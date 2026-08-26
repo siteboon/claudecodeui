@@ -144,6 +144,32 @@ const uploadFormDataWithProgress = (
     xhr.send(formData);
   });
 
+const readFileSystemFile = (fileEntry: FileSystemFileEntry) => new Promise<File>((resolve, reject) => {
+  fileEntry.file(resolve, reject);
+});
+
+async function readDirectoryEntryFiles(
+  entry: FileSystemEntry,
+  basePath: string,
+  ignoredFiles: string[],
+): Promise<File[]> {
+  const entryPath = basePath ? `${basePath}/${entry.name}` : entry.name;
+  if (entry.isFile) {
+    const file = await readFileSystemFile(entry as FileSystemFileEntry);
+    if (ignoredFiles.includes(file.name)) {
+      return [];
+    }
+    return [new File([file], entryPath, {
+      type: file.type,
+      lastModified: file.lastModified,
+    })];
+  }
+  if (entry.isDirectory) {
+    return readAllDirectoryEntries(entry as FileSystemDirectoryEntry, entryPath);
+  }
+  return [];
+}
+
 // Helper function to read all files from a directory entry recursively
 const readAllDirectoryEntries = async (directoryEntry: FileSystemDirectoryEntry, basePath = ''): Promise<File[]> => {
   const files: File[] = [];
@@ -163,35 +189,34 @@ const readAllDirectoryEntries = async (directoryEntry: FileSystemDirectoryEntry,
   // Files to ignore (system files)
   const ignoredFiles = ['.DS_Store', 'Thumbs.db', 'desktop.ini'];
 
-  for (const entry of entries) {
-    const entryPath = basePath ? `${basePath}/${entry.name}` : entry.name;
+  const entryFiles = await Promise.all(
+    entries.map((entry) => readDirectoryEntryFiles(entry, basePath, ignoredFiles)),
+  );
 
-    if (entry.isFile) {
-      const fileEntry = entry as FileSystemFileEntry;
-      const file = await new Promise<File>((resolve, reject) => {
-        fileEntry.file(resolve, reject);
-      });
-
-      // Skip ignored files
-      if (ignoredFiles.includes(file.name)) {
-        continue;
-      }
-
-      // Create a new file with the relative path as the name
-      const fileWithPath = new File([file], entryPath, {
-        type: file.type,
-        lastModified: file.lastModified,
-      });
-      files.push(fileWithPath);
-    } else if (entry.isDirectory) {
-      const dirEntry = entry as FileSystemDirectoryEntry;
-      const subFiles = await readAllDirectoryEntries(dirEntry, entryPath);
-      files.push(...subFiles);
-    }
-  }
+  files.push(...entryFiles.flat());
 
   return files;
 };
+
+async function readDroppedItemFiles(item: DataTransferItem): Promise<File[]> {
+  if (item.kind !== 'file') {
+    return [];
+  }
+
+  const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+  if (!entry) {
+    const file = item.getAsFile();
+    return file ? [file] : [];
+  }
+
+  if (entry.isFile) {
+    return [await readFileSystemFile(entry as FileSystemFileEntry)];
+  }
+  if (entry.isDirectory) {
+    return readAllDirectoryEntries(entry as FileSystemDirectoryEntry, entry.name);
+  }
+  return [];
+}
 
 const collectDroppedFiles = async (dataTransfer: DataTransfer) => {
   const files: File[] = [];
@@ -199,31 +224,8 @@ const collectDroppedFiles = async (dataTransfer: DataTransfer) => {
   // Use DataTransferItemList for folder support
   const { items } = dataTransfer;
   if (items) {
-    for (const item of Array.from(items)) {
-      if (item.kind !== 'file') {
-        continue;
-      }
-
-      const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
-      if (!entry) {
-        const file = item.getAsFile();
-        if (file) {
-          files.push(file);
-        }
-        continue;
-      }
-
-      if (entry.isFile) {
-        const file = await new Promise<File>((resolve, reject) => {
-          (entry as FileSystemFileEntry).file(resolve, reject);
-        });
-        files.push(file);
-      } else if (entry.isDirectory) {
-        // Pass the directory name as basePath so files include the folder path
-        const dirFiles = await readAllDirectoryEntries(entry as FileSystemDirectoryEntry, entry.name);
-        files.push(...dirFiles);
-      }
-    }
+    const itemFiles = await Promise.all(Array.from(items).map(readDroppedItemFiles));
+    files.push(...itemFiles.flat());
     return files;
   }
 

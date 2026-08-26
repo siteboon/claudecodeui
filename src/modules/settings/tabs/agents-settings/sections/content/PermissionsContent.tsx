@@ -489,14 +489,13 @@ function CodexPermissions({ permissionMode, onPermissionModeChange }: Omit<Codex
         </div>
         <p className="text-sm text-muted-foreground">{t('permissions.codex.description')}</p>
 
-        <div
+        <label
           className={`cursor-pointer rounded-lg border p-4 transition-all ${permissionMode === 'default'
             ? 'border-border bg-accent'
             : 'border-border bg-card/50 active:border-border active:bg-accent/50'
             }`}
-          onClick={() => onPermissionModeChange('default')}
         >
-          <label className="flex cursor-pointer items-start gap-3">
+          <div className="flex cursor-pointer items-start gap-3">
             <input
               type="radio"
               name="codexPermissionMode"
@@ -510,17 +509,16 @@ function CodexPermissions({ permissionMode, onPermissionModeChange }: Omit<Codex
                 {t('permissions.codex.modes.default.description')}
               </div>
             </div>
-          </label>
-        </div>
+          </div>
+        </label>
 
-        <div
+        <label
           className={`cursor-pointer rounded-lg border p-4 transition-all ${permissionMode === 'acceptEdits'
             ? 'border-green-400 bg-green-50 dark:border-green-600 dark:bg-green-900/20'
             : 'border-border bg-card/50 active:border-border active:bg-accent/50'
             }`}
-          onClick={() => onPermissionModeChange('acceptEdits')}
         >
-          <label className="flex cursor-pointer items-start gap-3">
+          <div className="flex cursor-pointer items-start gap-3">
             <input
               type="radio"
               name="codexPermissionMode"
@@ -534,17 +532,16 @@ function CodexPermissions({ permissionMode, onPermissionModeChange }: Omit<Codex
                 {t('permissions.codex.modes.acceptEdits.description')}
               </div>
             </div>
-          </label>
-        </div>
+          </div>
+        </label>
 
-        <div
+        <label
           className={`cursor-pointer rounded-lg border p-4 transition-all ${permissionMode === 'bypassPermissions'
             ? 'border-orange-400 bg-orange-50 dark:border-orange-600 dark:bg-orange-900/20'
             : 'border-border bg-card/50 active:border-border active:bg-accent/50'
             }`}
-          onClick={() => onPermissionModeChange('bypassPermissions')}
         >
-          <label className="flex cursor-pointer items-start gap-3">
+          <div className="flex cursor-pointer items-start gap-3">
             <input
               type="radio"
               name="codexPermissionMode"
@@ -561,8 +558,8 @@ function CodexPermissions({ permissionMode, onPermissionModeChange }: Omit<Codex
                 {t('permissions.codex.modes.bypassPermissions.description')}
               </div>
             </div>
-          </label>
-        </div>
+          </div>
+        </label>
 
         <details className="text-sm">
           <summary className="cursor-pointer text-muted-foreground hover:text-foreground">

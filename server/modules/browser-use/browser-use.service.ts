@@ -691,9 +691,9 @@ export const browserUseService = {
     if (!handle?.page) {
       throw new Error('Browser runtime handle is not available.');
     }
-    for (const field of fields) {
-      await handle.page.locator(field.selector).first().fill(field.value, { timeout: 10_000 });
-    }
+    await Promise.all(fields.map((field) => (
+      handle.page.locator(field.selector).first().fill(field.value, { timeout: 10_000 })
+    )));
     session.lastAction = 'fill_form';
     if (fields[0]) {
       session.cursor = await getActionPoint(handle.page, { selector: fields[0].selector }).then((point) => (

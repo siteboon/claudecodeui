@@ -454,11 +454,12 @@ export class CursorSessionsProvider implements IProviderSessions {
 
       try {
         if (!content?.role || !content?.content) {
-          if (content?.message?.role && content?.message?.content) {
-            if (content.message.role === 'system') {
+          const messageRole = content?.message?.role;
+          if (messageRole && content?.message?.content) {
+            if (messageRole === 'system') {
               continue;
             }
-            const role = content.message.role === 'user' ? 'user' : 'assistant';
+            const role = messageRole === 'user' ? 'user' : 'assistant';
             const messageContent = content.message.content;
             let text = '';
             if (Array.isArray(messageContent)) {

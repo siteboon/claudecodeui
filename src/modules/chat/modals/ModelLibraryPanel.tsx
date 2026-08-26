@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   ArrowLeft,
   Check,
@@ -8,21 +8,21 @@ import {
   Plus,
   Trash2,
   X,
-} from 'lucide-react';
+} from "lucide-react";
 
-import { Badge, Button, Input, LLMProviderLogo } from '@/shared/ui';
+import { Badge, Button, Input, LLMProviderLogo } from "@/shared/ui";
 import type {
   LLMProvider,
   ProviderModelActions,
   ProviderModelOption,
   ProviderModelsDefinition,
-} from '@/shared/types';
+} from "@/shared/types";
 
 const PROVIDERS: Array<{ id: LLMProvider; label: string }> = [
-  { id: 'claude', label: 'Claude' },
-  { id: 'codex', label: 'Codex' },
-  { id: 'cursor', label: 'Cursor' },
-  { id: 'opencode', label: 'OpenCode' },
+  { id: "claude", label: "Claude" },
+  { id: "codex", label: "Codex" },
+  { id: "cursor", label: "Cursor" },
+  { id: "opencode", label: "OpenCode" },
 ];
 
 type ModelLibraryPanelProps = {
@@ -40,7 +40,7 @@ type ModelLibraryPanelProps = {
  * each consumer supplies the Dialog around it. That is why it sits in modals/
  * with no Dialog in the file.
  */
-export default function ModelLibraryPanel({
+function useModelLibraryPanelController({
   initialProvider,
   providerModelCatalog,
   actions,
@@ -48,11 +48,13 @@ export default function ModelLibraryPanel({
 }: ModelLibraryPanelProps) {
   const [selectedProvider, setSelectedProvider] = useState(initialProvider);
   const [editing, setEditing] = useState<ProviderModelOption | null>(null);
-  const [model, setModel] = useState('');
-  const [modelId, setModelId] = useState('');
+  const [model, setModel] = useState("");
+  const [modelId, setModelId] = useState("");
   const [saving, setSaving] = useState(false);
   const [deletingRecordId, setDeletingRecordId] = useState<number | null>(null);
-  const [confirmDeleteRecordId, setConfirmDeleteRecordId] = useState<number | null>(null);
+  const [confirmDeleteRecordId, setConfirmDeleteRecordId] = useState<
+    number | null
+  >(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -75,8 +77,8 @@ export default function ModelLibraryPanel({
 
   const resetForm = () => {
     setEditing(null);
-    setModel('');
-    setModelId('');
+    setModel("");
+    setModelId("");
     setError(null);
   };
 
@@ -101,11 +103,11 @@ export default function ModelLibraryPanel({
     const normalizedModel = model.trim();
     const normalizedId = modelId.trim();
     if (!normalizedModel || !normalizedId) {
-      setError('Enter both a model name and model ID.');
+      setError("Enter both a model name and model ID.");
       return;
     }
     if (/\s/.test(normalizedId)) {
-      setError('Model IDs cannot contain spaces.');
+      setError("Model IDs cannot contain spaces.");
       return;
     }
 
@@ -128,7 +130,11 @@ export default function ModelLibraryPanel({
       }
       resetForm();
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : 'Unable to save this model.');
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to save this model.",
+      );
     } finally {
       setSaving(false);
     }
@@ -150,12 +156,78 @@ export default function ModelLibraryPanel({
       setConfirmDeleteRecordId(null);
       setNotice(`${option.label} was deleted.`);
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : 'Unable to delete this model.');
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to delete this model.",
+      );
     } finally {
       setDeletingRecordId(null);
     }
   };
 
+  return {
+    selectedProvider,
+    setSelectedProvider,
+    editing,
+    setEditing,
+    model,
+    setModel,
+    modelId,
+    setModelId,
+    saving,
+    setSaving,
+    deletingRecordId,
+    setDeletingRecordId,
+    confirmDeleteRecordId,
+    setConfirmDeleteRecordId,
+    error,
+    setError,
+    notice,
+    setNotice,
+    options,
+    customModels,
+    predefinedModels,
+    resetForm,
+    selectProvider,
+    startEditing,
+    handleSubmit,
+    handleDelete,
+  };
+}
+
+function renderModelLibraryPanel({
+  initialProvider,
+  providerModelCatalog,
+  actions,
+  onDone,
+  selectedProvider,
+  setSelectedProvider,
+  editing,
+  setEditing,
+  model,
+  setModel,
+  modelId,
+  setModelId,
+  saving,
+  setSaving,
+  deletingRecordId,
+  setDeletingRecordId,
+  confirmDeleteRecordId,
+  setConfirmDeleteRecordId,
+  error,
+  setError,
+  notice,
+  setNotice,
+  options,
+  customModels,
+  predefinedModels,
+  resetForm,
+  selectProvider,
+  startEditing,
+  handleSubmit,
+  handleDelete,
+}: ModelLibraryPanelProps & ReturnType<typeof useModelLibraryPanelController>) {
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
       <div className="flex shrink-0 flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-start sm:justify-between">
@@ -165,15 +237,24 @@ export default function ModelLibraryPanel({
               <Plus className="h-4 w-4" />
             </span>
             <div>
-              <p className="text-base font-semibold tracking-tight text-foreground">Model library</p>
+              <p className="text-base font-semibold tracking-tight text-foreground">
+                Model library
+              </p>
               <p className="text-xs leading-5 text-muted-foreground">
-                Add model IDs supported by your provider. Built-in models stay locked.
+                Add model IDs supported by your provider. Built-in models stay
+                locked.
               </p>
             </div>
           </div>
         </div>
         {onDone && (
-          <Button type="button" variant="outline" size="sm" onClick={onDone} className="shrink-0 rounded-xl">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onDone}
+            className="shrink-0 rounded-xl"
+          >
             <ArrowLeft className="h-3.5 w-3.5" />
             Back to models
           </Button>
@@ -191,8 +272,8 @@ export default function ModelLibraryPanel({
               aria-pressed={selected}
               className={`flex min-w-fit flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all ${
                 selected
-                  ? 'bg-background text-foreground shadow-sm ring-1 ring-border/70'
-                  : 'text-muted-foreground hover:bg-background/60 hover:text-foreground'
+                  ? "bg-background text-foreground shadow-sm ring-1 ring-border/70"
+                  : "text-muted-foreground hover:bg-background/60 hover:text-foreground"
               }`}
             >
               <LLMProviderLogo provider={provider.id} className="h-4 w-4" />
@@ -210,10 +291,15 @@ export default function ModelLibraryPanel({
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-foreground">
-                {editing ? 'Edit custom model' : 'Add a custom model'}
+                {editing ? "Edit custom model" : "Add a custom model"}
               </p>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                The ID is sent to {PROVIDERS.find((entry) => entry.id === selectedProvider)?.label} exactly as written.
+                The ID is sent to{" "}
+                {
+                  PROVIDERS.find((entry) => entry.id === selectedProvider)
+                    ?.label
+                }{" "}
+                exactly as written.
               </p>
             </div>
             {editing && (
@@ -230,7 +316,10 @@ export default function ModelLibraryPanel({
             )}
           </div>
 
-          <label className="mt-4 block text-xs font-semibold text-foreground" htmlFor="custom-model-name">
+          <label
+            className="mt-4 block text-xs font-semibold text-foreground"
+            htmlFor="custom-model-name"
+          >
             Model name
           </label>
           <Input
@@ -243,7 +332,10 @@ export default function ModelLibraryPanel({
             className="mt-1.5 h-10 rounded-xl bg-background"
           />
 
-          <label className="mt-4 block text-xs font-semibold text-foreground" htmlFor="custom-model-id">
+          <label
+            className="mt-4 block text-xs font-semibold text-foreground"
+            htmlFor="custom-model-id"
+          >
             Model ID
           </label>
           <Input
@@ -257,11 +349,15 @@ export default function ModelLibraryPanel({
             className="mt-1.5 h-10 rounded-xl bg-background font-mono"
           />
           <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
-            Use the exact identifier accepted by the provider CLI. IDs cannot contain spaces.
+            Use the exact identifier accepted by the provider CLI. IDs cannot
+            contain spaces.
           </p>
 
           {error && (
-            <div role="alert" className="mt-3 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            <div
+              role="alert"
+              className="mt-3 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+            >
               {error}
             </div>
           )}
@@ -272,9 +368,19 @@ export default function ModelLibraryPanel({
             </div>
           )}
 
-          <Button type="submit" disabled={saving} className="mt-4 w-full rounded-xl">
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editing ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-            {saving ? 'Saving…' : editing ? 'Save changes' : 'Add model'}
+          <Button
+            type="submit"
+            disabled={saving}
+            className="mt-4 w-full rounded-xl"
+          >
+            {saving ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : editing ? (
+              <Check className="h-4 w-4" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
+            {saving ? "Saving…" : editing ? "Save changes" : "Add model"}
           </Button>
         </form>
 
@@ -282,16 +388,27 @@ export default function ModelLibraryPanel({
           <section>
             <div className="mb-2 flex items-center justify-between gap-3 px-1">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-foreground">Your models</p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">Editable and stored in auth.db</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-foreground">
+                  Your models
+                </p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  Editable and stored in auth.db
+                </p>
               </div>
-              <Badge variant="secondary" className="rounded-full text-[10px]">{customModels.length}</Badge>
+              <Badge variant="secondary" className="rounded-full text-[10px]">
+                {customModels.length}
+              </Badge>
             </div>
 
             {customModels.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-border bg-background/60 px-4 py-7 text-center">
-                <p className="text-sm font-medium text-foreground">No custom models yet</p>
-                <p className="mt-1 text-xs text-muted-foreground">Add one with the form and it will appear in every model picker.</p>
+                <p className="text-sm font-medium text-foreground">
+                  No custom models yet
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Add one with the form and it will appear in every model
+                  picker.
+                </p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -299,14 +416,23 @@ export default function ModelLibraryPanel({
                   const confirming = confirmDeleteRecordId === option.recordId;
                   const deleting = deletingRecordId === option.recordId;
                   return (
-                    <div key={option.recordId ?? option.value} className="rounded-2xl border border-primary/20 bg-primary/[0.04] p-3">
+                    <div
+                      key={option.recordId ?? option.value}
+                      className="rounded-2xl border border-primary/20 bg-primary/[0.04] p-3"
+                    >
                       <div className="flex items-start gap-3">
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <p className="truncate text-sm font-semibold text-foreground">{option.label}</p>
-                            <Badge className="rounded-full px-2 py-0 text-[9px]">Custom</Badge>
+                            <p className="truncate text-sm font-semibold text-foreground">
+                              {option.label}
+                            </p>
+                            <Badge className="rounded-full px-2 py-0 text-[9px]">
+                              Custom
+                            </Badge>
                           </div>
-                          <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">{option.value}</p>
+                          <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">
+                            {option.value}
+                          </p>
                         </div>
                         {!confirming && (
                           <div className="flex shrink-0 items-center gap-1">
@@ -324,7 +450,11 @@ export default function ModelLibraryPanel({
                               type="button"
                               variant="ghost"
                               size="icon"
-                              onClick={() => setConfirmDeleteRecordId(option.recordId ?? null)}
+                              onClick={() =>
+                                setConfirmDeleteRecordId(
+                                  option.recordId ?? null,
+                                )
+                              }
                               className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                               aria-label={`Delete ${option.label}`}
                             >
@@ -335,13 +465,30 @@ export default function ModelLibraryPanel({
                       </div>
                       {confirming && (
                         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3">
-                          <p className="text-xs text-muted-foreground">Delete this model from all pickers?</p>
+                          <p className="text-xs text-muted-foreground">
+                            Delete this model from all pickers?
+                          </p>
                           <div className="flex items-center gap-2">
-                            <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmDeleteRecordId(null)} className="h-8 rounded-lg">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setConfirmDeleteRecordId(null)}
+                              className="h-8 rounded-lg"
+                            >
                               Cancel
                             </Button>
-                            <Button type="button" variant="destructive" size="sm" disabled={deleting} onClick={() => void handleDelete(option)} className="h-8 rounded-lg">
-                              {deleting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              size="sm"
+                              disabled={deleting}
+                              onClick={() => void handleDelete(option)}
+                              className="h-8 rounded-lg"
+                            >
+                              {deleting && (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              )}
                               Delete
                             </Button>
                           </div>
@@ -357,18 +504,31 @@ export default function ModelLibraryPanel({
           <section>
             <div className="mb-2 flex items-center justify-between gap-3 px-1">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-foreground">Built-in models</p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">Maintained by CloudCLI and read-only</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-foreground">
+                  Built-in models
+                </p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  Maintained by CloudCLI and read-only
+                </p>
               </div>
-              <Badge variant="secondary" className="rounded-full text-[10px]">{predefinedModels.length}</Badge>
+              <Badge variant="secondary" className="rounded-full text-[10px]">
+                {predefinedModels.length}
+              </Badge>
             </div>
             <div className="overflow-hidden rounded-2xl border border-border/70 bg-background/70">
               {predefinedModels.map((option) => (
-                <div key={option.recordId ?? option.value} className="flex items-center gap-3 border-b border-border/60 px-3 py-2.5 last:border-b-0">
+                <div
+                  key={option.recordId ?? option.value}
+                  className="flex items-center gap-3 border-b border-border/60 px-3 py-2.5 last:border-b-0"
+                >
                   <LockKeyhole className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-medium text-foreground">{option.label}</p>
-                    <p className="truncate font-mono text-[10px] text-muted-foreground">{option.value}</p>
+                    <p className="truncate text-xs font-medium text-foreground">
+                      {option.label}
+                    </p>
+                    <p className="truncate font-mono text-[10px] text-muted-foreground">
+                      {option.value}
+                    </p>
                   </div>
                 </div>
               ))}
@@ -378,4 +538,25 @@ export default function ModelLibraryPanel({
       </div>
     </div>
   );
+}
+
+export default function ModelLibraryPanel({
+  initialProvider,
+  providerModelCatalog,
+  actions,
+  onDone,
+}: ModelLibraryPanelProps) {
+  const controller = useModelLibraryPanelController({
+    initialProvider,
+    providerModelCatalog,
+    actions,
+    onDone,
+  });
+  return renderModelLibraryPanel({
+    initialProvider,
+    providerModelCatalog,
+    actions,
+    onDone,
+    ...controller,
+  });
 }

@@ -139,6 +139,8 @@ function TaskCard({ task, onClick = null, showParent = false, className = '' }: 
 
   return (
     <div
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
       className={cn(
         'bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-3',
         'hover:shadow-md hover:border-blue-300 dark:hover:border-blue-600 transition-all duration-200',
@@ -146,6 +148,12 @@ function TaskCard({ task, onClick = null, showParent = false, className = '' }: 
         className,
       )}
       onClick={onClick ?? undefined}
+      onKeyDown={onClick ? (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onClick();
+        }
+      } : undefined}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">

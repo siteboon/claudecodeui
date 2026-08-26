@@ -203,7 +203,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                   <button
                     onClick={handleNextStep}
                     disabled={!isCurrentStepValid || isSubmitting}
-                    className="flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 font-medium text-primary-foreground shadow-lg shadow-primary/25 transition-all duration-200 hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none"
+                    className="flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 font-medium text-primary-foreground shadow-lg shadow-primary/25 transition-[filter,transform,opacity,box-shadow] duration-200 hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none"
                   >
                     {isSubmitting ? (
                       <>
@@ -221,7 +221,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                   <button
                     onClick={handleFinish}
                     disabled={isSubmitting}
-                    className="flex items-center gap-2 rounded-xl bg-emerald-600 px-6 py-2.5 font-medium text-white shadow-lg shadow-emerald-600/25 transition-all duration-200 hover:bg-emerald-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none"
+                    className="flex items-center gap-2 rounded-xl bg-emerald-600 px-6 py-2.5 font-medium text-white shadow-lg shadow-emerald-600/25 transition-[background-color,transform,opacity,box-shadow] duration-200 hover:bg-emerald-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none"
                   >
                     {isSubmitting ? (
                       <>

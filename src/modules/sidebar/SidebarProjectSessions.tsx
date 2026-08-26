@@ -90,7 +90,7 @@ export default function SidebarProjectSessions({
       {isCompact ? (
         <div className="px-3 pb-1 pt-1">
           <button
-            className="flex h-8 w-full items-center justify-center gap-2 rounded-md bg-primary text-xs font-medium text-primary-foreground transition-all duration-150 hover:bg-primary/90 active:scale-[0.98]"
+            className="flex h-8 w-full items-center justify-center gap-2 rounded-md bg-primary text-xs font-medium text-primary-foreground transition-[background-color,transform] duration-150 hover:bg-primary/90 active:scale-[0.98]"
             onClick={() => {
               onProjectSelect(project);
               onNewSession(project);

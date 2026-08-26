@@ -113,7 +113,7 @@ export default function ConfirmActionModal({ action, onCancel, onConfirm }: Conf
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={handleCancel} />
+      <button type="button" aria-label="Cancel action" className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={handleCancel} />
       {/*
         Capped to the viewport with only the message scrolling, so a long body
         (a multi-paragraph commit message, a long file list) can never push the

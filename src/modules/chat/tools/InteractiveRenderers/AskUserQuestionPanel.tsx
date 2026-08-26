@@ -44,6 +44,9 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
   }, [otherActive, currentStep]);
 
   const toggleOption = useCallback((qIdx: number, label: string, multiSelect: boolean) => {
+    if (!multiSelect) {
+      setOtherActive(prev => { const next = new Map(prev); next.set(qIdx, false); return next; });
+    }
     setSelections(prev => {
       const next = new Map(prev);
       const current = new Set(next.get(qIdx) || []);
@@ -53,7 +56,6 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
       } else {
         current.clear();
         current.add(label);
-        setOtherActive(p => { const n = new Map(p); n.set(qIdx, false); return n; });
       }
       next.set(qIdx, current);
       return next;
@@ -61,16 +63,16 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
   }, []);
 
   const toggleOther = useCallback((qIdx: number, multiSelect: boolean) => {
+    const wasActive = otherActive.get(qIdx) || false;
+    if (!multiSelect && !wasActive) {
+      setSelections(prev => { const next = new Map(prev); next.set(qIdx, new Set()); return next; });
+    }
     setOtherActive(prev => {
       const next = new Map(prev);
-      const wasActive = next.get(qIdx) || false;
-      next.set(qIdx, !wasActive);
-      if (!multiSelect && !wasActive) {
-        setSelections(p => { const n = new Map(p); n.set(qIdx, new Set()); return n; });
-      }
+      next.set(qIdx, !(next.get(qIdx) || false));
       return next;
     });
-  }, []);
+  }, [otherActive]);
 
   const setOtherText = useCallback((qIdx: number, text: string) => {
     setOtherTexts(prev => { const next = new Map(prev); next.set(qIdx, text); return next; });
@@ -198,9 +200,9 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
           {/* Progress dots (multi-question) */}
           {!isSingle && (
             <div className="mb-2 flex items-center gap-1">
-              {questions.map((_, i) => (
+              {questions.map((question, i) => (
                 <button
-                  key={i}
+                  key={question.question}
                   type="button"
                   onClick={() => setCurrentStep(i)}
                   className={`h-[3px] rounded-full transition-all duration-300 ${

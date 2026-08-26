@@ -1,17 +1,27 @@
-import { memo, useCallback, useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
+import { memo, useCallback, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 
-import { useDeviceSettings } from '@/shared/hooks/useDeviceSettings';
-import { useVersionCheck } from '@/shared/hooks/useVersionCheck';
-import { useUiPreferences, useSetUiPreference } from '@/shared/context/UiPreferencesContext';
-import { useSidebarController } from '@/modules/sidebar/hooks/useSidebarController';
-import { useTaskMaster, useTasksSettings } from '@/modules/task-master';
-import { usePaletteOps } from '@/modules/command-palette';
-import { useBusySessionIdSet } from '@/shared/context/SessionProtectionContext';
-import type { LLMProvider, LoadingProgress, MCPServerStatus, Project, ProjectSession, SidebarProjectListProps } from '@/shared/types';
-import SidebarCollapsed from '@/modules/sidebar/SidebarCollapsed';
-import SidebarContent from '@/modules/sidebar/SidebarContent';
-import SidebarModals from '@/modules/sidebar/SidebarModals';
+import { useDeviceSettings } from "@/shared/hooks/useDeviceSettings";
+import { useVersionCheck } from "@/shared/hooks/useVersionCheck";
+import {
+  useUiPreferences,
+  useSetUiPreference,
+} from "@/shared/context/UiPreferencesContext";
+import { useSidebarController } from "@/modules/sidebar/hooks/useSidebarController";
+import { useTaskMaster, useTasksSettings } from "@/modules/task-master";
+import { usePaletteOps } from "@/modules/command-palette";
+import { useBusySessionIdSet } from "@/shared/context/SessionProtectionContext";
+import type {
+  LLMProvider,
+  LoadingProgress,
+  MCPServerStatus,
+  Project,
+  ProjectSession,
+  SidebarProjectListProps,
+} from "@/shared/types";
+import SidebarCollapsed from "@/modules/sidebar/SidebarCollapsed";
+import SidebarContent from "@/modules/sidebar/SidebarContent";
+import SidebarModals from "@/modules/sidebar/SidebarModals";
 
 type SidebarProps = {
   projects: Project[];
@@ -42,7 +52,7 @@ type TaskMasterSidebarContext = {
 };
 
 /** Exported through the sidebar barrel; the project-workspace module renders it as the app's project and session navigation panel. */
-function Sidebar({
+function useSidebarViewController({
   projects,
   selectedProject,
   selectedSession,
@@ -62,16 +72,21 @@ function Sidebar({
   onCloseSettings,
   isMobile,
 }: SidebarProps) {
-  const { t } = useTranslation(['sidebar', 'common']);
+  const { t } = useTranslation(["sidebar", "common"]);
   const { isPWA } = useDeviceSettings({ trackMobile: false });
-  const { updateAvailable, restartRequired, latestVersion, currentVersion, releaseInfo, installMode } = useVersionCheck(
-    'siteboon',
-    'claudecodeui',
-  );
+  const {
+    updateAvailable,
+    restartRequired,
+    latestVersion,
+    currentVersion,
+    releaseInfo,
+    installMode,
+  } = useVersionCheck("siteboon", "claudecodeui");
   const preferences = useUiPreferences();
   const setPreference = useSetUiPreference();
   const { sidebarVisible } = preferences;
-  const { setCurrentProject, mcpServerStatus } = useTaskMaster() as TaskMasterSidebarContext;
+  const { setCurrentProject, mcpServerStatus } =
+    useTaskMaster() as TaskMasterSidebarContext;
   const { tasksEnabled } = useTasksSettings();
   const paletteOps = usePaletteOps();
   // Only membership is rendered here, so subscribing to the full activity map
@@ -154,17 +169,17 @@ function Sidebar({
     onLoadMoreSessions,
     onProjectDelete,
     setCurrentProject,
-    setSidebarVisible: (visible) => setPreference('sidebarVisible', visible),
+    setSidebarVisible: (visible) => setPreference("sidebarVisible", visible),
     sidebarVisible,
   });
 
   useEffect(() => {
-    if (typeof document === 'undefined') {
+    if (typeof document === "undefined") {
       return;
     }
 
-    document.documentElement.classList.toggle('pwa-mode', isPWA);
-    document.body.classList.toggle('pwa-mode', isPWA);
+    document.documentElement.classList.toggle("pwa-mode", isPWA);
+    document.body.classList.toggle("pwa-mode", isPWA);
   }, [isPWA]);
 
   const handleProjectCreated = () => {
@@ -173,12 +188,20 @@ function Sidebar({
 
   // Stable so memo() on the row components can bail out; an inline arrow here
   // would give every row a new callback on each sidebar render.
-  const handleSaveProjectName = useCallback((projectId: string, nextName: string) => {
-    void saveProjectName(projectId, nextName);
-  }, [saveProjectName]);
+  const handleSaveProjectName = useCallback(
+    (projectId: string, nextName: string) => {
+      void saveProjectName(projectId, nextName);
+    },
+    [saveProjectName],
+  );
 
   const handleSaveSessionName = useCallback(
-    (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => {
+    (
+      projectName: string,
+      sessionId: string,
+      summary: string,
+      provider: LLMProvider,
+    ) => {
       void updateSessionSummary(projectName, sessionId, summary, provider);
     },
     [updateSessionSummary],
@@ -202,7 +225,7 @@ function Sidebar({
     loadingMoreProjects,
     activeSessions,
     attentionSessionIds,
-    forceExpanded: searchMode === 'running',
+    forceExpanded: searchMode === "running",
     isProjectStarred,
     onRenameDraftChange: updateRenameDraft,
     onToggleProject: toggleProject,
@@ -223,10 +246,216 @@ function Sidebar({
     t,
   };
 
+  return {
+    t,
+    isPWA,
+    updateAvailable,
+    restartRequired,
+    latestVersion,
+    currentVersion,
+    releaseInfo,
+    installMode,
+    preferences,
+    setPreference,
+    sidebarVisible,
+    setCurrentProject,
+    mcpServerStatus,
+    tasksEnabled,
+    paletteOps,
+    activeSessions,
+    isSidebarCollapsed,
+    expandedProjects,
+    activeRename,
+    showNewProject,
+    initialSessionsLoaded,
+    currentTime,
+    isRefreshing,
+    searchFilter,
+    searchMode,
+    setSearchMode,
+    conversationResults,
+    isSearching,
+    searchProgress,
+    clearConversationResults,
+    runningSessionsCount,
+    deletingProjects,
+    pendingDeletion,
+    showVersionModal,
+    filteredProjects,
+    archivedProjects,
+    archivedSessions,
+    archivedSessionsCount,
+    isArchivedSessionsLoading,
+    recentConversations,
+    recentConversationsTotal,
+    recentConversationsHasMore,
+    isRecentConversationsLoading,
+    isLoadingMoreRecentConversations,
+    recentConversationsError,
+    reloadRecentConversations,
+    loadMoreRecentConversations,
+    toggleProject,
+    handleSessionClick,
+    toggleStarProject,
+    isProjectStarred,
+    getProjectSessions,
+    loadingMoreProjects,
+    loadMoreSessionsForProject,
+    startEditingProject,
+    startEditingSession,
+    updateRenameDraft,
+    cancelRename,
+    saveProjectName,
+    showDeleteSessionConfirmation,
+    confirmDeleteSession,
+    requestProjectDelete,
+    confirmDeleteProject,
+    handleProjectSelect,
+    openArchivedSession,
+    restoreArchivedProject,
+    restoreArchivedSession,
+    refreshProjects,
+    updateSessionSummary,
+    forkSession,
+    handleCollapseSidebar,
+    handleExpandSidebar,
+    setShowNewProject,
+    setSearchFilter,
+    setPendingDeletion,
+    setShowVersionModal,
+    handleProjectCreated,
+    handleSaveProjectName,
+    handleSaveSessionName,
+    projectListProps,
+  };
+}
+
+function Sidebar({
+  projects,
+  selectedProject,
+  selectedSession,
+  attentionSessionIds,
+  onProjectSelect,
+  onSessionSelect,
+  onNewSession,
+  onSessionDelete,
+  onLoadMoreSessions,
+  onProjectDelete,
+  isLoading,
+  loadingProgress,
+  onRefresh,
+  onShowSettings,
+  showSettings,
+  settingsInitialTab,
+  onCloseSettings,
+  isMobile,
+}: SidebarProps) {
+  const {
+    t,
+    isPWA,
+    updateAvailable,
+    restartRequired,
+    latestVersion,
+    currentVersion,
+    releaseInfo,
+    installMode,
+    preferences,
+    setPreference,
+    sidebarVisible,
+    setCurrentProject,
+    mcpServerStatus,
+    tasksEnabled,
+    paletteOps,
+    activeSessions,
+    isSidebarCollapsed,
+    expandedProjects,
+    activeRename,
+    showNewProject,
+    initialSessionsLoaded,
+    currentTime,
+    isRefreshing,
+    searchFilter,
+    searchMode,
+    setSearchMode,
+    conversationResults,
+    isSearching,
+    searchProgress,
+    clearConversationResults,
+    runningSessionsCount,
+    deletingProjects,
+    pendingDeletion,
+    showVersionModal,
+    filteredProjects,
+    archivedProjects,
+    archivedSessions,
+    archivedSessionsCount,
+    isArchivedSessionsLoading,
+    recentConversations,
+    recentConversationsTotal,
+    recentConversationsHasMore,
+    isRecentConversationsLoading,
+    isLoadingMoreRecentConversations,
+    recentConversationsError,
+    reloadRecentConversations,
+    loadMoreRecentConversations,
+    toggleProject,
+    handleSessionClick,
+    toggleStarProject,
+    isProjectStarred,
+    getProjectSessions,
+    loadingMoreProjects,
+    loadMoreSessionsForProject,
+    startEditingProject,
+    startEditingSession,
+    updateRenameDraft,
+    cancelRename,
+    saveProjectName,
+    showDeleteSessionConfirmation,
+    confirmDeleteSession,
+    requestProjectDelete,
+    confirmDeleteProject,
+    handleProjectSelect,
+    openArchivedSession,
+    restoreArchivedProject,
+    restoreArchivedSession,
+    refreshProjects,
+    updateSessionSummary,
+    forkSession,
+    handleCollapseSidebar,
+    handleExpandSidebar,
+    setShowNewProject,
+    setSearchFilter,
+    setPendingDeletion,
+    setShowVersionModal,
+    handleProjectCreated,
+    handleSaveProjectName,
+    handleSaveSessionName,
+    projectListProps,
+  } = useSidebarViewController({
+    projects,
+    selectedProject,
+    selectedSession,
+    attentionSessionIds,
+    onProjectSelect,
+    onSessionSelect,
+    onNewSession,
+    onSessionDelete,
+    onLoadMoreSessions,
+    onProjectDelete,
+    isLoading,
+    loadingProgress,
+    onRefresh,
+    onShowSettings,
+    showSettings,
+    settingsInitialTab,
+    onCloseSettings,
+    isMobile,
+  });
+
   return (
     <>
-        <SidebarModals
-          projects={projects}
+      <SidebarModals
+        projects={projects}
         showSettings={showSettings}
         settingsInitialTab={settingsInitialTab}
         onCloseSettings={onCloseSettings}
@@ -257,7 +486,7 @@ function Sidebar({
         />
       ) : (
         <>
-        <SidebarContent
+          <SidebarContent
             isPWA={isPWA}
             isMobile={isMobile}
             isLoading={isLoading}
@@ -275,11 +504,11 @@ function Sidebar({
             recentConversationsError={recentConversationsError}
             searchFilter={searchFilter}
             onSearchFilterChange={setSearchFilter}
-            onClearSearchFilter={() => setSearchFilter('')}
+            onClearSearchFilter={() => setSearchFilter("")}
             searchMode={searchMode}
             onSearchModeChange={(mode) => {
               setSearchMode(mode);
-              if (mode === 'projects') clearConversationResults();
+              if (mode === "projects") clearConversationResults();
             }}
             conversationResults={conversationResults}
             isSearching={isSearching}
@@ -296,14 +525,25 @@ function Sidebar({
                 { isArchived: true },
               );
             }}
-            onConversationResultClick={(projectId: string | null, sessionId: string, provider: string, messageTimestamp?: string | null, messageSnippet?: string | null) => {
+            onConversationResultClick={(
+              projectId: string | null,
+              sessionId: string,
+              provider: string,
+              messageTimestamp?: string | null,
+              messageSnippet?: string | null,
+            ) => {
               // `projectId` (DB key) is the canonical identifier post-migration.
               // The server emits null when it can't resolve a project row for
               // the search hit; treat that as "no project" and still navigate
               // to the session so the user can open it from the URL.
-              const resolvedProvider = (provider || 'claude') as LLMProvider;
-              const project = projectId ? projects.find(p => p.projectId === projectId) : null;
-              const searchTarget = { __searchTargetTimestamp: messageTimestamp || null, __searchTargetSnippet: messageSnippet || null };
+              const resolvedProvider = (provider || "claude") as LLMProvider;
+              const project = projectId
+                ? projects.find((p) => p.projectId === projectId)
+                : null;
+              const searchTarget = {
+                __searchTargetTimestamp: messageTimestamp || null,
+                __searchTargetSnippet: messageSnippet || null,
+              };
               const sessionObj = {
                 id: sessionId,
                 __provider: resolvedProvider,
@@ -313,14 +553,17 @@ function Sidebar({
               if (project) {
                 handleProjectSelect(project);
                 const sessions = getProjectSessions(project);
-                const existing = sessions.find(s => s.id === sessionId);
+                const existing = sessions.find((s) => s.id === sessionId);
                 if (existing) {
-                  handleSessionClick({ ...existing, ...searchTarget }, project.projectId);
+                  handleSessionClick(
+                    { ...existing, ...searchTarget },
+                    project.projectId,
+                  );
                 } else {
                   handleSessionClick(sessionObj, project.projectId);
                 }
               } else {
-                handleSessionClick(sessionObj, projectId ?? '');
+                handleSessionClick(sessionObj, projectId ?? "");
               }
             }}
             onRefresh={() => {
@@ -341,7 +584,6 @@ function Sidebar({
           />
         </>
       )}
-
     </>
   );
 }

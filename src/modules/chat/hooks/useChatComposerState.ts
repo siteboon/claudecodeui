@@ -938,11 +938,11 @@ export function useChatComposerState({
 
     const restoreDraft = () => {
       const savedInput = readDraftText(draftScope);
+      inputValueRef.current = savedInput;
       setInputState((previous) => {
         if (previous.scope === draftScope && previous.value === savedInput) {
           return previous;
         }
-        inputValueRef.current = savedInput;
         return { scope: draftScope, value: savedInput };
       });
     };

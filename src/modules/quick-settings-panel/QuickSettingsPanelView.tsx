@@ -81,7 +81,9 @@ function QuickSettingsPanelView() {
       </div>
 
       {isOpen && (
-        <div
+        <button
+          type="button"
+          aria-label="Close quick settings"
           className="fixed inset-0 z-[9998] bg-background/80 backdrop-blur-sm transition-opacity duration-150 ease-out"
           onClick={() => setIsOpen(false)}
         />

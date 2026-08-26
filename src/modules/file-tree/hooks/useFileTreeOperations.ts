@@ -297,17 +297,13 @@ export function useFileTreeOperations({
         zip.file(fullPath, fileBytes);
       } else if (node.type === 'directory' && node.children) {
         // Recursively process children
-        for (const child of node.children) {
-          await collectFiles(child, fullPath);
-        }
+        await Promise.all(node.children.map((child) => collectFiles(child, fullPath)));
       }
     };
 
     // If the folder has children, process them
     if (folder.children && folder.children.length > 0) {
-      for (const child of folder.children) {
-        await collectFiles(child, '');
-      }
+      await Promise.all(folder.children.map((child) => collectFiles(child, '')));
     }
 
     // Generate ZIP file

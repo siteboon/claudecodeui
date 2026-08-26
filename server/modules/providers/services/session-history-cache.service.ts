@@ -66,7 +66,11 @@ export function createSessionHistoryCache(
       if (entries.size <= 1 || (totalBytes <= maxTotalFileBytes && entries.size <= maxEntries)) {
         break;
       }
-      totalBytes -= entries.get(key)!.size;
+      const entry = entries.get(key);
+      if (!entry) {
+        continue;
+      }
+      totalBytes -= entry.size;
       entries.delete(key);
     }
   }

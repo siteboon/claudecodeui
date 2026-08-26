@@ -178,9 +178,18 @@ export default function FileTreeNode({
 
   const rowContent = (
     <div
+      role="treeitem"
+      tabIndex={0}
+      aria-expanded={item.type === 'directory' ? isOpen : undefined}
       className={rowClassName}
       style={{ paddingLeft: `${level * 16 + 4}px` }}
       onClick={() => onItemClick(item)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onItemClick(item);
+        }
+      }}
       onDragOver={onItemDragOver ? (event) => onItemDragOver(event, dragTargetPath) : undefined}
     >
       {viewMode === 'detailed' ? (

@@ -23,7 +23,7 @@ window.__MOCK_STATE__ = {
   var SEARCH = new URLSearchParams(window.location.search || '');
 
   function clone(value) {
-    return JSON.parse(JSON.stringify(value));
+    return structuredClone(value);
   }
 
   var mockState = clone(MOCK);

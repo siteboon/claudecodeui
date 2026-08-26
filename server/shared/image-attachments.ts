@@ -356,6 +356,45 @@ type ClaudeContentBlock =
   | { type: 'text'; text: string }
   | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } };
 
+async function buildClaudeImageBlock(
+  descriptor: ImageAttachmentDescriptor,
+  cwd?: string,
+): Promise<ClaudeContentBlock | null> {
+  const mediaType = resolveImageMediaType(descriptor);
+  if (!mediaType || !CLAUDE_IMAGE_MEDIA_TYPES.has(mediaType)) {
+    console.warn(`[Images] Skipping unsupported Claude image type for ${descriptor.path}`);
+    return null;
+  }
+
+  const resolvedPath = resolveImageAbsolutePath(cwd, descriptor.path);
+  if (!isAllowedImageSourcePath(resolvedPath, cwd)) {
+    console.warn(`[Images] Refusing to read image outside allowed roots: ${descriptor.path}`);
+    return null;
+  }
+
+  try {
+    const canonicalPath = await fs.realpath(resolvedPath);
+    if (!isAllowedImageSourcePath(canonicalPath, cwd)) {
+      console.warn(`[Images] Refusing to read symlinked image outside allowed roots: ${descriptor.path}`);
+      return null;
+    }
+
+    const bytes = await fs.readFile(canonicalPath);
+    return {
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: mediaType,
+        data: bytes.toString('base64'),
+      },
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[Images] Failed to read image ${descriptor.path}: ${message}`);
+    return null;
+  }
+}
+
 /**
  * Builds the Claude user-message content list: the prompt text followed by one
  * base64 `image` block per attachment. Images the Claude API cannot accept
@@ -367,44 +406,14 @@ export async function buildClaudeUserContent(
   images: unknown,
   cwd?: string,
 ): Promise<ClaudeContentBlock[]> {
-  const blocks: ClaudeContentBlock[] = [{ type: 'text', text: prompt }];
+  const imageBlocks = await Promise.all(
+    normalizeImageDescriptors(images).map((descriptor) => buildClaudeImageBlock(descriptor, cwd)),
+  );
 
-  for (const descriptor of normalizeImageDescriptors(images)) {
-    const mediaType = resolveImageMediaType(descriptor);
-    if (!mediaType || !CLAUDE_IMAGE_MEDIA_TYPES.has(mediaType)) {
-      console.warn(`[Images] Skipping unsupported Claude image type for ${descriptor.path}`);
-      continue;
-    }
-
-    const resolvedPath = resolveImageAbsolutePath(cwd, descriptor.path);
-    if (!isAllowedImageSourcePath(resolvedPath, cwd)) {
-      console.warn(`[Images] Refusing to read image outside allowed roots: ${descriptor.path}`);
-      continue;
-    }
-
-    try {
-      const canonicalPath = await fs.realpath(resolvedPath);
-      if (!isAllowedImageSourcePath(canonicalPath, cwd)) {
-        console.warn(`[Images] Refusing to read symlinked image outside allowed roots: ${descriptor.path}`);
-        continue;
-      }
-
-      const bytes = await fs.readFile(canonicalPath);
-      blocks.push({
-        type: 'image',
-        source: {
-          type: 'base64',
-          media_type: mediaType,
-          data: bytes.toString('base64'),
-        },
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.warn(`[Images] Failed to read image ${descriptor.path}: ${message}`);
-    }
-  }
-
-  return blocks;
+  return [
+    { type: 'text', text: prompt },
+    ...imageBlocks.filter((block) => block !== null),
+  ];
 }
 
 type CodexInputItem =

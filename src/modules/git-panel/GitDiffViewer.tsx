@@ -10,7 +10,7 @@ const PREVIEW_CHARACTER_LIMIT = 200_000;
 const PREVIEW_LINE_LIMIT = 1_500;
 
 type DiffPreview = {
-  lines: string[];
+  lines: Array<{ key: string; content: string }>;
   isCharacterTruncated: boolean;
   isLineTruncated: boolean;
 };
@@ -18,7 +18,12 @@ type DiffPreview = {
 function buildDiffPreview(diff: string): DiffPreview {
   const isCharacterTruncated = diff.length > PREVIEW_CHARACTER_LIMIT;
   const previewText = isCharacterTruncated ? diff.slice(0, PREVIEW_CHARACTER_LIMIT) : diff;
-  const previewLines = previewText.split('\n');
+  const lineOccurrences = new Map<string, number>();
+  const previewLines = previewText.split('\n').map((content) => {
+    const occurrence = lineOccurrences.get(content) ?? 0;
+    lineOccurrences.set(content, occurrence + 1);
+    return { key: `${content}-${occurrence}`, content };
+  });
   const isLineTruncated = previewLines.length > PREVIEW_LINE_LIMIT;
 
   return {
@@ -42,14 +47,14 @@ export default function GitDiffViewer({ diff, isMobile, wrapText }: GitDiffViewe
     );
   }
 
-  const renderDiffLine = (line: string, index: number) => {
-    const isAddition = line.startsWith('+') && !line.startsWith('+++');
-    const isDeletion = line.startsWith('-') && !line.startsWith('---');
-    const isHeader = line.startsWith('@@');
+  const renderDiffLine = (line: { key: string; content: string }) => {
+    const isAddition = line.content.startsWith('+') && !line.content.startsWith('+++');
+    const isDeletion = line.content.startsWith('-') && !line.content.startsWith('---');
+    const isHeader = line.content.startsWith('@@');
 
     return (
       <div
-        key={index}
+        key={line.key}
         className={`px-3 py-0.5 font-mono text-xs ${isMobile && wrapText ? 'whitespace-pre-wrap break-all' : 'overflow-x-auto whitespace-pre'
           } ${isAddition ? 'bg-green-50 text-green-700 dark:bg-green-950/50 dark:text-green-300' :
             isDeletion ? 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300' :
@@ -57,7 +62,7 @@ export default function GitDiffViewer({ diff, isMobile, wrapText }: GitDiffViewe
                 'text-muted-foreground/70'
           }`}
       >
-        {line}
+        {line.content}
       </div>
     );
   };
@@ -69,7 +74,7 @@ export default function GitDiffViewer({ diff, isMobile, wrapText }: GitDiffViewe
           Large diff preview: rendering is limited to keep the tab responsive.
         </div>
       )}
-      {preview.lines.map((line, index) => renderDiffLine(line, index))}
+      {preview.lines.map(renderDiffLine)}
     </div>
   );
 }

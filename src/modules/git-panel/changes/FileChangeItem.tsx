@@ -60,8 +60,9 @@ export default function FileChangeItem({
             <ChevronRight className={`h-3 w-3 transition-transform duration-200 ease-in-out ${isExpanded ? 'rotate-90' : 'rotate-0'}`} />
           </button>
 
-          <span
-            className={`flex-1 truncate ${isMobile ? 'text-xs' : 'text-sm'} cursor-pointer hover:text-primary hover:underline`}
+          <button
+            type="button"
+            className={`flex-1 truncate text-left ${isMobile ? 'text-xs' : 'text-sm'} cursor-pointer hover:text-primary hover:underline`}
             onClick={(event) => {
               event.stopPropagation();
               onOpenFile(filePath);
@@ -69,7 +70,7 @@ export default function FileChangeItem({
             title="Click to open file"
           >
             {filePath}
-          </span>
+          </button>
 
           <span className="flex items-center gap-1">
             {(status === 'M' || status === 'D' || status === 'U') && (

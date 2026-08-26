@@ -112,7 +112,7 @@ export default function WorkspaceTabs({
         const displayLabel = tab.kind === 'builtin' ? t(tab.labelKey) : tab.label;
 
         return (
-          <Fragment key={`${tab.id}-${index}`}>
+          <Fragment key={tab.id}>
             {index === builtInTabs.length && pluginTabs.length > 0 && (
               <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-border" />
             )}

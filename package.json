@@ -18,6 +18,11 @@
     "scripts/",
     "README.md"
   ],
+  "knip": {
+    "entry": [
+      "electron/launcher/launcher.js"
+    ]
+  },
   "homepage": "https://cloudcli.ai",
   "repository": {
     "type": "git",

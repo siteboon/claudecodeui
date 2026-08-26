@@ -111,6 +111,7 @@ export function useSidebarController({
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [optimisticStarByProjectId, setOptimisticStarByProjectId] = useState<Map<string, boolean>>(new Map());
   const [loadingMoreProjects, setLoadingMoreProjects] = useState<Set<string>>(new Set());
+  const loadingMoreProjectsRef = useRef<Set<string>>(new Set());
   const searchSeqRef = useRef(0);
   const recentConversationsSeqRef = useRef(0);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -589,21 +590,16 @@ export function useSidebarController({
       return;
     }
 
-    let shouldLoad = false;
-    setLoadingMoreProjects((previous) => {
-      if (previous.has(projectId)) {
-        return previous;
-      }
+    if (loadingMoreProjectsRef.current.has(projectId)) {
+      return;
+    }
+    loadingMoreProjectsRef.current.add(projectId);
 
-      shouldLoad = true;
+    setLoadingMoreProjects((previous) => {
       const next = new Set(previous);
       next.add(projectId);
       return next;
     });
-
-    if (!shouldLoad) {
-      return;
-    }
 
     try {
       await onLoadMoreSessions(projectId);
@@ -611,6 +607,7 @@ export function useSidebarController({
       console.error('[Sidebar] Failed to load more sessions:', error);
       alert(t('messages.refreshError'));
     } finally {
+      loadingMoreProjectsRef.current.delete(projectId);
       setLoadingMoreProjects((previous) => {
         const next = new Set(previous);
         next.delete(projectId);

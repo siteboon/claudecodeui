@@ -1,26 +1,36 @@
-import { useCallback, useState, useEffect, useRef } from 'react';
-import type { ChangeEvent } from 'react';
-import { useTranslation } from 'react-i18next';
-import { AlertTriangle, Check, X, Loader2, Folder, Upload } from 'lucide-react';
+import { useCallback, useState, useEffect, useRef } from "react";
+import type { ChangeEvent } from "react";
+import { useTranslation } from "react-i18next";
+import { AlertTriangle, Check, X, Loader2, Folder, Upload } from "lucide-react";
 
-import { cn } from '@/shared/utils';
-import { ICON_SIZE_CLASS, getFileIconData } from '@/modules/file-tree/utils/fileIcons';
-import { useExpandedDirectories } from '@/modules/file-tree/hooks/useExpandedDirectories';
-import { useFileTreeData } from '@/modules/file-tree/hooks/useFileTreeData';
-import { useFileTreeOperations } from '@/modules/file-tree/hooks/useFileTreeOperations';
-import { useFileTreeSearch } from '@/modules/file-tree/hooks/useFileTreeSearch';
-import { useFileTreeViewMode } from '@/modules/file-tree/hooks/useFileTreeViewMode';
-import { useFileTreeUpload } from '@/modules/file-tree/hooks/useFileTreeUpload';
-import type { FileTreeImageSelection, FileTreeNode,Project } from '@/shared/types';
-import { formatFileSize, formatRelativeTime, isImageFile } from '@/modules/file-tree/utils/fileTreeUtils';
-import { ScrollArea, Input } from '@/shared/ui';
-import FileTreeBody from '@/modules/file-tree/FileTreeBody';
-import FileTreeDetailedColumns from '@/modules/file-tree/FileTreeDetailedColumns';
-import FileTreeHeader from '@/modules/file-tree/FileTreeHeader';
-import FileTreeLoadingState from '@/modules/file-tree/FileTreeLoadingState';
-import FileTreeUploadProgress from '@/modules/file-tree/FileTreeUploadProgress';
-import ImageViewer from '@/modules/file-tree/ImageViewer';
-
+import { cn } from "@/shared/utils";
+import {
+  ICON_SIZE_CLASS,
+  getFileIconData,
+} from "@/modules/file-tree/utils/fileIcons";
+import { useExpandedDirectories } from "@/modules/file-tree/hooks/useExpandedDirectories";
+import { useFileTreeData } from "@/modules/file-tree/hooks/useFileTreeData";
+import { useFileTreeOperations } from "@/modules/file-tree/hooks/useFileTreeOperations";
+import { useFileTreeSearch } from "@/modules/file-tree/hooks/useFileTreeSearch";
+import { useFileTreeViewMode } from "@/modules/file-tree/hooks/useFileTreeViewMode";
+import { useFileTreeUpload } from "@/modules/file-tree/hooks/useFileTreeUpload";
+import type {
+  FileTreeImageSelection,
+  FileTreeNode,
+  Project,
+} from "@/shared/types";
+import {
+  formatFileSize,
+  formatRelativeTime,
+  isImageFile,
+} from "@/modules/file-tree/utils/fileTreeUtils";
+import { ScrollArea, Input } from "@/shared/ui";
+import FileTreeBody from "@/modules/file-tree/FileTreeBody";
+import FileTreeDetailedColumns from "@/modules/file-tree/FileTreeDetailedColumns";
+import FileTreeHeader from "@/modules/file-tree/FileTreeHeader";
+import FileTreeLoadingState from "@/modules/file-tree/FileTreeLoadingState";
+import FileTreeUploadProgress from "@/modules/file-tree/FileTreeUploadProgress";
+import ImageViewer from "@/modules/file-tree/ImageViewer";
 
 type FileTreeProps = {
   selectedProject: Project | null;
@@ -28,17 +38,24 @@ type FileTreeProps = {
 };
 
 /** Exported through the file-tree barrel; the project-workspace module renders it as the Files sidebar tab. */
-export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps) {
+function useFileTreeController({ selectedProject, onFileOpen }: FileTreeProps) {
   const { t } = useTranslation();
-  const [selectedImage, setSelectedImage] = useState<FileTreeImageSelection | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [selectedImage, setSelectedImage] =
+    useState<FileTreeImageSelection | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error";
+  } | null>(null);
   const newItemInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
   // Show toast notification
-  const showToast = useCallback((message: string, type: 'success' | 'error') => {
-    setToast({ message, type });
-  }, []);
+  const showToast = useCallback(
+    (message: string, type: "success" | "error") => {
+      setToast({ message, type });
+    },
+    [],
+  );
 
   // Auto-hide toast
   useEffect(() => {
@@ -48,9 +65,11 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
     }
   }, [toast]);
 
-  const { files, loading, error, refreshFiles } = useFileTreeData(selectedProject);
+  const { files, loading, error, refreshFiles } =
+    useFileTreeData(selectedProject);
   const { viewMode, changeViewMode } = useFileTreeViewMode();
-  const { expandedDirs, toggleDirectory, expandDirectories, collapseAll } = useExpandedDirectories();
+  const { expandedDirs, toggleDirectory, expandDirectories, collapseAll } =
+    useExpandedDirectories();
   const { searchQuery, setSearchQuery, filteredFiles } = useFileTreeSearch({
     files,
     expandDirectories,
@@ -70,12 +89,13 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
     onRefresh: refreshFiles,
     showToast,
   });
-  const operationLoading = operations.operationLoading || upload.operationLoading;
+  const operationLoading =
+    operations.operationLoading || upload.operationLoading;
 
   // Folder-targeted uploads (context menu / hover button) share one hidden
   // input; the target path is remembered until the user picks the files.
   const folderUploadInputRef = useRef<HTMLInputElement>(null);
-  const folderUploadTargetRef = useRef('');
+  const folderUploadTargetRef = useRef("");
   const { uploadFiles } = upload;
 
   const handleUploadToFolder = useCallback((targetPath: string) => {
@@ -89,7 +109,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
       if (pickedFiles && pickedFiles.length > 0) {
         uploadFiles(Array.from(pickedFiles), folderUploadTargetRef.current);
       }
-      event.target.value = '';
+      event.target.value = "";
     },
     [uploadFiles],
   );
@@ -118,7 +138,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
   // Centralized click behavior keeps file actions identical across all presentation modes.
   const handleItemClick = useCallback(
     (item: FileTreeNode) => {
-      if (item.type === 'directory') {
+      if (item.type === "directory") {
         toggleDirectory(item.path);
         return;
       }
@@ -144,6 +164,83 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
     (date?: string) => formatRelativeTime(date, t),
     [t],
   );
+
+  return {
+    t,
+    selectedImage,
+    setSelectedImage,
+    toast,
+    setToast,
+    newItemInputRef,
+    renameInputRef,
+    showToast,
+    files,
+    loading,
+    error,
+    refreshFiles,
+    viewMode,
+    changeViewMode,
+    expandedDirs,
+    toggleDirectory,
+    expandDirectories,
+    collapseAll,
+    searchQuery,
+    setSearchQuery,
+    filteredFiles,
+    operations,
+    treeRef,
+    upload,
+    operationLoading,
+    folderUploadInputRef,
+    folderUploadTargetRef,
+    uploadFiles,
+    handleUploadToFolder,
+    handleFolderUploadInputChange,
+    renderFileIcon,
+    handleItemClick,
+    formatRelativeTimeLabel,
+  };
+}
+
+export default function FileTree({
+  selectedProject,
+  onFileOpen,
+}: FileTreeProps) {
+  const {
+    t,
+    selectedImage,
+    setSelectedImage,
+    toast,
+    setToast,
+    newItemInputRef,
+    renameInputRef,
+    showToast,
+    files,
+    loading,
+    error,
+    refreshFiles,
+    viewMode,
+    changeViewMode,
+    expandedDirs,
+    toggleDirectory,
+    expandDirectories,
+    collapseAll,
+    searchQuery,
+    setSearchQuery,
+    filteredFiles,
+    operations,
+    treeRef,
+    upload,
+    operationLoading,
+    folderUploadInputRef,
+    folderUploadTargetRef,
+    uploadFiles,
+    handleUploadToFolder,
+    handleFolderUploadInputChange,
+    renderFileIcon,
+    handleItemClick,
+    formatRelativeTimeLabel,
+  } = useFileTreeController({ selectedProject, onFileOpen });
 
   if (loading) {
     return <FileTreeLoadingState />;
@@ -176,10 +273,14 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
             <Upload className="h-6 w-6 text-blue-500" />
             <span className="text-sm font-medium">
               {upload.dropTarget
-                ? t('fileTree.dropToUploadTo', 'Drop files to upload to "{{folder}}"', {
-                    folder: upload.dropTarget.split(/[\\/]/).pop(),
-                  })
-                : t('fileTree.dropToUpload', 'Drop files to upload')}
+                ? t(
+                    "fileTree.dropToUploadTo",
+                    'Drop files to upload to "{{folder}}"',
+                    {
+                      folder: upload.dropTarget.split(/[\\/]/).pop(),
+                    },
+                  )
+                : t("fileTree.dropToUpload", "Drop files to upload")}
             </span>
           </div>
         </div>
@@ -191,31 +292,37 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
         onUploadFiles={upload.handleFileSelect}
-        onNewFile={() => operations.handleStartCreate('', 'file')}
-        onNewFolder={() => operations.handleStartCreate('', 'directory')}
+        onNewFile={() => operations.handleStartCreate("", "file")}
+        onNewFolder={() => operations.handleStartCreate("", "directory")}
         onRefresh={refreshFiles}
         onCollapseAll={collapseAll}
         loading={loading}
         operationLoading={operationLoading}
-        isUploading={upload.uploadProgress?.status === 'uploading'}
+        isUploading={upload.uploadProgress?.status === "uploading"}
         uploadProgress={upload.uploadProgress?.progress ?? null}
       />
 
       <FileTreeUploadProgress upload={upload.uploadProgress} />
 
-      {viewMode === 'detailed' && filteredFiles.length > 0 && <FileTreeDetailedColumns />}
+      {viewMode === "detailed" && filteredFiles.length > 0 && (
+        <FileTreeDetailedColumns />
+      )}
 
       <ScrollArea className="flex-1 px-2 py-1">
         {/* New item input */}
         {operations.isCreating && (
           <div
             className="mb-1 flex items-center gap-1.5 py-[3px] pr-2"
-            style={{ paddingLeft: `${(operations.newItemParent.split('/').length - 1) * 16 + 4}px` }}
+            style={{
+              paddingLeft: `${(operations.newItemParent.split("/").length - 1) * 16 + 4}px`,
+            }}
           >
-            {operations.newItemType === 'directory' ? (
-              <Folder className={cn(ICON_SIZE_CLASS, 'text-blue-500')} />
+            {operations.newItemType === "directory" ? (
+              <Folder className={cn(ICON_SIZE_CLASS, "text-blue-500")} />
             ) : (
-              <span className="ml-[18px]">{renderFileIcon(operations.newItemName)}</span>
+              <span className="ml-[18px]">
+                {renderFileIcon(operations.newItemName)}
+              </span>
             )}
             <Input
               ref={newItemInputRef}
@@ -224,8 +331,8 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
               onChange={(e) => operations.setNewItemName(e.target.value)}
               onKeyDown={(e) => {
                 e.stopPropagation();
-                if (e.key === 'Enter') operations.handleConfirmCreate();
-                if (e.key === 'Escape') operations.handleCancelCreate();
+                if (e.key === "Enter") operations.handleConfirmCreate();
+                if (e.key === "Escape") operations.handleCancelCreate();
               }}
               onBlur={() => {
                 setTimeout(() => {
@@ -251,8 +358,10 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
           formatRelativeTime={formatRelativeTimeLabel}
           onRename={operations.handleStartRename}
           onDelete={operations.handleStartDelete}
-          onNewFile={(path) => operations.handleStartCreate(path, 'file')}
-          onNewFolder={(path) => operations.handleStartCreate(path, 'directory')}
+          onNewFile={(path) => operations.handleStartCreate(path, "file")}
+          onNewFolder={(path) =>
+            operations.handleStartCreate(path, "directory")
+          }
           onCopyPath={operations.handleCopyPath}
           onDownload={operations.handleDownload}
           onUpload={handleUploadToFolder}
@@ -278,61 +387,73 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
       )}
 
       {/* Delete Confirmation Dialog */}
-      {operations.deleteConfirmation.isOpen && operations.deleteConfirmation.item && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
-          <div className="mx-4 max-w-sm rounded-lg border border-border bg-background p-4 shadow-lg">
-            <div className="mb-4 flex items-center gap-3">
-              <div className="rounded-full bg-red-100 p-2 dark:bg-red-900/30">
-                <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
+      {operations.deleteConfirmation.isOpen &&
+        operations.deleteConfirmation.item && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
+            <div className="mx-4 max-w-sm rounded-lg border border-border bg-background p-4 shadow-lg">
+              <div className="mb-4 flex items-center gap-3">
+                <div className="rounded-full bg-red-100 p-2 dark:bg-red-900/30">
+                  <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                </div>
+                <div>
+                  <h3 className="font-medium text-foreground">
+                    {t("fileTree.delete.title", "Delete {{type}}", {
+                      type:
+                        operations.deleteConfirmation.item.type === "directory"
+                          ? "Folder"
+                          : "File",
+                    })}
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    {operations.deleteConfirmation.item.name}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-medium text-foreground">
-                  {t('fileTree.delete.title', 'Delete {{type}}', {
-                    type: operations.deleteConfirmation.item.type === 'directory' ? 'Folder' : 'File'
-                  })}
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  {operations.deleteConfirmation.item.name}
-                </p>
+              <p className="mb-4 text-sm text-muted-foreground">
+                {operations.deleteConfirmation.item.type === "directory"
+                  ? t(
+                      "fileTree.delete.folderWarning",
+                      "This folder and all its contents will be permanently deleted.",
+                    )
+                  : t(
+                      "fileTree.delete.fileWarning",
+                      "This file will be permanently deleted.",
+                    )}
+              </p>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={operations.handleCancelDelete}
+                  disabled={operationLoading}
+                  className="rounded-md px-3 py-1.5 text-sm transition-colors hover:bg-accent"
+                >
+                  {t("common.cancel", "Cancel")}
+                </button>
+                <button
+                  onClick={operations.handleConfirmDelete}
+                  disabled={operationLoading}
+                  className="flex items-center gap-2 rounded-md bg-red-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                >
+                  {operationLoading && (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  )}
+                  {t("fileTree.delete.confirm", "Delete")}
+                </button>
               </div>
-            </div>
-            <p className="mb-4 text-sm text-muted-foreground">
-              {operations.deleteConfirmation.item.type === 'directory'
-                ? t('fileTree.delete.folderWarning', 'This folder and all its contents will be permanently deleted.')
-                : t('fileTree.delete.fileWarning', 'This file will be permanently deleted.')}
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={operations.handleCancelDelete}
-                disabled={operationLoading}
-                className="rounded-md px-3 py-1.5 text-sm transition-colors hover:bg-accent"
-              >
-                {t('common.cancel', 'Cancel')}
-              </button>
-              <button
-                onClick={operations.handleConfirmDelete}
-                disabled={operationLoading}
-                className="flex items-center gap-2 rounded-md bg-red-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-red-700 disabled:opacity-50"
-              >
-                {operationLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-                {t('fileTree.delete.confirm', 'Delete')}
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
       {/* Toast Notification */}
       {toast && (
         <div
           className={cn(
-            'fixed bottom-4 right-4 z-[9999] px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 animate-in slide-in-from-bottom-2',
-            toast.type === 'success'
-              ? 'bg-green-600 text-white'
-              : 'bg-red-600 text-white'
+            "fixed bottom-4 right-4 z-[9999] px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 animate-in slide-in-from-bottom-2",
+            toast.type === "success"
+              ? "bg-green-600 text-white"
+              : "bg-red-600 text-white",
           )}
         >
-          {toast.type === 'success' ? (
+          {toast.type === "success" ? (
             <Check className="h-4 w-4" />
           ) : (
             <X className="h-4 w-4" />

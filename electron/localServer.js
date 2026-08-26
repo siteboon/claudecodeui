@@ -472,9 +472,10 @@ export class LocalServerController {
       }
     }
 
-    const serverEntry = await this.resolveServerEntry();
-
-    const port = await chooseServerPort(this.getServerBindHost());
+    const [serverEntry, port] = await Promise.all([
+      this.resolveServerEntry(),
+      chooseServerPort(this.getServerBindHost()),
+    ]);
     const serverUrl = `http://${HOST}:${port}`;
     const displayUrl = `http://${DISPLAY_HOST}:${port}`;
     this.localServerPort = port;

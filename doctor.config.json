@@ -1,0 +1,26 @@
+{
+  "$schema": "https://react.doctor/schema/config.json",
+  "ignore": {
+    "overrides": [
+      {
+        "files": [
+          "server/index.ts",
+          "server/modules/auth/auth.middleware.ts",
+          "server/modules/notifications/vapid-keys.service.ts"
+        ],
+        "rules": ["react-doctor/no-barrel-import"]
+      },
+      {
+        "files": [
+          "src/modules/chat/hooks/useChatProviderState.ts",
+          "src/modules/mcp/hooks/useMcpServers.ts",
+          "src/modules/project-creation-wizard/hooks/useGithubTokens.ts",
+          "src/modules/project-workspace/hooks/useProjectsState.ts",
+          "src/modules/sidebar/hooks/useSidebarController.ts",
+          "src/modules/skills/hooks/useProviderSkills.ts"
+        ],
+        "rules": ["react-doctor/no-loading-flag-reset-outside-finally"]
+      }
+    ]
+  }
+}

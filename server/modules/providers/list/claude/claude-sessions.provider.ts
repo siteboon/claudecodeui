@@ -98,12 +98,13 @@ async function readClaudeSubagentTranscript(filePath: string): Promise<ClaudeSub
         const entry = JSON.parse(line) as AnyRecord;
         const timestamp = typeof entry.timestamp === 'string' ? entry.timestamp : undefined;
 
-        if (entry.message?.role === 'assistant' && Array.isArray(entry.message?.content)) {
+        const messageContent = entry.message?.content;
+        if (entry.message?.role === 'assistant' && Array.isArray(messageContent)) {
           if (typeof entry.message.model === 'string') {
             transcript.model = entry.message.model;
           }
 
-          for (const part of entry.message.content as AnyRecord[]) {
+          for (const part of messageContent as AnyRecord[]) {
             if (part.type === 'tool_use') {
               const tool: SubagentActivity = {
                 kind: 'tool',
@@ -128,8 +129,8 @@ async function readClaudeSubagentTranscript(filePath: string): Promise<ClaudeSub
           }
         }
 
-        if (entry.message?.role === 'user' && Array.isArray(entry.message?.content)) {
-          for (const part of entry.message.content as AnyRecord[]) {
+        if (entry.message?.role === 'user' && Array.isArray(messageContent)) {
+          for (const part of messageContent as AnyRecord[]) {
             if (part.type !== 'tool_result') {
               continue;
             }

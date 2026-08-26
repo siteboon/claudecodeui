@@ -85,7 +85,7 @@ export default function SidebarFooter({
           {/* Mobile update */}
           <div className="px-3 py-2 md:hidden">
             <button
-              className="flex h-11 w-full items-center gap-3 rounded-xl border border-blue-200/60 bg-blue-50/80 px-3.5 transition-all active:scale-[0.98] dark:border-blue-700/40 dark:bg-blue-900/15"
+              className="flex h-11 w-full items-center gap-3 rounded-xl border border-blue-200/60 bg-blue-50/80 px-3.5 transition-transform active:scale-[0.98] dark:border-blue-700/40 dark:bg-blue-900/15"
               onClick={onShowVersionModal}
             >
               <div className="relative flex-shrink-0">
@@ -165,7 +165,7 @@ export default function SidebarFooter({
           href={GITHUB_ISSUES_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex h-10 w-full items-center gap-3 rounded-xl bg-muted/40 px-3.5 transition-all hover:bg-muted/60 active:scale-[0.98]"
+          className="flex h-10 w-full items-center gap-3 rounded-xl bg-muted/40 px-3.5 transition-[background-color,transform] hover:bg-muted/60 active:scale-[0.98]"
         >
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-background/80">
             <Bug className="h-4 w-4 text-muted-foreground" />
@@ -180,7 +180,7 @@ export default function SidebarFooter({
           href={DISCORD_INVITE_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex h-10 w-full items-center gap-3 rounded-xl bg-muted/40 px-3.5 transition-all hover:bg-muted/60 active:scale-[0.98]"
+          className="flex h-10 w-full items-center gap-3 rounded-xl bg-muted/40 px-3.5 transition-[background-color,transform] hover:bg-muted/60 active:scale-[0.98]"
         >
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-background/80">
             <DiscordIcon className="h-4 w-4 text-muted-foreground" />
@@ -192,7 +192,7 @@ export default function SidebarFooter({
       {/* Mobile settings */}
       <div className="px-3 pb-3 pt-2 md:hidden">
         <button
-          className="flex h-10 w-full items-center gap-3 rounded-xl bg-muted/40 px-3.5 transition-all hover:bg-muted/60 active:scale-[0.98]"
+          className="flex h-10 w-full items-center gap-3 rounded-xl bg-muted/40 px-3.5 transition-[background-color,transform] hover:bg-muted/60 active:scale-[0.98]"
           onClick={onShowSettings}
         >
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-background/80">

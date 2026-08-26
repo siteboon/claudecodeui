@@ -30,7 +30,7 @@ export default function SidebarProjectsState({
           <div className="space-y-2">
             <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
               <div
-                className="h-full bg-primary transition-all duration-300 ease-out"
+                className="h-full bg-primary transition-[width] duration-300 ease-out"
                 style={{ width: `${(loadingProgress.current / loadingProgress.total) * 100}%` }}
               />
             </div>

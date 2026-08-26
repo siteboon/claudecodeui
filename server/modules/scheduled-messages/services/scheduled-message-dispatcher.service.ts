@@ -144,11 +144,17 @@ export async function dispatchDueScheduledMessages(
     return 0;
   }
 
-  // Sequentially: a session can only have one run at a time, and two due
-  // messages for the same session must not race each other into it.
+  // Different sessions can dispatch together, but messages for one session
+  // are chained in claim order because a session can only run one at a time.
+  const dispatchesBySession = new Map<string, Promise<void>>();
   for (const row of due) {
-    await sendClaimedMessage(row, runtime);
+    const previousDispatch = dispatchesBySession.get(row.session_id) ?? Promise.resolve();
+    dispatchesBySession.set(
+      row.session_id,
+      previousDispatch.then(() => sendClaimedMessage(row, runtime)),
+    );
   }
+  await Promise.all(dispatchesBySession.values());
 
   return due.length;
 }

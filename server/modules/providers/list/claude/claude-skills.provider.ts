@@ -123,63 +123,59 @@ export class ClaudeSkillsProvider extends SkillsProvider {
       return [];
     }
 
-    const skills: ProviderSkill[] = [];
     const visitedPluginFolders = new Set<string>();
     const pluginEntries = Object.entries(enabledPlugins)
       .sort(([left], [right]) => left.localeCompare(right));
-    for (const [pluginId, enabled] of pluginEntries) {
-      if (enabled !== true) {
-        continue;
-      }
-
+    const pluginFolderGroups = await Promise.all(pluginEntries.map(async ([pluginId, enabled]) => {
       const installs = installedPlugins[pluginId];
-      if (!Array.isArray(installs)) {
-        continue;
+      if (enabled !== true || !Array.isArray(installs)) {
+        return [];
       }
 
-      for (const install of installs) {
+      const installFolderGroups = await Promise.all(installs.map(async (install) => {
         const installRecord = readObjectRecord(install);
         const installPath = readOptionalString(installRecord?.installPath);
         if (!installPath) {
-          continue;
+          return [];
         }
 
         // Claude's installed path points at one version folder; the usable
         // plugin payloads live in the direct child folders beside it.
         const pluginFolders = await listChildDirectories(path.dirname(installPath));
-        for (const pluginFolder of pluginFolders) {
-          const pluginFolderKey = `${pluginId}:${path.resolve(pluginFolder)}`;
-          if (visitedPluginFolders.has(pluginFolderKey)) {
-            continue;
-          }
-          visitedPluginFolders.add(pluginFolderKey);
+        return pluginFolders.map((pluginFolder) => ({ pluginFolder, pluginId }));
+      }));
+      return installFolderGroups.flat();
+    }));
 
-          const pluginName = await readClaudePluginName(pluginFolder, pluginId);
-          if (!pluginName) {
-            continue;
-          }
-
-          const commandsPath = path.join(pluginFolder, 'commands');
-          if (await pathExistsAsDirectory(commandsPath)) {
-            skills.push(
-              ...(await this.listPluginCommandSkills(commandsPath, pluginId, pluginName)),
-            );
-            continue;
-          }
-
-          const skillsPath = path.join(pluginFolder, 'skills');
-          if (!(await pathExistsAsDirectory(skillsPath))) {
-            continue;
-          }
-
-          skills.push(
-            ...(await this.listPluginSkillMarkdowns(pluginFolder, pluginId, pluginName)),
-          );
-        }
+    const uniquePluginFolders = pluginFolderGroups.flat().filter(({ pluginFolder, pluginId }) => {
+      const pluginFolderKey = `${pluginId}:${path.resolve(pluginFolder)}`;
+      if (visitedPluginFolders.has(pluginFolderKey)) {
+        return false;
       }
-    }
+      visitedPluginFolders.add(pluginFolderKey);
+      return true;
+    });
 
-    return skills;
+    const pluginSkills = await Promise.all(uniquePluginFolders.map(async ({ pluginFolder, pluginId }) => {
+      const pluginName = await readClaudePluginName(pluginFolder, pluginId);
+      if (!pluginName) {
+        return [];
+      }
+
+      const commandsPath = path.join(pluginFolder, 'commands');
+      if (await pathExistsAsDirectory(commandsPath)) {
+        return this.listPluginCommandSkills(commandsPath, pluginId, pluginName);
+      }
+
+      const skillsPath = path.join(pluginFolder, 'skills');
+      if (!(await pathExistsAsDirectory(skillsPath))) {
+        return [];
+      }
+
+      return this.listPluginSkillMarkdowns(pluginFolder, pluginId, pluginName);
+    }));
+
+    return pluginSkills.flat();
   }
 
   private async listPluginCommandSkills(

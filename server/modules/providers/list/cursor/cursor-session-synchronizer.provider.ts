@@ -45,14 +45,12 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
   async synchronize(since?: Date): Promise<number> {
     const projectsDir = path.join(this.cursorHome, 'projects');
 
-    let processed = 0;
-
     const files = await findFilesRecursivelyCreatedAfter(projectsDir, '.jsonl', since ?? null);
 
-    for (const filePath of files) {
+    const processedFiles = await Promise.all(files.map(async (filePath): Promise<boolean> => {
       const parsed = await this.processSessionFile(filePath);
       if (!parsed) {
-        continue;
+        return false;
       }
 
       const timestamps = await readFileTimestamps(filePath);
@@ -65,10 +63,10 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
         timestamps.updatedAt,
         filePath
       );
-      processed += 1;
-    }
+      return true;
+    }));
 
-    return processed;
+    return processedFiles.filter(Boolean).length;
   }
 
   /**

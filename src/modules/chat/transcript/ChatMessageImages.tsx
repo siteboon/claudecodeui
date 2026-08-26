@@ -177,8 +177,8 @@ export default function ChatMessageImages({ images, projectId }: ChatMessageImag
 
   return (
     <div className="flex flex-wrap justify-end gap-2">
-      {images.map((image, index) => (
-        <ChatMessageImage key={image.path || image.name || index} image={image} projectId={projectId} />
+      {images.map((image) => (
+        <ChatMessageImage key={image.path || `${image.name}-${image.size}-${image.type}`} image={image} projectId={projectId} />
       ))}
     </div>
   );

@@ -106,17 +106,16 @@ self.addEventListener('notificationclick', event => {
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async clientList => {
-      for (const client of clientList) {
-        if (client.url.includes(self.location.origin)) {
-          await client.focus();
-          client.postMessage({
-            type: 'notification:navigate',
-            sessionId: sessionId || null,
-            provider,
-            urlPath
-          });
-          return;
-        }
+      const client = clientList.find(candidate => candidate.url.includes(self.location.origin));
+      if (client) {
+        await client.focus();
+        client.postMessage({
+          type: 'notification:navigate',
+          sessionId: sessionId || null,
+          provider,
+          urlPath
+        });
+        return;
       }
       return self.clients.openWindow(urlPath);
     })

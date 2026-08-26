@@ -726,62 +726,69 @@ export function addUniqueProviderSkillSource(
  * descendant `SKILL.md`. Missing or unreadable roots return an empty list
  * because users may not have every provider installed or configured.
  */
+async function collectProviderSkillFilesRecursive(dirPath: string): Promise<string[]> {
+  let entries;
+  try {
+    entries = await readdir(dirPath, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  let skillFile: string[] = [];
+  try {
+    const skillPath = path.join(dirPath, 'SKILL.md');
+    const skillStats = await stat(skillPath);
+    if (skillStats.isFile()) {
+      skillFile = [skillPath];
+    }
+  } catch {
+    // Directories without SKILL.md are expected while walking plugin trees.
+  }
+
+  const descendantPromises: Array<Promise<string[]>> = [];
+  for (const entry of entries) {
+    if (entry.isDirectory() || entry.isSymbolicLink()) {
+      descendantPromises.push(collectProviderSkillFilesRecursive(path.join(dirPath, entry.name)));
+    }
+  }
+  const descendantFiles = await Promise.all(descendantPromises);
+  return [...skillFile, ...descendantFiles.flat()];
+}
+
+async function findSkillMarkdownInChild(rootDir: string, entryName: string): Promise<string | null> {
+  const skillPath = path.join(rootDir, entryName, 'SKILL.md');
+  try {
+    const skillStats = await stat(skillPath);
+    return skillStats.isFile() ? skillPath : null;
+  } catch {
+    // A partial skill directory should not block discovery of sibling skills.
+    return null;
+  }
+}
+
 export async function findProviderSkillMarkdownFiles(
   rootDir: string,
   options: { recursive?: boolean } = {},
 ): Promise<string[]> {
-  const skillFiles: string[] = [];
-
-  const collectRecursive = async (dirPath: string): Promise<void> => {
-    let entries;
-    try {
-      entries = await readdir(dirPath, { withFileTypes: true });
-    } catch {
-      return;
-    }
-
-    try {
-      const skillPath = path.join(dirPath, 'SKILL.md');
-      const skillStats = await stat(skillPath);
-      if (skillStats.isFile()) {
-        skillFiles.push(skillPath);
-      }
-    } catch {
-      // Directories without SKILL.md are expected while walking plugin trees.
-    }
-
-    for (const entry of entries) {
-      if (entry.isDirectory() || entry.isSymbolicLink()) {
-        await collectRecursive(path.join(dirPath, entry.name));
-      }
-    }
-  };
-
   if (options.recursive) {
-    await collectRecursive(rootDir);
+    const skillFiles = await collectProviderSkillFilesRecursive(rootDir);
     return skillFiles.sort((left, right) => left.localeCompare(right));
   }
 
   try {
     const entries = await readdir(rootDir, { withFileTypes: true });
 
+    const discoveryPromises: Array<Promise<string | null>> = [];
     for (const entry of entries) {
-      if (!entry.isDirectory() && !entry.isSymbolicLink()) {
-        continue;
-      }
-
-      const skillPath = path.join(rootDir, entry.name, 'SKILL.md');
-      try {
-        const skillStats = await stat(skillPath);
-        if (skillStats.isFile()) {
-          skillFiles.push(skillPath);
-        }
-      } catch {
-        // A partial skill directory should not block discovery of sibling skills.
+      if (entry.isDirectory() || entry.isSymbolicLink()) {
+        discoveryPromises.push(findSkillMarkdownInChild(rootDir, entry.name));
       }
     }
+    const discoveredSkillFiles = await Promise.all(discoveryPromises);
 
-    return skillFiles.sort((left, right) => left.localeCompare(right));
+    return discoveredSkillFiles
+      .filter((skillPath): skillPath is string => skillPath !== null)
+      .sort((left, right) => left.localeCompare(right));
   } catch {
     return [];
   }

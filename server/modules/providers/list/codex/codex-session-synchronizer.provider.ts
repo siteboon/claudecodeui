@@ -29,18 +29,15 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
    * Scans ~/.codex/sessions and upserts discovered sessions into DB.
    */
   async synchronize(since?: Date): Promise<number> {
-    const nameMap = await buildLookupMap(path.join(this.codexHome, 'session_index.jsonl'), 'id', 'thread_name');
-    const files = await findFilesRecursivelyCreatedAfter(
-      path.join(this.codexHome, 'sessions'),
-      '.jsonl',
-      since ?? null
-    );
+    const [nameMap, files] = await Promise.all([
+      buildLookupMap(path.join(this.codexHome, 'session_index.jsonl'), 'id', 'thread_name'),
+      findFilesRecursivelyCreatedAfter(path.join(this.codexHome, 'sessions'), '.jsonl', since ?? null),
+    ]);
 
-    let processed = 0;
-    for (const filePath of files) {
+    const processedFiles = await Promise.all(files.map(async (filePath): Promise<boolean> => {
       const parsed = await this.processSessionFile(filePath, nameMap);
       if (!parsed) {
-        continue;
+        return false;
       }
 
       const existingSession = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)
@@ -62,10 +59,10 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
         timestamps.updatedAt,
         filePath
       );
-      processed += 1;
-    }
+      return true;
+    }));
 
-    return processed;
+    return processedFiles.filter(Boolean).length;
   }
 
   /**

@@ -48,11 +48,14 @@ export default function LoginForm() {
       }
 
       setIsSubmitting(true);
-      const result = await login(formState.username.trim(), formState.password);
-      if (!result.success) {
-        setErrorMessage(result.error);
+      try {
+        const result = await login(formState.username.trim(), formState.password);
+        if (!result.success) {
+          setErrorMessage(result.error);
+        }
+      } finally {
+        setIsSubmitting(false);
       }
-      setIsSubmitting(false);
     },
     [formState.password, formState.username, login, t],
   );
@@ -92,7 +95,7 @@ export default function LoginForm() {
         <button
           type="submit"
           disabled={isSubmitting}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 font-medium text-primary-foreground shadow-lg shadow-primary/25 transition-all duration-200 hover:shadow-primary/30 hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2 focus:ring-offset-card active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 font-medium text-primary-foreground shadow-lg shadow-primary/25 transition-[box-shadow,filter,transform,opacity] duration-200 hover:shadow-primary/30 hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2 focus:ring-offset-card active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isSubmitting ? (
             <>

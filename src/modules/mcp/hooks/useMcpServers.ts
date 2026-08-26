@@ -386,31 +386,36 @@ export function useMcpServers({ selectedProvider, currentProjects }: UseMcpServe
 
     setIsLoadingProjectScopes(true);
 
-    // Update the UI as each project scope resolves. This avoids waiting for the
-    // slowest project before showing servers from faster config files.
-    await Promise.all(projectScopeRequests.map(async ({ scope, project }) => {
-      try {
-        const scopedServers = await fetchProviderScopeServers(selectedProvider, scope, project);
-        if (activeLoadIdRef.current !== loadId) {
-          return;
+    try {
+      // Update the UI as each project scope resolves. This avoids waiting for the
+      // slowest project before showing servers from faster config files.
+      await Promise.all(projectScopeRequests.map(async ({ scope, project }) => {
+        try {
+          const scopedServers = await fetchProviderScopeServers(selectedProvider, scope, project);
+          if (activeLoadIdRef.current !== loadId) {
+            return;
+          }
+
+          nextServers = replaceScopedServers(nextServers, scopedServers, scope, project.path);
+          setServers(nextServers);
+        } catch (error) {
+          firstError = firstError || getErrorMessage(error);
         }
+      }));
 
-        nextServers = replaceScopedServers(nextServers, scopedServers, scope, project.path);
-        setServers(nextServers);
-      } catch (error) {
-        firstError = firstError || getErrorMessage(error);
+      if (activeLoadIdRef.current !== loadId) {
+        return;
       }
-    }));
 
-    if (activeLoadIdRef.current !== loadId) {
-      return;
+      const finalServers = sortServers(nextServers);
+      mcpServersCache.set(cacheKey, { servers: finalServers, updatedAt: Date.now() });
+      setServers(finalServers);
+      setLoadError(firstError);
+    } finally {
+      if (activeLoadIdRef.current === loadId) {
+        setIsLoadingProjectScopes(false);
+      }
     }
-
-    const finalServers = sortServers(nextServers);
-    mcpServersCache.set(cacheKey, { servers: finalServers, updatedAt: Date.now() });
-    setServers(finalServers);
-    setLoadError(firstError);
-    setIsLoadingProjectScopes(false);
   }, [cacheKey, projectTargets, selectedProvider]);
 
   const openForm = useCallback((server?: ProviderMcpServer) => {

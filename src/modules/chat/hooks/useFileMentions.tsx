@@ -162,18 +162,21 @@ export function useFileMentions({ selectedProject, input, setInput, textareaRef 
       }
 
       const parts = text.split(fileMentionRegex);
-      return parts.map((part, index) =>
-        fileMentionSet.has(part) ? (
+      let characterOffset = 0;
+      return parts.map((part) => {
+        const partOffset = characterOffset;
+        characterOffset += part.length;
+        return fileMentionSet.has(part) ? (
           <span
-            key={`mention-${index}`}
+            key={`mention-${partOffset}-${part}`}
             className="-ml-0.5 rounded-md bg-blue-200/70 box-decoration-clone px-0.5 text-transparent dark:bg-blue-300/40"
           >
             {part}
           </span>
         ) : (
-          <span key={`text-${index}`}>{part}</span>
-        ),
-      );
+          <span key={`text-${partOffset}-${part}`}>{part}</span>
+        );
+      });
     },
     [fileMentionRegex, fileMentionSet],
   );

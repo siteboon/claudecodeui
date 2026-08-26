@@ -294,29 +294,34 @@ export function useProviderSkills({ selectedProvider, currentProjects }: UseProv
 
     setIsLoadingProjectScopes(true);
 
-    await Promise.all(projectTargets.map(async (project) => {
-      try {
-        const projectSkills = await fetchProviderSkills(selectedProvider, project);
-        if (activeLoadIdRef.current !== loadId) {
-          return;
+    try {
+      await Promise.all(projectTargets.map(async (project) => {
+        try {
+          const projectSkills = await fetchProviderSkills(selectedProvider, project);
+          if (activeLoadIdRef.current !== loadId) {
+            return;
+          }
+
+          nextSkills = mergeSkills(nextSkills, projectSkills);
+          setSkills(nextSkills);
+        } catch (error) {
+          firstError = firstError || (error instanceof Error ? error.message : 'Failed to load skills');
         }
+      }));
 
-        nextSkills = mergeSkills(nextSkills, projectSkills);
-        setSkills(nextSkills);
-      } catch (error) {
-        firstError = firstError || (error instanceof Error ? error.message : 'Failed to load skills');
+      if (activeLoadIdRef.current !== loadId) {
+        return;
       }
-    }));
 
-    if (activeLoadIdRef.current !== loadId) {
-      return;
+      const finalSkills = sortSkills(nextSkills);
+      skillsCache.set(cacheKey, { skills: finalSkills, updatedAt: Date.now() });
+      setSkills(finalSkills);
+      setLoadError(firstError);
+    } finally {
+      if (activeLoadIdRef.current === loadId) {
+        setIsLoadingProjectScopes(false);
+      }
     }
-
-    const finalSkills = sortSkills(nextSkills);
-    skillsCache.set(cacheKey, { skills: finalSkills, updatedAt: Date.now() });
-    setSkills(finalSkills);
-    setLoadError(firstError);
-    setIsLoadingProjectScopes(false);
   }, [cacheKey, projectTargets, selectedProvider]);
 
   const addSkills = useCallback(async (payload: ProviderSkillCreatePayload) => {

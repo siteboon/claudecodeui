@@ -54,8 +54,8 @@ const TodoList = memo(
           </div>
         )}
         <Queue>
-          {normalized.map((todo, index) => (
-            <QueueItem key={todo.id ?? `${todo.content}-${index}`} status={todo.queueStatus}>
+          {normalized.map((todo) => (
+            <QueueItem key={todo.id ?? todo.content} status={todo.queueStatus}>
               <QueueItemIndicator />
               <QueueItemContent>{todo.content}</QueueItemContent>
             </QueueItem>

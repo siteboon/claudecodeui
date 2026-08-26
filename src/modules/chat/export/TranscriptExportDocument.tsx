@@ -43,14 +43,14 @@ export function TranscriptExportDocument({
     <I18nextProvider i18n={i18n}>
       <TranscriptRenderContext.Provider value={{ isExporting: true }}>
         <div className="chat-export-transcript">
-          {grouped.map((item, index) => {
+          {grouped.map((item) => {
             if (isToolGroupItem(item)) {
               const groupPreviousMessage = previousMessage;
               previousMessage = item.messages[item.messages.length - 1] || previousMessage;
 
               return (
                 <ToolGroupContainer
-                  key={`group-${index}`}
+                  key={`group-${item.messages.map((message) => message.timestamp).join('-')}`}
                   group={item}
                   prevMessage={groupPreviousMessage}
                   createDiff={createDiff}
@@ -68,7 +68,7 @@ export function TranscriptExportDocument({
 
             return (
               <MessageComponent
-                key={`message-${index}`}
+                key={`message-${item.timestamp}`}
                 message={item}
                 prevMessage={messagePreviousMessage}
                 createDiff={createDiff}

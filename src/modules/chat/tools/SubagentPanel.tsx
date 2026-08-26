@@ -189,13 +189,13 @@ export const SubagentPanel = memo(({
 
           {visibleEntries.length > 0 && (
             <div className="border-l border-border/60 pl-2">
-              {visibleEntries.map((entry, index) => (
+              {visibleEntries.map((entry) => (
                 entry.kind === 'tool' ? (
                   // Rendered through the same router the main thread uses, so a
                   // subagent's shell command or diff looks exactly like one the
                   // top-level agent ran.
                   <ToolRenderer
-                    key={entry.toolId ?? `activity-${index}`}
+                    key={entry.toolId ?? `${entry.timestamp}-${entry.toolName}`}
                     toolName={entry.toolName || 'UnknownTool'}
                     toolInput={entry.toolInput}
                     toolResult={entry.toolResult}
@@ -206,7 +206,7 @@ export const SubagentPanel = memo(({
                     selectedProject={selectedProject}
                   />
                 ) : (
-                  <SubagentNote key={`activity-${index}`} activity={entry} />
+                  <SubagentNote key={`${entry.timestamp}-${entry.kind}-${entry.content}`} activity={entry} />
                 )
               ))}
             </div>

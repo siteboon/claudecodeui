@@ -63,8 +63,10 @@ const resolveCommandModel = async (modelsService, provider, context) => {
 
 const executeModelsCommand = async (args, context, modelsService) => {
   const currentProvider = readModelProvider(context?.provider);
-  const catalog = await modelsService.getProviderModels(currentProvider);
-  const currentModel = await resolveCommandModel(modelsService, currentProvider, context);
+  const [catalog, currentModel] = await Promise.all([
+    modelsService.getProviderModels(currentProvider),
+    resolveCommandModel(modelsService, currentProvider, context),
+  ]);
   const availableModels = catalog.OPTIONS.map((option) => option.value);
   const availableOptions = catalog.OPTIONS.map((option) => ({
     value: option.value,

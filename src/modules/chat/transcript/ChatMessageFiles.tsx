@@ -86,8 +86,8 @@ export default function ChatMessageFiles({ files }: ChatMessageFilesProps) {
 
   return (
     <div className="flex max-w-full flex-wrap justify-end gap-2">
-      {files.map((file, index) => (
-        <ChatMessageFile key={file.path || file.name || index} file={file} />
+      {files.map((file) => (
+        <ChatMessageFile key={file.path || `${file.name}-${file.size}-${file.type}`} file={file} />
       ))}
     </div>
   );

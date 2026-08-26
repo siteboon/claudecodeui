@@ -166,7 +166,7 @@ function HelpContent({ data }: { data: HelpCommandData }) {
             {filteredCommands.map((command, index) => (
               <div
                 key={`${command.namespace || 'builtin'}-${command.name}`}
-                className="settings-content-enter rounded-2xl border border-border/70 bg-background/75 p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-muted/25"
+                className="settings-content-enter rounded-2xl border border-border/70 bg-background/75 p-3 shadow-sm transition-[transform,border-color,background-color] duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-muted/25"
                 style={{ animationDelay: `${Math.min(index * 18, 160)}ms` }}
               >
                 <div className="flex items-start justify-between gap-3">

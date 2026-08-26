@@ -53,7 +53,7 @@ export const QuestionAnswerContent: React.FC<QuestionAnswerContentProps> = ({
 
         return (
           <div
-            key={idx}
+            key={q.question}
             className="border-gray-150 overflow-hidden rounded-lg border bg-gray-50/50 dark:border-gray-700/50 dark:bg-gray-800/30"
           >
             <button

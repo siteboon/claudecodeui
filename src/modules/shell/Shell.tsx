@@ -1,16 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
-import '@xterm/xterm/css/xterm.css';
-import type { Project, ProjectSession } from '@/shared/types';
-import { useShellRuntime } from '@/modules/shell/hooks/useShellRuntime';
-import { sendSocketMessage } from '@/modules/shell/utils/socket';
-import { getSessionTitle } from '@/shared/utils';
-import ShellConnectionOverlay from '@/modules/shell/ShellConnectionOverlay';
-import ShellEmptyState from '@/modules/shell/ShellEmptyState';
-import ShellHeader from '@/modules/shell/ShellHeader';
-import ShellMinimalView from '@/modules/shell/ShellMinimalView';
-import TerminalShortcutsPanel from '@/modules/shell/TerminalShortcutsPanel';
+import "@xterm/xterm/css/xterm.css";
+import type { Project, ProjectSession } from "@/shared/types";
+import { useShellRuntime } from "@/modules/shell/hooks/useShellRuntime";
+import { sendSocketMessage } from "@/modules/shell/utils/socket";
+import { getSessionTitle } from "@/shared/utils";
+import ShellConnectionOverlay from "@/modules/shell/ShellConnectionOverlay";
+import ShellEmptyState from "@/modules/shell/ShellEmptyState";
+import ShellHeader from "@/modules/shell/ShellHeader";
+import ShellMinimalView from "@/modules/shell/ShellMinimalView";
+import TerminalShortcutsPanel from "@/modules/shell/TerminalShortcutsPanel";
 
 const SHELL_RESTART_DELAY_MS = 200;
 
@@ -35,7 +35,7 @@ type ShellProps = {
 };
 
 /** Exported through the shell barrel: the standalone-shell module renders it as a full-page terminal and the task-master module embeds it in its setup modal to run TaskMaster's init command. */
-export default function Shell({
+function useShellController({
   selectedProject = null,
   selectedSession = null,
   initialCommand = null,
@@ -45,9 +45,11 @@ export default function Shell({
   autoConnect = false,
   isActive = true,
 }: ShellProps) {
-  const { t } = useTranslation('chat');
+  const { t } = useTranslation("chat");
   const [isRestarting, setIsRestarting] = useState(false);
-  const [cliPromptOptions, setCliPromptOptions] = useState<CliPromptOption[] | null>(null);
+  const [cliPromptOptions, setCliPromptOptions] = useState<
+    CliPromptOption[] | null
+  >(null);
   const promptCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restartAfterInitRef = useRef(false);
@@ -90,7 +92,10 @@ export default function Shell({
 
     let footerIdx = -1;
     for (let i = lines.length - 1; i >= 0; i--) {
-      if (/esc to cancel/i.test(lines[i]) || /enter to select/i.test(lines[i])) {
+      if (
+        /esc to cancel/i.test(lines[i]) ||
+        /enter to select/i.test(lines[i])
+      ) {
         footerIdx = i;
         break;
       }
@@ -111,7 +116,11 @@ export default function Shell({
       if (match) {
         const num = match[1];
         const label = match[2].trim();
-        if (parseInt(num, 10) <= PROMPT_MAX_OPTIONS && label.length > 0 && !optMap.has(num)) {
+        if (
+          parseInt(num, 10) <= PROMPT_MAX_OPTIONS &&
+          label.length > 0 &&
+          !optMap.has(num)
+        ) {
           optMap.set(num, label);
         }
       }
@@ -119,7 +128,8 @@ export default function Shell({
 
     const valid: CliPromptOption[] = [];
     for (let i = 1; i <= optMap.size; i++) {
-      if (optMap.has(String(i))) valid.push({ number: String(i), label: optMap.get(String(i))! });
+      if (optMap.has(String(i)))
+        valid.push({ number: String(i), label: optMap.get(String(i))! });
       else break;
     }
 
@@ -129,7 +139,10 @@ export default function Shell({
   // Schedule prompt check after terminal output (debounced)
   const schedulePromptCheck = useCallback(() => {
     if (promptCheckTimer.current) clearTimeout(promptCheckTimer.current);
-    promptCheckTimer.current = setTimeout(checkBufferForPrompt, PROMPT_DEBOUNCE_MS);
+    promptCheckTimer.current = setTimeout(
+      checkBufferForPrompt,
+      PROMPT_DEBOUNCE_MS,
+    );
   }, [checkBufferForPrompt]);
 
   // Wire up the onOutput callback
@@ -176,7 +189,7 @@ export default function Shell({
 
   const sendInput = useCallback(
     (data: string) => {
-      sendSocketMessage(wsRef.current, { type: 'input', data });
+      sendSocketMessage(wsRef.current, { type: "input", data });
     },
     [wsRef],
   );
@@ -232,11 +245,87 @@ export default function Shell({
     connectToShell({ forceRestart: true });
   }, [connectToShell, isConnected, isConnecting, isInitialized, isRestarting]);
 
+  return {
+    t,
+    isRestarting,
+    setIsRestarting,
+    cliPromptOptions,
+    setCliPromptOptions,
+    promptCheckTimer,
+    restartTimerRef,
+    restartAfterInitRef,
+    onOutputRef,
+    terminalContainerRef,
+    terminalRef,
+    wsRef,
+    isConnected,
+    isInitialized,
+    isConnecting,
+    connectToShell,
+    disconnectFromShell,
+    checkBufferForPrompt,
+    schedulePromptCheck,
+    sendInput,
+    sessionDisplayName,
+    sessionDisplayNameShort,
+    sessionDisplayNameLong,
+    handleRestartShell,
+    handleDisconnectShell,
+  };
+}
+
+export default function Shell({
+  selectedProject = null,
+  selectedSession = null,
+  initialCommand = null,
+  isPlainShell = false,
+  onProcessComplete = null,
+  minimal = false,
+  autoConnect = false,
+  isActive = true,
+}: ShellProps) {
+  const {
+    t,
+    isRestarting,
+    setIsRestarting,
+    cliPromptOptions,
+    setCliPromptOptions,
+    promptCheckTimer,
+    restartTimerRef,
+    restartAfterInitRef,
+    onOutputRef,
+    terminalContainerRef,
+    terminalRef,
+    wsRef,
+    isConnected,
+    isInitialized,
+    isConnecting,
+    connectToShell,
+    disconnectFromShell,
+    checkBufferForPrompt,
+    schedulePromptCheck,
+    sendInput,
+    sessionDisplayName,
+    sessionDisplayNameShort,
+    sessionDisplayNameLong,
+    handleRestartShell,
+    handleDisconnectShell,
+  } = useShellController({
+    selectedProject,
+    selectedSession,
+    initialCommand,
+    isPlainShell,
+    onProcessComplete,
+    minimal,
+    autoConnect,
+    isActive,
+  });
+
   if (!selectedProject) {
     return (
       <ShellEmptyState
-        title={t('shell.selectProject.title')}
-        description={t('shell.selectProject.description')}
+        title={t("shell.selectProject.title")}
+        description={t("shell.selectProject.description")}
       />
     );
   }
@@ -256,23 +345,30 @@ export default function Shell({
   }
 
   const readyDescription = isPlainShell
-    ? t('shell.runCommand', {
-        command: initialCommand || t('shell.defaultCommand'),
+    ? t("shell.runCommand", {
+        command: initialCommand || t("shell.defaultCommand"),
         projectName: selectedProject.displayName,
       })
     : selectedSession
-      ? t('shell.resumeSession', { displayName: sessionDisplayNameLong })
-      : t('shell.startSession');
+      ? t("shell.resumeSession", { displayName: sessionDisplayNameLong })
+      : t("shell.startSession");
 
   const connectingDescription = isPlainShell
-    ? t('shell.runCommand', {
-        command: initialCommand || t('shell.defaultCommand'),
+    ? t("shell.runCommand", {
+        command: initialCommand || t("shell.defaultCommand"),
         projectName: selectedProject.displayName,
       })
-    : t('shell.startCli', { projectName: selectedProject.displayName });
+    : t("shell.startCli", { projectName: selectedProject.displayName });
 
-  const overlayMode = !isInitialized ? 'loading' : isConnecting ? 'connecting' : !isConnected ? 'connect' : null;
-  const overlayDescription = overlayMode === 'connecting' ? connectingDescription : readyDescription;
+  const overlayMode = !isInitialized
+    ? "loading"
+    : isConnecting
+      ? "connecting"
+      : !isConnected
+        ? "connect"
+        : null;
+  const overlayDescription =
+    overlayMode === "connecting" ? connectingDescription : readyDescription;
 
   return (
     <div className="flex h-full w-full flex-col bg-gray-900">
@@ -284,13 +380,13 @@ export default function Shell({
         sessionDisplayNameShort={sessionDisplayNameShort}
         onDisconnect={handleDisconnectShell}
         onRestart={handleRestartShell}
-        statusNewSessionText={t('shell.status.newSession')}
-        statusInitializingText={t('shell.status.initializing')}
-        statusRestartingText={t('shell.status.restarting')}
-        disconnectLabel={t('shell.actions.disconnect')}
-        disconnectTitle={t('shell.actions.disconnectTitle')}
-        restartLabel={t('shell.actions.restart')}
-        restartTitle={t('shell.actions.restartTitle')}
+        statusNewSessionText={t("shell.status.newSession")}
+        statusInitializingText={t("shell.status.initializing")}
+        statusRestartingText={t("shell.status.restarting")}
+        disconnectLabel={t("shell.actions.disconnect")}
+        disconnectTitle={t("shell.actions.disconnectTitle")}
+        restartLabel={t("shell.actions.restart")}
+        restartTitle={t("shell.actions.restartTitle")}
         disableRestart={isRestarting || !isInitialized}
       />
 
@@ -298,17 +394,17 @@ export default function Shell({
         <div
           ref={terminalContainerRef}
           className="h-full w-full focus:outline-none"
-          style={{ outline: 'none' }}
+          style={{ outline: "none" }}
         />
 
         {overlayMode && (
           <ShellConnectionOverlay
             mode={overlayMode}
             description={overlayDescription}
-            loadingLabel={t('shell.loading')}
-            connectLabel={t('shell.actions.connect')}
-            connectTitle={t('shell.actions.connectTitle')}
-            connectingLabel={t('shell.connecting')}
+            loadingLabel={t("shell.loading")}
+            connectLabel={t("shell.actions.connect")}
+            connectTitle={t("shell.actions.connectTitle")}
+            connectingLabel={t("shell.connecting")}
             onConnect={handleRestartShell}
           />
         )}
@@ -336,7 +432,7 @@ export default function Shell({
               <button
                 type="button"
                 onClick={() => {
-                  sendInput('\x1b');
+                  sendInput("\x1b");
                   setCliPromptOptions(null);
                 }}
                 className="rounded bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-200 transition-colors hover:bg-gray-600"
@@ -353,7 +449,6 @@ export default function Shell({
         terminalRef={terminalRef}
         isConnected={isConnected}
       />
-
     </div>
   );
 }
