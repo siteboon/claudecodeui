@@ -16,7 +16,7 @@ type VersionUpgradeModalProps = {
     installMode: InstallMode;
 };
 
-const RELOAD_COUNTDOWN_START = 30;
+const RELOAD_COUNTDOWN_START = 120;
 
 /** This module's only public export: rendered by the sidebar module's modal layer to show release notes and run the app upgrade. */
 export function VersionUpgradeModal({
@@ -44,7 +44,11 @@ export function VersionUpgradeModal({
         }
 
         if (reloadCountdown <= 0) {
-            window.location.reload();
+            // Force a hard reload (bypass cache) so stale assets from the
+            // previous version aren't served after the environment updates.
+            const url = new URL(window.location.href);
+            url.searchParams.set('_hardReload', Date.now().toString());
+            window.location.replace(url.toString());
             return;
         }
 
@@ -213,7 +217,7 @@ export function VersionUpgradeModal({
                             <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-200">
                                 {reloadCountdown === 0
                                     ? 'Refreshing the window now...'
-                                    : `This will refresh the window in ${reloadCountdown} ${reloadCountdown === 1 ? 'second' : 'seconds'}. If the update doesn't apply, RESTART the environment.`}
+                                    : `This environment will be updated after this time. You can close the window and return in ${Math.ceil(reloadCountdown / 60)} minutes. If the update doesn't apply, RESTART the environment.`}
                             </div>
                         )}
                         {updateError && (
