@@ -26,3 +26,19 @@ test('known command namespaces render before custom namespaces', () => {
     ['/builtin', '/skill', '/custom'],
   );
 });
+
+test('listbox options stay out of the page tab order while remaining focusable', () => {
+  const view = render(
+    <CommandMenu
+      commands={[
+        { name: '/first', namespace: 'builtin' },
+        { name: '/second', namespace: 'builtin' },
+      ]}
+      onClose={() => undefined}
+      isOpen
+    />,
+  );
+
+  const options = within(view.getByRole('listbox')).getAllByRole('option');
+  assert.deepEqual(options.map((option) => option.tabIndex), [-1, -1]);
+});

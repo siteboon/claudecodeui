@@ -286,6 +286,7 @@ export default function CommandMenu({
                 ref={isSelected ? selectedItemRef : null}
                 role="option"
                 aria-selected={isSelected}
+                tabIndex={-1}
                 className={`command-item group relative mb-1 flex cursor-pointer items-start gap-2 rounded-md border px-2.5 py-2 transition-all ${
                   isSelected
                     ? 'border-primary/30 bg-primary/10 shadow-sm'
