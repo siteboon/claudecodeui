@@ -137,6 +137,43 @@ function redactCliStderr(text) {
  * @param {string} line - One raw stderr line, already trimmed.
  * @returns {string} The line to hand to the logger.
  */
+// A PEM block spans many lines: a header, then base64 body lines that carry
+// the actual key material, then a footer. The single-line pattern above only
+// ever sees the header, so redacting line by line would blank the header and
+// print the key underneath it -- the worst of both worlds, because the log
+// then *looks* redacted.
+const PEM_BEGIN = /-----BEGIN[^-]{0,40}PRIVATE KEY-----/;
+const PEM_END = /-----END[^-]{0,40}PRIVATE KEY-----/;
+const PEM_PLACEHOLDER = '<redacted private key>';
+
+/**
+ * Formats stderr lines, suppressing whole PEM private-key blocks.
+ *
+ * Stateful by necessity: whether a base64 line is key material or ordinary
+ * output cannot be decided from the line itself. The state lives per run and
+ * dies with it.
+ *
+ * @param {() => string} sessionTag - Supplies the current session tag.
+ * @returns {(line: string) => string} Formatter for one stderr line.
+ */
+function createCliStderrFormatter(sessionTag) {
+  let insidePem = false;
+  return (line) => {
+    if (insidePem) {
+      if (PEM_END.test(line)) {
+        insidePem = false;
+      }
+      return formatCliStderrLine(sessionTag(), PEM_PLACEHOLDER);
+    }
+    if (PEM_BEGIN.test(line)) {
+      // A line carrying the whole block at once closes it again immediately.
+      insidePem = !PEM_END.test(line);
+      return formatCliStderrLine(sessionTag(), PEM_PLACEHOLDER);
+    }
+    return formatCliStderrLine(sessionTag(), line);
+  };
+}
+
 /**
  * Reassembles complete lines from raw stderr chunks.
  *
@@ -825,6 +862,9 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
 
     // Forward the CLI child's stderr into the service log; see the limits
     // documented at CLI_STDERR_MAX_LINE_CHARS above.
+    // Per-run PEM state; see createCliStderrFormatter.
+    const formatStderrLine = createCliStderrFormatter(sessionTag);
+
     // One place where a finished line is emitted, used by both the streaming
     // path and the flush during cleanup. Two code paths for the same job are
     // how a redaction rule ends up applied in one of them and not the other.
@@ -846,7 +886,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         return;
       }
       stderrLinesInWindow += 1;
-      console.error(formatCliStderrLine(sessionTag(), line));
+      console.error(formatStderrLine(line));
     };
 
     stderrChunker = createCliStderrChunker(emitStderrLine);
@@ -1315,6 +1355,7 @@ export const claudeRuntime = {
 // Export public API
 export {
   createCliStderrChunker,
+  createCliStderrFormatter,
   formatCliStderrLine,
   queryClaudeSDK,
   abortClaudeSDKSession,
