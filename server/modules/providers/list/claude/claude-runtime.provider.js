@@ -833,6 +833,29 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // Hoisted above the try so the catch's cleanup can tell whether this run
   // still owns the activeSessions entry (or was superseded by a newer run).
   let queryInstance = null;
+  // Hoisted so the catch path can still report what was resolved when setup
+  // failed part-way through.
+  let sdkOptions = null;
+  // Guarantees a run_start for every run_end. The record is emitted where its
+  // payload is complete -- but everything above that point can throw, and a
+  // run_end without a matching run_start reads like a run that started before
+  // the log did. That is exactly the confusion this logging exists to remove.
+  let runStartLogged = false;
+  const logRunStart = () => {
+    if (runStartLogged) {
+      return;
+    }
+    runStartLogged = true;
+    logRunLifecycle('run_start', {
+      sessionKey: sessionKey(),
+      providerSessionId: providerSessionId || null,
+      // A run either resumes a known provider session or creates a new one.
+      resumed: Boolean(providerSessionId),
+      userId: ws?.userId || null,
+      model: sdkOptions?.model || null,
+      permissionMode: sdkOptions?.permissionMode || null
+    });
+  };
 
   try {
     const resolvedModel = await context.resolveResumeModel(sessionId, options.model);
@@ -843,7 +866,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       console.warn('[Claude SDK] Unable to load provider models for effort validation:', error);
     }
 
-    const sdkOptions = mapCliOptionsToSDK({
+    sdkOptions = mapCliOptionsToSDK({
       ...options,
       providerSessionId,
       model: resolvedModel || options.model,
@@ -1021,15 +1044,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     }
 
     // Process streaming messages
-    logRunLifecycle('run_start', {
-      sessionKey: sessionKey(),
-      providerSessionId: providerSessionId || null,
-      // A run either resumes a known provider session or creates a new one.
-      resumed: Boolean(providerSessionId),
-      userId: ws?.userId || null,
-      model: sdkOptions.model || null,
-      permissionMode: sdkOptions.permissionMode || null
-    });
+    logRunStart();
     for await (const message of queryInstance) {
       // Capture session ID from first message
       if (message.session_id && !capturedSessionId) {
@@ -1165,6 +1180,9 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
 
   } catch (error) {
     console.error('SDK query error:', error);
+
+    // Setup may have thrown before the run_start above was reached.
+    logRunStart();
 
     // Clean up session on error — only while this run still owns the map entry
     // (a superseding run may have replaced it).
