@@ -867,6 +867,13 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         return { behavior: 'deny', message: 'Permission request cancelled' };
       }
 
+      // A client answered. Announce it on the run stream so the replay buffer
+      // and every other attached tab drop the prompt — resolving happens over
+      // the inbound socket only, so without this a mid-run page refresh
+      // replays the `permission_request` with nothing to retract it and the
+      // already-answered prompt resurrects.
+      ws.send(createNormalizedMessage({ kind: 'permission_resolved', requestId, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+
       if (decision.allow) {
         if (decision.rememberEntry && typeof decision.rememberEntry === 'string') {
           if (!sdkOptions.allowedTools.includes(decision.rememberEntry)) {

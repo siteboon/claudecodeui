@@ -225,6 +225,7 @@ export function useChatRealtimeHandlers({
         msg.kind !== 'complete'
         && msg.kind !== 'status'
         && msg.kind !== 'permission_request'
+        && msg.kind !== 'permission_resolved'
         && msg.kind !== 'permission_cancelled';
 
       if (sid && shouldPersist) {
@@ -309,6 +310,10 @@ export function useChatRealtimeHandlers({
           break;
         }
 
+        // `permission_resolved` arrives when any client answers the prompt: it
+        // retracts a replayed `permission_request` after a mid-run refresh and
+        // clears the prompt in other tabs watching the same run.
+        case 'permission_resolved':
         case 'permission_cancelled': {
           if (msg.requestId && sid === activeViewSessionId) {
             const nextPendingPermissionRequests = pendingPermissionRequestsRef.current.filter(

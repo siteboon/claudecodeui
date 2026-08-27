@@ -485,7 +485,7 @@ export type NormalizedMessage = {
   rowid?: number;
 };
 
-/** Discriminator on NormalizedMessage naming which kind of transcript event it carries — plain text, tool use or result, thinking, stream delta or end, error, completion, status, permission request or cancellation, session creation, interactive prompt, or task notification. */
+/** Discriminator on NormalizedMessage naming which kind of transcript event it carries — plain text, tool use or result, thinking, stream delta or end, error, completion, status, permission request/resolution/cancellation, session creation, interactive prompt, or task notification. */
 type MessageKind =
   | 'text'
   | 'tool_use'
@@ -497,6 +497,7 @@ type MessageKind =
   | 'complete'
   | 'status'
   | 'permission_request'
+  | 'permission_resolved'
   | 'permission_cancelled'
   | 'session_created'
   | 'history_truncated'

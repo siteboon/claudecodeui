@@ -748,6 +748,7 @@ export function useProjectsState({
         && event.kind !== 'session_upserted'
         && event.kind !== 'status'
         && event.kind !== 'stream_end'
+        && event.kind !== 'permission_resolved'
         && event.kind !== 'permission_cancelled'
         && event.kind !== 'websocket_reconnected'
       ) {

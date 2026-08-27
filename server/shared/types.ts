@@ -186,6 +186,7 @@ export type MessageKind =
   | 'complete'
   | 'status'
   | 'permission_request'
+  | 'permission_resolved'
   | 'permission_cancelled'
   | 'session_created'
   | 'history_truncated'
