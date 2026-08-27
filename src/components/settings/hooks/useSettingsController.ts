@@ -22,6 +22,8 @@ import type {
 type ThemeContextValue = {
   isDarkMode: boolean;
   toggleDarkMode: () => void;
+  useSystemFont: boolean;
+  setUseSystemFont: (value: boolean) => void;
 };
 
 type UseSettingsControllerArgs = {
@@ -138,7 +140,12 @@ const normalizeNotificationPreferences = (
 };
 
 export function useSettingsController({ isOpen, initialTab }: UseSettingsControllerArgs) {
-  const { isDarkMode, toggleDarkMode } = useTheme() as ThemeContextValue;
+  const {
+    isDarkMode,
+    toggleDarkMode,
+    useSystemFont,
+    setUseSystemFont,
+  } = useTheme() as ThemeContextValue;
   const closeTimerRef = useRef<number | null>(null);
 
   const [activeTab, setActiveTab] = useState<SettingsMainTab>(() => normalizeMainTab(initialTab));
@@ -381,6 +388,8 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     setActiveTab,
     isDarkMode,
     toggleDarkMode,
+    useSystemFont,
+    setUseSystemFont,
     saveStatus,
     projectSortOrder,
     setProjectSortOrder,

@@ -39,6 +39,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     activeTab,
     setActiveTab,
     saveStatus,
+    useSystemFont,
+    setUseSystemFont,
     projectSortOrder,
     setProjectSortOrder,
     codeEditorSettings,
@@ -163,6 +165,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
             <div key={activeTab} className="settings-content-enter min-w-0 space-y-6 overflow-x-hidden p-4 pb-safe-area-inset-bottom md:space-y-8 md:p-6">
               {activeTab === 'appearance' && (
                 <AppearanceSettingsTab
+                  useSystemFont={useSystemFont}
+                  onUseSystemFontChange={setUseSystemFont}
                   projectSortOrder={projectSortOrder}
                   onProjectSortOrderChange={setProjectSortOrder}
                   codeEditorSettings={codeEditorSettings}
