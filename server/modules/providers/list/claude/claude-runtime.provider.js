@@ -69,6 +69,228 @@ const BG_WAIT_CEILING_MS = 30 * 60 * 1000;
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
+// The SDK forwards the CLI child's stderr through an explicit callback
+// (`options.stderr`). This provider never set it, so that output was dropped
+// on the floor — including the one line the CLI writes when it winds itself
+// down:
+//
+//     Background tasks still running after <N>s; terminating.
+//     Set CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 to wait indefinitely.
+//
+// That message therefore never reached the service log, which is why a run
+// ended by the background-wait ceiling looks, from the outside, exactly like
+// a run that vanished without a trace. Wiring the callback is what turns that
+// guess into a reading.
+//
+// The same channel also carries SDK debug output, so it is forwarded under
+// three limits. None of them is cosmetic:
+//
+//   1. Redaction before logging — stderr can carry argv fragments and paths.
+//   2. A length cap per line — one runaway line must not swamp the journal.
+//   3. A rate limit per RUN — a CLI stuck in a write loop would otherwise
+//      flood the log. The counters live in the run's closure and die with it;
+//      a per-session map would need someone to clean it up, and that is
+//      exactly the kind of bookkeeping that gets forgotten.
+const CLI_STDERR_MAX_LINE_CHARS = 500;
+const CLI_STDERR_MAX_LINES_PER_WINDOW = 50;
+const CLI_STDERR_WINDOW_MS = 60 * 1000;
+// Upper bound on a partial line held back between chunks. The SDK forwards raw
+// `data` events, so a logical line can arrive in pieces; without a bound, a
+// stream that never emits a newline would grow this buffer without limit.
+const CLI_STDERR_MAX_PENDING_CHARS = 8 * 1024;
+
+// Redaction runs BEFORE truncation. Truncating first can cut a secret in half
+// and leave the tail in place: the pattern no longer matches, so the filter
+// stops working silently on exactly the line that needed it.
+const CLI_STDERR_REDACTIONS = [
+  /-----BEGIN[^-]{0,40}PRIVATE KEY-----/g,
+  /\b(sk|pk|ghp|gho|ghs|github_pat|xox[abprs])[-_][A-Za-z0-9_-]{8,}/g,
+  /\bsk-ant-[A-Za-z0-9_-]{16,}/g,
+  /\bAKIA[0-9A-Z]{12,}\b/g,
+  /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}/g,
+  /api\.telegram\.org\/bot[^/\s]+/g,
+  /[A-Za-z0-9_-]*(TOKEN|KEY|SECRET|PASSWORD|PASSWD|CREDENTIAL|APIKEY)[A-Za-z0-9_-]*\s*[=:]\s*\S+/gi,
+];
+
+/**
+ * Redacts well-known secret shapes from one line of CLI stderr.
+ *
+ * @param {string} text - Raw stderr text.
+ * @returns {string} The same text with secret-shaped runs replaced.
+ */
+function redactCliStderr(text) {
+  let out = String(text);
+  for (const pattern of CLI_STDERR_REDACTIONS) {
+    out = out.replace(pattern, '<redacted>');
+  }
+  return out;
+}
+
+/**
+ * Formats one CLI stderr line for the service log: redact, then cap.
+ *
+ * Kept as a pure function so both halves are testable on their own. The order
+ * matters and is the reason this is one function rather than two calls at the
+ * call site: capping first could split a secret and leave its tail readable.
+ *
+ * @param {string} sessionTag - Short session identifier for correlation.
+ * @param {string} line - One raw stderr line, already trimmed.
+ * @returns {string} The line to hand to the logger.
+ */
+// A PEM block spans many lines: a header, then base64 body lines that carry
+// the actual key material, then a footer. The single-line pattern above only
+// ever sees the header, so redacting line by line would blank the header and
+// print the key underneath it -- the worst of both worlds, because the log
+// then *looks* redacted.
+const PEM_BEGIN = /-----BEGIN[^-]{0,40}PRIVATE KEY-----/;
+const PEM_END = /-----END[^-]{0,40}PRIVATE KEY-----/;
+const PEM_PLACEHOLDER = '<redacted private key>';
+
+/**
+ * Formats stderr lines, suppressing whole PEM private-key blocks.
+ *
+ * Stateful by necessity: whether a base64 line is key material or ordinary
+ * output cannot be decided from the line itself. The state lives per run and
+ * dies with it.
+ *
+ * @param {() => string} sessionTag - Supplies the current session tag.
+ * @returns {(line: string) => string} Formatter for one stderr line.
+ */
+function createCliStderrFormatter(sessionTag) {
+  let insidePem = false;
+  return (line) => {
+    if (insidePem) {
+      if (PEM_END.test(line)) {
+        insidePem = false;
+      }
+      return formatCliStderrLine(sessionTag(), PEM_PLACEHOLDER);
+    }
+    if (PEM_BEGIN.test(line)) {
+      // A line carrying the whole block at once closes it again immediately.
+      insidePem = !PEM_END.test(line);
+      return formatCliStderrLine(sessionTag(), PEM_PLACEHOLDER);
+    }
+    return formatCliStderrLine(sessionTag(), line);
+  };
+}
+
+/**
+ * Reassembles complete lines from raw stderr chunks.
+ *
+ * The SDK forwards the child's `stderr` `data` events verbatim — it calls
+ * `options.stderr` straight from the data handler, with no line framing. A
+ * logical line can therefore arrive split across two chunks, and a secret
+ * split that way slips past redaction because neither half matches the
+ * pattern on its own.
+ *
+ * Kept as a factory so the buffering is testable on its own: this is exactly
+ * the kind of state that is easy to get subtly wrong and impossible to see
+ * afterwards in a log that looks plausible.
+ *
+ * @param {(line: string) => void} emit - Receives each complete line.
+ * @param {number} [maxPending] - Cap on a held-back fragment.
+ * @returns {{push: (chunk: string) => void, flush: () => void}}
+ */
+function createCliStderrChunker(emit, maxPending = CLI_STDERR_MAX_PENDING_CHARS) {
+  let pending = '';
+  return {
+    push(chunk) {
+      pending += String(chunk ?? '');
+      // A stream that never emits a newline must not grow this buffer forever.
+      // Flushing early can in principle split a secret, but at this size that
+      // needs a line two orders of magnitude longer than any credential
+      // format — unbounded memory is the worse failure.
+      if (pending.length > maxPending && !pending.includes('\n')) {
+        emit(pending);
+        pending = '';
+        return;
+      }
+      const parts = pending.split('\n');
+      pending = parts.pop() ?? '';
+      for (const line of parts) {
+        emit(line);
+      }
+    },
+    // Anything still buffered is a real line; it just never got its newline
+    // before the run ended.
+    flush() {
+      if (pending) {
+        emit(pending);
+        pending = '';
+      }
+    },
+  };
+}
+
+/**
+ * Rate-limits CLI stderr without letting the redaction state fall behind.
+ *
+ * The throttle and the PEM-block formatter are each correct on their own. The
+ * bug lived at their handover: the formatter used to be called only for lines
+ * that survived the throttle, so a suppressed END marker left `insidePem`
+ * stuck and every later line of the run came out as the placeholder. State
+ * must advance for EVERY line; only the writing is rate-limited.
+ *
+ * Kept as a factory for the same reason as the chunker above: this is state
+ * that is easy to get subtly wrong and impossible to see afterwards in a log
+ * that looks plausible.
+ *
+ * @param {object} deps
+ * @param {(line: string) => string} deps.format - Stateful line formatter.
+ * @param {(text: string) => void} deps.sink - Receives lines that pass.
+ * @param {(dropped: number) => void} deps.throttleNotice - Reports losses.
+ * @param {() => number} [deps.now] - Clock, injectable for tests.
+ * @returns {{push: (line: string) => void, flushDropped: () => void}}
+ */
+function createCliStderrEmitter({ format, sink, throttleNotice, now = Date.now }) {
+  let windowStart = 0;
+  let linesInWindow = 0;
+  let dropped = 0;
+
+  // A throttle that hides its own losses is a log that lies.
+  const flushDropped = () => {
+    if (dropped > 0) {
+      throttleNotice(dropped);
+      dropped = 0;
+    }
+  };
+
+  const push = (rawLine) => {
+    const line = String(rawLine ?? '').trim();
+    if (!line) {
+      return;
+    }
+    // BEFORE the throttle, unconditionally: the formatter carries the PEM
+    // block state across lines. Skipping it for a dropped line would lose the
+    // END marker and silently redact the rest of the run.
+    const formatted = format(line);
+    const stamp = now();
+    if (stamp - windowStart >= CLI_STDERR_WINDOW_MS) {
+      // Report what the previous window swallowed before opening a new one.
+      flushDropped();
+      windowStart = stamp;
+      linesInWindow = 0;
+    }
+    if (linesInWindow >= CLI_STDERR_MAX_LINES_PER_WINDOW) {
+      dropped += 1;
+      return;
+    }
+    linesInWindow += 1;
+    sink(formatted);
+  };
+
+  return { push, flushDropped };
+}
+
+
+function formatCliStderrLine(sessionTag, line) {
+  const safe = redactCliStderr(line);
+  const capped = safe.length > CLI_STDERR_MAX_LINE_CHARS
+    ? `${safe.slice(0, CLI_STDERR_MAX_LINE_CHARS - 1)}\u2026`
+    : safe;
+  return `[claude-cli-stderr] ${sessionTag} ${capped}`;
+}
+
 function resolveClaudeEffort(model, effort, modelsDefinition = CLAUDE_PREDEFINED_MODELS) {
   const selectedModel = modelsDefinition?.OPTIONS?.find((option) => option.value === model) || null;
   const allowedEfforts = selectedModel?.effort?.values
@@ -321,6 +543,23 @@ function getSession(sessionId) {
  */
 function getAllSessions() {
   return Array.from(activeSessions.keys());
+}
+
+/**
+ * Emits one greppable line per lifecycle transition of a Claude run.
+ *
+ * The Agent SDK owns the CLI child process, so this provider never holds a
+ * process handle: the *run* is the smallest unit it can observe. These records
+ * therefore report when a run started, which session it belonged to, who owned
+ * it, and how and why it ended.
+ *
+ * @param {string} event - Lifecycle transition: run_start, session_created,
+ *   abort_requested or run_end.
+ * @param {Object} fields - Event payload; serialized as JSON so log processors
+ *   can parse it without a format-specific reader.
+ */
+function logRunLifecycle(event, fields) {
+  console.log(`[Claude SDK] lifecycle ${event}`, JSON.stringify(fields));
 }
 
 /**
@@ -577,6 +816,30 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // Process-map key: the app session id when the caller supplied one, else
   // the provider-native id once captured (legacy/direct API callers).
   const sessionKey = () => sessionId || capturedSessionId || null;
+  // Short, greppable session tag for the CLI stderr lines below.
+  const sessionTag = () => String(sessionKey() || 'unknown').slice(0, 8);
+  // Rate-limit state for CLI stderr. Scoped to this run, dies with this run.
+  // Assigned once the SDK options are built; the cleanup path needs both.
+  let stderrChunker = null;
+  let stderrEmitter = null;
+  // Wall-clock start of this run, so every run_end can report a duration.
+  const runStartedAt = Date.now();
+  // Guarantees exactly one terminal lifecycle record per run: the success path
+  // emits run_end before the notification calls, and a throw from one of those
+  // would otherwise reach the catch and log a second, contradicting one.
+  let runEndLogged = false;
+  const logRunEnd = (fields) => {
+    if (runEndLogged) {
+      return;
+    }
+    runEndLogged = true;
+    logRunLifecycle('run_end', {
+      sessionKey: sessionKey(),
+      providerSessionId: capturedSessionId || null,
+      userId: ws?.userId || null,
+      ...fields
+    });
+  };
 
   const emitNotification = (event) => {
     notifyUserIfEnabled({
@@ -623,6 +886,29 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // Hoisted above the try so the catch's cleanup can tell whether this run
   // still owns the activeSessions entry (or was superseded by a newer run).
   let queryInstance = null;
+  // Hoisted so the catch path can still report what was resolved when setup
+  // failed part-way through.
+  let sdkOptions = null;
+  // Guarantees a run_start for every run_end. The record is emitted where its
+  // payload is complete -- but everything above that point can throw, and a
+  // run_end without a matching run_start reads like a run that started before
+  // the log did. That is exactly the confusion this logging exists to remove.
+  let runStartLogged = false;
+  const logRunStart = () => {
+    if (runStartLogged) {
+      return;
+    }
+    runStartLogged = true;
+    logRunLifecycle('run_start', {
+      sessionKey: sessionKey(),
+      providerSessionId: providerSessionId || null,
+      // A run either resumes a known provider session or creates a new one.
+      resumed: Boolean(providerSessionId),
+      userId: ws?.userId || null,
+      model: sdkOptions?.model || null,
+      permissionMode: sdkOptions?.permissionMode || null
+    });
+  };
 
   try {
     const resolvedModel = await context.resolveResumeModel(sessionId, options.model);
@@ -633,7 +919,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       console.warn('[Claude SDK] Unable to load provider models for effort validation:', error);
     }
 
-    const sdkOptions = mapCliOptionsToSDK({
+    sdkOptions = mapCliOptionsToSDK({
       ...options,
       providerSessionId,
       model: resolvedModel || options.model,
@@ -649,6 +935,25 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     // `result`. The message list is reusable, but each query attempt needs its
     // own stream because an async generator cannot be replayed once consumed.
     const promptMessages = await buildPromptMessages(command, options.images, options.files, options.cwd);
+
+    // Forward the CLI child's stderr into the service log; see the limits
+    // documented at CLI_STDERR_MAX_LINE_CHARS above.
+    // Per-run PEM state; see createCliStderrFormatter.
+    const formatStderrLine = createCliStderrFormatter(sessionTag);
+
+    // One place where a finished line is emitted, used by both the streaming
+    // path and the flush during cleanup. Two code paths for the same job are
+    // how a redaction rule ends up applied in one of them and not the other.
+    stderrEmitter = createCliStderrEmitter({
+      format: formatStderrLine,
+      sink: (text) => console.error(text),
+      throttleNotice: (dropped) => console.error(
+        `[claude-cli-stderr] ${sessionTag()} [throttled ${dropped}]`,
+      ),
+    });
+
+    stderrChunker = createCliStderrChunker(stderrEmitter.push);
+    sdkOptions.stderr = (data) => stderrChunker.push(data);
 
     sdkOptions.hooks = {
       Notification: [{
@@ -779,7 +1084,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     }
 
     // Process streaming messages
-    console.log('Starting async generator loop for session:', capturedSessionId || 'NEW');
+    logRunStart();
     for await (const message of queryInstance) {
       // Capture session ID from first message
       if (message.session_id && !capturedSessionId) {
@@ -795,6 +1100,11 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         // Send session-created event only once for sessions with nothing to resume
         if (!providerSessionId && !sessionCreatedSent) {
           sessionCreatedSent = true;
+          logRunLifecycle('session_created', {
+            sessionKey: sessionKey(),
+            providerSessionId: capturedSessionId,
+            userId: ws?.userId || null
+          });
           ws.send(createNormalizedMessage({ kind: 'session_created', newSessionId: capturedSessionId, sessionId: capturedSessionId, provider: 'claude' }));
         }
       } else {
@@ -895,10 +1205,24 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         stopReason: wasAborted ? 'aborted' : 'completed'
       });
     }
+    // A superseded run skips the block above entirely — it owns none of the
+    // client-facing events. Without a record here it would end as a run_start
+    // with no run_end, which is exactly how such a run becomes invisible at
+    // the moment something unusual happened to it.
+    logRunEnd(superseded
+      ? { reason: 'superseded', exitCode: null, durationMs: Date.now() - runStartedAt }
+      : {
+        reason: wasAborted ? 'aborted' : 'completed',
+        exitCode: wasAborted ? null : 0,
+        durationMs: Date.now() - runStartedAt
+      });
     // Complete
 
   } catch (error) {
     console.error('SDK query error:', error);
+
+    // Setup may have thrown before the run_start above was reached.
+    logRunStart();
 
     // Clean up session on error — only while this run still owns the map entry
     // (a superseding run may have replaced it).
@@ -909,6 +1233,16 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     if (supersededInstances.has(queryInstance)) {
       // Interrupted because a newer run took over this session id; that run
       // owns the abort flag and all further client-facing events.
+      //
+      // The run stays silent toward the CLIENT — that is deliberate and
+      // unchanged. It does get a log record, though: this is the path an
+      // interrupted run actually takes, and without a record it vanishes
+      // here without a trace.
+      logRunEnd({
+        reason: 'superseded',
+        exitCode: null,
+        durationMs: Date.now() - runStartedAt
+      });
       return;
     }
 
@@ -916,6 +1250,11 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     if (wasAborted) {
       // The abort already produced the terminal complete; a generator throw
       // caused by interrupt() is expected noise, not a user-facing error.
+      logRunEnd({
+        reason: 'aborted',
+        exitCode: null,
+        durationMs: Date.now() - runStartedAt
+      });
       return;
     }
 
@@ -929,9 +1268,18 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     // reported completion and then failed during its post-turn hold still
     // surfaces the error, but must not emit a second terminal complete.
     ws.send(createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+    // The logging sits after the guard on purpose: it belongs to the RUN, not
+    // to the client-facing message, and runEndLogged gives it its own
+    // exactly-once guarantee.
     if (!turnCompleteSent) {
       ws.send(createCompleteMessage({ provider: 'claude', sessionId: capturedSessionId || sessionId || null, exitCode: 1 }));
     }
+    logRunEnd({
+      reason: 'error',
+      exitCode: 1,
+      durationMs: Date.now() - runStartedAt,
+      error: error?.message || String(error)
+    });
     notifyRunFailed({
       userId: ws?.userId || null,
       provider: 'claude',
@@ -946,6 +1294,12 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       clearTimeout(idleReleaseTimer);
       idleReleaseTimer = null;
     }
+    // Anything still buffered is a real line the CLI wrote; it just never got
+    // its newline before the run ended.
+    stderrChunker?.flush();
+    // A run that ends while its throttle window is still open would otherwise
+    // carry the dropped-line count to the grave.
+    stderrEmitter?.flushDropped();
     releasePromptStream();
   }
 }
@@ -964,7 +1318,7 @@ async function abortClaudeSDKSession(sessionId) {
   }
 
   try {
-    console.log(`Aborting SDK session: ${sessionId}`);
+    logRunLifecycle('abort_requested', { sessionKey: sessionId });
 
     // Mark before interrupting so the run loop knows not to emit its own
     // terminal complete (the abort handler sends the aborted one).
@@ -1058,6 +1412,10 @@ export const claudeRuntime = {
 
 // Export public API
 export {
+  createCliStderrChunker,
+  createCliStderrEmitter,
+  createCliStderrFormatter,
+  formatCliStderrLine,
   queryClaudeSDK,
   abortClaudeSDKSession,
   isClaudeSDKSessionActive,
