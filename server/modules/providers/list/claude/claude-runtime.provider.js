@@ -324,6 +324,23 @@ function getAllSessions() {
 }
 
 /**
+ * Emits one greppable line per lifecycle transition of a Claude run.
+ *
+ * The Agent SDK owns the CLI child process, so this provider never holds a
+ * process handle: the *run* is the smallest unit it can observe. These records
+ * therefore report when a run started, which session it belonged to, who owned
+ * it, and how and why it ended.
+ *
+ * @param {string} event - Lifecycle transition: run_start, session_created,
+ *   abort_requested or run_end.
+ * @param {Object} fields - Event payload; serialized as JSON so log processors
+ *   can parse it without a format-specific reader.
+ */
+function logRunLifecycle(event, fields) {
+  console.log(`[Claude SDK] lifecycle ${event}`, JSON.stringify(fields));
+}
+
+/**
  * Transforms SDK messages to WebSocket format expected by frontend
  * @param {Object} sdkMessage - SDK message object
  * @returns {Object} Transformed message ready for WebSocket
@@ -577,6 +594,24 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // Process-map key: the app session id when the caller supplied one, else
   // the provider-native id once captured (legacy/direct API callers).
   const sessionKey = () => sessionId || capturedSessionId || null;
+  // Wall-clock start of this run, so every run_end can report a duration.
+  const runStartedAt = Date.now();
+  // Guarantees exactly one terminal lifecycle record per run: the success path
+  // emits run_end before the notification calls, and a throw from one of those
+  // would otherwise reach the catch and log a second, contradicting one.
+  let runEndLogged = false;
+  const logRunEnd = (fields) => {
+    if (runEndLogged) {
+      return;
+    }
+    runEndLogged = true;
+    logRunLifecycle('run_end', {
+      sessionKey: sessionKey(),
+      providerSessionId: capturedSessionId || null,
+      userId: ws?.userId || null,
+      ...fields
+    });
+  };
 
   const emitNotification = (event) => {
     notifyUserIfEnabled({
@@ -779,7 +814,15 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     }
 
     // Process streaming messages
-    console.log('Starting async generator loop for session:', capturedSessionId || 'NEW');
+    logRunLifecycle('run_start', {
+      sessionKey: sessionKey(),
+      providerSessionId: providerSessionId || null,
+      // A run either resumes a known provider session or creates a new one.
+      resumed: Boolean(providerSessionId),
+      userId: ws?.userId || null,
+      model: sdkOptions.model || null,
+      permissionMode: sdkOptions.permissionMode || null
+    });
     for await (const message of queryInstance) {
       // Capture session ID from first message
       if (message.session_id && !capturedSessionId) {
@@ -795,6 +838,11 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         // Send session-created event only once for sessions with nothing to resume
         if (!providerSessionId && !sessionCreatedSent) {
           sessionCreatedSent = true;
+          logRunLifecycle('session_created', {
+            sessionKey: sessionKey(),
+            providerSessionId: capturedSessionId,
+            userId: ws?.userId || null
+          });
           ws.send(createNormalizedMessage({ kind: 'session_created', newSessionId: capturedSessionId, sessionId: capturedSessionId, provider: 'claude' }));
         }
       } else {
@@ -895,6 +943,17 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         stopReason: wasAborted ? 'aborted' : 'completed'
       });
     }
+    // A superseded run skips the block above entirely — it owns none of the
+    // client-facing events. Without a record here it would end as a run_start
+    // with no run_end, which is exactly how such a run becomes invisible at
+    // the moment something unusual happened to it.
+    logRunEnd(superseded
+      ? { reason: 'superseded', exitCode: null, durationMs: Date.now() - runStartedAt }
+      : {
+        reason: wasAborted ? 'aborted' : 'completed',
+        exitCode: wasAborted ? null : 0,
+        durationMs: Date.now() - runStartedAt
+      });
     // Complete
 
   } catch (error) {
@@ -909,6 +968,16 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     if (supersededInstances.has(queryInstance)) {
       // Interrupted because a newer run took over this session id; that run
       // owns the abort flag and all further client-facing events.
+      //
+      // The run stays silent toward the CLIENT — that is deliberate and
+      // unchanged. It does get a log record, though: this is the path an
+      // interrupted run actually takes, and without a record it vanishes
+      // here without a trace.
+      logRunEnd({
+        reason: 'superseded',
+        exitCode: null,
+        durationMs: Date.now() - runStartedAt
+      });
       return;
     }
 
@@ -916,6 +985,11 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     if (wasAborted) {
       // The abort already produced the terminal complete; a generator throw
       // caused by interrupt() is expected noise, not a user-facing error.
+      logRunEnd({
+        reason: 'aborted',
+        exitCode: null,
+        durationMs: Date.now() - runStartedAt
+      });
       return;
     }
 
@@ -929,9 +1003,18 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     // reported completion and then failed during its post-turn hold still
     // surfaces the error, but must not emit a second terminal complete.
     ws.send(createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+    // The logging sits after the guard on purpose: it belongs to the RUN, not
+    // to the client-facing message, and runEndLogged gives it its own
+    // exactly-once guarantee.
     if (!turnCompleteSent) {
       ws.send(createCompleteMessage({ provider: 'claude', sessionId: capturedSessionId || sessionId || null, exitCode: 1 }));
     }
+    logRunEnd({
+      reason: 'error',
+      exitCode: 1,
+      durationMs: Date.now() - runStartedAt,
+      error: error?.message || String(error)
+    });
     notifyRunFailed({
       userId: ws?.userId || null,
       provider: 'claude',
@@ -964,7 +1047,7 @@ async function abortClaudeSDKSession(sessionId) {
   }
 
   try {
-    console.log(`Aborting SDK session: ${sessionId}`);
+    logRunLifecycle('abort_requested', { sessionKey: sessionId });
 
     // Mark before interrupting so the run loop knows not to emit its own
     // terminal complete (the abort handler sends the aborted one).
