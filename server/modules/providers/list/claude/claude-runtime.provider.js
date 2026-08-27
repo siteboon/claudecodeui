@@ -94,6 +94,10 @@ const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode'])
 const CLI_STDERR_MAX_LINE_CHARS = 500;
 const CLI_STDERR_MAX_LINES_PER_WINDOW = 50;
 const CLI_STDERR_WINDOW_MS = 60 * 1000;
+// Upper bound on a partial line held back between chunks. The SDK forwards raw
+// `data` events, so a logical line can arrive in pieces; without a bound, a
+// stream that never emits a newline would grow this buffer without limit.
+const CLI_STDERR_MAX_PENDING_CHARS = 8 * 1024;
 
 // Redaction runs BEFORE truncation. Truncating first can cut a secret in half
 // and leave the tail in place: the pattern no longer matches, so the filter
@@ -133,6 +137,54 @@ function redactCliStderr(text) {
  * @param {string} line - One raw stderr line, already trimmed.
  * @returns {string} The line to hand to the logger.
  */
+/**
+ * Reassembles complete lines from raw stderr chunks.
+ *
+ * The SDK forwards the child's `stderr` `data` events verbatim — it calls
+ * `options.stderr` straight from the data handler, with no line framing. A
+ * logical line can therefore arrive split across two chunks, and a secret
+ * split that way slips past redaction because neither half matches the
+ * pattern on its own.
+ *
+ * Kept as a factory so the buffering is testable on its own: this is exactly
+ * the kind of state that is easy to get subtly wrong and impossible to see
+ * afterwards in a log that looks plausible.
+ *
+ * @param {(line: string) => void} emit - Receives each complete line.
+ * @param {number} [maxPending] - Cap on a held-back fragment.
+ * @returns {{push: (chunk: string) => void, flush: () => void}}
+ */
+function createCliStderrChunker(emit, maxPending = CLI_STDERR_MAX_PENDING_CHARS) {
+  let pending = '';
+  return {
+    push(chunk) {
+      pending += String(chunk ?? '');
+      // A stream that never emits a newline must not grow this buffer forever.
+      // Flushing early can in principle split a secret, but at this size that
+      // needs a line two orders of magnitude longer than any credential
+      // format — unbounded memory is the worse failure.
+      if (pending.length > maxPending && !pending.includes('\n')) {
+        emit(pending);
+        pending = '';
+        return;
+      }
+      const parts = pending.split('\n');
+      pending = parts.pop() ?? '';
+      for (const line of parts) {
+        emit(line);
+      }
+    },
+    // Anything still buffered is a real line; it just never got its newline
+    // before the run ended.
+    flush() {
+      if (pending) {
+        emit(pending);
+        pending = '';
+      }
+    },
+  };
+}
+
 function formatCliStderrLine(sessionTag, line) {
   const safe = redactCliStderr(line);
   const capped = safe.length > CLI_STDERR_MAX_LINE_CHARS
@@ -672,6 +724,8 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   let stderrWindowStart = 0;
   let stderrLinesInWindow = 0;
   let stderrDropped = 0;
+  // Assigned once the SDK options are built; the cleanup path needs it.
+  let stderrChunker = null;
   const flushStderrDropped = () => {
     if (stderrDropped > 0) {
       console.error(`[claude-cli-stderr] ${sessionTag()} [throttled ${stderrDropped}]`);
@@ -771,7 +825,14 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
 
     // Forward the CLI child's stderr into the service log; see the limits
     // documented at CLI_STDERR_MAX_LINE_CHARS above.
-    sdkOptions.stderr = (data) => {
+    // One place where a finished line is emitted, used by both the streaming
+    // path and the flush during cleanup. Two code paths for the same job are
+    // how a redaction rule ends up applied in one of them and not the other.
+    const emitStderrLine = (rawLine) => {
+      const line = rawLine.trim();
+      if (!line) {
+        return;
+      }
       const now = Date.now();
       if (now - stderrWindowStart >= CLI_STDERR_WINDOW_MS) {
         // Report what the previous window swallowed before opening a new one.
@@ -780,19 +841,16 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         stderrWindowStart = now;
         stderrLinesInWindow = 0;
       }
-      for (const rawLine of String(data ?? '').split('\n')) {
-        const line = rawLine.trim();
-        if (!line) {
-          continue;
-        }
-        if (stderrLinesInWindow >= CLI_STDERR_MAX_LINES_PER_WINDOW) {
-          stderrDropped += 1;
-          continue;
-        }
-        stderrLinesInWindow += 1;
-        console.error(formatCliStderrLine(sessionTag(), line));
+      if (stderrLinesInWindow >= CLI_STDERR_MAX_LINES_PER_WINDOW) {
+        stderrDropped += 1;
+        return;
       }
+      stderrLinesInWindow += 1;
+      console.error(formatCliStderrLine(sessionTag(), line));
     };
+
+    stderrChunker = createCliStderrChunker(emitStderrLine);
+    sdkOptions.stderr = (data) => stderrChunker.push(data);
 
     sdkOptions.hooks = {
       Notification: [{
@@ -1138,6 +1196,9 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       clearTimeout(idleReleaseTimer);
       idleReleaseTimer = null;
     }
+    // Anything still buffered is a real line the CLI wrote; it just never got
+    // its newline before the run ended.
+    stderrChunker?.flush();
     // A run that ends while its throttle window is still open would otherwise
     // carry the dropped-line count to the grave.
     flushStderrDropped();
@@ -1253,6 +1314,7 @@ export const claudeRuntime = {
 
 // Export public API
 export {
+  createCliStderrChunker,
   formatCliStderrLine,
   queryClaudeSDK,
   abortClaudeSDKSession,
