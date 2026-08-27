@@ -89,7 +89,7 @@ test('claude cli stderr: a line split across chunks is reassembled', () => {
   const chunker = createCliStderrChunker((line) => seen.push(line));
 
   chunker.push('Error: ENOENT: no such ');
-  assert.deepEqual(seen, [], 'nothing may be emitted before the newline');
+  assert.equal(seen.length, 0, 'nothing may be emitted before the newline');
   chunker.push('file or directory\n');
 
   assert.deepEqual(seen, ['Error: ENOENT: no such file or directory']);
@@ -137,7 +137,7 @@ test('claude cli stderr: a newline-less stream does not buffer without bound', (
   const chunker = createCliStderrChunker((line) => seen.push(line), 32);
 
   chunker.push('x'.repeat(20));
-  assert.deepEqual(seen, [], 'below the cap it keeps buffering');
+  assert.equal(seen.length, 0, 'below the cap it keeps buffering');
 
   chunker.push('y'.repeat(20));
   assert.equal(seen.length, 1, 'above the cap it gives up and emits');
