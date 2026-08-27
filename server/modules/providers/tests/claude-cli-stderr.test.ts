@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   createCliStderrChunker,
+  createCliStderrFormatter,
   formatCliStderrLine,
 } from '@/modules/providers/list/claude/claude-runtime.provider.js';
 
@@ -141,4 +142,48 @@ test('claude cli stderr: a newline-less stream does not buffer without bound', (
   chunker.push('y'.repeat(20));
   assert.equal(seen.length, 1, 'above the cap it gives up and emits');
   assert.equal(seen[0].length, 40);
+});
+
+// --- PEM blocks ------------------------------------------------------------
+
+test('claude cli stderr: a whole PEM block is suppressed, not just its header', () => {
+  const out: string[] = [];
+  const format = createCliStderrFormatter(() => 'tag');
+
+  const block = [
+    '-----BEGIN RSA PRIVATE KEY-----',
+    'MIIEowIBAAKCAQEAxKeyMaterialLine1',
+    'AAAAB3NzaC1yc2EAAAADAQABAAABgQKeyMaterialLine2',
+    '-----END RSA PRIVATE KEY-----',
+  ];
+  for (const line of block) out.push(format(line));
+
+  assert.equal(out.length, 4);
+  for (const line of out) {
+    assert.ok(line.includes('<redacted private key>'), `leaked: ${line}`);
+  }
+  assert.ok(!out.join('\n').includes('MIIEowIBAAKCAQEAxKeyMaterialLine1'));
+  assert.ok(!out.join('\n').includes('AAAAB3NzaC1yc2EAAAADAQABAAABgQKeyMaterialLine2'));
+});
+
+test('claude cli stderr: output after the END marker is readable again', () => {
+  const format = createCliStderrFormatter(() => 'tag');
+
+  format('-----BEGIN PRIVATE KEY-----');
+  format('bodyLineThatMustNotAppear');
+  format('-----END PRIVATE KEY-----');
+  const after = format('Error: ENOENT: no such file or directory');
+
+  assert.equal(after, '[claude-cli-stderr] tag Error: ENOENT: no such file or directory');
+  assert.ok(!after.includes('<redacted private key>'));
+});
+
+test('claude cli stderr: a one-line PEM block does not swallow what follows', () => {
+  const format = createCliStderrFormatter(() => 'tag');
+
+  const oneLine = format('-----BEGIN PRIVATE KEY----- abc -----END PRIVATE KEY-----');
+  const after = format('ordinary diagnostics');
+
+  assert.ok(oneLine.includes('<redacted private key>'));
+  assert.equal(after, '[claude-cli-stderr] tag ordinary diagnostics');
 });
