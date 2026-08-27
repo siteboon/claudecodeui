@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { formatCliStderrLine } from '@/modules/providers/list/claude/claude-runtime.provider.js';
+import {
+  createCliStderrChunker,
+  formatCliStderrLine,
+} from '@/modules/providers/list/claude/claude-runtime.provider.js';
 
 const TAG = 'abc12345';
 
@@ -73,4 +76,69 @@ test('claude cli stderr: a secret straddling the cut is still redacted', () => {
 
   assert.ok(!out.includes('sk-ant-aaaaaaaaaaaaaaaa'));
   assert.ok(out.includes('<redacted>'));
+});
+
+// --- chunk reassembly ------------------------------------------------------
+//
+// The SDK forwards raw `data` events, so these are the cases that decide
+// whether redaction can be bypassed by nothing more than unlucky timing.
+
+test('claude cli stderr: a line split across chunks is reassembled', () => {
+  const seen: string[] = [];
+  const chunker = createCliStderrChunker((line) => seen.push(line));
+
+  chunker.push('Error: ENOENT: no such ');
+  assert.deepEqual(seen, [], 'nothing may be emitted before the newline');
+  chunker.push('file or directory\n');
+
+  assert.deepEqual(seen, ['Error: ENOENT: no such file or directory']);
+});
+
+test('claude cli stderr: a secret split across chunks is still redacted', () => {
+  const seen: string[] = [];
+  const chunker = createCliStderrChunker((line) => seen.push(formatCliStderrLine('tag', line)));
+
+  // Neither half matches the pattern on its own — that is the whole point.
+  chunker.push('auth: sk-ant-abcdefgh');
+  chunker.push('ijklmnopqrstuvwxyz0123\n');
+
+  assert.equal(seen.length, 1);
+  assert.ok(seen[0].includes('<redacted>'));
+  assert.ok(!seen[0].includes('sk-ant-abcdefghijklmnopqrstuvwxyz0123'));
+});
+
+test('claude cli stderr: several lines in one chunk all come through', () => {
+  const seen: string[] = [];
+  const chunker = createCliStderrChunker((line) => seen.push(line));
+
+  chunker.push('one\ntwo\nthree\n');
+
+  assert.deepEqual(seen, ['one', 'two', 'three']);
+});
+
+test('claude cli stderr: the trailing fragment is flushed, not lost', () => {
+  const seen: string[] = [];
+  const chunker = createCliStderrChunker((line) => seen.push(line));
+
+  chunker.push('a complete line\nand a dangling one');
+  assert.deepEqual(seen, ['a complete line']);
+
+  chunker.flush();
+  assert.deepEqual(seen, ['a complete line', 'and a dangling one']);
+
+  // Flushing twice must not emit the fragment again.
+  chunker.flush();
+  assert.equal(seen.length, 2);
+});
+
+test('claude cli stderr: a newline-less stream does not buffer without bound', () => {
+  const seen: string[] = [];
+  const chunker = createCliStderrChunker((line) => seen.push(line), 32);
+
+  chunker.push('x'.repeat(20));
+  assert.deepEqual(seen, [], 'below the cap it keeps buffering');
+
+  chunker.push('y'.repeat(20));
+  assert.equal(seen.length, 1, 'above the cap it gives up and emits');
+  assert.equal(seen[0].length, 40);
 });
