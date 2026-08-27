@@ -69,6 +69,78 @@ const BG_WAIT_CEILING_MS = 30 * 60 * 1000;
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
+// The SDK forwards the CLI child's stderr through an explicit callback
+// (`options.stderr`). This provider never set it, so that output was dropped
+// on the floor — including the one line the CLI writes when it winds itself
+// down:
+//
+//     Background tasks still running after <N>s; terminating.
+//     Set CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 to wait indefinitely.
+//
+// That message therefore never reached the service log, which is why a run
+// ended by the background-wait ceiling looks, from the outside, exactly like
+// a run that vanished without a trace. Wiring the callback is what turns that
+// guess into a reading.
+//
+// The same channel also carries SDK debug output, so it is forwarded under
+// three limits. None of them is cosmetic:
+//
+//   1. Redaction before logging — stderr can carry argv fragments and paths.
+//   2. A length cap per line — one runaway line must not swamp the journal.
+//   3. A rate limit per RUN — a CLI stuck in a write loop would otherwise
+//      flood the log. The counters live in the run's closure and die with it;
+//      a per-session map would need someone to clean it up, and that is
+//      exactly the kind of bookkeeping that gets forgotten.
+const CLI_STDERR_MAX_LINE_CHARS = 500;
+const CLI_STDERR_MAX_LINES_PER_WINDOW = 50;
+const CLI_STDERR_WINDOW_MS = 60 * 1000;
+
+// Redaction runs BEFORE truncation. Truncating first can cut a secret in half
+// and leave the tail in place: the pattern no longer matches, so the filter
+// stops working silently on exactly the line that needed it.
+const CLI_STDERR_REDACTIONS = [
+  /-----BEGIN[^-]{0,40}PRIVATE KEY-----/g,
+  /\b(sk|pk|ghp|gho|ghs|github_pat|xox[abprs])[-_][A-Za-z0-9_-]{8,}/g,
+  /\bsk-ant-[A-Za-z0-9_-]{16,}/g,
+  /\bAKIA[0-9A-Z]{12,}\b/g,
+  /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}/g,
+  /api\.telegram\.org\/bot[^/\s]+/g,
+  /[A-Za-z0-9_-]*(TOKEN|KEY|SECRET|PASSWORD|PASSWD|CREDENTIAL|APIKEY)[A-Za-z0-9_-]*\s*[=:]\s*\S+/gi,
+];
+
+/**
+ * Redacts well-known secret shapes from one line of CLI stderr.
+ *
+ * @param {string} text - Raw stderr text.
+ * @returns {string} The same text with secret-shaped runs replaced.
+ */
+function redactCliStderr(text) {
+  let out = String(text);
+  for (const pattern of CLI_STDERR_REDACTIONS) {
+    out = out.replace(pattern, '<redacted>');
+  }
+  return out;
+}
+
+/**
+ * Formats one CLI stderr line for the service log: redact, then cap.
+ *
+ * Kept as a pure function so both halves are testable on their own. The order
+ * matters and is the reason this is one function rather than two calls at the
+ * call site: capping first could split a secret and leave its tail readable.
+ *
+ * @param {string} sessionTag - Short session identifier for correlation.
+ * @param {string} line - One raw stderr line, already trimmed.
+ * @returns {string} The line to hand to the logger.
+ */
+function formatCliStderrLine(sessionTag, line) {
+  const safe = redactCliStderr(line);
+  const capped = safe.length > CLI_STDERR_MAX_LINE_CHARS
+    ? `${safe.slice(0, CLI_STDERR_MAX_LINE_CHARS - 1)}\u2026`
+    : safe;
+  return `[claude-cli-stderr] ${sessionTag} ${capped}`;
+}
+
 function resolveClaudeEffort(model, effort, modelsDefinition = CLAUDE_PREDEFINED_MODELS) {
   const selectedModel = modelsDefinition?.OPTIONS?.find((option) => option.value === model) || null;
   const allowedEfforts = selectedModel?.effort?.values
@@ -594,6 +666,18 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // Process-map key: the app session id when the caller supplied one, else
   // the provider-native id once captured (legacy/direct API callers).
   const sessionKey = () => sessionId || capturedSessionId || null;
+  // Short, greppable session tag for the CLI stderr lines below.
+  const sessionTag = () => String(sessionKey() || 'unknown').slice(0, 8);
+  // Rate-limit state for CLI stderr. Scoped to this run, dies with this run.
+  let stderrWindowStart = 0;
+  let stderrLinesInWindow = 0;
+  let stderrDropped = 0;
+  const flushStderrDropped = () => {
+    if (stderrDropped > 0) {
+      console.error(`[claude-cli-stderr] ${sessionTag()} [throttled ${stderrDropped}]`);
+      stderrDropped = 0;
+    }
+  };
   // Wall-clock start of this run, so every run_end can report a duration.
   const runStartedAt = Date.now();
   // Guarantees exactly one terminal lifecycle record per run: the success path
@@ -684,6 +768,31 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     // `result`. The message list is reusable, but each query attempt needs its
     // own stream because an async generator cannot be replayed once consumed.
     const promptMessages = await buildPromptMessages(command, options.images, options.files, options.cwd);
+
+    // Forward the CLI child's stderr into the service log; see the limits
+    // documented at CLI_STDERR_MAX_LINE_CHARS above.
+    sdkOptions.stderr = (data) => {
+      const now = Date.now();
+      if (now - stderrWindowStart >= CLI_STDERR_WINDOW_MS) {
+        // Report what the previous window swallowed before opening a new one.
+        // A throttle that hides its own losses is a log that lies.
+        flushStderrDropped();
+        stderrWindowStart = now;
+        stderrLinesInWindow = 0;
+      }
+      for (const rawLine of String(data ?? '').split('\n')) {
+        const line = rawLine.trim();
+        if (!line) {
+          continue;
+        }
+        if (stderrLinesInWindow >= CLI_STDERR_MAX_LINES_PER_WINDOW) {
+          stderrDropped += 1;
+          continue;
+        }
+        stderrLinesInWindow += 1;
+        console.error(formatCliStderrLine(sessionTag(), line));
+      }
+    };
 
     sdkOptions.hooks = {
       Notification: [{
@@ -1029,6 +1138,9 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       clearTimeout(idleReleaseTimer);
       idleReleaseTimer = null;
     }
+    // A run that ends while its throttle window is still open would otherwise
+    // carry the dropped-line count to the grave.
+    flushStderrDropped();
     releasePromptStream();
   }
 }
@@ -1141,6 +1253,7 @@ export const claudeRuntime = {
 
 // Export public API
 export {
+  formatCliStderrLine,
   queryClaudeSDK,
   abortClaudeSDKSession,
   isClaudeSDKSessionActive,
