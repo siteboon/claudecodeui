@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   createCliStderrChunker,
+  createCliStderrEmitter,
   createCliStderrFormatter,
   formatCliStderrLine,
 } from '@/modules/providers/list/claude/claude-runtime.provider.js';
@@ -186,4 +187,98 @@ test('claude cli stderr: a one-line PEM block does not swallow what follows', ()
 
   assert.ok(oneLine.includes('<redacted private key>'));
   assert.equal(after, '[claude-cli-stderr] tag ordinary diagnostics');
+});
+
+// --- The handover between throttle and PEM state ---------------------------
+//
+// Two mechanisms, each correct on its own. The bug lived where they meet: the
+// formatter used to run only for lines the throttle let through, so a
+// suppressed END marker left the block state stuck open for the rest of the
+// run. These tests pin both directions — the state must advance for every
+// line, and it must still redact what genuinely belongs to the block.
+
+/** Builds an emitter with a hand-driven clock, so a window can be closed
+ *  without waiting a real minute. */
+function emitterHarness() {
+  const written: string[] = [];
+  const notices: number[] = [];
+  let clock = 1_000;
+  const emitter = createCliStderrEmitter({
+    format: createCliStderrFormatter(() => 'tag'),
+    sink: (text: string) => { written.push(text); },
+    throttleNotice: (dropped: number) => { notices.push(dropped); },
+    now: () => clock,
+  });
+  return {
+    written,
+    notices,
+    push: (line: string) => emitter.push(line),
+    flushDropped: () => emitter.flushDropped(),
+    advance: (ms: number) => { clock += ms; },
+  };
+}
+
+test('claude cli stderr: a throttled END marker does not redact the rest of the run', () => {
+  const h = emitterHarness();
+
+  h.push('-----BEGIN PRIVATE KEY-----');
+  // Fill the window. Everything here is inside the block, so it is redacted
+  // where it is written at all; the point is that the window ends full.
+  for (let i = 0; i < 60; i += 1) h.push(`keyMaterialLine${i}`);
+  // This is the line that used to be lost: dropped by the throttle, and with
+  // it the state transition that closes the block.
+  h.push('-----END PRIVATE KEY-----');
+
+  assert.ok(h.notices.length === 0, 'losses are reported at the window boundary, not before');
+
+  h.advance(61_000);
+  h.push('Error: ENOENT: no such file or directory');
+
+  const last = h.written[h.written.length - 1];
+  // Exact equality, not "does not contain the placeholder": a weaker assertion
+  // would also pass if the formatting drifted.
+  assert.equal(last, '[claude-cli-stderr] tag Error: ENOENT: no such file or directory');
+  // The dropped lines are still accounted for: 62 pushed (BEGIN + 60 + END),
+  // 50 fit in the window, 12 were dropped.
+  assert.deepEqual(h.notices, [12]);
+});
+
+test('claude cli stderr: a throttled body line stays redacted when the block is still open', () => {
+  const h = emitterHarness();
+
+  h.push('-----BEGIN PRIVATE KEY-----');
+  for (let i = 0; i < 60; i += 1) h.push(`filler${i}`);
+  // Still INSIDE the block — no END marker anywhere. The window rolls over,
+  // and the next line must remain suppressed.
+  h.advance(61_000);
+  h.push('MIIEowIBAAKCAQEAxRealKeyMaterialAfterTheWindow');
+
+  const last = h.written[h.written.length - 1];
+  assert.equal(last, '[claude-cli-stderr] tag <redacted private key>');
+  assert.ok(!h.written.join('\n').includes('MIIEowIBAAKCAQEAxRealKeyMaterialAfterTheWindow'));
+});
+
+test('claude cli stderr: the run-end flush still reports what the throttle swallowed', () => {
+  const h = emitterHarness();
+
+  for (let i = 0; i < 60; i += 1) h.push(`line${i}`);
+  assert.equal(h.notices.length, 0);
+
+  // The run ends with the window still open; the count must not go to the grave.
+  h.flushDropped();
+  assert.deepEqual(h.notices, [10]);
+
+  // Flushing twice must not invent a second report.
+  h.flushDropped();
+  assert.deepEqual(h.notices, [10]);
+});
+
+test('claude cli stderr: blank lines are ignored and do not consume the window', () => {
+  const h = emitterHarness();
+
+  h.push('   ');
+  h.push('');
+  h.push('real line');
+
+  assert.deepEqual(h.written, ['[claude-cli-stderr] tag real line']);
 });

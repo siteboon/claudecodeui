@@ -222,6 +222,67 @@ function createCliStderrChunker(emit, maxPending = CLI_STDERR_MAX_PENDING_CHARS)
   };
 }
 
+/**
+ * Rate-limits CLI stderr without letting the redaction state fall behind.
+ *
+ * The throttle and the PEM-block formatter are each correct on their own. The
+ * bug lived at their handover: the formatter used to be called only for lines
+ * that survived the throttle, so a suppressed END marker left `insidePem`
+ * stuck and every later line of the run came out as the placeholder. State
+ * must advance for EVERY line; only the writing is rate-limited.
+ *
+ * Kept as a factory for the same reason as the chunker above: this is state
+ * that is easy to get subtly wrong and impossible to see afterwards in a log
+ * that looks plausible.
+ *
+ * @param {object} deps
+ * @param {(line: string) => string} deps.format - Stateful line formatter.
+ * @param {(text: string) => void} deps.sink - Receives lines that pass.
+ * @param {(dropped: number) => void} deps.throttleNotice - Reports losses.
+ * @param {() => number} [deps.now] - Clock, injectable for tests.
+ * @returns {{push: (line: string) => void, flushDropped: () => void}}
+ */
+function createCliStderrEmitter({ format, sink, throttleNotice, now = Date.now }) {
+  let windowStart = 0;
+  let linesInWindow = 0;
+  let dropped = 0;
+
+  // A throttle that hides its own losses is a log that lies.
+  const flushDropped = () => {
+    if (dropped > 0) {
+      throttleNotice(dropped);
+      dropped = 0;
+    }
+  };
+
+  const push = (rawLine) => {
+    const line = String(rawLine ?? '').trim();
+    if (!line) {
+      return;
+    }
+    // BEFORE the throttle, unconditionally: the formatter carries the PEM
+    // block state across lines. Skipping it for a dropped line would lose the
+    // END marker and silently redact the rest of the run.
+    const formatted = format(line);
+    const stamp = now();
+    if (stamp - windowStart >= CLI_STDERR_WINDOW_MS) {
+      // Report what the previous window swallowed before opening a new one.
+      flushDropped();
+      windowStart = stamp;
+      linesInWindow = 0;
+    }
+    if (linesInWindow >= CLI_STDERR_MAX_LINES_PER_WINDOW) {
+      dropped += 1;
+      return;
+    }
+    linesInWindow += 1;
+    sink(formatted);
+  };
+
+  return { push, flushDropped };
+}
+
+
 function formatCliStderrLine(sessionTag, line) {
   const safe = redactCliStderr(line);
   const capped = safe.length > CLI_STDERR_MAX_LINE_CHARS
@@ -758,17 +819,9 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // Short, greppable session tag for the CLI stderr lines below.
   const sessionTag = () => String(sessionKey() || 'unknown').slice(0, 8);
   // Rate-limit state for CLI stderr. Scoped to this run, dies with this run.
-  let stderrWindowStart = 0;
-  let stderrLinesInWindow = 0;
-  let stderrDropped = 0;
-  // Assigned once the SDK options are built; the cleanup path needs it.
+  // Assigned once the SDK options are built; the cleanup path needs both.
   let stderrChunker = null;
-  const flushStderrDropped = () => {
-    if (stderrDropped > 0) {
-      console.error(`[claude-cli-stderr] ${sessionTag()} [throttled ${stderrDropped}]`);
-      stderrDropped = 0;
-    }
-  };
+  let stderrEmitter = null;
   // Wall-clock start of this run, so every run_end can report a duration.
   const runStartedAt = Date.now();
   // Guarantees exactly one terminal lifecycle record per run: the success path
@@ -891,28 +944,15 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     // One place where a finished line is emitted, used by both the streaming
     // path and the flush during cleanup. Two code paths for the same job are
     // how a redaction rule ends up applied in one of them and not the other.
-    const emitStderrLine = (rawLine) => {
-      const line = rawLine.trim();
-      if (!line) {
-        return;
-      }
-      const now = Date.now();
-      if (now - stderrWindowStart >= CLI_STDERR_WINDOW_MS) {
-        // Report what the previous window swallowed before opening a new one.
-        // A throttle that hides its own losses is a log that lies.
-        flushStderrDropped();
-        stderrWindowStart = now;
-        stderrLinesInWindow = 0;
-      }
-      if (stderrLinesInWindow >= CLI_STDERR_MAX_LINES_PER_WINDOW) {
-        stderrDropped += 1;
-        return;
-      }
-      stderrLinesInWindow += 1;
-      console.error(formatStderrLine(line));
-    };
+    stderrEmitter = createCliStderrEmitter({
+      format: formatStderrLine,
+      sink: (text) => console.error(text),
+      throttleNotice: (dropped) => console.error(
+        `[claude-cli-stderr] ${sessionTag()} [throttled ${dropped}]`,
+      ),
+    });
 
-    stderrChunker = createCliStderrChunker(emitStderrLine);
+    stderrChunker = createCliStderrChunker(stderrEmitter.push);
     sdkOptions.stderr = (data) => stderrChunker.push(data);
 
     sdkOptions.hooks = {
@@ -1259,7 +1299,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     stderrChunker?.flush();
     // A run that ends while its throttle window is still open would otherwise
     // carry the dropped-line count to the grave.
-    flushStderrDropped();
+    stderrEmitter?.flushDropped();
     releasePromptStream();
   }
 }
@@ -1373,6 +1413,7 @@ export const claudeRuntime = {
 // Export public API
 export {
   createCliStderrChunker,
+  createCliStderrEmitter,
   createCliStderrFormatter,
   formatCliStderrLine,
   queryClaudeSDK,
