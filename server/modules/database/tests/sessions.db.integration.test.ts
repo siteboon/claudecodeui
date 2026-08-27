@@ -72,6 +72,30 @@ test('createSession reactivates archived rows when the session becomes active ag
   });
 });
 
+test("createSession leaves an archived row archived when the transcript has not changed", async () => {
+  await withIsolatedDatabase(() => {
+    const createdAt = "2026-07-18T09:00:00.000Z";
+    const updatedAt = "2026-07-18T10:00:00.000Z";
+    const jsonlPath = "/transcripts/session-untouched.jsonl";
+
+    sessionsDb.createSession("session-untouched", "claude", "/workspace/demo-project", "A Name", createdAt, updatedAt, jsonlPath);
+    sessionsDb.updateSessionIsArchived("session-untouched", true);
+
+    // A full rescan re-indexes every transcript created since the last scan,
+    // changed or not, and hands over the timestamps the file still carries.
+    sessionsDb.createSession("session-untouched", "claude", "/workspace/demo-project", "A Name", createdAt, updatedAt, jsonlPath);
+
+    assert.equal(sessionsDb.getSessionById("session-untouched")?.isArchived, 1);
+    assert.equal(sessionsDb.getArchivedSessions().length, 1);
+    assert.equal(sessionsDb.getAllSessions().length, 0);
+
+    // Actually writing to the session again still brings it back.
+    sessionsDb.createSession("session-untouched", "claude", "/workspace/demo-project", "A Name", createdAt, "2026-07-18T11:00:00.000Z", jsonlPath);
+
+    assert.equal(sessionsDb.getSessionById("session-untouched")?.isArchived, 0);
+  });
+});
+
 test('repository reads normalize SQLite UTC timestamps to ISO strings', async () => {
   await withIsolatedDatabase(() => {
     sessionsDb.createAppSession('session-timezone', 'claude', '/workspace/demo-project');
