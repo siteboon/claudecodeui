@@ -9,6 +9,12 @@
  * - Format: Line-delimited JSON (not JSON-RPC 2.0)
  * - Request: { id: number, method: string, params?: AnyRecord }
  * - Response: { id: number, result: unknown } | { id: number, error: { code: number, message: string, data?: unknown } }
+ * - Server Request (bidirectional): { id: string ("server-N"), method: string, params?: AnyRecord }.
+ *   The engine initiates requests against the client and blocks the
+ *   originating client call until it is answered — `session/create` waits on
+ *   `session/requestRuntimePreferences` and fails with -32022 after the
+ *   engine's 15s timeout if no answer arrives, so EVERY server request must
+ *   get a response: { id, result } | { id, error }
  * - Notification: { method: string, params: AnyRecord } (no id field)
  * - Error codes: -32600 (Invalid Request), -32601 (Method not found)
  *
@@ -57,6 +63,20 @@ type ProtocolNotification = {
 };
 
 /**
+ * Protocol server-initiated request envelope (id + method, from stdout).
+ *
+ * The engine calls back into the client with its own id namespace
+ * ("server-1", "server-2", ...) while handling client requests; the client
+ * must answer with `{ id, result }` or `{ id, error }` or the originating
+ * client request dies with a -32022 timeout after the engine's 15s window.
+ */
+type ProtocolServerRequest = {
+  id: number | string;
+  method: string;
+  params?: AnyRecord;
+};
+
+/**
  * Response wrapper for internal pending request management.
  */
 type PendingRequest = {
@@ -94,7 +114,9 @@ const CONFIG = {
  * `server/modules/providers/tests/zcode-protocol.client.test.ts`.
  * Returns null for empty or malformed lines so callers can skip them.
  */
-export function parseProtocolLine(line: string): ProtocolResponse | ProtocolNotification | null {
+export function parseProtocolLine(
+  line: string
+): ProtocolResponse | ProtocolNotification | ProtocolServerRequest | null {
   const trimmed = line.trim();
   if (!trimmed) {
     return null;
@@ -301,14 +323,72 @@ class ZCodeProtocolClient {
   }
 
   /**
-   * Handles parsed protocol messages (responses or notifications).
+   * Handles parsed protocol messages (responses, server requests, or
+   * notifications). `method` + `id` marks a server-initiated request; `id`
+   * alone marks a response to one of ours; `method` alone is a notification.
    */
-  private handleProtocolMessage(message: ProtocolResponse | ProtocolNotification): void {
-    if ('id' in message) {
+  private handleProtocolMessage(
+    message: ProtocolResponse | ProtocolNotification | ProtocolServerRequest
+  ): void {
+    if ('id' in message && 'method' in message) {
+      this.handleServerRequest(message);
+    } else if ('id' in message) {
       this.handleResponse(message);
     } else {
       this.handleNotification(message);
     }
+  }
+
+  /**
+   * Writes a response to a server-initiated request back to the subprocess.
+   *
+   * Payload is `{ result }` on success or `{ error }` with a JSON-RPC-style
+   * code; the envelope keeps the server's own id so the engine can correlate.
+   */
+  private respondToServer(
+    requestId: number | string,
+    payload: { result: unknown } | { error: { code: number; message: string } }
+  ): void {
+    const response = { id: requestId, ...payload };
+    const jsonLine = JSON.stringify(response) + '\n';
+
+    try {
+      this.process?.stdin?.write(jsonLine, 'utf-8', (error) => {
+        if (error) {
+          console.error(`[ZCode Protocol] Failed to respond to server request ${requestId}:`, error);
+        }
+      });
+    } catch (error) {
+      console.error(`[ZCode Protocol] Failed to respond to server request ${requestId}:`, error);
+    }
+  }
+
+  /**
+   * Handles server-initiated requests (engine → client).
+   *
+   * Every request MUST be answered: the engine blocks the client call that
+   * triggered it (e.g. `session/create` waits on
+   * `session/requestRuntimePreferences`) until a response arrives or its own
+   * 15s timeout rejects the client call with -32022.
+   */
+  private handleServerRequest(request: ProtocolServerRequest): void {
+    console.debug(`[ZCode Protocol] Received server request: ${request.method}`);
+
+    if (request.method === 'session/requestRuntimePreferences') {
+      // Minimal viable preferences validated by the Phase 0.1 spike
+      // (docs/phase0-1-findings.md §5).
+      this.respondToServer(request.id, { result: { nativeSearchEnhancementsEnabled: false } });
+      return;
+    }
+
+    // Unsupported engine callbacks get an explicit method-not-found error
+    // rather than silence or an empty result: the engine recognizes -32601 as
+    // "client does not implement this" and applies its own fallbacks, while an
+    // empty `{}` result could be misread as approval for interaction/*
+    // requests.
+    this.respondToServer(request.id, {
+      error: { code: -32601, message: `Method not found: ${request.method}` },
+    });
   }
 
   /**

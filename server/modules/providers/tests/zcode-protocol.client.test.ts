@@ -76,6 +76,112 @@ test('protocol client routes session/event notifications by nested event session
   }
 });
 
+test('parseProtocolLine parses server request envelopes', () => {
+  const message = parseProtocolLine(
+    '{"id":"server-1","method":"session/requestRuntimePreferences","params":{"scope":"runtime-materialization"}}'
+  );
+  assert.deepEqual(message, {
+    id: 'server-1',
+    method: 'session/requestRuntimePreferences',
+    params: { scope: 'runtime-materialization' },
+  });
+});
+
+test('protocol client answers session/requestRuntimePreferences server requests', () => {
+  const written: string[] = [];
+  const client = protocolClient as unknown as {
+    process: unknown;
+    handleProtocolMessage(message: unknown): void;
+  };
+  const originalProcess = client.process;
+  client.process = {
+    stdin: {
+      write: (line: string, _encoding: unknown, callback?: () => void) => {
+        written.push(line);
+        callback?.();
+      },
+    },
+  };
+
+  try {
+    client.handleProtocolMessage({
+      id: 'server-1',
+      method: 'session/requestRuntimePreferences',
+      params: { sessionId: 'sess_prefs', scope: 'runtime-materialization' },
+    });
+
+    assert.equal(written.length, 1);
+    assert.deepEqual(JSON.parse(written[0]), {
+      id: 'server-1',
+      result: { nativeSearchEnhancementsEnabled: false },
+    });
+  } finally {
+    client.process = originalProcess;
+  }
+});
+
+test('protocol client rejects unknown server requests with method-not-found', () => {
+  const written: string[] = [];
+  const client = protocolClient as unknown as {
+    process: unknown;
+    handleProtocolMessage(message: unknown): void;
+  };
+  const originalProcess = client.process;
+  client.process = {
+    stdin: {
+      write: (line: string, _encoding: unknown, callback?: () => void) => {
+        written.push(line);
+        callback?.();
+      },
+    },
+  };
+
+  try {
+    client.handleProtocolMessage({
+      id: 'server-9',
+      method: 'interaction/requestPermission',
+      params: { toolName: 'Bash' },
+    });
+
+    assert.equal(written.length, 1);
+    const response = JSON.parse(written[0]) as { id: string; error: { code: number } };
+    assert.equal(response.id, 'server-9');
+    assert.equal(response.error.code, -32601);
+  } finally {
+    client.process = originalProcess;
+  }
+});
+
+test('protocol client still resolves pending client requests by numeric id', () => {  const client = protocolClient as unknown as {
+    pendingRequests: Map<number, {
+      resolve: (value: unknown) => void;
+      reject: (error: Error) => void;
+      timeout: NodeJS.Timeout | null;
+    }>;
+    handleProtocolMessage(message: unknown): void;
+  };
+
+  let resolved: unknown = null;
+  client.pendingRequests.set(41, {
+    resolve: (value) => {
+      resolved = value;
+    },
+    reject: (error) => {
+      throw error;
+    },
+    timeout: null,
+  });
+
+  try {
+    client.handleProtocolMessage({ id: 41, result: { sessionId: 'sess_ok' } });
+
+    assert.deepEqual(resolved, { sessionId: 'sess_ok' });
+    assert.equal(client.pendingRequests.has(41), false);
+  } finally {
+    client.pendingRequests.delete(41);
+  }
+});
+
 test('protocol client ignores non-session notifications', () => {
   const listener = () => {
     throw new Error('listener must not be called');

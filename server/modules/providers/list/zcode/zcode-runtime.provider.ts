@@ -57,9 +57,15 @@ const activeSessions = new Map<string, string>();
 /**
  * Session completion tracking to ensure exactly one complete event per run.
  * Maps ZCode session IDs to completion state; `tokenUsage` is the run's
- * total used-token count carried on the final complete message.
+ * total used-token count carried on the final complete message, `failed`
+ * marks runs that ended with a terminal error event (turn.failed/fatal) so
+ * the complete message reports a non-zero exit code.
  */
-const sessionCompletionState = new Map<string, { completed: boolean; tokenUsage?: number }>();
+const sessionCompletionState = new Map<string, {
+  completed: boolean;
+  failed?: boolean;
+  tokenUsage?: number;
+}>();
 
 /**
  * ZCode Runtime Provider Implementation
@@ -91,7 +97,17 @@ export class ZCodeRuntimeProvider implements IProviderRuntime {
     context: ProviderRuntimeContext,
   ): Promise<unknown> {
     const appSessionId = readOptionalString(options.sessionId) ?? null;
-    const zcodeSessionId = await this.resolveOrCreateSession(appSessionId, options, context, writer);
+
+    // Runs before the main try block below; without its own error emission a
+    // session/create failure would never reach the chat stream and the page
+    // would stay silent (the gateway only logs runtime rejections).
+    let zcodeSessionId: string;
+    try {
+      zcodeSessionId = await this.resolveOrCreateSession(appSessionId, options, context, writer);
+    } catch (error) {
+      this.sendRuntimeError(writer, appSessionId, error);
+      throw error;
+    }
 
     // Abort is requested with the app-facing id; fall back to the ZCode id
     // for callers (e.g. tests) that never supplied one.
@@ -118,21 +134,36 @@ export class ZCodeRuntimeProvider implements IProviderRuntime {
       }
     } catch (error) {
       // Surface the failure to the chat stream before propagating it.
-      const errorMessage = createNormalizedMessage({
-        id: generateMessageId('zcode'),
-        sessionId: zcodeSessionId,
-        provider: 'zcode',
-        kind: 'error',
-        isError: true,
-        text: error instanceof Error ? error.message : 'Unknown ZCode runtime error',
-      });
-      writer.send(errorMessage);
+      this.sendRuntimeError(writer, zcodeSessionId, error);
 
       throw error;
     } finally {
       activeSessions.delete(abortKey);
       sessionCompletionState.delete(zcodeSessionId);
     }
+  }
+
+  /**
+   * Emits a `kind: 'error'` message to the chat stream before a failure
+   * propagates out of `run`.
+   *
+   * `sessionId` only feeds the message envelope — the gateway writer remaps it
+   * to the app-facing id — so callers pass whichever id they currently hold.
+   */
+  private sendRuntimeError(
+    writer: ProviderRuntimeWriter,
+    sessionId: string | null,
+    error: unknown,
+  ): void {
+    const errorMessage = createNormalizedMessage({
+      id: generateMessageId('zcode'),
+      sessionId,
+      provider: 'zcode',
+      kind: 'error',
+      isError: true,
+      text: error instanceof Error ? error.message : 'Unknown ZCode runtime error',
+    });
+    writer.send(errorMessage);
   }
 
   /**
@@ -345,7 +376,10 @@ export class ZCodeRuntimeProvider implements IProviderRuntime {
    * Sends user message to ZCode session.
    *
    * `session/send` is issued without a request timeout because its result
-   * arrives on the event stream rather than as a protocol response.
+   * arrives on the event stream rather than as a protocol response. The
+   * params are strict-schema validated by the engine — extra keys such as a
+   * `deliveryKind` are rejected with "Unrecognized key" (validated against
+   * engine 0.16.3), so only `sessionId` and `content` are sent.
    */
   private async sendUserMessage(
     sessionId: string,
@@ -356,7 +390,6 @@ export class ZCodeRuntimeProvider implements IProviderRuntime {
       sessionId,
       // Message content field: content (not message) per protocol findings
       content: command,
-      deliveryKind: 'interactive',
     };
 
     if (Array.isArray(options.attachments)) {
@@ -408,6 +441,17 @@ export class ZCodeRuntimeProvider implements IProviderRuntime {
             continue;
           }
 
+          if (message.kind === 'error') {
+            // Terminal error events (turn.failed / fatal) end the turn; mark
+            // the run completed-as-failed so waitForCompletion and the final
+            // complete message reflect it instead of timing out after 10 min.
+            const completionState = sessionCompletionState.get(sessionId);
+            if (completionState) {
+              completionState.failed = true;
+              completionState.completed = true;
+            }
+          }
+
           writer.send(message);
         }      } catch (error) {
         console.error(`[ZCodeRuntime] Error processing session event:`, error);
@@ -455,12 +499,13 @@ export class ZCodeRuntimeProvider implements IProviderRuntime {
     sessionId: string,
     writer: ProviderRuntimeWriter,
   ): void {
-    const tokenUsage = sessionCompletionState.get(sessionId)?.tokenUsage;
+    const completionState = sessionCompletionState.get(sessionId);
+    const tokenUsage = completionState?.tokenUsage;
 
     const completeMessage = createCompleteMessage({
       provider: 'zcode',
       sessionId,
-      exitCode: 0,
+      exitCode: completionState?.failed ? 1 : 0,
     });
     if (typeof tokenUsage === 'number') {
       completeMessage.tokens = tokenUsage;

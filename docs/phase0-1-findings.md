@@ -183,6 +183,50 @@ Model config is missing. Create /Users/azrael/.zcode/cli/config.json with an exp
 }
 ```
 
+#### 2026-08-18 update: root cause found — config.json is a red herring in app-server mode
+
+Validated against engine 0.16.3 with direct experiments (see "Headless bootstrap
+recipe" below): a raw `node zcode.cjs app-server` subprocess **never reads
+`~/.zcode/cli/config.json`**. Invalid JSON in that file produces the same
+"Model config is missing" error as a valid file — the desktop app supplies
+model config in-process instead. Filling in config.json (any shape, including
+the one above) does NOT unblock headless session creation.
+
+**Headless bootstrap recipe (validated):** before the first `session/create`,
+the client must populate the engine's per-workspace model registry:
+
+1. `workspace/upsertModelProvider` — `{ workspace, provider: { providerId,
+   kind: "openai-compatible", apiFormat: "openai-chat-completions",
+   baseURL: "https://open.bigmodel.cn/api/coding/paas/v4",
+   apiKey: <see auth note>, source: "custom",
+   models: [{ modelId: "GLM-5.3", supportsTools: true }] } }`
+   (`apiKey` is a discriminated union: `{source:"inline",value}`,
+   `{source:"env",name}`, `{source:"credential",key}`, or
+   `{source:"server-config",key}`.)
+2. `workspace/setDefaultModel` — `{ workspace, model: { providerId, modelId } }`
+3. `session/create` now succeeds (response shape: `result.session.sessionId`;
+   the id is NOT at the top level).
+
+**Auth note (open problem):** `{source:"credential",
+key:"oauth:bigmodel:access_token"}` resolves to nothing in a headless
+subprocess — the shared store `~/.zcode/v2/credentials.json` holds `enc:v1:`
+AES-256-GCM values keyed by `ZCODE_CREDENTIAL_SECRET` (fallback derivation
+`sha256("zcode-credential-fallback:<platform>:<homedir>:<username>")` does NOT
+decrypt desktop-written values; the desktop passes its own secret to its child
+processes). `{source:"inline"}` with a real API key reaches the endpoint
+correctly (a garbage value yields provider 401 "令牌已过期或验证不正确"),
+so the API-key path works once a key is available. The engine's
+`interaction/requestProviderRuntimeHeaders` server→client request is how the
+desktop injects per-request auth headers and is a further option for OAuth
+relay.
+
+**Related protocol facts confirmed the same day:**
+- `session/send` rejects `deliveryKind` (strict schema, `Unrecognized key`).
+- Event stream types observed live: `session.titleUpdated`, `turn.started`,
+  `session.updated`, `turn.failed` (payload.error.attribution carries
+  statusCode/providerErrorCode). `turn.failed` currently maps to nothing in
+  the sessions normalizer and should surface as `kind: 'error'`.
+
 ### 🟡 Blocker 2: Inactive Session State
 
 **Issue:** Operations on inactive sessions fail with "Session is not active" errors.

@@ -281,7 +281,10 @@ export class ZCodeSessionsProvider implements IProviderSessions {
       })];
     }
 
-    if (type === 'error' || type === 'fatal') {
+    if (type === 'error' || type === 'fatal' || type === 'turn.failed') {
+      // `turn.failed` (observed live on engine 0.16.3) wraps the cause in
+      // payload.error ({message, attribution:{statusCode, reason, ...}}).
+      const errorRecord = readObjectRecord(payload.error);
       return [createNormalizedMessage({
         id: baseId,
         sessionId: eventSessionId,
@@ -289,7 +292,10 @@ export class ZCodeSessionsProvider implements IProviderSessions {
         provider: PROVIDER,
         kind: 'error',
         isError: true,
-        text: readOptionalString(payload.error) ?? readOptionalString(payload.message) ?? 'Unknown ZCode error',
+        text: readOptionalString(errorRecord?.message)
+          ?? readOptionalString(payload.error)
+          ?? readOptionalString(payload.message)
+          ?? 'Unknown ZCode error',
       })];
     }
 
