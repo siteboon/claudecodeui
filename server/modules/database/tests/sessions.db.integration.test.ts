@@ -96,6 +96,34 @@ test("createSession leaves an archived row archived when the transcript has not 
   });
 });
 
+test("the upsert path counts an omitted timestamp as activity", async () => {
+  await withIsolatedDatabase(() => {
+    // An app-created row carries no provider id, so indexing it takes the
+    // INSERT ... ON CONFLICT branch rather than the UPDATE above. Its
+    // updated_at is CURRENT_TIMESTAMP, which resolves to whole seconds, so a
+    // call in the same second is not *newer* -- the omitted timestamp itself
+    // has to be what reactivates the row.
+    sessionsDb.createAppSession("session-legacy", "claude", "/workspace/demo-project");
+    sessionsDb.updateSessionIsArchived("session-legacy", true);
+
+    sessionsDb.createSession("session-legacy", "claude", "/workspace/demo-project", "Indexed Name");
+
+    assert.equal(sessionsDb.getSessionById("session-legacy")?.isArchived, 0);
+  });
+});
+
+test("the upsert path leaves an archived row alone for a transcript older than it", async () => {
+  await withIsolatedDatabase(() => {
+    sessionsDb.createAppSession("session-stale", "claude", "/workspace/demo-project");
+    sessionsDb.updateSessionIsArchived("session-stale", true);
+
+    sessionsDb.createSession("session-stale", "claude", "/workspace/demo-project", "Indexed Name", "2026-07-18T09:00:00.000Z", "2026-07-18T10:00:00.000Z", "/transcripts/session-stale.jsonl");
+
+    assert.equal(sessionsDb.getSessionById("session-stale")?.isArchived, 1);
+  });
+});
+
+
 test('repository reads normalize SQLite UTC timestamps to ISO strings', async () => {
   await withIsolatedDatabase(() => {
     sessionsDb.createAppSession('session-timezone', 'claude', '/workspace/demo-project');
