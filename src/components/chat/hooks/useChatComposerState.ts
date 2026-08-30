@@ -724,16 +724,21 @@ export function useChatComposerState({
         }
 
         // A message may already be queued for this turn (the user queued "A"
-        // and is now queuing "B" before the run finishes). Append onto it
-        // instead of replacing it so the earlier message is never dropped.
-        const existingDraft =
-          queuedSessionKey && queuedDraftSessionRef.current === queuedSessionKey ? queuedDraft : null;
+        // and is now queuing "B" before the run finishes). Re-read the
+        // persisted draft here rather than trusting the `queuedDraft` closure:
+        // two submissions can each be past their own upload await with
+        // neither having committed a re-render yet, so both closures would
+        // see the same stale (or empty) state and the second write would
+        // still clobber the first. Storage is read, merged, and written back
+        // with no `await` in between, so it stays correct even when two
+        // submissions' uploads resolve out of order.
+        const existingQueued = queuedSessionKey ? readQueuedMessage(queuedSessionKey) : null;
 
         const durableDraft: QueuedDraft = {
-          content: existingDraft ? mergeQueuedContent(existingDraft.content, currentInput) : currentInput,
-          attachments: existingDraft ? [...existingDraft.attachments, ...currentAttachments] : currentAttachments,
-          uploadedAttachments: existingDraft
-            ? [...(existingDraft.uploadedAttachments ?? []), ...uploadedAttachments]
+          content: existingQueued ? mergeQueuedContent(existingQueued.content, currentInput) : currentInput,
+          attachments: [...(queuedDraft?.attachments ?? []), ...currentAttachments],
+          uploadedAttachments: existingQueued
+            ? [...(existingQueued.attachments ?? []), ...uploadedAttachments]
             : uploadedAttachments,
           options: queuedOptions,
         };
