@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
 
 import type { LLMProvider, ProviderModelOption } from "@/shared/types";
@@ -53,20 +53,21 @@ export default function ModelGroupList({
   const collapsed = useMemo(() => new Set(collapsedKeys), [collapsedKeys]);
 
   const toggle = useCallback((key: string) => {
-    setCollapsedKeys((previous) => {
-      const next = previous.includes(key)
-        ? previous.filter((entry) => entry !== key)
-        : [...previous, key];
-
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      } catch {
-        // A closed branch is a convenience; not being able to remember it is no reason to fail.
-      }
-
-      return next;
-    });
+    setCollapsedKeys((previous) => (previous.includes(key)
+      ? previous.filter((entry) => entry !== key)
+      : [...previous, key]));
   }, []);
+
+  // Persisted from an effect, not from the updater: React may run an updater
+  // more than once or throw its result away, and only committed state should
+  // reach storage.
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(collapsedKeys));
+    } catch {
+      // A closed branch is a convenience; not being able to remember it is no reason to fail.
+    }
+  }, [collapsedKeys]);
 
   return (
     <>
