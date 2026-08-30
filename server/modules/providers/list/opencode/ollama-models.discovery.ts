@@ -36,6 +36,15 @@ function getOllamaBaseUrl(): string {
 const PROBE_TIMEOUT_MS = 1500;
 
 /**
+ * `CLOUDCLI_OLLAMA_DISCOVERY=0` (or `false`/`off`) turns the probe off for
+ * good, for anyone who wants the catalog to be nothing but the curated list.
+ */
+function isDiscoveryEnabled(): boolean {
+  const flag = (process.env.CLOUDCLI_OLLAMA_DISCOVERY ?? '').trim().toLowerCase();
+  return !['0', 'false', 'off', 'no'].includes(flag);
+}
+
+/**
  * Models cannot change while a request is in flight, but the catalog is read
  * often (every model dropdown). A short cache keeps that from turning into a
  * request per render, while a newly pulled model still shows up promptly.
@@ -91,6 +100,10 @@ function toOption(tag: OllamaTag): ProviderModelOption | null {
  * cannot be reached. Never throws.
  */
 export async function discoverOllamaModels(): Promise<ProviderModelOption[]> {
+  if (!isDiscoveryEnabled()) {
+    return [];
+  }
+
   if (Date.now() - cachedAt < CACHE_TTL_MS) {
     return cachedOptions;
   }
