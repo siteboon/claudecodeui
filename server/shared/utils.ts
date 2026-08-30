@@ -304,8 +304,14 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
     }
 
     const resolvedWorkspaceRoot = normalizeProjectPath(await realpath(WORKSPACES_ROOT));
+    // A drive root already ends in the separator ("A:\"), and `/` does too.
+    // Appending another one gives "A:\\", which nothing starts with - every
+    // path under such a root would be rejected as outside it.
+    const workspaceRootPrefix = resolvedWorkspaceRoot.endsWith(path.sep)
+      ? resolvedWorkspaceRoot
+      : `${resolvedWorkspaceRoot}${path.sep}`;
     if (
-      !resolvedPath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)
+      !resolvedPath.startsWith(workspaceRootPrefix)
       && resolvedPath !== resolvedWorkspaceRoot
     ) {
       return {
