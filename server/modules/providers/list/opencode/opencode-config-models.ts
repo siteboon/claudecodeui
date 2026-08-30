@@ -30,25 +30,35 @@ import type { ProviderModelOption } from '@/shared/types.js';
  */
 
 /**
- * Config files in the order OpenCode looks them up; the first one that exists
- * wins. `OPENCODE_CONFIG` names a file directly, otherwise the global config
- * directory is used - all four lookups appear as strings in the OpenCode
- * binary.
+ * Every config file OpenCode reads globally - it merges them rather than
+ * picking one. Measured against `opencode models`: with `opencode.json` and
+ * `opencode.jsonc` side by side both contribute their providers, and a file
+ * named by `OPENCODE_CONFIG` adds to the global one instead of replacing it.
+ *
+ * Read last wins a collision, which is why `OPENCODE_CONFIG` comes last: it is
+ * the more specific choice. Only the label can differ that way - the id is the
+ * same either way, and which label OpenCode itself would show is not
+ * observable through its CLI.
+ *
+ * A project-local `opencode.json` is deliberately out of scope: this catalog is
+ * fetched without a project in hand.
  */
 function getConfigCandidates(): string[] {
-  const explicit = (process.env.OPENCODE_CONFIG || '').trim();
-  if (explicit) {
-    return [explicit];
-  }
-
   const configHome = (process.env.XDG_CONFIG_HOME || '').trim()
     || path.join(os.homedir(), '.config');
   const directory = path.join(configHome, 'opencode');
 
-  return [
-    path.join(directory, 'opencode.jsonc'),
+  const candidates = [
     path.join(directory, 'opencode.json'),
+    path.join(directory, 'opencode.jsonc'),
   ];
+
+  const explicit = (process.env.OPENCODE_CONFIG || '').trim();
+  if (explicit) {
+    candidates.push(explicit);
+  }
+
+  return candidates;
 }
 
 /**
@@ -87,13 +97,12 @@ function asText(value: unknown): string {
   return typeof value === 'string' && value.trim() ? value.trim() : '';
 }
 
-function toOptions(config: OpenCodeConfig): ProviderModelOption[] {
+/** Adds one config's providers to `collected`, keyed by the routed model id. */
+function collectOptions(config: OpenCodeConfig, collected: Map<string, ProviderModelOption>): void {
   const providers = config.provider;
   if (!providers || typeof providers !== 'object') {
-    return [];
+    return;
   }
-
-  const options: ProviderModelOption[] = [];
 
   for (const [providerId, rawProvider] of Object.entries(providers as Record<string, ConfiguredProvider>)) {
     if (!providerId || !rawProvider || typeof rawProvider !== 'object') {
@@ -116,23 +125,21 @@ function toOptions(config: OpenCodeConfig): ProviderModelOption[] {
         ? asText(rawModel.name) || modelId
         : modelId;
 
-      options.push({
-        // The provider prefix is what OpenCode routes on.
-        value: `${providerId}/${modelId}`,
+      // The provider prefix is what OpenCode routes on.
+      const value = `${providerId}/${modelId}`;
+      collected.set(value, {
+        value,
         label: modelLabel,
         description: providerLabel,
         isCustom: false,
       });
     }
   }
-
-  options.sort((a, b) => a.value.localeCompare(b.value));
-  return options;
 }
 
 /**
  * Models declared in the local OpenCode config, or an empty list when there is
- * no config, it cannot be read, or it holds no providers. Never throws.
+ * none, it cannot be read, or it holds no providers. Never throws.
  */
 export async function readConfiguredOpenCodeModels(): Promise<ProviderModelOption[]> {
   if (!isEnabled()) {
@@ -143,30 +150,32 @@ export async function readConfiguredOpenCodeModels(): Promise<ProviderModelOptio
     return cachedOptions;
   }
 
-  let options: ProviderModelOption[] = [];
+  const collected = new Map<string, ProviderModelOption>();
 
   for (const candidate of getConfigCandidates()) {
     let text: string;
     try {
       text = await fs.readFile(candidate, 'utf8');
     } catch {
-      // Not this one (or not readable): try the next candidate.
+      // Not there, or not readable: OpenCode skips it as well.
       continue;
     }
 
+    // A file that exists but does not parse contributes nothing rather than
+    // failing the whole read - the other files are still live.
     const config = parseJsonc<OpenCodeConfig>(text);
-    // A file that exists but does not parse is still the file OpenCode uses;
-    // moving on to the next candidate would report a config that is not live.
-    options = config ? toOptions(config) : [];
-    break;
+    if (config) {
+      collectOptions(config, collected);
+    }
   }
 
+  const options = [...collected.values()].sort((a, b) => a.value.localeCompare(b.value));
   cachedOptions = options;
   cachedAt = Date.now();
   return cachedOptions;
 }
 
-/** Drops the cache so the next call reads the file again. For tests. */
+/** Drops the cache so the next call reads the files again. For tests. */
 export function resetOpenCodeConfigModelCache(): void {
   cachedOptions = [];
   cachedAt = 0;
