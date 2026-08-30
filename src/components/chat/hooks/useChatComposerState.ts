@@ -148,6 +148,15 @@ const createFakeSubmitEvent = () => {
   return { preventDefault: () => undefined } as unknown as FormEvent<HTMLFormElement>;
 };
 
+// Two messages queued back-to-back while a turn is in flight ("A" then "B")
+// must both reach Claude, not just the most recent one - join them into a
+// single message instead of the second replacing the first.
+const mergeQueuedContent = (existing: string, incoming: string): string => {
+  if (!existing.trim()) return incoming;
+  if (!incoming.trim()) return existing;
+  return `${existing}\n\n${incoming}`;
+};
+
 const MAX_ATTACHMENT_COUNT = 10;
 const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024;
 
@@ -714,10 +723,23 @@ export function useChatComposerState({
           return;
         }
 
+        // A message may already be queued for this turn (the user queued "A"
+        // and is now queuing "B" before the run finishes). Re-read the
+        // persisted draft here rather than trusting the `queuedDraft` closure:
+        // two submissions can each be past their own upload await with
+        // neither having committed a re-render yet, so both closures would
+        // see the same stale (or empty) state and the second write would
+        // still clobber the first. Storage is read, merged, and written back
+        // with no `await` in between, so it stays correct even when two
+        // submissions' uploads resolve out of order.
+        const existingQueued = queuedSessionKey ? readQueuedMessage(queuedSessionKey) : null;
+
         const durableDraft: QueuedDraft = {
-          content: currentInput,
-          attachments: currentAttachments,
-          uploadedAttachments,
+          content: existingQueued ? mergeQueuedContent(existingQueued.content, currentInput) : currentInput,
+          attachments: [...(queuedDraft?.attachments ?? []), ...currentAttachments],
+          uploadedAttachments: existingQueued
+            ? [...(existingQueued.attachments ?? []), ...uploadedAttachments]
+            : uploadedAttachments,
           options: queuedOptions,
         };
         if (queuedSessionKey) {
@@ -940,6 +962,7 @@ export function useChatComposerState({
       onSessionProcessing,
       onSessionEstablished,
       provider,
+      queuedDraft,
       resetCommandMenuState,
       scrollToBottom,
       selectedProject,
