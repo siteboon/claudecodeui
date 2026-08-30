@@ -43,6 +43,25 @@ function readGroup(result: ToolResult): { tabGroupId?: number; tabs: Tab[] } {
   return { tabs: [] };
 }
 
+/**
+ * Openings run one after another.
+ *
+ * Which tab was just created is worked out by comparing the group before and
+ * after, and that comparison is only true if nothing else creates a tab in
+ * between. Two requests arriving together would otherwise both see the other's
+ * tab as "new" - or neither would, and the one that lost would navigate a page
+ * the user has open. The whole sequence is short (0.25 s warm), so a queue
+ * costs nothing worth having.
+ */
+let pending: Promise<unknown> = Promise.resolve();
+
+function serialize<T>(task: () => Promise<T>): Promise<T> {
+  const next = pending.then(task, task);
+  // The chain must not stay rejected, or every later opening inherits it.
+  pending = next.catch(() => undefined);
+  return next;
+}
+
 function readText(result: ToolResult): string {
   return (result?.content ?? [])
     .map((part) => (typeof part?.text === 'string' ? part.text : ''))
@@ -75,6 +94,11 @@ export const chromeTabsService = {
       });
     }
 
+    return serialize(() => this.openTabNow(url));
+  },
+
+  /** The sequence itself; only ever entered through the queue above. */
+  async openTabNow(url: string): Promise<OpenTabResult> {
     // Every call, not just the first: the client drops its connection after any
     // failure and after the idle timeout, so a later call can just as well meet
     // a closed transport. Unwrapped, that reached the route as a plain Error and
@@ -102,20 +126,26 @@ export const chromeTabsService = {
         after = readGroup(await chromeMcpClient.callTool('tabs_context_mcp', {}));
       }
 
-      const created = after.tabs.find((tab) => !known.has(tab.tabId))
-        ?? after.tabs[after.tabs.length - 1];
+      // Only a tab that was not there before. Falling back to the last one in
+      // the group looks harmless and is not: when creating a tab fails, that
+      // last tab is a page the user has open, and the address below would
+      // navigate it away.
+      const created = after.tabs.find((tab) => !known.has(tab.tabId));
 
       const opened: OpenTabResult = {
         tabId: created?.tabId,
         tabGroupId: after.tabGroupId ?? before.tabGroupId,
       };
 
-      if (!url) {
-        return opened;
+      if (created?.tabId === undefined) {
+        throw new AppError(
+          'Chrome did not report a new tab, so nothing was opened.',
+          { code: 'NO_TAB_CREATED', statusCode: 502 },
+        );
       }
 
-      if (created?.tabId === undefined) {
-        return { ...opened, warning: 'The new tab reported no id, so the address was not loaded.' };
+      if (!url) {
+        return opened;
       }
 
       const navigation = await chromeMcpClient.callTool('navigate', { url, tabId: created.tabId });
