@@ -145,6 +145,24 @@ export default function ModelOptionsContent({ agent }: { agent: AgentProvider })
     return <AgentWithoutOptions agent={agent} />;
   }
 
+  // A failed load leaves `settings` null forever, so the spinner would be the
+  // last thing the tab ever shows. The message the load produced belongs here,
+  // with a way to try again.
+  if (!settings && status?.kind === 'error') {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-start gap-2 text-sm text-destructive">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{status.text}</span>
+        </div>
+        <Button size="sm" variant="outline" onClick={() => { setStatus(null); void load(); }}>
+          <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+          Try again
+        </Button>
+      </div>
+    );
+  }
+
   if (!settings) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">

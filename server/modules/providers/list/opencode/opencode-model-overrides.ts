@@ -28,6 +28,11 @@ export type ModelOverride = {
   topP?: number;
   /** Upper bound for the answer, sent as `max_tokens`. */
   maxOutput?: number;
+  /**
+   * Context window, only ever written to satisfy OpenCode's schema next to
+   * `maxOutput` - never a setting of its own, and not reported back as one.
+   */
+  contextLimit?: number;
 };
 
 /** Keyed by the routed model id, `<providerID>/<modelID>`. */
@@ -48,6 +53,14 @@ export function getOverridesPath(): string {
     || path.join(os.homedir(), '.cloudcli', 'opencode-overrides.json');
 }
 
+/**
+ * Names that are not keys but reach into the prototype chain. The routed id
+ * comes from a request body, and `overlay.provider['__proto__'].models ??= {}`
+ * would write onto `Object.prototype` instead of the overlay - every object in
+ * the process would carry a `models` from then on.
+ */
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 /** Splits `ollama/qwen3.8:27b` into provider and model; a model id may contain `/`. */
 function splitModelValue(value: string): { providerId: string; modelId: string } | null {
   const separator = value.indexOf('/');
@@ -55,10 +68,13 @@ function splitModelValue(value: string): { providerId: string; modelId: string }
     return null;
   }
 
-  return {
-    providerId: value.slice(0, separator),
-    modelId: value.slice(separator + 1),
-  };
+  const providerId = value.slice(0, separator);
+  const modelId = value.slice(separator + 1);
+  if (UNSAFE_KEYS.has(providerId) || UNSAFE_KEYS.has(modelId)) {
+    return null;
+  }
+
+  return { providerId, modelId };
 }
 
 function asNumber(value: unknown): number | undefined {
@@ -106,9 +122,17 @@ export async function readModelOverrides(): Promise<ModelOverrides> {
  * Stores the settings for one model. A field left `undefined` is removed, so a
  * cleared input goes back to whatever the model itself defines.
  *
- * `limit` needs `context` next to `output` to satisfy OpenCode's schema, so a
- * context already in the overlay is kept and only replaced when the caller has
- * a value of its own.
+ * `limit` needs BOTH keys. OpenCode validates every config file on its own,
+ * before any merge, so a lone `output` does not get its `context` filled in
+ * from the catalog - it fails the whole file:
+ *
+ *   Error: Configuration is invalid at ...\opencode-overrides.json
+ *   ↳ Missing key provider.ollama.models.gpt-oss:20b.limit.context
+ *
+ * That is not a warning: `opencode models` refuses to run, and so does every
+ * session. A context already in the overlay is therefore kept, the caller may
+ * replace it, and without one an output override is refused rather than
+ * written.
  */
 export async function writeModelOverride(
   modelValue: string,
@@ -141,16 +165,25 @@ export async function writeModelOverride(
   }
 
   const limit = { ...(model.limit ?? {}) };
+  if (override.contextLimit !== undefined) {
+    limit.context = override.contextLimit;
+  }
+
   if (override.maxOutput === undefined) {
     delete limit.output;
   } else {
+    if (limit.context === undefined) {
+      throw new Error(
+        `Cannot set an output limit for "${modelValue}": OpenCode needs the context window next to it, and none is known.`,
+      );
+    }
     limit.output = override.maxOutput;
   }
 
   const next: OverlayModel = {};
   if (Object.keys(options).length > 0) next.options = options;
-  // `output` alone is not a valid limit; without it the whole limit goes.
-  if (limit.output !== undefined) next.limit = limit;
+  // Only ever both keys, or no limit at all - see the note above.
+  if (limit.output !== undefined) next.limit = { context: limit.context, output: limit.output };
 
   if (Object.keys(next).length > 0) {
     models[split.modelId] = next;

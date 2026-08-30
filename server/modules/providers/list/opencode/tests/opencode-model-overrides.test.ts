@@ -57,7 +57,12 @@ async function withTempEnvironment(
 
 test('writes the shape OpenCode merges: options for sampling, limit for the answer', async () => {
   await withTempEnvironment(null, async ({ overrides }) => {
-    await writeModelOverride('ollama/qwen3.8:27b', { temperature: 0.2, topP: 0.9, maxOutput: 4096 });
+    await writeModelOverride('ollama/qwen3.8:27b', {
+      temperature: 0.2,
+      topP: 0.9,
+      maxOutput: 4096,
+      contextLimit: 131072,
+    });
 
     const written = JSON.parse(await fs.readFile(overrides, 'utf8'));
     assert.deepEqual(written, {
@@ -66,7 +71,9 @@ test('writes the shape OpenCode merges: options for sampling, limit for the answ
           models: {
             'qwen3.8:27b': {
               options: { temperature: 0.2, top_p: 0.9 },
-              limit: { output: 4096 },
+              // Both keys, always: OpenCode validates each config file on its
+              // own and rejects `output` without `context` beside it.
+              limit: { context: 131072, output: 4096 },
             },
           },
         },
@@ -76,6 +83,50 @@ test('writes the shape OpenCode merges: options for sampling, limit for the answ
     assert.deepEqual(await readModelOverrides(), {
       'ollama/qwen3.8:27b': { temperature: 0.2, topP: 0.9, maxOutput: 4096 },
     });
+  });
+});
+
+test('an output limit without a context window is refused, not written', async () => {
+  await withTempEnvironment(null, async ({ overrides }) => {
+    await assert.rejects(
+      () => writeModelOverride('ollama/gpt-oss:20b', { maxOutput: 2048 }),
+      /context window/,
+    );
+
+    // Measured against `opencode models`: a file holding only
+    // `limit: { output: 500 }` fails validation with "Missing key
+    // ...limit.context" and takes every OpenCode run with it. Nothing at all is
+    // better than that.
+    await assert.rejects(() => fs.readFile(overrides, 'utf8'));
+  });
+});
+
+test('a context window already stored is kept when only the output changes', async () => {
+  await withTempEnvironment(null, async ({ overrides }) => {
+    await writeModelOverride('ollama/gpt-oss:20b', { maxOutput: 2048, contextLimit: 65536 });
+    await writeModelOverride('ollama/gpt-oss:20b', { maxOutput: 1024 });
+
+    const written = JSON.parse(await fs.readFile(overrides, 'utf8'));
+    assert.deepEqual(
+      written.provider.ollama.models['gpt-oss:20b'].limit,
+      { context: 65536, output: 1024 },
+    );
+  });
+});
+
+test('a routed id reaching into the prototype chain is refused', async () => {
+  await withTempEnvironment(null, async () => {
+    for (const value of ['__proto__/evil', 'ollama/__proto__', 'constructor/x', 'ollama/prototype']) {
+      await assert.rejects(
+        () => writeModelOverride(value, { temperature: 0.5 }),
+        /Not a routed model id/,
+        `expected "${value}" to be refused`,
+      );
+    }
+
+    // Nothing leaked onto Object.prototype on the way.
+    assert.equal(({} as Record<string, unknown>).models, undefined);
+    assert.deepEqual(await readModelOverrides(), {});
   });
 });
 
@@ -91,7 +142,7 @@ test('a model id may contain a slash of its own', async () => {
 
 test('clearing a field removes it, and the last one takes the model with it', async () => {
   await withTempEnvironment(null, async ({ overrides }) => {
-    await writeModelOverride('ollama/gpt-oss:20b', { temperature: 0.3, maxOutput: 2048 });
+    await writeModelOverride('ollama/gpt-oss:20b', { temperature: 0.3, maxOutput: 2048, contextLimit: 65536 });
     await writeModelOverride('ollama/gpt-oss:20b', { maxOutput: 2048 });
 
     assert.deepEqual(await readModelOverrides(), {
