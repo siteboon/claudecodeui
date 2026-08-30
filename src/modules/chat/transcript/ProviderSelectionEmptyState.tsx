@@ -1,12 +1,11 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { Check, ChevronDown, Plus } from "lucide-react";
+import { ChevronDown, Plus } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 
 import type {
   ProjectSession,
   LLMProvider,
   ProviderModelActions,
-  ProviderModelOption,
   ProviderModelsDefinition,
 } from "@/shared/types";
 import { NextTaskBanner } from "@/modules/task-master";
@@ -19,13 +18,11 @@ import {
   CommandInput,
   CommandList,
   CommandEmpty,
-  CommandGroup,
-  CommandItem,
   Card,
-  Badge,
   Button,
   LLMProviderLogo,
 } from "@/shared/ui";
+import ModelGroupList, { type ModelGroup } from "@/modules/chat/composer/ModelGroupList";
 import ModelLibraryPanel from "@/modules/chat/modals/ModelLibraryPanel";
 import { writeSelectedProvider } from '@/shared/selectedProvider';
 
@@ -68,12 +65,6 @@ type ProviderSelectionEmptyStateProps = {
   setInput: React.Dispatch<React.SetStateAction<string>>;
 };
 
-type ProviderGroup = {
-  id: LLMProvider;
-  name: string;
-  models: ProviderModelOption[];
-};
-
 function getModelConfig(
   p: LLMProvider,
   catalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>,
@@ -114,13 +105,18 @@ export default function ProviderSelectionEmptyState({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [modelLibraryOpen, setModelLibraryOpen] = useState(false);
 
-  const visibleProviderGroups = useMemo<ProviderGroup[]>(() => {
-    return PROVIDER_META.map((p) => ({
-      id: p.id,
-      name: p.name,
-      models: providerModelCatalog[p.id]?.OPTIONS ?? [],
-    }));
-  }, [providerModelCatalog]);
+  const [modelSearch, setModelSearch] = useState("");
+
+  /** One collapsible branch per provider, in the order the picker lists them. */
+  const visibleProviderGroups = useMemo<ModelGroup[]>(
+    () => PROVIDER_META.map((meta) => ({
+      key: meta.id,
+      provider: meta.id,
+      name: meta.name,
+      models: providerModelCatalog[meta.id]?.OPTIONS ?? [],
+    })),
+    [providerModelCatalog],
+  );
 
   const nextTaskPrompt = t("tasks.nextTaskPrompt", {
     defaultValue: "Start the next task",
@@ -231,6 +227,8 @@ export default function ProviderSelectionEmptyState({
               </div>
               <Command filter={modelSearchFilter}>
                 <CommandInput
+                  value={modelSearch}
+                  onValueChange={setModelSearch}
                   placeholder={t("providerSelection.searchModels", {
                     defaultValue: "Search models...",
                   })}
@@ -241,56 +239,17 @@ export default function ProviderSelectionEmptyState({
                       defaultValue: "No models found.",
                     })}
                   </CommandEmpty>
-                  {visibleProviderGroups.map((group, idx) => (
-                    <CommandGroup
-                      key={group.id}
-                      className={
-                        idx > 0
-                          ? "border-t border-border/40 [&_[cmdk-group-heading]]:mt-1 [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider"
-                          : "[&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider"
-                      }
-                      heading={
-                        <span className="flex items-center gap-1.5">
-                          <LLMProviderLogo provider={group.id} className="h-3.5 w-3.5 shrink-0" />
-                          {group.name}
-                        </span>
-                      }
-                    >
-                      {group.models.length === 0 && providerModelsLoading ? (
-                        <CommandItem disabled className="ml-4 border-l border-border/40 pl-4 text-muted-foreground">
-                          {t("providerSelection.loadingModels", { defaultValue: "Loading models…" })}
-                        </CommandItem>
-                      ) : null}
-                      {group.models.map((model) => {
-                        const isSelected = provider === group.id && currentModel === model.value;
-                        return (
-                          <CommandItem
-                            key={`${group.id}-${model.value}`}
-                            value={`${group.name} ${model.label} ${model.description || ''}`}
-                            onSelect={() => handleModelSelect(group.id, model.value)}
-                            className="ml-4 border-l border-border/40 pl-4"
-                          >
-                            <div className="min-w-0 flex-1">
-                              <div className="flex min-w-0 items-center gap-2">
-                                <span className="truncate">{model.label}</span>
-                                {model.isCustom && (
-                                  <Badge className="h-4 shrink-0 rounded-full px-1.5 text-[8px]">Custom</Badge>
-                                )}
-                              </div>
-                              {model.label !== model.value && (
-                                <div className="truncate font-mono text-[10px] text-muted-foreground">
-                                  {model.value}
-                                </div>
-                              )}
-                            </div>
-                            {isSelected && (
-                              <Check className="ml-auto h-4 w-4 shrink-0 text-primary" />
-                            )}
-                          </CommandItem>
-                        );
-                      })}
-                    </CommandGroup>
-                  ))}
+                  <ModelGroupList
+                    groups={visibleProviderGroups}
+                    provider={provider}
+                    currentModel={currentModel}
+                    loading={providerModelsLoading}
+                    searching={modelSearch.trim().length > 0}
+                    onSelect={handleModelSelect}
+                    loadingLabel={t("providerSelection.loadingModels", {
+                      defaultValue: "Loading models…",
+                    })}
+                  />
                 </CommandList>
               </Command>
             </DialogContent>
