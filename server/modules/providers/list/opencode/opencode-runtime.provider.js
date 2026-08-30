@@ -8,6 +8,7 @@ import {
   appendImagesInputTag,
   normalizeAttachmentDescriptors
 } from '@/shared/image-attachments.js';
+import { getOverridesEnv } from '@/modules/providers/list/opencode/opencode-model-overrides.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
 import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell, getOpenCodeDatabasePath } from '@/shared/utils.js';
 
@@ -124,6 +125,10 @@ function readOpenCodeTokenUsage(sessionId) {
 }
 
 async function spawnOpenCode(command, options = {}, ws, context) {
+  // Per-model settings live in a file of our own that OpenCode merges into the
+  // global config; empty when the user set OPENCODE_CONFIG themselves.
+  const overridesEnv = await getOverridesEnv();
+
   return new Promise((resolve, reject) => {
     const {
       sessionId,
@@ -290,7 +295,7 @@ async function spawnOpenCode(command, options = {}, ws, context) {
       opencodeProcess = spawnFunction('opencode', args, {
         cwd: workingDir,
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env, ...permissionOptions.env },
+        env: { ...process.env, ...overridesEnv, ...permissionOptions.env },
       });
 
       activeOpenCodeProcesses.set(processKey, opencodeProcess);

@@ -1134,7 +1134,7 @@ export type SettingsMainTab = 'agents' | 'appearance' | 'git' | 'api' | 'voice' 
 export type AgentProvider = LLMProvider;
 
 /** One category of per-agent configuration in the agents settings tab (account, permissions, MCP servers or skills); use it to key which panel the tab renders. */
-export type AgentCategory = 'account' | 'permissions' | 'mcp' | 'skills';
+export type AgentCategory = 'account' | 'permissions' | 'model' | 'mcp' | 'skills';
 
 /** How much Codex may do without asking, from prompting on every edit to bypassing permission checks entirely; persisted as the Codex agent's permission setting. */
 export type CodexPermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions';

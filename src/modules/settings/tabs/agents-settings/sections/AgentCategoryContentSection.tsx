@@ -4,6 +4,8 @@ import { ProviderSkills } from '@/modules/skills';
 import AccountContent from '@/modules/settings/tabs/agents-settings/sections/content/AccountContent';
 import PermissionsContent from '@/modules/settings/tabs/agents-settings/sections/content/PermissionsContent';
 
+import ModelOptionsContent from '@/modules/settings/tabs/agents-settings/sections/content/ModelOptionsContent';
+
 type AgentCategoryContentSectionProps = {
   selectedAgent: AgentProvider;
   selectedCategory: AgentCategory;
@@ -83,6 +85,8 @@ export default function AgentCategoryContentSection({
           onPermissionModeChange={onCodexPermissionModeChange}
         />
       )}
+
+      {selectedCategory === 'model' && <ModelOptionsContent agent={selectedAgent} />}
 
       {selectedCategory === 'mcp' && (
         // AgentSettingsProject.name is populated from the DB projectId by
