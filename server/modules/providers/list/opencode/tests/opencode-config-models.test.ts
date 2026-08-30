@@ -5,6 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import {
+  readConfiguredModelContextLimits,
   readConfiguredOpenCodeModels,
   resetOpenCodeConfigModelCache,
 } from '@/modules/providers/list/opencode/opencode-config-models.js';
@@ -188,5 +189,29 @@ test('stays out of the way when reading the config is switched off', async () =>
     resetOpenCodeConfigModelCache();
 
     assert.deepEqual(await readConfiguredOpenCodeModels(), []);
+  });
+});
+
+test('context windows follow read-last-wins, including a later entry that drops one', async () => {
+  await withOpenCodeConfig({
+    json: '{ "provider": { "ollama": { "models": { "keeps:8b": { "limit": { "context": 8192 } }, "loses:8b": { "limit": { "context": 4096 } } } } } }',
+    explicit: `{
+      "provider": {
+        "ollama": {
+          "models": {
+            "keeps:8b": { "limit": { "context": 131072 } },
+            "loses:8b": {}
+          }
+        }
+      }
+    }`,
+  }, async () => {
+    const limits = await readConfiguredModelContextLimits();
+
+    // The explicit file is read last and raises this one.
+    assert.equal(limits['ollama/keeps:8b'], 131072);
+    // It also describes this model without a limit, so the earlier value is
+    // gone rather than left standing for an entry that no longer states it.
+    assert.equal('ollama/loses:8b' in limits, false);
   });
 });

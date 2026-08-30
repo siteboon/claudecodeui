@@ -211,12 +211,21 @@ export async function readConfiguredModelContextLimits(): Promise<Record<string,
       }
 
       for (const [modelId, rawModel] of Object.entries(models as Record<string, ConfiguredModel>)) {
+        if (!modelId) {
+          continue;
+        }
+
         const limit = rawModel && typeof rawModel === 'object' ? rawModel.limit : null;
         const context = limit && typeof limit === 'object'
           ? (limit as { context?: unknown }).context
           : undefined;
 
-        if (modelId && typeof context === 'number' && Number.isFinite(context)) {
+        // Read last wins, the same as the model list above - and that has to
+        // include a later entry that drops the limit. Overwriting only on a
+        // number would leave the earlier file's value standing for a model its
+        // successor no longer describes, so the entry goes first either way.
+        delete limits[`${providerId}/${modelId}`];
+        if (typeof context === 'number' && Number.isFinite(context)) {
           limits[`${providerId}/${modelId}`] = context;
         }
       }
