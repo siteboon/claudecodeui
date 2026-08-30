@@ -28,7 +28,7 @@ import {
 import { escapeRegExp } from '@/modules/chat/utils/chatFormatting';
 import { useFileMentions } from '@/modules/chat/hooks/useFileMentions';
 import { useSlashCommands } from '@/modules/chat/hooks/useSlashCommands';
-import { openChromeTab } from '@/modules/chat/utils/chromeTab';
+import { openChromeTab, reportChromeTab } from '@/modules/chat/utils/chromeTab';
 
 type UseChatComposerStateArgs = {
   selectedProject: Project | null;
@@ -371,13 +371,7 @@ export function useChatComposerState({
         const url = (match?.[1] ?? '').trim();
         setInput('');
         inputValueRef.current = '';
-        void openChromeTab(url).catch((error: unknown) => {
-          addMessage({
-            type: 'assistant',
-            content: error instanceof Error ? error.message : String(error),
-            timestamp: Date.now(),
-          });
-        });
+        void reportChromeTab(openChromeTab(url), addMessage);
         return;
       }
 
@@ -728,7 +722,7 @@ export function useChatComposerState({
         if (textareaRef.current) {
           textareaRef.current.style.height = 'auto';
         }
-        void openChromeTab(url);
+        void reportChromeTab(openChromeTab(url), addMessage);
         return;
       }
 

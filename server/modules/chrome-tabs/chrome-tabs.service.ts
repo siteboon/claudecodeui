@@ -75,65 +75,73 @@ export const chromeTabsService = {
       });
     }
 
-    // Look before creating. There are two ways a tab comes into being here,
-    // and running both is how one click produced two tabs: `createIfEmpty`
-    // opens a window with an empty tab when no group exists yet, and
-    // `tabs_create_mcp` adds one to a group that does. Which one is needed
-    // depends on what is already there, so that is read first - without
-    // `createIfEmpty`, so the look itself creates nothing.
-    let before: { tabGroupId?: number; tabs: Tab[] };
+    // Every call, not just the first: the client drops its connection after any
+    // failure and after the idle timeout, so a later call can just as well meet
+    // a closed transport. Unwrapped, that reached the route as a plain Error and
+    // became a 500, while the button only knows what to say about a 503.
     try {
-      before = readGroup(await chromeMcpClient.callTool('tabs_context_mcp', {}));
+      // Look before creating. There are two ways a tab comes into being here,
+      // and running both is how one click produced two tabs: `createIfEmpty`
+      // opens a window with an empty tab when no group exists yet, and
+      // `tabs_create_mcp` adds one to a group that does. Which one is needed
+      // depends on what is already there, so that is read first - without
+      // `createIfEmpty`, so the look itself creates nothing.
+      const before = readGroup(await chromeMcpClient.callTool('tabs_context_mcp', {}));
+      const known = new Set(before.tabs.map((tab) => tab.tabId));
+
+      let after: { tabGroupId?: number; tabs: Tab[] };
+      if (before.tabs.length === 0) {
+        // No group, or a group without tabs: this one call is the whole job,
+        // and it is what the VS Code extension does for `@browser:newTab`.
+        after = readGroup(await chromeMcpClient.callTool('tabs_context_mcp', { createIfEmpty: true }));
+      } else {
+        // A group with tabs: `createIfEmpty` would have no effect here ("this
+        // parameter has no effect" per its schema). The create call does not
+        // report the new id, so the context is read again for it.
+        await chromeMcpClient.callTool('tabs_create_mcp', {});
+        after = readGroup(await chromeMcpClient.callTool('tabs_context_mcp', {}));
+      }
+
+      const created = after.tabs.find((tab) => !known.has(tab.tabId))
+        ?? after.tabs[after.tabs.length - 1];
+
+      const opened: OpenTabResult = {
+        tabId: created?.tabId,
+        tabGroupId: after.tabGroupId ?? before.tabGroupId,
+      };
+
+      if (!url) {
+        return opened;
+      }
+
+      if (created?.tabId === undefined) {
+        return { ...opened, warning: 'The new tab reported no id, so the address was not loaded.' };
+      }
+
+      const navigation = await chromeMcpClient.callTool('navigate', { url, tabId: created.tabId });
+      if (navigation.isError) {
+        const reported = readText(navigation);
+        return {
+          ...opened,
+          warning: /permission/i.test(reported)
+            // Only reachable with CLOUDCLI_CHROME_ASK=1; otherwise the client
+            // starts the server in skip_all_permission_checks mode.
+            ? 'The tab is open. Chrome refused the address - confirm it in the Claude extension, or unset CLOUDCLI_CHROME_ASK.'
+            : `The tab is open, but the address was refused: ${reported}`,
+        };
+      }
+
+      return { ...opened, url };
     } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+
       throw new AppError(
         error instanceof Error ? error.message : 'Chrome could not be reached.',
         { code: 'CHROME_UNAVAILABLE', statusCode: 503 },
       );
     }
-
-    let after: { tabGroupId?: number; tabs: Tab[] };
-    const known = new Set(before.tabs.map((tab) => tab.tabId));
-
-    if (before.tabs.length === 0) {
-      // No group, or a group without tabs: this one call is the whole job, and
-      // it is exactly what the VS Code extension does for `@browser:newTab`.
-      after = readGroup(await chromeMcpClient.callTool('tabs_context_mcp', { createIfEmpty: true }));
-    } else {
-      // A group with tabs: `createIfEmpty` would have no effect here ("this
-      // parameter has no effect" per its schema). The create call does not
-      // report the new id, so the context is read again for it.
-      await chromeMcpClient.callTool('tabs_create_mcp', {});
-      after = readGroup(await chromeMcpClient.callTool('tabs_context_mcp', {}));
-    }
-
-    const created = after.tabs.find((tab) => !known.has(tab.tabId))
-      ?? after.tabs[after.tabs.length - 1];
-
-    const opened: OpenTabResult = {
-      tabId: created?.tabId,
-      tabGroupId: after.tabGroupId ?? before.tabGroupId,
-    };
-
-    if (!url) {
-      return opened;
-    }
-
-    if (created?.tabId === undefined) {
-      return { ...opened, warning: 'The new tab reported no id, so the address was not loaded.' };
-    }
-
-    const navigation = await chromeMcpClient.callTool('navigate', { url, tabId: created.tabId });
-    if (navigation.isError) {
-      const reported = readText(navigation);
-      return {
-        ...opened,
-        warning: /permission/i.test(reported)
-          ? 'The tab is open. Chrome refused the address: confirm the request in the Claude extension.'
-          : `The tab is open, but the address was refused: ${reported}`,
-      };
-    }
-
-    return { ...opened, url };
   },
 
   /** Whether a connection is currently held. */

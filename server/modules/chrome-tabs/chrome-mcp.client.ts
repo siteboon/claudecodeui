@@ -43,6 +43,42 @@ const IDLE_TIMEOUT_MS = 5 * 60_000;
 /** A call that hangs takes the connection with it rather than wedging the button. */
 const CALL_TIMEOUT_MS = 45_000;
 
+/**
+ * The Chrome extension asks the user before acting on a page, and a request
+ * nobody answers is not a quick failure: it sits for ~30 s and then comes back
+ * as "Permission denied by user". Opening a tab is not gated that way, but
+ * navigating to an address is, which made an address take half a minute to be
+ * refused.
+ *
+ * Claude Code itself turns that off when the agent runs unattended. From its
+ * bundle, deciding what to send the extension per tool call:
+ *
+ *   let T = c ? {permissionMode:"skip_all_permission_checks", sessionScope:p}
+ *             : {permissionMode:"follow_a_plan", allowedDomains:R, …}
+ *
+ * where `c` is `kx(a,d)==="bypassPermissions"`. It carries the same value in an
+ * environment variable, which the extension reads on the bridge path:
+ *
+ *   function RL(e,t){ if(!e||"ask"===e) return;
+ *                     const r="skip_all_permission_checks"===e;
+ *                     return new tL(()=>r, …); }
+ *
+ * `tL(()=>true)` approves everything. Measured, same call either way:
+ *
+ *   without   30,726 ms   "Permission denied by user"
+ *   with         314 ms   "Navigated to https://example.com"
+ *
+ * `CLOUDCLI_CHROME_ASK=1` puts the prompts back for anyone who wants them.
+ */
+function permissionEnv(): Record<string, string> {
+  const flag = (process.env.CLOUDCLI_CHROME_ASK ?? '').trim().toLowerCase();
+  if (['1', 'true', 'on', 'yes'].includes(flag)) {
+    return {};
+  }
+
+  return { CLAUDE_CHROME_PERMISSION_MODE: 'skip_all_permission_checks' };
+}
+
 export class ChromeMcpClient {
   private client: Client | null = null;
 
@@ -123,9 +159,13 @@ export class ChromeMcpClient {
     const transport = new StdioClientTransport({
       command,
       args: ['--claude-in-chrome-mcp'],
-      // USER_TYPE is what the extension passes as well; without it the server
-      // treats the caller as an internal one.
-      env: { ...process.env, USER_TYPE: 'external' } as Record<string, string>,
+      env: {
+        ...process.env,
+        // USER_TYPE is what the extension passes as well; without it the server
+        // treats the caller as an internal one.
+        USER_TYPE: 'external',
+        ...permissionEnv(),
+      } as Record<string, string>,
       stderr: 'ignore',
     });
 

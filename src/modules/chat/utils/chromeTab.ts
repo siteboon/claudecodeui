@@ -21,6 +21,31 @@ export type ChromeTabResult = {
   warning?: string;
 };
 
+/**
+ * Says something only when there is something to say.
+ *
+ * The tab opening is its own confirmation - it is right there on the screen -
+ * but a refused address is not: the request answers 200 with the tab's id and a
+ * `warning`, and without this the address silently did not load.
+ */
+export async function reportChromeTab(
+  opening: Promise<ChromeTabResult>,
+  addMessage: (message: { type: 'assistant'; content: string; timestamp: number }) => void,
+): Promise<void> {
+  try {
+    const result = await opening;
+    if (result.warning) {
+      addMessage({ type: 'assistant', content: result.warning, timestamp: Date.now() });
+    }
+  } catch (error) {
+    addMessage({
+      type: 'assistant',
+      content: error instanceof Error ? error.message : String(error),
+      timestamp: Date.now(),
+    });
+  }
+}
+
 export async function openChromeTab(url?: string): Promise<ChromeTabResult> {
   const response = await authenticatedFetch('/api/chrome-tabs/tab', {
     method: 'POST',
