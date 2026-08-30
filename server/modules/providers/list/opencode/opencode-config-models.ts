@@ -79,6 +79,7 @@ const CACHE_TTL_MS = 30_000;
 
 type ConfiguredModel = {
   name?: unknown;
+  limit?: { context?: unknown; output?: unknown } | unknown;
 };
 
 type ConfiguredProvider = {
@@ -173,6 +174,56 @@ export async function readConfiguredOpenCodeModels(): Promise<ProviderModelOptio
   cachedOptions = options;
   cachedAt = Date.now();
   return cachedOptions;
+}
+
+/**
+ * Context windows the user declared themselves, keyed by the routed model id.
+ *
+ * A locally served model is in no catalog, so this is the only place its
+ * context window is written down - and OpenCode refuses a `limit` that names an
+ * `output` without a `context` beside it.
+ */
+export async function readConfiguredModelContextLimits(): Promise<Record<string, number>> {
+  if (!isEnabled()) {
+    return {};
+  }
+
+  const limits: Record<string, number> = {};
+
+  for (const candidate of getConfigCandidates()) {
+    let text: string;
+    try {
+      text = await fs.readFile(candidate, 'utf8');
+    } catch {
+      continue;
+    }
+
+    const config = parseJsonc<OpenCodeConfig>(text);
+    const providers = config?.provider;
+    if (!providers || typeof providers !== 'object') {
+      continue;
+    }
+
+    for (const [providerId, rawProvider] of Object.entries(providers as Record<string, ConfiguredProvider>)) {
+      const models = rawProvider && typeof rawProvider === 'object' ? rawProvider.models : null;
+      if (!providerId || !models || typeof models !== 'object') {
+        continue;
+      }
+
+      for (const [modelId, rawModel] of Object.entries(models as Record<string, ConfiguredModel>)) {
+        const limit = rawModel && typeof rawModel === 'object' ? rawModel.limit : null;
+        const context = limit && typeof limit === 'object'
+          ? (limit as { context?: unknown }).context
+          : undefined;
+
+        if (modelId && typeof context === 'number' && Number.isFinite(context)) {
+          limits[`${providerId}/${modelId}`] = context;
+        }
+      }
+    }
+  }
+
+  return limits;
 }
 
 /** Drops the cache so the next call reads the files again. For tests. */
