@@ -328,7 +328,7 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
         const resolvedSymlinkPath = path.resolve(path.dirname(absolutePath), symlinkTarget);
         const realSymlinkPath = await realpath(resolvedSymlinkPath);
         if (
-          !realSymlinkPath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)
+          !realSymlinkPath.startsWith(workspaceRootPrefix)
           && realSymlinkPath !== resolvedWorkspaceRoot
         ) {
           return {

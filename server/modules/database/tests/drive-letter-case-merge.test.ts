@@ -106,6 +106,54 @@ test('runMigrations repoints sessions of a merged project instead of orphaning t
   });
 });
 
+test('runMigrations keeps a merged project active when the duplicate was in use', async () => {
+  await withIsolatedDatabase(() => {
+    const db = getConnection();
+
+    // The uppercase row was archived at some point; the lowercase one is the
+    // project actually being worked in. All sessions end up on the surviving
+    // row, so keeping it archived would hide a project in daily use.
+    db.prepare(
+      'INSERT INTO projects (project_id, project_path, custom_project_name, isStarred, isArchived) VALUES (?, ?, NULL, 0, 1)',
+    ).run('project-archived', 'A:\\work');
+    db.prepare(
+      'INSERT INTO projects (project_id, project_path, custom_project_name, isStarred, isArchived) VALUES (?, ?, NULL, 0, 0)',
+    ).run('project-active', 'a:\\work');
+    db.prepare('INSERT INTO sessions (session_id, provider, project_path) VALUES (?, ?, ?)').run(
+      'session-active',
+      'claude',
+      'a:\\work',
+    );
+
+    runMigrations(db);
+
+    const merged = db
+      .prepare('SELECT project_path, isArchived FROM projects')
+      .all() as { project_path: string; isArchived: number }[];
+    assert.deepEqual(merged, [{ project_path: 'A:\\work', isArchived: 0 }]);
+  });
+});
+
+test('runMigrations keeps a merged project archived when both rows were archived', async () => {
+  await withIsolatedDatabase(() => {
+    const db = getConnection();
+
+    db.prepare(
+      'INSERT INTO projects (project_id, project_path, custom_project_name, isStarred, isArchived) VALUES (?, ?, NULL, 0, 1)',
+    ).run('project-archived-upper', 'A:\\gone');
+    db.prepare(
+      'INSERT INTO projects (project_id, project_path, custom_project_name, isStarred, isArchived) VALUES (?, ?, NULL, 0, 1)',
+    ).run('project-archived-lower', 'a:\\gone');
+
+    runMigrations(db);
+
+    const merged = db
+      .prepare('SELECT project_path, isArchived FROM projects')
+      .all() as { project_path: string; isArchived: number }[];
+    assert.deepEqual(merged, [{ project_path: 'A:\\gone', isArchived: 1 }]);
+  });
+});
+
 test('runMigrations leaves a database without lowercase drive letters alone', async () => {
   await withIsolatedDatabase(() => {
     const db = getConnection();

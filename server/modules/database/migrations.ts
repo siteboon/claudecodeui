@@ -519,6 +519,9 @@ const mergeProjectsDifferingOnlyByDriveLetterCase = (db: Database): void => {
     SET custom_project_name = ?
     WHERE project_path = ? AND (custom_project_name IS NULL OR trim(custom_project_name) = '')
   `);
+  const inheritActive = db.prepare(
+    'UPDATE projects SET isArchived = 0 WHERE project_path = ? AND isArchived = 1',
+  );
   // Prepared lazily: better-sqlite3 resolves table names at prepare time, so
   // preparing this against a database without a sessions table would throw
   // before the guard below could skip it.
@@ -530,7 +533,7 @@ const mergeProjectsDifferingOnlyByDriveLetterCase = (db: Database): void => {
   );
   const dropProject = db.prepare('DELETE FROM projects WHERE project_id = ?');
   const readProject = db.prepare(
-    'SELECT custom_project_name, isStarred FROM projects WHERE project_id = ?',
+    'SELECT custom_project_name, isStarred, isArchived FROM projects WHERE project_id = ?',
   );
 
   const merge = db.transaction(() => {
@@ -545,7 +548,7 @@ const mergeProjectsDifferingOnlyByDriveLetterCase = (db: Database): void => {
       }
 
       const losing = readProject.get(duplicate.project_id) as
-        | { custom_project_name: string | null; isStarred: number }
+        | { custom_project_name: string | null; isStarred: number; isArchived: number }
         | undefined;
 
       moveSessions?.run(uppercasePath, duplicate.project_path);
@@ -556,6 +559,12 @@ const mergeProjectsDifferingOnlyByDriveLetterCase = (db: Database): void => {
       }
       if (losing?.custom_project_name && losing.custom_project_name.trim() !== '') {
         inheritName.run(losing.custom_project_name, uppercasePath);
+      }
+      // Being archived must not survive the merge when the duplicate was the
+      // one in use: the surviving row keeps every session, and archiving it
+      // would take a project the user works in out of the list.
+      if (losing && !losing.isArchived) {
+        inheritActive.run(uppercasePath);
       }
 
       dropProject.run(duplicate.project_id);
