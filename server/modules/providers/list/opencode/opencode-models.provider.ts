@@ -5,6 +5,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { discoverOllamaModels } from '@/modules/providers/list/opencode/ollama-models.discovery.js';
 import type { IProviderModels } from '@/shared/interfaces.js';
 import type {
   ProviderCurrentActiveModel,
@@ -243,11 +244,28 @@ const parseOpenCodeSessionModelValue = (rawModel: unknown): string | null => {
 
 /** Provider registry model adapter for OpenCode predefined models and session metadata. */
 export class OpenCodeProviderModels implements IProviderModels {
+  /**
+   * The curated catalog plus whatever the local Ollama instance has pulled.
+   *
+   * The static list cannot know those - they change with every `ollama pull` -
+   * and OpenCode addresses them as `ollama/<model>`. When Ollama is not
+   * running the discovery yields nothing and the catalog is unchanged.
+   */
   async getSupportedModels(): Promise<ProviderModelsDefinition> {
-    return filterOpenCodeModelsByProvider(
+    const connected = filterOpenCodeModelsByProvider(
       OPENCODE_PREDEFINED_MODELS,
       await readConnectedOpenCodeProviderIds(),
     );
+
+    const ollamaModels = await discoverOllamaModels();
+    if (ollamaModels.length === 0) {
+      return connected;
+    }
+
+    return {
+      ...connected,
+      OPTIONS: [...connected.OPTIONS, ...ollamaModels],
+    };
   }
 
   async getCurrentActiveModel(sessionId?: string): Promise<ProviderCurrentActiveModel> {
