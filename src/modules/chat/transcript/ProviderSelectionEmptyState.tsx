@@ -107,6 +107,20 @@ export default function ProviderSelectionEmptyState({
 
   const [modelSearch, setModelSearch] = useState("");
 
+  /**
+   * Opens and closes the picker, clearing the search on the way out.
+   *
+   * The search box is controlled, so a query left behind comes back with the
+   * dialog - and brings every branch open with it, since searching expands
+   * them. Reopening would undo the collapsing this picker is built around.
+   */
+  const setPickerOpen = useCallback((open: boolean) => {
+    setDialogOpen(open);
+    if (!open) {
+      setModelSearch("");
+    }
+  }, []);
+
   /** One collapsible branch per provider, in the order the picker lists them. */
   const visibleProviderGroups = useMemo<ModelGroup[]>(
     () => PROVIDER_META.map((meta) => ({
@@ -137,20 +151,20 @@ export default function ProviderSelectionEmptyState({
       setProvider(providerId);
       writeSelectedProvider(providerId);
       setProviderModel(providerId, modelValue);
-      setDialogOpen(false);
+      setPickerOpen(false);
       setTimeout(() => textareaRef.current?.focus(), 100);
     },
-    [setProvider, setProviderModel, textareaRef],
+    [setProvider, setProviderModel, setPickerOpen, textareaRef],
   );
 
   const openModelLibrary = () => {
-    setDialogOpen(false);
+    setPickerOpen(false);
     setModelLibraryOpen(true);
   };
 
   const closeModelLibrary = () => {
     setModelLibraryOpen(false);
-    setDialogOpen(true);
+    setPickerOpen(true);
   };
 
   if (!selectedSession && !currentSessionId) {
@@ -166,7 +180,7 @@ export default function ProviderSelectionEmptyState({
             </p>
           </div>
 
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <Dialog open={dialogOpen} onOpenChange={setPickerOpen}>
             <DialogTrigger asChild>
               <Card
                 className="group mx-auto max-w-xs cursor-pointer border-border/60 transition-all duration-150 hover:border-border hover:shadow-md active:scale-[0.99]"
