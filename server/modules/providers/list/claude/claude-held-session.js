@@ -55,6 +55,10 @@ export class HeldClaudeSession {
 
     /** The SDK query, once started. */
     this.instance = null;
+    /** The options it was started with; its callbacks read from this. */
+    this.sdkOptions = null;
+    /** The tool list the last turn set, to tell it from what was remembered. */
+    this.appliedAllowedTools = [];
     /** Closes stdin so the CLI can exit. */
     this.release = () => {};
     /** The turn being served right now, or null between turns. */
@@ -72,11 +76,16 @@ export class HeldClaudeSession {
   /**
    * Brings the live process in line with what this turn asks for.
    *
-   * Only what the SDK can change mid-session: the model and the permission
-   * mode. Effort has no live setter, so a change there is caught by
-   * `matches()` and starts a new process instead.
+   * Only what the SDK can change mid-session: the model, the permission mode,
+   * and the tool list the mode implies. Effort has no live setter, so a change
+   * there is caught by `matches()` and starts a new process instead.
+   *
+   * @param {Object} turn
+   * @param {string} [turn.model] - The model this turn asks for
+   * @param {string} [turn.permissionMode] - The permission mode it asks for
+   * @param {string[]} [turn.allowedTools] - Its tool list, mode entries included
    */
-  async applyTurn({ model, permissionMode }) {
+  async applyTurn({ model, permissionMode, allowedTools }) {
     if (model && model !== this.fingerprint.model) {
       await this.instance.setModel(model);
       this.fingerprint.model = model;
@@ -93,6 +102,35 @@ export class HeldClaudeSession {
         this.sdkOptions.permissionMode = mode;
       }
     }
+
+    this.applyAllowedTools(allowedTools);
+  }
+
+  /**
+   * Puts this turn's tool list into the options the callback reads.
+   *
+   * The user's own policy is part of the fingerprint, so within one held
+   * process it never changes; what does is what the permission mode adds -
+   * plan mode brings its read-only set along. Were that difference left in the
+   * fingerprint, every step into plan mode and back would cost a new process,
+   * and were it ignored here, `canUseTool` would ask about every Read the plan
+   * makes.
+   *
+   * Entries the callback remembered mid-conversation are in neither list, so
+   * they are carried over rather than dropped.
+   *
+   * @param {string[]} [allowedTools] - This turn's list; anything else is ignored
+   */
+  applyAllowedTools(allowedTools) {
+    if (!this.sdkOptions || !Array.isArray(allowedTools)) {
+      return;
+    }
+
+    const remembered = (this.sdkOptions.allowedTools || [])
+      .filter((tool) => !this.appliedAllowedTools.includes(tool) && !allowedTools.includes(tool));
+
+    this.sdkOptions.allowedTools = [...allowedTools, ...remembered];
+    this.appliedAllowedTools = [...allowedTools];
   }
 
   /**
@@ -162,6 +200,8 @@ export class HeldClaudeSession {
     this.instance = instance;
     this.release = release;
     this.sdkOptions = sdkOptions;
+    /** What the last turn put there; anything beyond it was remembered live. */
+    this.appliedAllowedTools = [...(sdkOptions?.allowedTools || [])];
     this.consume();
   }
 
