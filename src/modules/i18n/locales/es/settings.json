@@ -440,8 +440,8 @@
       "add": "Añadir"
     },
     "keepSessionAlive": {
-      "label": "Keep the process alive for the whole conversation",
-      "description": "Faster replies: the CLI starts once per conversation instead of once per message. Costs one process per open conversation, and a change of project or reasoning effort starts a new one anyway."
+      "label": "Mantener el proceso activo durante toda la conversación",
+      "description": "Respuestas más rápidas: la CLI se inicia una vez por conversación en lugar de una vez por mensaje. Cuesta un proceso por cada conversación abierta, y cambiar de proyecto o de nivel de razonamiento inicia uno nuevo de todos modos."
     }
   },
   "mcpServers": {

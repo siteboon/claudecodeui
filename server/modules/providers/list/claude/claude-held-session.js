@@ -23,6 +23,18 @@
  * live, through the SDK's own `setModel` / `setPermissionMode`.
  */
 
+/**
+ * JSON with object keys in a fixed order, so two equal configurations always
+ * produce the same string - whatever order they were written in.
+ */
+export function stableJson(value) {
+  return JSON.stringify(value, (_key, entry) => (
+    entry && typeof entry === 'object' && !Array.isArray(entry)
+      ? Object.fromEntries(Object.keys(entry).sort().map((key) => [key, entry[key]]))
+      : entry
+  ));
+}
+
 /** Held sessions by session key. */
 const heldSessions = new Map();
 
@@ -74,6 +86,12 @@ export class HeldClaudeSession {
     if (mode !== this.fingerprint.permissionMode) {
       await this.instance.setPermissionMode(mode);
       this.fingerprint.permissionMode = mode;
+      // `canUseTool` reads the mode off the options object it was built with,
+      // so the new mode has to land there too - otherwise turning off
+      // "skip permissions" would leave the callback approving everything.
+      if (this.sdkOptions) {
+        this.sdkOptions.permissionMode = mode;
+      }
     }
   }
 
@@ -122,16 +140,28 @@ export class HeldClaudeSession {
       && this.fingerprint.cwd === fingerprint.cwd
       && this.fingerprint.mcp === fingerprint.mcp
       && this.fingerprint.effort === fingerprint.effort
+      // The tool policy decides what `canUseTool` lets through, and that
+      // callback was built around the first turn's options. Rather than run a
+      // turn under a policy that is no longer the user's, a changed one gets
+      // its own process.
+      && this.fingerprint.tools === fingerprint.tools
       // The permission callback and the hooks were built around the writer of
       // the first turn. A reconnect brings a new one, and rather than reaching
       // through the old socket, that turn gets its own process.
       && this.fingerprint.writer === fingerprint.writer;
   }
 
-  /** Attaches the started query and begins consuming it. */
-  start(instance, release) {
+  /**
+   * Attaches the started query and begins consuming it.
+   *
+   * The options object comes along because the callbacks built into it read
+   * from it at call time; keeping the reference is what lets a later turn
+   * correct what they see.
+   */
+  start(instance, release, sdkOptions = null) {
     this.instance = instance;
     this.release = release;
+    this.sdkOptions = sdkOptions;
     this.consume();
   }
 

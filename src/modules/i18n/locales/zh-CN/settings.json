@@ -440,8 +440,8 @@
       "add": "添加"
     },
     "keepSessionAlive": {
-      "label": "Keep the process alive for the whole conversation",
-      "description": "Faster replies: the CLI starts once per conversation instead of once per message. Costs one process per open conversation, and a change of project or reasoning effort starts a new one anyway."
+      "label": "在整个对话期间保持进程运行",
+      "description": "回复更快：CLI 每次对话只启动一次，而不是每条消息启动一次。每个打开的对话会占用一个进程，切换项目或推理强度时仍会启动新进程。"
     }
   },
   "mcpServers": {

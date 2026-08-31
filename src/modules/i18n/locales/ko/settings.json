@@ -440,8 +440,8 @@
       "add": "추가"
     },
     "keepSessionAlive": {
-      "label": "Keep the process alive for the whole conversation",
-      "description": "Faster replies: the CLI starts once per conversation instead of once per message. Costs one process per open conversation, and a change of project or reasoning effort starts a new one anyway."
+      "label": "대화 전체 동안 프로세스 유지",
+      "description": "응답이 빨라집니다: CLI가 메시지마다가 아니라 대화마다 한 번만 시작됩니다. 열린 대화마다 프로세스를 하나씩 사용하며, 프로젝트나 추론 수준을 바꾸면 어차피 새 프로세스가 시작됩니다."
     }
   },
   "mcpServers": {
