@@ -768,6 +768,8 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   let queryInstance = null;
   // The process serving this conversation, when it is being kept alive.
   let heldSession = null;
+  // Whether this turn already claimed that process (see `reserve`).
+  let heldTurnReserved = false;
 
   try {
     const resolvedModel = await context.resolveResumeModel(sessionId, options.model);
@@ -929,13 +931,33 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
 
     const reusable = keepSessionAlive ? getHeldSession(sessionKey()) : null;
     if (reusable && reusable.matches(fingerprint)) {
+      // Claimed before anything is applied. `applyTurn` sets the model and the
+      // permission mode on the live process and writes the tool list into the
+      // options the running turn reads from, so a turn that did all that and
+      // only then found the session busy would leave its settings on someone
+      // else's turn. Refusing here also keeps the process: falling through to
+      // the branch below would start a second one and `holdSession` would
+      // close this one, ending the turn it is serving.
+      if (!reusable.reserve()) {
+        throw new Error('This session is already serving a turn.');
+      }
+
       heldSession = reusable;
+      heldTurnReserved = true;
       queryInstance = reusable.instance;
-      await reusable.applyTurn({
-        model: sdkOptions.model,
-        permissionMode: sdkOptions.permissionMode,
-        allowedTools: sdkOptions.allowedTools,
-      });
+      try {
+        await reusable.applyTurn({
+          model: sdkOptions.model,
+          permissionMode: sdkOptions.permissionMode,
+          allowedTools: sdkOptions.allowedTools,
+        });
+      } catch (error) {
+        // The turn never starts, so the claim has to go back or the process
+        // stays blocked for the rest of the conversation.
+        reusable.cancelReservation();
+        heldTurnReserved = false;
+        throw error;
+      }
     } else {
       if (keepSessionAlive && sessionKey()) {
         heldSession = new HeldClaudeSession({ sessionKey: sessionKey(), fingerprint });
@@ -1089,7 +1111,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     if (heldSession) {
       // The session reads the stream for all of its turns; this one gets its
       // messages through the callback and ends with its own `result`.
-      await heldSession.runTurn({ promptMessages, onMessage: handleTurnMessage });
+      await heldSession.runTurn({ promptMessages, onMessage: handleTurnMessage, reserved: heldTurnReserved });
     } else {
       for await (const message of queryInstance) {
         handleTurnMessage(message);

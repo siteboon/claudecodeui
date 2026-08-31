@@ -1152,6 +1152,8 @@ export type ClaudePermissionsState = {
   allowedTools: string[];
   disallowedTools: string[];
   skipPermissions: boolean;
+  /** Keep one CLI process for a whole conversation instead of one per message. */
+  keepSessionAlive: boolean;
 };
 
 /** The user's notification settings, grouped into delivery channels (in-app, web push, desktop, sound) and the events that trigger them; mirrors the payload of the notification preferences API. */

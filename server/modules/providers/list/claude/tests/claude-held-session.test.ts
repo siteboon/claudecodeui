@@ -91,6 +91,60 @@ test('a turn is only handed to a process started with what it needs', () => {
   session.close();
 });
 
+test('a second turn cannot touch a process that is already serving one', async () => {
+  // The damage this prevents: `applyTurn` writes the model, the permission
+  // mode and the tool list into what the running turn reads from. A turn that
+  // did all that and only then found the session busy would leave its settings
+  // behind - the first turn would finish under the second one's.
+  const sdkOptions = { permissionMode: 'default', allowedTools: [] as string[] };
+  const session = new HeldClaudeSession({ sessionKey: 'session-7', fingerprint: fingerprint() });
+
+  // A query that answers nothing, so the first turn stays open. It yields
+  // nothing on purpose - that is the whole fixture - so require-yield has to
+  // step aside here rather than be satisfied with unreachable code.
+  // eslint-disable-next-line require-yield
+  const idle = (async function* () {
+    for await (const _message of session.promptStream()) {
+      // The turn never gets its `result`.
+    }
+  })() as AsyncGenerator<unknown> & {
+    setModel: (model?: string) => Promise<void>;
+    setPermissionMode: (mode: string) => Promise<void>;
+  };
+  idle.setModel = async () => {};
+  idle.setPermissionMode = async () => {};
+  session.start(idle, () => {}, sdkOptions);
+
+  assert.equal(session.reserve(), true, 'the first turn claims it');
+  const running = session.runTurn({
+    promptMessages: [{ text: 'one' }],
+    onMessage: () => {},
+    reserved: true,
+  });
+  running.catch(() => {});
+
+  assert.equal(session.reserve(), false, 'the second one is refused');
+  await assert.rejects(
+    () => session.runTurn({ promptMessages: [{ text: 'two' }], onMessage: () => {} }),
+    /already serving a turn/,
+  );
+  assert.deepEqual(sdkOptions, { permissionMode: 'default', allowedTools: [] }, 'and changed nothing');
+
+  session.close();
+});
+
+test('a claim that never becomes a turn is given back', () => {
+  const session = new HeldClaudeSession({ sessionKey: 'session-8', fingerprint: fingerprint() });
+  session.start(fakeQuery(session, []), () => {});
+
+  assert.equal(session.reserve(), true);
+  assert.equal(session.reserve(), false);
+  session.cancelReservation();
+  assert.equal(session.reserve(), true, 'the process is free again, not blocked for good');
+
+  session.close();
+});
+
 test('a closed session takes no further turns', async () => {
   const session = new HeldClaudeSession({ sessionKey: 'session-3', fingerprint: fingerprint() });
   session.start(fakeQuery(session, []), () => {});
