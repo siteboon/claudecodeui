@@ -28,6 +28,7 @@ import {
   HeldClaudeSession,
   getHeldSession,
   holdSession,
+  stableJson,
 } from '@/modules/providers/list/claude/claude-held-session.js';
 import {
   CLAUDE_PREDEFINED_MODELS,
@@ -907,7 +908,14 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     // exception and are set on the live process below.
     const fingerprint = {
       cwd: options.cwd || '',
-      mcp: Object.keys(mcpServers || {}).sort().join(','),
+      // The whole configuration, not just the names: a server that keeps its
+      // name but changes command, url, arguments or environment is a different
+      // server, and the running process still has the old one.
+      mcp: stableJson(mcpServers || {}),
+      tools: stableJson({
+        allowed: sdkOptions.allowedTools || [],
+        disallowed: sdkOptions.disallowedTools || [],
+      }),
       effort: sdkOptions.effort || '',
       model: sdkOptions.model || '',
       permissionMode: sdkOptions.permissionMode || 'default',
@@ -957,7 +965,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       }
 
       if (heldSession) {
-        heldSession.start(queryInstance, () => {});
+        heldSession.start(queryInstance, () => {}, sdkOptions);
         holdSession(heldSession);
       }
     }

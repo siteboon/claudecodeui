@@ -6,6 +6,7 @@ import { HeldClaudeSession } from '@/modules/providers/list/claude/claude-held-s
 type Fingerprint = {
   cwd: string;
   mcp: string;
+  tools: string;
   effort: string;
   model: string;
   permissionMode: string;
@@ -16,7 +17,8 @@ const writer = { name: 'writer' };
 
 const fingerprint = (overrides: Partial<Fingerprint> = {}): Fingerprint => ({
   cwd: '/workspace',
-  mcp: 'chrome-tabs',
+  mcp: '{"chrome-tabs":{"command":"claude"}}',
+  tools: '{"allowed":[],"disallowed":[]}',
   effort: 'high',
   model: 'opus',
   permissionMode: 'default',
@@ -73,6 +75,11 @@ test('a turn is only handed to a process started with what it needs', () => {
   assert.equal(session.matches(fingerprint()), true, 'same startup conditions');
   assert.equal(session.matches(fingerprint({ cwd: '/elsewhere' })), false, 'other project');
   assert.equal(session.matches(fingerprint({ mcp: '' })), false, 'other mcp servers');
+  assert.equal(
+    session.matches(fingerprint({ tools: '{"allowed":["Bash"],"disallowed":[]}' })),
+    false,
+    'other tool policy',
+  );
   assert.equal(session.matches(fingerprint({ effort: 'xhigh' })), false, 'other effort');
   assert.equal(session.matches(fingerprint({ writer: { name: 'other' } })), false, 'other writer');
 
@@ -94,6 +101,23 @@ test('a closed session takes no further turns', async () => {
     () => session.runTurn({ promptMessages: [{ text: 'one' }], onMessage: () => {} }),
     /no longer held/,
   );
+});
+
+test('turning off "skip permissions" reaches the tool callback as well', async () => {
+  // `canUseTool` reads the mode off the options object it was built with. If a
+  // held process kept the first turn's object, switching the mode back would
+  // leave that callback approving everything.
+  const sdkOptions: { permissionMode: string } = { permissionMode: 'bypassPermissions' };
+  const session = new HeldClaudeSession({
+    sessionKey: 'session-5',
+    fingerprint: fingerprint({ permissionMode: 'bypassPermissions' }),
+  });
+  session.start(fakeQuery(session, []), () => {}, sdkOptions);
+
+  await session.applyTurn({ model: 'opus', permissionMode: 'default' });
+
+  assert.equal(sdkOptions.permissionMode, 'default');
+  session.close();
 });
 
 test('the model is only pushed to the process when it actually changed', async () => {
