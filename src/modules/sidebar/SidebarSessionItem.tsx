@@ -248,12 +248,14 @@ function SidebarSessionItem({
         <div
           className={cn(
             'p-2 mx-3 my-0.5 rounded-md bg-card border active:scale-[0.98] transition-all duration-150 relative',
+            // One chain, not two: as two, the fallback still ran while
+            // selected, and `twMerge` keeps the last border colour it sees -
+            // which quietly threw the selected border away again.
             isSelected
               ? 'bg-primary/15 border-primary/30 before:absolute before:left-0 before:top-1/2 before:h-6 before:w-[3px] before:-translate-y-1/2 before:rounded-r-full before:bg-primary'
-              : '',
-            !isSelected && isProcessing
+              : isProcessing
               ? 'border-border/60 bg-muted/20'
-              : !isSelected && sessionView.isActive
+              : sessionView.isActive
               ? 'border-green-500/30 bg-green-50/5 dark:bg-green-900/5'
               : 'border-border/30',
           )}
