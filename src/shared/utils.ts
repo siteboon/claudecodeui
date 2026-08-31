@@ -191,6 +191,89 @@ export const playChatCompletionSound = (options = {}): Promise<void> => playNoti
 
 // ---------------------------
 
+//----------------- CHAT BODY FONT SIZE ------------
+
+/** localStorage key holding the user's preferred chat reading size. */
+export const CHAT_BODY_FONT_SIZE_STORAGE_KEY = 'chatBodyFontSize';
+
+/** CSS custom property applied to rendered chat Markdown. */
+export const CHAT_BODY_FONT_SIZE_CSS_VARIABLE = '--chat-body-font-size';
+
+/** Default chat reading size, matching the current prose-sm presentation. */
+export const DEFAULT_CHAT_BODY_FONT_SIZE = 14;
+
+/** Smallest chat reading size accepted by the appearance setting. */
+export const MIN_CHAT_BODY_FONT_SIZE = 1;
+
+/** Largest chat reading size accepted by the appearance setting. */
+export const MAX_CHAT_BODY_FONT_SIZE = 50;
+
+type FontSizeStorageReader = Pick<Storage, 'getItem'>;
+type FontSizeStorageWriter = Pick<Storage, 'setItem'>;
+type CssVariableTarget = Pick<CSSStyleDeclaration, 'setProperty'>;
+
+/** Converts persisted or user-entered chat font sizes to a supported integer value. */
+export function normalizeChatBodyFontSize(value: unknown): number {
+  if (typeof value === 'string' && value.trim() === '') {
+    return DEFAULT_CHAT_BODY_FONT_SIZE;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_CHAT_BODY_FONT_SIZE;
+  }
+
+  return Math.min(
+    MAX_CHAT_BODY_FONT_SIZE,
+    Math.max(MIN_CHAT_BODY_FONT_SIZE, Math.round(parsed)),
+  );
+}
+
+/** Reads the saved chat font size, falling back safely when storage is unavailable. */
+export function readChatBodyFontSize(
+  storage: FontSizeStorageReader = window.localStorage,
+): number {
+  try {
+    return normalizeChatBodyFontSize(storage.getItem(CHAT_BODY_FONT_SIZE_STORAGE_KEY));
+  } catch {
+    return DEFAULT_CHAT_BODY_FONT_SIZE;
+  }
+}
+
+/** Applies a normalized chat font size to the document-level CSS custom property. */
+export function applyChatBodyFontSize(
+  value: unknown,
+  style: CssVariableTarget = document.documentElement.style,
+): number {
+  const normalized = normalizeChatBodyFontSize(value);
+  style.setProperty(CHAT_BODY_FONT_SIZE_CSS_VARIABLE, `${normalized}px`);
+  return normalized;
+}
+
+/** Saves and immediately applies a chat font size selected in appearance settings. */
+export function persistChatBodyFontSize(
+  value: unknown,
+  storage: FontSizeStorageWriter = window.localStorage,
+  style: CssVariableTarget = document.documentElement.style,
+): number {
+  const normalized = applyChatBodyFontSize(value, style);
+
+  try {
+    storage.setItem(CHAT_BODY_FONT_SIZE_STORAGE_KEY, String(normalized));
+  } catch {
+    // Applying the live preference is still useful when storage is unavailable.
+  }
+
+  return normalized;
+}
+
+/** Restores the saved chat font size before React paints the transcript. */
+export function initializeChatBodyFontSize(): number {
+  return applyChatBodyFontSize(readChatBodyFontSize());
+}
+
+// ---------------------------
+
 //----------------- DOCUMENT TITLE ------------
 
 /** Browser tab title shown when no project or session is selected. Private to the title helpers. */

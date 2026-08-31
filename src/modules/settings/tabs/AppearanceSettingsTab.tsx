@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { DarkModeToggle } from '@/shared/ui';
 import type { CodeEditorSettingsState, ProjectSortOrder } from '@/shared/types';
 import { LanguageSelector } from '@/modules/i18n';
+import ChatBodyFontSizeControl from '@/modules/settings/ChatBodyFontSizeControl';
 import SettingsCard from '@/modules/settings/SettingsCard';
 import SettingsRow from '@/modules/settings/SettingsRow';
 import SettingsSection from '@/modules/settings/SettingsSection';
@@ -11,6 +12,8 @@ import SettingsToggle from '@/modules/settings/SettingsToggle';
 type AppearanceSettingsTabProps = {
   projectSortOrder: ProjectSortOrder;
   onProjectSortOrderChange: (value: ProjectSortOrder) => void;
+  chatBodyFontSize: number;
+  onChatBodyFontSizeChange: (value: number) => void;
   codeEditorSettings: CodeEditorSettingsState;
   onCodeEditorWordWrapChange: (value: boolean) => void;
   onCodeEditorShowMinimapChange: (value: boolean) => void;
@@ -22,6 +25,8 @@ type AppearanceSettingsTabProps = {
 export default function AppearanceSettingsTab({
   projectSortOrder,
   onProjectSortOrderChange,
+  chatBodyFontSize,
+  onChatBodyFontSizeChange,
   codeEditorSettings,
   onCodeEditorWordWrapChange,
   onCodeEditorShowMinimapChange,
@@ -46,6 +51,21 @@ export default function AppearanceSettingsTab({
       <SettingsSection title={t('mainTabs.appearance')}>
         <SettingsCard>
           <LanguageSelector />
+        </SettingsCard>
+      </SettingsSection>
+
+      <SettingsSection title={t('appearanceSettings.chatContent.title')}>
+        <SettingsCard>
+          <SettingsRow
+            label={t('appearanceSettings.chatContent.fontSize.label')}
+            description={t('appearanceSettings.chatContent.fontSize.description')}
+          >
+            <ChatBodyFontSizeControl
+              value={chatBodyFontSize}
+              onChange={onChatBodyFontSizeChange}
+              label={t('appearanceSettings.chatContent.fontSize.label')}
+            />
+          </SettingsRow>
         </SettingsCard>
       </SettingsSection>
 
