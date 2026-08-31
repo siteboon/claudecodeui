@@ -564,6 +564,39 @@ async function openLocalInDesktop() {
 }
 
 /**
+ * The page to open inside the local app, from `CLOUDCLI_DESKTOP_START_PATH`.
+ *
+ * The variable names a route in the web UI, and `new URL` resolves it against
+ * the local server. A full address ("https://…") or a protocol-relative one
+ * ("//host/x") would win over that base, though, and put a foreign page in a
+ * window that is meant for the local server - so anything that leaves the
+ * origin is refused and the app opens where it always does.
+ *
+ * @param {string} baseUrl - Where the local server answers
+ * @returns {string} The URL to open
+ */
+function resolveStartUrl(baseUrl) {
+  const startPath = (process.env.CLOUDCLI_DESKTOP_START_PATH || '').trim();
+  if (!startPath) {
+    return baseUrl;
+  }
+
+  try {
+    const resolved = new URL(startPath, baseUrl);
+    if (resolved.origin === new URL(baseUrl).origin) {
+      return resolved.toString();
+    }
+    console.warn(
+      `[CloudCLI] Ignoring CLOUDCLI_DESKTOP_START_PATH "${startPath}": it leaves ${baseUrl}.`
+    );
+  } catch (error) {
+    console.warn(`[CloudCLI] Ignoring unusable CLOUDCLI_DESKTOP_START_PATH "${startPath}":`, error);
+  }
+
+  return baseUrl;
+}
+
+/**
  * Opens Local CloudCLI straight after startup instead of showing the launcher,
  * optionally at a path inside the web UI. Both come from the launcher script:
  *
@@ -585,9 +618,7 @@ async function openLocalAtStartup() {
     desktopWindow.emitDesktopState();
 
     const target = await localServer.getResolvedTarget();
-    const startPath = (process.env.CLOUDCLI_DESKTOP_START_PATH || '').trim();
-    const url = startPath ? new URL(startPath, target.url).toString() : target.url;
-    await desktopWindow.showTarget({ ...target, url });
+    await desktopWindow.showTarget({ ...target, url: resolveStartUrl(target.url) });
   } catch (error) {
     await showError('Could not open Local CloudCLI', error);
   }
