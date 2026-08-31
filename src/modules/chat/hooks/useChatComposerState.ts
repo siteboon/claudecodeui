@@ -14,7 +14,7 @@ import { useDropzone } from 'react-dropzone';
 import { api } from '@/shared/api';
 import { PROVIDER_PERMISSION_PREFERENCE_KEYS } from '@/shared/constants';
 import { readUserPreference } from '@/shared/userSettings';
-import type { CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
+import type { CommandModalPayload, CostCommandData, CodexRuntimeMode, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
 import { grantClaudeToolPermission } from '@/modules/chat/utils/chatPermissions';
 import {
   clearQueuedMessage,
@@ -69,6 +69,13 @@ type UseChatComposerStateArgs = {
 type MentionableFile = {
   name: string;
   path: string;
+};
+
+type ProviderPermissionSettings = {
+  allowedTools: string[];
+  disallowedTools: string[];
+  skipPermissions: boolean;
+  runtimeMode?: CodexRuntimeMode;
 };
 
 type CommandExecutionResult = {
@@ -569,7 +576,7 @@ export function useChatComposerState({
   // queued message keeps the provider settings it was composed under even if
   // it is later dispatched outside this composer (app-level auto-send).
   const buildSendOptions = useCallback((currentInput: string): QueuedSendOptions => {
-    const getToolsSettings = () => readUserPreference(
+    const getToolsSettings = () => readUserPreference<ProviderPermissionSettings>(
       PROVIDER_PERMISSION_PREFERENCE_KEYS[provider],
       {
         allowedTools: [],
@@ -584,6 +591,9 @@ export function useChatComposerState({
       model: currentProviderModel,
       effort: currentProviderEffort,
       permissionMode: resolvePermissionModeForProvider(provider, permissionMode),
+      ...(provider === 'codex'
+        ? { codexRuntimeMode: toolsSettings?.runtimeMode === 'sdk' ? 'sdk' : 'app-server' }
+        : {}),
       toolsSettings,
       skipPermissions: toolsSettings?.skipPermissions || false,
       sessionSummary: getNotificationSessionSummary(selectedSession, currentInput),

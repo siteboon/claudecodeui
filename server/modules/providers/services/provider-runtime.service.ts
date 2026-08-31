@@ -10,6 +10,7 @@ import type {
   ProviderRuntimeContext,
   ProviderRuntimeWriter,
 } from '@/shared/types.js';
+import { AppError } from '@/shared/utils.js';
 
 type ProviderRuntimeServiceDependencies = {
   listProviders(): IProvider[];
@@ -89,6 +90,19 @@ export function createProviderRuntimeService(
 
     async abort(providerName: LLMProvider, sessionId: string): Promise<boolean> {
       return Boolean(await dependencies.resolveProvider(providerName).runtime.abort(sessionId));
+    },
+
+    async restart(providerName: LLMProvider): Promise<{ provider: LLMProvider; restarted: true }> {
+      const runtime = dependencies.resolveProvider(providerName).runtime;
+      if (!runtime.restart) {
+        throw new AppError(`${providerName} does not expose a restartable runtime.`, {
+          code: 'PROVIDER_RUNTIME_RESTART_UNSUPPORTED',
+          statusCode: 409,
+        });
+      }
+
+      await runtime.restart();
+      return { provider: providerName, restarted: true };
     },
 
     resolveToolApproval(requestId: string, decision: ProviderPermissionDecision): void {

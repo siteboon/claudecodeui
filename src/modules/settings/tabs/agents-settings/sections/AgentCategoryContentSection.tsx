@@ -1,4 +1,4 @@
-import type { AgentCategory, AgentContextByProvider, AgentProvider, AgentSettingsProject, ClaudePermissionsState, CodexPermissionMode, CursorPermissionsState, McpProject, SkillsProject } from '@/shared/types';
+import type { AgentCategory, AgentContextByProvider, AgentProvider, AgentSettingsProject, ClaudePermissionsState, CodexPermissionMode, CodexRuntimeMode, CursorPermissionsState, McpProject, SkillsProject } from '@/shared/types';
 import { McpServers } from '@/modules/mcp';
 import { ProviderSkills } from '@/modules/skills';
 import AccountContent from '@/modules/settings/tabs/agents-settings/sections/content/AccountContent';
@@ -14,6 +14,8 @@ type AgentCategoryContentSectionProps = {
   onCursorPermissionsChange: (value: CursorPermissionsState) => void;
   codexPermissionMode: CodexPermissionMode;
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
+  codexRuntimeMode: CodexRuntimeMode;
+  onCodexRuntimeModeChange: (value: CodexRuntimeMode) => void;
   projects: AgentSettingsProject[];
 };
 
@@ -28,6 +30,8 @@ export default function AgentCategoryContentSection({
   onCursorPermissionsChange,
   codexPermissionMode,
   onCodexPermissionModeChange,
+  codexRuntimeMode,
+  onCodexRuntimeModeChange,
   projects,
 }: AgentCategoryContentSectionProps) {
   return (
@@ -81,6 +85,8 @@ export default function AgentCategoryContentSection({
           agent="codex"
           permissionMode={codexPermissionMode}
           onPermissionModeChange={onCodexPermissionModeChange}
+          runtimeMode={codexRuntimeMode}
+          onRuntimeModeChange={onCodexRuntimeModeChange}
         />
       )}
 

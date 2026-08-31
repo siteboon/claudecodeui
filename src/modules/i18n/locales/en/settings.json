@@ -412,6 +412,28 @@
       "rmRf": "- Block recursive delete"
     },
     "codex": {
+      "runtime": {
+        "title": "Codex runtime",
+        "description": "Choose how CloudCLI runs Codex requests.",
+        "modes": {
+          "app-server": {
+            "title": "Codex app-server",
+            "description": "Use one persistent Codex app-server for conversations and thread operations."
+          },
+          "sdk": {
+            "title": "Codex SDK",
+            "description": "Use the direct @openai/codex-sdk runtime."
+          }
+        },
+        "restart": {
+          "title": "Restart app-server",
+          "description": "Reload Codex configuration and authentication from disk.",
+          "action": "Restart",
+          "restarting": "Restarting...",
+          "success": "Codex app-server restarted.",
+          "error": "Could not restart while Codex is busy or unavailable."
+        }
+      },
       "permissionMode": "Permission Mode",
       "description": "Controls how Codex handles file modifications and command execution",
       "modes": {

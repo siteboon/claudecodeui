@@ -384,6 +384,28 @@
       "rmRf": "- 封鎖遞迴刪除"
     },
     "codex": {
+      "runtime": {
+        "title": "Codex 執行方式",
+        "description": "選擇 CloudCLI 執行 Codex 請求的方式。",
+        "modes": {
+          "app-server": {
+            "title": "Codex app-server",
+            "description": "使用同一個常駐 Codex app-server 處理對話與執行緒操作。"
+          },
+          "sdk": {
+            "title": "Codex SDK",
+            "description": "使用直接呼叫 @openai/codex-sdk 的執行方式。"
+          }
+        },
+        "restart": {
+          "title": "重新啟動 app-server",
+          "description": "從磁碟重新載入 Codex 設定與登入狀態。",
+          "action": "重新啟動",
+          "restarting": "正在重新啟動...",
+          "success": "Codex app-server 已重新啟動。",
+          "error": "Codex 忙碌中或無法使用，不能重新啟動。"
+        }
+      },
       "permissionMode": "權限模式",
       "description": "控制 Codex 如何處理檔案修改和指令執行",
       "modes": {

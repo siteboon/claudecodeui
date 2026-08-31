@@ -293,6 +293,7 @@ export function useChatRealtimeHandlers({
             if (!previousPendingPermissionRequests.some((request) => request.requestId === msg.requestId)) {
               const nextPendingPermissionRequests = [...previousPendingPermissionRequests, {
                 requestId: msg.requestId as string,
+                provider: msg.provider as LLMProvider | undefined,
                 toolName: (msg.toolName as string) || 'UnknownTool',
                 input: msg.input,
                 context: msg.context,
