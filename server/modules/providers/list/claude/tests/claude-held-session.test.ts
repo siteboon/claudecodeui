@@ -120,6 +120,50 @@ test('turning off "skip permissions" reaches the tool callback as well', async (
   session.close();
 });
 
+test('stepping into a plan and back keeps the process, its tools, and what was remembered', async () => {
+  // Plan mode adds read-only tools of its own. They are deliberately not part
+  // of the fingerprint - otherwise every step into a plan would cost a new
+  // process - so they have to reach the options `canUseTool` reads, or it
+  // would ask about every Read the plan makes.
+  const sdkOptions: { permissionMode: string; allowedTools: string[] } = {
+    permissionMode: 'default',
+    allowedTools: ['Bash(git:*)'],
+  };
+  const session = new HeldClaudeSession({ sessionKey: 'session-6', fingerprint: fingerprint() });
+  session.start(fakeQuery(session, []), () => {}, sdkOptions);
+
+  // Mid-conversation the user allows one more tool and asks to remember it;
+  // `canUseTool` writes it straight into the options.
+  sdkOptions.allowedTools.push('Write');
+
+  await session.applyTurn({
+    model: 'opus',
+    permissionMode: 'plan',
+    allowedTools: ['Bash(git:*)', 'Read', 'exit_plan_mode'],
+  });
+
+  assert.equal(sdkOptions.permissionMode, 'plan');
+  assert.deepEqual(
+    sdkOptions.allowedTools,
+    ['Bash(git:*)', 'Read', 'exit_plan_mode', 'Write'],
+    'the plan tools arrive, the remembered one stays',
+  );
+
+  await session.applyTurn({
+    model: 'opus',
+    permissionMode: 'default',
+    allowedTools: ['Bash(git:*)'],
+  });
+
+  assert.deepEqual(
+    sdkOptions.allowedTools,
+    ['Bash(git:*)', 'Write'],
+    'leaving the plan takes its tools away again',
+  );
+
+  session.close();
+});
+
 test('the model is only pushed to the process when it actually changed', async () => {
   const session = new HeldClaudeSession({ sessionKey: 'session-4', fingerprint: fingerprint() });
   const instance = fakeQuery(session, []);

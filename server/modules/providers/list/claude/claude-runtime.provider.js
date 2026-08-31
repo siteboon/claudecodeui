@@ -912,9 +912,14 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       // name but changes command, url, arguments or environment is a different
       // server, and the running process still has the old one.
       mcp: stableJson(mcpServers || {}),
+      // The policy the user set, not the list handed to the CLI: plan mode
+      // adds its own read-only tools, and the mode is switched on the live
+      // process. Comparing the full list would start a new process for every
+      // step into a plan and back out of it - `applyTurn` moves those entries
+      // over instead.
       tools: stableJson({
-        allowed: sdkOptions.allowedTools || [],
-        disallowed: sdkOptions.disallowedTools || [],
+        allowed: options.toolsSettings?.allowedTools || [],
+        disallowed: options.toolsSettings?.disallowedTools || [],
       }),
       effort: sdkOptions.effort || '',
       model: sdkOptions.model || '',
@@ -929,6 +934,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       await reusable.applyTurn({
         model: sdkOptions.model,
         permissionMode: sdkOptions.permissionMode,
+        allowedTools: sdkOptions.allowedTools,
       });
     } else {
       if (keepSessionAlive && sessionKey()) {
