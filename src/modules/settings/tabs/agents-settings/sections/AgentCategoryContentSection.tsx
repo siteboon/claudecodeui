@@ -51,6 +51,10 @@ export default function AgentCategoryContentSection({
           onAllowedToolsChange={(value) => {
             onClaudePermissionsChange({ ...claudePermissions, allowedTools: value });
           }}
+          keepSessionAlive={claudePermissions.keepSessionAlive}
+          onKeepSessionAliveChange={(value) => {
+            onClaudePermissionsChange({ ...claudePermissions, keepSessionAlive: value });
+          }}
           disallowedTools={claudePermissions.disallowedTools}
           onDisallowedToolsChange={(value) => {
             onClaudePermissionsChange({ ...claudePermissions, disallowedTools: value });

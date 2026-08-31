@@ -25,6 +25,11 @@ import {
   normalizeImageDescriptors
 } from '@/shared/image-attachments.js';
 import {
+  HeldClaudeSession,
+  getHeldSession,
+  holdSession,
+} from '@/modules/providers/list/claude/claude-held-session.js';
+import {
   CLAUDE_PREDEFINED_MODELS,
   CLAUDE_ULTRACODE_EFFORT
 } from '@/modules/providers/list/claude/claude-models.provider.js';
@@ -731,9 +736,15 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // turn-ending `result` is only mined for usage when nothing better arrived.
   let assistantBudgetSent = false;
 
+  // Whether this conversation keeps one process across its turns instead of
+  // starting a fresh one per message.
+  const keepSessionAlive = Boolean(options.toolsSettings?.keepSessionAlive);
+
   // A new turn supersedes any earlier one still holding this session's process
-  // open, so held runs cannot stack up across a conversation.
-  if (sessionKey()) {
+  // open, so held runs cannot stack up across a conversation. A process being
+  // kept for this very conversation is the exception - releasing it here would
+  // undo the point of holding it.
+  if (sessionKey() && !(keepSessionAlive && getHeldSession(sessionKey()))) {
     getSession(sessionKey())?.releaseInput?.();
   }
 
@@ -754,6 +765,8 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // Hoisted above the try so the catch's cleanup can tell whether this run
   // still owns the activeSessions entry (or was superseded by a newer run).
   let queryInstance = null;
+  // The process serving this conversation, when it is being kept alive.
+  let heldSession = null;
 
   try {
     const resolvedModel = await context.resolveResumeModel(sessionId, options.model);
@@ -889,36 +902,81 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       return { behavior: 'deny', message: decision.message ?? 'User denied tool use' };
     };
 
-    let heldPrompt = createHeldPromptStream(promptMessages);
-    releasePromptStream = heldPrompt.release;
-    try {
-      queryInstance = query({
-        prompt: heldPrompt.stream,
-        options: sdkOptions
+    // What the CLI fixes when it starts. A held process may serve the next turn
+    // only if all of it still matches; model and permission mode are the
+    // exception and are set on the live process below.
+    const fingerprint = {
+      cwd: options.cwd || '',
+      mcp: Object.keys(mcpServers || {}).sort().join(','),
+      effort: sdkOptions.effort || '',
+      model: sdkOptions.model || '',
+      permissionMode: sdkOptions.permissionMode || 'default',
+      writer: ws,
+    };
+
+    const reusable = keepSessionAlive ? getHeldSession(sessionKey()) : null;
+    if (reusable && reusable.matches(fingerprint)) {
+      heldSession = reusable;
+      queryInstance = reusable.instance;
+      await reusable.applyTurn({
+        model: sdkOptions.model,
+        permissionMode: sdkOptions.permissionMode,
       });
-    } catch (hookError) {
-      // Older/newer SDK versions may not accept hook shapes yet.
-      // Keep notification behavior operational via runtime events even if hook registration fails.
-      console.warn('Failed to initialize Claude query with hooks, retrying without hooks:', hookError?.message || hookError);
-      delete sdkOptions.hooks;
-      // Discard the abandoned stream and build a fresh one for the retry.
-      heldPrompt.release();
-      heldPrompt = createHeldPromptStream(promptMessages);
+    } else {
+      if (keepSessionAlive && sessionKey()) {
+        heldSession = new HeldClaudeSession({ sessionKey: sessionKey(), fingerprint });
+      }
+
+      // A held session feeds the process itself, turn by turn; a one-shot run
+      // gets this turn's messages and nothing more.
+      let heldPrompt = heldSession
+        ? { stream: heldSession.promptStream(), release: () => {} }
+        : createHeldPromptStream(promptMessages);
       releasePromptStream = heldPrompt.release;
-      queryInstance = query({
-        prompt: heldPrompt.stream,
-        options: sdkOptions
-      });
+      try {
+        queryInstance = query({
+          prompt: heldPrompt.stream,
+          options: sdkOptions
+        });
+      } catch (hookError) {
+        // Older/newer SDK versions may not accept hook shapes yet.
+        // Keep notification behavior operational via runtime events even if hook registration fails.
+        console.warn('Failed to initialize Claude query with hooks, retrying without hooks:', hookError?.message || hookError);
+        delete sdkOptions.hooks;
+        // The retry falls back to a one-shot run: the held stream cannot be
+        // handed out twice, and this path is a compatibility fallback anyway.
+        heldPrompt.release();
+        heldSession?.close();
+        heldSession = null;
+        heldPrompt = createHeldPromptStream(promptMessages);
+        releasePromptStream = heldPrompt.release;
+        queryInstance = query({
+          prompt: heldPrompt.stream,
+          options: sdkOptions
+        });
+      }
+
+      if (heldSession) {
+        heldSession.start(queryInstance, () => {});
+        holdSession(heldSession);
+      }
     }
 
     // Track the query instance for abort capability
     if (sessionKey()) {
-      addSession(sessionKey(), queryInstance, ws, releasePromptStream);
+      addSession(
+        sessionKey(),
+        queryInstance,
+        ws,
+        heldSession ? () => heldSession.close() : releasePromptStream,
+      );
     }
 
     // Process streaming messages
     console.log('Starting async generator loop for session:', capturedSessionId || 'NEW');
-    for await (const message of queryInstance) {
+    // One SDK message, handled the same way whichever process delivered it:
+    // a fresh query, or one held open across the turns of this conversation.
+    const handleTurnMessage = (message) => {
       // Capture session ID from first message
       if (message.session_id && !capturedSessionId) {
 
@@ -1011,6 +1069,16 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       } else if (idleReleaseTimer) {
         // Background activity after the turn — push the countdown back out.
         scheduleRelease();
+      }
+    };
+
+    if (heldSession) {
+      // The session reads the stream for all of its turns; this one gets its
+      // messages through the callback and ends with its own `result`.
+      await heldSession.runTurn({ promptMessages, onMessage: handleTurnMessage });
+    } else {
+      for await (const message of queryInstance) {
+        handleTurnMessage(message);
       }
     }
 
