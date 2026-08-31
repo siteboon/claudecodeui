@@ -154,7 +154,10 @@ export class ChromeMcpClient {
   private async open(): Promise<void> {
     // The same binary the agent runs on, so a configured CLAUDE_CLI_PATH and
     // the Windows wrapper resolution apply here too.
-    const command = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
+    // Falls back to the bare name, as the auth provider does: with nothing
+    // resolved, PATH is still worth a try, and a spawn error says more than a
+    // refusal to start would.
+    const command = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH) ?? 'claude';
 
     const transport = new StdioClientTransport({
       command,

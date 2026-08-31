@@ -62,6 +62,36 @@ function serialize<T>(task: () => Promise<T>): Promise<T> {
   return next;
 }
 
+/**
+ * Whether this is something Chrome can be asked to open.
+ *
+ * A bare word is not an address, and the Chrome extension asks the user before
+ * every navigation - so a stray fragment of the command itself ("bro", left
+ * over from picking /browser after typing /bro) turned into a permission
+ * prompt for a site that does not exist.
+ *
+ * Matching a prefix is not enough for that: "example.com trailing text" starts
+ * like an address and is none, and "http://" carries a scheme and no host. The
+ * whole value is parsed instead. With a scheme the user has said what they
+ * mean and a host is enough; without one, the dot is what tells "example.com"
+ * from "bro".
+ */
+export function isUsableAddress(url: string): boolean {
+  if (/\s/.test(url)) {
+    return false;
+  }
+
+  const hasScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(url);
+  let host = '';
+  try {
+    host = new URL(hasScheme ? url : `https://${url}`).hostname;
+  } catch {
+    return false;
+  }
+
+  return host !== '' && (hasScheme || host.includes('.'));
+}
+
 function readText(result: ToolResult): string {
   return (result?.content ?? [])
     .map((part) => (typeof part?.text === 'string' ? part.text : ''))
@@ -83,11 +113,7 @@ export const chromeTabsService = {
   async openTab(rawUrl?: string): Promise<OpenTabResult> {
     const url = (rawUrl ?? '').trim();
 
-    // A bare word is not an address, and the Chrome extension asks the user
-    // before every navigation - so a stray fragment of the command itself
-    // ("bro", left over from picking /browser after typing /bro) turned into a
-    // permission prompt for a site that does not exist. Refuse it here instead.
-    if (url && !/^[a-z][a-z0-9+.-]*:\/\//i.test(url) && !/^[^\s/]+\.[^\s/]{2,}/.test(url)) {
+    if (url && !isUsableAddress(url)) {
       throw new AppError(`"${url}" is not an address.`, {
         code: 'INVALID_URL',
         statusCode: 400,
@@ -148,7 +174,22 @@ export const chromeTabsService = {
         return opened;
       }
 
-      const navigation = await chromeMcpClient.callTool('navigate', { url, tabId: created.tabId });
+      // The tab exists from here on, and the doc comment above promises it is
+      // reported either way. A rejection - a dropped transport, the 45 s call
+      // timeout - would otherwise reach the outer catch and become a 503, and
+      // the caller would never hear about the tab it could have used.
+      let navigation: ToolResult;
+      try {
+        navigation = await chromeMcpClient.callTool('navigate', { url, tabId: created.tabId });
+      } catch (error) {
+        return {
+          ...opened,
+          warning: `The tab is open, but the address could not be sent: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        };
+      }
+
       if (navigation.isError) {
         const reported = readText(navigation);
         return {
