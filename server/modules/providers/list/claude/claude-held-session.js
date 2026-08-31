@@ -74,6 +74,38 @@ export class HeldClaudeSession {
   }
 
   /**
+   * Claims the process for one turn, or refuses because it is taken.
+   *
+   * This has to happen before `applyTurn`, which is why it is separate from
+   * `runTurn`: `applyTurn` sets the model and the permission mode on the live
+   * process and writes the tool list into the options the running turn's
+   * callbacks read. A second turn that changed all that and only then found
+   * the session busy would leave its settings behind on someone else's turn -
+   * the first one would finish under the second one's model and permissions.
+   *
+   * @returns {boolean} Whether the caller may now run a turn
+   */
+  reserve() {
+    if (this.busy || this.closed || !this.instance) {
+      return false;
+    }
+
+    this.busy = true;
+    this.clearIdle();
+    return true;
+  }
+
+  /** Gives a claim back when the turn it was for never started. */
+  cancelReservation() {
+    if (!this.busy) {
+      return;
+    }
+
+    this.busy = false;
+    this.scheduleIdle();
+  }
+
+  /**
    * Brings the live process in line with what this turn asks for.
    *
    * Only what the SDK can change mid-session: the model, the permission mode,
@@ -195,6 +227,10 @@ export class HeldClaudeSession {
    * The options object comes along because the callbacks built into it read
    * from it at call time; keeping the reference is what lets a later turn
    * correct what they see.
+   *
+   * @param {Object} instance - The started SDK query
+   * @param {() => void} release - Closes stdin so the CLI can exit
+   * @param {Record<string, unknown>|null} [sdkOptions] - The options it was started with
    */
   start(instance, release, sdkOptions = null) {
     this.instance = instance;
@@ -236,18 +272,21 @@ export class HeldClaudeSession {
    * @param {Object} args
    * @param {Array<Object>} args.promptMessages - What the user sent
    * @param {(message: Object) => void} args.onMessage - Receives every SDK message
+   * @param {boolean} [args.reserved] - Whether the caller already claimed it
    * @returns {Promise<void>}
    */
-  runTurn({ promptMessages, onMessage }) {
-    if (this.busy) {
-      return Promise.reject(new Error('This session is already serving a turn.'));
-    }
+  runTurn({ promptMessages, onMessage, reserved = false }) {
     if (this.closed || !this.instance) {
+      if (reserved) {
+        this.busy = false;
+      }
       return Promise.reject(new Error('This session is no longer held.'));
     }
-
-    this.clearIdle();
-    this.busy = true;
+    // A caller that reserved the session already holds the claim; anyone else
+    // takes it here, or is turned away because a turn is running.
+    if (!reserved && !this.reserve()) {
+      return Promise.reject(new Error('This session is already serving a turn.'));
+    }
 
     return new Promise((resolve, reject) => {
       let settled = false;
