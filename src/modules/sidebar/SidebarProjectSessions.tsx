@@ -90,7 +90,7 @@ export default function SidebarProjectSessions({
       {isCompact ? (
         <div className="px-3 pb-1 pt-1">
           <button
-            className="flex h-8 w-full items-center justify-center gap-2 rounded-md bg-primary text-xs font-medium text-primary-foreground transition-all duration-150 hover:bg-primary/90 active:scale-[0.98]"
+            className="flex h-8 w-full items-center justify-center gap-2 rounded-md border border-transparent text-xs font-medium text-muted-foreground transition-all duration-150 hover:border-border hover:bg-accent hover:text-foreground active:scale-[0.98]"
             onClick={() => {
               onProjectSelect(project);
               onNewSession(project);
@@ -101,10 +101,16 @@ export default function SidebarProjectSessions({
           </button>
         </div>
       ) : (
+        /* No frame and no fill: starting a session is an action one reaches
+           for now and then, while the open session is a state that has to
+           stand out at a glance. Anything drawn around this button competes
+           with the marker on the session actually in use - which is the one
+           thing the list has to answer. It gets its outline on hover, when it
+           is being aimed at. */
         <Button
-          variant="default"
+          variant="ghost"
           size="sm"
-          className="flex h-8 w-full justify-start gap-2 bg-primary text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          className="flex h-8 w-full justify-start gap-2 border border-transparent text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:text-foreground"
           onClick={() => onNewSession(project)}
         >
           <Plus className="h-3 w-3" />
