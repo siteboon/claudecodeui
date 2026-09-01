@@ -744,12 +744,19 @@ export class DesktopWindowManager {
       return { action: 'deny' };
     });
 
-    this.mainWindow.on('resize', () => {
-      this.viewHost.resizeActiveView();
-      this.syncSettingsWindowBounds();
-    });
+    // Every way the content area can change size. 'resize' alone misses a
+    // move to a screen with a different scaling factor, and maximising does
+    // not reliably report its final size through 'resize' either - the view
+    // then keeps the old width and the page hangs over the right edge.
+    for (const event of ['resize', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) {
+      this.mainWindow.on(event, () => {
+        this.viewHost.resizeActiveView();
+        this.syncSettingsWindowBounds();
+      });
+    }
 
     this.mainWindow.on('move', () => {
+      this.viewHost.resizeActiveView();
       this.syncSettingsWindowBounds();
     });
 

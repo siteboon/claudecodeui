@@ -228,8 +228,12 @@ export class ViewHost {
     } catch {
       return;
     }
+    // No setAutoResize here. It grows the view along with the window on its
+    // own, and `resizeActiveView` below already sets the bounds on every
+    // resize - the two together let the view end up wider than the window,
+    // which cuts the page off at the right edge with no scrollbar to hint at
+    // it. Setting the bounds by hand covers every case setAutoResize would.
     view.setBounds(this.getContentViewBounds());
-    view.setAutoResize({ width: true, height: true });
   }
 
   resizeActiveView() {
