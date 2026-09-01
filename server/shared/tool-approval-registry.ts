@@ -113,8 +113,8 @@ function ensureSweepTimer(): void {
   sweepTimer.unref?.();
 }
 
-// Consumed by each provider runtime in `@/modules/providers` (currently the
-// Claude runtime) to park a turn until the user answers its permission prompt.
+// Consumed by permission-capable runtimes in `@/modules/providers` (Claude
+// and OMP) to park a turn until the user answers its permission prompt.
 export function registerApproval(
   requestId: string,
   {

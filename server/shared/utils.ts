@@ -715,6 +715,35 @@ export function addUniqueProviderSkillSource(
   sources.push({ ...source, rootDir: normalizedRootDir });
 }
 
+/**
+ * Lists the project directories a skill lookup walks, nearest first.
+ *
+ * The walk stops at the topmost repository root when one exists.
+ */
+export function getProjectSkillSearchRoots(
+  workspacePath: string,
+  repoRoot: string | null,
+): string[] {
+  const roots: string[] = [];
+  const normalizedRepoRoot = repoRoot ? path.resolve(repoRoot) : null;
+  let currentPath = path.resolve(workspacePath);
+
+  while (true) {
+    roots.push(currentPath);
+    if (!normalizedRepoRoot || currentPath === normalizedRepoRoot) {
+      break;
+    }
+
+    const parentPath = path.dirname(currentPath);
+    if (parentPath === currentPath) {
+      break;
+    }
+    currentPath = parentPath;
+  }
+
+  return roots;
+}
+
 // ---------------------------
 //----------------- PROVIDER SKILL MARKDOWN UTILITIES ------------
 /**
@@ -826,6 +855,17 @@ export function readProviderSkillMarkdownDefinitionFromContent(
 
 // ---------------------------
 //----------------- SESSION SYNCHRONIZER TITLE HELPERS ------------
+/**
+ * Builds the provisional title used before provider storage exists.
+ *
+ * The sessions service and synchronizers share this exact four-word rule so a
+ * provider title can replace a generated title without replacing a user title.
+ */
+export function buildCloudCliSessionName(initialMessage: string): string {
+  const words = initialMessage.trim().split(/\s+/).filter(Boolean);
+  return words.slice(0, 4).join(' ') || 'Untitled Session';
+}
+
 /**
  * Produces a compact session title suitable for UI rendering and DB storage.
  *

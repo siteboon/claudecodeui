@@ -13,6 +13,7 @@ const PROVIDER_LABELS = {
   claude: 'Claude',
   cursor: 'Cursor',
   codex: 'Codex',
+  omp: 'omp',
   system: 'System'
 };
 
@@ -247,6 +248,15 @@ function notifyUserIfEnabled({ userId, event }) {
   }
 }
 
+/**
+ * @param {{
+ *   userId: string | number | null,
+ *   provider: string,
+ *   sessionId?: string | null,
+ *   stopReason?: string,
+ *   sessionName?: string | null
+ * }} input
+ */
 function notifyRunStopped({ userId, provider, sessionId = null, stopReason = 'completed', sessionName = null }) {
   notifyUserIfEnabled({
     userId,
@@ -269,6 +279,14 @@ function notifyRunStopped({ userId, provider, sessionId = null, stopReason = 'co
  * than needing a new opt-in that would default to off. No explicit dedupeKey, so
  * the default composite key collapses repeats inside the dedupe window.
  */
+/**
+ * @param {{
+ *   userId: string | number | null,
+ *   provider: string,
+ *   sessionId?: string | null,
+ *   sessionName?: string | null
+ * }} input
+ */
 function notifyBackgroundWorkCompleted({ userId, provider, sessionId = null, sessionName = null }) {
   notifyUserIfEnabled({
     userId,
@@ -283,6 +301,15 @@ function notifyBackgroundWorkCompleted({ userId, provider, sessionId = null, ses
   });
 }
 
+/**
+ * @param {{
+ *   userId: string | number | null,
+ *   provider: string,
+ *   sessionId?: string | null,
+ *   error: unknown,
+ *   sessionName?: string | null
+ * }} input
+ */
 function notifyRunFailed({ userId, provider, sessionId = null, error, sessionName = null }) {
   const errorMessage = normalizeErrorMessage(error);
 

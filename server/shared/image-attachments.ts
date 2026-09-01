@@ -33,13 +33,35 @@ export type ImageAttachmentDescriptor = {
 /** Provider-neutral descriptor used for both image and non-image chat attachments. */
 export type ChatAttachmentDescriptor = ImageAttachmentDescriptor;
 
-/** Media types the Claude Messages API accepts for base64 image blocks. */
-const CLAUDE_IMAGE_MEDIA_TYPES = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'image/webp',
-]);
+/** Media types accepted by the base64 image builders. */
+const SUPPORTED_IMAGE_MEDIA_TYPES: Record<string, true> = {
+  'image/jpeg': true,
+  'image/png': true,
+  'image/gif': true,
+  'image/webp': true,
+};
+
+function hasMatchingImageSignature(bytes: Buffer, mediaType: string): boolean {
+  switch (mediaType) {
+    case 'image/jpeg':
+      return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+    case 'image/png':
+      return bytes.length >= 8
+        && bytes.readUInt32BE(0) === 0x89504e47
+        && bytes.readUInt32BE(4) === 0x0d0a1a0a;
+    case 'image/gif':
+      return bytes.length >= 6
+        && bytes.readUInt32BE(0) === 0x47494638
+        && (bytes[4] === 0x37 || bytes[4] === 0x39)
+        && bytes[5] === 0x61;
+    case 'image/webp':
+      return bytes.length >= 12
+        && bytes.readUInt32BE(0) === 0x52494646
+        && bytes.readUInt32BE(8) === 0x57454250;
+    default:
+      return false;
+  }
+}
 
 const EXTENSION_TO_MEDIA_TYPE: Record<string, string> = {
   '.jpg': 'image/jpeg',
@@ -100,7 +122,7 @@ const IMAGE_FILE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp']
  * provider-native image input instead of the general file reference channel.
  */
 export function isImageAttachmentDescriptor(descriptor: ChatAttachmentDescriptor): boolean {
-  if (descriptor.mimeType && CLAUDE_IMAGE_MEDIA_TYPES.has(descriptor.mimeType)) {
+  if (descriptor.mimeType && SUPPORTED_IMAGE_MEDIA_TYPES[descriptor.mimeType]) {
     return true;
   }
   return IMAGE_FILE_EXTENSIONS.has(path.extname(descriptor.path).toLowerCase());
@@ -371,7 +393,7 @@ export async function buildClaudeUserContent(
 
   for (const descriptor of normalizeImageDescriptors(images)) {
     const mediaType = resolveImageMediaType(descriptor);
-    if (!mediaType || !CLAUDE_IMAGE_MEDIA_TYPES.has(mediaType)) {
+    if (!mediaType || !SUPPORTED_IMAGE_MEDIA_TYPES[mediaType]) {
       console.warn(`[Images] Skipping unsupported Claude image type for ${descriptor.path}`);
       continue;
     }
@@ -432,4 +454,56 @@ export function buildCodexInputItems(prompt: string, images: unknown, cwd?: stri
     });
   }
   return items;
+}
+
+type AcpPromptBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; mimeType: string; data: string };
+
+/**
+ * Builds ACP prompt blocks for the OMP runtime.
+ *
+ * Each image passes the shared root and symlink checks, then a file-signature
+ * check before its bytes cross the provider boundary.
+ */
+export async function buildAcpPromptBlocks(
+  prompt: string,
+  images: unknown,
+  cwd?: string,
+): Promise<AcpPromptBlock[]> {
+  const blocks: AcpPromptBlock[] = [{ type: 'text', text: prompt }];
+
+  for (const descriptor of normalizeImageDescriptors(images)) {
+    const mediaType = resolveImageMediaType(descriptor);
+    if (!mediaType || !SUPPORTED_IMAGE_MEDIA_TYPES[mediaType]) {
+      console.warn(`[Images] Skipping unsupported omp image type for ${descriptor.path}`);
+      continue;
+    }
+
+    const resolvedPath = resolveImageAbsolutePath(cwd, descriptor.path);
+    if (!isAllowedImageSourcePath(resolvedPath, cwd)) {
+      console.warn(`[Images] Refusing to read image outside allowed roots: ${descriptor.path}`);
+      continue;
+    }
+
+    try {
+      const canonicalPath = await fs.realpath(resolvedPath);
+      if (!isAllowedImageSourcePath(canonicalPath, cwd)) {
+        console.warn(`[Images] Refusing to read symlinked image outside allowed roots: ${descriptor.path}`);
+        continue;
+      }
+
+      const bytes = await fs.readFile(canonicalPath);
+      if (!hasMatchingImageSignature(bytes, mediaType)) {
+        console.warn(`[Images] Skipping omp image with mismatched file signature: ${descriptor.path}`);
+        continue;
+      }
+      blocks.push({ type: 'image', mimeType: mediaType, data: bytes.toString('base64') });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[Images] Failed to read image ${descriptor.path}: ${message}`);
+    }
+  }
+
+  return blocks;
 }

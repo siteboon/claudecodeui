@@ -20,6 +20,8 @@ function createSessionRow(overrides: Record<string, unknown> = {}) {
     project_path: null,
     jsonl_path: null,
     custom_name: null,
+    name_source: null,
+    provider_name: null,
     model: null,
     effort: null,
     forked_from_session_id: null,
@@ -367,6 +369,37 @@ test('Codex token usage falls back to the whole file when the tail has no token_
 
     const usage = await service.getSessionTokenUsage('app-session');
     assert.equal(usage.used, 6);
+  } finally {
+    await rm(tempDirectory, { recursive: true, force: true });
+  }
+});
+
+test('OMP token usage reports the latest turn model and context fallback', async () => {
+  const tempDirectory = await mkdtemp(path.join(tmpdir(), 'provider-token-usage-omp-'));
+  const sessionFilePath = path.join(tempDirectory, 'provider-session.jsonl');
+  try {
+    await writeFile(sessionFilePath, JSON.stringify({
+      type: 'message',
+      message: {
+        role: 'assistant',
+        provider: 'acme',
+        model: 'no-such-model',
+        usage: { input: 100, output: 30, cacheRead: 20, totalTokens: 150 },
+      },
+    }));
+    const service = createProviderTokenUsageService({
+      getSessionById: () => createSessionRow({ provider: 'omp', jsonl_path: sessionFilePath }),
+      getOmpContextWindow: async () => null,
+    });
+
+    assert.deepEqual(await service.getSessionTokenUsage('app-session'), {
+      used: 150,
+      total: 200_000,
+      model: 'no-such-model',
+      inputTokens: 120,
+      outputTokens: 30,
+      breakdown: { input: 120, output: 30 },
+    });
   } finally {
     await rm(tempDirectory, { recursive: true, force: true });
   }
