@@ -350,6 +350,7 @@
     "tokensUsed_other": "{{count}} tokens used",
     "compacted": "Compacted",
     "compactionSummary": "full summary",
+    "tokensUsedOfContext": "{{used}} of {{total}} context tokens ({{percent}}%)",
     "expandImage": "Expand {{name}}",
     "tokensLabel_one": "token",
     "tokensLabel_other": "tokens",

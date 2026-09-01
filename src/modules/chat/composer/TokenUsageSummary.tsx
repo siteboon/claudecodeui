@@ -45,22 +45,49 @@ function TokenUsageSummary({ usage, onClick }: TokenUsageSummaryProps) {
   const inputTokens = readUsageNumber(usage?.inputTokens ?? breakdown?.input);
   const outputTokens = readUsageNumber(usage?.outputTokens ?? breakdown?.output);
   const usedTokens = readUsageNumber(usage?.used) || inputTokens + outputTokens;
+  // The backend already reports the model's context window as `total`, but the
+  // UI never rendered it — so a bare token count read as "session length" with
+  // no sense of how close the context actually is to full.
+  const contextWindow = readUsageNumber(usage?.total);
+  const hasContextWindow = contextWindow > 0;
+  const percentUsed = hasContextWindow
+    ? Math.min(100, Math.round((usedTokens / contextWindow) * 100))
+    : 0;
+  const percentTone = percentUsed >= 90
+    ? 'text-red-500'
+    : percentUsed >= 75
+      ? 'text-amber-500'
+      : 'text-muted-foreground/70';
+  const title = hasContextWindow
+    ? t('chat:misc.tokensUsedOfContext', {
+      used: usedTokens.toLocaleString(),
+      total: contextWindow.toLocaleString(),
+      percent: percentUsed,
+    })
+    : t('chat:misc.tokensUsed', { count: usedTokens });
 
   return (
     <button
       type="button"
       onClick={onClick}
       className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border/70 bg-background/70 px-2 text-xs text-muted-foreground shadow-sm transition-colors hover:border-primary/25 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:gap-2 sm:px-2.5"
-      title={t('chat:misc.tokensUsed', { count: usedTokens })}
+      title={title}
       aria-label={t('chat:misc.showTokenUsage')}
     >
       <span className="grid h-5 w-5 place-items-center rounded-md bg-primary/10 text-primary">
         <ActivityIcon className="h-3.5 w-3.5" />
       </span>
       <span className="font-medium text-foreground">{formatTokenCount(usedTokens)}</span>
-      <span className="hidden text-muted-foreground/70 sm:inline">
-        {t('chat:misc.tokensLabel', { count: usedTokens })}
-      </span>
+      {hasContextWindow ? (
+        <>
+          <span className="text-muted-foreground/70">/{formatTokenCount(contextWindow)}</span>
+          <span className={`hidden font-medium sm:inline ${percentTone}`}>{percentUsed}%</span>
+        </>
+      ) : (
+        <span className="hidden text-muted-foreground/70 sm:inline">
+          {t('chat:misc.tokensLabel', { count: usedTokens })}
+        </span>
+      )}
     </button>
   );
 }
