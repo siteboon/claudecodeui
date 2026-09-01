@@ -79,7 +79,13 @@ type UseInputHistoryOptions = {
 };
 
 type HistoryNav = {
-  /** Position in the stored history the box currently shows. */
+  /**
+   * The entries being walked, snapshotted when recall starts: `index` is a
+   * position in THIS array, so an append from another tab mid-recall cannot
+   * shift what the arrows land on or displace the draft restore.
+   */
+  history: string[];
+  /** Position in `history` the box currently shows. */
   index: number;
   /** What was in the box before recall started, restored by ArrowDown past the newest entry. */
   draft: string;
@@ -117,7 +123,7 @@ export function useInputHistory({ setInput, textareaRef, scope }: UseInputHistor
   const recall = useCallback(
     (history: string[], index: number, draft: string) => {
       const recalled = history[index];
-      navRef.current = { index, draft, recalled };
+      navRef.current = { history, index, draft, recalled };
       setInput(recalled);
       // The controlled update can leave the caret at its old offset; a
       // recalled message should be ready to extend at its end.
@@ -149,7 +155,9 @@ export function useInputHistory({ setInput, textareaRef, scope }: UseInputHistor
         if (value !== '' && !untouched) {
           return false;
         }
-        const history = readInputHistory(scopeRef.current);
+        // A fresh read starts a recall; an in-progress one keeps walking its
+        // own snapshot.
+        const history = untouched ? nav.history : readInputHistory(scopeRef.current);
         if (history.length === 0) {
           return false;
         }
@@ -170,7 +178,7 @@ export function useInputHistory({ setInput, textareaRef, scope }: UseInputHistor
         return false;
       }
       event.preventDefault();
-      const history = readInputHistory(scopeRef.current);
+      const { history } = nav;
       if (nav.index >= history.length - 1) {
         const { draft } = nav;
         navRef.current = null;

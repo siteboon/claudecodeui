@@ -133,6 +133,26 @@ describe('useInputHistory', () => {
     assert.equal(handled, false);
   });
 
+  it('keeps walking the snapshot taken when recall started, even if storage changes', () => {
+    const { result, setCalls } = setUp();
+    act(() => {
+      result.current.recordSentMessage('only message');
+      result.current.handleHistoryKeyDown(keyEvent('ArrowUp', '').event);
+    });
+    assert.deepEqual(setCalls, ['only message']);
+
+    // Another tab appends to this chat's history mid-recall: ArrowDown must
+    // still restore the draft, not surface the foreign entry.
+    localStorage.setItem(
+      'chat-input-history',
+      JSON.stringify({ 'session-1': ['only message', 'from another tab'] }),
+    );
+    act(() => {
+      result.current.handleHistoryKeyDown(keyEvent('ArrowDown', 'only message').event);
+    });
+    assert.deepEqual(setCalls, ['only message', '']);
+  });
+
   it('leaves the arrows alone while the user is editing text', () => {
     const { result, setCalls } = setUp();
     act(() => {
