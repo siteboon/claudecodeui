@@ -53,10 +53,23 @@ const PERMISSION_MODE_ARGS: Record<string, string[]> = {
 const activeProcesses = new Map<string, ChildProcess>();
 
 /**
+ * Monotonic counter for process keys of runs without a session ID, so
+ * concurrent keyless runs can never collide on `agy_<timestamp>`.
+ */
+let keylessRunCounter = 0;
+
+/**
  * Process keys killed by `abort()`. Their `close` event resolves the run
  * quietly and notifies with `stopReason: 'aborted'` instead of completed.
  */
 const abortedProcessKeys = new Set<string>();
+
+/**
+ * How much of the child's stderr is retained for failure reporting. agy
+ * writes actionable errors (auth failures, bad flags, quota) to stderr only;
+ * the tail is what the user sees when the run fails.
+ */
+const STDERR_TAIL_LIMIT = 4_000;
 
 export class AntigravityRuntimeProvider implements IProviderRuntime {
   /**
@@ -87,8 +100,24 @@ export class AntigravityRuntimeProvider implements IProviderRuntime {
       let sessionCreatedSent = false;
       let completeSent = false;
       let settled = false;
+      let sawErrorResult = false;
+      let errorResultMessage: string | null = null;
+      let stderrTail = '';
 
-      const processKey = sessionId || capturedSessionId || `agy_${Date.now()}`;
+      const processKey = sessionId || capturedSessionId || `agy_${Date.now()}_${keylessRunCounter += 1}`;
+
+      /**
+       * Builds the user-facing failure description for a non-zero or
+       * signal-terminated exit, appending the captured stderr tail because
+       * agy reports actionable errors there.
+       */
+      const describeFailure = (code: number | null): string => {
+        const base = code === null
+          ? 'Antigravity CLI terminated by signal.'
+          : `Antigravity CLI exited with code ${code}`;
+        const stderr = stderrTail.trim();
+        return stderr ? `${base}\nstderr:\n${stderr}` : base;
+      };
 
       const settleOnce = (callback: () => void) => {
         if (settled) return;
@@ -99,7 +128,8 @@ export class AntigravityRuntimeProvider implements IProviderRuntime {
       const notifyTerminalState = ({ code = null, error = null }: { code?: number | null; error?: string | Error | null } = {}) => {
         const finalSessionId = sessionId || capturedSessionId || processKey;
         const normalizedUserId = writer.userId != null ? String(writer.userId) : null;
-        if (code === 0 && !error) {
+        const failed = code !== 0 || error !== null || sawErrorResult;
+        if (!failed) {
           notifyRunStopped({
             userId: normalizedUserId,
             provider: PROVIDER,
@@ -113,9 +143,10 @@ export class AntigravityRuntimeProvider implements IProviderRuntime {
             provider: PROVIDER,
             sessionId: finalSessionId,
             sessionName: sessionSummary,
-            error: error || (code === null
-              ? 'Antigravity CLI terminated by signal.'
-              : `Antigravity CLI exited with code ${code}`),
+            error: error
+              || (sawErrorResult
+                ? (errorResultMessage || 'Antigravity CLI reported an error result.')
+                : describeFailure(code)),
           });
         }
       };
@@ -205,8 +236,24 @@ export class AntigravityRuntimeProvider implements IProviderRuntime {
       const processLine = (line: string) => {
         if (!line || !line.trim()) return;
 
+        let raw: unknown;
         try {
-          const raw = JSON.parse(line);
+          raw = JSON.parse(line);
+        } catch {
+          // Not JSON: agy occasionally prints plain progress/notice text on
+          // stdout even in stream-json mode; surface it as a text delta.
+          const deltaMsg = createNormalizedMessage({
+            id: generateMessageId(PROVIDER),
+            kind: 'stream_delta',
+            content: line,
+            sessionId: capturedSessionId || sessionId || null,
+            provider: PROVIDER,
+          });
+          writer.send(deltaMsg);
+          return;
+        }
+
+        try {
           const rawRecord = readObjectRecord(raw);
 
           // Handle init event for session ID capture. Fully handled here:
@@ -242,11 +289,13 @@ export class AntigravityRuntimeProvider implements IProviderRuntime {
             const isError = resultData?.status === 'ERROR' || Boolean(resultData?.error);
             const errorMessage = readOptionalString(resultData?.error);
 
-            if (isError && errorMessage) {
+            if (isError) {
+              sawErrorResult = true;
+              errorResultMessage = errorMessage ?? null;
               writer.send(createNormalizedMessage({
                 id: generateMessageId(PROVIDER),
                 kind: 'error',
-                content: errorMessage,
+                content: errorMessage || 'Antigravity CLI reported an error result.',
                 sessionId: capturedSessionId || sessionId || null,
                 provider: PROVIDER,
                 isError: true,
@@ -273,16 +322,20 @@ export class AntigravityRuntimeProvider implements IProviderRuntime {
           for (const msg of normalized) {
             writer.send(msg);
           }
-        } catch {
-          // If not JSON, treat as text stream delta
-          const deltaMsg = createNormalizedMessage({
+        } catch (error) {
+          // The event WAS valid JSON, so a throw here is a normalization bug
+          // or an unexpected payload shape — report it as an error instead of
+          // masquerading raw JSON as assistant text.
+          const detail = error instanceof Error ? error.message : String(error);
+          console.error('[AntigravityRuntime] Failed to process provider event:', detail, line);
+          writer.send(createNormalizedMessage({
             id: generateMessageId(PROVIDER),
-            kind: 'stream_delta',
-            content: line,
+            kind: 'error',
+            content: `Antigravity event could not be processed: ${detail}`,
             sessionId: capturedSessionId || sessionId || null,
             provider: PROVIDER,
-          });
-          writer.send(deltaMsg);
+            isError: true,
+          }));
         }
       };
 
@@ -307,6 +360,7 @@ export class AntigravityRuntimeProvider implements IProviderRuntime {
       agyProcess.stderr?.on('data', (data: Buffer) => {
         const text = data.toString('utf8');
         console.warn('[Antigravity CLI stderr]:', text);
+        stderrTail = (stderrTail + text).slice(-STDERR_TAIL_LIMIT);
       });
 
       agyProcess.on('close', (code: number | null) => {
@@ -342,11 +396,25 @@ export class AntigravityRuntimeProvider implements IProviderRuntime {
           return;
         }
 
+        // agy reports actionable errors (auth, quota, bad flags) on stderr
+        // only; surface the captured tail to the user instead of leaving it
+        // in the server console.
+        if (code !== 0 && stderrTail.trim()) {
+          writer.send(createNormalizedMessage({
+            id: generateMessageId(PROVIDER),
+            kind: 'error',
+            content: describeFailure(code),
+            sessionId: capturedSessionId || sessionId || null,
+            provider: PROVIDER,
+            isError: true,
+          }));
+        }
+
         notifyTerminalState({ code });
         if (code === 0) {
           settleOnce(() => resolve({ sessionId: capturedSessionId || sessionId, success: true }));
         } else {
-          settleOnce(() => reject(new Error(`Antigravity CLI exited with code ${code ?? 'signal'}`)));
+          settleOnce(() => reject(new Error(describeFailure(code))));
         }
       });
 

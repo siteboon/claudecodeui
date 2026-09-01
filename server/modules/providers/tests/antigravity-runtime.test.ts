@@ -19,6 +19,7 @@ import type {
   ProviderRuntimeContext,
   ProviderRuntimeWriter,
 } from '@/shared/types.js';
+import { readObjectRecord } from '@/shared/utils.js';
 
 import { AntigravityRuntimeProvider } from '../list/antigravity/antigravity-runtime.provider.js';
 import { AntigravitySessionsProvider } from '../list/antigravity/antigravity-sessions.provider.js';
@@ -30,9 +31,25 @@ const argsFilePath = path.join(stubDir, 'args.txt');
 const stubScript = `#!/usr/bin/env node
 const fs = require('fs');
 fs.writeFileSync(process.env.AGY_ARGS_FILE, process.argv.slice(2).join('\\n') + '\\n');
-if (process.env.AGY_STUB_MODE === 'sleep') {
+const mode = process.env.AGY_STUB_MODE;
+if (mode === 'sleep') {
   process.on('SIGTERM', () => process.exit(0));
   setInterval(() => {}, 1000);
+} else if (mode === 'fail') {
+  console.error('agy: quota exceeded for project');
+  process.exit(1);
+} else if (mode === 'error-result') {
+  console.log(JSON.stringify({ event: 'init', conversation_id: 'stub-conv-err', init: { cwd: '/tmp' } }));
+  console.log(JSON.stringify({ event: 'result', result: { conversation_id: 'stub-conv-err', status: 'ERROR', error: 'model overloaded' } }));
+} else if (mode === 'noisy') {
+  console.log('connecting to backend...');
+  console.log(JSON.stringify({ event: 'init', conversation_id: 'stub-conv-noisy', init: { cwd: '/tmp' } }));
+  console.log(JSON.stringify({ event: 'step_update', step_update: { conversation_id: 'stub-conv-noisy', step_index: 2, state: 'DONE', step_type: 'agent_response', text_delta: 'OK' } }));
+  console.log(JSON.stringify({ event: 'result', result: { conversation_id: 'stub-conv-noisy', status: 'SUCCESS', usage: { total_tokens: 7 } } }));
+} else if (mode === 'explosive') {
+  console.log(JSON.stringify({ event: 'init', conversation_id: 'stub-conv-boom', init: { cwd: '/tmp' } }));
+  console.log(JSON.stringify({ event: 'explosive', payload: true }));
+  console.log(JSON.stringify({ event: 'result', result: { conversation_id: 'stub-conv-boom', status: 'SUCCESS', usage: { total_tokens: 1 } } }));
 } else {
   console.log(JSON.stringify({ event: 'init', conversation_id: 'stub-conv-1', init: { cwd: '/tmp' } }));
   console.log(JSON.stringify({ event: 'step_update', step_update: { conversation_id: 'stub-conv-1', step_index: 2, state: 'DONE', step_type: 'agent_response', text_delta: 'OK' } }));
@@ -211,3 +228,91 @@ test('runtime normalizes model with embedded effort suffix and avoids conflictin
   assert.equal(args[args.indexOf('--effort') + 1], 'high');
 });
 
+
+test('runtime surfaces stderr from a failed run as an error message', async () => {
+  const runtime = new AntigravityRuntimeProvider();
+  await fs.rm(argsFilePath, { force: true });
+  process.env.AGY_STUB_MODE = 'fail';
+  try {
+    const { messages, writer } = createWriter();
+    await assert.rejects(
+      runtime.run('hello', { sessionId: 'sess-stderr' }, writer, context),
+      /quota exceeded/,
+      'the rejection reason must carry the stderr tail',
+    );
+
+    const error = messages.find((msg) => msg.kind === 'error');
+    assert.ok(error, 'an error message must reach the writer');
+    assert.match(String(error?.content), /quota exceeded/);
+    const complete = messages.find((msg) => msg.kind === 'complete');
+    assert.equal(complete?.exitCode, 1);
+  } finally {
+    delete process.env.AGY_STUB_MODE;
+  }
+});
+
+test('runtime reports provider error results even with a zero exit code', async () => {
+  const runtime = new AntigravityRuntimeProvider();
+  await fs.rm(argsFilePath, { force: true });
+  process.env.AGY_STUB_MODE = 'error-result';
+  try {
+    const { messages, writer } = createWriter();
+    const result = await runtime.run('hello', { sessionId: 'sess-err-result' }, writer, context);
+
+    const error = messages.find((msg) => msg.kind === 'error');
+    assert.ok(error, 'an ERROR result must surface an error message');
+    assert.equal(error?.content, 'model overloaded');
+    const complete = messages.find((msg) => msg.kind === 'complete');
+    assert.equal(complete?.exitCode, 1);
+    assert.deepEqual(result, { sessionId: 'stub-conv-err', success: true });
+  } finally {
+    delete process.env.AGY_STUB_MODE;
+  }
+});
+
+test('runtime keeps plain-text stdout as stream deltas', async () => {
+  const runtime = new AntigravityRuntimeProvider();
+  await fs.rm(argsFilePath, { force: true });
+  process.env.AGY_STUB_MODE = 'noisy';
+  try {
+    const { messages, writer } = createWriter();
+    await runtime.run('hello', { sessionId: 'sess-noisy' }, writer, context);
+
+    const delta = messages.find((msg) => msg.kind === 'stream_delta');
+    assert.equal(delta?.content, 'connecting to backend...');
+    assert.equal(messages.some((msg) => msg.kind === 'error'), false);
+  } finally {
+    delete process.env.AGY_STUB_MODE;
+  }
+});
+
+test('runtime reports normalization failures as errors instead of raw text', async () => {
+  const runtime = new AntigravityRuntimeProvider();
+  await fs.rm(argsFilePath, { force: true });
+  process.env.AGY_STUB_MODE = 'explosive';
+  try {
+    const throwingContext: ProviderRuntimeContext = {
+      ...context,
+      normalizeMessage: (raw, sessionId) => {
+        const record = readObjectRecord(raw);
+        if (record?.event === 'explosive') {
+          throw new Error('norm boom');
+        }
+        return context.normalizeMessage(raw, sessionId);
+      },
+    };
+    const { messages, writer } = createWriter();
+    await runtime.run('hello', { sessionId: 'sess-explosive' }, writer, throwingContext);
+
+    const error = messages.find((msg) => msg.kind === 'error');
+    assert.ok(error, 'a normalization failure must surface an error message');
+    assert.match(String(error?.content), /norm boom/);
+    // The raw JSON line must NOT be forwarded as assistant text.
+    assert.equal(
+      messages.some((msg) => msg.kind === 'stream_delta' && String(msg.content).includes('explosive')),
+      false,
+    );
+  } finally {
+    delete process.env.AGY_STUB_MODE;
+  }
+});

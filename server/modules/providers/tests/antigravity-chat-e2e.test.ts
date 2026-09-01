@@ -42,10 +42,15 @@ const stubDir = fsSync.mkdtempSync(path.join(os.tmpdir(), 'agy-e2e-stub-'));
 const stubPath = path.join(stubDir, 'agy');
 const argsFilePath = path.join(stubDir, 'args.txt');
 const sleepModeMarkerPath = path.join(stubDir, 'sleep-mode');
+const failModeMarkerPath = path.join(stubDir, 'fail-mode');
 
 const stubScript = `#!/usr/bin/env node
 const fs = require('fs');
 fs.writeFileSync(process.env.AGY_ARGS_FILE, process.argv.slice(2).join('\\n') + '\\n');
+if (process.env.AGY_FAIL_FILE && fs.existsSync(process.env.AGY_FAIL_FILE)) {
+  console.error('agy: quota exceeded for project');
+  process.exit(1);
+}
 if (process.env.AGY_MODE_FILE && fs.existsSync(process.env.AGY_MODE_FILE)) {
   process.on('SIGTERM', () => process.exit(0));
   setInterval(() => {}, 1000);
@@ -114,6 +119,7 @@ before(async () => {
       CLOUDCLI_ANTIGRAVITY_DATA_DIR: agyDataDir,
       AGY_ARGS_FILE: argsFilePath,
       AGY_MODE_FILE: sleepModeMarkerPath,
+      AGY_FAIL_FILE: failModeMarkerPath,
     },
   });
   serverProcess.stdout?.on('data', (chunk: Buffer) => serverOutput.push(chunk.toString()));
@@ -335,6 +341,39 @@ test('chat.abort stops a running agy process and emits exactly one aborted compl
     assert.equal(messagesHaveKind(ws, 'error'), false, 'abort must not surface as an error');
   } finally {
     await fs.rm(sleepModeMarkerPath, { force: true });
+    ws.close();
+  }
+});
+
+test('a failing agy run surfaces stderr to the WebUI client and still completes', async () => {
+  const ws = await connectWebSocket();
+  try {
+    await fs.writeFile(failModeMarkerPath, 'fail');
+    const appSessionId = await createAppSession('trigger failure');
+    sendChat(ws, appSessionId, 'trigger failure');
+
+    await waitFor(ws, (msg) => (
+      msg.kind === 'error' && msg.sessionId === appSessionId
+        && String(msg.content).includes('quota exceeded')
+    ), 'error carrying the stderr tail');
+
+    const completions = new Map<string, WireMessage>();
+    const messages = (ws as WebSocket & { messages: WireMessage[] }).messages;
+    const deadline = Date.now() + 15_000;
+    while (Date.now() < deadline) {
+      for (const msg of messages) {
+        if (msg.kind === 'complete' && msg.sessionId === appSessionId) {
+          completions.set(String(msg.id), msg);
+        }
+      }
+      if (completions.size > 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    const completionList = [...completions.values()];
+    assert.equal(completionList.length, 1, `expected exactly one complete, got ${JSON.stringify(completionList)}`);
+    assert.equal(completionList[0].exitCode, 1);
+  } finally {
+    await fs.rm(failModeMarkerPath, { force: true });
     ws.close();
   }
 });
