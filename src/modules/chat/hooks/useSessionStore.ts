@@ -7,7 +7,7 @@
  * No localStorage for messages. Backend JSONL is the source of truth.
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '@/shared/api';
 import type { LLMProvider, NormalizedMessage } from '@/shared/types';
@@ -556,9 +556,27 @@ export function useSessionStore() {
   // allocates them before the first send), so slots are keyed directly with
   // no alias/redirect indirection.
   const [, setTick] = useState(0);
+  // Coalesce re-renders to one animation frame. A Workflow or multi-subagent
+  // run emits hundreds of events per second and every tick rebuilt the entire
+  // transcript (including JSON.stringify of every tool input), which pegged the
+  // tab. Events are already buffered in the store, so nothing is lost.
+  const notifyFrameRef = useRef<number | null>(null);
   const notify = useCallback((sessionId: string) => {
-    if (sessionId === activeSessionIdRef.current) {
+    if (sessionId !== activeSessionIdRef.current) {
+      return;
+    }
+    if (notifyFrameRef.current !== null) {
+      return;
+    }
+    notifyFrameRef.current = requestAnimationFrame(() => {
+      notifyFrameRef.current = null;
       setTick(n => n + 1);
+    });
+  }, []);
+
+  useEffect(() => () => {
+    if (notifyFrameRef.current !== null) {
+      cancelAnimationFrame(notifyFrameRef.current);
     }
   }, []);
 
