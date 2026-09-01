@@ -154,6 +154,13 @@
         "label": "字型大小",
         "description": "編輯器字型大小（px）"
       }
+    },
+    "mobileNavigation": {
+      "title": "行動裝置導覽",
+      "backOpensSessionList": {
+        "label": "返回鍵開啟工作階段清單",
+        "description": "在手機尺寸的螢幕上，工作階段清單關閉時，返回操作會開啟清單，而不是離開頁面。如果清單已開啟，返回操作會照常導覽。頁面剛載入後，在你與頁面互動之前，返回操作維持不變。"
+      }
     }
   },
   "mcpForm": {
