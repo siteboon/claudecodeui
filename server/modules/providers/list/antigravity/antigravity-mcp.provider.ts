@@ -70,9 +70,20 @@ const findProjectConfigPath = async (workspacePath: string): Promise<string | nu
 };
 
 /**
- * Resolves the user-level global MCP config file path.
+ * Resolves the user-level global MCP config file path. agy 1.1+ keeps its
+ * global MCP config in `~/.gemini/config/mcp_config.json`; the previous
+ * `~/.gemini/antigravity/` location only exists on old installations and is
+ * kept as a read-only fallback.
  */
 const resolveUserConfigPath = (): string => (
+  path.join(os.homedir(), '.gemini', 'config', 'mcp_config.json')
+);
+
+/**
+ * Resolves the legacy user-level MCP config location written by older agy
+ * versions. Used only for reading; writes always go to the current path.
+ */
+const resolveLegacyUserConfigPath = (): string => (
   path.join(os.homedir(), '.gemini', 'antigravity', 'mcp_config.json')
 );
 
@@ -101,13 +112,15 @@ export class AntigravityMcpProvider extends McpProvider {
       }
     }
 
-    // User scope
-    const configPath = resolveUserConfigPath();
-    try {
-      return readServerRecords(await readJsonConfig(configPath));
-    } catch {
-      return {};
+    // User scope. `readJsonConfig` resolves a missing file to `{}` instead of
+    // throwing, so fall back to the legacy location when the current one yields
+    // no servers rather than via a catch.
+    const currentServers = readServerRecords(await readJsonConfig(resolveUserConfigPath()));
+    if (Object.keys(currentServers).length > 0) {
+      return currentServers;
     }
+
+    return readServerRecords(await readJsonConfig(resolveLegacyUserConfigPath()));
   }
 
   /**

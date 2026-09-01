@@ -51,8 +51,8 @@ flowchart LR
 - **数据存储布局**：
   - 会话索引：`~/.gemini/antigravity-cli/conversation_summaries.db`（表 `conversation_summaries` 包含 `conversation_id, title, workspace_uris, last_modified_time`）。
   - 轨迹日志：`~/.gemini/antigravity-cli/brain/<id>/.system_generated/logs/transcript.jsonl`。
-  - 全局配置与 MCP：`~/.gemini/antigravity-cli/settings.json` 与 `~/.gemini/antigravity/mcp_config.json`。
-  - 技能目录：工作区 `.agents/skills` 与全局 `~/.agents/skills`（修正：最初调研记录的 `~/.gemini/antigravity/skills` 实测不存在；实测 `agy` 能发现并执行 `~/.agents/skills` 下的技能）。
+  - 全局配置与 MCP：`~/.gemini/antigravity-cli/settings.json` 与 `~/.gemini/config/mcp_config.json`（agy 1.1+ 的实际位置；旧版 `~/.gemini/antigravity/mcp_config.json` 仅作只读兜底）。
+  - 技能目录：工作区 `.agents/skills` 与全局 `~/.gemini/config/skills`（从 agy 1.1.16 二进制内嵌字符串确认；`~/.agents/skills` 保留为兼容源）。
 
 ---
 
@@ -105,9 +105,9 @@ server/modules/providers/list/antigravity/
    - `getSupportedModels()`：通过 `agy models </dev/null` 获取模型列表并缓存 5 分钟；失败回退到内置模型列表（`gemini-3.7-flash-high`, `gemini-3.1-pro-high`, `claude-sonnet-4-6` 等），默认 `gemini-3.7-flash-high`。
    - `getCurrentActiveModel(sessionId)`：从 `settings.json` 或会话记录读取。
 5. **MCP 适配 (`antigravity-mcp.provider.ts`)**：
-   - 继承 `McpProvider`，读写 `~/.gemini/antigravity/mcp_config.json` 及工作区 `.gemini/mcp_config.json`（支持 stdio、http、sse）。
+   - 继承 `McpProvider`，读写 `~/.gemini/config/mcp_config.json`（旧版 `~/.gemini/antigravity/mcp_config.json` 只读兜底）及工作区 `.gemini/mcp_config.json`（支持 stdio、http、sse）。
 6. **技能发现 (`antigravity-skills.provider.ts`)**：
-   - 继承 `SkillsProvider`，列出三个源：工作区 `.agents/skills`、全局 `~/.agents/skills`（agy 实际读取的全局目录）、`~/.gemini/antigravity/skills`（兜底，实测通常不存在），前缀 `/`；用户级技能写入目标为 `~/.agents/skills`。
+   - 继承 `SkillsProvider`，列出三个源：工作区 `.agents/skills`、全局 `~/.gemini/config/skills`（agy 实际读取的全局目录）、`~/.agents/skills`（兼容源），前缀 `/`；用户级技能写入目标为 `~/.gemini/config/skills`。
 7. **会话与历史 (`antigravity-sessions.provider.ts`)**：
    - 实现 `normalizeMessage`；
    - `fetchHistory` 读取 `brain/<id>/.system_generated/logs/transcript.jsonl`，支持 `sliceTailPage` 分页。

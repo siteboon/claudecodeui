@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
+import test, { mock } from 'node:test';
 
 import { AntigravityProviderAuth } from '../list/antigravity/antigravity-auth.provider.js';
 import { AntigravityProviderModels } from '../list/antigravity/antigravity-models.provider.js';
@@ -111,6 +111,27 @@ test('AntigravitySkillsProvider returns correct skill roots', async () => {
   assert.ok(Array.isArray(list));
 });
 
+test('AntigravitySkillsProvider discovers user skills from ~/.gemini/config/skills', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agy-skills-test-'));
+  const restoreHomedir = mock.method(os, 'homedir', () => tempDir);
+
+  try {
+    const skillDir = path.join(tempDir, '.gemini', 'config', 'skills', 'demo-skill');
+    await fs.mkdir(skillDir, { recursive: true });
+    await fs.writeFile(path.join(skillDir, 'SKILL.md'), '---\nname: demo-skill\ndescription: Demo\n---\n\nBody\n', 'utf8');
+
+    const skills = new AntigravitySkillsProvider();
+    const list = await skills.listSkills({ workspacePath: '/mock/workspace' });
+    const demo = list.find((skill) => skill.name === 'demo-skill');
+    assert.ok(demo);
+    assert.equal(demo.scope, 'user');
+    assert.ok(demo.sourcePath.includes(path.join('.gemini', 'config', 'skills')));
+  } finally {
+    restoreHomedir.mock.restore();
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('AntigravityMcpProvider handles project-level mcp_config.json', async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agy-mcp-test-'));
   const mcp = new AntigravityMcpProvider();
@@ -139,6 +160,57 @@ test('AntigravityMcpProvider handles project-level mcp_config.json', async () =>
     const remaining = await mcp.listServersForScope('project', { workspacePath: tempDir });
     assert.equal(remaining.length, 0);
   } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('AntigravityMcpProvider reads and writes user scope in ~/.gemini/config', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agy-mcp-user-test-'));
+  const restoreHomedir = mock.method(os, 'homedir', () => tempDir);
+  const mcp = new AntigravityMcpProvider();
+
+  try {
+    await mcp.upsertServer({
+      scope: 'user',
+      workspacePath: '/mock/workspace',
+      name: 'user-mcp',
+      transport: 'stdio',
+      command: 'node',
+      args: ['server.js'],
+    });
+
+    const configPath = path.join(tempDir, '.gemini', 'config', 'mcp_config.json');
+    const written = JSON.parse(await fs.readFile(configPath, 'utf8')) as {
+      mcpServers?: Record<string, unknown>;
+    };
+    assert.ok(written.mcpServers?.['user-mcp']);
+
+    const servers = await mcp.listServersForScope('user', { workspacePath: '/mock/workspace' });
+    assert.equal(servers.length, 1);
+    assert.equal(servers[0]?.name, 'user-mcp');
+  } finally {
+    restoreHomedir.mock.restore();
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('AntigravityMcpProvider falls back to legacy user config when current one is missing', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agy-mcp-legacy-test-'));
+  const restoreHomedir = mock.method(os, 'homedir', () => tempDir);
+
+  try {
+    const legacyPath = path.join(tempDir, '.gemini', 'antigravity', 'mcp_config.json');
+    await fs.mkdir(path.dirname(legacyPath), { recursive: true });
+    await fs.writeFile(legacyPath, JSON.stringify({
+      mcpServers: { 'legacy-mcp': { command: 'node', args: ['legacy.js'] } },
+    }), 'utf8');
+
+    const mcp = new AntigravityMcpProvider();
+    const servers = await mcp.listServersForScope('user', { workspacePath: '/mock/workspace' });
+    assert.equal(servers.length, 1);
+    assert.equal(servers[0]?.name, 'legacy-mcp');
+  } finally {
+    restoreHomedir.mock.restore();
     await fs.rm(tempDir, { recursive: true, force: true });
   }
 });

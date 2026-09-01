@@ -2,7 +2,7 @@
  * Antigravity Skills Provider
  *
  * Implements skill discovery for the Antigravity CLI (agy).
- * Discovers skills in `.agents/skills` and `~/.gemini/antigravity/skills`.
+ * Discovers skills in `<workspace>/.agents/skills` and `~/.gemini/config/skills`.
  *
  * @module antigravity-skills.provider
  */
@@ -20,6 +20,9 @@ export class AntigravitySkillsProvider extends SkillsProvider {
 
   /**
    * Returns Antigravity skill sources for project and user scopes.
+   *
+   * agy reads user-level skills from `~/.gemini/config/skills/<name>/SKILL.md`;
+   * `~/.agents/skills` is kept as a secondary source for cross-tool setups.
    */
   protected async getSkillSources(workspacePath: string): Promise<ProviderSkillSource[]> {
     return [
@@ -30,7 +33,7 @@ export class AntigravitySkillsProvider extends SkillsProvider {
       },
       {
         scope: 'user',
-        rootDir: path.join(os.homedir(), '.gemini', 'antigravity', 'skills'),
+        rootDir: path.join(os.homedir(), '.gemini', 'config', 'skills'),
         commandPrefix: '/',
       },
       {
@@ -47,7 +50,7 @@ export class AntigravitySkillsProvider extends SkillsProvider {
   protected async getGlobalSkillSource(): Promise<ProviderSkillSource> {
     return {
       scope: 'user',
-      rootDir: path.join(os.homedir(), '.agents', 'skills'),
+      rootDir: path.join(os.homedir(), '.gemini', 'config', 'skills'),
       commandPrefix: '/',
     };
   }

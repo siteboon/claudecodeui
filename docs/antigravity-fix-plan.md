@@ -140,8 +140,8 @@ if (skipPermissions && !args.includes('--dangerously-skip-permissions')) {
 
 ### 5.2 集成方案文档回改（`antigravity-integration-plan.md`）
 
-- §2 与 §4.1.6：全局技能目录由 `~/.gemini/antigravity/skills` 修正为 `~/.agents/skills`（实测前者不存在；实测 agy 能发现并执行 `~/.agents/skills` 下的 `/checkpoint` 技能；实现代码即按此生效，属文档过时而非代码缺陷）。
-- §4.1.6：补记 skills provider 实际列出三个源（workspace `.agents/skills`、`~/.agents/skills`、`~/.gemini/antigravity/skills` 兜底），全局写入目标为 `~/.agents/skills`。
+- §2 与 §4.1.6：全局技能目录由 `~/.gemini/antigravity/skills` 修正为 `~/.agents/skills`（实测前者不存在；实测 agy 能发现并执行 `~/.agents/skills` 下的 `/checkpoint` 技能；实现代码即按此生效，属文档过时而非代码缺陷）。**2026-09-01 修订**：经 agy 1.1.16 二进制内嵌字符串确认，agy 真正读取的全局技能目录是 `~/.gemini/config/skills`，`~/.agents/skills` 实为兼容源，代码已随本次修正。
+- §4.1.6：补记 skills provider 实际列出三个源（workspace `.agents/skills`、全局 `~/.gemini/config/skills`、`~/.agents/skills` 兼容源），全局写入目标为 `~/.gemini/config/skills`。
 - §6.2 验收清单：补一条「权限模式四档分别生效」的验收项；该清单此前无权限模式条目，而 P0-1 恰在此处断链，属验收覆盖缺口。
 
 ### 5.3 明确不改动项
