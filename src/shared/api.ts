@@ -12,12 +12,25 @@ export type ApiRequestOptions = Omit<RequestInit, 'headers'> & {
   headers?: Record<string, string>;
 };
 
+let authRequestSequence = 0;
+let lastAuthorizedRequest = 0;
+
+const rejectionStillApplies = (requestSequence: number, sentToken: string | null): boolean => {
+  if (requestSequence < lastAuthorizedRequest) {
+    return false;
+  }
+
+  const storedToken = localStorage.getItem('auth-token');
+  return sentToken ? storedToken === sentToken : storedToken === null;
+};
+
 // Utility function for authenticated API calls
 export const authenticatedFetch = (
   url: string,
   options: ApiRequestOptions = {},
 ): Promise<Response> => {
   const token = getStoredAuthToken();
+  const requestSequence = (authRequestSequence += 1);
 
   const defaultHeaders: Record<string, string> = {};
 
@@ -42,7 +55,11 @@ export const authenticatedFetch = (
       storeAuthToken(refreshedToken);
     }
     if (response.headers.get('X-Auth-Error')) {
-      expireAuthSession();
+      if (rejectionStillApplies(requestSequence, token)) {
+        expireAuthSession();
+      }
+    } else if (response.ok && requestSequence > lastAuthorizedRequest) {
+      lastAuthorizedRequest = requestSequence;
     }
     return response;
   });
