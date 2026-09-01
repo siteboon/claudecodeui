@@ -14,7 +14,7 @@ export default function SidebarProjectList({
   selectedSession,
   isLoading,
   loadingProgress,
-  expandedProjects,
+  isProjectExpanded,
   activeRename,
   initialSessionsLoaded,
   currentTime,
@@ -27,7 +27,6 @@ export default function SidebarProjectList({
   loadingMoreProjects,
   activeSessions,
   attentionSessionIds,
-  forceExpanded = false,
   isProjectStarred,
   onRenameDraftChange,
   onToggleProject,
@@ -88,7 +87,7 @@ export default function SidebarProjectList({
                 project={project}
                 selectedProject={selectedProject}
                 selectedSession={selectedSession}
-                isExpanded={forceExpanded || expandedProjects.has(project.projectId)}
+                isExpanded={isProjectExpanded(project.projectId)}
                 isDeleting={deletingProjects.has(project.projectId)}
                 isStarred={isProjectStarred(project.projectId)}
                 isEditing={renamingProject !== null}
