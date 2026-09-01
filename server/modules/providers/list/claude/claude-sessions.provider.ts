@@ -162,7 +162,7 @@ async function readClaudeSubagentTranscript(filePath: string): Promise<ClaudeSub
                   ? part.content
                     .map((contentPart: AnyRecord) => contentPart?.text || '')
                     .join('\n')
-                  : JSON.stringify(part.content),
+                  : JSON.stringify(part.content ?? null),
               isError: Boolean(part.is_error),
             };
           }
@@ -785,7 +785,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
               provider: PROVIDER,
               kind: 'tool_result',
               toolId: part.tool_use_id,
-              content: typeof part.content === 'string' ? part.content : JSON.stringify(part.content),
+              content: typeof part.content === 'string' ? part.content : JSON.stringify(part.content ?? null),
               isError: Boolean(part.is_error),
               toolUseResult: raw.toolUseResult,
             }));
@@ -1145,7 +1145,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
         msg.toolResult = {
           content: typeof toolResult.content === 'string'
             ? toolResult.content
-            : JSON.stringify(toolResult.content),
+            : JSON.stringify(toolResult.content ?? null),
           isError: toolResult.isError,
           toolUseResult: toolResult.toolUseResult,
         };

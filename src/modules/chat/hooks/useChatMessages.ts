@@ -7,7 +7,11 @@ import type { ChatMessage,NormalizedMessage,SubagentActivity } from '@/shared/ty
 import { formatUsageLimitText } from '@/modules/chat/utils/chatFormatting';
 
 function formatToolResultContent(content: unknown): string {
-  const text = typeof content === 'string' ? content : JSON.stringify(content);
+  // JSON.stringify(undefined) returns undefined, not a string. A tool_result
+  // block that omits `content` therefore threw on .trim(), which unmounted the
+  // whole chat pane via the ErrorBoundary in MainContent.
+  const serialized = typeof content === 'string' ? content : JSON.stringify(content);
+  const text = serialized ?? '';
   const toolUseErrorMatch = /^<tool_use_error>([\s\S]*)<\/tool_use_error>$/.exec(text.trim());
   return toolUseErrorMatch ? toolUseErrorMatch[1] : text;
 }
