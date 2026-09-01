@@ -102,3 +102,12 @@ test('streaming replies render normalized LaTeX through MarkdownBody', () => {
 
   assert.equal(container.querySelectorAll('.katex').length, 1);
 });
+
+test('Markdown keeps escaped LaTeX delimiters out of math', () => {
+  const escapedPair = String.raw`\\[ \theta \\]`;
+  const escapedCloser = String.raw`\[ \rho \\]`;
+  const { container } = renderMarkdown(`${escapedPair}\n\n${escapedCloser}`);
+
+  assert.equal(container.querySelector('.katex'), null);
+  assert.equal(container.textContent?.includes('$$'), false, 'delimiters must not become math');
+});

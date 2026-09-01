@@ -62,8 +62,10 @@ const MATH_DELIMITER = /\$\$/;
 
 // Match code before LaTeX so delimiter-like text in code stays literal. The fence
 // branch also covers an unfinished streamed fence by consuming through the end.
+// Both LaTeX delimiters require an unescaped backslash on each side, so text
+// that spells out `\\[ ... \\]` stays prose instead of turning into math.
 const CODE_OR_LATEX_MATH =
-  /^ {0,3}((`|~)\2{2,})(?!\2)[^\r\n]*(?:\r?\n|$)[\s\S]*?(?:^ {0,3}\1\2*[ \t]*(?=\r?$)|$(?![\s\S]))|(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\3(?!`)|\$\$[\s\S]*?\$\$|\\\[([\s\S]*?)\\\]|\\\(([\s\S]*?)\\\)/gm;
+  /^ {0,3}((`|~)\2{2,})(?!\2)[^\r\n]*(?:\r?\n|$)[\s\S]*?(?:^ {0,3}\1\2*[ \t]*(?=\r?$)|$(?![\s\S]))|(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\3(?!`)|\$\$[\s\S]*?\$\$|(?<!\\)\\\[([\s\S]*?)(?<!\\)\\\]|(?<!\\)\\\(([\s\S]*?)(?<!\\)\\\)/gm;
 
 const normalizeLatexDelimiters = (text: string): string =>
   text.replace(
