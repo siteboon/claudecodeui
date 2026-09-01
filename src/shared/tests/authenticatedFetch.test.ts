@@ -215,3 +215,23 @@ test('an ordinary response leaves the stored token alone', async () => {
 
   assert.equal(localStorage.getItem('auth-token'), token);
 });
+
+test('a caller Authorization header cannot end the stored session', async () => {
+  const token = liveToken();
+  const otherToken = liveToken().replace('signature', 'other');
+  localStorage.setItem('auth-token', token);
+  let expiries = 0;
+  const onExpired = () => {
+    expiries += 1;
+  };
+  window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, onExpired);
+  respondWith({ 'X-Auth-Error': 'invalid-token' });
+
+  await (await loadFetch(false))('/api/projects', {
+    headers: { Authorization: `Bearer ${otherToken}` },
+  });
+
+  window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, onExpired);
+  assert.equal(expiries, 0);
+  assert.equal(localStorage.getItem('auth-token'), token);
+});
