@@ -19,9 +19,11 @@ async function withIsolatedDatabase(
 
   closeConnection();
   process.env.DATABASE_PATH = databasePath;
-  await initializeDatabase();
 
   try {
+    // Inside the try: a failed init must still restore DATABASE_PATH and
+    // remove the temporary directory.
+    await initializeDatabase();
     await runTest(databasePath);
   } finally {
     closeConnection();

@@ -118,10 +118,19 @@ export function getConnection(): Database.Database {
 
   try {
     // Several processes can hold this file open at once (server, CLI, dev
-    // watcher). WAL keeps readers from blocking the writer, and the busy
-    // timeout makes a contended statement wait rather than fail immediately.
-    connection.pragma('journal_mode = WAL');
+    // watcher). The busy timeout comes first so the journal-mode switch, which
+    // needs a brief exclusive lock, waits for a contended file instead of
+    // failing outright; WAL then keeps readers from blocking the writer.
     connection.pragma('busy_timeout = 5000');
+    const journalMode = connection.pragma('journal_mode = WAL', { simple: true });
+
+    // SQLite answers with the mode actually in force, so a file on a mount
+    // that cannot do WAL (NFS, some container volumes) silently stays on
+    // rollback journaling. That is slower under concurrency but still correct,
+    // so it belongs in the log rather than in a refusal to start.
+    if (journalMode !== 'wal') {
+      console.warn(`[Database] WAL unavailable for ${dbPath}; journal mode is '${journalMode}'`);
+    }
 
     // app_config must exist immediately — the auth middleware reads
     // the JWT secret at module-load time, before initializeDatabase() runs.

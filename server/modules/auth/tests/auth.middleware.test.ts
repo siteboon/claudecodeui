@@ -18,11 +18,13 @@ async function withMiddleware(
   // Dynamic on purpose: both modules open the database at import time, so the
   // disposable DATABASE_PATH above has to be in place before they load.
   const { closeConnection, initializeDatabase } = await import('@/modules/database/index.js');
-  await initializeDatabase();
-
-  const { authenticateToken } = await import('@/modules/auth/index.js');
 
   try {
+    // Inside the try: a failed init or import must still restore
+    // DATABASE_PATH and remove the temporary directory.
+    await initializeDatabase();
+
+    const { authenticateToken } = await import('@/modules/auth/index.js');
     await runTest(authenticateToken);
   } finally {
     closeConnection();
