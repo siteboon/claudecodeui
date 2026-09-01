@@ -9,7 +9,11 @@ import type { PendingPermissionRequest, PermissionMode,
   ProviderModelActions,
   ProviderModelOption,
   ProviderModelsDefinition } from '@/shared/types';
-import { DEFAULT_EFFORT_VALUE } from '@/shared/constants';
+import {
+  DEFAULT_EFFORT_VALUE,
+  OMP_CONFIGURED_MODEL_LABEL,
+  OMP_CONFIGURED_MODEL_SENTINEL,
+} from '@/shared/constants';
 import { readSelectedProvider, writeSelectedProvider } from '@/shared/selectedProvider';
 
 const FALLBACK_PROVIDER_EFFORT_VALUES: Partial<Record<LLMProvider, readonly string[]>> = {
@@ -24,6 +28,10 @@ const FALLBACK_PROVIDER_EFFORT_VALUES: Partial<Record<LLMProvider, readonly stri
   opencode: ['none', 'low', 'medium', 'high', 'xhigh', 'max'],
 };
 
+const FALLBACK_MODEL_OPTIONS: Partial<Record<LLMProvider, ProviderModelOption[]>> = {
+  omp: [{ value: OMP_CONFIGURED_MODEL_SENTINEL, label: OMP_CONFIGURED_MODEL_LABEL }],
+};
+
 const toProviderEffortOptions = (
   values: readonly string[],
 ): NonNullable<ProviderModelOption['effort']>['values'] => values.map((value) => ({ value }));
@@ -33,9 +41,10 @@ const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   cursor: 'gpt-5.3-codex',
   codex: 'gpt-5.4',
   opencode: 'anthropic/claude-sonnet-4-5',
+  omp: OMP_CONFIGURED_MODEL_SENTINEL,
 };
 
-const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode'];
+const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode', 'omp'];
 
 /** localStorage key holding the user's default model for one provider. */
 const providerModelStorageKey = (provider: LLMProvider): string => `${provider}-model`;
@@ -51,6 +60,7 @@ const FALLBACK_PERMISSION_MODES: Record<LLMProvider, PermissionMode[]> = {
   cursor: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
   codex: ['default', 'acceptEdits', 'bypassPermissions'],
   opencode: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
+  omp: ['default', 'plan', 'bypassPermissions'],
 };
 
 type ProviderCapabilities = {
@@ -341,6 +351,12 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     model: string,
     currentEffort: string,
   ): string => {
+    // OMP thinking levels come from its live model catalog. Until that boundary
+    // resolves, an empty option list means "unknown", not "unsupported".
+    if (targetProvider === 'omp' && !providerModelCatalog.omp) {
+      return currentEffort || DEFAULT_EFFORT_VALUE;
+    }
+
     const allowedValues = getAllowedEffortValues(targetProvider, model);
     if (allowedValues.length === 0) {
       return DEFAULT_EFFORT_VALUE;
@@ -355,7 +371,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     }
 
     return DEFAULT_EFFORT_VALUE;
-  }, [getAllowedEffortValues]);
+  }, [getAllowedEffortValues, providerModelCatalog.omp]);
 
   // One reconciliation pass over every provider, mirroring the effort effect
   // below. This was four copy-pasted eleven-line effects, one per provider.
@@ -703,7 +719,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     );
   }, [activeSessionSelection?.effort, currentProviderModel, provider, providerEfforts, reconcileStoredEffort]);
   const currentProviderModelOptions = useMemo(
-    () => providerModelCatalog[provider]?.OPTIONS ?? [],
+    () => providerModelCatalog[provider]?.OPTIONS ?? FALLBACK_MODEL_OPTIONS[provider] ?? [],
     [provider, providerModelCatalog],
   );
 

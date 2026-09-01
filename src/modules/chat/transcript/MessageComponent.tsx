@@ -197,7 +197,9 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                         : provider === 'codex'
                           ? t('messageTypes.codex')
                           : provider === 'opencode'
-                              ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
+                            ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
+                            : provider === 'omp'
+                              ? t('messageTypes.omp', { defaultValue: 'omp' })
                               : t('messageTypes.claude'))}
               </div>
             </div>
