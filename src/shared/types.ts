@@ -1261,7 +1261,7 @@ export type SidebarProjectListProps = SessionRowActions & {
   selectedSession: ProjectSession | null;
   isLoading: boolean;
   loadingProgress: LoadingProgress | null;
-  expandedProjects: Set<string>;
+  isProjectExpanded: (projectId: string) => boolean;
   initialSessionsLoaded: Set<string>;
   currentTime: Date;
   deletingProjects: Set<string>;
@@ -1270,11 +1270,10 @@ export type SidebarProjectListProps = SessionRowActions & {
   getProjectSessions: (project: Project) => SessionWithProvider[];
   onLoadMoreSessions: (projectId: string) => void;
   loadingMoreProjects: Set<string>;
-  forceExpanded?: boolean;
-  isProjectStarred: (projectName: string) => boolean;
-  onToggleProject: (projectName: string) => void;
+  isProjectStarred: (projectId: string) => boolean;
+  onToggleProject: (projectId: string) => void;
   onProjectSelect: (project: Project) => void;
-  onToggleStarProject: (projectName: string) => void;
+  onToggleStarProject: (projectId: string) => void;
   onStartEditingProject: (project: Project) => void;
   onCancelEditingProject: () => void;
   onSaveProjectName: (projectId: string, nextName: string) => void;
