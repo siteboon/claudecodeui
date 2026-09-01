@@ -10,9 +10,15 @@ import os from 'node:os';
 import path from 'node:path';
 import test, { mock } from 'node:test';
 
+import Database from 'better-sqlite3';
+
+import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
+
 import { AntigravityProviderAuth } from '../list/antigravity/antigravity-auth.provider.js';
+import { getAntigravitySummariesDbPath } from '../list/antigravity/antigravity-data-root.js';
 import { AntigravityProviderModels } from '../list/antigravity/antigravity-models.provider.js';
 import { AntigravityMcpProvider } from '../list/antigravity/antigravity-mcp.provider.js';
+import { AntigravitySessionSynchronizer } from '../list/antigravity/antigravity-session-synchronizer.provider.js';
 import { AntigravitySkillsProvider } from '../list/antigravity/antigravity-skills.provider.js';
 import { AntigravitySessionsProvider } from '../list/antigravity/antigravity-sessions.provider.js';
 import { providerRegistry } from '../provider.registry.js';
@@ -358,5 +364,88 @@ test('AntigravitySessionsProvider fetchHistory returns empty for unknown session
   } finally {
     restoreDataDir();
     await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('AntigravitySessionSynchronizer reads the summaries db from the overridden data root', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agy-sync-'));
+  // A mocked, empty home proves the synchronizer resolves the db through the
+  // shared data root instead of the historical ~/.gemini hardcode.
+  const emptyHome = await fs.mkdtemp(path.join(os.tmpdir(), 'agy-sync-home-'));
+  const restoreDataDir = withEnvValue('CLOUDCLI_ANTIGRAVITY_DATA_DIR', tempRoot);
+  const restoreHomedir = mock.method(os, 'homedir', () => emptyHome);
+  const previousDatabasePath = process.env.DATABASE_PATH;
+
+  const summariesDb = new Database(getAntigravitySummariesDbPath());
+  summariesDb.exec(`
+    CREATE TABLE conversation_summaries (
+      conversation_id TEXT PRIMARY KEY,
+      title TEXT,
+      workspace_uris TEXT,
+      last_modified_time TEXT,
+      status TEXT
+    );
+  `);
+  summariesDb.prepare(`
+    INSERT INTO conversation_summaries
+      (conversation_id, title, workspace_uris, last_modified_time, status)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(
+    'fixture-conv-1',
+    'Fixture Conversation',
+    JSON.stringify([`file://${tempRoot}/workspace`]),
+    new Date().toISOString(),
+    'ACTIVE',
+  );
+
+  closeConnection();
+  process.env.DATABASE_PATH = path.join(emptyHome, 'auth.db');
+  await initializeDatabase();
+
+  try {
+    const synchronizer = new AntigravitySessionSynchronizer();
+    const processed = await synchronizer.synchronize();
+
+    assert.equal(processed, 1);
+    const synced = sessionsDb.getSessionByProviderSessionId('fixture-conv-1');
+    assert.ok(synced, 'fixture conversation must be indexed into the sessions db');
+  } finally {
+    summariesDb.close();
+    closeConnection();
+    if (previousDatabasePath === undefined) {
+      delete process.env.DATABASE_PATH;
+    } else {
+      process.env.DATABASE_PATH = previousDatabasePath;
+    }
+    restoreHomedir.mock.restore();
+    restoreDataDir();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+    await fs.rm(emptyHome, { recursive: true, force: true });
+  }
+});
+
+test('AntigravityProviderModels reads the default model from the overridden data root', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agy-models-'));
+  // Empty mocked home: only the env-overridden root holds settings.json, so
+  // the settings fallback must resolve through the shared data root.
+  const emptyHome = await fs.mkdtemp(path.join(os.tmpdir(), 'agy-models-home-'));
+  const restoreDataDir = withEnvValue('CLOUDCLI_ANTIGRAVITY_DATA_DIR', tempRoot);
+  const restoreHomedir = mock.method(os, 'homedir', () => emptyHome);
+
+  try {
+    await fs.writeFile(
+      path.join(tempRoot, 'settings.json'),
+      JSON.stringify({ model: 'fixture-model-from-settings' }),
+      'utf8',
+    );
+
+    const models = new AntigravityProviderModels();
+    const active = await models.getCurrentActiveModel();
+    assert.equal(active.model, 'fixture-model-from-settings');
+  } finally {
+    restoreHomedir.mock.restore();
+    restoreDataDir();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+    await fs.rm(emptyHome, { recursive: true, force: true });
   }
 });

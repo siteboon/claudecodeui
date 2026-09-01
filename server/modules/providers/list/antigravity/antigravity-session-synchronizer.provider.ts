@@ -9,7 +9,6 @@
  */
 
 import fsSync from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 
 import Database from 'better-sqlite3';
@@ -23,6 +22,8 @@ import {
   readOptionalString,
 } from '@/shared/utils.js';
 
+import { getAntigravitySummariesDbPath } from './antigravity-data-root.js';
+
 const PROVIDER: LLMProvider = 'antigravity';
 
 type AntigravitySummaryRow = {
@@ -32,13 +33,6 @@ type AntigravitySummaryRow = {
   last_modified_time: string | null;
   status: string | null;
 };
-
-/**
- * Resolves the path to the Antigravity conversation summaries database.
- */
-function getAntigravityDbPath(): string {
-  return path.join(os.homedir(), '.gemini', 'antigravity-cli', 'conversation_summaries.db');
-}
 
 /**
  * Parses workspace directory from JSON array like `["file:///Users/azrael/workspaces/cloudcli"]`.
@@ -104,7 +98,7 @@ export class AntigravitySessionSynchronizer implements IProviderSessionSynchroni
     sinceMillis: number | null,
     limit: number | null,
   ): { processedCount: number; firstSessionId: string | null } {
-    const dbPath = getAntigravityDbPath();
+    const dbPath = getAntigravitySummariesDbPath();
     if (!fsSync.existsSync(dbPath)) {
       return { processedCount: 0, firstSessionId: null };
     }

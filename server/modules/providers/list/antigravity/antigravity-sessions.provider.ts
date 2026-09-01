@@ -10,8 +10,6 @@
 
 import { readFile } from 'node:fs/promises';
 import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 
 import { parseFilesInputTag, parseImagesInputTag } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
@@ -30,31 +28,19 @@ import {
   sliceTailPage,
 } from '@/shared/utils.js';
 
-const PROVIDER = 'antigravity';
+import {
+  getAntigravityTranscriptCandidates,
+} from './antigravity-data-root.js';
 
-/**
- * Resolves the Antigravity CLI data root (`~/.gemini/antigravity-cli` by
- * default). `CLOUDCLI_ANTIGRAVITY_DATA_DIR` overrides it so tests can point
- * file lookups at an isolated fixture tree instead of the real home directory.
- * Exported for the auth provider, which locates the OAuth token file under
- * the same root.
- */
-export function getAntigravityDataRoot(): string {
-  return process.env.CLOUDCLI_ANTIGRAVITY_DATA_DIR
-    ?? path.join(os.homedir(), '.gemini', 'antigravity-cli');
-}
+const PROVIDER = 'antigravity';
 
 /**
  * Finds the transcript.jsonl file for a session across possible brain directories.
  */
 function findTranscriptPath(sessionId: string): string | null {
   const safeId = sanitizeLeafDirectoryName(sessionId, 'antigravity session id');
-  const candidates = [
-    path.join(getAntigravityDataRoot(), 'brain', safeId, '.system_generated', 'logs', 'transcript.jsonl'),
-    path.join(os.homedir(), '.gemini', 'antigravity', 'brain', safeId, '.system_generated', 'logs', 'transcript.jsonl'),
-  ];
 
-  for (const candidate of candidates) {
+  for (const candidate of getAntigravityTranscriptCandidates(safeId)) {
     if (fs.existsSync(candidate)) {
       return candidate;
     }

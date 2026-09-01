@@ -8,13 +8,12 @@
  */
 
 import fs from 'node:fs';
-import path from 'node:path';
 
 import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { ProviderAuthStatus } from '@/shared/types.js';
 
+import { getAntigravityOauthTokenPath } from './antigravity-data-root.js';
 import { getEngineVersion, tryResolveEnginePath } from './antigravity-engine-path.js';
-import { getAntigravityDataRoot } from './antigravity-sessions.provider.js';
 
 /**
  * Checks whether the Antigravity CLI holds OAuth credentials.
@@ -25,8 +24,7 @@ import { getAntigravityDataRoot } from './antigravity-sessions.provider.js';
  * authenticated.
  */
 function checkAntigravityAuthenticated(): boolean {
-  const tokenFile = path.join(getAntigravityDataRoot(), 'antigravity-oauth-token');
-  return fs.existsSync(tokenFile);
+  return fs.existsSync(getAntigravityOauthTokenPath());
 }
 
 export class AntigravityProviderAuth implements IProviderAuth {

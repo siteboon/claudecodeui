@@ -9,7 +9,7 @@ import { sessionSynchronizerService } from '@/modules/providers/services/session
 import { WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
 import type { LLMProvider } from '@/shared/types.js';
 import { generateDisplayName } from '@/modules/projects/index.js';
-import { getAntigravityDataRoot } from '@/modules/providers/list/antigravity/antigravity-sessions.provider.js';
+import { getAntigravityDataRoot } from '@/modules/providers/list/antigravity/index.js';
 import { getZCodeStorageDir } from '@/shared/utils.js';
 
 type WatcherEventType = 'add' | 'change';

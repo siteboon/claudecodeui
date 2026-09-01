@@ -9,8 +9,6 @@
 
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import { promisify } from 'node:util';
 
 import type { IProviderModels } from '@/shared/interfaces.js';
@@ -25,6 +23,7 @@ import {
   readOptionalString,
 } from '@/shared/utils.js';
 
+import { getAntigravitySettingsPath } from './antigravity-data-root.js';
 import { tryResolveEnginePath } from './antigravity-engine-path.js';
 
 const execFileAsync = promisify(execFile);
@@ -177,11 +176,11 @@ async function fetchModelsFromCli(): Promise<ProviderModelsDefinition | null> {
 }
 
 /**
- * Reads user's default model setting from `~/.gemini/antigravity-cli/settings.json`.
+ * Reads user's default model setting from the agy data root's `settings.json`.
  */
 function readDefaultModelFromSettings(): string | null {
   try {
-    const settingsPath = path.join(os.homedir(), '.gemini', 'antigravity-cli', 'settings.json');
+    const settingsPath = getAntigravitySettingsPath();
     if (!fs.existsSync(settingsPath)) {
       return null;
     }
