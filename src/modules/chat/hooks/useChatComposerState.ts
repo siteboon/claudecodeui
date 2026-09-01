@@ -676,6 +676,11 @@ export function useChatComposerState({
           });
         }
 
+        // Recorded under the session the message was queued FOR, and before
+        // the session-switch return below — the queued text must be
+        // recallable even when it dispatches without this composer.
+        recordSentMessage(currentInput, queuedSessionKey);
+
         // The server owns dispatch after persistence. If the user changed
         // sessions during upload, the durable record is already enough; do
         // not attach its UI card to the newly opened composer.
@@ -685,7 +690,6 @@ export function useChatComposerState({
 
         queuedDraftSessionRef.current = queuedSessionKey;
         setQueuedDraft(durableDraft);
-        recordSentMessage(currentInput);
         setInput('');
         inputValueRef.current = '';
         setAttachedFiles([]);
