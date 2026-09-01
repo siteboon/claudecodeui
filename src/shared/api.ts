@@ -41,7 +41,13 @@ export const authenticatedFetch = (
     if (refreshedToken) {
       storeAuthToken(refreshedToken);
     }
-    if (response.headers.get('X-Auth-Error')) {
+    // Only a request that actually carried a token can have had one rejected.
+    // The server answers a request without any `Authorization` header with the
+    // same `X-Auth-Error`, and acting on that threw away a perfectly good
+    // login: one call going out before the token was in place - a desktop
+    // window that has just been handed one, a tab restored from a cold start -
+    // was enough to sign the user out, over and over.
+    if (token && response.headers.get('X-Auth-Error')) {
       expireAuthSession();
     }
     return response;

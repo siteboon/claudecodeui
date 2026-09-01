@@ -170,6 +170,24 @@ test('an auth error on the response ends the session', async () => {
   assert.equal(localStorage.getItem('auth-token'), null);
 });
 
+test('a request that carried no token does not end the session', async () => {
+  // The server answers an unauthenticated request with the same X-Auth-Error
+  // it uses to reject a bad token. Acting on that signed the user out over a
+  // call that never claimed to be signed in - one going out before the token
+  // was in place was enough to throw a live session away.
+  let expiries = 0;
+  const onExpired = () => {
+    expiries += 1;
+  };
+  window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, onExpired);
+  respondWith({ 'X-Auth-Error': 'invalid' });
+
+  await (await loadFetch(false))('/api/projects');
+
+  window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, onExpired);
+  assert.equal(expiries, 0, 'nothing was rejected, so nothing may be cleared');
+});
+
 test('an ordinary response leaves the stored token alone', async () => {
   const token = liveToken();
   localStorage.setItem('auth-token', token);
