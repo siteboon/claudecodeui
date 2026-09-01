@@ -17,7 +17,7 @@ import {
 } from '@/modules/providers/index.js';
 import { createWebSocketServer } from '@/modules/websocket/index.js';
 
-import { getConnectableHost } from '../shared/networkHosts.js';
+import { getConnectableHost, isLoopbackHost, isWildcardHost } from '../shared/networkHosts.js';
 
 import { createGitModule } from './modules/git/index.js';
 import {
@@ -291,12 +291,20 @@ function getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
 }
 
+// The address the desktop app is told to open. `DISPLAY_HOST` says `localhost`
+// for anything loopback, which is friendlier to read and wrong to connect to
+// here: `localhost` and `127.0.0.1` are separate browser origins, so a window
+// that switches between them loses its `localStorage` - the stored login with
+// it - and on Windows `localhost` resolves to `::1` first, where nothing is
+// listening. The marker therefore names what is actually being served.
+const MARKER_HOST = isWildcardHost(HOST) || isLoopbackHost(HOST) ? '127.0.0.1' : HOST;
+
 async function writeLocalServerMarker() {
     const marker = {
         pid: process.pid,
         host: HOST,
         port: Number.parseInt(String(SERVER_PORT), 10),
-        url: `http://${DISPLAY_HOST}:${SERVER_PORT}`,
+        url: `http://${MARKER_HOST}:${SERVER_PORT}`,
         installMode,
         appRoot: APP_ROOT,
         updatedAt: new Date().toISOString(),
