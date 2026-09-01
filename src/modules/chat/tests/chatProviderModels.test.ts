@@ -4,6 +4,10 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 
 import { resetUserPreferences, writeUserPreference } from '@/shared/userSettings';
+import {
+  OMP_CONFIGURED_MODEL_LABEL,
+  OMP_CONFIGURED_MODEL_SENTINEL,
+} from '@/shared/constants';
 
 /**
  * The four per-provider default models used to be four useState slots with four
@@ -64,6 +68,7 @@ test('each provider gets its own model from its own storage key', async () => {
   localStorage.setItem('cursor-model', 'cursor-stored');
   localStorage.setItem('codex-model', 'codex-stored');
   localStorage.setItem('opencode-model', 'opencode-stored');
+  localStorage.setItem('omp-model', 'omp-stored');
 
   const { result } = await renderProviderState();
 
@@ -73,6 +78,7 @@ test('each provider gets its own model from its own storage key', async () => {
   assert.equal(result.current.providerModels.cursor, 'cursor-stored');
   assert.equal(result.current.providerModels.codex, 'codex-stored');
   assert.equal(result.current.providerModels.opencode, 'opencode-stored');
+  assert.equal(result.current.providerModels.omp, 'omp-stored');
 });
 
 test('a provider with no stored model falls back to its own default, not another provider’s', async () => {
@@ -88,6 +94,32 @@ test('a provider with no stored model falls back to its own default, not another
     Object.keys(models).length,
     'each provider must have a distinct default model',
   );
+});
+
+test('OMP shows a friendly configured-default label when its catalog is unavailable', async () => {
+  writeUserPreference('selectedProvider', 'omp');
+  const { result } = await renderProviderState();
+
+  await waitFor(() => {
+    assert.equal(result.current.provider, 'omp');
+  });
+  assert.equal(result.current.currentProviderModel, OMP_CONFIGURED_MODEL_SENTINEL);
+  assert.deepEqual(result.current.currentProviderModelOptions, [{
+    value: OMP_CONFIGURED_MODEL_SENTINEL,
+    label: OMP_CONFIGURED_MODEL_LABEL,
+  }]);
+});
+
+test('OMP preserves a stored effort until its dynamic model catalog loads', async () => {
+  writeUserPreference('selectedProvider', 'omp');
+  localStorage.setItem('omp-effort', 'high');
+  const { result } = await renderProviderState();
+
+  await waitFor(() => {
+    assert.equal(result.current.provider, 'omp');
+  });
+  assert.equal(result.current.currentProviderEffort, 'high');
+  assert.equal(localStorage.getItem('omp-effort'), 'high');
 });
 
 test('choosing a model persists it under that provider’s key only', async () => {

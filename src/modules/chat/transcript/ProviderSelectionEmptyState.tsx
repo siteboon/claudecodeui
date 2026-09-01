@@ -28,12 +28,17 @@ import {
 } from "@/shared/ui";
 import ModelLibraryPanel from "@/modules/chat/modals/ModelLibraryPanel";
 import { writeSelectedProvider } from '@/shared/selectedProvider';
+import {
+  OMP_CONFIGURED_MODEL_LABEL,
+  OMP_CONFIGURED_MODEL_SENTINEL,
+} from '@/shared/constants';
 
 const PROVIDER_META: { id: LLMProvider; name: string }[] = [
   { id: "claude", name: "Anthropic" },
   { id: "codex", name: "OpenAI" },
   { id: "cursor", name: "Cursor" },
   { id: "opencode", name: "OpenCode" },
+  { id: "omp", name: "omp" },
 ];
 
 const MOD_KEY =
@@ -87,6 +92,7 @@ function getProviderDisplayName(p: LLMProvider) {
   if (p === "cursor") return "Cursor";
   if (p === "codex") return "Codex";
   if (p === "opencode") return "OpenCode";
+  if (p === "omp") return "omp";
   return "Claude";
 }
 
@@ -129,6 +135,9 @@ export default function ProviderSelectionEmptyState({
   const currentModel = providerModels[provider];
 
   const currentModelLabel = useMemo(() => {
+    if (provider === 'omp' && currentModel === OMP_CONFIGURED_MODEL_SENTINEL) {
+      return OMP_CONFIGURED_MODEL_LABEL;
+    }
     const config = getModelConfig(provider, providerModelCatalog);
     const found = config.OPTIONS.find(
       (o: { value: string; label: string }) => o.value === currentModel,
@@ -336,6 +345,10 @@ export default function ProviderSelectionEmptyState({
                 opencode: t("providerSelection.readyPrompt.opencode", {
                   model: providerModels.opencode,
                   defaultValue: "Ready with OpenCode {{model}}",
+                }),
+                omp: t("providerSelection.readyPrompt.omp", {
+                  model: currentModelLabel,
+                  defaultValue: "Ready with omp {{model}}",
                 }),
               }[provider]
             }
