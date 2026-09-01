@@ -14,6 +14,16 @@ const patchHomeDir = (nextHomeDir: string) => {
   };
 };
 
+/**
+ * Creates the fixture root for tests that exercise git-root walking.
+ *
+ * `/tmp` is used instead of `os.tmpdir()` because `findTopmostGitRoot` walks
+ * `.git` markers all the way to the filesystem root: a tool-managed TMPDIR
+ * that happens to live inside a repository would otherwise be swept into
+ * project-scope skill discovery and break the fixtures.
+ */
+const createGitWalkTempRoot = (prefix: string) => fs.mkdtemp(path.join('/tmp', prefix));
+
 const writeSkill = async (
   skillsRoot: string,
   directoryName: string,
@@ -323,7 +333,7 @@ test('providerSkillsService lists claude user, project, and enabled plugin skill
  * supported user roots, and verifies repository lookup across cwd, parent, and git root.
  */
 test('providerSkillsService lists codex repository, user, and system skills', { concurrency: false }, async () => {
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-codex-'));
+  const tempRoot = await createGitWalkTempRoot('llm-skills-codex-');
   const repoRoot = path.join(tempRoot, 'repo');
   const workspacePath = path.join(repoRoot, 'packages', 'app');
   await fs.mkdir(path.join(repoRoot, '.git'), { recursive: true });
@@ -389,7 +399,7 @@ test('providerSkillsService lists codex repository, user, and system skills', { 
  * plus the global OpenCode/Claude/Agents compatibility locations.
  */
 test('providerSkillsService lists opencode project and user compatibility skills', { concurrency: false }, async () => {
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-opencode-'));
+  const tempRoot = await createGitWalkTempRoot('llm-skills-opencode-');
   const repoRoot = path.join(tempRoot, 'repo');
   const workspacePath = path.join(repoRoot, 'packages', 'app');
   await fs.mkdir(path.join(repoRoot, '.git'), { recursive: true });
