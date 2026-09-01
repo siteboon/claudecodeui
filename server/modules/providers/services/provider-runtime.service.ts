@@ -44,6 +44,18 @@ export function createProviderRuntimeService(
 ) {
   const dependencies = { ...defaultDependencies, ...dependencyOverrides };
 
+  const getPermissionOwner = () => {
+    // Permission-capable runtimes expose the same process-wide approval
+    // registry. Route through one gateway so adding another runtime cannot
+    // replay or resolve every pending row once per registered provider.
+    for (const provider of dependencies.listProviders()) {
+      if (provider.runtime.permissions) {
+        return provider.runtime.permissions;
+      }
+    }
+    return undefined;
+  };
+
   const createRuntimeContext = (
     provider: IProvider,
   ): ProviderRuntimeContext => ({
@@ -92,15 +104,11 @@ export function createProviderRuntimeService(
     },
 
     resolveToolApproval(requestId: string, decision: ProviderPermissionDecision): void {
-      for (const provider of dependencies.listProviders()) {
-        provider.runtime.permissions?.resolve(requestId, decision);
-      }
+      getPermissionOwner()?.resolve(requestId, decision);
     },
 
     getPendingApprovalsForSession(sessionId: string): unknown[] {
-      return dependencies.listProviders().flatMap(
-        (provider) => provider.runtime.permissions?.listPending(sessionId) ?? [],
-      );
+      return getPermissionOwner()?.listPending(sessionId) ?? [];
     },
   };
 }
