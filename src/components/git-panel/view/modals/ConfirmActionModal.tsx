@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { Check, Download, RotateCcw, Trash2, Upload } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AlertTriangle, Check, Download, RotateCcw, Trash2, Upload } from 'lucide-react';
 import {
   CONFIRMATION_ACTION_LABELS,
   CONFIRMATION_BUTTON_CLASSES,
@@ -11,7 +11,7 @@ import type { ConfirmationRequest } from '../../types/types';
 type ConfirmActionModalProps = {
   action: ConfirmationRequest | null;
   onCancel: () => void;
-  onConfirm: () => void;
+  onConfirm: (useAlternateConfirmation: boolean) => void;
 };
 
 function renderConfirmActionIcon(actionType: ConfirmationRequest['type']) {
@@ -35,7 +35,19 @@ function renderConfirmActionIcon(actionType: ConfirmationRequest['type']) {
 }
 
 export default function ConfirmActionModal({ action, onCancel, onConfirm }: ConfirmActionModalProps) {
+  const [useAlternateConfirmation, setUseAlternateConfirmation] = useState(false);
   const titleId = action ? `confirmation-title-${action.type}` : undefined;
+
+  const handleCancel = () => {
+    setUseAlternateConfirmation(false);
+    onCancel();
+  };
+
+  const handleConfirm = () => {
+    const shouldUseAlternateConfirmation = useAlternateConfirmation && Boolean(action?.alternateConfirmation);
+    setUseAlternateConfirmation(false);
+    onConfirm(shouldUseAlternateConfirmation);
+  };
 
   useEffect(() => {
     if (!action) {
@@ -44,6 +56,7 @@ export default function ConfirmActionModal({ action, onCancel, onConfirm }: Conf
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        setUseAlternateConfirmation(false);
         onCancel();
       }
     };
@@ -60,7 +73,7 @@ export default function ConfirmActionModal({ action, onCancel, onConfirm }: Conf
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={handleCancel} />
       {/*
         Capped to the viewport with only the message scrolling, so a long body
         (a multi-paragraph commit message, a long file list) can never push the
@@ -90,19 +103,43 @@ export default function ConfirmActionModal({ action, onCancel, onConfirm }: Conf
           {action.message}
         </p>
 
+        {action.alternateConfirmation && (
+          <label className="mx-6 mb-5 flex cursor-pointer items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 transition-colors hover:bg-destructive/10">
+            <input
+              type="checkbox"
+              checked={useAlternateConfirmation}
+              onChange={(event) => setUseAlternateConfirmation(event.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-destructive"
+            />
+            <span className="min-w-0">
+              <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
+                {action.alternateConfirmation.label}
+              </span>
+              <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+                {action.alternateConfirmation.description}
+              </span>
+            </span>
+          </label>
+        )}
+
         <div className="flex shrink-0 justify-end space-x-3 px-6 pb-6">
           <button
-            onClick={onCancel}
+            onClick={handleCancel}
             className="rounded-lg px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             Cancel
           </button>
           <button
-            onClick={onConfirm}
+            onClick={handleConfirm}
             className={`flex items-center space-x-2 rounded-lg px-4 py-2 text-sm text-white transition-colors ${CONFIRMATION_BUTTON_CLASSES[action.type]}`}
           >
             {renderConfirmActionIcon(action.type)}
-            <span>{CONFIRMATION_ACTION_LABELS[action.type]}</span>
+            <span>
+              {useAlternateConfirmation && action.alternateConfirmation
+                ? action.alternateConfirmation.actionLabel
+                : CONFIRMATION_ACTION_LABELS[action.type]}
+            </span>
           </button>
         </div>
       </div>

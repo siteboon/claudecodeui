@@ -124,6 +124,8 @@
     "modeConversations": "Conversaciones",
     "conversationsPlaceholder": "Buscar en conversaciones...",
     "searching": "Buscando...",
+    "sessionTitles": "Títulos de sesiones",
+    "conversationContents": "Contenido de conversaciones",
     "noResults": "No se encontraron resultados",
     "tryDifferentQuery": "Prueba con otra búsqueda",
     "matches_one": "{{count}} coincidencia",

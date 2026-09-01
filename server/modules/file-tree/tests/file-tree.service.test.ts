@@ -87,37 +87,67 @@ function createDependencies(
   };
 }
 
-test('listProjectFiles builds a sorted tree and skips generated directories', async () => {
+test('listProjectFiles applies gitignore alongside hard directory exclusions', async () => {
   const projectRoot = path.resolve('file-tree-test-project');
+  const documentationDirectory = path.join(projectRoot, 'docs');
+  const buildDocumentationDirectory = path.join(documentationDirectory, 'build');
+  const gitDirectory = path.join(projectRoot, '.git');
+  const nodeModulesDirectory = path.join(projectRoot, 'node_modules');
   const sourceDirectory = path.join(projectRoot, 'src');
+  const readDirectories: string[] = [];
   const fileSystem = createFakeFileSystem({
     access: async () => undefined,
+    readTextFile: async (filePath) => {
+      assert.equal(filePath, path.join(projectRoot, '.gitignore'));
+      return '*.log';
+    },
     openDirectory: createDirectoryReader((directoryPath) => {
+      readDirectories.push(directoryPath);
       if (directoryPath === projectRoot) {
         return [
+          createDirectoryEntry('.git', true),
           createDirectoryEntry('node_modules', true),
           createDirectoryEntry('README.md', false),
+          createDirectoryEntry('docs', true),
           createDirectoryEntry('src', true),
         ];
+      }
+      if (directoryPath === documentationDirectory) {
+        return [createDirectoryEntry('build', true)];
+      }
+      if (directoryPath === buildDocumentationDirectory) {
+        return [createDirectoryEntry('foo.md', false)];
       }
       if (directoryPath === sourceDirectory) {
         return [createDirectoryEntry('index.ts', false)];
       }
       return [];
     }),
-    lstat: async (candidatePath) => createStats(candidatePath === sourceDirectory, 0o754),
+    lstat: async (candidatePath) => createStats(
+      candidatePath === documentationDirectory
+        || candidatePath === buildDocumentationDirectory
+        || candidatePath === sourceDirectory
+        || candidatePath === gitDirectory
+        || candidatePath === nodeModulesDirectory,
+      0o754,
+    ),
   });
   const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
 
-  const tree = await service.listProjectFiles('project-1');
+  const tree = await service.listProjectFiles('project-1', { respectGitignore: true });
 
-  assert.deepEqual(tree.map((entry) => entry.name), ['src', 'README.md']);
-  const sourceEntry = tree[0];
+  assert.deepEqual(tree.map((entry) => entry.name), ['docs', 'src', 'README.md']);
+  const documentationEntry = tree[0];
+  assert.deepEqual(documentationEntry?.children?.map((entry) => entry.name), ['build']);
+  assert.deepEqual(documentationEntry?.children?.[0]?.children?.map((entry) => entry.name), ['foo.md']);
+  const sourceEntry = tree[1];
   assert.ok(sourceEntry);
   assert.equal(sourceEntry.type, 'directory');
   assert.equal(sourceEntry.permissions, '754');
   assert.equal(sourceEntry.permissionsRwx, 'rwxr-xr--');
   assert.deepEqual(sourceEntry.children?.map((entry) => entry.name), ['index.ts']);
+  assert.equal(readDirectories.includes(gitDirectory), false);
+  assert.equal(readDirectories.includes(nodeModulesDirectory), false);
 });
 
 test('listProjectFiles excludes gitignored entries only when requested', async () => {
@@ -167,23 +197,47 @@ test('listProjectFiles excludes gitignored entries only when requested', async (
   assert.equal(readDirectories.includes(cacheDirectory), false);
 });
 
-test('listProjectFiles returns the normal tree when no gitignore exists', async () => {
+test('listProjectFiles falls back to conventional directory names when no gitignore exists', async () => {
   const projectRoot = path.resolve('file-tree-test-project');
+  const documentationDirectory = path.join(projectRoot, 'docs');
+  const buildDocumentationDirectory = path.join(documentationDirectory, 'build');
+  const nodeModulesDirectory = path.join(projectRoot, 'node_modules');
+  const readDirectories: string[] = [];
   const fileSystem = createFakeFileSystem({
     access: async () => undefined,
     readTextFile: async () => {
       throw Object.assign(new Error('missing'), { code: 'ENOENT' });
     },
-    openDirectory: createDirectoryReader((directoryPath) => directoryPath === projectRoot
-      ? [createDirectoryEntry('debug.log', false)]
-      : []),
-    lstat: async () => createStats(false, 0o644),
+    openDirectory: createDirectoryReader((directoryPath) => {
+      readDirectories.push(directoryPath);
+      if (directoryPath === projectRoot) {
+        return [
+          createDirectoryEntry('debug.log', false),
+          createDirectoryEntry('docs', true),
+          createDirectoryEntry('node_modules', true),
+        ];
+      }
+      if (directoryPath === documentationDirectory) {
+        return [
+          createDirectoryEntry('build', true),
+          createDirectoryEntry('guide.md', false),
+        ];
+      }
+      if (directoryPath === buildDocumentationDirectory) {
+        return [createDirectoryEntry('generated.md', false)];
+      }
+      return [];
+    }),
+    lstat: async (candidatePath) => createStats(candidatePath === documentationDirectory, 0o644),
   });
   const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
 
   const tree = await service.listProjectFiles('project-1', { respectGitignore: true });
 
-  assert.deepEqual(tree.map((entry) => entry.name), ['debug.log']);
+  assert.deepEqual(tree.map((entry) => entry.name), ['docs', 'debug.log']);
+  assert.deepEqual(tree[0]?.children?.map((entry) => entry.name), ['guide.md']);
+  assert.equal(readDirectories.includes(nodeModulesDirectory), false);
+  assert.equal(readDirectories.includes(buildDocumentationDirectory), false);
 });
 
 test('listProjectFiles rejects a tree that exceeds the server entry limit', async () => {

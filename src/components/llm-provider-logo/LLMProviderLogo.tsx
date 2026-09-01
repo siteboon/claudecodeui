@@ -6,15 +6,15 @@ import CursorLogo from './CursorLogo';
 import OpenCodeLogo from './OpenCodeLogo';
 import ZCodeLogo from './ZCodeLogo';
 
-type SessionProviderLogoProps = {
+type LLMProviderLogoProps = {
   provider?: LLMProvider | string | null;
   className?: string;
 };
 
-export default function SessionProviderLogo({
+export default function LLMProviderLogo({
   provider = 'claude',
   className = 'w-5 h-5',
-}: SessionProviderLogoProps) {
+}: LLMProviderLogoProps) {
   if (provider === 'cursor') {
     return <CursorLogo className={className} />;
   }

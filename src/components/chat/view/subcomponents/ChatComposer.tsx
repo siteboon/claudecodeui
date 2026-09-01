@@ -185,6 +185,8 @@ export default function ChatComposer({
   sendByCtrlEnter,
 }: ChatComposerProps) {
   const { t } = useTranslation('chat');
+  const fileDropdownRef = useRef<HTMLDivElement | null>(null);
+  const selectedFileRef = useRef<HTMLDivElement | null>(null);
   const commandMenuPosition = useMemo(() => {
     if (!isCommandMenuOpen) {
       return { top: 0, left: 16, bottom: 90 };
@@ -196,6 +198,25 @@ export default function ChatComposer({
       bottom: textareaRect ? window.innerHeight - textareaRect.top + 8 : 90,
     };
   }, [isCommandMenuOpen, textareaRef]);
+
+  useEffect(() => {
+    const dropdown = fileDropdownRef.current;
+    const selectedFile = selectedFileRef.current;
+    if (!showFileDropdown || !dropdown || !selectedFile) {
+      return;
+    }
+
+    const itemTop = selectedFile.offsetTop;
+    const itemBottom = itemTop + selectedFile.offsetHeight;
+    const visibleTop = dropdown.scrollTop;
+    const visibleBottom = visibleTop + dropdown.clientHeight;
+
+    if (itemTop < visibleTop) {
+      dropdown.scrollTop = itemTop;
+    } else if (itemBottom > visibleBottom) {
+      dropdown.scrollTop = itemBottom - dropdown.clientHeight;
+    }
+  }, [selectedFileIndex, showFileDropdown]);
 
   // Voice state is hosted here (not in the mic button) so the main Send button can stop
   // recording and send the transcript in one tap, the way the mic button drops it in the box.
@@ -275,10 +296,14 @@ export default function ChatComposer({
 
       {!hasQuestionPanel && <div className="relative mx-auto max-w-[54.25rem]">
         {showFileDropdown && filteredFiles.length > 0 && (
-          <div className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-48 overflow-y-auto rounded-xl border border-border/50 bg-card/95 shadow-lg backdrop-blur-md">
+          <div
+            ref={fileDropdownRef}
+            className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-48 overflow-y-auto rounded-xl border border-border/50 bg-card/95 shadow-lg backdrop-blur-md"
+          >
             {filteredFiles.map((file, index) => (
               <div
                 key={file.path}
+                ref={index === selectedFileIndex ? selectedFileRef : undefined}
                 className={`cursor-pointer touch-manipulation border-b border-border/30 px-4 py-3 last:border-b-0 ${
                   index === selectedFileIndex
                     ? 'bg-primary/8 text-primary'

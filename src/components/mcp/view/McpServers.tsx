@@ -2,7 +2,7 @@ import { Edit3, ExternalLink, Globe, Lock, Plus, Server, Terminal, Trash2, Users
 import { useTranslation } from 'react-i18next';
 
 import type { McpProject, McpProvider, McpScope, ProviderMcpServer } from '../types';
-import { IS_PLATFORM } from '../../../constants/config';
+import { IS_PLATFORM } from '../../../shared/utils';
 import { ActionMenu, Badge, Button } from '../../../shared/view/ui';
 import {
   MCP_GLOBAL_SUPPORTED_SCOPES,

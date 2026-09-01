@@ -1,4 +1,4 @@
-import { IS_PLATFORM } from '../../../constants/config';
+import { IS_PLATFORM } from '../../../shared/utils';
 import { getStoredAuthToken } from '../../../utils/api';
 import type { ShellIncomingMessage, ShellOutgoingMessage } from '../types/types';
 

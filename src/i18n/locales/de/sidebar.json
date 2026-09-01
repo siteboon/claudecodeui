@@ -124,6 +124,8 @@
     "modeConversations": "Unterhaltungen",
     "conversationsPlaceholder": "In Unterhaltungen suchen...",
     "searching": "Sucht...",
+    "sessionTitles": "Sitzungstitel",
+    "conversationContents": "Unterhaltungsinhalte",
     "noResults": "Keine Ergebnisse gefunden",
     "tryDifferentQuery": "Versuch eine andere Suchanfrage",
     "matches_one": "{{count}} Treffer",

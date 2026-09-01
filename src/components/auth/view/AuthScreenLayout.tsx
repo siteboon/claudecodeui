@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { IS_PLATFORM } from '../../../constants/config';
+
+import { IS_PLATFORM } from '../../../shared/utils';
 
 type AuthScreenLayoutProps = {
   title: string;

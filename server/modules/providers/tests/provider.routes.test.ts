@@ -78,6 +78,67 @@ test('session creation route names a CloudCLI session from the initial message',
   });
 });
 
+test('conversation search streams title matches before transcript results', async () => {
+  await withProviderServer(async (baseUrl, workspacePath) => {
+    sessionsDb.createAppSession(
+      'title-only-session',
+      'codex',
+      workspacePath,
+      'Release planning notes',
+    );
+    const transcriptPath = path.join(path.dirname(workspacePath), 'codex-search.jsonl');
+    await writeFile(transcriptPath, `${JSON.stringify({
+      type: 'event_msg',
+      timestamp: '2026-08-12T09:00:00.000Z',
+      payload: {
+        type: 'user_message',
+        kind: 'plain',
+        message: 'Release planning also appears in this conversation.',
+      },
+    })}\n`);
+    sessionsDb.createSession(
+      'transcript-session',
+      'codex',
+      workspacePath,
+      'Unrelated session',
+      undefined,
+      undefined,
+      transcriptPath,
+    );
+
+    const response = await fetch(
+      `${baseUrl}/api/providers/search/sessions?q=release%20planning&limit=50`,
+    );
+    const eventStream = await response.text();
+    const titleEventIndex = eventStream.indexOf('event: title-results');
+    const conversationEventIndex = eventStream.indexOf('event: result');
+    const doneEventIndex = eventStream.indexOf('event: done');
+
+    assert.equal(response.status, 200);
+    assert.ok(titleEventIndex >= 0);
+    assert.ok(conversationEventIndex > titleEventIndex);
+    assert.ok(doneEventIndex > titleEventIndex);
+
+    const titleDataLine = eventStream
+      .slice(titleEventIndex, conversationEventIndex)
+      .split('\n')
+      .find((line) => line.startsWith('data: '));
+    assert.ok(titleDataLine);
+
+    const titlePayload = JSON.parse(titleDataLine.slice('data: '.length)) as {
+      titleResults: Array<{
+        sessionId: string;
+        sessionTitle: string;
+        provider: string;
+      }>;
+    };
+    assert.equal(titlePayload.titleResults.length, 1);
+    assert.equal(titlePayload.titleResults[0]?.sessionId, 'title-only-session');
+    assert.equal(titlePayload.titleResults[0]?.sessionTitle, 'Release planning notes');
+    assert.equal(titlePayload.titleResults[0]?.provider, 'codex');
+  });
+});
+
 test('reasoning effort is persisted and returned with the active session model', async () => {
   await withProviderServer(async (baseUrl, workspacePath) => {
     sessionsDb.createAppSession('effort-session', 'codex', workspacePath);

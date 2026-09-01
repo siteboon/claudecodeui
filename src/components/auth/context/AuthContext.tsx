@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { IS_PLATFORM } from '../../../constants/config';
+
+import { IS_PLATFORM } from '../../../shared/utils';
 import {
   api,
   AUTH_SESSION_EXPIRED_EVENT,

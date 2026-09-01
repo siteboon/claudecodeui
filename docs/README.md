@@ -1,11 +1,11 @@
 <div align="center">
- <img src="public/logo.svg" alt="CloudCLI UI" width="64" height="64">
+ <img src="../public/logo.svg" alt="CloudCLI UI" width="64" height="64">
  <h1>Cloud CLI (aka Claude Code UI)</h1>
  <p>A desktop and mobile UI for <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>, <a href="https://docs.cursor.com/en/cli/overview">Cursor CLI</a>, and <a href="https://developers.openai.com/codex">Codex</a>.<br>Use it locally or remotely to view your active projects and sessions from everywhere.</p>
 </div>
 
 <p align="center">
- <a href="https://cloudcli.ai">CloudCLI Cloud</a> · <a href="https://cloudcli.ai/docs">Documentation</a> · <a href="https://discord.gg/buxwujPNRE">Discord</a> · <a href="https://github.com/siteboon/claudecodeui/issues">Bug Reports</a> · <a href="CONTRIBUTING.md">Contributing</a>
+ <a href="https://cloudcli.ai">CloudCLI Cloud</a> · <a href="https://cloudcli.ai/docs">Documentation</a> · <a href="https://discord.gg/buxwujPNRE">Discord</a> · <a href="https://github.com/siteboon/claudecodeui/issues">Bug Reports</a> · <a href="../CONTRIBUTING.md">Contributing</a>
 </p>
 
 <p align="center">
@@ -27,13 +27,13 @@
 <tr>
 <td align="center">
 <h3>Desktop View</h3>
-<img src="public/screenshots/desktop-main.png" alt="Desktop Interface" width="400">
+<img src="../public/screenshots/desktop-main.png" alt="Desktop Interface" width="400">
 <br>
 <em>Main interface showing project overview and chat</em>
 </td>
 <td align="center">
 <h3>Mobile Experience</h3>
-<img src="public/screenshots/mobile-chat.png" alt="Mobile Interface" width="250">
+<img src="../public/screenshots/mobile-chat.png" alt="Mobile Interface" width="250">
 <br>
 <em>Responsive mobile design with touch navigation</em>
 </td>
@@ -41,7 +41,7 @@
 <tr>
 <td align="center" colspan="2">
 <h3>CLI Selection</h3>
-<img src="public/screenshots/cli-selection.png" alt="CLI Selection" width="400">
+<img src="../public/screenshots/cli-selection.png" alt="CLI Selection" width="400">
 <br>
 <em>Select between Claude Code, Cursor CLI and Codex</em>
 </td>
@@ -103,7 +103,7 @@ Run agents in isolated sandboxes with hypervisor-level isolation. Starts Claude 
 npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project
 ```
 
-Supports Claude Code and Codex. See the [sandbox docs](docker/) for setup and advanced options.
+Supports Claude Code and Codex. See the [sandbox docs](../docker/) for setup and advanced options.
 
 ### Desktop Companion App
 
@@ -156,7 +156,7 @@ To use Claude Code's full functionality, you'll need to manually enable tools:
 
 <div align="center">
 
-![Tools Settings Modal](public/screenshots/tools-modal.png)
+![Tools Settings Modal](../public/screenshots/tools-modal.png)
 *Tools Settings interface - enable only what you need*
 
 </div>
@@ -237,11 +237,11 @@ Yes, for self-hosted. CloudCLI UI reads from and writes to the same `~/.claude` 
 - **[Documentation](https://cloudcli.ai/docs)** — installation, configuration, features, and troubleshooting
 - **[Discord](https://discord.gg/buxwujPNRE)** — get help and connect with other users
 - **[GitHub Issues](https://github.com/siteboon/claudecodeui/issues)** — bug reports and feature requests
-- **[Contributing Guide](CONTRIBUTING.md)** — how to contribute to the project
+- **[Contributing Guide](../CONTRIBUTING.md)** — how to contribute to the project
 
 ## License
 
-GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later) — see [LICENSE](LICENSE) for the full text, including additional terms under Section 7.
+GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later) — see [LICENSE](../LICENSE) for the full text, including additional terms under Section 7.
 
 This project is open source and free to use, modify, and distribute under the AGPL-3.0-or-later license. If you modify this software and run it as a network service, you must make your modified source code available to users of that service.
 

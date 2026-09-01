@@ -265,6 +265,8 @@ export default function CodeEditor({
             onClose={onClose}
             labels={{
               showingChanges: t('header.showingChanges'),
+              copyPath: t('actions.copyPath', 'Copy file path'),
+              pathCopied: t('actions.pathCopied', 'File path copied'),
               editMarkdown: t('actions.editMarkdown'),
               previewMarkdown: t('actions.previewMarkdown'),
               previewHtml: t('actions.previewHtml', 'Open HTML preview in new tab'),

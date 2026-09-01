@@ -1,4 +1,4 @@
-import { CLOUDCLI_WORDMARK_FONT_FAMILY } from '../../../constants/branding';
+import { CLOUDCLI_WORDMARK_FONT_FAMILY } from '../../../shared/constants';
 
 const loadingDotAnimationDelays = ['0s', '0.15s', '0.3s'];
 

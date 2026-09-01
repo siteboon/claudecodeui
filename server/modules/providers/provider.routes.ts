@@ -842,6 +842,11 @@ router.get('/search/sessions', asyncHandler(async (req: Request, res: Response) 
       query,
       limit,
       signal: abortController.signal,
+      onTitleResults: (titleResults) => {
+        if (!closed) {
+          res.write(`event: title-results\ndata: ${JSON.stringify({ titleResults })}\n\n`);
+        }
+      },
       onProgress: ({ projectResult, totalMatches, scannedProjects, totalProjects }) => {
         if (closed) {
           return;
