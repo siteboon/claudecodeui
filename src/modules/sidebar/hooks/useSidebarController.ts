@@ -80,6 +80,7 @@ export function useSidebarController({
 }: UseSidebarControllerArgs) {
   const paletteOps = usePaletteOps();
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
+  const [collapsedRunningProjects, setCollapsedRunningProjects] = useState<Set<string>>(new Set());
   // The one rename the sidebar has open, as a single value so a project and a
   // session cannot both be mid-rename. See ActiveSidebarRename.
   const [activeRename, setActiveRename] = useState<ActiveSidebarRename | null>(null);
@@ -490,15 +491,37 @@ export function useSidebarController({
 
   // All sidebar state keys (expanded, starred, loading, etc.) use the DB
   // `projectId` as their identifier after the migration.
-  const toggleProject = useCallback((projectId: string) => {
-    setExpandedProjects((prev) => {
-      const next = new Set<string>();
-      if (!prev.has(projectId)) {
-        next.add(projectId);
+  const toggleProject = useCallback(
+    (projectId: string) => {
+      if (searchMode === 'running') {
+        setCollapsedRunningProjects((prev) => {
+          const next = new Set(prev);
+          if (!next.delete(projectId)) {
+            next.add(projectId);
+          }
+          return next;
+        });
+        return;
       }
-      return next;
-    });
-  }, []);
+
+      setExpandedProjects((prev) => {
+        const next = new Set<string>();
+        if (!prev.has(projectId)) {
+          next.add(projectId);
+        }
+        return next;
+      });
+    },
+    [searchMode],
+  );
+
+  const isProjectExpanded = useCallback(
+    (projectId: string) =>
+      searchMode === 'running'
+        ? !collapsedRunningProjects.has(projectId)
+        : expandedProjects.has(projectId),
+    [collapsedRunningProjects, expandedProjects, searchMode],
+  );
 
   const handleSessionClick = useCallback(
     (session: SessionWithProvider, projectId: string) => {
@@ -1021,7 +1044,7 @@ export function useSidebarController({
 
   return {
     isSidebarCollapsed,
-    expandedProjects,
+    isProjectExpanded,
     activeRename,
     showNewProject,
     initialSessionsLoaded,
