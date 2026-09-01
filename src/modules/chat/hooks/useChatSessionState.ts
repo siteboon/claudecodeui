@@ -235,6 +235,9 @@ export function useChatSessionState({
   const loadAllFinishedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadAllOverlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastLoadedSessionKeyRef = useRef<string | null>(null);
+  // The last socket that carried this session's subscription. A new identity
+  // marks reconnect so the persisted-tail refresh can follow the subscribe.
+  const subscribedSocketRef = useRef<WebSocket | null>(null);
   /**
    * Tracks the last processed value from `useProjectsState.newSessionTrigger`.
    *
@@ -659,11 +662,15 @@ export function useChatSessionState({
     };
   }, [chatMessages.length, isActive, isLoadingSessionMessages, scrollToBottom]);
 
-  // Session replay/subscription remains active regardless of which main tab is
-  // visible. Only persisted-history HTTP traffic is visibility-gated below.
+  // This is the only owner of chat.subscribe. On reconnect the subscription
+  // goes first so the server attaches and replays missed seq frames before a
+  // persisted-tail refresh can merge the completed part of the turn.
   useEffect(() => {
     if (!selectedSession || !selectedProject || !ws) return;
 
+    const isReconnect = subscribedSocketRef.current !== null
+      && subscribedSocketRef.current !== ws;
+    subscribedSocketRef.current = ws;
     statusCheckSentAtRef.current.set(selectedSession.id, Date.now());
     sendMessage({
       type: 'chat.subscribe',
@@ -672,7 +679,19 @@ export function useChatSessionState({
         lastSeq: lastSeqRef.current.get(selectedSession.id) ?? 0,
       }],
     });
-  }, [lastSeqRef, selectedProject, selectedSession, sendMessage, statusCheckSentAtRef, ws]);
+    if (isReconnect) {
+      void requestLatestMessages(selectedSession.id, isActive);
+    }
+  }, [
+    isActive,
+    lastSeqRef,
+    requestLatestMessages,
+    selectedProject,
+    selectedSession,
+    sendMessage,
+    statusCheckSentAtRef,
+    ws,
+  ]);
 
   // Main session loading effect — store-based.
   //

@@ -256,23 +256,6 @@ function ChatInterface({
     resolvePermissionModeForProvider,
   });
 
-  // On WebSocket reconnect, request a bounded persisted-tail sync (deferred
-  // while Chat is hidden), then re-subscribe — the
-  // `chat_subscribed` ack restores or clears the activity indicator, replays
-  // missed live events, and re-attaches a still-running stream to this socket.
-  const handleWebSocketReconnect = useCallback(async () => {
-    if (!selectedProject || !selectedSession) return;
-    await requestLatestMessages(selectedSession.id, isActive);
-    statusCheckSentAtRef.current.set(selectedSession.id, Date.now());
-    sendMessage({
-      type: 'chat.subscribe',
-      sessions: [{
-        sessionId: selectedSession.id,
-        lastSeq: lastSeqRef.current.get(selectedSession.id) ?? 0,
-      }],
-    });
-  }, [isActive, requestLatestMessages, selectedProject, selectedSession, sendMessage]);
-
   useChatRealtimeHandlers({
     isActive,
     subscribe,
@@ -288,7 +271,6 @@ function ChatInterface({
     statusCheckSentAtRef,
     onSessionProcessing,
     onSessionIdle,
-    onWebSocketReconnect: handleWebSocketReconnect,
     requestLatestMessages,
     sessionStore,
   });
