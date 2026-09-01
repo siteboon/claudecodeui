@@ -914,14 +914,40 @@ export function useChatComposerState({
     setQueuedDraft(null);
   }, []);
 
-  // A voice transcript either fills the input (to edit before sending) or, when the
-  // user tapped "stop and send", is submitted straight away. Mirror the value into
-  // inputValueRef synchronously so handleSubmit reads the new text, not the stale state.
-  const handleVoiceTranscript = useCallback((text: string, send?: boolean) => {
-    const base = inputValueRef.current.trim();
+  /**
+   * What was in the box when this dictation started.
+   *
+   * The transcript arrives again and again while someone speaks, each time as
+   * the whole thing rather than the newest words. Appending every one of those
+   * would repeat the sentence on screen, so each update replaces the last -
+   * and this is what it replaces back to.
+   */
+  const voiceBase = useRef<string | null>(null);
+
+  /**
+   * Puts the running transcript in the box, the way the VS Code extension
+   * does: while speaking, not once at the end. Waiting for the end is what
+   * made dictation feel like it had stopped working - nothing happened until
+   * everything happened.
+   *
+   * `final` closes the dictation off, so the next one starts from what is in
+   * the box by then. The other two dictation paths report once, at the end, so
+   * leaving it out means exactly that. Mirrored into `inputValueRef`
+   * synchronously, or a send would read the text from before this update.
+   */
+  const handleVoiceTranscript = useCallback((text: string, send?: boolean, final = true) => {
+    if (voiceBase.current === null) {
+      voiceBase.current = inputValueRef.current.trim();
+    }
+
+    const base = voiceBase.current;
     const next = base ? `${base} ${text}` : text;
     setInput(next);
     inputValueRef.current = next;
+
+    if (final) {
+      voiceBase.current = null;
+    }
     if (send) handleSubmitRef.current?.(createFakeSubmitEvent());
   }, [setInput]);
 
@@ -1019,6 +1045,12 @@ export function useChatComposerState({
     (event: ChangeEvent<HTMLTextAreaElement>) => {
       const newValue = event.target.value;
       const cursorPos = event.target.selectionStart;
+
+      // Typing ends any claim a dictation had on the box. Without this, one
+      // that stopped without a final transcript - an upstream error, a dropped
+      // connection - would leave its base behind, and the next recording would
+      // replace whatever was typed in the meantime.
+      voiceBase.current = null;
 
       setInput(newValue);
       inputValueRef.current = newValue;
