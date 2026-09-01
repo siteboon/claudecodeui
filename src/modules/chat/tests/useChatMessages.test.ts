@@ -130,3 +130,49 @@ test('preserves both UI objects produced by an unchanged task notification', () 
   assert.equal(updated[0]?.isTaskNotification, true);
   assert.equal(updated[1]?.content, 'Detailed result');
 });
+
+test('a tool_result that omits content renders as empty instead of throwing', () => {
+  // JSON.stringify(undefined) returns undefined, not a string, so the .trim()
+  // that follows used to throw. The throw happened inside the useMemo in
+  // useChatSessionState, under the ErrorBoundary in MainContent, which replaced
+  // the whole chat pane — and since the store state survived, the fallback's
+  // reset button re-rendered the same messages and threw again. The session was
+  // permanently unopenable.
+  const toolUse = message('tool-use', {
+    kind: 'tool_use',
+    toolId: 'tool-1',
+    toolName: 'Workflow',
+    toolInput: { script: 'export const meta = {}' },
+  });
+  const toolResult = message('tool-result', {
+    kind: 'tool_result',
+    toolId: 'tool-1',
+    content: undefined,
+  });
+
+  const converted = normalizedToChatMessages([toolUse, toolResult]);
+
+  assert.equal(converted.length, 1);
+  assert.deepEqual(converted[0]?.toolResult, {
+    content: '',
+    isError: false,
+    toolUseResult: undefined,
+  });
+});
+
+test('a tool_use carrying an attached result with no content renders as empty', () => {
+  // The same crash by the other route: the result is attached to the tool_use
+  // row by the backend rather than arriving as its own tool_result message.
+  const toolUse = message('tool-use', {
+    kind: 'tool_use',
+    toolId: 'tool-1',
+    toolName: 'BashOutput',
+    toolInput: { bash_id: 'bash-1' },
+    toolResult: { content: undefined as unknown as string, isError: false },
+  });
+
+  const converted = normalizedToChatMessages([toolUse]);
+
+  assert.equal(converted.length, 1);
+  assert.equal(converted[0]?.toolResult?.content, '');
+});
