@@ -449,3 +449,56 @@ test('AntigravityProviderModels reads the default model from the overridden data
     await fs.rm(emptyHome, { recursive: true, force: true });
   }
 });
+
+test('AntigravityProviderAuth validates token expiry and extracts the account email', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agy-auth-expiry-'));
+  const restoreDataDir = withEnvValue('CLOUDCLI_ANTIGRAVITY_DATA_DIR', tempRoot);
+  const restoreAgyPath = withEnvValue('CLOUDCLI_AGY_PATH', path.join(tempRoot, 'agy'));
+  await fs.writeFile(path.join(tempRoot, 'agy'), '#!/bin/sh\n', { mode: 0o755 });
+  const jwtPayload = (payload: Record<string, unknown>) =>
+    Buffer.from(JSON.stringify(payload)).toString('base64url');
+
+  try {
+    const auth = new AntigravityProviderAuth();
+
+    // A valid token whose email only lives in the id_token JWT payload.
+    await fs.writeFile(path.join(tempRoot, 'antigravity-oauth-token'), JSON.stringify({
+      access_token: 'at',
+      refresh_token: 'rt',
+      expiry: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      id_token: `header.${jwtPayload({ email: 'user@example.com' })}.signature`,
+    }));
+    const signedIn = await auth.getStatus();
+    assert.equal(signedIn.authenticated, true);
+    assert.equal(signedIn.email, 'user@example.com');
+
+    // An expired token without a refresh token must not count as logged in.
+    await fs.writeFile(path.join(tempRoot, 'antigravity-oauth-token'), JSON.stringify({
+      access_token: 'at',
+      expiry: new Date(Date.now() - 60 * 1000).toISOString(),
+    }));
+    const expired = await auth.getStatus();
+    assert.equal(expired.authenticated, false);
+    assert.match(expired.error ?? '', /expired/);
+
+    // An expired access token with a refresh token can renew silently.
+    await fs.writeFile(path.join(tempRoot, 'antigravity-oauth-token'), JSON.stringify({
+      access_token: 'at',
+      refresh_token: 'rt',
+      expiry: new Date(Date.now() - 60 * 1000).toISOString(),
+    }));
+    const refreshable = await auth.getStatus();
+    assert.equal(refreshable.authenticated, true);
+
+    // Unparseable token files keep the previous "exists = authenticated"
+    // behavior so unknown schemas never lock existing users out.
+    await fs.writeFile(path.join(tempRoot, 'antigravity-oauth-token'), 'not json at all');
+    const opaque = await auth.getStatus();
+    assert.equal(opaque.authenticated, true);
+    assert.equal(opaque.email, null);
+  } finally {
+    restoreAgyPath();
+    restoreDataDir();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
