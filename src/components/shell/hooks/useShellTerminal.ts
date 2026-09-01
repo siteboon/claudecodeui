@@ -251,6 +251,13 @@ export function useShellTerminal({
         cols: currentTerminal.cols,
         rows: currentTerminal.rows,
       });
+
+      // Login modals (minimal) exist only to drive an interactive CLI login;
+      // without focus every keystroke lands on the page and the login CLI
+      // appears frozen until the user thinks to click the terminal first.
+      if (minimal) {
+        currentTerminal.focus();
+      }
     }, TERMINAL_INIT_DELAY_MS);
 
     setIsInitialized(true);
