@@ -57,8 +57,25 @@ const childrenToText = (children: React.ReactNode): string => {
   return '';
 };
 
-// The delimiters `remark-math` recognizes with `singleDollarTextMath` off.
-const MATH_DELIMITER = /\$\$|\\\(|\\\[/;
+// With single-dollar math disabled, remark-math only parses double-dollar delimiters.
+const MATH_DELIMITER = /\$\$/;
+
+// Match code before LaTeX so delimiter-like text in code stays literal. The fence
+// branch also covers an unfinished streamed fence by consuming through the end.
+// Both LaTeX delimiters require an unescaped backslash on each side, so text
+// that spells out `\\[ ... \\]` stays prose instead of turning into math.
+const CODE_OR_LATEX_MATH =
+  /^ {0,3}((`|~)\2{2,})(?!\2)[^\r\n]*(?:\r?\n|$)[\s\S]*?(?:^ {0,3}\1\2*[ \t]*(?=\r?$)|$(?![\s\S]))|(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\3(?!`)|\$\$[\s\S]*?\$\$|(?<!\\)\\\[([\s\S]*?)(?<!\\)\\\]|(?<!\\)\\\(([\s\S]*?)(?<!\\)\\\)/gm;
+
+const normalizeLatexDelimiters = (text: string): string =>
+  text.replace(
+    CODE_OR_LATEX_MATH,
+    (match, _fence, _fenceMarker, _codeDelimiter, blockMath, inlineMath) => {
+      if (blockMath !== undefined) return `$$${blockMath}$$`;
+      if (inlineMath !== undefined) return `$$${inlineMath}$$`;
+      return match;
+    },
+  );
 
 const EMPTY_PLUGINS: never[] = [];
 
@@ -245,7 +262,7 @@ const markdownComponents = {
  */
 function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 'className'>) {
   const content = useMemo(
-    () => normalizeInlineCodeFences(String(children ?? '')),
+    () => normalizeLatexDelimiters(normalizeInlineCodeFences(String(children ?? ''))),
     [children],
   );
   // Math support costs a remark tree pass plus a full KaTeX walk on every
