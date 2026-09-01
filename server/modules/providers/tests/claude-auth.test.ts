@@ -136,6 +136,64 @@ test('checkCredentials: no CLAUDE_CODE_OAUTH_TOKEN, expired credentials file rep
   });
 });
 
+test('checkCredentials: expired access token with a live refresh token is still authenticated', async () => {
+  await withTempHome(async (homeDir) => {
+    await writeCredentialsFile(homeDir, {
+      claudeAiOauth: {
+        accessToken: 'stale-token',
+        refreshToken: 'live-refresh-token',
+        expiresAt: 1_000_000_000_000,
+        refreshTokenExpiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
+      },
+      email: 'someone@example.com',
+    });
+
+    await withEnv({}, async () => {
+      const status = await checkCredentials(new ClaudeProviderAuth());
+      assert.equal(status.authenticated, true);
+      assert.equal(status.method, 'credentials_file');
+      assert.equal(status.email, 'someone@example.com');
+    });
+  });
+});
+
+test('checkCredentials: expired access token with a refresh token that has no recorded expiry is authenticated', async () => {
+  await withTempHome(async (homeDir) => {
+    await writeCredentialsFile(homeDir, {
+      claudeAiOauth: {
+        accessToken: 'stale-token',
+        refreshToken: 'live-refresh-token',
+        expiresAt: 1_000_000_000_000,
+      },
+    });
+
+    await withEnv({}, async () => {
+      const status = await checkCredentials(new ClaudeProviderAuth());
+      assert.equal(status.authenticated, true);
+      assert.equal(status.method, 'credentials_file');
+    });
+  });
+});
+
+test('checkCredentials: expired access token with an expired refresh token reports not authenticated', async () => {
+  await withTempHome(async (homeDir) => {
+    await writeCredentialsFile(homeDir, {
+      claudeAiOauth: {
+        accessToken: 'stale-token',
+        refreshToken: 'stale-refresh-token',
+        expiresAt: 1_000_000_000_000,
+        refreshTokenExpiresAt: 1_000_000_000_000,
+      },
+    });
+
+    await withEnv({}, async () => {
+      const status = await checkCredentials(new ClaudeProviderAuth());
+      assert.equal(status.authenticated, false);
+      assert.match(status.error ?? '', /expired/i);
+    });
+  });
+});
+
 test('checkCredentials: ANTHROPIC_API_KEY takes precedence over CLAUDE_CODE_OAUTH_TOKEN', async () => {
   await withTempHome(async () => {
     await withEnv(

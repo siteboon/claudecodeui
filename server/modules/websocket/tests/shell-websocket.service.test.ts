@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 
 import { WebSocket } from 'ws';
@@ -116,4 +118,110 @@ test('shell output detects and normalizes a wrapped authentication URL', () => {
   });
 
   pty.emitExit();
+});
+
+test('bypassPermissions launches claude with --dangerously-skip-permissions', () => {
+  const spawnedCommands: string[] = [];
+  const dependencies = {
+    resolveProviderSessionId: () => null,
+    spawnPty: (_shell: string, args: string | string[]) => {
+      spawnedCommands.push(Array.isArray(args) ? args[args.length - 1] : args);
+      return createFakePty() as never;
+    },
+  };
+
+  const bypassSocket = createFakeSocket();
+  handleShellConnection(bypassSocket as never, dependencies);
+  bypassSocket.emit(
+    'message',
+    JSON.stringify({
+      type: 'init',
+      projectPath: process.cwd(),
+      sessionId: `bypass-on-${Date.now()}`,
+      hasSession: false,
+      provider: 'claude',
+      bypassPermissions: true,
+    })
+  );
+
+  const defaultSocket = createFakeSocket();
+  handleShellConnection(defaultSocket as never, dependencies);
+  defaultSocket.emit(
+    'message',
+    JSON.stringify({
+      type: 'init',
+      projectPath: process.cwd(),
+      sessionId: `bypass-off-${Date.now()}`,
+      hasSession: false,
+      provider: 'claude',
+    })
+  );
+
+  assert.deepEqual(spawnedCommands, ['claude --dangerously-skip-permissions', 'claude']);
+});
+
+test('bypassPermissions carries through to resumed claude sessions', () => {
+  const spawnedCommands: string[] = [];
+  const dependencies = {
+    resolveProviderSessionId: () => 'resumed-session-id',
+    spawnPty: (_shell: string, args: string | string[]) => {
+      spawnedCommands.push(Array.isArray(args) ? args[args.length - 1] : args);
+      return createFakePty() as never;
+    },
+  };
+
+  const socket = createFakeSocket();
+  handleShellConnection(socket as never, dependencies);
+  socket.emit(
+    'message',
+    JSON.stringify({
+      type: 'init',
+      projectPath: process.cwd(),
+      sessionId: `bypass-resume-${Date.now()}`,
+      hasSession: true,
+      provider: 'claude',
+      bypassPermissions: true,
+    })
+  );
+
+  assert.equal(spawnedCommands.length, 1);
+  if (os.platform() !== 'win32') {
+    assert.equal(
+      spawnedCommands[0],
+      'claude --resume "resumed-session-id" --dangerously-skip-permissions || claude --dangerously-skip-permissions'
+    );
+  }
+});
+
+test('a missing project directory is reported as an error frame and starts no pty', () => {
+  const socket = createFakeSocket();
+  let spawnCount = 0;
+  const dependencies = {
+    resolveProviderSessionId: () => null,
+    spawnPty: () => {
+      spawnCount += 1;
+      return createFakePty() as never;
+    },
+  };
+
+  handleShellConnection(socket as never, dependencies);
+  socket.emit(
+    'message',
+    JSON.stringify({
+      type: 'init',
+      // A project row survives its directory being deleted or unmounted, so
+      // this is what the Shell tab sends for a stale sidebar entry.
+      projectPath: path.join(os.tmpdir(), `shell-missing-${Date.now()}`),
+      sessionId: `missing-path-${Date.now()}`,
+      hasSession: false,
+      provider: 'plain-shell',
+      isPlainShell: true,
+    })
+  );
+
+  assert.equal(spawnCount, 0);
+  assert.deepEqual(
+    socket.frames.map((frame) => JSON.parse(frame) as Record<string, unknown>),
+    [{ type: 'error', message: 'Invalid project path' }]
+  );
 });

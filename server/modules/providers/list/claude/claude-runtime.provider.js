@@ -24,7 +24,10 @@ import {
   buildClaudeUserContent,
   normalizeImageDescriptors
 } from '@/shared/image-attachments.js';
-import { CLAUDE_PREDEFINED_MODELS } from '@/modules/providers/list/claude/claude-models.provider.js';
+import {
+  CLAUDE_PREDEFINED_MODELS,
+  CLAUDE_ULTRACODE_EFFORT
+} from '@/modules/providers/list/claude/claude-models.provider.js';
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
 import {
   createNotificationEvent,
@@ -69,6 +72,12 @@ const BG_WAIT_CEILING_MS = 30 * 60 * 1000;
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
+// Ultracode is a session-scoped setting rather than an SDK effort level: it pairs xhigh
+// effort with standing dynamic-workflow orchestration, and the CLI only honours it when
+// Workflows are enabled. The catalog offers it as an effort choice for the picker, so the
+// selection is translated back into the two options the SDK actually understands here.
+const ULTRACODE_SDK_EFFORT = 'xhigh';
+
 function resolveClaudeEffort(model, effort, modelsDefinition = CLAUDE_PREDEFINED_MODELS) {
   const selectedModel = modelsDefinition?.OPTIONS?.find((option) => option.value === model) || null;
   const allowedEfforts = selectedModel?.effort?.values
@@ -76,6 +85,30 @@ function resolveClaudeEffort(model, effort, modelsDefinition = CLAUDE_PREDEFINED
   return typeof effort === 'string' && effort !== 'default' && allowedEfforts.includes(effort)
     ? effort
     : undefined;
+}
+
+/**
+ * Writes the resolved effort choice onto the SDK options, expanding `ultracode` into the
+ * xhigh effort level plus the session-scoped settings it requires.
+ * @param {Object} sdkOptions - SDK options being built
+ * @param {string|undefined} resolvedEffort - Catalog-validated effort selection
+ */
+function applyClaudeEffort(sdkOptions, resolvedEffort) {
+  if (!resolvedEffort) {
+    return;
+  }
+
+  if (resolvedEffort !== CLAUDE_ULTRACODE_EFFORT) {
+    sdkOptions.effort = resolvedEffort;
+    return;
+  }
+
+  sdkOptions.effort = ULTRACODE_SDK_EFFORT;
+  sdkOptions.settings = {
+    ...(sdkOptions.settings || {}),
+    ultracode: true,
+    enableWorkflows: true
+  };
 }
 
 function createRequestId() {
@@ -183,7 +216,7 @@ function matchesToolPermission(entry, toolName, input) {
 }
 
 function mapCliOptionsToSDK(options = {}) {
-  const { providerSessionId, cwd, toolsSettings, permissionMode, effort } = options;
+  const { providerSessionId, cwd, toolsSettings, permissionMode, effort, resumeAnchorId, resumeFromScratch } = options;
 
   const sdkOptions = {};
 
@@ -193,7 +226,12 @@ function mapCliOptionsToSDK(options = {}) {
 
   // Resolve the executable eagerly on Windows because the SDK uses raw child_process.spawn,
   // which does not reliably follow npm's shell wrappers like cross-spawn does.
-  sdkOptions.pathToClaudeCodeExecutable = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
+  // When nothing resolves the option stays unset on purpose: the SDK then falls back to the
+  // binary it ships, which beats handing it a bare `claude` that raw spawn can never launch.
+  const claudeExecutablePath = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
+  if (claudeExecutablePath) {
+    sdkOptions.pathToClaudeCodeExecutable = claudeExecutablePath;
+  }
 
   if (cwd) {
     sdkOptions.cwd = cwd;
@@ -235,14 +273,11 @@ function mapCliOptionsToSDK(options = {}) {
 
   sdkOptions.model = options.model || CLAUDE_PREDEFINED_MODELS.DEFAULT;
 
-  const resolvedEffort = resolveClaudeEffort(
+  applyClaudeEffort(sdkOptions, resolveClaudeEffort(
     sdkOptions.model,
     effort,
     options.effortModels || CLAUDE_PREDEFINED_MODELS,
-  );
-  if (resolvedEffort) {
-    sdkOptions.effort = resolvedEffort;
-  }
+  ));
 
   sdkOptions.systemPrompt = {
     type: 'preset',
@@ -252,8 +287,19 @@ function mapCliOptionsToSDK(options = {}) {
   sdkOptions.settingSources = ['project', 'user', 'local'];
 
   // The SDK resumes with the provider-native session id, never the app id.
-  if (providerSessionId) {
+  // `resumeFromScratch` is set when the very first prompt of a conversation was
+  // edited: there is nothing before it to resume through, so the turn has to
+  // start the conversation over instead.
+  if (providerSessionId && !resumeFromScratch) {
     sdkOptions.resume = providerSessionId;
+
+    // Editing an already-sent message re-runs the conversation truncated just
+    // before it. `resumeSessionAt` is inclusive of the uuid it names, so the
+    // caller resolves the last row to KEEP and passes that — never the edited
+    // turn itself, which would leave the original prompt in context.
+    if (resumeAnchorId) {
+      sdkOptions.resumeSessionAt = resumeAnchorId;
+    }
   }
 
   return sdkOptions;
@@ -339,47 +385,129 @@ function transformMessage(sdkMessage) {
   return sdkMessage;
 }
 
+/**
+ * True for the user bubble the SDK echoes for a subagent's own prompt.
+ *
+ * Subagent traffic carries `parent_tool_use_id`, so this echo lands in the main
+ * thread and stacks a second copy of the prompt right below the Agent tool card
+ * that already displays it. It also disappears on reload, because the transcript
+ * keeps that turn in the subagent's sidechain rather than the session file.
+ * @param {Object} message - Normalized message about to be sent to the client
+ * @returns {boolean}
+ */
+export function isSubagentPromptEcho(message) {
+  return Boolean(message?.parentToolUseId) && message.role === 'user' && message.kind === 'text';
+}
+
 function readNumber(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
 /**
- * Extracts token usage from SDK messages.
- * Prefers per-step `message.usage` (Claude message payload), then falls back
- * to result-level usage/modelUsage for compatibility across SDK versions.
+ * @typedef {Object} TokenBudget
+ * @property {number} used
+ * @property {number} total
+ * @property {number} inputTokens
+ * @property {number} outputTokens
+ * @property {number} [cacheReadTokens]
+ * @property {number} [cacheCreationTokens]
+ * @property {number} [cacheTokens]
+ * @property {{ input: number, output: number }} breakdown
+ */
+
+/**
+ * Builds a context-window budget from an Anthropic-shaped usage payload.
+ *
+ * `input_tokens + cache_read + cache_creation` is one request's whole prompt,
+ * which is exactly what the context window holds at that moment.
+ * @param {Object} messageUsage - Anthropic usage payload
+ * @returns {TokenBudget} Token budget object
+ */
+function buildTokenBudget(messageUsage) {
+  const directInputTokens = readNumber(messageUsage.input_tokens ?? messageUsage.inputTokens);
+  const cacheCreationTokens = readNumber(messageUsage.cache_creation_input_tokens ?? messageUsage.cacheCreationInputTokens ?? messageUsage.cacheCreationTokens);
+  const cacheReadTokens = readNumber(messageUsage.cache_read_input_tokens ?? messageUsage.cacheReadInputTokens ?? messageUsage.cacheReadTokens);
+  const cacheTokens = cacheCreationTokens + cacheReadTokens;
+  const inputTokens = directInputTokens + cacheTokens;
+  const outputTokens = readNumber(messageUsage.output_tokens ?? messageUsage.outputTokens);
+  const contextWindow = parseInt(process.env.CONTEXT_WINDOW, 10) || 160000;
+
+  return {
+    used: inputTokens + outputTokens,
+    total: contextWindow,
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheCreationTokens,
+    cacheTokens,
+    breakdown: {
+      input: inputTokens,
+      output: outputTokens,
+    },
+  };
+}
+
+/**
+ * Extracts the session's context-window usage from an SDK stream message.
+ *
+ * Only assistant messages describe the context window: each one reports the
+ * prompt its own request carried. The turn-ending `result` is deliberately not
+ * a source here — see `extractCumulativeTokenBudget`.
  * @param {Object} sdkMessage - SDK stream message
- * @returns {Object|null} Token budget object or null
+ * @returns {TokenBudget|null} Token budget object or null
  */
 function extractTokenBudget(sdkMessage) {
   if (!sdkMessage || typeof sdkMessage !== 'object') {
     return null;
   }
 
-  const messageUsage = sdkMessage.message?.usage || sdkMessage.usage;
-  if (messageUsage && typeof messageUsage === 'object') {
-    const directInputTokens = readNumber(messageUsage.input_tokens ?? messageUsage.inputTokens);
-    const cacheCreationTokens = readNumber(messageUsage.cache_creation_input_tokens ?? messageUsage.cacheCreationInputTokens ?? messageUsage.cacheCreationTokens);
-    const cacheReadTokens = readNumber(messageUsage.cache_read_input_tokens ?? messageUsage.cacheReadInputTokens ?? messageUsage.cacheReadTokens);
-    const cacheTokens = cacheCreationTokens + cacheReadTokens;
-    const inputTokens = directInputTokens + cacheTokens;
-    const outputTokens = readNumber(messageUsage.output_tokens ?? messageUsage.outputTokens);
-    const totalUsed = inputTokens + outputTokens;
-    const contextWindow = parseInt(process.env.CONTEXT_WINDOW, 10) || 160000;
+  // Subagent traffic (parent_tool_use_id set) reports the subagent's own
+  // context window, not this session's — surfacing it makes the counter drop
+  // to the subagent's number and bounce back on the next main-thread event.
+  if (sdkMessage.parent_tool_use_id) {
+    return null;
+  }
 
-    return {
-      used: totalUsed,
-      total: contextWindow,
-      inputTokens,
-      outputTokens,
-      cacheReadTokens,
-      cacheCreationTokens,
-      cacheTokens,
-      breakdown: {
-        input: inputTokens,
-        output: outputTokens,
-      },
-    };
+  // Only assistant messages carry Anthropic-shaped usage. System
+  // task_progress/task_notification events have a top-level `usage` too, but
+  // shaped {total_tokens, tool_uses, duration_ms} — reading Anthropic keys
+  // off it yields an all-zero budget that flashes "0" in the composer.
+  if (sdkMessage.type !== 'assistant') {
+    return null;
+  }
+
+  const messageUsage = sdkMessage.message?.usage;
+  if (!messageUsage || typeof messageUsage !== 'object') {
+    return null;
+  }
+
+  return buildTokenBudget(messageUsage);
+}
+
+/**
+ * Last-resort budget read from a turn's `result` message.
+ *
+ * `result.usage` and `result.modelUsage` are the turn's *bill*: every request
+ * the turn made, summed, including each subagent's. A turn that made four
+ * requests therefore reports roughly four times the context the conversation
+ * actually holds, so publishing it made the counter leap at the end of a turn
+ * and fall back on the next assistant message — worst with subagents running,
+ * whose requests inflate the sum without ever entering this session's context.
+ *
+ * It is still the only usage an SDK build that reports none per assistant
+ * message ever emits, so it stays available for the caller to use when a turn
+ * produced no assistant budget at all.
+ * @param {Object} sdkMessage - SDK stream message
+ * @returns {TokenBudget|null} Token budget object or null
+ */
+function extractCumulativeTokenBudget(sdkMessage) {
+  if (!sdkMessage || typeof sdkMessage !== 'object' || sdkMessage.type !== 'result') {
+    return null;
+  }
+
+  if (sdkMessage.usage && typeof sdkMessage.usage === 'object') {
+    return buildTokenBudget(sdkMessage.usage);
   }
 
   if (!sdkMessage.modelUsage || typeof sdkMessage.modelUsage !== 'object') {
@@ -599,6 +727,9 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // True while the process is being held open for background work, so a later
   // `result` can be recognised as that work reporting back.
   let heldForBackgroundWork = false;
+  // Set once a turn publishes a budget read from an assistant message, so the
+  // turn-ending `result` is only mined for usage when nothing better arrived.
+  let assistantBudgetSent = false;
 
   // A new turn supersedes any earlier one still holding this session's process
   // open, so held runs cannot stack up across a conversation.
@@ -736,6 +867,13 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         return { behavior: 'deny', message: 'Permission request cancelled' };
       }
 
+      // A client answered. Announce it on the run stream so the replay buffer
+      // and every other attached tab drop the prompt — resolving happens over
+      // the inbound socket only, so without this a mid-run page refresh
+      // replays the `permission_request` with nothing to retract it and the
+      // already-answered prompt resurrects.
+      ws.send(createNormalizedMessage({ kind: 'permission_resolved', requestId, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+
       if (decision.allow) {
         if (decision.rememberEntry && typeof decision.rememberEntry === 'string') {
           if (!sdkOptions.allowedTools.includes(decision.rememberEntry)) {
@@ -812,12 +950,21 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         if (transformedMessage.parentToolUseId && !msg.parentToolUseId) {
           msg.parentToolUseId = transformedMessage.parentToolUseId;
         }
+        if (isSubagentPromptEcho(msg)) {
+          continue;
+        }
         ws.send(msg);
       }
 
-      // Extract and send token budget updates from assistant/result usage payloads
-      const tokenBudgetData = extractTokenBudget(message);
+      // Extract and send token budget updates from assistant usage payloads,
+      // falling back to the turn's cumulative bill only for SDK builds that
+      // report no per-assistant usage at all.
+      const tokenBudgetData = extractTokenBudget(message)
+        || (assistantBudgetSent ? null : extractCumulativeTokenBudget(message));
       if (tokenBudgetData) {
+        if (message.type === 'assistant') {
+          assistantBudgetSent = true;
+        }
         ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
       }
 
@@ -1064,5 +1211,7 @@ export {
   getActiveClaudeSDKSessions,
   resolveToolApproval,
   getPendingApprovalsForSession,
-  reconnectSessionWriter
+  reconnectSessionWriter,
+  extractTokenBudget,
+  extractCumulativeTokenBudget
 };

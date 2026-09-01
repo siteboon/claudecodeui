@@ -53,6 +53,36 @@ export interface IProvider {
   readonly skills: IProviderSkills;
   readonly sessions: IProviderSessions;
   readonly sessionSynchronizer: IProviderSessionSynchronizer;
+  /**
+   * Transcript branching. Present only for providers that can materialise a
+   * prefix of one conversation as an independent, resumable provider session;
+   * its absence is what makes "fork session" unavailable.
+   */
+  readonly fork?: IProviderFork;
+}
+
+// ---------------------------
+//----------------- PROVIDER FORK INTERFACE ------------
+/**
+ * Transcript-branching contract for one provider.
+ */
+export interface IProviderFork {
+  /**
+   * Copies a session's transcript, up to and including `upToAnchorId` (the
+   * whole conversation when omitted), into a brand-new provider session.
+   *
+   * Returns the new provider-native id and the path of the artifact it wrote,
+   * so the caller can insert the database row before the filesystem watcher
+   * notices the file and indexes it as an unrelated session.
+   */
+  forkSession(input: {
+    providerSessionId: string;
+    jsonlPath: string;
+    /** The session's working directory — how providers scope a session lookup. */
+    projectPath: string;
+    upToAnchorId?: string;
+    title?: string;
+  }): Promise<{ providerSessionId: string; jsonlPath: string }>;
 }
 
 // ---------------------------
@@ -154,6 +184,38 @@ export interface IProviderMcp {
 export interface IProviderSessions {
   normalizeMessage(raw: unknown, sessionId: string | null): NormalizedMessage[];
   fetchHistory(sessionId: string, options?: FetchHistoryOptions): Promise<FetchHistoryResult>;
+
+  /**
+   * Resolves where a conversation must resume from so that the turn identified
+   * by `anchorId`, and everything after it, is replaced.
+   *
+   * `resumeThroughId` is the last transcript row to KEEP — resuming is
+   * inclusive of it — or `null` when the edited turn is the first prompt and
+   * the conversation should start over. `found` is false when `anchorId` is not
+   * in the transcript, which the caller must report rather than guess at.
+   *
+   * Implemented only by providers whose transcripts have stable per-row
+   * identity; its absence is what makes "edit this message" unavailable.
+   */
+  resolveEditAnchor?(
+    sessionId: string,
+    anchorId: string,
+  ): Promise<{ found: boolean; resumeThroughId: string | null }>;
+
+  /**
+   * Rewinds the session so `keepThroughId` is the last row of its
+   * conversation, and points the session at whatever provider session now
+   * holds it. `null` keeps nothing: the conversation starts over.
+   *
+   * Implemented only by providers whose runtime cannot resume a transcript
+   * partway and have to branch instead. Codex is one — it has no
+   * resume-at-a-row, so the rewind is a `thread/fork` that leaves the pre-edit
+   * thread on disk and moves the session onto the copy. Providers that can
+   * resume partway leave this undefined, and the anchor is handed to their
+   * runtime as a resume option instead; that is the difference the edit
+   * gateway branches on.
+   */
+  rewindSession?(sessionId: string, keepThroughId: string | null): Promise<void>;
 }
 
 // ---------------------------
