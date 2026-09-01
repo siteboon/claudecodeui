@@ -25,6 +25,9 @@ type WebSocketContextType = {
 
 const WebSocketContext = createContext<WebSocketContextType | null>(null);
 
+const RECONNECT_DELAY_MS = 3_000;
+const RESUME_PONG_TIMEOUT_MS = 3_000;
+
 export const useWebSocket = () => {
   const context = useContext(WebSocketContext);
   if (!context) {
@@ -73,6 +76,15 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   const connect = useCallback(function connect() {
     if (unmountedRef.current) return; // Prevent connection if unmounted
     if (!IS_PLATFORM && (isAuthLoading || !user)) return;
+    // A reconnect timer and a resume event can race. Keep the socket already
+    // connecting or carrying traffic instead of orphaning it with a second one.
+    const existing = wsRef.current;
+    if (
+      existing
+      && (existing.readyState === WebSocket.CONNECTING || existing.readyState === WebSocket.OPEN)
+    ) {
+      return;
+    }
     try {
       // Construct WebSocket URL
       const wsUrl = buildWebSocketUrl(token);
@@ -96,6 +108,9 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       websocket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data) as ServerEvent;
+          if (data.kind === 'pong') {
+            return;
+          }
           dispatch(data);
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
@@ -109,11 +124,11 @@ const useWebSocketProviderState = (): WebSocketContextType => {
         setIsConnected(false);
         wsRef.current = null;
 
-        // Attempt to reconnect after 3 seconds
         reconnectTimeoutRef.current = setTimeout(() => {
+          reconnectTimeoutRef.current = null;
           if (unmountedRef.current) return; // Prevent reconnection if unmounted
           connect();
-        }, 3000);
+        }, RECONNECT_DELAY_MS);
       };
 
       websocket.onerror = (error) => {
@@ -143,6 +158,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       unmountedRef.current = true;
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
       }
       const activeSocket = wsRef.current;
       if (activeSocket) {
@@ -157,6 +173,104 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       }
     };
   }, [connect, isAuthLoading, user]); // reconnect after authentication or token refresh
+
+  // A suspended browser can retain an OPEN socket whose TCP peer is gone.
+  // Probe when the page resumes and replace the transport if no pong returns.
+  useEffect(() => {
+    let probeTimer: NodeJS.Timeout | null = null;
+    let probeSocket: WebSocket | null = null;
+    let probeListener: ((event: MessageEvent) => void) | null = null;
+
+    const clearProbe = () => {
+      if (probeTimer !== null) {
+        clearTimeout(probeTimer);
+        probeTimer = null;
+      }
+      if (probeSocket && probeListener) {
+        probeSocket.removeEventListener('message', probeListener);
+      }
+      probeSocket = null;
+      probeListener = null;
+    };
+
+    const scheduleReconnect = () => {
+      if (reconnectTimeoutRef.current) {
+        return;
+      }
+      reconnectTimeoutRef.current = setTimeout(() => {
+        reconnectTimeoutRef.current = null;
+        if (unmountedRef.current) return;
+        connect();
+      }, RECONNECT_DELAY_MS);
+    };
+
+    const replaceSocket = (socket: WebSocket) => {
+      if (wsRef.current !== socket) {
+        return;
+      }
+      clearProbe();
+      setIsConnected(false);
+      wsRef.current = null;
+      socket.close();
+      scheduleReconnect();
+    };
+
+    const handleResume = () => {
+      if (document.visibilityState !== 'visible') {
+        return;
+      }
+
+      // A bfcache restore can fire both events for one resume.
+      clearProbe();
+
+      const socket = wsRef.current;
+      if (!socket || socket.readyState === WebSocket.CLOSED) {
+        if (reconnectTimeoutRef.current) {
+          clearTimeout(reconnectTimeoutRef.current);
+          reconnectTimeoutRef.current = null;
+        }
+        connect();
+        if (!wsRef.current) {
+          scheduleReconnect();
+        }
+        return;
+      }
+      if (socket.readyState !== WebSocket.OPEN) {
+        return;
+      }
+
+      const nonce = `resume-${Date.now()}-${Math.random()}`;
+      probeSocket = socket;
+      probeListener = (event: MessageEvent) => {
+        try {
+          const frame = JSON.parse(String(event.data)) as { kind?: string; nonce?: string };
+          if (frame.kind === 'pong' && frame.nonce === nonce) {
+            clearProbe();
+          }
+        } catch {
+          // The normal message handler reports malformed frames.
+        }
+      };
+      socket.addEventListener('message', probeListener);
+
+      try {
+        socket.send(JSON.stringify({ type: 'chat.ping', nonce }));
+      } catch {
+        replaceSocket(socket);
+        return;
+      }
+
+      probeTimer = setTimeout(() => replaceSocket(socket), RESUME_PONG_TIMEOUT_MS);
+    };
+
+    document.addEventListener('visibilitychange', handleResume);
+    window.addEventListener('pageshow', handleResume);
+    return () => {
+      clearProbe();
+      document.removeEventListener('visibilitychange', handleResume);
+      window.removeEventListener('pageshow', handleResume);
+    };
+  }, [connect]);
 
   const sendMessage = useCallback((message: unknown) => {
     const socket = wsRef.current;
