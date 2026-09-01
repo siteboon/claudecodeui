@@ -17,7 +17,7 @@ import {
 } from '@/modules/providers/index.js';
 import { createWebSocketServer } from '@/modules/websocket/index.js';
 
-import { getConnectableHost, isLoopbackHost, isWildcardHost } from '../shared/networkHosts.js';
+import { getBindableHost, getConnectableHost } from '../shared/networkHosts.js';
 
 import { createGitModule } from './modules/git/index.js';
 import {
@@ -292,12 +292,13 @@ function getErrorMessage(error: unknown): string {
 }
 
 // The address the desktop app is told to open. `DISPLAY_HOST` says `localhost`
-// for anything loopback, which is friendlier to read and wrong to connect to
-// here: `localhost` and `127.0.0.1` are separate browser origins, so a window
-// that switches between them loses its `localStorage` - the stored login with
-// it - and on Windows `localhost` resolves to `::1` first, where nothing is
-// listening. The marker therefore names what is actually being served.
-const MARKER_HOST = isWildcardHost(HOST) || isLoopbackHost(HOST) ? '127.0.0.1' : HOST;
+// for anything loopback, which is friendlier to read and wrong to connect to:
+// `localhost` and `127.0.0.1` are separate browser origins, so a window that
+// switches between them loses its `localStorage` - the stored login with it -
+// and on Windows `localhost` resolves to `::1` first, where an IPv4-bound
+// server is not listening. The marker names what is actually being served,
+// address family included: a server on `::1` is not reachable over IPv4.
+const MARKER_HOST = getBindableHost(HOST);
 
 async function writeLocalServerMarker() {
     const marker = {
