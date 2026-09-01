@@ -165,6 +165,8 @@ export interface IProviderSkills {
  * `ProviderMcpServer` records used by routes and frontend state.
  */
 export interface IProviderMcp {
+  /** Writable/readable scopes exposed by this provider's MCP adapter. */
+  readonly supportedScopes: McpScope[];
   listServers(options?: { workspacePath?: string }): Promise<Record<McpScope, ProviderMcpServer[]>>;
   listServersForScope(scope: McpScope, options?: { workspacePath?: string }): Promise<ProviderMcpServer[]>;
   upsertServer(input: UpsertProviderMcpServerInput): Promise<ProviderMcpServer>;

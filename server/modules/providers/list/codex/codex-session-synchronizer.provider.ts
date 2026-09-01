@@ -48,7 +48,7 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
       if (existingSession) {
         // If session name is untitled and we now have a name, update it
         if (existingSession.custom_name === 'Untitled Codex Session' && parsed.sessionName && parsed.sessionName !== 'Untitled Codex Session') {
-          sessionsDb.updateSessionCustomName(existingSession.session_id, parsed.sessionName);
+          sessionsDb.updateSessionCustomName(existingSession.session_id, parsed.sessionName, 'provider');
         }
       }
 

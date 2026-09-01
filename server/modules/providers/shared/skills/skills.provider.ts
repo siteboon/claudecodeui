@@ -94,9 +94,15 @@ export abstract class SkillsProvider implements IProviderSkills {
 
   async listSkills(options?: ProviderSkillListOptions): Promise<ProviderSkill[]> {
     const workspacePath = resolveWorkspacePath(options?.workspacePath);
-    const sources = await this.getSkillSources(workspacePath);
-    const skills: ProviderSkill[] = [];
+    return this.scanSkillSources(await this.getSkillSources(workspacePath));
+  }
 
+  /**
+   * Reads ordered skill roots for providers that interleave filesystem and
+   * registry-backed sources, currently OMP.
+   */
+  protected async scanSkillSources(sources: ProviderSkillSource[]): Promise<ProviderSkill[]> {
+    const skills: ProviderSkill[] = [];
     for (const source of sources) {
       const skillFiles = await findProviderSkillMarkdownFiles(source.rootDir, {
         recursive: source.recursive,
@@ -119,11 +125,10 @@ export abstract class SkillsProvider implements IProviderSkills {
             pluginId: source.pluginId,
           });
         } catch {
-          // A malformed or unreadable skill markdown file should not hide other valid skills.
+          // A malformed or unreadable skill file should not hide valid skills.
         }
       }
     }
-
     return skills;
   }
 

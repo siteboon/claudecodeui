@@ -117,8 +117,8 @@ function ensureSweepTimer(): void {
 }
 
 /**
- * Used by provider runtimes in `@/modules/providers`, currently Claude, to park
- * a turn until the user answers its permission prompt.
+ * Used by Claude and OMP runtimes in `@/modules/providers` to park a turn until
+ * the user answers its permission prompt.
  *
  * By default, the registry cancels approvals older than 30 minutes. Providers
  * that own timeout policy must pass `expires: false` and settle or unregister
