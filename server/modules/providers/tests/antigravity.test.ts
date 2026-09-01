@@ -18,6 +18,23 @@ import { AntigravitySessionsProvider } from '../list/antigravity/antigravity-ses
 import { providerRegistry } from '../provider.registry.js';
 import { providerCapabilitiesService } from '../services/provider-capabilities.service.js';
 
+/**
+ * Sets environment variable `name` to `value` and returns a restore function
+ * that puts back the previous value, so test overrides cannot leak into each
+ * other.
+ */
+function withEnvValue(name: string, value: string): () => void {
+  const previousValue = process.env[name];
+  process.env[name] = value;
+  return () => {
+    if (previousValue === undefined) {
+      delete process.env[name];
+    } else {
+      process.env[name] = previousValue;
+    }
+  };
+}
+
 test('AntigravityProvider is registered in providerRegistry', () => {
   const provider = providerRegistry.resolveProvider('antigravity');
   assert.equal(provider.id, 'antigravity');
@@ -48,6 +65,36 @@ test('AntigravityProviderAuth reports valid status object without throwing', asy
   assert.equal(typeof status.installed, 'boolean');
   assert.equal(typeof status.authenticated, 'boolean');
   assert.equal(status.loginCommand, 'agy');
+});
+
+test('AntigravityProviderAuth only reports authenticated with an OAuth token file', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agy-auth-'));
+  // Keep the engine check deterministic on machines without `agy` installed;
+  // tryResolveEnginePath honors this override whenever its cache is empty.
+  const restoreDataDir = withEnvValue('CLOUDCLI_ANTIGRAVITY_DATA_DIR', tempRoot);
+  const restoreAgyPath = withEnvValue('CLOUDCLI_AGY_PATH', path.join(tempRoot, 'agy'));
+  await fs.writeFile(path.join(tempRoot, 'agy'), '#!/bin/sh\n', { mode: 0o755 });
+  try {
+    const auth = new AntigravityProviderAuth();
+
+    // installation_id and settings.json exist from first launch, before any login
+    await fs.writeFile(path.join(tempRoot, 'installation_id'), 'fixture');
+    await fs.writeFile(path.join(tempRoot, 'settings.json'), '{}');
+    const signedOut = await auth.getStatus();
+    assert.equal(signedOut.installed, true);
+    assert.equal(signedOut.authenticated, false);
+    assert.match(signedOut.error ?? '', /not logged in/);
+
+    // The OAuth token file only appears after a completed `agy` login
+    await fs.writeFile(path.join(tempRoot, 'antigravity-oauth-token'), '{"token":{}}');
+    const signedIn = await auth.getStatus();
+    assert.equal(signedIn.authenticated, true);
+    assert.equal(signedIn.error, undefined);
+  } finally {
+    restoreAgyPath();
+    restoreDataDir();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
 });
 
 test('AntigravityProviderModels returns builtin models fallback', async () => {
@@ -194,8 +241,7 @@ test('AntigravitySessionsProvider fetchHistory renders replies and tool results 
     entries.map((entry) => JSON.stringify(entry)).join('\n') + '\n',
   );
 
-  const previousDataDir = process.env.CLOUDCLI_ANTIGRAVITY_DATA_DIR;
-  process.env.CLOUDCLI_ANTIGRAVITY_DATA_DIR = tempRoot;
+  const restoreDataDir = withEnvValue('CLOUDCLI_ANTIGRAVITY_DATA_DIR', tempRoot);
   try {
     const sessions = new AntigravitySessionsProvider();
     const result = await sessions.fetchHistory(sessionId, {});
@@ -224,30 +270,21 @@ test('AntigravitySessionsProvider fetchHistory renders replies and tool results 
     assert.equal(okToolMsg?.toolResult?.content, 'file body');
     assert.equal(okToolMsg?.toolResult?.isError, false);
   } finally {
-    if (previousDataDir === undefined) {
-      delete process.env.CLOUDCLI_ANTIGRAVITY_DATA_DIR;
-    } else {
-      process.env.CLOUDCLI_ANTIGRAVITY_DATA_DIR = previousDataDir;
-    }
+    restoreDataDir();
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
 });
 
 test('AntigravitySessionsProvider fetchHistory returns empty for unknown sessions', async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agy-data-empty-'));
-  const previousDataDir = process.env.CLOUDCLI_ANTIGRAVITY_DATA_DIR;
-  process.env.CLOUDCLI_ANTIGRAVITY_DATA_DIR = tempRoot;
+  const restoreDataDir = withEnvValue('CLOUDCLI_ANTIGRAVITY_DATA_DIR', tempRoot);
   try {
     const sessions = new AntigravitySessionsProvider();
     const result = await sessions.fetchHistory('missing-session', {});
     assert.equal(result.total, 0);
     assert.deepEqual(result.messages, []);
   } finally {
-    if (previousDataDir === undefined) {
-      delete process.env.CLOUDCLI_ANTIGRAVITY_DATA_DIR;
-    } else {
-      process.env.CLOUDCLI_ANTIGRAVITY_DATA_DIR = previousDataDir;
-    }
+    restoreDataDir();
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
 });

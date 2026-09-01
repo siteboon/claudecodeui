@@ -8,27 +8,25 @@
  */
 
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 
 import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { ProviderAuthStatus } from '@/shared/types.js';
 
 import { getEngineVersion, tryResolveEnginePath } from './antigravity-engine-path.js';
+import { getAntigravityDataRoot } from './antigravity-sessions.provider.js';
 
 /**
- * Checks whether Antigravity configuration or credentials exist locally.
+ * Checks whether the Antigravity CLI holds OAuth credentials.
+ *
+ * Only the token file written by a completed `agy` login counts as
+ * authenticated: `installation_id` and `settings.json` are created on first
+ * launch regardless of login state, so they must never mark the provider as
+ * authenticated.
  */
 function checkAntigravityAuthenticated(): boolean {
-  const cliDir = path.join(os.homedir(), '.gemini', 'antigravity-cli');
-  const desktopDir = path.join(os.homedir(), '.gemini', 'antigravity');
-
-  // Settings file or installation id in either directory indicates initialized state
-  const settingsFile = path.join(cliDir, 'settings.json');
-  const installationIdFile = path.join(desktopDir, 'installation_id');
-  const cliInstallationIdFile = path.join(cliDir, 'installation_id');
-
-  return fs.existsSync(settingsFile) || fs.existsSync(installationIdFile) || fs.existsSync(cliInstallationIdFile);
+  const tokenFile = path.join(getAntigravityDataRoot(), 'antigravity-oauth-token');
+  return fs.existsSync(tokenFile);
 }
 
 export class AntigravityProviderAuth implements IProviderAuth {

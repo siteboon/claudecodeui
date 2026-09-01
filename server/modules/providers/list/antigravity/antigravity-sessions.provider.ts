@@ -35,10 +35,11 @@ const PROVIDER = 'antigravity';
 /**
  * Resolves the Antigravity CLI data root (`~/.gemini/antigravity-cli` by
  * default). `CLOUDCLI_ANTIGRAVITY_DATA_DIR` overrides it so tests can point
- * transcript lookups at an isolated fixture tree instead of the real home
- * directory.
+ * file lookups at an isolated fixture tree instead of the real home directory.
+ * Exported for the auth provider, which locates the OAuth token file under
+ * the same root.
  */
-function getAntigravityDataRoot(): string {
+export function getAntigravityDataRoot(): string {
   return process.env.CLOUDCLI_ANTIGRAVITY_DATA_DIR
     ?? path.join(os.homedir(), '.gemini', 'antigravity-cli');
 }
