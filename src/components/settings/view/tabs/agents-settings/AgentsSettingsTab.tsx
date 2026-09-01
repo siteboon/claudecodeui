@@ -26,9 +26,11 @@ export default function AgentsSettingsTab({
       : ['account', 'permissions', 'mcp', 'skills']
   ), [selectedAgent]);
 
+  const allAgents: AgentProvider[] = ['claude', 'cursor', 'codex', 'opencode', 'zcode', 'antigravity'];
+
   const visibleAgents = useMemo<AgentProvider[]>(() => {
-    return ['claude', 'cursor', 'codex', 'opencode', 'zcode', 'antigravity'];
-  }, []);
+    return allAgents.filter((agent) => providerAuthStatus[agent].installed);
+  }, [providerAuthStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const agentContextById = useMemo<Record<AgentProvider, AgentContext>>(() => ({
     claude: {
@@ -64,6 +66,12 @@ export default function AgentsSettingsTab({
     providerAuthStatus.zcode,
     providerAuthStatus.antigravity,
   ]);
+
+  useEffect(() => {
+    if (visibleAgents.length > 0 && !visibleAgents.includes(selectedAgent)) {
+      setSelectedAgent(visibleAgents[0]);
+    }
+  }, [selectedAgent, visibleAgents]);
 
   useEffect(() => {
     if (!visibleCategories.includes(selectedCategory)) {

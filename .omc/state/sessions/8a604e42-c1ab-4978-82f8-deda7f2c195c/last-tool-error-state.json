@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"curl -sS --max-time 10 -o /dev/null -w \\\"HTTP状态: %{http_code}\\\\n\\\" https://registry.npmjs.org/tinyexec 2>&1; echo \\\"---\\\"; curl -sS --max-time 10 -o /dev/null -w \\\"HTTP状态: %{http_code}\\\\n\\...",
+  "error": "Exit code 6\ncurl: (6) Could not resolve host: registry.npmjs.org\nHTTP状态: 000\n---\ncurl: (6) Could not resolve host: github.com\nHTTP状态: 000",
+  "timestamp": "2026-09-01T04:34:29.555Z",
+  "retry_count": 1
+}

@@ -1,6 +1,8 @@
 import type { LLMProvider } from '../../types/app';
 
 export type ProviderAuthStatus = {
+  /** Whether the CLI binary is installed on this host. */
+  installed: boolean;
   authenticated: boolean;
   email: string | null;
   method: string | null;
@@ -28,10 +30,10 @@ export const PROVIDER_AUTH_STATUS_ENDPOINTS: Record<LLMProvider, string> = {
 };
 
 export const createInitialProviderAuthStatusMap = (loading = true): ProviderAuthStatusMap => ({
-  claude: { authenticated: false, email: null, method: null, error: null, loginCommand: null, loading },
-  cursor: { authenticated: false, email: null, method: null, error: null, loginCommand: null, loading },
-  codex: { authenticated: false, email: null, method: null, error: null, loginCommand: null, loading },
-  opencode: { authenticated: false, email: null, method: null, error: null, loginCommand: null, loading },
-  zcode: { authenticated: false, email: null, method: null, error: null, loginCommand: null, loading },
-  antigravity: { authenticated: false, email: null, method: null, error: null, loginCommand: null, loading },
+  claude: { installed: true, authenticated: false, email: null, method: null, error: null, loginCommand: null, loading },
+  cursor: { installed: true, authenticated: false, email: null, method: null, error: null, loginCommand: null, loading },
+  codex: { installed: true, authenticated: false, email: null, method: null, error: null, loginCommand: null, loading },
+  opencode: { installed: true, authenticated: false, email: null, method: null, error: null, loginCommand: null, loading },
+  zcode: { installed: true, authenticated: false, email: null, method: null, error: null, loginCommand: null, loading },
+  antigravity: { installed: true, authenticated: false, email: null, method: null, error: null, loginCommand: null, loading },
 });

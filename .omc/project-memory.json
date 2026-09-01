@@ -1,0 +1,267 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1788237105779,
+  "projectRoot": "/Users/azrael/workspaces/cloudcli",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      },
+      {
+        "name": "TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "tsconfig.json"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "express",
+        "version": "4.18.2",
+        "category": "backend"
+      },
+      {
+        "name": "react",
+        "version": "18.2.0",
+        "category": "frontend"
+      },
+      {
+        "name": "react-dom",
+        "version": "18.2.0",
+        "category": "frontend"
+      },
+      {
+        "name": "vite",
+        "version": "7.0.4",
+        "category": "build"
+      }
+    ],
+    "packageManager": "npm",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "npm run build",
+    "testCommand": "npm test",
+    "lintCommand": "npm run lint",
+    "devCommand": "npm run dev",
+    "scripts": {
+      "dev": "concurrently --kill-others \"npm run server:dev\" \"npm run client\"",
+      "preserver": "node scripts/promote-dist-server.mjs recover",
+      "server": "node dist-server/server/index.js",
+      "server:dev": "tsx --tsconfig server/tsconfig.json server/index.ts",
+      "server:dev-watch": "tsx watch --tsconfig server/tsconfig.json server/index.ts",
+      "client": "vite",
+      "desktop": "electron electron/main.js",
+      "desktop:dev": "cross-env ELECTRON_DEV_URL=http://127.0.0.1:5173 electron electron/main.js",
+      "desktop:stage": "node scripts/release/prepare-desktop-app.js",
+      "desktop:pack": "npm run build && npm run desktop:stage && electron-builder --projectDir .desktop-build/desktop-app --dir",
+      "desktop:dist:mac": "npm run build && npm run desktop:stage && electron-builder --projectDir .desktop-build/desktop-app --mac dmg",
+      "desktop:dist:win": "npm run build && npm run desktop:stage && electron-builder --projectDir .desktop-build/desktop-app --win nsis",
+      "server:bundle": "npm run build && node scripts/release/build-server-bundle.js",
+      "desktop:icon:mac": "node electron/scripts/generate-macos-icon.js",
+      "build": "npm run build:client && npm run build:server",
+      "build:client": "vite build",
+      "prebuild:server": "node -e \"require('node:fs').rmSync('dist-server.next', { recursive: true, force: true })\"",
+      "build:server": "tsc -p server/tsconfig.json && tsc-alias -p server/tsconfig.json",
+      "postbuild:server": "node scripts/promote-dist-server.mjs",
+      "preview": "vite preview",
+      "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p server/tsconfig.json",
+      "test": "tsx --tsconfig server/tsconfig.json --test \"server/**/*.test.ts\" \"server/**/*.test.js\"",
+      "test:client": "tsx --test \"src/**/*.test.ts\" \"src/**/*.test.tsx\"",
+      "lint": "eslint src/ server/",
+      "lint:fix": "eslint src/ server/ --fix",
+      "start": "npm run build && npm run server",
+      "release": "./release.sh",
+      "prepublishOnly": "npm run build",
+      "postinstall": "node scripts/fix-node-pty.js",
+      "prepare": "husky",
+      "update:platform": "./update-platform.sh"
+    }
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": "type-based"
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "docs",
+      "public",
+      "scripts",
+      "src"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "docker": {
+      "path": "docker",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1788237105766,
+      "keyFiles": [
+        "README.md"
+      ]
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 9,
+      "lastAccessed": 1788237105767,
+      "keyFiles": [
+        "README.de.md",
+        "README.ja.md",
+        "README.ko.md",
+        "README.md",
+        "README.ru.md"
+      ]
+    },
+    "electron": {
+      "path": "electron",
+      "purpose": null,
+      "fileCount": 9,
+      "lastAccessed": 1788237105770,
+      "keyFiles": [
+        "cloud.js",
+        "desktopNotifications.js",
+        "desktopWindow.js",
+        "localServer.js",
+        "main.js"
+      ]
+    },
+    "plugins": {
+      "path": "plugins",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1788237105770,
+      "keyFiles": []
+    },
+    "public": {
+      "path": "public",
+      "purpose": "Public files",
+      "fileCount": 14,
+      "lastAccessed": 1788237105771,
+      "keyFiles": [
+        "api-docs.html",
+        "clear-cache.html",
+        "convert-icons.md",
+        "favicon.png",
+        "favicon.svg"
+      ]
+    },
+    "redirect-package": {
+      "path": "redirect-package",
+      "purpose": null,
+      "fileCount": 4,
+      "lastAccessed": 1788237105772,
+      "keyFiles": [
+        "README.md",
+        "bin.js",
+        "index.js",
+        "package.json"
+      ]
+    },
+    "scripts": {
+      "path": "scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 2,
+      "lastAccessed": 1788237105774,
+      "keyFiles": [
+        "fix-node-pty.js",
+        "promote-dist-server.mjs"
+      ]
+    },
+    "server": {
+      "path": "server",
+      "purpose": null,
+      "fileCount": 3,
+      "lastAccessed": 1788237105774,
+      "keyFiles": [
+        "index.ts",
+        "load-env.ts",
+        "tsconfig.json"
+      ]
+    },
+    "shared": {
+      "path": "shared",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1788237105774,
+      "keyFiles": [
+        "networkHosts.js"
+      ]
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 4,
+      "lastAccessed": 1788237105775,
+      "keyFiles": [
+        "App.tsx",
+        "index.css",
+        "main.jsx",
+        "vite-env.d.ts"
+      ]
+    },
+    "electron/assets": {
+      "path": "electron/assets",
+      "purpose": "Static assets",
+      "fileCount": 3,
+      "lastAccessed": 1788237105776,
+      "keyFiles": [
+        "logo-macos.icns",
+        "logo-macos.png",
+        "logo-windows.ico"
+      ]
+    },
+    "electron/scripts": {
+      "path": "electron/scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 1,
+      "lastAccessed": 1788237105776,
+      "keyFiles": [
+        "generate-macos-icon.js"
+      ]
+    },
+    "src/components": {
+      "path": "src/components",
+      "purpose": "UI components",
+      "fileCount": 0,
+      "lastAccessed": 1788237105778,
+      "keyFiles": []
+    },
+    "src/lib": {
+      "path": "src/lib",
+      "purpose": "Library code",
+      "fileCount": 3,
+      "lastAccessed": 1788237105778,
+      "keyFiles": [
+        "utils.js",
+        "voiceApi.ts",
+        "voicePlayer.ts"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "server/modules/notifications/services/notification-orchestrator.service.js",
+      "accessCount": 2,
+      "lastAccessed": 1788237688876,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}
