@@ -13,6 +13,7 @@ export type UiPreferences = {
   showRawParameters: boolean;
   showThinking: boolean;
   sendByCtrlEnter: boolean;
+  backOpensSessionList: boolean;
   sidebarVisible: boolean;
   voiceEnabled: boolean;
 };
@@ -27,6 +28,7 @@ const DEFAULTS: UiPreferences = {
   showRawParameters: false,
   showThinking: true,
   sendByCtrlEnter: false,
+  backOpensSessionList: false,
   sidebarVisible: true,
   voiceEnabled: false,
 };

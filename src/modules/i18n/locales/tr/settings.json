@@ -154,6 +154,13 @@
         "label": "Yazı Tipi Boyutu",
         "description": "Editör yazı tipi boyutu (piksel)"
       }
+    },
+    "mobileNavigation": {
+      "title": "Mobil Gezinme",
+      "backOpensSessionList": {
+        "label": "Geri oturum listesini açar",
+        "description": "Telefon boyutundaki ekranlarda liste kapalıyken Geri, sayfadan ayrılmak yerine oturum listesini açar. Liste zaten açıksa Geri normal şekilde gezinir. Sayfa yüklendikten hemen sonra, sayfayla etkileşime girene kadar Geri değişmeden kalır."
+      }
     }
   },
   "mcpForm": {
