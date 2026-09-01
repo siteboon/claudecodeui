@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"echo \\\"=== pm2 持久化配置 ===\\\"; cat ~/.pm2/dump.pm2 2>/dev/null | python3 -c \\\"import json,sys; d=json.load(sys.stdin); [print(json.dumps(p, ensure_ascii=False, indent=1)) for p in d if 'cloud...",
-  "error": "Exit code 1\n=== pm2 持久化配置 ===\n{\n \"kill_retry_time\": 100,\n \"windowsHide\": true,\n \"username\": \"azrael\",\n \"treekill\": true,\n \"automation\": true,\n \"pmx\": true,\n \"instance_var\": \"NODE_APP_INSTANCE\",\n \"watch\": false,\n \"autorestart\": true,\n \"autostart\": true,\n \"vizion\": true,\n \"merge_logs\": true,\n \"env\": {\n  \"OPENCLAW_GATEWAY_PORT\": \"18789\",\n  \"TMPDIR\": \"/Users/azrael/.openclaw/tmp\",\n  \"USER\": \"azrael\",\n  \"OPENCLAW_SERVICE_KIND\": \"gateway\",\n  \"SSH_AUTH_SOCK\": \"/var/run/com.apple.launchd.aGFkyGrZkq/List...",
-  "timestamp": "2026-09-01T04:55:39.686Z",
-  "retry_count": 1
-}
