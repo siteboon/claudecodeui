@@ -30,22 +30,24 @@ function isWorkspaceTrustPrompt(text = '') {
 }
 
 async function spawnCursor(command, options = {}, ws, context) {
-  return new Promise(async (resolve, reject) => {
+  // Callers pass the stable app session id; the CLI resumes with the
+  // provider-native id recorded on the session row. Both lookups run before the
+  // promise is created: inside an async executor a rejected `resolveResumeModel`
+  // would be swallowed and leave the returned promise pending forever.
+  const providerSessionId = context.resolveProviderSessionId(options.sessionId);
+  const resolvedModel = await context.resolveResumeModel(options.sessionId, options.model);
+
+  return new Promise((resolve, reject) => {
     const {
       sessionId,
       projectPath,
       cwd,
       toolsSettings,
       skipPermissions,
-      model,
       sessionSummary,
       images,
       files
     } = options;
-    // Callers pass the stable app session id; the CLI resumes with the
-    // provider-native id recorded on the session row.
-    const providerSessionId = context.resolveProviderSessionId(sessionId);
-    const resolvedModel = await context.resolveResumeModel(sessionId, model);
     let capturedSessionId = providerSessionId; // Track the provider-native session id throughout the process
     let sessionCreatedSent = false; // Track if we've already sent session-created event
     let hasRetriedWithTrust = false;

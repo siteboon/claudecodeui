@@ -3,15 +3,16 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
-import { chatRunRegistry } from '@/modules/websocket/index.js';
+import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
+import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import type {
   FetchHistoryOptions,
   FetchHistoryResult,
   LLMProvider,
   NormalizedMessage,
 } from '@/shared/types.js';
-import { AppError } from '@/shared/utils.js';
+import { AppError, sliceTailPage } from '@/shared/utils.js';
 
 type CreateAppSessionResult = {
   sessionId: string;
@@ -237,6 +238,79 @@ export const sessionsService = {
   },
 
   /**
+   * Branches a session into an independent one containing its conversation up
+   * to `upToAnchorId` (the whole thing when omitted).
+   *
+   * The source is left completely untouched — this is the "try two approaches"
+   * action, not a destructive one.
+   */
+  async forkSessionById(
+    sessionId: string,
+    options: { upToAnchorId?: string; title?: string } = {},
+  ): Promise<CreateAppSessionResult> {
+    const source = sessionsDb.getSessionById(sessionId);
+    if (!source) {
+      throw new AppError(`Session "${sessionId}" was not found.`, {
+        code: 'SESSION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    const provider = source.provider as LLMProvider;
+    const fork = providerRegistry.resolveProvider(provider).fork;
+    if (!fork) {
+      throw new AppError(`Sessions cannot be forked for provider "${provider}".`, {
+        code: 'FORK_NOT_SUPPORTED',
+        statusCode: 409,
+      });
+    }
+
+    // A session that has never run has no transcript to copy, so there is
+    // nothing a fork of it could resume from.
+    if (!source.provider_session_id || !source.jsonl_path) {
+      throw new AppError('This session has not produced a transcript yet.', {
+        code: 'FORK_SOURCE_NOT_READY',
+        statusCode: 409,
+      });
+    }
+
+    const sessionName = options.title?.trim()
+      || `${source.custom_name?.trim() || 'Session'} (fork)`;
+
+    const forked = await fork.forkSession({
+      providerSessionId: source.provider_session_id,
+      jsonlPath: source.jsonl_path,
+      projectPath: source.project_path ?? '',
+      upToAnchorId: options.upToAnchorId,
+      title: sessionName,
+    });
+
+    const forkSessionId = randomUUID();
+    sessionsDb.createForkedSession({
+      sessionId: forkSessionId,
+      provider,
+      projectPath: source.project_path ?? '',
+      customName: sessionName,
+      providerSessionId: forked.providerSessionId,
+      jsonlPath: forked.jsonlPath,
+      forkedFromSessionId: sessionId,
+      // A fork that silently dropped to the catalog default would answer
+      // differently from the conversation it was branched from.
+      model: source.model,
+      effort: source.effort,
+    });
+
+    await broadcastSessionUpserted(forkSessionId);
+
+    return {
+      sessionId: forkSessionId,
+      provider,
+      projectPath: source.project_path ?? '',
+      sessionName,
+    };
+  },
+
+  /**
    * Resolves the provider-native id only for an explicit user copy action.
    * Normal session payloads continue to expose only the stable app id.
    */
@@ -268,6 +342,73 @@ export const sessionsService = {
    * and every returned message is remapped back to the app session id so
    * provider ids never reach the frontend.
    */
+  /**
+   * Resolves where a conversation must resume from so that one already-sent
+   * message, and everything after it, is replaced.
+   *
+   * Returns `null` when the provider cannot do this at all, which is how the
+   * chat gateway knows to refuse the request rather than silently sending the
+   * edit as a new message at the end of the conversation.
+   */
+  async resolveEditAnchor(
+    sessionId: string,
+    anchorId: string,
+  ): Promise<{ found: boolean; resumeThroughId: string | null } | null> {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session) {
+      throw new AppError(`Session "${sessionId}" was not found.`, {
+        code: 'SESSION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    const sessions = providerRegistry.resolveProvider(session.provider as LLMProvider).sessions;
+    if (!sessions.resolveEditAnchor) {
+      return null;
+    }
+
+    return sessions.resolveEditAnchor(sessionId, anchorId);
+  },
+
+  /**
+   * Whether editing a message on this session's provider means rewinding it on
+   * disk first, rather than handing the anchor to the runtime as a resume
+   * option.
+   *
+   * Answering this without doing anything is the point: the rewind moves the
+   * session onto a different provider transcript and cannot be undone, so the
+   * gateway has to know which shape the run takes before it commits to one.
+   */
+  providerRewindsForEdit(sessionId: string): boolean {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session) {
+      throw new AppError(`Session "${sessionId}" was not found.`, {
+        code: 'SESSION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    return Boolean(providerRegistry.resolveProvider(session.provider as LLMProvider).sessions.rewindSession);
+  },
+
+  /**
+   * Rewinds a session on disk so `keepThroughId` is the last row it holds.
+   *
+   * Only call this once the run is admitted — see `providerRewindsForEdit`.
+   */
+  async rewindSessionForEdit(sessionId: string, keepThroughId: string | null): Promise<void> {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session) {
+      throw new AppError(`Session "${sessionId}" was not found.`, {
+        code: 'SESSION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    const sessions = providerRegistry.resolveProvider(session.provider as LLMProvider).sessions;
+    await sessions.rewindSession?.(sessionId, keepThroughId);
+  },
+
   async fetchHistory(
     sessionId: string,
     options: Pick<FetchHistoryOptions, 'limit' | 'offset'> = {},
@@ -293,12 +434,51 @@ export const sessionsService = {
     }
 
     const provider = session.provider as LLMProvider;
-    const result = await providerRegistry.resolveProvider(provider).sessions.fetchHistory(sessionId, {
-      limit: options.limit ?? null,
-      offset: options.offset ?? 0,
-      projectPath: session.project_path ?? '',
-      providerSessionId: session.provider_session_id,
+    const providerSessions = providerRegistry.resolveProvider(provider).sessions;
+    const providerSessionId = session.provider_session_id;
+    const projectPath = session.project_path ?? '';
+    const requestedLimit = options.limit ?? null;
+    const requestedOffset = options.offset ?? 0;
+
+    // Claude and Codex history readers parse `jsonl_path` itself, so a page
+    // can be sliced from the stat-validated full-transcript cache instead of
+    // re-parsing the whole file per request. Cursor and OpenCode read their
+    // messages from elsewhere (store.db / shared SQLite), so that file's stat
+    // says nothing about their history — they stay on the direct path.
+    const transcriptPath = provider === 'claude' || provider === 'codex'
+      ? session.jsonl_path
+      : null;
+    const fullHistory = await sessionHistoryCache.getFullHistory({
+      sessionId,
+      transcriptPath,
+      loadFull: () => providerSessions.fetchHistory(sessionId, {
+        limit: null,
+        offset: 0,
+        projectPath,
+        providerSessionId,
+      }),
     });
+
+    let result: FetchHistoryResult;
+    if (fullHistory) {
+      // Providers slice with this same helper, so a cached page is identical
+      // to what a direct `(limit, offset)` read would have returned.
+      const { page, hasMore } = sliceTailPage(fullHistory.messages, requestedLimit, Math.max(0, requestedOffset));
+      result = {
+        ...fullHistory,
+        messages: page,
+        hasMore,
+        offset: requestedOffset,
+        limit: requestedLimit,
+      };
+    } else {
+      result = await providerSessions.fetchHistory(sessionId, {
+        limit: requestedLimit,
+        offset: requestedOffset,
+        projectPath,
+        providerSessionId,
+      });
+    }
 
     return {
       ...result,
@@ -418,10 +598,22 @@ export const sessionsService = {
     }
 
     let removedFromDisk = false;
-    if (options.deletedFromDisk && session.jsonl_path) {
-      removedFromDisk = await removeFileIfExists(session.jsonl_path);
+    if (options.deletedFromDisk) {
+      // Every file the conversation has lived in, not just the one the row
+      // points at now: editing a message on a provider that rewinds by
+      // branching moves the session onto a copy and leaves the earlier
+      // transcript behind. Deleting only the current one would leave the
+      // replaced turns on disk, and unreachable through the app.
+      const transcripts = [
+        ...(session.jsonl_path ? [session.jsonl_path] : []),
+        ...sessionsDb.getSupersededTranscriptPaths(sessionId),
+      ];
+      for (const transcript of transcripts) {
+        removedFromDisk = (await removeFileIfExists(transcript)) || removedFromDisk;
+      }
     }
 
+    sessionsDb.clearSupersededProviderSessions(sessionId);
     const deleted = sessionsDb.deleteSessionById(sessionId);
     if (!deleted) {
       throw new AppError(`Session "${sessionId}" was not found.`, {

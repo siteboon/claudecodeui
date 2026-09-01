@@ -25,6 +25,15 @@ type ProviderCapabilities = {
   supportsTokenUsage: boolean;
   /** Whether the provider runtime can accept model-level reasoning effort. */
   supportsEffort: boolean;
+  /**
+   * Whether an already-sent message can be replaced, which requires the
+   * provider to re-run a conversation truncated at a chosen point.
+   */
+  supportsMessageEditing: boolean;
+  /**
+   * Whether a session's transcript can be branched into an independent one.
+   */
+  supportsSessionForking: boolean;
 };
 
 /**
@@ -44,6 +53,10 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsPermissionRequests: true,
     supportsTokenUsage: true,
     supportsEffort: true,
+    // `resumeSessionAt` re-runs a conversation truncated at a message, and
+    // `forkSession` copies a transcript prefix into a new session file.
+    supportsMessageEditing: true,
+    supportsSessionForking: true,
   },
   cursor: {
     provider: 'cursor',
@@ -55,6 +68,8 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsPermissionRequests: false,
     supportsTokenUsage: false,
     supportsEffort: false,
+    supportsMessageEditing: false,
+    supportsSessionForking: false,
   },
   codex: {
     provider: 'codex',
@@ -66,6 +81,12 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsPermissionRequests: false,
     supportsTokenUsage: true,
     supportsEffort: true,
+    // Not from the Codex SDK, which only starts and resumes threads: both ride
+    // the same CLI's `app-server` protocol, whose `thread/fork` copies a
+    // thread up to a chosen turn. Editing is that fork plus a new prompt,
+    // which is how Codex's own IDE clients do it.
+    supportsMessageEditing: true,
+    supportsSessionForking: true,
   },
   opencode: {
     provider: 'opencode',
@@ -80,6 +101,8 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsPermissionRequests: false,
     supportsTokenUsage: true,
     supportsEffort: true,
+    supportsMessageEditing: false,
+    supportsSessionForking: false,
   },
 };
 

@@ -4,11 +4,9 @@ import { promises as fsPromises } from 'node:fs';
 
 import chokidar, { type FSWatcher } from 'chokidar';
 
-import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { sessionSynchronizerService } from '@/modules/providers/services/session-synchronizer.service.js';
-import { WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
+import { broadcastSessionUpsertedBatch } from '@/modules/websocket/index.js';
 import type { LLMProvider } from '@/shared/types.js';
-import { generateDisplayName } from '@/modules/projects/index.js';
 
 type WatcherEventType = 'add' | 'change';
 
@@ -125,50 +123,6 @@ function queuePendingWatcherUpdate(
   schedulePendingWatcherFlush();
 }
 
-/**
- * Builds one `session_upserted` delta event for a provider-native session id.
- *
- * The event carries everything a sidebar needs to upsert the session in place
- * (session summary plus owning-project metadata), so clients never need a full
- * project-list refetch when a transcript file changes on disk. Returns `null`
- * when the id cannot be resolved to an indexed session row.
- */
-async function buildSessionUpsertedEvent(updatedProviderSessionId: string): Promise<string | null> {
-  const row = sessionsDb.getSessionByProviderSessionId(updatedProviderSessionId)
-    ?? sessionsDb.getSessionById(updatedProviderSessionId);
-  if (!row || row.isArchived) {
-    return null;
-  }
-
-  const projectPath = row.project_path;
-  const project = projectPath ? projectsDb.getProjectPath(projectPath) : null;
-  const displayName = project?.custom_project_name?.trim()
-    ? project.custom_project_name
-    : await generateDisplayName(path.basename(projectPath ?? '') || (projectPath ?? ''), projectPath);
-
-  return JSON.stringify({
-    kind: 'session_upserted',
-    sessionId: row.session_id,
-    provider: row.provider,
-    session: {
-      id: row.session_id,
-      summary: row.custom_name || '',
-      messageCount: 0,
-      lastActivity: row.updated_at ?? row.created_at ?? new Date().toISOString(),
-    },
-    project: project
-      ? {
-        projectId: project.project_id,
-        path: project.project_path,
-        fullPath: project.project_path,
-        displayName,
-        isStarred: Boolean(project.isStarred),
-      }
-      : null,
-    timestamp: new Date().toISOString(),
-  });
-}
-
 async function flushPendingWatcherUpdate(): Promise<void> {
   clearPendingWatcherFlushTimer();
 
@@ -190,23 +144,7 @@ async function flushPendingWatcherUpdate(): Promise<void> {
     // Per-session deltas instead of full project snapshots: an upsert of one
     // session can never clobber unrelated client state, so the frontend needs
     // no "suppress updates while a run is active" protection logic.
-    const events: string[] = [];
-    for (const updatedSessionId of queuedUpdate.updatedSessionIds) {
-      const event = await buildSessionUpsertedEvent(updatedSessionId);
-      if (event) {
-        events.push(event);
-      }
-    }
-
-    if (events.length > 0) {
-      connectedClients.forEach(client => {
-        if (client.readyState === WS_OPEN_STATE) {
-          for (const event of events) {
-            client.send(event);
-          }
-        }
-      });
-    }
+    await broadcastSessionUpsertedBatch(queuedUpdate.updatedSessionIds);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('Session watcher refresh failed while broadcasting session_upserted', { error: message });
@@ -262,6 +200,7 @@ export async function initializeSessionsWatcher(): Promise<void> {
   const initialSync = await sessionSynchronizerService.synchronizeSessions();
   console.log('Initial session synchronization complete', {
     processedByProvider: initialSync.processedByProvider,
+    prunedOrphans: initialSync.prunedOrphans,
     failures: initialSync.failures,
   });
 
