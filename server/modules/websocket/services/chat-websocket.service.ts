@@ -424,12 +424,22 @@ async function handleChatAbort(
   }
 
   const run = chatRunRegistry.getRun(sessionId);
-  if (!run || run.status !== 'running') {
+  if (!run) {
     sendProtocolError(ws, 'NO_ACTIVE_RUN', `Session "${sessionId}" has no active run.`, sessionId);
     return;
   }
 
+  // A run holding stdin open for background work already reports status
+  // 'completed', which used to fail this guard and leave the provider process
+  // (and its MCP servers) alive and unkillable for up to 30 minutes. Ask the
+  // runtime instead: it is the only component that knows whether a provider
+  // process is still attached.
   const success = await dependencies.runtime.abort(run.provider, sessionId);
+
+  if (!success && run.status !== 'running') {
+    sendProtocolError(ws, 'NO_ACTIVE_RUN', `Session "${sessionId}" has no active run.`, sessionId);
+    return;
+  }
 
   chatRunRegistry.completeRun(sessionId, {
     exitCode: success ? 0 : 1,

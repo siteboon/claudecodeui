@@ -116,7 +116,11 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       type: 'one-line',
       icon: 'terminal',
       getValue: (input) => input.command,
-      getSecondary: (input) => input.description,
+      getSecondary: (input) => (
+        input.run_in_background
+          ? `background${input.description ? ` · ${input.description}` : ''}`
+          : input.description
+      ),
       action: 'copy',
       style: 'terminal',
       wrapText: true,
@@ -203,6 +207,76 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       defaultOpen: false,
       contentType: 'text',
       getContentProps: (result) => ({ content: String(result?.content || ''), format: 'plain' })
+    }
+  },
+
+  BashOutput: {
+    input: {
+      type: 'one-line',
+      icon: 'terminal',
+      label: 'Background output',
+      getValue: (input) => input.bash_id || input.shell_id || '',
+      getSecondary: (input) => input.filter,
+      style: 'terminal',
+      colorScheme: {
+        primary: 'text-green-400 font-mono',
+        secondary: 'text-gray-400',
+        background: '',
+        border: 'border-green-500 dark:border-green-400',
+        icon: 'text-green-500 dark:text-green-400'
+      }
+    },
+    result: {
+      type: 'collapsible',
+      contentType: 'text',
+      getContentProps: (result) => ({
+        content: result?.content || '',
+        format: 'code'
+      })
+    }
+  },
+
+  KillShell: {
+    input: {
+      type: 'one-line',
+      icon: 'terminal',
+      label: 'Kill shell',
+      getValue: (input) => input.shell_id || input.bash_id || '',
+      style: 'terminal',
+      colorScheme: {
+        primary: 'text-red-400 font-mono',
+        secondary: 'text-gray-400',
+        background: '',
+        border: 'border-red-500 dark:border-red-400',
+        icon: 'text-red-500 dark:text-red-400'
+      }
+    },
+    result: {
+      hideOnSuccess: true,
+      type: 'special'
+    }
+  },
+
+  Workflow: {
+    input: {
+      type: 'collapsible',
+      title: 'Workflow script',
+      defaultOpen: false,
+      contentType: 'text',
+      getContentProps: (input) => ({
+        content: typeof input?.script === 'string'
+          ? input.script
+          : JSON.stringify(input, null, 2),
+        format: 'code'
+      })
+    },
+    result: {
+      type: 'collapsible',
+      contentType: 'text',
+      getContentProps: (result) => ({
+        content: result?.content || '',
+        format: 'code'
+      })
     }
   },
 
