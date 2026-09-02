@@ -159,8 +159,11 @@
       "importFailed": "No se ha podido importar ese tema.",
       "import": {
         "label": "Importar un tema de VS Code",
-        "description": "Convierte un archivo *-color-theme.json en una paleta",
-        "button": "Importar tema"
+        "description": "Convierte un archivo *-color-theme.json o una extensión .vsix en una paleta",
+        "button": "Importar tema",
+        "urlLabel": "O pega la URL de una extensión",
+        "urlPlaceholder": "https://marketplace.visualstudio.com/items?itemName=…",
+        "urlButton": "Obtener"
       }
     },
     "projectSorting": {

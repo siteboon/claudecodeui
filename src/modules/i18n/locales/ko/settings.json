@@ -159,8 +159,11 @@
       "importFailed": "테마를 가져오지 못했습니다.",
       "import": {
         "label": "VS Code 테마 가져오기",
-        "description": "*-color-theme.json 파일을 색상 팔레트로 변환합니다",
-        "button": "테마 가져오기"
+        "description": "*-color-theme.json 파일 또는 .vsix 확장을 색상 팔레트로 변환합니다",
+        "button": "테마 가져오기",
+        "urlLabel": "또는 확장 URL 붙여넣기",
+        "urlPlaceholder": "https://marketplace.visualstudio.com/items?itemName=…",
+        "urlButton": "가져오기"
       }
     },
     "projectSorting": {

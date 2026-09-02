@@ -85,11 +85,19 @@ test('a theme arriving from the store is applied without being written back', ()
 });
 
 /**
- * The palette is a second axis on top of light/dark. Most palettes state which
- * of the two they are, and the `dark` class has to follow that statement:
+ * The palette is a second axis on top of light/dark. An imported palette states
+ * which of the two it is, and the `dark` class has to follow that statement:
  * hundreds of `dark:`-prefixed utility classes read it, so a dark palette
  * rendered without it would show light-mode text on dark surfaces.
  */
+
+const importedTheme = (id: string, appearance: 'light' | 'dark') => ({
+  id,
+  name: id,
+  appearance,
+  previewColors: ['#000000', '#111111', '#cba6f7'] as [string, string, string],
+  tokens: { background: appearance === 'dark' ? '0 0% 8%' : '0 0% 96%' },
+});
 
 test('the default theme leaves light and dark to the user', () => {
   const { result } = renderHook(() => useTheme(), { wrapper });
@@ -103,28 +111,34 @@ test('picking a theme records it and marks the document', () => {
   const { result } = renderHook(() => useTheme(), { wrapper });
 
   act(() => {
-    result.current.setColorTheme('catppuccin-mocha');
+    result.current.addImportedTheme(importedTheme('imported-dark', 'dark'));
+  });
+  act(() => {
+    result.current.setColorTheme('imported-dark');
   });
 
-  assert.equal(readUserPreference('colorTheme', null), 'catppuccin-mocha');
-  assert.equal(document.documentElement.dataset.theme, 'catppuccin-mocha');
+  assert.equal(readUserPreference('colorTheme', null), 'imported-dark');
+  assert.equal(document.documentElement.dataset.theme, 'imported-dark');
 });
 
 test('a theme that fixes its appearance drives the dark class', () => {
   const { result } = renderHook(() => useTheme(), { wrapper });
 
   act(() => {
-    result.current.setColorTheme('catppuccin-mocha');
+    result.current.addImportedTheme(importedTheme('imported-dark', 'dark'));
+    result.current.addImportedTheme(importedTheme('imported-light', 'light'));
   });
 
+  act(() => {
+    result.current.setColorTheme('imported-dark');
+  });
   assert.equal(result.current.isDarkMode, true);
   assert.equal(result.current.canToggleDarkMode, false);
   assert.ok(document.documentElement.classList.contains('dark'));
 
   act(() => {
-    result.current.setColorTheme('catppuccin-latte');
+    result.current.setColorTheme('imported-light');
   });
-
   assert.equal(result.current.isDarkMode, false);
   assert.ok(!document.documentElement.classList.contains('dark'));
 });
@@ -134,7 +148,10 @@ test('the light/dark choice survives a detour through a fixed theme', () => {
   const { result } = renderHook(() => useTheme(), { wrapper });
 
   act(() => {
-    result.current.setColorTheme('catppuccin-latte');
+    result.current.addImportedTheme(importedTheme('imported-light', 'light'));
+  });
+  act(() => {
+    result.current.setColorTheme('imported-light');
   });
   assert.equal(result.current.isDarkMode, false, 'the palette wins while it is active');
 
@@ -142,7 +159,7 @@ test('the light/dark choice survives a detour through a fixed theme', () => {
     result.current.setColorTheme('default');
   });
 
-  assert.equal(result.current.isDarkMode, true, 'the user\'s own choice comes back');
+  assert.equal(result.current.isDarkMode, true, "the user's own choice comes back");
   assert.equal(readUserPreference('theme', null), 'dark');
 });
 

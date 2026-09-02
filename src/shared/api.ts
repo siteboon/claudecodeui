@@ -441,6 +441,13 @@ export const api = {
     deleteDraft: (scope: string) => del('/api/user/drafts', { scope }),
   },
 
+  // Colour themes. The download is proxied because the Visual Studio
+  // Marketplace serves no CORS headers, so the browser cannot fetch a `.vsix`
+  // itself; the response is the raw archive, parsed on this side.
+  themes: {
+    downloadExtension: (url: string) => post('/api/themes/download', { url }),
+  },
+
   // Server-side settings: API keys, stored credentials, notifications, web push
   settings: {
     apiKeys: () => get('/api/settings/api-keys'),

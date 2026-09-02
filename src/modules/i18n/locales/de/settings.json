@@ -133,8 +133,11 @@
       "importFailed": "Dieses Design konnte nicht importiert werden.",
       "import": {
         "label": "VS-Code-Design importieren",
-        "description": "Macht aus einer *-color-theme.json-Datei eine Farbpalette",
-        "button": "Design importieren"
+        "description": "Macht aus einer *-color-theme.json-Datei oder einer .vsix-Erweiterung eine Farbpalette",
+        "button": "Design importieren",
+        "urlLabel": "Oder eine Erweiterungs-URL einfügen",
+        "urlPlaceholder": "https://marketplace.visualstudio.com/items?itemName=…",
+        "urlButton": "Abrufen"
       }
     },
     "projectSorting": {

@@ -1,9 +1,10 @@
-import { Check, Trash2, Upload } from 'lucide-react';
+import { Check, Loader2, Trash2, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { api } from '@/shared/api';
 import { useTheme } from '@/shared/context/ThemeContext';
-import { VsCodeThemeImportError, parseVsCodeTheme } from '@/shared/themes';
+import { VsCodeThemeImportError, importThemesFromFile, parseVsixThemes } from '@/shared/themes';
 import type { ColorTheme } from '@/shared/types';
 import { cn } from '@/shared/utils';
 import SettingsCard from '@/modules/settings/SettingsCard';
@@ -18,6 +19,26 @@ export default function ColorThemeSection() {
   // The one thing the user cannot fix without being told what went wrong: which
   // part of the file made it unusable as a theme.
   const [importError, setImportError] = useState<string | null>(null);
+  // The URL being pasted, and whether its download is in flight — a marketplace
+  // extension is a few hundred kilobytes, long enough to need a spinner.
+  const [extensionUrl, setExtensionUrl] = useState('');
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  // One .vsix routinely contributes several themes — a flavour per variant — so
+  // all of them are registered and the first is the one switched to.
+  const registerThemes = (themes: ColorTheme[]) => {
+    for (const theme of themes) {
+      addImportedTheme(theme);
+    }
+    setColorTheme(themes[0].id);
+    setImportError(null);
+  };
+
+  const reportFailure = (error: unknown) => {
+    setImportError(
+      error instanceof VsCodeThemeImportError ? error.message : t('appearanceSettings.colorTheme.importFailed'),
+    );
+  };
 
   const handleFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -28,18 +49,36 @@ export default function ColorThemeSection() {
     }
 
     try {
-      const source = await file.text();
-      // A theme shipped in an extension names itself in package.json, not in the
-      // colour file, so the file name is the best fallback available here.
-      const fallbackName = file.name.replace(/(-color-theme)?\.json$/i, '');
-      const theme = parseVsCodeTheme(source, fallbackName);
-      addImportedTheme(theme);
-      setColorTheme(theme.id);
-      setImportError(null);
+      registerThemes(await importThemesFromFile(file));
     } catch (error) {
-      setImportError(
-        error instanceof VsCodeThemeImportError ? error.message : t('appearanceSettings.colorTheme.importFailed'),
-      );
+      reportFailure(error);
+    }
+  };
+
+  const handleUrlImport = async () => {
+    const url = extensionUrl.trim();
+    if (!url || isDownloading) {
+      return;
+    }
+
+    setIsDownloading(true);
+    try {
+      // The download is proxied: the Marketplace sends no CORS headers, and both
+      // registries answer an extension page with HTML rather than an archive.
+      const response = await api.themes.downloadExtension(url);
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+        throw new VsCodeThemeImportError(
+          payload?.error?.message ?? t('appearanceSettings.colorTheme.importFailed'),
+        );
+      }
+
+      registerThemes(await parseVsixThemes(await response.arrayBuffer(), extensionNameFromUrl(url)));
+      setExtensionUrl('');
+    } catch (error) {
+      reportFailure(error);
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -83,10 +122,37 @@ export default function ColorThemeSection() {
             <input
               ref={fileInputRef}
               type="file"
-              accept="application/json,.json"
+              accept="application/json,.json,.vsix"
               className="hidden"
               onChange={handleFileSelected}
             />
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <input
+              type="url"
+              inputMode="url"
+              value={extensionUrl}
+              onChange={(event) => setExtensionUrl(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  void handleUrlImport();
+                }
+              }}
+              placeholder={t('appearanceSettings.colorTheme.import.urlPlaceholder')}
+              aria-label={t('appearanceSettings.colorTheme.import.urlLabel')}
+              className="min-w-0 flex-1 touch-manipulation rounded-lg border border-input bg-card p-2.5 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+            <button
+              type="button"
+              onClick={() => void handleUrlImport()}
+              disabled={!extensionUrl.trim() || isDownloading}
+              className="inline-flex flex-shrink-0 touch-manipulation items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isDownloading && <Loader2 className="h-4 w-4 animate-spin" />}
+              {t('appearanceSettings.colorTheme.import.urlButton')}
+            </button>
           </div>
 
           {importError && (
@@ -98,6 +164,20 @@ export default function ColorThemeSection() {
       </SettingsCard>
     </SettingsSection>
   );
+}
+
+/** Names an import after the extension the URL points at, for a theme file that carries no name of its own. */
+function extensionNameFromUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const itemName = parsed.searchParams.get('itemName');
+    if (itemName) {
+      return itemName.slice(itemName.indexOf('.') + 1);
+    }
+    return parsed.pathname.split('/').filter(Boolean).at(-1) ?? 'Imported theme';
+  } catch {
+    return 'Imported theme';
+  }
 }
 
 type ThemeOptionProps = {

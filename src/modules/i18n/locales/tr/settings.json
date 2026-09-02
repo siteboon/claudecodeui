@@ -134,8 +134,11 @@
       "importFailed": "Bu tema içe aktarılamadı.",
       "import": {
         "label": "VS Code teması içe aktar",
-        "description": "Bir *-color-theme.json dosyasını renk paletine dönüştürür",
-        "button": "Temayı içe aktar"
+        "description": "Bir *-color-theme.json dosyasını veya .vsix uzantısını renk paletine dönüştürür",
+        "button": "Temayı içe aktar",
+        "urlLabel": "Veya bir uzantı bağlantısı yapıştırın",
+        "urlPlaceholder": "https://marketplace.visualstudio.com/items?itemName=…",
+        "urlButton": "Getir"
       }
     },
     "projectSorting": {

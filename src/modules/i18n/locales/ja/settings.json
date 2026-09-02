@@ -133,8 +133,11 @@
       "importFailed": "このテーマをインポートできませんでした。",
       "import": {
         "label": "VS Code のテーマをインポート",
-        "description": "*-color-theme.json ファイルをカラーパレットに変換します",
-        "button": "テーマをインポート"
+        "description": "*-color-theme.json ファイルまたは .vsix 拡張機能をカラーパレットに変換します",
+        "button": "テーマをインポート",
+        "urlLabel": "または拡張機能の URL を貼り付け",
+        "urlPlaceholder": "https://marketplace.visualstudio.com/items?itemName=…",
+        "urlButton": "取得"
       }
     },
     "projectSorting": {

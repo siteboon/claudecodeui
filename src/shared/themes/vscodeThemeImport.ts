@@ -13,11 +13,19 @@ import type { ColorTheme, ThemeAppearance, ThemeTokens } from '@/shared/types';
  * which this app renders with Prism and CodeMirror rather than TextMate scopes.
  */
 
-/** The shape this reads out of a theme file; every field is optional because the file is untrusted. */
-type VsCodeThemeFile = {
+/**
+ * The shape this reads out of a theme file; every field is optional because the
+ * file is untrusted.
+ *
+ * Exported for the .vsix importer, which parses theme files out of the archive
+ * itself so it can resolve their `include` chains before building a palette.
+ */
+export type VsCodeThemeFile = {
   name?: unknown;
   type?: unknown;
   colors?: unknown;
+  include?: unknown;
+  tokenColors?: unknown;
 };
 
 type Rgb = { r: number; g: number; b: number };
@@ -47,7 +55,24 @@ export function parseVsCodeTheme(source: string, fallbackName = 'Imported theme'
     throw new VsCodeThemeImportError('That file is too large to be a colour theme.');
   }
 
-  const file = parseJsonc(source);
+  return createThemeFromFile(parseJsonc(source), fallbackName);
+}
+
+/**
+ * Builds a palette from an already-parsed theme file.
+ *
+ * Used by the .vsix importer: an extension's theme files reach it through the
+ * archive rather than as one string, and their `include` chains are merged
+ * before this sees them.
+ *
+ * `uiThemeHint` is the `uiTheme` an extension's package.json declares for the
+ * contribution, which stands in when the theme file itself omits `type`.
+ */
+export function createThemeFromFile(
+  file: VsCodeThemeFile,
+  fallbackName: string,
+  uiThemeHint?: string,
+): ColorTheme {
   const colors = readColorMap(file);
 
   const background = requireColor(
@@ -61,7 +86,7 @@ export function parseVsCodeTheme(source: string, fallbackName = 'Imported theme'
     'This file has no "editor.foreground", so it is not a VS Code colour theme.',
   );
 
-  const appearance = readAppearance(file.type, background);
+  const appearance = readAppearance(file.type ?? uiThemeHint, background);
   // Every colour below is flattened against the background, because VS Code
   // themes routinely give surfaces an alpha channel (`#ffffff0a` for a hover
   // row) that CSS custom properties cannot reproduce once the value is baked
@@ -166,7 +191,13 @@ export function parseVsCodeTheme(source: string, fallbackName = 'Imported theme'
  * alone rejects a large share of real files. The string-aware scan is what
  * keeps a `//` inside a colour name or a description from being cut out.
  */
-function parseJsonc(source: string): VsCodeThemeFile {
+export function parseJsonc(source: string): VsCodeThemeFile {
+  // A leading byte-order mark is common in hand-edited theme files and makes
+  // JSON.parse reject the whole document.
+  if (source.charCodeAt(0) === 0xfeff) {
+    source = source.slice(1);
+  }
+
   let out = '';
   let index = 0;
   let inString = false;
@@ -254,7 +285,7 @@ function readColorMap(file: VsCodeThemeFile): Record<string, string> {
 function readAppearance(type: unknown, background: Rgb): ThemeAppearance {
   if (typeof type === 'string') {
     const normalized = type.toLowerCase();
-    if (normalized === 'light' || normalized === 'vs' || normalized === 'hclight') {
+    if (normalized === 'light' || normalized === 'vs' || normalized === 'hclight' || normalized === 'hc-light') {
       return 'light';
     }
     if (normalized === 'dark' || normalized === 'vs-dark' || normalized === 'hcdark' || normalized === 'hc-black') {

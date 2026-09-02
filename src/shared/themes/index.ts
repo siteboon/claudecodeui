@@ -1,4 +1,6 @@
 import type { ColorTheme } from '@/shared/types';
+import { parseVsCodeTheme } from '@/shared/themes/vscodeThemeImport';
+import { parseVsixThemes } from '@/shared/themes/vsixThemeImport';
 import { readUserPreference } from '@/shared/userSettings';
 
 /**
@@ -13,10 +15,6 @@ import { readUserPreference } from '@/shared/userSettings';
  * matching `@tailwind base` directive and Tailwind rejects it.
  */
 import '@/shared/themes/default.css';
-import '@/shared/themes/catppuccin-latte.css';
-import '@/shared/themes/catppuccin-frappe.css';
-import '@/shared/themes/catppuccin-macchiato.css';
-import '@/shared/themes/catppuccin-mocha.css';
 
 /** The palette a user gets before they ever open the theme picker. */
 export const DEFAULT_COLOR_THEME_ID = 'default';
@@ -31,33 +29,32 @@ export const BUILT_IN_THEMES: ColorTheme[] = [
     appearance: 'system',
     previewColors: ['#f7f6f3', '#ffffff', '#2563eb'],
   },
-  {
-    id: 'catppuccin-latte',
-    name: 'Catppuccin Latte',
-    appearance: 'light',
-    previewColors: ['#e6e9ef', '#eff1f5', '#1e66f5'],
-  },
-  {
-    id: 'catppuccin-frappe',
-    name: 'Catppuccin Frappé',
-    appearance: 'dark',
-    previewColors: ['#292c3c', '#303446', '#8caaee'],
-  },
-  {
-    id: 'catppuccin-macchiato',
-    name: 'Catppuccin Macchiato',
-    appearance: 'dark',
-    previewColors: ['#1e2030', '#24273a', '#8aadf4'],
-  },
-  {
-    id: 'catppuccin-mocha',
-    name: 'Catppuccin Mocha',
-    appearance: 'dark',
-    previewColors: ['#181825', '#1e1e2e', '#89b4fa'],
-  },
 ];
 
 export { parseVsCodeTheme, VsCodeThemeImportError } from '@/shared/themes/vscodeThemeImport';
+export { parseVsixThemes } from '@/shared/themes/vsixThemeImport';
+
+/**
+ * Reads every palette a picked file holds.
+ *
+ * The two accepted shapes are a bare `*-color-theme.json` and a whole `.vsix`
+ * extension, told apart by the zip signature rather than by the extension in
+ * the name — a theme downloaded from the marketplace is often saved without
+ * one, or with the wrong one.
+ */
+export async function importThemesFromFile(file: File): Promise<ColorTheme[]> {
+  const signature = new Uint8Array(await file.slice(0, 2).arrayBuffer());
+  const isArchive = signature[0] === 0x50 && signature[1] === 0x4b;
+
+  // An extension names its themes in its manifest and a theme file names itself,
+  // so the file name is only the last resort for both.
+  const fallbackName = file.name.replace(/(-color-theme)?\.(json|vsix)$/i, '');
+
+  if (isArchive) {
+    return parseVsixThemes(await file.arrayBuffer(), fallbackName);
+  }
+  return [parseVsCodeTheme(await file.text(), fallbackName)];
+}
 
 /** The style element every imported theme's variables are written into. */
 const IMPORTED_THEMES_STYLE_ID = 'imported-color-themes';

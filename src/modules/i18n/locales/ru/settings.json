@@ -133,8 +133,11 @@
       "importFailed": "Не удалось импортировать эту тему.",
       "import": {
         "label": "Импорт темы VS Code",
-        "description": "Превращает файл *-color-theme.json в палитру",
-        "button": "Импортировать тему"
+        "description": "Превращает файл *-color-theme.json или расширение .vsix в палитру",
+        "button": "Импортировать тему",
+        "urlLabel": "Или вставьте ссылку на расширение",
+        "urlPlaceholder": "https://marketplace.visualstudio.com/items?itemName=…",
+        "urlButton": "Загрузить"
       }
     },
     "projectSorting": {

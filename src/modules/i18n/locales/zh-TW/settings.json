@@ -134,8 +134,11 @@
       "importFailed": "無法匯入該佈景主題。",
       "import": {
         "label": "匯入 VS Code 佈景主題",
-        "description": "將 *-color-theme.json 檔案轉換為調色盤",
-        "button": "匯入佈景主題"
+        "description": "將 *-color-theme.json 檔案或 .vsix 擴充功能轉換為調色盤",
+        "button": "匯入佈景主題",
+        "urlLabel": "或貼上擴充功能連結",
+        "urlPlaceholder": "https://marketplace.visualstudio.com/items?itemName=…",
+        "urlButton": "取得"
       }
     },
     "projectSorting": {
