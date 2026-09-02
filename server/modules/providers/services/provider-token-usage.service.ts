@@ -293,6 +293,32 @@ function readAntigravityTokenUsage(fileContent: string): TokenUsageResult {
     }
   }
 
+  if (totalTokens === 0 && inputTokens === 0 && outputTokens === 0) {
+    let estimatedInputChars = 0;
+    let estimatedOutputChars = 0;
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const entry = JSON.parse(trimmed) as AnyRecord;
+        const contentLength = typeof entry.content === 'string' ? entry.content.length : 0;
+        const thinkingLength = typeof entry.thinking === 'string' ? entry.thinking.length : 0;
+        if (entry.source === 'MODEL' || entry.type === 'PLANNER_RESPONSE') {
+          estimatedOutputChars += contentLength + thinkingLength;
+        } else {
+          estimatedInputChars += contentLength;
+        }
+      } catch {
+        // Skip unparseable lines
+      }
+    }
+    if (estimatedInputChars > 0 || estimatedOutputChars > 0) {
+      inputTokens = Math.ceil(estimatedInputChars / 3);
+      outputTokens = Math.ceil(estimatedOutputChars / 3);
+      totalTokens = inputTokens + outputTokens;
+    }
+  }
+
   return {
     used: totalTokens || (inputTokens + outputTokens),
     inputTokens,
@@ -386,6 +412,21 @@ export function createProviderTokenUsageService(
             code: 'ANTIGRAVITY_SESSION_FILE_NOT_FOUND',
             statusCode: 404,
           });
+        }
+
+        // Check for persisted token_usage.json in session's brain directory
+        const brainDir = path.resolve(sessionFilePath, '../../..');
+        const tokenUsagePath = path.join(brainDir, 'token_usage.json');
+        if (dependencies.fileExists(tokenUsagePath)) {
+          try {
+            const usageRaw = await dependencies.readTextFile(tokenUsagePath);
+            const usageJson = JSON.parse(usageRaw);
+            if (usageJson && typeof usageJson.used === 'number') {
+              return usageJson as TokenUsageResult;
+            }
+          } catch {
+            // Fall back to reading transcript file
+          }
         }
 
         const fileContent = await dependencies.readTextFile(sessionFilePath);

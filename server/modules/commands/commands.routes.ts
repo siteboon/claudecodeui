@@ -10,6 +10,7 @@ type CommandsRouterDependencies = {
   homeDirectory(): string;
   appRoot: string;
   models: typeof import('../providers/index.js').providerModelsService;
+  tokenUsage?: typeof import('../providers/index.js').providerTokenUsageService;
   runtime: {
     uptime(): number;
     memoryUsage(): NodeJS.MemoryUsage;
@@ -25,16 +26,19 @@ const fs = dependencies.fileSystem;
 const os = { homedir: dependencies.homeDirectory };
 const APP_ROOT = dependencies.appRoot;
 const providerModelsService = dependencies.models;
+const providerTokenUsageService = dependencies.tokenUsage;
 const process = dependencies.runtime;
 const router = express.Router();
 
-const MODEL_PROVIDERS = ["claude", "cursor", "codex", "opencode"];
+const MODEL_PROVIDERS = ["claude", "cursor", "codex", "opencode", "zcode", "antigravity"];
 
 const MODEL_PROVIDER_LABELS = {
   claude: "Claude",
   cursor: "Cursor",
   codex: "Codex",
   opencode: "OpenCode",
+  zcode: "ZCode",
+  antigravity: "Antigravity",
 };
 
 const readModelProvider = (value) => {
@@ -261,9 +265,24 @@ Custom commands can be created in:
   "/models": (args, context) => executeModelsCommand(args, context, providerModelsService),
 
   "/cost": async (args, context) => {
-    const tokenUsage = context?.tokenUsage || {};
+    let tokenUsage = context?.tokenUsage || {};
     const provider = readModelProvider(context?.provider);
     const model = await resolveCommandModel(providerModelsService, provider, context);
+
+    if (
+      (!tokenUsage.used && !tokenUsage.totalUsed && !tokenUsage.total_tokens && !tokenUsage.inputTokens && !tokenUsage.outputTokens)
+      && context?.sessionId
+      && providerTokenUsageService
+    ) {
+      try {
+        const persisted = await providerTokenUsageService.getSessionTokenUsage(context.sessionId);
+        if (persisted && (persisted.used > 0 || persisted.inputTokens > 0 || persisted.outputTokens > 0)) {
+          tokenUsage = persisted;
+        }
+      } catch {
+        // Fall back to context tokenUsage
+      }
+    }
 
     const reportedUsed =
       Number(

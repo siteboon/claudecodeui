@@ -42,6 +42,7 @@ async function executeCommand(
   commandName: string,
   context: Record<string, unknown>,
   sessionModels: Record<string, string> = {},
+  tokenUsageOverride?: { getSessionTokenUsage: (id: string) => Promise<unknown> },
 ): Promise<Record<string, unknown>> {
   const router = createCommandsRouter({
     fileSystem: {
@@ -50,6 +51,7 @@ async function executeCommand(
     homeDirectory: () => '/home/test',
     appRoot: '/app',
     models: createModelsService(sessionModels) as never,
+    tokenUsage: tokenUsageOverride as never,
     runtime: {
       uptime: () => 0,
       memoryUsage: () => ({ rss: 0, heapTotal: 0, heapUsed: 0, external: 0, arrayBuffers: 0 }),
@@ -111,4 +113,41 @@ test('cost and status commands report the same resolved model as /models', async
 
   assert.equal((cost.data as { model: string }).model, 'haiku');
   assert.equal((status.data as { model: string }).model, 'haiku');
+});
+
+test('cost command preserves antigravity and zcode provider names', async () => {
+  const antigravityCost = await executeCommand('/cost', { provider: 'antigravity' });
+  const zcodeCost = await executeCommand('/cost', { provider: 'zcode' });
+
+  assert.equal((antigravityCost.data as { provider: string }).provider, 'antigravity');
+  assert.equal((zcodeCost.data as { provider: string }).provider, 'zcode');
+});
+
+test('cost command falls back to injected tokenUsage service when context has no usage', async () => {
+  const mockTokenUsage = {
+    getSessionTokenUsage: async (sessionId: string) => ({
+      used: 4200,
+      inputTokens: 3000,
+      outputTokens: 1200,
+      breakdown: { input: 3000, output: 1200 },
+    }),
+  };
+
+  const cost = await executeCommand(
+    '/cost',
+    { provider: 'antigravity', sessionId: 'test-session-123' },
+    {},
+    mockTokenUsage,
+  );
+
+  const data = cost.data as {
+    tokenUsage: { used: number };
+    tokenBreakdown?: { input: number; output: number };
+    provider: string;
+  };
+
+  assert.equal(data.provider, 'antigravity');
+  assert.equal(data.tokenUsage.used, 4200);
+  assert.equal(data.tokenBreakdown?.input, 3000);
+  assert.equal(data.tokenBreakdown?.output, 1200);
 });

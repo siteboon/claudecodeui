@@ -8,6 +8,8 @@
  */
 
 import type { ChildProcess } from 'node:child_process';
+import fsSync from 'node:fs';
+import fsp from 'node:fs/promises';
 import path from 'node:path';
 
 import crossSpawn from 'cross-spawn';
@@ -31,11 +33,29 @@ import {
   generateMessageId,
   readObjectRecord,
   readOptionalString,
+  sanitizeLeafDirectoryName,
 } from '@/shared/utils.js';
 
+import { getAntigravityDataRoot } from './antigravity-data-root.js';
 import { tryResolveEnginePath } from './antigravity-engine-path.js';
 
 const PROVIDER = 'antigravity';
+
+/**
+ * Persists token usage snapshot into session's brain directory for offline / reloaded queries.
+ */
+async function persistAntigravityTokenUsage(sessionId: string, tokenBudget: unknown): Promise<void> {
+  try {
+    const safeId = sanitizeLeafDirectoryName(sessionId, 'antigravity session id');
+    const brainDir = path.join(getAntigravityDataRoot(), 'brain', safeId);
+    if (fsSync.existsSync(brainDir)) {
+      const usageFile = path.join(brainDir, 'token_usage.json');
+      await fsp.writeFile(usageFile, JSON.stringify(tokenBudget, null, 2), 'utf8');
+    }
+  } catch {
+    // Best-effort persistence
+  }
+}
 
 /**
  * Maps CloudCLI permission modes onto `agy` CLI flags. `default` maps to no
@@ -291,6 +311,42 @@ export class AntigravityRuntimeProvider implements IProviderRuntime {
               }
             }
             return;
+          }
+
+          // Extract and broadcast token budget from step_update or result
+          const stepUpdateRecord = readObjectRecord(rawRecord?.step_update);
+          const resultRecord = readObjectRecord(rawRecord?.result);
+          const usageRecord = readObjectRecord(resultRecord?.usage ?? stepUpdateRecord?.usage ?? rawRecord?.usage);
+
+          if (usageRecord) {
+            const inputTokens = Number(usageRecord.input_tokens ?? usageRecord.inputTokens ?? usageRecord.prompt_tokens ?? 0) || 0;
+            const outputTokens = Number(usageRecord.output_tokens ?? usageRecord.outputTokens ?? usageRecord.completion_tokens ?? usageRecord.candidates_tokens ?? 0) || 0;
+            const used = Number(usageRecord.total_tokens ?? usageRecord.totalTokens ?? (inputTokens + outputTokens)) || 0;
+            if (used > 0 || inputTokens > 0 || outputTokens > 0) {
+              const tokenBudget = {
+                used,
+                total: 1048576,
+                inputTokens,
+                outputTokens,
+                breakdown: {
+                  input: inputTokens,
+                  output: outputTokens,
+                },
+              };
+              writer.send(createNormalizedMessage({
+                id: generateMessageId(PROVIDER),
+                kind: 'status',
+                text: 'token_budget',
+                tokenBudget,
+                sessionId: capturedSessionId || sessionId || null,
+                provider: PROVIDER,
+              }));
+
+              const activeSessionId = capturedSessionId || sessionId;
+              if (activeSessionId) {
+                void persistAntigravityTokenUsage(activeSessionId, tokenBudget);
+              }
+            }
           }
 
           // Handle result event (terminal)
