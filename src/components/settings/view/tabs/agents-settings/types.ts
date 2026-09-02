@@ -5,6 +5,7 @@ import type {
   ClaudePermissionsState,
   CursorPermissionsState,
   CodexPermissionMode,
+  AntigravityPermissionMode,
   SettingsProject,
 } from '../../../types/types';
 
@@ -25,6 +26,8 @@ export type AgentsSettingsTabProps = {
   onCursorPermissionsChange: (value: CursorPermissionsState) => void;
   codexPermissionMode: CodexPermissionMode;
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
+  antigravityPermissionMode: AntigravityPermissionMode;
+  onAntigravityPermissionModeChange: (value: AntigravityPermissionMode) => void;
   projects: SettingsProject[];
 };
 
@@ -52,5 +55,7 @@ export type AgentCategoryContentSectionProps = {
   onCursorPermissionsChange: (value: CursorPermissionsState) => void;
   codexPermissionMode: CodexPermissionMode;
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
+  antigravityPermissionMode: AntigravityPermissionMode;
+  onAntigravityPermissionModeChange: (value: AntigravityPermissionMode) => void;
   projects: SettingsProject[];
 };

@@ -16,6 +16,8 @@ export default function AgentsSettingsTab({
   onCursorPermissionsChange,
   codexPermissionMode,
   onCodexPermissionModeChange,
+  antigravityPermissionMode,
+  onAntigravityPermissionModeChange,
   projects,
 }: AgentsSettingsTabProps) {
   const [selectedAgent, setSelectedAgent] = useState<AgentProvider>('claude');
@@ -106,6 +108,8 @@ export default function AgentsSettingsTab({
           onCursorPermissionsChange={onCursorPermissionsChange}
           codexPermissionMode={codexPermissionMode}
           onCodexPermissionModeChange={onCodexPermissionModeChange}
+          antigravityPermissionMode={antigravityPermissionMode}
+          onAntigravityPermissionModeChange={onAntigravityPermissionModeChange}
           projects={projects}
         />
       </div>

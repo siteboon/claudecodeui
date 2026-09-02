@@ -436,6 +436,35 @@
         "overrideNote": "You can override this per-session using the mode button in the chat interface."
       }
     },
+    "antigravity": {
+      "permissionMode": "Permission Mode",
+      "description": "Controls how Antigravity handles file edits, plan generation, and command execution",
+      "modes": {
+        "default": {
+          "title": "Default",
+          "description": "Standard interactive permission mode. Prompts before executing write tools or mutating system state."
+        },
+        "acceptEdits": {
+          "title": "Accept Edits",
+          "description": "Automatically accepts and applies proposed file edits (--mode accept-edits)."
+        },
+        "plan": {
+          "title": "Plan Mode",
+          "description": "Read-only analysis and planning mode. Generates structured plans without editing files (--mode plan)."
+        },
+        "bypassPermissions": {
+          "title": "Bypass Permissions",
+          "description": "Full system access with no restrictions. All commands and tool actions run automatically (--dangerously-skip-permissions). Use with caution."
+        }
+      },
+      "technicalDetails": "Technical details",
+      "technicalInfo": {
+        "default": "Interactive mode: prompts for sensitive actions and file modifications.",
+        "acceptEdits": "Maps to agy --mode accept-edits. Auto-accepts file edits within workspace.",
+        "plan": "Maps to agy --mode plan. Read-only planning without modifications.",
+        "bypassPermissions": "Maps to agy --dangerously-skip-permissions. Full bypass of approval prompts."
+      }
+    },
     "actions": {
       "add": "Add"
     }

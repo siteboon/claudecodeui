@@ -436,6 +436,35 @@
         "overrideNote": "您可以使用聊天界面中的模式按钮按会话覆盖此设置。"
       }
     },
+    "antigravity": {
+      "permissionMode": "权限模式",
+      "description": "控制 Antigravity 如何处理文件编辑、计划生成及工具命令执行",
+      "modes": {
+        "default": {
+          "title": "默认模式",
+          "description": "标准交互式权限模式。在执行写入工具或修改系统状态前会进行确认。"
+        },
+        "acceptEdits": {
+          "title": "接受编辑",
+          "description": "自动接受并应用建议的文件修改（对应 --mode accept-edits）。"
+        },
+        "plan": {
+          "title": "计划模式",
+          "description": "只读分析与计划模式。生成结构化计划而不修改任何文件（对应 --mode plan）。"
+        },
+        "bypassPermissions": {
+          "title": "跳过权限（危险）",
+          "description": "完全系统访问，无任何限制。所有命令和工具操作全自动运行（对应 --dangerously-skip-permissions），请谨慎使用。"
+        }
+      },
+      "technicalDetails": "技术详情",
+      "technicalInfo": {
+        "default": "交互确认模式：对文件写入和敏感操作进行交互确认。",
+        "acceptEdits": "映射到 agy --mode accept-edits，自动接受工作区内的文件修改。",
+        "plan": "映射到 agy --mode plan，只读分析并输出计划。",
+        "bypassPermissions": "映射到 agy --dangerously-skip-permissions，完全跳过权限提示。"
+      }
+    },
     "actions": {
       "add": "添加"
     }

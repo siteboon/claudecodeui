@@ -10,6 +10,7 @@ import {
 } from '../constants/constants';
 import type {
   AgentProvider,
+  AntigravityPermissionMode,
   ClaudePermissionsState,
   CodeEditorSettingsState,
   CodexPermissionMode,
@@ -46,6 +47,10 @@ type CodexSettingsStorage = {
   permissionMode?: CodexPermissionMode;
 };
 
+type AntigravitySettingsStorage = {
+  permissionMode?: AntigravityPermissionMode;
+};
+
 type NotificationPreferencesResponse = {
   success?: boolean;
   preferences?: NotificationPreferencesState;
@@ -78,6 +83,14 @@ const parseJson = <T>(value: string | null, fallback: T): T => {
 
 const toCodexPermissionMode = (value: unknown): CodexPermissionMode => {
   if (value === 'acceptEdits' || value === 'bypassPermissions') {
+    return value;
+  }
+
+  return 'default';
+};
+
+const toAntigravityPermissionMode = (value: unknown): AntigravityPermissionMode => {
+  if (value === 'acceptEdits' || value === 'plan' || value === 'bypassPermissions') {
     return value;
   }
 
@@ -158,6 +171,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     createDefaultNotificationPreferences()
   ));
   const [codexPermissionMode, setCodexPermissionMode] = useState<CodexPermissionMode>('default');
+  const [antigravityPermissionMode, setAntigravityPermissionMode] = useState<AntigravityPermissionMode>('default');
 
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginProvider, setLoginProvider] = useState<ActiveLoginProvider>('');
@@ -196,6 +210,12 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
       );
       setCodexPermissionMode(toCodexPermissionMode(savedCodexSettings.permissionMode));
 
+      const savedAntigravitySettings = parseJson<AntigravitySettingsStorage>(
+        localStorage.getItem('antigravity-settings'),
+        {},
+      );
+      setAntigravityPermissionMode(toAntigravityPermissionMode(savedAntigravitySettings.permissionMode));
+
       try {
         const notificationResponse = await authenticatedFetch('/api/settings/notification-preferences');
         if (notificationResponse.ok) {
@@ -218,6 +238,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
       setCursorPermissions(createEmptyCursorPermissions());
       setNotificationPreferences(createDefaultNotificationPreferences());
       setCodexPermissionMode('default');
+      setAntigravityPermissionMode('default');
       setProjectSortOrder('name');
     }
   }, []);
@@ -268,6 +289,11 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
         lastUpdated: now,
       }));
 
+      localStorage.setItem('antigravity-settings', JSON.stringify({
+        permissionMode: antigravityPermissionMode,
+        lastUpdated: now,
+      }));
+
       const notificationResponse = await authenticatedFetch('/api/settings/notification-preferences', {
         method: 'PUT',
         body: JSON.stringify(notificationPreferences),
@@ -282,6 +308,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
       setSaveStatus('error');
     }
   }, [
+    antigravityPermissionMode,
     claudePermissions.allowedTools,
     claudePermissions.disallowedTools,
     claudePermissions.skipPermissions,
@@ -394,6 +421,8 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     setNotificationPreferences,
     codexPermissionMode,
     setCodexPermissionMode,
+    antigravityPermissionMode,
+    setAntigravityPermissionMode,
     providerAuthStatus,
     openLoginForProvider,
     showLoginModal,

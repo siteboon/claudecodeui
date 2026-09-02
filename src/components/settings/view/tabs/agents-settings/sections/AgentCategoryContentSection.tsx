@@ -17,6 +17,8 @@ export default function AgentCategoryContentSection({
   onCursorPermissionsChange,
   codexPermissionMode,
   onCodexPermissionModeChange,
+  antigravityPermissionMode,
+  onAntigravityPermissionModeChange,
   projects,
 }: AgentCategoryContentSectionProps) {
   return (
@@ -70,6 +72,14 @@ export default function AgentCategoryContentSection({
           agent="codex"
           permissionMode={codexPermissionMode}
           onPermissionModeChange={onCodexPermissionModeChange}
+        />
+      )}
+
+      {selectedCategory === 'permissions' && selectedAgent === 'antigravity' && (
+        <PermissionsContent
+          agent="antigravity"
+          permissionMode={antigravityPermissionMode}
+          onPermissionModeChange={onAntigravityPermissionModeChange}
         />
       )}
 

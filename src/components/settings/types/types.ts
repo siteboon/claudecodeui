@@ -9,6 +9,7 @@ export type AgentCategory = 'account' | 'permissions' | 'mcp' | 'skills';
 export type ProjectSortOrder = 'name' | 'date';
 export type SaveStatus = 'success' | 'error' | null;
 export type CodexPermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions';
+export type AntigravityPermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions';
 
 export type SettingsProject = {
   name: string;
@@ -56,6 +57,7 @@ export type SettingsStoragePayload = {
   claude: ClaudePermissionsState & { projectSortOrder: ProjectSortOrder; lastUpdated: string };
   cursor: CursorPermissionsState & { lastUpdated: string };
   codex: { permissionMode: CodexPermissionMode; lastUpdated: string };
+  antigravity: { permissionMode: AntigravityPermissionMode; lastUpdated: string };
 };
 
 export type SettingsProps = {

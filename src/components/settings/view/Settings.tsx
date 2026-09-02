@@ -51,6 +51,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     setCursorPermissions,
     codexPermissionMode,
     setCodexPermissionMode,
+    antigravityPermissionMode,
+    setAntigravityPermissionMode,
     providerAuthStatus,
     openLoginForProvider,
     showLoginModal,
@@ -185,6 +187,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
                   onCursorPermissionsChange={setCursorPermissions}
                   codexPermissionMode={codexPermissionMode}
                   onCodexPermissionModeChange={setCodexPermissionMode}
+                  antigravityPermissionMode={antigravityPermissionMode}
+                  onAntigravityPermissionModeChange={setAntigravityPermissionMode}
                   projects={projects}
                 />
               )}
