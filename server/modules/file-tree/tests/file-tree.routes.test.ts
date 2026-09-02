@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
+import { Readable } from 'node:stream';
 import test from 'node:test';
 
 import express, { type RequestHandler } from 'express';
@@ -18,6 +19,7 @@ function createFakeServices(overrides: Partial<FileTreeServices> = {}): FileTree
     createWorkspaceFolder: unexpectedOperation,
     readTextFile: unexpectedOperation,
     readExternalTextFile: unexpectedOperation,
+    openExternalFile: unexpectedOperation,
     openFile: unexpectedOperation,
     saveTextFile: unexpectedOperation,
     listProjectFiles: unexpectedOperation,
@@ -199,4 +201,30 @@ test('external-file route rejects requests without a path before calling the ser
   });
 
   assert.equal(readCalled, false);
+});
+
+test('external-file content route streams an external media file with proper content type', async () => {
+  const inputs: string[] = [];
+  const services = createFakeServices({
+    openExternalFile: async (filePath) => {
+      inputs.push(filePath);
+      return {
+        contentType: 'image/png',
+        stream: Readable.from(Buffer.from([0x89, 0x50, 0x4e, 0x47])),
+      };
+    },
+  });
+
+  await withFileTreeServer(services, async (baseUrl) => {
+    const response = await fetch(
+      `${baseUrl}/api/file-tree/external-file/content?path=${encodeURIComponent('/home/user/.cloudcli/assets/shot.png')}`,
+    );
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), 'image/png');
+    const bytes = await response.arrayBuffer();
+    assert.equal(bytes.byteLength, 4);
+  });
+
+  assert.deepEqual(inputs, ['/home/user/.cloudcli/assets/shot.png']);
 });

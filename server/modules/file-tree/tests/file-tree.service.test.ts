@@ -475,3 +475,23 @@ test('readExternalTextFile maps a missing file to 404', async () => {
     (error: unknown) => error instanceof AppError && error.statusCode === 404,
   );
 });
+
+test('openExternalFile streams a file inside an allowlisted external root', async () => {
+  const assetsRoot = path.resolve('cloudcli-assets');
+  const imagePath = path.join(assetsRoot, 'shot.png');
+  const fileSystem = createFakeFileSystem({
+    realpath: async (candidatePath) => candidatePath,
+    access: async () => {},
+    createReadStream: () => Readable.from(Buffer.from([0x89, 0x50, 0x4e, 0x47])) as any,
+  });
+  const dependencies = {
+    ...createDependencies(fileSystem, path.resolve('file-tree-test-project'), [assetsRoot]),
+    resolveMimeType: () => 'image/png',
+  };
+  const service = createFileTreeService(dependencies);
+
+  const result = await service.openExternalFile(imagePath);
+  assert.equal(result.contentType, 'image/png');
+  assert.ok(result.stream);
+});
+

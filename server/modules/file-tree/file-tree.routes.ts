@@ -137,6 +137,21 @@ export function createFileTreeRouter(
     response.json(await services.readExternalTextFile(filePath));
   }, logger));
 
+  // Streaming read-only access to allowlisted external files (media/attachments/artifacts);
+  // the service enforces the allowlist, routes stay thin.
+  router.get('/external-file/content', createRouteHandler(async (request, response) => {
+    const filePath = readRequiredString(request.query.path, 'path', 'Invalid file path');
+    const file = await services.openExternalFile(filePath);
+    response.setHeader('Content-Type', file.contentType);
+    file.stream.pipe(response);
+    file.stream.on('error', (error) => {
+      logger.error('Error streaming external file content', error);
+      if (!response.headersSent) {
+        response.status(500).json({ error: 'Error reading file' });
+      }
+    });
+  }, logger));
+
   router.get('/projects/:projectId/files/content', createRouteHandler(async (request, response) => {
     const filePath = readRequiredString(request.query.path, 'path', 'Invalid file path');
     const file = await services.openFile(readProjectId(request), filePath);

@@ -497,6 +497,24 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       }
     },
 
+    async openExternalFile(filePath) {
+      const resolvedPath = await resolvePathInsideExternalRoots(
+        fileSystem,
+        dependencies.externalReadOnlyRoots,
+        filePath,
+      );
+      try {
+        await fileSystem.access(resolvedPath);
+      } catch {
+        throw createFileTreeError('File not found', 404, 'FILE_NOT_FOUND');
+      }
+
+      return {
+        contentType: dependencies.resolveMimeType(resolvedPath),
+        stream: fileSystem.createReadStream(resolvedPath),
+      };
+    },
+
     async openFile(projectId, filePath) {
       const projectRoot = await resolveProjectRoot(projectId);
       const resolvedPath = resolvePathInsideProject(projectRoot, filePath);

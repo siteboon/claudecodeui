@@ -49,12 +49,12 @@ export default function CodeEditorMediaPreview({
   const [loading, setLoading] = useState(true);
   // Identifies which file the current `url` was loaded for. Rendering is gated on
   // this so a blob from a previously-opened file can never show under the new
-  // file (the editor reuses this component instance across files).
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
-  const sourceKey = `${projectId ?? ''}:${file.path}:${kind}`;
+  const isExternal = Boolean(file.isReadOnlyExternal);
+  const sourceKey = `${isExternal ? 'external' : (projectId ?? '')}:${file.path}:${kind}`;
 
   useEffect(() => {
-    if (!projectId) {
+    if (!isExternal && !projectId) {
       setUrl(null);
       setLoadedKey(null);
       setError(labels.error);
@@ -74,7 +74,9 @@ export default function CodeEditorMediaPreview({
         // The content endpoint requires the auth header, so we fetch the bytes
         // ourselves and hand the media element a blob URL instead of a bare src.
         // Fetching a blob (rather than streaming) also lets <video>/<audio> seek.
-        const contentUrl = `/api/file-tree/projects/${projectId}/files/content?path=${encodeURIComponent(file.path)}`;
+        const contentUrl = isExternal
+          ? `/api/file-tree/external-file/content?path=${encodeURIComponent(file.path)}`
+          : `/api/file-tree/projects/${projectId}/files/content?path=${encodeURIComponent(file.path)}`;
         const response = await authenticatedFetch(contentUrl, { signal: controller.signal });
 
         if (!response.ok) {

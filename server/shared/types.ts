@@ -1064,6 +1064,11 @@ export type FileTreeServices = {
    * write counterpart, so external files can never be modified through the API.
    */
   readExternalTextFile(filePath: string): Promise<{ content: string; path: string }>;
+  /**
+   * Opens a stream for a media or binary file outside any project root. The path
+   * must resolve inside one of the injected `externalReadOnlyRoots`.
+   */
+  openExternalFile(filePath: string): Promise<{ contentType: string; stream: Readable }>;
   openFile(projectId: string, filePath: string): Promise<{ contentType: string; stream: Readable }>;
   saveTextFile(projectId: string, filePath: string, content: string): Promise<{
     success: true;
