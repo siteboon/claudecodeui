@@ -438,6 +438,11 @@ test('AntigravitySessionSynchronizer reads the summaries db from the overridden 
     'ACTIVE',
   );
 
+  const transcriptDir = path.join(tempRoot, 'brain', 'fixture-conv-1', '.system_generated', 'logs');
+  await fs.mkdir(transcriptDir, { recursive: true });
+  const transcriptPath = path.join(transcriptDir, 'transcript.jsonl');
+  await fs.writeFile(transcriptPath, '{"type":"USER_INPUT"}\n');
+
   closeConnection();
   process.env.DATABASE_PATH = path.join(emptyHome, 'auth.db');
   await initializeDatabase();
@@ -449,6 +454,7 @@ test('AntigravitySessionSynchronizer reads the summaries db from the overridden 
     assert.equal(processed, 1);
     const synced = sessionsDb.getSessionByProviderSessionId('fixture-conv-1');
     assert.ok(synced, 'fixture conversation must be indexed into the sessions db');
+    assert.equal(synced?.jsonl_path, transcriptPath, 'jsonl_path should record the transcript location');
   } finally {
     summariesDb.close();
     closeConnection();

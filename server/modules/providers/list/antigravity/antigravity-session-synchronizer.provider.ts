@@ -21,9 +21,13 @@ import {
   normalizeSessionName,
   parseAntigravityWorkspacePath,
   readOptionalString,
+  sanitizeLeafDirectoryName,
 } from '@/shared/utils.js';
 
-import { getAntigravitySummariesDbPath } from './antigravity-data-root.js';
+import {
+  getAntigravitySummariesDbPath,
+  getAntigravityTranscriptCandidates,
+} from './antigravity-data-root.js';
 
 const PROVIDER: LLMProvider = 'antigravity';
 
@@ -130,6 +134,19 @@ export class AntigravitySessionSynchronizer implements IProviderSessionSynchroni
           ? existingName
           : title;
 
+        let jsonlPath: string | null = null;
+        try {
+          const safeId = sanitizeLeafDirectoryName(sessionId, 'antigravity session id');
+          for (const candidate of getAntigravityTranscriptCandidates(safeId)) {
+            if (fsSync.existsSync(candidate)) {
+              jsonlPath = candidate;
+              break;
+            }
+          }
+        } catch {
+          // Keep null when sanitization fails.
+        }
+
         const createdSessionId = sessionsDb.createSession(
           sessionId,
           PROVIDER,
@@ -137,7 +154,7 @@ export class AntigravitySessionSynchronizer implements IProviderSessionSynchroni
           normalizeSessionName(nextName, fallbackTitle),
           normalizeProviderTimestamp(rowTime || Date.now()),
           normalizeProviderTimestamp(rowTime || Date.now()),
-          null, // jsonl_path is null for DB-backed session indices
+          jsonlPath,
         );
 
         if (createdSessionId) {

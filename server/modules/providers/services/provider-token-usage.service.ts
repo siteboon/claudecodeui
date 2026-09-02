@@ -6,8 +6,9 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { getAntigravityTranscriptCandidates } from '@/modules/providers/list/antigravity/index.js';
 import type { AnyRecord } from '@/shared/types.js';
-import { AppError, getOpenCodeDatabasePath } from '@/shared/utils.js';
+import { AppError, getOpenCodeDatabasePath, sanitizeLeafDirectoryName } from '@/shared/utils.js';
 
 type SessionRow = NonNullable<ReturnType<typeof sessionsDb.getSessionById>>;
 
@@ -240,6 +241,66 @@ function readOpenCodeTokenUsage(databasePath: string, providerSessionId: string)
   }
 }
 
+function findAntigravitySessionFile(
+  providerSessionId: string,
+  dependencies: ProviderTokenUsageServiceDependencies,
+): string | null {
+  try {
+    const safeId = sanitizeLeafDirectoryName(providerSessionId, 'antigravity session id');
+    for (const candidate of getAntigravityTranscriptCandidates(safeId)) {
+      if (dependencies.fileExists(candidate)) {
+        return candidate;
+      }
+    }
+  } catch {
+    // Return null when sanitization or path lookup fails.
+  }
+
+  return null;
+}
+
+function readAntigravityTokenUsage(fileContent: string): TokenUsageResult {
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let totalTokens = 0;
+  const lines = fileContent.trim().split('\n');
+
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    try {
+      const entry = JSON.parse(lines[index]) as AnyRecord;
+      const usage = entry.usage
+        ?? entry.result?.usage
+        ?? (entry.event === 'result' ? entry.result?.usage : null)
+        ?? (entry.payload?.usage)
+        ?? null;
+
+      if (usage) {
+        inputTokens = readUsageNumber(usage.input_tokens ?? usage.inputTokens ?? usage.prompt_tokens);
+        outputTokens = readUsageNumber(usage.output_tokens ?? usage.outputTokens ?? usage.completion_tokens);
+        totalTokens = readUsageNumber(usage.total_tokens ?? usage.totalTokens)
+          || (inputTokens + outputTokens);
+        break;
+      }
+
+      if (typeof entry.total_tokens === 'number' || typeof entry.tokens === 'number') {
+        totalTokens = readUsageNumber(entry.total_tokens ?? entry.tokens);
+        inputTokens = readUsageNumber(entry.input_tokens ?? entry.prompt_tokens);
+        outputTokens = readUsageNumber(entry.output_tokens ?? entry.completion_tokens);
+        break;
+      }
+    } catch {
+      // Skip unparseable lines.
+    }
+  }
+
+  return {
+    used: totalTokens || (inputTokens + outputTokens),
+    inputTokens,
+    outputTokens,
+    breakdown: { input: inputTokens, output: outputTokens },
+  };
+}
+
 /**
  * Creates the provider token-usage service used by the provider routes. The
  * provider test suite supplies isolated filesystem and session dependencies so
@@ -309,6 +370,26 @@ export function createProviderTokenUsageService(
 
         const fileContent = await dependencies.readTextFile(sessionFilePath);
         return readCodexTokenUsage(fileContent);
+      }
+
+      if (session.provider === 'antigravity') {
+        const indexedFilePath = session.jsonl_path && dependencies.fileExists(session.jsonl_path)
+          ? session.jsonl_path
+          : null;
+        const sessionFilePath = indexedFilePath ?? findAntigravitySessionFile(
+          providerSessionId,
+          dependencies,
+        );
+
+        if (!sessionFilePath) {
+          throw new AppError(`Antigravity session file for "${sessionId}" was not found.`, {
+            code: 'ANTIGRAVITY_SESSION_FILE_NOT_FOUND',
+            statusCode: 404,
+          });
+        }
+
+        const fileContent = await dependencies.readTextFile(sessionFilePath);
+        return readAntigravityTokenUsage(fileContent);
       }
 
       let sessionFilePath = session.jsonl_path;

@@ -172,6 +172,53 @@ test('Cursor returns an explicit unsupported token usage result', async () => {
   assert.equal(result.total, 0);
 });
 
+test('Antigravity token usage reads usage from transcript.jsonl', async () => {
+  const tempDirectory = await mkdtemp(path.join(tmpdir(), 'provider-token-usage-agy-'));
+  const transcriptPath = path.join(tempDirectory, 'transcript.jsonl');
+
+  try {
+    await writeFile(transcriptPath, [
+      JSON.stringify({
+        step_index: 0,
+        type: 'USER_INPUT',
+        content: 'hello',
+      }),
+      JSON.stringify({
+        step_index: 1,
+        type: 'PLANNER_RESPONSE',
+        content: 'hi',
+      }),
+      JSON.stringify({
+        event: 'result',
+        result: {
+          status: 'SUCCESS',
+          usage: {
+            input_tokens: 250,
+            output_tokens: 80,
+            total_tokens: 330,
+          },
+        },
+      }),
+    ].join('\n'));
+
+    const service = createProviderTokenUsageService({
+      getSessionById: () => createSessionRow({
+        provider: 'antigravity',
+        jsonl_path: transcriptPath,
+      }),
+    });
+
+    assert.deepEqual(await service.getSessionTokenUsage('app-session'), {
+      used: 330,
+      inputTokens: 250,
+      outputTokens: 80,
+      breakdown: { input: 250, output: 80 },
+    });
+  } finally {
+    await rm(tempDirectory, { recursive: true, force: true });
+  }
+});
+
 test('token usage reports SESSION_NOT_FOUND for an unknown app session id', async () => {
   const service = createProviderTokenUsageService({ getSessionById: () => null });
 
