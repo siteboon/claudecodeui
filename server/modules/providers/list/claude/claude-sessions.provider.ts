@@ -487,12 +487,24 @@ async function getSessionMessages(
       const toolUseId = readAgentToolUseId(message);
       const notification = toolUseId ? notificationsByToolUseId.get(toolUseId) : undefined;
       // An async agent's launch row never tells you it finished — only the
-      // later notification does. When that notification is missing (a live run,
-      // or one compacted out of the transcript), the agent's own transcript is
-      // the evidence: a timeline that does not stop mid-tool-call is done.
+      // later notification does, so a missing notification is itself the signal
+      // that the agent is still outstanding.
+      //
+      // The agent's own transcript cannot stand in for that. A background agent
+      // routinely ends its turn cleanly while its work continues — it replies
+      // "I've started the command in the background, waiting for it to
+      // complete…" and stops. `endedMidToolCall` is then false even though no
+      // answer has arrived, which marked every background agent `completed` the
+      // moment it launched.
+      //
+      // Note this whole predicate is gated on `isAsync`, so dropping the clause
+      // changes nothing for a synchronous agent — one has never been able to
+      // report `running` here, with or without a dangling tool call. That also
+      // leaves `endedMidToolCall` computed but unread; it is kept because it is
+      // the only in-file evidence of an interrupted run, and is what a staleness
+      // rule would need.
       const isAwaitingAsyncAgent = message.toolUseResult?.isAsync === true
-        && !notification
-        && (!subagent || subagent.endedMidToolCall);
+        && !notification;
 
       if (subagent) {
         if (subagent.activity.length > 0) {
