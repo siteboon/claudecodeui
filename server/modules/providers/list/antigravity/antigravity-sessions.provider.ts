@@ -172,13 +172,19 @@ export class AntigravitySessionsProvider implements IProviderSessions {
 
   /**
    * Fetches and paginates history from transcript.jsonl log files.
+   *
+   * Transcripts live under brain/<provider-native conversation id>, while
+   * this method is addressed with the stable app session id; the
+   * provider-native id arrives via options and must win over the positional
+   * fallback (app-created sessions have distinct ids).
    */
   async fetchHistory(
     sessionId: string,
     options: FetchHistoryOptions = {},
   ): Promise<FetchHistoryResult> {
     const { limit = null, offset = 0 } = options;
-    const transcriptPath = findTranscriptPath(sessionId);
+    const providerSessionId = options.providerSessionId ?? sessionId;
+    const transcriptPath = findTranscriptPath(providerSessionId);
 
     if (!transcriptPath) {
       return { messages: [], total: 0, hasMore: false, offset: 0, limit: null };

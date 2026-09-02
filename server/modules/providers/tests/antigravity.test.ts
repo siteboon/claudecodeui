@@ -358,6 +358,41 @@ test('AntigravitySessionsProvider fetchHistory renders replies and tool results 
   }
 });
 
+test('AntigravitySessionsProvider fetchHistory resolves the transcript via options.providerSessionId', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agy-data-ids-'));
+  // App-created sessions are addressed by the stable app id but agy writes
+  // its transcript under the provider-native conversation id, so the reader
+  // must look the file up through options.providerSessionId.
+  const appSessionId = 'app-sess-1';
+  const providerSessionId = 'agy-conv-1';
+  const transcriptDir = path.join(tempRoot, 'brain', providerSessionId, '.system_generated', 'logs');
+  await fs.mkdir(transcriptDir, { recursive: true });
+  const entries = [
+    { step_index: 0, source: 'USER_EXPLICIT', type: 'USER_INPUT', status: 'DONE', created_at: '2026-09-02T14:47:19Z', content: '<USER_REQUEST>\n你运行一下pwd\n</USER_REQUEST>' },
+    { step_index: 3, source: 'MODEL', type: 'PLANNER_RESPONSE', status: 'DONE', created_at: '2026-09-02T14:47:25Z', content: 'pwd output here.' },
+  ];
+  await fs.writeFile(
+    path.join(transcriptDir, 'transcript.jsonl'),
+    entries.map((entry) => JSON.stringify(entry)).join('\n') + '\n',
+  );
+
+  const restoreDataDir = withEnvValue('CLOUDCLI_ANTIGRAVITY_DATA_DIR', tempRoot);
+  try {
+    const sessions = new AntigravitySessionsProvider();
+    const byProviderHint = await sessions.fetchHistory(appSessionId, { providerSessionId });
+    assert.equal(byProviderHint.total, 2, 'history must be found through the provider-native id hint');
+    assert.equal(byProviderHint.messages[0]?.role, 'user');
+
+    // Discovered sessions keep working with the positional-id fallback
+    // (their app id equals the provider id).
+    const byPositionalId = await sessions.fetchHistory(providerSessionId, {});
+    assert.equal(byPositionalId.total, 2);
+  } finally {
+    restoreDataDir();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('AntigravitySessionsProvider fetchHistory returns empty for unknown sessions', async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agy-data-empty-'));
   const restoreDataDir = withEnvValue('CLOUDCLI_ANTIGRAVITY_DATA_DIR', tempRoot);
