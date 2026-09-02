@@ -263,9 +263,21 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           ? {
               content: formatToolResultContent(tr.content),
               isError: Boolean(tr.isError),
-              toolUseResult: (tr as any).toolUseResult,
+              toolUseResult: tr.toolUseResult,
             }
           : null;
+
+        // TodoWrite is input-rendered. OMP reports the final checklist under
+        // the matching result's structured details, so prefer that newer state
+        // without introducing a provider-specific widget or message kind.
+        const resultDetails = tr?.toolUseResult
+          && typeof tr.toolUseResult === 'object'
+          && 'todos' in tr.toolUseResult
+          ? tr.toolUseResult
+          : null;
+        const displayedToolInput = msg.toolName === 'TodoWrite' && Array.isArray(resultDetails?.todos)
+          ? { todos: resultDetails.todos }
+          : msg.toolInput;
 
         // The server-indexed timeline arrives on a history load; the live fold
         // covers the run in progress. A mid-run refresh can attach a partial
@@ -283,7 +295,9 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           timestamp: msg.timestamp,
           isToolUse: true,
           toolName: msg.toolName,
-          toolInput: typeof msg.toolInput === 'string' ? msg.toolInput : JSON.stringify(msg.toolInput ?? '', null, 2),
+          toolInput: typeof displayedToolInput === 'string'
+            ? displayedToolInput
+            : JSON.stringify(displayedToolInput ?? '', null, 2),
           toolId: msg.toolId,
           toolResult,
           toolStatus: typeof msg.status === 'string' ? msg.status : undefined,

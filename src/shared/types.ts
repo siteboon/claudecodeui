@@ -459,6 +459,8 @@ export type NormalizedMessage = {
   toolInput?: unknown;
   toolId?: string;
   toolResult?: { content: string; isError: boolean; toolUseResult?: unknown } | null;
+  /** Structured provider result details before attachment to toolResult. */
+  toolUseResult?: unknown;
   isError?: boolean;
   text?: string;
   tokens?: number;
@@ -470,6 +472,10 @@ export type NormalizedMessage = {
   newSessionId?: string;
   status?: string;
   summary?: string;
+  /** Advisor identity carried by an OMP task-notification status note. */
+  advisor?: string;
+  /** Raw advisor note used to deduplicate mirrored transcript records. */
+  advisorNote?: string;
   exitCode?: number;
   actualSessionId?: string;
   parentToolUseId?: string;
@@ -674,6 +680,8 @@ export type TodoItem = {
   status: string;
   priority?: string;
   activeForm?: string;
+  /** Optional provider-reported phase used to group related checklist rows. */
+  phase?: string;
 };
 
 /** Display state of a tool call — 'running', 'completed', 'error' or 'denied' — used to choose the status badge and styling shown beside it in the transcript. */

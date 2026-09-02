@@ -1,4 +1,6 @@
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import readline from 'node:readline';
 
 import { sessionsDb } from '@/modules/database/index.js';
@@ -50,6 +52,226 @@ function readTextContent(value: unknown): string | null {
     ?? null;
 }
 
+type OmpTodo = { content: string; status: string; phase?: string };
+type OmpImageRef = { hash: string; mimeType: string };
+
+const liveTodoTools = new Set<string>();
+const MAX_INLINE_IMAGE_BYTES = 10 * 1024 * 1024;
+const ALLOWED_IMAGE_MIME = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+
+function liveToolKey(sessionId: string | null, toolId: string): string {
+  return `${sessionId ?? ''}\u0000${toolId}`;
+}
+
+function flattenOmpPhases(details: AnyRecord | null): OmpTodo[] | null {
+  const phases = details && Array.isArray(details.phases) ? details.phases : null;
+  if (!phases) {
+    return null;
+  }
+
+  const todos: OmpTodo[] = [];
+  for (const rawPhase of phases) {
+    const phase = readObjectRecord(rawPhase);
+    const phaseName = phase && readOptionalString(phase.name);
+    if (!phase || !Array.isArray(phase.tasks)) {
+      continue;
+    }
+    for (const rawTask of phase.tasks) {
+      const task = readObjectRecord(rawTask);
+      const content = task && readOptionalString(task.content);
+      if (content) {
+        todos.push({
+          content,
+          status: readOptionalString(task.status) ?? 'pending',
+          ...(phaseName ? { phase: phaseName } : {}),
+        });
+      }
+    }
+  }
+  return todos.length > 0 ? todos : null;
+}
+
+function readOmpTodoInput(input: AnyRecord | null): OmpTodo[] {
+  if (!input) {
+    return [];
+  }
+
+  const operations = Array.isArray(input.ops) ? input.ops : [input];
+  const todos: OmpTodo[] = [];
+  for (const rawOperation of operations) {
+    const operation = readObjectRecord(rawOperation);
+    if (!operation) {
+      continue;
+    }
+    const replacement = flattenOmpPhases(operation);
+    if (replacement) {
+      todos.push(...replacement);
+      continue;
+    }
+    const lists = Array.isArray(operation.list)
+      ? operation.list
+      : (Array.isArray(operation.items) ? [{ items: operation.items, phase: operation.phase }] : []);
+    for (const rawList of lists) {
+      const list = readObjectRecord(rawList);
+      if (!list || !Array.isArray(list.items)) {
+        continue;
+      }
+      const phase = readOptionalString(list.phase);
+      for (const rawItem of list.items) {
+        const item = readObjectRecord(rawItem);
+        const content = typeof rawItem === 'string'
+          ? rawItem
+          : (item && (readOptionalString(item.content) ?? readOptionalString(item.task)));
+        if (content) {
+          todos.push({
+            content,
+            status: item ? (readOptionalString(item.status) ?? 'pending') : 'pending',
+            ...(phase ? { phase } : {}),
+          });
+        }
+      }
+    }
+  }
+  return todos;
+}
+
+function isOmpTodoInput(input: AnyRecord | null): boolean {
+  if (!input) {
+    return false;
+  }
+  if (Array.isArray(input.ops)) {
+    return input.ops.some((operation) => typeof readObjectRecord(operation)?.op === 'string');
+  }
+  return typeof input.op === 'string'
+    && (
+      Array.isArray(input.list)
+      || Array.isArray(input.items)
+      || typeof input.task === 'string'
+      || typeof input.phase === 'string'
+    );
+}
+
+function readOmpAskInput(args: AnyRecord): AnyRecord | null {
+  const questions = (Array.isArray(args.questions) ? args.questions : [])
+    .map((rawQuestion: unknown) => {
+      const question = readObjectRecord(rawQuestion);
+      const options = question && Array.isArray(question.options) ? question.options : [];
+      return {
+        question: question ? (readOptionalString(question.question) ?? '') : '',
+        header: question
+          ? (readOptionalString(question.header) ?? readOptionalString(question.id)?.replace(/[_-]+/g, ' '))
+          : undefined,
+        multiSelect: question?.multi === true,
+        options: options
+          .map((rawOption: unknown) => {
+            const option = readObjectRecord(rawOption);
+            return {
+              label: option ? (readOptionalString(option.label) ?? '') : '',
+              description: option ? readOptionalString(option.description) : undefined,
+            };
+          })
+          .filter((option) => option.label),
+      };
+    })
+    .filter((question) => question.question);
+  return questions.length > 0 ? { questions } : null;
+}
+
+function mapOmpTool(name: string, rawArgs: unknown): { toolName: string; toolInput: unknown } {
+  const args = readObjectRecord(rawArgs);
+  if (!args) {
+    return { toolName: name, toolInput: rawArgs };
+  }
+  if (isOmpTodoInput(args)) {
+    return { toolName: 'TodoWrite', toolInput: { todos: readOmpTodoInput(args) } };
+  }
+
+  const intent = readOptionalString(args.i)
+    ?? readOptionalString(args._i)
+    ?? readOptionalString(args.agent__intent);
+  switch (name) {
+    case 'bash':
+      return {
+        toolName: 'Bash',
+        toolInput: {
+          command: args.command,
+          cwd: args.cwd,
+          timeout: args.timeout,
+          ...(intent ? { description: intent } : {}),
+        },
+      };
+    case 'read': {
+      const filePath = readOptionalString(args.path);
+      return filePath && !filePath.includes('://')
+        ? { toolName: 'Read', toolInput: { file_path: filePath } }
+        : { toolName: name, toolInput: rawArgs };
+    }
+    case 'write': {
+      const filePath = readOptionalString(args.path);
+      return filePath && !filePath.includes('://')
+        ? { toolName: 'Write', toolInput: { file_path: filePath, content: args.content } }
+        : { toolName: name, toolInput: rawArgs };
+    }
+    case 'ask': {
+      const toolInput = readOmpAskInput(args);
+      return toolInput
+        ? { toolName: 'AskUserQuestion', toolInput }
+        : { toolName: name, toolInput: rawArgs };
+    }
+    case 'todo':
+    case 'todo_write':
+      return { toolName: 'TodoWrite', toolInput: { todos: readOmpTodoInput(args) } };
+    default:
+      return { toolName: name, toolInput: rawArgs };
+  }
+}
+
+function ompLiveToolName(input: AnyRecord | null): string | null {
+  if (!input) {
+    return null;
+  }
+  if (isOmpTodoInput(input)) {
+    return 'todo';
+  }
+  if (
+    typeof input.code === 'string'
+    && typeof input.language === 'string'
+    && typeof input.title === 'string'
+  ) {
+    return 'eval';
+  }
+  return typeof input.command === 'string' ? 'bash' : null;
+}
+
+function parseOmpImageRef(part: AnyRecord): OmpImageRef | null {
+  const ref = readOptionalString(part.data);
+  const rawMimeType = readOptionalString(part.mimeType);
+  if (!ref || (rawMimeType && !ALLOWED_IMAGE_MIME.has(rawMimeType))) {
+    return null;
+  }
+  const hash = ref.startsWith('blob:') ? ref.split(':').pop() : ref;
+  if (!hash || !/^[a-f0-9]{16,128}$/i.test(hash)) {
+    return null;
+  }
+  return { hash, mimeType: rawMimeType ?? 'image/png' };
+}
+
+async function resolveOmpImage(ref: OmpImageRef): Promise<{ data: string; mimeType: string } | null> {
+  const basePath = path.join(os.homedir(), '.omp', 'agent', 'blobs', ref.hash);
+  for (const filePath of [basePath, `${basePath}.png`]) {
+    try {
+      if ((await fs.promises.stat(filePath)).size > MAX_INLINE_IMAGE_BYTES) {
+        return null;
+      }
+      const data = (await fs.promises.readFile(filePath)).toString('base64');
+      return { data: `data:${ref.mimeType};base64,${data}`, mimeType: ref.mimeType };
+    } catch {
+      // Try the alternate blob path.
+    }
+  }
+  return null;
+}
+
 /**
  * Maps one ACP `session/update` notification to NormalizedMessage chunks.
  * One update yields at most one message.
@@ -84,15 +306,21 @@ function normalizeAcpUpdate(params: AnyRecord, sessionId: string | null): Normal
     // that at the source — carry one id for both — rather than by guessing at a
     // match from position or content.
     const toolId = readOptionalString(update.toolCallId) || generateMessageId('omp_tool');
-    const toolName = typeof update.title === 'string'
-      ? update.title
-      : (typeof update.kind === 'string' ? update.kind : 'tool');
+    const rawInput = readObjectRecord(update.rawInput);
+    const knownToolName = ompLiveToolName(rawInput);
+    if (knownToolName === 'todo') {
+      liveTodoTools.add(liveToolKey(sessionId, toolId));
+    }
+    const mapped = knownToolName ? mapOmpTool(knownToolName, update.rawInput) : null;
     return [createNormalizedMessage({
       ...base,
       kind: 'tool_use',
-      toolName,
+      toolName: mapped?.toolName
+        ?? readOptionalString(update.title)
+        ?? readOptionalString(update.kind)
+        ?? 'tool',
       toolId,
-      toolInput: update.rawInput,
+      toolInput: mapped?.toolInput ?? update.rawInput,
     })];
   }
 
@@ -104,9 +332,13 @@ function normalizeAcpUpdate(params: AnyRecord, sessionId: string | null): Normal
       return [];
     }
     const toolId = readOptionalString(update.toolCallId) || generateMessageId('omp_tool');
+    const todoKey = liveToolKey(sessionId, toolId);
+    const isTodo = liveTodoTools.delete(todoKey);
+    const rawOutput = readObjectRecord(update.rawOutput);
+    const todos = isTodo ? flattenOmpPhases(readObjectRecord(rawOutput?.details)) : null;
     // ACP carries the result under `content` (ToolCallContent[]); rawOutput/
-    // output/result are alternate fields. Reading only `output` renders an empty
-    // tool_result against real omp output.
+    // output/result are alternate fields. Preserve structured details separately
+    // so shared tool renderers can use them without parsing display text.
     const content = readTextContent(update.content)
       ?? readTextContent(update.rawOutput)
       ?? readTextContent(update.raw_output)
@@ -119,6 +351,7 @@ function normalizeAcpUpdate(params: AnyRecord, sessionId: string | null): Normal
       toolId,
       content,
       isError: status === 'failed',
+      toolUseResult: todos ? { todos } : rawOutput?.details,
     })];
   }
 
@@ -145,14 +378,79 @@ function normalizeAcpUpdate(params: AnyRecord, sessionId: string | null): Normal
   return [];
 }
 
+type OmpAdvisorNote = { note: string; severity?: string; advisor?: string };
+
+function readOmpAdvisorNotes(entry: AnyRecord): OmpAdvisorNote[] {
+  if (entry.type !== 'custom_message' || entry.customType !== 'advisor') {
+    return [];
+  }
+  const details = readObjectRecord(entry.details);
+  if (!details) {
+    return [];
+  }
+  const rawNotes = Array.isArray(details.notes) ? details.notes : [details];
+  return rawNotes.flatMap((rawNote: unknown) => {
+    const note = readObjectRecord(rawNote);
+    const text = note && readOptionalString(note.note);
+    return text
+      ? [{
+          note: text,
+          severity: readOptionalString(note.severity) ?? undefined,
+          advisor: readOptionalString(note.advisor) ?? undefined,
+        }]
+      : [];
+  });
+}
+
+function advisorNotificationSummary(note: OmpAdvisorNote): string {
+  const source = note.advisor ? `Advisor ${note.advisor}` : 'Advisor';
+  return `${source}${note.severity ? ` (${note.severity})` : ''}: ${note.note}`;
+}
+
+function normalizeAdvisorEntry(entry: AnyRecord, sessionId: string | null): NormalizedMessage[] {
+  const timestamp = readOptionalString(entry.timestamp) ?? new Date().toISOString();
+  const baseId = readOptionalString(entry.id) ?? generateMessageId('omp_advisor');
+  return readOmpAdvisorNotes(entry).map((note, index) => createNormalizedMessage({
+    sessionId,
+    timestamp,
+    provider: PROVIDER,
+    id: `${baseId}_advisor_${index}`,
+    kind: 'task_notification',
+    status: note.severity ?? 'advisor',
+    summary: advisorNotificationSummary(note),
+    advisor: note.advisor,
+    advisorNote: note.note,
+  }));
+}
+
 /**
  * Maps one persisted jsonl entry to NormalizedMessages. A single entry can carry
  * several content parts, so it can expand into several messages.
  */
 function normalizeJsonlMessage(entry: AnyRecord, sessionId: string | null): NormalizedMessage[] {
+  if (entry.type === 'custom_message' && entry.customType === 'collab-prompt') {
+    const content = readOptionalString(entry.content);
+    if (!content) {
+      return [];
+    }
+    const from = readOptionalString(readObjectRecord(entry.details)?.from);
+    return [createNormalizedMessage({
+      sessionId,
+      timestamp: readOptionalString(entry.timestamp) ?? new Date().toISOString(),
+      provider: PROVIDER,
+      id: readOptionalString(entry.id) ?? generateMessageId(PROVIDER),
+      kind: 'text',
+      role: 'user',
+      content: from ? `${from}: ${content}` : content,
+    })];
+  }
+  if (entry.type === 'custom_message' && entry.customType === 'advisor') {
+    return normalizeAdvisorEntry(entry, sessionId);
+  }
   if (entry.type !== 'message') {
     return [];
   }
+
   const message = readObjectRecord(entry.message);
   if (!message) {
     return [];
@@ -161,20 +459,24 @@ function normalizeJsonlMessage(entry: AnyRecord, sessionId: string | null): Norm
   const ts = readOptionalString(entry.timestamp) ?? new Date().toISOString();
   const base = { sessionId, timestamp: ts, provider: PROVIDER } as const;
 
-  // Tool result: its own message, linked to the tool_use by toolCallId.
   if (message.role === 'toolResult') {
     const toolId = readOptionalString(message.toolCallId) ?? baseId;
+    const todos = message.toolName === 'todo' || message.toolName === 'todo_write'
+      ? flattenOmpPhases(readObjectRecord(message.details))
+      : null;
     return [createNormalizedMessage({
-      ...base, id: `${baseId}_res`, kind: 'tool_result',
+      ...base,
+      id: `${baseId}_res`,
+      kind: 'tool_result',
       toolId,
       content: readTextContent(message.content) ?? '',
       isError: message.isError === true,
+      toolUseResult: todos ? { todos } : message.details,
     })];
   }
 
-  // omp injects `role:'developer'` messages (<system-reminder> continuity nudges,
-  // incomplete-todo reminders) as model-directed instructions — internal plumbing,
-  // not conversation. Without this they render as assistant text with raw tags.
+  // Developer-role continuity and todo reminders are model instructions, not
+  // conversation rows.
   if (message.role === 'developer') {
     return [];
   }
@@ -185,8 +487,9 @@ function normalizeJsonlMessage(entry: AnyRecord, sessionId: string | null): Norm
   }
   const role = message.role === 'user' ? 'user' : 'assistant';
   const out: NormalizedMessage[] = [];
+  const images: OmpImageRef[] = [];
 
-  content.forEach((rawPart: unknown, i: number) => {
+  content.forEach((rawPart: unknown, index: number) => {
     const part = readObjectRecord(rawPart);
     if (!part) {
       return;
@@ -194,26 +497,58 @@ function normalizeJsonlMessage(entry: AnyRecord, sessionId: string | null): Norm
     if (part.type === 'text') {
       const text = readOptionalString(part.text);
       if (text) {
-        out.push(createNormalizedMessage({ ...base, id: `${baseId}_t${i}`, kind: 'text', role, content: text }));
+        out.push(createNormalizedMessage({
+          ...base,
+          id: `${baseId}_t${index}`,
+          kind: 'text',
+          role,
+          content: text,
+        }));
       }
     } else if (part.type === 'thinking') {
       const text = readOptionalString(part.thinking) ?? readOptionalString(part.text);
       if (text) {
-        out.push(createNormalizedMessage({ ...base, id: `${baseId}_k${i}`, kind: 'thinking', content: text }));
+        out.push(createNormalizedMessage({
+          ...base,
+          id: `${baseId}_k${index}`,
+          kind: 'thinking',
+          content: text,
+        }));
       }
     } else if (part.type === 'toolCall') {
-      const toolId = readOptionalString(part.id) || `${baseId}_u${i}`;
+      const toolId = readOptionalString(part.id) || `${baseId}_u${index}`;
+      const mapped = mapOmpTool(readOptionalString(part.name) ?? 'tool', part.arguments);
       out.push(createNormalizedMessage({
         ...base,
         id: toolId,
         kind: 'tool_use',
-        toolName: readOptionalString(part.name) ?? 'tool',
+        toolName: mapped.toolName,
         toolId,
-        toolInput: part.arguments,
+        toolInput: mapped.toolInput,
       }));
+    } else if (part.type === 'image') {
+      const image = parseOmpImageRef(part);
+      if (image) {
+        images.push(image);
+      }
     }
   });
 
+  if (images.length > 0) {
+    const textMessage = out.find((messageRow) => messageRow.kind === 'text');
+    if (textMessage) {
+      textMessage.images = images;
+    } else {
+      out.push(createNormalizedMessage({
+        ...base,
+        id: `${baseId}_img`,
+        kind: 'text',
+        role,
+        content: '',
+        images,
+      }));
+    }
+  }
   return out;
 }
 
@@ -254,17 +589,12 @@ async function readOmpJsonl(filePath: string): Promise<AnyRecord[]> {
  * file actually forks. Every ambiguous case fails soft back to file order: showing
  * an interleaved transcript is recoverable, hiding half of one is not.
  */
-// The entry types this reader turns into visible messages. Everything else omp
-// writes — `custom` tool-lifecycle markers, `thinking_level_change`, `title_change`
-// — carries a parentId too, and that matters: an EXITING omp process writes
-// `custom/session_exit` under the head IT held, which in the two-writer case is the
-// ABANDONED branch. Taking the last parented entry as the head therefore selects the
-// dead branch (measured on a real forked transcript: 269 entries from the exit
-// marker's chain against 525 from the last message's).
-// Only what normalizeJsonlMessage actually renders. It returns [] for every
-// other `entry.type`, so admitting one here would let selectActiveBranch crown
-// a head that draws nothing — and pick the wrong branch on a fork.
-const RENDERED_ENTRY_TYPES = new Set(['message']);
+// Branch-head visibility must match normalization exactly. A developer reminder
+// or empty message carries parentId but renders no row, so it cannot decide
+// which fork is active.
+function isRenderedEntry(entry: AnyRecord): boolean {
+  return normalizeJsonlMessage(entry, null).length > 0;
+}
 
 // A tree parent, or null for the file headers (`session`, `title`) which carry no
 // `parentId` at all and always stay. An explicit `parentId: null` is a real ROOT
@@ -308,8 +638,7 @@ function selectActiveBranch(entries: AnyRecord[]): AnyRecord[] {
     const entry = entries[i];
     if (branchParentOf(entry) !== null
       && typeof entry.id === 'string'
-      && typeof entry.type === 'string'
-      && RENDERED_ENTRY_TYPES.has(entry.type)) {
+      && isRenderedEntry(entry)) {
       head = entry;
       break;
     }
@@ -339,6 +668,177 @@ function selectActiveBranch(entries: AnyRecord[]): AnyRecord[] {
   ));
 }
 
+function attachAskAnswers(entries: AnyRecord[], normalized: NormalizedMessage[]): void {
+  const answersByToolId = new Map<string, Record<string, string>>();
+  for (const entry of entries) {
+    const message = readObjectRecord(entry.message);
+    if (!message || message.role !== 'toolResult' || message.toolName !== 'ask') {
+      continue;
+    }
+    const toolId = readOptionalString(message.toolCallId);
+    const details = readObjectRecord(message.details);
+    if (!toolId || !details) {
+      continue;
+    }
+
+    const answers: Record<string, string> = {};
+    for (const rawAnswer of Array.isArray(details.results) ? details.results : [details]) {
+      const answer = readObjectRecord(rawAnswer);
+      const question = answer && readOptionalString(answer.question);
+      if (!answer || !question) {
+        continue;
+      }
+      const selectedOptions = Array.isArray(answer.selectedOptions)
+        ? answer.selectedOptions.filter((option: unknown): option is string => typeof option === 'string')
+        : [];
+      const value = selectedOptions.length > 0
+        ? selectedOptions.join(', ')
+        : readOptionalString(answer.customInput);
+      if (value) {
+        answers[question] = value;
+      }
+    }
+    if (Object.keys(answers).length > 0) {
+      answersByToolId.set(toolId, answers);
+    }
+  }
+
+  for (const message of normalized) {
+    if (message.kind !== 'tool_use' || message.toolName !== 'AskUserQuestion' || !message.toolId) {
+      continue;
+    }
+    const answers = answersByToolId.get(message.toolId);
+    const input = readObjectRecord(message.toolInput);
+    if (answers && input) {
+      input.answers = answers;
+    }
+  }
+}
+
+async function readOmpAdvisorSidecars(
+  mainFilePath: string,
+  sessionId: string | null,
+): Promise<NormalizedMessage[]> {
+  const sidecarDirectory = mainFilePath.replace(/\.jsonl$/, '');
+  let sidecarNames: string[];
+  try {
+    sidecarNames = (await fs.promises.readdir(sidecarDirectory))
+      .filter((name) => /^__advisor(\..+)?\.jsonl$/.test(name))
+      .sort();
+  } catch {
+    return [];
+  }
+
+  const notifications: NormalizedMessage[] = [];
+  for (const sidecarName of sidecarNames) {
+    const advisor = sidecarName
+      .slice('__advisor'.length, -'.jsonl'.length)
+      .replace(/^\./, '') || undefined;
+    let entries: AnyRecord[];
+    try {
+      entries = selectActiveBranch(await readOmpJsonl(path.join(sidecarDirectory, sidecarName)));
+    } catch {
+      continue;
+    }
+
+    const seenNotes = new Set<string>();
+    for (const entry of entries) {
+      if (entry.type !== 'message') {
+        continue;
+      }
+      const message = readObjectRecord(entry.message);
+      const content = message && Array.isArray(message.content) ? message.content : [];
+      content.forEach((rawPart: unknown, index: number) => {
+        const part = readObjectRecord(rawPart);
+        const argumentsRecord = part?.type === 'toolCall' && part.name === 'advise'
+          ? readObjectRecord(part.arguments)
+          : null;
+        const noteText = argumentsRecord && readOptionalString(argumentsRecord.note);
+        if (!noteText || seenNotes.has(noteText)) {
+          return;
+        }
+        seenNotes.add(noteText);
+        const note: OmpAdvisorNote = {
+          note: noteText,
+          advisor,
+          severity: readOptionalString(argumentsRecord.severity) ?? undefined,
+        };
+        notifications.push(createNormalizedMessage({
+          sessionId,
+          timestamp: readOptionalString(entry.timestamp) ?? new Date().toISOString(),
+          provider: PROVIDER,
+          id: `advisor_${advisor ?? 'main'}_${readOptionalString(part?.id) ?? `${notifications.length}_${index}`}`,
+          kind: 'task_notification',
+          status: note.severity ?? 'advisor',
+          summary: advisorNotificationSummary(note),
+          advisor: note.advisor,
+          advisorNote: note.note,
+        }));
+      });
+    }
+  }
+  return notifications;
+}
+
+/**
+ * Reads one OMP transcript into the same normalized rows used by chat history.
+ *
+ * OmpSessionsProvider uses it for paginated REST history. Conversation search
+ * uses it without resolving image blobs, so search, export, and the live chat
+ * all match against the same active branch and tool/advisor normalization.
+ */
+export async function readNormalizedOmpHistory(
+  filePath: string,
+  sessionId: string | null,
+): Promise<NormalizedMessage[]> {
+  const activeEntries = selectActiveBranch(await readOmpJsonl(filePath));
+  const normalized: NormalizedMessage[] = [];
+  for (const entry of activeEntries) {
+    normalized.push(...normalizeJsonlMessage(entry, sessionId));
+  }
+  attachAskAnswers(activeEntries, normalized);
+
+  const resultById = new Map<string, NormalizedMessage>();
+  for (const message of normalized) {
+    if (message.kind === 'tool_result' && message.toolId) {
+      resultById.set(message.toolId, message);
+    }
+  }
+  for (const message of normalized) {
+    if (message.kind !== 'tool_use' || !message.toolId) {
+      continue;
+    }
+    const result = resultById.get(message.toolId);
+    if (!result) {
+      continue;
+    }
+    message.toolResult = {
+      content: result.content,
+      isError: result.isError,
+      ...(result.toolUseResult !== undefined ? { toolUseResult: result.toolUseResult } : {}),
+    };
+    const resultDetails = readObjectRecord(result.toolUseResult);
+    if (message.toolName === 'TodoWrite' && Array.isArray(resultDetails?.todos)) {
+      message.toolInput = { todos: resultDetails.todos };
+    }
+  }
+
+  const advisorKeys = new Set(
+    normalized
+      .filter((message) => message.kind === 'task_notification' && typeof message.advisorNote === 'string')
+      .map((message) => `${String(message.advisor ?? '')}\u0000${message.advisorNote}`),
+  );
+  for (const notification of await readOmpAdvisorSidecars(filePath, sessionId)) {
+    const key = `${String(notification.advisor ?? '')}\u0000${String(notification.advisorNote ?? '')}`;
+    if (!advisorKeys.has(key)) {
+      normalized.push(notification);
+      advisorKeys.add(key);
+    }
+  }
+  normalized.sort((left, right) => left.timestamp.localeCompare(right.timestamp));
+  return normalized.filter((message) => message.kind !== 'tool_result');
+}
+
 const EMPTY_PAGE: FetchHistoryResult = { messages: [], total: 0, hasMore: false, offset: 0, limit: null };
 
 // The IProviderSessions half of the omp provider, consumed by `omp.provider.ts`
@@ -364,44 +864,35 @@ export class OmpSessionsProvider implements IProviderSessions {
     // The jsonl is named by the native id; app-created sessions pass the app id
     // as sessionId + the native id as providerSessionId (matches claude-sessions).
     const providerSessionId = options.providerSessionId ?? sessionId;
-    let entries: AnyRecord[];
+    let filePath: string | null = null;
+    let renderable: NormalizedMessage[];
     try {
-      const filePath = sessionsDb.getSessionByProviderSessionId(providerSessionId)?.jsonl_path
+      filePath = sessionsDb.getSessionByProviderSessionId(providerSessionId)?.jsonl_path
         ?? sessionsDb.getSessionById(sessionId)?.jsonl_path
         ?? await locateOmpSessionFile(providerSessionId);
       if (!filePath) {
         return EMPTY_PAGE;
       }
-      entries = await readOmpJsonl(filePath);
+      renderable = await readNormalizedOmpHistory(filePath, sessionId);
     } catch (error) {
       console.warn(`[OmpProvider] Failed to load session ${sessionId}:`, error instanceof Error ? error.message : error);
       return EMPTY_PAGE;
     }
 
-    const normalized: NormalizedMessage[] = [];
-    for (const entry of selectActiveBranch(entries)) {
-      normalized.push(...normalizeJsonlMessage(entry, sessionId));
-    }
+    const total = renderable.length;
+    const { page, hasMore } = sliceTailPage(renderable, limit, offset);
 
-    // Backfill tool_result onto its tool_use so the UI renders one card (same
-    // pass as the other providers' history readers).
-    const resultById = new Map<string, NormalizedMessage>();
-    for (const msg of normalized) {
-      if (msg.kind === 'tool_result' && msg.toolId) {
-        resultById.set(msg.toolId, msg);
+    // Blob reads happen after pagination so a tail request never loads every
+    // image in a long transcript.
+    for (const message of page) {
+      const imageRefs = message.images as OmpImageRef[] | undefined;
+      if (!Array.isArray(imageRefs) || imageRefs.length === 0) {
+        continue;
       }
+      const images = (await Promise.all(imageRefs.map(resolveOmpImage)))
+        .filter((image): image is { data: string; mimeType: string } => image !== null);
+      message.images = images.length > 0 ? images : undefined;
     }
-    for (const msg of normalized) {
-      if (msg.kind === 'tool_use' && msg.toolId) {
-        const result = resultById.get(msg.toolId);
-        if (result) {
-          msg.toolResult = { content: result.content, isError: result.isError };
-        }
-      }
-    }
-
-    const total = normalized.filter((m) => m.kind !== 'tool_result').length;
-    const { page, hasMore } = sliceTailPage(normalized, limit, offset);
 
     return { messages: page, total, hasMore, offset: Math.max(0, offset), limit };
   }

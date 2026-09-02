@@ -463,6 +463,7 @@ async function readOmpTokenUsage(sessionId: string) {
     // usually the "use omp default" sentinel, so this is the only honest
     // answer the UI can show — and it is already resolved for the window.
     model: record.model ?? undefined,
+    provider: record.provider ?? undefined,
     cacheRead: Number(usage.cacheRead || 0),
     cacheWrite: Number(usage.cacheWrite || 0),
   };

@@ -41,6 +41,8 @@ type TokenUsageResult = {
   inputTokens: number;
   /** Model used by the latest turn when the transcript records it. */
   model?: string;
+  /** Underlying OMP backend that ran the latest turn. */
+  provider?: string;
   outputTokens: number;
   cacheReadTokens?: number;
   cacheCreationTokens?: number;
@@ -434,6 +436,7 @@ export function createProviderTokenUsageService(
           total: await dependencies.getOmpContextWindow(record.provider, record.model)
             ?? OMP_FALLBACK_CONTEXT_WINDOW,
           model: record.model ?? undefined,
+          provider: record.provider ?? undefined,
           inputTokens,
           outputTokens,
           breakdown: { input: inputTokens, output: outputTokens },
