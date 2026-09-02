@@ -240,10 +240,15 @@ test('Claude history leaves an async agent running while its outcome is unknown'
       // This case is ambiguous from the transcript alone: an agent whose
       // notification was compacted away and one that is still working in the
       // background both end their turn cleanly, so nothing on disk separates
-      // them. The tie is resolved in favour of the live agent — calling a
-      // running agent `completed` drops it from the UI while it is still
-      // working, which is worse than a stale spinner on an old session that
-      // the next load corrects.
+      // them. The tie is resolved in favour of the live agent, because calling
+      // a running agent `completed` drops it from the UI while it is still
+      // working.
+      //
+      // The cost is real and does not heal: once the notification has been
+      // compacted out, it is gone from the file, so a historical session keeps
+      // showing this agent as running on every load. Separating the two needs
+      // evidence the transcript does not carry — a staleness cutoff, or a
+      // liveness signal from the run registry.
       assert.equal(agentRow?.subagent?.status, 'running');
       assert.equal(agentRow?.toolResult?.content, '', 'the launch acknowledgement must never show as a result');
     });

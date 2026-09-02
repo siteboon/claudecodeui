@@ -497,8 +497,12 @@ async function getSessionMessages(
       // answer has arrived, which marked every background agent `completed` the
       // moment it launched.
       //
-      // `endedMidToolCall` remains the right evidence for a *synchronous* agent,
-      // where a dangling tool call is the only trace of an interrupted run.
+      // Note this whole predicate is gated on `isAsync`, so dropping the clause
+      // changes nothing for a synchronous agent — one has never been able to
+      // report `running` here, with or without a dangling tool call. That also
+      // leaves `endedMidToolCall` computed but unread; it is kept because it is
+      // the only in-file evidence of an interrupted run, and is what a staleness
+      // rule would need.
       const isAwaitingAsyncAgent = message.toolUseResult?.isAsync === true
         && !notification;
 
