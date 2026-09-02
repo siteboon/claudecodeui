@@ -2,6 +2,7 @@ import { memo, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import LLMProviderLogo from '../../../llm-provider-logo/LLMProviderLogo';
+import { getProviderDisplayName } from '../../../../utils/providerDisplay';
 import type {
   ChatMessage,
   ClaudePermissionSuggestion,
@@ -164,13 +165,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                   ? t('messageTypes.error')
                   : message.type === 'tool'
                     ? t('messageTypes.tool')
-                    : (provider === 'cursor'
-                        ? t('messageTypes.cursor')
-                        : provider === 'codex'
-                          ? t('messageTypes.codex')
-                          : provider === 'opencode'
-                              ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
-                              : t('messageTypes.claude'))}
+                    : getProviderDisplayName(provider)}
               </div>
             </div>
           )}
