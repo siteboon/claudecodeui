@@ -79,6 +79,10 @@ test('AntigravityProviderAuth only reports authenticated with an OAuth token fil
   // tryResolveEnginePath honors this override whenever its cache is empty.
   const restoreDataDir = withEnvValue('CLOUDCLI_ANTIGRAVITY_DATA_DIR', tempRoot);
   const restoreAgyPath = withEnvValue('CLOUDCLI_AGY_PATH', path.join(tempRoot, 'agy'));
+  // Keep the macOS keychain probe out so this fixture tree is the only
+  // credential source under test, even on a machine whose real keychain holds
+  // live agy credentials.
+  const restoreSkipKeychain = withEnvValue('CLOUDCLI_ANTIGRAVITY_SKIP_KEYCHAIN', '1');
   await fs.writeFile(path.join(tempRoot, 'agy'), '#!/bin/sh\n', { mode: 0o755 });
   try {
     const auth = new AntigravityProviderAuth();
@@ -99,6 +103,7 @@ test('AntigravityProviderAuth only reports authenticated with an OAuth token fil
   } finally {
     restoreAgyPath();
     restoreDataDir();
+    restoreSkipKeychain();
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
 });
@@ -454,6 +459,8 @@ test('AntigravityProviderAuth validates token expiry and extracts the account em
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agy-auth-expiry-'));
   const restoreDataDir = withEnvValue('CLOUDCLI_ANTIGRAVITY_DATA_DIR', tempRoot);
   const restoreAgyPath = withEnvValue('CLOUDCLI_AGY_PATH', path.join(tempRoot, 'agy'));
+  // Isolate from the real keychain so the file fixture alone decides the verdict.
+  const restoreSkipKeychain = withEnvValue('CLOUDCLI_ANTIGRAVITY_SKIP_KEYCHAIN', '1');
   await fs.writeFile(path.join(tempRoot, 'agy'), '#!/bin/sh\n', { mode: 0o755 });
   const jwtPayload = (payload: Record<string, unknown>) =>
     Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -499,6 +506,7 @@ test('AntigravityProviderAuth validates token expiry and extracts the account em
   } finally {
     restoreAgyPath();
     restoreDataDir();
+    restoreSkipKeychain();
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
 });

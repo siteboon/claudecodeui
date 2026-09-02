@@ -7,6 +7,7 @@
  * @module antigravity-auth.provider
  */
 
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 
 import type { IProviderAuth } from '@/shared/interfaces.js';
@@ -112,43 +113,80 @@ function parseTokenFile(raw: string): AntigravityTokenInfo {
       expiresAtMs: topLevel.expiresAtMs ?? nested.expiresAtMs,
       email: topLevel.email ?? nested.email,
     };
+    } catch {
+      // Unparseable content: report a present-but-opaque credential.
+      return opaqueCredential();
+    }
+}
+
+/**
+ * Builds the credential shape for credentials that exist but whose details
+ * this process cannot read.
+ */
+function opaqueCredential(): AntigravityTokenInfo {
+  return {
+    accessToken: null,
+    refreshToken: null,
+    expiresAtMs: null,
+    email: null,
+  };
+}
+
+/**
+ * Detects the OAuth credentials agy keeps in the macOS login keychain
+ * (service `gemini`, account `antigravity`). agy writes the token file on a
+ * completed login, but later refreshes update only the keychain — and a
+ * failed refresh can clear the file while the keychain copy stays valid — so
+ * the file alone under-reports authenticated state and traps the UI in its
+ * login prompt. `security` prints item attributes only (never the password
+ * without `-w`), so this probe is read-only.
+ * `CLOUDCLI_ANTIGRAVITY_SKIP_KEYCHAIN=1` disables the probe for hermetic tests.
+ */
+function hasKeychainCredentials(): boolean {
+  if (process.platform !== 'darwin' || process.env.CLOUDCLI_ANTIGRAVITY_SKIP_KEYCHAIN === '1') {
+    return false;
+  }
+  try {
+    execFileSync('security', ['find-generic-password', '-s', 'gemini', '-a', 'antigravity'], {
+      stdio: ['ignore', 'ignore', 'ignore'],
+      timeout: 3000,
+    });
+    return true;
   } catch {
-    // Unparseable content: report a present-but-opaque credential.
-    return {
-      accessToken: null,
-      refreshToken: null,
-      expiresAtMs: null,
-      email: null,
-    };
+    return false;
   }
 }
 
 /**
- * Reads and classifies the agy OAuth credential. Returns `null` when no
- * token file exists (never logged in).
+ * Reads and classifies the agy OAuth credential. Returns `null` only when agy
+ * has no credentials anywhere (never logged in, or the keychain entry was
+ * removed too).
  *
- * Only the token file written by a completed `agy` login counts as
- * authenticated: `installation_id` and `settings.json` are created on first
- * launch regardless of login state, so they must never mark the provider as
- * authenticated.
+ * The token file written by a completed `agy` login counts as authenticated;
+ * so does a macOS keychain credential when the file is gone, because agy
+ * silently refreshes from the keychain on its next run. `installation_id` and
+ * `settings.json` are created on first launch regardless of login state, so
+ * they must never mark the provider as authenticated.
  */
 function readAntigravityCredential(): AntigravityTokenInfo | null {
   const tokenFile = getAntigravityOauthTokenPath();
-  if (!fs.existsSync(tokenFile)) {
-    return null;
+  if (fs.existsSync(tokenFile)) {
+    try {
+      return parseTokenFile(fs.readFileSync(tokenFile, 'utf8'));
+    } catch {
+      // Unreadable file: present-but-opaque, treated like an unparseable one.
+      return opaqueCredential();
+    }
   }
 
-  try {
-    return parseTokenFile(fs.readFileSync(tokenFile, 'utf8'));
-  } catch {
-    // Unreadable file: present-but-opaque, treated like an unparseable one.
-    return {
-      accessToken: null,
-      refreshToken: null,
-      expiresAtMs: null,
-      email: null,
-    };
+  if (hasKeychainCredentials()) {
+    // Keychain-only credentials are live but opaque: expiry and email stay
+    // inside the item agy owns, and `isCredentialValid` treats an unknown
+    // expiry as valid so an existing user is never locked out.
+    return opaqueCredential();
   }
+
+  return null;
 }
 
 /**
