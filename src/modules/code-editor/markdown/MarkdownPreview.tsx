@@ -3,9 +3,9 @@ import type { Components } from 'react-markdown';
 import ReactMarkdown from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
 
 import MarkdownCodeBlock from '@/modules/code-editor/markdown/MarkdownCodeBlock';
+import { MARKDOWN_MATH_REMARK_PLUGINS } from '@/shared/markdownMath';
 
 type MarkdownPreviewProps = {
   content: string;
@@ -42,7 +42,7 @@ const markdownPreviewComponents: Components = {
 
 /** Used by the prd-editor module, and by CodeEditorSurface inside code-editor, to render markdown source as formatted preview output. */
 export default function MarkdownPreview({ content }: MarkdownPreviewProps) {
-  const remarkPlugins = useMemo(() => [remarkGfm, [remarkMath, { singleDollarTextMath: false }]] as any, []);
+  const remarkPlugins = useMemo(() => [remarkGfm, ...MARKDOWN_MATH_REMARK_PLUGINS] as any, []);
   const rehypePlugins = useMemo(() => [rehypeKatex], []);
 
   return (

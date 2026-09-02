@@ -5,10 +5,10 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 
 import { splitStreamingMarkdown } from '@/modules/chat/utils/streamingMarkdown';
+import { MARKDOWN_MATH_REMARK_PLUGINS } from '@/shared/markdownMath';
 
 /**
  * The property the split exists to preserve: rendering `settled` and `pending`
@@ -18,7 +18,7 @@ import { splitStreamingMarkdown } from '@/modules/chat/utils/streamingMarkdown';
  */
 
 // Same plugin set as Markdown.tsx.
-const remarkPlugins = [remarkGfm, [remarkMath, { singleDollarTextMath: false }]] as never;
+const remarkPlugins = [remarkGfm, ...MARKDOWN_MATH_REMARK_PLUGINS] as never;
 const rehypePlugins = [rehypeKatex] as never;
 
 /**
@@ -75,6 +75,7 @@ const FIXTURES: Array<[string, string]> = [
   ['nested fences', 'Intro.\n\n~~~markdown\n```\ncode\n\nmore\n```\n~~~\n\nDone'],
   ['tilde inside backticks', 'Intro.\n\n```md\n~~~\nfoo\n\nbar\n```\n\nEnd'],
   ['display math', 'Text before.\n\n$$\na = b\n\nc = d\n$$\n\nText after'],
+  ['TeX display math', 'Text before.\n\n\\[\na = b\n\nc = d\n\\]\n\nText after'],
   ['ordered list', 'Steps:\n\n1. first\n\n2. second\n\n3. third'],
   ['bullet list', 'Items:\n\n- alpha\n\n- beta\n\n- gamma'],
   ['blockquote', '> quoted line\n\n> continued quote\n\nAfter'],
