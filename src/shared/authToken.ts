@@ -51,7 +51,9 @@ const readTokenClaims = (token: unknown): TokenClaims | null => {
     }
 
     const subject =
-      payload.userId !== undefined && typeof payload.username === 'string'
+      payload.userId !== undefined &&
+      payload.userId !== null &&
+      typeof payload.username === 'string'
         ? `${String(payload.userId)}|${payload.username}`
         : null;
 

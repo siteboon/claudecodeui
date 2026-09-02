@@ -172,6 +172,21 @@ test('storeAuthToken: tokens without user claims still apply (no subject to comp
   assert.equal(localStorage.getItem('auth-token'), noSubject);
 });
 
+test('storeAuthToken: a null userId is no subject — such tokens always apply', () => {
+  localStorage.clear();
+  const now = Math.floor(Date.now() / 1000);
+  const current = makeToken({ userId: null, username: 'guest', iat: now, exp: now + 600 });
+  const older = makeToken({ userId: null, username: 'guest', iat: now - 60, exp: now + 540 });
+  localStorage.setItem('auth-token', current);
+
+  const events = countRefreshEvents(() => {
+    assert.equal(storeAuthToken(older), true);
+  });
+
+  assert.equal(events, 1);
+  assert.equal(localStorage.getItem('auth-token'), older);
+});
+
 test('getStoredAuthToken: an expired token is dropped and the expiry is announced once', () => {
   localStorage.clear();
   const now = Math.floor(Date.now() / 1000);
