@@ -47,13 +47,61 @@ function getToolInputPreview(message: ChatMessage): string {
   const parsedInput = parseToolInput(message.toolInput);
   const title = typeof config.title === 'function' ? config.title(parsedInput) : config.title;
   const value = config.getValue?.(parsedInput);
+  const raw = String(value || title || message.displayText || message.content || '').trim();
 
-  return String(value || title || message.displayText || message.content || '').trim();
+  const isFileTool = ['Read', 'view_file', 'Edit', 'replace_file_content', 'Write', 'write_to_file', 'ApplyPatch', 'LS', 'list_dir'].includes(message.toolName || '');
+  if (isFileTool && raw) {
+    return raw.split('/').pop() || raw;
+  }
+
+  return raw;
 }
 
-function getToolGroupIcon(icon: string | undefined, toolName: string): string {
-  if (icon === 'terminal') {
+function getToolGroupIcon(icon: string | undefined, toolName: string): React.ReactNode {
+  if (icon === 'terminal' || toolName === 'Bash' || toolName === 'run_command') {
     return '$';
+  }
+  if (['Read', 'view_file'].includes(toolName)) {
+    return (
+      <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    );
+  }
+  if (['Edit', 'replace_file_content', 'ApplyPatch'].includes(toolName)) {
+    return (
+      <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+      </svg>
+    );
+  }
+  if (['Write', 'write_to_file'].includes(toolName)) {
+    return (
+      <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+      </svg>
+    );
+  }
+  if (['Grep', 'Glob', 'grep_search', 'find_by_name'].includes(toolName)) {
+    return (
+      <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+      </svg>
+    );
+  }
+  if (['LS', 'list_dir'].includes(toolName)) {
+    return (
+      <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+      </svg>
+    );
+  }
+  if (['Task', 'manage_task', 'TaskCreate', 'TaskUpdate'].includes(toolName)) {
+    return (
+      <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+      </svg>
+    );
   }
 
   return icon || toolName.slice(0, 1).toUpperCase();
@@ -75,6 +123,25 @@ export default function ToolGroupContainer({
   const hasError = useMemo(() => {
     return group.messages.some((m) => Boolean(m.isError || m.toolResult?.isError));
   }, [group.messages]);
+
+  const diffStats = useMemo(() => {
+    if (!['Edit', 'Write'].includes(group.toolName)) return null;
+    let added = 0;
+    let removed = 0;
+    for (const msg of group.messages) {
+      const parsed = parseToolInput(msg.toolInput) as any;
+      const oldStr = parsed?.old_string ?? parsed?.TargetContent ?? '';
+      const newStr = parsed?.new_string ?? parsed?.ReplacementContent ?? parsed?.CodeContent ?? parsed?.content ?? '';
+      if (oldStr || newStr) {
+        const lines = createDiff ? createDiff(oldStr, newStr) : [];
+        for (const line of lines) {
+          if (line.type === 'added') added += 1;
+          else if (line.type === 'removed') removed += 1;
+        }
+      }
+    }
+    return added > 0 || removed > 0 ? { added, removed } : null;
+  }, [group.messages, group.toolName, createDiff]);
 
   const [isExpanded, setIsExpanded] = useState(hasError);
   const config = getToolConfig(group.toolName).input;
@@ -147,6 +214,16 @@ export default function ToolGroupContainer({
           {hasError && (
             <span className="flex-shrink-0 rounded-full bg-destructive/15 px-1.5 py-0.5 text-[10px] font-medium text-destructive">
               Failed
+            </span>
+          )}
+          {diffStats && (
+            <span className="flex flex-shrink-0 items-center gap-1 font-mono text-[10px] font-semibold leading-none">
+              {diffStats.added > 0 && (
+                <span className="text-emerald-600 dark:text-emerald-400">+{diffStats.added}</span>
+              )}
+              {diffStats.removed > 0 && (
+                <span className="text-rose-600 dark:text-rose-400">-{diffStats.removed}</span>
+              )}
             </span>
           )}
           {preview && (

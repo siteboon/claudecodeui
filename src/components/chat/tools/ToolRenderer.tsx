@@ -8,6 +8,7 @@ import { OneLineDisplay, BashCommandDisplay, CollapsibleDisplay, ToolDiffViewer,
 import { PlanDisplay } from './components/PlanDisplay';
 import { ToolStatusBadge } from './components/ToolStatusBadge';
 import type { ToolStatus } from './components/ToolStatusBadge';
+import { calculateDiff } from '../utils/messageTransforms';
 
 type DiffLine = {
   type: string;
@@ -304,7 +305,36 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
         })
       : undefined;
 
-    const badgeElement = toolStatus && toolStatus !== 'completed' ? <ToolStatusBadge status={toolStatus} /> : undefined;
+    let diffStats: { added: number; removed: number } | null = null;
+    if (displayConfig.contentType === 'diff') {
+      const oldStr = contentProps.oldContent ?? '';
+      const newStr = contentProps.newContent ?? '';
+      if (oldStr || newStr) {
+        const diffFn = createDiff || calculateDiff;
+        const lines = diffFn(oldStr, newStr);
+        let added = 0;
+        let removed = 0;
+        for (const line of lines) {
+          if (line.type === 'added') added += 1;
+          else if (line.type === 'removed') removed += 1;
+        }
+        diffStats = { added, removed };
+      }
+    }
+
+    const statusBadge = toolStatus && toolStatus !== 'completed' ? <ToolStatusBadge status={toolStatus} /> : null;
+    const diffBadge = diffStats && (diffStats.added > 0 || diffStats.removed > 0) ? (
+      <span className="flex items-center gap-1 font-mono text-[11px] font-semibold leading-none">
+        {diffStats.added > 0 && (
+          <span className="text-emerald-600 dark:text-emerald-400">+{diffStats.added}</span>
+        )}
+        {diffStats.removed > 0 && (
+          <span className="text-rose-600 dark:text-rose-400">-{diffStats.removed}</span>
+        )}
+      </span>
+    ) : null;
+
+    const badgeElement = statusBadge || diffBadge || undefined;
     const displayLabel = displayConfig.label || toolName;
 
     return (

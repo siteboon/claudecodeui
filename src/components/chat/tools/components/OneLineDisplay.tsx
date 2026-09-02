@@ -146,21 +146,11 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
           {value}
         </span>
         {secondary && (
-          <span className="flex-shrink-0 text-[11px] italic text-muted-foreground/60">
+          <span className="max-w-[45%] truncate text-[11px] italic text-muted-foreground/60">
             {secondary}
           </span>
         )}
         {status && <ToolStatusBadge status={status} />}
-        {toolResult && (
-          <a
-            href={`#tool-result-${toolId}`}
-            className="flex flex-shrink-0 items-center gap-0.5 text-[11px] text-primary transition-colors hover:text-primary/80"
-          >
-            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </a>
-        )}
       </div>
     );
   }
@@ -181,7 +171,7 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
         {value}
       </span>
       {secondary && (
-        <span className={`text-[11px] ${colorScheme.secondary} flex-shrink-0 italic`}>
+        <span className={`text-[11px] ${colorScheme.secondary} max-w-[45%] truncate italic`}>
           {secondary}
         </span>
       )}
