@@ -18,7 +18,9 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "zcode": "ZCode",
+    "antigravity": "Antigravity"
   },
   "tools": {
     "settings": "工具设置",
@@ -197,10 +199,10 @@
     },
     "loading": "正在加载终端...",
     "connecting": "正在连接到 Shell...",
-    "startSession": "启动新的 Claude 会话",
+    "startSession": "启动新的 {{provider}} 会话",
     "resumeSession": "恢复会话：{{displayName}}...",
     "runCommand": "在 {{projectName}} 中运行 {{command}}",
-    "startCli": "在 {{projectName}} 中启动 Claude CLI",
+    "startCli": "在 {{projectName}} 中启动 {{provider}} CLI",
     "defaultCommand": "命令"
   },
   "claudeStatus": {

@@ -14,6 +14,7 @@ import {
 import { useShellRuntime } from '../hooks/useShellRuntime';
 import { sendSocketMessage } from '../utils/socket';
 import { getSessionDisplayName } from '../utils/auth';
+import { getProviderDisplayName } from '../../../utils/providerDisplay';
 
 import ShellConnectionOverlay from './subcomponents/ShellConnectionOverlay';
 import ShellEmptyState from './subcomponents/ShellEmptyState';
@@ -250,6 +251,12 @@ export default function Shell({
     );
   }
 
+  // Mirrors the provider selection useShellConnection sends in the shell init
+  // message, so the overlay text names the CLI that is actually about to run.
+  const shellProviderLabel = getProviderDisplayName(
+    selectedSession?.__provider || localStorage.getItem('selected-provider') || 'claude',
+  );
+
   const readyDescription = isPlainShell
     ? t('shell.runCommand', {
         command: initialCommand || t('shell.defaultCommand'),
@@ -257,14 +264,14 @@ export default function Shell({
       })
     : selectedSession
       ? t('shell.resumeSession', { displayName: sessionDisplayNameLong })
-      : t('shell.startSession');
+      : t('shell.startSession', { provider: shellProviderLabel });
 
   const connectingDescription = isPlainShell
     ? t('shell.runCommand', {
         command: initialCommand || t('shell.defaultCommand'),
         projectName: selectedProject.displayName,
       })
-    : t('shell.startCli', { projectName: selectedProject.displayName });
+    : t('shell.startCli', { projectName: selectedProject.displayName, provider: shellProviderLabel });
 
   const overlayMode = !isInitialized ? 'loading' : isConnecting ? 'connecting' : !isConnected ? 'connect' : null;
   const overlayDescription = overlayMode === 'connecting' ? connectingDescription : readyDescription;

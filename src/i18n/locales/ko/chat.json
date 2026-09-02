@@ -18,7 +18,9 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "zcode": "ZCode",
+    "antigravity": "Antigravity"
   },
   "tools": {
     "settings": "도구 설정",
@@ -197,10 +199,10 @@
     },
     "loading": "터미널 로딩 중...",
     "connecting": "Shell에 연결 중...",
-    "startSession": "새 Claude 세션 시작",
+    "startSession": "새 {{provider}} 세션 시작",
     "resumeSession": "세션 재개: {{displayName}}...",
     "runCommand": "{{projectName}}에서 {{command}} 실행",
-    "startCli": "{{projectName}}에서 Claude CLI 시작",
+    "startCli": "{{projectName}}에서 {{provider}} CLI 시작",
     "defaultCommand": "명령어"
   },
   "claudeStatus": {

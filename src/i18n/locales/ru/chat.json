@@ -17,7 +17,9 @@
     "tool": "Инструмент",
     "claude": "Claude",
     "cursor": "Cursor",
-    "codex": "Codex"
+    "codex": "Codex",
+    "zcode": "ZCode",
+    "antigravity": "Antigravity"
   },
   "tools": {
     "settings": "Настройки инструмента",
@@ -177,10 +179,10 @@
     },
     "loading": "Загрузка терминала...",
     "connecting": "Подключение к оболочке...",
-    "startSession": "Начать новый сеанс Claude",
+    "startSession": "Начать новый сеанс {{provider}}",
     "resumeSession": "Возобновить сеанс: {{displayName}}...",
     "runCommand": "Выполнить {{command}} в {{projectName}}",
-    "startCli": "Запуск Claude CLI в {{projectName}}",
+    "startCli": "Запуск {{provider}} CLI в {{projectName}}",
     "defaultCommand": "команда"
   },
   "claudeStatus": {

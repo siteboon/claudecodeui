@@ -11,6 +11,7 @@ import { useChatSessionState } from '../hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '../hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '../hooks/useChatComposerState';
 import { useSessionStore } from '../../../stores/useSessionStore';
+import { getProviderDisplayName } from '../../../utils/providerDisplay';
 
 import ChatMessagesPane from './subcomponents/ChatMessagesPane';
 import ChatComposer from './subcomponents/ChatComposer';
@@ -317,14 +318,7 @@ function ChatInterface({
   // overlapping the last message.
   const hasActivityIndicator = Boolean(sessionActivity && pendingPermissionRequests.length === 0);
 
-  const selectedProviderLabel =
-    provider === 'cursor'
-      ? t('messageTypes.cursor')
-      : provider === 'codex'
-        ? t('messageTypes.codex')
-        : provider === 'opencode'
-            ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
-          : t('messageTypes.claude');
+  const selectedProviderLabel = getProviderDisplayName(provider);
 
   if (!selectedProject) {
     return (

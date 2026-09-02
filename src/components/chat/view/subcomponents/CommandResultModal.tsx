@@ -33,6 +33,7 @@ import type {
 } from '../../hooks/useChatComposerState';
 
 import ModelLibraryPanel from './ModelLibraryPanel';
+import { getProviderDisplayName, PROVIDER_DISPLAY_NAMES } from '../../../../utils/providerDisplay';
 
 type CommandResultModalProps = {
   payload: CommandModalPayload | null;
@@ -58,13 +59,6 @@ type CommandEntry = {
   namespace?: string;
 };
 
-const PROVIDER_LABELS: Record<string, string> = {
-  claude: 'Claude',
-  cursor: 'Cursor',
-  codex: 'Codex',
-  opencode: 'OpenCode',
-};
-
 const FALLBACK_COMMANDS: CommandEntry[] = [
   { name: '/models', description: 'Browse available models for the active provider.' },
   { name: '/cost', description: 'Review token usage for the active session.' },
@@ -74,12 +68,14 @@ const FALLBACK_COMMANDS: CommandEntry[] = [
   { name: '/help', description: 'Show command documentation and syntax.' },
 ];
 
+// Unknown provider values echo through unchanged instead of falling back to
+// the Claude label, so malformed payloads stay visible in the modal.
 const getProviderLabel = (provider: string | undefined, fallback = 'Unknown') => {
   if (!provider) {
     return fallback;
   }
 
-  return PROVIDER_LABELS[provider] || provider;
+  return provider in PROVIDER_DISPLAY_NAMES ? getProviderDisplayName(provider) : provider;
 };
 
 const formatNumber = (value: number) => {

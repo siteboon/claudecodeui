@@ -18,7 +18,9 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "zcode": "ZCode",
+    "antigravity": "Antigravity"
   },
   "tools": {
     "settings": "Ajustes de herramientas",
@@ -205,10 +207,10 @@
     },
     "loading": "Cargando terminal...",
     "connecting": "Conectando a la shell...",
-    "startSession": "Iniciar una sesión nueva de Claude",
+    "startSession": "Iniciar una sesión nueva de {{provider}}",
     "resumeSession": "Reanudar sesión: {{displayName}}...",
     "runCommand": "Ejecutar {{command}} en {{projectName}}",
-    "startCli": "Iniciando Claude CLI en {{projectName}}",
+    "startCli": "Iniciando {{provider}} CLI en {{projectName}}",
     "defaultCommand": "comando"
   },
   "claudeStatus": {

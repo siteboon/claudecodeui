@@ -10,6 +10,7 @@ import { copyTextToClipboard } from '../../../../utils/clipboard';
 import type { SessionWithProvider } from '../../types/types';
 import { createSessionViewModel, formatCompactAge } from '../../utils/utils';
 import LLMProviderLogo from '../../../llm-provider-logo/LLMProviderLogo';
+import { getProviderDisplayName } from '../../../../utils/providerDisplay';
 
 type SidebarSessionItemProps = {
   project: Project;
@@ -33,15 +34,6 @@ type SidebarSessionItemProps = {
     provider: LLMProvider,
   ) => void;
   t: TFunction;
-};
-
-const PROVIDER_LABELS: Record<LLMProvider, string> = {
-  claude: 'Claude',
-  codex: 'Codex',
-  cursor: 'Cursor',
-  opencode: 'OpenCode',
-  zcode: 'ZCode',
-  antigravity: 'Antigravity',
 };
 
 type CopyState = 'loading' | 'idle' | 'copying' | 'copied' | 'error';
@@ -74,7 +66,7 @@ export default function SidebarSessionItem({
   const providerIdRequestRef = useRef(0);
   const showAttentionIndicator = needsAttention && !isSelected;
   const showRecentIndicator = !showAttentionIndicator && !isProcessing && sessionView.isActive;
-  const providerLabel = PROVIDER_LABELS[session.__provider];
+  const providerLabel = getProviderDisplayName(session.__provider);
 
   // While editing, dismiss only when the user clicks outside the inline rename panel
   // (matches Escape / cancel-button behaviour). The mobile rename lives inside the

@@ -161,6 +161,60 @@ function parseShellMessage(rawMessage: RawData): ShellIncomingMessage | null {
 
 const SAFE_SESSION_ID_PATTERN = /^[a-zA-Z0-9_.\-:]+$/;
 
+/**
+ * Interactive CLI integration per provider for the standalone shell: the
+ * display name shown in the welcome banner, the command that launches a
+ * fresh interactive CLI, and (when the CLI supports resuming) a builder that
+ * derives the resume command from the provider-native session id.
+ *
+ * zcode has no known resume flag today (its runtime is the app-server
+ * protocol, not CLI flags), so it always launches a fresh interactive CLI.
+ * `agy`'s bare invocation is classified as a login command by
+ * isLoginShellCommand, so a fresh antigravity shell restarts its PTY on
+ * reconnect — resume-mode shells (with --conversation) reattach normally.
+ * Providers without an entry fall back to claude, matching the chat gateway
+ * default. Consumed by buildShellCommand and the init welcome banner.
+ */
+const SHELL_PROVIDER_CLI: Record<string, {
+  name: string;
+  launch: string;
+  resume?: (resumeSessionId: string) => string;
+}> = {
+  claude: {
+    name: 'Claude',
+    launch: 'claude',
+    resume: (id) => os.platform() === 'win32'
+      ? `claude --resume "${id}"; if ($LASTEXITCODE -ne 0) { claude }`
+      : `claude --resume "${id}" || claude`,
+  },
+  cursor: {
+    name: 'Cursor',
+    launch: 'cursor-agent',
+    resume: (id) => `cursor-agent --resume="${id}"`,
+  },
+  codex: {
+    name: 'Codex',
+    launch: 'codex',
+    resume: (id) => os.platform() === 'win32'
+      ? `codex resume "${id}"; if ($LASTEXITCODE -ne 0) { codex }`
+      : `codex resume "${id}" || codex`,
+  },
+  opencode: {
+    name: 'OpenCode',
+    launch: 'opencode',
+    resume: (id) => `opencode --session "${id}"`,
+  },
+  zcode: {
+    name: 'ZCode',
+    launch: 'zcode',
+  },
+  antigravity: {
+    name: 'Antigravity',
+    launch: 'agy',
+    resume: (id) => `agy --conversation "${id}"`,
+  },
+};
+
 function resolveResumeSessionId(
   message: ShellIncomingMessage,
   dependencies: ShellWebSocketDependencies
@@ -209,38 +263,11 @@ function buildShellCommand(
     return initialCommand;
   }
 
-  if (provider === 'cursor') {
-    if (resumeSessionId) {
-      return `cursor-agent --resume="${resumeSessionId}"`;
-    }
-    return 'cursor-agent';
+  const integration = SHELL_PROVIDER_CLI[provider] ?? SHELL_PROVIDER_CLI.claude;
+  if (resumeSessionId && integration.resume) {
+    return integration.resume(resumeSessionId);
   }
-
-  if (provider === 'codex') {
-    if (resumeSessionId) {
-      if (os.platform() === 'win32') {
-        return `codex resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { codex }`;
-      }
-      return `codex resume "${resumeSessionId}" || codex`;
-    }
-    return 'codex';
-  }
-
-  if (provider === 'opencode') {
-    if (resumeSessionId) {
-      return `opencode --session "${resumeSessionId}"`;
-    }
-    return initialCommand || 'opencode';
-  }
-
-  const command = initialCommand || 'claude';
-  if (resumeSessionId) {
-    if (os.platform() === 'win32') {
-      return `claude --resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { claude }`;
-    }
-    return `claude --resume "${resumeSessionId}" || claude`;
-  }
-  return command;
+  return initialCommand || integration.launch;
 }
 
 function readEnvValue(env: NodeJS.ProcessEnv, key: string): string | undefined {
@@ -542,14 +569,7 @@ export function handleShellConnection(
 
         let welcomeMsg = `\x1b[36mStarting terminal in: ${projectPath}\x1b[0m\r\n`;
         if (!isPlainShell) {
-          const providerName =
-            provider === 'cursor'
-              ? 'Cursor'
-              : provider === 'codex'
-                ? 'Codex'
-                : provider === 'opencode'
-                    ? 'OpenCode'
-                  : 'Claude';
+          const providerName = (SHELL_PROVIDER_CLI[provider] ?? SHELL_PROVIDER_CLI.claude).name;
           welcomeMsg = hasSession && resumeSessionId
             ? `\x1b[36mResuming ${providerName} session ${resumeSessionId} in: ${projectPath}\x1b[0m\r\n`
             : `\x1b[36mStarting new ${providerName} session in: ${projectPath}\x1b[0m\r\n`;

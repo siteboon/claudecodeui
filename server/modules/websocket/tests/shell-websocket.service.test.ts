@@ -118,6 +118,71 @@ test('shell output detects and normalizes a wrapped authentication URL', () => {
   pty.emitExit();
 });
 
+test('shell init launches the selected provider CLI and resumes via provider-native ids', () => {
+  const spawned: Array<{ file: string; args: string[] }> = [];
+  const pty = createFakePty();
+  const dependencies = {
+    resolveProviderSessionId: (sessionId: string, provider: string) => (
+      provider === 'antigravity' ? `agy-conv-for-${sessionId}` : null
+    ),
+    spawnPty: (file: string, args: string | string[]) => {
+      spawned.push({ file, args: Array.isArray(args) ? args : [args] });
+      return pty as never;
+    },
+  };
+
+  const scenarios = [
+    // antigravity with a session must resume through agy's --conversation flag.
+    { sessionId: `agy-resume-${Date.now()}`, provider: 'antigravity', hasSession: true, expected: (id: string) => `agy --conversation "agy-conv-for-${id}"`, expectedBanner: 'Antigravity' },
+    // antigravity without a session launches a fresh interactive agy.
+    { sessionId: `agy-fresh-${Date.now()}`, provider: 'antigravity', hasSession: false, expected: () => 'agy', expectedBanner: 'Antigravity' },
+    // zcode has no known resume flag; it always launches its interactive CLI.
+    { sessionId: `zcode-fresh-${Date.now()}`, provider: 'zcode', hasSession: true, expected: () => 'zcode', expectedBanner: 'ZCode' },
+    // Regression guards: the previously supported providers keep their commands.
+    { sessionId: `claude-resume-${Date.now()}`, provider: 'claude', hasSession: true, expected: () => 'claude --resume "claude-resume-id" || claude', expectedBanner: 'Claude' },
+    { sessionId: `cursor-resume-${Date.now()}`, provider: 'cursor', hasSession: true, expected: () => 'cursor-agent --resume="cursor-resume-id"', expectedBanner: 'Cursor' },
+  ] as const;
+
+  for (const scenario of scenarios) {
+    const socket = createFakeSocket();
+    handleShellConnection(socket as never, {
+      ...dependencies,
+      resolveProviderSessionId: (sessionId: string, provider: string) => {
+        if (provider === 'antigravity') return `agy-conv-for-${sessionId}`;
+        if (scenario.expected('').includes('claude --resume')) return 'claude-resume-id';
+        if (scenario.expected('').includes('cursor-agent')) return 'cursor-resume-id';
+        return null;
+      },
+    });
+    socket.emit(
+      'message',
+      JSON.stringify({
+        type: 'init',
+        projectPath: process.cwd(),
+        sessionId: scenario.sessionId,
+        hasSession: scenario.hasSession,
+        provider: scenario.provider,
+        isPlainShell: false,
+        initialCommand: null,
+      })
+    );
+
+    const shellArgs = spawned.at(-1)?.args ?? [];
+    const shellCommand = shellArgs[shellArgs.indexOf('-c') + 1] ?? '';
+    assert.equal(
+      shellCommand,
+      scenario.expected(scenario.sessionId),
+      `${scenario.provider} (hasSession=${scenario.hasSession}) must launch the provider CLI`,
+    );
+
+    const frames = socket.frames.map((frame) => JSON.parse(frame) as Record<string, string>);
+    const welcome = frames.find((frame) => frame.type === 'output' && typeof frame.data === 'string' && frame.data.includes('session'));
+    assert.match(welcome?.data ?? '', new RegExp(scenario.expectedBanner), 'welcome banner must name the provider');
+
+    pty.emitExit();
+  }
+});
+
 test('isLoginShellCommand recognizes every provider login command', () => {
   const loginCommands = [
     'agy',
