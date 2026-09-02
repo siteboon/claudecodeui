@@ -36,11 +36,11 @@ interface ToolRendererProps {
 
 function getToolCategory(toolName: string): string {
   if (['Edit', 'Write', 'ApplyPatch', 'replace_file_content', 'write_to_file'].includes(toolName)) return 'edit';
-  if (['Grep', 'Glob', 'grep_search', 'find_by_name'].includes(toolName)) return 'search';
+  if (['Grep', 'Glob', 'grep_search', 'find_by_name', 'list_dir'].includes(toolName)) return 'search';
   if (toolName === 'Bash' || toolName === 'run_command') return 'bash';
   if (['TodoWrite', 'TodoRead'].includes(toolName)) return 'todo';
-  if (['TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet'].includes(toolName)) return 'task';
-  if (toolName === 'Task') return 'agent';
+  if (['TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet', 'manage_task'].includes(toolName)) return 'task';
+  if (['Task', 'invoke_subagent', 'manage_subagents', 'send_message'].includes(toolName)) return 'agent';
   if (toolName === 'exit_plan_mode' || toolName === 'ExitPlanMode') return 'plan';
   if (toolName === 'AskUserQuestion') return 'question';
   return 'default';
@@ -296,7 +296,8 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
       }
     }
 
-    const handleTitleClick = (toolName === 'Edit' || toolName === 'Write' || toolName === 'ApplyPatch') && contentProps.filePath && onFileOpen
+    const isEditOrWrite = ['Edit', 'Write', 'ApplyPatch', 'replace_file_content', 'write_to_file'].includes(toolName);
+    const handleTitleClick = isEditOrWrite && contentProps.filePath && onFileOpen
       ? () => onFileOpen(contentProps.filePath, {
           old_string: contentProps.oldContent,
           new_string: contentProps.newContent
@@ -304,10 +305,11 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
       : undefined;
 
     const badgeElement = toolStatus && toolStatus !== 'completed' ? <ToolStatusBadge status={toolStatus} /> : undefined;
+    const displayLabel = displayConfig.label || toolName;
 
     return (
       <CollapsibleDisplay
-        toolName={toolName}
+        toolName={displayLabel}
         toolId={toolId}
         title={title}
         defaultOpen={defaultOpen}

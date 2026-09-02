@@ -136,6 +136,7 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
   Edit: {
     input: {
       type: 'collapsible',
+      label: 'Edit',
       title: (input) => {
         const rawPath = input.file_path || input.TargetFile || 'file';
         const filename = rawPath.split('/').pop() || rawPath;
@@ -160,6 +161,7 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
   replace_file_content: {
     input: {
       type: 'collapsible',
+      label: 'Edit',
       title: (input) => {
         const rawPath = input.TargetFile || input.file_path || 'file';
         const filename = rawPath.split('/').pop() || rawPath;
@@ -184,6 +186,7 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
   Write: {
     input: {
       type: 'collapsible',
+      label: 'Write',
       title: (input) => {
         const rawPath = input.file_path || input.TargetFile || 'file';
         const filename = rawPath.split('/').pop() || rawPath;
@@ -208,6 +211,7 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
   write_to_file: {
     input: {
       type: 'collapsible',
+      label: 'Write',
       title: (input) => {
         const rawPath = input.TargetFile || input.file_path || 'file';
         const filename = rawPath.split('/').pop() || rawPath;
@@ -371,20 +375,173 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       }
     },
     result: {
-      type: 'collapsible',
-      defaultOpen: false,
-      title: (result) => {
-        const toolData = result.toolUseResult || {};
-        const count = toolData.numFiles || toolData.filenames?.length || 0;
-        return `Found ${count} ${count === 1 ? 'file' : 'files'}`;
-      },
-      contentType: 'file-list',
-      getContentProps: (result) => {
-        const toolData = result.toolUseResult || {};
-        return {
-          files: toolData.filenames || []
-        };
+      hideOnSuccess: true
+    }
+  },
+
+  list_dir: {
+    input: {
+      type: 'one-line',
+      label: 'LS',
+      getValue: (input) => input.DirectoryPath || input.path || '',
+      action: 'open-file',
+      colorScheme: {
+        primary: 'text-gray-700 dark:text-gray-300',
+        background: '',
+        border: 'border-blue-400 dark:border-blue-500',
+        icon: 'text-blue-500 dark:text-blue-400'
       }
+    },
+    result: {
+      hidden: true
+    }
+  },
+
+  search_web: {
+    input: {
+      type: 'one-line',
+      label: 'WebSearch',
+      getValue: (input) => input.query || '',
+      action: 'none',
+      colorScheme: {
+        primary: 'text-gray-700 dark:text-gray-300',
+        border: 'border-cyan-400 dark:border-cyan-500',
+        icon: 'text-cyan-500 dark:text-cyan-400'
+      }
+    },
+    result: {
+      hideOnSuccess: true
+    }
+  },
+
+  read_url_content: {
+    input: {
+      type: 'one-line',
+      label: 'WebFetch',
+      getValue: (input) => input.Url || input.url || '',
+      action: 'none',
+      colorScheme: {
+        primary: 'text-gray-700 dark:text-gray-300',
+        border: 'border-cyan-400 dark:border-cyan-500',
+        icon: 'text-cyan-500 dark:text-cyan-400'
+      }
+    },
+    result: {
+      hidden: true
+    }
+  },
+
+  invoke_subagent: {
+    input: {
+      type: 'collapsible',
+      label: 'Subagent',
+      title: (input) => {
+        const first = input.Subagents?.[0];
+        const role = first?.Role || first?.TypeName || 'Agent';
+        const prompt = first?.Prompt ? String(first.Prompt).slice(0, 60) : '';
+        return `Subagent / ${role}${prompt ? `: ${prompt}` : ''}`;
+      },
+      defaultOpen: false,
+      contentType: 'markdown',
+      getContentProps: (input) => {
+        const first = input.Subagents?.[0];
+        return {
+          content: first?.Prompt || input.Prompt || ''
+        };
+      },
+      colorScheme: {
+        border: 'border-purple-500 dark:border-purple-400'
+      }
+    },
+    result: {
+      hideOnSuccess: true
+    }
+  },
+
+  manage_subagents: {
+    input: {
+      type: 'one-line',
+      label: 'Subagent',
+      getValue: (input) => `${input.Action || ''} ${input.ConversationIds?.join(', ') || ''}`.trim() || 'manage',
+      action: 'none',
+      colorScheme: {
+        primary: 'text-gray-700 dark:text-gray-300',
+        border: 'border-purple-500 dark:border-purple-400',
+        icon: 'text-purple-500 dark:text-purple-400'
+      }
+    },
+    result: {
+      hideOnSuccess: true
+    }
+  },
+
+  send_message: {
+    input: {
+      type: 'one-line',
+      label: 'Message',
+      getValue: (input) => input.toolSummary || input.toolAction || (input.Message ? String(input.Message).slice(0, 50) : 'send message'),
+      getSecondary: (input) => input.Recipient ? `to ${String(input.Recipient).split('/').pop()}` : undefined,
+      action: 'none',
+      colorScheme: {
+        primary: 'text-gray-700 dark:text-gray-300',
+        border: 'border-purple-400 dark:border-purple-500',
+        icon: 'text-purple-500 dark:text-purple-400'
+      }
+    },
+    result: {
+      hideOnSuccess: true
+    }
+  },
+
+  manage_task: {
+    input: {
+      type: 'one-line',
+      label: 'Task',
+      getValue: (input) => `${input.Action || ''} ${input.TaskId || ''}`.trim() || 'task',
+      action: 'none',
+      colorScheme: {
+        primary: 'text-gray-700 dark:text-gray-300',
+        border: 'border-violet-400 dark:border-violet-500',
+        icon: 'text-violet-500 dark:text-violet-400'
+      }
+    },
+    result: {
+      hideOnSuccess: true
+    }
+  },
+
+  schedule: {
+    input: {
+      type: 'one-line',
+      label: 'Schedule',
+      getValue: (input) => input.Prompt || (input.DurationSeconds ? `${input.DurationSeconds}s timer` : 'schedule'),
+      action: 'none',
+      colorScheme: {
+        primary: 'text-gray-700 dark:text-gray-300',
+        border: 'border-amber-400 dark:border-amber-500',
+        icon: 'text-amber-500 dark:text-amber-400'
+      }
+    },
+    result: {
+      hideOnSuccess: true
+    }
+  },
+
+  call_mcp_tool: {
+    input: {
+      type: 'one-line',
+      label: 'MCP',
+      getValue: (input) => `${input.ServerName || ''}/${input.ToolName || ''}`,
+      getSecondary: (input) => input.toolAction || input.toolSummary,
+      action: 'none',
+      colorScheme: {
+        primary: 'text-gray-700 dark:text-gray-300',
+        border: 'border-cyan-400 dark:border-cyan-500',
+        icon: 'text-cyan-500 dark:text-cyan-400'
+      }
+    },
+    result: {
+      hideOnSuccess: true
     }
   },
 

@@ -33,6 +33,11 @@ export function getNormalizedToolGroupKey(toolName: string): string {
   if (toolName === 'write_to_file' || toolName === 'Write') return 'Write';
   if (toolName === 'find_by_name' || toolName === 'Glob') return 'Glob';
   if (toolName === 'grep_search' || toolName === 'Grep') return 'Grep';
+  if (toolName === 'list_dir' || toolName === 'LS') return 'LS';
+  if (toolName === 'search_web' || toolName === 'WebSearch') return 'WebSearch';
+  if (toolName === 'read_url_content' || toolName === 'WebFetch') return 'WebFetch';
+  if (toolName === 'manage_task' || toolName === 'Task') return 'Task';
+  if (toolName === 'manage_subagents' || toolName === 'invoke_subagent') return 'Subagent';
   return toolName;
 }
 

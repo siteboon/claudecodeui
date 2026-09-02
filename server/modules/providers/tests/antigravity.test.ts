@@ -269,6 +269,25 @@ test('AntigravitySessionsProvider normalizes stream-json events', () => {
   assert.equal(toolUseMsg[0]?.kind, 'tool_use');
   assert.equal(toolUseMsg[0]?.toolName, 'view_file');
 
+  // Test quoted arguments cleanup
+  const quotedToolMsg = sessions.normalizeMessage({
+    event: 'step_update',
+    step_update: {
+      step_index: 4,
+      state: 'ACTIVE',
+      step_type: 'tool',
+      tool_name: 'view_file',
+      tool_info: {
+        parameters: { AbsolutePath: '"/test/file.ts"', toolAction: '"Viewing file"' },
+      },
+    },
+  }, 'test-conv-123');
+  assert.equal(quotedToolMsg.length, 1);
+  assert.deepEqual(quotedToolMsg[0]?.toolInput, {
+    AbsolutePath: '/test/file.ts',
+    toolAction: 'Viewing file',
+  });
+
   // Test tool result
   const toolResultMsg = sessions.normalizeMessage({
     event: 'step_update',

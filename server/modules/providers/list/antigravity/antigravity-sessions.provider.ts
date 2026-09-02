@@ -57,6 +57,43 @@ function findTranscriptPath(sessionId: string): string | null {
   return null;
 }
 
+function cleanToolArgValue(val: unknown): unknown {
+  if (typeof val !== 'string') return val;
+  const trimmed = val.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'") && trimmed.length >= 2)
+  ) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return trimmed.slice(1, -1);
+    }
+  }
+  return val;
+}
+
+/**
+ * Strips outer quoted strings that Antigravity CLI occasionally emits in transcript tool arguments.
+ */
+export function normalizeAntigravityToolArgs(args: unknown): AnyRecord {
+  const record = readObjectRecord(args);
+  if (!record) return {};
+  const cleaned: AnyRecord = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (typeof value === 'string') {
+      cleaned[key] = cleanToolArgValue(value);
+    } else if (Array.isArray(value)) {
+      cleaned[key] = value.map(cleanToolArgValue);
+    } else if (value && typeof value === 'object') {
+      cleaned[key] = normalizeAntigravityToolArgs(value);
+    } else {
+      cleaned[key] = value;
+    }
+  }
+  return cleaned;
+}
+
 /**
  * Normalizes one step or event from Antigravity CLI stream-json or transcript logs.
  */
@@ -120,7 +157,7 @@ export class AntigravitySessionsProvider implements IProviderSessions {
       if (stepType === 'tool' && state === 'ACTIVE') {
         const toolName = readOptionalString(step.tool_name) || 'tool';
         const toolInfo = readObjectRecord(step.tool_info);
-        const parameters = toolInfo?.parameters ?? {};
+        const parameters = normalizeAntigravityToolArgs(toolInfo?.parameters ?? {});
         const toolId = `tool_${stepIndex ?? Date.now()}`;
 
         messages.push(createNormalizedMessage({
@@ -255,7 +292,7 @@ export class AntigravitySessionsProvider implements IProviderSessions {
               for (let t = 0; t < entry.tool_calls.length; t++) {
                 const tc = entry.tool_calls[t] as AnyRecord;
                 const toolName = readOptionalString(tc?.name) || 'tool';
-                const args = tc?.args ?? {};
+                const args = normalizeAntigravityToolArgs(tc?.args ?? {});
                 const toolId = `tool_${stepIndex}_${t}`;
 
                 normalizedMessages.push(createNormalizedMessage({
