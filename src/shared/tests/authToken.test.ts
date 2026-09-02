@@ -84,6 +84,94 @@ test('storeAuthToken: a non-token value is rejected and does not overwrite the s
   assert.equal(localStorage.getItem('auth-token'), 'existing');
 });
 
+// Counts AUTH_TOKEN_REFRESHED_EVENT dispatches while `run` executes.
+const countRefreshEvents = (run: () => void): number => {
+  let events = 0;
+  const onRefresh = () => {
+    events += 1;
+  };
+  window.addEventListener(AUTH_TOKEN_REFRESHED_EVENT, onRefresh);
+  run();
+  window.removeEventListener(AUTH_TOKEN_REFRESHED_EVENT, onRefresh);
+  return events;
+};
+
+test('storeAuthToken: re-storing the identical token is a no-op', () => {
+  localStorage.clear();
+  const now = Math.floor(Date.now() / 1000);
+  const token = makeToken({ userId: 1, username: 'a', iat: now, exp: now + 600 });
+  localStorage.setItem('auth-token', token);
+
+  const events = countRefreshEvents(() => {
+    assert.equal(storeAuthToken(token), true);
+  });
+
+  assert.equal(events, 0);
+  assert.equal(localStorage.getItem('auth-token'), token);
+});
+
+test('storeAuthToken: a same-user token that is not newer is ignored', () => {
+  localStorage.clear();
+  const now = Math.floor(Date.now() / 1000);
+  const newer = makeToken({ userId: 1, username: 'a', iat: now, exp: now + 600 });
+  const older = makeToken({ userId: 1, username: 'a', iat: now - 1, exp: now + 599 });
+  const sameAge = makeToken({ userId: 1, username: 'a', iat: now, exp: now + 601 });
+  localStorage.setItem('auth-token', newer);
+
+  const events = countRefreshEvents(() => {
+    assert.equal(storeAuthToken(older), true);
+    assert.equal(storeAuthToken(sameAge), true);
+  });
+
+  assert.equal(events, 0);
+  assert.equal(localStorage.getItem('auth-token'), newer);
+});
+
+test('storeAuthToken: a same-user strictly newer token applies', () => {
+  localStorage.clear();
+  const now = Math.floor(Date.now() / 1000);
+  const older = makeToken({ userId: 1, username: 'a', iat: now - 60, exp: now + 540 });
+  const newer = makeToken({ userId: 1, username: 'a', iat: now, exp: now + 600 });
+  localStorage.setItem('auth-token', older);
+
+  const events = countRefreshEvents(() => {
+    assert.equal(storeAuthToken(newer), true);
+  });
+
+  assert.equal(events, 1);
+  assert.equal(localStorage.getItem('auth-token'), newer);
+});
+
+test('storeAuthToken: a different user\'s token applies even when it is older', () => {
+  localStorage.clear();
+  const now = Math.floor(Date.now() / 1000);
+  const current = makeToken({ userId: 1, username: 'a', iat: now, exp: now + 600 });
+  const otherUser = makeToken({ userId: 2, username: 'b', iat: now - 60, exp: now + 540 });
+  localStorage.setItem('auth-token', current);
+
+  const events = countRefreshEvents(() => {
+    assert.equal(storeAuthToken(otherUser), true);
+  });
+
+  assert.equal(events, 1);
+  assert.equal(localStorage.getItem('auth-token'), otherUser);
+});
+
+test('storeAuthToken: tokens without user claims still apply (no subject to compare)', () => {
+  localStorage.clear();
+  const now = Math.floor(Date.now() / 1000);
+  const current = makeToken({ userId: 1, username: 'a', iat: now, exp: now + 600 });
+  const noSubject = makeToken({ iat: now - 60, exp: now + 540 });
+  localStorage.setItem('auth-token', current);
+
+  const events = countRefreshEvents(() => {
+    assert.equal(storeAuthToken(noSubject), true);
+  });
+
+  assert.equal(events, 1);
+  assert.equal(localStorage.getItem('auth-token'), noSubject);
+});
+
 test('getStoredAuthToken: an expired token is dropped and the expiry is announced once', () => {
   localStorage.clear();
   const now = Math.floor(Date.now() / 1000);

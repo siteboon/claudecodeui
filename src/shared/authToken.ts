@@ -20,6 +20,7 @@ export const isValidRefreshedToken = (token: unknown): token is string =>
 type TokenClaims = {
   issuedAt: number;
   expiresAt: number;
+  subject: string | null;
 };
 
 const readTokenClaims = (token: unknown): TokenClaims | null => {
@@ -33,7 +34,12 @@ const readTokenClaims = (token: unknown): TokenClaims | null => {
       encodedPayload.length + ((4 - (encodedPayload.length % 4)) % 4),
       '=',
     );
-    const payload = JSON.parse(atob(paddedPayload)) as { iat?: unknown; exp?: unknown };
+    const payload = JSON.parse(atob(paddedPayload)) as {
+      iat?: unknown;
+      exp?: unknown;
+      userId?: unknown;
+      username?: unknown;
+    };
 
     if (
       typeof payload.iat !== 'number' ||
@@ -44,7 +50,12 @@ const readTokenClaims = (token: unknown): TokenClaims | null => {
       return null;
     }
 
-    return { issuedAt: payload.iat * 1000, expiresAt: payload.exp * 1000 };
+    const subject =
+      payload.userId !== undefined && typeof payload.username === 'string'
+        ? `${String(payload.userId)}|${payload.username}`
+        : null;
+
+    return { issuedAt: payload.iat * 1000, expiresAt: payload.exp * 1000, subject };
   } catch {
     return null;
   }
@@ -90,6 +101,30 @@ export const getStoredAuthToken = (): string | null => {
 export const storeAuthToken = (token: unknown): boolean => {
   if (!isValidRefreshedToken(token)) {
     return false;
+  }
+
+  // The server mints a fresh token on every request past the half-life, and
+  // /api/auth/refresh mints one unconditionally — jwt `iat` is per-second, so
+  // concurrent requests come back with *different* tokens. Every application
+  // re-fires AUTH_TOKEN_REFRESHED_EVENT and rebuilds whatever is keyed on the
+  // token (the chat websocket, the auth-status check, the refresh timer); with
+  // two tokens in flight the client ping-pongs between them indefinitely. A
+  // same-user token that is not strictly newer changes nothing, so keep the
+  // stored one. A different user's token (login) always applies.
+  const stored = localStorage.getItem('auth-token');
+  if (stored === token) {
+    return true;
+  }
+  const incoming = readTokenClaims(token);
+  const current = readTokenClaims(stored);
+  if (
+    incoming !== null &&
+    current !== null &&
+    incoming.issuedAt <= current.issuedAt &&
+    incoming.subject !== null &&
+    incoming.subject === current.subject
+  ) {
+    return true;
   }
 
   localStorage.setItem('auth-token', token);
