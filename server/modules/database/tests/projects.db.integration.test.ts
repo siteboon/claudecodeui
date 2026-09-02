@@ -70,3 +70,25 @@ test('projectsDb.createProjectPath returns active_conflict for active duplicates
     assert.equal(conflict.project?.isArchived, 0);
   });
 });
+
+test('projectsDb.ensureProjectPath creates row with isArchived=0 when not existing', async () => {
+  await withIsolatedDatabase(() => {
+    const project = projectsDb.ensureProjectPath('/workspace/ensure-new-project');
+    assert.ok(project);
+    assert.equal(project.project_path, '/workspace/ensure-new-project');
+    assert.equal(project.isArchived, 0);
+  });
+});
+
+test('projectsDb.ensureProjectPath preserves isArchived=1 when row is already archived', async () => {
+  await withIsolatedDatabase(() => {
+    const initial = projectsDb.createProjectPath('/workspace/ensure-archived-project');
+    assert.ok(initial.project);
+    projectsDb.updateProjectIsArchived('/workspace/ensure-archived-project', true);
+    assert.equal(projectsDb.getProjectPath('/workspace/ensure-archived-project')?.isArchived, 1);
+
+    const ensured = projectsDb.ensureProjectPath('/workspace/ensure-archived-project');
+    assert.equal(ensured.project_id, initial.project.project_id);
+    assert.equal(ensured.isArchived, 1, 'ensureProjectPath should not alter archived status!');
+  });
+});

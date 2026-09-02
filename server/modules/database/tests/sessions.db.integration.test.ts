@@ -53,7 +53,7 @@ test('session archive queries hide archived rows from active project views', asy
   });
 });
 
-test('createSession reactivates archived rows when the session becomes active again', async () => {
+test('createSession preserves archived state of existing rows', async () => {
   await withIsolatedDatabase(() => {
     sessionsDb.createSession('session-reused', 'claude', '/workspace/demo-project', 'First Name');
     sessionsDb.updateSessionIsArchived('session-reused', true);
@@ -62,13 +62,12 @@ test('createSession reactivates archived rows when the session becomes active ag
 
     const activeSessions = sessionsDb.getAllSessions();
     const archivedSessions = sessionsDb.getArchivedSessions();
-    const restoredSession = sessionsDb.getSessionById('session-reused');
+    const session = sessionsDb.getSessionById('session-reused');
 
-    assert.equal(activeSessions.length, 1);
-    assert.equal(activeSessions[0]?.session_id, 'session-reused');
-    assert.equal(activeSessions[0]?.custom_name, 'Updated Name');
-    assert.equal(archivedSessions.length, 0);
-    assert.equal(restoredSession?.isArchived, 0);
+    assert.equal(activeSessions.length, 0);
+    assert.equal(archivedSessions.length, 1);
+    assert.equal(archivedSessions[0]?.session_id, 'session-reused');
+    assert.equal(session?.isArchived, 1);
   });
 });
 

@@ -44,6 +44,29 @@ export const projectsDb = {
         };
     },
 
+    /**
+     * Ensures that a project row exists for the given project path without altering its
+     * isArchived state if it already exists (preserving user archive decisions).
+     */
+    ensureProjectPath(projectPath: string, customProjectName: string | null = null): ProjectRepositoryRow {
+        const db = getConnection();
+        const normalizedProjectPath = normalizeProjectPath(projectPath);
+        const existing = projectsDb.getProjectPath(normalizedProjectPath);
+        if (existing) {
+            return existing;
+        }
+
+        const attemptedId = randomUUID();
+        const normalizedProjectName = normalizeProjectDisplayName(normalizedProjectPath, customProjectName);
+        db.prepare(`
+            INSERT INTO projects (project_id, project_path, custom_project_name, isArchived)
+            VALUES (?, ?, ?, 0)
+            ON CONFLICT(project_path) DO NOTHING
+        `).run(attemptedId, normalizedProjectPath, normalizedProjectName);
+
+        return projectsDb.getProjectPath(normalizedProjectPath)!;
+    },
+
     getProjectPath(projectPath: string): ProjectRepositoryRow | null {
         const db = getConnection();
         const normalizedProjectPath = normalizeProjectPath(projectPath);

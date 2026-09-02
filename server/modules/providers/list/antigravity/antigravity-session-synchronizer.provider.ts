@@ -19,6 +19,7 @@ import type { LLMProvider } from '@/shared/types.js';
 import {
   normalizeProviderTimestamp,
   normalizeSessionName,
+  parseAntigravityWorkspacePath,
   readOptionalString,
 } from '@/shared/utils.js';
 
@@ -33,36 +34,6 @@ type AntigravitySummaryRow = {
   last_modified_time: string | null;
   status: string | null;
 };
-
-/**
- * Parses workspace directory from JSON array like `["file:///Users/azrael/workspaces/cloudcli"]`.
- */
-function parseWorkspacePath(workspaceUris: string | null): string | null {
-  if (!workspaceUris) return null;
-
-  try {
-    const uris = JSON.parse(workspaceUris);
-    if (Array.isArray(uris) && uris.length > 0) {
-      const firstUri = uris[0];
-      if (typeof firstUri === 'string') {
-        if (firstUri.startsWith('file://')) {
-          return decodeURIComponent(firstUri.slice(7));
-        }
-        return firstUri;
-      }
-    }
-  } catch {
-    // If not JSON, check if it's a direct path
-    if (workspaceUris.startsWith('file://')) {
-      return decodeURIComponent(workspaceUris.slice(7));
-    }
-    if (workspaceUris.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(workspaceUris)) {
-      return workspaceUris;
-    }
-  }
-
-  return null;
-}
 
 export class AntigravitySessionSynchronizer implements IProviderSessionSynchronizer {
   private highWaterMarkLastModified: number = 0;
@@ -139,7 +110,7 @@ export class AntigravitySessionSynchronizer implements IProviderSessionSynchroni
           continue;
         }
 
-        const projectPath = parseWorkspacePath(row.workspace_uris) ?? process.cwd();
+        const projectPath = parseAntigravityWorkspacePath(row.workspace_uris) ?? process.cwd();
         const fallbackTitle = 'Untitled Antigravity Session';
         const title = readOptionalString(row.title) || fallbackTitle;
 

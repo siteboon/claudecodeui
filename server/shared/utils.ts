@@ -1188,3 +1188,46 @@ export function getZCodeStorageDir(): string {
 export function getZCodeDatabasePath(): string {
   return path.join(getZCodeStorageDir(), 'cli', 'db', 'db.sqlite');
 }
+
+// ---------------------------
+//----------------- ANTIGRAVITY WORKSPACE PARSER UTILITIES ------------
+/**
+ * Parses workspace directory from Antigravity workspace_uris JSON array or raw string.
+ *
+ * Antigravity stores workspace paths in conversation_summaries.db as JSON arrays of file URIs
+ * like `["file:///path/to/project"]` or raw strings.
+ */
+export function parseAntigravityWorkspacePath(workspaceUris: string | null): string | null {
+  if (!workspaceUris) return null;
+
+  const tryParseUri = (uri: string): string => {
+    if (uri.startsWith('file://')) {
+      try {
+        return fileURLToPath(uri);
+      } catch {
+        return decodeURIComponent(uri.slice(7));
+      }
+    }
+    return uri;
+  };
+
+  try {
+    const uris = JSON.parse(workspaceUris);
+    if (Array.isArray(uris) && uris.length > 0) {
+      const firstUri = uris[0];
+      if (typeof firstUri === 'string') {
+        return tryParseUri(firstUri);
+      }
+    }
+  } catch {
+    if (workspaceUris.startsWith('file://')) {
+      return tryParseUri(workspaceUris);
+    }
+    if (workspaceUris.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(workspaceUris)) {
+      return workspaceUris;
+    }
+  }
+
+  return null;
+}
+
