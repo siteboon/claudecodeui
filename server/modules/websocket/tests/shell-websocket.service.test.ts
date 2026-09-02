@@ -4,7 +4,7 @@ import test from 'node:test';
 
 import { WebSocket } from 'ws';
 
-import { handleShellConnection } from '@/modules/websocket/services/shell-websocket.service.js';
+import { handleShellConnection, isLoginShellCommand } from '@/modules/websocket/services/shell-websocket.service.js';
 
 function createFakeSocket() {
   const socket = new EventEmitter() as EventEmitter & {
@@ -116,4 +116,26 @@ test('shell output detects and normalizes a wrapped authentication URL', () => {
   });
 
   pty.emitExit();
+});
+
+test('isLoginShellCommand recognizes every provider login command', () => {
+  const loginCommands = [
+    'agy',
+    'claude --dangerously-skip-permissions /login',
+    'codex login',
+    'codex login --device-auth',
+    'zcode login',
+    'cursor-agent login',
+    'opencode auth login',
+    'claude setup-token',
+  ];
+  for (const command of loginCommands) {
+    assert.equal(isLoginShellCommand(command), true, `should match: ${command}`);
+  }
+
+  for (const command of ['claude', 'codex', 'git status', 'npm run build', '']) {
+    assert.equal(isLoginShellCommand(command), false, `should not match: ${command}`);
+  }
+  assert.equal(isLoginShellCommand(null), false);
+  assert.equal(isLoginShellCommand(undefined), false);
 });
