@@ -1,4 +1,5 @@
 import fsSync from 'node:fs';
+import path from 'node:path';
 
 import Database from 'better-sqlite3';
 
@@ -9,10 +10,12 @@ import {
   createNormalizedMessage,
   generateMessageId,
   getOpenCodeDatabasePath,
+  normalizeProjectPath,
   normalizeProviderTimestamp,
   readObjectRecord,
   readJsonRecord,
   readOptionalString,
+  removePathIfExists,
   sliceTailPage,
   unwrapJsonStringLiteral,
 } from '@/shared/utils.js';
@@ -496,5 +499,59 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
     }
 
     return normalized;
+  }
+
+  /**
+   * Cleans up OpenCode native storage (SQLite session row and jsonl file if any).
+   */
+  async cleanupSession(nativeSessionId: string, jsonlPath?: string | null): Promise<boolean> {
+    let removed = false;
+    if (jsonlPath) {
+      if (await removePathIfExists(jsonlPath)) {
+        removed = true;
+      }
+    }
+    const openCodeDbPath = getOpenCodeDatabasePath();
+    if (fsSync.existsSync(openCodeDbPath)) {
+      let db: Database.Database | null = null;
+      try {
+        db = new Database(openCodeDbPath);
+        const res = db.prepare('DELETE FROM session WHERE id = ?').run(nativeSessionId);
+        if (res.changes > 0) {
+          removed = true;
+        }
+      } catch (err) {
+        console.warn('[OpenCodeSessions] Failed to delete OpenCode session row:', err);
+      } finally {
+        if (db) {
+          db.close();
+        }
+      }
+    }
+    return removed;
+  }
+
+  /**
+   * Cleans up OpenCode project storage from SQLite database.
+   */
+  async cleanupProjectStorage(projectPath: string): Promise<void> {
+    const normalizedPath = normalizeProjectPath(projectPath);
+    if (!normalizedPath || normalizedPath === path.parse(normalizedPath).root) {
+      return;
+    }
+    const openCodeDbPath = getOpenCodeDatabasePath();
+    if (fsSync.existsSync(openCodeDbPath)) {
+      let db: Database.Database | null = null;
+      try {
+        db = new Database(openCodeDbPath);
+        db.prepare('DELETE FROM session WHERE directory = ?').run(normalizedPath);
+      } catch (err) {
+        console.warn('[OpenCodeSessions] Failed to clean up OpenCode project sessions:', err);
+      } finally {
+        if (db) {
+          db.close();
+        }
+      }
+    }
   }
 }

@@ -8,7 +8,9 @@ import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMess
 import {
   createNormalizedMessage,
   generateMessageId,
+  normalizeProjectPath,
   readObjectRecord,
+  removePathIfExists,
   sanitizeLeafDirectoryName,
   sliceTailPage,
 } from '@/shared/utils.js';
@@ -650,5 +652,45 @@ export class CursorSessionsProvider implements IProviderSessions {
     });
 
     return messages;
+  }
+
+  /**
+   * Cleans up Cursor native storage (JSONL file and subagent directory).
+   */
+  async cleanupSession(nativeSessionId: string, jsonlPath?: string | null): Promise<boolean> {
+    let removed = false;
+    if (jsonlPath) {
+      if (await removePathIfExists(jsonlPath)) {
+        removed = true;
+      }
+      if (nativeSessionId) {
+        try {
+          const safeLeaf = sanitizeLeafDirectoryName(nativeSessionId, 'native session id');
+          const subagentsDir = path.join(path.dirname(jsonlPath), safeLeaf);
+          if (await removePathIfExists(subagentsDir)) {
+            removed = true;
+          }
+        } catch {
+          // Skip if safeLeaf is invalid
+        }
+      }
+    }
+    return removed;
+  }
+
+  /**
+   * Cleans up Cursor project storage (~/.cursor/projects/<encodedPath>).
+   */
+  async cleanupProjectStorage(projectPath: string): Promise<void> {
+    const normalizedPath = normalizeProjectPath(projectPath);
+    if (!normalizedPath || normalizedPath === path.parse(normalizedPath).root) {
+      return;
+    }
+    const cursorProjectsRoot = path.join(os.homedir(), '.cursor', 'projects');
+    const encodedCandidate = normalizedPath.replace(/[^a-zA-Z0-9_-]/g, '-');
+    if (encodedCandidate && encodedCandidate !== '-') {
+      const cursorProjectDir = path.join(cursorProjectsRoot, encodedCandidate);
+      await removePathIfExists(cursorProjectDir);
+    }
   }
 }

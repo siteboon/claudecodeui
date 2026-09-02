@@ -1,15 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import fsSync from 'node:fs';
-import fsp from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
-
-import Database from 'better-sqlite3';
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
-import { getAntigravityDataRoot, getAntigravitySummariesDbPath } from '@/modules/providers/list/antigravity/index.js';
 import type {
   FetchHistoryOptions,
   FetchHistoryResult,
@@ -18,11 +12,8 @@ import type {
 } from '@/shared/types.js';
 import {
   AppError,
-  getOpenCodeDatabasePath,
-  getZCodeDatabasePath,
   normalizeProjectPath,
-  parseAntigravityWorkspacePath,
-  sanitizeLeafDirectoryName,
+  removePathIfExists,
 } from '@/shared/utils.js';
 
 type CreateAppSessionResult = {
@@ -83,22 +74,6 @@ function buildCloudCliSessionName(initialMessage: string): string {
 }
 
 /**
- * Removes one file or directory recursively if it exists.
- */
-async function removePathIfExists(targetPath: string): Promise<boolean> {
-  try {
-    await fsp.rm(targetPath, { recursive: true, force: true });
-    return true;
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') {
-      return false;
-    }
-    return false;
-  }
-}
-
-/**
  * Removes provider-native files and storage records when a session is hard-deleted.
  */
 async function cleanupProviderNativeSession(session: {
@@ -109,108 +84,18 @@ async function cleanupProviderNativeSession(session: {
   project_path: string | null;
 }): Promise<boolean> {
   let removed = false;
-
-  // 1. JSONL file removal (Claude, Cursor, Codex, etc.)
-  if (session.jsonl_path) {
-    const fileRemoved = await removePathIfExists(session.jsonl_path);
-    if (fileRemoved) {
-      removed = true;
-    }
-
-    // Also check for subagent directory in same parent folder.
-    // Ensure nativeId is a safe single leaf directory to prevent deleting parent folders.
-    const nativeId = session.provider_session_id || session.session_id;
-    if (nativeId) {
-      try {
-        const safeLeaf = sanitizeLeafDirectoryName(nativeId, 'native session id');
-        const subagentsDir = path.join(path.dirname(session.jsonl_path), safeLeaf);
-        await removePathIfExists(subagentsDir);
-      } catch {
-        // Skip subagents folder deletion if nativeId is not a valid leaf directory name
-      }
-    }
-  }
-
   const nativeSessionId = session.provider_session_id || session.session_id;
 
-  // 2. Antigravity cleanup
-  if (session.provider === 'antigravity') {
-    const summariesDbPath = getAntigravitySummariesDbPath();
-    if (fsSync.existsSync(summariesDbPath)) {
-      let db: Database.Database | null = null;
-      try {
-        db = new Database(summariesDbPath);
-        const res = db.prepare('DELETE FROM conversation_summaries WHERE conversation_id = ?').run(nativeSessionId);
-        if (res.changes > 0) {
-          removed = true;
-        }
-      } catch (err) {
-        console.warn('[SessionsService] Failed to delete Antigravity summary row:', err);
-      } finally {
-        if (db) {
-          db.close();
-        }
-      }
+  try {
+    const provider = providerRegistry.resolveProvider(session.provider);
+    if (provider.sessions.cleanupSession) {
+      removed = await provider.sessions.cleanupSession(nativeSessionId, session.jsonl_path);
+    } else if (session.jsonl_path) {
+      removed = await removePathIfExists(session.jsonl_path);
     }
-
-    if (nativeSessionId) {
-      try {
-        const safeId = sanitizeLeafDirectoryName(nativeSessionId, 'antigravity session id');
-        const dataRoot = getAntigravityDataRoot();
-        const brainDir = path.join(dataRoot, 'brain', safeId);
-        if (await removePathIfExists(brainDir)) {
-          removed = true;
-        }
-
-        const conversationsDir = path.join(dataRoot, 'conversations', safeId);
-        if (await removePathIfExists(conversationsDir)) {
-          removed = true;
-        }
-      } catch {
-        // Skip if safeId is invalid
-      }
-    }
-  }
-
-  // 3. OpenCode cleanup
-  if (session.provider === 'opencode') {
-    const openCodeDbPath = getOpenCodeDatabasePath();
-    if (fsSync.existsSync(openCodeDbPath)) {
-      let db: Database.Database | null = null;
-      try {
-        db = new Database(openCodeDbPath);
-        const res = db.prepare('DELETE FROM session WHERE id = ?').run(nativeSessionId);
-        if (res.changes > 0) {
-          removed = true;
-        }
-      } catch (err) {
-        console.warn('[SessionsService] Failed to delete OpenCode session row:', err);
-      } finally {
-        if (db) {
-          db.close();
-        }
-      }
-    }
-  }
-
-  // 4. ZCode cleanup
-  if (session.provider === 'zcode') {
-    const zcodeDbPath = getZCodeDatabasePath();
-    if (fsSync.existsSync(zcodeDbPath)) {
-      let db: Database.Database | null = null;
-      try {
-        db = new Database(zcodeDbPath);
-        const res = db.prepare('DELETE FROM session WHERE id = ?').run(nativeSessionId);
-        if (res.changes > 0) {
-          removed = true;
-        }
-      } catch (err) {
-        console.warn('[SessionsService] Failed to delete ZCode session row:', err);
-      } finally {
-        if (db) {
-          db.close();
-        }
-      }
+  } catch {
+    if (session.jsonl_path) {
+      removed = await removePathIfExists(session.jsonl_path);
     }
   }
 
@@ -223,102 +108,18 @@ async function cleanupProviderNativeSession(session: {
  */
 async function cleanupProviderProjectStorage(projectPath: string): Promise<void> {
   const normalizedPath = normalizeProjectPath(projectPath);
-  // Defensive guard: never delete root, empty, or whitespace-only paths
   if (!normalizedPath || normalizedPath === path.parse(normalizedPath).root) {
     return;
   }
 
-  // 1. Antigravity workspace cleanup
-  const summariesDbPath = getAntigravitySummariesDbPath();
-  const matchingConversationIds: string[] = [];
-  if (fsSync.existsSync(summariesDbPath)) {
-    let db: Database.Database | null = null;
+  const providers = providerRegistry.listProviders();
+  for (const provider of providers) {
     try {
-      db = new Database(summariesDbPath);
-      const rows = db.prepare('SELECT conversation_id, workspace_uris FROM conversation_summaries').all() as Array<{
-        conversation_id: string;
-        workspace_uris: string | null;
-      }>;
-
-      for (const row of rows) {
-        if (!row.workspace_uris) {
-          continue;
-        }
-        const ws = parseAntigravityWorkspacePath(row.workspace_uris);
-        if (ws && normalizeProjectPath(ws) === normalizedPath) {
-          matchingConversationIds.push(row.conversation_id);
-          db.prepare('DELETE FROM conversation_summaries WHERE conversation_id = ?').run(row.conversation_id);
-        }
+      if (provider.sessions.cleanupProjectStorage) {
+        await provider.sessions.cleanupProjectStorage(normalizedPath);
       }
     } catch (err) {
-      console.warn('[SessionsService] Failed to clean up Antigravity workspace summaries:', err);
-    } finally {
-      if (db) {
-        db.close();
-      }
-    }
-  }
-
-  // Clean up Antigravity brain and conversation folders after closing the database
-  const dataRoot = getAntigravityDataRoot();
-  for (const convId of matchingConversationIds) {
-    try {
-      const safeId = sanitizeLeafDirectoryName(convId, 'conversation id');
-      await removePathIfExists(path.join(dataRoot, 'brain', safeId));
-      await removePathIfExists(path.join(dataRoot, 'conversations', safeId));
-    } catch {
-      // Ignore invalid leaf directory names
-    }
-  }
-
-  // 2. Claude projects folder cleanup
-  const claudeProjectsRoot = path.join(os.homedir(), '.claude', 'projects');
-  const encodedCandidate = normalizedPath.replace(/[^a-zA-Z0-9_-]/g, '-');
-  if (encodedCandidate && encodedCandidate !== '-') {
-    const claudeProjectDir = path.join(claudeProjectsRoot, encodedCandidate);
-    if (fsSync.existsSync(claudeProjectDir)) {
-      await removePathIfExists(claudeProjectDir);
-    }
-  }
-
-  // 3. Cursor projects folder cleanup
-  const cursorProjectsRoot = path.join(os.homedir(), '.cursor', 'projects');
-  if (encodedCandidate && encodedCandidate !== '-') {
-    const cursorProjectDir = path.join(cursorProjectsRoot, encodedCandidate);
-    if (fsSync.existsSync(cursorProjectDir)) {
-      await removePathIfExists(cursorProjectDir);
-    }
-  }
-
-  // 4. OpenCode database cleanup
-  const openCodeDbPath = getOpenCodeDatabasePath();
-  if (fsSync.existsSync(openCodeDbPath)) {
-    let db: Database.Database | null = null;
-    try {
-      db = new Database(openCodeDbPath);
-      db.prepare('DELETE FROM session WHERE directory = ?').run(normalizedPath);
-    } catch (err) {
-      console.warn('[SessionsService] Failed to clean up OpenCode project sessions:', err);
-    } finally {
-      if (db) {
-        db.close();
-      }
-    }
-  }
-
-  // 5. ZCode database cleanup
-  const zcodeDbPath = getZCodeDatabasePath();
-  if (fsSync.existsSync(zcodeDbPath)) {
-    let db: Database.Database | null = null;
-    try {
-      db = new Database(zcodeDbPath);
-      db.prepare('DELETE FROM session WHERE directory = ?').run(normalizedPath);
-    } catch (err) {
-      console.warn('[SessionsService] Failed to clean up ZCode project sessions:', err);
-    } finally {
-      if (db) {
-        db.close();
-      }
+      console.warn(`[SessionsService] Failed to clean up ${provider.id} project storage:`, err);
     }
   }
 }

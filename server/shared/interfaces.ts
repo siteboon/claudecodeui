@@ -154,6 +154,8 @@ export interface IProviderMcp {
 export interface IProviderSessions {
   normalizeMessage(raw: unknown, sessionId: string | null): NormalizedMessage[];
   fetchHistory(sessionId: string, options?: FetchHistoryOptions): Promise<FetchHistoryResult>;
+  cleanupSession?(nativeSessionId: string, jsonlPath?: string | null): Promise<boolean>;
+  cleanupProjectStorage?(projectPath: string): Promise<void>;
 }
 
 // ---------------------------

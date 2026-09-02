@@ -1,4 +1,5 @@
 import fsSync from 'node:fs';
+import path from 'node:path';
 
 import Database from 'better-sqlite3';
 
@@ -8,10 +9,12 @@ import {
   createNormalizedMessage,
   generateMessageId,
   getZCodeDatabasePath,
+  normalizeProjectPath,
   normalizeProviderTimestamp,
   readJsonRecord,
   readObjectRecord,
   readOptionalString,
+  removePathIfExists,
   sliceTailPage,
 } from '@/shared/utils.js';
 
@@ -605,5 +608,59 @@ export class ZCodeSessionsProvider implements IProviderSessions {
     }
 
     return normalized;
+  }
+
+  /**
+   * Cleans up ZCode native storage (SQLite session row and jsonl file if any).
+   */
+  async cleanupSession(nativeSessionId: string, jsonlPath?: string | null): Promise<boolean> {
+    let removed = false;
+    if (jsonlPath) {
+      if (await removePathIfExists(jsonlPath)) {
+        removed = true;
+      }
+    }
+    const zcodeDbPath = getZCodeDatabasePath();
+    if (fsSync.existsSync(zcodeDbPath)) {
+      let db: Database.Database | null = null;
+      try {
+        db = new Database(zcodeDbPath);
+        const res = db.prepare('DELETE FROM session WHERE id = ?').run(nativeSessionId);
+        if (res.changes > 0) {
+          removed = true;
+        }
+      } catch (err) {
+        console.warn('[ZCodeSessions] Failed to delete ZCode session row:', err);
+      } finally {
+        if (db) {
+          db.close();
+        }
+      }
+    }
+    return removed;
+  }
+
+  /**
+   * Cleans up ZCode project storage from SQLite database.
+   */
+  async cleanupProjectStorage(projectPath: string): Promise<void> {
+    const normalizedPath = normalizeProjectPath(projectPath);
+    if (!normalizedPath || normalizedPath === path.parse(normalizedPath).root) {
+      return;
+    }
+    const zcodeDbPath = getZCodeDatabasePath();
+    if (fsSync.existsSync(zcodeDbPath)) {
+      let db: Database.Database | null = null;
+      try {
+        db = new Database(zcodeDbPath);
+        db.prepare('DELETE FROM session WHERE directory = ?').run(normalizedPath);
+      } catch (err) {
+        console.warn('[ZCodeSessions] Failed to clean up ZCode project sessions:', err);
+      } finally {
+        if (db) {
+          db.close();
+        }
+      }
+    }
   }
 }

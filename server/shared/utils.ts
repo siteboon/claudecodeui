@@ -8,6 +8,7 @@ import {
   readdir,
   readlink,
   realpath,
+  rm,
   stat,
   writeFile,
 } from 'node:fs/promises';
@@ -921,6 +922,22 @@ export function sanitizeLeafDirectoryName(inputName: string, label = 'directory 
 
 // ---------------------------
 //----------------- SESSION SYNCHRONIZER FILESYSTEM HELPERS ------------
+/**
+ * Removes one file or directory recursively if it exists.
+ *
+ * Used by provider session implementations and session cleanup services to
+ * remove transcript files, subagents, and provider project folders safely.
+ * Returns true if deletion succeeded, false if path was missing or failed.
+ */
+export async function removePathIfExists(targetPath: string): Promise<boolean> {
+  try {
+    await rm(targetPath, { recursive: true, force: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Recursively discovers files that match one extension, with optional incremental filtering.
  *

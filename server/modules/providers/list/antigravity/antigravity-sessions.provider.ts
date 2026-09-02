@@ -10,6 +10,9 @@
 
 import { readFile } from 'node:fs/promises';
 import fs from 'node:fs';
+import path from 'node:path';
+
+import Database from 'better-sqlite3';
 
 import { parseFilesInputTag, parseImagesInputTag } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
@@ -22,13 +25,18 @@ import type {
 import {
   createNormalizedMessage,
   generateMessageId,
+  normalizeProjectPath,
+  parseAntigravityWorkspacePath,
   readObjectRecord,
   readOptionalString,
+  removePathIfExists,
   sanitizeLeafDirectoryName,
   sliceTailPage,
 } from '@/shared/utils.js';
 
 import {
+  getAntigravityDataRoot,
+  getAntigravitySummariesDbPath,
   getAntigravityTranscriptCandidates,
 } from './antigravity-data-root.js';
 
@@ -324,6 +332,108 @@ export class AntigravitySessionsProvider implements IProviderSessions {
     } catch (error) {
       console.warn(`[AntigravitySessions] Failed to load history for ${sessionId}:`, error);
       return { messages: [], total: 0, hasMore: false, offset: 0, limit: null };
+    }
+  }
+
+  /**
+   * Cleans up Antigravity native storage (summary DB row, brain directory, and conversations directory).
+   */
+  async cleanupSession(nativeSessionId: string, jsonlPath?: string | null): Promise<boolean> {
+    let removed = false;
+
+    if (jsonlPath) {
+      if (await removePathIfExists(jsonlPath)) {
+        removed = true;
+      }
+    }
+
+    const summariesDbPath = getAntigravitySummariesDbPath();
+    if (fs.existsSync(summariesDbPath)) {
+      let db: Database.Database | null = null;
+      try {
+        db = new Database(summariesDbPath);
+        const res = db.prepare('DELETE FROM conversation_summaries WHERE conversation_id = ?').run(nativeSessionId);
+        if (res.changes > 0) {
+          removed = true;
+        }
+      } catch (err) {
+        console.warn('[AntigravitySessions] Failed to delete Antigravity summary row:', err);
+      } finally {
+        if (db) {
+          db.close();
+        }
+      }
+    }
+
+    if (nativeSessionId) {
+      try {
+        const safeId = sanitizeLeafDirectoryName(nativeSessionId, 'antigravity session id');
+        const dataRoot = getAntigravityDataRoot();
+        const brainDir = path.join(dataRoot, 'brain', safeId);
+        if (await removePathIfExists(brainDir)) {
+          removed = true;
+        }
+
+        const conversationsDir = path.join(dataRoot, 'conversations', safeId);
+        if (await removePathIfExists(conversationsDir)) {
+          removed = true;
+        }
+      } catch {
+        // Skip if safeId is invalid
+      }
+    }
+
+    return removed;
+  }
+
+  /**
+   * Cleans up Antigravity native storage for an entire project path.
+   */
+  async cleanupProjectStorage(projectPath: string): Promise<void> {
+    const normalizedPath = normalizeProjectPath(projectPath);
+    if (!normalizedPath || normalizedPath === path.parse(normalizedPath).root) {
+      return;
+    }
+
+    const summariesDbPath = getAntigravitySummariesDbPath();
+    const matchingConversationIds: string[] = [];
+    if (fs.existsSync(summariesDbPath)) {
+      let db: Database.Database | null = null;
+      try {
+        db = new Database(summariesDbPath);
+        const rows = db.prepare('SELECT conversation_id, workspace_uris FROM conversation_summaries').all() as Array<{
+          conversation_id: string;
+          workspace_uris: string | null;
+        }>;
+
+        for (const row of rows) {
+          if (!row.workspace_uris) {
+            continue;
+          }
+          const ws = parseAntigravityWorkspacePath(row.workspace_uris);
+          if (ws && normalizeProjectPath(ws) === normalizedPath) {
+            matchingConversationIds.push(row.conversation_id);
+            db.prepare('DELETE FROM conversation_summaries WHERE conversation_id = ?').run(row.conversation_id);
+          }
+        }
+      } catch (err) {
+        console.warn('[AntigravitySessions] Failed to clean up Antigravity workspace summaries:', err);
+      } finally {
+        if (db) {
+          db.close();
+        }
+      }
+    }
+
+    const dataRoot = getAntigravityDataRoot();
+    for (const convId of matchingConversationIds) {
+      try {
+        const safeId = sanitizeLeafDirectoryName(convId, 'conversation id');
+        await removePathIfExists(path.join(dataRoot, 'brain', safeId));
+        await removePathIfExists(path.join(dataRoot, 'conversations', safeId));
+      } catch {
+        // Ignore invalid leaf directory names
+      }
     }
   }
 }

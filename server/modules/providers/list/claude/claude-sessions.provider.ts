@@ -1,12 +1,21 @@
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
 
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
 import { parseFilesInputTag } from '@/shared/image-attachments.js';
-import { createNormalizedMessage, generateMessageId, readObjectRecord, sliceTailPage } from '@/shared/utils.js';
+import {
+  createNormalizedMessage,
+  generateMessageId,
+  normalizeProjectPath,
+  readObjectRecord,
+  removePathIfExists,
+  sanitizeLeafDirectoryName,
+  sliceTailPage,
+} from '@/shared/utils.js';
 import { sessionsDb } from '@/modules/database/index.js';
 
 const PROVIDER = 'claude';
@@ -680,5 +689,45 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       offset: normalizedOffset,
       limit: normalizedLimit,
     };
+  }
+
+  /**
+   * Cleans up Claude native storage (JSONL file and subagent directory).
+   */
+  async cleanupSession(nativeSessionId: string, jsonlPath?: string | null): Promise<boolean> {
+    let removed = false;
+    if (jsonlPath) {
+      if (await removePathIfExists(jsonlPath)) {
+        removed = true;
+      }
+      if (nativeSessionId) {
+        try {
+          const safeLeaf = sanitizeLeafDirectoryName(nativeSessionId, 'native session id');
+          const subagentsDir = path.join(path.dirname(jsonlPath), safeLeaf);
+          if (await removePathIfExists(subagentsDir)) {
+            removed = true;
+          }
+        } catch {
+          // Skip if safeLeaf is invalid
+        }
+      }
+    }
+    return removed;
+  }
+
+  /**
+   * Cleans up Claude project storage (~/.claude/projects/<encodedPath>).
+   */
+  async cleanupProjectStorage(projectPath: string): Promise<void> {
+    const normalizedPath = normalizeProjectPath(projectPath);
+    if (!normalizedPath || normalizedPath === path.parse(normalizedPath).root) {
+      return;
+    }
+    const claudeProjectsRoot = path.join(os.homedir(), '.claude', 'projects');
+    const encodedCandidate = normalizedPath.replace(/[^a-zA-Z0-9_-]/g, '-');
+    if (encodedCandidate && encodedCandidate !== '-') {
+      const claudeProjectDir = path.join(claudeProjectsRoot, encodedCandidate);
+      await removePathIfExists(claudeProjectDir);
+    }
   }
 }

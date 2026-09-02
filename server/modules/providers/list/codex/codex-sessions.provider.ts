@@ -5,7 +5,7 @@ import { sessionsDb } from '@/modules/database/index.js';
 import { parseFilesInputTag, toImageAttachments } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
-import { createNormalizedMessage, generateMessageId, readObjectRecord, sliceTailPage } from '@/shared/utils.js';
+import { createNormalizedMessage, generateMessageId, readObjectRecord, removePathIfExists, sliceTailPage } from '@/shared/utils.js';
 
 const PROVIDER = 'codex';
 
@@ -934,5 +934,18 @@ export class CodexSessionsProvider implements IProviderSessions {
       limit: normalizedLimit,
       tokenUsage,
     };
+  }
+
+  /**
+   * Cleans up Codex native storage (JSONL file).
+   */
+  async cleanupSession(_nativeSessionId: string, jsonlPath?: string | null): Promise<boolean> {
+    let removed = false;
+    if (jsonlPath) {
+      if (await removePathIfExists(jsonlPath)) {
+        removed = true;
+      }
+    }
+    return removed;
   }
 }
