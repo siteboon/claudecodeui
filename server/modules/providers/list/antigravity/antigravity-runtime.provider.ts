@@ -8,6 +8,7 @@
  */
 
 import type { ChildProcess } from 'node:child_process';
+import path from 'node:path';
 
 import crossSpawn from 'cross-spawn';
 
@@ -83,9 +84,12 @@ export class AntigravityRuntimeProvider implements IProviderRuntime {
   ): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const sessionId = readOptionalString(options.sessionId);
-      const cwd = readOptionalString(options.cwd)
-        ?? readOptionalString(options.projectPath)
-        ?? process.cwd();
+      // An explicit workspace (chat gateway sends cwd + projectPath) is kept
+      // separate from the spawn fallback: only an explicitly requested
+      // directory may become a declared agy workspace via --add-dir.
+      const explicitWorkspace = readOptionalString(options.cwd)
+        ?? readOptionalString(options.projectPath);
+      const cwd = explicitWorkspace ? path.resolve(explicitWorkspace) : process.cwd();
       const model = readOptionalString(options.model);
       const effort = readOptionalString(options.effort);
       const permissionMode = readOptionalString(options.permissionMode);
@@ -168,6 +172,14 @@ export class AntigravityRuntimeProvider implements IProviderRuntime {
 
       // Build CLI arguments
       const args: string[] = [];
+
+      // agy (≤1.1.24) registers the spawn cwd as workspace metadata but still
+      // runs its shell tool in ~/.gemini/antigravity-cli/scratch; only an
+      // explicit --add-dir makes the agent actually operate in the project
+      // directory. Absolute path required (see path.resolve above).
+      if (explicitWorkspace) {
+        args.push('--add-dir', cwd);
+      }
 
       // Prompt with attachments
       const hasAttachments =

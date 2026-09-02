@@ -41,12 +41,14 @@ const repoRoot = path.resolve(thisDir, '..', '..', '..', '..');
 const stubDir = fsSync.mkdtempSync(path.join(os.tmpdir(), 'agy-e2e-stub-'));
 const stubPath = path.join(stubDir, 'agy');
 const argsFilePath = path.join(stubDir, 'args.txt');
+const cwdFilePath = path.join(stubDir, 'cwd.txt');
 const sleepModeMarkerPath = path.join(stubDir, 'sleep-mode');
 const failModeMarkerPath = path.join(stubDir, 'fail-mode');
 
 const stubScript = `#!/usr/bin/env node
 const fs = require('fs');
 fs.writeFileSync(process.env.AGY_ARGS_FILE, process.argv.slice(2).join('\\n') + '\\n');
+if (process.env.AGY_CWD_FILE) fs.writeFileSync(process.env.AGY_CWD_FILE, process.cwd() + '\\n');
 if (process.env.AGY_FAIL_FILE && fs.existsSync(process.env.AGY_FAIL_FILE)) {
   console.error('agy: quota exceeded for project');
   process.exit(1);
@@ -118,6 +120,7 @@ before(async () => {
       CLOUDCLI_ANTIGRAVITY_PATH: stubPath,
       CLOUDCLI_ANTIGRAVITY_DATA_DIR: agyDataDir,
       AGY_ARGS_FILE: argsFilePath,
+      AGY_CWD_FILE: cwdFilePath,
       AGY_MODE_FILE: sleepModeMarkerPath,
       AGY_FAIL_FILE: failModeMarkerPath,
     },
@@ -216,6 +219,11 @@ async function readRecordedArgs(): Promise<string[]> {
   return content.split('\n').filter((line) => line.length > 0);
 }
 
+async function readRecordedCwd(): Promise<string> {
+  const content = await fs.readFile(cwdFilePath, 'utf8');
+  return content.trim();
+}
+
 async function waitForArgsFile(): Promise<void> {
   for (let i = 0; i < 100; i += 1) {
     try {
@@ -263,6 +271,13 @@ test('chat.send drives the full WebUI path: REST session → WS stream → remap
     for (const expected of ['-p', 'hello from e2e', '--output-format', 'stream-json']) {
       assert.ok(args.includes(expected), `expected ${expected} in stub argv: ${JSON.stringify(args)}`);
     }
+    // The agy CLI (≤1.1.24) registers the spawn cwd as workspace metadata but
+    // still runs its shell tool in ~/.gemini/antigravity-cli/scratch; only an
+    // explicit --add-dir makes the agent actually operate in the project.
+    assert.equal(await readRecordedCwd(), repoRoot, 'agy must be spawned with the session project as its cwd');
+    const addDirIndex = args.indexOf('--add-dir');
+    assert.notEqual(addDirIndex, -1, `agy must receive an explicit workspace: ${JSON.stringify(args)}`);
+    assert.equal(args[addDirIndex + 1], repoRoot, '--add-dir must carry the session project path');
   } finally {
     ws.close();
   }

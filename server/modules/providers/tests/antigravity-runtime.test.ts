@@ -159,6 +159,37 @@ test('runtime forces skip-permissions from toolsSettings without duplicates', as
   assert.equal(args.filter((arg) => arg === '--dangerously-skip-permissions').length, 1);
 });
 
+test('runtime declares the project directory as an explicit agy workspace', async () => {
+  const runtime = new AntigravityRuntimeProvider();
+  const { writer } = createWriter();
+  // Real directories: spawn fails with ENOENT when cwd does not exist.
+  const workspaceA = fsSync.mkdtempSync(path.join(os.tmpdir(), 'agy-ws-a-'));
+  const workspaceB = fsSync.mkdtempSync(path.join(os.tmpdir(), 'agy-ws-b-'));
+
+  // agy's print mode ignores the spawn cwd for its shell tool (it lands in
+  // ~/.gemini/antigravity-cli/scratch), so the project must also arrive via
+  // --add-dir. The cwd option wins over projectPath, mirroring spawn cwd.
+  await fs.rm(argsFilePath, { force: true });
+  await runtime.run(
+    'hello',
+    { sessionId: 'sess-workspace', projectPath: workspaceB, cwd: workspaceA },
+    writer,
+    context,
+  );
+  let args = await readRecordedArgs();
+  const addDirIndex = args.indexOf('--add-dir');
+  assert.notEqual(addDirIndex, -1, `expected --add-dir in ${JSON.stringify(args)}`);
+  assert.equal(args[addDirIndex + 1], workspaceA, '--add-dir must carry the explicit cwd');
+
+  await fs.rm(argsFilePath, { force: true });
+  await runtime.run('hello', { sessionId: 'sess-workspace-2' }, writer, context);
+  args = await readRecordedArgs();
+  assert.ok(!args.includes('--add-dir'), 'no workspace flag without an explicit project directory');
+
+  await fs.rm(workspaceA, { recursive: true, force: true });
+  await fs.rm(workspaceB, { recursive: true, force: true });
+});
+
 test('runtime emits one session_created, stream deltas and a token-bearing complete', async () => {
   const runtime = new AntigravityRuntimeProvider();
   const { messages, writer } = createWriter();
