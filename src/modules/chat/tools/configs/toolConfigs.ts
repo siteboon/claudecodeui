@@ -729,6 +729,28 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     }
   },
 
+  // OMP eval records the language, intent, and source separately. Keep the
+  // source as code and the result as output instead of falling back to a JSON
+  // parameter dump headed by the field names.
+  eval: {
+    input: {
+      type: 'collapsible',
+      title: (input) => input?.title || input?.language || 'Run code',
+      defaultOpen: false,
+      contentType: 'text',
+      getContentProps: (input) => ({
+        content: String(input?.code || ''),
+        format: 'code'
+      })
+    },
+    result: {
+      type: 'collapsible',
+      title: 'Output',
+      contentType: 'text',
+      getContentProps: (result) => ({ content: String(result?.content || ''), format: 'plain' })
+    }
+  },
+
   // ============================================================================
   // DEFAULT FALLBACK
   // ============================================================================

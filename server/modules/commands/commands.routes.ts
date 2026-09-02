@@ -288,6 +288,10 @@ Custom commands can be created in:
   "/cost": async (args, context) => {
     const tokenUsage = context?.tokenUsage || {};
     const provider = readModelProvider(context?.provider);
+    const reportedProvider =
+      typeof tokenUsage.provider === "string" && tokenUsage.provider.trim()
+        ? tokenUsage.provider.trim()
+        : provider;
     const model = await resolveCostModel(providerModelsService, provider, context);
 
     const reportedUsed =
@@ -359,7 +363,7 @@ Custom commands can be created in:
               },
             }
           : {}),
-        provider,
+        provider: reportedProvider,
         model,
       },
     };

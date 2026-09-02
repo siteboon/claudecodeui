@@ -35,6 +35,20 @@ const TodoList = memo(
       [normalized],
     );
 
+    const groups = useMemo(() => {
+      const byPhase = new Map<string, typeof normalized>();
+      for (const todo of normalized) {
+        const phase = todo.phase ?? '';
+        const group = byPhase.get(phase);
+        if (group) {
+          group.push(todo);
+        } else {
+          byPhase.set(phase, [todo]);
+        }
+      }
+      return [...byPhase.entries()];
+    }, [normalized]);
+
     if (normalized.length === 0) return null;
 
     return (
@@ -53,14 +67,21 @@ const TodoList = memo(
             />
           </div>
         )}
-        <Queue>
-          {normalized.map((todo, index) => (
-            <QueueItem key={todo.id ?? `${todo.content}-${index}`} status={todo.queueStatus}>
-              <QueueItemIndicator />
-              <QueueItemContent>{todo.content}</QueueItemContent>
-            </QueueItem>
-          ))}
-        </Queue>
+        {groups.map(([phase, items], groupIndex) => (
+          <div key={phase || 'unphased'} className={groupIndex > 0 ? 'mt-2' : undefined}>
+            {phase && (
+              <div className="mb-0.5 text-xs font-semibold text-foreground/80">{phase}</div>
+            )}
+            <Queue>
+              {items.map((todo, index) => (
+                <QueueItem key={todo.id ?? `${todo.content}-${index}`} status={todo.queueStatus}>
+                  <QueueItemIndicator />
+                  <QueueItemContent>{todo.content}</QueueItemContent>
+                </QueueItem>
+              ))}
+            </Queue>
+          </div>
+        ))}
       </div>
     );
   },

@@ -374,7 +374,7 @@ test('Codex token usage falls back to the whole file when the tail has no token_
   }
 });
 
-test('OMP token usage reports the latest turn model and context fallback', async () => {
+test('OMP token usage reports the latest turn backend, model, and context fallback', async () => {
   const tempDirectory = await mkdtemp(path.join(tmpdir(), 'provider-token-usage-omp-'));
   const sessionFilePath = path.join(tempDirectory, 'provider-session.jsonl');
   try {
@@ -396,6 +396,7 @@ test('OMP token usage reports the latest turn model and context fallback', async
       used: 150,
       total: 200_000,
       model: 'no-such-model',
+      provider: 'acme',
       inputTokens: 120,
       outputTokens: 30,
       breakdown: { input: 120, output: 30 },

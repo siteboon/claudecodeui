@@ -317,6 +317,10 @@ export type NormalizedMessage = {
   newSessionId?: string;
   status?: string;
   summary?: string;
+  /** Advisor identity carried by an OMP task-notification status note. */
+  advisor?: string;
+  /** Raw advisor note used to deduplicate mirrored main/sidecar records. */
+  advisorNote?: string;
   tokenBudget?: unknown;
   /**
    * Timeline of everything a subagent did, attached to the `tool_use` that

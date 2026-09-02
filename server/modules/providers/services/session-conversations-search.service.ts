@@ -6,9 +6,11 @@ import { spawn } from 'cross-spawn';
 import { rgPath } from '@vscode/ripgrep';
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
+import { readNormalizedOmpHistory } from '@/modules/providers/list/omp/omp-sessions.provider.js';
+import type { NormalizedMessage } from '@/shared/types.js';
 
 type AnyRecord = Record<string, any>;
-type SearchableProvider = 'claude' | 'codex';
+type SearchableProvider = 'claude' | 'codex' | 'omp';
 
 type SearchSnippetHighlight = {
   start: number;
@@ -92,10 +94,15 @@ type ProjectBucket = {
   sessions: SearchableSessionRow[];
 };
 
-const SUPPORTED_PROVIDERS = new Set<SearchableProvider>(['claude', 'codex']);
+const SUPPORTED_PROVIDERS = new Set<SearchableProvider>(['claude', 'codex', 'omp']);
 const MAX_MATCHES_PER_SESSION = 2;
 const RIPGREP_FILE_CHUNK_SIZE = 40;
 const RIPGREP_CHUNK_CONCURRENCY = 6;
+const NORMALIZED_SEARCH_PREFILTER_ALIASES: Record<string, string> = {
+  askuserquestion: 'ask',
+  checklist: 'todo',
+  todowrite: 'todo',
+};
 const UNKNOWN_PROJECT_KEY = '__unknown_project__';
 
 const INTERNAL_CONTENT_PREFIXES = [
@@ -129,6 +136,18 @@ function normalizeComparablePath(inputPath: string): string {
 
   const resolved = path.resolve(normalized);
   return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
+function getOmpSearchPaths(mainFilePath: string): string[] {
+  const sidecarDirectory = mainFilePath.replace(/\.jsonl$/, '');
+  try {
+    const sidecars = fsSync.readdirSync(sidecarDirectory, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && /^__advisor(\..+)?\.jsonl$/.test(entry.name))
+      .map((entry) => path.join(sidecarDirectory, entry.name));
+    return [mainFilePath, ...sidecars];
+  } catch {
+    return [mainFilePath];
+  }
 }
 
 function chunkArray<TItem>(items: TItem[], size: number): TItem[][] {
@@ -643,7 +662,14 @@ async function runRipgrepFilesWithMatches(
   if (!pattern || filePaths.length === 0 || signal?.aborted) {
     return new Set();
   }
+  const normalizedPattern = pattern.toLowerCase();
+  const pathMatches = new Set(
+    filePaths
+      .filter((filePath) => normalizeComparablePath(filePath).toLowerCase().includes(normalizedPattern))
+      .map(normalizeComparablePath),
+  );
 
+  // Executor form: this file compiles against ES2022, which predates Promise.withResolvers.
   return new Promise((resolve, reject) => {
     const args = [
       '--files-with-matches',
@@ -710,7 +736,7 @@ async function runRipgrepFilesWithMatches(
       }
 
       const stdout = Buffer.concat(stdoutChunks).toString('utf8');
-      const matchedPaths = new Set<string>();
+      const matchedPaths = new Set(pathMatches);
 
       for (const line of stdout.split(/\r?\n/)) {
         const trimmed = line.trim();
@@ -1129,6 +1155,91 @@ async function parseCodexSessionMatches(
   };
 }
 
+function extractOmpSearchText(message: NormalizedMessage): string {
+  const values: unknown[] = [];
+  if (message.kind === 'task_notification') {
+    values.push(message.summary);
+  } else if (message.kind === 'text' || message.kind === 'thinking') {
+    values.push(message.content);
+  } else if (message.kind === 'tool_use') {
+    values.push(
+      message.displayText,
+      message.toolName,
+      message.toolInput,
+      message.toolResult?.content,
+      message.toolResult?.toolUseResult,
+      message.subagentTools,
+      message.memoryCitations,
+    );
+  }
+  values.push(message.commandName, message.commandArgs, message.commandMessage);
+
+  return values
+    .filter((value) => value !== undefined && value !== null)
+    .map((value) => {
+      if (typeof value === 'string') {
+        return value;
+      }
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return '';
+      }
+    })
+    .filter(Boolean)
+    .join('\n');
+}
+
+async function parseOmpSessionMatches(
+  session: SearchableSessionRow,
+  runtime: SearchRuntime,
+): Promise<SessionConversationResult | null> {
+  const matches: SessionConversationMatch[] = [];
+  let latestUserMessageText: string | null = null;
+  let messages: NormalizedMessage[];
+  try {
+    messages = await readNormalizedOmpHistory(session.jsonl_path, session.session_id);
+  } catch {
+    return null;
+  }
+
+  for (const message of messages) {
+    if (runtime.totalMatches >= runtime.limit || runtime.isAborted()) {
+      break;
+    }
+    const text = extractOmpSearchText(message);
+    if (!text) {
+      continue;
+    }
+    const role = message.role === 'user' ? 'user' : 'assistant';
+    if (role === 'user') {
+      latestUserMessageText = text;
+    }
+    if (!runtime.matchesQuery(text)) {
+      continue;
+    }
+
+    const { snippet, highlights } = runtime.buildSnippet(text);
+    addSessionMatch(runtime, matches, {
+      role,
+      snippet,
+      highlights,
+      timestamp: message.timestamp || null,
+      provider: 'omp',
+    });
+  }
+
+  if (matches.length === 0) {
+    return null;
+  }
+  return {
+    sessionId: session.session_id,
+    provider: 'omp',
+    sessionSummary: toSummaryText(session.custom_name, latestUserMessageText, 'OMP Session'),
+    matches,
+  };
+}
+
 async function parseSessionMatches(
   session: SearchableSessionRow,
   runtime: SearchRuntime,
@@ -1138,6 +1249,9 @@ async function parseSessionMatches(
   }
   if (session.provider === 'codex') {
     return parseCodexSessionMatches(session, runtime);
+  }
+  if (session.provider === 'omp') {
+    return parseOmpSessionMatches(session, runtime);
   }
   return null;
 }
@@ -1161,6 +1275,7 @@ export async function searchConversations(
   const safeQuery = typeof query === 'string' ? query.trim() : '';
   const safeLimit = Math.max(1, Math.min(Number.isFinite(limit) ? limit : 50, 200));
   const words = safeQuery.toLowerCase().split(/\s+/).filter((word) => word.length > 0);
+  const prefilterWords = words.map((word) => NORMALIZED_SEARCH_PREFILTER_ALIASES[word] ?? word);
 
   if (words.length === 0) {
     return { results: [], titleResults: [], totalMatches: 0, query: safeQuery };
@@ -1184,27 +1299,32 @@ export async function searchConversations(
   const searchablePathEntries: SearchablePathEntry[] = [];
 
   for (const session of searchableSessions) {
-    const normalizedPath = normalizeComparablePath(session.jsonl_path);
-    if (!normalizedPath) {
-      continue;
-    }
+    const candidatePaths = session.provider === 'omp'
+      ? getOmpSearchPaths(session.jsonl_path)
+      : [session.jsonl_path];
+    for (const candidatePath of candidatePaths) {
+      const normalizedPath = normalizeComparablePath(candidatePath);
+      if (!normalizedPath) {
+        continue;
+      }
 
-    if (!sessionsByPathKey.has(normalizedPath)) {
-      sessionsByPathKey.set(normalizedPath, []);
-      searchablePathEntries.push({
-        normalizedPath,
-        absolutePath: session.jsonl_path,
-      });
-    }
+      if (!sessionsByPathKey.has(normalizedPath)) {
+        sessionsByPathKey.set(normalizedPath, []);
+        searchablePathEntries.push({
+          normalizedPath,
+          absolutePath: candidatePath,
+        });
+      }
 
-    const pathSessions = sessionsByPathKey.get(normalizedPath) as SearchableSessionRow[];
-    pathSessions.push(session);
+      const pathSessions = sessionsByPathKey.get(normalizedPath) as SearchableSessionRow[];
+      pathSessions.push(session);
+    }
   }
 
   const matchedFileKeys = await findMatchedFileKeys(
     searchablePathEntries,
     safeQuery,
-    words,
+    prefilterWords,
     signal ?? undefined,
   );
   if (isAborted() || matchedFileKeys.size === 0) {

@@ -91,8 +91,8 @@ describe('omp synchronizer + fetchHistory', () => {
     const provider = new OmpSessionsProvider();
     const all = await provider.fetchHistory(SESSION_ID, {});
     const kinds = all.messages.map((m) => m.kind);
-    assert.deepEqual(kinds, ['text', 'thinking', 'text', 'tool_use', 'tool_result']);
-    assert.equal(all.total, 4, 'total excludes the standalone tool_result');
+    assert.deepEqual(kinds, ['text', 'thinking', 'text', 'tool_use']);
+    assert.equal(all.total, 4, 'the attached tool result does not add a transcript row');
 
     const toolUse = all.messages.find((m) => m.kind === 'tool_use')!;
     assert.equal(toolUse.toolName, 'Bash');
@@ -107,7 +107,8 @@ describe('omp synchronizer + fetchHistory', () => {
     const tail = await provider.fetchHistory(SESSION_ID, { limit: 2, offset: 0 });
     assert.equal(tail.messages.length, 2);
     assert.equal(tail.hasMore, true);
-    assert.equal(tail.messages.at(-1)!.kind, 'tool_result', 'newest entry is last');
+    assert.equal(tail.messages.at(-1)!.kind, 'tool_use', 'newest rendered entry is last');
+    assert.deepEqual(tail.messages.at(-1)!.toolResult, { content: 'file.txt', isError: false });
 
     closeConnection();
   });
@@ -514,10 +515,16 @@ describe('omp synchronizer + fetchHistory', () => {
       JSON.stringify({ type: 'session', version: 3, id: NATIVE, timestamp: '2026-07-21T03:00:00.000Z', cwd: cwd5 }),
       JSON.stringify({ type: 'title', v: 1, title: 'Dev', source: 'auto' }),
       JSON.stringify({ type: 'message', id: 't1', message: { role: 'assistant', content: [
-        { type: 'toolCall', id: 'td1', name: 'todo', arguments: { i: 'Plan', op: 'init' } },
+        { type: 'toolCall', id: 'td1', name: 'todo_write', arguments: {
+          agent__intent: 'Plan',
+          ops: [{ op: 'replace', phases: [
+            { name: 'Setup', tasks: [{ content: 'do the thing', status: 'pending' }] },
+          ] }],
+        } },
       ] } }),
-      JSON.stringify({ type: 'message', id: 't2', message: { role: 'toolResult', toolCallId: 'td1', toolName: 'todo',
-        content: [{ type: 'text', text: 'Overall: 0/1' }] } }),
+      JSON.stringify({ type: 'message', id: 't2', message: { role: 'toolResult', toolCallId: 'td1', toolName: 'todo_write',
+        content: [{ type: 'text', text: 'Overall: 0/1' }],
+        details: { phases: [{ name: 'Setup', tasks: [{ content: 'do the thing', status: 'in_progress' }] }] } } }),
       // omp's internal continuity nudge — must NOT appear in the transcript
       JSON.stringify({ type: 'message', id: 'd1', message: { role: 'developer', attribution: 'agent',
         content: [{ type: 'text', text: '<system-reminder>\nYou stopped with 1 incomplete todo item(s):\n- Setup\n</system-reminder>' }] } }),
@@ -531,8 +538,178 @@ describe('omp synchronizer + fetchHistory', () => {
       'developer-role <system-reminder> messages are hidden',
     );
 
-    const toolResult = all.messages.find((m) => m.kind === 'tool_result')!;
-    assert.equal(toolResult.content, 'Overall: 0/1', 'a tool result carries its text content');
+    const todo = all.messages.find((message) => message.kind === 'tool_use' && message.toolId === 'td1')!;
+    assert.equal(todo.toolName, 'TodoWrite');
+    assert.deepEqual(todo.toolInput, {
+      todos: [{ content: 'do the thing', status: 'in_progress', phase: 'Setup' }],
+    });
+    assert.equal(todo.toolResult?.content, 'Overall: 0/1');
+
+    closeConnection();
+  });
+
+  it('normalizes live OMP tools without cross-session todo correlation', async () => {
+    const { OmpSessionsProvider } = await import('@/modules/providers/list/omp/omp-sessions.provider.js');
+    const provider = new OmpSessionsProvider();
+
+    const todoCall = provider.normalizeMessage({ update: {
+      sessionUpdate: 'tool_call',
+      toolCallId: 'shared-id',
+      title: 'Updating plan',
+      rawInput: { op: 'init', list: [{ phase: 'Test', items: ['exercise path'] }] },
+    } }, 'session-a')[0];
+    assert.equal(todoCall.toolName, 'TodoWrite');
+
+    const unrelatedCall = provider.normalizeMessage({ update: {
+      sessionUpdate: 'tool_call',
+      toolCallId: 'shared-id',
+      title: 'Searching',
+      rawInput: { query: 'needle' },
+    } }, 'session-b')[0];
+    assert.equal(unrelatedCall.toolName, 'Searching');
+
+    const unrelatedResult = provider.normalizeMessage({ update: {
+      sessionUpdate: 'tool_call_update',
+      toolCallId: 'shared-id',
+      status: 'completed',
+      content: [{ type: 'text', text: 'plain output' }],
+      rawOutput: { details: { phases: [{ name: 'Wrong', tasks: [{ content: 'wrong', status: 'pending' }] }] } },
+    } }, 'session-b')[0];
+    assert.equal(unrelatedResult.content, 'plain output');
+    assert.deepEqual(unrelatedResult.toolUseResult, {
+      phases: [{ name: 'Wrong', tasks: [{ content: 'wrong', status: 'pending' }] }],
+    });
+
+    const todoResult = provider.normalizeMessage({ update: {
+      sessionUpdate: 'tool_call_update',
+      toolCallId: 'shared-id',
+      status: 'completed',
+      content: [{ type: 'text', text: 'done' }],
+      rawOutput: { details: { phases: [{ name: 'Test', tasks: [{ content: 'exercise path', status: 'completed' }] }] } },
+    } }, 'session-a')[0];
+    assert.deepEqual(todoResult.toolUseResult, {
+      todos: [{ content: 'exercise path', status: 'completed', phase: 'Test' }],
+    });
+
+    const bash = provider.normalizeMessage({ update: {
+      sessionUpdate: 'tool_call',
+      toolCallId: 'bash-live',
+      title: '$ printf ok',
+      rawInput: { command: 'printf ok' },
+    } }, 'session-a')[0];
+    assert.equal(bash.toolName, 'Bash');
+    assert.deepEqual(bash.toolInput, {
+      command: 'printf ok',
+      cwd: undefined,
+      timeout: undefined,
+    });
+
+    const evaluation = provider.normalizeMessage({ update: {
+      sessionUpdate: 'tool_call',
+      toolCallId: 'eval-live',
+      title: 'Run Python',
+      rawInput: { language: 'py', title: 'Count rows', code: 'print(3)' },
+    } }, 'session-a')[0];
+    assert.equal(evaluation.toolName, 'eval');
+  });
+
+  it('preserves rich OMP history through canonical tools and status notes', async () => {
+    const { closeConnection, initializeDatabase } = await import('@/modules/database/index.js');
+    const { OmpSessionSynchronizer } = await import('@/modules/providers/list/omp/omp-session-synchronizer.provider.js');
+    const { OmpSessionsProvider } = await import('@/modules/providers/list/omp/omp-sessions.provider.js');
+
+    closeConnection();
+    await initializeDatabase();
+
+    const nativeId = 'richhistorysess06';
+    const slugDirectory = path.join(tempHome, '.omp', 'agent', 'sessions', '-work-omp-rich');
+    await mkdir(slugDirectory, { recursive: true });
+    const historyPath = path.join(slugDirectory, `2026-07-21T04-00-00-000Z_${nativeId}.jsonl`);
+    const imageHash = '0123456789abcdef0123456789abcdef';
+    const blobDirectory = path.join(tempHome, '.omp', 'agent', 'blobs');
+    await mkdir(blobDirectory, { recursive: true });
+    await writeFile(path.join(blobDirectory, imageHash), Buffer.from('image bytes'));
+
+    await writeFile(historyPath, [
+      JSON.stringify({ type: 'session', version: 3, id: nativeId, timestamp: '2026-07-21T04:00:00.000Z', cwd: '/work/omp-rich' }),
+      JSON.stringify({ type: 'message', id: 'user', parentId: null, timestamp: '2026-07-21T04:00:01.000Z', message: { role: 'user', content: [
+        { type: 'text', text: 'inspect this' },
+        { type: 'image', data: `blob:sha256:${imageHash}`, mimeType: 'image/png' },
+      ] } }),
+      JSON.stringify({ type: 'message', id: 'tools', parentId: 'user', timestamp: '2026-07-21T04:00:02.000Z', message: { role: 'assistant', content: [
+        { type: 'toolCall', id: 'bash-1', name: 'bash', arguments: { i: 'List files', command: 'ls' } },
+        { type: 'toolCall', id: 'read-1', name: 'read', arguments: { path: '/tmp/file.txt' } },
+        { type: 'toolCall', id: 'virtual-1', name: 'read', arguments: { path: 'memory://note' } },
+        { type: 'toolCall', id: 'ask-1', name: 'ask', arguments: { questions: [
+          { id: 'choice', question: 'Pick one', options: [{ label: 'Pause, prune, restart' }] },
+        ] } },
+      ] } }),
+      JSON.stringify({ type: 'message', id: 'ask-result', parentId: 'tools', timestamp: '2026-07-21T04:00:03.000Z', message: {
+        role: 'toolResult',
+        toolCallId: 'ask-1',
+        toolName: 'ask',
+        content: [{ type: 'text', text: 'User selected: Pause, prune, restart' }],
+        details: { question: 'Pick one', selectedOptions: ['Pause, prune, restart'] },
+      } }),
+      JSON.stringify({ type: 'custom_message', customType: 'collab-prompt', id: 'collab', parentId: 'ask-result',
+        timestamp: '2026-07-21T04:00:04.000Z', content: 'continue', details: { from: 'guest' } }),
+      JSON.stringify({ type: 'custom_message', customType: 'advisor', id: 'advisor-main', parentId: 'collab',
+        timestamp: '2026-07-21T04:00:05.000Z',
+        details: { advisor: 'luna', severity: 'concern', note: 'mind the cleanup' } }),
+    ].join('\n') + '\n');
+
+    const sidecarDirectory = historyPath.replace(/\.jsonl$/, '');
+    await mkdir(sidecarDirectory, { recursive: true });
+    await writeFile(path.join(sidecarDirectory, '__advisor.luna.jsonl'), [
+      JSON.stringify({ type: 'message', id: 'sidecar-1', parentId: null, timestamp: '2026-07-21T04:00:05.000Z', message: {
+        role: 'assistant',
+        content: [{ type: 'toolCall', id: 'adv-1', name: 'advise', arguments: {
+          note: 'mind the cleanup',
+          severity: 'concern',
+        } }],
+      } }),
+      JSON.stringify({ type: 'message', id: 'sidecar-2', parentId: 'sidecar-1', timestamp: '2026-07-21T04:00:06.000Z', message: {
+        role: 'assistant',
+        content: [{ type: 'toolCall', id: 'adv-2', name: 'advise', arguments: {
+          note: 'verify the result',
+          severity: 'nit',
+        } }],
+      } }),
+    ].join('\n') + '\n');
+
+    await new OmpSessionSynchronizer().synchronizeFile(historyPath);
+    const history = await new OmpSessionsProvider().fetchHistory(nativeId, {});
+
+    const bash = history.messages.find((message) => message.toolId === 'bash-1')!;
+    assert.equal(bash.toolName, 'Bash');
+    assert.deepEqual(bash.toolInput, {
+      command: 'ls',
+      cwd: undefined,
+      timeout: undefined,
+      description: 'List files',
+    });
+    assert.equal(history.messages.find((message) => message.toolId === 'read-1')?.toolName, 'Read');
+    assert.equal(history.messages.find((message) => message.toolId === 'virtual-1')?.toolName, 'read');
+
+    const ask = history.messages.find((message) => message.toolId === 'ask-1')!;
+    assert.equal(ask.toolName, 'AskUserQuestion');
+    assert.ok(ask.toolInput && typeof ask.toolInput === 'object' && 'answers' in ask.toolInput);
+    assert.deepEqual(ask.toolInput.answers, {
+      'Pick one': 'Pause, prune, restart',
+    });
+
+    const user = history.messages.find((message) => message.id === 'user_t0')!;
+    assert.ok(Array.isArray(user.images));
+    const firstImage = user.images[0];
+    assert.ok(firstImage && typeof firstImage === 'object' && 'data' in firstImage);
+    assert.equal(typeof firstImage.data === 'string' && firstImage.data.startsWith('data:image/png;base64,'), true);
+    assert.equal(history.messages.find((message) => message.id === 'collab')?.content, 'guest: continue');
+
+    const advisors = history.messages.filter((message) => message.kind === 'task_notification');
+    assert.deepEqual(advisors.map((message) => [message.status, message.summary]), [
+      ['concern', 'Advisor luna (concern): mind the cleanup'],
+      ['nit', 'Advisor luna (nit): verify the result'],
+    ]);
 
     closeConnection();
   });

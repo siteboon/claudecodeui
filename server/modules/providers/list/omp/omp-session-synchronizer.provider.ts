@@ -103,11 +103,9 @@ export class OmpSessionSynchronizer implements IProviderSessionSynchronizer {
   }
 
   async synchronizeFile(filePath: string): Promise<string | null> {
-    // Skip omp sub-agent sidecar files (e.g. `__advisor.jsonl`). They live inside
-    // a session's dir and carry their OWN session header, so indexing them would
-    // surface confusing internal sub-sessions (the main agent's output appears as
-    // `user` messages, the sub-agent's as `assistant`). They are skipped here so a
-    // session's sidecars never appear as sessions of their own.
+    // Skip OMP sub-agent sidecars such as `__advisor.jsonl`. Indexing one
+    // would create a misleading standalone session. The parent history reader
+    // folds its substantive advisor notes into the owning transcript instead.
     if (!filePath.endsWith('.jsonl') || path.basename(filePath).startsWith('__')) {
       return null;
     }
