@@ -1035,6 +1035,13 @@ export type FileTreeServiceDependencies = {
   resolveMimeType(filePath: string): string;
   fileSystemConcurrency: number;
   logger: FileTreeLogger;
+  /**
+   * Absolute directory roots the service may read text files from outside any
+   * project. Populated by the composition root (currently the Antigravity
+   * brain directories, so chat-linked plan documents can be opened read-only);
+   * every path outside these roots is rejected with `PATH_NOT_ALLOWED`.
+   */
+  externalReadOnlyRoots: string[];
 };
 
 /**
@@ -1051,6 +1058,12 @@ export type FileTreeServices = {
   }>;
   createWorkspaceFolder(folderPath: string): Promise<{ success: true; path: string }>;
   readTextFile(projectId: string, filePath: string): Promise<{ content: string; path: string }>;
+  /**
+   * Reads a text file outside any project root. The path must resolve inside
+   * one of the injected `externalReadOnlyRoots`; there is deliberately no
+   * write counterpart, so external files can never be modified through the API.
+   */
+  readExternalTextFile(filePath: string): Promise<{ content: string; path: string }>;
   openFile(projectId: string, filePath: string): Promise<{ contentType: string; stream: Readable }>;
   saveTextFile(projectId: string, filePath: string, content: string): Promise<{
     success: true;

@@ -22,6 +22,7 @@ type CodeEditorHeaderProps = {
   onClose: () => void;
   labels: {
     showingChanges: string;
+    readOnly: string;
     copyPath: string;
     pathCopied: string;
     editMarkdown: string;
@@ -60,6 +61,9 @@ export default function CodeEditorHeader({
   const copyResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveTitle = saveSuccess ? labels.saved : saving ? labels.saving : labels.save;
   const pathCopied = copiedPath === file.path;
+  // Workspace-external documents (e.g. Antigravity plan files) load through the
+  // read-only endpoint; the save action is hidden so they cannot be written.
+  const isReadOnlyExternal = Boolean(file.isReadOnlyExternal);
 
   useEffect(() => () => {
     if (copyResetTimeoutRef.current) {
@@ -85,6 +89,11 @@ export default function CodeEditorHeader({
         <div className="min-w-0 shrink">
           <div className="flex min-w-0 items-center gap-2">
             <h3 className="truncate text-sm font-medium text-gray-900 dark:text-white">{file.name}</h3>
+            {isReadOnlyExternal && (
+              <span className="shrink-0 whitespace-nowrap rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                {labels.readOnly}
+              </span>
+            )}
             {file.diffInfo && (
               <span className="shrink-0 whitespace-nowrap rounded bg-blue-100 px-1.5 py-0.5 text-[10px] text-blue-600 dark:bg-blue-900 dark:text-blue-300">
                 {labels.showingChanges}
@@ -156,25 +165,27 @@ export default function CodeEditorHeader({
           <Download className="h-4 w-4" />
         </button>
 
-        <button
-          type="button"
-          onClick={onSave}
-          disabled={saving}
-          className={`flex items-center justify-center rounded-md p-1.5 transition-colors disabled:opacity-50 ${
-            saveSuccess
-              ? 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400'
-              : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'
-          }`}
-          title={saveTitle}
-        >
-          {saveSuccess ? (
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-          ) : (
-            <Save className="h-4 w-4" />
-          )}
-        </button>
+        {!isReadOnlyExternal && (
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={saving}
+            className={`flex items-center justify-center rounded-md p-1.5 transition-colors disabled:opacity-50 ${
+              saveSuccess
+                ? 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400'
+                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'
+            }`}
+            title={saveTitle}
+          >
+            {saveSuccess ? (
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+          </button>
+        )}
 
         {!isSidebar && (
           <button

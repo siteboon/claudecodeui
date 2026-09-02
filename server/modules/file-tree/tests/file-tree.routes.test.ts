@@ -17,6 +17,7 @@ function createFakeServices(overrides: Partial<FileTreeServices> = {}): FileTree
     browseWorkspace: unexpectedOperation,
     createWorkspaceFolder: unexpectedOperation,
     readTextFile: unexpectedOperation,
+    readExternalTextFile: unexpectedOperation,
     openFile: unexpectedOperation,
     saveTextFile: unexpectedOperation,
     listProjectFiles: unexpectedOperation,
@@ -154,4 +155,48 @@ test('create route rejects invalid entry types without calling the service', asy
   });
 
   assert.equal(createCalled, false);
+});
+
+test('external-file route forwards the requested path to the read-only service', async () => {
+  const inputs: string[] = [];
+  const services = createFakeServices({
+    readExternalTextFile: async (filePath) => {
+      inputs.push(filePath);
+      return { content: '# Plan', path: filePath };
+    },
+  });
+
+  await withFileTreeServer(services, async (baseUrl) => {
+    const response = await fetch(
+      `${baseUrl}/api/file-tree/external-file?path=${encodeURIComponent('/home/user/.gemini/antigravity-cli/brain/session/plan.md')}`,
+    );
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      content: '# Plan',
+      path: '/home/user/.gemini/antigravity-cli/brain/session/plan.md',
+    });
+  });
+
+  assert.deepEqual(inputs, ['/home/user/.gemini/antigravity-cli/brain/session/plan.md']);
+});
+
+test('external-file route rejects requests without a path before calling the service', async () => {
+  let readCalled = false;
+  const services = createFakeServices({
+    readExternalTextFile: async () => {
+      readCalled = true;
+      throw new Error('readExternalTextFile should not run without a path');
+    },
+  });
+
+  await withFileTreeServer(services, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/file-tree/external-file`);
+    const payload = await response.json() as { error: string };
+
+    assert.equal(response.status, 400);
+    assert.equal(payload.error, 'Invalid file path');
+  });
+
+  assert.equal(readCalled, false);
 });

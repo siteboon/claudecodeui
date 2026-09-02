@@ -39,5 +39,8 @@
     "loading": "Loading preview...",
     "error": "Unable to display this file.",
     "openInNewTab": "Open in new tab"
+  },
+  "readOnly": {
+    "badge": "Read-only"
   }
 }

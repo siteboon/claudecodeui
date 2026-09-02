@@ -52,6 +52,21 @@ export function getAntigravityOauthTokenPath(): string {
 }
 
 /**
+ * Returns the brain directory roots whose contents the File Tree module may
+ * read on the user's behalf: the current data root's `brain` directory plus
+ * the pre-1.1 legacy `~/.gemini/antigravity/brain` tree kept for old
+ * installations. Consumed by the File Tree composition root, which injects
+ * them as the read-only allowlist for external plan documents that Antigravity
+ * links to from chat messages.
+ */
+export function getAntigravityBrainRoots(): string[] {
+  return [
+    path.join(getAntigravityDataRoot(), 'brain'),
+    path.join(os.homedir(), '.gemini', 'antigravity', 'brain'),
+  ];
+}
+
+/**
  * Returns transcript.jsonl candidates for one session, newest layout first:
  * the current data root's brain directory, then the pre-1.1 legacy
  * `~/.gemini/antigravity` tree kept for old installations. Consumed by the

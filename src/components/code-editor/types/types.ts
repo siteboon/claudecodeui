@@ -10,6 +10,10 @@ export type CodeEditorFile = {
   // DB projectId; used by the editor to build `/api/file-tree/projects/:projectId/file`
   // URLs for reading and saving content.
   projectId?: string;
+  // Marks a workspace-external document (e.g. an Antigravity plan file linked
+  // from chat via `file://`). It is loaded through the read-only external
+  // endpoint and saving is disabled.
+  isReadOnlyExternal?: boolean;
   diffInfo?: CodeEditorDiffInfo | null;
   [key: string]: unknown;
 };

@@ -4,6 +4,7 @@
 
 export { AntigravityProvider } from './antigravity.provider.js';
 export {
+  getAntigravityBrainRoots,
   getAntigravityDataRoot,
   getAntigravityOauthTokenPath,
   getAntigravitySettingsPath,

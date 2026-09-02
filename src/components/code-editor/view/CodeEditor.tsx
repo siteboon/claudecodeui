@@ -63,6 +63,7 @@ export default function CodeEditor({
     saving,
     saveSuccess,
     saveError,
+    loadError,
     isBinary,
     previewKind,
     fileProjectId,
@@ -265,6 +266,7 @@ export default function CodeEditor({
             onClose={onClose}
             labels={{
               showingChanges: t('header.showingChanges'),
+              readOnly: t('readOnly.badge', 'Read-only'),
               copyPath: t('actions.copyPath', 'Copy file path'),
               pathCopied: t('actions.pathCopied', 'File path copied'),
               editMarkdown: t('actions.editMarkdown'),
@@ -281,9 +283,9 @@ export default function CodeEditor({
             }}
           />
 
-          {saveError && (
+          {(loadError || saveError) && (
             <div className="border-b border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">
-              {saveError}
+              {loadError ?? saveError}
             </div>
           )}
 

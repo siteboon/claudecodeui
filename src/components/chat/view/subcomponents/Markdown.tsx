@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 
 import MermaidDiagram from '../../../code-editor/view/subcomponents/markdown/MermaidDiagram';
 import { normalizeInlineCodeFences } from '../../utils/chatFormatting';
+import { filePathFromFileUrl, markdownUrlTransform } from '../../utils/fileLink';
 import { copyTextToClipboard } from '../../../../utils/clipboard';
 import { usePaletteOps } from '../../../../contexts/PaletteOpsContext';
 import { useTheme } from '../../../../contexts/ThemeContext';
@@ -231,13 +232,16 @@ export function Markdown({ children, className, breaks = false }: MarkdownProps)
       a: ({ href, children: linkChildren }: { href?: string; children?: React.ReactNode }) => {
         // Prefer the href when it is a real path; otherwise fall back to the
         // link text, since models often emit `[src/foo.ts]()` with an empty href.
+        // `file://` URLs are decoded to their absolute path first so external
+        // documents (e.g. Antigravity plan files) open read-only in the editor.
         const linkText = childrenToText(linkChildren);
-        const fileRef = looksLikeFilePath(href) ? href : looksLikeFilePath(linkText) ? linkText : undefined;
+        const pathHref = filePathFromFileUrl(href) ?? href;
+        const fileRef = looksLikeFilePath(pathHref) ? pathHref : looksLikeFilePath(linkText) ? linkText : undefined;
 
-        if (fileRef && !isExternalHref(href)) {
+        if (fileRef && !isExternalHref(pathHref)) {
           return (
             <a
-              href={href || fileRef}
+              href={pathHref || fileRef}
               className="cursor-pointer text-blue-600 hover:underline dark:text-blue-400"
               onClick={(event) => {
                 event.preventDefault();
@@ -266,7 +270,12 @@ export function Markdown({ children, className, breaks = false }: MarkdownProps)
 
   return (
     <div className={className}>
-      <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components as any}>
+      <ReactMarkdown
+        remarkPlugins={remarkPlugins}
+        rehypePlugins={rehypePlugins}
+        urlTransform={markdownUrlTransform}
+        components={components as any}
+      >
         {content}
       </ReactMarkdown>
     </div>

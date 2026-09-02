@@ -248,6 +248,10 @@ export const api = {
     }),
   readFile: (projectId, filePath) =>
     authenticatedFetch(`/api/file-tree/projects/${projectId}/file?filePath=${encodeURIComponent(filePath)}`),
+  // Read-only access to allowlisted workspace-external files (e.g. Antigravity
+  // plan documents); the server enforces the allowlist.
+  readExternalFile: (filePath) =>
+    authenticatedFetch(`/api/file-tree/external-file?path=${encodeURIComponent(filePath)}`),
   readFileBlob: (projectId, filePath) =>
     authenticatedFetch(`/api/file-tree/projects/${projectId}/files/content?path=${encodeURIComponent(filePath)}`),
   saveFile: (projectId, filePath, content) =>

@@ -25,6 +25,11 @@ export const useEditorSidebar = ({
     (filePath: string, diffInfo: CodeEditorDiffInfo | null = null) => {
       const normalizedPath = filePath.replace(/\\/g, '/');
       const fileName = normalizedPath.split('/').pop() || filePath;
+      // Absolute paths outside the project root are workspace-external
+      // documents (e.g. Antigravity plan files); they load read-only.
+      const projectPath = selectedProject?.path || selectedProject?.fullPath;
+      const isReadOnlyExternal = normalizedPath.startsWith('/')
+        && (!projectPath || !normalizedPath.startsWith(projectPath.replace(/\\/g, '/') + '/'));
 
       setEditingFile({
         name: fileName,
@@ -32,10 +37,11 @@ export const useEditorSidebar = ({
         // DB projectId is forwarded to the editor so it can read/save files
         // via `/api/file-tree/projects/:projectId/file` endpoints.
         projectId: selectedProject?.projectId,
+        isReadOnlyExternal,
         diffInfo,
       });
     },
-    [selectedProject?.projectId],
+    [selectedProject?.projectId, selectedProject?.path],
   );
 
   const handleCloseEditor = useCallback(() => {

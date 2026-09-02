@@ -21,6 +21,11 @@ type OnFileOpen = (filePath: string, diffInfo?: any) => void;
 
 const normalize = (value: string): string => value.replace(/\\/g, '/');
 
+// True for POSIX absolute paths and Windows drive-letter paths. Avoids Node's
+// `path` module, which the browser bundle does not provide.
+const isAbsolutePath = (value: string): boolean =>
+  value.startsWith('/') || /^[a-z]:\//i.test(value);
+
 const flatten = (nodes: FileNode[], out: FlatFile[]): void => {
   for (const node of nodes) {
     if (node.type === 'file') {
@@ -98,6 +103,13 @@ export function useFileOpenResolver(
   return useCallback(
     (filePath: string, diffInfo?: any) => {
       const ref = normalize(filePath).trim();
+      // Absolute paths (e.g. file:// links to workspace-external documents)
+      // name a concrete file the project tree cannot match; pass them through
+      // untouched so the editor can open them via the external read path.
+      if (isAbsolutePath(ref)) {
+        onFileOpen(filePath, diffInfo);
+        return;
+      }
       void loadFiles().then((files) => {
         const match = findBestMatch(files, ref);
         onFileOpen(match ?? filePath, diffInfo);
