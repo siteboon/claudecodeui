@@ -50,8 +50,32 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     input: {
       type: 'one-line',
       icon: 'terminal',
-      getValue: (input) => input.command,
-      getSecondary: (input) => input.description,
+      getValue: (input) => input.command || input.CommandLine,
+      getSecondary: (input) => input.description || input.toolAction || input.toolSummary,
+      action: 'copy',
+      style: 'terminal',
+      wrapText: true,
+      colorScheme: {
+        primary: 'text-green-400 font-mono',
+        secondary: 'text-gray-400',
+        background: '',
+        border: 'border-green-500 dark:border-green-400',
+        icon: 'text-green-500 dark:text-green-400'
+      }
+    },
+    result: {
+      hideOnSuccess: true,
+      type: 'special'
+    }
+  },
+
+  run_command: {
+    input: {
+      type: 'one-line',
+      icon: 'terminal',
+      label: 'Bash',
+      getValue: (input) => input.CommandLine || input.command,
+      getSecondary: (input) => input.toolAction || input.toolSummary || input.description,
       action: 'copy',
       style: 'terminal',
       wrapText: true,
@@ -77,7 +101,25 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     input: {
       type: 'one-line',
       label: 'Read',
-      getValue: (input) => input.file_path || '',
+      getValue: (input) => input.file_path || input.AbsolutePath || '',
+      action: 'open-file',
+      colorScheme: {
+        primary: 'text-gray-700 dark:text-gray-300',
+        background: '',
+        border: 'border-gray-300 dark:border-gray-600',
+        icon: 'text-gray-500 dark:text-gray-400'
+      }
+    },
+    result: {
+      hidden: true
+    }
+  },
+
+  view_file: {
+    input: {
+      type: 'one-line',
+      label: 'Read',
+      getValue: (input) => input.AbsolutePath || input.file_path || '',
       action: 'open-file',
       colorScheme: {
         primary: 'text-gray-700 dark:text-gray-300',
@@ -95,16 +137,41 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     input: {
       type: 'collapsible',
       title: (input) => {
-        const filename = input.file_path?.split('/').pop() || input.file_path || 'file';
+        const rawPath = input.file_path || input.TargetFile || 'file';
+        const filename = rawPath.split('/').pop() || rawPath;
         return `${filename}`;
       },
       defaultOpen: false,
       contentType: 'diff',
       actionButton: 'none',
       getContentProps: (input) => ({
-        oldContent: input.old_string,
-        newContent: input.new_string,
-        filePath: input.file_path,
+        oldContent: input.old_string ?? input.TargetContent ?? '',
+        newContent: input.new_string ?? input.ReplacementContent ?? '',
+        filePath: input.file_path || input.TargetFile,
+        badge: 'Edit',
+        badgeColor: 'gray'
+      })
+    },
+    result: {
+      hideOnSuccess: true
+    }
+  },
+
+  replace_file_content: {
+    input: {
+      type: 'collapsible',
+      title: (input) => {
+        const rawPath = input.TargetFile || input.file_path || 'file';
+        const filename = rawPath.split('/').pop() || rawPath;
+        return `${filename}`;
+      },
+      defaultOpen: false,
+      contentType: 'diff',
+      actionButton: 'none',
+      getContentProps: (input) => ({
+        oldContent: input.TargetContent ?? input.old_string ?? '',
+        newContent: input.ReplacementContent ?? input.new_string ?? '',
+        filePath: input.TargetFile || input.file_path,
         badge: 'Edit',
         badgeColor: 'gray'
       })
@@ -118,7 +185,8 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     input: {
       type: 'collapsible',
       title: (input) => {
-        const filename = input.file_path?.split('/').pop() || input.file_path || 'file';
+        const rawPath = input.file_path || input.TargetFile || 'file';
+        const filename = rawPath.split('/').pop() || rawPath;
         return `${filename}`;
       },
       defaultOpen: false,
@@ -126,8 +194,32 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       actionButton: 'none',
       getContentProps: (input) => ({
         oldContent: '',
-        newContent: input.content,
-        filePath: input.file_path,
+        newContent: input.content ?? input.CodeContent ?? '',
+        filePath: input.file_path || input.TargetFile,
+        badge: 'New',
+        badgeColor: 'green'
+      })
+    },
+    result: {
+      hideOnSuccess: true
+    }
+  },
+
+  write_to_file: {
+    input: {
+      type: 'collapsible',
+      title: (input) => {
+        const rawPath = input.TargetFile || input.file_path || 'file';
+        const filename = rawPath.split('/').pop() || rawPath;
+        return `${filename}`;
+      },
+      defaultOpen: false,
+      contentType: 'diff',
+      actionButton: 'none',
+      getContentProps: (input) => ({
+        oldContent: '',
+        newContent: input.CodeContent ?? input.content ?? '',
+        filePath: input.TargetFile || input.file_path,
         badge: 'New',
         badgeColor: 'green'
       })
@@ -201,8 +293,74 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     input: {
       type: 'one-line',
       label: 'Glob',
-      getValue: (input) => input.pattern,
-      getSecondary: (input) => input.path ? `in ${input.path}` : undefined,
+      getValue: (input) => input.pattern || input.Pattern || '',
+      getSecondary: (input) => input.path ? `in ${input.path}` : input.SearchDirectory ? `in ${input.SearchDirectory}` : undefined,
+      action: 'jump-to-results',
+      colorScheme: {
+        primary: 'text-gray-700 dark:text-gray-300',
+        secondary: 'text-gray-500 dark:text-gray-400',
+        background: '',
+        border: 'border-gray-400 dark:border-gray-500',
+        icon: 'text-gray-500 dark:text-gray-400'
+      }
+    },
+    result: {
+      type: 'collapsible',
+      defaultOpen: false,
+      title: (result) => {
+        const toolData = result.toolUseResult || {};
+        const count = toolData.numFiles || toolData.filenames?.length || 0;
+        return `Found ${count} ${count === 1 ? 'file' : 'files'}`;
+      },
+      contentType: 'file-list',
+      getContentProps: (result) => {
+        const toolData = result.toolUseResult || {};
+        return {
+          files: toolData.filenames || []
+        };
+      }
+    }
+  },
+
+  find_by_name: {
+    input: {
+      type: 'one-line',
+      label: 'Glob',
+      getValue: (input) => input.Pattern || input.pattern || '',
+      getSecondary: (input) => input.SearchDirectory ? `in ${input.SearchDirectory}` : input.path ? `in ${input.path}` : undefined,
+      action: 'jump-to-results',
+      colorScheme: {
+        primary: 'text-gray-700 dark:text-gray-300',
+        secondary: 'text-gray-500 dark:text-gray-400',
+        background: '',
+        border: 'border-gray-400 dark:border-gray-500',
+        icon: 'text-gray-500 dark:text-gray-400'
+      }
+    },
+    result: {
+      type: 'collapsible',
+      defaultOpen: false,
+      title: (result) => {
+        const toolData = result.toolUseResult || {};
+        const count = toolData.numFiles || toolData.filenames?.length || 0;
+        return `Found ${count} ${count === 1 ? 'file' : 'files'}`;
+      },
+      contentType: 'file-list',
+      getContentProps: (result) => {
+        const toolData = result.toolUseResult || {};
+        return {
+          files: toolData.filenames || []
+        };
+      }
+    }
+  },
+
+  grep_search: {
+    input: {
+      type: 'one-line',
+      label: 'Grep',
+      getValue: (input) => input.Query || input.pattern || '',
+      getSecondary: (input) => input.SearchPath ? `in ${input.SearchPath}` : input.path ? `in ${input.path}` : undefined,
       action: 'jump-to-results',
       colorScheme: {
         primary: 'text-gray-700 dark:text-gray-300',

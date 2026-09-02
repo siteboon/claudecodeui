@@ -26,6 +26,16 @@ function rendersNothing(message: ChatMessage, showThinking: boolean): boolean {
   return Boolean(message.isThinking && !showThinking);
 }
 
+export function getNormalizedToolGroupKey(toolName: string): string {
+  if (toolName === 'run_command' || toolName === 'Bash') return 'Bash';
+  if (toolName === 'view_file' || toolName === 'Read') return 'Read';
+  if (toolName === 'replace_file_content' || toolName === 'Edit') return 'Edit';
+  if (toolName === 'write_to_file' || toolName === 'Write') return 'Write';
+  if (toolName === 'find_by_name' || toolName === 'Glob') return 'Glob';
+  if (toolName === 'grep_search' || toolName === 'Grep') return 'Grep';
+  return toolName;
+}
+
 export function groupConsecutiveTools(
   messages: ChatMessage[],
   showThinking: boolean = true,
@@ -44,6 +54,7 @@ export function groupConsecutiveTools(
 
     const run: ChatMessage[] = [message];
     let nextIndex = index + 1;
+    const baseGroupKey = getNormalizedToolGroupKey(message.toolName);
 
     while (nextIndex < messages.length) {
       const candidate = messages[nextIndex];
@@ -54,7 +65,10 @@ export function groupConsecutiveTools(
         continue;
       }
 
-      if (isGroupableToolMessage(candidate) && candidate.toolName === message.toolName) {
+      if (
+        isGroupableToolMessage(candidate) &&
+        getNormalizedToolGroupKey(candidate.toolName) === baseGroupKey
+      ) {
         run.push(candidate);
         nextIndex += 1;
         continue;
@@ -66,7 +80,7 @@ export function groupConsecutiveTools(
     if (run.length >= TOOL_GROUP_THRESHOLD) {
       items.push({
         _isGroup: true,
-        toolName: message.toolName,
+        toolName: baseGroupKey,
         messages: run,
         timestamp: message.timestamp,
       });

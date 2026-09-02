@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 
-import { parseFrontMatter } from '@/shared/frontmatter.js';
+import { parseFrontMatter } from './frontmatter.js';
 import type {
   AnyRecord,
   ApiSuccessShape,
@@ -29,7 +29,7 @@ import type {
   ProviderModelsDefinition,
   ProviderSkillSource,
   WorkspacePathValidationResult,
-} from '@/shared/types.js';
+} from './types.js';
 
 //----------------- ENVIRONMENT UTILITIES ------------
 /**

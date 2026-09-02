@@ -70,11 +70,19 @@ export default function ToolGroupContainer({
   selectedProject,
   provider,
 }: ToolGroupContainerProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const hasError = useMemo(() => {
+    return group.messages.some((m) => Boolean(m.isError || m.toolResult?.isError));
+  }, [group.messages]);
+
+  const [isExpanded, setIsExpanded] = useState(hasError);
   const config = getToolConfig(group.toolName).input;
   const label = config.label || group.toolName;
-  const borderClass = config.colorScheme?.border || 'border-border';
-  const iconClass = config.colorScheme?.icon || 'text-muted-foreground';
+  const borderClass = hasError
+    ? 'border-destructive'
+    : config.colorScheme?.border || 'border-border';
+  const iconClass = hasError
+    ? 'text-destructive'
+    : config.colorScheme?.icon || 'text-muted-foreground';
   const icon = getToolGroupIcon(config.icon, group.toolName);
 
   const preview = useMemo(() => {
@@ -112,6 +120,11 @@ export default function ToolGroupContainer({
         <span className="flex-shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
           x{group.messages.length}
         </span>
+        {hasError && (
+          <span className="flex-shrink-0 rounded-full bg-destructive/15 px-1.5 py-0.5 text-[10px] font-medium text-destructive">
+            Failed
+          </span>
+        )}
         {preview && (
           <>
             <span className="text-[10px] text-muted-foreground/40">/</span>

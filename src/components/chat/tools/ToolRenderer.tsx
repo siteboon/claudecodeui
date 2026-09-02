@@ -35,9 +35,9 @@ interface ToolRendererProps {
 }
 
 function getToolCategory(toolName: string): string {
-  if (['Edit', 'Write', 'ApplyPatch'].includes(toolName)) return 'edit';
-  if (['Grep', 'Glob'].includes(toolName)) return 'search';
-  if (toolName === 'Bash') return 'bash';
+  if (['Edit', 'Write', 'ApplyPatch', 'replace_file_content', 'write_to_file'].includes(toolName)) return 'edit';
+  if (['Grep', 'Glob', 'grep_search', 'find_by_name'].includes(toolName)) return 'search';
+  if (toolName === 'Bash' || toolName === 'run_command') return 'bash';
   if (['TodoWrite', 'TodoRead'].includes(toolName)) return 'todo';
   if (['TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet'].includes(toolName)) return 'task';
   if (toolName === 'Task') return 'agent';
@@ -123,19 +123,19 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
 
   if (!displayConfig) return null;
 
-  // Bash renders as a Codex-style command row: the command on a single line with
+  // Bash / run_command renders as a Codex-style command row: the command on a single line with
   // a chevron that expands to show the output inline. The combined view lives on
   // the input render; the separate result section is suppressed in MessageComponent.
-  if (toolName === 'Bash' && mode === 'input') {
-    const command = typeof parsedData === 'object' && parsedData !== null && 'command' in parsedData
-      ? String(parsedData.command || '')
+  if ((toolName === 'Bash' || toolName === 'run_command') && mode === 'input') {
+    const command = typeof parsedData === 'object' && parsedData !== null
+      ? String(parsedData.command || parsedData.CommandLine || '')
       : typeof toolInput === 'string'
         ? toolInput
         : typeof rawToolInput === 'string'
           ? rawToolInput
           : '';
-    const description = typeof parsedData === 'object' && parsedData !== null && 'description' in parsedData
-      ? String(parsedData.description || '')
+    const description = typeof parsedData === 'object' && parsedData !== null
+      ? String(parsedData.description || parsedData.toolAction || parsedData.toolSummary || '')
       : undefined;
     const output = typeof toolResult?.content === 'string'
       ? toolResult.content
@@ -149,9 +149,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
         output={output}
         isError={Boolean(toolResult?.isError)}
         status={toolStatus !== 'completed' ? toolStatus : undefined}
-        // Commands stay collapsed by default — including failures; the status
-        // badge marks errors and the output expands via the chevron.
-        defaultOpen={false}
+        defaultOpen={Boolean(toolResult?.isError)}
       />
     );
   }
