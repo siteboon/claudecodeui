@@ -77,3 +77,31 @@ test('still renders a well-formed question + answer', () => {
   );
   assert.ok(html.includes('Pick one?'));
 });
+
+test('an option label containing ", " is kept as one answer', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(QuestionAnswerContent, {
+      questions: [{ question: 'Pick one?', options: [{ label: 'Yes, always' }, { label: 'No' }] }],
+      answers: { 'Pick one?': 'Yes, always' },
+    }),
+  );
+  // Split on ", " would render "Yes" and "always" as two chips, both unmatched
+  // by an option and therefore both labelled custom.
+  assert.ok(html.includes('Yes, always'));
+  assert.ok(!html.includes('(custom)'));
+});
+
+test('a multi-select answer with no exact option still splits on ", "', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(QuestionAnswerContent, {
+      questions: [{ question: 'Pick some?', multiSelect: true, options: [{ label: 'A' }, { label: 'B' }] }],
+      answers: { 'Pick some?': 'A, B' },
+    }),
+  );
+  // Both halves must match an option, so neither is labelled custom and the
+  // joined string never survives as a single chip.
+  assert.ok(html.includes('>A</span>'));
+  assert.ok(html.includes('>B</span>'));
+  assert.ok(!html.includes('A, B'));
+  assert.ok(!html.includes('(custom)'));
+});
