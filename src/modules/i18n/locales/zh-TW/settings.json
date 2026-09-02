@@ -124,7 +124,19 @@
   "appearanceSettings": {
     "darkMode": {
       "label": "深色模式",
-      "description": "切換淺色和深色佈景主題"
+      "description": "切換淺色和深色佈景主題",
+      "themeControlled": "此佈景主題自行決定使用淺色或深色外觀"
+    },
+    "colorTheme": {
+      "label": "配色佈景主題",
+      "description": "整個應用程式使用的調色盤",
+      "remove": "移除佈景主題",
+      "importFailed": "無法匯入該佈景主題。",
+      "import": {
+        "label": "匯入 VS Code 佈景主題",
+        "description": "將 *-color-theme.json 檔案轉換為調色盤",
+        "button": "匯入佈景主題"
+      }
     },
     "projectSorting": {
       "label": "專案排序",

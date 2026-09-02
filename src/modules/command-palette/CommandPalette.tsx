@@ -72,7 +72,7 @@ function CommandPalette({
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
   const [pages, setPages] = React.useState<Page[]>([]);
-  const { toggleDarkMode } = useTheme();
+  const { toggleDarkMode, canToggleDarkMode } = useTheme();
   const navigate = useNavigate();
   const ops = usePaletteOps();
 
@@ -212,10 +212,12 @@ function CommandPalette({
                   <Settings className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                   <span className="flex-1">Open settings</span>
                 </CommandItem>
-                <CommandItem value="Toggle theme dark light mode" onSelect={() => run(toggleDarkMode)}>
-                  <SunMoon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                  <span className="flex-1">Toggle theme</span>
-                </CommandItem>
+                {canToggleDarkMode && (
+                  <CommandItem value="Toggle theme dark light mode" onSelect={() => run(toggleDarkMode)}>
+                    <SunMoon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                    <span className="flex-1">Toggle theme</span>
+                  </CommandItem>
+                )}
               </CommandGroup>
             )}
 

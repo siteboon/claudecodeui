@@ -1,0 +1,42 @@
+/**
+ * Catppuccin Latte — generated from the official palette (catppuccin/palette v1.8.0).
+ *
+ * A flavour is a fixed appearance, so it declares one block rather than a
+ * light/dark pair: ThemeProvider drives the `dark` class from the theme's
+ * appearance. `:root[data-theme]` outranks the `:root` / `.dark` defaults, so
+ * the file order in the bundle does not matter.
+ */
+
+:root[data-theme="catppuccin-latte"] {
+  --background: 220 21.95% 91.96%;
+  --foreground: 233.79 16.02% 35.49%;
+  --card: 220 23.08% 94.9%;
+  --card-foreground: 233.79 16.02% 35.49%;
+  --popover: 220 23.08% 94.9%;
+  --popover-foreground: 233.79 16.02% 35.49%;
+  --primary: 219.91 91.49% 53.92%;
+  --primary-foreground: 220 20.69% 88.63%;
+  --secondary: 222.86 15.91% 82.75%;
+  --secondary-foreground: 233.79 16.02% 35.49%;
+  --muted: 222.86 15.91% 82.75%;
+  --muted-foreground: 232.8 10.37% 47.25%;
+  --accent: 222.86 15.91% 82.75%;
+  --accent-foreground: 233.79 16.02% 35.49%;
+  --destructive: 347.08 86.67% 44.12%;
+  --destructive-foreground: 220 20.69% 88.63%;
+  --border: 225 13.56% 76.86%;
+  --input: 225 13.56% 76.86%;
+  --ring: 219.91 91.49% 53.92%;
+
+  /* Nav design tokens */
+  --nav-glass-bg: 220 23.08% 94.9% / 0.7;
+  --nav-glass-blur: 20px;
+  --nav-glass-saturate: 1.8;
+  --nav-tab-glow: 219.91 91.49% 53.92% / 0.18;
+  --nav-tab-ring: 219.91 91.49% 53.92% / 0.10;
+  --nav-float-shadow: 0 0% 0% / 0.06;
+  --nav-float-ring: 225 13.56% 76.86% / 0.5;
+  --nav-divider-color: 225 13.56% 76.86% / 0.5;
+  --nav-input-bg: 222.86 15.91% 82.75% / 0.5;
+  --nav-input-focus-ring: 219.91 91.49% 53.92% / 0.22;
+}

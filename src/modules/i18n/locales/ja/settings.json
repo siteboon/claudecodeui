@@ -123,7 +123,19 @@
   "appearanceSettings": {
     "darkMode": {
       "label": "ダークモード",
-      "description": "ライトテーマとダークテーマを切り替えます"
+      "description": "ライトテーマとダークテーマを切り替えます",
+      "themeControlled": "このテーマはライト／ダークの外観を自身で指定します"
+    },
+    "colorTheme": {
+      "label": "カラーテーマ",
+      "description": "アプリ全体で使用するカラーパレット",
+      "remove": "テーマを削除",
+      "importFailed": "このテーマをインポートできませんでした。",
+      "import": {
+        "label": "VS Code のテーマをインポート",
+        "description": "*-color-theme.json ファイルをカラーパレットに変換します",
+        "button": "テーマをインポート"
+      }
     },
     "projectSorting": {
       "label": "プロジェクトの並び順",

@@ -124,7 +124,19 @@
   "appearanceSettings": {
     "darkMode": {
       "label": "Koyu Mod",
-      "description": "Açık ve koyu temalar arasında geçiş yap"
+      "description": "Açık ve koyu temalar arasında geçiş yap",
+      "themeControlled": "Bu tema kendi açık veya koyu görünümünü belirler"
+    },
+    "colorTheme": {
+      "label": "Renk Teması",
+      "description": "Uygulama genelinde kullanılan renk paleti",
+      "remove": "Temayı kaldır",
+      "importFailed": "Bu tema içe aktarılamadı.",
+      "import": {
+        "label": "VS Code teması içe aktar",
+        "description": "Bir *-color-theme.json dosyasını renk paletine dönüştürür",
+        "button": "Temayı içe aktar"
+      }
     },
     "projectSorting": {
       "label": "Proje Sıralama",

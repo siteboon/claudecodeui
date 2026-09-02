@@ -149,7 +149,19 @@
   "appearanceSettings": {
     "darkMode": {
       "label": "Modo oscuro",
-      "description": "Alterna entre el tema claro y el oscuro"
+      "description": "Alterna entre el tema claro y el oscuro",
+      "themeControlled": "Este tema define su propia apariencia clara u oscura"
+    },
+    "colorTheme": {
+      "label": "Tema de color",
+      "description": "La paleta utilizada en toda la aplicación",
+      "remove": "Eliminar tema",
+      "importFailed": "No se ha podido importar ese tema.",
+      "import": {
+        "label": "Importar un tema de VS Code",
+        "description": "Convierte un archivo *-color-theme.json en una paleta",
+        "button": "Importar tema"
+      }
     },
     "projectSorting": {
       "label": "Orden de proyectos",

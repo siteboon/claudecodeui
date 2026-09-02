@@ -149,7 +149,19 @@
   "appearanceSettings": {
     "darkMode": {
       "label": "深色模式",
-      "description": "切换浅色和深色主题"
+      "description": "切换浅色和深色主题",
+      "themeControlled": "此主题自行决定使用浅色还是深色外观"
+    },
+    "colorTheme": {
+      "label": "配色主题",
+      "description": "整个应用使用的调色板",
+      "remove": "移除主题",
+      "importFailed": "无法导入该主题。",
+      "import": {
+        "label": "导入 VS Code 主题",
+        "description": "将 *-color-theme.json 文件转换为调色板",
+        "button": "导入主题"
+      }
     },
     "projectSorting": {
       "label": "项目排序",
