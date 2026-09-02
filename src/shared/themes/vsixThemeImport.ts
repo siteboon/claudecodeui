@@ -35,6 +35,16 @@ const MAX_VSIX_BYTES = 60_000_000;
 /** Deep enough for the longest `include` chains published, shallow enough to stop a cycle. */
 const MAX_INCLUDE_DEPTH = 8;
 
+/**
+ * What a single entry may weigh once decompressed.
+ *
+ * The ceiling on the archive only bounds compressed bytes, and jszip imposes no
+ * limit of its own: a few kilobytes of zip can hold gigabytes of repeated
+ * characters, and `async('string')` would materialise all of it in the tab. A
+ * manifest or a theme file that large is not a theme.
+ */
+const MAX_ENTRY_BYTES = 8_000_000;
+
 /** One entry of `contributes.themes` in an extension's manifest. */
 type ThemeContribution = {
   path: string;
@@ -42,9 +52,19 @@ type ThemeContribution = {
   uiTheme?: string;
 };
 
-/** The subset of JSZip this needs, so the dynamic import stays typed. */
+/**
+ * The subset of JSZip this needs, so the dynamic import stays typed.
+ *
+ * `_data.uncompressedSize` is jszip's own bookkeeping rather than public API,
+ * so it is read defensively: when it is missing the entry is simply read.
+ */
+type ThemeArchiveEntry = {
+  async(type: 'string'): Promise<string>;
+  _data?: { uncompressedSize?: number };
+};
+
 type ThemeArchive = {
-  file(path: string): { async(type: 'string'): Promise<string> } | null;
+  file(path: string): ThemeArchiveEntry | null;
 };
 
 export async function parseVsixThemes(data: ArrayBuffer, fallbackName: string): Promise<ColorTheme[]> {
@@ -70,7 +90,7 @@ export async function parseVsixThemes(data: ArrayBuffer, fallbackName: string): 
     );
   }
 
-  const manifest = parseJsonc(await manifestEntry.async('string')) as VsCodeThemeFile & {
+  const manifest = parseJsonc(await readEntryText(manifestEntry, MANIFEST_PATH)) as VsCodeThemeFile & {
     contributes?: unknown;
   };
   const contributions = readThemeContributions(manifest);
@@ -122,7 +142,7 @@ async function readThemeFile(
     throw new VsCodeThemeImportError(`The extension points at "${path}", which is not in the archive.`);
   }
 
-  const file = parseJsonc(await entry.async('string'));
+  const file = parseJsonc(await readEntryText(entry, path));
   const include = typeof file.include === 'string' ? file.include : null;
   if (!include || depth >= MAX_INCLUDE_DEPTH) {
     return file;
@@ -131,6 +151,22 @@ async function readThemeFile(
   const includedPath = resolveArchivePath(directoryOf(path), include);
   const included = await readThemeFile(archive, includedPath, depth + 1);
   return mergeThemeFiles(included, file);
+}
+
+/** Reads one entry, refusing it before decompression when it declares an absurd size. */
+async function readEntryText(entry: ThemeArchiveEntry, path: string): Promise<string> {
+  const uncompressedSize = entry._data?.uncompressedSize;
+  if (typeof uncompressedSize === 'number' && uncompressedSize > MAX_ENTRY_BYTES) {
+    throw new VsCodeThemeImportError(`"${path}" is too large to be a theme file.`);
+  }
+
+  const text = await entry.async('string');
+  // Checked again on the result, because the declared size is the archive's own
+  // claim about itself.
+  if (text.length > MAX_ENTRY_BYTES) {
+    throw new VsCodeThemeImportError(`"${path}" is too large to be a theme file.`);
+  }
+  return text;
 }
 
 function mergeThemeFiles(base: VsCodeThemeFile, override: VsCodeThemeFile): VsCodeThemeFile {

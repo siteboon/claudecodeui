@@ -212,6 +212,24 @@ test('deleting the theme in use falls back to the default rather than to nothing
   assert.ok(!document.getElementById('imported-color-themes'));
 });
 
+test('a corrupted imported theme is dropped instead of crashing the first render', () => {
+  // The value round-trips through the server as opaque JSON; one null in the
+  // array would otherwise be read for its id before anything could recover.
+  writeUserPreference('importedThemes', [
+    null,
+    'not a theme',
+    { id: 'imported-valid', name: 'Valid', appearance: 'dark', previewColors: ['#000', '#111', '#222'], tokens: { background: '0 0% 0%' } },
+    { id: 42, name: 'Bad id', appearance: 'dark', previewColors: [] },
+  ]);
+
+  const { result } = renderHook(() => useTheme(), { wrapper });
+
+  assert.deepEqual(
+    result.current.availableThemes.map((theme) => theme.id),
+    ['default', 'imported-valid'],
+  );
+});
+
 test('a theme id whose theme is gone falls back without erasing the stored choice', () => {
   // The shape of deleting an imported palette on another device.
   writeUserPreference('colorTheme', 'imported-deleted-elsewhere');

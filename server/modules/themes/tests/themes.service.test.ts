@@ -121,6 +121,26 @@ test('accepts a direct package link on a host the registries serve from', async 
   assert.equal(download.fileName, 'theme.vsix');
 });
 
+test('stops a chunked response that never declares its length', async () => {
+  // The shape the header check cannot catch: no Content-Length, bytes arriving
+  // until memory gives out.
+  const chunk = new Uint8Array(1024);
+  const endless = new ReadableStream({
+    pull(controller) {
+      controller.enqueue(chunk);
+    },
+  });
+  const { fetchStub } = stubFetch({
+    [MARKETPLACE_PACKAGE]: new Response(endless, { status: 200 }),
+  });
+  const service = createThemeGalleryService({ fetch: fetchStub, maxDownloadBytes: 4096 });
+
+  await assert.rejects(
+    () => service.downloadExtension('https://marketplace.visualstudio.com/items?itemName=zhuangtongfa.Material-theme'),
+    /too large/,
+  );
+});
+
 test('refuses an extension larger than the import ceiling', async () => {
   const { fetchStub } = stubFetch({
     [MARKETPLACE_PACKAGE]: new Response(Buffer.from('PK'), {

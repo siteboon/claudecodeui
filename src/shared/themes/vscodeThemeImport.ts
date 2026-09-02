@@ -244,7 +244,7 @@ export function parseJsonc(source: string): VsCodeThemeFile {
   }
 
   // Trailing commas are legal in JSONC and common in hand-edited themes.
-  out = out.replace(/,(\s*[}\]])/g, '$1');
+  out = stripTrailingCommas(out);
 
   let parsed: unknown;
   try {
@@ -258,6 +258,57 @@ export function parseJsonc(source: string): VsCodeThemeFile {
   }
 
   return parsed as VsCodeThemeFile;
+}
+
+/**
+ * Drops the commas that sit before a closing brace or bracket.
+ *
+ * String-aware, because a theme is free to contain `"name": "Night,}"` — a
+ * blanket regex turns that into `"Night}"` and imports the theme under a name
+ * it never had.
+ */
+function stripTrailingCommas(source: string): string {
+  let out = '';
+  let inString = false;
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+
+    if (inString) {
+      out += char;
+      if (char === '\\') {
+        index += 1;
+        out += source[index] ?? '';
+        continue;
+      }
+      if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      out += char;
+      continue;
+    }
+
+    if (char === ',') {
+      // Comments are already gone by this point, so the next non-space
+      // character is the one that decides whether this comma is structural.
+      let next = index + 1;
+      while (next < source.length && /\s/.test(source[next])) {
+        next += 1;
+      }
+      if (source[next] === '}' || source[next] === ']') {
+        continue;
+      }
+    }
+
+    out += char;
+  }
+
+  return out;
 }
 
 function readColorMap(file: VsCodeThemeFile): Record<string, string> {

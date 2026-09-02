@@ -67,6 +67,18 @@ test('leaves a // inside a string alone', () => {
   assert.equal(parseVsCodeTheme(source).name, 'https://example.com theme');
 });
 
+test('leaves a comma inside a string value alone', () => {
+  // A blanket trailing-comma regex turns "Night,}" into "Night}", importing the
+  // theme under a name it never had.
+  const source = JSON.stringify({
+    name: 'Night,}',
+    type: 'dark',
+    colors: { 'editor.background': '#000000', 'editor.foreground': '#ffffff' },
+  });
+
+  assert.equal(parseVsCodeTheme(source).name, 'Night,}');
+});
+
 test('classifies a theme that declares no type by how bright it is', () => {
   const light = parseVsCodeTheme(JSON.stringify({
     colors: { 'editor.background': '#fafafa', 'editor.foreground': '#202020' },

@@ -108,6 +108,20 @@ test('keeps the variants that work when one is broken', async () => {
   assert.deepEqual(themes.map((theme) => theme.name), ['Fine']);
 });
 
+test('refuses an entry that decompresses far beyond a theme file', async () => {
+  // 9 MB of one repeated character compresses to a few kilobytes: the ceiling on
+  // the archive says nothing about what comes out of it.
+  const data = await buildVsix({
+    'extension/package.json': manifest([{ label: 'Bomb', path: './theme.json' }]),
+    'extension/theme.json': 'x'.repeat(9_000_000),
+  });
+
+  await assert.rejects(
+    () => parseVsixThemes(data, 'fallback'),
+    (error: Error) => error instanceof VsCodeThemeImportError && error.message.includes('too large'),
+  );
+});
+
 test('rejects an archive that is not a VS Code extension', async () => {
   const data = await buildVsix({ 'readme.txt': 'nothing to see' });
 

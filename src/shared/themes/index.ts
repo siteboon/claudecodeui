@@ -59,10 +59,39 @@ export async function importThemesFromFile(file: File): Promise<ColorTheme[]> {
 /** The style element every imported theme's variables are written into. */
 const IMPORTED_THEMES_STYLE_ID = 'imported-color-themes';
 
-/** The imported palettes the preference store holds, or none if it holds something else. */
+/**
+ * The imported palettes the preference store holds.
+ *
+ * Every entry is validated rather than trusted: the value round-trips through
+ * the server as opaque JSON, and a single `null` in the array would otherwise
+ * be read for its `id` during the first render — crashing the app before the
+ * user could reach Settings to remove it.
+ */
 export function readImportedThemes(): ColorTheme[] {
   const stored = readUserPreference<unknown>('importedThemes', null);
-  return Array.isArray(stored) ? (stored as ColorTheme[]) : [];
+  return Array.isArray(stored) ? stored.filter(isColorTheme) : [];
+}
+
+function isColorTheme(value: unknown): value is ColorTheme {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const theme = value as Partial<ColorTheme>;
+  return typeof theme.id === 'string'
+    && Boolean(theme.id)
+    && typeof theme.name === 'string'
+    && (theme.appearance === 'light' || theme.appearance === 'dark' || theme.appearance === 'system')
+    && Array.isArray(theme.previewColors)
+    && theme.previewColors.every((color) => typeof color === 'string')
+    && (theme.tokens === undefined || isTokenRecord(theme.tokens));
+}
+
+function isTokenRecord(value: unknown): boolean {
+  return Boolean(value)
+    && typeof value === 'object'
+    && !Array.isArray(value)
+    && Object.values(value as Record<string, unknown>).every((token) => typeof token === 'string');
 }
 
 /**

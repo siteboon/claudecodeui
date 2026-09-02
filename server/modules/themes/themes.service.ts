@@ -23,6 +23,8 @@ export type ThemeExtensionDownload = {
 
 type ThemeGalleryDependencies = {
   fetch: typeof globalThis.fetch;
+  /** The download ceiling, overridable so a test can trip it without moving 60 MB. */
+  maxDownloadBytes?: number;
 };
 
 /** The registries a URL may point at, and what identifies an extension in each. */
@@ -55,6 +57,18 @@ const MAX_REDIRECTS = 5;
 
 /** Creates the theme-gallery workflows with an explicit fetch adapter. */
 export function createThemeGalleryService(dependencies: ThemeGalleryDependencies) {
+  const maxDownloadBytes = dependencies.maxDownloadBytes ?? MAX_DOWNLOAD_BYTES;
+
+  const tooLarge = () => new AppError('That extension is too large to import', {
+    code: 'THEME_EXTENSION_TOO_LARGE',
+    statusCode: 413,
+  });
+
+  const downloadFailed = () => new AppError('That extension could not be downloaded', {
+    code: 'THEME_DOWNLOAD_FAILED',
+    statusCode: 502,
+  });
+
   /** Reads the registry's own metadata to turn an extension page into a file URL. */
   async function resolveDownloadUrl(reference: GalleryReference): Promise<string> {
     if (reference.registry === 'direct') {
@@ -70,15 +84,19 @@ export function createThemeGalleryService(dependencies: ThemeGalleryDependencies
 
     const metadataUrl = 'https://open-vsx.org/api/'
       + `${encodeURIComponent(reference.namespace)}/${encodeURIComponent(reference.name)}/latest`;
-    const response = await fetchWithTimeout(metadataUrl);
-    if (!response.ok) {
-      throw new AppError('That extension could not be found on Open VSX', {
-        code: 'THEME_EXTENSION_NOT_FOUND',
-        statusCode: 404,
-      });
+    const { response, release } = await fetchWithDeadline(metadataUrl);
+    let metadata: { files?: { download?: unknown } };
+    try {
+      if (!response.ok) {
+        throw new AppError('That extension could not be found on Open VSX', {
+          code: 'THEME_EXTENSION_NOT_FOUND',
+          statusCode: 404,
+        });
+      }
+      metadata = (await response.json()) as { files?: { download?: unknown } };
+    } finally {
+      release();
     }
-
-    const metadata = (await response.json()) as { files?: { download?: unknown } };
     const download = metadata.files?.download;
     if (typeof download !== 'string') {
       throw new AppError('That Open VSX extension publishes no downloadable package', {
@@ -89,66 +107,98 @@ export function createThemeGalleryService(dependencies: ThemeGalleryDependencies
     return download;
   }
 
-  async function fetchWithTimeout(url: string): Promise<Response> {
+  /**
+   * Fetches one URL under a deadline the caller closes.
+   *
+   * The timer is handed back rather than cleared here because it has to stay
+   * armed while the body is read: a response whose headers arrive promptly and
+   * whose body then trickles would otherwise hold the request open forever.
+   */
+  async function fetchWithDeadline(url: string): Promise<{
+    response: Response;
+    controller: AbortController;
+    release: () => void;
+  }> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
     try {
       // Redirects are followed by hand so every hop can be re-checked against
       // the allowlist; `redirect: 'follow'` would only ever show the last one.
-      return await dependencies.fetch(url, { redirect: 'manual', signal: controller.signal });
-    } catch {
-      throw new AppError('That extension could not be downloaded', {
-        code: 'THEME_DOWNLOAD_FAILED',
-        statusCode: 502,
+      const response = await dependencies.fetch(url, {
+        redirect: 'manual',
+        signal: controller.signal,
       });
-    } finally {
+      return { response, controller, release: () => clearTimeout(timer) };
+    } catch {
       clearTimeout(timer);
+      throw downloadFailed();
     }
+  }
+
+  /**
+   * Reads a body while counting it, so the ceiling is enforced on bytes actually
+   * received rather than on a `Content-Length` the response is free to omit.
+   */
+  async function readWithinBudget(response: Response, controller: AbortController): Promise<Buffer> {
+    const reader = response.body?.getReader();
+    if (!reader) {
+      // No stream to pull: buffering is the only option, and the same ceiling
+      // still applies to what came back.
+      const buffered = Buffer.from(await response.arrayBuffer());
+      if (buffered.byteLength > maxDownloadBytes) {
+        throw tooLarge();
+      }
+      return buffered;
+    }
+
+    const chunks: Buffer[] = [];
+    let received = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      received += value.byteLength;
+      if (received > maxDownloadBytes) {
+        // Stop pulling rather than discovering the size once it is all in memory.
+        controller.abort();
+        throw tooLarge();
+      }
+      chunks.push(Buffer.from(value));
+    }
+    return Buffer.concat(chunks);
   }
 
   async function download(startUrl: string): Promise<Buffer> {
     let url = assertAllowedUrl(startUrl);
 
     for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
-      const response = await fetchWithTimeout(url);
+      const { response, controller, release } = await fetchWithDeadline(url);
 
-      if (response.status >= 300 && response.status < 400) {
-        const location = response.headers.get('location');
-        if (!location) {
-          throw new AppError('That extension could not be downloaded', {
-            code: 'THEME_DOWNLOAD_FAILED',
-            statusCode: 502,
-          });
+      try {
+        if (response.status >= 300 && response.status < 400) {
+          const location = response.headers.get('location');
+          if (!location) {
+            throw downloadFailed();
+          }
+          url = assertAllowedUrl(new URL(location, url).toString());
+          continue;
         }
-        url = assertAllowedUrl(new URL(location, url).toString());
-        continue;
-      }
 
-      if (!response.ok) {
-        throw new AppError('That extension could not be downloaded', {
-          code: 'THEME_DOWNLOAD_FAILED',
-          statusCode: 502,
-        });
-      }
+        if (!response.ok) {
+          throw downloadFailed();
+        }
 
-      // Checked before reading the body so an oversized package is refused on
-      // its header rather than after it has been buffered in memory.
-      const declaredLength = Number(response.headers.get('content-length') ?? '0');
-      if (declaredLength > MAX_DOWNLOAD_BYTES) {
-        throw new AppError('That extension is too large to import', {
-          code: 'THEME_EXTENSION_TOO_LARGE',
-          statusCode: 413,
-        });
-      }
+        // A declared length that is already over the ceiling saves pulling the
+        // body at all; the streamed count below is what actually enforces it.
+        if (Number(response.headers.get('content-length') ?? '0') > maxDownloadBytes) {
+          throw tooLarge();
+        }
 
-      const data = Buffer.from(await response.arrayBuffer());
-      if (data.byteLength > MAX_DOWNLOAD_BYTES) {
-        throw new AppError('That extension is too large to import', {
-          code: 'THEME_EXTENSION_TOO_LARGE',
-          statusCode: 413,
-        });
+        return await readWithinBudget(response, controller);
+      } finally {
+        release();
       }
-      return data;
     }
 
     throw new AppError('That extension redirected too many times', {
