@@ -5,6 +5,8 @@ import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, Pr
 import type { Project } from '../../../../types/app';
 import type { ToolGroupItem } from '../../utils/toolGrouping';
 import { getToolConfig } from '../../tools';
+import LLMProviderLogo from '../../../llm-provider-logo/LLMProviderLogo';
+import { getProviderDisplayName } from '../../../../utils/providerDisplay';
 
 import MessageComponent from './MessageComponent';
 
@@ -101,57 +103,80 @@ export default function ToolGroupContainer({
     return extraCount > 0 ? `${previewText}, +${extraCount} more` : previewText;
   }, [group.messages]);
 
-  return (
-    <div className="chat-message tool px-3 sm:px-0" data-message-timestamp={group.timestamp || undefined}>
-      <button
-        type="button"
-        className={`group flex w-full items-center gap-2 border-l-2 ${borderClass} rounded-r-md bg-muted/25 px-3 py-2 text-left transition-colors hover:bg-muted/40 dark:bg-muted/10 dark:hover:bg-muted/20`}
-        onClick={() => setIsExpanded((current) => !current)}
-        aria-expanded={isExpanded}
-      >
-        <ChevronRight
-          className={`h-3.5 w-3.5 flex-shrink-0 text-muted-foreground transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-          aria-hidden
-        />
-        <span className={`${iconClass} flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-background/80 text-xs font-medium`}>
-          {icon}
-        </span>
-        <span className="min-w-0 flex-shrink-0 text-xs font-medium text-foreground">{label}</span>
-        <span className="flex-shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-          x{group.messages.length}
-        </span>
-        {hasError && (
-          <span className="flex-shrink-0 rounded-full bg-destructive/15 px-1.5 py-0.5 text-[10px] font-medium text-destructive">
-            Failed
-          </span>
-        )}
-        {preview && (
-          <>
-            <span className="text-[10px] text-muted-foreground/40">/</span>
-            <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{preview}</span>
-          </>
-        )}
-      </button>
+  const firstMessage = group.messages[0];
+  const isGrouped = Boolean(
+    prevMessage &&
+    prevMessage.type === firstMessage?.type &&
+    (prevMessage.type === 'assistant' ||
+      prevMessage.type === 'user' ||
+      prevMessage.type === 'tool' ||
+      prevMessage.type === 'error')
+  );
 
-      {isExpanded && (
-        <div className="mt-2 space-y-3 sm:space-y-4">
-          {group.messages.map((message, index) => (
-            <MessageComponent
-              key={getMessageKey(message)}
-              message={message}
-              prevMessage={index > 0 ? group.messages[index - 1] : prevMessage}
-              createDiff={createDiff}
-              onFileOpen={onFileOpen}
-              onShowSettings={onShowSettings}
-              onGrantToolPermission={onGrantToolPermission}
-              showRawParameters={showRawParameters}
-              showThinking={showThinking}
-              selectedProject={selectedProject}
-              provider={provider}
-            />
-          ))}
-        </div>
-      )}
+  return (
+    <div className={`chat-message tool ${isGrouped ? 'grouped' : ''} px-3 sm:px-0`} data-message-timestamp={group.timestamp || undefined}>
+      <div className="w-full">
+        {!isGrouped && (
+          <div className="mb-2 flex items-center space-x-3">
+            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full p-1 text-sm text-foreground">
+              <LLMProviderLogo provider={provider} className="h-full w-full" />
+            </div>
+            <div className="text-sm font-medium text-gray-900 dark:text-white">
+              {getProviderDisplayName(provider)}
+            </div>
+          </div>
+        )}
+
+        <button
+          type="button"
+          className={`group flex w-full items-center gap-2 border-l-2 ${borderClass} rounded-r-md bg-muted/25 px-3 py-2 text-left transition-colors hover:bg-muted/40 dark:bg-muted/10 dark:hover:bg-muted/20`}
+          onClick={() => setIsExpanded((current) => !current)}
+          aria-expanded={isExpanded}
+        >
+          <ChevronRight
+            className={`h-3.5 w-3.5 flex-shrink-0 text-muted-foreground transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+            aria-hidden
+          />
+          <span className={`${iconClass} flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-background/80 text-xs font-medium`}>
+            {icon}
+          </span>
+          <span className="min-w-0 flex-shrink-0 text-xs font-medium text-foreground">{label}</span>
+          <span className="flex-shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+            x{group.messages.length}
+          </span>
+          {hasError && (
+            <span className="flex-shrink-0 rounded-full bg-destructive/15 px-1.5 py-0.5 text-[10px] font-medium text-destructive">
+              Failed
+            </span>
+          )}
+          {preview && (
+            <>
+              <span className="text-[10px] text-muted-foreground/40">/</span>
+              <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{preview}</span>
+            </>
+          )}
+        </button>
+
+        {isExpanded && (
+          <div className="mt-2 space-y-3 sm:space-y-4">
+            {group.messages.map((message, index) => (
+              <MessageComponent
+                key={getMessageKey(message)}
+                message={message}
+                prevMessage={index > 0 ? group.messages[index - 1] : { ...message, type: 'assistant' }}
+                createDiff={createDiff}
+                onFileOpen={onFileOpen}
+                onShowSettings={onShowSettings}
+                onGrantToolPermission={onGrantToolPermission}
+                showRawParameters={showRawParameters}
+                showThinking={showThinking}
+                selectedProject={selectedProject}
+                provider={provider}
+              />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
