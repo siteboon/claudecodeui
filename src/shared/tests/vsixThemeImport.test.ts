@@ -47,6 +47,23 @@ test('imports every theme an extension contributes', async () => {
   assert.deepEqual(themes.map((theme) => theme.appearance), ['dark', 'light']);
 });
 
+test('labels each variant from the manifest, not from the theme file', async () => {
+  // One Dark Pro's shape: every variant file names itself identically, and only
+  // the manifest distinguishes them.
+  const data = await buildVsix({
+    'extension/package.json': manifest([
+      { label: 'One Dark Pro', path: './a.json' },
+      { label: 'One Dark Pro Flat', path: './b.json' },
+    ]),
+    'extension/a.json': themeFile({}, { name: 'One Dark Pro' }),
+    'extension/b.json': themeFile({}, { name: 'One Dark Pro' }),
+  });
+
+  const themes = await parseVsixThemes(data, 'fallback');
+
+  assert.deepEqual(themes.map((theme) => theme.name), ['One Dark Pro', 'One Dark Pro Flat']);
+});
+
 test('resolves an include chain inside the archive', async () => {
   const data = await buildVsix({
     'extension/package.json': manifest([{ label: 'Child', path: './themes/child.json' }]),

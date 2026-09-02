@@ -85,7 +85,11 @@ export async function parseVsixThemes(data: ArrayBuffer, fallbackName: string): 
     try {
       const path = resolveArchivePath(EXTENSION_ROOT, contribution.path);
       const file = await readThemeFile(archive, path, 0);
-      themes.push(createThemeFromFile(file, contribution.label ?? fallbackName, contribution.uiTheme));
+      // The manifest label wins over the theme file's own `name`, the way VS
+      // Code's own picker labels them: every One Dark Pro variant calls itself
+      // "One Dark Pro" internally, and only the manifest tells Flat from Darker.
+      const named = contribution.label ? { ...file, name: contribution.label } : file;
+      themes.push(createThemeFromFile(named, fallbackName, contribution.uiTheme));
     } catch (error) {
       // One broken variant must not cost the user the others, so failures are
       // held back and only reported if nothing at all could be imported.
