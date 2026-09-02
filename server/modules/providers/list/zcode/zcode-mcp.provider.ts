@@ -11,6 +11,7 @@ import {
   readOptionalString,
   readStringArray,
   readStringRecord,
+  validatePathSecurity,
   writeJsonConfig,
 } from '@/shared/utils.js';
 
@@ -23,22 +24,6 @@ import {
 const readServerRecords = (config: Record<string, unknown>): Record<string, unknown> => (
   readObjectRecord(readObjectRecord(config.mcp)?.servers) ?? {}
 );
-
-/**
- * Validates that a path does not escape its intended root directory.
- * Implements path security as required by integration plan §3.2.6.
- */
-const validatePathSecurity = (targetPath: string, rootPath: string): void => {
-  const resolvedTarget = path.resolve(targetPath);
-  const resolvedRoot = path.resolve(rootPath);
-
-  if (!resolvedTarget.startsWith(`${resolvedRoot}${path.sep}`) && resolvedTarget !== resolvedRoot) {
-    throw new AppError('Path validation failed: potential directory traversal attempt.', {
-      code: 'PATH_SECURITY_VIOLATION',
-      statusCode: 400,
-    });
-  }
-};
 
 /**
  * Finds the project-level ZCode config file (zcode.json or .zcode/config.json).

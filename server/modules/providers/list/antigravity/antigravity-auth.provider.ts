@@ -12,6 +12,7 @@ import fs from 'node:fs';
 
 import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { ProviderAuthStatus } from '@/shared/types.js';
+import { extractEmailFromJwt } from '@/shared/utils.js';
 
 import { getAntigravityOauthTokenPath } from './antigravity-data-root.js';
 import { getEngineVersion, tryResolveEnginePath } from './antigravity-engine-path.js';
@@ -71,20 +72,7 @@ function readEmail(record: Record<string, unknown> | null): string | null {
   if (email) return email;
 
   const idToken = readStringField(record, ['id_token']);
-  if (idToken) {
-    try {
-      const payloadPart = idToken.split('.')[1];
-      if (payloadPart) {
-        const payload = JSON.parse(Buffer.from(payloadPart, 'base64url').toString('utf8')) as Record<string, unknown>;
-        const payloadEmail = typeof payload.email === 'string' ? payload.email : null;
-        if (payloadEmail) return payloadEmail;
-      }
-    } catch {
-      // Not a decodable JWT; fall through.
-    }
-  }
-
-  return null;
+  return extractEmailFromJwt(idToken);
 }
 
 /**

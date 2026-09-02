@@ -329,6 +329,25 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
   }
 }
 
+/**
+ * Validates that a target path stays strictly inside its intended root directory.
+ * Throws a 400 AppError with PATH_SECURITY_VIOLATION if directory traversal is detected.
+ *
+ * Consumed by provider MCP implementations (Antigravity, ZCode) when writing
+ * configuration files into user or workspace directories.
+ */
+export function validatePathSecurity(targetPath: string, rootPath: string): void {
+  const resolvedTarget = path.resolve(targetPath);
+  const resolvedRoot = path.resolve(rootPath);
+
+  if (!resolvedTarget.startsWith(`${resolvedRoot}${path.sep}`) && resolvedTarget !== resolvedRoot) {
+    throw new AppError('Path validation failed: potential directory traversal attempt.', {
+      code: 'PATH_SECURITY_VIOLATION',
+      statusCode: 400,
+    });
+  }
+}
+
 // ---------------------------
 //----------------- NORMALIZED PROVIDER MESSAGE UTILITIES ------------
 /**
@@ -852,6 +871,35 @@ export function readJsonRecord(value: unknown): AnyRecord | null {
   } catch {
     return null;
   }
+}
+
+// ---------------------------
+//----------------- AUTH AND CREDENTIAL UTILITIES ------------
+/**
+ * Decodes a JWT token string without verification and extracts the user email.
+ *
+ * Consumed by provider auth adapters (Antigravity, Codex) when inspecting OAuth
+ * `id_token` credentials to surface the authenticated account email.
+ * Returns null if the token cannot be decoded or carries no email field.
+ */
+export function extractEmailFromJwt(jwtToken: string | null | undefined): string | null {
+  if (!jwtToken || typeof jwtToken !== 'string') {
+    return null;
+  }
+
+  try {
+    const parts = jwtToken.split('.');
+    if (parts.length >= 2 && parts[1]) {
+      const payload = readObjectRecord(
+        JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8')),
+      );
+      return readOptionalString(payload?.email) ?? readOptionalString(payload?.user) ?? null;
+    }
+  } catch {
+    // Unparseable JWT token
+  }
+
+  return null;
 }
 
 // ---------------------------

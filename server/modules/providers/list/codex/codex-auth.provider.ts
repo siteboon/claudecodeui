@@ -6,7 +6,7 @@ import spawn from 'cross-spawn';
 
 import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { ProviderAuthStatus } from '@/shared/types.js';
-import { readObjectRecord, readOptionalString } from '@/shared/utils.js';
+import { extractEmailFromJwt, readObjectRecord, readOptionalString } from '@/shared/utils.js';
 
 type CodexCredentialsStatus = {
   authenticated: boolean;
@@ -85,16 +85,6 @@ export class CodexProviderAuth implements IProviderAuth {
    * Extracts the user email from a Codex id_token when a readable JWT payload exists.
    */
   private readEmailFromIdToken(idToken: string): string {
-    try {
-      const parts = idToken.split('.');
-      if (parts.length >= 2) {
-        const payload = readObjectRecord(JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8')));
-        return readOptionalString(payload?.email) ?? readOptionalString(payload?.user) ?? 'Authenticated';
-      }
-    } catch {
-      // Fall back to a generic authenticated marker if the token payload is not readable.
-    }
-
-    return 'Authenticated';
+    return extractEmailFromJwt(idToken) ?? 'Authenticated';
   }
 }

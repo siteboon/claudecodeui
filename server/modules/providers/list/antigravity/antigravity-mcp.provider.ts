@@ -20,6 +20,7 @@ import {
   readOptionalString,
   readStringArray,
   readStringRecord,
+  validatePathSecurity,
   writeJsonConfig,
 } from '@/shared/utils.js';
 
@@ -29,21 +30,6 @@ import {
 const readServerRecords = (config: Record<string, unknown>): Record<string, unknown> => (
   readObjectRecord(config.mcpServers) ?? readObjectRecord(config.mcp_servers) ?? {}
 );
-
-/**
- * Validates that a path does not escape its intended root directory.
- */
-const validatePathSecurity = (targetPath: string, rootPath: string): void => {
-  const resolvedTarget = path.resolve(targetPath);
-  const resolvedRoot = path.resolve(rootPath);
-
-  if (!resolvedTarget.startsWith(`${resolvedRoot}${path.sep}`) && resolvedTarget !== resolvedRoot) {
-    throw new AppError('Path validation failed: potential directory traversal attempt.', {
-      code: 'PATH_SECURITY_VIOLATION',
-      statusCode: 400,
-    });
-  }
-};
 
 /**
  * Finds the project-level MCP config file.
