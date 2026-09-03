@@ -581,6 +581,104 @@ test('AntigravitySessionsProvider fetchHistory resolves the transcript via optio
   }
 });
 
+test('AntigravitySessionsProvider fetchHistory filters pure SYSTEM_MESSAGE entries and cleans mixed prompts', async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agy-data-sys-msg-'));
+  const sessionId = 'agy-sys-msg-test';
+  const transcriptDir = path.join(tempRoot, 'brain', sessionId, '.system_generated', 'logs');
+  await fs.mkdir(transcriptDir, { recursive: true });
+  const entries = [
+    {
+      step_index: 0,
+      source: 'USER_EXPLICIT',
+      type: 'USER_INPUT',
+      status: 'DONE',
+      created_at: '2026-09-02T14:47:19Z',
+      content: '<USER_REQUEST>\nhello world\n</USER_REQUEST>',
+    },
+    {
+      step_index: 1,
+      source: 'MODEL',
+      type: 'PLANNER_RESPONSE',
+      status: 'DONE',
+      created_at: '2026-09-02T14:47:20Z',
+      content: 'hi there!',
+    },
+    {
+      step_index: 2,
+      source: 'USER_EXPLICIT',
+      type: 'USER_INPUT',
+      status: 'DONE',
+      created_at: '2026-09-02T14:47:21Z',
+      content: 'The following is a <SYSTEM_MESSAGE> not actually sent by the user. It is provided by the system as important information to pay attention to.\n\n<SYSTEM_MESSAGE>\n[Message] timestamp=2026-09-03T13:15:37Z sender=task-152 priority=MESSAGE_PRIORITY_HIGH content=Task finished with result: ok\n</SYSTEM_MESSAGE>',
+    },
+    {
+      step_index: 3,
+      source: 'MODEL',
+      type: 'PLANNER_RESPONSE',
+      status: 'DONE',
+      created_at: '2026-09-02T14:47:22Z',
+      content: 'Task output noted.',
+    },
+    {
+      step_index: 4,
+      source: 'MODEL',
+      type: 'PLANNER_RESPONSE',
+      status: 'DONE',
+      created_at: '2026-09-02T14:47:23Z',
+      content: 'The following is a <SYSTEM_MESSAGE> not actually sent by the user. It is provided by the system as important information to pay attention to.\n\n<SYSTEM_MESSAGE>\n[Message] timestamp=2026-09-03T13:15:37Z sender=task-152 priority=MESSAGE_PRIORITY_HIGH content=Task id "task-152" finished with result:\n\nThe command exited with code 0.\nOutput:\nDatabase schema applied\n</SYSTEM_MESSAGE>',
+    },
+    {
+      step_index: 5,
+      source: 'MODEL',
+      type: 'PLANNER_RESPONSE',
+      status: 'DONE',
+      created_at: '2026-09-02T14:47:24Z',
+      content: 'All tests passed successfully.',
+    },
+    {
+      step_index: 6,
+      source: 'MODEL',
+      type: 'PLANNER_RESPONSE',
+      status: 'DONE',
+      created_at: '2026-09-02T14:47:25Z',
+      content: 'The following is a <SYSTEM_MESSAGE> not actually sent by the user. It is provided by the system as important information to pay attention to.\n\n<SYSTEM_MESSAGE>\n[Message] timestamp=2026-09-03T13:16:04Z sender=c37b34c9-47db-44eb-9724-bc3b3cd8ef95 priority=MESSAGE_PRIORITY_HIGH content=### 代码审查报告\n\n审核通过',
+    },
+    {
+      step_index: 7,
+      source: 'USER_EXPLICIT',
+      type: 'USER_INPUT',
+      status: 'DONE',
+      created_at: '2026-09-02T14:47:26Z',
+      content: 'The following is a <SYSTEM_MESSAGE> not actually sent by the user. It is provided by the system as important information to pay attention to.\n\n<SYSTEM_MESSAGE>\n[Message] timestamp=2026-09-03T13:42:37Z sender=system priority=MESSAGE_PRIORITY_LOW content=[Notice] All your subagents and background tasks have been stopped due to server restart.\n</SYSTEM_MESSAGE>',
+    },
+  ];
+  await fs.writeFile(
+    path.join(transcriptDir, 'transcript.jsonl'),
+    entries.map((entry) => JSON.stringify(entry)).join('\n') + '\n',
+  );
+
+  const restoreDataDir = withEnvValue('CLOUDCLI_ANTIGRAVITY_DATA_DIR', tempRoot);
+  try {
+    const sessions = new AntigravitySessionsProvider();
+    const result = await sessions.fetchHistory(sessionId, {});
+    // Pure SYSTEM_MESSAGE entries (step 2, 4, 7) must be stripped, while step 6 unclosed subagent report has its wrapper unwrapped
+    assert.equal(result.total, 5);
+    assert.equal(result.messages[0]?.role, 'user');
+    assert.equal(result.messages[0]?.content, 'hello world');
+    assert.equal(result.messages[1]?.role, 'assistant');
+    assert.equal(result.messages[1]?.content, 'hi there!');
+    assert.equal(result.messages[2]?.role, 'assistant');
+    assert.equal(result.messages[2]?.content, 'Task output noted.');
+    assert.equal(result.messages[3]?.role, 'assistant');
+    assert.equal(result.messages[3]?.content, 'All tests passed successfully.');
+    assert.equal(result.messages[4]?.role, 'assistant');
+    assert.equal(result.messages[4]?.content, '### 代码审查报告\n\n审核通过');
+  } finally {
+    restoreDataDir();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('AntigravitySessionsProvider fetchHistory returns empty for unknown sessions', async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'agy-data-empty-'));
   const restoreDataDir = withEnvValue('CLOUDCLI_ANTIGRAVITY_DATA_DIR', tempRoot);

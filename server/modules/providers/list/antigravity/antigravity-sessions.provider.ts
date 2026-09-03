@@ -176,6 +176,75 @@ export function normalizeAntigravityToolArgs(args: unknown): AnyRecord {
 }
 
 /**
+ * Cleans Antigravity engine internal wrapper blocks and system notifications.
+ */
+export function cleanAntigravityMessageContent(
+  text: string,
+  mode: 'user' | 'assistant' | 'tool_result',
+): string {
+  if (!text || typeof text !== 'string') return '';
+
+  const hasDisclaimer = /The following is a <SYSTEM_MESSAGE>/i.test(text);
+  const hasSystemTag = /<SYSTEM_MESSAGE>/i.test(text);
+
+  if (!hasDisclaimer && !hasSystemTag) {
+    return text.trim();
+  }
+
+  // 1. User messages: pure system notifications or wakeups must be completely stripped.
+  if (mode === 'user') {
+    let cleaned = text
+      .replace(/The following is a <SYSTEM_MESSAGE>[\s\S]*?<\/SYSTEM_MESSAGE>/gi, '')
+      .replace(/<SYSTEM_MESSAGE>[\s\S]*?<\/SYSTEM_MESSAGE>/gi, '');
+
+    // Handle unclosed system message blocks or trailing disclaimers
+    cleaned = cleaned.replace(/The following is a <SYSTEM_MESSAGE>[\s\S]*$/i, '');
+    cleaned = cleaned.replace(/<SYSTEM_MESSAGE>[\s\S]*$/i, '');
+    return cleaned.trim();
+  }
+
+  // 2. Assistant messages: drop task-finish notifications and server notices entirely.
+  if (mode === 'assistant') {
+    if (
+      /content=Task id "[^"]+" finished with result:/i.test(text) ||
+      /content=Task finished with result:/i.test(text) ||
+      /content=\[Notice\]/i.test(text)
+    ) {
+      return '';
+    }
+  }
+
+  // 3. Unwrap inner payload for tool results or valid assistant responses (e.g. subagents)
+  let cleaned = text
+    .replace(/The following is a <SYSTEM_MESSAGE>[\s\S]*?<SYSTEM_MESSAGE>/gi, '')
+    .replace(/<\/SYSTEM_MESSAGE>/gi, '')
+    .replace(/<SYSTEM_MESSAGE>/gi, '')
+    .trim();
+
+  cleaned = cleaned.replace(/^\[Message\][^\n]*?content=(?:Task id "[^"]+" finished with result:\s*)?/i, '');
+
+  if (/^\[Notice\]/i.test(cleaned)) {
+    return '';
+  }
+
+  return cleaned.trim();
+}
+
+/**
+ * Strips Antigravity engine internal wrapper blocks completely (used for user messages).
+ */
+export function stripSystemMessageBlocks(text: string): string {
+  return cleanAntigravityMessageContent(text, 'user');
+}
+
+/**
+ * Unwraps Antigravity engine internal wrapper blocks while preserving inner payload (used for tool results).
+ */
+export function unwrapSystemMessageContent(text: string): string {
+  return cleanAntigravityMessageContent(text, 'tool_result');
+}
+
+/**
  * Normalizes one step or event from Antigravity CLI stream-json or transcript logs.
  */
 export class AntigravitySessionsProvider implements IProviderSessions {
@@ -264,7 +333,7 @@ export class AntigravitySessionsProvider implements IProviderSessions {
           id: generateMessageId(PROVIDER),
           kind: 'tool_result',
           toolId,
-          content: isError ? (readOptionalString(toolInfo?.error) ?? 'Tool execution error') : output,
+          content: isError ? (readOptionalString(toolInfo?.error) ?? 'Tool execution error') : unwrapSystemMessageContent(output),
           isError,
           sessionId,
           provider: PROVIDER,
@@ -336,13 +405,14 @@ export class AntigravitySessionsProvider implements IProviderSessions {
 
           // User prompt
           if (type === 'USER_INPUT' || source === 'USER_EXPLICIT') {
-            // Clean prompt wrapper tags like <USER_REQUEST>...</USER_REQUEST>
+            // Clean prompt wrapper tags like <USER_REQUEST>...</USER_REQUEST> and internal <SYSTEM_MESSAGE> blocks
             let cleanText = rawContent
               .replace(/<USER_REQUEST>\s*/g, '')
               .replace(/<\/USER_REQUEST>\s*/g, '')
               .replace(/<ADDITIONAL_METADATA>[\s\S]*?<\/ADDITIONAL_METADATA>/g, '')
-              .replace(/<USER_SETTINGS_CHANGE>[\s\S]*?<\/USER_SETTINGS_CHANGE>/g, '')
-              .trim();
+              .replace(/<USER_SETTINGS_CHANGE>[\s\S]*?<\/USER_SETTINGS_CHANGE>/g, '');
+
+            cleanText = stripSystemMessageBlocks(cleanText).trim();
 
             const parsedImages = parseImagesInputTag(cleanText);
             const parsedFiles = parseFilesInputTag(parsedImages.text);
@@ -389,16 +459,19 @@ export class AntigravitySessionsProvider implements IProviderSessions {
                 }));
               }
             } else if (rawContent) {
-              normalizedMessages.push(createNormalizedMessage({
-                id: baseId,
-                sessionId,
-                timestamp: createdAt,
-                provider: PROVIDER,
-                kind: 'text',
-                role: 'assistant',
-                content: rawContent,
-                sequence: stepIndex,
-              }));
+              const cleanedContent = cleanAntigravityMessageContent(rawContent, 'assistant');
+              if (cleanedContent) {
+                normalizedMessages.push(createNormalizedMessage({
+                  id: baseId,
+                  sessionId,
+                  timestamp: createdAt,
+                  provider: PROVIDER,
+                  kind: 'text',
+                  role: 'assistant',
+                  content: cleanedContent,
+                  sequence: stepIndex,
+                }));
+              }
             }
             continue;
           }
@@ -412,24 +485,28 @@ export class AntigravitySessionsProvider implements IProviderSessions {
               (msg) => msg.kind === 'tool_use' && !msg.toolResult,
             );
             if (pendingToolUse) {
+              const cleanedResult = cleanAntigravityMessageContent(rawContent, 'tool_result');
               pendingToolUse.toolResult = {
-                content: rawContent,
+                content: cleanedResult,
                 isError: entry.status === 'ERROR'
                   || (typeof entry.exit_code === 'number' && entry.exit_code !== 0),
               };
             } else {
-              // Nothing to pair with (task status without a visible call):
-              // surface the content as assistant text instead of dropping it.
-              normalizedMessages.push(createNormalizedMessage({
-                id: baseId,
-                sessionId,
-                timestamp: createdAt,
-                provider: PROVIDER,
-                kind: 'text',
-                role: 'assistant',
-                content: rawContent,
-                sequence: stepIndex,
-              }));
+              const cleanedContent = cleanAntigravityMessageContent(rawContent, 'assistant');
+              if (cleanedContent) {
+                // Nothing to pair with (task status without a visible call):
+                // surface the cleaned content as assistant text only if non-empty
+                normalizedMessages.push(createNormalizedMessage({
+                  id: baseId,
+                  sessionId,
+                  timestamp: createdAt,
+                  provider: PROVIDER,
+                  kind: 'text',
+                  role: 'assistant',
+                  content: cleanedContent,
+                  sequence: stepIndex,
+                }));
+              }
             }
           }
         } catch {
