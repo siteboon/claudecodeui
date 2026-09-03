@@ -749,3 +749,70 @@ test('AntigravityProviderAuth validates token expiry and extracts the account em
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
 });
+
+test('AntigravitySessionsProvider reads token usage from the indexed transcript', async () => {
+  const tempDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'antigravity-token-usage-'));
+  const transcriptPath = path.join(tempDirectory, 'transcript.jsonl');
+
+  try {
+    await fs.writeFile(transcriptPath, [
+      JSON.stringify({ step_index: 0, type: 'USER_INPUT', content: 'hello' }),
+      JSON.stringify({ step_index: 1, type: 'PLANNER_RESPONSE', content: 'hi' }),
+      JSON.stringify({
+        event: 'result',
+        result: {
+          status: 'SUCCESS',
+          usage: { input_tokens: 250, output_tokens: 80, total_tokens: 330 },
+        },
+      }),
+    ].join('\n'));
+
+    const sessions = new AntigravitySessionsProvider();
+    assert.deepEqual(
+      await sessions.getTokenUsage({
+        appSessionId: 'app-session',
+        nativeSessionId: 'conv-1',
+        jsonlPath: transcriptPath,
+        projectPath: null,
+      }),
+      { used: 330, inputTokens: 250, outputTokens: 80, breakdown: { input: 250, output: 80 } },
+    );
+  } finally {
+    await fs.rm(tempDirectory, { recursive: true, force: true });
+  }
+});
+
+test('AntigravitySessionsProvider prefers persisted token_usage.json over the transcript', async () => {
+  const tempDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'antigravity-token-usage-json-'));
+  // Transcript candidates live at brain/<id>/.system_generated/logs/transcript.jsonl;
+  // the session's brain directory (which holds token_usage.json) is that id's folder.
+  const transcriptPath = path.join(
+    tempDirectory, 'brain', 'conv-2', '.system_generated', 'logs', 'transcript.jsonl',
+  );
+  await fs.mkdir(path.dirname(transcriptPath), { recursive: true });
+  await fs.writeFile(transcriptPath, JSON.stringify({
+    event: 'result',
+    result: { usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } },
+  }));
+  await fs.writeFile(
+    path.join(tempDirectory, 'brain', 'conv-2', 'token_usage.json'),
+    JSON.stringify({ used: 999, inputTokens: 900, outputTokens: 99, breakdown: { input: 900, output: 99 } }),
+  );
+
+  const restoreDataDir = withEnvValue('CLOUDCLI_ANTIGRAVITY_DATA_DIR', tempDirectory);
+
+  try {
+    const sessions = new AntigravitySessionsProvider();
+    const usage = await sessions.getTokenUsage({
+      appSessionId: 'app-session',
+      nativeSessionId: 'conv-2',
+      jsonlPath: null,
+      projectPath: null,
+    });
+
+    assert.equal(usage.used, 999);
+  } finally {
+    restoreDataDir();
+    await fs.rm(tempDirectory, { recursive: true, force: true });
+  }
+});

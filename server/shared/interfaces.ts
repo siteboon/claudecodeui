@@ -11,11 +11,14 @@ import type {
   ProviderCurrentActiveModel,
   ProviderModelsDefinition,
   ProviderMcpServer,
+  ProviderQuotaData,
+  ProviderSessionUsageInput,
   ProviderSkillCreateInput,
   ProviderSkillRemoveInput,
   ProviderRuntimeContext,
   ProviderRuntimePermissionGateway,
   ProviderRuntimeWriter,
+  ProviderTokenUsageResult,
   UpsertProviderMcpServerInput,
 } from '@/shared/types.js';
 
@@ -95,6 +98,14 @@ export interface IProviderAuth {
    * Checks whether the provider is installed and has usable credentials.
    */
   getStatus(): Promise<ProviderAuthStatus>;
+
+  /**
+   * Reads account-level quota and rate-limit status for this provider.
+   *
+   * Optional: providers without quota reporting simply omit it. Consumed by
+   * the provider token-usage service (GET /providers/quota).
+   */
+  getQuota?(options?: { forceRefresh?: boolean }): Promise<ProviderQuotaData | null>;
 }
 
 // ---------------------------
@@ -156,6 +167,16 @@ export interface IProviderSessions {
   fetchHistory(sessionId: string, options?: FetchHistoryOptions): Promise<FetchHistoryResult>;
   cleanupSession?(nativeSessionId: string, jsonlPath?: string | null): Promise<boolean>;
   cleanupProjectStorage?(projectPath: string): Promise<void>;
+
+  /**
+   * Reads the latest token-usage snapshot for one provider-native session.
+   *
+   * Optional: providers that cannot report usage omit it; the provider
+   * token-usage service then answers with an explicit unsupported result.
+   * Implementations own their native storage layout end to end and throw a
+   * provider-prefixed 404 AppError when the session cannot be found.
+   */
+  getTokenUsage?(input: ProviderSessionUsageInput): Promise<ProviderTokenUsageResult>;
 }
 
 // ---------------------------

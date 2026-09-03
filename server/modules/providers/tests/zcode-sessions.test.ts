@@ -7,6 +7,7 @@ import test from 'node:test';
 import Database from 'better-sqlite3';
 
 import { ZCodeSessionsProvider } from '@/modules/providers/list/zcode/zcode-sessions.provider.js';
+import { AppError } from '@/shared/utils.js';
 
 /** Redirects ZCODE_STORAGE_DIR to a temp dir for fixture isolation. */
 const withZCodeStorage = async (runTest: (storageDir: string) => Promise<void>): Promise<void> => {
@@ -249,5 +250,83 @@ test('fetchHistory returns empty for sub-agent sessions and missing databases', 
     const missing = await provider.fetchHistory('sess_missing');
     assert.equal(missing.total, 0);
     assert.deepEqual(missing.messages, []);
+  });
+});
+
+test('getTokenUsage aggregates message token totals from the fixture database', async () => {
+  await withZCodeStorage(async (storageDir) => {
+    await createFixtureDatabase(storageDir, 'sess_tokens');
+
+    const provider = new ZCodeSessionsProvider();
+    assert.deepEqual(
+      await provider.getTokenUsage({
+        appSessionId: 'app-1',
+        nativeSessionId: 'sess_tokens',
+        jsonlPath: null,
+        projectPath: null,
+      }),
+      // msg_asst carries tokens {input: 100, output: 20, reasoning: 5, cache.read: 10}
+      { used: 135, inputTokens: 100, outputTokens: 20, breakdown: { input: 100, output: 20 } },
+    );
+  });
+});
+
+test('getTokenUsage reports zeros for a known session without usage and 404s unknown sessions', async () => {
+  await withZCodeStorage(async (storageDir) => {
+    await createFixtureDatabase(storageDir, 'sess_known');
+
+    // A known session whose messages carry no usage counters.
+    const db = new Database(path.join(storageDir, 'cli', 'db', 'db.sqlite'));
+    try {
+      db.prepare(
+        'INSERT INTO message (id, session_id, time_created, time_updated, data, sequence) VALUES (?, ?, ?, ?, ?, ?)',
+      ).run('msg_bare', 'sess_no_usage', 3000, 3000, JSON.stringify({ role: 'assistant' }), 0);
+    } finally {
+      db.close();
+    }
+
+    const provider = new ZCodeSessionsProvider();
+    assert.deepEqual(
+      await provider.getTokenUsage({
+        appSessionId: 'app-1',
+        nativeSessionId: 'sess_no_usage',
+        jsonlPath: null,
+        projectPath: null,
+      }),
+      { used: 0, inputTokens: 0, outputTokens: 0, breakdown: { input: 0, output: 0 } },
+    );
+
+    await assert.rejects(
+      () => provider.getTokenUsage({
+        appSessionId: 'app-1',
+        nativeSessionId: 'sess_unknown',
+        jsonlPath: null,
+        projectPath: null,
+      }),
+      (error: unknown) => (
+        error instanceof AppError
+        && error.code === 'ZCODE_SESSION_NOT_FOUND'
+        && error.statusCode === 404
+      ),
+    );
+  });
+});
+
+test('getTokenUsage 404s when the ZCode database does not exist', async () => {
+  await withZCodeStorage(async () => {
+    const provider = new ZCodeSessionsProvider();
+    await assert.rejects(
+      () => provider.getTokenUsage({
+        appSessionId: 'app-1',
+        nativeSessionId: 'sess_missing_db',
+        jsonlPath: null,
+        projectPath: null,
+      }),
+      (error: unknown) => (
+        error instanceof AppError
+        && error.code === 'ZCODE_DATABASE_NOT_FOUND'
+        && error.statusCode === 404
+      ),
+    );
   });
 });

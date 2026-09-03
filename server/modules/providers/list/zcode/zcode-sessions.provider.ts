@@ -4,8 +4,16 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 
 import type { IProviderSessions } from '@/shared/interfaces.js';
-import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
+import type {
+  AnyRecord,
+  FetchHistoryOptions,
+  FetchHistoryResult,
+  NormalizedMessage,
+  ProviderSessionUsageInput,
+  ProviderTokenUsageResult,
+} from '@/shared/types.js';
 import {
+  AppError,
   createNormalizedMessage,
   generateMessageId,
   getZCodeDatabasePath,
@@ -106,7 +114,7 @@ function readTokenUsedCount(value: unknown): number | undefined {
  * Shape matches the `token_budget` summaries other providers report
  * (`used` plus input/output breakdown).
  */
-function buildTokenUsage(totals: ZCodeTokenTotals | null): AnyRecord | undefined {
+function buildTokenUsage(totals: ZCodeTokenTotals | null): ProviderTokenUsageResult | undefined {
   if (!totals) {
     return undefined;
   }
@@ -162,7 +170,7 @@ function extractText(value: unknown): string {
 function aggregateZCodeSessionTokenUsage(
   db: Database.Database,
   sessionId: string,
-): AnyRecord | undefined {
+): ProviderTokenUsageResult | undefined {
   const rows = db.prepare('SELECT data FROM message WHERE session_id = ?').all(sessionId) as { data: string }[];
 
   const totals: ZCodeTokenTotals = { input: 0, output: 0, reasoning: 0, cache: 0 };
@@ -608,6 +616,50 @@ export class ZCodeSessionsProvider implements IProviderSessions {
     }
 
     return normalized;
+  }
+
+  /**
+   * Reads the aggregated token usage for one ZCode session.
+   *
+   * Consumer: the provider token-usage service. Sums `message.data.tokens`
+   * rows for the provider-native session id (the same aggregation fetchHistory
+   * uses). A missing database or a session unknown to ZCode is a 404; a known
+   * session without recorded usage reports zeros.
+   */
+  async getTokenUsage(input: ProviderSessionUsageInput): Promise<ProviderTokenUsageResult> {
+    const db = openZCodeDatabase();
+    if (!db) {
+      throw new AppError('ZCode session database was not found.', {
+        code: 'ZCODE_DATABASE_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    try {
+      const usage = aggregateZCodeSessionTokenUsage(db, input.nativeSessionId);
+      if (usage) {
+        return usage;
+      }
+
+      const messageCount = db
+        .prepare('SELECT COUNT(*) AS count FROM message WHERE session_id = ?')
+        .get(input.nativeSessionId) as { count: number };
+      if (!messageCount.count) {
+        throw new AppError(`ZCode session for "${input.appSessionId}" was not found.`, {
+          code: 'ZCODE_SESSION_NOT_FOUND',
+          statusCode: 404,
+        });
+      }
+
+      return {
+        used: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        breakdown: { input: 0, output: 0 },
+      };
+    } finally {
+      db.close();
+    }
   }
 
   /**

@@ -21,14 +21,18 @@ import type {
   FetchHistoryOptions,
   FetchHistoryResult,
   NormalizedMessage,
+  ProviderSessionUsageInput,
+  ProviderTokenUsageResult,
 } from '@/shared/types.js';
 import {
+  AppError,
   createNormalizedMessage,
   generateMessageId,
   normalizeProjectPath,
   parseAntigravityWorkspacePath,
   readObjectRecord,
   readOptionalString,
+  readUsageNumber,
   removePathIfExists,
   sanitizeLeafDirectoryName,
   sliceTailPage,
@@ -55,6 +59,82 @@ function findTranscriptPath(sessionId: string): string | null {
   }
 
   return null;
+}
+
+/**
+ * Reads a usage snapshot from one Antigravity transcript.jsonl.
+ *
+ * Transcripts carry the usage either on a `result` event or on bare
+ * total/input/output lines. When no explicit usage was recorded the transcript
+ * is re-scanned and characters are estimated at ~3 chars/token so long
+ * conversations still show a ballpark figure instead of zeros.
+ */
+function readAntigravityTokenUsage(fileContent: string): ProviderTokenUsageResult {
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let totalTokens = 0;
+  const lines = fileContent.trim().split('\n');
+
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    try {
+      const entry = JSON.parse(lines[index]) as AnyRecord;
+      const usage = entry.usage
+        ?? entry.result?.usage
+        ?? (entry.event === 'result' ? entry.result?.usage : null)
+        ?? (entry.payload?.usage)
+        ?? null;
+
+      if (usage) {
+        inputTokens = readUsageNumber(usage.input_tokens ?? usage.inputTokens ?? usage.prompt_tokens);
+        outputTokens = readUsageNumber(usage.output_tokens ?? usage.outputTokens ?? usage.completion_tokens);
+        totalTokens = readUsageNumber(usage.total_tokens ?? usage.totalTokens)
+          || (inputTokens + outputTokens);
+        break;
+      }
+
+      if (typeof entry.total_tokens === 'number' || typeof entry.tokens === 'number') {
+        totalTokens = readUsageNumber(entry.total_tokens ?? entry.tokens);
+        inputTokens = readUsageNumber(entry.input_tokens ?? entry.prompt_tokens);
+        outputTokens = readUsageNumber(entry.output_tokens ?? entry.completion_tokens);
+        break;
+      }
+    } catch {
+      // Skip unparseable lines.
+    }
+  }
+
+  if (totalTokens === 0 && inputTokens === 0 && outputTokens === 0) {
+    let estimatedInputChars = 0;
+    let estimatedOutputChars = 0;
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const entry = JSON.parse(trimmed) as AnyRecord;
+        const contentLength = typeof entry.content === 'string' ? entry.content.length : 0;
+        const thinkingLength = typeof entry.thinking === 'string' ? entry.thinking.length : 0;
+        if (entry.source === 'MODEL' || entry.type === 'PLANNER_RESPONSE') {
+          estimatedOutputChars += contentLength + thinkingLength;
+        } else {
+          estimatedInputChars += contentLength;
+        }
+      } catch {
+        // Skip unparseable lines
+      }
+    }
+    if (estimatedInputChars > 0 || estimatedOutputChars > 0) {
+      inputTokens = Math.ceil(estimatedInputChars / 3);
+      outputTokens = Math.ceil(estimatedOutputChars / 3);
+      totalTokens = inputTokens + outputTokens;
+    }
+  }
+
+  return {
+    used: totalTokens || (inputTokens + outputTokens),
+    inputTokens,
+    outputTokens,
+    breakdown: { input: inputTokens, output: outputTokens },
+  };
 }
 
 function cleanToolArgValue(val: unknown): unknown {
@@ -383,6 +463,47 @@ export class AntigravitySessionsProvider implements IProviderSessions {
       console.warn(`[AntigravitySessions] Failed to load history for ${sessionId}:`, error);
       return { messages: [], total: 0, hasMore: false, offset: 0, limit: null };
     }
+  }
+
+  /**
+   * Reads the token usage for one Antigravity session.
+   *
+   * Consumer: the provider token-usage service. A persisted
+   * `token_usage.json` in the session's brain directory wins (written by the
+   * quota feature with exact counters); otherwise usage is parsed from the
+   * transcript. The transcript is located via the app row's indexed
+   * `jsonl_path` when it still exists, then via the brain directory lookup.
+   */
+  async getTokenUsage(input: ProviderSessionUsageInput): Promise<ProviderTokenUsageResult> {
+    const indexedFilePath = input.jsonlPath && fs.existsSync(input.jsonlPath)
+      ? input.jsonlPath
+      : null;
+    const sessionFilePath = indexedFilePath ?? findTranscriptPath(input.nativeSessionId);
+
+    if (!sessionFilePath) {
+      throw new AppError(`Antigravity session file for "${input.appSessionId}" was not found.`, {
+        code: 'ANTIGRAVITY_SESSION_FILE_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    // Check for persisted token_usage.json in session's brain directory
+    const brainDir = path.resolve(sessionFilePath, '../../..');
+    const tokenUsagePath = path.join(brainDir, 'token_usage.json');
+    if (fs.existsSync(tokenUsagePath)) {
+      try {
+        const usageRaw = await readFile(tokenUsagePath, 'utf8');
+        const usageJson = JSON.parse(usageRaw) as ProviderTokenUsageResult | null;
+        if (usageJson && typeof usageJson.used === 'number') {
+          return usageJson;
+        }
+      } catch {
+        // Fall back to reading the transcript file.
+      }
+    }
+
+    const fileContent = await readFile(sessionFilePath, 'utf8');
+    return readAntigravityTokenUsage(fileContent);
   }
 
   /**

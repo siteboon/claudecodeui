@@ -5,13 +5,22 @@ import path from 'node:path';
 import readline from 'node:readline';
 
 import type { IProviderSessions } from '@/shared/interfaces.js';
-import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
+import type {
+  AnyRecord,
+  FetchHistoryOptions,
+  FetchHistoryResult,
+  NormalizedMessage,
+  ProviderSessionUsageInput,
+  ProviderTokenUsageResult,
+} from '@/shared/types.js';
 import { parseFilesInputTag } from '@/shared/image-attachments.js';
 import {
+  AppError,
   createNormalizedMessage,
   generateMessageId,
   normalizeProjectPath,
   readObjectRecord,
+  readUsageNumber,
   removePathIfExists,
   sanitizeLeafDirectoryName,
   sliceTailPage,
@@ -305,6 +314,64 @@ function buildLocalCommandDisplayText(payload: ClaudeLocalCommandPayload): strin
  */
 function stripAnsiFormatting(text: string): string {
   return text.replace(/\u001B\[[0-9;?]*[ -/]*[@-~]/g, '');
+}
+
+/**
+ * Reads the latest assistant-message usage snapshot from a Claude JSONL.
+ *
+ * Claude appends cumulative per-assistant usage over time, so the scan walks
+ * from the end and stops at the first readable assistant entry. Cache reads
+ * and writes count toward the input total, matching how the CLI bills them.
+ */
+function readClaudeTokenUsage(
+  fileContent: string,
+  configuredContextWindow: string | undefined,
+): ProviderTokenUsageResult {
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let cacheReadTokens = 0;
+  let cacheCreationTokens = 0;
+  const lines = fileContent.trim().split('\n');
+
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    try {
+      const entry = JSON.parse(lines[index]) as AnyRecord;
+      const usage = entry.type === 'assistant' ? entry.message?.usage : null;
+      if (!usage) {
+        continue;
+      }
+
+      const directInputTokens = readUsageNumber(usage.input_tokens ?? usage.inputTokens);
+      cacheReadTokens = readUsageNumber(
+        usage.cache_read_input_tokens ?? usage.cacheReadInputTokens ?? usage.cacheReadTokens,
+      );
+      cacheCreationTokens = readUsageNumber(
+        usage.cache_creation_input_tokens
+          ?? usage.cacheCreationInputTokens
+          ?? usage.cacheCreationTokens,
+      );
+      inputTokens = directInputTokens + cacheReadTokens + cacheCreationTokens;
+      outputTokens = readUsageNumber(usage.output_tokens ?? usage.outputTokens);
+      break;
+    } catch {
+      // Skip malformed lines without discarding usage from earlier messages.
+    }
+  }
+
+  const parsedContextWindow = Number.parseInt(configuredContextWindow ?? '', 10);
+  const contextWindow = Number.isFinite(parsedContextWindow) ? parsedContextWindow : 160_000;
+  const cacheTokens = cacheReadTokens + cacheCreationTokens;
+
+  return {
+    used: inputTokens + outputTokens,
+    total: contextWindow,
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheCreationTokens,
+    cacheTokens,
+    breakdown: { input: inputTokens, output: outputTokens },
+  };
 }
 
 export class ClaudeSessionsProvider implements IProviderSessions {
@@ -689,6 +756,52 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       offset: normalizedOffset,
       limit: normalizedLimit,
     };
+  }
+
+  /**
+   * Reads the token usage recorded in one Claude session JSONL.
+   *
+   * Consumer: the provider token-usage service. The app row's indexed
+   * `jsonl_path` wins; otherwise the transcript is derived from the encoded
+   * project directory under `~/.claude/projects`. A missing file is a 404.
+   */
+  async getTokenUsage(input: ProviderSessionUsageInput): Promise<ProviderTokenUsageResult> {
+    let sessionFilePath = input.jsonlPath ?? undefined;
+    if (!sessionFilePath) {
+      if (!input.projectPath) {
+        throw new AppError(`Session file for "${input.appSessionId}" was not found.`, {
+          code: 'SESSION_FILE_NOT_FOUND',
+          statusCode: 404,
+        });
+      }
+
+      const encodedProjectPath = input.projectPath.replace(/[^a-zA-Z0-9-]/g, '-');
+      const projectDirectory = path.join(
+        os.homedir(),
+        '.claude',
+        'projects',
+        encodedProjectPath,
+      );
+      sessionFilePath = path.join(projectDirectory, `${input.nativeSessionId}.jsonl`);
+
+      const relativePath = path.relative(path.resolve(projectDirectory), path.resolve(sessionFilePath));
+      if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+        throw new AppError('Resolved session path is invalid.', {
+          code: 'INVALID_SESSION_PATH',
+          statusCode: 400,
+        });
+      }
+    }
+
+    if (!fs.existsSync(sessionFilePath)) {
+      throw new AppError(`Session file for "${input.appSessionId}" was not found.`, {
+        code: 'SESSION_FILE_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    const fileContent = await fsp.readFile(sessionFilePath, 'utf8');
+    return readClaudeTokenUsage(fileContent, process.env.CONTEXT_WINDOW);
   }
 
   /**

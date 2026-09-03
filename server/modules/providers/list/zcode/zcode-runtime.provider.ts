@@ -25,6 +25,7 @@ import type {
   ProviderRuntimeWriter,
 } from '@/shared/types.js';
 import { createCompleteMessage, createNormalizedMessage, generateMessageId, readOptionalString } from '@/shared/utils.js';
+import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
 
 import { protocolClient } from './zcode-protocol.client.js';
 import { readZCodeSessionModelFromDb, resolveZCodeModelRef } from './zcode-models.provider.js';
@@ -55,15 +56,24 @@ const PERMISSION_MODE_MAP: Record<string, string> = {
 const activeSessions = new Map<string, string>();
 
 /**
+ * Abort keys whose run was terminated by a user-requested abort, so the
+ * terminal notification reports "aborted" instead of a failure when the
+ * aborted run unwinds through `waitForCompletion`.
+ */
+const abortedRunKeys = new Set<string>();
+
+/**
  * Session completion tracking to ensure exactly one complete event per run.
  * Maps ZCode session IDs to completion state; `tokenUsage` is the run's
  * total used-token count carried on the final complete message, `failed`
  * marks runs that ended with a terminal error event (turn.failed/fatal) so
- * the complete message reports a non-zero exit code.
+ * the complete message reports a non-zero exit code, and `failedMessage`
+ * carries the last engine error text for the run-failure notification.
  */
 const sessionCompletionState = new Map<string, {
   completed: boolean;
   failed?: boolean;
+  failedMessage?: string;
   tokenUsage?: number;
 }>();
 
@@ -97,6 +107,7 @@ export class ZCodeRuntimeProvider implements IProviderRuntime {
     context: ProviderRuntimeContext,
   ): Promise<unknown> {
     const appSessionId = readOptionalString(options.sessionId) ?? null;
+    const sessionSummary = readOptionalString(options.sessionSummary);
 
     // Runs before the main try block below; without its own error emission a
     // session/create failure would never reach the chat stream and the page
@@ -106,12 +117,19 @@ export class ZCodeRuntimeProvider implements IProviderRuntime {
       zcodeSessionId = await this.resolveOrCreateSession(appSessionId, options, context, writer);
     } catch (error) {
       this.sendRuntimeError(writer, appSessionId, error);
+      this.notifyRunOutcome({
+        userId: writer.userId,
+        sessionId: appSessionId,
+        sessionSummary,
+        outcome: { failed: true, error },
+      });
       throw error;
     }
 
     // Abort is requested with the app-facing id; fall back to the ZCode id
     // for callers (e.g. tests) that never supplied one.
     const abortKey = appSessionId ?? zcodeSessionId;
+    const notifySessionId = appSessionId ?? zcodeSessionId;
     activeSessions.set(abortKey, zcodeSessionId);
     sessionCompletionState.set(zcodeSessionId, { completed: false });
 
@@ -128,19 +146,84 @@ export class ZCodeRuntimeProvider implements IProviderRuntime {
         await this.waitForCompletion(zcodeSessionId, abortKey);
         this.sendCompletionEvent(zcodeSessionId, writer);
 
-        return { sessionId: zcodeSessionId, success: true };
+        const completionState = sessionCompletionState.get(zcodeSessionId);
+        this.notifyRunOutcome({
+          userId: writer.userId,
+          sessionId: notifySessionId,
+          sessionSummary,
+          outcome: completionState?.failed
+            ? { failed: true, error: completionState.failedMessage ?? 'ZCode run failed' }
+            : { failed: false, stopReason: 'completed' },
+        });
+
+        return { sessionId: zcodeSessionId, success: !completionState?.failed };
       } finally {
         protocolClient.removeSessionListener(zcodeSessionId, eventListener);
       }
     } catch (error) {
-      // Surface the failure to the chat stream before propagating it.
-      this.sendRuntimeError(writer, zcodeSessionId, error);
+      // A user-requested abort removes the abort key, so the resulting
+      // "Session was aborted" error lands here: report it as stopped with an
+      // `aborted` reason instead of a failure, matching the other runtimes.
+      const wasAborted = abortedRunKeys.delete(abortKey);
+
+      // Surface non-abort failures to the chat stream before propagating.
+      // Aborted runs skip the error bubble so users don't see false-alarm errors.
+      if (!wasAborted) {
+        this.sendRuntimeError(writer, zcodeSessionId, error);
+      }
+
+      this.notifyRunOutcome({
+        userId: writer.userId,
+        sessionId: notifySessionId,
+        sessionSummary,
+        outcome: wasAborted
+          ? { failed: false, stopReason: 'aborted' }
+          : { failed: true, error },
+      });
 
       throw error;
     } finally {
       activeSessions.delete(abortKey);
       sessionCompletionState.delete(zcodeSessionId);
+      abortedRunKeys.delete(abortKey);
     }
+  }
+
+  /**
+   * Reports one run's terminal state to the notification channels.
+   *
+   * Mirrors the terminal-state notifications every other provider runtime
+   * emits: completed runs notify as stopped, engine-reported failures and
+   * runtime errors as failed, user aborts as stopped with an `aborted`
+   * reason. `sessionId` only feeds the notification envelope.
+   */
+  private notifyRunOutcome(options: {
+    userId: string | number | null | undefined;
+    sessionId: string | null;
+    sessionSummary: string | null | undefined;
+    outcome:
+      | { failed: false; stopReason: 'completed' | 'aborted' }
+      | { failed: true; error: unknown };
+  }): void {
+    const userId = options.userId != null ? String(options.userId) : null;
+    if (options.outcome.failed) {
+      notifyRunFailed({
+        userId,
+        provider: 'zcode',
+        sessionId: options.sessionId,
+        sessionName: options.sessionSummary,
+        error: options.outcome.error,
+      });
+      return;
+    }
+
+    notifyRunStopped({
+      userId,
+      provider: 'zcode',
+      sessionId: options.sessionId,
+      sessionName: options.sessionSummary,
+      stopReason: options.outcome.stopReason,
+    });
   }
 
   /**
@@ -183,6 +266,10 @@ export class ZCodeRuntimeProvider implements IProviderRuntime {
       console.warn(`[ZCodeRuntime] No active session found for ${sessionId}`);
       return false;
     }
+
+    // Record the user-requested abort so the run's terminal notification
+    // reports "aborted" instead of a failure when waitForCompletion unwinds.
+    abortedRunKeys.add(sessionId);
 
     try {
       // Mark session as completed to prevent duplicate complete events
@@ -449,6 +536,7 @@ export class ZCodeRuntimeProvider implements IProviderRuntime {
             if (completionState) {
               completionState.failed = true;
               completionState.completed = true;
+              completionState.failedMessage = readOptionalString(message.text) ?? undefined;
             }
           }
 

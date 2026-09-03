@@ -903,6 +903,20 @@ export function extractEmailFromJwt(jwtToken: string | null | undefined): string
 }
 
 // ---------------------------
+//----------------- TOKEN USAGE UTILITIES ------------
+/**
+ * Coerces an unknown usage field into a finite number, defaulting to 0.
+ *
+ * Provider token-usage readers (Claude, Codex, Antigravity, OpenCode) sum
+ * counters that may be absent, null, or malformed JSON numbers; every reader
+ * must treat those cases as 0 rather than propagating NaN into totals.
+ */
+export function readUsageNumber(value: unknown): number {
+  const parsedValue = Number(value);
+  return Number.isFinite(parsedValue) ? parsedValue : 0;
+}
+
+// ---------------------------
 //----------------- OPENCODE SESSION STORAGE UTILITIES ------------
 /**
  * Resolves the OpenCode SQLite session database path.

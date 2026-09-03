@@ -520,3 +520,29 @@ test('OpenCode synchronizer keeps the stored title for indexed sessions', { conc
     await rm(tempRoot, { recursive: true, force: true });
   }
 });
+
+test('getTokenUsage reads the token columns for the provider-native session', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'opencode-token-usage-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tempRoot);
+
+  try {
+    await createOpenCodeDatabase(tempRoot, workspacePath);
+
+    const provider = new OpenCodeSessionsProvider();
+    // Seeded session row: tokens 10/20/7/3/2 → used 42, input incl. cache reads 13.
+    assert.deepEqual(
+      await provider.getTokenUsage({
+        appSessionId: 'app-1',
+        nativeSessionId: 'open-session-1',
+        jsonlPath: null,
+        projectPath: null,
+      }),
+      { used: 42, inputTokens: 13, outputTokens: 20, breakdown: { input: 13, output: 20 } },
+    );
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});

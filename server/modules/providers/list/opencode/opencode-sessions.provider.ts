@@ -5,8 +5,16 @@ import Database from 'better-sqlite3';
 
 import { parseFilesInputTag, parseImagesInputTag } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
-import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
+import type {
+  AnyRecord,
+  FetchHistoryOptions,
+  FetchHistoryResult,
+  NormalizedMessage,
+  ProviderSessionUsageInput,
+  ProviderTokenUsageResult,
+} from '@/shared/types.js';
 import {
+  AppError,
   createNormalizedMessage,
   generateMessageId,
   getOpenCodeDatabasePath,
@@ -15,6 +23,7 @@ import {
   readObjectRecord,
   readJsonRecord,
   readOptionalString,
+  readUsageNumber,
   removePathIfExists,
   sliceTailPage,
   unwrapJsonStringLiteral,
@@ -499,6 +508,82 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
     }
 
     return normalized;
+  }
+
+  /**
+   * Reads the token usage recorded on the session row's token columns.
+   *
+   * Consumer: the provider token-usage service. Databases predating the token
+   * columns answer with an explicit unsupported result; a database or session
+   * row that cannot be found is a 404.
+   */
+  async getTokenUsage(input: ProviderSessionUsageInput): Promise<ProviderTokenUsageResult> {
+    const databasePath = getOpenCodeDatabasePath();
+    if (!fsSync.existsSync(databasePath)) {
+      throw new AppError('OpenCode database was not found.', {
+        code: 'OPENCODE_DATABASE_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    const database = new Database(databasePath, { readonly: true, fileMustExist: true });
+    try {
+      const columns = database.prepare('PRAGMA table_info(session)').all() as Array<{ name: string }>;
+      const columnNames = new Set(columns.map((column) => column.name));
+      const requiredColumns = [
+        'tokens_input',
+        'tokens_output',
+        'tokens_reasoning',
+        'tokens_cache_read',
+        'tokens_cache_write',
+      ];
+
+      if (!requiredColumns.every((column) => columnNames.has(column))) {
+        return {
+          used: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          breakdown: { input: 0, output: 0 },
+          unsupported: true,
+          message: 'Token usage tracking is not available in this OpenCode database schema',
+        };
+      }
+
+      const row = database.prepare(`
+        SELECT
+          tokens_input AS inputTokens,
+          tokens_output AS outputTokens,
+          tokens_reasoning AS reasoningTokens,
+          tokens_cache_read AS cacheReadTokens,
+          tokens_cache_write AS cacheWriteTokens
+        FROM session
+        WHERE id = ?
+      `).get(input.nativeSessionId) as OpenCodeTokenTotals | undefined;
+
+      if (!row) {
+        throw new AppError('OpenCode session was not found.', {
+          code: 'OPENCODE_SESSION_NOT_FOUND',
+          statusCode: 404,
+        });
+      }
+
+      const inputTokens = readUsageNumber(row.inputTokens) + readUsageNumber(row.cacheReadTokens);
+      const outputTokens = readUsageNumber(row.outputTokens);
+      const used = readUsageNumber(row.inputTokens)
+        + outputTokens
+        + readUsageNumber(row.reasoningTokens)
+        + readUsageNumber(row.cacheReadTokens)
+        + readUsageNumber(row.cacheWriteTokens);
+
+      return {
+        used,
+        inputTokens,
+        outputTokens,
+        breakdown: { input: inputTokens, output: outputTokens },
+      };
+    } finally {
+      database.close();
+    }
   }
 
   /**

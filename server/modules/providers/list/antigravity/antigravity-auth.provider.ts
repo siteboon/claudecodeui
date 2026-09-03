@@ -11,11 +11,12 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 
 import type { IProviderAuth } from '@/shared/interfaces.js';
-import type { ProviderAuthStatus } from '@/shared/types.js';
+import type { ProviderAuthStatus, ProviderQuotaData } from '@/shared/types.js';
 import { extractEmailFromJwt } from '@/shared/utils.js';
 
 import { getAntigravityOauthTokenPath } from './antigravity-data-root.js';
 import { getEngineVersion, tryResolveEnginePath } from './antigravity-engine-path.js';
+import { fetchAntigravityQuota } from './antigravity-quota.provider.js';
 
 /**
  * One credential record as found in the agy OAuth token file. The exact
@@ -232,5 +233,13 @@ export class AntigravityProviderAuth implements IProviderAuth {
           : 'Antigravity CLI is not logged in. Run `agy` in your terminal to log in.'),
       loginCommand: 'agy',
     };
+  }
+
+  /**
+   * Reads account-level quota (5-hour and weekly limits) via the agy CLI.
+   * Consumer: the provider token-usage service (GET /providers/quota).
+   */
+  async getQuota(options?: { forceRefresh?: boolean }): Promise<ProviderQuotaData | null> {
+    return fetchAntigravityQuota(options);
   }
 }

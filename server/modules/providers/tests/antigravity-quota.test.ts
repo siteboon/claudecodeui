@@ -7,6 +7,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import type { IProvider } from '@/shared/interfaces.js';
+
 import {
   fetchAntigravityQuota,
   resetAntigravityQuotaCache,
@@ -153,25 +155,28 @@ test('fetchAntigravityQuota returns null gracefully on execution failure or miss
 });
 
 test('providerTokenUsageService routes getProviderQuota correctly by provider', async () => {
-  const service = createProviderTokenUsageService({
-    fetchAntigravityQuota: async () => {
-      return {
-        groups: [
+  const quota = {
+    groups: [
+      {
+        name: 'Gemini Models',
+        buckets: [
           {
-            name: 'Gemini Models',
-            buckets: [
-              {
-                id: 'gemini-5h',
-                name: 'Five Hour Limit Remaining',
-                window: '5h',
-                remainingFraction: 0.8,
-              },
-            ],
+            id: 'gemini-5h',
+            name: 'Five Hour Limit Remaining',
+            window: '5h',
+            remainingFraction: 0.8,
           },
         ],
-        updatedAt: '2026-09-03T08:00:00.000Z',
-      };
-    },
+      },
+    ],
+    updatedAt: '2026-09-03T08:00:00.000Z',
+  };
+
+  const service = createProviderTokenUsageService({
+    resolveProvider: (provider: string) => ({
+      auth: provider === 'antigravity' ? { getQuota: async () => quota } : {},
+      sessions: {},
+    }) as unknown as Pick<IProvider, 'sessions' | 'auth'>,
   });
 
   const antigravityQuota = await service.getProviderQuota('antigravity');

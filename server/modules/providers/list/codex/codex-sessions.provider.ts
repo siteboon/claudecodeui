@@ -1,11 +1,29 @@
 import fsSync from 'node:fs';
+import fsp from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import readline from 'node:readline';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import { parseFilesInputTag, toImageAttachments } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
-import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
-import { createNormalizedMessage, generateMessageId, readObjectRecord, removePathIfExists, sliceTailPage } from '@/shared/utils.js';
+import type {
+  AnyRecord,
+  FetchHistoryOptions,
+  FetchHistoryResult,
+  NormalizedMessage,
+  ProviderSessionUsageInput,
+  ProviderTokenUsageResult,
+} from '@/shared/types.js';
+import {
+  AppError,
+  createNormalizedMessage,
+  generateMessageId,
+  readObjectRecord,
+  readUsageNumber,
+  removePathIfExists,
+  sliceTailPage,
+} from '@/shared/utils.js';
 
 const PROVIDER = 'codex';
 
@@ -229,6 +247,89 @@ const CODEX_COLLABORATION_CONTROL_TOOLS = new Set([
 
 function readNonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+/**
+ * Locates a Codex rollout JSONL by its session id under `~/.codex/sessions`.
+ *
+ * Codex partitions rollout files into date folders, so the lookup recurses;
+ * the app row's indexed `jsonl_path` wins when it still exists (see
+ * `getTokenUsage`). An unreadable branch is simply not a match.
+ */
+async function findCodexSessionFile(
+  directoryPath: string,
+  providerSessionId: string,
+): Promise<string | null> {
+  let entries;
+  try {
+    entries = await fsp.readdir(directoryPath, { withFileTypes: true });
+  } catch {
+    // Codex session folders are date-partitioned and can disappear while a
+    // cleanup is running. An unreadable branch is simply not a match.
+    return null;
+  }
+
+  for (const entry of entries) {
+    const entryPath = path.join(directoryPath, entry.name);
+    if (entry.isDirectory()) {
+      const nestedMatch = await findCodexSessionFile(entryPath, providerSessionId);
+      if (nestedMatch) {
+        return nestedMatch;
+      }
+      continue;
+    }
+
+    if (entry.name.includes(providerSessionId) && entry.name.endsWith('.jsonl')) {
+      return entryPath;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Reads the latest `token_count` snapshot from a Codex rollout JSONL.
+ *
+ * Codex appends cumulative totals over time, so the scan walks from the end
+ * and stops at the first readable token_count entry.
+ */
+function readCodexTokenUsage(fileContent: string): ProviderTokenUsageResult {
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let totalTokens = 0;
+  let contextWindow = 200_000;
+  const lines = fileContent.trim().split('\n');
+
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    try {
+      const entry = JSON.parse(lines[index]) as AnyRecord;
+      const tokenInfo = entry.type === 'event_msg' && entry.payload?.type === 'token_count'
+        ? entry.payload.info
+        : null;
+      if (!tokenInfo) {
+        continue;
+      }
+
+      if (tokenInfo.total_token_usage) {
+        inputTokens = readUsageNumber(tokenInfo.total_token_usage.input_tokens);
+        outputTokens = readUsageNumber(tokenInfo.total_token_usage.output_tokens);
+        totalTokens = readUsageNumber(tokenInfo.total_token_usage.total_tokens)
+          || inputTokens + outputTokens;
+      }
+      contextWindow = readUsageNumber(tokenInfo.model_context_window) || contextWindow;
+      break;
+    } catch {
+      // A provider may be writing the last JSONL line while this read happens.
+    }
+  }
+
+  return {
+    used: totalTokens,
+    total: contextWindow,
+    inputTokens,
+    outputTokens,
+    breakdown: { input: inputTokens, output: outputTokens },
+  };
 }
 
 async function getCodexSessionMessages(
@@ -934,6 +1035,34 @@ export class CodexSessionsProvider implements IProviderSessions {
       limit: normalizedLimit,
       tokenUsage,
     };
+  }
+
+  /**
+   * Reads the token usage recorded in one Codex rollout JSONL.
+   *
+   * Consumer: the provider token-usage service. The app row's indexed
+   * `jsonl_path` wins when it still exists; otherwise the rollout is located
+   * by its provider-native session id under `~/.codex/sessions`. No readable
+   * rollout is a 404.
+   */
+  async getTokenUsage(input: ProviderSessionUsageInput): Promise<ProviderTokenUsageResult> {
+    const indexedFilePath = input.jsonlPath && fsSync.existsSync(input.jsonlPath)
+      ? input.jsonlPath
+      : null;
+    const sessionFilePath = indexedFilePath ?? await findCodexSessionFile(
+      path.join(os.homedir(), '.codex', 'sessions'),
+      input.nativeSessionId,
+    );
+
+    if (!sessionFilePath) {
+      throw new AppError(`Codex session file for "${input.appSessionId}" was not found.`, {
+        code: 'CODEX_SESSION_FILE_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    const fileContent = await fsp.readFile(sessionFilePath, 'utf8');
+    return readCodexTokenUsage(fileContent);
   }
 
   /**

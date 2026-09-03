@@ -103,6 +103,51 @@ export type AntigravityQuotaBucket = ProviderQuotaBucket;
 export type AntigravityQuotaGroup = ProviderQuotaGroup;
 export type AntigravityQuotaData = ProviderQuotaData;
 
+// ---------------------------
+//----------------- PROVIDER SESSION TOKEN USAGE TYPES ------------
+/**
+ * Latest token-usage snapshot for one provider session, as served by
+ * `GET /providers/sessions/:sessionId/token-usage`.
+ *
+ * Each provider sessions facet produces this shape from its own native
+ * storage. `unsupported: true` marks providers that cannot report usage at
+ * all (callers surface `message` instead of the counters); `total` carries
+ * the context window when the provider knows it.
+ */
+export type ProviderTokenUsageResult = {
+  used: number;
+  total?: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
+  cacheTokens?: number;
+  breakdown: {
+    input: number;
+    output: number;
+  };
+  unsupported?: boolean;
+  message?: string;
+};
+
+/**
+ * Session identity handed to `IProviderSessions.getTokenUsage`.
+ *
+ * Carries exactly what the app session row knows about a provider-native
+ * session; every provider-specific storage detail stays inside the provider
+ * adapter.
+ */
+export type ProviderSessionUsageInput = {
+  /** App-facing session id; error messages address this id. */
+  appSessionId: string;
+  /** Provider-native session id (the app row's `provider_session_id`). */
+  nativeSessionId: string;
+  /** Indexed transcript path recorded on the app session row, when present. */
+  jsonlPath: string | null;
+  /** Workspace path recorded on the app session row, when present. */
+  projectPath: string | null;
+};
+
 /**
  * One selectable model row in a provider model catalog.
  */
