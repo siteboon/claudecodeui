@@ -845,7 +845,16 @@ export function useChatSessionState({
       if (response.ok && activeSessionIdRef.current === sid) {
         const payload = await response.json();
         if (payload.data && typeof payload.data === 'object' && activeSessionIdRef.current === sid) {
-          setTokenBudget(payload.data);
+          const nextData = payload.data as Record<string, unknown>;
+          const nextUsed = Number(nextData.used ?? 0)
+            || (Number(nextData.inputTokens ?? 0) + Number(nextData.outputTokens ?? 0));
+          setTokenBudget((prev) => {
+            const currentUsed = Number((prev as Record<string, unknown> | null)?.used ?? 0);
+            if (nextUsed === 0 && currentUsed > 0) {
+              return prev;
+            }
+            return nextData;
+          });
         }
       }
     } catch (error) {

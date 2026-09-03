@@ -359,12 +359,25 @@ export class AntigravitySessionsProvider implements IProviderSessions {
       const total = normalizedMessages.length;
       const { page, hasMore } = sliceTailPage(normalizedMessages, limit, offset);
 
+      let tokenUsage: unknown = undefined;
+      const brainDir = path.resolve(transcriptPath, '../../..');
+      const tokenUsagePath = path.join(brainDir, 'token_usage.json');
+      if (fs.existsSync(tokenUsagePath)) {
+        try {
+          const rawUsage = await readFile(tokenUsagePath, 'utf8');
+          tokenUsage = JSON.parse(rawUsage);
+        } catch {
+          // Fall back gracefully
+        }
+      }
+
       return {
         messages: page,
         total,
         hasMore,
         offset,
         limit,
+        tokenUsage,
       };
     } catch (error) {
       console.warn(`[AntigravitySessions] Failed to load history for ${sessionId}:`, error);
