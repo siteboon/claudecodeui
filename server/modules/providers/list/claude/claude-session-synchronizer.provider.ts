@@ -11,6 +11,7 @@ import {
   readFileTimestamps,
 } from '@/shared/utils.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
+import type { ProviderSessionWatchTarget } from '@/shared/types.js';
 
 type ParsedSession = {
   sessionId: string;
@@ -24,6 +25,18 @@ type ParsedSession = {
 export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
   private readonly provider = 'claude' as const;
   private readonly claudeHome = path.join(os.homedir(), '.claude');
+
+  /**
+   * Declares the watched artifact layout: the projects directory holding the
+   * per-session transcript JSONL files.
+   */
+  getSessionWatchTarget(): ProviderSessionWatchTarget {
+    return {
+      rootPath: path.join(this.claudeHome, 'projects'),
+      isTargetFile: (filePath: string) => filePath.endsWith('.jsonl'),
+    };
+  }
+
 
   /**
    * Returns true when a JSONL file is a subagent transcript or tool result

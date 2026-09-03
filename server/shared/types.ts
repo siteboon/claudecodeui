@@ -149,6 +149,22 @@ export type ProviderSessionUsageInput = {
 };
 
 /**
+ * Declares where one provider's session artifacts live on disk and which of
+ * them should trigger synchronization.
+ *
+ * Consumed by the sessions watcher (which roots to watch, which file events
+ * route to `IProviderSessionSynchronizer.synchronizeFile`) and reused by the
+ * synchronizers themselves, so each provider states its artifact layout in
+ * exactly one place. `rootPath` is watched recursively.
+ */
+export type ProviderSessionWatchTarget = {
+  /** Directory holding this provider's session artifacts. */
+  rootPath: string;
+  /** Returns true when a file event under `rootPath` should trigger a sync. */
+  isTargetFile(filePath: string): boolean;
+};
+
+/**
  * One selectable model row in a provider model catalog.
  */
 export type ProviderModelOption = {

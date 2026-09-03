@@ -13,6 +13,7 @@ import type {
   ProviderMcpServer,
   ProviderQuotaData,
   ProviderSessionUsageInput,
+  ProviderSessionWatchTarget,
   ProviderSkillCreateInput,
   ProviderSkillRemoveInput,
   ProviderRuntimeContext,
@@ -190,6 +191,16 @@ export interface IProviderSessions {
  * by filesystem watcher events.
  */
 export interface IProviderSessionSynchronizer {
+  /**
+   * Declares the filesystem location of this provider's session artifacts and
+   * which files there should trigger synchronization.
+   *
+   * The sessions watcher derives its watch roots and event routing from this
+   * declaration; implementations reuse the same predicate inside
+   * `synchronizeFile` so the artifact layout is stated exactly once.
+   */
+  getSessionWatchTarget(): ProviderSessionWatchTarget;
+
   /**
    * Scans provider session artifacts and upserts discovered sessions into DB.
    */

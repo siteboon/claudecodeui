@@ -17,14 +17,11 @@ export const sessionSynchronizerService = {
   async synchronizeSessions(): Promise<SessionSynchronizeResult> {
     const lastScanAt = scanStateDb.getLastScannedAt();
     const scanBoundary = new Date();
-    const processedByProvider: Record<LLMProvider, number> = {
-      claude: 0,
-      codex: 0,
-      cursor: 0,
-      opencode: 0,
-      zcode: 0,
-      antigravity: 0,
-    };
+    // Derived from the registry so a new provider never needs a hand-written
+    // entry here.
+    const processedByProvider = Object.fromEntries(
+      providerRegistry.listProviders().map((provider) => [provider.id, 0]),
+    ) as Record<LLMProvider, number>;
     const failures: string[] = [];
 
     const results = await Promise.allSettled(

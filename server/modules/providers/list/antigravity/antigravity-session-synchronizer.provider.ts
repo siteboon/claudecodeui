@@ -1,180 +1,116 @@
-/**
- * Antigravity Session Synchronizer Provider
- *
- * Implements IProviderSessionSynchronizer for Antigravity.
- * Scans `~/.gemini/antigravity-cli/conversation_summaries.db` and synchronizes
- * session metadata into CloudCLI's SQLite sessions index.
- *
- * @module antigravity-session-synchronizer.provider
- */
-
 import fsSync from 'node:fs';
-import path from 'node:path';
 
-import Database from 'better-sqlite3';
+import type Database from 'better-sqlite3';
 
-import { sessionsDb } from '@/modules/database/index.js';
-import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
-import type { LLMProvider } from '@/shared/types.js';
 import {
-  normalizeProviderTimestamp,
-  normalizeSessionName,
   parseAntigravityWorkspacePath,
   readOptionalString,
   sanitizeLeafDirectoryName,
 } from '@/shared/utils.js';
+
+import { SqliteSessionSynchronizer } from '../../shared/sessions/sqlite-session-synchronizer.provider.js';
 
 import {
   getAntigravitySummariesDbPath,
   getAntigravityTranscriptCandidates,
 } from './antigravity-data-root.js';
 
-const PROVIDER: LLMProvider = 'antigravity';
-
 type AntigravitySummaryRow = {
-  conversation_id: string;
+  id: string;
   title: string | null;
   workspace_uris: string | null;
   last_modified_time: string | null;
-  status: string | null;
 };
 
-export class AntigravitySessionSynchronizer implements IProviderSessionSynchronizer {
-  private highWaterMarkLastModified: number = 0;
+/**
+ * Session synchronizer for Antigravity's conversation_summaries.db.
+ *
+ * Contributes Antigravity's row mapping to the shared SQLite synchronizer
+ * skeleton: the workspace is decoded from `workspace_uris` (falling back to
+ * the process cwd), `last_modified_time` is an ISO string, and each session
+ * row carries the path of its per-session brain transcript via
+ * `resolveJsonlPath`.
+ */
+export class AntigravitySessionSynchronizer extends SqliteSessionSynchronizer<AntigravitySummaryRow> {
+  protected readonly fallbackTitle = 'Untitled Antigravity Session';
+  protected readonly logTag = '[AntigravitySessionSynchronizer]';
+  protected readonly watchedFileBasenames = [
+    'conversation_summaries.db',
+    'conversation_summaries.db-wal',
+  ];
 
-  /**
-   * Scans Antigravity conversation_summaries.db and upserts discovered sessions.
-   */
-  async synchronize(since?: Date): Promise<number> {
-    const sinceTime = since ? since.getTime() : null;
-    const result = this.queryUpdatedSessions(sinceTime, null);
-    return result.processedCount;
+  constructor() {
+    super('antigravity');
+  }
+
+  protected getDatabasePath(): string {
+    return getAntigravitySummariesDbPath();
+  }
+
+  protected selectSessionRows(
+    db: Database.Database,
+    _sinceMillis: number | null,
+    limit: number | null,
+  ): AntigravitySummaryRow[] {
+    // The summaries table has no filterable timestamp column in SQL; the
+    // shared skeleton applies the since filter per row after parsing the
+    // ISO `last_modified_time`.
+    const query = `
+      SELECT
+        conversation_id AS id,
+        title,
+        workspace_uris,
+        last_modified_time
+      FROM conversation_summaries
+      ORDER BY last_modified_time DESC
+      ${limit === null ? '' : 'LIMIT ?'}
+    `;
+
+    return (limit === null
+      ? db.prepare(query).all()
+      : db.prepare(query).all(limit)) as AntigravitySummaryRow[];
+  }
+
+  protected getRowTimestampsMs(row: AntigravitySummaryRow): { createdAtMs: number; updatedAtMs: number } {
+    const rowTime = row.last_modified_time
+      ? new Date(row.last_modified_time).getTime()
+      : 0;
+    return {
+      createdAtMs: rowTime || Date.now(),
+      updatedAtMs: rowTime || Date.now(),
+    };
+  }
+
+  protected getProjectPath(row: AntigravitySummaryRow): string | null {
+    return parseAntigravityWorkspacePath(row.workspace_uris) ?? process.cwd();
+  }
+
+  protected deriveSessionName(_db: Database.Database, row: AntigravitySummaryRow): string | null {
+    return readOptionalString(row.title) ?? null;
   }
 
   /**
-   * Handles watcher change notifications for conversation_summaries.db.
+   * Antigravity stores one transcript per session under its brain directory,
+   * so the session row can safely point at it (unlike the shared-SQLite
+   * providers where jsonl_path must stay null).
    */
-  async synchronizeFile(filePath: string): Promise<string | null> {
-    const fileName = path.basename(filePath);
-
-    if (fileName !== 'conversation_summaries.db' && fileName !== 'conversation_summaries.db-wal') {
+  protected resolveJsonlPath(row: AntigravitySummaryRow): string | null {
+    const sessionId = readOptionalString(row.id);
+    if (!sessionId) {
       return null;
     }
 
-    const sinceMillis = this.highWaterMarkLastModified > 0 ? this.highWaterMarkLastModified : null;
-    const result = this.queryUpdatedSessions(sinceMillis, 50);
-    return result.firstSessionId;
-  }
-
-  /**
-   * Queries and synchronizes sessions from conversation_summaries.db.
-   */
-  private queryUpdatedSessions(
-    sinceMillis: number | null,
-    limit: number | null,
-  ): { processedCount: number; firstSessionId: string | null } {
-    const dbPath = getAntigravitySummariesDbPath();
-    if (!fsSync.existsSync(dbPath)) {
-      return { processedCount: 0, firstSessionId: null };
-    }
-
-    let db: Database.Database | null = null;
-
     try {
-      db = new Database(dbPath, { readonly: true, fileMustExist: true });
-
-      const query = `
-        SELECT
-          conversation_id,
-          title,
-          workspace_uris,
-          last_modified_time,
-          status
-        FROM conversation_summaries
-        ORDER BY last_modified_time DESC
-        ${limit === null ? '' : 'LIMIT ?'}
-      `;
-
-      const rows = (limit === null
-        ? db.prepare(query).all()
-        : db.prepare(query).all(limit)) as AntigravitySummaryRow[];
-
-      let processedCount = 0;
-      let firstSessionId: string | null = null;
-
-      for (const row of rows) {
-        const sessionId = readOptionalString(row.conversation_id);
-        if (!sessionId) continue;
-
-        const rowTime = row.last_modified_time
-          ? new Date(row.last_modified_time).getTime()
-          : 0;
-
-        if (sinceMillis && rowTime <= sinceMillis) {
-          continue;
-        }
-
-        const projectPath = parseAntigravityWorkspacePath(row.workspace_uris) ?? process.cwd();
-        const fallbackTitle = 'Untitled Antigravity Session';
-        const title = readOptionalString(row.title) || fallbackTitle;
-
-        const pendingAppSession = sessionsDb.getSessionByProviderSessionId(sessionId)
-          ?? sessionsDb.getSessionById(sessionId)
-          ?? sessionsDb.findLatestPendingAppSession(PROVIDER, projectPath);
-
-        if (pendingAppSession && !pendingAppSession.provider_session_id) {
-          sessionsDb.assignProviderSessionId(pendingAppSession.session_id, sessionId);
-        }
-
-        const existingSession = sessionsDb.getSessionByProviderSessionId(sessionId)
-          ?? sessionsDb.getSessionById(sessionId);
-        const existingName = existingSession?.custom_name;
-
-        const nextName = existingName && existingName !== fallbackTitle
-          ? existingName
-          : title;
-
-        let jsonlPath: string | null = null;
-        try {
-          const safeId = sanitizeLeafDirectoryName(sessionId, 'antigravity session id');
-          for (const candidate of getAntigravityTranscriptCandidates(safeId)) {
-            if (fsSync.existsSync(candidate)) {
-              jsonlPath = candidate;
-              break;
-            }
-          }
-        } catch {
-          // Keep null when sanitization fails.
-        }
-
-        const createdSessionId = sessionsDb.createSession(
-          sessionId,
-          PROVIDER,
-          projectPath,
-          normalizeSessionName(nextName, fallbackTitle),
-          normalizeProviderTimestamp(rowTime || Date.now()),
-          normalizeProviderTimestamp(rowTime || Date.now()),
-          jsonlPath,
-        );
-
-        if (createdSessionId) {
-          processedCount += 1;
-          firstSessionId ??= createdSessionId;
-        }
-
-        if (rowTime > this.highWaterMarkLastModified) {
-          this.highWaterMarkLastModified = rowTime;
+      const safeId = sanitizeLeafDirectoryName(sessionId, 'antigravity session id');
+      for (const candidate of getAntigravityTranscriptCandidates(safeId)) {
+        if (fsSync.existsSync(candidate)) {
+          return candidate;
         }
       }
-
-      return { processedCount, firstSessionId };
-    } catch (error) {
-      console.warn('[AntigravitySessionSynchronizer] Sync failed:', error);
-      return { processedCount: 0, firstSessionId: null };
-    } finally {
-      if (db) {
-        db.close();
-      }
+    } catch {
+      // Keep null when sanitization fails.
     }
+
+    return null;
   }
 }

@@ -6,7 +6,9 @@ import test from 'node:test';
 
 import Database from 'better-sqlite3';
 
+import { ZCodeSessionSynchronizer } from '@/modules/providers/list/zcode/zcode-session-synchronizer.provider.js';
 import { ZCodeSessionsProvider } from '@/modules/providers/list/zcode/zcode-sessions.provider.js';
+import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import { AppError } from '@/shared/utils.js';
 
 /** Redirects ZCODE_STORAGE_DIR to a temp dir for fixture isolation. */
@@ -328,5 +330,73 @@ test('getTokenUsage 404s when the ZCode database does not exist', async () => {
         && error.statusCode === 404
       ),
     );
+  });
+});
+
+
+async function withIsolatedAppDatabase(runTest: () => Promise<void>): Promise<void> {
+  const previousDatabasePath = process.env.DATABASE_PATH;
+  const tempDirectory = await mkdtemp(path.join(os.tmpdir(), 'zcode-sync-app-db-'));
+
+  closeConnection();
+  process.env.DATABASE_PATH = path.join(tempDirectory, 'auth.db');
+  await initializeDatabase();
+
+  try {
+    await runTest();
+  } finally {
+    closeConnection();
+    if (previousDatabasePath === undefined) {
+      delete process.env.DATABASE_PATH;
+    } else {
+      process.env.DATABASE_PATH = previousDatabasePath;
+    }
+    await rm(tempDirectory, { recursive: true, force: true });
+  }
+}
+
+test('synchronizer maps fixture rows through the shared SQLite skeleton', async () => {
+  await withZCodeStorage(async (storageDir) => {
+    await createFixtureDatabase(storageDir, 'sess_sync');
+
+    // The synchronizer reads the session table, which the history fixture
+    // does not create: add the top-level row plus a subagent row to filter.
+    const Database = (await import('better-sqlite3')).default;
+    const db = new Database(path.join(storageDir, 'cli', 'db', 'db.sqlite'));
+    try {
+      db.exec(`
+        CREATE TABLE session (
+          id TEXT PRIMARY KEY,
+          parent_id TEXT,
+          directory TEXT,
+          title TEXT,
+          time_created INTEGER,
+          time_updated INTEGER
+        )
+      `);
+      const insertSession = db.prepare(
+        'INSERT INTO session (id, parent_id, directory, title, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?)',
+      );
+      insertSession.run('sess_sync', null, '/workspace/sess_sync', 'Fixture session', 1000, 2000);
+      insertSession.run('sess_subagent_agent_x', 'sess_sync', '/workspace/sess_sync', 'Subagent', 9000, 9500);
+    } finally {
+      db.close();
+    }
+
+    await withIsolatedAppDatabase(async () => {
+      const synchronizer = new ZCodeSessionSynchronizer();
+      assert.equal(await synchronizer.synchronize(), 1);
+
+      const indexed = sessionsDb.getSessionByProviderSessionId('sess_sync');
+      assert.equal(indexed?.provider, 'zcode');
+      assert.equal(indexed?.project_path, '/workspace/sess_sync');
+      assert.equal(indexed?.custom_name, 'Fixture session');
+      assert.equal(indexed?.jsonl_path, null);
+
+      // The watch target points at the db directory and matches the WAL file.
+      const target = synchronizer.getSessionWatchTarget();
+      assert.equal(target.rootPath, path.join(storageDir, 'cli', 'db'));
+      assert.equal(target.isTargetFile(path.join(storageDir, 'cli', 'db', 'db.sqlite-wal')), true);
+    });
   });
 });

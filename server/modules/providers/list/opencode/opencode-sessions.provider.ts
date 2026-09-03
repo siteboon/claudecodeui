@@ -17,7 +17,6 @@ import {
   AppError,
   createNormalizedMessage,
   generateMessageId,
-  getOpenCodeDatabasePath,
   normalizeProjectPath,
   normalizeProviderTimestamp,
   readObjectRecord,
@@ -28,6 +27,8 @@ import {
   sliceTailPage,
   unwrapJsonStringLiteral,
 } from '@/shared/utils.js';
+
+import { getOpenCodeDatabasePath } from './opencode-data-root.js';
 
 const PROVIDER = 'opencode';
 

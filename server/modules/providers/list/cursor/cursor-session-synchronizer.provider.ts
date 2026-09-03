@@ -13,6 +13,7 @@ import {
   readFileTimestamps,
 } from '@/shared/utils.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
+import type { ProviderSessionWatchTarget } from '@/shared/types.js';
 
 type ParsedSession = {
   sessionId: string;
@@ -39,6 +40,17 @@ async function listDirectoryEntriesSafe(
 export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
   private readonly provider = 'cursor' as const;
   private readonly cursorHome = path.join(os.homedir(), '.cursor');
+
+  /**
+   * Declares the watched artifact layout: the projects directory holding the
+   * chat JSONL files.
+   */
+  getSessionWatchTarget(): ProviderSessionWatchTarget {
+    return {
+      rootPath: path.join(this.cursorHome, 'projects'),
+      isTargetFile: (filePath: string) => filePath.endsWith('.jsonl'),
+    };
+  }
 
   /**
    * Scans Cursor chats and upserts discovered sessions into DB.

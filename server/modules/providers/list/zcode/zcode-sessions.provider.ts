@@ -16,7 +16,6 @@ import {
   AppError,
   createNormalizedMessage,
   generateMessageId,
-  getZCodeDatabasePath,
   normalizeProjectPath,
   normalizeProviderTimestamp,
   readJsonRecord,
@@ -25,6 +24,8 @@ import {
   removePathIfExists,
   sliceTailPage,
 } from '@/shared/utils.js';
+
+import { getZCodeDatabasePath } from './zcode-data-root.js';
 
 const PROVIDER = 'zcode';
 

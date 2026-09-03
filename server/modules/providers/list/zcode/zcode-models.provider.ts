@@ -13,11 +13,10 @@ import type {
 } from '@/shared/types.js';
 import {
   buildDefaultProviderCurrentActiveModel,
-  getZCodeDatabasePath,
-  getZCodeStorageDir,
   readObjectRecord,
   readOptionalString,
 } from '@/shared/utils.js';
+import { getZCodeDatabasePath, getZCodeStorageDir } from './zcode-data-root.js';
 
 /**
  * ZCode builtin models definition as fallback when config read fails.

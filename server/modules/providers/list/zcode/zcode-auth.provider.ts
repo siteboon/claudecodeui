@@ -3,7 +3,9 @@ import path from 'node:path';
 
 import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { ProviderAuthStatus } from '@/shared/types.js';
-import { getZCodeStorageDir, readObjectRecord } from '@/shared/utils.js';
+import { readObjectRecord } from '@/shared/utils.js';
+
+import { getZCodeStorageDir } from './zcode-data-root.js';
 
 import { getEngineVersion, tryResolveEnginePath } from './zcode-engine-path.js';
 

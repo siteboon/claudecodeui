@@ -999,18 +999,6 @@ export function readUsageNumber(value: unknown): number {
 }
 
 // ---------------------------
-//----------------- OPENCODE SESSION STORAGE UTILITIES ------------
-/**
- * Resolves the OpenCode SQLite session database path.
- *
- * OpenCode stores session, message, part, and project metadata in one shared
- * `opencode.db` file under its XDG data directory. Provider readers and
- * synchronizers should use this path for read-only access and should never store
- * it as a deletable transcript path for an individual app session row.
- */
-export function getOpenCodeDatabasePath(): string {
-  return path.join(os.homedir(), '.local', 'share', 'opencode', 'opencode.db');
-}
 
 /**
  * Decodes an OpenCode text payload that was persisted as a JSON string literal.
@@ -1321,34 +1309,6 @@ export function findApplicationRoot(startDirectory: string): string {
     : parentDirectory;
 }
 
-// ---------------------------
-//----------------- ZCODE STORAGE PATH UTILITIES ------------
-/**
- * Resolves the ZCode data root (`ZCODE_STORAGE_DIR` when set, `~/.zcode`
- * otherwise).
- *
- * ZCode redirects every data file (credentials, v2 config, SQLite database)
- * under this root, so all ZCode providers and tests must derive their paths
- * from this function instead of hard-coding the default. Consumers:
- * zcode auth (credentials), zcode models (v2 config), zcode sessions and
- * session synchronizer (database path).
- */
-export function getZCodeStorageDir(): string {
-  const override = process.env.ZCODE_STORAGE_DIR?.trim();
-  return override || path.join(os.homedir(), '.zcode');
-}
-
-/**
- * Resolves the path of ZCode's SQLite session database
- * (`<storage>/cli/db/db.sqlite`).
- *
- * Consumers: zcode sessions provider (history reads) and zcode session
- * synchronizer (incremental scans). Both open it strictly read-only and in
- * short-lived connections, so the path itself is the only shared fact.
- */
-export function getZCodeDatabasePath(): string {
-  return path.join(getZCodeStorageDir(), 'cli', 'db', 'db.sqlite');
-}
 
 // ---------------------------
 //----------------- ANTIGRAVITY WORKSPACE PARSER UTILITIES ------------
