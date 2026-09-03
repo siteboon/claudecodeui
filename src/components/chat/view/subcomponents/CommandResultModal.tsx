@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   BadgeCheck,
@@ -39,9 +39,10 @@ import type {
   StatusCommandData,
 } from '../../hooks/useChatComposerState';
 import { authenticatedFetch } from '../../../../utils/api';
+import { buildProviderQuotaUrl, resolveQuotaProvider } from '../../utils/providerQuota';
+import { getProviderDisplayName, PROVIDER_DISPLAY_NAMES } from '../../../../utils/providerDisplay';
 
 import ModelLibraryPanel from './ModelLibraryPanel';
-import { getProviderDisplayName, PROVIDER_DISPLAY_NAMES } from '../../../../utils/providerDisplay';
 
 type CommandResultModalProps = {
   payload: CommandModalPayload | null;
@@ -521,12 +522,17 @@ function QuotaGroupCard({
             const percent = Math.round(bucket.remainingFraction * 100);
             const tone = getQuotaTone(bucket.remainingFraction);
             const isFiveHour = bucket.window === '5h' || bucket.id.includes('5h');
+            const isWeekly = bucket.window === 'weekly' || bucket.id.includes('weekly');
             const countdown = formatRemainingCountdown(bucket.resetTime);
-            const Icon = isFiveHour ? Clock : Calendar;
-            const limitTitle = isFiveHour ? '5 小时滑动窗口限额' : '周配额';
+            const Icon = isFiveHour ? Clock : isWeekly ? Calendar : Timer;
+            const limitTitle = isFiveHour
+              ? '5 小时滑动窗口限额'
+              : isWeekly
+                ? '周配额'
+                : bucket.name;
 
             return (
-              <div key={bucket.id} className="space-y-2 rounded-xl border border-border/60 bg-background/80 p-3 shadow-xs">
+              <div key={bucket.id} className="shadow-xs space-y-2 rounded-xl border border-border/60 bg-background/80 p-3">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-2">
                     <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -570,43 +576,64 @@ function CostContent({ data }: { data: CostCommandData }) {
   const total = Number(data.tokenUsage?.total ?? 0);
   const model = data.model || 'Unknown';
   const provider = getProviderLabel(data.provider, data.provider || 'Unknown');
-  const isAntigravity = data.provider === 'antigravity';
+  const quotaProvider = resolveQuotaProvider(data.provider);
+  const supportsQuota = quotaProvider !== null;
 
   const [quotaData, setQuotaData] = useState<ProviderQuotaData | null>(data.quota ?? null);
-  const [loadingQuota, setLoadingQuota] = useState(isAntigravity && !data.quota);
+  const [loadingQuota, setLoadingQuota] = useState(supportsQuota && !data.quota);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [hasLoadedQuota, setHasLoadedQuota] = useState(Boolean(data.quota));
+  const [quotaError, setQuotaError] = useState<string | null>(null);
+  const quotaRequestSequence = useRef(0);
 
   const fetchQuota = useCallback(async (isManualRefresh = false) => {
-    if (!isAntigravity) return;
+    if (!quotaProvider) return;
+    const requestSequence = ++quotaRequestSequence.current;
     if (isManualRefresh) {
       setIsRefreshing(true);
     } else {
       setLoadingQuota(true);
     }
+    setQuotaError(null);
 
     try {
-      const response = await authenticatedFetch(
-        `/api/providers/quota?provider=antigravity${isManualRefresh ? '&refresh=true' : ''}`,
-      );
-      if (response.ok) {
-        const payload = await response.json();
-        if (payload.data?.groups) {
-          setQuotaData(payload.data as ProviderQuotaData);
-        }
+      const response = await authenticatedFetch(buildProviderQuotaUrl(quotaProvider, isManualRefresh));
+      if (!response.ok) {
+        throw new Error(`Quota request failed with status ${response.status}`);
       }
+
+      const payload = await response.json();
+      if (requestSequence !== quotaRequestSequence.current) return;
+      setQuotaData(payload.data?.groups ? payload.data as ProviderQuotaData : null);
     } catch (error) {
-      console.warn('Failed to load Antigravity quota:', error);
+      if (requestSequence !== quotaRequestSequence.current) return;
+      console.warn(`Failed to load ${quotaProvider} quota:`, error);
+      setQuotaError('配额读取失败，请稍后重试');
     } finally {
-      setLoadingQuota(false);
-      setIsRefreshing(false);
+      if (requestSequence === quotaRequestSequence.current) {
+        setHasLoadedQuota(true);
+        setLoadingQuota(false);
+        setIsRefreshing(false);
+      }
     }
-  }, [isAntigravity]);
+  }, [quotaProvider]);
 
   useEffect(() => {
-    if (isAntigravity && !data.quota) {
+    quotaRequestSequence.current += 1;
+    setQuotaData(data.quota ?? null);
+    setQuotaError(null);
+    setHasLoadedQuota(Boolean(data.quota));
+    setLoadingQuota(supportsQuota && !data.quota);
+    setIsRefreshing(false);
+
+    if (supportsQuota && !data.quota) {
       void fetchQuota(false);
     }
-  }, [fetchQuota, isAntigravity, data.quota]);
+
+    return () => {
+      quotaRequestSequence.current += 1;
+    };
+  }, [fetchQuota, supportsQuota, data.quota, quotaProvider]);
 
   const hasBreakdown =
     typeof data.tokenBreakdown?.input === 'number' ||
@@ -668,7 +695,7 @@ function CostContent({ data }: { data: CostCommandData }) {
       </div>
 
       {/* Provider Quota & Rate Limits Section (5-hour & Weekly) */}
-      {isAntigravity && (
+      {supportsQuota && (
         <div className="space-y-3">
           <div className="flex items-center justify-between px-1">
             <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
@@ -694,12 +721,33 @@ function CostContent({ data }: { data: CostCommandData }) {
           </div>
 
           {loadingQuota && (
-            <div className="flex items-center gap-3 rounded-2xl border border-border/70 bg-background/75 p-4 shadow-xs">
+            <div className="shadow-xs flex items-center gap-3 rounded-2xl border border-border/70 bg-background/75 p-4">
               <Loader2 className="h-5 w-5 animate-spin text-primary" />
               <div>
                 <p className="text-xs font-semibold text-foreground">正在获取最新配额...</p>
-                <p className="text-[11px] text-muted-foreground">正在从 Antigravity 引擎同步 5 小时限额与周配额</p>
+                <p className="text-[11px] text-muted-foreground">
+                  正在从 {provider} 同步 5 小时限额与周配额
+                </p>
               </div>
+            </div>
+          )}
+
+          {!loadingQuota && hasLoadedQuota && quotaGroups.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-border bg-background/60 px-4 py-6 text-center">
+              <p className="text-xs font-semibold text-foreground">
+                {quotaError || '当前账号没有可显示的配额数据'}
+              </p>
+              {!quotaError && data.provider === 'codex' && (
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  API Key 登录通常不会提供 ChatGPT 账号的 5 小时和周限额
+                </p>
+              )}
+            </div>
+          )}
+
+          {!loadingQuota && quotaError && quotaGroups.length > 0 && (
+            <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300">
+              刷新失败，当前显示的是上次成功获取的配额数据
             </div>
           )}
 
@@ -707,8 +755,8 @@ function CostContent({ data }: { data: CostCommandData }) {
             <div className="space-y-3">
               {quotaGroups.map((group, index) => {
                 const groupNameLower = group.name.toLowerCase();
-                let isCurrent = false;
-                if (groupNameLower.includes('claude') || groupNameLower.includes('gpt')) {
+                let isCurrent = data.provider === 'codex' && index === 0;
+                if (!isCurrent && (groupNameLower.includes('claude') || groupNameLower.includes('gpt'))) {
                   isCurrent = isClaudeOrGpt;
                 } else if (groupNameLower.includes('gemini')) {
                   isCurrent = isGemini;
