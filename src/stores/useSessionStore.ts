@@ -205,6 +205,7 @@ async function requestSessionHistoryPage(
  */
 function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedMessage[] {
   const out: NormalizedMessage[] = [];
+  const seenLongAssistantTexts = new Map<string, number>();
   let currentTurnAssistantTexts = new Set<string>();
 
   for (const m of merged) {
@@ -235,23 +236,34 @@ function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedM
           if (deltaText === text) {
             out[lastIdx] = m;
             currentTurnAssistantTexts.add(text);
+            if (text.length > 20) {
+              seenLongAssistantTexts.set(text, lastIdx);
+            }
             continue;
           }
         }
 
-        // If identical assistant text already appeared in this turn (even across tool uses)
-        if (currentTurnAssistantTexts.has(text)) {
-          const existingIdx = out.findIndex(
+        // Check if duplicate in current turn or duplicate long reply across the list
+        const isDuplicateInTurn = currentTurnAssistantTexts.has(text);
+        const previousLongIndex = text.length > 20 ? seenLongAssistantTexts.get(text) : undefined;
+
+        if (isDuplicateInTurn || previousLongIndex !== undefined) {
+          const targetIndex = previousLongIndex ?? out.findIndex(
             (item) => item.kind === 'text' && item.role === 'assistant' && (item.content || '').trim() === text,
           );
-          // Prefer persisted message over synthetic realtime message
-          if (existingIdx >= 0 && out[existingIdx].id.startsWith('text_') && !m.id.startsWith('text_')) {
-            out[existingIdx] = m;
+          if (targetIndex >= 0) {
+            // Prefer persisted message over synthetic realtime message
+            if (out[targetIndex].id.startsWith('text_') && !m.id.startsWith('text_')) {
+              out[targetIndex] = m;
+            }
           }
           continue;
         }
 
         currentTurnAssistantTexts.add(text);
+        if (text.length > 20) {
+          seenLongAssistantTexts.set(text, out.length);
+        }
       }
     }
 

@@ -17,7 +17,7 @@ const sessionId = 'session-1';
 
 function msg(
   kind: NormalizedMessage['kind'],
-  role: 'user' | 'assistant',
+  role: 'user' | 'assistant' | undefined,
   content: string,
   timestamp: string,
 ): NormalizedMessage {
@@ -135,4 +135,19 @@ test('a finalized row is recognised as echo even when older user turns are pagin
   ];
 
   assert.equal(isAssistantTextEchoedInSameTurnOnServer(realtime[3], server, realtime), true);
+});
+
+test('a finalized row is recognised as echo when all user turns are paginated away by tool calls', () => {
+  // Server only carries tool calls and the assistant reply (user message was 40 tool calls ago)
+  const server = [
+    msg('tool_use', undefined, '', '2026-01-01T00:00:20Z'),
+    msg('text', 'assistant', 'long detailed summary of accomplished work', '2026-01-01T00:00:25Z'),
+  ];
+  const realtime = [
+    msg('text', 'user', 'prompt that triggered tools', '2026-01-01T00:00:01Z'),
+    msg('tool_use', undefined, '', '2026-01-01T00:00:10Z'),
+    msg('text', 'assistant', 'long detailed summary of accomplished work', '2026-01-01T00:00:24Z'),
+  ];
+
+  assert.equal(isAssistantTextEchoedInSameTurnOnServer(realtime[2], server, realtime), true);
 });

@@ -118,6 +118,7 @@ export function isAssistantTextEchoedInSameTurnOnServer(
   const targetTime = readMessageTime(message);
   const allChronological = [...serverMessages, ...realtimeMessages].sort(compareMessagesChronologically);
   let precedingUserContent: string | null = null;
+  let precedingUserTime: number | null = null;
 
   for (const candidate of allChronological) {
     if (candidate.id === message.id) {
@@ -129,6 +130,7 @@ export function isAssistantTextEchoedInSameTurnOnServer(
     }
     if (candidate.kind === 'text' && candidate.role === 'user') {
       precedingUserContent = (candidate.content || '').trim();
+      precedingUserTime = candidateTime;
     }
   }
 
@@ -170,9 +172,14 @@ export function isAssistantTextEchoedInSameTurnOnServer(
   const turnRange = findServerTurnRangeByOrdinal(serverMessages, turnOrdinal);
   if (!turnRange) {
     // 3. Robust fallback: If user turn could not be found (e.g. paginated away by tool calls),
-    // and serverMessages already has this exact assistant text, it is an echo.
-    if (serverMessages.some((sm) => sm.kind === 'text' && sm.role === 'assistant' && (sm.content || '').trim() === assistantText)) {
-      return true;
+    // and serverMessages already has this exact assistant text after the user prompt, it is an echo.
+    for (const sm of serverMessages) {
+      if (sm.kind === 'text' && sm.role === 'assistant' && (sm.content || '').trim() === assistantText) {
+        const smTime = readMessageTime(sm);
+        if (precedingUserTime === null || smTime === null || smTime >= precedingUserTime) {
+          return true;
+        }
+      }
     }
     return false;
   }
