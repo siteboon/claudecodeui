@@ -12,6 +12,7 @@ import { useChatRealtimeHandlers } from '../hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '../hooks/useChatComposerState';
 import { useSessionStore } from '../../../stores/useSessionStore';
 import { getProviderDisplayName } from '../../../utils/providerDisplay';
+import { useProviderAuthStatus } from '../../provider-auth/hooks/useProviderAuthStatus';
 
 import ChatMessagesPane from './subcomponents/ChatMessagesPane';
 import ChatComposer from './subcomponents/ChatComposer';
@@ -41,6 +42,11 @@ function ChatInterface({
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
   const { subscribe } = useWebSocket();
   const { t } = useTranslation('chat');
+  const { providerAuthStatus, refreshProviderAuthStatuses } = useProviderAuthStatus();
+
+  useEffect(() => {
+    void refreshProviderAuthStatuses();
+  }, [refreshProviderAuthStatuses]);
 
   const sessionStore = useSessionStore();
   // Streaming accumulation is keyed per session: concurrent runs (one viewed,
@@ -371,6 +377,7 @@ function ChatInterface({
           providerModelCatalog={providerModelCatalog}
           providerModelActions={providerModelActions}
           providerModelsLoading={providerModelsLoading}
+          providerAuthStatus={providerAuthStatus}
           tasksEnabled={tasksEnabled}
           isTaskMasterInstalled={isTaskMasterInstalled}
           onShowAllTasks={onShowAllTasks}

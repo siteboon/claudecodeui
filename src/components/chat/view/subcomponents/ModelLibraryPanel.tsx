@@ -17,18 +17,22 @@ import type {
   ProviderModelOption,
   ProviderModelsDefinition,
 } from '../../../../types/app';
+import type { ProviderAuthStatusMap } from '../../../provider-auth/types';
 import LLMProviderLogo from '../../../llm-provider-logo/LLMProviderLogo';
 
-const PROVIDERS: Array<{ id: LLMProvider; label: string }> = [
+const ALL_PROVIDERS: Array<{ id: LLMProvider; label: string }> = [
   { id: 'claude', label: 'Claude' },
   { id: 'codex', label: 'Codex' },
   { id: 'cursor', label: 'Cursor' },
   { id: 'opencode', label: 'OpenCode' },
+  { id: 'zcode', label: 'ZCode' },
+  { id: 'antigravity', label: 'Antigravity' },
 ];
 
 type ModelLibraryPanelProps = {
   initialProvider: LLMProvider;
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
+  providerAuthStatus?: ProviderAuthStatusMap;
   actions: ProviderModelActions;
   onDone?: () => void;
 };
@@ -36,10 +40,24 @@ type ModelLibraryPanelProps = {
 export default function ModelLibraryPanel({
   initialProvider,
   providerModelCatalog,
+  providerAuthStatus,
   actions,
   onDone,
 }: ModelLibraryPanelProps) {
-  const [selectedProvider, setSelectedProvider] = useState(initialProvider);
+  const visibleProviders = useMemo(() => {
+    return ALL_PROVIDERS.filter((p) => {
+      if (!providerAuthStatus) return true;
+      return providerAuthStatus[p.id]?.installed !== false;
+    });
+  }, [providerAuthStatus]);
+
+  const [selectedProvider, setSelectedProvider] = useState<LLMProvider>(() => {
+    if (providerAuthStatus && providerAuthStatus[initialProvider]?.installed === false) {
+      const fallback = visibleProviders[0]?.id;
+      if (fallback) return fallback;
+    }
+    return initialProvider;
+  });
   const [editing, setEditing] = useState<ProviderModelOption | null>(null);
   const [model, setModel] = useState('');
   const [modelId, setModelId] = useState('');
@@ -50,8 +68,15 @@ export default function ModelLibraryPanel({
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
+    if (providerAuthStatus && providerAuthStatus[initialProvider]?.installed === false) {
+      const fallback = visibleProviders[0]?.id;
+      if (fallback) {
+        setSelectedProvider(fallback);
+        return;
+      }
+    }
     setSelectedProvider(initialProvider);
-  }, [initialProvider]);
+  }, [initialProvider, providerAuthStatus, visibleProviders]);
 
   const options = useMemo(
     () => providerModelCatalog[selectedProvider]?.OPTIONS ?? [],
@@ -174,7 +199,7 @@ export default function ModelLibraryPanel({
       </div>
 
       <div className="scrollbar-thin flex shrink-0 gap-1 overflow-x-auto rounded-xl border border-border/70 bg-muted/25 p-1">
-        {PROVIDERS.map((provider) => {
+        {visibleProviders.map((provider) => {
           const selected = provider.id === selectedProvider;
           return (
             <button
@@ -206,7 +231,7 @@ export default function ModelLibraryPanel({
                 {editing ? 'Edit custom model' : 'Add a custom model'}
               </p>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                The ID is sent to {PROVIDERS.find((entry) => entry.id === selectedProvider)?.label} exactly as written.
+                The ID is sent to {ALL_PROVIDERS.find((entry) => entry.id === selectedProvider)?.label} exactly as written.
               </p>
             </div>
             {editing && (

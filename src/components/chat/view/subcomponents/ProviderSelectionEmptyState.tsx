@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, ChevronDown, Plus } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 
@@ -9,6 +9,7 @@ import type {
   ProviderModelOption,
   ProviderModelsDefinition,
 } from "../../../../types/app";
+import type { ProviderAuthStatusMap } from "../../../provider-auth/types";
 import LLMProviderLogo from "../../../llm-provider-logo/LLMProviderLogo";
 import { NextTaskBanner } from "../../../task-master";
 import {
@@ -73,6 +74,7 @@ type ProviderSelectionEmptyStateProps = {
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
   providerModelActions: ProviderModelActions;
   providerModelsLoading: boolean;
+  providerAuthStatus?: ProviderAuthStatusMap;
   tasksEnabled: boolean;
   isTaskMasterInstalled: boolean | null;
   onShowAllTasks?: (() => void) | null;
@@ -141,6 +143,7 @@ export default function ProviderSelectionEmptyState({
   providerModelCatalog,
   providerModelActions,
   providerModelsLoading,
+  providerAuthStatus,
   tasksEnabled,
   isTaskMasterInstalled,
   onShowAllTasks,
@@ -151,12 +154,26 @@ export default function ProviderSelectionEmptyState({
   const [modelLibraryOpen, setModelLibraryOpen] = useState(false);
 
   const visibleProviderGroups = useMemo<ProviderGroup[]>(() => {
-    return PROVIDER_META.map((p) => ({
+    return PROVIDER_META.filter((p) => {
+      if (!providerAuthStatus) return true;
+      return providerAuthStatus[p.id]?.installed !== false;
+    }).map((p) => ({
       id: p.id,
       name: p.name,
       models: providerModelCatalog[p.id]?.OPTIONS ?? [],
     }));
-  }, [providerModelCatalog]);
+  }, [providerModelCatalog, providerAuthStatus]);
+
+  // Fall back to the first installed provider if the currently selected provider is not installed
+  useEffect(() => {
+    if (!providerAuthStatus || visibleProviderGroups.length === 0) return;
+    const isCurrentInstalled = providerAuthStatus[provider]?.installed !== false;
+    if (!isCurrentInstalled) {
+      const fallbackProvider = visibleProviderGroups[0].id;
+      setProvider(fallbackProvider);
+      localStorage.setItem("selected-provider", fallbackProvider);
+    }
+  }, [provider, providerAuthStatus, visibleProviderGroups, setProvider]);
 
   const nextTaskPrompt = t("tasks.nextTaskPrompt", {
     defaultValue: "Start the next task",
@@ -384,6 +401,7 @@ export default function ProviderSelectionEmptyState({
               <ModelLibraryPanel
                 initialProvider={provider}
                 providerModelCatalog={providerModelCatalog}
+                providerAuthStatus={providerAuthStatus}
                 actions={providerModelActions}
                 onDone={closeModelLibrary}
               />
