@@ -395,15 +395,16 @@ export function useChatSessionState({
     [hasMoreMessages, isActive, isLoadingMoreMessages, selectedProject, selectedSession, sessionStore],
   );
 
+  const scrollContentRef = useRef<HTMLDivElement>(null);
+
   const {
     scrollContainerRef,
     isUserScrolledUp,
     setIsUserScrolledUp,
+    isPinnedToBottomRef,
     isNearBottom,
     scrollToBottom,
-    handleScroll,
-    onWheel,
-    onTouchMove,
+    notifyPaneMounted,
     notifyContentMutating,
   } = useContinuousScrollAnchor({
     isActive,
@@ -411,6 +412,7 @@ export function useChatSessionState({
     isLoadingMore: isLoadingMoreMessages || isLoadingAllMessages,
     allMessagesLoaded,
     onLoadOlder: loadOlderMessages,
+    scrollContentRef,
     onNearTop: (nearTop) => {
       if (nearTop && hasMoreMessages && !allMessagesLoadedRef.current) {
         if (!wasNearTopRef.current) {
@@ -449,16 +451,9 @@ export function useChatSessionState({
     setIsUserScrolledUp(false);
   }, [selectedProject?.projectId, selectedSession?.id, setIsUserScrolledUp]);
 
-  // Initial scroll to bottom — robust to lazy content reflow.
-  // The previous implementation fired one scrollToBottom() at +200ms and
-  // cleared the pending flag. When markdown blocks, code highlighting, or
-  // images finished rendering after that window, scrollHeight grew but
-  // nothing re-anchored the viewport, leaving the chat tab visually
-  // "scrolled way up" with the latest assistant message off-screen.
-  //
-  // This version re-scrolls every animation frame while scrollHeight is
-  // still growing, capped at ~1s (60 frames) or 3 consecutive stable
-  // frames. Cancels cleanly on session change via the pending flag.
+  // Initial scroll to bottom — robust to lazy content reflow, but yields the
+  // moment the user scrolls up (isPinnedToBottomRef flips) so it can never
+  // fight the user for the viewport during the first second.
   useEffect(() => {
     if (!isActive) return;
     if (!pendingInitialScrollRef.current || !scrollContainerRef.current || isLoadingSessionMessages) return;
@@ -473,6 +468,10 @@ export function useChatSessionState({
 
     const tick = () => {
       if (!pendingInitialScrollRef.current || !scrollContainerRef.current) return;
+      if (!isPinnedToBottomRef.current) {
+        pendingInitialScrollRef.current = false;
+        return;
+      }
       container.scrollTop = container.scrollHeight;
       if (container.scrollHeight === lastHeight) {
         stableCount++;
@@ -491,7 +490,7 @@ export function useChatSessionState({
     return () => {
       if (rafId) cancelAnimationFrame(rafId);
     };
-  }, [chatMessages.length, isActive, isLoadingSessionMessages, scrollContainerRef, scrollToBottom]);
+  }, [chatMessages.length, isActive, isLoadingSessionMessages, isPinnedToBottomRef, scrollContainerRef, scrollToBottom]);
 
   // Session replay/subscription remains active regardless of which main tab is
   // visible. Only persisted-history HTTP traffic is visibility-gated below.
@@ -914,12 +913,11 @@ export function useChatSessionState({
     showLoadAllOverlay,
     createDiff,
     scrollContainerRef,
+    scrollContentRef,
     scrollToBottom,
     scrollToBottomAndReset,
     isNearBottom,
-    handleScroll,
-    onWheel,
-    onTouchMove,
+    notifyPaneMounted,
     requestLatestMessages,
   };
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export type UseContinuousScrollAnchorOptions = {
   isActive: boolean;
@@ -9,61 +9,51 @@ export type UseContinuousScrollAnchorOptions = {
   onNearTop?: (nearTop: boolean) => void;
   bottomThreshold?: number;
   topThreshold?: number;
+  /**
+   * The inner wrapper that grows/shrinks with message content. Observed with a
+   * ResizeObserver so a pinned viewport stays glued to the bottom while
+   * content streams in; the scroll container itself is observed too (its
+   * content box changes when the bottom padding toggles with the activity bar).
+   */
+  scrollContentRef?: React.RefObject<HTMLElement | null>;
 };
 
 export type UseContinuousScrollAnchorReturn = {
   scrollContainerRef: React.RefObject<HTMLDivElement>;
   isUserScrolledUp: boolean;
   setIsUserScrolledUp: React.Dispatch<React.SetStateAction<boolean>>;
+  /**
+   * Live pin state mirrored from scroll geometry. True while the viewport sits
+   * within `bottomThreshold` of the bottom. Unlike `isUserScrolledUp`, this
+   * never triggers a render, so long-running effects (e.g. the initial
+   * scroll-to-bottom loop) can poll it and bail the moment the user scrolls up.
+   */
+  isPinnedToBottomRef: React.RefObject<boolean>;
   isNearBottom: () => boolean;
   scrollToBottom: (smooth?: boolean) => void;
-  handleScroll: () => void;
-  onWheel: () => void;
-  onTouchMove: () => void;
+  /** Invoked by the chat pane when its scroll container mounts/unmounts. */
+  notifyPaneMounted: () => void;
   notifyContentMutating: () => void;
 };
 
 const DEFAULT_BOTTOM_THRESHOLD = 60;
 const DEFAULT_TOP_THRESHOLD = 100;
-const SUBPIXEL_THRESHOLD = 0.5;
 
 /**
- * Finds the topmost DOM message element intersecting or immediately below the container's top boundary.
- */
-export function findViewportAnchorElement(container: HTMLDivElement): { element: HTMLElement; offsetTop: number } | null {
-  const containerRect = container.getBoundingClientRect();
-  const children = container.querySelectorAll<HTMLElement>('[data-anchor-id], .chat-message, [data-message-id]');
-
-  for (let i = 0; i < children.length; i++) {
-    const child = children[i];
-    const childRect = child.getBoundingClientRect();
-    // Element's bottom is below container's top (i.e. it is visible inside the viewport)
-    if (childRect.bottom > containerRect.top + 2) {
-      return {
-        element: child,
-        offsetTop: childRect.top - containerRect.top,
-      };
-    }
-  }
-
-  // Fallback to first child if container is filled
-  if (children.length > 0) {
-    const first = children[0];
-    return {
-      element: first,
-      offsetTop: first.getBoundingClientRect().top - containerRect.top,
-    };
-  }
-
-  return null;
-}
-
-/**
- * Universal continuous scroll anchor hook for chat message lists.
- * Provides systemic, jitter-free scroll stabilization:
- * 1. Bottom-Pinned Mode: automatically follows streaming text, async layout, and new messages.
- * 2. Visual Anchor Locked Mode: locks screen visual position of the current reading element,
- *    compensating any height mutation (top prepends, streaming appends, image reflows) to 0px delta.
+ * Scroll stabilization for chat message lists, built on the browser's native
+ * scroll anchoring instead of fighting it:
+ *
+ * 1. Native anchoring (overflow-anchor, left at its default) keeps the user's
+ *    reading position stable whenever content above the viewport changes
+ *    height (older messages prepended, images/code blocks finishing layout,
+ *    content-visibility placeholders resolving to real heights).
+ * 2. Stick-to-bottom: a ResizeObserver on the content wrapper re-pins the
+ *    viewport to the bottom when content grows while the user is parked at the
+ *    bottom. ResizeObserver callbacks run after layout but before paint, so
+ *    streaming appends never flash a stale frame.
+ * 3. The one case native anchoring refuses to handle is a prepend while
+ *    scrollTop is exactly 0 (anchoring is boundary-suppressed there), so the
+ *    load-older path applies an explicit height-diff compensation.
  */
 export function useContinuousScrollAnchor({
   isActive,
@@ -74,23 +64,43 @@ export function useContinuousScrollAnchor({
   onNearTop,
   bottomThreshold = DEFAULT_BOTTOM_THRESHOLD,
   topThreshold = DEFAULT_TOP_THRESHOLD,
+  scrollContentRef,
 }: UseContinuousScrollAnchorOptions): UseContinuousScrollAnchorReturn {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
+  // The chat pane mounts later than this hook's owner whenever ChatInterface
+  // renders its "select a project" placeholder first. Listener/observer setup
+  // re-runs when the pane reports itself mounted.
+  const [paneMountedTick, setPaneMountedTick] = useState(0);
+  const notifyPaneMounted = useCallback(() => {
+    setPaneMountedTick((tick) => tick + 1);
+  }, []);
 
-  // Active anchor for visual stabilization
-  const currentAnchorRef = useRef<{
-    element: HTMLElement;
-    targetOffsetTop: number;
-    containerScrollHeight: number;
-    containerScrollTop: number;
-  } | null>(null);
+  // Pin state maintained from scroll events without triggering renders. Only
+  // a real flip of isUserScrolledUp (the scroll-to-bottom affordance) renders.
+  const isPinnedToBottomRef = useRef(true);
+  const isUserScrolledUpRef = useRef(false);
 
-  // Gesture & boundary lock to avoid momentum thrashing at the top
+  // Guard while a programmatic smooth scrollToBottom is in flight: its own
+  // intermediate scroll events must not be mistaken for the user scrolling up.
+  const smoothScrollInFlightRef = useRef(false);
+
+  // Momentum lock at the top to avoid thrashing load-older requests.
   const topBoundaryLockedRef = useRef(false);
   const wasNearTopRef = useRef(false);
-  const isInteractingRef = useRef(false);
-  const interactionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Latest callbacks/flags kept in refs so `handleScroll` stays referentially
+  // stable and the native scroll listener is attached exactly once.
+  const isActiveRef = useRef(isActive);
+  const onNearTopRef = useRef(onNearTop);
+  const onLoadOlderRef = useRef(onLoadOlder);
+  const loadStateRef = useRef({ hasMoreMessages, isLoadingMore, allMessagesLoaded });
+  useEffect(() => {
+    isActiveRef.current = isActive;
+    onNearTopRef.current = onNearTop;
+    onLoadOlderRef.current = onLoadOlder;
+    loadStateRef.current = { hasMoreMessages, isLoadingMore, allMessagesLoaded };
+  });
 
   const isNearBottom = useCallback((): boolean => {
     const container = scrollContainerRef.current;
@@ -102,6 +112,12 @@ export function useContinuousScrollAnchor({
   const scrollToBottom = useCallback((smooth = false) => {
     const container = scrollContainerRef.current;
     if (!container) return;
+    isPinnedToBottomRef.current = true;
+    smoothScrollInFlightRef.current = smooth;
+    if (isUserScrolledUpRef.current) {
+      isUserScrolledUpRef.current = false;
+      setIsUserScrolledUp(false);
+    }
     if (smooth) {
       container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
     } else {
@@ -109,145 +125,52 @@ export function useContinuousScrollAnchor({
     }
   }, []);
 
-  const markUserInteracting = useCallback(() => {
-    isInteractingRef.current = true;
-    if (interactionTimeoutRef.current) {
-      clearTimeout(interactionTimeoutRef.current);
-    }
-    interactionTimeoutRef.current = setTimeout(() => {
-      isInteractingRef.current = false;
-      interactionTimeoutRef.current = null;
-    }, 200);
-  }, []);
-
-  const onWheel = useCallback(() => {
-    markUserInteracting();
-  }, [markUserInteracting]);
-
-  const onTouchMove = useCallback(() => {
-    markUserInteracting();
-  }, [markUserInteracting]);
-
-  // Capture or update the current visual anchor
-  const captureAnchor = useCallback(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    const anchorData = findViewportAnchorElement(container);
-    if (anchorData) {
-      currentAnchorRef.current = {
-        element: anchorData.element,
-        targetOffsetTop: anchorData.offsetTop,
-        containerScrollHeight: container.scrollHeight,
-        containerScrollTop: container.scrollTop,
-      };
-    } else {
-      currentAnchorRef.current = {
-        element: container,
-        targetOffsetTop: 0,
-        containerScrollHeight: container.scrollHeight,
-        containerScrollTop: container.scrollTop,
-      };
-    }
-  }, []);
-
   /**
-   * Universal layout compensation pass.
-   * Invoked synchronously after every DOM commit / layout update.
+   * Compensates a top prepend that landed while scrollTop was 0, where the
+   * browser suppresses native anchoring. Called after the data mutation via
+   * double-rAF so it measures the post-commit layout.
    */
-  const applyStabilization = useCallback(() => {
-    const container = scrollContainerRef.current;
-    if (!container || !isActive) return;
-
-    // Mode A: Bottom Pinned
-    if (!isUserScrolledUp) {
-      container.scrollTop = container.scrollHeight;
-      currentAnchorRef.current = null;
-      return;
-    }
-
-    // Mode B: Visual Anchor Locked
-    const anchor = currentAnchorRef.current;
-    if (!anchor) return;
-
-    const containerRect = container.getBoundingClientRect();
-
-    if (anchor.element !== container && anchor.element.isConnected) {
-      const currentElementTop = anchor.element.getBoundingClientRect().top - containerRect.top;
-      const delta = currentElementTop - anchor.targetOffsetTop;
-
-      if (Math.abs(delta) > SUBPIXEL_THRESHOLD) {
-        container.scrollTop += delta;
-      }
-    } else {
-      // Fallback: height diff compensation
-      const heightDiff = container.scrollHeight - anchor.containerScrollHeight;
-      if (heightDiff > 0) {
-        container.scrollTop = anchor.containerScrollTop + heightDiff;
-      }
-    }
-
-    // Refresh anchor state after applying compensation
-    captureAnchor();
-  }, [captureAnchor, isActive, isUserScrolledUp]);
-
-  // Execute stabilization after every layout flush
-  useLayoutEffect(() => {
-    applyStabilization();
-  });
-
-  // Watch for asynchronous layout changes (images, code highlighting, graphs)
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container || typeof ResizeObserver === 'undefined') return;
-
-    let rafId: number | null = null;
-    const observer = new ResizeObserver(() => {
-      if (rafId !== null) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        applyStabilization();
-        rafId = null;
+  const stabilizeTopPrepend = useCallback((prevHeight: number, prevTop: number) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const container = scrollContainerRef.current;
+        if (!container || prevTop > 1) return;
+        const heightDiff = container.scrollHeight - prevHeight;
+        if (heightDiff > 0) {
+          container.scrollTop = prevTop + heightDiff;
+        }
       });
     });
+  }, []);
 
-    observer.observe(container);
-    // Observe children wrapper if present
-    const firstChild = container.firstElementChild as HTMLElement | null;
-    if (firstChild) {
-      observer.observe(firstChild);
-    }
-
-    return () => {
-      if (rafId !== null) cancelAnimationFrame(rafId);
-      observer.disconnect();
-    };
-  }, [applyStabilization]);
-
-  // Main scroll event handler
+  // Main scroll event handler — geometry reads only, one state write per flip.
   const handleScroll = useCallback(() => {
-    if (!isActive) return;
     const container = scrollContainerRef.current;
-    if (!container) return;
+    if (!container || !isActiveRef.current) return;
 
-    const nearBottom = isNearBottom();
-    const userUp = !nearBottom;
-    setIsUserScrolledUp(userUp);
+    const nearBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight <= bottomThreshold;
 
-    // If user is scrolled up, continuously refresh the reading anchor
-    if (userUp) {
-      captureAnchor();
+    if (smoothScrollInFlightRef.current) {
+      if (nearBottom) smoothScrollInFlightRef.current = false;
     } else {
-      currentAnchorRef.current = null;
+      isPinnedToBottomRef.current = nearBottom;
+    }
+    const userUp = !isPinnedToBottomRef.current;
+    if (isUserScrolledUpRef.current !== userUp) {
+      isUserScrolledUpRef.current = userUp;
+      setIsUserScrolledUp(userUp);
     }
 
     const scrolledNearTop = container.scrollTop < topThreshold;
     if (scrolledNearTop !== wasNearTopRef.current) {
       wasNearTopRef.current = scrolledNearTop;
-      onNearTop?.(scrolledNearTop);
+      onNearTopRef.current?.(scrolledNearTop);
     }
 
     // Top load handling with momentum lock
-    if (!allMessagesLoaded && hasMoreMessages && !isLoadingMore) {
+    const loadState = loadStateRef.current;
+    if (!loadState.allMessagesLoaded && loadState.hasMoreMessages && !loadState.isLoadingMore) {
       if (!scrolledNearTop) {
         topBoundaryLockedRef.current = false;
         return;
@@ -261,52 +184,81 @@ export function useContinuousScrollAnchor({
         return;
       }
 
-      // Hard lock before triggering async load
       topBoundaryLockedRef.current = true;
-      // Capture anchor state right before fetching
-      captureAnchor();
+      const prevHeight = container.scrollHeight;
+      const prevTop = container.scrollTop;
 
-      void onLoadOlder(container).finally(() => {
-        // Re-stabilize immediately after load
-        applyStabilization();
+      void Promise.resolve(onLoadOlderRef.current(container)).finally(() => {
+        stabilizeTopPrepend(prevHeight, prevTop);
       });
     }
-  }, [
-    allMessagesLoaded,
-    applyStabilization,
-    captureAnchor,
-    hasMoreMessages,
-    isActive,
-    isLoadingMore,
-    isNearBottom,
-    onLoadOlder,
-    onNearTop,
-    topThreshold,
-  ]);
+  }, [bottomThreshold, stabilizeTopPrepend, topThreshold]);
 
-  // Automatically attach native passive scroll listener to container
+  // Attach the native passive scroll listener exactly once per pane mount.
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
     container.addEventListener('scroll', handleScroll, { passive: true });
     return () => container.removeEventListener('scroll', handleScroll);
-  }, [handleScroll]);
+  }, [handleScroll, paneMountedTick]);
 
-  const notifyContentMutating = useCallback(() => {
-    if (isUserScrolledUp) {
-      captureAnchor();
+  // Stick-to-bottom: follow content growth only while pinned. While the user
+  // is scrolled up, native anchoring keeps the reading position stable.
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container || typeof ResizeObserver === 'undefined') return;
+
+    const observer = new ResizeObserver(() => {
+      if (!isActiveRef.current || !isPinnedToBottomRef.current) return;
+      container.scrollTop = container.scrollHeight;
+    });
+
+    observer.observe(container);
+    const content = scrollContentRef?.current;
+    if (content && content !== container) {
+      observer.observe(content);
     }
-  }, [captureAnchor, isUserScrolledUp]);
+
+    return () => observer.disconnect();
+  }, [paneMountedTick, scrollContentRef]);
+
+  /**
+   * Announces an imminent content mutation that prepends content while the
+   * user sits at the very top (load-all, expand-visible-window), where native
+   * anchoring is suppressed. A no-op everywhere else.
+   */
+  const notifyContentMutating = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container || container.scrollTop > 1) return;
+    const prevHeight = container.scrollHeight;
+    const prevTop = container.scrollTop;
+    stabilizeTopPrepend(prevHeight, prevTop);
+  }, [stabilizeTopPrepend]);
+
+  // External state resets (session switch, composer send) go through this so
+  // the pin refs never desync from the React state.
+  const setUserScrolledUp = useCallback<React.Dispatch<React.SetStateAction<boolean>>>(
+    (action) => {
+      setIsUserScrolledUp((prev) => {
+        const next = typeof action === 'function'
+          ? (action as (current: boolean) => boolean)(prev)
+          : action;
+        isUserScrolledUpRef.current = next;
+        isPinnedToBottomRef.current = !next;
+        return next;
+      });
+    },
+    [],
+  );
 
   return {
     scrollContainerRef,
     isUserScrolledUp,
-    setIsUserScrolledUp,
+    setIsUserScrolledUp: setUserScrolledUp,
+    isPinnedToBottomRef,
     isNearBottom,
     scrollToBottom,
-    handleScroll,
-    onWheel,
-    onTouchMove,
+    notifyPaneMounted,
     notifyContentMutating,
   };
 }

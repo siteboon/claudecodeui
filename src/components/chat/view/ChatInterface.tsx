@@ -5,7 +5,7 @@ import { ArrowDownIcon } from 'lucide-react';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useWebSocket } from '../../../contexts/WebSocketContext';
 import PermissionContext from '../../../contexts/PermissionContext';
-import type { ChatInterfaceProps, PermissionMode, Provider  } from '../types/types';
+import type { ChatInterfaceProps, PermissionMode } from '../types/types';
 import { useChatProviderState } from '../hooks/useChatProviderState';
 import { useChatSessionState } from '../hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '../hooks/useChatRealtimeHandlers';
@@ -133,9 +133,10 @@ function ChatInterface({
     showLoadAllOverlay,
     createDiff,
     scrollContainerRef,
+    scrollContentRef,
     scrollToBottom,
     scrollToBottomAndReset,
-    handleScroll,
+    notifyPaneMounted,
     requestLatestMessages,
   } = useChatSessionState({
     isActive,
@@ -329,6 +330,13 @@ function ChatInterface({
   // overlapping the last message.
   const hasActivityIndicator = Boolean(sessionActivity && pendingPermissionRequests.length === 0);
 
+  // Stable adapter so ChatMessagesPane's React.memo is not defeated by an
+  // inline arrow recreated on every render.
+  const handlePaneProviderChange = useCallback(
+    (nextProvider: Parameters<typeof setProvider>[0]) => setProvider(nextProvider),
+    [setProvider],
+  );
+
   const selectedProviderLabel = getProviderDisplayName(provider);
 
   if (!selectedProject) {
@@ -351,8 +359,8 @@ function ChatInterface({
       <div className="flex h-full min-h-0 flex-col">
         <ChatMessagesPane
           scrollContainerRef={scrollContainerRef}
-          onWheel={handleScroll}
-          onTouchMove={handleScroll}
+          scrollContentRef={scrollContentRef}
+          onPaneMounted={notifyPaneMounted}
           isLoadingSessionMessages={isLoadingSessionMessages}
           isProcessing={isProcessing}
           hasActivityIndicator={hasActivityIndicator}
@@ -360,7 +368,7 @@ function ChatInterface({
           selectedSession={selectedSession}
           currentSessionId={currentSessionId}
           provider={provider}
-          setProvider={(nextProvider) => setProvider(nextProvider as Provider)}
+          setProvider={handlePaneProviderChange}
           textareaRef={textareaRef}
           claudeModel={claudeModel}
           setClaudeModel={setClaudeModel}
