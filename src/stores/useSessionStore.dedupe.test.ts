@@ -119,3 +119,20 @@ test('a bubble with no matching user turn on the server is kept', () => {
 
   assert.equal(isAssistantTextEchoedInSameTurnOnServer(realtime[0], server, realtime), false);
 });
+
+test('a finalized row is recognised as echo even when older user turns are paginated away', () => {
+  // Server only carries the latest page (1 user message from turn 3)
+  const server = [
+    msg('text', 'user', 'third turn prompt', '2026-01-01T00:00:20Z'),
+    msg('text', 'assistant', 'third turn reply', '2026-01-01T00:00:21Z'),
+  ];
+  // Realtime or client session store contains earlier turns and redundant user message
+  const realtime = [
+    msg('text', 'user', 'first turn prompt', '2026-01-01T00:00:01Z'),
+    msg('text', 'user', 'second turn prompt', '2026-01-01T00:00:10Z'),
+    msg('text', 'user', 'third turn prompt', '2026-01-01T00:00:20Z'),
+    msg('text', 'assistant', 'third turn reply', '2026-01-01T00:00:22Z'),
+  ];
+
+  assert.equal(isAssistantTextEchoedInSameTurnOnServer(realtime[3], server, realtime), true);
+});

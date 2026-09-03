@@ -199,37 +199,62 @@ async function requestSessionHistoryPage(
  */
 
 /**
- * After `finalizeStreaming`, the client holds a synthetic assistant `text` row
- * while the sessions API soon returns the same reply with a different id.
- * Those sit back-to-back in merged order and look like duplicate bubbles until
- * A persisted-tail refresh reconciles realtime. Collapse same-text assistant rows and
- * stream_placeholder → text when content matches.
+ * Collapses duplicate assistant replies and replaces live streaming bubbles
+ * with persisted text. Turn-aware so identical assistant text within the same turn
+ * is collapsed even when separated by tool_use or status events.
  */
 function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedMessage[] {
   const out: NormalizedMessage[] = [];
+  let currentTurnAssistantTexts = new Set<string>();
+
   for (const m of merged) {
-    const prev = out[out.length - 1];
-    if (prev) {
-      if (prev.kind === 'stream_delta' && m.kind === 'text' && m.role === 'assistant') {
+    if (m.kind === 'text' && m.role === 'user') {
+      currentTurnAssistantTexts = new Set<string>();
+      out.push(m);
+      continue;
+    }
+
+    if (m.kind === 'stream_delta') {
+      const prev = out[out.length - 1];
+      if (prev && prev.kind === 'text' && prev.role === 'assistant') {
         const ps = (prev.content || '').trim();
         const ms = (m.content || '').trim();
         if (ps.length > 0 && ps === ms) {
-          out[out.length - 1] = m;
-          continue;
-        }
-      }
-      if (
-        prev.kind === 'text'
-        && m.kind === 'text'
-        && prev.role === 'assistant'
-        && m.role === 'assistant'
-      ) {
-        const ms = (m.content || '').trim();
-        if (ms.length > 0 && ms === (prev.content || '').trim()) {
           continue;
         }
       }
     }
+
+    if (m.kind === 'text' && m.role === 'assistant') {
+      const text = (m.content || '').trim();
+      if (text.length > 0) {
+        // If immediately preceded by matching stream_delta, promote delta to final text
+        const lastIdx = out.length - 1;
+        if (lastIdx >= 0 && out[lastIdx].kind === 'stream_delta') {
+          const deltaText = (out[lastIdx].content || '').trim();
+          if (deltaText === text) {
+            out[lastIdx] = m;
+            currentTurnAssistantTexts.add(text);
+            continue;
+          }
+        }
+
+        // If identical assistant text already appeared in this turn (even across tool uses)
+        if (currentTurnAssistantTexts.has(text)) {
+          const existingIdx = out.findIndex(
+            (item) => item.kind === 'text' && item.role === 'assistant' && (item.content || '').trim() === text,
+          );
+          // Prefer persisted message over synthetic realtime message
+          if (existingIdx >= 0 && out[existingIdx].id.startsWith('text_') && !m.id.startsWith('text_')) {
+            out[existingIdx] = m;
+          }
+          continue;
+        }
+
+        currentTurnAssistantTexts.add(text);
+      }
+    }
+
     out.push(m);
   }
   return out;
@@ -298,6 +323,15 @@ function computeMerged(server: NormalizedMessage[], realtime: NormalizedMessage[
   const extra = reconciledRealtime.filter((message) => {
     if (serverIds.has(message.id)) {
       return false;
+    }
+    if (
+      (message.kind === 'text' && message.role === 'assistant')
+      || message.kind === 'stream_delta'
+      || message.id === `__streaming_${message.sessionId}`
+    ) {
+      if (isAssistantTextEchoedInSameTurnOnServer(message, server, realtime)) {
+        return false;
+      }
     }
     return true;
   });

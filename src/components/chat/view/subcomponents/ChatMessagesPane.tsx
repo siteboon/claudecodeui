@@ -277,12 +277,33 @@ function ChatMessagesPane({
                 prevMessage = item.messages[item.messages.length - 1] || prevMessage;
 
                 return (
-                  <ToolGroupContainer
-                    key={`tool-group-${getMessageKey(item.messages[0])}`}
-                    group={item}
-                    prevMessage={groupPrevMessage}
+                  <div key={`tool-group-${getMessageKey(item.messages[0])}`} data-anchor-id={`tool-group-${getMessageKey(item.messages[0])}`}>
+                    <ToolGroupContainer
+                      group={item}
+                      prevMessage={groupPrevMessage}
+                      createDiff={createDiff}
+                      getMessageKey={getMessageKey}
+                      onFileOpen={onFileOpen}
+                      onShowSettings={onShowSettings}
+                      onGrantToolPermission={onGrantToolPermission}
+                      showRawParameters={showRawParameters}
+                      showThinking={showThinking}
+                      selectedProject={selectedProject}
+                      provider={provider}
+                    />
+                  </div>
+                );
+              }
+
+              const messagePrevMessage = prevMessage;
+              prevMessage = item;
+
+              return (
+                <div key={getMessageKey(item)} data-anchor-id={getMessageKey(item)}>
+                  <MessageComponent
+                    message={item}
+                    prevMessage={messagePrevMessage}
                     createDiff={createDiff}
-                    getMessageKey={getMessageKey}
                     onFileOpen={onFileOpen}
                     onShowSettings={onShowSettings}
                     onGrantToolPermission={onGrantToolPermission}
@@ -291,26 +312,7 @@ function ChatMessagesPane({
                     selectedProject={selectedProject}
                     provider={provider}
                   />
-                );
-              }
-
-              const messagePrevMessage = prevMessage;
-              prevMessage = item;
-
-              return (
-                <MessageComponent
-                  key={getMessageKey(item)}
-                  message={item}
-                  prevMessage={messagePrevMessage}
-                  createDiff={createDiff}
-                  onFileOpen={onFileOpen}
-                  onShowSettings={onShowSettings}
-                  onGrantToolPermission={onGrantToolPermission}
-                  showRawParameters={showRawParameters}
-                  showThinking={showThinking}
-                  selectedProject={selectedProject}
-                  provider={provider}
-                />
+                </div>
               );
             });
           })()}

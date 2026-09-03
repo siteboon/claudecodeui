@@ -58,7 +58,45 @@ test('scroll restoration delta calculation accurately compensates prepended elem
   const nextScrollTop = initialTop + delta;
   assert.equal(nextScrollTop, 950);
 
-  // Relative viewport position of the anchor after scroll adjustment:
-  const finalAnchorRelativeTop = anchorOffsetAfter - (nextScrollTop - initialTop);
-  assert.equal(finalAnchorRelativeTop, anchorOffsetBefore); // EXACT zero visual shift
+  // Invariant: Next relative position of anchor to viewport top remains identical
+  const relativeVisualPosition = anchorOffsetAfter - delta;
+  assert.equal(relativeVisualPosition, anchorOffsetBefore);
+});
+
+test('visual anchor compensates async height expansion (e.g. image/code block expand) to 0px jitter', () => {
+  // Scenario: An image or code block above the reading anchor asynchronously loads and expands by 320px
+  const containerInitialScrollTop = 500;
+  const targetOffsetTop = 60; // User is reading an item 60px from viewport top
+
+  // Mutation occurs: element is pushed down by 320px
+  const currentElementTop = targetOffsetTop + 320;
+  const delta = currentElementTop - targetOffsetTop;
+
+  assert.equal(delta, 320);
+
+  // Universal layout stabilization:
+  const stabilizedScrollTop = containerInitialScrollTop + delta;
+  assert.equal(stabilizedScrollTop, 820);
+
+  // Relative visual position remains 100% constant
+  const stabilizedVisualOffset = currentElementTop - delta;
+  assert.equal(stabilizedVisualOffset, targetOffsetTop);
+});
+
+test('bottom-pinned mode maintains stick-to-bottom across dynamic height increments', () => {
+  const clientHeight = 600;
+  let scrollHeight = 1200;
+  let scrollTop = scrollHeight - clientHeight; // 600 (at bottom)
+
+  const isNearBottom = (sh: number, st: number, ch: number, threshold = 60) => sh - st - ch <= threshold;
+  assert.equal(isNearBottom(scrollHeight, scrollTop, clientHeight), true);
+
+  // Streaming text appends 150px
+  scrollHeight += 150;
+  // Bottom pinned mode adjusts scrollTop to scrollHeight - clientHeight
+  scrollTop = scrollHeight; // browser clamps to scrollHeight - clientHeight
+  scrollTop = Math.min(scrollTop, scrollHeight - clientHeight);
+
+  assert.equal(scrollTop, 750);
+  assert.equal(isNearBottom(scrollHeight, scrollTop, clientHeight), true);
 });

@@ -114,9 +114,66 @@ export function isAssistantTextEchoedInSameTurnOnServer(
     return false;
   }
 
+  // 1. Precise preceding-user matching (robust against pagination slices and duplicate counts)
+  const targetTime = readMessageTime(message);
+  const allChronological = [...serverMessages, ...realtimeMessages].sort(compareMessagesChronologically);
+  let precedingUserContent: string | null = null;
+
+  for (const candidate of allChronological) {
+    if (candidate.id === message.id) {
+      break;
+    }
+    const candidateTime = readMessageTime(candidate);
+    if (targetTime !== null && candidateTime !== null && candidateTime > targetTime) {
+      break;
+    }
+    if (candidate.kind === 'text' && candidate.role === 'user') {
+      precedingUserContent = (candidate.content || '').trim();
+    }
+  }
+
+  if (precedingUserContent) {
+    // Find the latest matching user message on server
+    for (let i = serverMessages.length - 1; i >= 0; i--) {
+      const sm = serverMessages[i];
+      if (sm.kind === 'text' && sm.role === 'user' && (sm.content || '').trim() === precedingUserContent) {
+        let turnEnd = serverMessages.length;
+        for (let j = i + 1; j < serverMessages.length; j++) {
+          if (serverMessages[j].kind === 'text' && serverMessages[j].role === 'user') {
+            turnEnd = j;
+            break;
+          }
+        }
+        const turnSegments = serverMessages
+          .slice(i + 1, turnEnd)
+          .filter((serverMessage) =>
+            serverMessage.kind === 'text'
+            && serverMessage.role === 'assistant'
+            && (serverMessage.content || '').length > 0,
+          );
+
+        if (turnSegments.some((serverMessage) => (serverMessage.content || '').trim() === assistantText)) {
+          return true;
+        }
+        const joinedText = turnSegments.map((serverMessage) => serverMessage.content || '').join('');
+        if (joinedText.trim() === assistantText) {
+          return true;
+        }
+        // The server user turn exists, but this assistant text has not landed yet.
+        return false;
+      }
+    }
+  }
+
+  // 2. Fallback to turn-ordinal lookup for historical or legacy layouts
   const turnOrdinal = getUserTurnOrdinalBefore(message, serverMessages, realtimeMessages);
   const turnRange = findServerTurnRangeByOrdinal(serverMessages, turnOrdinal);
   if (!turnRange) {
+    // 3. Robust fallback: If user turn could not be found (e.g. paginated away by tool calls),
+    // and serverMessages already has this exact assistant text, it is an echo.
+    if (serverMessages.some((sm) => sm.kind === 'text' && sm.role === 'assistant' && (sm.content || '').trim() === assistantText)) {
+      return true;
+    }
     return false;
   }
 
