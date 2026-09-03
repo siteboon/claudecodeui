@@ -798,6 +798,16 @@ export function useSidebarController({
 
       if (response.ok) {
         onSessionDelete?.(sessionId);
+        // Same gap as rename: nothing refetched the recents feed, so the row the
+        // user just archived stayed in the list. Archiving keeps the session, so
+        // only the non-archived total moves.
+        setRecentConversations((previous) => {
+          const remaining = previous.filter((conversation) => conversation.sessionId !== sessionId);
+          if (remaining.length !== previous.length) {
+            setRecentConversationsTotal((total) => Math.max(0, total - 1));
+          }
+          return remaining;
+        });
         await fetchArchivedSessions();
       } else {
         const errorText = await response.text();
@@ -966,6 +976,15 @@ export function useSidebarController({
       try {
         const response = await api.renameSession(sessionId, trimmed);
         if (response.ok) {
+          // onRefresh reloads projects, not the recents feed, so a row renamed
+          // from the Conversations list kept its old title until the next fetch.
+          // Patching in place also preserves the pages already loaded past the
+          // first, which refetching page zero would discard.
+          setRecentConversations((previous) => previous.map((conversation) => (
+            conversation.sessionId === sessionId
+              ? { ...conversation, sessionTitle: trimmed }
+              : conversation
+          )));
           await onRefresh();
         } else {
           console.error('[Sidebar] Failed to rename session:', response.status);
