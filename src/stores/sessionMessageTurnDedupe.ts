@@ -23,6 +23,37 @@ export function compareMessagesChronologically(a: NormalizedMessage, b: Normaliz
 }
 
 /**
+ * Match assistant texts with tolerance for streaming whitespace differences,
+ * token concatenation boundary anomalies, and minor formatting discrepancies.
+ */
+export function isAssistantTextMatch(candidate: string, target: string): boolean {
+  const a = (candidate || '').trim();
+  const b = (target || '').trim();
+  if (a === b) {
+    return true;
+  }
+  if (!a || !b) {
+    return false;
+  }
+
+  // 1. Match with all whitespace stripped (handles lost spaces from token boundary or line breaks)
+  const compactA = a.replace(/\s+/g, '');
+  const compactB = b.replace(/\s+/g, '');
+  if (compactA === compactB) {
+    return true;
+  }
+
+  // 2. Match with substring containment for substantial messages (>= 20 compact chars)
+  if (compactA.length >= 20 && compactB.length >= 20) {
+    if (compactA.includes(compactB) || compactB.includes(compactA)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Count how many user turns precede `message` in a chronologically merged view
  * of server + realtime rows. Used to match a realtime row to the correct turn
  * on disk when several turns share identical assistant text.
@@ -154,11 +185,11 @@ export function isAssistantTextEchoedInSameTurnOnServer(
             && (serverMessage.content || '').length > 0,
           );
 
-        if (turnSegments.some((serverMessage) => (serverMessage.content || '').trim() === assistantText)) {
+        if (turnSegments.some((serverMessage) => isAssistantTextMatch(serverMessage.content || '', assistantText))) {
           return true;
         }
         const joinedText = turnSegments.map((serverMessage) => serverMessage.content || '').join('');
-        if (joinedText.trim() === assistantText) {
+        if (isAssistantTextMatch(joinedText, assistantText)) {
           return true;
         }
         // The server user turn exists, but this assistant text has not landed yet.
@@ -174,7 +205,7 @@ export function isAssistantTextEchoedInSameTurnOnServer(
     // 3. Robust fallback: If user turn could not be found (e.g. paginated away by tool calls),
     // and serverMessages already has this exact assistant text after the user prompt, it is an echo.
     for (const sm of serverMessages) {
-      if (sm.kind === 'text' && sm.role === 'assistant' && (sm.content || '').trim() === assistantText) {
+      if (sm.kind === 'text' && sm.role === 'assistant' && isAssistantTextMatch(sm.content || '', assistantText)) {
         const smTime = readMessageTime(sm);
         if (precedingUserTime === null || smTime === null || smTime >= precedingUserTime) {
           return true;
@@ -192,7 +223,7 @@ export function isAssistantTextEchoedInSameTurnOnServer(
       && (serverMessage.content || '').length > 0,
     );
 
-  if (turnSegments.some((serverMessage) => (serverMessage.content || '').trim() === assistantText)) {
+  if (turnSegments.some((serverMessage) => isAssistantTextMatch(serverMessage.content || '', assistantText))) {
     return true;
   }
 
@@ -200,5 +231,5 @@ export function isAssistantTextEchoedInSameTurnOnServer(
   // survives, matching how the live deltas concatenated; only the outer
   // edges are trimmed, same as `assistantText` above.
   const joinedText = turnSegments.map((serverMessage) => serverMessage.content || '').join('');
-  return joinedText.trim() === assistantText;
+  return isAssistantTextMatch(joinedText, assistantText);
 }

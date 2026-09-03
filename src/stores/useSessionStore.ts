@@ -16,6 +16,7 @@ import { removeOptimisticUserEchoes } from './sessionMessageReconciliation';
 import {
   compareMessagesChronologically,
   isAssistantTextEchoedInSameTurnOnServer,
+  isAssistantTextMatch,
   readMessageTime,
 } from './sessionMessageTurnDedupe';
 import {
@@ -220,7 +221,7 @@ function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedM
       if (prev && prev.kind === 'text' && prev.role === 'assistant') {
         const ps = (prev.content || '').trim();
         const ms = (m.content || '').trim();
-        if (ps.length > 0 && ps === ms) {
+        if (ps.length > 0 && isAssistantTextMatch(ps, ms)) {
           continue;
         }
       }
@@ -228,26 +229,27 @@ function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedM
 
     if (m.kind === 'text' && m.role === 'assistant') {
       const text = (m.content || '').trim();
-      if (text.length > 0) {
+      const compactKey = text.replace(/\s+/g, '');
+      if (compactKey.length > 0) {
         // If immediately preceded by matching stream_delta, promote delta to final text
         const lastIdx = out.length - 1;
         if (lastIdx >= 0 && out[lastIdx].kind === 'stream_delta') {
           const deltaText = (out[lastIdx].content || '').trim();
-          if (deltaText === text) {
+          if (isAssistantTextMatch(deltaText, text)) {
             out[lastIdx] = m;
-            currentTurnAssistantTexts.add(text);
-            seenAssistantTexts.set(text, lastIdx);
+            currentTurnAssistantTexts.add(compactKey);
+            seenAssistantTexts.set(compactKey, lastIdx);
             continue;
           }
         }
 
-        // Check if duplicate in current turn or duplicate long reply across the list
-        const isDuplicateInTurn = currentTurnAssistantTexts.has(text);
-        const previousIndex = seenAssistantTexts.get(text);
+        // Check if duplicate in current turn or duplicate reply across the list
+        const isDuplicateInTurn = currentTurnAssistantTexts.has(compactKey);
+        const previousIndex = seenAssistantTexts.get(compactKey);
 
         if (isDuplicateInTurn || previousIndex !== undefined) {
           const targetIndex = previousIndex ?? out.findIndex(
-            (item) => item.kind === 'text' && item.role === 'assistant' && (item.content || '').trim() === text,
+            (item) => item.kind === 'text' && item.role === 'assistant' && isAssistantTextMatch(item.content || '', text),
           );
           if (targetIndex >= 0) {
             // Prefer persisted message over synthetic realtime message
@@ -255,19 +257,16 @@ function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedM
               out[targetIndex] = m;
             }
           }
-          console.warn('[DEDUPE] Dropped duplicate assistant text', { id: m.id, textPreview: text.slice(0, 60), isDuplicateInTurn, previousIndex });
           continue;
         }
 
-        currentTurnAssistantTexts.add(text);
-        seenAssistantTexts.set(text, out.length);
-        console.warn('[DEDUPE] Kept assistant text', { id: m.id, textPreview: text.slice(0, 60), outIndex: out.length });
+        currentTurnAssistantTexts.add(compactKey);
+        seenAssistantTexts.set(compactKey, out.length);
       }
     }
 
     out.push(m);
   }
-  console.warn('[DEDUPE] Final output', out.length, 'messages from', merged.length, 'input. Assistant texts tracked:', seenAssistantTexts.size);
   return out;
 }
 
@@ -340,21 +339,12 @@ function computeMerged(server: NormalizedMessage[], realtime: NormalizedMessage[
       || message.kind === 'stream_delta'
       || message.id === `__streaming_${message.sessionId}`
     ) {
-      const isEcho = isAssistantTextEchoedInSameTurnOnServer(message, server, realtime);
-      if (!isEcho) {
-        console.warn('[MERGE] Realtime assistant msg NOT detected as echo:', { id: message.id, kind: message.kind, contentPreview: (message.content || '').slice(0, 60) });
-      }
-      if (isEcho) {
+      if (isAssistantTextEchoedInSameTurnOnServer(message, serverMessages, realtime)) {
         return false;
       }
     }
     return true;
   });
-
-  console.warn('[MERGE] server:', server.length, 'realtime:', realtime.length, 'reconciledRealtime:', reconciledRealtime.length, 'extra:', extra.length);
-  if (extra.length > 0) {
-    console.warn('[MERGE] Extra messages surviving filter:', extra.map((m) => ({ id: m.id, kind: m.kind, role: m.role, contentPreview: (m.content || '').slice(0, 60) })));
-  }
 
   if (extra.length === 0) {
     return dedupeAdjacentAssistantEchoes(server);

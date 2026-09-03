@@ -151,3 +151,17 @@ test('a finalized row is recognised as echo when all user turns are paginated aw
 
   assert.equal(isAssistantTextEchoedInSameTurnOnServer(realtime[2], server, realtime), true);
 });
+
+test('a finalized row is recognised as echo when streaming loses whitespace at token boundaries', () => {
+  const server = [
+    msg('text', 'user', '提交代码和push', '2026-01-01T00:00:01Z'),
+    msg('text', 'assistant', '提交并推送完成 ✅\n\n两个 commit：\n1. **`35b663e`** — `fix: improve app robustness and auth error handling`', '2026-01-01T00:00:05Z'),
+  ];
+  const realtime = [
+    msg('text', 'user', '提交代码和push', '2026-01-01T00:00:01Z'),
+    // Streaming delta boundary dropped a space: "app robustness" -> "approbustness"
+    msg('text', 'assistant', '提交并推送完成 ✅\n\n两个 commit：\n1. **`35b663e`** — `fix: improve approbustness and auth error handling`', '2026-01-01T00:00:06Z'),
+  ];
+
+  assert.equal(isAssistantTextEchoedInSameTurnOnServer(realtime[1], server, realtime), true);
+});
