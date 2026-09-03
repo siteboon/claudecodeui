@@ -339,7 +339,7 @@ function computeMerged(server: NormalizedMessage[], realtime: NormalizedMessage[
       || message.kind === 'stream_delta'
       || message.id === `__streaming_${message.sessionId}`
     ) {
-      if (isAssistantTextEchoedInSameTurnOnServer(message, serverMessages, realtime)) {
+      if (isAssistantTextEchoedInSameTurnOnServer(message, server, realtime)) {
         return false;
       }
     }
