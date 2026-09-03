@@ -14,6 +14,7 @@ import {
     closeSessionsWatcher,
     initializeSessionsWatcher,
     providerRuntimeService,
+    sessionsAutoArchiveService,
     shutdownZCodeRuntime,
 } from '@/modules/providers/index.js';
 import { createWebSocketServer } from '@/modules/websocket/index.js';
@@ -364,17 +365,26 @@ async function startServer() {
             // Start watching the projects folder for changes
             await initializeSessionsWatcher();
 
+            // Start periodic auto-archive scheduler for historical sessions
+            sessionsAutoArchiveService.startScheduler();
+
             // Start server-side plugin processes for enabled plugins
             startEnabledPluginServers().catch(err => {
                 console.error('[Plugins] Error during startup:', err.message);
             });
         });
 
-        await closeSessionsWatcher();
-        // Clean up plugin processes on shutdown
+        // Clean up runtime processes and listeners on shutdown
         const shutdownRuntimeServices = async () => {
+            sessionsAutoArchiveService.stopScheduler();
+            try {
+                await closeSessionsWatcher();
+            } catch (err) {
+                console.error('[SessionsWatcher] Error closing watcher during shutdown:', getErrorMessage(err));
+            }
             try {
                 await browserUseService.stopAllSessions();
+
             } catch (err) {
                 console.error('[Browser] Error stopping sessions during shutdown:', getErrorMessage(err));
             }

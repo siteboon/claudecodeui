@@ -531,4 +531,27 @@ export const sessionsDb = {
     const db = getConnection();
     return db.prepare('DELETE FROM sessions WHERE session_id = ?').run(sessionId).changes > 0;
   },
+
+  /**
+   * Batch-archives unarchived sessions whose last activity (updated_at or created_at)
+   * occurred before the specified cutoff timestamp string (or is null/invalid).
+   * Returns the count of newly archived session rows.
+   * Used by Providers module (sessionsAutoArchiveService).
+   */
+  archiveSessionsOlderThanCutoff(cutoffIsoString: string): number {
+    const db = getConnection();
+    const result = db
+      .prepare(
+        `UPDATE sessions
+         SET isArchived = 1
+         WHERE isArchived = 0
+           AND (
+             datetime(COALESCE(updated_at, created_at)) < datetime(?)
+             OR datetime(COALESCE(updated_at, created_at)) IS NULL
+           )`
+      )
+      .run(cutoffIsoString);
+    return result.changes;
+  },
 };
+
