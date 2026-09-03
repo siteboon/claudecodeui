@@ -1,13 +1,13 @@
-import React, { useMemo, useState } from 'react';
+import React, { memo, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useTranslation } from 'react-i18next';
 
+import { SyntaxHighlighter, isRegisteredLanguage } from './codeHighlightLanguages';
 import MermaidDiagram from '../../../code-editor/view/subcomponents/markdown/MermaidDiagram';
 import { normalizeInlineCodeFences } from '../../utils/chatFormatting';
 import { filePathFromFileUrl, markdownUrlTransform } from '../../utils/fileLink';
@@ -66,7 +66,7 @@ type CodeBlockProps = {
 };
 
 // `node` is destructured out so react-markdown's hast node never reaches the DOM.
-const CodeBlock = ({ node: _node, className, children, forceBlock, ...props }: CodeBlockProps) => {
+const CodeBlock = memo(function CodeBlock({ node: _node, className, children, forceBlock, ...props }: CodeBlockProps) {
   const { t } = useTranslation('chat');
   const { isDarkMode } = useTheme();
   const [copied, setCopied] = useState(false);
@@ -123,7 +123,7 @@ const CodeBlock = ({ node: _node, className, children, forceBlock, ...props }: C
             <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
               <path
                 fillRule="evenodd"
-                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                d="M16.707 5.293a 1 1 0 010 1.414l-8 8a 1 1 0 01-1.414 0l-4-4a 1 1 0 011.414-1.414L8 12.586l7.293-7.293a 1 1 0 011.414 0z"
                 clipRule="evenodd"
               />
             </svg>
@@ -144,31 +144,39 @@ const CodeBlock = ({ node: _node, className, children, forceBlock, ...props }: C
         </button>
       </div>
 
-      <SyntaxHighlighter
-        language={language}
-        style={isDarkMode ? oneDark : oneLight}
-        customStyle={{
-          margin: 0,
-          borderRadius: 0,
-          fontSize: '0.8125rem',
-          lineHeight: 1.6,
-          padding: '0.5rem 1rem 1rem',
-          // The container owns the background so the label row and code read as one panel.
-          background: 'transparent',
-        }}
-        codeTagProps={{
-          style: {
-            fontFamily:
-              'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+      {isRegisteredLanguage(language) ? (
+        <SyntaxHighlighter
+          language={language}
+          style={isDarkMode ? oneDark : oneLight}
+          customStyle={{
+            margin: 0,
+            borderRadius: 0,
+            fontSize: '0.8125rem',
+            lineHeight: 1.6,
+            padding: '0.5rem 1rem 1rem',
+            // The container owns the background so the label row and code read as one panel.
             background: 'transparent',
-          },
-        }}
-      >
-        {raw}
-      </SyntaxHighlighter>
+          }}
+          codeTagProps={{
+            style: {
+              fontFamily:
+                'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+              background: 'transparent',
+            },
+          }}
+        >
+          {raw}
+        </SyntaxHighlighter>
+      ) : (
+        // Fence language without a registered grammar: plain monospace block
+        // instead of refractor's "Unknown language" throw.
+        <pre className="overflow-x-auto whitespace-pre px-4 pb-4 pt-1 font-mono text-[0.8125rem] leading-[1.6]">
+          {raw}
+        </pre>
+      )}
     </div>
   );
-};
+});
 
 const markdownComponents = {
   code: CodeBlock,
@@ -203,6 +211,11 @@ const markdownComponents = {
       <table className="my-0 min-w-full border-collapse text-sm">{children}</table>
     </div>
   ),
+  img: ({ src, alt, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) => (
+    // Lazy decoding keeps late image loads from shifting scroll position
+    // while the user reads (native anchoring absorbs what remains).
+    <img src={src} alt={alt} loading="lazy" decoding="async" className="rounded-lg" {...props} />
+  ),
   thead: ({ children }: { children?: React.ReactNode }) => <thead className="bg-muted/60">{children}</thead>,
   tr: ({ children }: { children?: React.ReactNode }) => (
     <tr className="[&:last-child>td]:border-b-0">{children}</tr>
@@ -215,8 +228,11 @@ const markdownComponents = {
   ),
 };
 
-export function Markdown({ children, className, breaks = false }: MarkdownProps) {
-  const content = normalizeInlineCodeFences(String(children ?? ''));
+// Memoized: a re-render of an unchanged message must not re-parse its
+// markdown (react-markdown runs the whole remark/rehype pipeline
+// synchronously, plus KaTeX and Prism highlighting).
+export const Markdown = memo(function Markdown({ children, className, breaks = false }: MarkdownProps) {
+  const content = useMemo(() => normalizeInlineCodeFences(String(children ?? '')), [children]);
   const remarkPlugins = useMemo(
     () => (breaks
       ? [remarkGfm, [remarkMath, { singleDollarTextMath: false }], remarkBreaks]
@@ -280,4 +296,4 @@ export function Markdown({ children, className, breaks = false }: MarkdownProps)
       </ReactMarkdown>
     </div>
   );
-}
+});

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 
 import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, Provider } from '../../types/types';
@@ -130,7 +130,7 @@ function getToolGroupIcon(icon: string | undefined, toolName: string): React.Rea
   return icon || toolName.slice(0, 1).toUpperCase();
 }
 
-export default function ToolGroupContainer({
+export default memo(function ToolGroupContainer({
   group,
   prevMessage,
   createDiff,
@@ -263,7 +263,10 @@ export default function ToolGroupContainer({
               <MessageComponent
                 key={getMessageKey(message)}
                 message={message}
-                prevMessage={index > 0 ? group.messages[index - 1] : { ...message, type: 'assistant' }}
+                // Only `type` is consumed for grouping; the first row groups
+                // with itself instead of a per-render throwaway object, so
+                // the memo comparison holds.
+                prevMessage={index > 0 ? group.messages[index - 1] : message}
                 createDiff={createDiff}
                 onFileOpen={onFileOpen}
                 onShowSettings={onShowSettings}
@@ -279,4 +282,4 @@ export default function ToolGroupContainer({
       </div>
     </div>
   );
-}
+});
