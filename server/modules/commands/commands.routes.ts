@@ -268,16 +268,55 @@ Custom commands can be created in:
     let tokenUsage = context?.tokenUsage || {};
     const provider = readModelProvider(context?.provider);
     const model = await resolveCommandModel(providerModelsService, provider, context);
+    const hasContextUsage = Boolean(
+      tokenUsage.used
+      || tokenUsage.totalUsed
+      || tokenUsage.total_tokens
+      || tokenUsage.total
+      || tokenUsage.contextWindow
+      || tokenUsage.inputTokens
+      || tokenUsage.outputTokens,
+    );
+    const hasContextBreakdown = Boolean(
+      Number(
+        tokenUsage.inputTokens
+        ?? tokenUsage.input
+        ?? tokenUsage.cumulativeInputTokens
+        ?? tokenUsage.breakdown?.input
+        ?? tokenUsage.promptTokens
+        ?? tokenUsage.input_tokens
+        ?? 0,
+      )
+      || Number(
+        tokenUsage.outputTokens
+        ?? tokenUsage.output
+        ?? tokenUsage.cumulativeOutputTokens
+        ?? tokenUsage.breakdown?.output
+        ?? tokenUsage.completionTokens
+        ?? tokenUsage.output_tokens
+        ?? 0,
+      ),
+    );
 
     if (
-      (!tokenUsage.used && !tokenUsage.totalUsed && !tokenUsage.total_tokens && !tokenUsage.inputTokens && !tokenUsage.outputTokens)
+      (!hasContextUsage || !hasContextBreakdown)
       && context?.sessionId
       && providerTokenUsageService
     ) {
       try {
         const persisted = await providerTokenUsageService.getSessionTokenUsage(context.sessionId);
         if (persisted && (persisted.used > 0 || persisted.inputTokens > 0 || persisted.outputTokens > 0)) {
-          tokenUsage = persisted;
+          // Live telemetry can have a newer total/context window while omitting
+          // input/output. Keep those live values and fill only the missing
+          // breakdown from the provider's persisted session snapshot.
+          tokenUsage = hasContextUsage && !hasContextBreakdown
+            ? {
+                ...tokenUsage,
+                inputTokens: persisted.inputTokens,
+                outputTokens: persisted.outputTokens,
+                breakdown: persisted.breakdown,
+              }
+            : persisted;
         }
       } catch {
         // Fall back to context tokenUsage

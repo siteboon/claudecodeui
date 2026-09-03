@@ -653,13 +653,7 @@ function CostContent({ data }: { data: CostCommandData }) {
             icon: Coins,
           },
         ]
-      : [
-          {
-            label: 'Breakdown',
-            value: 'Unavailable',
-            icon: TerminalSquare,
-          },
-        ]),
+      : []),
     ...(total > 0
       ? [{ label: 'Context window', value: formatNumber(total), icon: Gauge }]
       : []),
