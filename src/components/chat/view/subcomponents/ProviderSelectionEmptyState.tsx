@@ -450,12 +450,11 @@ export default function ProviderSelectionEmptyState({
           </p>
 
           {provider && tasksEnabled && isTaskMasterInstalled && (
-            <div className="mt-5">
-              <NextTaskBanner
-                onStartTask={() => setInput(nextTaskPrompt)}
-                onShowAllTasks={onShowAllTasks}
-              />
-            </div>
+            <NextTaskBanner
+              className="mt-5"
+              onStartTask={() => setInput(nextTaskPrompt)}
+              onShowAllTasks={onShowAllTasks}
+            />
           )}
         </div>
       </div>
@@ -474,12 +473,11 @@ export default function ProviderSelectionEmptyState({
           </p>
 
           {tasksEnabled && isTaskMasterInstalled && (
-            <div className="mt-5">
-              <NextTaskBanner
-                onStartTask={() => setInput(nextTaskPrompt)}
-                onShowAllTasks={onShowAllTasks}
-              />
-            </div>
+            <NextTaskBanner
+              className="mt-5"
+              onStartTask={() => setInput(nextTaskPrompt)}
+              onShowAllTasks={onShowAllTasks}
+            />
           )}
         </div>
       </div>
