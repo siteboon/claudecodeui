@@ -24,6 +24,7 @@ import {
   hasReachedCachedTailTimeBoundary,
   mergeLatestServerPage,
   mergeOlderServerPage,
+  normalizedRowsEquivalent,
   planLatestPageBridge,
   resolveLatestPagePagination,
   SESSION_MESSAGES_PAGE_SIZE,
@@ -508,6 +509,21 @@ async function refreshLatestSlotFromServer(
   if (!nextServerMessages) {
     console.warn(`[SessionStore] Could not bridge latest history for ${sessionId}; retaining cached suffix.`);
     return { applied: false, changed, deferred: false };
+  }
+
+  // Content-level bail-out: an identical refresh (byte-equal rows, same
+  // pagination metadata) keeps the cached array identity so the merged
+  // recompute, realtime prune and consumer re-renders are all skipped.
+  // Trailing `session_upserted` frames after a finished run used to trigger
+  // several of these no-op refreshes in a row.
+  if (
+    nextServerMessages.length === previousServerMessages.length
+    && latestPage.total === previousTotal
+    && nextHasMore === previousHasMore
+    && nextServerMessages.every((row, index) => normalizedRowsEquivalent(previousServerMessages[index], row))
+  ) {
+    slot.fetchedAt = Date.now();
+    return { applied: true, changed, deferred: false };
   }
 
   slot.serverMessages = nextServerMessages;

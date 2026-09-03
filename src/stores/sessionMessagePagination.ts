@@ -58,6 +58,19 @@ function serializedValue(value: unknown): string {
 }
 
 /**
+ * Deep-equals two normalized rows by serialized value. Both cached rows and
+ * fresh server responses come from the same serializer, so key order is
+ * stable in practice and identity-stable refreshes can be built on this.
+ */
+export function normalizedRowsEquivalent(
+  first: NormalizedMessage,
+  second: NormalizedMessage,
+): boolean {
+  if (Object.is(first, second)) return true;
+  return JSON.stringify(first) === JSON.stringify(second);
+}
+
+/**
  * Persisted IDs are preferred, but some provider readers (notably Codex)
  * generate fresh IDs on every read. The fallback uses stable transcript fields
  * and deliberately excludes enrichment such as toolResult, which may change
@@ -172,7 +185,10 @@ export function hasReachedCachedTailTimeBoundary(
 
 /**
  * Atomically replaces the overlapping cached tail with the latest persisted
- * window while retaining every already-loaded older row.
+ * window while retaining every already-loaded older row. Rows inside the
+ * overlap that are byte-identical keep their cached object identity, so a
+ * no-op refresh never invalidates downstream memoization (message component
+ * React.memo, markdown parse caches).
  */
 export function mergeLatestServerPage(
   cachedMessages: NormalizedMessage[],
@@ -190,10 +206,16 @@ export function mergeLatestServerPage(
     return { messages: cachedMessages, overlapLength: 0 };
   }
 
+  const retainedCount = cachedMessages.length - overlapLength;
+  const overlapWindow = latestMessages.map((row, index) => {
+    const cachedTwin = cachedMessages[retainedCount + index];
+    return cachedTwin && normalizedRowsEquivalent(cachedTwin, row) ? cachedTwin : row;
+  });
+
   return {
     messages: [
-      ...cachedMessages.slice(0, cachedMessages.length - overlapLength),
-      ...latestMessages,
+      ...cachedMessages.slice(0, retainedCount),
+      ...overlapWindow,
     ],
     overlapLength,
   };

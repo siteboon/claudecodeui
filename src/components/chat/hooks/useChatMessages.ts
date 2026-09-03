@@ -56,31 +56,66 @@ function parseTaskNotification(content: string): ParsedTaskNotification | null {
 }
 
 /**
+ * Per-row conversion cache. Conversion output for one NormalizedMessage is a
+ * pure function of the row itself plus, for tool_use rows, the attached
+ * tool_result row object. Caching by row identity means a store update that
+ * only replaced some rows (a streaming delta, one changed tool result) leaves
+ * every other ChatMessage reference intact, so MessageComponent's React.memo
+ * and the markdown parse below it survive.
+ */
+type ConversionCacheEntry = {
+  /** Identity of whatever tool-result source fed this row's conversion. */
+  attachedToolResult: unknown;
+  outputs: ChatMessage[];
+};
+
+const conversionCache = new WeakMap<NormalizedMessage, ConversionCacheEntry>();
+
+/**
  * Convert NormalizedMessage[] from the session store into ChatMessage[]
  * that the existing UI components expect.
  *
  * Truly internal/system content is already filtered server-side. Some Claude
  * transcript artifacts such as local slash commands and compact summaries are
- * intentionally preserved and annotated so they can render like normal chat.
+ * intentionally preserved and annotated so they render like normal chat.
  */
 export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMessage[] {
   const converted: ChatMessage[] = [];
 
   // First pass: collect tool results for attachment
   const toolResultMap = new Map<string, NormalizedMessage>();
-  const toolUseIds = new Set<string>();
   for (const msg of messages) {
-    if (msg.kind === 'tool_use' && msg.toolId) {
-      toolUseIds.add(msg.toolId);
-    }
-
     if (msg.kind === 'tool_result' && msg.toolId) {
       toolResultMap.set(msg.toolId, msg);
     }
   }
 
   for (const msg of messages) {
-    const sharedMetadata = {
+    const attachedToolResult: unknown = msg.kind === 'tool_use'
+      ? (msg.toolResult || (msg.toolId ? toolResultMap.get(msg.toolId) ?? null : null))
+      : null;
+
+    const cached = conversionCache.get(msg);
+    if (cached && Object.is(cached.attachedToolResult, attachedToolResult)) {
+      converted.push(...cached.outputs);
+      continue;
+    }
+
+    const outputs = convertRow(msg, toolResultMap);
+    conversionCache.set(msg, { attachedToolResult, outputs });
+    converted.push(...outputs);
+  }
+
+  return converted;
+}
+
+function convertRow(
+  msg: NormalizedMessage,
+  toolResultMap: Map<string, NormalizedMessage>,
+): ChatMessage[] {
+  const outputs: ChatMessage[] = [];
+
+  const sharedMetadata = {
       id: msg.id,
       displayText: msg.displayText,
       commandName: msg.commandName,
@@ -96,13 +131,13 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
         const content = msg.content || '';
         const images = Array.isArray(msg.images) && msg.images.length > 0 ? msg.images : undefined;
         const files = Array.isArray(msg.files) && msg.files.length > 0 ? msg.files : undefined;
-        if (!content.trim() && !images && !files) continue;
+        if (!content.trim() && !images && !files) return outputs;
 
         if (msg.role === 'user') {
           // Parse task notifications
           const taskNotif = parseTaskNotification(content);
           if (taskNotif) {
-            converted.push({
+            outputs.push({
               type: 'assistant',
               content: taskNotif.summary,
               timestamp: msg.timestamp,
@@ -113,7 +148,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
             // Render the agent's result as a normal assistant message so its
             // markdown displays correctly instead of leaking raw XML.
             if (taskNotif.result) {
-              converted.push({
+              outputs.push({
                 type: 'assistant',
                 content: formatUsageLimitText(taskNotif.result),
                 timestamp: msg.timestamp,
@@ -121,7 +156,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
               });
             }
           } else {
-            converted.push({
+            outputs.push({
               type: 'user',
               content,
               timestamp: msg.timestamp,
@@ -132,7 +167,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           }
         } else {
           const text = formatUsageLimitText(content);
-          converted.push({
+          outputs.push({
             type: 'assistant',
             content: text,
             timestamp: msg.timestamp,
@@ -168,7 +203,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
             }
           : null;
 
-        converted.push({
+        outputs.push({
           type: 'assistant',
           content: '',
           timestamp: msg.timestamp,
@@ -192,7 +227,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
 
       case 'thinking':
         if (msg.content?.trim()) {
-          converted.push({
+          outputs.push({
             type: 'assistant',
             content: msg.content,
             timestamp: msg.timestamp,
@@ -203,7 +238,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
         break;
 
       case 'error':
-        converted.push({
+        outputs.push({
           type: 'error',
           content: msg.content || 'Unknown error',
           timestamp: msg.timestamp,
@@ -212,7 +247,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
         break;
 
       case 'interactive_prompt':
-        converted.push({
+        outputs.push({
           type: 'assistant',
           content: msg.content || '',
           timestamp: msg.timestamp,
@@ -222,7 +257,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
         break;
 
       case 'task_notification':
-        converted.push({
+        outputs.push({
           type: 'assistant',
           content: msg.summary || 'Background task update',
           timestamp: msg.timestamp,
@@ -234,7 +269,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
 
       case 'stream_delta':
         if (msg.content) {
-          converted.push({
+          outputs.push({
             type: 'assistant',
             content: msg.content,
             timestamp: msg.timestamp,
@@ -257,15 +292,11 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
 
       // tool_result is handled via attachment to tool_use above
       case 'tool_result': {
-        if (msg.toolId && toolUseIds.has(msg.toolId)) {
-          break;
-        }
-
-        // A result with a toolId but no matching tool_use in the loaded set is
-        // almost always a tool_use/tool_result pair split across a pagination
-        // boundary (older page not loaded yet). Rendering its raw content here
-        // produces an unstyled dump that "fixes itself" once the older page
-        // loads; skip it and let it attach to its tool_use when that arrives.
+        // A result with a toolId is either attached to its tool_use row above
+        // or split across a pagination boundary (older page not loaded yet) —
+        // rendering its raw content here would produce an unstyled dump that
+        // "fixes itself" once the older page loads, so skip it and let it
+        // attach to its tool_use when that arrives.
         if (msg.toolId) {
           break;
         }
@@ -275,7 +306,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           break;
         }
 
-        converted.push({
+        outputs.push({
           type: msg.isError ? 'error' : 'assistant',
           content,
           timestamp: msg.timestamp,
@@ -288,7 +319,6 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
       default:
         break;
     }
-  }
 
-  return converted;
+  return outputs;
 }
