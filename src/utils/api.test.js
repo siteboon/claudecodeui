@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { isAuthTokenExpired, TOKEN_EXPIRY_SKEW_MS } from './api.js';
+import { extractApiErrorMessage, extractResponseError, isAuthTokenExpired, TOKEN_EXPIRY_SKEW_MS } from './api.js';
 
 // Builds a JWT-shaped string (header.payload.signature, base64url segments) without
 // needing a real signing library — isAuthTokenExpired() never verifies the signature,
@@ -45,3 +45,72 @@ test('isAuthTokenExpired: a malformed/unreadable token is unaffected by the skew
   assert.equal(isAuthTokenExpired('only.two-segments'), false);
   assert.equal(isAuthTokenExpired(null), false);
 });
+
+test('extractApiErrorMessage: extracts strings and object formats correctly', () => {
+  // Fallbacks
+  assert.equal(extractApiErrorMessage(null), 'Operation failed');
+  assert.equal(extractApiErrorMessage(undefined, 'Custom fallback'), 'Custom fallback');
+  assert.equal(extractApiErrorMessage(''), 'Operation failed');
+
+  // Direct string
+  assert.equal(extractApiErrorMessage('Network timeout'), 'Network timeout');
+
+  // Standard server structured error { error: { code, message } }
+  assert.equal(
+    extractApiErrorMessage({ error: { code: 'INTERNAL_ERROR', message: 'git clone failed' } }),
+    'git clone failed',
+  );
+
+  // Server structured error with details { error: { code, details } }
+  assert.equal(
+    extractApiErrorMessage({ error: { code: 'INVALID_INPUT', details: 'Invalid plugin url' } }),
+    'Invalid plugin url',
+  );
+
+  // Server structured error fallback to code
+  assert.equal(
+    extractApiErrorMessage({ error: { code: 'ERR_TIMEOUT' } }),
+    'ERR_TIMEOUT',
+  );
+
+  // Error is direct string
+  assert.equal(
+    extractApiErrorMessage({ error: 'Direct error text' }),
+    'Direct error text',
+  );
+
+  // Details field
+  assert.equal(
+    extractApiErrorMessage({ details: 'Details text' }),
+    'Details text',
+  );
+  assert.equal(
+    extractApiErrorMessage({ details: { message: 'Details obj message' } }),
+    'Details obj message',
+  );
+
+  // Message field
+  assert.equal(
+    extractApiErrorMessage({ message: 'General message' }),
+    'General message',
+  );
+});
+
+test('extractResponseError: extracts from mock Response object', async () => {
+  const jsonResponse = {
+    status: 500,
+    statusText: 'Internal Server Error',
+    json: async () => ({ error: { code: 'INTERNAL_ERROR', message: 'Database connection failed' } }),
+  };
+  const message = await extractResponseError(jsonResponse, 'Server error');
+  assert.equal(message, 'Database connection failed');
+
+  const nonJsonResponse = {
+    status: 502,
+    statusText: 'Bad Gateway',
+    json: async () => { throw new Error('Not JSON'); },
+  };
+  const fallbackMessage = await extractResponseError(nonJsonResponse, 'Proxy error');
+  assert.equal(fallbackMessage, 'Bad Gateway');
+});
+
