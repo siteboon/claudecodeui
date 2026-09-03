@@ -67,7 +67,7 @@ const defaultDependencies: AntigravityQuotaDependencies = {
   now: () => Date.now(),
 };
 
-const CACHE_TTL_MS = 60_000; // 60 seconds
+const CACHE_TTL_MS = 120_000; // 2 minutes
 
 let cachedQuotaData: AntigravityQuotaData | null = null;
 let cachedTimestamp = 0;

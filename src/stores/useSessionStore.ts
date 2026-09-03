@@ -205,7 +205,7 @@ async function requestSessionHistoryPage(
  */
 function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedMessage[] {
   const out: NormalizedMessage[] = [];
-  const seenLongAssistantTexts = new Map<string, number>();
+  const seenAssistantTexts = new Map<string, number>();
   let currentTurnAssistantTexts = new Set<string>();
 
   for (const m of merged) {
@@ -236,19 +236,17 @@ function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedM
           if (deltaText === text) {
             out[lastIdx] = m;
             currentTurnAssistantTexts.add(text);
-            if (text.length > 20) {
-              seenLongAssistantTexts.set(text, lastIdx);
-            }
+            seenAssistantTexts.set(text, lastIdx);
             continue;
           }
         }
 
         // Check if duplicate in current turn or duplicate long reply across the list
         const isDuplicateInTurn = currentTurnAssistantTexts.has(text);
-        const previousLongIndex = text.length > 20 ? seenLongAssistantTexts.get(text) : undefined;
+        const previousIndex = seenAssistantTexts.get(text);
 
-        if (isDuplicateInTurn || previousLongIndex !== undefined) {
-          const targetIndex = previousLongIndex ?? out.findIndex(
+        if (isDuplicateInTurn || previousIndex !== undefined) {
+          const targetIndex = previousIndex ?? out.findIndex(
             (item) => item.kind === 'text' && item.role === 'assistant' && (item.content || '').trim() === text,
           );
           if (targetIndex >= 0) {
@@ -261,9 +259,7 @@ function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedM
         }
 
         currentTurnAssistantTexts.add(text);
-        if (text.length > 20) {
-          seenLongAssistantTexts.set(text, out.length);
-        }
+        seenAssistantTexts.set(text, out.length);
       }
     }
 
