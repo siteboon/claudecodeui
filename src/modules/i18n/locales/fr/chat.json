@@ -255,6 +255,7 @@
     },
     "pending": "Programmé pour {{when}}",
     "failed": "Non envoyé — {{reason}}",
-    "cancel": "Annuler le message programmé"
+    "cancel": "Annuler le message programmé",
+    "dismiss": "Masquer l'avis d'échec"
   }
 }
