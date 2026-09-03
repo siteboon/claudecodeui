@@ -44,6 +44,7 @@ const argsFilePath = path.join(stubDir, 'args.txt');
 const cwdFilePath = path.join(stubDir, 'cwd.txt');
 const sleepModeMarkerPath = path.join(stubDir, 'sleep-mode');
 const failModeMarkerPath = path.join(stubDir, 'fail-mode');
+const multiSegmentMarkerPath = path.join(stubDir, 'multi-segment');
 
 const stubScript = `#!/usr/bin/env node
 const fs = require('fs');
@@ -56,6 +57,16 @@ if (process.env.AGY_FAIL_FILE && fs.existsSync(process.env.AGY_FAIL_FILE)) {
 if (process.env.AGY_MODE_FILE && fs.existsSync(process.env.AGY_MODE_FILE)) {
   process.on('SIGTERM', () => process.exit(0));
   setInterval(() => {}, 1000);
+} else if (process.env.AGY_MULTI_FILE && fs.existsSync(process.env.AGY_MULTI_FILE)) {
+  // One turn with two pure-text segments separated by a tool call — the
+  // transcript shape behind the "reply shows twice" bug: history stores each
+  // PLANNER_RESPONSE segment as its own text row.
+  console.log(JSON.stringify({ event: 'init', conversation_id: 'stub-conv-multi', init: { cwd: '/tmp' } }));
+  console.log(JSON.stringify({ event: 'step_update', step_update: { conversation_id: 'stub-conv-multi', step_index: 2, state: 'ACTIVE', step_type: 'agent_response', text_delta: 'First segment.' } }));
+  console.log(JSON.stringify({ event: 'step_update', step_update: { conversation_id: 'stub-conv-multi', step_index: 3, state: 'ACTIVE', step_type: 'tool', tool_name: 'shell', tool_info: { parameters: { command: 'pwd' } } } }));
+  console.log(JSON.stringify({ event: 'step_update', step_update: { conversation_id: 'stub-conv-multi', step_index: 3, state: 'DONE', step_type: 'tool', tool_info: { output: '/tmp' } } }));
+  console.log(JSON.stringify({ event: 'step_update', step_update: { conversation_id: 'stub-conv-multi', step_index: 4, state: 'ACTIVE', step_type: 'agent_response', text_delta: 'Second segment.' } }));
+  console.log(JSON.stringify({ event: 'result', result: { conversation_id: 'stub-conv-multi', status: 'SUCCESS', usage: { total_tokens: 7 } } }));
 } else {
   console.log(JSON.stringify({ event: 'init', conversation_id: 'stub-conv-1', init: { cwd: '/tmp' } }));
   console.log(JSON.stringify({ event: 'step_update', step_update: { conversation_id: 'stub-conv-1', step_index: 2, state: 'DONE', step_type: 'agent_response', text_delta: 'OK' } }));
@@ -123,6 +134,7 @@ before(async () => {
       AGY_CWD_FILE: cwdFilePath,
       AGY_MODE_FILE: sleepModeMarkerPath,
       AGY_FAIL_FILE: failModeMarkerPath,
+      AGY_MULTI_FILE: multiSegmentMarkerPath,
     },
   });
   serverProcess.stdout?.on('data', (chunk: Buffer) => serverOutput.push(chunk.toString()));
@@ -286,6 +298,42 @@ test('chat.send drives the full WebUI path: REST session → WS stream → remap
 function messagesHaveKind(ws: WebSocket, kind: string): boolean {
   return (ws as WebSocket & { messages: WireMessage[] }).messages.some((msg) => msg.kind === kind);
 }
+
+test('a multi-segment turn emits stream_end at each text segment boundary', async () => {
+  const ws = await connectWebSocket();
+  try {
+    await fs.writeFile(multiSegmentMarkerPath, 'multi');
+    const appSessionId = await createAppSession('two segments please');
+    sendChat(ws, appSessionId, 'two segments please');
+
+    await waitFor(ws, (msg) => msg.kind === 'complete' && msg.sessionId === appSessionId, 'complete for multi-segment run');
+
+    // Live rendering must segment the turn exactly like the persisted
+    // transcript does (one text row per PLANNER_RESPONSE segment): without
+    // stream_end markers the client concatenates all deltas into one bubble
+    // that no per-segment echo-dedupe can ever match, and the reply renders
+    // twice once history loads.
+    const timeline = (ws as WebSocket & { messages: WireMessage[] }).messages
+      .filter((msg) => (
+        msg.sessionId === appSessionId
+        && ['stream_delta', 'stream_end', 'tool_use', 'tool_result', 'complete'].includes(String(msg.kind))
+      ))
+      .map((msg) => (msg.kind === 'stream_delta' ? `delta:${msg.content}` : String(msg.kind)));
+
+    assert.deepEqual(timeline, [
+      'delta:First segment.',
+      'stream_end',
+      'tool_use',
+      'tool_result',
+      'delta:Second segment.',
+      'stream_end',
+      'complete',
+    ]);
+  } finally {
+    await fs.rm(multiSegmentMarkerPath, { force: true });
+    ws.close();
+  }
+});
 
 test('a second chat.send resumes the provider conversation via the persisted id mapping', async () => {
   const ws = await connectWebSocket();

@@ -137,6 +137,13 @@ export class AntigravityRuntimeProvider implements IProviderRuntime {
       let sawErrorResult = false;
       let errorResultMessage: string | null = null;
       let stderrTail = '';
+      /**
+       * Whether an agent_response text segment is currently streaming. agy
+       * interleaves pure-text steps with tool steps inside one turn without
+       * any end-of-text marker, so the segment boundary is derived here:
+       * the first non-text event after text deltas closes the segment.
+       */
+      let agentResponseSegmentOpen = false;
 
       const processKey = sessionId || capturedSessionId || `agy_${Date.now()}_${keylessRunCounter += 1}`;
 
@@ -284,6 +291,7 @@ export class AntigravityRuntimeProvider implements IProviderRuntime {
             provider: PROVIDER,
           });
           writer.send(deltaMsg);
+          agentResponseSegmentOpen = true;
           return;
         }
 
@@ -319,6 +327,32 @@ export class AntigravityRuntimeProvider implements IProviderRuntime {
           const stepUpdateRecord = readObjectRecord(rawRecord?.step_update);
           const resultRecord = readObjectRecord(rawRecord?.result);
           const usageRecord = readObjectRecord(resultRecord?.usage ?? stepUpdateRecord?.usage ?? rawRecord?.usage);
+
+          // Segment boundary for streaming text: the first event that is not
+          // an agent_response text delta (a tool step, a text-less DONE, the
+          // terminal result, ...) closes the open text segment with a
+          // stream_end. The persisted transcript stores one row per segment,
+          // so closing each live segment keeps the client's concatenated
+          // bubble shape aligned with history and lets the existing exact-
+          // match echo dedupe do its job.
+          const stepEvent = rawRecord?.event === 'step_update' ? stepUpdateRecord : null;
+          const isTextDeltaStep = Boolean(
+            stepEvent
+            && readOptionalString(stepEvent.step_type) === 'agent_response'
+            && readOptionalString(stepEvent.text_delta),
+          );
+          if (agentResponseSegmentOpen && !isTextDeltaStep) {
+            agentResponseSegmentOpen = false;
+            writer.send(createNormalizedMessage({
+              id: generateMessageId(PROVIDER),
+              kind: 'stream_end',
+              sessionId: capturedSessionId || sessionId || null,
+              provider: PROVIDER,
+            }));
+          }
+          if (isTextDeltaStep) {
+            agentResponseSegmentOpen = true;
+          }
 
           if (usageRecord) {
             const inputTokens = Number(usageRecord.input_tokens ?? usageRecord.inputTokens ?? usageRecord.prompt_tokens ?? 0) || 0;
@@ -439,6 +473,19 @@ export class AntigravityRuntimeProvider implements IProviderRuntime {
         if (stdoutBuffer.trim()) {
           processLine(stdoutBuffer.trim());
           stdoutBuffer = '';
+        }
+
+        // stdout truncation can swallow the event that would have closed the
+        // last text segment; close it before the terminal complete so the
+        // client never keeps a synthetic streaming row alive.
+        if (agentResponseSegmentOpen) {
+          agentResponseSegmentOpen = false;
+          writer.send(createNormalizedMessage({
+            id: generateMessageId(PROVIDER),
+            kind: 'stream_end',
+            sessionId: capturedSessionId || sessionId || null,
+            provider: PROVIDER,
+          }));
         }
 
         if (!completeSent) {
