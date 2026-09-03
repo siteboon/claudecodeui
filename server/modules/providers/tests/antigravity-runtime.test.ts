@@ -68,7 +68,30 @@ const sessionsProvider = new AntigravitySessionsProvider();
 const context: ProviderRuntimeContext = {
   resolveProviderSessionId: () => null,
   resolveResumeModel: async () => undefined,
-  getProviderModels: async () => ({ OPTIONS: [], DEFAULT: 'gemini-3.7-flash-high' }),
+  getProviderModels: async () => ({
+    OPTIONS: [
+      {
+        value: 'gemini-3.7-flash',
+        label: 'Gemini 3.7 Flash',
+        effort: {
+          default: 'high',
+          values: [{ value: 'low' }, { value: 'medium' }, { value: 'high' }],
+          encoding: 'model-suffix',
+        },
+      },
+      {
+        value: 'gemini-3.1-pro',
+        label: 'Gemini 3.1 Pro',
+        effort: {
+          default: 'high',
+          values: [{ value: 'low' }, { value: 'high' }],
+          encoding: 'model-suffix',
+        },
+      },
+      { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (Thinking)' },
+    ],
+    DEFAULT: 'gemini-3.7-flash',
+  }),
   normalizeMessage: (raw, sessionId) => sessionsProvider.normalizeMessage(raw, sessionId),
   isProviderInstalled: async () => true,
 };
@@ -226,37 +249,104 @@ test('abort resolves the run quietly as aborted', async () => {
   }
 });
 
-test('runtime normalizes model with embedded effort suffix and avoids conflicting --effort flag', async () => {
+test('runtime resolves model selection and reasoning effort into agy arguments', async () => {
   const runtime = new AntigravityRuntimeProvider();
 
-  // Case 1: model with -high suffix and effort medium -> model becomes -medium, no --effort flag
-  await fs.rm(argsFilePath, { force: true });
-  const { writer: writer1 } = createWriter();
-  await runtime.run(
-    'hello',
-    { sessionId: 'sess-effort-1', model: 'gemini-3.7-flash-high', effort: 'medium' },
-    writer1,
-    context,
-  );
-  let args = await readRecordedArgs();
-  assert.ok(args.includes('--model'));
-  assert.equal(args[args.indexOf('--model') + 1], 'gemini-3.7-flash-medium');
-  assert.ok(!args.includes('--effort'), '--effort flag should be omitted when model encodes effort');
+  const scenarios: Array<{
+    name: string;
+    options: { model?: string; effort?: string };
+    expectModel: string;
+    expectEffort?: string;
+  }> = [
+    {
+      // Legacy saved sessions still carry suffixed ids: rewrite the suffix to
+      // the requested effort and never combine both channels.
+      name: 'legacy suffixed id with a conflicting effort rewrites the suffix',
+      options: { model: 'gemini-3.7-flash-high', effort: 'medium' },
+      expectModel: 'gemini-3.7-flash-medium',
+    },
+    {
+      name: 'legacy suffixed id without an effort keeps its tier',
+      options: { model: 'gemini-3.7-flash-low' },
+      expectModel: 'gemini-3.7-flash-low',
+    },
+    {
+      name: 'base model with an explicit effort appends the tier',
+      options: { model: 'gemini-3.7-flash', effort: 'medium' },
+      expectModel: 'gemini-3.7-flash-medium',
+    },
+    {
+      name: 'base model without an effort falls back to the family default tier',
+      options: { model: 'gemini-3.7-flash' },
+      expectModel: 'gemini-3.7-flash-high',
+    },
+    {
+      // The UI does not offer it, but a stale row can request a tier the
+      // family lacks; the default tier keeps the id valid.
+      name: 'effort outside the family tiers snaps to the default tier',
+      options: { model: 'gemini-3.1-pro', effort: 'medium' },
+      expectModel: 'gemini-3.1-pro-high',
+    },
+    {
+      // Same guard for a legacy suffixed id whose tier set has since
+      // narrowed: the row's model + effort must not combine into an id agy
+      // never offered.
+      name: 'legacy suffixed id with an unavailable effort snaps to the default tier',
+      options: { model: 'gemini-3.1-pro-high', effort: 'medium' },
+      expectModel: 'gemini-3.1-pro-high',
+    },
+    {
+      name: 'flag-effort model keeps its id and uses --effort',
+      options: { model: 'claude-sonnet-4-6', effort: 'high' },
+      expectModel: 'claude-sonnet-4-6',
+      expectEffort: 'high',
+    },
+    {
+      name: 'unknown custom model keeps its id and uses --effort',
+      options: { model: 'my-custom-gpt', effort: 'low' },
+      expectModel: 'my-custom-gpt',
+      expectEffort: 'low',
+    },
+  ];
 
-  // Case 2: model without effort suffix (e.g. claude-sonnet-4-6) -> passes model and --effort flag
+  for (const scenario of scenarios) {
+    await fs.rm(argsFilePath, { force: true });
+    const { writer } = createWriter();
+    await runtime.run('hello', { sessionId: `sess-effort-${scenario.name}`, ...scenario.options }, writer, context);
+
+    const args = await readRecordedArgs();
+    const modelIndex = args.indexOf('--model');
+    assert.ok(modelIndex !== -1, `${scenario.name}: expected --model in ${JSON.stringify(args)}`);
+    assert.equal(args[modelIndex + 1], scenario.expectModel, scenario.name);
+    if (scenario.expectEffort) {
+      const effortIndex = args.indexOf('--effort');
+      assert.ok(effortIndex !== -1, `${scenario.name}: expected --effort in ${JSON.stringify(args)}`);
+      assert.equal(args[effortIndex + 1], scenario.expectEffort, scenario.name);
+    } else {
+      assert.ok(!args.includes('--effort'), `${scenario.name}: --effort must not appear in ${JSON.stringify(args)}`);
+    }
+  }
+});
+
+test('runtime degrades to flag-based effort when the catalog lookup fails', async () => {
+  const runtime = new AntigravityRuntimeProvider();
+  const brokenContext: ProviderRuntimeContext = {
+    ...context,
+    getProviderModels: async () => {
+      throw new Error('catalog unavailable');
+    },
+  };
+
   await fs.rm(argsFilePath, { force: true });
-  const { writer: writer2 } = createWriter();
-  await runtime.run(
-    'hello',
-    { sessionId: 'sess-effort-2', model: 'claude-sonnet-4-6', effort: 'high' },
-    writer2,
-    context,
-  );
-  args = await readRecordedArgs();
-  assert.ok(args.includes('--model'));
-  assert.equal(args[args.indexOf('--model') + 1], 'claude-sonnet-4-6');
-  assert.ok(args.includes('--effort'));
-  assert.equal(args[args.indexOf('--effort') + 1], 'high');
+  const { writer } = createWriter();
+  await runtime.run('hello', { sessionId: 'sess-effort-catalog-down', model: 'gemini-3.7-flash', effort: 'medium' }, writer, brokenContext);
+
+  const args = await readRecordedArgs();
+  const modelIndex = args.indexOf('--model');
+  assert.equal(args[modelIndex + 1], 'gemini-3.7-flash');
+  const effortIndex = args.indexOf('--effort');
+  assert.ok(effortIndex !== -1, `expected --effort fallback in ${JSON.stringify(args)}`);
+  assert.equal(args[effortIndex + 1], 'medium');
 });
 
 

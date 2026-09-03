@@ -2,7 +2,10 @@
  * Antigravity Models Provider
  *
  * Implements IProviderModels for the Antigravity CLI (agy).
- * Provides supported model catalog (with effort levels) and active model resolution.
+ * Provides the supported model catalog (with effort levels) and active model
+ * resolution. Both the builtin fallback and the `agy models` output are
+ * collapsed into base models whose effort tiers ride on the Reasoning picker
+ * (see antigravity-model-effort).
  *
  * @module antigravity-models.provider
  */
@@ -14,7 +17,6 @@ import { promisify } from 'node:util';
 import type { IProviderModels } from '@/shared/interfaces.js';
 import type {
   ProviderCurrentActiveModel,
-  ProviderModelOption,
   ProviderModelsDefinition,
 } from '@/shared/types.js';
 import {
@@ -25,88 +27,47 @@ import {
 
 import { getAntigravitySettingsPath } from './antigravity-data-root.js';
 import { tryResolveEnginePath } from './antigravity-engine-path.js';
+import {
+  dedupeAntigravityVariantModels,
+  splitModelEffortSuffix,
+  type AntigravityRawModelEntry,
+} from './antigravity-model-effort.js';
 
 const execFileAsync = promisify(execFile);
 
 /**
- * Standard reasoning effort descriptions.
+ * Builtin raw model rows mirroring `agy models` output, used verbatim as the
+ * fallback catalog when the CLI cannot be queried. Suffixed variants collapse
+ * into base models at load time, so the picker lists one entry per base model
+ * with its Reasoning tiers. Only the first row of each variant family carries
+ * a description; it becomes the base model's description.
  */
-const EFFORT_DESCRIPTIONS: Record<string, string> = {
-  low: 'Faster, less detailed reasoning',
-  medium: 'Balanced reasoning for most tasks',
-  high: 'Maximum depth reasoning for complex tasks',
-};
+const ANTIGRAVITY_BUILTIN_RAW_MODELS: AntigravityRawModelEntry[] = [
+  { value: 'gemini-3.8-flash-high', label: 'Gemini 3.8 Flash (High)', description: 'Google Gemini 3.8 Flash' },
+  { value: 'gemini-3.8-flash-medium', label: 'Gemini 3.8 Flash (Medium)' },
+  { value: 'gemini-3.8-flash-low', label: 'Gemini 3.8 Flash (Low)' },
+  { value: 'gemini-3.7-flash-high', label: 'Gemini 3.7 Flash (High)', description: 'Google Gemini 3.7 Flash' },
+  { value: 'gemini-3.7-flash-medium', label: 'Gemini 3.7 Flash (Medium)' },
+  { value: 'gemini-3.7-flash-low', label: 'Gemini 3.7 Flash (Low)' },
+  { value: 'gemini-3.6-flash-high', label: 'Gemini 3.6 Flash (High)', description: 'Google Gemini 3.6 Flash' },
+  { value: 'gemini-3.6-flash-medium', label: 'Gemini 3.6 Flash (Medium)' },
+  { value: 'gemini-3.6-flash-low', label: 'Gemini 3.6 Flash (Low)' },
+  { value: 'gemini-3.1-pro-high', label: 'Gemini 3.1 Pro (High)', description: 'Google Gemini 3.1 Pro for complex architecture and deep reasoning' },
+  { value: 'gemini-3.1-pro-low', label: 'Gemini 3.1 Pro (Low)' },
+  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (Thinking)', description: 'Anthropic Claude Sonnet 4.6 with extended thinking' },
+  { value: 'claude-opus-4-6-thinking', label: 'Claude Opus 4.6 (Thinking)', description: 'Anthropic Claude Opus 4.6 with maximum reasoning capability' },
+  { value: 'gpt-oss-120b-medium', label: 'GPT-OSS 120B (Medium)', description: 'Open-weight 120B foundation model' },
+];
 
-const STANDARD_EFFORT_CONFIG = {
-  default: 'high',
-  values: [
-    { value: 'low', description: EFFORT_DESCRIPTIONS.low },
-    { value: 'medium', description: EFFORT_DESCRIPTIONS.medium },
-    { value: 'high', description: EFFORT_DESCRIPTIONS.high },
-  ],
-};
+/** Catalog default, kept identical in the builtin and dynamic paths. */
+const DEFAULT_BASE_MODEL = 'gemini-3.7-flash';
 
 /**
  * Builtin fallback model definitions when `agy models` cannot be queried.
  */
 export const ANTIGRAVITY_BUILTIN_MODELS: ProviderModelsDefinition = {
-  OPTIONS: [
-    {
-      value: 'gemini-3.7-flash-high',
-      label: 'Gemini 3.7 Flash (High)',
-      description: 'Google Gemini 3.7 Flash with high reasoning effort',
-      effort: STANDARD_EFFORT_CONFIG,
-    },
-    {
-      value: 'gemini-3.7-flash-medium',
-      label: 'Gemini 3.7 Flash (Medium)',
-      description: 'Google Gemini 3.7 Flash with medium reasoning effort',
-      effort: STANDARD_EFFORT_CONFIG,
-    },
-    {
-      value: 'gemini-3.7-flash-low',
-      label: 'Gemini 3.7 Flash (Low)',
-      description: 'Google Gemini 3.7 Flash with low reasoning effort',
-      effort: STANDARD_EFFORT_CONFIG,
-    },
-    {
-      value: 'gemini-3.6-flash-high',
-      label: 'Gemini 3.6 Flash (High)',
-      description: 'Google Gemini 3.6 Flash with high reasoning effort',
-      effort: STANDARD_EFFORT_CONFIG,
-    },
-    {
-      value: 'gemini-3.6-flash-medium',
-      label: 'Gemini 3.6 Flash (Medium)',
-      description: 'Google Gemini 3.6 Flash with medium reasoning effort',
-      effort: STANDARD_EFFORT_CONFIG,
-    },
-    {
-      value: 'gemini-3.1-pro-high',
-      label: 'Gemini 3.1 Pro (High)',
-      description: 'Google Gemini 3.1 Pro for complex architecture and deep reasoning',
-      effort: STANDARD_EFFORT_CONFIG,
-    },
-    {
-      value: 'claude-sonnet-4-6',
-      label: 'Claude Sonnet 4.6 (Thinking)',
-      description: 'Anthropic Claude Sonnet 4.6 with extended thinking',
-      effort: STANDARD_EFFORT_CONFIG,
-    },
-    {
-      value: 'claude-opus-4-6-thinking',
-      label: 'Claude Opus 4.6 (Thinking)',
-      description: 'Anthropic Claude Opus 4.6 with maximum reasoning capability',
-      effort: STANDARD_EFFORT_CONFIG,
-    },
-    {
-      value: 'gpt-oss-120b-medium',
-      label: 'GPT-OSS 120B (Medium)',
-      description: 'Open-weight 120B foundation model',
-      effort: STANDARD_EFFORT_CONFIG,
-    },
-  ],
-  DEFAULT: 'gemini-3.7-flash-high',
+  OPTIONS: dedupeAntigravityVariantModels(ANTIGRAVITY_BUILTIN_RAW_MODELS),
+  DEFAULT: DEFAULT_BASE_MODEL,
 };
 
 /**
@@ -124,10 +85,9 @@ async function fetchModelsFromCli(): Promise<ProviderModelsDefinition | null> {
       timeout: 8000,
     });
 
-    const lines = stdout.split(/\r?\n/);
-    const options: ProviderModelOption[] = [];
+    const entries: AntigravityRawModelEntry[] = [];
 
-    for (const line of lines) {
+    for (const line of stdout.split(/\r?\n/)) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('Fetching')) {
         continue;
@@ -135,33 +95,26 @@ async function fetchModelsFromCli(): Promise<ProviderModelsDefinition | null> {
 
       // Format is `<modelId>\t<Label>` or `<modelId>   <Label>`
       const parts = trimmed.split(/\t+|\s{2,}/);
-      if (parts.length >= 2) {
-        const value = parts[0]?.trim() || '';
-        const label = parts[1]?.trim() || value;
-
-        if (value) {
-          options.push({
-            value,
-            label,
-            description: `${label} via Google Antigravity CLI`,
-            effort: STANDARD_EFFORT_CONFIG,
-          });
-        }
-      } else if (parts.length === 1 && parts[0]?.trim()) {
-        const value = parts[0].trim();
-        options.push({
-          value,
-          label: value,
-          description: `${value} via Google Antigravity CLI`,
-          effort: STANDARD_EFFORT_CONFIG,
-        });
+      const value = parts[0]?.trim() || '';
+      if (!value) {
+        continue;
       }
+
+      entries.push({
+        value,
+        label: parts.length >= 2 ? (parts[1]?.trim() || value) : value,
+      });
     }
 
-    if (options.length > 0) {
-      const defaultModel = options.find((o) => o.value.includes('3.7-flash-high'))?.value
+    if (entries.length > 0) {
+      const options = dedupeAntigravityVariantModels(entries).map((option) => ({
+        ...option,
+        description: option.description ?? `${option.label} via Google Antigravity CLI`,
+      }));
+
+      const defaultModel = options.find((o) => o.value === DEFAULT_BASE_MODEL)?.value
         ?? options[0]?.value
-        ?? 'gemini-3.7-flash-high';
+        ?? DEFAULT_BASE_MODEL;
 
       return {
         OPTIONS: options,
@@ -218,12 +171,15 @@ export class AntigravityProviderModels implements IProviderModels {
    *
    * Session-scoped model memory is owned by providerModelsService
    * (setSessionModel / resolveResumeModel) on the chat path; this facet only
-   * reports the settings.json default or the catalog default.
+   * reports the settings.json default or the catalog default. agy stores the
+   * full suffixed id in settings.json, so the tier is stripped to match the
+   * base-model catalog.
    */
   async getCurrentActiveModel(_sessionId?: string): Promise<ProviderCurrentActiveModel> {
     const settingsModel = readDefaultModelFromSettings();
     if (settingsModel) {
-      return { model: settingsModel };
+      const { base } = splitModelEffortSuffix(settingsModel);
+      return { model: base };
     }
 
     return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());

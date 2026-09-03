@@ -85,6 +85,15 @@ export type ProviderModelOption = {
       value: string;
       description?: string;
     }[];
+    /**
+     * Marks effort tiers the provider CLI encodes as model-id suffixes
+     * (antigravity's `gemini-3.7-flash-medium`) instead of a separate effort
+     * flag. The antigravity models facet sets this on variant-family base
+     * models; the antigravity runtime reads it to append the chosen tier to
+     * the model id rather than passing `--effort`. Omitted for models that
+     * take the CLI's own effort flag.
+     */
+    encoding?: 'model-suffix';
   };
 };
 

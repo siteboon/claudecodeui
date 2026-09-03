@@ -23,7 +23,7 @@ const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   codex: 'gpt-5.4',
   opencode: 'anthropic/claude-sonnet-4-5',
   zcode: 'GLM-5.3',
-  antigravity: 'gemini-3.7-flash-high',
+  antigravity: 'gemini-3.7-flash',
 };
 
 const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode', 'zcode', 'antigravity'];

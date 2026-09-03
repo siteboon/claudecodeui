@@ -38,6 +38,11 @@ import {
 
 import { getAntigravityDataRoot } from './antigravity-data-root.js';
 import { tryResolveEnginePath } from './antigravity-engine-path.js';
+import {
+  extractVariantFamilyFromOption,
+  resolveAntigravityModelArgs,
+  splitModelEffortSuffix,
+} from './antigravity-model-effort.js';
 
 const PROVIDER = 'antigravity';
 
@@ -102,6 +107,11 @@ export class AntigravityRuntimeProvider implements IProviderRuntime {
     writer: ProviderRuntimeWriter,
     context: ProviderRuntimeContext,
   ): Promise<unknown> {
+    // The merged catalog decides whether a base model id encodes effort as an
+    // id suffix. A catalog lookup failure must degrade to flag-based effort,
+    // never block the run.
+    const catalog = await context.getProviderModels().catch(() => null);
+
     return new Promise((resolve, reject) => {
       const sessionId = readOptionalString(options.sessionId);
       // An explicit workspace (chat gateway sends cwd + projectPath) is kept
@@ -220,32 +230,24 @@ export class AntigravityRuntimeProvider implements IProviderRuntime {
         args.push('--conversation', providerSessionId);
       }
 
-      // Model configuration and reasoning effort
-      let finalModel = model;
-      let finalEffort = effort && ['low', 'medium', 'high'].includes(effort) ? effort : undefined;
+      // Model configuration and reasoning effort share one resolution:
+      // variant-family base ids get their tier appended to the model id,
+      // legacy suffixed ids keep their embedded tier, and everything else
+      // (claude passthroughs, custom models) takes the --effort flag. The
+      // family is looked up by base id so a legacy suffixed id from an old
+      // session row is validated against the family's real tiers too.
+      const requestedBase = model ? splitModelEffortSuffix(model).base : undefined;
+      const variantFamily = extractVariantFamilyFromOption(
+        catalog?.OPTIONS.find((option) => option.value === requestedBase),
+      );
+      const modelArgs = resolveAntigravityModelArgs(model, effort, variantFamily);
 
-      if (finalModel) {
-        const effortSuffixMatch = finalModel.match(/-(low|medium|high)$/);
-        if (effortSuffixMatch) {
-          const modelEmbeddedEffort = effortSuffixMatch[1];
-          if (finalEffort && finalEffort !== modelEmbeddedEffort) {
-            // If the model name has an embedded effort suffix (e.g. gemini-3.7-flash-high)
-            // and the user requested a different effort (e.g. medium),
-            // replace the suffix to match the requested effort (e.g. gemini-3.7-flash-medium)
-            finalModel = finalModel.replace(/-(low|medium|high)$/, `-${finalEffort}`);
-          }
-          // Do not pass --effort flag when the model name already encodes the effort level,
-          // avoiding CLI conflict errors.
-          finalEffort = undefined;
-        }
+      if (modelArgs.model) {
+        args.push('--model', modelArgs.model);
       }
 
-      if (finalModel) {
-        args.push('--model', finalModel);
-      }
-
-      if (finalEffort) {
-        args.push('--effort', finalEffort);
+      if (modelArgs.effort) {
+        args.push('--effort', modelArgs.effort);
       }
 
       // Permission mode (acceptEdits / plan / bypassPermissions); 'default'
