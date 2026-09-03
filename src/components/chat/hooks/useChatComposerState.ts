@@ -98,6 +98,26 @@ export type ModelCommandData = {
   defaultModel?: string;
 };
 
+export type QuotaBucket = {
+  id: string;
+  name: string;
+  description?: string;
+  window: '5h' | 'weekly' | string;
+  remainingFraction: number;
+  resetTime?: string;
+};
+
+export type QuotaGroup = {
+  name: string;
+  description?: string;
+  buckets: QuotaBucket[];
+};
+
+export type ProviderQuotaData = {
+  groups: QuotaGroup[];
+  updatedAt?: string;
+};
+
 export type CostCommandData = {
   tokenUsage?: {
     used?: number;
@@ -109,6 +129,7 @@ export type CostCommandData = {
   };
   provider?: string;
   model?: string;
+  quota?: ProviderQuotaData;
 };
 
 export type StatusCommandData = {

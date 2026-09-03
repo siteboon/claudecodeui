@@ -760,6 +760,16 @@ router.get(
   }),
 );
 
+router.get(
+  '/quota',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = readOptionalQueryString(req.query.provider) || 'antigravity';
+    const forceRefresh = parseOptionalBooleanQuery(req.query.refresh, 'refresh') ?? false;
+    const result = await providerTokenUsageService.getProviderQuota(provider, { forceRefresh });
+    res.json(createApiSuccessResponse(result));
+  }),
+);
+
 // Must stay registered after the static and session-specific routes so their
 // literals never match the generic `:sessionId` parameter.
 router.get(

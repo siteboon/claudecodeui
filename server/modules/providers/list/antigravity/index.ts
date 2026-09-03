@@ -11,3 +11,10 @@ export {
   getAntigravitySummariesDbPath,
   getAntigravityTranscriptCandidates,
 } from './antigravity-data-root.js';
+export {
+  fetchAntigravityQuota,
+  resetAntigravityQuotaCache,
+  type AntigravityQuotaBucket,
+  type AntigravityQuotaGroup,
+  type AntigravityQuotaData,
+} from './antigravity-quota.provider.js';

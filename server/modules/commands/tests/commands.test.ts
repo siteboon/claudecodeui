@@ -151,3 +151,32 @@ test('cost command falls back to injected tokenUsage service when context has no
   assert.equal(data.tokenBreakdown?.input, 3000);
   assert.equal(data.tokenBreakdown?.output, 1200);
 });
+
+test('cost command returns immediate session token usage without blocking on quota', async () => {
+  const mockTokenUsage = {
+    getSessionTokenUsage: async () => ({
+      used: 100,
+      inputTokens: 80,
+      outputTokens: 20,
+      breakdown: { input: 80, output: 20 },
+    }),
+  };
+
+  const cost = await executeCommand(
+    '/cost',
+    { provider: 'antigravity', sessionId: 'test-session-123' },
+    {},
+    mockTokenUsage,
+  );
+
+  const data = cost.data as {
+    provider: string;
+    tokenUsage: { used: number };
+    tokenBreakdown?: { input: number; output: number };
+  };
+
+  assert.equal(data.provider, 'antigravity');
+  assert.equal(data.tokenUsage.used, 100);
+  assert.equal(data.tokenBreakdown?.input, 80);
+  assert.equal(data.tokenBreakdown?.output, 20);
+});

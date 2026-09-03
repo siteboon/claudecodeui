@@ -69,6 +69,41 @@ export type AuthenticatedWebSocketRequest = IncomingMessage & {
 export type LLMProvider = 'claude' | 'codex' | 'cursor' | 'opencode' | 'zcode' | 'antigravity';
 
 /**
+ * Single quota bucket representing rolling or windowed token limit information
+ * returned by providers such as Antigravity.
+ */
+export type ProviderQuotaBucket = {
+  id: string;
+  name: string;
+  description?: string;
+  window: '5h' | 'weekly' | string;
+  remainingFraction: number;
+  resetTime?: string;
+};
+
+/**
+ * Group of quota buckets belonging to a family of models (e.g. Gemini Models, Claude/GPT models).
+ */
+export type ProviderQuotaGroup = {
+  name: string;
+  description?: string;
+  buckets: ProviderQuotaBucket[];
+};
+
+/**
+ * Account-level quota and rate limit status across model groups.
+ */
+export type ProviderQuotaData = {
+  groups: ProviderQuotaGroup[];
+  updatedAt: string;
+};
+
+/** Backwards-compatible aliases for Antigravity-specific callers */
+export type AntigravityQuotaBucket = ProviderQuotaBucket;
+export type AntigravityQuotaGroup = ProviderQuotaGroup;
+export type AntigravityQuotaData = ProviderQuotaData;
+
+/**
  * One selectable model row in a provider model catalog.
  */
 export type ProviderModelOption = {

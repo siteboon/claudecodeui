@@ -6,7 +6,11 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 
 import { sessionsDb } from '@/modules/database/index.js';
-import { getAntigravityTranscriptCandidates } from '@/modules/providers/list/antigravity/index.js';
+import {
+  fetchAntigravityQuota,
+  getAntigravityTranscriptCandidates,
+  type AntigravityQuotaData,
+} from '@/modules/providers/list/antigravity/index.js';
 import type { AnyRecord } from '@/shared/types.js';
 import { AppError, getOpenCodeDatabasePath, sanitizeLeafDirectoryName } from '@/shared/utils.js';
 
@@ -20,6 +24,7 @@ type ProviderTokenUsageServiceDependencies = {
   readDirectory: (directoryPath: string) => Promise<Dirent[]>;
   readTextFile: (filePath: string) => Promise<string>;
   getClaudeContextWindow: () => string | undefined;
+  fetchAntigravityQuota: (options?: { forceRefresh?: boolean }) => Promise<AntigravityQuotaData | null>;
 };
 
 type TokenUsageResult = {
@@ -54,6 +59,7 @@ const defaultDependencies: ProviderTokenUsageServiceDependencies = {
   readDirectory: (directoryPath) => fsp.readdir(directoryPath, { withFileTypes: true }),
   readTextFile: (filePath) => fsp.readFile(filePath, 'utf8'),
   getClaudeContextWindow: () => process.env.CONTEXT_WINDOW,
+  fetchAntigravityQuota,
 };
 
 function readUsageNumber(value: unknown): number {
@@ -469,6 +475,20 @@ export function createProviderTokenUsageService(
 
       const fileContent = await dependencies.readTextFile(sessionFilePath);
       return readClaudeTokenUsage(fileContent, dependencies.getClaudeContextWindow());
+    },
+
+    /**
+     * Retrieves account-level quota status (5-hour and weekly limits) for providers
+     * that support quota reporting, such as Antigravity.
+     */
+    async getProviderQuota(
+      provider: string,
+      options?: { forceRefresh?: boolean },
+    ): Promise<AntigravityQuotaData | null> {
+      if (provider === 'antigravity') {
+        return dependencies.fetchAntigravityQuota(options);
+      }
+      return null;
     },
   };
 }

@@ -1,13 +1,18 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   BadgeCheck,
+  Calendar,
+  ChevronDown,
+  ChevronRight,
   CircleHelp,
+  Clock,
   Coins,
   Cpu,
   Gauge,
   Package,
   Plus,
+  RotateCw,
   Search,
   Server,
   Sparkles,
@@ -29,8 +34,11 @@ import type {
   CostCommandData,
   HelpCommandData,
   ModelCommandData,
+  ProviderQuotaData,
+  QuotaGroup,
   StatusCommandData,
 } from '../../hooks/useChatComposerState';
+import { authenticatedFetch } from '../../../../utils/api';
 
 import ModelLibraryPanel from './ModelLibraryPanel';
 import { getProviderDisplayName, PROVIDER_DISPLAY_NAMES } from '../../../../utils/providerDisplay';
@@ -415,11 +423,191 @@ function ModelsContent({
   );
 }
 
+function formatRemainingCountdown(resetTime?: string): string {
+  if (!resetTime) return '';
+  const resetMs = new Date(resetTime).getTime();
+  if (!Number.isFinite(resetMs)) return '';
+  const diffMs = resetMs - Date.now();
+  if (diffMs <= 0) return '即将重置';
+  const totalMinutes = Math.floor(diffMs / 60_000);
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) {
+    return `${days} 天 ${hours} 小时后重置`;
+  }
+  if (hours > 0) {
+    return `${hours} 小时 ${minutes} 分钟后重置`;
+  }
+  return `${Math.max(1, minutes)} 分钟后重置`;
+}
+
+function getQuotaTone(remainingFraction: number) {
+  if (remainingFraction <= 0.15) {
+    return {
+      bar: 'bg-rose-500',
+      text: 'text-rose-500 dark:text-rose-400',
+      track: 'bg-rose-500/15',
+    };
+  }
+  if (remainingFraction <= 0.4) {
+    return {
+      bar: 'bg-amber-500',
+      text: 'text-amber-500 dark:text-amber-400',
+      track: 'bg-amber-500/15',
+    };
+  }
+  return {
+    bar: 'bg-emerald-500',
+    text: 'text-emerald-500 dark:text-emerald-400',
+    track: 'bg-emerald-500/15',
+  };
+}
+
+function QuotaGroupCard({
+  group,
+  defaultExpanded,
+  isCurrentGroup,
+}: {
+  group: QuotaGroup;
+  defaultExpanded: boolean;
+  isCurrentGroup: boolean;
+}) {
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-border/70 bg-background/75 transition-all duration-200">
+      <button
+        type="button"
+        onClick={() => setIsExpanded((previous) => !previous)}
+        className="flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-muted/25"
+      >
+        <div className="flex items-center gap-3">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
+            <Gauge className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="truncate text-sm font-semibold text-foreground">{group.name}</span>
+              {isCurrentGroup ? (
+                <span className="shrink-0 rounded-md border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                  当前会话模型组
+                </span>
+              ) : (
+                <span className="shrink-0 rounded-md border border-border/60 bg-muted/30 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  其他模型组
+                </span>
+              )}
+            </div>
+            {group.description && (
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">{group.description}</p>
+            )}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5 pl-3 text-xs text-muted-foreground">
+          <span>{isExpanded ? '收起' : '展开查看'}</span>
+          {isExpanded ? (
+            <ChevronDown className="h-4 w-4" />
+          ) : (
+            <ChevronRight className="h-4 w-4" />
+          )}
+        </div>
+      </button>
+
+      {isExpanded && (
+        <div className="space-y-3 border-t border-border/60 bg-muted/10 p-4">
+          {group.buckets.map((bucket) => {
+            const percent = Math.round(bucket.remainingFraction * 100);
+            const tone = getQuotaTone(bucket.remainingFraction);
+            const isFiveHour = bucket.window === '5h' || bucket.id.includes('5h');
+            const countdown = formatRemainingCountdown(bucket.resetTime);
+            const Icon = isFiveHour ? Clock : Calendar;
+            const limitTitle = isFiveHour ? '5 小时滑动窗口限额' : '周配额';
+
+            return (
+              <div key={bucket.id} className="space-y-2 rounded-xl border border-border/60 bg-background/80 p-3 shadow-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="truncate text-xs font-semibold text-foreground">
+                      {limitTitle}
+                    </span>
+                  </div>
+                  <span className={`shrink-0 font-mono text-xs font-bold ${tone.text}`}>
+                    剩余 {percent}%
+                  </span>
+                </div>
+
+                {/* Progress Bar */}
+                <div className={`h-2 w-full overflow-hidden rounded-full ${tone.track}`}>
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${tone.bar}`}
+                    style={{ width: `${percent}%` }}
+                  />
+                </div>
+
+                {/* Subtitle / Description & Reset Countdown */}
+                <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                  <span className="truncate">{bucket.description || bucket.name}</span>
+                  {countdown && (
+                    <span className="shrink-0 font-medium text-foreground/90">
+                      {countdown}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CostContent({ data }: { data: CostCommandData }) {
   const used = Number(data.tokenUsage?.used ?? 0);
   const total = Number(data.tokenUsage?.total ?? 0);
   const model = data.model || 'Unknown';
   const provider = getProviderLabel(data.provider, data.provider || 'Unknown');
+  const isAntigravity = data.provider === 'antigravity';
+
+  const [quotaData, setQuotaData] = useState<ProviderQuotaData | null>(data.quota ?? null);
+  const [loadingQuota, setLoadingQuota] = useState(isAntigravity && !data.quota);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const fetchQuota = useCallback(async (isManualRefresh = false) => {
+    if (!isAntigravity) return;
+    if (isManualRefresh) {
+      setIsRefreshing(true);
+    } else {
+      setLoadingQuota(true);
+    }
+
+    try {
+      const response = await authenticatedFetch(
+        `/api/providers/quota?provider=antigravity${isManualRefresh ? '&refresh=true' : ''}`,
+      );
+      if (response.ok) {
+        const payload = await response.json();
+        if (payload.data?.groups) {
+          setQuotaData(payload.data as ProviderQuotaData);
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load Antigravity quota:', error);
+    } finally {
+      setLoadingQuota(false);
+      setIsRefreshing(false);
+    }
+  }, [isAntigravity]);
+
+  useEffect(() => {
+    if (isAntigravity && !data.quota) {
+      void fetchQuota(false);
+    }
+  }, [fetchQuota, isAntigravity, data.quota]);
+
   const hasBreakdown =
     typeof data.tokenBreakdown?.input === 'number' ||
     typeof data.tokenBreakdown?.output === 'number';
@@ -450,8 +638,14 @@ function CostContent({ data }: { data: CostCommandData }) {
       : []),
   ];
 
+  const quotaGroups = quotaData?.groups ?? [];
+  const normalizedModel = (data.model || '').toLowerCase();
+  const isClaudeOrGpt = normalizedModel.includes('claude') || normalizedModel.includes('gpt');
+  const isGemini = normalizedModel.includes('gemini');
+
   return (
-    <div className="space-y-4">
+    <div className="scrollbar-thin h-full min-h-0 space-y-4 overflow-y-auto pr-1">
+      {/* Session Context Token Usage */}
       <div className="overflow-hidden rounded-2xl border border-border/70 bg-background/75">
         {usageRows.map((row) => {
           const Icon = row.icon;
@@ -473,6 +667,68 @@ function CostContent({ data }: { data: CostCommandData }) {
         })}
       </div>
 
+      {/* Provider Quota & Rate Limits Section (5-hour & Weekly) */}
+      {isAntigravity && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              账号配额与速率限额
+            </h4>
+            <div className="flex items-center gap-2">
+              {quotaData?.updatedAt && (
+                <span className="text-[11px] text-muted-foreground/70">
+                  更新于 {new Date(quotaData.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => void fetchQuota(true)}
+                disabled={loadingQuota || isRefreshing}
+                className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-background/80 px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+                title="刷新最新配额"
+              >
+                <RotateCw className={`h-3 w-3 ${isRefreshing ? 'animate-spin text-primary' : ''}`} />
+                <span>刷新</span>
+              </button>
+            </div>
+          </div>
+
+          {loadingQuota && (
+            <div className="flex items-center gap-3 rounded-2xl border border-border/70 bg-background/75 p-4 shadow-xs">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              <div>
+                <p className="text-xs font-semibold text-foreground">正在获取最新配额...</p>
+                <p className="text-[11px] text-muted-foreground">正在从 Antigravity 引擎同步 5 小时限额与周配额</p>
+              </div>
+            </div>
+          )}
+
+          {!loadingQuota && quotaGroups.length > 0 && (
+            <div className="space-y-3">
+              {quotaGroups.map((group, index) => {
+                const groupNameLower = group.name.toLowerCase();
+                let isCurrent = false;
+                if (groupNameLower.includes('claude') || groupNameLower.includes('gpt')) {
+                  isCurrent = isClaudeOrGpt;
+                } else if (groupNameLower.includes('gemini')) {
+                  isCurrent = isGemini;
+                }
+
+                return (
+                  <QuotaGroupCard
+                    key={group.name}
+                    group={group}
+                    defaultExpanded={isCurrent || index === 0}
+                    isCurrentGroup={isCurrent}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Provider & Model Info */}
       <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
