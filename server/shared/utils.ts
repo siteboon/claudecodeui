@@ -904,6 +904,88 @@ export function extractEmailFromJwt(jwtToken: string | null | undefined): string
 
 // ---------------------------
 //----------------- TOKEN USAGE UTILITIES ------------
+type ProviderQuotaCacheOptions = {
+  forceRefresh?: boolean;
+};
+
+type ProviderQuotaCache<T> = {
+  get(
+    options: ProviderQuotaCacheOptions,
+    loader: () => Promise<T | null>,
+    now?: () => number,
+  ): Promise<T | null>;
+  reset(): void;
+};
+
+/**
+ * Creates a short-lived nullable cache for provider account quota adapters.
+ *
+ * Antigravity and Codex use this to avoid repeatedly spawning their CLIs when
+ * the Token Usage dialog is opened. Successful `null` reads are cached because
+ * they represent a provider returning no account quota. Loader failures remain
+ * rejected so routes can distinguish an unavailable provider from empty data.
+ * Concurrent completions commit by request order, preventing an older read
+ * from overwriting the result of a newer forced refresh.
+ */
+export function createProviderQuotaCache<T>(ttlMs: number): ProviderQuotaCache<T> {
+  let cachedValue: T | null = null;
+  let cachedTimestamp = 0;
+  let inFlightPromise: Promise<T | null> | null = null;
+  let inFlightRequestId = 0;
+  let latestRequestId = 0;
+  let latestCommittedRequestId = 0;
+
+  return {
+    async get(options, loader, now = Date.now): Promise<T | null> {
+      const currentTime = now();
+      if (
+        !options.forceRefresh
+        && cachedTimestamp > 0
+        && currentTime - cachedTimestamp < ttlMs
+      ) {
+        return cachedValue;
+      }
+
+      if (!options.forceRefresh && inFlightPromise) {
+        return inFlightPromise;
+      }
+
+      const requestId = ++latestRequestId;
+      const loadPromise = (async () => {
+        try {
+          const loadedValue = await loader();
+          if (requestId > latestCommittedRequestId) {
+            cachedValue = loadedValue;
+            cachedTimestamp = now();
+            latestCommittedRequestId = requestId;
+          }
+          return loadedValue;
+        } finally {
+          if (inFlightRequestId === requestId) {
+            inFlightPromise = null;
+            inFlightRequestId = 0;
+          }
+        }
+      })();
+
+      if (!options.forceRefresh) {
+        inFlightPromise = loadPromise;
+        inFlightRequestId = requestId;
+      }
+
+      return loadPromise;
+    },
+
+    reset(): void {
+      cachedValue = null;
+      cachedTimestamp = 0;
+      inFlightPromise = null;
+      inFlightRequestId = 0;
+      latestCommittedRequestId = ++latestRequestId;
+    },
+  };
+}
+
 /**
  * Coerces an unknown usage field into a finite number, defaulting to 0.
  *
@@ -1309,4 +1391,3 @@ export function parseAntigravityWorkspacePath(workspaceUris: string | null): str
 
   return null;
 }
-

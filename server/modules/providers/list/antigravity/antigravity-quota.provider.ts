@@ -15,6 +15,7 @@ import type {
   ProviderQuotaData,
   ProviderQuotaGroup,
 } from '@/shared/types.js';
+import { createProviderQuotaCache } from '@/shared/utils.js';
 
 import { tryResolveEnginePath } from './antigravity-engine-path.js';
 
@@ -68,10 +69,7 @@ const defaultDependencies: AntigravityQuotaDependencies = {
 };
 
 const CACHE_TTL_MS = 120_000; // 2 minutes
-
-let cachedQuotaData: AntigravityQuotaData | null = null;
-let cachedTimestamp = 0;
-let inFlightPromise: Promise<AntigravityQuotaData | null> | null = null;
+const quotaCache = createProviderQuotaCache<AntigravityQuotaData>(CACHE_TTL_MS);
 
 function normalizeQuotaPayload(raw: RawAgyUsageResponse, nowTimestamp: number): AntigravityQuotaData | null {
   const groupsRaw = raw.command?.data?.groups;
@@ -135,65 +133,35 @@ export async function fetchAntigravityQuota(
     ...dependencyOverrides,
   };
 
-  const currentTime = deps.now();
+  return quotaCache.get(
+    options,
+    async () => {
+      try {
+        const enginePath = deps.resolveEnginePath();
+        if (!enginePath) {
+          return null;
+        }
 
-  // 1. Return valid in-memory cache if not forced
-  if (
-    !options.forceRefresh &&
-    cachedTimestamp > 0 &&
-    currentTime - cachedTimestamp < CACHE_TTL_MS
-  ) {
-    return cachedQuotaData;
-  }
+        const { stdout } = await deps.runCommand(enginePath, [
+          '--output-format',
+          'json',
+          '--print',
+          '/usage',
+        ]);
 
-  // 2. Reuse in-flight request to avoid duplicate subprocess execution (unless forced)
-  if (!options.forceRefresh && inFlightPromise) {
-    return inFlightPromise;
-  }
+        if (!stdout || !stdout.trim()) {
+          return null;
+        }
 
-  const executeQuery = async (): Promise<AntigravityQuotaData | null> => {
-    try {
-      const enginePath = deps.resolveEnginePath();
-      if (!enginePath) {
-        cachedQuotaData = null;
-        cachedTimestamp = deps.now();
+        const parsed = JSON.parse(stdout) as RawAgyUsageResponse;
+        return normalizeQuotaPayload(parsed, deps.now());
+      } catch {
+        // Antigravity historically treats CLI failures as unavailable quota.
         return null;
       }
-
-      const { stdout } = await deps.runCommand(enginePath, [
-        '--output-format',
-        'json',
-        '--print',
-        '/usage',
-      ]);
-
-      if (!stdout || !stdout.trim()) {
-        cachedQuotaData = null;
-        cachedTimestamp = deps.now();
-        return null;
-      }
-
-      const parsed = JSON.parse(stdout) as RawAgyUsageResponse;
-      const normalized = normalizeQuotaPayload(parsed, deps.now());
-      cachedQuotaData = normalized;
-      cachedTimestamp = deps.now();
-      return normalized;
-    } catch {
-      // Record timestamp to avoid stampeding subprocess spawns on consecutive errors
-      cachedQuotaData = null;
-      cachedTimestamp = deps.now();
-      return null;
-    } finally {
-      inFlightPromise = null;
-    }
-  };
-
-  const queryPromise = executeQuery();
-  if (!options.forceRefresh) {
-    inFlightPromise = queryPromise;
-  }
-
-  return queryPromise;
+    },
+    deps.now,
+  );
 }
 
 /**
@@ -201,7 +169,5 @@ export async function fetchAntigravityQuota(
  * Consumed primarily in unit test suites.
  */
 export function resetAntigravityQuotaCache(): void {
-  cachedQuotaData = null;
-  cachedTimestamp = 0;
-  inFlightPromise = null;
+  quotaCache.reset();
 }
