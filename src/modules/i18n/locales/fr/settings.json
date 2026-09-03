@@ -131,6 +131,13 @@
       "alphabetical": "Alphabétique",
       "recentActivity": "Activité récente"
     },
+    "chatContent": {
+      "title": "Contenu du chat",
+      "fontSize": {
+        "label": "Taille du texte",
+        "description": "Ajuster le texte, les formules et le contenu des tableaux du chat"
+      }
+    },
     "codeEditor": {
       "title": "Éditeur de code",
       "theme": {

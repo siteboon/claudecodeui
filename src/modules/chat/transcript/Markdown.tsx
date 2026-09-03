@@ -9,7 +9,7 @@ import { useTranslation } from 'react-i18next';
 
 import { MermaidDiagram } from '@/modules/code-editor';
 import { normalizeInlineCodeFences } from '@/modules/chat/utils/chatFormatting';
-import { copyTextToClipboard } from '@/shared/utils';
+import { cn, copyTextToClipboard } from '@/shared/utils';
 import { SyntaxHighlighter } from '@/shared/syntaxHighlighter';
 import { usePaletteOps } from '@/modules/command-palette';
 import { buildSyntaxTheme } from '@/modules/chat/utils/syntaxHighlightTheme';
@@ -154,7 +154,7 @@ const CodeBlock = ({ node: _node, className, children, forceBlock, ...props }: C
         customStyle={{
           margin: 0,
           borderRadius: 0,
-          fontSize: '0.8125rem',
+          fontSize: '0.875em',
           lineHeight: 1.6,
           padding: '0.5rem 1rem 1rem',
           // The container owns the background so the label row and code read as one panel.
@@ -223,7 +223,7 @@ const markdownComponents = {
   table: ({ children }: { children?: React.ReactNode }) => (
     <div className="my-3 overflow-x-auto rounded-lg border border-border">
       {/* my-0 cancels Tailwind Typography's table margin, which would show as blank bands inside the border */}
-      <table className="my-0 min-w-full border-collapse text-sm">{children}</table>
+      <table className="my-0 min-w-full border-collapse">{children}</table>
     </div>
   ),
   thead: ({ children }: { children?: React.ReactNode }) => <thead className="bg-muted/60">{children}</thead>,
@@ -329,7 +329,7 @@ export const MarkdownBody = memo(MarkdownBodyRenderer);
 /** Markdown in its own prose container. The form every non-streaming caller uses. */
 export const Markdown = memo(function Markdown({ children, className, breaks }: MarkdownProps) {
   return (
-    <div className={className}>
+    <div className={cn('chat-markdown', className)}>
       <MarkdownBody breaks={breaks}>{children}</MarkdownBody>
     </div>
   );

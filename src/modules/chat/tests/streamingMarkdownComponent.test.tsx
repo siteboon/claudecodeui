@@ -87,7 +87,7 @@ test('both halves live in one prose container, so block margins still collapse',
   const { container } = renderStreaming('First paragraph.\n\nSecond paragraph still being writ');
 
   assert.equal(container.children.length, 1, 'exactly one container element');
-  assert.equal(container.firstElementChild?.className, PROSE);
+  assert.equal(container.firstElementChild?.className, `chat-markdown ${PROSE}`);
 });
 
 test('the settled and pending halves are siblings inside it, not nested', () => {
