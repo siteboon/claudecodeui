@@ -123,7 +123,22 @@
   "appearanceSettings": {
     "darkMode": {
       "label": "ダークモード",
-      "description": "ライトテーマとダークテーマを切り替えます"
+      "description": "ライトテーマとダークテーマを切り替えます",
+      "themeControlled": "このテーマはライト／ダークの外観を自身で指定します"
+    },
+    "colorTheme": {
+      "label": "カラーテーマ",
+      "description": "アプリ全体で使用するカラーパレット",
+      "remove": "テーマを削除",
+      "importFailed": "このテーマをインポートできませんでした。",
+      "import": {
+        "label": "VS Code のテーマをインポート",
+        "description": "*-color-theme.json ファイルまたは .vsix 拡張機能をカラーパレットに変換します",
+        "button": "テーマをインポート",
+        "urlLabel": "または拡張機能の URL を貼り付け",
+        "urlPlaceholder": "https://marketplace.visualstudio.com/items?itemName=…",
+        "urlButton": "取得"
+      }
     },
     "projectSorting": {
       "label": "プロジェクトの並び順",

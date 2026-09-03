@@ -1548,3 +1548,37 @@ type TaskStatus =
 
 /** A TaskMaster task's priority; high, medium and low are the known values and the string fallback tolerates anything else TaskMaster emits. */
 type TaskPriority = 'high' | 'medium' | 'low' | string;
+
+// ---------------------------
+
+//----------------- COLOUR THEMES ------------
+
+/**
+ * Whether a theme paints a light or a dark surface.
+ *
+ * `system` means the palette ships both variants and lets the dark-mode toggle
+ * pick between them — only the default theme does. Any other value fixes the
+ * appearance, and ThemeProvider drives the `dark` class from it so the
+ * `dark:`-prefixed utility classes across the app agree with the palette.
+ */
+export type ThemeAppearance = 'system' | 'light' | 'dark';
+
+/**
+ * One selectable colour palette.
+ *
+ * Built-in themes ship a matching `src/shared/themes/<id>.css`; imported ones
+ * carry their variables in `tokens` instead, because they arrive at runtime and
+ * have no stylesheet to point at.
+ */
+export type ColorTheme = {
+  id: string;
+  name: string;
+  appearance: ThemeAppearance;
+  /** Swatches for the settings picker, as CSS colours: background, surface, primary. */
+  previewColors: [string, string, string];
+  /** Set only on imported themes: CSS variable name (without `--`) to value. */
+  tokens?: ThemeTokens;
+};
+
+/** A theme's CSS custom properties, keyed by variable name without the leading `--`. */
+export type ThemeTokens = Record<string, string>;
