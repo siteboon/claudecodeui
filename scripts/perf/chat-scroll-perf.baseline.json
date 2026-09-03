@@ -1,0 +1,45 @@
+{
+  "timestamp": "2026-09-03T16:01:33.171Z",
+  "baseUrl": "http://localhost:3001",
+  "session": "sess_8eb5690a-9c66-49c2-9ad8-d78820592685",
+  "messages": 48,
+  "scrollHeight": 5886,
+  "snapBack": {
+    "scrolledUpTo": 8524,
+    "scrollTopAfter": 8564,
+    "distanceFromBottom": 0,
+    "snappedBack": true
+  },
+  "visualJump": {
+    "scrollTopBefore": 3660,
+    "scrollTopMid": 3660,
+    "scrollTopAfter": 3034,
+    "settleDriftPx": 0,
+    "renderDriftPx": 60,
+    "totalDriftPx": 60
+  },
+  "scrollJank": {
+    "wheelEvents": 40,
+    "scrollTopAfter": 2329,
+    "frameCount": 167,
+    "frameGapP95Ms": 20,
+    "frameGapMaxMs": 21,
+    "droppedFrames": 0,
+    "longTaskCount": 0,
+    "longTaskTotalMs": 0
+  },
+  "verdict": {
+    "snapBack": {
+      "pass": false,
+      "detail": "distance from bottom after unrelated re-render: 0px (expect >= 5)"
+    },
+    "visualJump": {
+      "pass": false,
+      "detail": "anchor drift 60px across 1s settle + re-render (expect <= 8)"
+    },
+    "scrollJank": {
+      "pass": true,
+      "detail": "frame gaps p95 20ms / max 21ms, 0 dropped during 40 wheel events (expect p95 <= 40, max <= 150)"
+    }
+  }
+}
