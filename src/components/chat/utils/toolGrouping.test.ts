@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { ChatMessage } from '../types/types';
+
 import {
   groupConsecutiveTools,
   getNormalizedToolGroupKey,
@@ -35,6 +36,45 @@ test('getNormalizedToolGroupKey normalizes Antigravity tool names to standard na
   assert.equal(getNormalizedToolGroupKey('manage_subagents'), 'Subagent');
   assert.equal(getNormalizedToolGroupKey('Bash'), 'Bash');
   assert.equal(getNormalizedToolGroupKey('Read'), 'Read');
+  assert.equal(getNormalizedToolGroupKey('exec'), 'Bash');
+  assert.equal(getNormalizedToolGroupKey('command_execution'), 'Bash');
+  assert.equal(getNormalizedToolGroupKey('ApplyPatch'), 'Edit');
+  assert.equal(getNormalizedToolGroupKey('update_plan'), 'Plan');
+});
+
+test('groupConsecutiveTools groups Codex exec and command_execution tools into a Bash group', () => {
+  const messages: ChatMessage[] = [
+    createMockToolMessage('exec', '1'),
+    createMockToolMessage('command_execution', '2'),
+    createMockToolMessage('Bash', '3'),
+  ];
+
+  const result = groupConsecutiveTools(messages);
+  assert.equal(result.length, 1);
+  assert.ok(isToolGroupItem(result[0]));
+  assert.equal(result[0].toolName, 'Bash');
+  assert.equal(result[0].messages.length, 3);
+});
+
+test('groupConsecutiveTools groups tools across empty or hidden thinking messages', () => {
+  const emptyThinking: ChatMessage = {
+    id: 'think-1',
+    type: 'assistant',
+    isThinking: true,
+    content: '',
+    timestamp: '2026-09-03T00:00:00.000Z',
+    sender: 'assistant',
+  };
+  const messages: ChatMessage[] = [
+    createMockToolMessage('Bash', '1'),
+    emptyThinking,
+    createMockToolMessage('Bash', '2'),
+  ];
+
+  const result = groupConsecutiveTools(messages, true);
+  assert.equal(result.length, 1);
+  assert.ok(isToolGroupItem(result[0]));
+  assert.equal(result[0].messages.length, 2);
 });
 
 test('groupConsecutiveTools groups consecutive run_command tools into a Bash group', () => {

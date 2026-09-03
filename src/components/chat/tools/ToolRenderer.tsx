@@ -2,13 +2,13 @@ import React, { memo, useMemo, useCallback } from 'react';
 
 import type { Project } from '../../../types/app';
 import type { SubagentChildTool } from '../types/types';
+import { calculateDiff } from '../utils/messageTransforms';
 
 import { getToolConfig } from './configs/toolConfigs';
 import { OneLineDisplay, BashCommandDisplay, CollapsibleDisplay, ToolDiffViewer, MarkdownContent, FileListContent, TodoListContent, TaskListContent, TextContent, QuestionAnswerContent, SubagentContainer } from './components';
 import { PlanDisplay } from './components/PlanDisplay';
 import { ToolStatusBadge } from './components/ToolStatusBadge';
 import type { ToolStatus } from './components/ToolStatusBadge';
-import { calculateDiff } from '../utils/messageTransforms';
 
 type DiffLine = {
   type: string;
@@ -124,17 +124,30 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
 
   if (!displayConfig) return null;
 
-  // Bash / run_command renders as a Codex-style command row: the command on a single line with
+  // Bash / run_command / exec / command_execution renders as a Codex-style command row: the command on a single line with
   // a chevron that expands to show the output inline. The combined view lives on
   // the input render; the separate result section is suppressed in MessageComponent.
-  if ((toolName === 'Bash' || toolName === 'run_command') && mode === 'input') {
-    const command = typeof parsedData === 'object' && parsedData !== null
-      ? String(parsedData.command || parsedData.CommandLine || '')
+  const isCommandTool = ['Bash', 'run_command', 'exec', 'command_execution'].includes(toolName);
+  if (isCommandTool && mode === 'input') {
+    let command = typeof parsedData === 'object' && parsedData !== null
+      ? String(parsedData.command || parsedData.cmd || parsedData.CommandLine || '')
       : typeof toolInput === 'string'
         ? toolInput
         : typeof rawToolInput === 'string'
           ? rawToolInput
           : '';
+
+    if (!command || command.includes('tools.exec_command') || command.includes('tools.shell_command')) {
+      const match = (rawToolInput || command).match(/(?:["'](?:cmd|command)["']|\b(?:cmd|command))\s*:\s*("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)/s);
+      if (match) {
+        try {
+          command = JSON.parse(match[1]);
+        } catch {
+          command = match[1].slice(1, -1);
+        }
+      }
+    }
+
     const description = typeof parsedData === 'object' && parsedData !== null
       ? String(parsedData.description || parsedData.toolAction || parsedData.toolSummary || '')
       : undefined;

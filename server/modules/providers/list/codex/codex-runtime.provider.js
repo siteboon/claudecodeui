@@ -146,6 +146,31 @@ function transformCodexEvent(event) {
             }
           };
 
+        case 'custom_tool_call': {
+          const name = item.name;
+          const input = item.input || '';
+          if (name === 'exec' && /\btools\.(?:shell_command|exec_command)\s*\(/.test(String(input))) {
+            return { type: 'ignored' };
+          }
+          return {
+            type: 'item',
+            itemType: name || 'custom_tool_call',
+            item: item
+          };
+        }
+
+        case 'exec': {
+          const input = item.input || item.command || '';
+          if (/\btools\.(?:shell_command|exec_command)\s*\(/.test(String(input))) {
+            return { type: 'ignored' };
+          }
+          return {
+            type: 'item',
+            itemType: 'exec',
+            item: item
+          };
+        }
+
         default:
           return {
             type: 'item',
@@ -343,6 +368,9 @@ export async function queryCodex(command, options = {}, ws, context) {
       }
 
       const transformed = transformCodexEvent(event);
+      if (!transformed || transformed.type === 'ignored') {
+        continue;
+      }
 
       // Normalize the transformed event into NormalizedMessage(s) via adapter
       const normalizedMsgs = context.normalizeMessage(transformed, capturedSessionId || sessionId || null);

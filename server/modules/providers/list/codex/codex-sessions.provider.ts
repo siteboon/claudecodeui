@@ -161,7 +161,7 @@ function decodeJavaScriptStringLiteral(literal: string): string {
 
 function extractNestedCodexCommands(source: string): string[] {
   const commands: string[] = [];
-  const commandPattern = /(?:["']command["']|\bcommand)\s*:\s*("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)/gs;
+  const commandPattern = /(?:["'](?:command|cmd)["']|\b(?:command|cmd))\s*:\s*("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)/gs;
   for (const match of source.matchAll(commandPattern)) {
     commands.push(decodeJavaScriptStringLiteral(match[1]));
   }
@@ -184,6 +184,24 @@ function extractNestedCodexCommands(source: string): string[] {
   return commands;
 }
 
+function parseCodexPatchContent(patchContent: string): { filePath: string; oldLines: string[]; newLines: string[] } {
+  const fileMatch = patchContent.match(/\*\*\* (?:Update|Add|Delete) File: (.+)/);
+  const filePath = fileMatch ? fileMatch[1].trim() : 'unknown';
+  const lines = patchContent.split('\n');
+  const oldLines: string[] = [];
+  const newLines: string[] = [];
+
+  for (const lineContent of lines) {
+    if (lineContent.startsWith('-') && !lineContent.startsWith('---')) {
+      oldLines.push(lineContent.slice(1));
+    } else if (lineContent.startsWith('+') && !lineContent.startsWith('+++')) {
+      newLines.push(lineContent.slice(1));
+    }
+  }
+
+  return { filePath, oldLines, newLines };
+}
+
 /**
  * Newer Codex rollouts persist the orchestration wrapper (`exec`) instead of
  * the nested tool name. Recover the useful UI-level operation so history does
@@ -197,6 +215,22 @@ function translateCodexExecInput(input: unknown): { toolName: string; toolInput:
       return {
         toolName: 'Bash',
         toolInput: JSON.stringify({ command: commands.join('\n') }),
+      };
+    }
+  }
+
+  if (/\btools\.apply_patch\s*\(/.test(source)) {
+    const patchMatch = source.match(/(?:(?:const|let|var)\s+\w+\s*=\s*|\btools\.apply_patch\s*\(\s*)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)/s);
+    if (patchMatch) {
+      const patch = decodeJavaScriptStringLiteral(patchMatch[1]);
+      const { filePath, oldLines, newLines } = parseCodexPatchContent(patch);
+      return {
+        toolName: 'Edit',
+        toolInput: JSON.stringify({
+          file_path: filePath,
+          old_string: oldLines.join('\n'),
+          new_string: newLines.join('\n'),
+        }),
       };
     }
   }
@@ -627,19 +661,7 @@ async function getCodexSessionMessages(
           }
 
           if (toolName === 'apply_patch') {
-            const fileMatch = String(input).match(/\*\*\* Update File: (.+)/);
-            const filePath = fileMatch ? fileMatch[1].trim() : 'unknown';
-            const lines = String(input).split('\n');
-            const oldLines: string[] = [];
-            const newLines: string[] = [];
-
-            for (const lineContent of lines) {
-              if (lineContent.startsWith('-') && !lineContent.startsWith('---')) {
-                oldLines.push(lineContent.slice(1));
-              } else if (lineContent.startsWith('+') && !lineContent.startsWith('+++')) {
-                newLines.push(lineContent.slice(1));
-              }
-            }
+            const { filePath, oldLines, newLines } = parseCodexPatchContent(String(input));
 
             messages.push({
               type: 'tool_use',

@@ -23,13 +23,13 @@ function isGroupableToolMessage(message: ChatMessage): message is ChatMessage & 
 // shouldn't split an otherwise-continuous run of the same tool — providers like
 // Codex interleave hidden reasoning between consecutive tool calls.
 function rendersNothing(message: ChatMessage, showThinking: boolean): boolean {
-  return Boolean(message.isThinking && !showThinking);
+  return Boolean(message.isThinking && (!showThinking || !message.content?.trim()));
 }
 
 export function getNormalizedToolGroupKey(toolName: string): string {
-  if (toolName === 'run_command' || toolName === 'Bash') return 'Bash';
+  if (toolName === 'run_command' || toolName === 'Bash' || toolName === 'exec' || toolName === 'command_execution') return 'Bash';
   if (toolName === 'view_file' || toolName === 'Read') return 'Read';
-  if (toolName === 'replace_file_content' || toolName === 'Edit') return 'Edit';
+  if (toolName === 'replace_file_content' || toolName === 'Edit' || toolName === 'ApplyPatch' || toolName === 'apply_patch') return 'Edit';
   if (toolName === 'write_to_file' || toolName === 'Write') return 'Write';
   if (toolName === 'find_by_name' || toolName === 'Glob') return 'Glob';
   if (toolName === 'grep_search' || toolName === 'Grep') return 'Grep';
@@ -38,6 +38,7 @@ export function getNormalizedToolGroupKey(toolName: string): string {
   if (toolName === 'read_url_content' || toolName === 'WebFetch') return 'WebFetch';
   if (toolName === 'manage_task' || toolName === 'Task') return 'Task';
   if (toolName === 'manage_subagents' || toolName === 'invoke_subagent') return 'Subagent';
+  if (toolName === 'ExitPlanMode' || toolName === 'exit_plan_mode' || toolName === 'Plan' || toolName === 'update_plan') return 'Plan';
   return toolName;
 }
 
