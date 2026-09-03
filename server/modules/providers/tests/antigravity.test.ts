@@ -816,3 +816,68 @@ test('AntigravitySessionsProvider prefers persisted token_usage.json over the tr
     await fs.rm(tempDirectory, { recursive: true, force: true });
   }
 });
+
+test('AntigravitySessionsProvider cleanupSession removes summary row, conversation dbs, presence lock, and brain dirs', async () => {
+  const tempDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'antigravity-cleanup-'));
+  const restoreDataDir = withEnvValue('CLOUDCLI_ANTIGRAVITY_DATA_DIR', tempDirectory);
+
+  try {
+    const summariesDbPath = path.join(tempDirectory, 'conversation_summaries.db');
+    const db = new Database(summariesDbPath);
+    db.exec(`
+      CREATE TABLE conversation_summaries (
+        conversation_id TEXT PRIMARY KEY,
+        title TEXT,
+        workspace_uris TEXT,
+        last_modified_time TEXT
+      );
+      INSERT INTO conversation_summaries (conversation_id, title, workspace_uris, last_modified_time)
+      VALUES ('test-conv-123', 'Test Title', '["/tmp/test"]', '2026-09-01T00:00:00.000Z');
+    `);
+    db.close();
+
+    const convDbPath = path.join(tempDirectory, 'conversations', 'test-conv-123.db');
+    const convWalPath = path.join(tempDirectory, 'conversations', 'test-conv-123.db-wal');
+    const lockPath = path.join(tempDirectory, 'presence', 'test-conv-123.lock');
+    const brainDir = path.join(tempDirectory, 'brain', 'test-conv-123');
+
+    await fs.mkdir(path.dirname(convDbPath), { recursive: true });
+    await fs.mkdir(path.dirname(lockPath), { recursive: true });
+    await fs.mkdir(brainDir, { recursive: true });
+
+    await fs.writeFile(convDbPath, 'dummy db');
+    await fs.writeFile(convWalPath, 'dummy wal');
+    await fs.writeFile(lockPath, 'dummy lock');
+    await fs.writeFile(path.join(brainDir, 'test.txt'), 'brain content');
+
+    const sessions = new AntigravitySessionsProvider();
+    const removed = await sessions.cleanupSession('test-conv-123', null);
+
+    assert.equal(removed, true);
+
+    const checkDb = new Database(summariesDbPath);
+    const row = checkDb.prepare('SELECT * FROM conversation_summaries WHERE conversation_id = ?').get('test-conv-123');
+    checkDb.close();
+    assert.equal(row, undefined);
+
+    assert.equal(
+      await fs.access(convDbPath).then(() => true).catch(() => false),
+      false,
+    );
+    assert.equal(
+      await fs.access(convWalPath).then(() => true).catch(() => false),
+      false,
+    );
+    assert.equal(
+      await fs.access(lockPath).then(() => true).catch(() => false),
+      false,
+    );
+    assert.equal(
+      await fs.access(brainDir).then(() => true).catch(() => false),
+      false,
+    );
+  } finally {
+    restoreDataDir();
+    await fs.rm(tempDirectory, { recursive: true, force: true });
+  }
+});

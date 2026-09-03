@@ -39,6 +39,7 @@ import {
 } from '@/shared/utils.js';
 
 import {
+  getAntigravityBrainRoots,
   getAntigravityDataRoot,
   getAntigravitySummariesDbPath,
   getAntigravityTranscriptCandidates,
@@ -540,13 +541,31 @@ export class AntigravitySessionsProvider implements IProviderSessions {
       try {
         const safeId = sanitizeLeafDirectoryName(nativeSessionId, 'antigravity session id');
         const dataRoot = getAntigravityDataRoot();
-        const brainDir = path.join(dataRoot, 'brain', safeId);
-        if (await removePathIfExists(brainDir)) {
+
+        // 1. Clean up brain directories (current and legacy roots)
+        for (const brainRoot of getAntigravityBrainRoots()) {
+          const brainDir = path.join(brainRoot, safeId);
+          if (await removePathIfExists(brainDir)) {
+            removed = true;
+          }
+        }
+
+        // 2. Clean up conversation DB files (.db, .db-wal, .db-shm) and directories if any
+        const convDbPath = path.join(dataRoot, 'conversations', `${safeId}.db`);
+        if (await removePathIfExists(convDbPath)) {
+          removed = true;
+        }
+        await removePathIfExists(`${convDbPath}-wal`);
+        await removePathIfExists(`${convDbPath}-shm`);
+
+        const convDir = path.join(dataRoot, 'conversations', safeId);
+        if (await removePathIfExists(convDir)) {
           removed = true;
         }
 
-        const conversationsDir = path.join(dataRoot, 'conversations', safeId);
-        if (await removePathIfExists(conversationsDir)) {
+        // 3. Clean up lock files in presence/
+        const lockPath = path.join(dataRoot, 'presence', `${safeId}.lock`);
+        if (await removePathIfExists(lockPath)) {
           removed = true;
         }
       } catch {
@@ -597,11 +616,20 @@ export class AntigravitySessionsProvider implements IProviderSessions {
     }
 
     const dataRoot = getAntigravityDataRoot();
+    const brainRoots = getAntigravityBrainRoots();
     for (const convId of matchingConversationIds) {
       try {
         const safeId = sanitizeLeafDirectoryName(convId, 'conversation id');
-        await removePathIfExists(path.join(dataRoot, 'brain', safeId));
+        for (const brainRoot of brainRoots) {
+          await removePathIfExists(path.join(brainRoot, safeId));
+        }
+
+        const convDbPath = path.join(dataRoot, 'conversations', `${safeId}.db`);
+        await removePathIfExists(convDbPath);
+        await removePathIfExists(`${convDbPath}-wal`);
+        await removePathIfExists(`${convDbPath}-shm`);
         await removePathIfExists(path.join(dataRoot, 'conversations', safeId));
+        await removePathIfExists(path.join(dataRoot, 'presence', `${safeId}.lock`));
       } catch {
         // Ignore invalid leaf directory names
       }
