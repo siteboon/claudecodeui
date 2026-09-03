@@ -835,29 +835,48 @@ export function useChatSessionState({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatMessages.length, isActive, isLoadingSessionMessages, searchTarget]);
 
-  // Initial token usage fetch for providers with file-backed usage data.
-  useEffect(() => {
-    if (!selectedSession?.id) {
+  const refreshTokenUsage = useCallback(async (sessionIdToFetch?: string) => {
+    const sid = sessionIdToFetch || activeSessionIdRef.current;
+    if (!sid) {
       setTokenBudget(null);
       return;
     }
-    const fetchInitialTokenUsage = async () => {
-      try {
-        // The provider module resolves storage and provider details from the session id.
-        const url = `/api/providers/sessions/${encodeURIComponent(selectedSession.id)}/token-usage`;
-        const response = await authenticatedFetch(url);
-        if (response.ok) {
-          const payload = await response.json();
-          setTokenBudget(payload.data ?? null);
-        } else {
-          setTokenBudget(null);
+    try {
+      const url = `/api/providers/sessions/${encodeURIComponent(sid)}/token-usage`;
+      const response = await authenticatedFetch(url);
+      if (response.ok && activeSessionIdRef.current === sid) {
+        const payload = await response.json();
+        if (payload.data && typeof payload.data === 'object' && activeSessionIdRef.current === sid) {
+          setTokenBudget(payload.data);
         }
-      } catch (error) {
-        console.error('Failed to fetch initial token usage:', error);
       }
-    };
-    fetchInitialTokenUsage();
-  }, [selectedSession?.id]);
+    } catch (error) {
+      console.error('Failed to fetch token usage:', error);
+    }
+  }, []);
+
+  // Initial token usage fetch whenever active session id changes
+  useEffect(() => {
+    if (!activeSessionId) {
+      setTokenBudget(null);
+      return;
+    }
+    void refreshTokenUsage(activeSessionId);
+  }, [activeSessionId, refreshTokenUsage]);
+
+  // Refresh token usage automatically when a turn finishes processing within the same session
+  const lastProcessedSessionIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (isProcessing) {
+      lastProcessedSessionIdRef.current = activeSessionId;
+    } else if (lastProcessedSessionIdRef.current) {
+      const finishedSessionId = lastProcessedSessionIdRef.current;
+      lastProcessedSessionIdRef.current = null;
+      if (finishedSessionId === activeSessionId) {
+        void refreshTokenUsage(finishedSessionId);
+      }
+    }
+  }, [isProcessing, activeSessionId, refreshTokenUsage]);
 
   const visibleMessages = useMemo(() => {
     if (chatMessages.length <= visibleMessageCount) return chatMessages;
@@ -975,6 +994,7 @@ export function useChatSessionState({
     setIsUserScrolledUp,
     tokenBudget,
     setTokenBudget,
+    refreshTokenUsage,
     visibleMessageCount,
     visibleMessages,
     loadEarlierMessages,

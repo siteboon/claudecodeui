@@ -213,6 +213,7 @@ function ChatInterface({
     processingSessions,
     canAbortSession,
     tokenBudget,
+    setTokenBudget,
     sendMessage,
     sendByCtrlEnter,
     onSessionProcessing,

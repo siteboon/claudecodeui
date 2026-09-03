@@ -52,6 +52,7 @@ interface UseChatComposerStateArgs {
   processingSessions?: SessionActivityMap;
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
+  setTokenBudget?: (budget: Record<string, unknown> | null) => void;
   sendMessage: (message: unknown) => void;
   sendByCtrlEnter?: boolean;
   onSessionProcessing?: MarkSessionProcessing;
@@ -263,6 +264,7 @@ export function useChatComposerState({
   processingSessions,
   canAbortSession,
   tokenBudget,
+  setTokenBudget,
   sendMessage,
   sendByCtrlEnter,
   onSessionProcessing,
@@ -341,10 +343,20 @@ export function useChatComposerState({
           break;
 
         case 'cost': {
+          const costData = (data || {}) as CostCommandData;
           setCommandModalPayload({
             kind: 'cost',
-            data: (data || {}) as CostCommandData,
+            data: costData,
           });
+          if (costData.tokenUsage && setTokenBudget) {
+            setTokenBudget({
+              used: costData.tokenUsage.used,
+              total: costData.tokenUsage.total,
+              inputTokens: costData.tokenBreakdown?.input,
+              outputTokens: costData.tokenBreakdown?.output,
+              breakdown: costData.tokenBreakdown,
+            });
+          }
           break;
         }
 
@@ -383,7 +395,7 @@ export function useChatComposerState({
           console.warn('Unknown built-in command action:', action);
       }
     },
-    [onFileOpen, onShowSettings, addMessage],
+    [onFileOpen, onShowSettings, addMessage, setTokenBudget],
   );
 
   const closeCommandModal = useCallback(() => {
