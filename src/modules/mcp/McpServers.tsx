@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import type { McpProject, McpProvider, McpScope, ProviderMcpServer } from '@/shared/types';
 import { IS_PLATFORM } from '@/shared/utils';
 import { ActionMenu, Badge, Button } from '@/shared/ui';
-import { MCP_GLOBAL_SUPPORTED_TRANSPORTS, MCP_PROVIDER_NAMES } from '@/shared/constants';
+import { MCP_GLOBAL_SUPPORTED_TRANSPORTS, MCP_PROVIDER_NAMES, MCP_SUPPORTED_SCOPES } from '@/shared/constants';
 import { useMcpServers } from '@/modules/mcp/hooks/useMcpServers';
 import { maskSecret } from '@/modules/mcp/utils/mcpFormatting';
 import McpServerFormModal from '@/modules/mcp/McpServerFormModal';
@@ -21,6 +21,7 @@ const MCP_PROVIDER_BUTTON_CLASSES: Record<McpProvider, string> = {
   cursor: 'bg-primary text-primary-foreground hover:bg-primary/90',
   codex: 'bg-primary text-primary-foreground hover:bg-primary/90',
   opencode: 'bg-primary text-primary-foreground hover:bg-primary/90',
+  omp: 'bg-primary text-primary-foreground hover:bg-primary/90',
 };
 
 const getTransportIcon = (transport: string | undefined) => {
@@ -156,13 +157,15 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
               icon: Globe,
               onSelect: openGlobalForm,
             },
-            {
-              key: 'provider',
-              label: providerButtonLabel,
-              description: providerAddDescription,
-              icon: Server,
-              onSelect: () => openForm(),
-            },
+            ...(MCP_SUPPORTED_SCOPES[selectedProvider].length > 0
+              ? [{
+                key: 'provider',
+                label: providerButtonLabel,
+                description: providerAddDescription,
+                icon: Server,
+                onSelect: () => openForm(),
+              }]
+              : []),
           ]}
         />
 

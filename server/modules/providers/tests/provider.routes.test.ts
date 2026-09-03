@@ -242,3 +242,15 @@ test('model routes expose immutable defaults and full custom model CRUD', async 
     );
   });
 });
+
+test('OMP provider routes accept the registered provider id', async () => {
+  await withProviderServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/providers/omp/mcp/servers`);
+    const payload: unknown = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.ok(payload && typeof payload === 'object' && 'data' in payload);
+    assert.ok(payload.data && typeof payload.data === 'object' && 'provider' in payload.data);
+    assert.equal(payload.data.provider, 'omp');
+  });
+});

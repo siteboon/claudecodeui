@@ -131,6 +131,12 @@ CREATE TABLE IF NOT EXISTS sessions (
     -- id mid-run, or equals \`session_id\` for sessions discovered on disk.
     provider_session_id TEXT,
     custom_name TEXT,
+    -- Explicit title ownership prevents provider retitles from replacing names
+    -- chosen by the user. NULL is retained for legacy rows until a synchronizer
+    -- can classify the current value.
+    name_source TEXT,
+    -- Last title observed in provider storage, used as the retitle watermark.
+    provider_name TEXT,
     project_path TEXT,
     jsonl_path TEXT,
     -- Model and reasoning effort this session runs with. Written when the user
@@ -178,7 +184,7 @@ CREATE TABLE IF NOT EXISTS app_config (
 export const PROVIDER_MODELS_TABLE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS provider_models (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    provider TEXT NOT NULL CHECK (provider IN ('claude', 'cursor', 'codex', 'opencode')),
+    provider TEXT NOT NULL CHECK (provider IN ('claude', 'cursor', 'codex', 'opencode', 'omp')),
     model_id TEXT NOT NULL,
     model_name TEXT NOT NULL,
     sort_order INTEGER NOT NULL DEFAULT 0,

@@ -1,3 +1,7 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import type { LLMProvider } from '@/shared/types.js';
 
 /**
@@ -34,6 +38,8 @@ type ProviderCapabilities = {
    * Whether a session's transcript can be branched into an independent one.
    */
   supportsSessionForking: boolean;
+  /** Whether model selectors should be grouped by their provider prefix. */
+  groupsModelsByProvider?: boolean;
 };
 
 /**
@@ -104,17 +110,67 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsMessageEditing: false,
     supportsSessionForking: false,
   },
+  omp: {
+    provider: 'omp',
+    permissionModes: ['default', 'plan', 'bypassPermissions'],
+    defaultPermissionMode: 'default',
+    supportsImages: true,
+    supportsFiles: false,
+    supportsAbort: true,
+    supportsPermissionRequests: true,
+    supportsTokenUsage: true,
+    supportsEffort: true,
+    supportsMessageEditing: false,
+    supportsSessionForking: false,
+    groupsModelsByProvider: true,
+  },
 };
+
+let cachedOmpDefaultMode: string | null = null;
+
+/**
+ * Maps omp's configured approval mode to the composer's first-use default.
+ *
+ * The UI persists later choices, so this reads the config once per process.
+ */
+function readOmpDefaultPermissionMode(): string {
+  if (cachedOmpDefaultMode !== null) {
+    return cachedOmpDefaultMode;
+  }
+
+  let mode = 'default';
+  try {
+    const config = fs.readFileSync(path.join(os.homedir(), '.omp', 'agent', 'config.yml'), 'utf8');
+    const configuredMode = config.match(/^\s*approvalMode:\s*(\S+)/m)?.[1]?.replace(/['"]/g, '');
+    if (configuredMode === 'yolo') {
+      mode = 'bypassPermissions';
+    }
+  } catch {
+    // Missing config uses the interactive default.
+  }
+
+  cachedOmpDefaultMode = mode;
+  return mode;
+}
+
 
 /**
  * Application service exposing the provider capability matrix.
  */
 export const providerCapabilitiesService = {
   getProviderCapabilities(provider: LLMProvider): ProviderCapabilities {
-    return PROVIDER_CAPABILITIES[provider];
+    const capabilities = PROVIDER_CAPABILITIES[provider];
+    return provider === 'omp'
+      ? { ...capabilities, defaultPermissionMode: readOmpDefaultPermissionMode() }
+      : capabilities;
   },
 
   listAllProviderCapabilities(): ProviderCapabilities[] {
-    return Object.values(PROVIDER_CAPABILITIES);
+    const ompDefaultPermissionMode = readOmpDefaultPermissionMode();
+    return Object.values(PROVIDER_CAPABILITIES).map((capabilities) =>
+      capabilities.provider === 'omp'
+        ? { ...capabilities, defaultPermissionMode: ompDefaultPermissionMode }
+        : capabilities,
+    );
   },
 };

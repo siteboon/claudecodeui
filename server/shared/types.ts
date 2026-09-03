@@ -66,7 +66,7 @@ export type AuthenticatedWebSocketRequest = IncomingMessage & {
  * Use this as the source of truth whenever a function or payload needs to identify
  * a specific LLM integration.
  */
-export type LLMProvider = 'claude' | 'codex' | 'cursor' | 'opencode';
+export type LLMProvider = 'claude' | 'codex' | 'cursor' | 'opencode' | 'omp';
 
 /**
  * One selectable model row in a provider model catalog.
@@ -317,6 +317,10 @@ export type NormalizedMessage = {
   newSessionId?: string;
   status?: string;
   summary?: string;
+  /** Advisor identity carried by an OMP task-notification status note. */
+  advisor?: string;
+  /** Raw advisor note used to deduplicate mirrored main/sidecar records. */
+  advisorNote?: string;
   tokenBudget?: unknown;
   /**
    * Timeline of everything a subagent did, attached to the `tool_use` that

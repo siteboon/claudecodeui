@@ -457,6 +457,55 @@ const addSessionEffortColumn = (db: Database): void => {
   addColumnToTableIfNotExists(db, 'sessions', columnNames, 'effort', 'TEXT');
 };
 
+/**
+ * Adds the last provider title used as the retitle watermark.
+ */
+const addSessionProviderNameColumn = (db: Database): void => {
+  const columnNames = getTableInfo(db, 'sessions').map((column) => column.name);
+  addColumnToTableIfNotExists(db, 'sessions', columnNames, 'provider_name', 'TEXT');
+};
+
+/**
+ * Adds explicit title ownership and schedules one full scan to classify legacy
+ * rows where the previous schema could not distinguish user and provider names.
+ */
+const addSessionNameSourceColumn = (db: Database): void => {
+  const columnNames = getTableInfo(db, 'sessions').map((column) => column.name);
+  if (columnNames.includes('name_source')) {
+    return;
+  }
+
+  addColumnToTableIfNotExists(db, 'sessions', columnNames, 'name_source', 'TEXT');
+  if (tableExists(db, 'scan_state')) {
+    db.exec('UPDATE scan_state SET last_scanned_at = NULL');
+  }
+};
+
+/**
+ * Extends the provider_models CHECK constraint for upgraded databases.
+ */
+const addOmpProviderModelsConstraint = (db: Database): void => {
+  const table = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'provider_models'",
+  ).get() as { sql: string | null } | undefined;
+  if (!table?.sql || table.sql.includes("'omp'")) {
+    return;
+  }
+
+  db.transaction(() => {
+    db.exec('ALTER TABLE provider_models RENAME TO provider_models_before_omp');
+    db.exec(PROVIDER_MODELS_TABLE_SCHEMA_SQL);
+    db.exec(`
+      INSERT INTO provider_models (
+        id, provider, model_id, model_name, sort_order, created_at, updated_at
+      )
+      SELECT id, provider, model_id, model_name, sort_order, created_at, updated_at
+      FROM provider_models_before_omp
+    `);
+    db.exec('DROP TABLE provider_models_before_omp');
+  })();
+};
+
 const ensureProjectsForSessionPaths = (db: Database): void => {
   if (!tableExists(db, 'sessions')) {
     return;
@@ -500,6 +549,7 @@ export const runMigrations = (db: Database) => {
     db.exec('CREATE INDEX IF NOT EXISTS idx_notification_channel_endpoints_user_channel ON notification_channel_endpoints(user_id, channel)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_notification_channel_endpoints_enabled ON notification_channel_endpoints(enabled)');
     db.exec(PROVIDER_MODELS_TABLE_SCHEMA_SQL);
+    addOmpProviderModelsConstraint(db);
     db.exec(`
       CREATE INDEX IF NOT EXISTS idx_provider_models_provider_order
       ON provider_models(provider, sort_order, id)
@@ -518,6 +568,8 @@ export const runMigrations = (db: Database) => {
     addProviderSessionIdMapping(db);
     addSessionModelColumn(db);
     addSessionEffortColumn(db);
+    addSessionProviderNameColumn(db);
+    addSessionNameSourceColumn(db);
     addForkedFromSessionIdColumn(db);
     ensureProjectsForSessionPaths(db);
     db.exec(SCHEDULED_MESSAGES_TABLE_SCHEMA_SQL);

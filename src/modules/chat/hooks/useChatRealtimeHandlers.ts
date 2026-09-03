@@ -333,9 +333,23 @@ export function useChatRealtimeHandlers({
             if (sid === activeViewSessionId) {
               setTokenBudget(msg.tokenBudget as Record<string, unknown>);
             }
-          } else if (msg.text && sid) {
+          } else if (typeof msg.text === 'string' && msg.text && sid) {
+            const value = typeof msg.status === 'string' ? msg.status : undefined;
+            const configId = typeof msg.configId === 'string' ? msg.configId : undefined;
+            const configLabel = configId === 'thinking'
+              ? 'Thinking'
+              : configId === 'mode'
+                ? 'Mode'
+                : 'Model';
+            const statusText = msg.text === 'plan'
+              ? 'Planning'
+              : msg.text === 'config_option_update'
+                ? (value ? `${configLabel}: ${value}` : `${configLabel} updated`)
+                : msg.text === 'current_mode_update'
+                  ? (value ? `Mode: ${value}` : 'Mode changed')
+                  : msg.text;
             onSessionProcessing?.(sid, {
-              statusText: msg.text as string,
+              statusText,
               canInterrupt: msg.canInterrupt !== false,
             });
           }

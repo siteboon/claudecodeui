@@ -4,7 +4,7 @@ import test from 'node:test';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { createProviderRuntimeService } from '@/modules/providers/services/provider-runtime.service.js';
 import type { IProvider, IProviderRuntime } from '@/shared/interfaces.js';
-import type { LLMProvider } from '@/shared/types.js';
+import type { LLMProvider, ProviderRuntimePermissionGateway } from '@/shared/types.js';
 
 function createRuntime(overrides: Partial<IProviderRuntime> = {}): IProviderRuntime {
   return {
@@ -76,6 +76,7 @@ test('providerRegistry owns one runtime for every registered provider', () => {
     'codex',
     'cursor',
     'opencode',
+    'omp',
   ]);
   assert.equal(providers.every((provider) => typeof provider.runtime.run === 'function'), true);
   assert.equal(providers.every((provider) => typeof provider.runtime.abort === 'function'), true);
@@ -111,21 +112,21 @@ test('dispatches runs and aborts through the runtime owned by providerRegistry',
   ]);
 });
 
-test('routes permission decisions through provider-owned runtime capabilities', () => {
+test('routes approval state through one shared permission gateway', () => {
   const decisions: unknown[][] = [];
-  const claudeRuntime = createRuntime({
-    permissions: {
-      resolve(requestId, decision) {
-        decisions.push([requestId, decision]);
-      },
-      listPending(sessionId) {
-        return [{ requestId: 'request-1', sessionId }];
-      },
+  let listCalls = 0;
+  const sharedPermissions: ProviderRuntimePermissionGateway = {
+    resolve(requestId, decision) {
+      decisions.push([requestId, decision]);
     },
-  });
+    listPending(sessionId) {
+      listCalls += 1;
+      return [{ requestId: 'request-1', sessionId }];
+    },
+  };
   const service = createService([
-    createProvider('claude', claudeRuntime),
-    createProvider('cursor', createRuntime()),
+    createProvider('claude', createRuntime({ permissions: sharedPermissions })),
+    createProvider('codex', createRuntime({ permissions: sharedPermissions })),
   ]);
   const decision = { allow: true, message: 'approved' };
 
@@ -135,4 +136,5 @@ test('routes permission decisions through provider-owned runtime capabilities', 
   assert.deepEqual(service.getPendingApprovalsForSession('session-1'), [
     { requestId: 'request-1', sessionId: 'session-1' },
   ]);
+  assert.equal(listCalls, 1);
 });

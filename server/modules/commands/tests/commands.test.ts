@@ -112,3 +112,33 @@ test('cost and status commands report the same resolved model as /models', async
   assert.equal((cost.data as { model: string }).model, 'haiku');
   assert.equal((status.data as { model: string }).model, 'haiku');
 });
+
+test('cost reports the concrete OMP backend and model from the latest turn', async () => {
+  const result = await executeCommand('/cost', {
+    provider: 'omp',
+    sessionId: 'session-1',
+    model: '__omp_configured_model__',
+    tokenUsage: {
+      used: 100,
+      total: 1000,
+      provider: 'openai-codex',
+      model: 'gpt-5.6-sol',
+    },
+  }, { 'session-1': '__omp_configured_model__' });
+
+  assert.ok(
+    result.data
+      && typeof result.data === 'object'
+      && 'model' in result.data
+      && 'provider' in result.data,
+  );
+  assert.equal(result.data.provider, 'openai-codex');
+  assert.equal(result.data.model, 'gpt-5.6-sol');
+});
+
+test('cost labels the OMP catalog default instead of exposing its raw value', async () => {
+  const result = await executeCommand('/cost', { provider: 'omp', sessionId: 'session-2' });
+
+  assert.ok(result.data && typeof result.data === 'object' && 'model' in result.data);
+  assert.equal(result.data.model, 'Default');
+});

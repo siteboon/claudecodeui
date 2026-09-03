@@ -28,13 +28,14 @@ const providerModelsService = dependencies.models;
 const process = dependencies.runtime;
 const router = express.Router();
 
-const MODEL_PROVIDERS = ["claude", "cursor", "codex", "opencode"];
+const MODEL_PROVIDERS = ["claude", "cursor", "codex", "opencode", "omp"];
 
 const MODEL_PROVIDER_LABELS = {
   claude: "Claude",
   cursor: "Cursor",
   codex: "Codex",
   opencode: "OpenCode",
+  omp: "omp",
 };
 
 const readModelProvider = (value) => {
@@ -59,6 +60,30 @@ const resolveCommandModel = async (modelsService, provider, context) => {
     requestedModel: context?.model,
   });
   return resolved.model;
+};
+
+/**
+ * Resolves the model the latest turn actually used.
+ *
+ * OMP records a configured-default sentinel on the session, while token usage
+ * carries the concrete model. The catalog label is used for any raw default.
+ */
+const resolveCostModel = async (modelsService, provider, context) => {
+  const turnModel = typeof context?.tokenUsage?.model === 'string'
+    ? context.tokenUsage.model.trim()
+    : '';
+  if (turnModel) {
+    return turnModel;
+  }
+
+  const [resolved, catalog] = await Promise.all([
+    resolveCommandModel(modelsService, provider, context),
+    modelsService.getProviderModels(provider),
+  ]);
+  if (resolved !== catalog.DEFAULT) {
+    return resolved;
+  }
+  return catalog.OPTIONS.find((option) => option.value === resolved)?.label || resolved;
 };
 
 const executeModelsCommand = async (args, context, modelsService) => {
@@ -263,7 +288,11 @@ Custom commands can be created in:
   "/cost": async (args, context) => {
     const tokenUsage = context?.tokenUsage || {};
     const provider = readModelProvider(context?.provider);
-    const model = await resolveCommandModel(providerModelsService, provider, context);
+    const reportedProvider =
+      typeof tokenUsage.provider === "string" && tokenUsage.provider.trim()
+        ? tokenUsage.provider.trim()
+        : provider;
+    const model = await resolveCostModel(providerModelsService, provider, context);
 
     const reportedUsed =
       Number(
@@ -334,7 +363,7 @@ Custom commands can be created in:
               },
             }
           : {}),
-        provider,
+        provider: reportedProvider,
         model,
       },
     };

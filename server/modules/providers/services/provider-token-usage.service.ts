@@ -6,6 +6,11 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import {
+  OMP_FALLBACK_CONTEXT_WINDOW,
+  readOmpContextWindow,
+} from '@/modules/providers/list/omp/omp-models.provider.js';
+import { readOmpSessionUsage } from '@/modules/providers/list/omp/omp-runtime.provider.js';
 import type { AnyRecord } from '@/shared/types.js';
 import { AppError, getOpenCodeDatabasePath } from '@/shared/utils.js';
 
@@ -26,6 +31,7 @@ type ProviderTokenUsageServiceDependencies = {
   readTextFile: (filePath: string) => Promise<string>;
   readTextFileTail: (filePath: string, maxBytes: number) => Promise<FileTail>;
   getClaudeContextWindow: () => string | undefined;
+  getOmpContextWindow: (provider: string | null, model: string | null) => Promise<number | null>;
   isProviderSessionSuperseded: (providerSessionId: string, provider: string) => boolean;
 };
 
@@ -33,6 +39,10 @@ type TokenUsageResult = {
   used: number;
   total?: number;
   inputTokens: number;
+  /** Model used by the latest turn when the transcript records it. */
+  model?: string;
+  /** Underlying OMP backend that ran the latest turn. */
+  provider?: string;
   outputTokens: number;
   cacheReadTokens?: number;
   cacheCreationTokens?: number;
@@ -92,6 +102,7 @@ const defaultDependencies: ProviderTokenUsageServiceDependencies = {
     }
   },
   getClaudeContextWindow: () => process.env.CONTEXT_WINDOW,
+  getOmpContextWindow: readOmpContextWindow,
   isProviderSessionSuperseded: (providerSessionId, provider) =>
     sessionsDb.isProviderSessionSuperseded(providerSessionId, provider),
 };
@@ -403,6 +414,33 @@ export function createProviderTokenUsageService(
         }
 
         return readOpenCodeTokenUsage(databasePath, providerSessionId);
+      }
+
+      if (session.provider === 'omp') {
+        const record = await readOmpSessionUsage(providerSessionId, session.jsonl_path);
+        if (!record) {
+          return {
+            used: 0,
+            total: 0,
+            inputTokens: 0,
+            outputTokens: 0,
+            breakdown: { input: 0, output: 0 },
+          };
+        }
+
+        const inputTokens = readUsageNumber(record.usage.input)
+          + readUsageNumber(record.usage.cacheRead);
+        const outputTokens = readUsageNumber(record.usage.output);
+        return {
+          used: readUsageNumber(record.usage.totalTokens) || inputTokens + outputTokens,
+          total: await dependencies.getOmpContextWindow(record.provider, record.model)
+            ?? OMP_FALLBACK_CONTEXT_WINDOW,
+          model: record.model ?? undefined,
+          provider: record.provider ?? undefined,
+          inputTokens,
+          outputTokens,
+          breakdown: { input: inputTokens, output: outputTokens },
+        };
       }
 
       if (session.provider === 'codex') {

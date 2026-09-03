@@ -217,6 +217,16 @@ function buildShellCommand(
     return initialCommand || 'opencode';
   }
 
+  if (provider === 'omp') {
+    if (resumeSessionId) {
+      if (os.platform() === 'win32') {
+        return `omp -r "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { omp }`;
+      }
+      return `omp -r "${resumeSessionId}" || omp`;
+    }
+    return initialCommand || 'omp';
+  }
+
   // Launching with the flag is what unlocks "bypass permissions" in the CLI's
   // shift+tab permission-mode cycle; it cannot be enabled from inside a
   // session started without it.
@@ -542,8 +552,10 @@ export function handleShellConnection(
               : provider === 'codex'
                 ? 'Codex'
                 : provider === 'opencode'
-                    ? 'OpenCode'
-                  : 'Claude';
+                  ? 'OpenCode'
+                  : provider === 'omp'
+                    ? 'omp'
+                    : 'Claude';
           welcomeMsg = hasSession && resumeSessionId
             ? `\x1b[36mResuming ${providerName} session ${resumeSessionId} in: ${projectPath}\x1b[0m\r\n`
             : `\x1b[36mStarting new ${providerName} session in: ${projectPath}\x1b[0m\r\n`;

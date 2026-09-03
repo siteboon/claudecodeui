@@ -2,6 +2,8 @@ import { getConnection } from '@/modules/database/connection.js';
 import { projectsDb } from '@/modules/database/repositories/projects.db.js';
 import { normalizeProjectPath } from '@/shared/utils.js';
 
+type SessionNameSource = 'provisional' | 'provider' | 'user';
+
 type SessionRow = {
   session_id: string;
   provider: string;
@@ -9,6 +11,10 @@ type SessionRow = {
   project_path: string | null;
   jsonl_path: string | null;
   custom_name: string | null;
+  /** Owner of custom_name; NULL only for rows created before ownership tracking. */
+  name_source: SessionNameSource | null;
+  /** Last title read from provider storage. */
+  provider_name: string | null;
   /** Model this session runs with; NULL until the app records one for it. */
   model: string | null;
   /** Reasoning effort this session runs with; NULL until the app records one. */
@@ -26,7 +32,7 @@ type RecentSessionsPage = {
 };
 
 const SESSION_ROW_COLUMNS =
-  'session_id, provider, provider_session_id, project_path, jsonl_path, custom_name, model, effort, forked_from_session_id, isArchived, created_at, updated_at';
+  'session_id, provider, provider_session_id, project_path, jsonl_path, custom_name, name_source, provider_name, model, effort, forked_from_session_id, isArchived, created_at, updated_at';
 
 const SQLITE_UTC_TIMESTAMP_REGEX = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 
@@ -76,9 +82,9 @@ export const sessionsDb = {
    * The given id is the provider-native session id. Rows are keyed by
    * `provider_session_id` so a session that was first created by the app
    * (with an app-allocated `session_id`) is updated in place once its
-   * transcript shows up on disk, instead of producing a duplicate row. An
-   * app-created row keeps its existing name; synchronizer names only update
-   * rows that were themselves created by indexing provider storage.
+   * transcript shows up on disk, instead of producing a duplicate row. This
+   * upsert preserves an app-created row's title; synchronizers use the
+   * ownership-aware title methods below for later provider retitles.
    */
   createSession(
     providerSessionId: string,
@@ -135,8 +141,8 @@ export const sessionsDb = {
     // keyed by the provider-native id for both columns. The ON CONFLICT path
     // covers legacy rows that predate the provider_session_id mapping.
     db.prepare(
-      `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, project_path, jsonl_path, isArchived, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 0, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))
+      `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, name_source, project_path, jsonl_path, isArchived, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'provider', ?, ?, 0, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))
        ON CONFLICT(session_id) DO UPDATE SET
          provider = excluded.provider,
          provider_session_id = excluded.provider_session_id,
@@ -184,8 +190,8 @@ export const sessionsDb = {
     projectsDb.createProjectPath(normalizedProjectPath);
 
     db.prepare(
-      `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, project_path, jsonl_path, isArchived, created_at, updated_at)
-       VALUES (?, ?, NULL, ?, ?, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+      `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, name_source, project_path, jsonl_path, isArchived, created_at, updated_at)
+       VALUES (?, ?, NULL, ?, 'provisional', ?, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
     ).run(sessionId, provider, customName ?? null, normalizedProjectPath);
 
     return sessionId;
@@ -222,8 +228,8 @@ export const sessionsDb = {
       db.prepare('DELETE FROM sessions WHERE session_id = ? AND session_id <> ?')
         .run(input.providerSessionId, input.sessionId);
       db.prepare(
-        `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, project_path, jsonl_path, model, effort, forked_from_session_id, isArchived, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+        `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, name_source, project_path, jsonl_path, model, effort, forked_from_session_id, isArchived, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'user', ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
       ).run(
         input.sessionId,
         input.provider,
@@ -268,10 +274,20 @@ export const sessionsDb = {
           `UPDATE sessions SET
              provider_session_id = ?,
              jsonl_path = COALESCE(jsonl_path, ?),
+             name_source = CASE
+               WHEN custom_name IS NULL THEN COALESCE(?, name_source)
+               ELSE name_source
+             END,
              custom_name = COALESCE(custom_name, ?),
              updated_at = CURRENT_TIMESTAMP
            WHERE session_id = ?`
-        ).run(providerSessionId, duplicate.jsonl_path, duplicate.custom_name, sessionId);
+        ).run(
+          providerSessionId,
+          duplicate.jsonl_path,
+          duplicate.name_source,
+          duplicate.custom_name,
+          sessionId,
+        );
         return;
       }
 
@@ -287,25 +303,31 @@ export const sessionsDb = {
   },
 
   /**
-   * Moves one session onto a different provider session and transcript.
+   * Moves one session onto a different provider session and replaces its
+   * transcript path in the same transaction.
    *
-   * Only editing a message on a provider that has to branch to rewind (Codex)
-   * does this — an ordinary run keeps the same provider session for its whole
-   * life. `assignProviderSessionId` cannot be used for it: that one keeps the
-   * existing `jsonl_path` on purpose, so a session repointed with it would
-   * claim the new thread while still reading the old transcript.
-   *
-   * The watcher may already have indexed the new transcript under its own id.
-   * That row is the same conversation this one is about to become, so it is
-   * replaced rather than left behind as a second sidebar entry.
+   * `jsonlPath` may be NULL when a provider minted the new id before its first
+   * transcript write. Clearing the old path is required: keeping it would make
+   * history and usage read the abandoned source conversation under the new id.
+   * If the watcher already indexed the replacement, its path is adopted.
    */
   repointSessionToProviderSession(
     sessionId: string,
-    input: { providerSessionId: string; jsonlPath: string },
+    input: { providerSessionId: string; jsonlPath: string | null },
   ): void {
     const db = getConnection();
 
     db.transaction(() => {
+      const indexedReplacement = db.prepare(
+        `SELECT jsonl_path FROM sessions
+         WHERE (session_id = ? OR provider_session_id = ?)
+           AND session_id <> ?
+         LIMIT 1`,
+      ).get(
+        input.providerSessionId,
+        input.providerSessionId,
+        sessionId,
+      ) as { jsonl_path: string | null } | undefined;
       db.prepare('DELETE FROM sessions WHERE session_id = ? AND session_id <> ?')
         .run(input.providerSessionId, sessionId);
       db.prepare(
@@ -314,7 +336,11 @@ export const sessionsDb = {
            jsonl_path = ?,
            updated_at = CURRENT_TIMESTAMP
          WHERE session_id = ?`
-      ).run(input.providerSessionId, input.jsonlPath, sessionId);
+      ).run(
+        input.providerSessionId,
+        input.jsonlPath ?? indexedReplacement?.jsonl_path ?? null,
+        sessionId,
+      );
     })();
   },
 
@@ -436,13 +462,33 @@ export const sessionsDb = {
     ).run(effort, sessionId);
   },
 
-  updateSessionCustomName(sessionId: string, customName: string): void {
+  /**
+   * Updates the displayed title and its owner in one write.
+   */
+  updateSessionCustomName(
+    sessionId: string,
+    customName: string,
+    source: Exclude<SessionNameSource, 'provisional'>,
+  ): void {
     const db = getConnection();
     db.prepare(
       `UPDATE sessions
-       SET custom_name = ?
+       SET custom_name = ?,
+           name_source = ?
        WHERE session_id = ?`
-    ).run(customName, sessionId);
+    ).run(customName, source, sessionId);
+  },
+
+  /**
+   * Records the latest title observed in provider storage.
+   */
+  updateSessionProviderName(sessionId: string, providerName: string): void {
+    const db = getConnection();
+    db.prepare(
+      `UPDATE sessions
+       SET provider_name = ?
+       WHERE session_id = ?`
+    ).run(providerName, sessionId);
   },
 
   getSessionById(sessionId: string): SessionRow | null {
