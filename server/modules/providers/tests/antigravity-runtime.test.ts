@@ -445,3 +445,30 @@ test('runtime reports normalization failures as errors instead of raw text', asy
     delete process.env.AGY_STUB_MODE;
   }
 });
+
+test('runtime defaults print-timeout to 30m and allows option override', async () => {
+  const runtime = new AntigravityRuntimeProvider();
+
+  // 1. Default timeout
+  await fs.rm(argsFilePath, { force: true });
+  const { writer: writer1 } = createWriter();
+  await runtime.run('hello', { sessionId: 'sess-timeout-default' }, writer1, context);
+  let args = await readRecordedArgs();
+  const timeoutIndex = args.indexOf('--print-timeout');
+  assert.notEqual(timeoutIndex, -1, `expected --print-timeout in ${JSON.stringify(args)}`);
+  assert.equal(args[timeoutIndex + 1], '30m', 'default timeout must be 30m');
+
+  // 2. Custom override via options
+  await fs.rm(argsFilePath, { force: true });
+  const { writer: writer2 } = createWriter();
+  await runtime.run(
+    'hello',
+    { sessionId: 'sess-timeout-override', printTimeout: '45m' },
+    writer2,
+    context,
+  );
+  args = await readRecordedArgs();
+  const customTimeoutIndex = args.indexOf('--print-timeout');
+  assert.notEqual(customTimeoutIndex, -1, `expected --print-timeout in ${JSON.stringify(args)}`);
+  assert.equal(args[customTimeoutIndex + 1], '45m', 'explicit printTimeout must be passed through');
+});

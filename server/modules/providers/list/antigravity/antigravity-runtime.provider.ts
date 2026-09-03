@@ -73,6 +73,13 @@ const PERMISSION_MODE_ARGS: Record<string, string[]> = {
 };
 
 /**
+ * Default timeout for `agy` print mode execution. Set to 30 minutes to allow
+ * long-running subagent tasks (such as deep code reviews) to finish without
+ * being terminated by the CLI's default 5-minute hard timeout.
+ */
+const DEFAULT_PRINT_TIMEOUT = '30m';
+
+/**
  * Active process map keyed by session ID.
  */
 const activeProcesses = new Map<string, ChildProcess>();
@@ -229,6 +236,10 @@ export class AntigravityRuntimeProvider implements IProviderRuntime {
         );
         args.push('-p', flattenPromptForWindowsShell(promptWithAttachments));
         args.push('--output-format', 'stream-json');
+        const printTimeout = readOptionalString(options.printTimeout)
+          ?? process.env.CLOUDCLI_ANTIGRAVITY_PRINT_TIMEOUT
+          ?? DEFAULT_PRINT_TIMEOUT;
+        args.push('--print-timeout', printTimeout);
       }
 
       // Resume existing conversation
