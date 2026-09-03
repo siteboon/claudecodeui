@@ -1,22 +1,14 @@
 /**
- * ZCode Protocol Client
+ * ZCode Protocol Client (facade)
  *
- * Manages communication with the ZCode app-server subprocess using line-delimited JSON protocol.
- * This module handles process lifecycle, protocol encoding/decoding, request correlation,
- * event routing, and automatic recovery.
- *
- * Protocol Specification (derived from reverse engineering):
- * - Format: Line-delimited JSON (not JSON-RPC 2.0)
- * - Request: { id: number, method: string, params?: AnyRecord }
- * - Response: { id: number, result: unknown } | { id: number, error: { code: number, message: string, data?: unknown } }
- * - Server Request (bidirectional): { id: string ("server-N"), method: string, params?: AnyRecord }.
- *   The engine initiates requests against the client and blocks the
- *   originating client call until it is answered — `session/create` waits on
- *   `session/requestRuntimePreferences` and fails with -32022 after the
- *   engine's 15s timeout if no answer arrives, so EVERY server request must
- *   get a response: { id, result } | { id, error }
- * - Notification: { method: string, params: AnyRecord } (no id field)
- * - Error codes: -32600 (Invalid Request), -32601 (Method not found)
+ * Manages communication with the ZCode app-server subprocess. This facade
+ * composes the three protocol modules and preserves the original singleton
+ * consumption surface:
+ * - `zcode-codec.ts`: pure protocol envelopes, parsing, and encoding
+ * - `zcode-engine-supervisor.ts`: subprocess lifecycle (startup, crash
+ *   detection, restart circuit breaker, graceful shutdown)
+ * - `zcode-request-router.ts`: request correlation, engine-callback policy,
+ *   and session event routing
  *
  * Lifecycle rules:
  * - Construction is side-effect free: the engine path is resolved lazily on
@@ -25,180 +17,40 @@
  * - Shutdown is driven exclusively by the server's shutdown flow
  *   (`shutdownZCodeRuntime`); the client never installs its own signal
  *   handlers or calls `process.exit`.
+ * - When the engine crashes, in-flight requests fail and every registered
+ *   session listener receives a synthetic `zcode:session/lost` notification
+ *   so waiting runs can fail fast instead of timing out.
  *
  * @module zcode-protocol.client
  */
 
-import { spawn, type ChildProcess } from 'node:child_process';
-import * as path from 'node:path';
-import { setTimeout, clearTimeout } from 'node:timers';
-import * as os from 'node:os';
+import type { SessionEventListener } from './zcode-codec.js';
+import { EngineSupervisor } from './zcode-engine-supervisor.js';
+import { RequestRouter } from './zcode-request-router.js';
 
-import type { AnyRecord } from '@/shared/types.js';
-
-import { tryResolveEnginePath, getEngineVersion } from './zcode-engine-path.js';
-
-/**
- * Protocol request envelope (line-delimited JSON to stdin).
- */
-type ProtocolRequest = {
-  id: number;
-  method: string;
-  params?: AnyRecord;
-};
+export {
+  parseProtocolLine,
+  SESSION_LOST_METHOD,
+  type ProtocolMessage,
+  type ProtocolNotification,
+  type ProtocolRequest,
+  type ProtocolResponse,
+  type ProtocolServerRequest,
+  type SessionEventListener,
+} from './zcode-codec.js';
 
 /**
- * Protocol response envelope (from stdout).
- */
-type ProtocolResponse =
-  | { id: number; result: unknown }
-  | { id: number; error: { code: number; message: string; data?: unknown } };
-
-/**
- * Protocol notification envelope (no id, async event).
- */
-type ProtocolNotification = {
-  method: string;
-  params: AnyRecord;
-};
-
-/**
- * Protocol server-initiated request envelope (id + method, from stdout).
+ * ZCode Protocol Client - singleton facade over the supervisor and router.
  *
- * The engine calls back into the client with its own id namespace
- * ("server-1", "server-2", ...) while handling client requests; the client
- * must answer with `{ id, result }` or `{ id, error }` or the originating
- * client request dies with a -32022 timeout after the engine's 15s window.
- */
-type ProtocolServerRequest = {
-  id: number | string;
-  method: string;
-  params?: AnyRecord;
-};
-
-/**
- * Response wrapper for internal pending request management.
- */
-type PendingRequest = {
-  resolve: (result: unknown) => void;
-  reject: (error: Error) => void;
-  timeout: NodeJS.Timeout | null;
-};
-
-/**
- * Event listener for session-specific notifications.
- * Consumers: zcode runtime provider (per-run event normalization).
- */
-export type SessionEventListener = (notification: ProtocolNotification) => void;
-
-/**
- * Configuration constants for process management.
- */
-const CONFIG = {
-  /** Default timeout for requests (30s) */
-  DEFAULT_TIMEOUT: 30000,
-  /** Maximum restarts per minute before giving up */
-  MAX_RESTARTS_PER_MINUTE: 5,
-  /** Exponential backoff base in milliseconds */
-  RESTART_BACKOFF_BASE: 1000,
-  /** Maximum backoff time */
-  MAX_BACKOFF: 32000,
-  /** Graceful shutdown timeout in milliseconds */
-  SHUTDOWN_TIMEOUT: 2000,
-} as const;
-
-/**
- * Parses one stdout line into a protocol response or notification.
- *
- * Consumers: `handleStdout` here and
- * `server/modules/providers/tests/zcode-protocol.client.test.ts`.
- * Returns null for empty or malformed lines so callers can skip them.
- */
-export function parseProtocolLine(
-  line: string
-): ProtocolResponse | ProtocolNotification | ProtocolServerRequest | null {
-  const trimmed = line.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  try {
-    const message = JSON.parse(trimmed) as ProtocolResponse | ProtocolNotification;
-    if (!message || typeof message !== 'object') {
-      return null;
-    }
-    // Responses carry `id`; notifications carry `method` only.
-    if (!('id' in message) && !('method' in message)) {
-      return null;
-    }
-    return message;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Reads the session id a `session/event` notification belongs to.
- * Supports both flat (`params.sessionId`) and nested (`params.event.sessionId`)
- * payload layouts; the exact wrapper was not captured during the Phase 0
- * spike, so both documented shapes are accepted.
- */
-function readNotificationSessionId(params: AnyRecord | undefined): string | null {
-  const flat = params?.sessionId;
-  if (typeof flat === 'string' && flat) {
-    return flat;
-  }
-
-  const nested = (params?.event as AnyRecord | undefined)?.sessionId;
-  if (typeof nested === 'string' && nested) {
-    return nested;
-  }
-
-  return null;
-}
-
-/**
- * ZCode Protocol Client - Singleton process manager and protocol router.
- *
- * Responsibilities:
- * - Lazy app-server subprocess spawning (first request triggers startup)
- * - Request/response correlation with auto-incrementing IDs
- * - Event notification routing to session listeners
- * - Automatic restart with exponential backoff
- * - Graceful shutdown orchestrated by the server shutdown flow
+ * Consumers: zcode runtime provider (sendRequest + session listeners) and
+ * `shutdownZCodeRuntime` in the zcode provider (shutdown).
  */
 class ZCodeProtocolClient {
   /** Singleton instance */
   private static instance: ZCodeProtocolClient | null = null;
 
-  /** app-server subprocess handle */
-  private process: ChildProcess | null = null;
-
-  /** In-flight startup promise; concurrent callers await the same attempt */
-  private startupPromise: Promise<void> | null = null;
-
-  /** Auto-incrementing request ID counter */
-  private requestId: number = 0;
-
-  /** Pending requests awaiting response */
-  private pendingRequests: Map<number, PendingRequest> = new Map();
-
-  /** Session-specific event listeners by session ID */
-  private sessionListeners: Map<string, SessionEventListener[]> = new Map();
-
-  /** Process restart tracking */
-  private restartCount: number = 0;
-  private restartWindowStart: number = 0;
-  private currentBackoff: number = CONFIG.RESTART_BACKOFF_BASE;
-
-  /** Process state flags */
-  private isShuttingDown: boolean = false;
-
-  /** stdout line buffer */
-  private stdoutBuffer: string = '';
-
-  /** stderr line buffer */
-  private stderrBuffer: string = '';
+  private readonly supervisor = new EngineSupervisor();
+  private readonly router: RequestRouter;
 
   /**
    * Gets the singleton protocol client instance. Construction performs no
@@ -211,431 +63,59 @@ class ZCodeProtocolClient {
     return ZCodeProtocolClient.instance;
   }
 
-  /**
-   * Starts the app-server subprocess if not already running.
-   * Concurrent calls share one startup attempt.
-   */
-  private startProcess(): Promise<void> {
-    if (this.process && !this.process.killed) {
-      return Promise.resolve();
-    }
-
-    if (this.startupPromise) {
-      return this.startupPromise;
-    }
-
-    this.startupPromise = this.doStartProcess();
-    this.startupPromise.finally(() => {
-      this.startupPromise = null;
-    }).catch(() => {
-      // Startup errors are already surfaced to the awaiting request.
+  private constructor() {
+    this.router = new RequestRouter({
+      ensureRunning: () => this.supervisor.ensureRunning(),
+      writeLine: (line: string) => this.supervisor.writeLine(line),
     });
 
-    return this.startupPromise;
-  }
+    this.supervisor.onLine((line) => this.router.handleLine(line));
 
-  private async doStartProcess(): Promise<void> {
-    const enginePath = tryResolveEnginePath();
-
-    if (!enginePath) {
-      throw new Error(
-        'ZCode engine not found. Please install ZCode Desktop App from https://z.ai/download ' +
-        'or set CLOUDCLI_ZCODE_ENGINE environment variable to override path detection.'
-      );
-    }
-
-    console.info('[ZCode Protocol] Starting app-server subprocess...');
-    console.debug(`[ZCode Protocol] Engine path: ${enginePath}`);
-    console.debug(`[ZCode Protocol] Detected version: ${getEngineVersion() || 'unknown'}`);
-
-    this.process = spawn('node', [enginePath, 'app-server'], {
-      env: {
-        ...process.env,
-        // Ensure ZCode uses the expected storage directory
-        ZCODE_STORAGE_DIR: process.env.ZCODE_STORAGE_DIR || path.join(os.homedir(), '.zcode'),
-      },
-      stdio: ['pipe', 'pipe', 'pipe'],
-      detached: false,
+    // Engine crash: fail in-flight requests and tell every waiting session
+    // that its engine-side session is gone.
+    this.supervisor.onCrash(({ code, signal }) => {
+      this.router.failAllPending(new Error('ZCode process terminated unexpectedly'));
+      this.router.notifySessionLost(code, signal);
     });
-
-    this.setupProcessHandlers();
-    this.resetRestartTracking();
-
-    console.info('[ZCode Protocol] app-server started successfully');
-  }
-
-  /**
-   * Sets up event handlers for the subprocess.
-   */
-  private setupProcessHandlers(): void {
-    if (!this.process) return;
-
-    this.process.stdout?.on('data', (data: Buffer) => {
-      this.handleStdout(data);
-    });
-
-    this.process.stderr?.on('data', (data: Buffer) => {
-      this.handleStderr(data);
-    });
-
-    this.process.on('exit', (code: number | null, signal: NodeJS.Signals | null) => {
-      this.handleProcessExit(code, signal);
-    });
-
-    this.process.on('error', (error: Error) => {
-      console.error('[ZCode Protocol] Process error:', error);
-    });
-  }
-
-  /**
-   * Handles stdout data with line-delimited JSON parsing.
-   */
-  private handleStdout(data: Buffer): void {
-    this.stdoutBuffer += data.toString('utf-8');
-
-    const lines = this.stdoutBuffer.split('\n');
-    this.stdoutBuffer = lines.pop() || ''; // Keep incomplete line in buffer
-
-    for (const line of lines) {
-      const message = parseProtocolLine(line);
-      if (message) {
-        this.handleProtocolMessage(message);
-      } else if (line.trim()) {
-        console.warn(`[ZCode Protocol] Failed to parse stdout line: ${line.slice(0, 100)}`);
-      }
-    }
-  }
-
-  /**
-   * Handles stderr data for logging.
-   */
-  private handleStderr(data: Buffer): void {
-    this.stderrBuffer += data.toString('utf-8');
-
-    const lines = this.stderrBuffer.split('\n');
-    this.stderrBuffer = lines.pop() || '';
-
-    for (const line of lines) {
-      if (line.trim()) {
-        console.debug(`[ZCode stderr] ${line}`);
-      }
-    }
-  }
-
-  /**
-   * Handles parsed protocol messages (responses, server requests, or
-   * notifications). `method` + `id` marks a server-initiated request; `id`
-   * alone marks a response to one of ours; `method` alone is a notification.
-   */
-  private handleProtocolMessage(
-    message: ProtocolResponse | ProtocolNotification | ProtocolServerRequest
-  ): void {
-    if ('id' in message && 'method' in message) {
-      this.handleServerRequest(message);
-    } else if ('id' in message) {
-      this.handleResponse(message);
-    } else {
-      this.handleNotification(message);
-    }
-  }
-
-  /**
-   * Writes a response to a server-initiated request back to the subprocess.
-   *
-   * Payload is `{ result }` on success or `{ error }` with a JSON-RPC-style
-   * code; the envelope keeps the server's own id so the engine can correlate.
-   */
-  private respondToServer(
-    requestId: number | string,
-    payload: { result: unknown } | { error: { code: number; message: string } }
-  ): void {
-    const response = { id: requestId, ...payload };
-    const jsonLine = JSON.stringify(response) + '\n';
-
-    try {
-      this.process?.stdin?.write(jsonLine, 'utf-8', (error) => {
-        if (error) {
-          console.error(`[ZCode Protocol] Failed to respond to server request ${requestId}:`, error);
-        }
-      });
-    } catch (error) {
-      console.error(`[ZCode Protocol] Failed to respond to server request ${requestId}:`, error);
-    }
-  }
-
-  /**
-   * Handles server-initiated requests (engine → client).
-   *
-   * Every request MUST be answered: the engine blocks the client call that
-   * triggered it (e.g. `session/create` waits on
-   * `session/requestRuntimePreferences`) until a response arrives or its own
-   * 15s timeout rejects the client call with -32022.
-   */
-  private handleServerRequest(request: ProtocolServerRequest): void {
-    console.debug(`[ZCode Protocol] Received server request: ${request.method}`);
-
-    if (request.method === 'session/requestRuntimePreferences') {
-      // Minimal viable preferences validated by the Phase 0.1 spike
-      // (docs/phase0-1-findings.md §5).
-      this.respondToServer(request.id, { result: { nativeSearchEnhancementsEnabled: false } });
-      return;
-    }
-
-    // Unsupported engine callbacks get an explicit method-not-found error
-    // rather than silence or an empty result: the engine recognizes -32601 as
-    // "client does not implement this" and applies its own fallbacks, while an
-    // empty `{}` result could be misread as approval for interaction/*
-    // requests.
-    this.respondToServer(request.id, {
-      error: { code: -32601, message: `Method not found: ${request.method}` },
-    });
-  }
-
-  /**
-   * Handles protocol responses and resolves pending requests.
-   */
-  private handleResponse(response: ProtocolResponse): void {
-    const pending = this.pendingRequests.get(response.id);
-
-    if (!pending) {
-      console.warn(`[ZCode Protocol] Received response for unknown request id: ${response.id}`);
-      return;
-    }
-
-    if (pending.timeout) {
-      clearTimeout(pending.timeout);
-    }
-
-    this.pendingRequests.delete(response.id);
-
-    if ('error' in response) {
-      const error = new Error(response.error.message);
-      (error as AnyRecord).code = response.error.code;
-      (error as AnyRecord).data = response.error.data;
-      pending.reject(error);
-    } else {
-      pending.resolve(response.result);
-    }
-  }
-
-  /**
-   * Handles protocol notifications and routes to session listeners.
-   */
-  private handleNotification(notification: ProtocolNotification): void {
-    console.debug(`[ZCode Protocol] Received notification: ${notification.method}`);
-
-    if (notification.method === 'session/event') {
-      const sessionId = readNotificationSessionId(notification.params);
-      if (sessionId) {
-        this.routeSessionEvent(sessionId, notification);
-      }
-    }
-  }
-
-  /**
-   * Routes session-specific events to registered listeners.
-   */
-  private routeSessionEvent(sessionId: string, notification: ProtocolNotification): void {
-    const listeners = this.sessionListeners.get(sessionId);
-    if (listeners) {
-      for (const listener of listeners) {
-        try {
-          listener(notification);
-        } catch (error) {
-          console.error(`[ZCode Protocol] Session event listener error for ${sessionId}:`, error);
-        }
-      }
-    }
-  }
-
-  /**
-   * Handles unexpected process exit with auto-restart logic.
-   */
-  private handleProcessExit(code: number | null, signal: NodeJS.Signals | null): void {
-    console.warn(`[ZCode Protocol] Process exited (code: ${code}, signal: ${signal})`);
-
-    this.process = null;
-
-    for (const pending of this.pendingRequests.values()) {
-      if (pending.timeout) clearTimeout(pending.timeout);
-      pending.reject(new Error('ZCode process terminated unexpectedly'));
-    }
-    this.pendingRequests.clear();
-
-    if (this.isShuttingDown) {
-      console.info('[ZCode Protocol] Process terminated during shutdown');
-      return;
-    }
-
-    const now = Date.now();
-    if (now - this.restartWindowStart > 60000) {
-      this.restartCount = 0;
-      this.restartWindowStart = now;
-      this.currentBackoff = CONFIG.RESTART_BACKOFF_BASE;
-    }
-
-    if (++this.restartCount > CONFIG.MAX_RESTARTS_PER_MINUTE) {
-      console.error('[ZCode Protocol] Too many restarts, giving up');
-      return;
-    }
-
-    const backoff = Math.min(this.currentBackoff, CONFIG.MAX_BACKOFF);
-    console.info(`[ZCode Protocol] Scheduling restart in ${backoff}ms...`);
-
-    setTimeout(() => {
-      this.currentBackoff *= 2;
-      this.startProcess().catch((error) => {
-        console.error('[ZCode Protocol] Restart failed:', error);
-      });
-    }, backoff);
-  }
-
-  /**
-   * Resets restart tracking after successful startup.
-   */
-  private resetRestartTracking(): void {
-    this.restartCount = 0;
-    this.restartWindowStart = Date.now();
-    this.currentBackoff = CONFIG.RESTART_BACKOFF_BASE;
   }
 
   /**
    * Sends a protocol request and returns the response.
    *
-   * Consumers: zcode runtime provider (session lifecycle + messaging).
-   *
    * @param method - Protocol method name
    * @param params - Method parameters
    * @param timeout - Request timeout in milliseconds (0 for no timeout: use
    *   for `session/send`, whose result arrives on the event stream)
-   * @returns Promise that resolves with the result or rejects with error
    */
   async sendRequest<T = unknown>(
     method: string,
-    params: AnyRecord = {},
-    timeout: number = CONFIG.DEFAULT_TIMEOUT
+    params: Record<string, unknown> = {},
+    timeout?: number,
   ): Promise<T> {
-    await this.startProcess();
-
-    if (!this.process || this.process.killed) {
-      throw new Error('ZCode process is not available');
-    }
-
-    const id = ++this.requestId;
-    const request: ProtocolRequest = { id, method, params };
-    const childProcess = this.process;
-
-    return new Promise<T>((resolve, reject) => {
-      let timeoutHandle: NodeJS.Timeout | null = null;
-      if (timeout > 0) {
-        timeoutHandle = setTimeout(() => {
-          this.pendingRequests.delete(id);
-          reject(new Error(`Request timeout after ${timeout}ms`));
-        }, timeout);
-      }
-
-      this.pendingRequests.set(id, {
-        resolve: (result) => resolve(result as T),
-        reject,
-        timeout: timeoutHandle,
-      });
-
-      try {
-        const jsonLine = JSON.stringify(request) + '\n';
-        childProcess.stdin!.write(jsonLine, 'utf-8', (error) => {
-          if (error) {
-            this.pendingRequests.delete(id);
-            if (timeoutHandle) clearTimeout(timeoutHandle);
-            reject(new Error(`Failed to send request: ${error.message}`));
-          }
-        });
-      } catch (error) {
-        this.pendingRequests.delete(id);
-        if (timeoutHandle) clearTimeout(timeoutHandle);
-        reject(new Error(`Failed to serialize request: ${error instanceof Error ? error.message : 'Unknown error'}`));
-      }
-    });
+    return this.router.request<T>(method, params, timeout);
   }
 
   /**
-   * Registers a listener for session-specific events.
-   *
-   * @param sessionId - ZCode native session ID to listen for
-   * @param listener - Callback function for notifications
+   * Registers a listener for one ZCode session's events.
    */
   addSessionListener(sessionId: string, listener: SessionEventListener): void {
-    if (!this.sessionListeners.has(sessionId)) {
-      this.sessionListeners.set(sessionId, []);
-    }
-    this.sessionListeners.get(sessionId)!.push(listener);
+    this.router.addSessionListener(sessionId, listener);
   }
 
   /**
-   * Removes a session event listener.
-   *
-   * @param sessionId - Session ID
-   * @param listener - Callback function to remove
+   * Removes one listener registration (same function identity).
    */
   removeSessionListener(sessionId: string, listener: SessionEventListener): void {
-    const listeners = this.sessionListeners.get(sessionId);
-    if (listeners) {
-      const index = listeners.indexOf(listener);
-      if (index !== -1) {
-        listeners.splice(index, 1);
-      }
-      if (listeners.length === 0) {
-        this.sessionListeners.delete(sessionId);
-      }
-    }
+    this.router.removeSessionListener(sessionId, listener);
   }
 
   /**
-   * Gracefully shuts down the app-server process.
-   *
-   * Consumer: `shutdownZCodeRuntime` in the zcode provider, wired into the
-   * server shutdown flow from `server/index.ts`.
+   * Graceful shutdown orchestrated by the server shutdown flow. Cancels any
+   * scheduled restart, fails in-flight requests, and stops the engine.
    */
   async shutdown(): Promise<void> {
-    if (this.isShuttingDown) {
-      return;
-    }
-
-    this.isShuttingDown = true;
-    console.info('[ZCode Protocol] Initiating graceful shutdown...');
-
-    for (const pending of this.pendingRequests.values()) {
-      if (pending.timeout) clearTimeout(pending.timeout);
-      pending.reject(new Error('Client is shutting down'));
-    }
-    this.pendingRequests.clear();
-
-    // Close stdin to signal EOF to app-server
-    if (this.process && this.process.stdin) {
-      this.process.stdin.end();
-    }
-
-    const shutdownPromise = new Promise<void>((resolve) => {
-      if (!this.process) {
-        resolve();
-        return;
-      }
-
-      const timeout = setTimeout(() => {
-        console.warn('[ZCode Protocol] Shutdown timeout, forcing kill');
-        if (this.process && !this.process.killed) {
-          this.process.kill('SIGKILL');
-        }
-        resolve();
-      }, CONFIG.SHUTDOWN_TIMEOUT);
-
-      this.process.once('exit', () => {
-        clearTimeout(timeout);
-        resolve();
-      });
-    });
-
-    await shutdownPromise;
-    console.info('[ZCode Protocol] Shutdown complete');
+    this.router.failAllPending(new Error('Client is shutting down'));
+    await this.supervisor.shutdown();
   }
 }
 

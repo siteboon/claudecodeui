@@ -27,6 +27,7 @@ import type {
 import { createCompleteMessage, createNormalizedMessage, generateMessageId, readOptionalString } from '@/shared/utils.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
 
+import { SESSION_LOST_METHOD } from './zcode-codec.js';
 import { protocolClient } from './zcode-protocol.client.js';
 import { readZCodeSessionModelFromDb, resolveZCodeModelRef } from './zcode-models.provider.js';
 
@@ -508,8 +509,23 @@ export class ZCodeRuntimeProvider implements IProviderRuntime {
     return (notification: AnyRecord) => {
       try {
         const method = readOptionalString(notification.method);
+
+        // Synthetic client-originated notification: the engine process died,
+        // so this session no longer exists engine-side. Mark the run failed
+        // (once) so waitForCompletion returns instead of timing out against a
+        // dead engine.
+        if (method === SESSION_LOST_METHOD) {
+          const completionState = sessionCompletionState.get(sessionId);
+          if (completionState && !completionState.completed) {
+            completionState.failed = true;
+            completionState.completed = true;
+            completionState.failedMessage = 'ZCode engine connection was lost';
+          }
+          return;
+        }
+
         if (method && method !== 'session/event') {
-          console.debug(`[ZCodeRuntime] Received server request: ${method}`);
+          console.debug(`[ZCodeRuntime] Received non-session notification: ${method}`);
           return;
         }
 
