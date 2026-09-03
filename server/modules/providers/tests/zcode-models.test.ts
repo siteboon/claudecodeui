@@ -80,6 +80,55 @@ test('getSupportedModels parses the v2 config provider catalog', async () => {
   });
 });
 
+test('getSupportedModels ignores disabled providers and deduplicates model options', async () => {
+  await withZCodeStorage(async (storageDir) => {
+    const v2Dir = path.join(storageDir, 'v2');
+    await mkdir(v2Dir, { recursive: true });
+    await writeFile(
+      path.join(v2Dir, 'config.json'),
+      JSON.stringify({
+        provider: {
+          'builtin:disabled-provider': {
+            enabled: false,
+            models: {
+              'GLM-5.3': {
+                reasoning: { variants: ['low'] },
+              },
+              'DISABLED-ONLY': {},
+            },
+          },
+          'builtin:first-provider': {
+            enabled: true,
+            models: {
+              'GLM-5.3': {
+                reasoning: { variants: ['max', 'low'] },
+              },
+            },
+          },
+          'builtin:second-provider': {
+            models: {
+              'GLM-5.3': {
+                reasoning: { variants: ['high'] },
+              },
+              'GLM-5.3-Flash': {},
+            },
+          },
+        },
+      }),
+      'utf8'
+    );
+
+    const models = new ZCodeProviderModels();
+    const definition = await models.getSupportedModels();
+
+    // DISABLED-ONLY should not be present; GLM-5.3 must appear exactly once
+    assert.deepEqual(
+      definition.OPTIONS.map((opt) => opt.value),
+      ['GLM-5.3', 'GLM-5.3-Flash']
+    );
+  });
+});
+
 test('readZCodeSessionModelFromDb returns the latest message model', async () => {
   await withZCodeStorage(async (storageDir) => {
     const dbDir = path.join(storageDir, 'cli', 'db');

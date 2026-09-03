@@ -69,15 +69,23 @@ const readZCodeModelConfig = async (): Promise<ProviderModelsDefinition> => {
     }
 
     const modelOptions: ProviderModelOption[] = [];
+    const seenModelKeys = new Set<string>();
 
     for (const providerConfig of Object.values(providers)) {
       const providerRecord = readObjectRecord(providerConfig);
+      // Skip explicitly disabled providers
+      if (providerRecord?.enabled === false) continue;
+
       const models = readObjectRecord(providerRecord?.models);
       if (!models) continue;
 
       for (const [modelKey, modelConfig] of Object.entries(models)) {
+        if (seenModelKeys.has(modelKey)) continue;
+
         const modelRecord = readObjectRecord(modelConfig);
         if (!modelRecord) continue;
+
+        seenModelKeys.add(modelKey);
 
         const reasoning = readObjectRecord(modelRecord.reasoning);
         const variants = reasoning?.variants;
