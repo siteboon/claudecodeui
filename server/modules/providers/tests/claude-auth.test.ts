@@ -6,10 +6,11 @@ import test from 'node:test';
 
 import { ClaudeProviderAuth } from '@/modules/providers/list/claude/claude-auth.provider.js';
 
-// checkCredentials() is private, but unlike getStatus() it never shells out to the
-// `claude` CLI — it only reads env vars and ~/.claude files. Calling it directly
-// (TypeScript's `private` has no runtime effect) tests the priority order without
-// depending on `claude` being installed in the test environment.
+// checkCredentials() is private; calling it directly (TypeScript's `private` has
+// no runtime effect) tests the priority order. It asks the `claude` CLI before
+// falling back to env vars and ~/.claude files, so the probe is stubbed here:
+// otherwise every assertion below would depend on whether the machine running
+// the suite happens to have a logged-in CLI.
 type CheckCredentialsResult = {
   authenticated: boolean;
   email: string | null;
@@ -17,8 +18,16 @@ type CheckCredentialsResult = {
   error?: string;
 };
 
-const checkCredentials = (auth: ClaudeProviderAuth): Promise<CheckCredentialsResult> =>
-  (auth as unknown as { checkCredentials: () => Promise<CheckCredentialsResult> }).checkCredentials();
+const checkCredentials = (
+  auth: ClaudeProviderAuth,
+  cliStatus: CheckCredentialsResult | null = null,
+): Promise<CheckCredentialsResult> => {
+  (auth as unknown as { checkCliStatus: () => CheckCredentialsResult | null }).checkCliStatus =
+    () => cliStatus;
+  return (auth as unknown as {
+    checkCredentials: () => Promise<CheckCredentialsResult>;
+  }).checkCredentials();
+};
 
 const ENV_KEYS = ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN'] as const;
 
@@ -204,5 +213,37 @@ test('checkCredentials: ANTHROPIC_API_KEY takes precedence over CLAUDE_CODE_OAUT
         assert.equal(status.method, 'api_key');
       },
     );
+  });
+});
+
+test('checkCredentials: a logged-in CLI is authenticated even when the credentials file is expired', async () => {
+  await withTempHome(async (homeDir) => {
+    await writeCredentialsFile(homeDir, {
+      claudeAiOauth: { accessToken: 'stale-token', expiresAt: 1_000_000_000_000 }, // long expired
+    });
+
+    await withEnv({}, async () => {
+      const status = await checkCredentials(new ClaudeProviderAuth(), {
+        authenticated: true,
+        email: 'someone@example.com',
+        method: 'cli_status',
+      });
+      assert.equal(status.authenticated, true);
+      assert.equal(status.method, 'cli_status');
+      assert.equal(status.email, 'someone@example.com');
+    });
+  });
+});
+
+test('checkCredentials: explicit env credentials still win over the CLI probe', async () => {
+  await withTempHome(async () => {
+    await withEnv({ ANTHROPIC_API_KEY: 'test-api-key' }, async () => {
+      const status = await checkCredentials(new ClaudeProviderAuth(), {
+        authenticated: true,
+        email: 'someone@example.com',
+        method: 'cli_status',
+      });
+      assert.equal(status.method, 'api_key');
+    });
   });
 });
