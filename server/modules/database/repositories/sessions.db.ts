@@ -234,6 +234,18 @@ export const sessionsDb = {
   },
 
   /**
+   * Updates updated_at to the current timestamp when messages are sent or runs complete.
+   */
+  touchSession(sessionId: string): void {
+    const db = getConnection();
+    db.prepare(
+      `UPDATE sessions
+       SET updated_at = CURRENT_TIMESTAMP
+       WHERE session_id = ? OR provider_session_id = ?`
+    ).run(sessionId, sessionId);
+  },
+
+  /**
    * Records the model one session runs with.
    *
    * Called both when the user picks a model for the session and on every send,

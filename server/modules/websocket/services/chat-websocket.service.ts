@@ -223,6 +223,8 @@ async function handleChatSend(
     return;
   }
 
+  sessionsDb.touchSession(sessionId);
+
   const clientOptions = (data.options ?? {}) as AnyRecord;
   const command = typeof data.content === 'string' ? data.content : '';
 
@@ -277,6 +279,7 @@ async function handleChatSend(
     // a queued message can start the session's next run before this promise
     // settles, and the session-keyed completeRun would kill that new run.
     chatRunRegistry.completeRunIfCurrent(run, { exitCode: 1 });
+    sessionsDb.touchSession(sessionId);
   }
 }
 
