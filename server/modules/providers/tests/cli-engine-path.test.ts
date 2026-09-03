@@ -9,6 +9,9 @@ import test from 'node:test';
 import {
   createCliEnginePathResolver,
 } from '@/modules/providers/shared/engine-path/cli-engine-path.js';
+import {
+  DEFAULT_NEGATIVE_PROBE_TTL_MS,
+} from '@/modules/providers/shared/installation/cli-installation-probe.js';
 
 type SpawnCall = { command: string; args: string[] };
 
@@ -23,6 +26,7 @@ function createTestResolver(options: {
   versionProbeInvocations?: number;
   eagerVersionProbe?: boolean;
   expectedVersion?: string;
+  now?: () => number;
 }) {
   const calls: SpawnCall[] = [];
   const spawnSync = ((
@@ -71,7 +75,7 @@ function createTestResolver(options: {
       : undefined,
     eagerVersionProbe: options.eagerVersionProbe,
     expectedVersion: options.expectedVersion,
-  }, { spawnSync });
+  }, { spawnSync, now: options.now });
 
   return {
     resolver,
@@ -155,17 +159,59 @@ test('a failed resolution is negatively cached until the cache is cleared', asyn
             return false;
           }
         },
+        now: () => 0,
       });
 
       try {
         // The engine file does not exist yet: resolution fails and is negatively cached.
         assert.equal(resolver.tryResolveEnginePath(), null);
 
-        // The engine "appears": the negative cache still holds.
+        // The engine "appears": within the TTL the negative cache still holds.
         await writeFile(lateEnginePath, 'engine', 'utf8');
         assert.equal(resolver.tryResolveEnginePath(), null);
 
+        // Clearing bypasses the TTL entirely.
         resolver.clearEnginePathCache();
+        assert.equal(resolver.tryResolveEnginePath(), lateEnginePath);
+      } finally {
+        restore();
+      }
+    });
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('a negative cache expires after the TTL and the resolution reruns', async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'cli-engine-path-negative-ttl-'));
+  const lateEnginePath = path.join(tempDir, 'late-engine');
+  let clock = 0;
+
+  try {
+    await withEnv(lateEnginePath, async () => {
+      const { resolver, calls, restore } = createTestResolver({
+        responses: {},
+        platform: 'linux',
+        isValidPath: (filePath) => {
+          try {
+            return fs.statSync(filePath).isFile();
+          } catch {
+            return false;
+          }
+        },
+        now: () => clock,
+      });
+
+      try {
+        assert.equal(resolver.tryResolveEnginePath(), null);
+        assert.equal(resolver.tryResolveEnginePath(), null);
+        assert.equal(calls.length, 1);
+
+        // The engine "appears" and the TTL elapses: the next query resolves it.
+        // The rerun hits the env override directly, so `which` is not called
+        // again — the null → path transition is the rerun proof.
+        await writeFile(lateEnginePath, 'engine', 'utf8');
+        clock += DEFAULT_NEGATIVE_PROBE_TTL_MS;
         assert.equal(resolver.tryResolveEnginePath(), lateEnginePath);
       } finally {
         restore();

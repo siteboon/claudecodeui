@@ -3,8 +3,8 @@
  *
  * One parameterized resolver for locating a provider's CLI engine binary:
  * environment overrides → PATH lookup (`which`/`where`) → platform install
- * locations, with module-level caching, negative caching, and an optional
- * asynchronous version probe.
+ * locations, with module-level caching, TTL-bounded negative caching, and an
+ * optional asynchronous version probe.
  *
  * Extracted from the twin `antigravity-engine-path` / `zcode-engine-path`
  * modules, whose resolution order, caching, and version probing were ~80%
@@ -16,6 +16,8 @@
 
 import { spawnSync as nodeSpawnSync } from 'node:child_process';
 import path from 'node:path';
+
+import { DEFAULT_NEGATIVE_PROBE_TTL_MS } from '../installation/cli-installation-probe.js';
 
 /**
  * One version probe attempt, built from the resolved engine path.
@@ -76,9 +78,12 @@ export type CliEnginePathResolverConfig = {
  * The three functions a provider's engine-path module re-exports.
  *
  * `tryResolveEnginePath` never throws ("not installed" is a legal state) and
- * caches its result — including a negative result — for the process lifetime
- * until `clearEnginePathCache`. `getEngineVersion` returns the cached probe
- * result only; the probe itself runs asynchronously off the request path.
+ * caches a resolved path for the process lifetime, while a negative result is
+ * cached only until the shared negative TTL elapses (users install the CLI
+ * right after seeing "not installed"; nothing clears this cache in
+ * production, so a permanent negative would force a server restart).
+ * `getEngineVersion` returns the cached probe result only; the probe itself
+ * runs asynchronously off the request path.
  */
 export type CliEnginePathResolver = {
   tryResolveEnginePath: () => string | null;
@@ -90,16 +95,20 @@ export type CliEnginePathResolver = {
  * Creates one provider's engine path resolver from its resolution data.
  *
  * Consumers: antigravity-engine-path and zcode-engine-path. Tests may inject
- * `spawnSync` to stub subprocesses; production uses the default.
+ * `spawnSync` to stub subprocesses and `now` to control the negative TTL;
+ * production uses the defaults.
  */
 export function createCliEnginePathResolver(
   config: CliEnginePathResolverConfig,
-  dependencies: { spawnSync?: typeof nodeSpawnSync } = {},
+  dependencies: { spawnSync?: typeof nodeSpawnSync; now?: () => number } = {},
 ): CliEnginePathResolver {
   const spawnSync = dependencies.spawnSync ?? nodeSpawnSync;
+  const now = dependencies.now ?? Date.now;
 
-  /** `null` = not yet resolved; `false` = resolved as missing (negative cache). */
-  let cachedEnginePath: string | false | null = null;
+  /** Resolved engine path, cached for the process lifetime once found. */
+  let cachedEnginePath: string | null = null;
+  /** When the last failed resolution happened; `null` = no negative cache. */
+  let negativeResolvedAt: number | null = null;
   let cachedVersion: string | null = null;
   let versionProbeScheduled = false;
 
@@ -187,7 +196,10 @@ export function createCliEnginePathResolver(
 
   function tryResolveEnginePath(): string | null {
     if (cachedEnginePath !== null) {
-      return cachedEnginePath || null;
+      return cachedEnginePath;
+    }
+    if (negativeResolvedAt !== null && now() - negativeResolvedAt < DEFAULT_NEGATIVE_PROBE_TTL_MS) {
+      return null;
     }
 
     const resolved = resolveFromEnv() ?? resolveFromWhich() ?? resolveFromPlatformPaths();
@@ -197,7 +209,7 @@ export function createCliEnginePathResolver(
       return resolved;
     }
 
-    cachedEnginePath = false;
+    negativeResolvedAt = now();
     return null;
   }
 
@@ -216,6 +228,7 @@ export function createCliEnginePathResolver(
 
   function clearEnginePathCache(): void {
     cachedEnginePath = null;
+    negativeResolvedAt = null;
     cachedVersion = null;
     versionProbeScheduled = false;
   }
