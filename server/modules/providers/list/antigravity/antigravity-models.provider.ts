@@ -37,10 +37,12 @@ const execFileAsync = promisify(execFile);
 
 /**
  * Builtin raw model rows mirroring `agy models` output, used verbatim as the
- * fallback catalog when the CLI cannot be queried. Suffixed variants collapse
- * into base models at load time, so the picker lists one entry per base model
- * with its Reasoning tiers. Only the first row of each variant family carries
- * a description; it becomes the base model's description.
+ * fallback catalog when the CLI cannot be queried. Variant families with two
+ * or more tiers collapse into base models at load time, so the picker lists
+ * one entry per adjustable model with its Reasoning tiers; single-variant
+ * rows (gpt-oss-120b-medium) and claude passthroughs keep their original id
+ * and label with no Reasoning options. Only the first row of each collapsed
+ * family carries a description; it becomes the base model's description.
  */
 const ANTIGRAVITY_BUILTIN_RAW_MODELS: AntigravityRawModelEntry[] = [
   { value: 'gemini-3.8-flash-high', label: 'Gemini 3.8 Flash (High)', description: 'Google Gemini 3.8 Flash' },

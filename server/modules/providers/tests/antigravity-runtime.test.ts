@@ -89,6 +89,7 @@ const context: ProviderRuntimeContext = {
         },
       },
       { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (Thinking)' },
+      { value: 'gpt-oss-120b-medium', label: 'GPT-OSS 120B (Medium)' },
     ],
     DEFAULT: 'gemini-3.7-flash',
   }),
@@ -296,10 +297,17 @@ test('runtime resolves model selection and reasoning effort into agy arguments',
       expectModel: 'gemini-3.1-pro-high',
     },
     {
-      name: 'flag-effort model keeps its id and uses --effort',
+      // Claude passthroughs and the fixed-tier gpt-oss row have no
+      // adjustable tiers: a stale effort choice must be dropped and the id
+      // must never be rewritten into something agy does not offer.
+      name: 'cataloged model without effort support drops a stale effort',
       options: { model: 'claude-sonnet-4-6', effort: 'high' },
       expectModel: 'claude-sonnet-4-6',
-      expectEffort: 'high',
+    },
+    {
+      name: 'fixed-tier suffixed model keeps its real id',
+      options: { model: 'gpt-oss-120b-medium', effort: 'high' },
+      expectModel: 'gpt-oss-120b-medium',
     },
     {
       name: 'unknown custom model keeps its id and uses --effort',

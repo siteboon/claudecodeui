@@ -13,6 +13,7 @@ import test, { mock } from 'node:test';
 import Database from 'better-sqlite3';
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
+import type { ProviderModelOption } from '@/shared/types.js';
 
 import { AntigravityProviderAuth } from '../list/antigravity/antigravity-auth.provider.js';
 import { getAntigravitySummariesDbPath } from '../list/antigravity/antigravity-data-root.js';
@@ -125,16 +126,10 @@ test('AntigravityProviderModels returns builtin models fallback', async () => {
   assert.ok(definition.OPTIONS.some((m) => m.value === 'gemini-3.7-flash'));
 });
 
-test('ANTIGRAVITY_BUILTIN_MODELS lists base models with suffix-encoded effort tiers', () => {
+test('ANTIGRAVITY_BUILTIN_MODELS collapses multi-tier families and keeps fixed models', () => {
   assert.equal(ANTIGRAVITY_BUILTIN_MODELS.DEFAULT, 'gemini-3.7-flash');
 
   const values = ANTIGRAVITY_BUILTIN_MODELS.OPTIONS.map((option) => option.value);
-  // Every suffixed variant collapses into its base id.
-  assert.equal(
-    values.filter((value) => /-(low|medium|high)$/.test(value)).length,
-    0,
-    `no suffixed ids may survive: ${JSON.stringify(values)}`,
-  );
   for (const expected of [
     'gemini-3.8-flash',
     'gemini-3.7-flash',
@@ -142,10 +137,17 @@ test('ANTIGRAVITY_BUILTIN_MODELS lists base models with suffix-encoded effort ti
     'gemini-3.1-pro',
     'claude-sonnet-4-6',
     'claude-opus-4-6-thinking',
-    'gpt-oss-120b',
+    'gpt-oss-120b-medium',
   ]) {
     assert.ok(values.includes(expected), `${expected} must be listed`);
   }
+  // Multi-tier gemini families collapse; the fixed-tier gpt-oss row keeps
+  // its real agy id.
+  assert.equal(
+    values.filter((value) => value.startsWith('gemini-') && /-(low|medium|high)$/.test(value)).length,
+    0,
+    `no gemini suffixed ids may survive: ${JSON.stringify(values)}`,
+  );
 
   const flash = ANTIGRAVITY_BUILTIN_MODELS.OPTIONS.find((o) => o.value === 'gemini-3.7-flash');
   assert.equal(flash?.label, 'Gemini 3.7 Flash');
@@ -158,17 +160,15 @@ test('ANTIGRAVITY_BUILTIN_MODELS lists base models with suffix-encoded effort ti
   const pro = ANTIGRAVITY_BUILTIN_MODELS.OPTIONS.find((o) => o.value === 'gemini-3.1-pro');
   assert.deepEqual(pro?.effort?.values.map((v) => v.value), ['low', 'high']);
 
-  // The single-tier family defaults to its only tier.
-  const gptOss = ANTIGRAVITY_BUILTIN_MODELS.OPTIONS.find((o) => o.value === 'gpt-oss-120b');
-  assert.deepEqual(gptOss?.effort?.values.map((v) => v.value), ['medium']);
-  assert.equal(gptOss?.effort?.default, 'medium');
+  // Models without adjustable tiers carry no effort config at all, so the
+  // WebUI hides the Reasoning menu for them.
+  const gptOss = ANTIGRAVITY_BUILTIN_MODELS.OPTIONS.find((o) => o.value === 'gpt-oss-120b-medium');
+  assert.equal(gptOss?.label, 'GPT-OSS 120B (Medium)');
+  assert.equal(gptOss?.effort, undefined);
 
-  // Non-variant models keep their labels and take the --effort flag.
   const claude = ANTIGRAVITY_BUILTIN_MODELS.OPTIONS.find((o) => o.value === 'claude-sonnet-4-6');
   assert.equal(claude?.label, 'Claude Sonnet 4.6 (Thinking)');
-  assert.equal(claude?.effort?.encoding, undefined);
-  assert.deepEqual(claude?.effort?.values.map((v) => v.value), ['low', 'medium', 'high']);
-  assert.equal(claude?.effort?.default, 'high');
+  assert.equal(claude?.effort, undefined);
 });
 
 test('dedupeAntigravityVariantModels merges CLI variant rows into base models', () => {
@@ -180,10 +180,11 @@ test('dedupeAntigravityVariantModels merges CLI variant rows into base models', 
     { value: 'gpt-oss-120b-medium', label: 'GPT-OSS 120B (Medium)' },
   ]);
 
-  // Base-model order follows first appearance; passthrough models interleave.
+  // Multi-tier family collapses; passthrough and single-variant rows keep
+  // their original ids, interleaved in first-appearance order.
   assert.deepEqual(
     options.map((option) => option.value),
-    ['gemini-3.8-flash', 'claude-sonnet-4-6', 'gpt-oss-120b'],
+    ['gemini-3.8-flash', 'claude-sonnet-4-6', 'gpt-oss-120b-medium'],
   );
 
   const flash = options[0];
@@ -192,15 +193,14 @@ test('dedupeAntigravityVariantModels merges CLI variant rows into base models', 
   assert.deepEqual(flash?.effort?.values.map((v) => v.value), [...ANTIGRAVITY_EFFORT_TIERS]);
   assert.equal(flash?.effort?.default, 'high');
 
-  const singleTier = options[2];
-  assert.deepEqual(singleTier?.effort?.values.map((v) => v.value), ['medium']);
-  assert.equal(singleTier?.effort?.default, 'medium');
-
-  // Passthrough models must keep a flag-effort config, or the WebUI would
-  // drop their Reasoning menu entirely.
+  // Fixed-tier and passthrough models keep their original row with no
+  // effort config, so the WebUI hides their Reasoning menu.
   const claude = options[1];
-  assert.equal(claude?.effort?.encoding, undefined);
-  assert.deepEqual(claude?.effort?.values.map((v) => v.value), ['low', 'medium', 'high']);
+  assert.equal(claude?.label, 'Claude Sonnet 4.6 (Thinking)');
+  assert.equal(claude?.effort, undefined);
+  const gptOss = options[2];
+  assert.equal(gptOss?.label, 'GPT-OSS 120B (Medium)');
+  assert.equal(gptOss?.effort, undefined);
 });
 
 test('stripEffortTierFromLabel only removes tier qualifiers', () => {
@@ -210,44 +210,79 @@ test('stripEffortTierFromLabel only removes tier qualifiers', () => {
 });
 
 test('resolveAntigravityModelArgs maps catalog selections onto agy arguments', () => {
-  const flashFamily = { tiers: ['low', 'medium', 'high'], default: 'high' };
+  const flashOption: ProviderModelOption = {
+    value: 'gemini-3.7-flash',
+    label: 'Gemini 3.7 Flash',
+    effort: {
+      default: 'high',
+      values: [{ value: 'low' }, { value: 'medium' }, { value: 'high' }],
+      encoding: 'model-suffix',
+    },
+  };
+  const proOption: ProviderModelOption = {
+    value: 'gemini-3.1-pro',
+    label: 'Gemini 3.1 Pro',
+    effort: {
+      default: 'high',
+      values: [{ value: 'low' }, { value: 'high' }],
+      encoding: 'model-suffix',
+    },
+  };
+  const fixedOption: ProviderModelOption = { value: 'gpt-oss-120b-medium', label: 'GPT-OSS 120B (Medium)' };
+  const claudeOption: ProviderModelOption = { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (Thinking)' };
 
   // Base model + chosen tier -> suffixed id, no flag.
   assert.deepEqual(
-    resolveAntigravityModelArgs('gemini-3.7-flash', 'medium', flashFamily),
+    resolveAntigravityModelArgs('gemini-3.7-flash', 'medium', flashOption),
     { model: 'gemini-3.7-flash-medium' },
   );
   // 'default' (or absent) resolves through the family default tier.
   assert.deepEqual(
-    resolveAntigravityModelArgs('gemini-3.7-flash', 'default', flashFamily),
+    resolveAntigravityModelArgs('gemini-3.7-flash', 'default', flashOption),
     { model: 'gemini-3.7-flash-high' },
   );
   assert.deepEqual(
-    resolveAntigravityModelArgs('gemini-3.7-flash', undefined, flashFamily),
+    resolveAntigravityModelArgs('gemini-3.7-flash', undefined, flashOption),
     { model: 'gemini-3.7-flash-high' },
-  );
-  // Legacy suffixed id without a family entry still rewrites on conflict.
-  assert.deepEqual(
-    resolveAntigravityModelArgs('gemini-3.7-flash-high', 'low', null),
-    { model: 'gemini-3.7-flash-low' },
   );
   // A tier the family lacks snaps to the default instead of an invalid id.
   assert.deepEqual(
-    resolveAntigravityModelArgs('gpt-oss-120b', 'high', { tiers: ['medium'], default: 'medium' }),
+    resolveAntigravityModelArgs('gemini-3.1-pro', 'medium', proOption),
+    { model: 'gemini-3.1-pro-high' },
+  );
+  // Legacy suffixed ids rewrite within their family.
+  assert.deepEqual(
+    resolveAntigravityModelArgs('gemini-3.7-flash-high', 'low', flashOption),
+    { model: 'gemini-3.7-flash-low' },
+  );
+  // Cataloged models without effort support run with their id verbatim; a
+  // stale effort choice is dropped and no id is ever invented.
+  assert.deepEqual(
+    resolveAntigravityModelArgs('gpt-oss-120b-medium', 'high', fixedOption),
     { model: 'gpt-oss-120b-medium' },
   );
-  // Flag-effort and custom models keep --effort; invalid efforts are dropped.
   assert.deepEqual(
-    resolveAntigravityModelArgs('claude-sonnet-4-6', 'high', null),
-    { model: 'claude-sonnet-4-6', effort: 'high' },
-  );
-  assert.deepEqual(
-    resolveAntigravityModelArgs('claude-sonnet-4-6', 'default', null),
+    resolveAntigravityModelArgs('claude-sonnet-4-6', 'high', claudeOption),
     { model: 'claude-sonnet-4-6' },
   );
+  assert.deepEqual(
+    resolveAntigravityModelArgs('claude-sonnet-4-6', 'default', claudeOption),
+    { model: 'claude-sonnet-4-6' },
+  );
+  // Models missing from the catalog (user-defined custom ones) keep the
+  // --effort flag channel.
+  assert.deepEqual(
+    resolveAntigravityModelArgs('my-custom-model', 'low', undefined),
+    { model: 'my-custom-model', effort: 'low' },
+  );
+  // An unknown suffixed id is never rewritten into an id agy may not have.
+  assert.deepEqual(
+    resolveAntigravityModelArgs('gemini-3.7-flash-high', 'low', undefined),
+    { model: 'gemini-3.7-flash-high' },
+  );
   // No model at all still forwards a valid effort flag.
-  assert.deepEqual(resolveAntigravityModelArgs(undefined, 'low', null), { effort: 'low' });
-  assert.deepEqual(resolveAntigravityModelArgs(undefined, undefined, null), {});
+  assert.deepEqual(resolveAntigravityModelArgs(undefined, 'low', undefined), { effort: 'low' });
+  assert.deepEqual(resolveAntigravityModelArgs(undefined, undefined, undefined), {});
 });
 
 test('AntigravitySkillsProvider returns correct skill roots', async () => {

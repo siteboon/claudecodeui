@@ -4,9 +4,13 @@
  * The Antigravity CLI encodes reasoning effort as model-id suffixes: `agy
  * models` lists `gemini-3.7-flash-high/medium/low` as separate models and has
  * no bare `gemini-3.7-flash` id. To keep the picker a short base-model list
- * plus the shared Reasoning menu, catalogs are collapsed into base models
- * whose effort config carries `encoding: 'model-suffix'`, and spawn-time
- * arguments are re-expanded by resolveAntigravityModelArgs.
+ * plus the shared Reasoning menu, variant families with two or more tiers are
+ * collapsed into base models whose effort config carries
+ * `encoding: 'model-suffix'`, and spawn-time arguments are re-expanded by
+ * resolveAntigravityModelArgs. Models without adjustable tiers — single-
+ * variant rows (gpt-oss-120b-medium), claude passthroughs, user-defined
+ * custom models — carry no effort config, so the WebUI hides the Reasoning
+ * menu for them and only `default` is ever sent.
  *
  * @module antigravity-model-effort
  */
@@ -25,19 +29,6 @@ const EFFORT_DESCRIPTIONS: Record<string, string> = {
   high: 'Maximum depth reasoning for complex tasks',
 };
 
-/**
- * Effort config for models that take the CLI `--effort` flag instead of an
- * id suffix (claude passthroughs, user-defined custom models).
- */
-const FLAG_EFFORT_CONFIG = {
-  default: 'high',
-  values: [
-    { value: 'low', description: EFFORT_DESCRIPTIONS.low },
-    { value: 'medium', description: EFFORT_DESCRIPTIONS.medium },
-    { value: 'high', description: EFFORT_DESCRIPTIONS.high },
-  ],
-};
-
 /** One `<modelId> <Label>` row as printed by `agy models`. */
 export type AntigravityRawModelEntry = {
   value: string;
@@ -46,10 +37,10 @@ export type AntigravityRawModelEntry = {
 };
 
 /**
- * Tier set of one variant family: the tiers agy offers as id suffixes and the
- * tier used when no explicit effort was chosen.
+ * Tier set of one collapsed variant family: the tiers agy offers as id
+ * suffixes and the tier used when no explicit effort was chosen.
  */
-export type AntigravityVariantFamily = {
+type AntigravityVariantFamily = {
   tiers: string[];
   default: string;
 };
@@ -63,8 +54,8 @@ const LABEL_TIER_PATTERN = /\s*\((?:High|Medium|Low)\)\s*$/;
  * `gemini-3.7-flash-medium` becomes `{ base: 'gemini-3.7-flash', effort:
  * 'medium' }`; ids without a tier suffix return the id unchanged and a null
  * effort. Ids that merely end in one of these words but are not agy variants
- * are treated as suffixed too — spawn-time resolution re-appends the tier,
- * so such ids round-trip unchanged.
+ * (e.g. gpt-oss-120b-medium) are treated as suffixed too — spawn-time
+ * resolution keeps such ids verbatim, so they round-trip unchanged.
  */
 export function splitModelEffortSuffix(modelId: string): { base: string; effort: string | null } {
   const effort = modelId.match(EFFORT_SUFFIX_PATTERN)?.[1] ?? null;
@@ -85,13 +76,14 @@ export function stripEffortTierFromLabel(label: string): string {
  * Used by antigravity-models.provider for both the builtin fallback rows and
  * the dynamic `agy models` output.
  *
- * Entries whose id ends in an effort tier are grouped under their base id;
- * the option's label and description come from the first-seen variant with
- * the tier stripped from the label, and the merged tier set becomes the
- * option's `encoding: 'model-suffix'` effort config. The default tier
- * prefers high over medium over low, matching the CLI's own default model.
- * Entries without a tier suffix pass through with the `--effort` flag config.
- * Options keep the order their base id (or passthrough id) first appears in.
+ * Entries whose id ends in an effort tier are grouped under their base id.
+ * A family offering two or more tiers becomes one base-model option (label
+ * and description from the first-seen variant, tier stripped from the label)
+ * whose merged tier set rides on the `encoding: 'model-suffix'` effort
+ * config. A single-variant family is a fixed-tier model, not an adjustable
+ * one: the original row passes through verbatim with no effort config.
+ * Entries without a tier suffix (claude passthroughs) also pass through
+ * without effort config. Options keep first-appearance order.
  */
 export function dedupeAntigravityVariantModels(
   entries: AntigravityRawModelEntry[],
@@ -101,6 +93,7 @@ export function dedupeAntigravityVariantModels(
     label: string;
     description?: string;
     tiers: Set<string>;
+    firstEntry: AntigravityRawModelEntry;
     firstSeen: number;
   };
 
@@ -120,7 +113,6 @@ export function dedupeAntigravityVariantModels(
           value: entry.value,
           label: entry.label,
           description: entry.description,
-          effort: FLAG_EFFORT_CONFIG,
         },
       });
       continue;
@@ -133,6 +125,7 @@ export function dedupeAntigravityVariantModels(
         label: stripEffortTierFromLabel(entry.label),
         description: entry.description,
         tiers: new Set<string>(),
+        firstEntry: entry,
         firstSeen: slots.length,
       };
       familyByBase.set(base, draft);
@@ -147,6 +140,16 @@ export function dedupeAntigravityVariantModels(
     .map((slot) => {
       if ('option' in slot) {
         return slot.option;
+      }
+      // A single variant is a fixed-tier model, not an adjustable one: keep
+      // the original suffixed id and label with no Reasoning options.
+      if (slot.family.tiers.size < 2) {
+        const entry = slot.family.firstEntry;
+        return {
+          value: entry.value,
+          label: entry.label,
+          description: entry.description,
+        } satisfies ProviderModelOption;
       }
       const tiers = ANTIGRAVITY_EFFORT_TIERS.filter((tier) => slot.family.tiers.has(tier));
       return {
@@ -172,12 +175,10 @@ function defaultTierOf(tiers: string[]): string {
 
 /**
  * Extracts the variant-family tier set from a catalog option, or null when
- * the model does not encode effort in its id (flag-effort and custom models).
- *
- * The antigravity runtime feeds this from the merged catalog its runtime
- * context already carries, so no separate catalog lookup channel is needed.
+ * the model does not encode effort in its id (fixed-tier, passthrough, and
+ * custom models).
  */
-export function extractVariantFamilyFromOption(
+function extractVariantFamilyFromOption(
   option: ProviderModelOption | undefined,
 ): AntigravityVariantFamily | null {
   const effort = option?.effort;
@@ -197,22 +198,25 @@ export function extractVariantFamilyFromOption(
 /**
  * Resolves the `--model` / `--effort` arguments one agy run should spawn with.
  *
- * Used by antigravity-runtime.provider when building the CLI argument list.
+ * Used by antigravity-runtime.provider when building the CLI argument list;
+ * `catalogOption` is the merged-catalog entry for the model's base id.
  *
  * Rules:
- * - A legacy suffixed id keeps its embedded tier (rewritten only when the
- *   requested effort conflicts), and never receives the `--effort` flag —
- *   combining both makes the CLI reject the run.
- * - A base id that maps to a variant family gets the chosen tier appended to
- *   the model id; the family default tier applies when no valid effort was
- *   chosen, so catalog defaults keep resolving to concrete agy model ids.
- * - Every other model (claude passthroughs, user-defined custom models)
- *   keeps its id and receives `--effort` when a valid tier was requested.
+ * - A base id from a variant family gets the chosen tier appended to the
+ *   model id (the family default tier applies when no valid effort was
+ *   chosen), and a legacy suffixed id from an old session row keeps or
+ *   rewrites its embedded tier within the family — the `--effort` flag is
+ *   never combined with a suffixed id because the CLI rejects the run.
+ * - A cataloged model without effort support (claude passthroughs, the
+ *   fixed-tier gpt-oss-120b-medium) runs with its id verbatim; a stale
+ *   effort choice is dropped and no model id is ever invented.
+ * - A model absent from the catalog (user-defined custom models) keeps its
+ *   id and receives `--effort` when a valid tier was requested.
  */
 export function resolveAntigravityModelArgs(
   model: string | undefined,
   effort: string | undefined,
-  family: AntigravityVariantFamily | null,
+  catalogOption: ProviderModelOption | undefined,
 ): { model?: string; effort?: string } {
   const requested = effort !== undefined
     && (ANTIGRAVITY_EFFORT_TIERS as readonly string[]).includes(effort)
@@ -224,10 +228,15 @@ export function resolveAntigravityModelArgs(
   }
 
   const { base, effort: embedded } = splitModelEffortSuffix(model);
+  const family = extractVariantFamilyFromOption(catalogOption);
+
   if (embedded) {
+    if (!family) {
+      return { model };
+    }
     let tier = embedded;
     if (requested && requested !== embedded) {
-      tier = family && !family.tiers.includes(requested) ? family.default : requested;
+      tier = family.tiers.includes(requested) ? requested : family.default;
     }
     return { model: `${base}-${tier}` };
   }
@@ -235,6 +244,10 @@ export function resolveAntigravityModelArgs(
   if (family) {
     const tier = requested && family.tiers.includes(requested) ? requested : family.default;
     return { model: `${base}-${tier}` };
+  }
+
+  if (catalogOption) {
+    return { model };
   }
 
   return requested ? { model, effort: requested } : { model };

@@ -39,7 +39,6 @@ import {
 import { getAntigravityDataRoot } from './antigravity-data-root.js';
 import { tryResolveEnginePath } from './antigravity-engine-path.js';
 import {
-  extractVariantFamilyFromOption,
   resolveAntigravityModelArgs,
   splitModelEffortSuffix,
 } from './antigravity-model-effort.js';
@@ -237,17 +236,19 @@ export class AntigravityRuntimeProvider implements IProviderRuntime {
         args.push('--conversation', providerSessionId);
       }
 
-      // Model configuration and reasoning effort share one resolution:
-      // variant-family base ids get their tier appended to the model id,
-      // legacy suffixed ids keep their embedded tier, and everything else
-      // (claude passthroughs, custom models) takes the --effort flag. The
-      // family is looked up by base id so a legacy suffixed id from an old
-      // session row is validated against the family's real tiers too.
+      // Model configuration and reasoning effort share one resolution: the
+      // merged-catalog entry for the model's base id decides the channel —
+      // variant-family ids get their tier appended, cataloged models without
+      // effort support run with their id verbatim, and models missing from
+      // the catalog (custom ones) take the --effort flag. The lookup by base
+      // id also validates legacy suffixed ids from old session rows against
+      // the family's real tiers.
       const requestedBase = model ? splitModelEffortSuffix(model).base : undefined;
-      const variantFamily = extractVariantFamilyFromOption(
+      const modelArgs = resolveAntigravityModelArgs(
+        model,
+        effort,
         catalog?.OPTIONS.find((option) => option.value === requestedBase),
       );
-      const modelArgs = resolveAntigravityModelArgs(model, effort, variantFamily);
 
       if (modelArgs.model) {
         args.push('--model', modelArgs.model);
