@@ -180,7 +180,11 @@ function ChatMessagesPane({
       {chatMessages.length > 0 && (
         <div className="pointer-events-none sticky right-4 top-3 z-10 mb-2 flex justify-end sm:px-4">
           <div className="pointer-events-auto">
-            <ChatExportMenu messages={chatMessages} sessionTitle={selectedSession?.title} />
+            <ChatExportMenu
+              messages={chatMessages}
+              sessionTitle={selectedSession?.title}
+              provider={selectedSession?.provider || provider}
+            />
           </div>
         </div>
       )}

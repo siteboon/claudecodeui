@@ -1,8 +1,27 @@
 import type { ChatMessage } from '../types/types';
 
 export interface ExportOptions {
-  includeMeta: boolean;
-  format: 'markdown' | 'pdf' | 'docx';
+  includeMeta?: boolean;
+  format?: 'markdown' | 'pdf' | 'docx';
+  provider?: string;
+  assistantName?: string;
+}
+
+/**
+ * Get display name for the assistant based on provider or custom name.
+ */
+export function getAssistantDisplayName(provider?: string, customName?: string): string {
+  if (customName) return customName;
+  if (!provider) return 'Assistant';
+  const map: Record<string, string> = {
+    antigravity: 'Antigravity',
+    claude: 'Claude',
+    codex: 'Codex',
+    cursor: 'Cursor',
+    opencode: 'OpenCode',
+    zcode: 'ZCode',
+  };
+  return map[provider.toLowerCase()] || provider.charAt(0).toUpperCase() + provider.slice(1);
 }
 
 /**
@@ -38,6 +57,7 @@ export function exportToMarkdown(
   options: Partial<ExportOptions> = {},
 ): string {
   const includeMeta = options.includeMeta ?? true;
+  const assistantName = getAssistantDisplayName(options.provider, options.assistantName);
 
   let markdown = '';
 
@@ -50,20 +70,33 @@ export function exportToMarkdown(
 
   // Messages
   for (const msg of messages) {
-    if (msg.type === 'user') {
-      markdown += '## You\n\n';
-    } else if (msg.type === 'assistant') {
-      markdown += '## Claude\n\n';
-    } else if (msg.type === 'error') {
-      markdown += '## ⚠️ Error\n\n';
-    } else if (msg.type === 'tool') {
-      markdown += '## 🔧 Tool\n\n';
-    } else {
+    // Skip tool use messages
+    if (msg.isToolUse || msg.type === 'tool') {
       continue;
     }
 
     const content = typeof msg.content === 'string' ? msg.content : String(msg.content ?? '');
-    markdown += `${content}\n\n`;
+    const hasImages = Array.isArray(msg.images) && msg.images.length > 0;
+    const hasFiles = Array.isArray(msg.files) && msg.files.length > 0;
+
+    // Skip empty messages
+    if (!content.trim() && !hasImages && !hasFiles) {
+      continue;
+    }
+
+    if (msg.type === 'user') {
+      markdown += '## You\n\n';
+    } else if (msg.type === 'assistant') {
+      markdown += `## ${assistantName}\n\n`;
+    } else if (msg.type === 'error') {
+      markdown += '## ⚠️ Error\n\n';
+    } else {
+      continue;
+    }
+
+    if (content.trim()) {
+      markdown += `${content}\n\n`;
+    }
 
     if (includeMeta && msg.timestamp) {
       markdown += `<small>${formatTimestamp(msg.timestamp)}</small>\n\n`;
@@ -82,8 +115,9 @@ export function downloadMarkdown(
   messages: ChatMessage[],
   filename: string = 'chat-export.md',
   sessionTitle?: string,
+  options: Partial<ExportOptions> = {},
 ): void {
-  const content = exportToMarkdown(messages, sessionTitle);
+  const content = exportToMarkdown(messages, sessionTitle, options);
   const blob = new Blob([content], { type: 'text/markdown' });
   downloadBlob(blob, filename);
 }
@@ -97,10 +131,19 @@ export function exportToHTML(
   options: Partial<ExportOptions> = {},
 ): string {
   const includeMeta = options.includeMeta ?? true;
+  const assistantName = getAssistantDisplayName(options.provider, options.assistantName);
 
-  const htmlContent = messages
+  const filteredMessages = messages.filter((msg) => {
+    if (msg.isToolUse || msg.type === 'tool') return false;
+    const content = typeof msg.content === 'string' ? msg.content : String(msg.content ?? '');
+    const hasImages = Array.isArray(msg.images) && msg.images.length > 0;
+    const hasFiles = Array.isArray(msg.files) && msg.files.length > 0;
+    return content.trim().length > 0 || hasImages || hasFiles;
+  });
+
+  const htmlContent = filteredMessages
     .map((msg) => {
-      const type = msg.type === 'user' ? '👤 You' : msg.type === 'assistant' ? '🤖 Claude' : `${msg.type}`;
+      const type = msg.type === 'user' ? '👤 You' : msg.type === 'assistant' ? `🤖 ${assistantName}` : `${msg.type}`;
       const time = includeMeta && msg.timestamp ? `<p style="font-size: 12px; color: #999; margin-top: 8px;">${formatTimestamp(msg.timestamp)}</p>` : '';
 
       const contentStr = typeof msg.content === 'string' ? msg.content : String(msg.content ?? '');
@@ -155,8 +198,9 @@ export function downloadHTML(
   messages: ChatMessage[],
   filename: string = 'chat-export.html',
   sessionTitle?: string,
+  options: Partial<ExportOptions> = {},
 ): void {
-  const content = exportToHTML(messages, sessionTitle);
+  const content = exportToHTML(messages, sessionTitle, options);
   const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
   downloadBlob(blob, filename);
 }
@@ -167,11 +211,12 @@ export function downloadHTML(
  */
 export function downloadWord(
   messages: ChatMessage[],
-  _filename: string = 'chat-export.html',
+  filename: string = 'chat-export.html',
   sessionTitle?: string,
+  options: Partial<ExportOptions> = {},
 ): void {
   // Fallback to HTML export since generating true DOCX requires additional library
-  downloadHTML(messages, 'chat-export.html', sessionTitle);
+  downloadHTML(messages, filename, sessionTitle, options);
 }
 
 /**
@@ -181,8 +226,9 @@ export function downloadPDF(
   messages: ChatMessage[],
   _filename: string = 'chat-export',
   sessionTitle?: string,
+  options: Partial<ExportOptions> = {},
 ): void {
-  const htmlContent = exportToHTML(messages, sessionTitle);
+  const htmlContent = exportToHTML(messages, sessionTitle, options);
   const win = window.open('', '', 'width=800,height=600');
   if (!win) {
     window.alert('PDF export could not start because the browser blocked the popup. Allow popups and try again.');

@@ -7,9 +7,10 @@ import { downloadMarkdown, downloadHTML, downloadPDF, EXPORT_FORMATS } from '../
 type ChatExportMenuProps = {
   messages: ChatMessage[];
   sessionTitle?: string;
+  provider?: string;
 };
 
-export default function ChatExportMenu({ messages, sessionTitle }: ChatExportMenuProps) {
+export default function ChatExportMenu({ messages, sessionTitle, provider }: ChatExportMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   if (messages.length === 0) {
@@ -19,16 +20,17 @@ export default function ChatExportMenu({ messages, sessionTitle }: ChatExportMen
   const handleExport = (format: 'markdown' | 'html' | 'pdf') => {
     const timestamp = new Date().toISOString().split('T')[0];
     const filename = `${sessionTitle || 'chat'}-${timestamp}`;
+    const options = { provider };
 
     switch (format) {
       case 'markdown':
-        downloadMarkdown(messages, `${filename}.md`, sessionTitle);
+        downloadMarkdown(messages, `${filename}.md`, sessionTitle, options);
         break;
       case 'html':
-        downloadHTML(messages, `${filename}.html`, sessionTitle);
+        downloadHTML(messages, `${filename}.html`, sessionTitle, options);
         break;
       case 'pdf':
-        downloadPDF(messages, filename, sessionTitle);
+        downloadPDF(messages, filename, sessionTitle, options);
         break;
     }
     setIsOpen(false);
