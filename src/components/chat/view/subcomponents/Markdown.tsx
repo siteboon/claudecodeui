@@ -211,7 +211,7 @@ const markdownComponents = {
       <table className="my-0 min-w-full border-collapse text-sm">{children}</table>
     </div>
   ),
-  img: ({ src, alt, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) => (
+  img: ({ src, alt, node: _node, ...props }: { node?: unknown } & React.ImgHTMLAttributes<HTMLImageElement>) => (
     // Lazy decoding keeps late image loads from shifting scroll position
     // while the user reads (native anchoring absorbs what remains).
     <img src={src} alt={alt} loading="lazy" decoding="async" className="rounded-lg" {...props} />

@@ -81,9 +81,11 @@ export function useContinuousScrollAnchor({
   const isPinnedToBottomRef = useRef(true);
   const isUserScrolledUpRef = useRef(false);
 
-  // Guard while a programmatic smooth scrollToBottom is in flight: its own
-  // intermediate scroll events must not be mistaken for the user scrolling up.
-  const smoothScrollInFlightRef = useRef(false);
+  // Expiry timestamp while a programmatic smooth scrollToBottom is in flight:
+  // its own intermediate scroll events must not be mistaken for the user
+  // scrolling up, but the guard self-clears so an interrupted animation can
+  // never freeze the pin state.
+  const smoothScrollUntilRef = useRef(0);
 
   // Momentum lock at the top to avoid thrashing load-older requests.
   const topBoundaryLockedRef = useRef(false);
@@ -113,7 +115,7 @@ export function useContinuousScrollAnchor({
     const container = scrollContainerRef.current;
     if (!container) return;
     isPinnedToBottomRef.current = true;
-    smoothScrollInFlightRef.current = smooth;
+    smoothScrollUntilRef.current = smooth ? Date.now() + 800 : 0;
     if (isUserScrolledUpRef.current) {
       isUserScrolledUpRef.current = false;
       setIsUserScrolledUp(false);
@@ -128,16 +130,19 @@ export function useContinuousScrollAnchor({
   /**
    * Compensates a top prepend that landed while scrollTop was 0, where the
    * browser suppresses native anchoring. Called after the data mutation via
-   * double-rAF so it measures the post-commit layout.
+   * double-rAF so it measures the post-commit layout. The guard reads the
+   * CURRENT scrollTop at execution time: if the user scrolled away during the
+   * fetch, or anchoring already compensated (scrollTop > 1), the viewport is
+   * not ours to move.
    */
-  const stabilizeTopPrepend = useCallback((prevHeight: number, prevTop: number) => {
+  const stabilizeTopPrepend = useCallback((prevHeight: number) => {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const container = scrollContainerRef.current;
-        if (!container || prevTop > 1) return;
+        if (!container || container.scrollTop > 1) return;
         const heightDiff = container.scrollHeight - prevHeight;
         if (heightDiff > 0) {
-          container.scrollTop = prevTop + heightDiff;
+          container.scrollTop += heightDiff;
         }
       });
     });
@@ -151,8 +156,8 @@ export function useContinuousScrollAnchor({
     const nearBottom =
       container.scrollHeight - container.scrollTop - container.clientHeight <= bottomThreshold;
 
-    if (smoothScrollInFlightRef.current) {
-      if (nearBottom) smoothScrollInFlightRef.current = false;
+    if (Date.now() < smoothScrollUntilRef.current) {
+      if (nearBottom) smoothScrollUntilRef.current = 0;
     } else {
       isPinnedToBottomRef.current = nearBottom;
     }
@@ -186,11 +191,16 @@ export function useContinuousScrollAnchor({
 
       topBoundaryLockedRef.current = true;
       const prevHeight = container.scrollHeight;
-      const prevTop = container.scrollTop;
 
-      void Promise.resolve(onLoadOlderRef.current(container)).finally(() => {
-        stabilizeTopPrepend(prevHeight, prevTop);
-      });
+      // Compensate only when older rows actually prepended (the loader
+      // resolves false for no-ops and failures, which need no adjustment).
+      void Promise.resolve(onLoadOlderRef.current(container))
+        .then((loaded) => {
+          if (loaded) stabilizeTopPrepend(prevHeight);
+        })
+        .catch(() => {
+          // Load failures prepend nothing; no compensation.
+        });
     }
   }, [bottomThreshold, stabilizeTopPrepend, topThreshold]);
 
@@ -230,23 +240,20 @@ export function useContinuousScrollAnchor({
   const notifyContentMutating = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container || container.scrollTop > 1) return;
-    const prevHeight = container.scrollHeight;
-    const prevTop = container.scrollTop;
-    stabilizeTopPrepend(prevHeight, prevTop);
+    stabilizeTopPrepend(container.scrollHeight);
   }, [stabilizeTopPrepend]);
 
   // External state resets (session switch, composer send) go through this so
-  // the pin refs never desync from the React state.
+  // the pin refs never desync from the React state. Refs are written
+  // synchronously from the mirrored value, never from a state updater.
   const setUserScrolledUp = useCallback<React.Dispatch<React.SetStateAction<boolean>>>(
     (action) => {
-      setIsUserScrolledUp((prev) => {
-        const next = typeof action === 'function'
-          ? (action as (current: boolean) => boolean)(prev)
-          : action;
-        isUserScrolledUpRef.current = next;
-        isPinnedToBottomRef.current = !next;
-        return next;
-      });
+      const next = typeof action === 'function'
+        ? (action as (current: boolean) => boolean)(isUserScrolledUpRef.current)
+        : action;
+      isUserScrolledUpRef.current = next;
+      isPinnedToBottomRef.current = !next;
+      setIsUserScrolledUp(next);
     },
     [],
   );

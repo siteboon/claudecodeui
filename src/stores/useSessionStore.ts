@@ -512,14 +512,21 @@ async function refreshLatestSlotFromServer(
   }
 
   // Content-level bail-out: an identical refresh (byte-equal rows, same
-  // pagination metadata) keeps the cached array identity so the merged
-  // recompute, realtime prune and consumer re-renders are all skipped.
+  // pagination metadata, no realtime rows to prune) keeps the cached array
+  // identity so the merged recompute and consumer re-renders are skipped.
   // Trailing `session_upserted` frames after a finished run used to trigger
-  // several of these no-op refreshes in a row.
+  // several of these no-op refreshes in a row. The prune is computed first:
+  // realtime rows that a delayed ws replay appended after the server already
+  // persisted them must still be superseded here.
+  const prunedRealtimeMessages = pruneRealtimeSupersededByServer(
+    nextServerMessages,
+    slot.realtimeMessages,
+  );
   if (
     nextServerMessages.length === previousServerMessages.length
     && latestPage.total === previousTotal
     && nextHasMore === previousHasMore
+    && prunedRealtimeMessages.length === slot.realtimeMessages.length
     && nextServerMessages.every((row, index) => normalizedRowsEquivalent(previousServerMessages[index], row))
   ) {
     slot.fetchedAt = Date.now();
@@ -531,10 +538,7 @@ async function refreshLatestSlotFromServer(
   slot.offset = nextServerMessages.length;
   slot.hasMore = nextHasMore;
   slot.fetchedAt = Date.now();
-  slot.realtimeMessages = pruneRealtimeSupersededByServer(
-    slot.serverMessages,
-    slot.realtimeMessages,
-  );
+  slot.realtimeMessages = prunedRealtimeMessages;
   recomputeMergedIfNeeded(slot);
 
   return { applied: true, changed: true, deferred: false };

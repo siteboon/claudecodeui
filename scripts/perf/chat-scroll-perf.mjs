@@ -431,9 +431,9 @@ function verdicts(snap, jump, jank) {
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-const chrome = launchChrome(mkdtempSync(join(tmpdir(), 'chat-scroll-perf-')));
+const profileDir = mkdtempSync(join(tmpdir(), 'chat-scroll-perf-'));
+const chrome = launchChrome(profileDir);
 let cdp = null;
-const profileDir = null; // captured by chrome spawn above
 try {
   await waitForDebugEndpoint();
   cdp = await openPageTarget();
@@ -494,4 +494,5 @@ try {
   chrome.kill('SIGTERM');
   await sleep(300);
   chrome.kill('SIGKILL');
+  rmSync(profileDir, { recursive: true, force: true });
 }

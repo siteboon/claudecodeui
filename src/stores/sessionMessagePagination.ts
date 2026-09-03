@@ -67,7 +67,13 @@ export function normalizedRowsEquivalent(
   second: NormalizedMessage,
 ): boolean {
   if (Object.is(first, second)) return true;
-  return JSON.stringify(first) === JSON.stringify(second);
+  try {
+    return JSON.stringify(first) === JSON.stringify(second);
+  } catch {
+    // Non-serializable payload (should not happen for parsed JSON): treat as
+    // different so the fresh row wins instead of silently dropping updates.
+    return false;
+  }
 }
 
 /**
