@@ -1,19 +1,21 @@
 /**
  * Antigravity CLI Engine Path Resolver
  *
- * Resolves the path to the Antigravity CLI (`agy`) binary across platforms,
- * supporting environment variable overrides, PATH discovery, and common installation locations.
+ * Antigravity's resolution data (env names, `agy` binary, platform install
+ * locations) on the shared CLI engine path factory. The resolution order,
+ * caching, and version probing live in `cli-engine-path.ts`.
  *
  * @module antigravity-engine-path
  */
 
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { createCliEnginePathResolver } from '../../shared/engine-path/cli-engine-path.js';
+
 /**
- * Known default install locations by platform.
+ * Known default install locations by platform. `agy` is a native executable.
  */
 const COMMON_PATHS: Partial<Record<NodeJS.Platform, string[]>> = {
   darwin: [
@@ -34,89 +36,41 @@ const COMMON_PATHS: Partial<Record<NodeJS.Platform, string[]>> = {
   ],
 };
 
-let cachedEnginePath: string | null = null;
-let cachedEngineVersion: string | null = null;
+const resolver = createCliEnginePathResolver({
+  logTag: '[Antigravity]',
+  envVars: ['CLOUDCLI_ANTIGRAVITY_PATH', 'CLOUDCLI_AGY_PATH'],
+  whichBinary: 'agy',
+  platformCandidates: COMMON_PATHS,
+  isValidPath: (filePath) => fs.existsSync(filePath),
+  versionProbe: {
+    invocations: [
+      (enginePath) => ({ command: enginePath, args: ['--version'] }),
+    ],
+    timeoutMs: 5000,
+    parse: (output) => {
+      const trimmed = output.trim();
+      return trimmed || null;
+    },
+  },
+});
 
 /**
  * Resolves the absolute path to the `agy` executable.
  *
- * Resolution order:
- * 1. CLOUDCLI_ANTIGRAVITY_PATH / CLOUDCLI_AGY_PATH environment variable
- * 2. System PATH via which/where
- * 3. Platform common installation directories
+ * Resolution order: CLOUDCLI_ANTIGRAVITY_PATH / CLOUDCLI_AGY_PATH override →
+ * system PATH → platform common directories. Returns null when no valid
+ * binary is found; the result (including "not found") is cached for the
+ * process lifetime.
  *
- * Returns null when no valid binary is found.
+ * Consumers: antigravity auth, runtime, models, and quota providers.
  */
-export function tryResolveEnginePath(): string | null {
-  if (cachedEnginePath && fs.existsSync(cachedEnginePath)) {
-    return cachedEnginePath;
-  }
-
-  // 1. Check explicit environment override
-  const envOverride = process.env.CLOUDCLI_ANTIGRAVITY_PATH || process.env.CLOUDCLI_AGY_PATH;
-  if (envOverride && fs.existsSync(envOverride)) {
-    cachedEnginePath = path.resolve(envOverride);
-    return cachedEnginePath;
-  }
-
-  // 2. Try which / where lookup
-  try {
-    const isWindows = process.platform === 'win32';
-    const whichCmd = isWindows ? 'where' : 'which';
-    const stdout = execFileSync(whichCmd, ['agy'], {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore'],
-    }).trim();
-
-    const firstLine = stdout.split(/\r?\n/)[0]?.trim();
-    if (firstLine && fs.existsSync(firstLine)) {
-      cachedEnginePath = path.resolve(firstLine);
-      return cachedEnginePath;
-    }
-  } catch {
-    // PATH lookup failed, proceed to common paths
-  }
-
-  // 3. Check common platform paths
-  const platformCandidates = COMMON_PATHS[process.platform] ?? [];
-  for (const candidate of platformCandidates) {
-    if (fs.existsSync(candidate)) {
-      cachedEnginePath = path.resolve(candidate);
-      return cachedEnginePath;
-    }
-  }
-
-  return null;
-}
+export const tryResolveEnginePath = resolver.tryResolveEnginePath;
 
 /**
  * Probes the installed Antigravity CLI version by running `agy --version`.
- * Returns null if the CLI cannot be executed.
+ * The probe warms asynchronously after the first successful resolve, so the
+ * first call may return null; later calls return the cached version.
+ *
+ * Consumers: antigravity auth provider (status `method` annotation).
  */
-export function getEngineVersion(): string | null {
-  if (cachedEngineVersion) {
-    return cachedEngineVersion;
-  }
-
-  const enginePath = tryResolveEnginePath();
-  if (!enginePath) {
-    return null;
-  }
-
-  try {
-    const stdout = execFileSync(enginePath, ['--version'], {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore'],
-      timeout: 5000,
-    }).trim();
-
-    if (stdout) {
-      cachedEngineVersion = stdout;
-      return cachedEngineVersion;
-    }
-  } catch {
-    // Version check failed
-  }
-
-  return null;
-}
+export const getEngineVersion = resolver.getEngineVersion;

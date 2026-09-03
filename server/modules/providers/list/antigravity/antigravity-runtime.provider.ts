@@ -282,7 +282,9 @@ export class AntigravityRuntimeProvider implements IProviderRuntime {
         args.push('--dangerously-skip-permissions');
       }
 
-      console.debug(`[AntigravityRuntime] Spawning agy with args:`, args);
+      // Flag names only: `-p` carries the user prompt verbatim and must never
+      // reach the server console.
+      console.debug(`[AntigravityRuntime] Spawning agy with flags: ${args.filter((arg) => arg.startsWith('--')).join(' ')}`);
 
       let stdoutBuffer = '';
 
