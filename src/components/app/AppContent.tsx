@@ -7,6 +7,7 @@ import MainContent from '../main-content/view/MainContent';
 import CommandPalette from '../command-palette/CommandPalette';
 import { QuickSettingsPanel } from '../quick-settings-panel';
 import { useWebSocket } from '../../contexts/WebSocketContext';
+import type { ChatInterfaceProps } from '../chat/types/types';
 import { PaletteOpsProvider, usePaletteOpsRegister } from '../../contexts/PaletteOpsContext';
 import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
@@ -100,6 +101,23 @@ function AppContentInner() {
     sendMessage,
     markSessionProcessing,
   });
+
+  // Stable MainContent callbacks — inline arrows here would defeat
+  // React.memo(MainContent) on every AppContentInner render.
+  const handleMenuClick = useCallback(() => setSidebarOpen(true), [setSidebarOpen]);
+  const handleNavigateToSession = useCallback<NonNullable<ChatInterfaceProps['onNavigateToSession']>>(
+    (targetSessionId, options) =>
+      navigate(`/session/${targetSessionId}`, { replace: Boolean(options?.replace) }),
+    [navigate],
+  );
+  const handleSessionEstablished = useCallback<NonNullable<ChatInterfaceProps['onSessionEstablished']>>(
+    (targetSessionId, context) => registerOptimisticSession({ sessionId: targetSessionId, ...context }),
+    [registerOptimisticSession],
+  );
+  const handleProjectsRefresh = useCallback(
+    () => void refreshProjectsSilently(),
+    [refreshProjectsSilently],
+  );
 
   const refreshRunningSessions = useCallback(async () => {
     try {
@@ -251,23 +269,19 @@ function AppContentInner() {
           ws={ws}
           sendMessage={sendMessage}
           isMobile={isMobile}
-          onMenuClick={() => setSidebarOpen(true)}
+          onMenuClick={handleMenuClick}
           isLoading={isLoadingProjects}
           onInputFocusChange={setIsInputFocused}
           onSessionProcessing={markSessionProcessing}
           onSessionIdle={markSessionIdle}
           processingSessions={processingSessions}
-          onNavigateToSession={(targetSessionId: string, options) =>
-            navigate(`/session/${targetSessionId}`, { replace: Boolean(options?.replace) })
-          }
-          onSessionEstablished={(targetSessionId, context) =>
-            registerOptimisticSession({ sessionId: targetSessionId, ...context })
-          }
+          onNavigateToSession={handleNavigateToSession}
+          onSessionEstablished={handleSessionEstablished}
           onShowSettings={openSettings}
           externalMessageUpdate={externalMessageUpdate}
           newSessionTrigger={newSessionTrigger}
           onProjectSelect={handleProjectSelect}
-          onProjectsRefresh={() => void refreshProjectsSilently()}
+          onProjectsRefresh={handleProjectsRefresh}
         />
       </div>
 
