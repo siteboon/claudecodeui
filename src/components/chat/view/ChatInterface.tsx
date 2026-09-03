@@ -43,8 +43,12 @@ function ChatInterface({
   const { t } = useTranslation('chat');
 
   const sessionStore = useSessionStore();
-  const streamTimerRef = useRef<number | null>(null);
-  const accumulatedStreamRef = useRef('');
+  // Streaming accumulation is keyed per session: concurrent runs (one viewed,
+  // one background) each keep their own buffer and 100ms throttle timer, so
+  // deltas can never cross-contaminate and one run's terminal flush never
+  // discards another run's in-flight prefix.
+  const streamTimersRef = useRef(new Map<string, number>());
+  const accumulatedStreamsRef = useRef(new Map<string, string>());
   // When each session's `chat.subscribe` was last sent; idle acks older than
   // a later local request are discarded as stale.
   const statusCheckSentAtRef = useRef(new Map<string, number>());
@@ -54,11 +58,11 @@ function ChatInterface({
   const lastSeqRef = useRef(new Map<string, number>());
 
   const resetStreamingState = useCallback(() => {
-    if (streamTimerRef.current) {
-      clearTimeout(streamTimerRef.current);
-      streamTimerRef.current = null;
+    for (const timer of streamTimersRef.current.values()) {
+      clearTimeout(timer);
     }
-    accumulatedStreamRef.current = '';
+    streamTimersRef.current.clear();
+    accumulatedStreamsRef.current.clear();
   }, []);
 
   const {
@@ -254,8 +258,8 @@ function ChatInterface({
     setTokenBudget,
     pendingPermissionRequests,
     setPendingPermissionRequests,
-    streamTimerRef,
-    accumulatedStreamRef,
+    streamTimersRef,
+    accumulatedStreamsRef,
     lastSeqRef,
     statusCheckSentAtRef,
     onSessionProcessing,

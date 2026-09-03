@@ -266,8 +266,8 @@ export function useChatSessionState({
       setHasMoreMessages(slot.hasMore);
       setTotalMessages(slot.total);
       messagesOffsetRef.current = slot.offset;
-      if (slot.tokenUsage !== undefined) {
-        setTokenBudget((slot.tokenUsage as Record<string, unknown> | null) ?? null);
+      if (slot.tokenUsage && typeof slot.tokenUsage === 'object') {
+        setTokenBudget(slot.tokenUsage as Record<string, unknown>);
       }
     }
     return !result.deferred;
@@ -411,8 +411,8 @@ export function useChatSessionState({
         setHasMoreMessages(slot.hasMore);
         setTotalMessages(slot.total);
         messagesOffsetRef.current = slot.offset;
-        if (slot.tokenUsage !== undefined) {
-          setTokenBudget((slot.tokenUsage as Record<string, unknown> | null) ?? null);
+        if (slot.tokenUsage && typeof slot.tokenUsage === 'object') {
+          setTokenBudget(slot.tokenUsage as Record<string, unknown>);
         }
 
         if (prependedCount === 0) {
@@ -631,11 +631,10 @@ export function useChatSessionState({
     }
 
     const sessionChanged = currentSessionId !== null && currentSessionId !== selectedSessionId;
-    if (sessionChanged) {
-      resetStreamingState();
-    }
 
-    // Reset pagination/scroll state
+    // Reset pagination/scroll state. Stream buffers are NOT reset here: they
+    // are per session now, and clearing them on switch would discard the
+    // in-flight prefix of a run still streaming in another session.
     messagesOffsetRef.current = 0;
     setHasMoreMessages(false);
     setTotalMessages(0);
@@ -672,8 +671,8 @@ export function useChatSessionState({
         setHasMoreMessages(slot.hasMore);
         setTotalMessages(slot.total);
         messagesOffsetRef.current = slot.offset;
-        if (slot.tokenUsage !== undefined) {
-          setTokenBudget((slot.tokenUsage as Record<string, unknown> | null) ?? null);
+        if (slot.tokenUsage && typeof slot.tokenUsage === 'object') {
+          setTokenBudget(slot.tokenUsage as Record<string, unknown>);
         }
       }
       setIsLoadingSessionMessages(false);
@@ -682,7 +681,6 @@ export function useChatSessionState({
     });
   }, [
     isActive,
-    resetStreamingState,
     requestLatestMessages,
     selectedProject,
     selectedSession?.id,
