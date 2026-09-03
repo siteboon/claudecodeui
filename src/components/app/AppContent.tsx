@@ -11,6 +11,7 @@ import { PaletteOpsProvider, usePaletteOpsRegister } from '../../contexts/Palett
 import { useDeviceSettings } from '../../hooks/useDeviceSettings';
 import { useSessionProtection } from '../../hooks/useSessionProtection';
 import { useProjectsState } from '../../hooks/useProjectsState';
+import { useLastSessionRestore } from '../../hooks/useLastSessionRestore';
 import { useQueuedMessageAutoSend } from '../../hooks/useQueuedMessageAutoSend';
 import { api } from '../../utils/api';
 
@@ -54,6 +55,8 @@ function AppContentInner() {
   const { t } = useTranslation('common');
   const { isMobile } = useDeviceSettings({ trackPWA: false });
   const { ws, sendMessage, subscribe } = useWebSocket();
+
+  useLastSessionRestore({ sessionId });
 
   const {
     processingSessions,
