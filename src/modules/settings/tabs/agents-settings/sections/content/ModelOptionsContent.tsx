@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Loader2, RotateCcw, Sliders } from 'lucide-react';
 
 import { authenticatedFetch } from '@/shared/api';
@@ -72,10 +72,30 @@ export default function ModelOptionsContent({ agent }: { agent: AgentProvider })
   const [status, setStatus] = useState<{ kind: 'error' | 'saved'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
+  /**
+   * Which load counts as the current one.
+   *
+   * A load and a save can be in flight together: leaving the tab for another
+   * agent and coming back starts a fresh GET, and it may well have been started
+   * before the PUT finished. Landing second, its answer is the state from
+   * before the save and would put it back on top of what was just stored - the
+   * Save button then sits there disabled over settings that no longer match the
+   * server. Each load takes a number, a finished save invalidates the numbers
+   * handed out so far, and an answer that is no longer the current number is
+   * dropped rather than rendered.
+   */
+  const loadGeneration = useRef(0);
+
   const load = useCallback(async () => {
+    const generation = loadGeneration.current + 1;
+    loadGeneration.current = generation;
+
     try {
       const response = await authenticatedFetch('/api/providers/opencode/model-settings');
       const payload = await response.json();
+      if (generation !== loadGeneration.current) {
+        return;
+      }
       if (!response.ok) {
         throw new Error(payload?.error?.message || payload?.error || 'Could not load the model settings');
       }
@@ -84,6 +104,9 @@ export default function ModelOptionsContent({ agent }: { agent: AgentProvider })
       setSettings(data);
       setSelected((current) => current || data.models[0]?.value || '');
     } catch (error) {
+      if (generation !== loadGeneration.current) {
+        return;
+      }
       setStatus({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
     }
   }, []);
@@ -132,6 +155,10 @@ export default function ModelOptionsContent({ agent }: { agent: AgentProvider })
         throw new Error(payload?.error?.message || payload?.error || 'Could not save');
       }
 
+      // The answer to this PUT is the newest state there is. Any load still in
+      // flight was started before it and carries the settings from before the
+      // save; retiring its number drops it when it arrives.
+      loadGeneration.current += 1;
       setSettings(payload.data as ModelSettings);
       setStatus({ kind: 'saved', text: 'Saved. The next run picks it up.' });
     } catch (error) {
