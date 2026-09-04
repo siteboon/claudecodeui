@@ -253,6 +253,7 @@
     },
     "pending": "Geplant für {{when}}",
     "failed": "Nicht gesendet – {{reason}}",
-    "cancel": "Geplante Nachricht abbrechen"
+    "cancel": "Geplante Nachricht abbrechen",
+    "dismiss": "Fehlerhinweis ausblenden"
   }
 }
