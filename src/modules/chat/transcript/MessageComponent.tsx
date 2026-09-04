@@ -30,6 +30,7 @@ type ForkDiffLine = {
 type MessageComponentProps = {
   message: ChatMessage;
   prevMessage: ChatMessage | null;
+  turnAnchorMessage?: ChatMessage | null;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
@@ -50,7 +51,7 @@ type InteractiveOption = {
 
 const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'Edit', 'Write', 'ApplyPatch']);
 
-const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, showRawParameters, showThinking, selectedProject, provider, onEditMessage, onForkFromMessage }: MessageComponentProps) => {
+const MessageComponent = memo(({ message, prevMessage, turnAnchorMessage, createDiff, onFileOpen, showRawParameters, showThinking, selectedProject, provider, onEditMessage, onForkFromMessage }: MessageComponentProps) => {
   const { t } = useTranslation('chat');
   const isGrouped = prevMessage && prevMessage.type === message.type &&
     ((prevMessage.type === 'assistant') ||
@@ -411,6 +412,18 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                 )}
                 {shouldShowAssistantCopyControl && (
                   <MessageSpeakControl content={assistantCopyContent} />
+                )}
+                {onForkFromMessage && turnAnchorMessage?.transcriptAnchorId && (
+                  <button
+                    type="button"
+                    onClick={() => onForkFromMessage(turnAnchorMessage)}
+                    title={t('message.forkFromHere', { defaultValue: 'Fork from here' })}
+                    aria-label={t('message.forkFromHere', { defaultValue: 'Fork from here' })}
+                    className="flex items-center gap-1 rounded px-1.5 py-1 text-xs opacity-70 transition-opacity hover:bg-muted hover:opacity-100 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                  >
+                    <GitBranchIcon className="h-3.5 w-3.5" />
+                    <span>{t('message.fork', { defaultValue: 'Fork' })}</span>
+                  </button>
                 )}
                 {!isGrouped && <span>{formattedTime}</span>}
               </div>

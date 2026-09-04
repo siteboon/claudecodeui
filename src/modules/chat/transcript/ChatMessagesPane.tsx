@@ -263,6 +263,7 @@ function ChatMessagesPane({
 
           {(() => {
             let prevMessage: ChatMessage | null = null;
+            let currentTurnAnchor: ChatMessage | null = null;
             const totalCount = groupedVisibleMessages.length;
             const enableLazy = totalCount > 25;
             const activeTailCount = 15;
@@ -308,6 +309,10 @@ function ChatMessagesPane({
                 );
               }
 
+              if (item.type === 'user' && item.transcriptAnchorId) {
+                currentTurnAnchor = item;
+              }
+
               const messagePrevMessage = prevMessage;
               prevMessage = item;
 
@@ -316,6 +321,7 @@ function ChatMessagesPane({
                   <MessageComponent
                     message={item}
                     prevMessage={messagePrevMessage}
+                    turnAnchorMessage={currentTurnAnchor}
                     createDiff={createDiff}
                     onFileOpen={onFileOpen}
                     onShowSettings={onShowSettings}

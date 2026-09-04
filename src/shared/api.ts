@@ -652,6 +652,6 @@ export const extractResponseError = async (res: Response, fallbackPrefix = 'Requ
 
 
 
-/** Fork: fetches one external (outside-project) file's content for the code editor media preview. */
+/** Fork: fetches one external (outside-project) file's content for the code editor document. */
 export const readExternalFile = (filePath: string): Promise<Response> =>
-  authenticatedFetch(`/api/file-tree/external-file/content?path=${encodeURIComponent(filePath)}`);
+  authenticatedFetch(`/api/file-tree/external-file?path=${encodeURIComponent(filePath)}`);
