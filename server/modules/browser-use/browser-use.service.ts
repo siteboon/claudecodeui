@@ -415,6 +415,10 @@ async function getActionPoint(page: any, input: { selector?: string; text?: stri
   };
 }
 
+/**
+ * Main service for Browser Use sessions and MCP registration.
+ * Consumed by HTTP routes, MCP stdio endpoints, and server initialization.
+ */
 export const browserUseService = {
   async getSettings() {
     return readSettings();
@@ -470,6 +474,21 @@ export const browserUseService = {
       },
     });
     return { name: MCP_SERVER_NAME, command, args, results };
+  },
+
+  /**
+   * Idempotently reconciles the browser-use MCP server registration across all
+   * providers if browser sessions are enabled in settings. Called during server startup
+   * to ensure newly added providers or freshly installed clients stay in sync.
+   */
+  async syncAgentMcpIfNeeded() {
+    const settings = readSettings();
+    if (!settings.enabled) {
+      return { synced: false, reason: 'disabled' };
+    }
+
+    const registration = await this.registerAgentMcp();
+    return { synced: true, registration };
   },
 
   getMcpToken() {

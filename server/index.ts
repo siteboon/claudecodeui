@@ -49,12 +49,14 @@ import {
     initializeScheduledMessageDispatcher,
     scheduledMessagesRoutes,
 } from './modules/scheduled-messages/index.js';
-import browserUseRoutes from './modules/browser-use/browser-use.routes.js';
 import { assetsRoutes } from './modules/assets/index.js';
 import { fileTreeRoutes } from './modules/file-tree/index.js';
 import { worktreesRoutes } from './modules/worktrees/index.js';
-import browserUseMcpRoutes from './modules/browser-use/browser-use-mcp.routes.js';
-import { browserUseService } from './modules/browser-use/browser-use.service.js';
+import {
+    browserUseMcpRoutes,
+    browserUseRoutes,
+    browserUseService,
+} from './modules/browser-use/index.js';
 import { initializeDatabase, sessionsDb } from './modules/database/index.js';
 import { configureWebPush } from './modules/notifications/index.js';
 
@@ -377,6 +379,11 @@ async function startServer() {
             // Start server-side plugin processes for enabled plugins
             startEnabledPluginServers().catch(err => {
                 console.error('[Plugins] Error during startup:', err.message);
+            });
+
+            // Ensure managed MCP servers (like browser-use) are synced to all configured providers if enabled
+            await browserUseService.syncAgentMcpIfNeeded().catch((err) => {
+                console.warn('[Browser] Failed to sync agent MCP configuration during startup:', getErrorMessage(err));
             });
         });
 
