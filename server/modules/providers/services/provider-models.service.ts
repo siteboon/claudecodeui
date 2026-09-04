@@ -67,8 +67,10 @@ const isUniqueConstraintError = (error: unknown): boolean => (
   error !== null
   && error !== undefined
   && typeof error === 'object'
-  && 'code' in error
-  && String(error.code).startsWith('SQLITE_CONSTRAINT')
+  && (
+    ('code' in error && (error.code === 'SQLITE_CONSTRAINT_UNIQUE' || error.code === 'SQLITE_CONSTRAINT_PRIMARYKEY'))
+    || ('message' in error && typeof error.message === 'string' && error.message.includes('UNIQUE constraint failed'))
+  )
 );
 
 /**

@@ -11,6 +11,7 @@ import {
   readFileTimestamps,
 } from '@/shared/utils.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
+import type { ProviderSessionWatchTarget } from '@/shared/types.js';
 
 type ParsedSession = {
   sessionId: string;
@@ -24,6 +25,18 @@ type ParsedSession = {
 export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
   private readonly provider = 'codex' as const;
   private readonly codexHome = path.join(os.homedir(), '.codex');
+
+  /**
+   * Declares the watched artifact layout: the sessions directory holding the
+   * rollout JSONL files.
+   */
+  getSessionWatchTarget(): ProviderSessionWatchTarget {
+    return {
+      rootPath: path.join(this.codexHome, 'sessions'),
+      isTargetFile: (filePath: string) => filePath.endsWith('.jsonl'),
+    };
+  }
+
 
   /**
    * Scans ~/.codex/sessions and upserts discovered sessions into DB.

@@ -16,10 +16,11 @@ import type {
   AnyRecord,
   AuthenticatedWebSocketRequest,
   LLMProvider,
+  NormalizedMessage,
   ProviderPermissionDecision,
   ProviderRuntimeWriter,
 } from '@/shared/types.js';
-import { parseIncomingJsonObject } from '@/shared/utils.js';
+import { createNormalizedMessage, parseIncomingJsonObject } from '@/shared/utils.js';
 
 /**
  * Trust boundary for client-supplied image attachments: chat.send options come
@@ -139,6 +140,38 @@ function readRequiredSessionId(data: AnyRecord): string | null {
 }
 
 /**
+ * Reports a runtime crash to the chat stream when the runtime itself never
+ * emitted an error message.
+ *
+ * Without this, a runtime that throws before producing events leaves the UI
+ * with nothing but the synthetic terminal `complete` and the failure stays
+ * invisible. Runtimes that already reported an error (buffered in the run's
+ * event log) are not duplicated.
+ *
+ * Consumers: `handleChatSend`'s runtime rejection path and
+ * `server/modules/websocket/tests/chat-websocket.service.test.ts` (verifies
+ * the dedup contract without a full websocket harness).
+ */
+export function emitRuntimeFailureFallback(
+  run: { events: Array<Pick<NormalizedMessage, 'kind'>>; writer: { send: (data: unknown) => void } },
+  input: { provider: LLMProvider; sessionId: string; message: string }
+): void {
+  if (run.events.some((event) => event.kind === 'error')) {
+    return;
+  }
+
+  run.writer.send(
+    createNormalizedMessage({
+      sessionId: input.sessionId,
+      provider: input.provider,
+      kind: 'error',
+      isError: true,
+      text: input.message,
+    })
+  );
+}
+
+/**
  * Handles `chat.send`: resolves the session row (provider, project path, and
  * provider-native id all come from the database — never from the client),
  * registers the run, and dispatches to the provider runtime.
@@ -237,6 +270,8 @@ async function dispatchRun(
     return { started: false, error: 'A run is already in progress for this session.' };
   }
 
+  sessionsDb.touchSession(sessionId);
+
   const clientOptions = (data.options ?? {}) as AnyRecord;
   const command = typeof data.content === 'string' ? data.content : '';
 
@@ -290,6 +325,7 @@ async function dispatchRun(
   } catch (error) {
     failure = error instanceof Error ? error.message : String(error);
     console.error(`[Chat] Provider runtime "${provider}" failed`, { sessionId, error: failure });
+    emitRuntimeFailureFallback(run, { provider, sessionId, message: failure });
   } finally {
     // Safety net: a runtime that crashed (or resolved) without emitting its
     // terminal `complete` would otherwise leave the session stuck in
@@ -297,6 +333,7 @@ async function dispatchRun(
     // a queued message can start the session's next run before this promise
     // settles, and the session-keyed completeRun would kill that new run.
     chatRunRegistry.completeRunIfCurrent(run, { exitCode: 1 });
+    sessionsDb.touchSession(sessionId);
   }
 
   return { started: true, error: failure };

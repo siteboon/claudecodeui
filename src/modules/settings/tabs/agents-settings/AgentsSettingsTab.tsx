@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { AgentCategory, AgentContextByProvider, AgentProvider, AgentSettingsProject, ClaudePermissionsState, CodexPermissionMode, CursorPermissionsState, ProviderAuthStatus } from '@/shared/types';
+import type { AgentCategory, AgentContextByProvider, AgentProvider, AgentSettingsProject, AntigravityPermissionMode, ClaudePermissionsState, CodexPermissionMode, CursorPermissionsState, ProviderAuthStatus } from '@/shared/types';
 import AgentCategoryContentSection from '@/modules/settings/tabs/agents-settings/sections/AgentCategoryContentSection';
 import AgentCategoryTabsSection from '@/modules/settings/tabs/agents-settings/sections/AgentCategoryTabsSection';
 import AgentSelectorSection from '@/modules/settings/tabs/agents-settings/sections/AgentSelectorSection';
@@ -16,6 +16,8 @@ type AgentsSettingsTabProps = {
   onCursorPermissionsChange: (value: CursorPermissionsState) => void;
   codexPermissionMode: CodexPermissionMode;
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
+  antigravityPermissionMode?: AntigravityPermissionMode;
+  onAntigravityPermissionModeChange?: (value: AntigravityPermissionMode) => void;
   projects: AgentSettingsProject[];
 };
 
@@ -29,6 +31,8 @@ export default function AgentsSettingsTab({
   onCursorPermissionsChange,
   codexPermissionMode,
   onCodexPermissionModeChange,
+  antigravityPermissionMode,
+  onAntigravityPermissionModeChange,
   projects,
 }: AgentsSettingsTabProps) {
   const [selectedAgent, setSelectedAgent] = useState<AgentProvider>('claude');
@@ -39,9 +43,11 @@ export default function AgentsSettingsTab({
       : ['account', 'permissions', 'mcp', 'skills']
   ), [selectedAgent]);
 
+  const allAgents: AgentProvider[] = ['claude', 'cursor', 'codex', 'opencode', 'antigravity'];
+
   const visibleAgents = useMemo<AgentProvider[]>(() => {
-    return ['claude', 'cursor', 'codex', 'opencode'];
-  }, []);
+    return allAgents.filter((agent) => providerAuthStatus[agent].installed);
+  }, [providerAuthStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const agentContextById = useMemo<AgentContextByProvider>(() => ({
     claude: {
@@ -60,13 +66,24 @@ export default function AgentsSettingsTab({
       authStatus: providerAuthStatus.opencode,
       onLogin: () => onProviderLogin('opencode'),
     },
+    antigravity: {
+      authStatus: providerAuthStatus.antigravity,
+      onLogin: () => onProviderLogin('antigravity'),
+    },
   }), [
     onProviderLogin,
     providerAuthStatus.claude,
     providerAuthStatus.codex,
     providerAuthStatus.cursor,
     providerAuthStatus.opencode,
+    providerAuthStatus.antigravity,
   ]);
+
+  useEffect(() => {
+    if (visibleAgents.length > 0 && !visibleAgents.includes(selectedAgent)) {
+      setSelectedAgent(visibleAgents[0]);
+    }
+  }, [selectedAgent, visibleAgents]);
 
   useEffect(() => {
     if (!visibleCategories.includes(selectedCategory)) {
@@ -101,6 +118,8 @@ export default function AgentsSettingsTab({
           onCursorPermissionsChange={onCursorPermissionsChange}
           codexPermissionMode={codexPermissionMode}
           onCodexPermissionModeChange={onCodexPermissionModeChange}
+          antigravityPermissionMode={antigravityPermissionMode}
+          onAntigravityPermissionModeChange={onAntigravityPermissionModeChange}
           projects={projects}
         />
       </div>

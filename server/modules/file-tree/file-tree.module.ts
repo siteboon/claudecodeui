@@ -8,6 +8,8 @@ import multer from 'multer';
 import { projectsDb } from '@/modules/database/index.js';
 import { createFileTreeRouter } from '@/modules/file-tree/file-tree.routes.js';
 import { createFileTreeService } from '@/modules/file-tree/file-tree.service.js';
+import { getAntigravityBrainRoots } from '@/modules/providers/index.js';
+import { getGlobalImageAssetsDir } from '@/shared/image-attachments.js';
 import type {
   FileTreeFileSystem,
   FileTreeLogger,
@@ -86,6 +88,10 @@ const fileTreeServices = createFileTreeService({
   resolveMimeType: (filePath) => mime.lookup(filePath) || 'application/octet-stream',
   fileSystemConcurrency: readFileSystemConcurrency(),
   logger: fileTreeLogger,
+  // Antigravity writes plan documents into its brain directories, and chat
+  // file attachments live in ~/.cloudcli/assets; this allowlist lets the editor
+  // open and preview those files read-only without widening project-scoped access.
+  externalReadOnlyRoots: [...getAntigravityBrainRoots(), getGlobalImageAssetsDir()],
 });
 
 const fileUploadMiddleware = multer({

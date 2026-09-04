@@ -10,6 +10,7 @@ type CommandsRouterDependencies = {
   homeDirectory(): string;
   appRoot: string;
   models: typeof import('../providers/index.js').providerModelsService;
+  tokenUsage?: typeof import('../providers/index.js').providerTokenUsageService;
   runtime: {
     uptime(): number;
     memoryUsage(): NodeJS.MemoryUsage;
@@ -25,16 +26,18 @@ const fs = dependencies.fileSystem;
 const os = { homedir: dependencies.homeDirectory };
 const APP_ROOT = dependencies.appRoot;
 const providerModelsService = dependencies.models;
+const providerTokenUsageService = dependencies.tokenUsage;
 const process = dependencies.runtime;
 const router = express.Router();
 
-const MODEL_PROVIDERS = ["claude", "cursor", "codex", "opencode"];
+const MODEL_PROVIDERS = ["claude", "cursor", "codex", "opencode", "antigravity"];
 
 const MODEL_PROVIDER_LABELS = {
   claude: "Claude",
   cursor: "Cursor",
   codex: "Codex",
   opencode: "OpenCode",
+  antigravity: "Antigravity",
 };
 
 const readModelProvider = (value) => {
@@ -261,9 +264,63 @@ Custom commands can be created in:
   "/models": (args, context) => executeModelsCommand(args, context, providerModelsService),
 
   "/cost": async (args, context) => {
-    const tokenUsage = context?.tokenUsage || {};
+    let tokenUsage = context?.tokenUsage || {};
     const provider = readModelProvider(context?.provider);
     const model = await resolveCommandModel(providerModelsService, provider, context);
+    const hasContextUsage = Boolean(
+      tokenUsage.used
+      || tokenUsage.totalUsed
+      || tokenUsage.total_tokens
+      || tokenUsage.total
+      || tokenUsage.contextWindow
+      || tokenUsage.inputTokens
+      || tokenUsage.outputTokens,
+    );
+    const hasContextBreakdown = Boolean(
+      Number(
+        tokenUsage.inputTokens
+        ?? tokenUsage.input
+        ?? tokenUsage.cumulativeInputTokens
+        ?? tokenUsage.breakdown?.input
+        ?? tokenUsage.promptTokens
+        ?? tokenUsage.input_tokens
+        ?? 0,
+      )
+      || Number(
+        tokenUsage.outputTokens
+        ?? tokenUsage.output
+        ?? tokenUsage.cumulativeOutputTokens
+        ?? tokenUsage.breakdown?.output
+        ?? tokenUsage.completionTokens
+        ?? tokenUsage.output_tokens
+        ?? 0,
+      ),
+    );
+
+    if (
+      (!hasContextUsage || !hasContextBreakdown)
+      && context?.sessionId
+      && providerTokenUsageService
+    ) {
+      try {
+        const persisted = await providerTokenUsageService.getSessionTokenUsage(context.sessionId);
+        if (persisted && (persisted.used > 0 || persisted.inputTokens > 0 || persisted.outputTokens > 0)) {
+          // Live telemetry can have a newer total/context window while omitting
+          // input/output. Keep those live values and fill only the missing
+          // breakdown from the provider's persisted session snapshot.
+          tokenUsage = hasContextUsage && !hasContextBreakdown
+            ? {
+                ...tokenUsage,
+                inputTokens: persisted.inputTokens,
+                outputTokens: persisted.outputTokens,
+                breakdown: persisted.breakdown,
+              }
+            : persisted;
+        }
+      } catch {
+        // Fall back to context tokenUsage
+      }
+    }
 
     const reportedUsed =
       Number(

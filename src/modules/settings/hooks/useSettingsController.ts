@@ -1,24 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useTheme } from '@/shared/context/ThemeContext';
-import { api } from '@/shared/api';
-import { setNotificationSoundEnabled } from '@/shared/utils';
-import {
-  readCodeEditorSettings,
-  writeCodeEditorSettings,
-} from '@/shared/codeEditorSettings';
-import {
-  readUserPreference,
-  writeUserPreferences,
-} from '@/shared/userSettings';
+import { authenticatedFetch } from '@/shared/api';
+import { setNotificationSoundEnabled } from '@/modules/chat';
 import { useProviderAuthStatus } from '@/modules/provider-auth';
-import type { AgentProvider, ClaudePermissionsState, CodeEditorSettingsState, CodexPermissionMode, CursorPermissionsState, NotificationPreferencesState, ProjectSortOrder, SettingsMainTab } from '@/shared/types';
-
-const DEFAULT_CURSOR_PERMISSIONS: CursorPermissionsState = {
-  allowedCommands: [],
-  disallowedCommands: [],
-  skipPermissions: false,
-};
+import {
+  DEFAULT_CODE_EDITOR_SETTINGS,
+  DEFAULT_CURSOR_PERMISSIONS,
+} from '@/modules/settings/constants/constants';
+import type {
+  AgentProvider,
+  AntigravityPermissionMode,
+  ClaudePermissionsState,
+  CodeEditorSettingsState,
+  CodexPermissionMode,
+  CursorPermissionsState,
+  NotificationPreferencesState,
+  ProjectSortOrder,
+  SettingsMainTab,
+} from '@/shared/types';
 
 type ThemeContextValue = {
   isDarkMode: boolean;
@@ -47,6 +47,10 @@ type CodexSettingsStorage = {
   permissionMode?: CodexPermissionMode;
 };
 
+type AntigravitySettingsStorage = {
+  permissionMode?: AntigravityPermissionMode;
+};
+
 type NotificationPreferencesResponse = {
   success?: boolean;
   preferences?: NotificationPreferencesState;
@@ -65,6 +69,18 @@ const normalizeMainTab = (tab: string): SettingsMainTab => {
   return KNOWN_MAIN_TABS.includes(tab as SettingsMainTab) ? (tab as SettingsMainTab) : 'agents';
 };
 
+const parseJson = <T>(value: string | null, fallback: T): T => {
+  if (!value) {
+    return fallback;
+  }
+
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+};
+
 const toCodexPermissionMode = (value: unknown): CodexPermissionMode => {
   if (value === 'acceptEdits' || value === 'bypassPermissions') {
     return value;
@@ -72,6 +88,21 @@ const toCodexPermissionMode = (value: unknown): CodexPermissionMode => {
 
   return 'default';
 };
+
+const toAntigravityPermissionMode = (value: unknown): AntigravityPermissionMode => {
+  if (value === 'acceptEdits' || value === 'plan' || value === 'bypassPermissions') {
+    return value;
+  }
+
+  return 'default';
+};
+
+const readCodeEditorSettings = (): CodeEditorSettingsState => ({
+  wordWrap: localStorage.getItem('codeEditorWordWrap') === 'true',
+  showMinimap: localStorage.getItem('codeEditorShowMinimap') !== 'false',
+  lineNumbers: localStorage.getItem('codeEditorLineNumbers') !== 'false',
+  fontSize: localStorage.getItem('codeEditorFontSize') ?? DEFAULT_CODE_EDITOR_SETTINGS.fontSize,
+});
 
 const toResponseJson = async <T>(response: Response): Promise<T> => response.json() as Promise<T>;
 
@@ -140,6 +171,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     createDefaultNotificationPreferences()
   ));
   const [codexPermissionMode, setCodexPermissionMode] = useState<CodexPermissionMode>('default');
+  const [antigravityPermissionMode, setAntigravityPermissionMode] = useState<AntigravityPermissionMode>('default');
 
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginProvider, setLoginProvider] = useState<ActiveLoginProvider>('');
@@ -151,26 +183,41 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
 
   const loadSettings = useCallback(async () => {
     try {
-      const savedClaudeSettings = readUserPreference<ClaudeSettingsStorage>('claudePermissions', {});
+      const savedClaudeSettings = parseJson<ClaudeSettingsStorage>(
+        localStorage.getItem('claude-settings'),
+        {},
+      );
       setClaudePermissions({
         allowedTools: savedClaudeSettings.allowedTools || [],
         disallowedTools: savedClaudeSettings.disallowedTools || [],
         skipPermissions: Boolean(savedClaudeSettings.skipPermissions),
       });
-      setProjectSortOrder(readUserPreference<ProjectSortOrder>('projectSortOrder', 'name') === 'date' ? 'date' : 'name');
+      setProjectSortOrder(savedClaudeSettings.projectSortOrder === 'date' ? 'date' : 'name');
 
-      const savedCursorSettings = readUserPreference<CursorSettingsStorage>('cursorPermissions', {});
+      const savedCursorSettings = parseJson<CursorSettingsStorage>(
+        localStorage.getItem('cursor-tools-settings'),
+        {},
+      );
       setCursorPermissions({
         allowedCommands: savedCursorSettings.allowedCommands || [],
         disallowedCommands: savedCursorSettings.disallowedCommands || [],
         skipPermissions: Boolean(savedCursorSettings.skipPermissions),
       });
 
-      const savedCodexSettings = readUserPreference<CodexSettingsStorage>('codexPermissions', {});
+      const savedCodexSettings = parseJson<CodexSettingsStorage>(
+        localStorage.getItem('codex-settings'),
+        {},
+      );
       setCodexPermissionMode(toCodexPermissionMode(savedCodexSettings.permissionMode));
 
+      const savedAntigravitySettings = parseJson<AntigravitySettingsStorage>(
+        localStorage.getItem('antigravity-settings'),
+        {},
+      );
+      setAntigravityPermissionMode(toAntigravityPermissionMode(savedAntigravitySettings.permissionMode));
+
       try {
-        const notificationResponse = await api.settings.notificationPreferences();
+        const notificationResponse = await authenticatedFetch('/api/settings/notification-preferences');
         if (notificationResponse.ok) {
           const notificationData = await toResponseJson<NotificationPreferencesResponse>(notificationResponse);
           if (notificationData.success && notificationData.preferences) {
@@ -191,6 +238,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
       setCursorPermissions(createEmptyCursorPermissions());
       setNotificationPreferences(createDefaultNotificationPreferences());
       setCodexPermissionMode('default');
+      setAntigravityPermissionMode('default');
       setProjectSortOrder('name');
     }
   }, []);
@@ -199,6 +247,11 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     setLoginProvider(provider);
     setShowLoginModal(true);
   }, []);
+
+  const closeLoginModal = useCallback(() => {
+    setShowLoginModal(false);
+    void refreshProviderAuthStatuses();
+  }, [refreshProviderAuthStatuses]);
 
   const handleLoginComplete = useCallback((exitCode: number) => {
     if (!loginProvider) {
@@ -220,28 +273,36 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     setSaveStatus(null);
 
     try {
-      // One call so the whole dialog's state reaches the server as a single
-      // merge-patch rather than four racing requests.
-      writeUserPreferences({
-        claudePermissions: {
-          allowedTools: claudePermissions.allowedTools,
-          disallowedTools: claudePermissions.disallowedTools,
-          skipPermissions: claudePermissions.skipPermissions,
-        },
+      const now = new Date().toISOString();
+      localStorage.setItem('claude-settings', JSON.stringify({
+        allowedTools: claudePermissions.allowedTools,
+        disallowedTools: claudePermissions.disallowedTools,
+        skipPermissions: claudePermissions.skipPermissions,
         projectSortOrder,
-        cursorPermissions: {
-          allowedCommands: cursorPermissions.allowedCommands,
-          disallowedCommands: cursorPermissions.disallowedCommands,
-          skipPermissions: cursorPermissions.skipPermissions,
-        },
-        codexPermissions: {
-          permissionMode: codexPermissionMode,
-        },
-      });
+        lastUpdated: now,
+      }));
 
-      const notificationResponse = await api.settings.saveNotificationPreferences(
-        notificationPreferences,
-      );
+      localStorage.setItem('cursor-tools-settings', JSON.stringify({
+        allowedCommands: cursorPermissions.allowedCommands,
+        disallowedCommands: cursorPermissions.disallowedCommands,
+        skipPermissions: cursorPermissions.skipPermissions,
+        lastUpdated: now,
+      }));
+
+      localStorage.setItem('codex-settings', JSON.stringify({
+        permissionMode: codexPermissionMode,
+        lastUpdated: now,
+      }));
+
+      localStorage.setItem('antigravity-settings', JSON.stringify({
+        permissionMode: antigravityPermissionMode,
+        lastUpdated: now,
+      }));
+
+      const notificationResponse = await authenticatedFetch('/api/settings/notification-preferences', {
+        method: 'PUT',
+        body: JSON.stringify(notificationPreferences),
+      });
       if (!notificationResponse.ok) {
         throw new Error('Failed to save notification preferences');
       }
@@ -252,6 +313,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
       setSaveStatus('error');
     }
   }, [
+    antigravityPermissionMode,
     claudePermissions.allowedTools,
     claudePermissions.disallowedTools,
     claudePermissions.skipPermissions,
@@ -263,21 +325,9 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     projectSortOrder,
   ]);
 
-  // Persist on the user's edit rather than in an effect keyed on the settings
-  // object. The effect form also ran on mount, so merely opening this dialog
-  // rewrote all four keys — which reset the editor's font size for anyone who
-  // had never changed it.
-  //
-  // The other three keys are merged from storage rather than from the rendered
-  // state, so two edits landing in one React batch cannot write the second one
-  // on top of a pre-first-edit snapshot. Storage is the newest value because
-  // this is the only writer that can be behind — the editor's own wordWrap
-  // mirror in useCodeEditorSettings only ever writes back what it just read.
   const updateCodeEditorSetting = useCallback(
     <K extends keyof CodeEditorSettingsState>(key: K, value: CodeEditorSettingsState[K]) => {
-      const next = { ...readCodeEditorSettings(), [key]: value };
-      setCodeEditorSettings(next);
-      writeCodeEditorSettings(next);
+      setCodeEditorSettings((prev: CodeEditorSettingsState) => ({ ...prev, [key]: value }));
     },
     [],
   );
@@ -296,12 +346,20 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     setNotificationSoundEnabled(notificationPreferences.channels.sound);
   }, [notificationPreferences.channels.sound]);
 
+  useEffect(() => {
+    localStorage.setItem('codeEditorWordWrap', String(codeEditorSettings.wordWrap));
+    localStorage.setItem('codeEditorShowMinimap', String(codeEditorSettings.showMinimap));
+    localStorage.setItem('codeEditorLineNumbers', String(codeEditorSettings.lineNumbers));
+    localStorage.setItem('codeEditorFontSize', codeEditorSettings.fontSize);
+    window.dispatchEvent(new Event('codeEditorSettingsChanged'));
+  }, [codeEditorSettings]);
+
   // Auto-save permissions and sort order with debounce
   const autoSaveTimerRef = useRef<number | null>(null);
   const isInitialLoadRef = useRef(true);
 
   useEffect(() => {
-    // Skip auto-save on initial load (settings are being loaded from the store)
+    // Skip auto-save on initial load (settings are being loaded from localStorage)
     if (isInitialLoadRef.current) {
       isInitialLoadRef.current = false;
       return;
@@ -368,10 +426,13 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     setNotificationPreferences,
     codexPermissionMode,
     setCodexPermissionMode,
+    antigravityPermissionMode,
+    setAntigravityPermissionMode,
     providerAuthStatus,
     openLoginForProvider,
     showLoginModal,
     setShowLoginModal,
+    closeLoginModal,
     loginProvider,
     handleLoginComplete,
   };

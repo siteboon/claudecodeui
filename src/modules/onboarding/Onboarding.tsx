@@ -248,6 +248,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           isOpen={Boolean(activeLoginProvider)}
           onClose={() => setActiveLoginProvider(null)}
           provider={activeLoginProvider}
+          customCommand={providerAuthStatus[activeLoginProvider].loginCommand ?? undefined}
           onComplete={handleLoginComplete}
         />
       )}

@@ -93,7 +93,8 @@
     "tasks": "タスク",
     "notifications": "通知",
     "plugins": "プラグイン",
-    "about": "概要"
+    "about": "概要",
+    "sessions": "セッション"
   },
   "notifications": {
     "title": "通知",
@@ -480,5 +481,35 @@
     "installAriaLabel": "プラグインのgitリポジトリURL",
     "tab": "タブ",
     "runningStatus": "実行中"
+  },
+  "sessions": {
+    "title": "Sessions",
+    "autoArchive": {
+      "enableLabel": "Auto-archive historical sessions",
+      "enableDescription": "Automatically archives inactive sessions periodically to keep your sidebar clean and responsive.",
+      "retentionLabel": "Archive threshold",
+      "retentionDescription": "Choose how long a session can remain inactive before being archived (e.g. 1 day archives all sessions before today)."
+    },
+    "retention": {
+      "1day": "1 day (before today)",
+      "3days": "3 days ago",
+      "7days": "7 days ago (1 week)",
+      "14days": "14 days ago (2 weeks)",
+      "30days": "30 days ago (1 month)"
+    },
+    "manualSection": {
+      "title": "Manual Cleanup"
+    },
+    "manualRun": {
+      "title": "Archive old sessions now",
+      "description": "Scans and archives all matching older sessions immediately based on your current threshold setting.",
+      "button": "Archive Now",
+      "successCount": "Successfully archived {{count}} historical session(s)!",
+      "noneFound": "No older sessions found needing archival."
+    },
+    "notice": {
+      "title": "Data Safety Notice:",
+      "content": "Archiving only removes old sessions from the active sidebar list. Your conversation history and files on disk are never deleted. You can browse or restore archived sessions at any time in the sidebar Archive view."
+    }
   }
 }

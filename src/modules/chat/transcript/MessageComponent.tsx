@@ -1,24 +1,36 @@
 import { memo, useMemo, useRef } from 'react';
-import { useTranslation } from 'react-i18next';
 import { GitBranchIcon, PencilIcon } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
-import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider,DiffLine,Project } from '@/shared/types';
+import LLMProviderLogo from '@/shared/ui/LLMProviderLogo';
+import { getProviderDisplayName } from '@/shared/providerDisplay';
+import type {DiffLine, 
+  ChatMessage,
+  ClaudePermissionSuggestion,
+  PermissionGrantResult,
+  Provider,
+} from '@/shared/types';
 import { formatUsageLimitText, stripProposedPlanEnvelope } from '@/modules/chat/utils/chatFormatting';
-import { ToolRenderer, ToolErrorDisplay, SubagentPanel, shouldHideToolResult } from '@/modules/chat/tools';
-import { LLMProviderLogo } from '@/shared/ui';
-import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/modules/chat/transcript/Reasoning';
+import type { Project } from '@/shared/types';
+import { ToolRenderer, ToolErrorDisplay, shouldHideToolResult } from '@/modules/chat/tools';
+import { Reasoning, ReasoningTrigger, ReasoningContent } from '@/shared/ui/ReasoningFork';
+
 import ChatMessageImages from '@/modules/chat/transcript/ChatMessageImages';
 import ChatMessageFiles from '@/modules/chat/transcript/ChatMessageFiles';
 import { Markdown } from '@/modules/chat/transcript/Markdown';
-import StreamingMarkdown from '@/modules/chat/transcript/StreamingMarkdown';
 import MessageCopyControl from '@/modules/chat/transcript/MessageCopyControl';
 import MessageSpeakControl from '@/modules/chat/transcript/MessageSpeakControl';
-import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
-import { MemoryCitations } from '@/modules/chat/transcript/MemoryCitations';
+
+type ForkDiffLine = {
+  type: string;
+  content: string;
+  lineNum: number;
+};
 
 type MessageComponentProps = {
   message: ChatMessage;
   prevMessage: ChatMessage | null;
+  turnAnchorMessage?: ChatMessage | null;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
@@ -26,27 +38,20 @@ type MessageComponentProps = {
   showRawParameters?: boolean;
   showThinking?: boolean;
   selectedProject?: Project | null;
-  provider: LLMProvider | string;
-  /**
-   * Loads this message back into the composer to be replaced. Absent when the
-   * provider cannot re-run a conversation from a chosen point, which is what
-   * hides the affordance rather than showing one that would fail.
-   */
+  provider: Provider | string;
   onEditMessage?: (message: ChatMessage) => void;
-  /**
-   * Branches the conversation into a new session ending at this message.
-   * Absent when the provider cannot copy a transcript prefix.
-   */
   onForkFromMessage?: (message: ChatMessage) => void;
+};
+
+type InteractiveOption = {
+  number: string;
+  text: string;
+  isSelected: boolean;
 };
 
 const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'Edit', 'Write', 'ApplyPatch']);
 
-/**
- * Rendered by chat's ChatMessagesPane and ToolGroupContainer to draw one
- * transcript entry — user turn, assistant turn, or a tool call and its result.
- */
-const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, showRawParameters, showThinking, selectedProject, provider, onEditMessage, onForkFromMessage }: MessageComponentProps) => {
+const MessageComponent = memo(({ message, prevMessage, turnAnchorMessage, createDiff, onFileOpen, showRawParameters, showThinking, selectedProject, provider, onEditMessage, onForkFromMessage }: MessageComponentProps) => {
   const { t } = useTranslation('chat');
   const isGrouped = prevMessage && prevMessage.type === message.type &&
     ((prevMessage.type === 'assistant') ||
@@ -70,14 +75,8 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
   const isCommandOrFileEditToolResponse = Boolean(
     message.isToolUse && COPY_HIDDEN_TOOL_NAMES.has(String(message.toolName || ''))
   );
-  // Copy and speak are affordances for a live conversation. In an exported
-  // document there is nothing to click, and rendering them statically would
-  // also pull in browser-only voice state that a document render has no
-  // provider for.
-  const isExporting = useIsExportingTranscript();
-  const shouldShowUserCopyControl = !isExporting && message.type === 'user' && userCopyContent.trim().length > 0;
-  const shouldShowAssistantCopyControl = !isExporting &&
-    message.type === 'assistant' &&
+  const shouldShowUserCopyControl = message.type === 'user' && userCopyContent.trim().length > 0;
+  const shouldShowAssistantCopyControl = message.type === 'assistant' &&
     assistantCopyContent.trim().length > 0 &&
     !isCommandOrFileEditToolResponse &&
     !message.isThinking;
@@ -124,9 +123,9 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                     <button
                       type="button"
                       onClick={() => onEditMessage(message)}
-                      title={t('message.editAndResend')}
-                      aria-label={t('message.editAndResend')}
-                      className="rounded p-1 opacity-0 transition-opacity hover:bg-muted focus-visible:opacity-100 group-hover:opacity-100"
+                      title={t('message.editAndResend', { defaultValue: 'Edit and resend' })}
+                      aria-label={t('message.editAndResend', { defaultValue: 'Edit and resend' })}
+                      className="rounded p-1 opacity-70 transition-opacity hover:bg-muted hover:opacity-100 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                     >
                       <PencilIcon className="h-3.5 w-3.5" />
                     </button>
@@ -135,9 +134,9 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                     <button
                       type="button"
                       onClick={() => onForkFromMessage(message)}
-                      title={t('message.forkFromHere')}
-                      aria-label={t('message.forkFromHere')}
-                      className="rounded p-1 opacity-0 transition-opacity hover:bg-muted focus-visible:opacity-100 group-hover:opacity-100"
+                      title={t('message.forkFromHere', { defaultValue: 'Fork from here' })}
+                      aria-label={t('message.forkFromHere', { defaultValue: 'Fork from here' })}
+                      className="rounded p-1 opacity-70 transition-opacity hover:bg-muted hover:opacity-100 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                     >
                       <GitBranchIcon className="h-3.5 w-3.5" />
                     </button>
@@ -192,32 +191,14 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                   ? t('messageTypes.error')
                   : message.type === 'tool'
                     ? t('messageTypes.tool')
-                    : (provider === 'cursor'
-                        ? t('messageTypes.cursor')
-                        : provider === 'codex'
-                          ? t('messageTypes.codex')
-                          : provider === 'opencode'
-                              ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
-                              : t('messageTypes.claude'))}
+                    : getProviderDisplayName(provider)}
               </div>
             </div>
           )}
 
           <div className="w-full">
 
-            {message.isSubagentContainer ? (
-              /* A spawned agent owns its whole card — header, timeline and
-                 result — so it never goes through the tool input/result pair. */
-              <SubagentPanel
-                toolInput={message.toolInput}
-                toolResult={message.toolResult}
-                subagent={message.subagent}
-                activity={message.subagentActivity}
-                onFileOpen={onFileOpen}
-                createDiff={createDiff}
-                selectedProject={selectedProject}
-              />
-            ) : message.isToolUse ? (
+            {message.isToolUse ? (
               <>
                 <div className="flex flex-col">
                   <div className="flex flex-col">
@@ -239,12 +220,11 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                     selectedProject={selectedProject}
                     showRawParameters={showRawParameters}
                     rawToolInput={typeof message.toolInput === 'string' ? message.toolInput : undefined}
-                    toolStatus={message.toolStatus}
                   />
                 )}
 
-                {/* Tool Result Section — Bash renders its output inside the command row above. */}
-                {message.toolResult && message.toolName !== 'Bash' && !shouldHideToolResult(message.toolName || 'UnknownTool', message.toolResult) && (
+                {/* Tool Result Section — Bash/run_command/exec renders its output inside the command row above. */}
+                {message.toolResult && !['Bash', 'run_command', 'exec', 'command_execution'].includes(message.toolName || '') && !shouldHideToolResult(message.toolName || 'UnknownTool', message.toolResult) && (
                   message.toolResult.isError ? (
                     // Error results — collapsed red row that expands to the content
                     <div id={`tool-result-${message.toolId}`} className="scroll-mt-4">
@@ -270,19 +250,98 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                   )
                 )}
               </>
+            ) : message.isInteractivePrompt ? (
+              // Special handling for interactive prompts
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-amber-500">
+                    <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="mb-3 text-base font-semibold text-amber-900 dark:text-amber-100">
+                      {t('interactive.title')}
+                    </h4>
+                    {(() => {
+                      const lines = (message.content || '').split('\n').filter((line) => line.trim());
+                      const questionLine = lines.find((line) => line.includes('?')) || lines[0] || '';
+                      const options: InteractiveOption[] = [];
+
+                      // Parse the menu options
+                      lines.forEach((line) => {
+                        // Match lines like "❯ 1. Yes" or "  2. No"
+                        const optionMatch = line.match(/[❯\s]*(\d+)\.\s+(.+)/);
+                        if (optionMatch) {
+                          const isSelected = line.includes('❯');
+                          options.push({
+                            number: optionMatch[1],
+                            text: optionMatch[2].trim(),
+                            isSelected
+                          });
+                        }
+                      });
+
+                      return (
+                        <>
+                          <p className="mb-4 text-sm text-amber-800 dark:text-amber-200">
+                            {questionLine}
+                          </p>
+
+                          {/* Option buttons */}
+                          <div className="mb-4 space-y-2">
+                            {options.map((option) => (
+                              <button
+                                key={option.number}
+                                className={`w-full rounded-lg border-2 px-4 py-3 text-left transition-all ${option.isSelected
+                                  ? 'border-amber-600 bg-amber-600 text-white shadow-md dark:border-amber-700 dark:bg-amber-700'
+                                  : 'border-amber-300 bg-white text-amber-900 dark:border-amber-700 dark:bg-gray-800 dark:text-amber-100'
+                                  } cursor-not-allowed opacity-75`}
+                                disabled
+                              >
+                                <div className="flex items-center gap-3">
+                                  <span className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold ${option.isSelected
+                                    ? 'bg-white/20'
+                                    : 'bg-amber-100 dark:bg-amber-800/50'
+                                    }`}>
+                                    {option.number}
+                                  </span>
+                                  <span className="flex-1 text-sm font-medium sm:text-base">
+                                    {option.text}
+                                  </span>
+                                  {option.isSelected && (
+                                    <span className="text-lg">❯</span>
+                                  )}
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+
+                          <div className="rounded-lg bg-amber-100 p-3 dark:bg-amber-800/30">
+                            <p className="mb-1 text-sm font-medium text-amber-900 dark:text-amber-100">
+                              {t('interactive.waiting')}
+                            </p>
+                            <p className="text-xs text-amber-800 dark:text-amber-200">
+                              {t('interactive.instruction')}
+                            </p>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
             ) : message.isThinking ? (
               /* Thinking messages — Reasoning component (ai-elements pattern) */
-              <Reasoning defaultOpen={isExporting}>
+              <Reasoning defaultOpen={false}>
                 <ReasoningTrigger />
                 <ReasoningContent>
                   <Markdown className="prose prose-sm prose-gray max-w-none font-serif dark:prose-invert">
                     {message.content}
                   </Markdown>
-                  {!isExporting && (
-                    <div className="mt-3 flex items-center text-[11px]">
-                      <MessageCopyControl content={String(message.content || '')} messageType="assistant" />
-                    </div>
-                  )}
+                  <div className="mt-3 flex items-center text-[11px]">
+                    <MessageCopyControl content={String(message.content || '')} messageType="assistant" />
+                  </div>
                 </ReasoningContent>
               </Reasoning>
             ) : (
@@ -333,14 +392,10 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                   }
 
                   // Normal rendering for non-JSON content
-                  // One component for both states on purpose: swapping element
-                  // types here remounted the whole reply the instant it finished.
                   return message.type === 'assistant' ? (
-                    <StreamingMarkdown
-                      content={content}
-                      isStreaming={Boolean(message.isStreaming)}
-                      className="prose prose-sm prose-gray max-w-none font-serif dark:prose-invert"
-                    />
+                    <Markdown className="prose prose-sm prose-gray max-w-none font-serif dark:prose-invert">
+                      {content}
+                    </Markdown>
                   ) : (
                     <div className="whitespace-pre-wrap">
                       {content}
@@ -350,12 +405,6 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
               </div>
             )}
 
-            {/* Outside the branches on purpose: a provider can cite memory on a
-                plain reply or on the plan card it turned that reply into. */}
-            {Array.isArray(message.memoryCitations) && message.memoryCitations.length > 0 && (
-              <MemoryCitations citations={message.memoryCitations} />
-            )}
-
             {(shouldShowAssistantCopyControl || !isGrouped) && (
               <div className="mt-1 flex w-full items-center gap-2 text-[11px] text-gray-400 dark:text-gray-500">
                 {shouldShowAssistantCopyControl && (
@@ -363,6 +412,18 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                 )}
                 {shouldShowAssistantCopyControl && (
                   <MessageSpeakControl content={assistantCopyContent} />
+                )}
+                {onForkFromMessage && turnAnchorMessage?.transcriptAnchorId && (
+                  <button
+                    type="button"
+                    onClick={() => onForkFromMessage(turnAnchorMessage)}
+                    title={t('message.forkFromHere', { defaultValue: 'Fork from here' })}
+                    aria-label={t('message.forkFromHere', { defaultValue: 'Fork from here' })}
+                    className="flex items-center gap-1 rounded px-1.5 py-1 text-xs opacity-70 transition-opacity hover:bg-muted hover:opacity-100 focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                  >
+                    <GitBranchIcon className="h-3.5 w-3.5" />
+                    <span>{t('message.fork', { defaultValue: 'Fork' })}</span>
+                  </button>
                 )}
                 {!isGrouped && <span>{formattedTime}</span>}
               </div>

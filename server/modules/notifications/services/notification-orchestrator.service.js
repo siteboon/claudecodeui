@@ -247,6 +247,9 @@ function notifyUserIfEnabled({ userId, event }) {
   }
 }
 
+/**
+ * @param {{ userId?: string | null, provider: import('@/shared/types.js').LLMProvider, sessionId?: string | null, stopReason?: string, sessionName?: string | null }} options
+ */
 function notifyRunStopped({ userId, provider, sessionId = null, stopReason = 'completed', sessionName = null }) {
   notifyUserIfEnabled({
     userId,
@@ -283,6 +286,9 @@ function notifyBackgroundWorkCompleted({ userId, provider, sessionId = null, ses
   });
 }
 
+/**
+ * @param {{ userId?: string | null, provider: import('@/shared/types.js').LLMProvider, sessionId?: string | null, error: unknown, sessionName?: string | null }} options
+ */
 function notifyRunFailed({ userId, provider, sessionId = null, error, sessionName = null }) {
   const errorMessage = normalizeErrorMessage(error);
 

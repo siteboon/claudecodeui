@@ -5,52 +5,22 @@ import { ArrowDownIcon } from 'lucide-react';
 import { useTasksSettings } from '@/modules/task-master';
 import { useWebSocket } from '@/shared/context/WebSocketContext';
 import PermissionContext from '@/modules/chat/context/PermissionContext';
-import { api } from '@/shared/api';
-import type {
-  ChatMessage,
-  Project,
-  ProjectSession,
-  SessionEstablishedContext,
-  SessionNavigationOptions,
-} from '@/shared/types';
+import type { ChatInterfaceProps, PermissionMode } from '@/shared/types';
 import { useChatProviderState } from '@/modules/chat/hooks/useChatProviderState';
-import { useScheduledMessages } from '@/modules/chat/composer/useScheduledMessages';
 import { useChatSessionState } from '@/modules/chat/hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '@/modules/chat/hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
 import { useSessionStore } from '@/modules/chat/hooks/useSessionStore';
-import {
-  useProcessingSessions,
-  useSessionProtectionActions,
-} from '@/shared/context/SessionProtectionContext';
+import { getProviderDisplayName } from '@/shared/providerDisplay';
+import { useProviderAuthStatus } from '@/modules/provider-auth';
+
+import { useScheduledMessages } from '@/modules/chat/composer/useScheduledMessages';
 import ChatMessagesPane from '@/modules/chat/transcript/ChatMessagesPane';
+import type { ChatMessage } from '@/shared/types';
+import { api } from '@/shared/api';
 import ChatComposer from '@/modules/chat/composer/ChatComposer';
 import CommandResultModal from '@/modules/chat/modals/CommandResultModal';
 
-type ChatInterfaceProps = {
-  isActive: boolean;
-  selectedProject: Project | null;
-  selectedSession: ProjectSession | null;
-  ws: WebSocket | null;
-  sendMessage: (message: unknown) => void;
-  onFileOpen?: (filePath: string, diffInfo?: any) => void;
-  onNavigateToSession?: (targetSessionId: string, options?: SessionNavigationOptions) => void;
-  onSessionEstablished?: (sessionId: string, context: SessionEstablishedContext) => void;
-  onShowSettings?: () => void;
-  showRawParameters?: boolean;
-  showThinking?: boolean;
-  sendByCtrlEnter?: boolean;
-  externalMessageUpdate?: number;
-  newSessionTrigger?: number;
-  onTaskClick?: (...args: unknown[]) => void;
-  onShowAllTasks?: (() => void) | null;
-};
-
-/**
- * Used by the project-workspace module (via the chat barrel) to render a
- * project session's chat tab; it owns the session, provider, realtime and
- * composer state that ChatMessagesPane and ChatComposer render.
- */
 function ChatInterface({
   isActive,
   selectedProject,
@@ -58,6 +28,10 @@ function ChatInterface({
   ws,
   sendMessage,
   onFileOpen,
+  onInputFocusChange,
+  onSessionProcessing,
+  onSessionIdle,
+  processingSessions,
   onNavigateToSession,
   onSessionEstablished,
   onShowSettings,
@@ -71,15 +45,19 @@ function ChatInterface({
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
   const { subscribe } = useWebSocket();
   const { t } = useTranslation('chat');
-  const processingSessions = useProcessingSessions();
-  const {
-    markSessionProcessing: onSessionProcessing,
-    markSessionIdle: onSessionIdle,
-  } = useSessionProtectionActions();
+  const { providerAuthStatus, refreshProviderAuthStatuses } = useProviderAuthStatus();
+
+  useEffect(() => {
+    void refreshProviderAuthStatuses();
+  }, [refreshProviderAuthStatuses]);
 
   const sessionStore = useSessionStore();
-  const streamTimerRef = useRef<number | null>(null);
-  const accumulatedStreamRef = useRef('');
+  // Streaming accumulation is keyed per session: concurrent runs (one viewed,
+  // one background) each keep their own buffer and 100ms throttle timer, so
+  // deltas can never cross-contaminate and one run's terminal flush never
+  // discards another run's in-flight prefix.
+  const streamTimersRef = useRef(new Map<string, number>());
+  const accumulatedStreamsRef = useRef(new Map<string, string>());
   // When each session's `chat.subscribe` was last sent; idle acks older than
   // a later local request are discarded as stale.
   const statusCheckSentAtRef = useRef(new Map<string, number>());
@@ -89,18 +67,20 @@ function ChatInterface({
   const lastSeqRef = useRef(new Map<string, number>());
 
   const resetStreamingState = useCallback(() => {
-    if (streamTimerRef.current) {
-      clearTimeout(streamTimerRef.current);
-      streamTimerRef.current = null;
+    for (const timer of streamTimersRef.current.values()) {
+      clearTimeout(timer);
     }
-    accumulatedStreamRef.current = '';
+    streamTimersRef.current.clear();
+    accumulatedStreamsRef.current.clear();
   }, []);
 
   const {
     provider,
     setProvider,
     providerModels,
-    setStoredProviderModel,
+    setProviderModel,
+    supportsMessageEditing,
+    supportsSessionForking,
     currentProviderEffort,
     currentProviderEffortOptions,
     currentProviderModel,
@@ -117,8 +97,6 @@ function ChatInterface({
     selectProviderModel,
     selectProviderEffort,
     resolvePermissionModeForProvider,
-    supportsMessageEditing,
-    supportsSessionForking,
   } = useChatProviderState({
     selectedSession,
     selectedProject,
@@ -144,16 +122,16 @@ function ChatInterface({
     visibleMessages,
     loadEarlierMessages,
     loadAllMessages,
-    loadFullTranscript,
     allMessagesLoaded,
     isLoadingAllMessages,
     loadAllJustFinished,
     showLoadAllOverlay,
     createDiff,
     scrollContainerRef,
+    scrollContentRef,
     scrollToBottom,
     scrollToBottomAndReset,
-    handleScroll,
+    notifyPaneMounted,
     requestLatestMessages,
   } = useChatSessionState({
     isActive,
@@ -202,6 +180,7 @@ function ChatInterface({
     selectFile,
     attachedFiles,
     setAttachedFiles,
+    uploadingFiles,
     fileErrors,
     getRootProps,
     getInputProps,
@@ -209,6 +188,9 @@ function ChatInterface({
     openAttachmentPicker,
     handleSubmit,
     queuedDraft,
+    editingAnchorId,
+    beginEditMessage,
+    cancelEditMessage,
     editQueuedDraft,
     deleteQueuedDraft,
     handleVoiceTranscript,
@@ -227,9 +209,6 @@ function ChatInterface({
     commandModalPayload,
     closeCommandModal,
     showCostModal,
-    editingAnchorId,
-    beginEditMessage,
-    cancelEditMessage,
   } = useChatComposerState({
     selectedProject,
     selectedSession,
@@ -243,10 +222,12 @@ function ChatInterface({
     processingSessions,
     canAbortSession,
     tokenBudget,
+    setTokenBudget,
     sendMessage,
     sendByCtrlEnter,
     onSessionProcessing,
     onSessionEstablished: handleSessionEstablished,
+    onInputFocusChange,
     onFileOpen,
     onShowSettings,
     scrollToBottom,
@@ -282,8 +263,8 @@ function ChatInterface({
     setTokenBudget,
     pendingPermissionRequests,
     setPendingPermissionRequests,
-    streamTimerRef,
-    accumulatedStreamRef,
+    streamTimersRef,
+    accumulatedStreamsRef,
     lastSeqRef,
     statusCheckSentAtRef,
     onSessionProcessing,
@@ -319,49 +300,6 @@ function ChatInterface({
     };
   }, [resetStreamingState]);
 
-  /**
-   * Branches the conversation into a new session that ends at this message,
-   * then opens it. The session being viewed is left exactly as it was.
-   */
-  const handleForkFromMessage = useCallback(async (message: ChatMessage) => {
-    const anchorId = message.transcriptAnchorId;
-    const sourceSessionId = selectedSession?.id;
-    if (!anchorId || !sourceSessionId) return;
-
-    try {
-      const response = await api.forkSession(sourceSessionId, { upToAnchorId: anchorId });
-      const payload = await response.json();
-      const forkedSessionId = payload?.data?.sessionId;
-      if (!response.ok || typeof forkedSessionId !== 'string') {
-        throw new Error(payload?.message || `HTTP ${response.status}`);
-      }
-      onNavigateToSession?.(forkedSessionId);
-    } catch (error) {
-      console.error('Error forking session:', error);
-    }
-  }, [onNavigateToSession, selectedSession?.id]);
-
-  const { scheduledMessages, schedule: scheduleMessage, cancel: cancelScheduledMessage } =
-    useScheduledMessages(currentSessionId || selectedSession?.id || null);
-
-  /**
-   * Hands the composer's current text to the server to send later, and clears
-   * the box as a send would — the message has left the composer either way.
-   */
-  const handleScheduleMessage = useCallback(async (scheduledFor: Date) => {
-    const content = input.trim();
-    if (!content) return;
-
-    const scheduled = await scheduleMessage({
-      content,
-      scheduledFor,
-      options: { model: currentProviderModel, effort: currentProviderEffort, permissionMode },
-    });
-    if (scheduled) {
-      setInput('');
-    }
-  }, [currentProviderEffort, currentProviderModel, input, permissionMode, scheduleMessage, setInput]);
-
   const permissionContextValue = useMemo(() => ({
     pendingPermissionRequests,
     handlePermissionDecision,
@@ -390,14 +328,49 @@ function ChatInterface({
   // overlapping the last message.
   const hasActivityIndicator = Boolean(sessionActivity && pendingPermissionRequests.length === 0);
 
-  const selectedProviderLabel =
-    provider === 'cursor'
-      ? t('messageTypes.cursor')
-      : provider === 'codex'
-        ? t('messageTypes.codex')
-        : provider === 'opencode'
-            ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
-          : t('messageTypes.claude');
+  const { scheduledMessages, schedule: scheduleMessage, cancel: cancelScheduledMessage } =
+    useScheduledMessages(currentSessionId || selectedSession?.id || null);
+
+  const handleScheduleMessage = useCallback(async (scheduledFor: Date) => {
+    const content = input.trim();
+    if (!content) return;
+
+    const scheduled = await scheduleMessage({
+      content,
+      scheduledFor,
+      options: { model: currentProviderModel, effort: currentProviderEffort, permissionMode },
+    });
+    if (scheduled) {
+      setInput('');
+    }
+  }, [currentProviderEffort, currentProviderModel, input, permissionMode, scheduleMessage, setInput]);
+
+  const handleForkFromMessage = useCallback(async (message: ChatMessage) => {
+    const anchorId = message.transcriptAnchorId;
+    const sourceSessionId = selectedSession?.id;
+    if (!anchorId || !sourceSessionId) return;
+
+    try {
+      const response = await api.forkSession(sourceSessionId, { upToAnchorId: anchorId });
+      const payload = await response.json();
+      const forkedSessionId = payload?.data?.sessionId;
+      if (!response.ok || typeof forkedSessionId !== 'string') {
+        throw new Error(payload?.message || `HTTP ${response.status}`);
+      }
+      onNavigateToSession?.(forkedSessionId);
+    } catch (error) {
+      console.error('Error forking session:', error);
+    }
+  }, [onNavigateToSession, selectedSession?.id]);
+
+  // Stable adapter so ChatMessagesPane's React.memo is not defeated by an
+  // inline arrow recreated on every render.
+  const handlePaneProviderChange = useCallback(
+    (nextProvider: Parameters<typeof setProvider>[0]) => setProvider(nextProvider),
+    [setProvider],
+  );
+
+  const selectedProviderLabel = getProviderDisplayName(provider);
 
   if (!selectedProject) {
     return (
@@ -414,19 +387,13 @@ function ChatInterface({
     );
   }
 
-
   return (
     <PermissionContext.Provider value={permissionContextValue}>
       <div className="flex h-full min-h-0 flex-col">
         <ChatMessagesPane
           scrollContainerRef={scrollContainerRef}
-          // Not redundant with the `scroll` listener. A first page is 20 rows,
-          // tool results fold into their calls, and the "load earlier" link is
-          // hidden while more pages exist — so a short transcript is often not
-          // scrollable at all and never emits `scroll`. Wheel and touch are
-          // then the only way to reach the top pager or the "load all" overlay.
-          onWheel={handleScroll}
-          onTouchMove={handleScroll}
+          scrollContentRef={scrollContentRef}
+          onPaneMounted={notifyPaneMounted}
           isLoadingSessionMessages={isLoadingSessionMessages}
           isProcessing={isProcessing}
           hasActivityIndicator={hasActivityIndicator}
@@ -434,13 +401,16 @@ function ChatInterface({
           selectedSession={selectedSession}
           currentSessionId={currentSessionId}
           provider={provider}
-          setProvider={setProvider}
+          setProvider={handlePaneProviderChange}
           textareaRef={textareaRef}
           providerModels={providerModels}
-          setProviderModel={setStoredProviderModel}
+          setProviderModel={setProviderModel}
+          onEditMessage={supportsMessageEditing && !isProcessing ? beginEditMessage : undefined}
+          onForkFromMessage={supportsSessionForking ? handleForkFromMessage : undefined}
           providerModelCatalog={providerModelCatalog}
           providerModelActions={providerModelActions}
           providerModelsLoading={providerModelsLoading}
+          providerAuthStatus={providerAuthStatus}
           tasksEnabled={tasksEnabled}
           isTaskMasterInstalled={isTaskMasterInstalled}
           onShowAllTasks={onShowAllTasks}
@@ -464,12 +434,6 @@ function ChatInterface({
           showRawParameters={showRawParameters}
           showThinking={showThinking}
           selectedProject={selectedProject}
-          // Editing replaces the turn and everything after it, so it is only
-          // offered when the session is idle — a half-truncated transcript with
-          // a live stream writing into it is not recoverable.
-          onEditMessage={supportsMessageEditing && !isProcessing ? beginEditMessage : undefined}
-          onForkFromMessage={supportsSessionForking ? handleForkFromMessage : undefined}
-          onLoadFullTranscript={loadFullTranscript}
         />
 
         <div className="relative flex-shrink-0">
@@ -496,7 +460,7 @@ function ChatInterface({
           onAbortSession={handleAbortSession}
           permissionMode={permissionMode}
           availablePermissionModes={availablePermissionModes}
-          onSelectPermissionMode={selectPermissionMode}
+          onSelectPermissionMode={(mode) => selectPermissionMode(mode as PermissionMode)}
           providerLabel={selectedProviderLabel}
           effort={currentProviderEffort}
           availableEffortOptions={currentProviderEffortOptions}
@@ -507,11 +471,6 @@ function ChatInterface({
           modelsLoading={providerModelsLoading}
           tokenBudget={tokenBudget}
           onShowTokenUsage={showCostModal}
-          isEditingSentMessage={Boolean(editingAnchorId)}
-          onCancelEditMessage={cancelEditMessage}
-          scheduledMessages={scheduledMessages}
-          onScheduleMessage={handleScheduleMessage}
-          onCancelScheduledMessage={cancelScheduledMessage}
           slashCommandsCount={slashCommandsCount}
           onToggleCommandMenu={handleToggleCommandMenu}
           hasInput={Boolean(input.trim())}
@@ -527,6 +486,7 @@ function ChatInterface({
               previous.filter((_, currentIndex) => currentIndex !== index),
             )
           }
+          uploadingFiles={uploadingFiles}
           fileErrors={fileErrors}
           showFileDropdown={showFileDropdown}
           filteredFiles={filteredFiles}
@@ -553,6 +513,11 @@ function ChatInterface({
           onTextareaScrollSync={syncInputOverlayScroll}
           onTextareaInput={handleTextareaInput}
           isInputFocused={isInputFocused}
+          isEditingSentMessage={Boolean(editingAnchorId)}
+          onCancelEditMessage={cancelEditMessage}
+          scheduledMessages={scheduledMessages}
+          onScheduleMessage={handleScheduleMessage}
+          onCancelScheduledMessage={cancelScheduledMessage}
           onInputFocusChange={handleInputFocusChange}
           placeholder={t('input.placeholder', { provider: selectedProviderLabel })}
           isTextareaExpanded={isTextareaExpanded}

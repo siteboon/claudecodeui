@@ -1,44 +1,38 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { api } from '@/shared/api';
-import type { PendingPermissionRequest, PermissionMode,
+import { authenticatedFetch } from '@/shared/api';
+import type { PendingPermissionRequest, PermissionMode } from '@/shared/types';
+import type {
   ProjectSession,
   LLMProvider,
   Project,
   CustomProviderModelInput,
   ProviderModelActions,
   ProviderModelOption,
-  ProviderModelsDefinition } from '@/shared/types';
-import { DEFAULT_EFFORT_VALUE } from '@/shared/constants';
-import { readSelectedProvider, writeSelectedProvider } from '@/shared/selectedProvider';
-
-const FALLBACK_PROVIDER_EFFORT_VALUES: Partial<Record<LLMProvider, readonly string[]>> = {
-  // Superset used only before the model catalog loads; `ultracode` belongs to the
-  // xhigh-capable models alone, but listing it here keeps a stored ultracode
-  // selection from being reset during catalog hydration.
-  claude: ['low', 'medium', 'high', 'xhigh', 'max', 'ultracode'],
-  // Superset used only before the model catalog loads. Per-model metadata
-  // narrows this once available; including the GPT-5.6 tiers here prevents a
-  // valid Max/Ultra selection from being reset during catalog hydration.
-  codex: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
-  opencode: ['none', 'low', 'medium', 'high', 'xhigh', 'max'],
-};
-
-const toProviderEffortOptions = (
-  values: readonly string[],
-): NonNullable<ProviderModelOption['effort']>['values'] => values.map((value) => ({ value }));
+  ProviderModelsDefinition,
+} from '@/shared/types';
+import {
+  DEFAULT_EFFORT_VALUE,
+  FALLBACK_PROVIDER_EFFORT_VALUES,
+  toProviderEffortOptions,
+} from '@/modules/chat/constants/providerEffort';
 
 const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   claude: 'default',
   cursor: 'gpt-5.3-codex',
   codex: 'gpt-5.4',
   opencode: 'anthropic/claude-sonnet-4-5',
+  antigravity: 'gemini-3.7-flash',
 };
 
-const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode'];
+const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode', 'antigravity'];
 
-/** localStorage key holding the user's default model for one provider. */
-const providerModelStorageKey = (provider: LLMProvider): string => `${provider}-model`;
+const readStoredProvider = (): LLMProvider => {
+  const storedProvider = localStorage.getItem('selected-provider');
+  return PROVIDERS.includes(storedProvider as LLMProvider)
+    ? storedProvider as LLMProvider
+    : 'claude';
+};
 
 /**
  * Fallback permission-mode matrix used only until the backend capability
@@ -51,6 +45,7 @@ const FALLBACK_PERMISSION_MODES: Record<LLMProvider, PermissionMode[]> = {
   cursor: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
   codex: ['default', 'acceptEdits', 'bypassPermissions'],
   opencode: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
+  antigravity: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
 };
 
 type ProviderCapabilities = {
@@ -77,7 +72,7 @@ type ProviderCapabilitiesApiResponse = {
 type UseChatProviderStateArgs = {
   selectedSession: ProjectSession | null;
   selectedProject: Project | null;
-};
+}
 
 type ProviderModelsApiResponse = {
   success?: boolean;
@@ -127,20 +122,16 @@ const getSessionSelectionKey = (provider: LLMProvider, sessionId: string): strin
 export function useChatProviderState({ selectedSession, selectedProject: _selectedProject }: UseChatProviderStateArgs) {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('default');
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
-  // The provider the composer sends under. Held here rather than read from
-  // storage per render because switching it has to reset the model menu, the
-  // permission mode and the session in one commit.
-  const [provider, setProvider] = useState<LLMProvider>(readSelectedProvider);
-  // Every provider's chosen model, not just the active one: switching provider
-  // must restore the model that provider was last used with, and the catalogue
-  // that validates them arrives asynchronously per provider.
-  const [providerModels, setProviderModels] = useState<Record<LLMProvider, string>>(() => {
-    return PROVIDERS.reduce<Record<LLMProvider, string>>((acc, targetProvider) => {
-      acc[targetProvider] = localStorage.getItem(providerModelStorageKey(targetProvider))
-        || FALLBACK_DEFAULT_MODEL[targetProvider];
+  const [provider, setProvider] = useState<LLMProvider>(readStoredProvider);
+  // One map for the per-provider default model, mirroring the upstream
+  // providerModels API. Each provider keeps its own `<provider>-model`
+  // storage key so selections made before the merge still resolve.
+  const [providerModels, setProviderModels] = useState<Record<LLMProvider, string>>(() => (
+    PROVIDERS.reduce<Record<LLMProvider, string>>((acc, targetProvider) => {
+      acc[targetProvider] = localStorage.getItem(`${targetProvider}-model`) || FALLBACK_DEFAULT_MODEL[targetProvider];
       return acc;
-    }, {} as Record<LLMProvider, string>);
-  });
+    }, {} as Record<LLMProvider, string>)
+  ));
   const [providerEfforts, setProviderEfforts] = useState<Partial<Record<LLMProvider, string>>>(() => {
     return PROVIDERS.reduce<Partial<Record<LLMProvider, string>>>((acc, targetProvider) => {
       acc[targetProvider] = localStorage.getItem(`${targetProvider}-effort`) || DEFAULT_EFFORT_VALUE;
@@ -169,13 +160,13 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   const sessionModelMutationIdRef = useRef(0);
   const sessionEffortMutationIdRef = useRef(0);
 
-  const setStoredProviderModel = useCallback((targetProvider: LLMProvider, model: string) => {
+  const setProviderModel = useCallback((targetProvider: LLMProvider, model: string) => {
     setProviderModels((previous) => (
       previous[targetProvider] === model
         ? previous
         : { ...previous, [targetProvider]: model }
     ));
-    localStorage.setItem(providerModelStorageKey(targetProvider), model);
+    localStorage.setItem(`${targetProvider}-model`, model);
   }, []);
 
   const setStoredProviderEffort = useCallback((targetProvider: LLMProvider, effort: string) => {
@@ -195,7 +186,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     try {
       const results = await Promise.all(
         PROVIDERS.map(async (p) => {
-          const response = await api.providers.models(p);
+          const response = await authenticatedFetch(`/api/providers/${p}/models`);
           const body = (await response.json()) as ProviderModelsApiResponse;
           if (!body.success || !body.data?.models) {
             return null;
@@ -239,7 +230,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
 
     const loadCapabilities = async () => {
       try {
-        const response = await api.providers.capabilities();
+        const response = await authenticatedFetch('/api/providers/capabilities');
         const body = (await response.json()) as ProviderCapabilitiesApiResponse;
         if (cancelled || !body.success || !Array.isArray(body.data?.providers)) {
           return;
@@ -357,33 +348,39 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     return DEFAULT_EFFORT_VALUE;
   }, [getAllowedEffortValues]);
 
-  // One reconciliation pass over every provider, mirroring the effort effect
-  // below. This was four copy-pasted eleven-line effects, one per provider.
+  // One reconciliation pass over every provider: when a catalog arrives,
+  // resolve each stored model against it (falling back to the catalog
+  // default) instead of running one near-identical effect per provider.
   useEffect(() => {
-    const reconciledModels: Partial<Record<LLMProvider, string>> = {};
+    setProviderModels((previous) => {
+      let changed = false;
+      const next = { ...previous };
 
-    for (const targetProvider of PROVIDERS) {
-      const catalog = providerModelCatalog[targetProvider];
-      if (!catalog) {
-        continue;
+      for (const targetProvider of PROVIDERS) {
+        const definition = providerModelCatalog[targetProvider];
+        if (!definition) {
+          continue;
+        }
+
+        const stored = localStorage.getItem(`${targetProvider}-model`);
+        const current = previous[targetProvider];
+        let resolved = definition.DEFAULT;
+        if (stored && definition.OPTIONS.some((option) => option.value === stored)) {
+          resolved = stored;
+        } else if (current && definition.OPTIONS.some((option) => option.value === current)) {
+          resolved = current;
+        }
+
+        if (resolved !== current) {
+          next[targetProvider] = resolved;
+          localStorage.setItem(`${targetProvider}-model`, resolved);
+          changed = true;
+        }
       }
 
-      const storageKey = providerModelStorageKey(targetProvider);
-      const currentModel = providerModels[targetProvider];
-      const nextModel = pickStoredOrCurrent(storageKey, currentModel, catalog);
-
-      if (nextModel !== currentModel) {
-        reconciledModels[targetProvider] = nextModel;
-      }
-      if (localStorage.getItem(storageKey) !== nextModel) {
-        localStorage.setItem(storageKey, nextModel);
-      }
-    }
-
-    if (Object.keys(reconciledModels).length > 0) {
-      setProviderModels((previous) => ({ ...previous, ...reconciledModels }));
-    }
-  }, [providerModelCatalog, providerModels]);
+      return changed ? next : previous;
+    });
+  }, [providerModelCatalog]);
 
   useEffect(() => {
     const nextEfforts: Partial<Record<LLMProvider, string>> = {};
@@ -428,7 +425,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     }
 
     setProvider(selectedSession.__provider);
-    writeSelectedProvider(selectedSession.__provider);
+    localStorage.setItem('selected-provider', selectedSession.__provider);
   }, [provider, selectedSession]);
 
   // Permission prompts belong to a session, not to the transient provider
@@ -463,14 +460,6 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     () => getPermissionModesForProvider(provider),
     [getPermissionModesForProvider, provider],
   );
-
-  /**
-   * Both default to false until the matrix loads, so an affordance is never
-   * offered and then withdrawn — and never offered at all for a provider whose
-   * runtime would reject it.
-   */
-  const supportsMessageEditing = Boolean(providerCapabilities?.[provider]?.supportsMessageEditing);
-  const supportsSessionForking = Boolean(providerCapabilities?.[provider]?.supportsSessionForking);
 
   const resolvePermissionModeForProvider = useCallback((
     targetProvider: LLMProvider,
@@ -515,7 +504,9 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
 
     const loadSessionSelection = async () => {
       try {
-        const response = await api.providers.sessionActiveModel(targetProvider, selectedSessionId);
+        const response = await authenticatedFetch(
+          `/api/providers/${targetProvider}/sessions/${encodeURIComponent(selectedSessionId)}/active-model`,
+        );
         const body = (await response.json()) as SessionSelectionApiResponse;
         if (
           cancelled
@@ -568,7 +559,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     model: string,
     sessionId?: string | null,
   ) => {
-    setStoredProviderModel(targetProvider, model);
+    setProviderModel(targetProvider, model);
 
     const normalizedSessionId = typeof sessionId === 'string' ? sessionId.trim() : '';
     if (!normalizedSessionId) {
@@ -582,10 +573,12 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     sessionModelMutationIdRef.current = mutationId;
     const targetSessionKey = getSessionSelectionKey(targetProvider, normalizedSessionId);
 
-    const response = await api.providers.setSessionActiveModel(
-      targetProvider,
-      normalizedSessionId,
-      model,
+    const response = await authenticatedFetch(
+      `/api/providers/${targetProvider}/sessions/${encodeURIComponent(normalizedSessionId)}/active-model`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ model }),
+      },
     );
 
     const body = (await response.json()) as SessionSelectionApiResponse;
@@ -608,7 +601,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       }));
     }
     return { scope: 'session' as const, model: storedModel };
-  }, [setStoredProviderModel]);
+  }, [setProviderModel]);
 
   /**
    * Applies an effort choice optimistically and persists it for the open
@@ -644,10 +637,12 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     });
 
     try {
-      const response = await api.providers.setSessionActiveEffort(
-        targetProvider,
-        normalizedSessionId,
-        effort,
+      const response = await authenticatedFetch(
+        `/api/providers/${targetProvider}/sessions/${encodeURIComponent(normalizedSessionId)}/active-effort`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ effort }),
+        },
       );
       const body = (await response.json()) as SessionSelectionApiResponse;
       if (!response.ok || !body.success) {
@@ -707,6 +702,12 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     [provider, providerModelCatalog],
   );
 
+  // Capability gates for the transcript affordances (edit & resend, fork from
+  // here). Server matrix wins once loaded; until then assume supported, since
+  // the primary providers (claude, codex) implement both.
+  const supportsMessageEditing = providerCapabilities?.[provider]?.supportsMessageEditing ?? true;
+  const supportsSessionForking = providerCapabilities?.[provider]?.supportsSessionForking ?? true;
+
   const applyProviderCatalog = useCallback((
     targetProvider: LLMProvider,
     models: ProviderModelsDefinition,
@@ -735,7 +736,10 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     targetProvider: LLMProvider,
     input: CustomProviderModelInput,
   ) => {
-    const response = await api.providers.createModel(targetProvider, input);
+    const response = await authenticatedFetch(`/api/providers/${targetProvider}/models`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
     const result = await readModelMutationResponse(response);
     applyProviderCatalog(targetProvider, result.models);
   }, [applyProviderCatalog, readModelMutationResponse]);
@@ -749,12 +753,18 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       throw new Error('This model cannot be edited.');
     }
 
-    const response = await api.providers.updateModel(targetProvider, existing.recordId, input);
+    const response = await authenticatedFetch(
+      `/api/providers/${targetProvider}/models/${existing.recordId}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(input),
+      },
+    );
     const result = await readModelMutationResponse(response);
     applyProviderCatalog(targetProvider, result.models);
 
     if (providerModels[targetProvider] === existing.value) {
-      setStoredProviderModel(targetProvider, result.model.value);
+      setProviderModel(targetProvider, result.model.value);
     }
     if (provider === targetProvider && sessionModel === existing.value) {
       setSessionSelection((current) => current ? {
@@ -768,7 +778,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     providerModels,
     readModelMutationResponse,
     sessionModel,
-    setStoredProviderModel,
+    setProviderModel,
   ]);
 
   const removeCustomModel = useCallback(async (
@@ -779,12 +789,15 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       throw new Error('This model cannot be deleted.');
     }
 
-    const response = await api.providers.deleteModel(targetProvider, existing.recordId);
+    const response = await authenticatedFetch(
+      `/api/providers/${targetProvider}/models/${existing.recordId}`,
+      { method: 'DELETE' },
+    );
     const result = await readModelMutationResponse(response);
     applyProviderCatalog(targetProvider, result.models);
 
     if (providerModels[targetProvider] === existing.value) {
-      setStoredProviderModel(targetProvider, result.models.DEFAULT);
+      setProviderModel(targetProvider, result.models.DEFAULT);
     }
     if (provider === targetProvider && sessionModel === existing.value) {
       setSessionSelection((current) => current ? {
@@ -798,7 +811,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     providerModels,
     readModelMutationResponse,
     sessionModel,
-    setStoredProviderModel,
+    setProviderModel,
   ]);
 
   const providerModelActions = useMemo<ProviderModelActions>(() => ({
@@ -810,13 +823,17 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   return {
     provider,
     setProvider,
+    supportsMessageEditing,
+    supportsSessionForking,
     providerModels,
-    setStoredProviderModel,
+    setProviderModel,
     currentProviderEffort,
     currentProviderEffortOptions,
     currentProviderModel,
     currentProviderModelOptions,
+
     permissionMode,
+    setPermissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
     availablePermissionModes,
@@ -828,7 +845,5 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     selectProviderModel,
     selectProviderEffort,
     resolvePermissionModeForProvider,
-    supportsMessageEditing,
-    supportsSessionForking,
   };
 }

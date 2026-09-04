@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
 
@@ -9,20 +10,27 @@ import type {
   FetchHistoryOptions,
   FetchHistoryResult,
   NormalizedMessage,
+  ProviderSessionUsageInput,
+  ProviderTokenUsageResult,
   SubagentActivity,
   SubagentInfo,
 } from '@/shared/types.js';
 import { parseFilesInputTag } from '@/shared/image-attachments.js';
 import { prepareTranscriptMessages } from '@/shared/message-unification.js';
 import {
+  AppError,
   createNormalizedMessage,
   generateMessageId,
+  normalizeProjectPath,
   readObjectRecord,
+  readUsageNumber,
+  removePathIfExists,
+  sanitizeLeafDirectoryName,
   sliceTailPage,
   truncateSubagentActivity,
 } from '@/shared/utils.js';
 import { sessionsDb } from '@/modules/database/index.js';
-import { summarizeClaudeTokenUsage } from '@/modules/providers/services/provider-token-usage.service.js';
+import { summarizeClaudeTokenUsage } from '@/modules/providers/services/claude-usage.js';
 
 const PROVIDER = 'claude';
 
@@ -646,6 +654,64 @@ function stripAnsiFormatting(text: string): string {
   return text.replace(/\u001B\[[0-9;?]*[ -/]*[@-~]/g, '');
 }
 
+/**
+ * Reads the latest assistant-message usage snapshot from a Claude JSONL.
+ *
+ * Claude appends cumulative per-assistant usage over time, so the scan walks
+ * from the end and stops at the first readable assistant entry. Cache reads
+ * and writes count toward the input total, matching how the CLI bills them.
+ */
+function readClaudeTokenUsage(
+  fileContent: string,
+  configuredContextWindow: string | undefined,
+): ProviderTokenUsageResult {
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let cacheReadTokens = 0;
+  let cacheCreationTokens = 0;
+  const lines = fileContent.trim().split('\n');
+
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    try {
+      const entry = JSON.parse(lines[index]) as AnyRecord;
+      const usage = entry.type === 'assistant' ? entry.message?.usage : null;
+      if (!usage) {
+        continue;
+      }
+
+      const directInputTokens = readUsageNumber(usage.input_tokens ?? usage.inputTokens);
+      cacheReadTokens = readUsageNumber(
+        usage.cache_read_input_tokens ?? usage.cacheReadInputTokens ?? usage.cacheReadTokens,
+      );
+      cacheCreationTokens = readUsageNumber(
+        usage.cache_creation_input_tokens
+          ?? usage.cacheCreationInputTokens
+          ?? usage.cacheCreationTokens,
+      );
+      inputTokens = directInputTokens + cacheReadTokens + cacheCreationTokens;
+      outputTokens = readUsageNumber(usage.output_tokens ?? usage.outputTokens);
+      break;
+    } catch {
+      // Skip malformed lines without discarding usage from earlier messages.
+    }
+  }
+
+  const parsedContextWindow = Number.parseInt(configuredContextWindow ?? '', 10);
+  const contextWindow = Number.isFinite(parsedContextWindow) ? parsedContextWindow : 160_000;
+  const cacheTokens = cacheReadTokens + cacheCreationTokens;
+
+  return {
+    used: inputTokens + outputTokens,
+    total: contextWindow,
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheCreationTokens,
+    cacheTokens,
+    breakdown: { input: inputTokens, output: outputTokens },
+  };
+}
+
 export class ClaudeSessionsProvider implements IProviderSessions {
   /**
    * Normalizes one Claude JSONL entry or live SDK stream event into the shared
@@ -1104,5 +1170,91 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       // whatever it was when the session was opened.
       tokenUsage: summarizeClaudeTokenUsage(rawMessages),
     };
+  }
+
+  /**
+   * Reads the token usage recorded in one Claude session JSONL.
+   *
+   * Consumer: the provider token-usage service. The app row's indexed
+   * `jsonl_path` wins; otherwise the transcript is derived from the encoded
+   * project directory under `~/.claude/projects`. A missing file is a 404.
+   */
+  async getTokenUsage(input: ProviderSessionUsageInput): Promise<ProviderTokenUsageResult> {
+    let sessionFilePath = input.jsonlPath ?? undefined;
+    if (!sessionFilePath) {
+      if (!input.projectPath) {
+        throw new AppError(`Session file for "${input.appSessionId}" was not found.`, {
+          code: 'SESSION_FILE_NOT_FOUND',
+          statusCode: 404,
+        });
+      }
+
+      const encodedProjectPath = input.projectPath.replace(/[^a-zA-Z0-9-]/g, '-');
+      const projectDirectory = path.join(
+        os.homedir(),
+        '.claude',
+        'projects',
+        encodedProjectPath,
+      );
+      sessionFilePath = path.join(projectDirectory, `${input.nativeSessionId}.jsonl`);
+
+      const relativePath = path.relative(path.resolve(projectDirectory), path.resolve(sessionFilePath));
+      if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+        throw new AppError('Resolved session path is invalid.', {
+          code: 'INVALID_SESSION_PATH',
+          statusCode: 400,
+        });
+      }
+    }
+
+    if (!fs.existsSync(sessionFilePath)) {
+      throw new AppError(`Session file for "${input.appSessionId}" was not found.`, {
+        code: 'SESSION_FILE_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    const fileContent = await fsp.readFile(sessionFilePath, 'utf8');
+    return readClaudeTokenUsage(fileContent, process.env.CONTEXT_WINDOW);
+  }
+
+  /**
+   * Cleans up Claude native storage (JSONL file and subagent directory).
+   */
+  async cleanupSession(nativeSessionId: string, jsonlPath?: string | null): Promise<boolean> {
+    let removed = false;
+    if (jsonlPath) {
+      if (await removePathIfExists(jsonlPath)) {
+        removed = true;
+      }
+      if (nativeSessionId) {
+        try {
+          const safeLeaf = sanitizeLeafDirectoryName(nativeSessionId, 'native session id');
+          const subagentsDir = path.join(path.dirname(jsonlPath), safeLeaf);
+          if (await removePathIfExists(subagentsDir)) {
+            removed = true;
+          }
+        } catch {
+          // Skip if safeLeaf is invalid
+        }
+      }
+    }
+    return removed;
+  }
+
+  /**
+   * Cleans up Claude project storage (~/.claude/projects/<encodedPath>).
+   */
+  async cleanupProjectStorage(projectPath: string): Promise<void> {
+    const normalizedPath = normalizeProjectPath(projectPath);
+    if (!normalizedPath || normalizedPath === path.parse(normalizedPath).root) {
+      return;
+    }
+    const claudeProjectsRoot = path.join(os.homedir(), '.claude', 'projects');
+    const encodedCandidate = normalizedPath.replace(/[^a-zA-Z0-9_-]/g, '-');
+    if (encodedCandidate && encodedCandidate !== '-') {
+      const claudeProjectDir = path.join(claudeProjectsRoot, encodedCandidate);
+      await removePathIfExists(claudeProjectDir);
+    }
   }
 }

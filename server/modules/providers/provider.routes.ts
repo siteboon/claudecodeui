@@ -7,6 +7,7 @@ import { providerModelsService } from '@/modules/providers/services/provider-mod
 import { providerTokenUsageService } from '@/modules/providers/services/provider-token-usage.service.js';
 import { providerSkillsService } from '@/modules/providers/services/skills.service.js';
 import { sessionConversationsSearchService } from '@/modules/providers/services/session-conversations-search.service.js';
+import { sessionsAutoArchiveService } from '@/modules/providers/services/sessions-auto-archive.service.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 import type {
   CustomProviderModelInput,
@@ -287,6 +288,7 @@ const parseProvider = (value: unknown): LLMProvider => {
     || normalized === 'codex'
     || normalized === 'cursor'
     || normalized === 'opencode'
+    || normalized === 'antigravity'
   ) {
     return normalized;
   }
@@ -763,6 +765,55 @@ router.get(
 );
 
 router.get(
+  '/sessions/auto-archive/settings',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const settings = sessionsAutoArchiveService.getSettings();
+    res.json(createApiSuccessResponse(settings));
+  }),
+);
+
+router.put(
+  '/sessions/auto-archive/settings',
+  asyncHandler(async (req: Request, res: Response) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const enabled = typeof body.enabled === 'boolean' ? body.enabled : undefined;
+    let retentionDays: number | undefined;
+    if (body.retentionDays !== undefined) {
+      const parsedDays = Number(body.retentionDays);
+      if (!Number.isFinite(parsedDays) || parsedDays < 1 || parsedDays > 3650) {
+        throw new AppError('retentionDays must be a valid number between 1 and 3650.', {
+          code: 'INVALID_RETENTION_DAYS',
+          statusCode: 400,
+        });
+      }
+      retentionDays = Math.floor(parsedDays);
+    }
+    const updated = sessionsAutoArchiveService.updateSettings({
+      ...(enabled !== undefined ? { enabled } : {}),
+      ...(retentionDays !== undefined ? { retentionDays } : {}),
+    });
+    res.json(createApiSuccessResponse(updated));
+  }),
+);
+
+router.post(
+  '/sessions/auto-archive/run',
+  asyncHandler(async (req: Request, res: Response) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    let retentionDaysOverride: number | undefined;
+    if (body.retentionDays !== undefined) {
+      const parsedDays = Number(body.retentionDays);
+      if (Number.isFinite(parsedDays) && parsedDays >= 1 && parsedDays <= 3650) {
+        retentionDaysOverride = Math.floor(parsedDays);
+      }
+    }
+    const result = await sessionsAutoArchiveService.runAutoArchive(retentionDaysOverride);
+    res.json(createApiSuccessResponse(result));
+  }),
+);
+
+
+router.get(
   '/sessions/:sessionId/provider-id',
   asyncHandler(async (req: Request, res: Response) => {
     const sessionId = parseSessionId(req.params.sessionId);
@@ -776,6 +827,16 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const sessionId = parseSessionId(req.params.sessionId);
     const result = await providerTokenUsageService.getSessionTokenUsage(sessionId);
+    res.json(createApiSuccessResponse(result));
+  }),
+);
+
+router.get(
+  '/quota',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = readOptionalQueryString(req.query.provider) || 'antigravity';
+    const forceRefresh = parseOptionalBooleanQuery(req.query.refresh, 'refresh') ?? false;
+    const result = await providerTokenUsageService.getProviderQuota(provider, { forceRefresh });
     res.json(createApiSuccessResponse(result));
   }),
 );

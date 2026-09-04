@@ -3,7 +3,7 @@ import { AlertTriangle, Plus, Shield, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Button, Input } from '@/shared/ui';
-import type { CodexPermissionMode } from '@/shared/types';
+import type { AntigravityPermissionMode, CodexPermissionMode } from '@/shared/types';
 
 const COMMON_CLAUDE_TOOLS = [
   'Bash(git log:*)',
@@ -471,6 +471,104 @@ function CursorPermissions({
   );
 }
 
+type PermissionModeRadioCardProps<T extends string> = {
+  name: string;
+  value: T;
+  currentValue: T;
+  onChange: (value: T) => void;
+  title: string;
+  description: string;
+  variant?: 'default' | 'success' | 'info' | 'warning';
+  hasWarningIcon?: boolean;
+};
+
+function PermissionModeRadioCard<T extends string>({
+  name,
+  value,
+  currentValue,
+  onChange,
+  title,
+  description,
+  variant = 'default',
+  hasWarningIcon = false,
+}: PermissionModeRadioCardProps<T>) {
+  const isSelected = currentValue === value;
+
+  const getCardStyle = () => {
+    if (!isSelected) {
+      return 'border-border bg-card/50 active:border-border active:bg-accent/50';
+    }
+    switch (variant) {
+      case 'success':
+        return 'border-green-400 bg-green-50 dark:border-green-600 dark:bg-green-900/20';
+      case 'info':
+        return 'border-blue-400 bg-blue-50 dark:border-blue-600 dark:bg-blue-900/20';
+      case 'warning':
+        return 'border-orange-400 bg-orange-50 dark:border-orange-600 dark:bg-orange-900/20';
+      default:
+        return 'border-border bg-accent';
+    }
+  };
+
+  const getTitleStyle = () => {
+    if (!isSelected) {
+      return 'text-foreground';
+    }
+    switch (variant) {
+      case 'success':
+        return 'text-green-900 dark:text-green-100';
+      case 'info':
+        return 'text-blue-900 dark:text-blue-100';
+      case 'warning':
+        return 'text-orange-900 dark:text-orange-100';
+      default:
+        return 'text-foreground';
+    }
+  };
+
+  const getDescStyle = () => {
+    if (!isSelected) {
+      return 'text-muted-foreground';
+    }
+    switch (variant) {
+      case 'success':
+        return 'text-green-700 dark:text-green-300';
+      case 'info':
+        return 'text-blue-700 dark:text-blue-300';
+      case 'warning':
+        return 'text-orange-700 dark:text-orange-300';
+      default:
+        return 'text-muted-foreground';
+    }
+  };
+
+  return (
+    <div
+      className={`cursor-pointer rounded-lg border p-4 transition-all ${getCardStyle()}`}
+      onClick={() => onChange(value)}
+    >
+      <label className="flex cursor-pointer items-start gap-3">
+        <input
+          type="radio"
+          name={name}
+          checked={isSelected}
+          onChange={() => onChange(value)}
+          className={`mt-1 h-4 w-4 ${variant === 'warning' ? 'text-orange-600' : 'text-green-600'}`}
+        />
+        <div>
+          <div className={`flex items-center gap-2 font-medium ${getTitleStyle()}`}>
+            <span>{title}</span>
+            {hasWarningIcon && <AlertTriangle className="h-4 w-4 text-orange-500" />}
+          </div>
+          <div className={`text-sm ${getDescStyle()}`}>
+            {description}
+          </div>
+        </div>
+      </label>
+    </div>
+  );
+}
+
 type CodexPermissionsProps = {
   agent: 'codex';
   permissionMode: CodexPermissionMode;
@@ -489,80 +587,35 @@ function CodexPermissions({ permissionMode, onPermissionModeChange }: Omit<Codex
         </div>
         <p className="text-sm text-muted-foreground">{t('permissions.codex.description')}</p>
 
-        <div
-          className={`cursor-pointer rounded-lg border p-4 transition-all ${permissionMode === 'default'
-            ? 'border-border bg-accent'
-            : 'border-border bg-card/50 active:border-border active:bg-accent/50'
-            }`}
-          onClick={() => onPermissionModeChange('default')}
-        >
-          <label className="flex cursor-pointer items-start gap-3">
-            <input
-              type="radio"
-              name="codexPermissionMode"
-              checked={permissionMode === 'default'}
-              onChange={() => onPermissionModeChange('default')}
-              className="mt-1 h-4 w-4 text-green-600"
-            />
-            <div>
-              <div className="font-medium text-foreground">{t('permissions.codex.modes.default.title')}</div>
-              <div className="text-sm text-muted-foreground">
-                {t('permissions.codex.modes.default.description')}
-              </div>
-            </div>
-          </label>
-        </div>
+        <PermissionModeRadioCard
+          name="codexPermissionMode"
+          value="default"
+          currentValue={permissionMode}
+          onChange={onPermissionModeChange}
+          title={t('permissions.codex.modes.default.title')}
+          description={t('permissions.codex.modes.default.description')}
+        />
 
-        <div
-          className={`cursor-pointer rounded-lg border p-4 transition-all ${permissionMode === 'acceptEdits'
-            ? 'border-green-400 bg-green-50 dark:border-green-600 dark:bg-green-900/20'
-            : 'border-border bg-card/50 active:border-border active:bg-accent/50'
-            }`}
-          onClick={() => onPermissionModeChange('acceptEdits')}
-        >
-          <label className="flex cursor-pointer items-start gap-3">
-            <input
-              type="radio"
-              name="codexPermissionMode"
-              checked={permissionMode === 'acceptEdits'}
-              onChange={() => onPermissionModeChange('acceptEdits')}
-              className="mt-1 h-4 w-4 text-green-600"
-            />
-            <div>
-              <div className="font-medium text-green-900 dark:text-green-100">{t('permissions.codex.modes.acceptEdits.title')}</div>
-              <div className="text-sm text-green-700 dark:text-green-300">
-                {t('permissions.codex.modes.acceptEdits.description')}
-              </div>
-            </div>
-          </label>
-        </div>
+        <PermissionModeRadioCard
+          name="codexPermissionMode"
+          value="acceptEdits"
+          currentValue={permissionMode}
+          onChange={onPermissionModeChange}
+          variant="success"
+          title={t('permissions.codex.modes.acceptEdits.title')}
+          description={t('permissions.codex.modes.acceptEdits.description')}
+        />
 
-        <div
-          className={`cursor-pointer rounded-lg border p-4 transition-all ${permissionMode === 'bypassPermissions'
-            ? 'border-orange-400 bg-orange-50 dark:border-orange-600 dark:bg-orange-900/20'
-            : 'border-border bg-card/50 active:border-border active:bg-accent/50'
-            }`}
-          onClick={() => onPermissionModeChange('bypassPermissions')}
-        >
-          <label className="flex cursor-pointer items-start gap-3">
-            <input
-              type="radio"
-              name="codexPermissionMode"
-              checked={permissionMode === 'bypassPermissions'}
-              onChange={() => onPermissionModeChange('bypassPermissions')}
-              className="mt-1 h-4 w-4 text-orange-600"
-            />
-            <div>
-              <div className="flex items-center gap-2 font-medium text-orange-900 dark:text-orange-100">
-                {t('permissions.codex.modes.bypassPermissions.title')}
-                <AlertTriangle className="h-4 w-4" />
-              </div>
-              <div className="text-sm text-orange-700 dark:text-orange-300">
-                {t('permissions.codex.modes.bypassPermissions.description')}
-              </div>
-            </div>
-          </label>
-        </div>
+        <PermissionModeRadioCard
+          name="codexPermissionMode"
+          value="bypassPermissions"
+          currentValue={permissionMode}
+          onChange={onPermissionModeChange}
+          variant="warning"
+          hasWarningIcon
+          title={t('permissions.codex.modes.bypassPermissions.title')}
+          description={t('permissions.codex.modes.bypassPermissions.description')}
+        />
 
         <details className="text-sm">
           <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
@@ -580,7 +633,85 @@ function CodexPermissions({ permissionMode, onPermissionModeChange }: Omit<Codex
   );
 }
 
-type PermissionsContentProps = ClaudePermissionsProps | CursorPermissionsProps | CodexPermissionsProps;
+type AntigravityPermissionsProps = {
+  agent: 'antigravity';
+  permissionMode: AntigravityPermissionMode;
+  onPermissionModeChange: (value: AntigravityPermissionMode) => void;
+};
+
+function AntigravityPermissions({ permissionMode, onPermissionModeChange }: Omit<AntigravityPermissionsProps, 'agent'>) {
+  const { t } = useTranslation('settings');
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <Shield className="h-5 w-5 text-green-500" />
+          <h3 className="text-lg font-medium text-foreground">{t('permissions.antigravity.permissionMode')}</h3>
+        </div>
+        <p className="text-sm text-muted-foreground">{t('permissions.antigravity.description')}</p>
+
+        <PermissionModeRadioCard
+          name="antigravityPermissionMode"
+          value="default"
+          currentValue={permissionMode}
+          onChange={onPermissionModeChange}
+          title={t('permissions.antigravity.modes.default.title')}
+          description={t('permissions.antigravity.modes.default.description')}
+        />
+
+        <PermissionModeRadioCard
+          name="antigravityPermissionMode"
+          value="acceptEdits"
+          currentValue={permissionMode}
+          onChange={onPermissionModeChange}
+          variant="success"
+          title={t('permissions.antigravity.modes.acceptEdits.title')}
+          description={t('permissions.antigravity.modes.acceptEdits.description')}
+        />
+
+        <PermissionModeRadioCard
+          name="antigravityPermissionMode"
+          value="plan"
+          currentValue={permissionMode}
+          onChange={onPermissionModeChange}
+          variant="info"
+          title={t('permissions.antigravity.modes.plan.title')}
+          description={t('permissions.antigravity.modes.plan.description')}
+        />
+
+        <PermissionModeRadioCard
+          name="antigravityPermissionMode"
+          value="bypassPermissions"
+          currentValue={permissionMode}
+          onChange={onPermissionModeChange}
+          variant="warning"
+          hasWarningIcon
+          title={t('permissions.antigravity.modes.bypassPermissions.title')}
+          description={t('permissions.antigravity.modes.bypassPermissions.description')}
+        />
+
+        <details className="text-sm">
+          <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+            {t('permissions.antigravity.technicalDetails')}
+          </summary>
+          <div className="mt-2 space-y-2 rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
+            <p><strong>{t('permissions.antigravity.modes.default.title')}:</strong> {t('permissions.antigravity.technicalInfo.default')}</p>
+            <p><strong>{t('permissions.antigravity.modes.acceptEdits.title')}:</strong> {t('permissions.antigravity.technicalInfo.acceptEdits')}</p>
+            <p><strong>{t('permissions.antigravity.modes.plan.title')}:</strong> {t('permissions.antigravity.technicalInfo.plan')}</p>
+            <p><strong>{t('permissions.antigravity.modes.bypassPermissions.title')}:</strong> {t('permissions.antigravity.technicalInfo.bypassPermissions')}</p>
+          </div>
+        </details>
+      </div>
+    </div>
+  );
+}
+
+type PermissionsContentProps =
+  | ClaudePermissionsProps
+  | CursorPermissionsProps
+  | CodexPermissionsProps
+  | AntigravityPermissionsProps;
 
 /** Rendered by AgentCategoryContentSection for the "permissions" category, one variant per agent provider. */
 export default function PermissionsContent(props: PermissionsContentProps) {
@@ -590,6 +721,10 @@ export default function PermissionsContent(props: PermissionsContentProps) {
 
   if (props.agent === 'cursor') {
     return <CursorPermissions {...props} />;
+  }
+
+  if (props.agent === 'antigravity') {
+    return <AntigravityPermissions {...props} />;
   }
 
   return <CodexPermissions {...props} />;

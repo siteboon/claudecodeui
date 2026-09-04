@@ -3,56 +3,16 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { api } from '@/shared/api';
 import { useAuth } from '@/modules/auth';
 import { useWebSocket } from '@/shared/context/WebSocketContext';
-import type { Project, ServerEvent, TaskMasterProject, TaskMasterProjectInfo, TaskMasterTask } from '@/shared/types';
-
-/** What may be handed to setCurrentProject: a TaskMaster-enriched project, a plain project, or null to clear the selection. */
-type TaskMasterProjectInput = TaskMasterProject | Project | null;
-
-/** A failed TaskMaster operation recorded for display, naming the operation that failed and when the failure happened. */
-type TaskMasterContextError = {
-  message: string;
-  context: string;
-  timestamp: string;
-};
-
-/** Detailed status of the TaskMaster MCP server, including its configuration, API-key availability and the reason it is unusable, or null while the status is unknown. */
-type TaskMasterMcpStatus = {
-  hasMCPServer?: boolean;
-  isConfigured?: boolean;
-  hasApiKeys?: boolean;
-  scope?: string;
-  config?: {
-    command?: string;
-    args?: string[];
-    url?: string;
-    envVars?: string[];
-    type?: string;
-  };
-  reason?: string;
-  [key: string]: unknown;
-} | null;
-
-type TaskMasterWebSocketMessage = {
-  type?: string;
-  // Post-migration TaskMaster broadcasts identify projects by `projectId`.
-  projectId?: string;
-  [key: string]: unknown;
-};
-
-type TaskMasterContextValue = {
-  currentProject: TaskMasterProject | null;
-  projectTaskMaster: TaskMasterProjectInfo | null;
-  mcpServerStatus: TaskMasterMcpStatus;
-  tasks: TaskMasterTask[];
-  nextTask: TaskMasterTask | null;
-  isLoadingTasks: boolean;
-  isLoadingMCP: boolean;
-  error: TaskMasterContextError | null;
-  setCurrentProject: (project: TaskMasterProjectInput) => void;
-  refreshTasks: () => Promise<void>;
-  refreshMCPStatus: () => Promise<void>;
-  clearError: () => void;
-};
+import type {
+  TaskMasterContextError,
+  TaskMasterContextValue,
+  TaskMasterMcpStatus,
+  TaskMasterProject,
+  TaskMasterProjectInfo,
+  TaskMasterProjectInput,
+  TaskMasterTask,
+  TaskMasterWebSocketMessage,
+} from '@/modules/task-master/types';
 
 const TaskMasterContext = createContext<TaskMasterContextValue | null>(null);
 
@@ -97,11 +57,11 @@ export function useTaskMaster() {
   return context;
 }
 
-/** Mounted by App.tsx; supplies the TaskMaster project and task state that the sidebar module and this module's own components read through useTaskMaster. */
 export function TaskMasterProvider({ children }: { children: React.ReactNode }) {
   const { subscribe } = useWebSocket();
   const { user, token, isLoading: isAuthLoading } = useAuth();
 
+  const [projects, setProjects] = useState<TaskMasterProject[]>([]);
   const [currentProject, setCurrentProjectState] = useState<TaskMasterProject | null>(null);
   const [projectTaskMaster, setProjectTaskMaster] = useState<TaskMasterProjectInfo | null>(null);
   const [mcpServerStatus, setMcpServerStatus] = useState<TaskMasterMcpStatus>(null);
@@ -109,6 +69,7 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
   const [tasks, setTasks] = useState<TaskMasterTask[]>([]);
   const [nextTask, setNextTask] = useState<TaskMasterTask | null>(null);
 
+  const [isLoading, setIsLoading] = useState(false);
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
   const [isLoadingMCP, setIsLoadingMCP] = useState(false);
   const [error, setError] = useState<TaskMasterContextError | null>(null);
@@ -141,7 +102,20 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
   const applyTaskMasterInfo = useCallback((projectId: string, taskMasterInfo: TaskMasterProjectInfo | null) => {
     setProjectTaskMaster(taskMasterInfo);
 
-    setCurrentProjectState((previousProject) => {
+    setProjects((previousProjects) =>
+      previousProjects.map((project) => {
+        if (project.projectId !== projectId) {
+          return project;
+        }
+
+        return enrichProject({
+          ...project,
+          taskmaster: taskMasterInfo ?? undefined,
+        });
+      }),
+    );
+
+    setCurrentProjectState((previousProject: TaskMasterProject | null) => {
       if (!previousProject || previousProject.projectId !== projectId) {
         return previousProject;
       }
@@ -213,24 +187,84 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
     [refreshCurrentProjectTaskMaster],
   );
 
-  /**
-   * Re-reads TaskMaster details for whichever project is selected.
-   *
-   * This used to fetch the whole `/api/projects` list — a second copy of the
-   * request the workspace already makes on boot, with its own taskmaster merge
-   * — even though the only thing downstream reads is `currentProject`. The
-   * per-project endpoint answers exactly that question, which also means it is
-   * now the same call setCurrentProject and the websocket handler already make,
-   * so the only caller left is the sign-in effect below.
-   */
-  const refreshSelectedProjectTaskMaster = useCallback(async () => {
-    const currentProjectId = currentProjectIdRef.current;
-    if (!currentProjectId) {
+  const refreshProjects = useCallback(async () => {
+    if (!user || !token) {
+      setProjects([]);
+      setCurrentProjectState(null);
+      setProjectTaskMaster(null);
+      setTasks([]);
+      setNextTask(null);
       return;
     }
 
-    await refreshCurrentProjectTaskMaster(currentProjectId);
-  }, [refreshCurrentProjectTaskMaster]);
+    try {
+      setIsLoading(true);
+      clearError();
+
+      const response = await api.projects();
+      if (!response.ok) {
+        throw new Error(`Failed to fetch projects: ${response.status}`);
+      }
+
+      const data = (await response.json()) as unknown;
+      const loadedProjects = Array.isArray(data) ? (data as TaskMasterProject[]) : [];
+      const enrichedProjects = loadedProjects.map((project) => enrichProject(project));
+
+      setProjects((previousProjects) => {
+        // Cache is keyed by `projectId` (DB primary key) post-migration.
+        const taskMasterByProjectId = new Map(
+          previousProjects
+            .filter((project) => Boolean(project.taskmaster))
+            .map((project) => [project.projectId, project.taskmaster]),
+        );
+
+        return enrichedProjects.map((project) => {
+          const cachedTaskMasterInfo = taskMasterByProjectId.get(project.projectId);
+          if (!cachedTaskMasterInfo) {
+            return project;
+          }
+
+          return enrichProject({
+            ...project,
+            taskmaster: cachedTaskMasterInfo,
+          });
+        });
+      });
+
+      const currentProjectId = currentProjectIdRef.current;
+      if (!currentProjectId) {
+        return;
+      }
+
+      const matchingProject = enrichedProjects.find((project) => project.projectId === currentProjectId) ?? null;
+
+      if (!matchingProject) {
+        taskMasterRequestSeqRef.current += 1;
+        setCurrentProjectState(null);
+        setProjectTaskMaster(null);
+        setTasks([]);
+        setNextTask(null);
+        return;
+      }
+
+      const cachedTaskMasterInfo = matchingProject.taskmaster ?? projectTaskMasterRef.current ?? null;
+      setCurrentProjectState(
+        cachedTaskMasterInfo
+          ? enrichProject({
+              ...matchingProject,
+              taskmaster: cachedTaskMasterInfo,
+            })
+          : matchingProject,
+      );
+      setProjectTaskMaster(cachedTaskMasterInfo);
+
+      void refreshCurrentProjectTaskMaster(currentProjectId);
+    } catch (caughtError) {
+      handleError('load projects', caughtError);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [clearError, handleError, refreshCurrentProjectTaskMaster, token, user]);
 
   const refreshTasks = useCallback(async () => {
     // TaskMaster tasks endpoint now lives under /api/taskmaster/tasks/:projectId.
@@ -293,10 +327,10 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     if (!isAuthLoading && user && token) {
-      void refreshSelectedProjectTaskMaster();
+      void refreshProjects();
       void refreshMCPStatus();
     }
-  }, [isAuthLoading, refreshMCPStatus, refreshSelectedProjectTaskMaster, token, user]);
+  }, [isAuthLoading, refreshMCPStatus, refreshProjects, token, user]);
 
   useEffect(() => {
     if (currentProject?.projectId && user && token) {
@@ -304,48 +338,50 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
     }
   }, [currentProject?.projectId, refreshTasks, token, user]);
 
+  // TaskMaster broadcasts arrive as low-frequency `taskmaster-*` websocket
+  // frames. Subscribing (instead of reading a per-frame context state slot)
+  // keeps the message stream out of React entirely.
   useEffect(() => {
-    const handleEvent = (event: ServerEvent) => {
-      const message = event as TaskMasterWebSocketMessage;
+    const unsubscribe = subscribe((event) => {
+      const message = event as TaskMasterWebSocketMessage | null;
       if (!isTaskMasterMessage(message)) {
         return;
       }
 
-      // Broadcasts identify projects by their DB `projectId`.
+      // Broadcasts now identify projects by `projectId` (see taskmaster-websocket.js).
       if (message.type === 'taskmaster-project-updated' && message.projectId) {
-        // Only the selected project has anything to re-read. The second call
-        // here used to be refreshProjects(), which after e872a34 is this exact
-        // per-project request — so a broadcast for the selected project fired
-        // two identical fetches, and a broadcast for any other project refetched
-        // the selected one for news that said nothing about it.
         if (message.projectId === currentProjectIdRef.current) {
           void refreshCurrentProjectTaskMaster(message.projectId);
         }
+        void refreshProjects();
         return;
       }
 
-      if (
-        message.type === 'taskmaster-tasks-updated'
-        && message.projectId === currentProjectIdRef.current
-      ) {
+      if (message.type === 'taskmaster-tasks-updated' && message.projectId === currentProjectIdRef.current) {
         void refreshTasks();
         return;
       }
-    };
 
-    return subscribe(handleEvent);
-  }, [refreshCurrentProjectTaskMaster, refreshTasks, subscribe]);
+      if (message.type === 'taskmaster-mcp-status-changed') {
+        void refreshMCPStatus();
+      }
+    });
+    return unsubscribe;
+  }, [subscribe, refreshCurrentProjectTaskMaster, refreshMCPStatus, refreshProjects, refreshTasks]);
 
   const contextValue = useMemo<TaskMasterContextValue>(
     () => ({
+      projects,
       currentProject,
       projectTaskMaster,
       mcpServerStatus,
       tasks,
       nextTask,
+      isLoading,
       isLoadingTasks,
       isLoadingMCP,
       error,
+      refreshProjects,
       setCurrentProject,
       refreshTasks,
       refreshMCPStatus,
@@ -355,12 +391,15 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       clearError,
       currentProject,
       error,
+      isLoading,
       isLoadingMCP,
       isLoadingTasks,
       mcpServerStatus,
       nextTask,
       projectTaskMaster,
+      projects,
       refreshMCPStatus,
+      refreshProjects,
       refreshTasks,
       setCurrentProject,
       tasks,
@@ -369,3 +408,5 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
 
   return <TaskMasterContext.Provider value={contextValue}>{children}</TaskMasterContext.Provider>;
 }
+
+export default TaskMasterContext;

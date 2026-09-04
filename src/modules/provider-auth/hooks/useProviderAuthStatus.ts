@@ -3,20 +3,33 @@ import { useCallback, useState } from 'react';
 import { api } from '@/shared/api';
 import type { LLMProvider, ProviderAuthStatus, ProviderAuthStatusMap } from '@/shared/types';
 
-const CLI_PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode'];
+const CLI_PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode', 'antigravity'];
+
+const createInitialProviderAuthStatus = (loading = true) => ({
+  installed: false,
+  authenticated: false,
+  email: null,
+  method: null,
+  error: null,
+  loginCommand: null,
+  loading,
+});
 
 const createInitialProviderAuthStatusMap = (loading = true): ProviderAuthStatusMap => ({
-  claude: { authenticated: false, email: null, method: null, error: null, loading },
-  cursor: { authenticated: false, email: null, method: null, error: null, loading },
-  codex: { authenticated: false, email: null, method: null, error: null, loading },
-  opencode: { authenticated: false, email: null, method: null, error: null, loading },
+  claude: createInitialProviderAuthStatus(loading),
+  cursor: createInitialProviderAuthStatus(loading),
+  codex: createInitialProviderAuthStatus(loading),
+  opencode: createInitialProviderAuthStatus(loading),
+  antigravity: createInitialProviderAuthStatus(loading),
 });
 
 type ProviderAuthStatusPayload = {
+  installed?: boolean;
   authenticated?: boolean;
   email?: string | null;
   method?: string | null;
   error?: string | null;
+  loginCommand?: string | null;
 };
 
 type ProviderAuthStatusApiResponse = {
@@ -35,10 +48,12 @@ const toProviderAuthStatus = (
   payload: ProviderAuthStatusPayload,
   fallbackError: string | null = null,
 ): ProviderAuthStatus => ({
+  installed: payload.installed !== false,
   authenticated: Boolean(payload.authenticated),
   email: payload.email ?? null,
   method: payload.method ?? null,
   error: payload.error ?? fallbackError,
+  loginCommand: payload.loginCommand ?? null,
   loading: false,
 });
 
@@ -79,9 +94,11 @@ export function useProviderAuthStatus(
 
       if (!response.ok) {
         const status: ProviderAuthStatus = {
+          installed: true,
           authenticated: false,
           email: null,
           method: null,
+          loginCommand: null,
           loading: false,
           error: FALLBACK_STATUS_ERROR,
         };
@@ -96,9 +113,11 @@ export function useProviderAuthStatus(
     } catch (caughtError) {
       console.error(`Error checking ${provider} auth status:`, caughtError);
       const status: ProviderAuthStatus = {
+        installed: true,
         authenticated: false,
         email: null,
         method: null,
+        loginCommand: null,
         loading: false,
         error: toErrorMessage(caughtError),
       };

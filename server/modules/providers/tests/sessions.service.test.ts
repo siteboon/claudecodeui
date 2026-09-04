@@ -191,3 +191,19 @@ test('history pages are sliced from the cached full transcript and see appended 
     await rm(transcriptDirectory, { recursive: true, force: true });
   }
 });
+
+test('deleteOrArchiveSessionById deletes session when given provider_session_id', { concurrency: false }, async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createAppSession('app-id-1', 'codex', '/tmp/delete-test');
+    sessionsDb.assignProviderSessionId('app-id-1', 'native-id-1');
+
+    const result = await sessionsService.deleteOrArchiveSessionById('native-id-1', {
+      force: true,
+      deletedFromDisk: false,
+    });
+
+    assert.equal(result.sessionId, 'app-id-1');
+    assert.equal(result.action, 'deleted');
+    assert.equal(sessionsDb.getSessionById('app-id-1'), null);
+  });
+});

@@ -17,7 +17,8 @@
     "tool": "Werkzeug",
     "claude": "Claude",
     "cursor": "Cursor",
-    "codex": "Codex"
+    "codex": "Codex",
+    "antigravity": "Antigravity"
   },
   "tools": {
     "settings": "Werkzeugeinstellungen",
@@ -173,10 +174,10 @@
     },
     "loading": "Terminal wird geladen...",
     "connecting": "Verbindung zum Terminal wird hergestellt...",
-    "startSession": "Neue Claude-Sitzung starten",
+    "startSession": "Neue {{provider}}-Sitzung starten",
     "resumeSession": "Sitzung fortsetzen: {{displayName}}...",
     "runCommand": "{{command}} in {{projectName}} ausführen",
-    "startCli": "Claude CLI wird in {{projectName}} gestartet",
+    "startCli": "{{provider}} CLI wird in {{projectName}} gestartet",
     "defaultCommand": "Befehl"
   },
   "claudeStatus": {
@@ -255,5 +256,32 @@
     "failed": "Nicht gesendet – {{reason}}",
     "cancel": "Geplante Nachricht abbrechen",
     "dismiss": "Fehlerhinweis ausblenden"
+  },
+  "cost": {
+    "totalTokensUsed": "Verwendete Tokens gesamt",
+    "inputTokens": "Eingabe-Tokens",
+    "outputTokens": "Ausgabe-Tokens",
+    "contextWindow": "Kontextfenster",
+    "quotaTitle": "Kontokontingent & Ratenbegrenzung",
+    "updatedAt": "Aktualisiert um {{time}}",
+    "refresh": "Aktualisieren",
+    "refreshTitle": "Aktuelles Kontingent abrufen",
+    "fetchingQuota": "Aktuelles Kontingent wird abgerufen...",
+    "syncingWithProvider": "5-Stunden- und Wochenlimits von {{provider}} synchronisieren",
+    "noQuotaData": "Keine Kontingentdaten für dieses Konto verfügbar",
+    "apiKeyNotice": "API-Schlüssel-Anmeldungen liefern in der Regel keine 5-Stunden- oder Wochenlimits",
+    "refreshFailedNotice": "Aktualisierung fehlgeschlagen; letzte erfolgreiche Daten werden angezeigt",
+    "fetchFailed": "Kontingent konnte nicht geladen werden, bitte später erneut versuchen",
+    "currentGroup": "Aktuelle Sitzungsmodelle",
+    "otherGroup": "Andere Modelle",
+    "collapse": "Einklappen",
+    "expand": "Ausklappen",
+    "fiveHourWindow": "Gleitendes 5-Stunden-Limit",
+    "weeklyWindow": "Wöchentliches Kontingent",
+    "remainingPercent": "{{percent}}% verbleibend",
+    "resetSoon": "Wird bald zurückgesetzt",
+    "resetDaysHours": "Zurücksetzung in {{days}}T {{hours}}Std",
+    "resetHoursMinutes": "Zurücksetzung in {{hours}}Std {{minutes}}Min",
+    "resetMinutes": "Zurücksetzung in {{minutes}}Min"
   }
 }

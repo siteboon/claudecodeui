@@ -6,6 +6,7 @@ import { ProviderLoginModal } from '@/modules/provider-auth';
 import { Button } from '@/shared/ui';
 import SettingsSidebar from '@/modules/settings/SettingsSidebar';
 import AgentsSettingsTab from '@/modules/settings/tabs/agents-settings/AgentsSettingsTab';
+import SessionsSettingsTab from '@/modules/settings/tabs/sessions-settings/SessionsSettingsTab';
 import AppearanceSettingsTab from '@/modules/settings/tabs/AppearanceSettingsTab';
 import CredentialsSettingsTab from '@/modules/settings/tabs/api-settings/CredentialsSettingsTab';
 import VoiceSettingsTab from '@/modules/settings/tabs/VoiceSettingsTab';
@@ -17,14 +18,7 @@ import { PluginSettingsTab } from '@/modules/plugins';
 import AboutTab from '@/modules/settings/tabs/AboutTab';
 import { useSettingsController } from '@/modules/settings/hooks/useSettingsController';
 import { useWebPush } from '@/modules/settings/hooks/useWebPush';
-import type { AgentSettingsProject } from '@/shared/types';
-
-type SettingsProps = {
-  isOpen: boolean;
-  onClose: () => void;
-  projects?: AgentSettingsProject[];
-  initialTab?: string;
-};
+import type { SettingsProps } from '@/shared/types';
 
 type DesktopNotificationsState = {
   enabled: boolean;
@@ -59,10 +53,13 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     setCursorPermissions,
     codexPermissionMode,
     setCodexPermissionMode,
+    antigravityPermissionMode,
+    setAntigravityPermissionMode,
     providerAuthStatus,
     openLoginForProvider,
     showLoginModal,
     setShowLoginModal,
+    closeLoginModal,
     loginProvider,
     handleLoginComplete,
   } = useSettingsController({
@@ -193,9 +190,13 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
                   onCursorPermissionsChange={setCursorPermissions}
                   codexPermissionMode={codexPermissionMode}
                   onCodexPermissionModeChange={setCodexPermissionMode}
+                  antigravityPermissionMode={antigravityPermissionMode}
+                  onAntigravityPermissionModeChange={setAntigravityPermissionMode}
                   projects={projects}
                 />
               )}
+
+              {activeTab === 'sessions' && <SessionsSettingsTab />}
 
               {activeTab === 'tasks' && <TasksSettingsTab />}
 
@@ -232,8 +233,9 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
       <ProviderLoginModal
         key={loginProvider || 'claude'}
         isOpen={showLoginModal}
-        onClose={() => setShowLoginModal(false)}
+        onClose={closeLoginModal}
         provider={loginProvider || 'claude'}
+        customCommand={loginProvider ? providerAuthStatus[loginProvider].loginCommand ?? undefined : undefined}
         onComplete={handleLoginComplete}
         isAuthenticated={isAuthenticated}
       />

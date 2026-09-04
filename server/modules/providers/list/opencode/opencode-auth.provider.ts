@@ -2,8 +2,7 @@ import { readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import spawn from 'cross-spawn';
-
+import { createCliInstallationProbe } from '@/modules/providers/shared/installation/cli-installation-probe.js';
 import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { ProviderAuthStatus } from '@/shared/types.js';
 import { readObjectRecord, readOptionalString } from '@/shared/utils.js';
@@ -23,24 +22,21 @@ const OPENCODE_ENV_CREDENTIAL_KEYS = [
   'OPENROUTER_API_KEY',
 ];
 
+const installationProbe = createCliInstallationProbe({ command: () => 'opencode' });
+
 export class OpenCodeProviderAuth implements IProviderAuth {
   /**
    * Checks whether the OpenCode CLI is available to the server process.
    */
-  private checkInstalled(): boolean {
-    try {
-      const result = spawn.sync('opencode', ['--version'], { stdio: 'ignore', timeout: 5000 });
-      return !result.error && result.status === 0;
-    } catch {
-      return false;
-    }
+  private checkInstalled(): Promise<boolean> {
+    return installationProbe.isInstalled();
   }
 
   /**
    * Returns OpenCode CLI installation and credential status.
    */
   async getStatus(): Promise<ProviderAuthStatus> {
-    const installed = this.checkInstalled();
+    const installed = await this.checkInstalled();
     const credentials = await this.checkCredentials();
 
     return {

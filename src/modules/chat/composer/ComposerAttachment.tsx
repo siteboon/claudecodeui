@@ -7,6 +7,8 @@ type ComposerAttachmentProps = {
   file: File;
   onRemove: () => void;
   error?: string;
+  /** 0-100 upload progress from the fork's file-upload flow; rendered when present. */
+  uploadProgress?: number;
 };
 
 const formatFileSize = (size: number) => {
@@ -19,7 +21,7 @@ const formatFileSize = (size: number) => {
  * Rendered by chat's ChatComposer for each pending attachment, showing its
  * thumbnail or file chip, upload progress and remove control.
  */
-const ComposerAttachment = ({ file, onRemove, error }: ComposerAttachmentProps) => {
+const ComposerAttachment = ({ file, onRemove, error, uploadProgress }: ComposerAttachmentProps) => {
   const [preview, setPreview] = useState<string | undefined>(undefined);
   const [expanded, setExpanded] = useState(false);
   const isImage = file.type.startsWith('image/');

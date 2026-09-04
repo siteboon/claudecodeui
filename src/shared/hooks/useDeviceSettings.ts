@@ -14,7 +14,7 @@ const getIsMobile = (mobileBreakpoint: number): boolean => {
   return window.innerWidth < mobileBreakpoint;
 };
 
-const getIsPWA = (): boolean => {
+export const getIsPWA = (): boolean => {
   if (typeof window === 'undefined') {
     return false;
   }

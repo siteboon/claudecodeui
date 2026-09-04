@@ -43,6 +43,7 @@ export class ClaudeMcpProvider extends McpProvider {
   ): Promise<void> {
     if (scope === 'project') {
       const filePath = path.join(workspacePath, '.mcp.json');
+      this.assertPathSecurity(filePath, workspacePath);
       const config = await readJsonConfig(filePath);
       config.mcpServers = servers;
       await writeJsonConfig(filePath, config);

@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>cloudcli · antigravity / zcode 架构走查</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose", flowchart: { curve: "basis" } });
+    </script>
+    <style>
+      .seam { stroke-dasharray: 4 4; }
+      .deep { background: linear-gradient(135deg, #0f172a, #1e293b); }
+      .mod { font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900 font-sans">
+    <main class="max-w-5xl mx-auto px-6 py-12 space-y-14">
+
+      <!-- ============ HEADER ============ -->
+      <header class="space-y-4">
+        <h1 class="font-serif text-3xl font-bold tracking-tight">cloudcli · antigravity / zcode 架构走查</h1>
+        <p class="text-sm text-slate-500">2026-09-03 · 范围：<span class="font-mono">server/modules/providers/list/{antigravity,zcode}</span> 及其寄生的共享层 · 三路并行走查 + 关键论断逐条实证</p>
+        <div class="flex flex-wrap gap-4 text-xs text-slate-600 border-y border-slate-200 py-3">
+          <span class="flex items-center gap-1.5"><span class="inline-block w-4 h-3 border border-slate-400 bg-white"></span> module</span>
+          <span class="flex items-center gap-1.5"><svg width="20" height="8"><line x1="0" y1="4" x2="20" y2="4" stroke="#64748b" stroke-width="1.5" class="seam"/></svg> seam</span>
+          <span class="flex items-center gap-1.5"><svg width="20" height="8"><line x1="0" y1="4" x2="20" y2="4" stroke="#dc2626" stroke-width="2"/></svg> 泄漏 / bug 路径</span>
+          <span class="flex items-center gap-1.5"><span class="inline-block w-4 h-3 deep rounded-sm"></span> deep module</span>
+          <span class="flex items-center gap-1.5"><span class="inline-block px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-medium">Strong</span><span class="inline-block px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-medium">Worth exploring</span><span class="inline-block px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 font-medium">Speculative</span></span>
+        </div>
+        <div class="rounded-lg bg-sky-50 border border-sky-200 px-4 py-3 text-sm text-sky-900">
+          工作区里已有一批未提交改动正在收编 <span class="font-mono text-xs">validatePathSecurity</span>（4 份副本 → shared/utils）与 <span class="font-mono text-xs">extractEmailFromJwt</span>（antigravity + codex）——方向与本报 #5 一致，以下候选不再重复列它们。
+        </div>
+      </header>
+
+      <section id="candidates" class="space-y-12">
+
+      <!-- ============ CANDIDATE 1 ============ -->
+      <article id="c1" class="rounded-xl border border-slate-200 bg-white shadow-sm p-6 space-y-5">
+        <div class="flex items-start justify-between gap-4">
+          <h2 class="font-serif text-xl font-bold">1 · Token 用量读取下放为 provider facet</h2>
+          <div class="flex gap-2 shrink-0">
+            <span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-xs font-semibold">Strong</span>
+            <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-xs font-medium">in-process</span>
+          </div>
+        </div>
+        <div class="font-mono text-sm text-slate-600 space-y-0.5">
+          <div>server/modules/providers/services/provider-token-usage.service.ts</div>
+          <div>server/shared/interfaces.ts · list/{zcode,antigravity,codex,claude}/…</div>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-4">
+          <div class="rounded-lg border border-slate-200 p-4">
+            <div class="mod text-slate-400 mb-2">Before — if 链寄生在共享层</div>
+            <pre class="mermaid">
+flowchart TD
+  R[GET /token-usage] --> S[provider-token-usage.service]
+  S -->|"if antigravity"| A["antigravity 分支<br/>(deep-import barrel)"]
+  S -->|"if codex"| C[codex 分支]
+  S -->|"兜底: 拼 ~/.claude/projects"| F["claude fallback"]
+  Z["zcode 会话<br/>jsonl_path = null"] -.掉进来.-> F
+  F -.必然.-> X["404 SESSION_FILE_NOT_FOUND"]
+  classDef leak stroke:#dc2626,stroke-width:2px;
+  class A,F,X leak
+            </pre>
+          </div>
+          <div class="rounded-lg border border-slate-200 p-4">
+            <div class="mod text-slate-400 mb-2">After — seam 归位，一个分派</div>
+            <pre class="mermaid">
+flowchart TD
+  R[GET /token-usage] --> S["token-usage 分派<br/>(查 session → 经 seam 调用)"]
+  S -. IProviderSessions seam .-> ZA["zcode adapter"]
+  S -.-> AA["antigravity adapter"]
+  S -.-> CA["claude adapter"]
+  S -.-> CO["codex adapter<br/>(或声明不支持)"]
+  style S fill:#0f172a,color:#fff
+            </pre>
+          </div>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-4 text-sm">
+          <div>
+            <div class="mod text-slate-400 mb-1">Problem</div>
+            <p>读取协议（transcript 在哪、怎么解析）本属各 provider 的实现细节，却被压进共享 service 的 if 链，随 provider 线性增长；services 反向 deep-import <span class="font-mono text-xs">list/antigravity</span>，seam 方向倒置。<strong>实证 bug</strong>：zcode 声明 <span class="font-mono text-xs">supportsTokenUsage: true</span>（provider-capabilities.service.ts:97），但读取链路没有 zcode 分支——zcode 同步器写死 <span class="font-mono text-xs">jsonl_path: null</span>（zcode-session-synchronizer.provider.ts:193-197），会话掉进 claude 兜底拼 <span class="font-mono text-xs">~/.claude/projects/…</span>，必然 404。下一轮大概率又是一枚「+85 行 zcode 分支」提交。</p>
+          </div>
+          <div>
+            <div class="mod text-slate-400 mb-1">Solution</div>
+            <p>给 provider interface 增加可选的 token 用量读取能力（挂 <span class="font-mono text-xs">IProviderSessions</span> 或独立 facet），每个 provider 自持读取协议；共享 service 收缩为「查 app session → 经 registry 分派 → 统一结果形状」，cursor 的「不支持」分支升级为协议化结果。</p>
+          </div>
+        </div>
+        <ul class="flex flex-wrap gap-2 text-xs">
+          <li class="px-2 py-1 rounded bg-emerald-50 text-emerald-800">locality：zcode 404 这类 bug 不可能在分派层复发</li>
+          <li class="px-2 py-1 rounded bg-emerald-50 text-emerald-800">leverage：新增 provider = 实现一个方法，不再改共享 service</li>
+          <li class="px-2 py-1 rounded bg-emerald-50 text-emerald-800">capabilities 与实现不再各说各话</li>
+          <li class="px-2 py-1 rounded bg-emerald-50 text-emerald-800">services→list 的反向 import 消失</li>
+        </ul>
+      </article>
+
+      <!-- ============ CANDIDATE 2 ============ -->
+      <article id="c2" class="rounded-xl border border-slate-200 bg-white shadow-sm p-6 space-y-5">
+        <div class="flex items-start justify-between gap-4">
+          <h2 class="font-serif text-xl font-bold">2 · SQLite 会话同步器抽模板方法基类</h2>
+          <div class="flex gap-2 shrink-0">
+            <span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-xs font-semibold">Strong</span>
+            <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-xs font-medium">in-process</span>
+          </div>
+        </div>
+        <div class="font-mono text-sm text-slate-600 space-y-0.5">
+          <div>list/zcode/zcode-session-synchronizer.provider.ts (200 行)</div>
+          <div>list/antigravity/antigravity-session-synchronizer.provider.ts (180 行)</div>
+          <div>list/opencode/opencode-session-synchronizer.provider.ts</div>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-4">
+          <!-- before: three identical tall columns -->
+          <div class="rounded-lg border border-slate-200 p-4">
+            <div class="mod text-slate-400 mb-3">Before — 三份 ~75% 同构副本</div>
+            <div class="grid grid-cols-3 gap-2">
+              <div class="border border-slate-300 rounded overflow-hidden text-center text-xs">
+                <div class="bg-slate-100 py-1 font-medium">zcode</div>
+                <div class="py-1 border-t border-slate-200 text-slate-500">高水位 + watch 过滤</div>
+                <div class="py-1 border-t border-slate-200 text-slate-500">只读 SQLite 短连接</div>
+                <div class="py-1 border-t border-rose-300 bg-rose-50 text-rose-700">pending 绑定三连</div>
+                <div class="py-1 border-t border-rose-300 bg-rose-50 text-rose-700">名字保留 + upsert</div>
+                <div class="py-1 border-t border-slate-200 text-slate-500">SQL + row 映射</div>
+              </div>
+              <div class="border border-slate-300 rounded overflow-hidden text-center text-xs">
+                <div class="bg-slate-100 py-1 font-medium">antigravity</div>
+                <div class="py-1 border-t border-slate-200 text-slate-500">高水位 + watch 过滤</div>
+                <div class="py-1 border-t border-slate-200 text-slate-500">只读 SQLite 短连接</div>
+                <div class="py-1 border-t border-rose-300 bg-rose-50 text-rose-700">pending 绑定三连</div>
+                <div class="py-1 border-t border-rose-300 bg-rose-50 text-rose-700">名字保留 + upsert</div>
+                <div class="py-1 border-t border-slate-200 text-slate-500">SQL + row 映射</div>
+              </div>
+              <div class="border border-slate-300 rounded overflow-hidden text-center text-xs">
+                <div class="bg-slate-100 py-1 font-medium">opencode</div>
+                <div class="py-1 border-t border-slate-200 text-slate-500">高水位 + watch 过滤</div>
+                <div class="py-1 border-t border-slate-200 text-slate-500">只读 SQLite 短连接</div>
+                <div class="py-1 border-t border-rose-300 bg-rose-50 text-rose-700">pending 绑定三连</div>
+                <div class="py-1 border-t border-rose-300 bg-rose-50 text-rose-700">名字保留 + upsert</div>
+                <div class="py-1 border-t border-slate-200 text-slate-500">SQL + row 映射</div>
+              </div>
+            </div>
+            <p class="text-xs text-rose-700 mt-2">红色块 = 逐字重复的绑定协议；drift 已发生：增量 limit 100 vs 50，zcode 的 jsonl_path 恒 null 无人核对是否故意。</p>
+          </div>
+          <!-- after: deep base + thin adapters -->
+          <div class="rounded-lg border border-slate-200 p-4">
+            <div class="mod text-slate-400 mb-3">After — 骨架沉进基类，provider 只留本质差异</div>
+            <div class="deep text-white rounded-lg p-3 text-center">
+              <div class="mod text-slate-300">deep module · synchronizer 基类</div>
+              <div class="text-xs text-slate-300 mt-1">高水位 · watch 过滤 · 短连接 · 绑定协议 · 名字保留 · upsert（各一份）</div>
+            </div>
+            <svg viewBox="0 0 300 24" class="w-full h-6"><line x1="50" y1="0" x2="50" y2="24" stroke="#94a3b8" stroke-width="1.5" class="seam"/><line x1="150" y1="0" x2="150" y2="24" stroke="#94a3b8" stroke-width="1.5" class="seam"/><line x1="250" y1="0" x2="250" y2="24" stroke="#94a3b8" stroke-width="1.5" class="seam"/></svg>
+            <div class="grid grid-cols-3 gap-2 text-center text-xs">
+              <div class="border border-slate-300 rounded py-2">zcode<br/><span class="text-slate-500">SQL + 映射</span></div>
+              <div class="border border-slate-300 rounded py-2">antigravity<br/><span class="text-slate-500">SQL + 映射 + jsonl_path</span></div>
+              <div class="border border-slate-300 rounded py-2">opencode<br/><span class="text-slate-500">SQL + 映射</span></div>
+            </div>
+            <p class="text-xs text-slate-500 mt-2">MCP / Skills 已有同样的模板方法基类——这是补齐第三个，不是发明新模式。</p>
+          </div>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-4 text-sm">
+          <div>
+            <div class="mod text-slate-400 mb-1">Problem</div>
+            <p>三份 synchronizer 骨架同构（zcode:39-201 ≈ antigravity:42-180 ≈ opencode），只有 SQL 与 row 映射是本质差异；「pending app session 绑定」这一最易改错的协议逐字存在三份，改语义要同步改 6 个文件。zcode 的同步器还是零测试。</p>
+          </div>
+          <div>
+            <div class="mod text-slate-400 mb-1">Solution</div>
+            <p>仿照 McpProvider / SkillsProvider 的模板方法基类：骨架（含绑定协议）沉底，adapter 只暴露 SQL、row→元组映射、可选钩子。落地前先对齐三份的真实分歧（limit、jsonlPath、subagent 过滤），避免错误统一。</p>
+          </div>
+        </div>
+        <ul class="flex flex-wrap gap-2 text-xs">
+          <li class="px-2 py-1 rounded bg-emerald-50 text-emerald-800">每家少 ~40 行样板</li>
+          <li class="px-2 py-1 rounded bg-emerald-50 text-emerald-800">locality：绑定语义只存在一份</li>
+          <li class="px-2 py-1 rounded bg-emerald-50 text-emerald-800">新 provider 接入 = 写一个 row mapper</li>
+          <li class="px-2 py-1 rounded bg-emerald-50 text-emerald-800">基类测一次，三家受益</li>
+        </ul>
+      </article>
+
+      <!-- ============ CANDIDATE 3 ============ -->
+      <article id="c3" class="rounded-xl border border-slate-200 bg-white shadow-sm p-6 space-y-5">
+        <div class="flex items-start justify-between gap-4">
+          <h2 class="font-serif text-xl font-bold">3 · engine-path 解析工厂</h2>
+          <div class="flex gap-2 shrink-0">
+            <span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-xs font-semibold">Strong</span>
+            <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-xs font-medium">local-substitutable</span>
+          </div>
+        </div>
+        <div class="font-mono text-sm text-slate-600 space-y-0.5">
+          <div>list/antigravity/antigravity-engine-path.ts (122 行) · list/zcode/zcode-engine-path.ts (269 行)</div>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-4">
+          <!-- mass diagram before -->
+          <div class="rounded-lg border border-slate-200 p-4">
+            <div class="mod text-slate-400 mb-3">Before — 双胞胎，interface ≈ implementation</div>
+            <div class="flex gap-4 justify-center items-end h-44">
+              <div class="text-center">
+                <div class="w-24 bg-rose-100 border border-rose-300 rounded-t text-[10px] text-rose-700 py-1">env→which→路径表→缓存</div>
+                <div class="w-24 h-24 bg-white border border-slate-300 rounded-b text-[10px] text-slate-500 py-1">agy 常量表<br/>版本探测</div>
+                <div class="text-xs mt-1 text-slate-600">antigravity-engine-path</div>
+              </div>
+              <div class="text-center">
+                <div class="w-24 bg-rose-100 border border-rose-300 rounded-t text-[10px] text-rose-700 py-1">env→which→路径表→缓存</div>
+                <div class="w-24 h-24 bg-white border border-slate-300 rounded-b text-[10px] text-slate-500 py-1">zcode.cjs 常量表<br/>版本探测 + 版本钉死</div>
+                <div class="text-xs mt-1 text-slate-600">zcode-engine-path</div>
+              </div>
+            </div>
+            <p class="text-xs text-rose-700 mt-2 text-center">解析序与缓存机制 ~80% 相同，差异全是数据</p>
+          </div>
+          <!-- mass diagram after -->
+          <div class="rounded-lg border border-slate-200 p-4">
+            <div class="mod text-slate-400 mb-3">After — 一个 deep 工厂 + 两张小表</div>
+            <div class="flex gap-4 justify-center items-end h-44">
+              <div class="text-center">
+                <div class="w-24 bg-white border border-slate-300 rounded-t text-[10px] text-slate-500 py-1">工厂入参<br/>env 名 · 形态 · 路径表</div>
+                <div class="w-24 h-28 deep text-white rounded-b text-[10px] py-2">resolveCliBinary()<br/><span class="text-slate-300">解析序 · 双缓存<br/>版本探测 · 负缓存</span></div>
+                <div class="text-xs mt-1 text-slate-600">共享工厂 ~150 行</div>
+              </div>
+              <div class="text-center">
+                <div class="w-24 h-10 border border-slate-300 rounded text-[10px] text-slate-500 py-2">agy 表 ~20 行</div>
+                <div class="w-24 h-10 border border-slate-300 rounded text-[10px] text-slate-500 py-2 mt-2">zcode 表 ~30 行</div>
+                <div class="text-xs mt-3 text-slate-600">纯数据 adapter</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-4 text-sm">
+          <div>
+            <div class="mod text-slate-400 mb-1">Problem</div>
+            <p>「env 覆盖 → which → 平台路径表 → 模块级 path+version 双缓存 → 5s 超时版本探测」这套模板抄了两份；每加一个 CLI 型 provider 再抄一份。zcode 那份还各自长出了独有缺陷（spawnSync 阻塞请求路径、版本钉死 console.warn）。</p>
+          </div>
+          <div>
+            <div class="mod text-slate-400 mb-1">Solution</div>
+            <p>差异全是数据（env 变量名、二进制形态、平台路径表），合并成一个参数化工厂；两个文件退化为两张声明表。deletion test：删掉两份实现，复杂度集中而非平移。</p>
+          </div>
+        </div>
+        <ul class="flex flex-wrap gap-2 text-xs">
+          <li class="px-2 py-1 rounded bg-emerald-50 text-emerald-800">改动最小、半天级</li>
+          <li class="px-2 py-1 rounded bg-emerald-50 text-emerald-800">工厂测一次，覆盖两家分支</li>
+          <li class="px-2 py-1 rounded bg-emerald-50 text-emerald-800">zcode 的 spawnSync 阻塞顺手可治</li>
+        </ul>
+      </article>
+
+      <!-- ============ CANDIDATE 4 ============ -->
+      <article id="c4" class="rounded-xl border border-slate-200 bg-white shadow-sm p-6 space-y-5">
+        <div class="flex items-start justify-between gap-4">
+          <h2 class="font-serif text-xl font-bold">4 · 拆分 zcode protocol client：codec / supervisor / request router</h2>
+          <div class="flex gap-2 shrink-0">
+            <span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-xs font-semibold">Strong</span>
+            <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-xs font-medium">ports &amp; adapters</span>
+          </div>
+        </div>
+        <div class="font-mono text-sm text-slate-600 space-y-0.5">
+          <div>list/zcode/zcode-protocol.client.ts (647 行，不可注入的单例)</div>
+          <div>list/zcode/zcode-runtime.provider.ts (547 行) · zcode-protocol.client.test.ts</div>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-4">
+          <div class="rounded-lg border border-slate-200 p-4">
+            <div class="mod text-slate-400 mb-2">Before — 3.5 个 module 挤一个单例</div>
+            <pre class="mermaid">
+flowchart TD
+  subgraph PC["protocolClient 单例"]
+    CODEC["编解码<br/>parseProtocolLine"]
+    SUP["进程监管<br/>spawn/退避/熔断"]
+    REQ["请求关联 + 超时"]
+    CB["引擎回调策略<br/>(硬编码产品语义)"]
+  end
+  RT[zcode-runtime] --> PC
+  RT2[zcode-runtime waitForCompletion] -.断连后烧满 10 分钟超时.-> X["session 丢失无人认领"]
+  T[tests] -.cast 私有字段才能测.-> PC
+  SUP -.请求路径绕过熔断.-> REQ
+  classDef leak stroke:#dc2626,stroke-width:2px;
+  class X leak
+  class CODEC,SUP,REQ,CB fill:#f1f5f9,stroke:#94a3b8
+            </pre>
+          </div>
+          <div class="rounded-lg border border-slate-200 p-4">
+            <div class="mod text-slate-400 mb-2">After — 三个内聚 module，spawn 可注入</div>
+            <div class="space-y-2">
+              <div class="deep text-white rounded-lg p-3">
+                <div class="mod text-slate-300">engine supervisor</div>
+                <div class="text-xs text-slate-300">spawn(可注入) · 退避 · 统一熔断 · 可取消重启 · 可复位 shutdown</div>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div class="border border-slate-300 rounded p-2 text-center text-xs">codec<br/><span class="text-slate-500">纯函数，直测</span></div>
+                <div class="border border-slate-300 rounded p-2 text-center text-xs">request router<br/><span class="text-slate-500">回调策略 = 注入 handler</span></div>
+              </div>
+              <div class="text-xs text-slate-500 text-center">runtime 与 tests 从同一个 interface 进来，cast 私有字段的测试全部退役</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-4 text-sm">
+          <div>
+            <div class="mod text-slate-400 mb-1">Problem</div>
+            <p>它是全 provider 最有状态的单点，内聚崩坏且带三个真实缺陷：① 请求路径 <span class="font-mono text-xs">sendRequest→startProcess</span> 绕过熔断计数（:518），退避可被打穿；② shutdown 不取消已排期的重启 timer（:485-490），关服后仍可拉起新引擎进程，且 <span class="font-mono text-xs">isShuttingDown</span> 永不复位（:603）；③ 引擎崩溃重启后新进程不知道旧 session，无 re-subscribe、无 session-lost 通知，runtime 只能烧满 10 分钟超时。spawn 硬编码不可注入，测试被迫 cast 私有字段。</p>
+          </div>
+          <div>
+            <div class="mod text-slate-400 mb-1">Solution</div>
+            <p>按生命周期拆三个 module：codec（纯函数）、engine supervisor（进程监管，spawn 注入、重启可取消、shutdown 可复位、熔断覆盖所有路径）、request router（服务端回调策略改为注入的 handler）。断连时的 session 语义显式化：要么 re-subscribe，要么通知 runtime 失败。</p>
+          </div>
+        </div>
+        <ul class="flex flex-wrap gap-2 text-xs">
+          <li class="px-2 py-1 rounded bg-emerald-50 text-emerald-800">三个缺陷变成可直测的单元</li>
+          <li class="px-2 py-1 rounded bg-emerald-50 text-emerald-800">locality：进程生命周期问题集中一处</li>
+          <li class="px-2 py-1 rounded bg-emerald-50 text-emerald-800">产品语义（回调应答）离开传输层</li>
+        </ul>
+      </article>
+
+      <!-- ============ CANDIDATE 5 ============ -->
+      <article id="c5" class="rounded-xl border border-slate-200 bg-white shadow-sm p-6 space-y-5">
+        <div class="flex items-start justify-between gap-4">
+          <h2 class="font-serif text-xl font-bold">5 · provider 数据所有权 seam：删除 facet + data-root 归位</h2>
+          <div class="flex gap-2 shrink-0">
+            <span class="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-xs font-semibold">Worth exploring</span>
+            <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-xs font-medium">in-process</span>
+          </div>
+        </div>
+        <div class="font-mono text-sm text-slate-600 space-y-0.5">
+          <div>services/sessions.service.ts:104-324 · services/sessions-watcher.service.ts:17-99</div>
+          <div>server/shared/utils.ts:1166-1229 · list/antigravity/antigravity-data-root.ts</div>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-4">
+          <!-- cross-section before -->
+          <div class="rounded-lg border border-slate-200 p-4">
+            <div class="mod text-slate-400 mb-3">Before — 共享 service 里的 provider 知识堆积</div>
+            <div class="space-y-1 text-xs">
+              <div class="h-10 border-l-4 border-slate-300 bg-white rounded-r px-3 flex items-center justify-between"><span>sessions.service：通用删除编排</span></div>
+              <div class="h-9 border-l-4 border-rose-400 bg-rose-50 rounded-r px-3 flex items-center justify-between"><span>antigravity：brain/&lt;id&gt; · conversation_summaries.db</span><span class="text-rose-600 font-mono text-[10px]">import list/antigravity</span></div>
+              <div class="h-9 border-l-4 border-rose-400 bg-rose-50 rounded-r px-3 flex items-center justify-between"><span>zcode：DELETE FROM session</span><span class="text-rose-600 font-mono text-[10px]">shared/utils 路径</span></div>
+              <div class="h-9 border-l-4 border-rose-400 bg-rose-50 rounded-r px-3 flex items-center justify-between"><span>opencode / claude / cursor / codex 各一段</span><span class="text-rose-600 font-mono text-[10px]">watcher 再硬编码一遍根路径</span></div>
+            </div>
+            <p class="text-xs text-rose-700 mt-2">同一路径知识最多四处放法：antigravity 模块内 / zcode·opencode 在 shared/utils / claude 内联 / watcher 再抄一遍。</p>
+          </div>
+          <!-- cross-section after -->
+          <div class="rounded-lg border border-slate-200 p-4">
+            <div class="mod text-slate-400 mb-3">After — 删除能力随 provider 走</div>
+            <div class="space-y-1 text-xs">
+              <div class="h-10 border-l-4 border-slate-300 bg-white rounded-r px-3 flex items-center justify-between"><span>sessions.service / watcher：只按 registry 分派</span></div>
+              <div class="h-14 deep text-white rounded-lg px-3 py-2"><span class="mod text-slate-300">IProvider seam</span><div class="text-[10px] text-slate-300">deleteNativeSession · watchRoot · targetFile · data-root（各 provider 自持）</div></div>
+              <div class="grid grid-cols-3 gap-1 pt-1">
+                <div class="border border-slate-300 rounded py-1 text-center text-[10px]">antigravity<br/>data-root 模式</div>
+                <div class="border border-slate-300 rounded py-1 text-center text-[10px]">zcode<br/>data-root 模式</div>
+                <div class="border border-slate-300 rounded py-1 text-center text-[10px]">claude / …</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-4 text-sm">
+          <div>
+            <div class="mod text-slate-400 mb-1">Problem</div>
+            <p>这是「新增一个 provider 要改 15+ 处」的单一根因：删除逻辑、watch 根路径、目标文件谓词、shell 命令表、capabilities 条目散落共享层，靠人工 checklist 维护。deletion test 的反例就在眼前：删掉 zcode 模块后，sessions.service 里的 zcode 删除分支变成静默死代码——能力没有随 module 走。antigravity 的 data-root 是最佳实践，却没被推广成约定。</p>
+          </div>
+          <div>
+            <div class="mod text-slate-400 mb-1">Solution</div>
+            <p>先从「删除」一个口子切入验证模式：IProvider 增加可选的删除 facet，sessions.service 的 6 段 SQLite 样板收缩为分派 + 一个共享 helper；随后把 watch 路径、target-file 谓词改为 provider 自声明、registry 收集；getZCodeStorageDir/getOpenCodeDatabasePath 迁出 shared/utils。动共享接口，代价较大，建议排在 #1/#2 落地之后。</p>
+          </div>
+        </div>
+        <ul class="flex flex-wrap gap-2 text-xs">
+          <li class="px-2 py-1 rounded bg-emerald-50 text-emerald-800">新 provider 触点从 15+ 收敛到「模块内自持」</li>
+          <li class="px-2 py-1 rounded bg-emerald-50 text-emerald-800">删模块不再留死代码</li>
+          <li class="px-2 py-1 rounded bg-emerald-50 text-emerald-800">shared/utils 停止积累 provider 知识</li>
+        </ul>
+      </article>
+
+      <!-- ============ CANDIDATE 6 ============ -->
+      <article id="c6" class="rounded-xl border border-slate-200 bg-white shadow-sm p-6 space-y-5">
+        <div class="flex items-start justify-between gap-4">
+          <h2 class="font-serif text-xl font-bold">6 · 补齐 zcode 的 run 终态通知</h2>
+          <div class="flex gap-2 shrink-0">
+            <span class="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-xs font-semibold">Worth exploring</span>
+            <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-xs font-medium">bug fix 优先</span>
+          </div>
+        </div>
+        <div class="font-mono text-sm text-slate-600 space-y-0.5">
+          <div>list/zcode/zcode-runtime.provider.ts（import 无 notifyRun*）· server/shared/interfaces.ts:30-38</div>
+        </div>
+
+        <div class="rounded-lg border border-slate-200 p-4">
+          <div class="mod text-slate-400 mb-3">现状 — 同一契约，五家自觉遵守，一家缺席</div>
+          <div class="grid grid-cols-6 gap-2 text-center text-xs">
+            <div class="border border-slate-300 rounded py-2">claude<div class="text-emerald-600">✓ notifyRunFailed</div></div>
+            <div class="border border-slate-300 rounded py-2">codex<div class="text-emerald-600">✓</div></div>
+            <div class="border border-slate-300 rounded py-2">cursor<div class="text-emerald-600">✓</div></div>
+            <div class="border border-slate-300 rounded py-2">opencode<div class="text-emerald-600">✓</div></div>
+            <div class="border border-slate-300 rounded py-2">antigravity<div class="text-emerald-600">✓ :137/145/400</div></div>
+            <div class="border-2 border-rose-400 bg-rose-50 rounded py-2">zcode<div class="text-rose-600">✗ 无任何调用</div></div>
+          </div>
+          <p class="text-xs text-slate-500 mt-2">IProviderRuntime 不编码该契约 → 失败 run 的站内通知成了 per-provider 自觉行为，zcode 用户失败无通知。疑似复制分叉遗漏，非有意为之。</p>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-4 text-sm">
+          <div>
+            <div class="mod text-slate-400 mb-1">Problem</div>
+            <p>「run 终态要通知用户」这一横切能力没有 seam，靠各家自觉——zcode 恰好就是漏掉的那家。</p>
+          </div>
+          <div>
+            <div class="mod text-slate-400 mb-1">Solution</div>
+            <p>第一步（即时）：zcode runtime 对齐其余五家，补上失败/停止通知。第二步（与 #5 同方向）：把该契约上升为共享 runtime scaffold 的职责，而不是六个调用点各自记得。</p>
+          </div>
+        </div>
+        <ul class="flex flex-wrap gap-2 text-xs">
+          <li class="px-2 py-1 rounded bg-emerald-50 text-emerald-800">用户可见缺口，改动小</li>
+          <li class="px-2 py-1 rounded bg-emerald-50 text-emerald-800">契约进 interface，不再靠自觉</li>
+        </ul>
+      </article>
+
+      </section>
+
+      <!-- ============ B-LEVEL FOOTNOTES ============ -->
+      <section class="rounded-xl border border-slate-200 bg-white p-6">
+        <h2 class="font-serif text-lg font-bold mb-3">B 级 · 顺手项清单（不单独立卡）</h2>
+        <ul class="text-sm text-slate-700 grid md:grid-cols-2 gap-x-8 gap-y-1.5 list-disc list-inside">
+          <li>barrel 是装饰品：registry 绕过 <span class="font-mono text-xs">list/*/index.ts</span> 深 import，6 个测试文件跟进（provider.registry.ts:1-6）</li>
+          <li>权限模式映射表三处重复：两个 runtime + capabilities 矩阵</li>
+          <li><span class="font-mono text-xs">~/.zcode</span> 默认值写了两遍（zcode-protocol.client.ts:255 与 shared/utils.ts:1175）</li>
+          <li>zcode fetchHistory 全量加载后内存分页再全表扫聚合 token，每页 O(整个 session)</li>
+          <li>claude/codex/cursor/opencode runtime 是被 git 跟踪的手写 .js，违反 modules 全 TS 规范</li>
+          <li>antigravity runtime 的 console.debug 每轮把完整 argv（含用户 prompt）打进控制台</li>
+          <li>zcode synchronizer 零测试（models 测试的 fixture 模式可直接复用）</li>
+          <li>antigravity 钥匙串分支零覆盖：execFileSync 无 seam 可替换（对比 token-usage 的 dependencies 注入模式）</li>
+        </ul>
+      </section>
+
+      <!-- ============ TOP RECOMMENDATION ============ -->
+      <section id="top-recommendation" class="deep text-white rounded-xl p-8 space-y-3">
+        <div class="mod text-slate-400">Top recommendation</div>
+        <h2 class="font-serif text-2xl font-bold"><a href="#c1" class="underline decoration-slate-500 underline-offset-4">#1 · Token 用量读取下放为 provider facet</a></h2>
+        <p class="text-slate-200 text-sm max-w-3xl">它同时是实证 bug（zcode 必然 404）、seam 方向修正（services 不再反向依赖具体 provider）和防复发投资（if 链停止线性生长）。改动量中等、有现成的注入式测试模式可抄。#3 engine-path 工厂是同一天可以顺手做完的快赢；#2 同步器基类杠杆最大但要先对齐三份分歧；#4 是 zcode 自身最痛的一块，值得紧随其后。</p>
+      </section>
+
+      <footer class="text-xs text-slate-400 text-center pb-8">
+        cloudcli · feature/zcode · 走查方法：三路并行走查（antigravity / zcode / 共享框架横向对比）+ 关键论断逐条 grep 实证 · 词汇表：module / interface / seam / deep / shallow / adapter / locality / leverage
+      </footer>
+    </main>
+  </body>
+</html>

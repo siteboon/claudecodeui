@@ -1,11 +1,13 @@
-import type { ChatMessage, ToolGroupItem } from '@/shared/types';
-import { getToolConfig } from '@/modules/chat/tools/configs/toolConfigs';
+import type { ChatMessage } from '@/shared/types';
 
 export const TOOL_GROUP_THRESHOLD = 2;
 
-/** How many of a group's tool inputs the collapsed summary line spells out. */
-const PREVIEWED_TOOL_COUNT = 2;
-
+export type ToolGroupItem = {
+  _isGroup: true;
+  toolName: string;
+  messages: ChatMessage[];
+  timestamp: ChatMessage['timestamp'];
+}
 
 export type MessageListItem = ChatMessage | ToolGroupItem;
 
@@ -21,61 +23,23 @@ function isGroupableToolMessage(message: ChatMessage): message is ChatMessage & 
 // shouldn't split an otherwise-continuous run of the same tool — providers like
 // Codex interleave hidden reasoning between consecutive tool calls.
 function rendersNothing(message: ChatMessage, showThinking: boolean): boolean {
-  return Boolean(message.isThinking && !showThinking);
+  return Boolean(message.isThinking && (!showThinking || !message.content?.trim()));
 }
 
-function parseToolInput(toolInput: unknown): unknown {
-  if (typeof toolInput !== 'string') {
-    return toolInput;
-  }
-
-  try {
-    return JSON.parse(toolInput);
-  } catch {
-    return toolInput;
-  }
-}
-
-function getToolInputPreview(message: ChatMessage): string {
-  const config = getToolConfig(message.toolName || 'UnknownTool').input;
-  const parsedInput = parseToolInput(message.toolInput);
-  const title = typeof config.title === 'function' ? config.title(parsedInput) : config.title;
-  const value = config.getValue?.(parsedInput);
-
-  return String(value || title || message.displayText || message.content || '').trim();
-}
-
-/**
- * Builds the collapsed group's summary line.
- *
- * Computed here rather than in the component so it happens once per grouping
- * pass instead of once per group render. It is not cached beyond that: grouping
- * re-runs on every 100ms stream tick because visibleMessages is a fresh array,
- * and a run's preview changes as the run grows, so a cache would have to be
- * keyed on the whole run. Measured at 0.18ms per tick over a 100-message window,
- * which is a seventh of what the store's own per-tick merge costs — not worth
- * the staleness risk.
- */
-function buildGroupPreview(messages: ChatMessage[]): string {
-  const named = messages
-    .slice(0, PREVIEWED_TOOL_COUNT)
-    .map(getToolInputPreview)
-    .filter(Boolean);
-
-  const previewText = named.join(', ');
-  // Subtracted from the previews actually printed, not from the two slots the
-  // line reserves, so that named + extraCount === messages.length for every
-  // input. A tool whose input yields no text — a Read with no file_path, an
-  // input still arriving as partial JSON — is genuinely not named, so it
-  // belongs in the remainder. Counting slots instead makes a group of three
-  // whose first preview is empty render "/b.ts, +1 more" beside an x3 badge.
-  const extraCount = messages.length - named.length;
-
-  if (!previewText) {
-    return extraCount > 0 ? `+${extraCount} more` : '';
-  }
-
-  return extraCount > 0 ? `${previewText}, +${extraCount} more` : previewText;
+export function getNormalizedToolGroupKey(toolName: string): string {
+  if (toolName === 'run_command' || toolName === 'Bash' || toolName === 'exec' || toolName === 'command_execution') return 'Bash';
+  if (toolName === 'view_file' || toolName === 'Read') return 'Read';
+  if (toolName === 'replace_file_content' || toolName === 'Edit' || toolName === 'ApplyPatch' || toolName === 'apply_patch') return 'Edit';
+  if (toolName === 'write_to_file' || toolName === 'Write') return 'Write';
+  if (toolName === 'find_by_name' || toolName === 'Glob') return 'Glob';
+  if (toolName === 'grep_search' || toolName === 'Grep') return 'Grep';
+  if (toolName === 'list_dir' || toolName === 'LS') return 'LS';
+  if (toolName === 'search_web' || toolName === 'WebSearch') return 'WebSearch';
+  if (toolName === 'read_url_content' || toolName === 'WebFetch') return 'WebFetch';
+  if (toolName === 'manage_task' || toolName === 'Task') return 'Task';
+  if (toolName === 'manage_subagents' || toolName === 'invoke_subagent') return 'Subagent';
+  if (toolName === 'ExitPlanMode' || toolName === 'exit_plan_mode' || toolName === 'Plan' || toolName === 'update_plan') return 'Plan';
+  return toolName;
 }
 
 export function groupConsecutiveTools(
@@ -96,6 +60,7 @@ export function groupConsecutiveTools(
 
     const run: ChatMessage[] = [message];
     let nextIndex = index + 1;
+    const baseGroupKey = getNormalizedToolGroupKey(message.toolName);
 
     while (nextIndex < messages.length) {
       const candidate = messages[nextIndex];
@@ -106,7 +71,10 @@ export function groupConsecutiveTools(
         continue;
       }
 
-      if (isGroupableToolMessage(candidate) && candidate.toolName === message.toolName) {
+      if (
+        isGroupableToolMessage(candidate) &&
+        getNormalizedToolGroupKey(candidate.toolName) === baseGroupKey
+      ) {
         run.push(candidate);
         nextIndex += 1;
         continue;
@@ -118,10 +86,9 @@ export function groupConsecutiveTools(
     if (run.length >= TOOL_GROUP_THRESHOLD) {
       items.push({
         _isGroup: true,
-        toolName: message.toolName,
+        toolName: baseGroupKey,
         messages: run,
         timestamp: message.timestamp,
-        preview: buildGroupPreview(run),
       });
     } else {
       items.push(...run);

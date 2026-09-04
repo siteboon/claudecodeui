@@ -1,5 +1,6 @@
 import spawn from 'cross-spawn';
 
+import { createCliInstallationProbe } from '@/modules/providers/shared/installation/cli-installation-probe.js';
 import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { ProviderAuthStatus } from '@/shared/types.js';
 
@@ -10,24 +11,21 @@ type CursorLoginStatus = {
   error?: string;
 };
 
+const installationProbe = createCliInstallationProbe({ command: () => 'cursor-agent' });
+
 export class CursorProviderAuth implements IProviderAuth {
   /**
    * Checks whether the cursor-agent CLI is available on this host.
    */
-  private checkInstalled(): boolean {
-    try {
-      spawn.sync('cursor-agent', ['--version'], { stdio: 'ignore', timeout: 5000 });
-      return true;
-    } catch {
-      return false;
-    }
+  private checkInstalled(): Promise<boolean> {
+    return installationProbe.isInstalled();
   }
 
   /**
    * Returns Cursor CLI installation and login status.
    */
   async getStatus(): Promise<ProviderAuthStatus> {
-    const installed = this.checkInstalled();
+    const installed = await this.checkInstalled();
 
     if (!installed) {
       return {

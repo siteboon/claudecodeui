@@ -7,13 +7,13 @@ import rehypeKatex from 'rehype-katex';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useTranslation } from 'react-i18next';
 
+import { SyntaxHighlighter, isRegisteredLanguage } from '@/modules/chat/composer/codeHighlightLanguages';
 import { MermaidDiagram } from '@/modules/code-editor';
 import { normalizeInlineCodeFences } from '@/modules/chat/utils/chatFormatting';
+import { filePathFromFileUrl, markdownUrlTransform } from '@/modules/chat/utils/fileLink';
 import { copyTextToClipboard } from '@/shared/utils';
-import { SyntaxHighlighter } from '@/shared/syntaxHighlighter';
 import { usePaletteOps } from '@/modules/command-palette';
-import { buildSyntaxTheme } from '@/modules/chat/utils/syntaxHighlightTheme';
-import type { PrismStyleSheet } from '@/modules/chat/utils/syntaxHighlightTheme';
+import { useTheme } from '@/shared/context/ThemeContext';
 
 type MarkdownProps = {
   children: React.ReactNode;
@@ -57,11 +57,6 @@ const childrenToText = (children: React.ReactNode): string => {
   return '';
 };
 
-// The delimiters `remark-math` recognizes with `singleDollarTextMath` off.
-const MATH_DELIMITER = /\$\$|\\\(|\\\[/;
-
-const EMPTY_PLUGINS: never[] = [];
-
 type CodeBlockProps = {
   node?: any;
   className?: string;
@@ -71,8 +66,9 @@ type CodeBlockProps = {
 };
 
 // `node` is destructured out so react-markdown's hast node never reaches the DOM.
-const CodeBlock = ({ node: _node, className, children, forceBlock, ...props }: CodeBlockProps) => {
+const CodeBlock = memo(function CodeBlock({ node: _node, className, children, forceBlock, ...props }: CodeBlockProps) {
   const { t } = useTranslation('chat');
+  const { isDarkMode } = useTheme();
   const [copied, setCopied] = useState(false);
   // Fenced blocks carry a trailing newline in the tree; trim it so the
   // highlighter doesn't render an empty final line.
@@ -127,7 +123,7 @@ const CodeBlock = ({ node: _node, className, children, forceBlock, ...props }: C
             <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
               <path
                 fillRule="evenodd"
-                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                d="M16.707 5.293a 1 1 0 010 1.414l-8 8a 1 1 0 01-1.414 0l-4-4a 1 1 0 011.414-1.414L8 12.586l7.293-7.293a 1 1 0 011.414 0z"
                 clipRule="evenodd"
               />
             </svg>
@@ -148,50 +144,39 @@ const CodeBlock = ({ node: _node, className, children, forceBlock, ...props }: C
         </button>
       </div>
 
-      <SyntaxHighlighter
-        language={language}
-        style={syntaxTheme.style}
-        customStyle={{
-          margin: 0,
-          borderRadius: 0,
-          fontSize: '0.8125rem',
-          lineHeight: 1.6,
-          padding: '0.5rem 1rem 1rem',
-          // The container owns the background so the label row and code read as one panel.
-          background: 'transparent',
-        }}
-        codeTagProps={{
-          style: {
-            fontFamily:
-              'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+      {isRegisteredLanguage(language) ? (
+        <SyntaxHighlighter
+          language={language}
+          style={isDarkMode ? oneDark : oneLight}
+          customStyle={{
+            margin: 0,
+            borderRadius: 0,
+            fontSize: '0.8125rem',
+            lineHeight: 1.6,
+            padding: '0.5rem 1rem 1rem',
+            // The container owns the background so the label row and code read as one panel.
             background: 'transparent',
-          },
-        }}
-      >
-        {raw}
-      </SyntaxHighlighter>
+          }}
+          codeTagProps={{
+            style: {
+              fontFamily:
+                'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+              background: 'transparent',
+            },
+          }}
+        >
+          {raw}
+        </SyntaxHighlighter>
+      ) : (
+        // Fence language without a registered grammar: plain monospace block
+        // instead of refractor's "Unknown language" throw.
+        <pre className="overflow-x-auto whitespace-pre px-4 pb-4 pt-1 font-mono text-[0.8125rem] leading-[1.6]">
+          {raw}
+        </pre>
+      )}
     </div>
   );
-};
-
-/**
- * One style object for both themes: switching between the two Prism objects
- * re-tokenized every mounted code block, so the theme-dependent values are CSS
- * variables and the toggle is a style recalculation instead.
- */
-const syntaxTheme = buildSyntaxTheme(oneLight as PrismStyleSheet, oneDark as PrismStyleSheet);
-
-// The `:root`/`.dark` declarations backing syntaxTheme.style. Injected once
-// because the values are derived from the Prism theme objects at runtime and so
-// cannot live in index.css. ThemeContext toggles `.dark` on <html>, which is
-// what repaints the tokens.
-const SYNTAX_THEME_STYLE_ELEMENT_ID = 'cc-syntax-theme';
-if (!document.getElementById(SYNTAX_THEME_STYLE_ELEMENT_ID)) {
-  const styleElement = document.createElement('style');
-  styleElement.id = SYNTAX_THEME_STYLE_ELEMENT_ID;
-  styleElement.textContent = syntaxTheme.css;
-  document.head.appendChild(styleElement);
-}
+});
 
 const markdownComponents = {
   code: CodeBlock,
@@ -226,6 +211,11 @@ const markdownComponents = {
       <table className="my-0 min-w-full border-collapse text-sm">{children}</table>
     </div>
   ),
+  img: ({ src, alt, node: _node, ...props }: { node?: unknown } & React.ImgHTMLAttributes<HTMLImageElement>) => (
+    // Lazy decoding keeps late image loads from shifting scroll position
+    // while the user reads (native anchoring absorbs what remains).
+    <img src={src} alt={alt} loading="lazy" decoding="async" className="rounded-lg" {...props} />
+  ),
   thead: ({ children }: { children?: React.ReactNode }) => <thead className="bg-muted/60">{children}</thead>,
   tr: ({ children }: { children?: React.ReactNode }) => (
     <tr className="[&:last-child>td]:border-b-0">{children}</tr>
@@ -238,34 +228,18 @@ const markdownComponents = {
   ),
 };
 
-/**
- * Used by chat's MessageComponent, ToolErrorDisplay and MarkdownContent to
- * render model-authored markdown with this module's shared prose styling,
- * code highlighting and table rules.
- */
-function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 'className'>) {
-  const content = useMemo(
-    () => normalizeInlineCodeFences(String(children ?? '')),
-    [children],
-  );
-  // Math support costs a remark tree pass plus a full KaTeX walk on every
-  // render, and almost no assistant message contains math. Only wire the two
-  // plugins up when the text has a delimiter they could act on.
-  const hasMath = useMemo(() => MATH_DELIMITER.test(content), [content]);
+// Memoized: a re-render of an unchanged message must not re-parse its
+// markdown (react-markdown runs the whole remark/rehype pipeline
+// synchronously, plus KaTeX and Prism highlighting).
+export const Markdown = memo(function Markdown({ children, className, breaks = false }: MarkdownProps) {
+  const content = useMemo(() => normalizeInlineCodeFences(String(children ?? '')), [children]);
   const remarkPlugins = useMemo(
-    () => {
-      const plugins: unknown[] = [remarkGfm];
-      if (hasMath) {
-        plugins.push([remarkMath, { singleDollarTextMath: false }]);
-      }
-      if (breaks) {
-        plugins.push(remarkBreaks);
-      }
-      return plugins as any;
-    },
-    [breaks, hasMath],
+    () => (breaks
+      ? [remarkGfm, [remarkMath, { singleDollarTextMath: false }], remarkBreaks]
+      : [remarkGfm, [remarkMath, { singleDollarTextMath: false }]]) as any,
+    [breaks],
   );
-  const rehypePlugins = useMemo(() => (hasMath ? [rehypeKatex] : EMPTY_PLUGINS), [hasMath]);
+  const rehypePlugins = useMemo(() => [rehypeKatex], []);
   const { openFileInEditor } = usePaletteOps();
 
   const components = useMemo(
@@ -274,13 +248,16 @@ function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 
       a: ({ href, children: linkChildren }: { href?: string; children?: React.ReactNode }) => {
         // Prefer the href when it is a real path; otherwise fall back to the
         // link text, since models often emit `[src/foo.ts]()` with an empty href.
+        // `file://` URLs are decoded to their absolute path first so external
+        // documents (e.g. Antigravity plan files) open read-only in the editor.
         const linkText = childrenToText(linkChildren);
-        const fileRef = looksLikeFilePath(href) ? href : looksLikeFilePath(linkText) ? linkText : undefined;
+        const pathHref = filePathFromFileUrl(href) ?? href;
+        const fileRef = looksLikeFilePath(pathHref) ? pathHref : looksLikeFilePath(linkText) ? linkText : undefined;
 
-        if (fileRef && !isExternalHref(href)) {
+        if (fileRef && !isExternalHref(pathHref)) {
           return (
             <a
-              href={href || fileRef}
+              href={pathHref || fileRef}
               className="cursor-pointer text-blue-600 hover:underline dark:text-blue-400"
               onClick={(event) => {
                 event.preventDefault();
@@ -308,29 +285,15 @@ function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 
   );
 
   return (
-    <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components as any}>
-      {content}
-    </ReactMarkdown>
-  );
-}
-
-/**
- * Markdown blocks without the prose wrapper. Used by StreamingMarkdown so a
- * streamed reply's settled and pending halves render as siblings inside ONE
- * prose container — Tailwind Typography's `> :first-child`/`> :last-child`
- * margin rules are per-container, so two containers would zero the gap at the
- * seam and make it pop back when the boundary moves.
- *
- * Memoized so a re-render does not re-run remark, rehype, KaTeX and Prism over
- * text that has not changed.
- */
-export const MarkdownBody = memo(MarkdownBodyRenderer);
-
-/** Markdown in its own prose container. The form every non-streaming caller uses. */
-export const Markdown = memo(function Markdown({ children, className, breaks }: MarkdownProps) {
-  return (
     <div className={className}>
-      <MarkdownBody breaks={breaks}>{children}</MarkdownBody>
+      <ReactMarkdown
+        remarkPlugins={remarkPlugins}
+        rehypePlugins={rehypePlugins}
+        urlTransform={markdownUrlTransform}
+        components={components as any}
+      >
+        {content}
+      </ReactMarkdown>
     </div>
   );
 });

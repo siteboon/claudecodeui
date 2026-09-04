@@ -66,7 +66,103 @@ export type AuthenticatedWebSocketRequest = IncomingMessage & {
  * Use this as the source of truth whenever a function or payload needs to identify
  * a specific LLM integration.
  */
-export type LLMProvider = 'claude' | 'codex' | 'cursor' | 'opencode';
+export type LLMProvider = 'claude' | 'codex' | 'cursor' | 'opencode' | 'antigravity';
+
+/**
+ * Single quota bucket representing rolling or windowed token limit information
+ * returned by providers such as Antigravity.
+ */
+export type ProviderQuotaBucket = {
+  id: string;
+  name: string;
+  description?: string;
+  window: '5h' | 'weekly' | string;
+  remainingFraction: number;
+  resetTime?: string;
+};
+
+/**
+ * Group of quota buckets belonging to a family of models (e.g. Gemini Models, Claude/GPT models).
+ */
+export type ProviderQuotaGroup = {
+  name: string;
+  description?: string;
+  buckets: ProviderQuotaBucket[];
+};
+
+/**
+ * Account-level quota and rate limit status across model groups.
+ */
+export type ProviderQuotaData = {
+  groups: ProviderQuotaGroup[];
+  updatedAt: string;
+};
+
+/** Backwards-compatible aliases for Antigravity-specific callers */
+export type AntigravityQuotaBucket = ProviderQuotaBucket;
+export type AntigravityQuotaGroup = ProviderQuotaGroup;
+export type AntigravityQuotaData = ProviderQuotaData;
+
+// ---------------------------
+//----------------- PROVIDER SESSION TOKEN USAGE TYPES ------------
+/**
+ * Latest token-usage snapshot for one provider session, as served by
+ * `GET /providers/sessions/:sessionId/token-usage`.
+ *
+ * Each provider sessions facet produces this shape from its own native
+ * storage. `unsupported: true` marks providers that cannot report usage at
+ * all (callers surface `message` instead of the counters); `total` carries
+ * the context window when the provider knows it.
+ */
+export type ProviderTokenUsageResult = {
+  used: number;
+  total?: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
+  cacheTokens?: number;
+  breakdown: {
+    input: number;
+    output: number;
+  };
+  unsupported?: boolean;
+  message?: string;
+};
+
+/**
+ * Session identity handed to `IProviderSessions.getTokenUsage`.
+ *
+ * Carries exactly what the app session row knows about a provider-native
+ * session; every provider-specific storage detail stays inside the provider
+ * adapter.
+ */
+export type ProviderSessionUsageInput = {
+  /** App-facing session id; error messages address this id. */
+  appSessionId: string;
+  /** Provider-native session id (the app row's `provider_session_id`). */
+  nativeSessionId: string;
+  /** Indexed transcript path recorded on the app session row, when present. */
+  jsonlPath: string | null;
+  /** Workspace path recorded on the app session row, when present. */
+  projectPath: string | null;
+};
+
+/**
+ * Declares where one provider's session artifacts live on disk and which of
+ * them should trigger synchronization.
+ *
+ * Consumed by the sessions watcher (which roots to watch, which file events
+ * route to `IProviderSessionSynchronizer.synchronizeFile`) and reused by the
+ * synchronizers themselves, so each provider states its artifact layout in
+ * exactly one place. `rootPath` is watched recursively.
+ */
+export type ProviderSessionWatchTarget = {
+  /** Directory holding this provider's session artifacts. */
+  rootPath: string;
+  /** Returns true when a file event under `rootPath` should trigger a sync. */
+  isTargetFile(filePath: string): boolean;
+};
 
 /**
  * One selectable model row in a provider model catalog.
@@ -85,6 +181,15 @@ export type ProviderModelOption = {
       value: string;
       description?: string;
     }[];
+    /**
+     * Marks effort tiers the provider CLI encodes as model-id suffixes
+     * (antigravity's `gemini-3.7-flash-medium`) instead of a separate effort
+     * flag. The antigravity models facet sets this on variant-family base
+     * models; the antigravity runtime reads it to append the chosen tier to
+     * the model id rather than passing `--effort`. Omitted for models that
+     * take the CLI's own effort flag.
+     */
+    encoding?: 'model-suffix';
   };
 };
 
@@ -680,6 +785,14 @@ export type ProviderAuthStatus = {
   email: string | null;
   method: string | null;
   error?: string;
+  /**
+   * Provider-suggested login command for the terminal-based login modal.
+   *
+   * Only providers whose login requires a resolved absolute engine path
+   * populate it; the frontend falls back
+   * to its own static per-provider command when absent.
+   */
+  loginCommand?: string | null;
 };
 
 // ---------------------------
@@ -1148,6 +1261,13 @@ export type FileTreeServiceDependencies = {
   resolveMimeType(filePath: string): string;
   fileSystemConcurrency: number;
   logger: FileTreeLogger;
+  /**
+   * Absolute directory roots the service may read text files from outside any
+   * project. Populated by the composition root (currently the Antigravity
+   * brain directories, so chat-linked plan documents can be opened read-only);
+   * every path outside these roots is rejected with `PATH_NOT_ALLOWED`.
+   */
+  externalReadOnlyRoots: string[];
 };
 
 /**
@@ -1164,6 +1284,17 @@ export type FileTreeServices = {
   }>;
   createWorkspaceFolder(folderPath: string): Promise<{ success: true; path: string }>;
   readTextFile(projectId: string, filePath: string): Promise<{ content: string; path: string }>;
+  /**
+   * Reads a text file outside any project root. The path must resolve inside
+   * one of the injected `externalReadOnlyRoots`; there is deliberately no
+   * write counterpart, so external files can never be modified through the API.
+   */
+  readExternalTextFile(filePath: string): Promise<{ content: string; path: string }>;
+  /**
+   * Opens a stream for a media or binary file outside any project root. The path
+   * must resolve inside one of the injected `externalReadOnlyRoots`.
+   */
+  openExternalFile(filePath: string): Promise<{ contentType: string; stream: Readable }>;
   openFile(projectId: string, filePath: string): Promise<{ contentType: string; stream: Readable }>;
   saveTextFile(projectId: string, filePath: string, content: string): Promise<{
     success: true;

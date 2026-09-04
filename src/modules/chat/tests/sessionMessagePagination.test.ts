@@ -9,6 +9,7 @@ import {
   hasReachedCachedTailTimeBoundary,
   mergeLatestServerPage,
   mergeOlderServerPage,
+  normalizedRowsEquivalent,
   planLatestPageBridge,
   resolveLatestPagePagination,
 } from '@/modules/chat/utils/sessionMessagePagination';
@@ -176,4 +177,39 @@ test('offset counts loaded persisted rows even when renderable total excludes to
 
   assert.equal(pagination.offset, 23);
   assert.ok(pagination.offset > renderableTotal);
+});
+
+test('byte-equal overlap rows keep their cached identity on refresh', () => {
+  const cachedTail = message(2, { content: 'same' });
+  const cachedChanged = message(3, { content: 'stale enrichment' });
+  const cached = [message(1), cachedTail, cachedChanged];
+
+  // Fresh server parse: identical row for m2, updated toolResult text for m3,
+  // plus one genuinely new row.
+  const latest = [
+    structuredClone(cachedTail),
+    { ...structuredClone(cachedChanged), content: 'fresh enrichment' },
+    message(4),
+  ];
+
+  const merged = mergeLatestServerPage(cached, latest);
+
+  assert.equal(merged.overlapLength, 2);
+  assert.equal(merged.messages.length, 4);
+  // Identical row: cached object survives so downstream memoization holds.
+  assert.equal(merged.messages[1], cachedTail);
+  // Changed row: the fresh server object wins.
+  assert.equal(merged.messages[2], latest[1]);
+  assert.equal(merged.messages[2].content, 'fresh enrichment');
+  // New row appended as-is.
+  assert.equal(merged.messages[3], latest[2]);
+});
+
+test('normalizedRowsEquivalent matches on value equality, not identity alone', () => {
+  const row = message(9, { content: 'payload' });
+  const twin = structuredClone(row);
+
+  assert.ok(normalizedRowsEquivalent(row, row));
+  assert.ok(normalizedRowsEquivalent(row, twin));
+  assert.ok(!normalizedRowsEquivalent(row, { ...twin, content: 'different' }));
 });

@@ -37,6 +37,23 @@ const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
 const ANSI_ESCAPE_SEQUENCE_REGEX = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1B\\))/g;
 const TRAILING_URL_PUNCTUATION_REGEX = /[)\]}>.,;:!?]+$/;
 
+/**
+ * Decides whether a shell init's `initialCommand` is a provider login flow:
+ * `agy`, `claude ... /login`, `claude setup-token`, `codex login`,
+ * `cursor-agent login`, `opencode auth login`. Login shells
+ * must always start a fresh PTY instead of reconnecting to a retained one —
+ * a retained login CLI can be stuck in a dead OAuth/state screen, and then
+ * every login click would silently reconnect to that broken process.
+ * Consumed by handleShellConnection in this module and by the websocket tests.
+ */
+export function isLoginShellCommand(initialCommand: string | null | undefined): boolean {
+  if (!initialCommand) {
+    return false;
+  }
+  const command = initialCommand.trim();
+  return command === 'agy' || command.includes('login') || command.includes('setup-token');
+}
+
 function stripAnsiSequences(value: string): string {
   return value.replace(ANSI_ESCAPE_SEQUENCE_REGEX, '');
 }
@@ -145,6 +162,54 @@ function parseShellMessage(rawMessage: RawData): ShellIncomingMessage | null {
 
 const SAFE_SESSION_ID_PATTERN = /^[a-zA-Z0-9_.\-:]+$/;
 
+/**
+ * Interactive CLI integration per provider for the standalone shell: the
+ * display name shown in the welcome banner, the command that launches a
+ * fresh interactive CLI, and (when the CLI supports resuming) a builder that
+ * derives the resume command from the provider-native session id.
+ *
+ * `agy`'s bare invocation is classified as a login command by
+ * isLoginShellCommand, so a fresh antigravity shell restarts its PTY on
+ * reconnect — resume-mode shells (with --conversation) reattach normally.
+ * Providers without an entry fall back to claude, matching the chat gateway
+ * default. Consumed by buildShellCommand and the init welcome banner.
+ */
+const SHELL_PROVIDER_CLI: Record<string, {
+  name: string;
+  launch: string;
+  resume?: (resumeSessionId: string) => string;
+}> = {
+  claude: {
+    name: 'Claude',
+    launch: 'claude',
+    resume: (id) => os.platform() === 'win32'
+      ? `claude --resume "${id}"; if ($LASTEXITCODE -ne 0) { claude }`
+      : `claude --resume "${id}" || claude`,
+  },
+  cursor: {
+    name: 'Cursor',
+    launch: 'cursor-agent',
+    resume: (id) => `cursor-agent --resume="${id}"`,
+  },
+  codex: {
+    name: 'Codex',
+    launch: 'codex',
+    resume: (id) => os.platform() === 'win32'
+      ? `codex resume "${id}"; if ($LASTEXITCODE -ne 0) { codex }`
+      : `codex resume "${id}" || codex`,
+  },
+  opencode: {
+    name: 'OpenCode',
+    launch: 'opencode',
+    resume: (id) => `opencode --session "${id}"`,
+  },
+  antigravity: {
+    name: 'Antigravity',
+    launch: 'agy',
+    resume: (id) => `agy --conversation "${id}"`,
+  },
+};
+
 function resolveResumeSessionId(
   message: ShellIncomingMessage,
   dependencies: ShellWebSocketDependencies
@@ -193,44 +258,24 @@ function buildShellCommand(
     return initialCommand;
   }
 
-  if (provider === 'cursor') {
-    if (resumeSessionId) {
-      return `cursor-agent --resume="${resumeSessionId}"`;
-    }
-    return 'cursor-agent';
-  }
-
-  if (provider === 'codex') {
-    if (resumeSessionId) {
-      if (os.platform() === 'win32') {
-        return `codex resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { codex }`;
-      }
-      return `codex resume "${resumeSessionId}" || codex`;
-    }
-    return 'codex';
-  }
-
-  if (provider === 'opencode') {
-    if (resumeSessionId) {
-      return `opencode --session "${resumeSessionId}"`;
-    }
-    return initialCommand || 'opencode';
-  }
+  const integration = SHELL_PROVIDER_CLI[provider] ?? SHELL_PROVIDER_CLI.claude;
 
   // Launching with the flag is what unlocks "bypass permissions" in the CLI's
-  // shift+tab permission-mode cycle; it cannot be enabled from inside a
-  // session started without it.
-  const bypassFlag = readBoolean(message.bypassPermissions)
+  // own approval flow; resuming must carry it through as well.
+  const bypassFlag = readBoolean(message.bypassPermissions) && provider === 'claude'
     ? ' --dangerously-skip-permissions'
     : '';
-  const command = initialCommand || `claude${bypassFlag}`;
-  if (resumeSessionId) {
-    if (os.platform() === 'win32') {
-      return `claude --resume "${resumeSessionId}"${bypassFlag}; if ($LASTEXITCODE -ne 0) { claude${bypassFlag} }`;
+
+  if (resumeSessionId && integration.resume) {
+    if (bypassFlag) {
+      return `claude --resume "${resumeSessionId}"${bypassFlag} || claude${bypassFlag}`;
     }
-    return `claude --resume "${resumeSessionId}"${bypassFlag} || claude${bypassFlag}`;
+    return integration.resume(resumeSessionId);
   }
-  return command;
+  if (provider === 'claude' && bypassFlag) {
+    return `claude${bypassFlag}`;
+  }
+  return initialCommand || integration.launch;
 }
 
 function readEnvValue(env: NodeJS.ProcessEnv, key: string): string | undefined {
@@ -326,11 +371,7 @@ export function handleShellConnection(
         urlDetectionBuffer = '';
         announcedAuthUrls.clear();
 
-        const isLoginCommand =
-          !!initialCommand &&
-          (initialCommand.includes('setup-token') ||
-            initialCommand.includes('cursor-agent login') ||
-            initialCommand.includes('auth login'));
+        const isLoginCommand = isLoginShellCommand(initialCommand);
 
         const commandSuffix =
           isPlainShell && initialCommand
@@ -536,14 +577,7 @@ export function handleShellConnection(
 
         let welcomeMsg = `\x1b[36mStarting terminal in: ${projectPath}\x1b[0m\r\n`;
         if (!isPlainShell) {
-          const providerName =
-            provider === 'cursor'
-              ? 'Cursor'
-              : provider === 'codex'
-                ? 'Codex'
-                : provider === 'opencode'
-                    ? 'OpenCode'
-                  : 'Claude';
+          const providerName = (SHELL_PROVIDER_CLI[provider] ?? SHELL_PROVIDER_CLI.claude).name;
           welcomeMsg = hasSession && resumeSessionId
             ? `\x1b[36mResuming ${providerName} session ${resumeSessionId} in: ${projectPath}\x1b[0m\r\n`
             : `\x1b[36mStarting new ${providerName} session in: ${projectPath}\x1b[0m\r\n`;

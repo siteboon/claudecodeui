@@ -476,6 +476,41 @@ const ensureProjectsForSessionPaths = (db: Database): void => {
   `);
 };
 
+const migrateProviderModelsSchema = (db: Database): void => {
+  if (!tableExists(db, 'provider_models')) {
+    return;
+  }
+  const row = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'provider_models'")
+    .get() as { sql: string } | undefined;
+  if (!row || !row.sql) return;
+
+  if (row.sql.includes('CHECK') && !row.sql.includes('antigravity')) {
+    console.log('Running migration: Updating provider_models table schema to support antigravity');
+    db.exec(`
+      CREATE TABLE provider_models_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        provider TEXT NOT NULL CHECK (provider IN ('claude', 'cursor', 'codex', 'opencode', 'antigravity')),
+        model_id TEXT NOT NULL,
+        model_name TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(provider, model_id)
+      );
+
+      INSERT INTO provider_models_new (id, provider, model_id, model_name, sort_order, created_at, updated_at)
+      SELECT id, provider, model_id, model_name, sort_order, created_at, updated_at FROM provider_models;
+
+      DROP TABLE provider_models;
+      ALTER TABLE provider_models_new RENAME TO provider_models;
+
+      CREATE INDEX IF NOT EXISTS idx_provider_models_provider_order
+      ON provider_models(provider, sort_order, id);
+    `);
+  }
+};
+
 export const runMigrations = (db: Database) => {
   try {
     const usersTableInfo = db.prepare('PRAGMA table_info(users)').all() as { name: string }[];
@@ -504,6 +539,7 @@ export const runMigrations = (db: Database) => {
       CREATE INDEX IF NOT EXISTS idx_provider_models_provider_order
       ON provider_models(provider, sort_order, id)
     `);
+    migrateProviderModelsSchema(db);
     db.exec(USER_PREFERENCES_TABLE_SCHEMA_SQL);
     db.exec(SESSION_DRAFTS_TABLE_SCHEMA_SQL);
     db.exec(SUPERSEDED_PROVIDER_SESSIONS_TABLE_SCHEMA_SQL);

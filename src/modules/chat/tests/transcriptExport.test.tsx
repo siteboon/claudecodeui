@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 
 import { describe, expect, it } from 'vitest';
+import { vi } from 'vitest';
 
 import type { ChatMessage } from '@/shared/types';
 import { buildTranscriptExport, toExportFileStem } from '@/modules/chat/utils/chatExport';
@@ -63,6 +64,9 @@ describe('markdown export', () => {
     expect(markdown).toContain('Please rename the helper');
     expect(markdown).toContain('### Claude');
     expect(markdown).toContain('const renamed = 1;');
+
+    const agyMd = await buildTranscriptExport('markdown', { ...input, provider: 'antigravity' }, exportedAt);
+    expect(agyMd).toContain('### Antigravity');
   });
 
   it('fences content that already contains a fence', async () => {
@@ -184,3 +188,7 @@ describe('html export', () => {
     expect(html).not.toContain('<img src=x');
   });
 });
+
+vi.mock('@/shared/context/ThemeContext', () => ({ useTheme: () => ({ isDarkMode: false, toggleDarkMode: () => undefined }) }));
+
+vi.mock('@/shared/context/UiPreferencesContext', () => ({ useUiPreferences: () => ({ uiPreferences: { theme: 'light' }, setUiPreferences: () => undefined }) }));

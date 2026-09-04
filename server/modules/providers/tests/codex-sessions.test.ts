@@ -6,6 +6,7 @@ import test from 'node:test';
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import { CodexSessionSynchronizer } from '@/modules/providers/list/codex/codex-session-synchronizer.provider.js';
+import { AppError } from '@/shared/utils.js';
 import { CodexSessionsProvider, parseCodexExecScript, readCodexMemoryCitations } from '@/modules/providers/list/codex/codex-sessions.provider.js';
 
 const patchHomeDir = (nextHomeDir: string) => {
@@ -233,6 +234,71 @@ test('Codex history translates wrapped exec scripts into the tools they ran', { 
   } finally {
     restoreHomeDir();
     await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('getTokenUsage reads the latest token_count snapshot from the indexed rollout', async () => {
+  const tempDirectory = await mkdtemp(path.join(os.tmpdir(), 'codex-token-usage-'));
+  const sessionFilePath = path.join(tempDirectory, 'rollout-provider-session.jsonl');
+
+  try {
+    await writeFile(sessionFilePath, [
+      JSON.stringify({
+        type: 'event_msg',
+        payload: {
+          type: 'token_count',
+          info: {
+            total_token_usage: { input_tokens: 10, output_tokens: 4, total_tokens: 14 },
+            model_context_window: 100_000,
+          },
+        },
+      }),
+      JSON.stringify({
+        type: 'event_msg',
+        payload: {
+          type: 'token_count',
+          info: {
+            total_token_usage: { input_tokens: 40, output_tokens: 9, total_tokens: 49 },
+            model_context_window: 250_000,
+          },
+        },
+      }),
+    ].join('\n'));
+
+    const provider = new CodexSessionsProvider();
+    assert.deepEqual(
+      await provider.getTokenUsage({
+        appSessionId: 'app-session',
+        nativeSessionId: 'provider-session',
+        jsonlPath: sessionFilePath,
+        projectPath: null,
+      }),
+      { used: 49, total: 250_000, inputTokens: 40, outputTokens: 9, breakdown: { input: 40, output: 9 } },
+    );
+  } finally {
+    await rm(tempDirectory, { recursive: true, force: true });
+  }
+});
+
+test('getTokenUsage 404s when no rollout file can be located', async () => {
+  const restoreHomeDir = patchHomeDir(await mkdtemp(path.join(os.tmpdir(), 'codex-token-usage-empty-')));
+  try {
+    const provider = new CodexSessionsProvider();
+    await assert.rejects(
+      () => provider.getTokenUsage({
+        appSessionId: 'app-session',
+        nativeSessionId: 'provider-session',
+        jsonlPath: null,
+        projectPath: null,
+      }),
+      (error: unknown) => (
+        error instanceof AppError
+        && error.code === 'CODEX_SESSION_FILE_NOT_FOUND'
+        && error.statusCode === 404
+      ),
+    );
+  } finally {
+    restoreHomeDir();
   }
 });
 

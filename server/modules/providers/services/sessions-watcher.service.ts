@@ -1,33 +1,16 @@
-import os from 'node:os';
 import path from 'node:path';
 import { promises as fsPromises } from 'node:fs';
 
 import chokidar, { type FSWatcher } from 'chokidar';
 
+import { projectsDb, sessionsDb } from '@/modules/database/index.js';
+import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { sessionSynchronizerService } from '@/modules/providers/services/session-synchronizer.service.js';
-import { broadcastSessionUpsertedBatch } from '@/modules/websocket/index.js';
-import type { LLMProvider } from '@/shared/types.js';
+import { broadcastSessionUpsertedBatch, WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
+import type { LLMProvider, ProviderSessionWatchTarget } from '@/shared/types.js';
+import { generateDisplayName } from '@/modules/projects/index.js';
 
 type WatcherEventType = 'add' | 'change';
-
-const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> = [
-  {
-    provider: 'claude',
-    rootPath: path.join(os.homedir(), '.claude', 'projects'),
-  },
-  {
-    provider: 'cursor',
-    rootPath: path.join(os.homedir(), '.cursor', 'projects'),
-  },
-  {
-    provider: 'codex',
-    rootPath: path.join(os.homedir(), '.codex', 'sessions'),
-  },
-  {
-    provider: 'opencode',
-    rootPath: path.join(os.homedir(), '.local', 'share', 'opencode'),
-  },
-];
 
 const WATCHER_IGNORED_PATTERNS = [
   '**/node_modules/**',
@@ -64,14 +47,37 @@ let watcherRefreshInFlight = false;
 let watcherRescheduleAfterRefresh = false;
 
 /**
- * Filters watcher events to provider-specific session artifact file types.
+ * Handles file watcher updates and triggers provider file-level synchronization.
  */
-function isWatcherTargetFile(provider: LLMProvider, filePath: string): boolean {
-  if (provider === 'opencode') {
-    return path.basename(filePath) === 'opencode.db';
+async function onUpdate(
+  eventType: WatcherEventType,
+  filePath: string,
+  provider: LLMProvider,
+  watchTarget: ProviderSessionWatchTarget
+): Promise<void> {
+  if (!watchTarget.isTargetFile(filePath)) {
+    return;
   }
 
-  return filePath.endsWith('.jsonl');
+  try {
+    const result = await sessionSynchronizerService.synchronizeProviderFile(provider, filePath);
+    if (!result.indexed) {
+      return;
+    }
+
+    console.log(`Session synchronization triggered by ${eventType} event for provider "${provider}"`, {
+      filePath,
+      sessionId: result.sessionId,
+    });
+    queuePendingWatcherUpdate(eventType, provider, result.sessionId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`Session watcher sync failed for provider "${provider}"`, {
+      eventType,
+      filePath,
+      error: message,
+    });
+  }
 }
 
 function clearPendingWatcherFlushTimer(): void {
@@ -159,40 +165,11 @@ async function flushPendingWatcherUpdate(): Promise<void> {
 }
 
 /**
- * Handles file watcher updates and triggers provider file-level synchronization.
- */
-async function onUpdate(
-  eventType: WatcherEventType,
-  filePath: string,
-  provider: LLMProvider
-): Promise<void> {
-  if (!isWatcherTargetFile(provider, filePath)) {
-    return;
-  }
-
-  try {
-    const result = await sessionSynchronizerService.synchronizeProviderFile(provider, filePath);
-    if (!result.indexed) {
-      return;
-    }
-
-    console.log(`Session synchronization triggered by ${eventType} event for provider "${provider}"`, {
-      filePath,
-      sessionId: result.sessionId,
-    });
-    queuePendingWatcherUpdate(eventType, provider, result.sessionId);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`Session watcher sync failed for provider "${provider}"`, {
-      eventType,
-      filePath,
-      error: message,
-    });
-  }
-}
-
-/**
  * Starts provider filesystem watchers and performs initial DB synchronization.
+ *
+ * Watch roots and file routing come from each provider's own
+ * `getSessionWatchTarget` declaration — the watcher holds no per-provider
+ * path knowledge of its own.
  */
 export async function initializeSessionsWatcher(): Promise<void> {
   console.log('Setting up session watchers');
@@ -204,7 +181,10 @@ export async function initializeSessionsWatcher(): Promise<void> {
     failures: initialSync.failures,
   });
 
-  for (const { provider, rootPath } of PROVIDER_WATCH_PATHS) {
+  for (const provider of providerRegistry.listProviders()) {
+    const watchTarget = provider.sessionSynchronizer.getSessionWatchTarget();
+    const { rootPath } = watchTarget;
+
     try {
       await fsPromises.mkdir(rootPath, { recursive: true });
 
@@ -221,20 +201,20 @@ export async function initializeSessionsWatcher(): Promise<void> {
 
       watcher
         .on('add', (filePath: string) => {
-          void onUpdate('add', filePath, provider);
+          void onUpdate('add', filePath, provider.id, watchTarget);
         })
         .on('change', (filePath: string) => {
-          void onUpdate('change', filePath, provider);
+          void onUpdate('change', filePath, provider.id, watchTarget);
         })
         .on('error', (error: unknown) => {
           const message = error instanceof Error ? error.message : String(error);
-          console.error(`Session watcher error for provider "${provider}"`, { error: message });
+          console.error(`Session watcher error for provider "${provider.id}"`, { error: message });
         });
 
       watchers.push(watcher);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`Failed to initialize session watcher for provider "${provider}"`, {
+      console.error(`Failed to initialize session watcher for provider "${provider.id}"`, {
         rootPath,
         error: message,
       });

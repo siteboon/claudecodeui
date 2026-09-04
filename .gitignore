@@ -14,6 +14,7 @@ dist-server.old/
 dist-ssr/
 build/
 out/
+.omc/
 
 # Environment variables
 .env
@@ -25,6 +26,7 @@ out/
 # IDE and editor files
 .vscode/
 .idea/
+.zcode/
 *.swp
 *.swo
 *~

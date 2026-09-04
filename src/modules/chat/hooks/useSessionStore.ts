@@ -9,20 +9,28 @@
 
 import { useCallback, useMemo, useRef, useState } from 'react';
 
-import { api } from '@/shared/api';
-import type { LLMProvider, NormalizedMessage } from '@/shared/types';
+import { authenticatedFetch } from '@/shared/api';
+import type { LLMProvider, MessageKind, NormalizedMessage } from '@/shared/types';
 import { removeOptimisticUserEchoes } from '@/modules/chat/utils/sessionMessageReconciliation';
 import {
+  compareMessagesChronologically,
+  isAssistantTextEchoedInSameTurnOnServer,
+  isAssistantTextMatch,
+  readMessageTime,
+} from '@/modules/chat/utils/sessionMessageTurnDedupe';
+import {
+  buildSessionMessagesUrl,
   hasReachedCachedTailTimeBoundary,
   mergeLatestServerPage,
   mergeOlderServerPage,
+  normalizedRowsEquivalent,
   planLatestPageBridge,
   resolveLatestPagePagination,
   SESSION_MESSAGES_PAGE_SIZE,
 } from '@/modules/chat/utils/sessionMessagePagination';
 import type { SessionMessagesRequestOptions } from '@/modules/chat/utils/sessionMessagePagination';
 
-// ─── NormalizedMessage (mirrors server/adapters/types.js) ────────────────────
+export type { MessageKind, NormalizedMessage };
 
 
 // ─── Per-session slot ────────────────────────────────────────────────────────
@@ -47,7 +55,7 @@ export type SessionSlot = {
   hasMore: boolean;
   offset: number;
   tokenUsage: unknown;
-};
+}
 
 const EMPTY: NormalizedMessage[] = [];
 const SESSION_HISTORY_REQUEST_TIMEOUT_MS = 30_000;
@@ -64,13 +72,7 @@ function createEmptySlot(): SessionSlot {
     total: 0,
     hasMore: false,
     offset: 0,
-    // `undefined` means "no page has reported usage for this session yet", and
-    // every consumer distinguishes that from a reported `null`. Initialising it
-    // to `null` made the two indistinguishable, so a provider whose history
-    // payload carries no usage looked like one reporting zero — and every
-    // history refresh overwrote the value fetched from the token-usage
-    // endpoint with it.
-    tokenUsage: undefined,
+    tokenUsage: null,
     _historyMutationQueue: Promise.resolve(),
   };
 }
@@ -98,7 +100,7 @@ async function requestSessionHistoryPage(
   sessionId: string,
   options: SessionMessagesRequestOptions,
 ): Promise<SessionHistoryPage> {
-  const response = await api.providers.sessionMessages(sessionId, options, {
+  const response = await authenticatedFetch(buildSessionMessagesUrl(sessionId, options), {
     signal: AbortSignal.timeout(SESSION_HISTORY_REQUEST_TIMEOUT_MS),
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -124,164 +126,74 @@ async function requestSessionHistoryPage(
  * assistant echo (same trimmed text), so finalized stream rows do not stack
  * on top of the persisted copy before realtime is cleared.
  */
-function readMessageTime(m: NormalizedMessage): number | null {
-  const time = Date.parse(m.timestamp);
-  return Number.isFinite(time) ? time : null;
-}
-
-function compareMessagesChronologically(a: NormalizedMessage, b: NormalizedMessage): number {
-  const timeA = readMessageTime(a) ?? 0;
-  const timeB = readMessageTime(b) ?? 0;
-  if (timeA !== timeB) {
-    return timeA - timeB;
-  }
-  return 0;
-}
 
 /**
- * The time a row sorts by, which is its own except for one case.
- *
- * The optimistic echo of an edited message is the row whose clock cannot be
- * trusted against the rows around it. Providers that rewind by branching —
- * Codex has no way to resume a transcript partway, so an edit copies the kept
- * history into a new one — write the copy with the timestamps of the copy. So
- * every turn that survived the cut comes back from the next refresh stamped a
- * moment *after* the replacement was typed, and the message the user just sent
- * jumps to the top of the conversation.
- *
- * A replacement is by definition the newest thing in the conversation, so it
- * is sorted as such instead of by what the clock said when it was typed.
- */
-function readSortTime(message: NormalizedMessage, replacementFloor: number): number {
-  const time = readMessageTime(message) ?? 0;
-  return message.replacesAnchorId ? Math.max(time, replacementFloor) : time;
-}
-
-/**
- * Count how many user turns precede `message` in a chronologically merged view
- * of server + realtime rows. Used to match a realtime row to the correct turn
- * on disk when several turns share identical assistant text.
- */
-function getUserTurnOrdinalBefore(
-  message: NormalizedMessage,
-  serverMessages: NormalizedMessage[],
-  realtimeMessages: NormalizedMessage[],
-): number {
-  const messageTime = readMessageTime(message);
-  let userCount = 0;
-
-  for (const candidate of [...serverMessages, ...realtimeMessages].sort(compareMessagesChronologically)) {
-    if (candidate.id === message.id) {
-      break;
-    }
-
-    const candidateTime = readMessageTime(candidate);
-    if (
-      messageTime !== null
-      && candidateTime !== null
-      && candidateTime > messageTime
-    ) {
-      break;
-    }
-
-    if (candidate.kind === 'text' && candidate.role === 'user') {
-      userCount++;
-    }
-  }
-
-  return Math.max(0, userCount - 1);
-}
-
-function findServerTurnRangeByOrdinal(
-  serverMessages: NormalizedMessage[],
-  turnOrdinal: number,
-): { start: number; end: number } | null {
-  let userCount = -1;
-  let start = -1;
-
-  for (let index = 0; index < serverMessages.length; index++) {
-    const message = serverMessages[index];
-    if (message.kind === 'text' && message.role === 'user') {
-      userCount++;
-      if (userCount === turnOrdinal) {
-        start = index;
-        break;
-      }
-    }
-  }
-
-  if (start < 0) {
-    return null;
-  }
-
-  let end = serverMessages.length;
-  for (let index = start + 1; index < serverMessages.length; index++) {
-    if (serverMessages[index].kind === 'text' && serverMessages[index].role === 'user') {
-      end = index;
-      break;
-    }
-  }
-
-  return { start, end };
-}
-
-function isAssistantTextEchoedInSameTurnOnServer(
-  message: NormalizedMessage,
-  serverMessages: NormalizedMessage[],
-  realtimeMessages: NormalizedMessage[],
-): boolean {
-  const assistantText = (message.content || '').trim();
-  if (!assistantText) {
-    return false;
-  }
-
-  const turnOrdinal = getUserTurnOrdinalBefore(message, serverMessages, realtimeMessages);
-  const turnRange = findServerTurnRangeByOrdinal(serverMessages, turnOrdinal);
-  if (!turnRange) {
-    return false;
-  }
-
-  return serverMessages
-    .slice(turnRange.start + 1, turnRange.end)
-    .some((serverMessage) =>
-      serverMessage.kind === 'text'
-      && serverMessage.role === 'assistant'
-      && (serverMessage.content || '').trim() === assistantText,
-    );
-}
-
-/**
- * After `finalizeStreaming`, the client holds a synthetic assistant `text` row
- * while the sessions API soon returns the same reply with a different id.
- * Those sit back-to-back in merged order and look like duplicate bubbles until
- * A persisted-tail refresh reconciles realtime. Collapse same-text assistant rows and
- * stream_placeholder → text when content matches.
+ * Collapses duplicate assistant replies and replaces live streaming bubbles
+ * with persisted text. Turn-aware so identical assistant text within the same turn
+ * is collapsed even when separated by tool_use or status events.
  */
 function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedMessage[] {
   const out: NormalizedMessage[] = [];
+  const seenAssistantTexts = new Map<string, number>();
+  let currentTurnAssistantTexts = new Set<string>();
+
   for (const m of merged) {
-    const prev = out[out.length - 1];
-    if (prev) {
-      if (prev.kind === 'stream_delta' && m.kind === 'text' && m.role === 'assistant') {
+    if (m.kind === 'text' && m.role === 'user') {
+      currentTurnAssistantTexts = new Set<string>();
+      seenAssistantTexts.clear();
+      out.push(m);
+      continue;
+    }
+
+    if (m.kind === 'stream_delta') {
+      const prev = out[out.length - 1];
+      if (prev && prev.kind === 'text' && prev.role === 'assistant') {
         const ps = (prev.content || '').trim();
         const ms = (m.content || '').trim();
-        if (ps.length > 0 && ps === ms) {
-          out[out.length - 1] = m;
-          continue;
-        }
-      }
-      if (
-        prev.kind === 'text'
-        && m.kind === 'text'
-        && prev.role === 'assistant'
-        && m.role === 'assistant'
-      ) {
-        const ms = (m.content || '').trim();
-        if (ms.length > 0 && ms === (prev.content || '').trim()) {
+        if (ps.length > 0 && isAssistantTextMatch(ps, ms)) {
           continue;
         }
       }
     }
+
+    if (m.kind === 'text' && m.role === 'assistant') {
+      const text = (m.content || '').trim();
+      const compactKey = text.replace(/\s+/g, '');
+      if (compactKey.length > 0) {
+        // If immediately preceded by matching stream_delta, promote delta to final text
+        const lastIdx = out.length - 1;
+        if (lastIdx >= 0 && out[lastIdx].kind === 'stream_delta') {
+          const deltaText = (out[lastIdx].content || '').trim();
+          if (isAssistantTextMatch(deltaText, text)) {
+            out[lastIdx] = m;
+            currentTurnAssistantTexts.add(compactKey);
+            seenAssistantTexts.set(compactKey, lastIdx);
+            continue;
+          }
+        }
+
+        // Check if duplicate in current turn or duplicate reply across the list
+        const isDuplicateInTurn = currentTurnAssistantTexts.has(compactKey);
+        const previousIndex = seenAssistantTexts.get(compactKey);
+
+        if (isDuplicateInTurn || previousIndex !== undefined) {
+          const targetIndex = previousIndex ?? out.findIndex(
+            (item) => item.kind === 'text' && item.role === 'assistant' && isAssistantTextMatch(item.content || '', text),
+          );
+          if (targetIndex >= 0) {
+            // Prefer persisted message over synthetic realtime message
+            if (out[targetIndex].id.startsWith('text_') && !m.id.startsWith('text_')) {
+              out[targetIndex] = m;
+            }
+          }
+          continue;
+        }
+
+        currentTurnAssistantTexts.add(compactKey);
+        seenAssistantTexts.set(compactKey, out.length);
+      }
+    }
+
     out.push(m);
   }
   return out;
@@ -351,6 +263,15 @@ function computeMerged(server: NormalizedMessage[], realtime: NormalizedMessage[
     if (serverIds.has(message.id)) {
       return false;
     }
+    if (
+      (message.kind === 'text' && message.role === 'assistant')
+      || message.kind === 'stream_delta'
+      || message.id === `__streaming_${message.sessionId}`
+    ) {
+      if (isAssistantTextEchoedInSameTurnOnServer(message, server, realtime)) {
+        return false;
+      }
+    }
     return true;
   });
 
@@ -359,17 +280,9 @@ function computeMerged(server: NormalizedMessage[], realtime: NormalizedMessage[
   }
 
   // Interleave by timestamp so live rows stay with their turn instead of
-  // piling up at the bottom after every refresh. Sorting is stable and the
-  // live rows come second, so a replacement that ties with the newest server
-  // row still lands after it.
-  const newestServerTime = server.reduce(
-    (newest, message) => Math.max(newest, readMessageTime(message) ?? 0),
-    0,
-  );
+  // piling up at the bottom after every refresh.
   return dedupeAdjacentAssistantEchoes(
-    [...server, ...extra].sort(
-      (a, b) => readSortTime(a, newestServerTime) - readSortTime(b, newestServerTime),
-    ),
+    [...server, ...extra].sort(compareMessagesChronologically),
   );
 }
 
@@ -526,15 +439,34 @@ async function refreshLatestSlotFromServer(
     return { applied: false, changed, deferred: false };
   }
 
+  // Content-level bail-out: an identical refresh (byte-equal rows, same
+  // pagination metadata, no realtime rows to prune) keeps the cached array
+  // identity so the merged recompute and consumer re-renders are skipped.
+  // Trailing `session_upserted` frames after a finished run used to trigger
+  // several of these no-op refreshes in a row. The prune is computed first:
+  // realtime rows that a delayed ws replay appended after the server already
+  // persisted them must still be superseded here.
+  const prunedRealtimeMessages = pruneRealtimeSupersededByServer(
+    nextServerMessages,
+    slot.realtimeMessages,
+  );
+  if (
+    nextServerMessages.length === previousServerMessages.length
+    && latestPage.total === previousTotal
+    && nextHasMore === previousHasMore
+    && prunedRealtimeMessages.length === slot.realtimeMessages.length
+    && nextServerMessages.every((row, index) => normalizedRowsEquivalent(previousServerMessages[index], row))
+  ) {
+    slot.fetchedAt = Date.now();
+    return { applied: true, changed, deferred: false };
+  }
+
   slot.serverMessages = nextServerMessages;
   slot.total = latestPage.total;
   slot.offset = nextServerMessages.length;
   slot.hasMore = nextHasMore;
   slot.fetchedAt = Date.now();
-  slot.realtimeMessages = pruneRealtimeSupersededByServer(
-    slot.serverMessages,
-    slot.realtimeMessages,
-  );
+  slot.realtimeMessages = prunedRealtimeMessages;
   recomputeMergedIfNeeded(slot);
 
   return { applied: true, changed: true, deferred: false };
@@ -572,6 +504,10 @@ export function useSessionStore() {
       store.set(sessionId, createEmptySlot());
     }
     return store.get(sessionId)!;
+  }, []);
+
+  const has = useCallback((sessionId: string) => {
+    return storeRef.current.has(sessionId);
   }, []);
 
   /**
@@ -705,49 +641,6 @@ export function useSessionStore() {
    * Append a realtime (WebSocket) message to the correct session slot.
    * This works regardless of which session is actively viewed.
    */
-  /**
-   * Drops the message carrying `anchorId` and everything after it.
-   *
-   * Sent when an already-sent message is edited: the replacement streams in
-   * from the provider, so the rows it supersedes have to go first or the
-   * transcript shows the question twice. Runs on every subscribed client, not
-   * just the one that made the edit.
-   */
-  const truncateAt = useCallback((sessionId: string, anchorId: string) => {
-    const slot = storeRef.current.get(sessionId);
-    if (!slot) return;
-
-    const cutIndex = slot.serverMessages.findIndex(
-      (message) => message.transcriptAnchorId === anchorId,
-    );
-    if (cutIndex < 0) return;
-
-    slot.serverMessages = slot.serverMessages.slice(0, cutIndex);
-    // Anything already streamed belonged to the turn being replaced — except
-    // the replacement itself. The client that made the edit appends its
-    // optimistic echo before the server acknowledges, so clearing live rows
-    // outright took the message the user had just sent with it, and it only
-    // came back when the run finished and the transcript was re-read.
-    // Only the last one: a send that was refused leaves its echo behind, so a
-    // second attempt at the same message would otherwise survive the cut
-    // alongside the abandoned first and show the user both.
-    const replacements = slot.realtimeMessages.filter(
-      (message) => message.replacesAnchorId === anchorId,
-    );
-    slot.realtimeMessages = replacements.length > 0
-      // Stamped here because this is the only place that knows how much of the
-      // conversation survived, which is what tells the echo apart from the
-      // turns it now sits after.
-      ? [{ ...replacements[replacements.length - 1], replacesAfterRowCount: cutIndex }]
-      : EMPTY;
-    // `total` counts what the server would serve; it is about to be re-fetched
-    // anyway, but leaving it high makes the pager offer pages that do not exist.
-    slot.total = slot.serverMessages.length;
-    slot.offset = slot.serverMessages.length;
-    recomputeMergedIfNeeded(slot);
-    notify(sessionId);
-  }, [notify]);
-
   const appendRealtime = useCallback((sessionId: string, msg: NormalizedMessage) => {
     const slot = getSlot(sessionId);
     const normalizedMessage =
@@ -755,6 +648,26 @@ export function useSessionStore() {
         ? msg
         : { ...msg, sessionId };
     let updated = [...slot.realtimeMessages, normalizedMessage];
+    if (updated.length > MAX_REALTIME_MESSAGES) {
+      updated = updated.slice(-MAX_REALTIME_MESSAGES);
+    }
+    slot.realtimeMessages = updated;
+    recomputeMergedIfNeeded(slot);
+    notify(sessionId);
+  }, [getSlot, notify]);
+
+  /**
+   * Append multiple realtime messages at once (batch).
+   */
+  const appendRealtimeBatch = useCallback((sessionId: string, msgs: NormalizedMessage[]) => {
+    if (msgs.length === 0) return;
+    const slot = getSlot(sessionId);
+    const normalizedMessages = msgs.map((msg) =>
+      msg.sessionId === sessionId
+        ? msg
+        : { ...msg, sessionId },
+    );
+    let updated = [...slot.realtimeMessages, ...normalizedMessages];
     if (updated.length > MAX_REALTIME_MESSAGES) {
       updated = updated.slice(-MAX_REALTIME_MESSAGES);
     }
@@ -792,6 +705,15 @@ export function useSessionStore() {
         return { slot, applied: false, changed: false, deferred: false };
       }
     });
+  }, [getSlot, notify]);
+
+  /**
+   * Update session status.
+   */
+  const setStatus = useCallback((sessionId: string, status: SessionStatus) => {
+    const slot = getSlot(sessionId);
+    slot.status = status;
+    notify(sessionId);
   }, [getSlot, notify]);
 
   /**
@@ -852,11 +774,52 @@ export function useSessionStore() {
     }
   }, [notify]);
 
+/**
+   * Drops every persisted row from `anchorId` onwards after an edit replaced
+   * an already-sent message, plus the live rows that belonged to the replaced
+   * turn. The optimistic replacement echo survives — it is stamped with the
+   * surviving row count so the transcript renderer can tell it apart from the
+   * turns it now sits after.
+   */
+  const truncateAt = useCallback((sessionId: string, anchorId: string) => {
+    const slot = storeRef.current.get(sessionId);
+    if (!slot) return;
+
+    const cutIndex = slot.serverMessages.findIndex(
+      (message) => message.transcriptAnchorId === anchorId,
+    );
+    if (cutIndex < 0) return;
+
+    slot.serverMessages = slot.serverMessages.slice(0, cutIndex);
+    const replacements = slot.realtimeMessages.filter(
+      (message) => message.replacesAnchorId === anchorId,
+    );
+    slot.realtimeMessages = replacements.length > 0
+      ? [{ ...replacements[replacements.length - 1], replacesAfterRowCount: cutIndex }]
+      : [];
+    slot.total = slot.serverMessages.length;
+    slot.offset = slot.serverMessages.length;
+    recomputeMergedIfNeeded(slot);
+    notify(sessionId);
+  }, [notify]);
+
+  /**
+   * Clear realtime messages for a session (e.g., after stream completes and server fetch catches up).
+   */
+  const clearRealtime = useCallback((sessionId: string) => {
+    const slot = storeRef.current.get(sessionId);
+    if (slot) {
+      slot.realtimeMessages = [];
+      recomputeMergedIfNeeded(slot);
+      notify(sessionId);
+    }
+  }, [notify]);
+
   /**
    * Get merged messages for a session (for rendering).
    */
   const getMessages = useCallback((sessionId: string): NormalizedMessage[] => {
-    return storeRef.current.get(sessionId)?.merged ?? EMPTY;
+    return storeRef.current.get(sessionId)?.merged ?? [];
   }, []);
 
   /**
@@ -867,23 +830,28 @@ export function useSessionStore() {
   }, []);
 
   return useMemo(() => ({
+    getSlot,
+    has,
     fetchFromServer,
     fetchMore,
     appendRealtime,
-    truncateAt,
+    appendRealtimeBatch,
     refreshLatestFromServer,
     setActiveSession,
+    setStatus,
     isStale,
     updateStreaming,
     finalizeStreaming,
+    truncateAt,
+    clearRealtime,
     getMessages,
     getSessionSlot,
   }), [
-    fetchFromServer, fetchMore, appendRealtime, truncateAt, refreshLatestFromServer,
-    setActiveSession, isStale, updateStreaming, finalizeStreaming,
-    getMessages, getSessionSlot,
+    getSlot, has, fetchFromServer, fetchMore,
+    appendRealtime, appendRealtimeBatch, refreshLatestFromServer,
+    setActiveSession, setStatus, isStale, updateStreaming, finalizeStreaming,
+    truncateAt, clearRealtime, getMessages, getSessionSlot,
   ]);
 }
 
-/** Full store API returned by useSessionStore; chat hooks take it as a parameter. */
 export type SessionStore = ReturnType<typeof useSessionStore>;

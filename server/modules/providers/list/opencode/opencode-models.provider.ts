@@ -12,10 +12,11 @@ import type {
 } from '@/shared/types.js';
 import {
   buildDefaultProviderCurrentActiveModel,
-  getOpenCodeDatabasePath,
   readObjectRecord,
   readOptionalString,
 } from '@/shared/utils.js';
+
+import { getOpenCodeDatabasePath } from './opencode-data-root.js';
 
 /**
  * Curated OpenCode catalog shipped as immutable CloudCLI defaults.

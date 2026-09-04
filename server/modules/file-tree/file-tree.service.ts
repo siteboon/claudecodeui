@@ -4,6 +4,7 @@ import ignore from 'ignore';
 
 import type {
   FileTreeDirectoryEntry,
+  FileTreeFileSystem,
   FileTreeNode,
   FileTreeServiceDependencies,
   FileTreeServices,
@@ -99,6 +100,64 @@ function resolvePathInsideProject(projectRoot: string, targetPath: string): stri
   }
 
   return resolvedPath;
+}
+
+/**
+ * Resolves `targetPath` and verifies it falls inside one of the injected
+ * external read-only roots. Both the target and the roots are resolved
+ * through `realpath` before the prefix check so a symlink planted inside a
+ * root cannot point the read back outside the allowlist.
+ */
+async function resolvePathInsideExternalRoots(
+  fileSystem: FileTreeFileSystem,
+  externalReadOnlyRoots: string[],
+  targetPath: string,
+): Promise<string> {
+  if (!path.isAbsolute(targetPath)) {
+    throw createFileTreeError(
+      'External file path must be absolute',
+      403,
+      'PATH_NOT_ALLOWED',
+    );
+  }
+
+  const realRoots = await Promise.all(externalReadOnlyRoots.map(async (rootPath) => {
+    try {
+      return await fileSystem.realpath(rootPath);
+    } catch {
+      // A root that does not exist (for example the legacy tree on a fresh
+      // install) simply allows nothing.
+      return null;
+    }
+  }));
+
+  let realTargetPath: string;
+  try {
+    realTargetPath = await fileSystem.realpath(path.resolve(targetPath));
+  } catch (error) {
+    mapFileSystemError(error, {
+      ENOENT: { message: 'File not found', statusCode: 404 },
+      EACCES: { message: 'Permission denied', statusCode: 403 },
+    });
+  }
+
+  const isAllowed = realRoots.some((realRoot) => {
+    if (!realRoot) {
+      return false;
+    }
+    const normalizedRoot = realRoot.endsWith(path.sep) ? realRoot : realRoot + path.sep;
+    return realTargetPath === realRoot || realTargetPath.startsWith(normalizedRoot);
+  });
+
+  if (!isAllowed) {
+    throw createFileTreeError(
+      'Path is not in an allowed external read-only root',
+      403,
+      'PATH_NOT_ALLOWED',
+    );
+  }
+
+  return realTargetPath;
 }
 
 function expandWorkspacePath(workspaceRoot: string, inputPath: string): string {
@@ -419,6 +478,41 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
           EACCES: { message: 'Permission denied', statusCode: 403 },
         });
       }
+    },
+
+    async readExternalTextFile(filePath) {
+      const resolvedPath = await resolvePathInsideExternalRoots(
+        fileSystem,
+        dependencies.externalReadOnlyRoots,
+        filePath,
+      );
+      try {
+        const content = await fileSystem.readTextFile(resolvedPath);
+        return { content, path: resolvedPath };
+      } catch (error) {
+        mapFileSystemError(error, {
+          ENOENT: { message: 'File not found', statusCode: 404 },
+          EACCES: { message: 'Permission denied', statusCode: 403 },
+        });
+      }
+    },
+
+    async openExternalFile(filePath) {
+      const resolvedPath = await resolvePathInsideExternalRoots(
+        fileSystem,
+        dependencies.externalReadOnlyRoots,
+        filePath,
+      );
+      try {
+        await fileSystem.access(resolvedPath);
+      } catch {
+        throw createFileTreeError('File not found', 404, 'FILE_NOT_FOUND');
+      }
+
+      return {
+        contentType: dependencies.resolveMimeType(resolvedPath),
+        stream: fileSystem.createReadStream(resolvedPath),
+      };
     },
 
     async openFile(projectId, filePath) {

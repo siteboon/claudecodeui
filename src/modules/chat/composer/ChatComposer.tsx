@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ChangeEvent,
   ClipboardEvent,
@@ -14,7 +14,10 @@ import { PaperclipIcon, MessageSquareIcon, XIcon, Loader2, ArrowUpIcon, PencilIc
 
 import { useVoiceInput } from '@/modules/chat/hooks/useVoiceInput';
 import { useVoiceAvailable } from '@/modules/chat/hooks/useVoiceAvailable';
-import type { QueuedDraft, ScheduledMessage, SlashCommand,SessionActivity,PendingPermissionRequest,PermissionMode,ProviderModelOption } from '@/shared/types';
+import type { QueuedDraft } from '@/modules/chat/hooks/useChatComposerState';
+import type { SessionActivity, ScheduledMessage } from '@/shared/types';
+import type { PendingPermissionRequest, PermissionMode } from '@/shared/types';
+import type { ProviderModelOption } from '@/shared/types';
 import {
   PromptInput,
   PromptInputHeader,
@@ -24,7 +27,8 @@ import {
   PromptInputTools,
   PromptInputButton,
   PromptInputSubmit,
-} from '@/modules/chat/composer/PromptInput';
+} from '@/modules/chat/composer/PromptInputFork';
+
 import CommandMenu from '@/modules/chat/composer/CommandMenu';
 import ActivityIndicator from '@/modules/chat/composer/ActivityIndicator';
 import ComposerAttachment from '@/modules/chat/composer/ComposerAttachment';
@@ -40,7 +44,17 @@ import ComposerPermissionMenu from '@/modules/chat/composer/ComposerPermissionMe
 type MentionableFile = {
   name: string;
   path: string;
-};
+}
+
+type SlashCommand = {
+  name: string;
+  description?: string;
+  namespace?: string;
+  path?: string;
+  type?: string;
+  metadata?: Record<string, unknown>;
+  [key: string]: unknown;
+}
 
 type ChatComposerProps = {
   pendingPermissionRequests: PendingPermissionRequest[];
@@ -52,9 +66,9 @@ type ChatComposerProps = {
   activity: SessionActivity | null;
   isLoading: boolean;
   onAbortSession: () => void;
-  permissionMode: PermissionMode;
-  availablePermissionModes: PermissionMode[];
-  onSelectPermissionMode: (mode: PermissionMode) => void;
+  permissionMode: PermissionMode | string;
+  availablePermissionModes: (PermissionMode | string)[];
+  onSelectPermissionMode: (mode: PermissionMode | string) => void;
   providerLabel: string;
   effort: string;
   availableEffortOptions: NonNullable<ProviderModelOption['effort']>['values'];
@@ -72,17 +86,17 @@ type ChatComposerProps = {
   onSubmit: (event: FormEvent<HTMLFormElement> | MouseEvent<HTMLButtonElement> | TouchEvent<HTMLButtonElement>) => void;
   isDragActive: boolean;
   queuedDraft: QueuedDraft | null;
-  /** Set while the composer is replacing an already-sent message. */
+  onEditQueuedDraft: () => void;
+  /** True while the composer is editing an already-sent message (edit & resend). */
   isEditingSentMessage: boolean;
   onCancelEditMessage: () => void;
-  /** Messages waiting to be sent to this session later. */
   scheduledMessages: ScheduledMessage[];
   onScheduleMessage: (scheduledFor: Date) => void;
   onCancelScheduledMessage: (id: string) => void;
-  onEditQueuedDraft: () => void;
   onDeleteQueuedDraft: () => void;
   attachedFiles: File[];
   onRemoveAttachment: (index: number) => void;
+  uploadingFiles: Map<string, number>;
   fileErrors: Map<string, string>;
   showFileDropdown: boolean;
   filteredFiles: MentionableFile[];
@@ -113,14 +127,9 @@ type ChatComposerProps = {
   placeholder: string;
   isTextareaExpanded: boolean;
   sendByCtrlEnter?: boolean;
-};
+}
 
-/**
- * Rendered by chat's ChatInterface as the whole input area: textarea, pending
- * attachments, queued message, permission banner, voice input and the
- * model/permission popovers that drive the next turn.
- */
-export default function ChatComposer({
+function ChatComposer({
   pendingPermissionRequests,
   handlePermissionDecision,
   handleGrantToolPermission,
@@ -147,15 +156,16 @@ export default function ChatComposer({
   onSubmit,
   isDragActive,
   queuedDraft,
+  onEditQueuedDraft,
   isEditingSentMessage,
   onCancelEditMessage,
   scheduledMessages,
   onScheduleMessage,
   onCancelScheduledMessage,
-  onEditQueuedDraft,
   onDeleteQueuedDraft,
   attachedFiles,
   onRemoveAttachment,
+  uploadingFiles,
   fileErrors,
   showFileDropdown,
   filteredFiles,
@@ -396,6 +406,7 @@ export default function ChatComposer({
                       key={`${file.name}-${file.lastModified}-${index}`}
                       file={file}
                       onRemove={() => onRemoveAttachment(index)}
+                      uploadProgress={uploadingFiles.get(file.name)}
                       error={fileErrors.get(file.name)}
                     />
                   ))}
@@ -429,7 +440,7 @@ export default function ChatComposer({
             />
         </PromptInputBody>
 
-        <PromptInputFooter className="flex-wrap gap-y-1">
+        <PromptInputFooter>
           <PromptInputTools className="min-w-0">
             <PromptInputButton
               tooltip={{ content: t('input.attachFiles') }}
@@ -472,7 +483,15 @@ export default function ChatComposer({
 
           </PromptInputTools>
 
-          <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+            <div
+              className={`hidden text-xs text-muted-foreground/50 transition-opacity duration-200 lg:block ${
+                input.trim() && !canQueueDraft ? 'opacity-0' : 'opacity-100'
+              }`}
+            >
+              {submitHint}
+            </div>
+
             <ScheduleMessagePopover
               disabled={!input.trim()}
               onSchedule={onScheduleMessage}
@@ -489,8 +508,8 @@ export default function ChatComposer({
             />
 
             <ComposerPermissionMenu
-              permissionMode={permissionMode}
-              permissionModes={availablePermissionModes}
+              permissionMode={permissionMode as PermissionMode}
+              permissionModes={availablePermissionModes as PermissionMode[]}
               onSelectPermissionMode={onSelectPermissionMode}
               providerLabel={providerLabel}
             />
@@ -531,17 +550,11 @@ export default function ChatComposer({
               ) : undefined}
             </PromptInputSubmit>
           </div>
-
-          <div
-            className={`order-last hidden basis-full px-2 text-center text-xs leading-4 text-muted-foreground/50 transition-opacity duration-200 lg:block ${
-              input.trim() && !canQueueDraft ? 'opacity-0' : 'opacity-100'
-            }`}
-          >
-            {submitHint}
-          </div>
         </PromptInputFooter>
       </PromptInput>
       </div>}
     </div>
   );
 }
+
+export default memo(ChatComposer);

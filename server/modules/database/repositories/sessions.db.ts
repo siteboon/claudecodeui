@@ -96,7 +96,7 @@ export const sessionsDb = {
 
     // First, ensure the project path is recorded in the projects table,
     // since it's a foreign key in the sessions table.
-    projectsDb.createProjectPath(normalizedProjectPath);
+    projectsDb.ensureProjectPath(normalizedProjectPath);
 
     const existing = db
       .prepare(
@@ -113,7 +113,6 @@ export const sessionsDb = {
            updated_at = COALESCE(?, CURRENT_TIMESTAMP),
            project_path = ?,
            jsonl_path = ?,
-           isArchived = 0,
            custom_name = CASE
              WHEN session_id <> provider_session_id AND custom_name IS NOT NULL THEN custom_name
              ELSE COALESCE(?, custom_name)
@@ -143,7 +142,6 @@ export const sessionsDb = {
          updated_at = excluded.updated_at,
          project_path = excluded.project_path,
          jsonl_path = excluded.jsonl_path,
-         isArchived = 0,
          custom_name = CASE
            WHEN sessions.session_id <> sessions.provider_session_id AND sessions.custom_name IS NOT NULL
              THEN sessions.custom_name
@@ -181,7 +179,7 @@ export const sessionsDb = {
     const db = getConnection();
     const normalizedProjectPath = normalizeProjectPathForProvider(provider, projectPath);
 
-    projectsDb.createProjectPath(normalizedProjectPath);
+    projectsDb.ensureProjectPath(normalizedProjectPath);
 
     db.prepare(
       `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, project_path, jsonl_path, isArchived, created_at, updated_at)
@@ -284,6 +282,18 @@ export const sessionsDb = {
     });
 
     merge();
+  },
+
+  /**
+   * Updates updated_at to the current timestamp when messages are sent or runs complete.
+   */
+  touchSession(sessionId: string): void {
+    const db = getConnection();
+    db.prepare(
+      `UPDATE sessions
+       SET updated_at = CURRENT_TIMESTAMP
+       WHERE session_id = ? OR provider_session_id = ?`
+    ).run(sessionId, sessionId);
   },
 
   /**
@@ -693,6 +703,28 @@ export const sessionsDb = {
   },
 
   /**
+   * Batch-archives unarchived sessions whose last activity (updated_at or created_at)
+   * occurred before the specified cutoff timestamp string (or is null/invalid).
+   * Returns the count of newly archived session rows.
+   * Used by Providers module (sessionsAutoArchiveService).
+   */
+  archiveSessionsOlderThanCutoff(cutoffIsoString: string): number {
+    const db = getConnection();
+    const result = db
+      .prepare(
+        `UPDATE sessions
+         SET isArchived = 1
+         WHERE isArchived = 0
+           AND (
+             datetime(COALESCE(updated_at, created_at)) < datetime(?)
+             OR datetime(COALESCE(updated_at, created_at)) IS NULL
+           )`
+      )
+      .run(cutoffIsoString);
+    return result.changes;
+  },
+
+  /**
    * Lists every indexed session that claims a transcript file on disk.
    *
    * Only rows with a `jsonl_path` are returned, which deliberately excludes
@@ -712,3 +744,4 @@ export const sessionsDb = {
       .all() as Array<{ session_id: string; jsonl_path: string }>;
   },
 };
+

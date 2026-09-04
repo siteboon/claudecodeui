@@ -1,10 +1,13 @@
 import { useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 
-import type { ServerEvent,MarkSessionIdle,MarkSessionProcessing,PendingPermissionRequest,ProjectSession,LLMProvider,NormalizedMessage } from '@/shared/types';
+import type { ServerEvent } from '@/shared/context/WebSocketContext';
 import { showCompletionTitleIndicator } from '@/modules/chat/utils/pageTitleNotification';
-import { playChatCompletionSound, playNotificationSound } from '@/shared/utils';
-import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
+import { playChatCompletionSound, playNotificationSound } from '@/modules/chat/utils/notificationSound';
+import type { MarkSessionIdle, MarkSessionProcessing } from '@/shared/types';
+import type { PendingPermissionRequest } from '@/shared/types';
+import type { ProjectSession, LLMProvider } from '@/shared/types';
+import type { SessionStore, NormalizedMessage } from '@/modules/chat/hooks/useSessionStore';
 
 const isActionablePermissionRequest = (request: { toolName?: unknown } | null | undefined): boolean => {
   return request?.toolName !== 'ExitPlanMode' && request?.toolName !== 'exit_plan_mode';
@@ -23,8 +26,10 @@ type UseChatRealtimeHandlersArgs = {
   setTokenBudget: (budget: Record<string, unknown> | null) => void;
   pendingPermissionRequests: PendingPermissionRequest[];
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
-  streamTimerRef: MutableRefObject<number | null>;
-  accumulatedStreamRef: MutableRefObject<string>;
+  /** Per-session 100ms throttle timers for stream_delta → store updates. */
+  streamTimersRef: MutableRefObject<Map<string, number>>;
+  /** Per-session accumulated stream text; flushed on stream_end/complete. */
+  accumulatedStreamsRef: MutableRefObject<Map<string, string>>;
   /**
    * Highest live `seq` observed per session. Essential for reconnect catch-up:
    * `chat.subscribe` sends this value as `lastSeq` so the server replays only
@@ -39,7 +44,7 @@ type UseChatRealtimeHandlersArgs = {
   onWebSocketReconnect?: () => void;
   requestLatestMessages: (sessionId: string, allowNetwork?: boolean) => Promise<void>;
   sessionStore: SessionStore;
-};
+}
 
 /* ------------------------------------------------------------------ */
 /*  Hook                                                              */
@@ -63,8 +68,8 @@ export function useChatRealtimeHandlers({
   setTokenBudget,
   pendingPermissionRequests,
   setPendingPermissionRequests,
-  streamTimerRef,
-  accumulatedStreamRef,
+  streamTimersRef,
+  accumulatedStreamsRef,
   lastSeqRef,
   statusCheckSentAtRef,
   onSessionProcessing,
@@ -92,8 +97,7 @@ export function useChatRealtimeHandlers({
   }, [pendingPermissionRequests]);
 
   useEffect(() => {
-    const handleEvent = (msg: ServerEvent) => {
-      if (!msg.kind) {
+    const handleEvent = (msg: ServerEvent) => {      if (!msg.kind) {
         return;
       }
 
@@ -185,38 +189,51 @@ export function useChatRealtimeHandlers({
       /*  Provider NormalizedMessage handling                            */
       /* -------------------------------------------------------------- */
 
+      /**
+       * Flushes one session's accumulated stream text into its `__streaming_`
+       * row and finalizes it as a regular assistant text message. Buffers are
+       * per session, so flushing one run never touches a concurrent run.
+       */
+      const flushSessionStream = (sessionId: string) => {
+        const timer = streamTimersRef.current.get(sessionId);
+        if (timer !== undefined) {
+          clearTimeout(timer);
+          streamTimersRef.current.delete(sessionId);
+        }
+        const buffer = accumulatedStreamsRef.current.get(sessionId);
+        if (buffer) {
+          accumulatedStreamsRef.current.delete(sessionId);
+          sessionStore.updateStreaming(sessionId, buffer, provider);
+          sessionStore.finalizeStreaming(sessionId);
+        }
+      };
+
       // --- Streaming: buffer for performance ---
+      // Viewed and background sessions share this path: every run accumulates
+      // into its own single `__streaming_<sid>` store row. Appending each
+      // delta as its own realtime row (the old background path) left fragment
+      // bubbles that no exact-match echo dedupe could ever reconcile.
       if (msg.kind === 'stream_delta') {
         const text = (msg.content as string) || '';
-        if (!text) return;
-        accumulatedStreamRef.current += text;
-        if (!streamTimerRef.current) {
-          streamTimerRef.current = window.setTimeout(() => {
-            streamTimerRef.current = null;
-            if (sid) {
-              sessionStore.updateStreaming(sid, accumulatedStreamRef.current, provider);
-            }
+        if (!text || !sid) return;
+        accumulatedStreamsRef.current.set(sid, (accumulatedStreamsRef.current.get(sid) ?? '') + text);
+        if (!streamTimersRef.current.has(sid)) {
+          const timer = window.setTimeout(() => {
+            streamTimersRef.current.delete(sid);
+            sessionStore.updateStreaming(sid, accumulatedStreamsRef.current.get(sid) ?? '', provider);
           }, 100);
-        }
-        // Also route to store for non-active sessions
-        if (sid && sid !== activeViewSessionId) {
-          sessionStore.appendRealtime(sid, msg as unknown as NormalizedMessage);
+          streamTimersRef.current.set(sid, timer);
         }
         return;
       }
 
       if (msg.kind === 'stream_end') {
-        if (streamTimerRef.current) {
-          clearTimeout(streamTimerRef.current);
-          streamTimerRef.current = null;
-        }
         if (sid) {
-          if (accumulatedStreamRef.current) {
-            sessionStore.updateStreaming(sid, accumulatedStreamRef.current, provider);
-          }
+          flushSessionStream(sid);
+          // A stream_end without buffered text still closes the synthetic
+          // streaming row (finalizeStreaming is a no-op when none exists).
           sessionStore.finalizeStreaming(sid);
         }
-        accumulatedStreamRef.current = '';
         return;
       }
 
@@ -225,7 +242,6 @@ export function useChatRealtimeHandlers({
         msg.kind !== 'complete'
         && msg.kind !== 'status'
         && msg.kind !== 'permission_request'
-        && msg.kind !== 'permission_resolved'
         && msg.kind !== 'permission_cancelled';
 
       if (sid && shouldPersist) {
@@ -236,15 +252,9 @@ export function useChatRealtimeHandlers({
       switch (msg.kind) {
         case 'complete': {
           // Flush any remaining streaming state
-          if (streamTimerRef.current) {
-            clearTimeout(streamTimerRef.current);
-            streamTimerRef.current = null;
+          if (sid) {
+            flushSessionStream(sid);
           }
-          if (sid && accumulatedStreamRef.current) {
-            sessionStore.updateStreaming(sid, accumulatedStreamRef.current, provider);
-            sessionStore.finalizeStreaming(sid);
-          }
-          accumulatedStreamRef.current = '';
 
           // `complete` is the unified terminal event — every provider run ends
           // with exactly one, regardless of success, failure, or abort. The
@@ -310,10 +320,6 @@ export function useChatRealtimeHandlers({
           break;
         }
 
-        // `permission_resolved` arrives when any client answers the prompt: it
-        // retracts a replayed `permission_request` after a mid-run refresh and
-        // clears the prompt in other tabs watching the same run.
-        case 'permission_resolved':
         case 'permission_cancelled': {
           if (msg.requestId && sid === activeViewSessionId) {
             const nextPendingPermissionRequests = pendingPermissionRequestsRef.current.filter(
@@ -328,11 +334,7 @@ export function useChatRealtimeHandlers({
 
         case 'status': {
           if (msg.text === 'token_budget' && msg.tokenBudget) {
-            // The counter shows the viewed session's context; budgets from
-            // other concurrently running sessions must not overwrite it.
-            if (sid === activeViewSessionId) {
-              setTokenBudget(msg.tokenBudget as Record<string, unknown>);
-            }
+            setTokenBudget(msg.tokenBudget as Record<string, unknown>);
           } else if (msg.text && sid) {
             onSessionProcessing?.(sid, {
               statusText: msg.text as string,
@@ -342,7 +344,7 @@ export function useChatRealtimeHandlers({
           break;
         }
 
-        // text, tool_use, tool_result, thinking, task_notification
+        // text, tool_use, tool_result, thinking, interactive_prompt, task_notification
         // → already routed to store above, no UI side effects needed
         default:
           break;
@@ -358,8 +360,8 @@ export function useChatRealtimeHandlers({
     setTokenBudget,
     pendingPermissionRequests,
     setPendingPermissionRequests,
-    streamTimerRef,
-    accumulatedStreamRef,
+    streamTimersRef,
+    accumulatedStreamsRef,
     lastSeqRef,
     statusCheckSentAtRef,
     onSessionProcessing,

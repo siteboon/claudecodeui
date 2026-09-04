@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, ChevronDown, Plus } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 
@@ -9,6 +9,8 @@ import type {
   ProviderModelOption,
   ProviderModelsDefinition,
 } from "@/shared/types";
+import type { ProviderAuthStatusMap } from "@/modules/provider-auth";
+import LLMProviderLogo from "@/shared/ui/LLMProviderLogo";
 import { NextTaskBanner } from "@/modules/task-master";
 import {
   Dialog,
@@ -24,16 +26,16 @@ import {
   Card,
   Badge,
   Button,
-  LLMProviderLogo,
 } from "@/shared/ui";
-import ModelLibraryPanel from "@/modules/chat/modals/ModelLibraryPanel";
-import { writeSelectedProvider } from '@/shared/selectedProvider';
+
+import ModelLibraryPanel from '@/modules/chat/modals/ModelLibraryPanel';
 
 const PROVIDER_META: { id: LLMProvider; name: string }[] = [
   { id: "claude", name: "Anthropic" },
   { id: "codex", name: "OpenAI" },
   { id: "cursor", name: "Cursor" },
   { id: "opencode", name: "OpenCode" },
+  { id: "antigravity", name: "Antigravity" },
 ];
 
 const MOD_KEY =
@@ -57,11 +59,11 @@ type ProviderSelectionEmptyStateProps = {
   setProvider: (next: LLMProvider) => void;
   textareaRef: React.RefObject<HTMLTextAreaElement>;
   providerModels: Record<LLMProvider, string>;
-  /** Records the pick as this provider's default and persists it. */
   setProviderModel: (provider: LLMProvider, model: string) => void;
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
   providerModelActions: ProviderModelActions;
   providerModelsLoading: boolean;
+  providerAuthStatus?: ProviderAuthStatusMap;
   tasksEnabled: boolean;
   isTaskMasterInstalled: boolean | null;
   onShowAllTasks?: (() => void) | null;
@@ -87,13 +89,10 @@ function getProviderDisplayName(p: LLMProvider) {
   if (p === "cursor") return "Cursor";
   if (p === "codex") return "Codex";
   if (p === "opencode") return "OpenCode";
+  if (p === "antigravity") return "Antigravity";
   return "Claude";
 }
 
-/**
- * Rendered by chat's ChatMessagesPane when a session has no messages yet, so
- * the user can pick a provider, model and permission mode before their first turn.
- */
 export default function ProviderSelectionEmptyState({
   selectedSession,
   currentSessionId,
@@ -105,6 +104,7 @@ export default function ProviderSelectionEmptyState({
   providerModelCatalog,
   providerModelActions,
   providerModelsLoading,
+  providerAuthStatus,
   tasksEnabled,
   isTaskMasterInstalled,
   onShowAllTasks,
@@ -115,18 +115,32 @@ export default function ProviderSelectionEmptyState({
   const [modelLibraryOpen, setModelLibraryOpen] = useState(false);
 
   const visibleProviderGroups = useMemo<ProviderGroup[]>(() => {
-    return PROVIDER_META.map((p) => ({
+    return PROVIDER_META.filter((p) => {
+      if (!providerAuthStatus) return true;
+      return providerAuthStatus[p.id]?.installed !== false;
+    }).map((p) => ({
       id: p.id,
       name: p.name,
       models: providerModelCatalog[p.id]?.OPTIONS ?? [],
     }));
-  }, [providerModelCatalog]);
+  }, [providerModelCatalog, providerAuthStatus]);
+
+  // Fall back to the first installed provider if the currently selected provider is not installed
+  useEffect(() => {
+    if (!providerAuthStatus || visibleProviderGroups.length === 0) return;
+    const isCurrentInstalled = providerAuthStatus[provider]?.installed !== false;
+    if (!isCurrentInstalled) {
+      const fallbackProvider = visibleProviderGroups[0].id;
+      setProvider(fallbackProvider);
+      localStorage.setItem("selected-provider", fallbackProvider);
+    }
+  }, [provider, providerAuthStatus, visibleProviderGroups, setProvider]);
 
   const nextTaskPrompt = t("tasks.nextTaskPrompt", {
     defaultValue: "Start the next task",
   });
 
-  const currentModel = providerModels[provider];
+  const currentModel = providerModels[provider] ?? "";
 
   const currentModelLabel = useMemo(() => {
     const config = getModelConfig(provider, providerModelCatalog);
@@ -139,7 +153,7 @@ export default function ProviderSelectionEmptyState({
   const handleModelSelect = useCallback(
     (providerId: LLMProvider, modelValue: string) => {
       setProvider(providerId);
-      writeSelectedProvider(providerId);
+      localStorage.setItem("selected-provider", providerId);
       setProviderModel(providerId, modelValue);
       setDialogOpen(false);
       setTimeout(() => textareaRef.current?.focus(), 100);
@@ -315,6 +329,7 @@ export default function ProviderSelectionEmptyState({
               <ModelLibraryPanel
                 initialProvider={provider}
                 providerModelCatalog={providerModelCatalog}
+                providerAuthStatus={providerAuthStatus}
                 actions={providerModelActions}
                 onDone={closeModelLibrary}
               />
@@ -337,6 +352,10 @@ export default function ProviderSelectionEmptyState({
                   model: providerModels.opencode,
                   defaultValue: "Ready with OpenCode {{model}}",
                 }),
+                antigravity: t("providerSelection.readyPrompt.antigravity", {
+                  model: providerModels.antigravity,
+                  defaultValue: "Ready with Antigravity {{model}}",
+                }),
               }[provider]
             }
           </p>
@@ -355,12 +374,11 @@ export default function ProviderSelectionEmptyState({
           </p>
 
           {provider && tasksEnabled && isTaskMasterInstalled && (
-            <div className="mt-5">
-              <NextTaskBanner
-                onStartTask={() => setInput(nextTaskPrompt)}
-                onShowAllTasks={onShowAllTasks}
-              />
-            </div>
+            <NextTaskBanner
+              className="mt-5"
+              onStartTask={() => setInput(nextTaskPrompt)}
+              onShowAllTasks={onShowAllTasks}
+            />
           )}
         </div>
       </div>
@@ -379,12 +397,11 @@ export default function ProviderSelectionEmptyState({
           </p>
 
           {tasksEnabled && isTaskMasterInstalled && (
-            <div className="mt-5">
-              <NextTaskBanner
-                onStartTask={() => setInput(nextTaskPrompt)}
-                onShowAllTasks={onShowAllTasks}
-              />
-            </div>
+            <NextTaskBanner
+              className="mt-5"
+              onStartTask={() => setInput(nextTaskPrompt)}
+              onShowAllTasks={onShowAllTasks}
+            />
           )}
         </div>
       </div>

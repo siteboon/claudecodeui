@@ -5,7 +5,7 @@ import type { NavigateFunction } from 'react-router-dom';
 //----------------- LLM PROVIDER MODEL CATALOG ------------
 
 /** Identifies which coding-agent CLI backs a session, project selection or model list. */
-export type LLMProvider = 'claude' | 'cursor' | 'codex' | 'opencode';
+export type LLMProvider = 'claude' | 'cursor' | 'codex' | 'opencode' | 'antigravity';
 
 /** One selectable model in a provider's model menu, including its optional reasoning-effort choices. */
 export type ProviderModelOption = {
@@ -84,17 +84,17 @@ export type ProjectSession = {
   // (session switching, sidebar focus, etc.) can match against selectedProject.
   __projectId?: string;
   [key: string]: unknown;
-};
+}
 
 /** Pagination metadata returned alongside a project's session page. */
-type ProjectSessionMeta = {
+export type ProjectSessionMeta = {
   total?: number;
   hasMore?: boolean;
   [key: string]: unknown;
 };
 
 /** Task Master provisioning state for a project, used to decide whether the tasks tab is available. */
-type ProjectTaskmasterInfo = {
+export type ProjectTaskmasterInfo = {
   hasTaskmaster?: boolean;
   status?: string;
   metadata?: Record<string, unknown>;
@@ -116,7 +116,7 @@ export type Project = {
   sessionMeta?: ProjectSessionMeta;
   taskmaster?: ProjectTaskmasterInfo;
   [key: string]: unknown;
-};
+}
 
 /** Progress payload streamed while the backend enumerates projects, used to drive the sidebar loading bar. */
 export type LoadingProgress = {
@@ -126,7 +126,7 @@ export type LoadingProgress = {
   total: number;
   currentProject?: string;
   [key: string]: unknown;
-};
+}
 
 // ---------------------------
 
@@ -236,7 +236,7 @@ export type ChatAttachment = {
   name?: string;
   mimeType?: string;
   size?: number;
-};
+}
 
 /** A chat attachment that is an image, extending ChatAttachment with the inline base64 data URL that Claude history uses when no stored path is available. */
 export type ChatImage = {
@@ -295,8 +295,11 @@ export type ChatMessage = {
    * already-sent one, naming the anchor it replaces. Local to this client.
    */
   replacesAnchorId?: string;
+  /** The agent this row spawned, when it spawned one. Its presence is what makes a row a subagent container. */
+  subagent?: SubagentInfo;
   isThinking?: boolean;
   isStreaming?: boolean;
+  isInteractivePrompt?: boolean;
   isToolUse?: boolean;
   toolName?: string;
   toolInput?: unknown;
@@ -310,16 +313,13 @@ export type ChatMessage = {
   isLocalCommandStdout?: boolean;
   isCompactSummary?: boolean;
   isSubagentContainer?: boolean;
-  /** The agent this row spawned, when it spawned one. Its presence is what makes a row a subagent container. */
-  subagent?: SubagentInfo;
-  /** What that agent did, in order. Empty while the agent is still starting up. */
-  subagentActivity?: SubagentActivity[];
-  /** Stored memory this reply drew on, shown as a footnote beneath it. */
-  memoryCitations?: MemoryCitation[];
-  /** Lifecycle the provider reported for this tool call, when it reports one; otherwise the status is inferred from whether a result has arrived. */
-  toolStatus?: string;
+  subagentState?: {
+    childTools: SubagentChildTool[];
+    currentToolIndex: number;
+    isComplete: boolean;
+  };
   [key: string]: unknown;
-};
+}
 
 /** The user's locally persisted Claude preferences (allowed and disallowed tool lists, permission skipping and project sort order) read from and written back to browser storage. */
 export type ClaudeSettings = {
@@ -329,21 +329,21 @@ export type ClaudeSettings = {
   projectSortOrder: string;
   lastUpdated?: string;
   [key: string]: unknown;
-};
+}
 
 /** A proposed Claude tool-permission rule derived from a denied tool call, offered to the user so that tool can be added to the stored allow list in one click. */
 export type ClaudePermissionSuggestion = {
   toolName: string;
   entry: string;
   isAllowed: boolean;
-};
+}
 
 /** Outcome of writing a tool-permission rule into the stored Claude settings, reporting whether it succeeded, whether the rule was already allowed, and the resulting settings. */
 export type PermissionGrantResult = {
   success: boolean;
   alreadyAllowed?: boolean;
   updatedSettings?: ClaudeSettings;
-};
+}
 
 /** A tool-permission request awaiting the user's decision, identified by its requestId and carrying the tool name, input and context needed to render the prompt and reply to the backend. */
 export type PendingPermissionRequest = {
@@ -353,7 +353,7 @@ export type PendingPermissionRequest = {
   context?: unknown;
   sessionId?: string | null;
   receivedAt?: Date;
-};
+}
 
 /** One question asked by the AskUserQuestion tool, with its answer options and whether more than one option may be selected. */
 export type Question = {
@@ -361,7 +361,7 @@ export type Question = {
   header?: string;
   options: QuestionOption[];
   multiSelect?: boolean;
-};
+}
 
 /** Options for a programmatic session navigation, currently only whether the route change should replace the current history entry instead of pushing a new one. */
 export type SessionNavigationOptions = {
@@ -382,10 +382,10 @@ export type ToolResult = {
   timestamp?: string | number | Date;
   toolUseResult?: unknown;
   [key: string]: unknown;
-};
+}
 
 /** One selectable answer for a Question, with the label shown to the user and an optional explanatory description. */
-type QuestionOption = {
+export type QuestionOption = {
   label: string;
   description?: string;
 };
@@ -397,34 +397,6 @@ type QuestionOption = {
 /** A provider-agnostic transcript event as normalized by the backend adapters, with all kind-specific fields kept flat; it is the shape the session store holds and that chat converts into ChatMessage for rendering, so treat it as the wire contract rather than a view model. */
 export type NormalizedMessage = {
   id: string;
-  /**
-   * The provider's own id for the transcript row behind this message, when the
-   * provider has stable per-row identity (today: Claude). Sent back as the
-   * anchor for "edit this message" and "fork from here".
-   */
-  transcriptAnchorId?: string;
-  /**
-   * Set only on the client-side optimistic echo of an edited message, naming
-   * the anchor that echo replaces. Never sent by the backend.
-   *
-   * The truncation that follows an edit clears every live row, because they
-   * belonged to the turn being replaced. This tag is what tells the store the
-   * replacement itself is not one of them.
-   */
-  replacesAnchorId?: string;
-  /**
-   * How many persisted rows survived the cut this echo was sent for, stamped
-   * when the truncation is applied.
-   *
-   * The echo is retired once the provider persists it, and that is decided by
-   * matching text and attachments inside a time window. That is enough until a
-   * rewind re-stamps the surviving turns — a provider that has to branch
-   * writes the copy with the timestamps of the copy — because an earlier turn
-   * with the same words then sits inside the window and retires the message
-   * the user just sent. The replacement can only be a row that was not there
-   * when the cut was made, so this is where those rows begin.
-   */
-  replacesAfterRowCount?: number;
   sessionId: string;
   timestamp: string;
   provider: LLMProvider;
@@ -473,20 +445,30 @@ export type NormalizedMessage = {
   exitCode?: number;
   actualSessionId?: string;
   parentToolUseId?: string;
-  /** Timeline of a spawned subagent's work, attached by the backend to the tool call that spawned it. */
-  subagentTools?: SubagentActivity[];
-  /** Identity and lifecycle of that subagent. */
-  subagent?: SubagentInfo;
-  /** Stored memory this reply drew on, when the provider reports it. */
-  memoryCitations?: MemoryCitation[];
+  subagentTools?: unknown[];
   isFinal?: boolean;
+  subagent?: SubagentInfo;
+  /**
+   * The provider's identifier for the persisted row this event came from, when
+   * the provider has stable per-row identity. Client counterpart of the
+   * transcript anchor used by message editing.
+   */
+  transcriptAnchorId?: string;
+  /**
+   * Set on the optimistic echo of a message sent as a replacement for an
+   * already-sent one; the truncate that follows spares the newest echo with
+   * this stamp from being dropped with the turns it replaces.
+   */
+  replacesAnchorId?: string;
+  replacesAfterRowCount?: number;
   // Cursor-specific ordering
   sequence?: number;
   rowid?: number;
-};
+}
+
 
 /** Discriminator on NormalizedMessage naming which kind of transcript event it carries — plain text, tool use or result, thinking, stream delta or end, error, completion, status, permission request/resolution/cancellation, session creation, interactive prompt, or task notification. */
-type MessageKind =
+export type MessageKind =
   | 'text'
   | 'tool_use'
   | 'tool_result'
@@ -501,6 +483,7 @@ type MessageKind =
   | 'permission_cancelled'
   | 'session_created'
   | 'history_truncated'
+  | 'interactive_prompt'
   | 'task_notification';
 
 // ---------------------------
@@ -1086,10 +1069,17 @@ export type ProjectWorkspaceShellProps = RealtimeProps & {
 
 /** Sign-in state of one LLM provider CLI - whether it is authenticated, the account email and method, plus in-flight loading and error state - polled by the provider-auth module and rendered by the settings and onboarding account views. */
 export type ProviderAuthStatus = {
+  /** Whether the CLI binary is installed on this host. */
+  installed: boolean;
   authenticated: boolean;
   email: string | null;
   method: string | null;
   error: string | null;
+  /**
+   * Backend-suggested login command for the terminal login modal.
+   * The modal falls back to its static per-provider command when null.
+   */
+  loginCommand: string | null;
   loading: boolean;
 };
 
@@ -1128,7 +1118,7 @@ export type AgentContext = {
 };
 
 /** Identifier of a top-level section in the settings dialog; use it whenever a tab is stored, compared or requested so deep links, the sidebar and the command palette all agree on the same set of names. */
-export type SettingsMainTab = 'agents' | 'appearance' | 'git' | 'api' | 'voice' | 'tasks' | 'browser' | 'notifications' | 'plugins' | 'about';
+export type SettingsMainTab = 'agents' | 'sessions' | 'appearance' | 'git' | 'api' | 'voice' | 'tasks' | 'browser' | 'notifications' | 'plugins' | 'about';
 
 /** The coding-agent CLI a settings screen is configuring, aliasing LLMProvider so agent-scoped settings read as being about an agent rather than a chat model. */
 export type AgentProvider = LLMProvider;
@@ -1548,3 +1538,110 @@ type TaskStatus =
 
 /** A TaskMaster task's priority; high, medium and low are the known values and the string fallback tolerates anything else TaskMaster emits. */
 type TaskPriority = 'high' | 'medium' | 'low' | string;
+
+// ─── Fork additions consolidated from src/types/app, chat/types, settings/types ───
+export type AntigravityPermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions';
+
+export type AuthStatus = ProviderAuthStatus;
+
+export type ChatInterfaceProps = {
+  isActive: boolean;
+  selectedProject: Project | null;
+  selectedSession: ProjectSession | null;
+  ws: WebSocket | null;
+  sendMessage: (message: unknown) => void;
+  onFileOpen?: (filePath: string, diffInfo?: any) => void;
+  onInputFocusChange?: (focused: boolean) => void;
+  onSessionProcessing?: MarkSessionProcessing;
+  onSessionIdle?: MarkSessionIdle;
+  processingSessions?: SessionActivityMap;
+  onNavigateToSession?: (targetSessionId: string, options?: SessionNavigationOptions) => void;
+  onSessionEstablished?: (sessionId: string, context: SessionEstablishedContext) => void;
+  onShowSettings?: () => void;
+  showRawParameters?: boolean;
+  showThinking?: boolean;
+  sendByCtrlEnter?: boolean;
+  externalMessageUpdate?: number;
+  newSessionTrigger?: number;
+  onTaskClick?: (...args: unknown[]) => void;
+  onShowAllTasks?: (() => void) | null;
+}
+
+export type Provider = LLMProvider;
+
+export type SaveStatus = 'success' | 'error' | null;
+
+export type SetState<T> = (value: T | ((prev: T) => T)) => void;
+
+export type SettingsProps = {
+  isOpen: boolean;
+  onClose: () => void;
+  projects?: SettingsProject[];
+  initialTab?: string;
+};
+
+export type SettingsStoragePayload = {
+  claude: ClaudePermissionsState & { projectSortOrder: ProjectSortOrder; lastUpdated: string };
+  cursor: CursorPermissionsState & { lastUpdated: string };
+  codex: { permissionMode: CodexPermissionMode; lastUpdated: string };
+  antigravity: { permissionMode: AntigravityPermissionMode; lastUpdated: string };
+};
+
+export type SubagentChildTool = {
+  toolId: string;
+  toolName: string;
+  toolInput: unknown;
+  toolResult?: ToolResult | null;
+  timestamp: Date;
+}
+
+// ─── Per-session slot ────────────────────────────────────────────────────────
+
+export type SessionStatus = 'idle' | 'loading' | 'streaming' | 'error';
+
+export type SessionSlot = {
+  serverMessages: NormalizedMessage[];
+  realtimeMessages: NormalizedMessage[];
+  merged: NormalizedMessage[];
+  /** @internal Cache-invalidation refs for computeMerged */
+  _lastServerRef: NormalizedMessage[];
+  _lastRealtimeRef: NormalizedMessage[];
+  /**
+   * @internal Serializes history reads for this session so an older-page
+   * request calculates its offset after any latest-page refresh completes.
+   */
+  _historyMutationQueue: Promise<void>;
+  status: SessionStatus;
+  fetchedAt: number;
+  total: number;
+  hasMore: boolean;
+  offset: number;
+  tokenUsage: unknown;
+}
+
+const EMPTY: NormalizedMessage[] = [];
+const SESSION_HISTORY_REQUEST_TIMEOUT_MS = 30_000;
+
+function createEmptySlot(): SessionSlot {
+  return {
+    serverMessages: EMPTY,
+    realtimeMessages: EMPTY,
+    merged: EMPTY,
+    _lastServerRef: EMPTY,
+    _lastRealtimeRef: EMPTY,
+    status: 'idle',
+    fetchedAt: 0,
+    total: 0,
+    hasMore: false,
+    offset: 0,
+    tokenUsage: null,
+    _historyMutationQueue: Promise.resolve(),
+  };
+}
+
+type SessionHistoryPage = {
+  messages: NormalizedMessage[];
+  total: number;
+  hasMore: boolean;
+  tokenUsage?: unknown;
+};

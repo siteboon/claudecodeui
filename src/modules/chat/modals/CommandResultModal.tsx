@@ -1,13 +1,18 @@
-import { memo, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   BadgeCheck,
+  Calendar,
+  ChevronDown,
+  ChevronRight,
   CircleHelp,
+  Clock,
   Coins,
   Cpu,
   Gauge,
   Package,
   Plus,
+  RotateCw,
   Search,
   Server,
   Sparkles,
@@ -17,13 +22,29 @@ import {
   X,
 } from 'lucide-react';
 
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
+
 import { Badge, Button, Dialog, DialogContent, DialogTitle, Input } from '@/shared/ui';
 import type {
   LLMProvider,
   ProviderModelActions,
   ProviderModelOption,
-  ProviderModelsDefinition,CommandModalPayload,CostCommandData,HelpCommandData,ModelCommandData,StatusCommandData
+  ProviderModelsDefinition,
 } from '@/shared/types';
+import type {
+  CommandModalPayload,
+  CostCommandData,
+  HelpCommandData,
+  ModelCommandData,
+  ProviderQuotaData,
+  QuotaGroup,
+  StatusCommandData,
+} from '@/modules/chat/hooks/useChatComposerState';
+import { authenticatedFetch } from '@/shared/api';
+import { buildProviderQuotaUrl, resolveQuotaProvider } from '@/modules/chat/utils/providerQuota';
+import { getProviderDisplayName, PROVIDER_DISPLAY_NAMES } from '@/shared/providerDisplay';
+
 import ModelLibraryPanel from '@/modules/chat/modals/ModelLibraryPanel';
 
 type CommandResultModalProps = {
@@ -50,13 +71,6 @@ type CommandEntry = {
   namespace?: string;
 };
 
-const PROVIDER_LABELS: Record<string, string> = {
-  claude: 'Claude',
-  cursor: 'Cursor',
-  codex: 'Codex',
-  opencode: 'OpenCode',
-};
-
 const FALLBACK_COMMANDS: CommandEntry[] = [
   { name: '/models', description: 'Browse available models for the active provider.' },
   { name: '/cost', description: 'Review token usage for the active session.' },
@@ -66,12 +80,14 @@ const FALLBACK_COMMANDS: CommandEntry[] = [
   { name: '/help', description: 'Show command documentation and syntax.' },
 ];
 
+// Unknown provider values echo through unchanged instead of falling back to
+// the Claude label, so malformed payloads stay visible in the modal.
 const getProviderLabel = (provider: string | undefined, fallback = 'Unknown') => {
   if (!provider) {
     return fallback;
   }
 
-  return PROVIDER_LABELS[provider] || provider;
+  return provider in PROVIDER_DISPLAY_NAMES ? getProviderDisplayName(provider) : provider;
 };
 
 const formatNumber = (value: number) => {
@@ -411,47 +427,252 @@ function ModelsContent({
   );
 }
 
+function formatRemainingCountdown(t: TFunction, resetTime?: string): string {
+  if (!resetTime) return '';
+  const resetMs = new Date(resetTime).getTime();
+  if (!Number.isFinite(resetMs)) return '';
+  const diffMs = resetMs - Date.now();
+  if (diffMs <= 0) return t('cost.resetSoon', { defaultValue: '即将重置' });
+  const totalMinutes = Math.floor(diffMs / 60_000);
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) {
+    return t('cost.resetDaysHours', { days, hours, defaultValue: `${days} 天 ${hours} 小时后重置` });
+  }
+  if (hours > 0) {
+    return t('cost.resetHoursMinutes', { hours, minutes, defaultValue: `${hours} 小时 ${minutes} 分钟后重置` });
+  }
+  return t('cost.resetMinutes', { minutes: Math.max(1, minutes), defaultValue: `${Math.max(1, minutes)} 分钟后重置` });
+}
+
+function getQuotaTone(remainingFraction: number) {
+  if (remainingFraction <= 0.15) {
+    return {
+      bar: 'bg-rose-500',
+      text: 'text-rose-500 dark:text-rose-400',
+      track: 'bg-rose-500/15',
+    };
+  }
+  if (remainingFraction <= 0.4) {
+    return {
+      bar: 'bg-amber-500',
+      text: 'text-amber-500 dark:text-amber-400',
+      track: 'bg-amber-500/15',
+    };
+  }
+  return {
+    bar: 'bg-emerald-500',
+    text: 'text-emerald-500 dark:text-emerald-400',
+    track: 'bg-emerald-500/15',
+  };
+}
+
+function QuotaGroupCard({
+  group,
+  defaultExpanded,
+  isCurrentGroup,
+  t,
+}: {
+  group: QuotaGroup;
+  defaultExpanded: boolean;
+  isCurrentGroup: boolean;
+  t: TFunction;
+}) {
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-border/70 bg-background/75 transition-all duration-200">
+      <button
+        type="button"
+        onClick={() => setIsExpanded((previous) => !previous)}
+        className="flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-muted/25"
+      >
+        <div className="flex items-center gap-3">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
+            <Gauge className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="truncate text-sm font-semibold text-foreground">{group.name}</span>
+              {isCurrentGroup ? (
+                <span className="shrink-0 rounded-md border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                  {t('cost.currentGroup', { defaultValue: '当前会话模型组' })}
+                </span>
+              ) : (
+                <span className="shrink-0 rounded-md border border-border/60 bg-muted/30 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  {t('cost.otherGroup', { defaultValue: '其他模型组' })}
+                </span>
+              )}
+            </div>
+            {group.description && (
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">{group.description}</p>
+            )}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5 pl-3 text-xs text-muted-foreground">
+          <span>{isExpanded ? t('cost.collapse', { defaultValue: '收起' }) : t('cost.expand', { defaultValue: '展开查看' })}</span>
+          {isExpanded ? (
+            <ChevronDown className="h-4 w-4" />
+          ) : (
+            <ChevronRight className="h-4 w-4" />
+          )}
+        </div>
+      </button>
+
+      {isExpanded && (
+        <div className="space-y-3 border-t border-border/60 bg-muted/10 p-4">
+          {group.buckets.map((bucket) => {
+            const percent = Math.round(bucket.remainingFraction * 100);
+            const tone = getQuotaTone(bucket.remainingFraction);
+            const isFiveHour = bucket.window === '5h' || bucket.id.includes('5h');
+            const isWeekly = bucket.window === 'weekly' || bucket.id.includes('weekly');
+            const countdown = formatRemainingCountdown(t, bucket.resetTime);
+            const Icon = isFiveHour ? Clock : isWeekly ? Calendar : Timer;
+            const limitTitle = isFiveHour
+              ? t('cost.fiveHourWindow', { defaultValue: '5 小时滑动窗口限额' })
+              : isWeekly
+                ? t('cost.weeklyWindow', { defaultValue: '周配额' })
+                : bucket.name;
+
+            return (
+              <div key={bucket.id} className="shadow-xs space-y-2 rounded-xl border border-border/60 bg-background/80 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="truncate text-xs font-semibold text-foreground">
+                      {limitTitle}
+                    </span>
+                  </div>
+                  <span className={`shrink-0 font-mono text-xs font-bold ${tone.text}`}>
+                    {t('cost.remainingPercent', { percent, defaultValue: `剩余 ${percent}%` })}
+                  </span>
+                </div>
+
+                {/* Progress Bar */}
+                <div className={`h-2 w-full overflow-hidden rounded-full ${tone.track}`}>
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${tone.bar}`}
+                    style={{ width: `${percent}%` }}
+                  />
+                </div>
+
+                {/* Subtitle / Description & Reset Countdown */}
+                <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                  <span className="truncate">{bucket.description || bucket.name}</span>
+                  {countdown && (
+                    <span className="shrink-0 font-medium text-foreground/90">
+                      {countdown}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CostContent({ data }: { data: CostCommandData }) {
+  const { t } = useTranslation('chat');
   const used = Number(data.tokenUsage?.used ?? 0);
   const total = Number(data.tokenUsage?.total ?? 0);
   const model = data.model || 'Unknown';
   const provider = getProviderLabel(data.provider, data.provider || 'Unknown');
+  const quotaProvider = resolveQuotaProvider(data.provider);
+  const supportsQuota = quotaProvider !== null;
+
+  const [quotaData, setQuotaData] = useState<ProviderQuotaData | null>(data.quota ?? null);
+  const [loadingQuota, setLoadingQuota] = useState(supportsQuota && !data.quota);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [hasLoadedQuota, setHasLoadedQuota] = useState(Boolean(data.quota));
+  const [quotaError, setQuotaError] = useState<string | null>(null);
+  const quotaRequestSequence = useRef(0);
+
+  const fetchQuota = useCallback(async (isManualRefresh = false) => {
+    if (!quotaProvider) return;
+    const requestSequence = ++quotaRequestSequence.current;
+    if (isManualRefresh) {
+      setIsRefreshing(true);
+    } else {
+      setLoadingQuota(true);
+    }
+    setQuotaError(null);
+
+    try {
+      const response = await authenticatedFetch(buildProviderQuotaUrl(quotaProvider, isManualRefresh));
+      if (!response.ok) {
+        throw new Error(`Quota request failed with status ${response.status}`);
+      }
+
+      const payload = await response.json();
+      if (requestSequence !== quotaRequestSequence.current) return;
+      setQuotaData(payload.data?.groups ? payload.data as ProviderQuotaData : null);
+    } catch (error) {
+      if (requestSequence !== quotaRequestSequence.current) return;
+      console.warn(`Failed to load ${quotaProvider} quota:`, error);
+      setQuotaError(t('cost.fetchFailed', { defaultValue: '配额读取失败，请稍后重试' }));
+    } finally {
+      if (requestSequence === quotaRequestSequence.current) {
+        setHasLoadedQuota(true);
+        setLoadingQuota(false);
+        setIsRefreshing(false);
+      }
+    }
+  }, [quotaProvider, t]);
+
+  useEffect(() => {
+    quotaRequestSequence.current += 1;
+    setQuotaData(data.quota ?? null);
+    setQuotaError(null);
+    setHasLoadedQuota(Boolean(data.quota));
+    setLoadingQuota(supportsQuota && !data.quota);
+    setIsRefreshing(false);
+
+    if (supportsQuota && !data.quota) {
+      void fetchQuota(false);
+    }
+
+    return () => {
+      quotaRequestSequence.current += 1;
+    };
+  }, [fetchQuota, supportsQuota, data.quota, quotaProvider]);
+
   const hasBreakdown =
     typeof data.tokenBreakdown?.input === 'number' ||
     typeof data.tokenBreakdown?.output === 'number';
   const usageRows = [
-    { label: 'Total tokens used', value: formatNumber(used), icon: Activity },
+    { label: t('cost.totalTokensUsed', { defaultValue: 'Total tokens used' }), value: formatNumber(used), icon: Activity },
     ...(hasBreakdown
       ? [
           {
-            label: 'Input tokens',
+            label: t('cost.inputTokens', { defaultValue: 'Input tokens' }),
             value: formatNumber(Number(data.tokenBreakdown?.input ?? 0)),
             icon: TerminalSquare,
           },
           {
-            label: 'Output tokens',
+            label: t('cost.outputTokens', { defaultValue: 'Output tokens' }),
             value: formatNumber(Number(data.tokenBreakdown?.output ?? 0)),
             icon: Coins,
           },
         ]
-      : [
-          {
-            label: 'Breakdown',
-            value: 'Unavailable',
-            icon: TerminalSquare,
-          },
-        ]),
-    // Only when it is consistent with what was actually used. The window comes
-    // from the CONTEXT_WINDOW setting, which cannot know whether a session is
-    // running a 200K or a 1M variant of the same model name — and a row reading
-    // "used 404,009 / window 160,000" is worse than no row at all.
-    ...(total > used
-      ? [{ label: 'Context window', value: formatNumber(total), icon: Gauge }]
+      : []),
+    ...(total > 0
+      ? [{ label: t('cost.contextWindow', { defaultValue: 'Context window' }), value: formatNumber(total), icon: Gauge }]
       : []),
   ];
 
+  const quotaGroups = quotaData?.groups ?? [];
+  const normalizedModel = (data.model || '').toLowerCase();
+  const isClaudeOrGpt = normalizedModel.includes('claude') || normalizedModel.includes('gpt');
+  const isGemini = normalizedModel.includes('gemini');
+
   return (
-    <div className="space-y-4">
+    <div className="scrollbar-thin h-full min-h-0 space-y-4 overflow-y-auto pr-1">
+      {/* Session Context Token Usage */}
       <div className="overflow-hidden rounded-2xl border border-border/70 bg-background/75">
         {usageRows.map((row) => {
           const Icon = row.icon;
@@ -473,6 +694,95 @@ function CostContent({ data }: { data: CostCommandData }) {
         })}
       </div>
 
+      {/* Provider Quota & Rate Limits Section (5-hour & Weekly) */}
+      {supportsQuota && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              {t('cost.quotaTitle', { defaultValue: '账号配额与速率限额' })}
+            </h4>
+            <div className="flex items-center gap-2">
+              {quotaData?.updatedAt && (
+                <span className="text-[11px] text-muted-foreground/70">
+                  {t('cost.updatedAt', {
+                    time: new Date(quotaData.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    defaultValue: `更新于 ${new Date(quotaData.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                  })}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => void fetchQuota(true)}
+                disabled={loadingQuota || isRefreshing}
+                className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-background/80 px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+                title={t('cost.refreshTitle', { defaultValue: '刷新最新配额' })}
+              >
+                <RotateCw className={`h-3 w-3 ${isRefreshing ? 'animate-spin text-primary' : ''}`} />
+                <span>{t('cost.refresh', { defaultValue: '刷新' })}</span>
+              </button>
+            </div>
+          </div>
+
+          {loadingQuota && (
+            <div className="shadow-xs flex items-center gap-3 rounded-2xl border border-border/70 bg-background/75 p-4">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              <div>
+                <p className="text-xs font-semibold text-foreground">
+                  {t('cost.fetchingQuota', { defaultValue: '正在获取最新配额...' })}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  {t('cost.syncingWithProvider', { provider, defaultValue: `正在从 ${provider} 同步 5 小时限额与周配额` })}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!loadingQuota && hasLoadedQuota && quotaGroups.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-border bg-background/60 px-4 py-6 text-center">
+              <p className="text-xs font-semibold text-foreground">
+                {quotaError || t('cost.noQuotaData', { defaultValue: '当前账号没有可显示的配额数据' })}
+              </p>
+              {!quotaError && data.provider === 'codex' && (
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {t('cost.apiKeyNotice', { defaultValue: 'API Key 登录通常不会提供 ChatGPT 账号的 5 小时和周限额' })}
+                </p>
+              )}
+            </div>
+          )}
+
+          {!loadingQuota && quotaError && quotaGroups.length > 0 && (
+            <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300">
+              {t('cost.refreshFailedNotice', { defaultValue: '刷新失败，当前显示的是上次成功获取的配额数据' })}
+            </div>
+          )}
+
+          {!loadingQuota && quotaGroups.length > 0 && (
+            <div className="space-y-3">
+              {quotaGroups.map((group, index) => {
+                const groupNameLower = group.name.toLowerCase();
+                let isCurrent = data.provider === 'codex' && index === 0;
+                if (!isCurrent && (groupNameLower.includes('claude') || groupNameLower.includes('gpt'))) {
+                  isCurrent = isClaudeOrGpt;
+                } else if (groupNameLower.includes('gemini')) {
+                  isCurrent = isGemini;
+                }
+
+                return (
+                  <QuotaGroupCard
+                    key={group.name}
+                    group={group}
+                    defaultExpanded={isCurrent || index === 0}
+                    isCurrentGroup={isCurrent}
+                    t={t}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Provider & Model Info */}
       <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
@@ -527,11 +837,7 @@ function StatusContent({ data }: { data: StatusCommandData }) {
   );
 }
 
-/**
- * Rendered by chat's ChatInterface to present the result of a slash command
- * (help, model picker, cost or status) in a modal over the transcript.
- */
-function CommandResultModal({
+export default function CommandResultModal({
   payload,
   onClose,
   providerModelCatalog,
@@ -648,6 +954,3 @@ function CommandResultModal({
     </Dialog>
   );
 }
-
-/** Memoized: chat re-renders on every keystroke and this modal is closed for almost all of them. */
-export default memo(CommandResultModal);

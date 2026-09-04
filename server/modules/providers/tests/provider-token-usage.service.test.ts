@@ -10,6 +10,11 @@ import {
   createProviderTokenUsageService,
   summarizeClaudeTokenUsage,
 } from '@/modules/providers/services/provider-token-usage.service.js';
+import type { IProvider } from '@/shared/interfaces.js';
+import type {
+  ProviderSessionUsageInput,
+  ProviderTokenUsageResult,
+} from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
 
 function createSessionRow(overrides: Record<string, unknown> = {}) {
@@ -30,143 +35,71 @@ function createSessionRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
-test('token usage lookup requires only the app-facing session id for Claude', async () => {
-  const tempDirectory = await mkdtemp(path.join(tmpdir(), 'provider-token-usage-claude-'));
-  const sessionFilePath = path.join(tempDirectory, 'provider-session.jsonl');
+function stubProvider(
+  sessions: Partial<IProvider['sessions']> = {},
+  auth: Partial<IProvider['auth']> = {},
+): Pick<IProvider, 'sessions' | 'auth'> {
+  return {
+    sessions: {
+      normalizeMessage: () => [],
+      fetchHistory: async () => ({ messages: [], total: 0, hasMore: false, offset: 0, limit: null }),
+      ...sessions,
+    },
+    auth: auth as IProvider['auth'],
+  } as Pick<IProvider, 'sessions' | 'auth'>;
+}
 
-  try {
-    await writeFile(sessionFilePath, [
-      JSON.stringify({
-        type: 'assistant',
-        message: {
-          usage: {
-            input_tokens: 100,
-            cache_read_input_tokens: 20,
-            cache_creation_input_tokens: 5,
-            output_tokens: 30,
-          },
-        },
-      }),
-      '{incomplete',
-    ].join('\n'));
+test('token usage dispatches to the provider sessions facet with the mapped session identity', async () => {
+  const usage: ProviderTokenUsageResult = {
+    used: 42,
+    inputTokens: 30,
+    outputTokens: 12,
+    breakdown: { input: 30, output: 12 },
+  };
+  const seenInputs: ProviderSessionUsageInput[] = [];
 
-    const service = createProviderTokenUsageService({
-      getSessionById: () => createSessionRow({ jsonl_path: sessionFilePath }),
-      getClaudeContextWindow: () => '180000',
-    });
+  const service = createProviderTokenUsageService({
+    getSessionById: () => createSessionRow({
+      provider: 'antigravity',
+      provider_session_id: 'sess_native',
+      jsonl_path: '/data/transcript.jsonl',
+      project_path: '/workspaces/demo',
+    }),
+    resolveProvider: () => stubProvider({
+      getTokenUsage: async (input) => {
+        seenInputs.push(input);
+        return usage;
+      },
+    }),
+  });
 
-    assert.deepEqual(await service.getSessionTokenUsage('app-session'), {
-      used: 155,
-      total: 180_000,
-      inputTokens: 125,
-      outputTokens: 30,
-      cacheReadTokens: 20,
-      cacheCreationTokens: 5,
-      cacheTokens: 25,
-      breakdown: { input: 125, output: 30 },
-    });
-  } finally {
-    await rm(tempDirectory, { recursive: true, force: true });
-  }
+  assert.deepEqual(await service.getSessionTokenUsage('app-session'), usage);
+  assert.deepEqual(seenInputs[0], {
+    appSessionId: 'app-session',
+    nativeSessionId: 'sess_native',
+    jsonlPath: '/data/transcript.jsonl',
+    projectPath: '/workspaces/demo',
+  });
 });
 
-test('Codex token usage uses the latest token_count snapshot', async () => {
-  const tempDirectory = await mkdtemp(path.join(tmpdir(), 'provider-token-usage-codex-'));
-  const sessionFilePath = path.join(tempDirectory, 'rollout-provider-session.jsonl');
+test('token usage falls back to the app session id when no native id is recorded', async () => {
+  const service = createProviderTokenUsageService({
+    getSessionById: () => createSessionRow({ provider_session_id: null }),
+    resolveProvider: () => stubProvider({
+      getTokenUsage: async (input) => {
+        assert.equal(input.nativeSessionId, 'app-session');
+        return { used: 1, inputTokens: 1, outputTokens: 0, breakdown: { input: 1, output: 0 } };
+      },
+    }),
+  });
 
-  try {
-    await writeFile(sessionFilePath, [
-      JSON.stringify({
-        type: 'event_msg',
-        payload: {
-          type: 'token_count',
-          info: {
-            total_token_usage: { input_tokens: 10, output_tokens: 4, total_tokens: 14 },
-            model_context_window: 100_000,
-          },
-        },
-      }),
-      JSON.stringify({
-        type: 'event_msg',
-        payload: {
-          type: 'token_count',
-          info: {
-            total_token_usage: { input_tokens: 40, output_tokens: 9, total_tokens: 49 },
-            model_context_window: 250_000,
-          },
-        },
-      }),
-    ].join('\n'));
-
-    const service = createProviderTokenUsageService({
-      getSessionById: () => createSessionRow({
-        provider: 'codex',
-        jsonl_path: sessionFilePath,
-      }),
-    });
-
-    assert.deepEqual(await service.getSessionTokenUsage('app-session'), {
-      used: 49,
-      total: 250_000,
-      inputTokens: 40,
-      outputTokens: 9,
-      breakdown: { input: 40, output: 9 },
-    });
-  } finally {
-    await rm(tempDirectory, { recursive: true, force: true });
-  }
+  await service.getSessionTokenUsage('app-session');
 });
 
-test('OpenCode token usage resolves its provider-native id from the session row', async () => {
-  const tempDirectory = await mkdtemp(path.join(tmpdir(), 'provider-token-usage-opencode-'));
-  const databasePath = path.join(tempDirectory, 'opencode.db');
-  const database = new Database(databasePath);
-
-  try {
-    database.exec(`
-      CREATE TABLE session (
-        id TEXT PRIMARY KEY,
-        tokens_input INTEGER,
-        tokens_output INTEGER,
-        tokens_reasoning INTEGER,
-        tokens_cache_read INTEGER,
-        tokens_cache_write INTEGER
-      )
-    `);
-    database.prepare(`
-      INSERT INTO session (
-        id,
-        tokens_input,
-        tokens_output,
-        tokens_reasoning,
-        tokens_cache_read,
-        tokens_cache_write
-      ) VALUES (?, ?, ?, ?, ?, ?)
-    `).run('provider-session', 12, 7, 3, 5, 2);
-  } finally {
-    database.close();
-  }
-
-  try {
-    const service = createProviderTokenUsageService({
-      getSessionById: () => createSessionRow({ provider: 'opencode' }),
-      getOpenCodeDatabasePath: () => databasePath,
-    });
-
-    assert.deepEqual(await service.getSessionTokenUsage('app-session'), {
-      used: 29,
-      inputTokens: 17,
-      outputTokens: 7,
-      breakdown: { input: 17, output: 7 },
-    });
-  } finally {
-    await rm(tempDirectory, { recursive: true, force: true });
-  }
-});
-
-test('Cursor returns an explicit unsupported token usage result', async () => {
+test('providers without a getTokenUsage facet answer with an explicit unsupported result', async () => {
   const service = createProviderTokenUsageService({
     getSessionById: () => createSessionRow({ provider: 'cursor' }),
+    resolveProvider: () => stubProvider(),
   });
 
   const result = await service.getSessionTokenUsage('app-session');
@@ -174,6 +107,7 @@ test('Cursor returns an explicit unsupported token usage result', async () => {
   assert.equal(result.unsupported, true);
   assert.equal(result.used, 0);
   assert.equal(result.total, 0);
+  assert.match(result.message ?? '', /cursor/);
 });
 
 test('token usage reports SESSION_NOT_FOUND for an unknown app session id', async () => {
@@ -187,6 +121,39 @@ test('token usage reports SESSION_NOT_FOUND for an unknown app session id', asyn
       && error.statusCode === 404
     ),
   );
+});
+
+test('quota dispatches to the provider auth facet', async () => {
+  const quota = {
+    groups: [
+      {
+        name: 'Gemini Models',
+        buckets: [
+          {
+            id: 'gemini-5h',
+            name: 'Five Hour Limit Remaining',
+            window: '5h',
+            remainingFraction: 0.8,
+          },
+        ],
+      },
+    ],
+    updatedAt: '2026-09-03T08:00:00.000Z',
+  };
+
+  const service = createProviderTokenUsageService({
+    resolveProvider: (provider) => stubProvider(
+      {},
+      provider === 'antigravity' ? { getQuota: async () => quota } : {},
+    ),
+  });
+
+  const antigravityQuota = await service.getProviderQuota('antigravity');
+  assert.ok(antigravityQuota);
+  assert.equal(antigravityQuota.groups[0].name, 'Gemini Models');
+
+  const claudeQuota = await service.getProviderQuota('claude');
+  assert.equal(claudeQuota, null);
 });
 
 test('the Claude summarizer reads the newest assistant turn, not the whole conversation', () => {
@@ -253,121 +220,4 @@ test('the Claude summarizer reports zero for a transcript with no assistant turn
 
   assert.equal(usage.used, 0);
   assert.equal(usage.total, 200_000);
-});
-
-/** Padding rows large enough to push earlier rows out of the 4MB tail window. */
-function paddingLines(totalBytes: number): string {
-  const line = JSON.stringify({ type: 'attachment', filler: 'x'.repeat(4096) });
-  return Array.from({ length: Math.ceil(totalBytes / line.length) }, () => line).join('\n');
-}
-
-test('Claude token usage reads only the tail of a large transcript', async () => {
-  const tempDirectory = await mkdtemp(path.join(tmpdir(), 'provider-token-usage-claude-tail-'));
-  const sessionFilePath = path.join(tempDirectory, 'provider-session.jsonl');
-
-  try {
-    await writeFile(sessionFilePath, [
-      paddingLines(5 * 1024 * 1024),
-      JSON.stringify({ type: 'assistant', message: { usage: { input_tokens: 7, output_tokens: 2 } } }),
-    ].join('\n'));
-
-    const service = createProviderTokenUsageService({
-      getSessionById: () => createSessionRow({ jsonl_path: sessionFilePath }),
-      getClaudeContextWindow: () => '180000',
-      // Reading the whole file here would defeat the tail read; fail loudly.
-      readTextFile: () => { throw new Error('full read must not happen when the tail has usage'); },
-    });
-
-    const usage = await service.getSessionTokenUsage('app-session');
-    assert.equal(usage.inputTokens, 7);
-    assert.equal(usage.outputTokens, 2);
-  } finally {
-    await rm(tempDirectory, { recursive: true, force: true });
-  }
-});
-
-test('Claude token usage falls back to the whole file when the tail has no usage row', async () => {
-  const tempDirectory = await mkdtemp(path.join(tmpdir(), 'provider-token-usage-claude-fallback-'));
-  const sessionFilePath = path.join(tempDirectory, 'provider-session.jsonl');
-
-  try {
-    await writeFile(sessionFilePath, [
-      JSON.stringify({ type: 'assistant', message: { usage: { input_tokens: 11, output_tokens: 3 } } }),
-      paddingLines(5 * 1024 * 1024),
-    ].join('\n'));
-
-    const service = createProviderTokenUsageService({
-      getSessionById: () => createSessionRow({ jsonl_path: sessionFilePath }),
-      getClaudeContextWindow: () => '180000',
-    });
-
-    const usage = await service.getSessionTokenUsage('app-session');
-    assert.equal(usage.inputTokens, 11);
-    assert.equal(usage.outputTokens, 3);
-  } finally {
-    await rm(tempDirectory, { recursive: true, force: true });
-  }
-});
-
-test('Codex token usage reads only the tail of a large rollout', async () => {
-  const tempDirectory = await mkdtemp(path.join(tmpdir(), 'provider-token-usage-codex-tail-'));
-  const sessionFilePath = path.join(tempDirectory, 'rollout-provider-session.jsonl');
-
-  try {
-    await writeFile(sessionFilePath, [
-      paddingLines(5 * 1024 * 1024),
-      JSON.stringify({
-        type: 'event_msg',
-        payload: {
-          type: 'token_count',
-          info: {
-            total_token_usage: { input_tokens: 21, output_tokens: 8, total_tokens: 29 },
-            model_context_window: 150_000,
-          },
-        },
-      }),
-    ].join('\n'));
-
-    const service = createProviderTokenUsageService({
-      getSessionById: () => createSessionRow({ provider: 'codex', jsonl_path: sessionFilePath }),
-      readTextFile: () => { throw new Error('full read must not happen when the tail has usage'); },
-    });
-
-    assert.deepEqual(await service.getSessionTokenUsage('app-session'), {
-      used: 29,
-      total: 150_000,
-      inputTokens: 21,
-      outputTokens: 8,
-      breakdown: { input: 21, output: 8 },
-    });
-  } finally {
-    await rm(tempDirectory, { recursive: true, force: true });
-  }
-});
-
-test('Codex token usage falls back to the whole file when the tail has no token_count row', async () => {
-  const tempDirectory = await mkdtemp(path.join(tmpdir(), 'provider-token-usage-codex-fallback-'));
-  const sessionFilePath = path.join(tempDirectory, 'rollout-provider-session.jsonl');
-
-  try {
-    await writeFile(sessionFilePath, [
-      JSON.stringify({
-        type: 'event_msg',
-        payload: {
-          type: 'token_count',
-          info: { total_token_usage: { input_tokens: 5, output_tokens: 1, total_tokens: 6 } },
-        },
-      }),
-      paddingLines(5 * 1024 * 1024),
-    ].join('\n'));
-
-    const service = createProviderTokenUsageService({
-      getSessionById: () => createSessionRow({ provider: 'codex', jsonl_path: sessionFilePath }),
-    });
-
-    const usage = await service.getSessionTokenUsage('app-session');
-    assert.equal(usage.used, 6);
-  } finally {
-    await rm(tempDirectory, { recursive: true, force: true });
-  }
 });

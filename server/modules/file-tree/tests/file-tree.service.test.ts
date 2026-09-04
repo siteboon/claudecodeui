@@ -71,6 +71,7 @@ function createFakeFileSystem(
 function createDependencies(
   fileSystem: FileTreeFileSystem,
   projectRoot: string,
+  externalReadOnlyRoots: string[] = [],
 ): FileTreeServiceDependencies {
   return {
     fileSystem,
@@ -84,6 +85,7 @@ function createDependencies(
     resolveMimeType: () => 'text/plain',
     fileSystemConcurrency: 4,
     logger: { error: () => undefined },
+    externalReadOnlyRoots,
   };
 }
 
@@ -369,3 +371,127 @@ test('createEntry performs filesystem mutation only through the injected adapter
   assert.equal(result.path, targetPath);
   assert.deepEqual(writtenFiles, [{ filePath: targetPath, content: '' }]);
 });
+
+test('readExternalTextFile reads a file inside an allowlisted external root', async () => {
+  const brainRoot = path.resolve('antigravity-brain');
+  const planPath = path.join(brainRoot, '28b2c337-session', 'plan.md');
+  const fileSystem = createFakeFileSystem({
+    realpath: async (candidatePath) => candidatePath,
+    readTextFile: async (filePath) => {
+      assert.equal(filePath, planPath);
+      return '# Plan';
+    },
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, path.resolve('file-tree-test-project'), [brainRoot]));
+
+  const result = await service.readExternalTextFile(planPath);
+
+  assert.equal(result.content, '# Plan');
+  assert.equal(result.path, planPath);
+});
+
+test('readExternalTextFile accepts the legacy brain root as well', async () => {
+  const currentRoot = path.resolve('antigravity-brain');
+  const legacyRoot = path.resolve('legacy-antigravity-brain');
+  const legacyPlanPath = path.join(legacyRoot, 'old-session', 'plan.md');
+  const fileSystem = createFakeFileSystem({
+    realpath: async (candidatePath) => candidatePath,
+    readTextFile: async (filePath) => {
+      assert.equal(filePath, legacyPlanPath);
+      return '# Legacy Plan';
+    },
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, path.resolve('file-tree-test-project'), [currentRoot, legacyRoot]));
+
+  const result = await service.readExternalTextFile(legacyPlanPath);
+
+  assert.equal(result.content, '# Legacy Plan');
+});
+
+test('readExternalTextFile rejects paths outside every allowlisted root', async () => {
+  const brainRoot = path.resolve('antigravity-brain');
+  const outsidePath = path.resolve('/etc/passwd');
+  const fileSystem = createFakeFileSystem({
+    realpath: async (candidatePath) => candidatePath,
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, path.resolve('file-tree-test-project'), [brainRoot]));
+
+  await assert.rejects(
+    service.readExternalTextFile(outsidePath),
+    (error: unknown) => error instanceof AppError
+      && error.statusCode === 403
+      && error.code === 'PATH_NOT_ALLOWED',
+  );
+});
+
+test('readExternalTextFile rejects relative paths before touching the filesystem', async () => {
+  const readPaths: string[] = [];
+  const fileSystem = createFakeFileSystem({
+    realpath: async (candidatePath) => {
+      readPaths.push(candidatePath);
+      return candidatePath;
+    },
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, path.resolve('file-tree-test-project'), [path.resolve('antigravity-brain')]));
+
+  await assert.rejects(
+    service.readExternalTextFile('brain/plan.md'),
+    (error: unknown) => error instanceof AppError
+      && error.statusCode === 403
+      && error.code === 'PATH_NOT_ALLOWED',
+  );
+  assert.deepEqual(readPaths, []);
+});
+
+test('readExternalTextFile rejects a symlink planted inside a root that points outside', async () => {
+  const brainRoot = path.resolve('antigravity-brain');
+  const linkPath = path.join(brainRoot, 'escape.md');
+  const outsideTarget = path.resolve('/etc/passwd');
+  const fileSystem = createFakeFileSystem({
+    realpath: async (candidatePath) => (candidatePath === linkPath ? outsideTarget : candidatePath),
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, path.resolve('file-tree-test-project'), [brainRoot]));
+
+  await assert.rejects(
+    service.readExternalTextFile(linkPath),
+    (error: unknown) => error instanceof AppError
+      && error.statusCode === 403
+      && error.code === 'PATH_NOT_ALLOWED',
+  );
+});
+
+test('readExternalTextFile maps a missing file to 404', async () => {
+  const brainRoot = path.resolve('antigravity-brain');
+  const missingPath = path.join(brainRoot, 'missing.md');
+  const fileSystem = createFakeFileSystem({
+    realpath: async () => {
+      throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+    },
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, path.resolve('file-tree-test-project'), [brainRoot]));
+
+  await assert.rejects(
+    service.readExternalTextFile(missingPath),
+    (error: unknown) => error instanceof AppError && error.statusCode === 404,
+  );
+});
+
+test('openExternalFile streams a file inside an allowlisted external root', async () => {
+  const assetsRoot = path.resolve('cloudcli-assets');
+  const imagePath = path.join(assetsRoot, 'shot.png');
+  const fileSystem = createFakeFileSystem({
+    realpath: async (candidatePath) => candidatePath,
+    access: async () => {},
+    createReadStream: () => Readable.from(Buffer.from([0x89, 0x50, 0x4e, 0x47])) as any,
+  });
+  const dependencies = {
+    ...createDependencies(fileSystem, path.resolve('file-tree-test-project'), [assetsRoot]),
+    resolveMimeType: () => 'image/png',
+  };
+  const service = createFileTreeService(dependencies);
+
+  const result = await service.openExternalFile(imagePath);
+  assert.equal(result.contentType, 'image/png');
+  assert.ok(result.stream);
+});
+

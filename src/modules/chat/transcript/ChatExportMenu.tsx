@@ -1,96 +1,91 @@
 import { useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { Braces, Download, FileCode2, FileText, Loader2 } from 'lucide-react';
+import { Download, FileJson, FileText } from 'lucide-react';
 
-import { ActionMenu } from '@/shared/ui';
-import type { ChatMessage, DiffLine, LLMProvider, Project } from '@/shared/types';
-import {
-  downloadTranscriptExport,
-  type TranscriptExportFormat,
-} from '@/modules/chat/utils/chatExport';
+import type { ChatMessage, DiffLine } from '@/shared/types';
+import { buildTranscriptExport, downloadTranscriptExport, toExportFileStem, downloadPDF, EXPORT_FORMATS } from '@/modules/chat/utils/chatExport';
 
 type ChatExportMenuProps = {
   messages: ChatMessage[];
   sessionTitle?: string;
-  provider: LLMProvider | string;
-  selectedProject?: Project | null;
+  provider?: string;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
-  /**
-   * Loads the rest of the conversation before exporting.
-   *
-   * The transcript is paged, so `messages` is usually the tail of it. Without
-   * this, exporting a long session silently produced a file containing the
-   * last twenty messages.
-   */
-  onLoadFullTranscript?: () => Promise<ChatMessage[]>;
 };
 
-const FORMATS: Array<{ id: TranscriptExportFormat; icon: typeof FileText; labelKey: string; descriptionKey: string }> = [
-  { id: 'html', icon: FileCode2, labelKey: 'export.html.label', descriptionKey: 'export.html.description' },
-  { id: 'markdown', icon: FileText, labelKey: 'export.markdown.label', descriptionKey: 'export.markdown.description' },
-  { id: 'json', icon: Braces, labelKey: 'export.json.label', descriptionKey: 'export.json.description' },
-];
-
-/**
- * Rendered by chat's ChatMessagesPane header so the open conversation can be
- * downloaded as a self-contained web page, as Markdown, or as JSON.
- */
-export default function ChatExportMenu({
-  messages,
-  sessionTitle,
-  provider,
-  selectedProject,
-  createDiff,
-  onLoadFullTranscript,
-}: ChatExportMenuProps) {
-  const { t } = useTranslation('chat');
-  // Building a large transcript takes long enough to notice, and the download
-  // only appears at the end — without this the button looks unresponsive.
-  const [busyFormat, setBusyFormat] = useState<TranscriptExportFormat | null>(null);
+export default function ChatExportMenu({ messages, sessionTitle, provider, createDiff }: ChatExportMenuProps) {
+  const [isOpen, setIsOpen] = useState(false);
 
   if (messages.length === 0) {
     return null;
   }
 
-  const runExport = async (format: TranscriptExportFormat) => {
-    setBusyFormat(format);
-    try {
-      const fullMessages = (await onLoadFullTranscript?.()) ?? messages;
-      await downloadTranscriptExport(format, {
-        messages: fullMessages.length > 0 ? fullMessages : messages,
-        sessionTitle: sessionTitle?.trim() || t('export.untitled'),
-        provider,
-        selectedProject,
-        createDiff,
-      });
-    } catch (error) {
-      console.error('Failed to export conversation:', error);
-    } finally {
-      setBusyFormat(null);
+  const options = { provider };
+  const handleExport = async (format: 'markdown' | 'html' | 'json' | 'pdf') => {
+    if (format === 'pdf') {
+      const timestamp = new Date().toISOString().split('T')[0];
+      const filename = `${sessionTitle || 'chat'}-${timestamp}`;
+      downloadPDF(messages, filename, sessionTitle, options);
+      setIsOpen(false);
+      return;
     }
+
+    const exportedAt = new Date();
+    const content = await buildTranscriptExport(format, {
+      messages,
+      sessionTitle: sessionTitle || 'chat',
+      provider: provider || 'claude',
+      createDiff,
+    }, exportedAt);
+    const filename = `${toExportFileStem(sessionTitle || 'chat', exportedAt)}.${format === 'markdown' ? 'md' : format}`;
+
+    const url = URL.createObjectURL(new Blob([content], { type: format === 'json' ? 'application/json;charset=utf-8' : format === 'html' ? 'text/html;charset=utf-8' : 'text/markdown;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setIsOpen(false);
   };
 
   return (
-    <ActionMenu
-      icon={busyFormat ? Loader2 : Download}
-      iconOnly
-      label={t('export.trigger')}
-      ariaLabel={t('export.trigger')}
-      triggerClassName="h-8 w-8 rounded-lg border border-border/50 text-muted-foreground hover:bg-accent hover:text-foreground"
-      menuClassName="w-[260px] rounded-xl p-1.5 shadow-xl"
-      header={(
-        <div className="mb-1 border-b border-border px-3 py-2">
-          <p className="text-xs font-medium text-foreground">{t('export.heading')}</p>
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        aria-label="Export chat"
+        title="Export chat"
+        className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/50 text-muted-foreground transition-all hover:bg-accent hover:text-foreground"
+      >
+        <Download className="h-4 w-4" />
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-lg border border-border/50 bg-card shadow-lg">
+          <div className="p-2">
+            <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Export as:</div>
+            {EXPORT_FORMATS.map((fmt) => (
+              <button
+                key={fmt.id}
+                type="button"
+                onClick={() => void handleExport(fmt.id as 'markdown' | 'html' | 'pdf')}
+                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
+              >
+                {fmt.id === 'markdown' ? (
+                  <FileText className="h-4 w-4" />
+                ) : (
+                  <FileJson className="h-4 w-4" />
+                )}
+                <span>{fmt.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
-      items={FORMATS.map((format) => ({
-        key: format.id,
-        label: t(format.labelKey),
-        description: t(format.descriptionKey),
-        icon: format.icon,
-        loading: busyFormat === format.id,
-        onSelect: () => { void runExport(format.id); },
-      }))}
-    />
+
+      {isOpen && (
+        <div className="fixed inset-0" onClick={() => setIsOpen(false)} />
+      )}
+    </div>
   );
 }

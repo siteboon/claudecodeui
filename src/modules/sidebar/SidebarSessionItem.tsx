@@ -9,6 +9,7 @@ import { api } from '@/shared/api';
 import { useSessionForkingProviders } from '@/shared/hooks/useProviderCapabilities';
 import { createSessionViewModel, formatCompactAge } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import { useCompactSidebar } from '@/modules/sidebar/hooks/useCompactSidebar';
+import { getProviderDisplayName } from '@/shared/providerDisplay';
 
 type SidebarSessionItemProps = {
   project: Project;
@@ -30,13 +31,6 @@ type SidebarSessionItemProps = {
   /** Branches this session into an independent one; absent when its provider cannot. */
   onForkSession?: (session: SessionWithProvider) => void;
   t: TFunction;
-};
-
-const PROVIDER_LABELS: Record<LLMProvider, string> = {
-  claude: 'Claude',
-  codex: 'Codex',
-  cursor: 'Cursor',
-  opencode: 'OpenCode',
 };
 
 type CopyState = 'loading' | 'idle' | 'copying' | 'copied' | 'error';
@@ -70,8 +64,9 @@ function SidebarSessionItem({
   const [providerSessionId, setProviderSessionId] = useState<string | null>(null);
   const providerIdRequestRef = useRef(0);
   const showAttentionIndicator = needsAttention && !isSelected;
-  const showRecentIndicator = !showAttentionIndicator && !isProcessing && sessionView.isActive;
-  const providerLabel = PROVIDER_LABELS[session.__provider];
+  const showProcessingIndicator = isProcessing;
+  const showRecentIndicator = !showAttentionIndicator && !showProcessingIndicator && sessionView.isActive;
+  const providerLabel = getProviderDisplayName(session.__provider);
 
   // While editing, dismiss only when the user clicks outside the inline rename panel
   // (matches Escape / cancel-button behaviour). The mobile rename lives inside the
@@ -129,7 +124,6 @@ function SidebarSessionItem({
       setCopyState('idle');
     } catch {
       if (requestId !== providerIdRequestRef.current) return;
-      setProviderSessionId(null);
       setCopyState('error');
     }
   };
@@ -197,24 +191,30 @@ function SidebarSessionItem({
           : `${providerLabel} session ID unavailable`
         : `Copy ${providerLabel} session ID`;
 
+  const indicatorLabel = showAttentionIndicator
+    ? t('tooltips.attentionRequiredIndicator', { defaultValue: 'Session needs attention' })
+    : showProcessingIndicator
+      ? t('tooltips.processingSessionIndicator', { defaultValue: 'Processing session' })
+      : t('tooltips.activeSessionIndicator', { defaultValue: 'Active session' });
+
   return (
     <div className="group relative">
-      {(showAttentionIndicator || showRecentIndicator) && (
+      {(showAttentionIndicator || showProcessingIndicator || showRecentIndicator) && (
         <div className="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 transform">
           <Tooltip
-            content={showAttentionIndicator
-              ? t('tooltips.attentionRequiredIndicator', { defaultValue: 'Session needs attention' })
-              : t('tooltips.activeSessionIndicator')}
+            content={indicatorLabel}
             position="right"
           >
             <div
               role="status"
-              aria-label={showAttentionIndicator
-                ? t('tooltips.attentionRequiredIndicator', { defaultValue: 'Session needs attention' })
-                : t('tooltips.activeSessionIndicator')}
+              aria-label={indicatorLabel}
               className={cn(
-                'h-2 w-2 animate-pulse rounded-full',
-                showAttentionIndicator ? 'bg-amber-500' : 'bg-green-500',
+                'h-2 w-2 rounded-full',
+                showAttentionIndicator
+                  ? 'bg-amber-500 animate-pulse'
+                  : showProcessingIndicator
+                    ? 'bg-green-500 animate-pulse'
+                    : 'bg-green-500/80',
               )}
             />
           </Tooltip>

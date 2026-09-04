@@ -104,6 +104,7 @@
   "mainTabs": {
     "label": "设置",
     "agents": "智能体",
+    "sessions": "会话",
     "appearance": "外观",
     "git": "Git",
     "apiTokens": "API 和令牌",
@@ -114,6 +115,37 @@
     "plugins": "插件",
     "about": "关于"
   },
+  "sessions": {
+    "title": "会话管理",
+    "autoArchive": {
+      "enableLabel": "自动归档历史会话",
+      "enableDescription": "定期将长时间未活跃的会话自动移入归档，保持侧边栏清爽顺畅。",
+      "retentionLabel": "归档时间阈值",
+      "retentionDescription": "选择超过多长时间没有新活跃记录的会话会被归档（例如选择“1天”即归档今天之前的所有会话）。"
+    },
+    "retention": {
+      "1day": "1 天（今天之前）",
+      "3days": "3 天前",
+      "7days": "7 天前（一周前）",
+      "14days": "14 天前（两周前）",
+      "30days": "30 天前（一个月前）"
+    },
+    "manualSection": {
+      "title": "手动清理操作"
+    },
+    "manualRun": {
+      "title": "立即执行历史会话归档",
+      "description": "按照当前的归档阈值设置，立即扫描并归档所有符合条件的旧会话。",
+      "button": "立即归档",
+      "successCount": "已成功归档 {{count}} 个历史会话！",
+      "noneFound": "没有发现需要归档的历史会话。"
+    },
+    "notice": {
+      "title": "数据安全说明：",
+      "content": "归档操作只会从侧边栏列表中移出旧会话，绝不会删除您的对话历史和磁盘文件。您随时可以在侧边栏点击“归档视图”（顶部箱子图标）查看完整历史记录，或者一键将其恢复回活跃列表中。"
+    }
+  },
+
   "notifications": {
     "title": "通知",
     "description": "控制你希望接收的通知事件。",
@@ -434,6 +466,35 @@
         "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never。所有命令在项目目录内自动执行。",
         "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never。完全系统访问权限，仅在可信环境中使用。",
         "overrideNote": "您可以使用聊天界面中的模式按钮按会话覆盖此设置。"
+      }
+    },
+    "antigravity": {
+      "permissionMode": "权限模式",
+      "description": "控制 Antigravity 如何处理文件编辑、计划生成及工具命令执行",
+      "modes": {
+        "default": {
+          "title": "默认模式",
+          "description": "标准交互式权限模式。在执行写入工具或修改系统状态前会进行确认。"
+        },
+        "acceptEdits": {
+          "title": "接受编辑",
+          "description": "自动接受并应用建议的文件修改（对应 --mode accept-edits）。"
+        },
+        "plan": {
+          "title": "计划模式",
+          "description": "只读分析与计划模式。生成结构化计划而不修改任何文件（对应 --mode plan）。"
+        },
+        "bypassPermissions": {
+          "title": "跳过权限（危险）",
+          "description": "完全系统访问，无任何限制。所有命令和工具操作全自动运行（对应 --dangerously-skip-permissions），请谨慎使用。"
+        }
+      },
+      "technicalDetails": "技术详情",
+      "technicalInfo": {
+        "default": "交互确认模式：对文件写入和敏感操作进行交互确认。",
+        "acceptEdits": "映射到 agy --mode accept-edits，自动接受工作区内的文件修改。",
+        "plan": "映射到 agy --mode plan，只读分析并输出计划。",
+        "bypassPermissions": "映射到 agy --dangerously-skip-permissions，完全跳过权限提示。"
       }
     },
     "actions": {

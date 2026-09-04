@@ -346,7 +346,7 @@ function PluginCard({
         {updateError && (
           <div className="mt-2 flex items-center gap-1.5 text-sm text-red-500">
             <ServerCrash className="h-3.5 w-3.5 flex-shrink-0" />
-            <span>{updateError}</span>
+            <span>{typeof updateError === 'string' ? updateError : String(updateError)}</span>
           </div>
         )}
       </div>
@@ -606,7 +606,9 @@ export default function PluginSettingsTab() {
       </div>
 
       {installError && (
-        <p className="-mt-4 text-sm text-red-500">{installError}</p>
+        <p className="-mt-4 text-sm text-red-500">
+          {typeof installError === 'string' ? installError : String(installError)}
+        </p>
       )}
 
       <p className="-mt-4 flex items-start gap-1.5 text-xs leading-snug text-muted-foreground/50">

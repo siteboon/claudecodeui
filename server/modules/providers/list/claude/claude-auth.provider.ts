@@ -2,8 +2,7 @@ import { readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import spawn from 'cross-spawn';
-
+import { createCliInstallationProbe } from '@/modules/providers/shared/installation/cli-installation-probe.js';
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
 import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { ProviderAuthStatus } from '@/shared/types.js';
@@ -20,27 +19,23 @@ const hasErrorCode = (error: unknown, code: string): boolean => (
   error instanceof Error && 'code' in error && error.code === code
 );
 
+const installationProbe = createCliInstallationProbe({
+  command: () => resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH) ?? 'claude',
+});
+
 export class ClaudeProviderAuth implements IProviderAuth {
   /**
    * Checks whether the Claude Code CLI is available on this host.
    */
-  private checkInstalled(): boolean {
-    // cross-spawn resolves shims and PATHEXT itself, so the bare command is a
-    // usable fallback here even where the SDK's raw spawn could not use it.
-    const cliPath = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH) ?? 'claude';
-    try {
-      spawn.sync(cliPath, ['--version'], { stdio: 'ignore', timeout: 5000 });
-      return true;
-    } catch {
-      return false;
-    }
+  private checkInstalled(): Promise<boolean> {
+    return installationProbe.isInstalled();
   }
 
   /**
    * Returns Claude installation and credential status using Claude Code's auth priority.
    */
   async getStatus(): Promise<ProviderAuthStatus> {
-    const installed = this.checkInstalled();
+    const installed = await this.checkInstalled();
 
     if (!installed) {
       return {

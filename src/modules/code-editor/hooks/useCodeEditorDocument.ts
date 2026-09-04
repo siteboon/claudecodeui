@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { api } from '@/shared/api';
+import { readExternalFile } from '@/shared/api';
 import type { CodeEditorFile } from '@/shared/types';
 import { isBinaryFile } from '@/modules/code-editor/utils/binaryFile';
 import { getPreviewKind } from '@/modules/code-editor/utils/previewableFile';
@@ -24,6 +25,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isBinary, setIsBinary] = useState(false);
   // Some binaries (images, PDFs, audio, video) can be rendered natively, so the
   // editor shows an inline preview instead of the generic binary placeholder.
@@ -32,6 +34,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
   // the fallback to `projectPath` preserves older callers that didn't yet
   // propagate the identifier.
   const fileProjectId = file.projectId ?? projectPath;
+  const isReadOnlyExternal = Boolean(file.isReadOnlyExternal);
   const filePath = file.path;
   const fileName = file.name;
   const fileDiffNewString = file.diffInfo?.new_string;
@@ -42,6 +45,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
       try {
         setLoading(true);
         setIsBinary(false);
+        setLoadError(null);
 
         // Natively previewable media (image/pdf/audio/video) is rendered by
         // CodeEditorMediaPreview, so there is nothing to read as text here.
@@ -68,6 +72,19 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
           return;
         }
 
+        // Workspace-external documents are served by the read-only external
+        // endpoint and are not tied to a project.
+        if (isReadOnlyExternal) {
+          const externalResponse = await readExternalFile(filePath);
+          if (!externalResponse.ok) {
+            throw new Error(`Failed to load file: ${externalResponse.status} ${externalResponse.statusText}`);
+          }
+
+          const externalData = await externalResponse.json();
+          setContent(externalData.content);
+          return;
+        }
+
         if (!fileProjectId) {
           throw new Error('Missing project identifier');
         }
@@ -82,19 +99,22 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
       } catch (error) {
         const message = getErrorMessage(error);
         console.error('Error loading file:', error);
-        setContent(`// Error loading file: ${message}\n// File: ${fileName}\n// Path: ${filePath}`);
+        // Surface load failures as a distinct error state instead of passing
+        // the message off as the file's content.
+        setLoadError(message);
+        setContent('');
       } finally {
         setLoading(false);
       }
     };
 
     loadFileContent();
-  }, [file.diffInfo, file.name, fileDiffNewString, fileDiffOldString, fileName, filePath, fileProjectId]);
+  }, [file.diffInfo, file.name, isReadOnlyExternal, fileDiffNewString, fileDiffOldString, fileName, filePath, fileProjectId]);
 
   const handleSave = useCallback(async () => {
-    // Preview-only and binary files have no editable text buffer; never write
-    // them back (e.g. via Cmd/Ctrl+S) or we'd corrupt the file on disk.
-    if (previewKind || isBinaryFile(fileName)) {
+    // Preview-only, binary, and external read-only files have no writable
+    // buffer; never write them back (e.g. via Cmd/Ctrl+S).
+    if (previewKind || isBinaryFile(fileName) || isReadOnlyExternal) {
       return;
     }
 
@@ -131,7 +151,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     } finally {
       setSaving(false);
     }
-  }, [content, filePath, fileProjectId, previewKind, fileName]);
+  }, [content, filePath, fileProjectId, previewKind, fileName, isReadOnlyExternal]);
 
   const handleDownload = useCallback(() => {
     const blob = new Blob([content], { type: 'text/plain' });
@@ -155,6 +175,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     saving,
     saveSuccess,
     saveError,
+    loadError,
     isBinary,
     previewKind,
     fileProjectId,

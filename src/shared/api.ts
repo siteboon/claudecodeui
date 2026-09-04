@@ -1,3 +1,4 @@
+export { expireAuthSession, isAuthTokenExpired, TOKEN_EXPIRY_SKEW_MS } from '@/shared/authToken';
 import {
   expireAuthSession,
   getStoredAuthToken,
@@ -588,3 +589,69 @@ export function synthesizeVoice(text: string, signal: AbortSignal): Promise<Resp
 
   return api.voice.tts(text, { headers: voiceConfigHeaders(), signal });
 }
+
+// ─── Fork additions (error extraction & token skew) ───
+
+export const extractApiErrorMessage = (data: any, fallback = 'Operation failed') => {
+  if (!data) return fallback;
+  if (typeof data === 'string' && data.trim()) return data;
+
+  if (typeof data === 'object') {
+    if (typeof data.details === 'string' && data.details.trim()) {
+      return data.details;
+    }
+    if (
+      data.details &&
+      typeof data.details === 'object' &&
+      typeof data.details.message === 'string' &&
+      data.details.message.trim()
+    ) {
+      return data.details.message;
+    }
+
+    if (typeof data.error === 'string' && data.error.trim()) {
+      return data.error;
+    }
+    if (data.error && typeof data.error === 'object') {
+      if (typeof data.error.details === 'string' && data.error.details.trim()) {
+        return data.error.details;
+      }
+      if (typeof data.error.message === 'string' && data.error.message.trim()) {
+        return data.error.message;
+      }
+      if (typeof data.error.code === 'string' && data.error.code.trim()) {
+        return data.error.code;
+      }
+    }
+
+    if (typeof data.message === 'string' && data.message.trim()) {
+      return data.message;
+    }
+  }
+
+  return fallback;
+};
+
+/**
+ * Asynchronously extracts an error message from a fetch Response object.
+ *
+ * @param {Response} res
+ * @param {string} [fallbackPrefix='Request failed']
+ * @returns {Promise<string>}
+ */
+
+export const extractResponseError = async (res: Response, fallbackPrefix = 'Request failed'): Promise<string> => {
+  const fallback = `${fallbackPrefix} (${res.status})`;
+  try {
+    const data = await res.json();
+    return extractApiErrorMessage(data, fallback);
+  } catch {
+    return res.statusText || fallback;
+  }
+};
+
+
+
+/** Fork: fetches one external (outside-project) file's content for the code editor document. */
+export const readExternalFile = (filePath: string): Promise<Response> =>
+  authenticatedFetch(`/api/file-tree/external-file?path=${encodeURIComponent(filePath)}`);

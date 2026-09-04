@@ -2,9 +2,22 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import { useAuth } from '@/modules/auth';
 import { IS_PLATFORM } from '@/shared/utils';
-import { expireAuthSession, isAuthTokenExpired } from '@/shared/authToken';
-import type { ServerEvent } from '@/shared/types';
+import { expireAuthSession, isAuthTokenExpired } from '@/shared/api';
 
+/**
+ * One frame received from the chat websocket. The server guarantees every
+ * frame carries a `kind` (provider message kinds plus gateway kinds such as
+ * `chat_subscribed`, `session_upserted`, `loading_progress`,
+ * `protocol_error`). The synthetic `websocket_reconnected` kind is injected
+ * client-side when the socket re-opens after a drop.
+ */
+export type ServerEvent = {
+  kind?: string;
+  type?: string;
+  sessionId?: string;
+  seq?: number;
+  [key: string]: unknown;
+};
 
 type ServerEventListener = (event: ServerEvent) => void;
 
@@ -14,10 +27,11 @@ type WebSocketContextType = {
   /**
    * Subscribes to every websocket frame. Returns an unsubscribe function.
    *
-   * This is the primary consumption API: events are dispatched synchronously
-   * to every listener, so rapid back-to-back frames cannot be coalesced or
-   * dropped. Frames are deliberately not copied into React state; each
-   * listener updates only the state owned by the feature that handles it.
+   * This is the consumption API: events are dispatched synchronously to every
+   * listener, so rapid back-to-back frames can never be coalesced or dropped.
+   * Frames never touch React state — a per-frame setState here used to
+   * re-render the whole consumer tree (chat interface included) for every
+   * broadcast on the machine, idle or not.
    */
   subscribe: (listener: ServerEventListener) => () => void;
   isConnected: boolean;
@@ -68,9 +82,36 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     }
   }, []);
 
-  // Named function expression so the reconnect timer below can call itself
-  // without reading the `connect` binding while it is still initializing.
-  const connect = useCallback(function connect() {
+  useEffect(() => {
+    // The cleanup below sets unmountedRef = true. Without this reset, every
+    // re-run of the effect (e.g. on token refresh) would short-circuit connect()
+    // at its unmounted guard and leave the socket permanently disconnected.
+    unmountedRef.current = false;
+    if (!IS_PLATFORM && (isAuthLoading || !user)) {
+      return undefined;
+    }
+    connect();
+
+    return () => {
+      unmountedRef.current = true;
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      const activeSocket = wsRef.current;
+      if (activeSocket) {
+        // Prevent the intentionally closed, old-token socket from scheduling
+        // a reconnect after the refreshed-token effect has already started.
+        activeSocket.onopen = null;
+        activeSocket.onmessage = null;
+        activeSocket.onclose = null;
+        activeSocket.onerror = null;
+        activeSocket.close();
+        wsRef.current = null;
+      }
+    };
+  }, [isAuthLoading, token, user]); // reconnect after authentication or token refresh
+
+  const connect = useCallback(() => {
     if (unmountedRef.current) return; // Prevent connection if unmounted
     if (!IS_PLATFORM && (isAuthLoading || !user)) return;
     try {
@@ -125,39 +166,6 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     }
   }, [dispatch, isAuthLoading, token, user]); // reconnect with current authentication state
 
-  // Declared after `connect` so the effect body does not reference it before
-  // initialization. `connect` is memoized on [dispatch, isAuthLoading, token,
-  // user] and `dispatch` is stable, so depending on it reconnects on exactly
-  // the same transitions as the previous [isAuthLoading, token, user] list.
-  useEffect(() => {
-    // The cleanup below sets unmountedRef = true. Without this reset, every
-    // re-run of the effect (e.g. on token refresh) would short-circuit connect()
-    // at its unmounted guard and leave the socket permanently disconnected.
-    unmountedRef.current = false;
-    if (!IS_PLATFORM && (isAuthLoading || !user)) {
-      return undefined;
-    }
-    connect();
-
-    return () => {
-      unmountedRef.current = true;
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      const activeSocket = wsRef.current;
-      if (activeSocket) {
-        // Prevent the intentionally closed, old-token socket from scheduling
-        // a reconnect after the refreshed-token effect has already started.
-        activeSocket.onopen = null;
-        activeSocket.onmessage = null;
-        activeSocket.onclose = null;
-        activeSocket.onerror = null;
-        activeSocket.close();
-        wsRef.current = null;
-      }
-    };
-  }, [connect, isAuthLoading, user]); // reconnect after authentication or token refresh
-
   const sendMessage = useCallback((message: unknown) => {
     const socket = wsRef.current;
     if (socket && socket.readyState === WebSocket.OPEN) {
@@ -185,7 +193,6 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   return value;
 };
 
-/** Mounted once by App; owns the single chat websocket that the chat, project-workspace and task-master modules subscribe to. */
 export const WebSocketProvider = ({ children }: { children: React.ReactNode }) => {
   const webSocketData = useWebSocketProviderState();
 

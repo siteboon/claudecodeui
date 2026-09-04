@@ -33,12 +33,12 @@ type ToolRendererProps = {
 };
 
 function getToolCategory(toolName: string): string {
-  if (['Edit', 'Write', 'ApplyPatch'].includes(toolName)) return 'edit';
-  if (['Grep', 'Glob'].includes(toolName)) return 'search';
-  if (toolName === 'Bash') return 'bash';
+  if (['Edit', 'Write', 'ApplyPatch', 'replace_file_content', 'write_to_file'].includes(toolName)) return 'edit';
+  if (['Grep', 'Glob', 'grep_search', 'find_by_name', 'list_dir'].includes(toolName)) return 'search';
+  if (toolName === 'Bash' || toolName === 'run_command') return 'bash';
   if (['TodoWrite', 'TodoRead'].includes(toolName)) return 'todo';
-  if (['TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet'].includes(toolName)) return 'task';
-  if (toolName === 'Task') return 'agent';
+  if (['TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet', 'manage_task'].includes(toolName)) return 'task';
+  if (['Task', 'invoke_subagent', 'manage_subagents', 'send_message'].includes(toolName)) return 'agent';
   if (toolName === 'exit_plan_mode' || toolName === 'ExitPlanMode') return 'plan';
   if (toolName === 'AskUserQuestion') return 'question';
   return 'default';
@@ -114,19 +114,32 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
 
   if (!displayConfig) return null;
 
-  // Bash renders as a Codex-style command row: the command on a single line with
+  // Bash / run_command / exec / command_execution renders as a Codex-style command row: the command on a single line with
   // a chevron that expands to show the output inline. The combined view lives on
   // the input render; the separate result section is suppressed in MessageComponent.
-  if (toolName === 'Bash' && mode === 'input') {
-    const command = typeof parsedData === 'object' && parsedData !== null && 'command' in parsedData
-      ? String(parsedData.command || '')
+  const isCommandTool = ['Bash', 'run_command', 'exec', 'command_execution'].includes(toolName);
+  if (isCommandTool && mode === 'input') {
+    let command = typeof parsedData === 'object' && parsedData !== null
+      ? String((parsedData as Record<string, unknown>).command || (parsedData as Record<string, unknown>).cmd || (parsedData as Record<string, unknown>).CommandLine || '')
       : typeof toolInput === 'string'
         ? toolInput
         : typeof rawToolInput === 'string'
           ? rawToolInput
           : '';
-    const description = typeof parsedData === 'object' && parsedData !== null && 'description' in parsedData
-      ? String(parsedData.description || '')
+
+    if (!command || command.includes('tools.exec_command') || command.includes('tools.shell_command')) {
+      const match = (rawToolInput || command).match(/(?:["'](?:cmd|command)["']|\b(?:cmd|command))\s*:\s*("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)/s);
+      if (match) {
+        try {
+          command = JSON.parse(match[1]);
+        } catch {
+          command = match[1].slice(1, -1);
+        }
+      }
+    }
+
+    const description = typeof parsedData === 'object' && parsedData !== null
+      ? String((parsedData as Record<string, unknown>).description || (parsedData as Record<string, unknown>).toolAction || (parsedData as Record<string, unknown>).toolSummary || '')
       : undefined;
     const output = typeof toolResult?.content === 'string'
       ? toolResult.content
@@ -140,9 +153,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
         output={output}
         isError={Boolean(toolResult?.isError)}
         status={toolStatus !== 'completed' ? toolStatus : undefined}
-        // Commands stay collapsed by default — including failures; the status
-        // badge marks errors and the output expands via the chevron.
-        defaultOpen={false}
+        defaultOpen={Boolean(toolResult?.isError)}
       />
     );
   }
@@ -289,7 +300,8 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
       }
     }
 
-    const handleTitleClick = (toolName === 'Edit' || toolName === 'Write' || toolName === 'ApplyPatch') && contentProps.filePath && onFileOpen
+    const isEditOrWrite = ['Edit', 'Write', 'ApplyPatch', 'replace_file_content', 'write_to_file'].includes(toolName);
+    const handleTitleClick = isEditOrWrite && contentProps.filePath && onFileOpen
       ? () => onFileOpen(contentProps.filePath, {
           old_string: contentProps.oldContent,
           new_string: contentProps.newContent

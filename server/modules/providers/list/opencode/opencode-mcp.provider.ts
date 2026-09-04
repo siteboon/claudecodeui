@@ -140,6 +140,9 @@ export class OpenCodeMcpProvider extends McpProvider {
     servers: Record<string, unknown>,
   ): Promise<void> {
     const { filePath } = await resolveOpenCodeConfigPath(scope, workspacePath);
+    if (scope === 'project') {
+      this.assertPathSecurity(filePath, workspacePath);
+    }
     const config = await readOpenCodeConfig(filePath);
     config.mcp = servers;
     await writeOpenCodeConfig(filePath, config);

@@ -1,14 +1,15 @@
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-dom';
 import { I18nextProvider } from 'react-i18next';
 
 import { ThemeProvider } from '@/shared/context/ThemeContext';
 import { UiPreferencesProvider } from '@/shared/context/UiPreferencesContext';
 import { AuthProvider, ProtectedRoute } from '@/modules/auth';
-import { TaskMasterProvider,TasksSettingsProvider } from '@/modules/task-master';
+import { TaskMasterProvider, TasksSettingsProvider } from '@/modules/task-master';
 import { WebSocketProvider } from '@/shared/context/WebSocketContext';
-import { PluginsProvider } from '@/modules/plugins';
+import { PluginsProvider } from '@/modules/plugins/context/PluginsContext';
+import WorkspaceErrorBoundary from '@/modules/project-workspace/WorkspaceErrorBoundary';
 import { ProjectWorkspaceRoute } from '@/modules/project-workspace';
-import { i18n } from '@/modules/i18n';
+import i18n from '@/modules/i18n/config';
 
 const DEPLOYMENT_ASSET_DIRECTORIES = new Set(['assets', 'static', 'icons', 'images']);
 
@@ -102,6 +103,16 @@ function detectRouterBasename() {
     }
   }
 
+  // Safety check: if detectedBasename is set but the current window pathname
+  // does not start with it as a path segment, ignore it to prevent route mismatch blank screens.
+  if (detectedBasename && typeof window !== 'undefined') {
+    const currentPath = window.location.pathname;
+    const matchesCurrentPath = currentPath === detectedBasename || currentPath.startsWith(`${detectedBasename}/`);
+    if (!matchesCurrentPath) {
+      return '';
+    }
+  }
+
   return detectedBasename;
 }
 
@@ -112,6 +123,7 @@ export default function App() {
   return (
     <I18nextProvider i18n={i18n}>
       <ThemeProvider>
+        <WorkspaceErrorBoundary showDetails>
         <UiPreferencesProvider>
         <AuthProvider>
           <WebSocketProvider>
@@ -132,6 +144,7 @@ export default function App() {
           </WebSocketProvider>
         </AuthProvider>
         </UiPreferencesProvider>
+        </WorkspaceErrorBoundary>
       </ThemeProvider>
     </I18nextProvider>
   );

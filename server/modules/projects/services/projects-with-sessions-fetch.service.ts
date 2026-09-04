@@ -174,6 +174,33 @@ function broadcastProgress(progress: ProgressUpdate) {
   });
 }
 
+const SYNCHRONIZE_COOLDOWN_MS = 10_000;
+let lastSynchronizedAt = 0;
+let activeSyncPromise: Promise<void> | null = null;
+
+async function synchronizeSessionsThrottled(): Promise<void> {
+  if (activeSyncPromise) {
+    await activeSyncPromise;
+    return;
+  }
+
+  const now = Date.now();
+  if (now - lastSynchronizedAt < SYNCHRONIZE_COOLDOWN_MS) {
+    return;
+  }
+
+  activeSyncPromise = (async () => {
+    try {
+      await sessionSynchronizerService.synchronizeSessions();
+      lastSynchronizedAt = Date.now();
+    } finally {
+      activeSyncPromise = null;
+    }
+  })();
+
+  await activeSyncPromise;
+}
+
 /**
  * Reads all projects from DB and returns normalized session summaries.
  */
@@ -181,7 +208,7 @@ export async function getProjectsWithSessions(
   options: GetProjectsWithSessionsOptions = {}
 ): Promise<ProjectListItem[]> {
   if (!options.skipSynchronization) {
-    await sessionSynchronizerService.synchronizeSessions();
+    await synchronizeSessionsThrottled();
   }
 
   const projectRows = projectsDb.getProjectPaths() as Array<{
@@ -249,7 +276,7 @@ export async function getArchivedProjectsWithSessions(
   options: Pick<GetProjectsWithSessionsOptions, 'skipSynchronization'> = {},
 ): Promise<ArchivedProjectListItem[]> {
   if (!options.skipSynchronization) {
-    await sessionSynchronizerService.synchronizeSessions();
+    await synchronizeSessionsThrottled();
   }
 
   const projectRows = projectsDb.getArchivedProjectPaths() as Array<{

@@ -1,34 +1,33 @@
 import { useTranslation } from 'react-i18next';
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useCallback, useEffect, useMemo } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 
-import type { ChatMessage,
+import type { ChatMessage } from '@/shared/types';
+import type {
   Project,
   ProjectSession,
   LLMProvider,
   ProviderModelActions,
-  ProviderModelsDefinition } from '@/shared/types';
+  ProviderModelsDefinition,
+} from '@/shared/types';
+import type { ProviderAuthStatusMap } from '@/modules/provider-auth';
 import { getIntrinsicMessageKey } from '@/modules/chat/utils/messageKeys';
 import { groupConsecutiveTools, isToolGroupItem } from '@/modules/chat/utils/toolGrouping';
-import { useLazyRowObserver } from '@/modules/chat/hooks/useLazyRowObserver';
-import LazyMessageRow from '@/modules/chat/transcript/LazyMessageRow';
+
 import MessageComponent from '@/modules/chat/transcript/MessageComponent';
 import ProviderSelectionEmptyState from '@/modules/chat/transcript/ProviderSelectionEmptyState';
 import ToolGroupContainer from '@/modules/chat/transcript/ToolGroupContainer';
 import LoadAllMessagesOverlay from '@/modules/chat/transcript/LoadAllMessagesOverlay';
 import ChatExportMenu from '@/modules/chat/transcript/ChatExportMenu';
-
-/**
- * How many of the newest rows mount with real content on the first commit,
- * before the lazy-row observer has had a chance to report what is actually
- * near the viewport. Covers a bit more than one screen of typical rows.
- */
-const INITIAL_MOUNTED_TAIL_ROWS = 30;
+import LazyMessageRow from '@/modules/chat/transcript/LazyMessageRow';
+import { useLazyRowObserver } from '@/modules/chat/hooks/useLazyRowObserver';
 
 type ChatMessagesPaneProps = {
   scrollContainerRef: RefObject<HTMLDivElement>;
-  onWheel: () => void;
-  onTouchMove: () => void;
+  /** The inner content wrapper whose growth the scroll anchor observes. */
+  scrollContentRef: RefObject<HTMLDivElement>;
+  /** Reports mount/unmount so the scroll anchor can (re)attach listeners. */
+  onPaneMounted: () => void;
   isLoadingSessionMessages: boolean;
   /** True while the viewed session has an active provider run in flight. */
   isProcessing?: boolean;
@@ -42,9 +41,14 @@ type ChatMessagesPaneProps = {
   textareaRef: RefObject<HTMLTextAreaElement>;
   providerModels: Record<LLMProvider, string>;
   setProviderModel: (provider: LLMProvider, model: string) => void;
+  /** Present when the provider supports editing an already-sent message. */
+  onEditMessage?: (message: ChatMessage) => void;
+  /** Present when the provider supports forking the session from a message. */
+  onForkFromMessage?: (message: ChatMessage) => void;
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
   providerModelActions: ProviderModelActions;
   providerModelsLoading: boolean;
+  providerAuthStatus?: ProviderAuthStatusMap;
   tasksEnabled: boolean;
   isTaskMasterInstalled: boolean | null;
   onShowAllTasks?: (() => void) | null;
@@ -68,23 +72,12 @@ type ChatMessagesPaneProps = {
   showRawParameters?: boolean;
   showThinking?: boolean;
   selectedProject: Project;
-  /** Loads an already-sent message back into the composer; absent when the provider cannot re-run from a point. */
-  onEditMessage?: (message: ChatMessage) => void;
-  /** Branches the conversation into a new session ending at a message. */
-  onForkFromMessage?: (message: ChatMessage) => void;
-  /** Fetches the whole transcript for an export, which otherwise only sees the loaded page. */
-  onLoadFullTranscript?: () => Promise<ChatMessage[]>;
-};
+}
 
-/**
- * Rendered by chat's ChatInterface as the scrolling transcript: the message
- * list and tool groups, the export menu, the provider empty state and the
- * load-all-history overlay.
- */
 function ChatMessagesPane({
   scrollContainerRef,
-  onWheel,
-  onTouchMove,
+  scrollContentRef,
+  onPaneMounted,
   isLoadingSessionMessages,
   isProcessing = false,
   hasActivityIndicator = false,
@@ -96,9 +89,12 @@ function ChatMessagesPane({
   textareaRef,
   providerModels,
   setProviderModel,
+  onEditMessage,
+  onForkFromMessage,
   providerModelCatalog,
   providerModelActions,
   providerModelsLoading,
+  providerAuthStatus,
   tasksEnabled,
   isTaskMasterInstalled,
   onShowAllTasks,
@@ -116,9 +112,6 @@ function ChatMessagesPane({
   loadAllJustFinished,
   showLoadAllOverlay,
   createDiff,
-  onEditMessage,
-  onForkFromMessage,
-  onLoadFullTranscript,
   onFileOpen,
   onShowSettings,
   onGrantToolPermission,
@@ -128,6 +121,12 @@ function ChatMessagesPane({
 }: ChatMessagesPaneProps) {
   const { t } = useTranslation('chat');
   const lazyRows = useLazyRowObserver(scrollContainerRef);
+
+  useEffect(() => {
+    onPaneMounted();
+    return () => onPaneMounted();
+  }, [onPaneMounted]);
+
   const groupedVisibleMessages = useMemo(
     () => groupConsecutiveTools(visibleMessages, Boolean(showThinking)),
     [visibleMessages, showThinking],
@@ -135,11 +134,14 @@ function ChatMessagesPane({
 
   // Stable, deterministic keys for the messages rendered this pass.
   //
-  // A server refresh can replace source records with equivalent new objects, so
-  // object identity is not a durable React key across pagination or hydration.
-  // Deriving keys from this render's ordered messages (intrinsic key,
-  // disambiguated by occurrence index on collision) preserves existing DOM
-  // nodes and component state when older history is prepended.
+  // `normalizedToChatMessages` rebuilds fresh ChatMessage objects on every store
+  // update, so caching keys by object identity (or via a cross-render allocation
+  // Set) minted a brand-new key for the *same* logical message on each prepend —
+  // remounting the whole list, which disconnects the scroll-restore anchor and
+  // reflows heights, jumping the viewport to the bottom. Deriving keys purely
+  // from this render's ordered messages (intrinsic key, disambiguated by
+  // occurrence index on collision) yields the same key for the same message
+  // order, so React preserves existing DOM nodes and component state on prepend.
   const messageKeyMap = useMemo(() => {
     const keys = new WeakMap<ChatMessage, string>();
     const occurrences = new Map<string, number>();
@@ -168,8 +170,6 @@ function ChatMessagesPane({
   return (
     <div
       ref={scrollContainerRef}
-      onWheel={onWheel}
-      onTouchMove={onTouchMove}
       className={`chat-messages-pane relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden pt-3 sm:pt-4 ${
         hasActivityIndicator ? 'pb-12 sm:pb-14' : 'pb-3 sm:pb-4'
       }`}
@@ -179,16 +179,14 @@ function ChatMessagesPane({
           <div className="pointer-events-auto">
             <ChatExportMenu
               messages={chatMessages}
-              sessionTitle={selectedSession?.summary || selectedSession?.title}
-              provider={provider}
-              selectedProject={selectedProject}
+              sessionTitle={selectedSession?.title}
+              provider={selectedSession?.provider || provider}
               createDiff={createDiff}
-              onLoadFullTranscript={onLoadFullTranscript}
             />
           </div>
         </div>
       )}
-      <div className="mx-auto w-full max-w-[54.25rem] space-y-3 px-4 sm:space-y-4">
+      <div ref={scrollContentRef} className="mx-auto w-full max-w-[54.25rem] space-y-3 px-4 sm:space-y-4">
       {(isLoadingSessionMessages || isProcessing) && chatMessages.length === 0 ? (
         <div className="mt-8 text-center text-gray-500 dark:text-gray-400">
           <div className="flex items-center justify-center space-x-2">
@@ -208,6 +206,7 @@ function ChatMessagesPane({
           providerModelCatalog={providerModelCatalog}
           providerModelActions={providerModelActions}
           providerModelsLoading={providerModelsLoading}
+          providerAuthStatus={providerAuthStatus}
           tasksEnabled={tasksEnabled}
           isTaskMasterInstalled={isTaskMasterInstalled}
           onShowAllTasks={onShowAllTasks}
@@ -264,25 +263,20 @@ function ChatMessagesPane({
 
           {(() => {
             let prevMessage: ChatMessage | null = null;
-            const rowCount = groupedVisibleMessages.length;
+            let currentTurnAnchor: ChatMessage | null = null;
+            const totalCount = groupedVisibleMessages.length;
+            const enableLazy = totalCount > 25;
+            const activeTailCount = 15;
 
             return groupedVisibleMessages.map((item, index) => {
-              // Rows near the tail mount their content on first commit so the
-              // initial scroll-to-bottom measures real heights; older rows
-              // start as placeholders and mount when scrolled toward.
-              const initiallyNearViewport = index >= rowCount - INITIAL_MOUNTED_TAIL_ROWS;
+              const isNearTail = index >= totalCount - activeTailCount;
 
               if (isToolGroupItem(item)) {
                 const groupPrevMessage = prevMessage;
                 prevMessage = item.messages[item.messages.length - 1] || prevMessage;
 
-                return (
-                  <LazyMessageRow
-                    key={`tool-group-${getMessageKey(item.messages[0])}`}
-                    lazyRows={lazyRows}
-                    timestamp={item.timestamp}
-                    initiallyNearViewport={initiallyNearViewport}
-                  >
+                const rowContent = (
+                  <div key={`tool-group-${getMessageKey(item.messages[0])}`} data-anchor-id={`tool-group-${getMessageKey(item.messages[0])}`}>
                     <ToolGroupContainer
                       group={item}
                       prevMessage={groupPrevMessage}
@@ -296,23 +290,38 @@ function ChatMessagesPane({
                       selectedProject={selectedProject}
                       provider={provider}
                     />
+                  </div>
+                );
+
+                if (!enableLazy) {
+                  return rowContent;
+                }
+
+                return (
+                  <LazyMessageRow
+                    key={`lazy-tool-group-${getMessageKey(item.messages[0])}`}
+                    lazyRows={lazyRows}
+                    timestamp={item.messages[0]?.timestamp}
+                    initiallyNearViewport={isNearTail}
+                  >
+                    {rowContent}
                   </LazyMessageRow>
                 );
+              }
+
+              if (item.type === 'user' && item.transcriptAnchorId) {
+                currentTurnAnchor = item;
               }
 
               const messagePrevMessage = prevMessage;
               prevMessage = item;
 
-              return (
-                <LazyMessageRow
-                  key={getMessageKey(item)}
-                  lazyRows={lazyRows}
-                  timestamp={item.timestamp}
-                  initiallyNearViewport={initiallyNearViewport}
-                >
+              const rowContent = (
+                <div key={getMessageKey(item)} data-anchor-id={getMessageKey(item)}>
                   <MessageComponent
                     message={item}
                     prevMessage={messagePrevMessage}
+                    turnAnchorMessage={currentTurnAnchor}
                     createDiff={createDiff}
                     onFileOpen={onFileOpen}
                     onShowSettings={onShowSettings}
@@ -324,6 +333,21 @@ function ChatMessagesPane({
                     onEditMessage={onEditMessage}
                     onForkFromMessage={onForkFromMessage}
                   />
+                </div>
+              );
+
+              if (!enableLazy) {
+                return rowContent;
+              }
+
+              return (
+                <LazyMessageRow
+                  key={`lazy-${getMessageKey(item)}`}
+                  lazyRows={lazyRows}
+                  timestamp={item.timestamp}
+                  initiallyNearViewport={isNearTail}
+                >
+                  {rowContent}
                 </LazyMessageRow>
               );
             });
