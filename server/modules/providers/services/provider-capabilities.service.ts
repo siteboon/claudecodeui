@@ -104,6 +104,25 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsMessageEditing: false,
     supportsSessionForking: false,
   },
+  'command-code': {
+    provider: 'command-code',
+    // The runtime owns the only translation to Command Code's real
+    // `--permission-mode`/`--yolo`/`--plan` vocabulary. See
+    // resolveCommandCodePermissionArgs in the Command Code runtime adapter.
+    permissionModes: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
+    defaultPermissionMode: 'default',
+    // Command Code's headless `-p` mode has no image/file attachment flag.
+    supportsImages: false,
+    supportsFiles: false,
+    supportsAbort: true,
+    // Headless runs have no interactive prompt channel — permission is set
+    // pre-launch via --permission-mode / --yolo.
+    supportsPermissionRequests: false,
+    supportsTokenUsage: true,
+    supportsEffort: true,
+    supportsMessageEditing: false,
+    supportsSessionForking: false,
+  },
 };
 
 /**

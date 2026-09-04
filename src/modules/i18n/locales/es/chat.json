@@ -18,7 +18,8 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "commandCode": "Command Code"
   },
   "tools": {
     "settings": "Ajustes de herramientas",

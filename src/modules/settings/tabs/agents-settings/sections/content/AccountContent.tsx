@@ -54,6 +54,15 @@ const agentConfig: Record<AgentProvider, AgentVisualConfig> = {
     subtextClass: 'text-zinc-700 dark:text-zinc-300',
     buttonClass: 'bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-950 dark:bg-zinc-700 dark:hover:bg-zinc-600',
   },
+  'command-code': {
+    name: 'Command Code',
+    description: 'Command Code CLI assistant',
+    bgClass: 'bg-neutral-50 dark:bg-neutral-900/20',
+    borderClass: 'border-neutral-200 dark:border-neutral-700',
+    textClass: 'text-neutral-900 dark:text-neutral-100',
+    subtextClass: 'text-neutral-700 dark:text-neutral-300',
+    buttonClass: 'bg-neutral-900 hover:bg-neutral-800 active:bg-neutral-950 dark:bg-neutral-700 dark:hover:bg-neutral-600',
+  },
 };
 
 /** Rendered by AgentCategoryContentSection for the "account" category to show sign-in state for one provider. */
