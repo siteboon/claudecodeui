@@ -181,6 +181,25 @@ test('yields nothing without a config, and nothing for a config without models',
   });
 });
 
+test('leaves out a model the config disables, and keeps its siblings', async () => {
+  await withOpenCodeConfig({
+    jsonc: `{
+      "provider": {
+        "ollama": {
+          "models": {
+            "kept:8b": {},
+            "retired:8b": { "disabled": true },
+            "still-here:8b": { "disabled": false }
+          }
+        }
+      }
+    }`,
+  }, async () => {
+    const values = (await readConfiguredOpenCodeModels()).map((option) => option.value);
+    assert.deepEqual(values.sort(), ['ollama/kept:8b', 'ollama/still-here:8b']);
+  });
+});
+
 test('stays out of the way when reading the config is switched off', async () => {
   await withOpenCodeConfig({
     jsonc: '{ "provider": { "ollama": { "models": { "gpt-oss:20b": {} } } } }',

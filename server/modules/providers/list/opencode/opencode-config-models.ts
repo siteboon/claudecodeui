@@ -80,6 +80,8 @@ const CACHE_TTL_MS = 30_000;
 type ConfiguredModel = {
   name?: unknown;
   limit?: { context?: unknown; output?: unknown } | unknown;
+  /** OpenCode keeps a model out of its own catalog with this. */
+  disabled?: unknown;
 };
 
 type ConfiguredProvider = {
@@ -119,6 +121,12 @@ function collectOptions(config: OpenCodeConfig, collected: Map<string, ProviderM
 
     for (const [modelId, rawModel] of Object.entries(models as Record<string, ConfiguredModel>)) {
       if (!modelId) {
+        continue;
+      }
+
+      // OpenCode leaves a disabled model out of its own catalog, so offering it
+      // here would put a model in the picker that the runtime then refuses.
+      if (rawModel && typeof rawModel === 'object' && rawModel.disabled === true) {
         continue;
       }
 
