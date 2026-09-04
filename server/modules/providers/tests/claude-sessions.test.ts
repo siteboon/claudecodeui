@@ -679,7 +679,7 @@ test('buildLookupMap skips rows with non-string key or value', async () => {
 });
 
 // ---------------------------------------------------------------------------
-// extractSessionAiTitleFromEnd — tested via synchronizeFile
+// extractSessionTitle — tested via synchronizeFile
 // ---------------------------------------------------------------------------
 
 test('synchronizeFile uses ai-title from JSONL when no DB custom_name exists', { concurrency: false }, async () => {

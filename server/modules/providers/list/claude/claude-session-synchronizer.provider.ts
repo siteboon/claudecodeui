@@ -147,7 +147,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       };
     }
 
-    let sessionName = await this.extractSessionAiTitleFromEnd(filePath, parsed.sessionId);
+    let sessionName = await this.extractSessionTitle(filePath, parsed.sessionId);
     if (!sessionName) {
       sessionName = nameMap.get(parsed.sessionId);
     }
@@ -159,22 +159,16 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
   }
 
   /**
-   * Extracts the best available title from the JSONL transcript.
+   * Returns the best available title for one session from its transcript.
    *
-   * Scans every line in the file (forward, not reverse), collecting
-   * {@code custom-title}, {@code ai-title}, and {@code last-prompt} events
-   * that match {@code sessionId}. Returns the highest-priority value found:
+   * Scans forward keeping the last match of each event type, then prefers
+   * `custom-title` (a manual `/rename`) over `ai-title` over `last-prompt`.
+   * Claude writes `custom-title` immediately before `ai-title`, so a reverse
+   * scan that returns its first hit would always lose the manual rename.
    *
-   * <pre>
-   * custom-title  →  user-renamed via /rename
-   * ai-title      →  Claude Code auto-generated
-   * last-prompt   →  last user message (fallback)
-   * </pre>
-   *
-   * Silently returns {@code undefined} when the file is missing or unreadable
-   * so the synchronizer can continue with the remaining sessions.
+   * Returns undefined on a missing or unreadable file so sync can continue.
    */
-  private async extractSessionAiTitleFromEnd(
+  private async extractSessionTitle(
     filePath: string,
     sessionId: string
   ): Promise<string | undefined> {
