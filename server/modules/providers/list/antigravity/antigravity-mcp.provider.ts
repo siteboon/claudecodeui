@@ -20,7 +20,6 @@ import {
   readOptionalString,
   readStringArray,
   readStringRecord,
-  validatePathSecurity,
   writeJsonConfig,
 } from '@/shared/utils.js';
 
@@ -124,7 +123,7 @@ export class AntigravityMcpProvider extends McpProvider {
         configPath = path.join(workspacePath, '.gemini', 'mcp_config.json');
       }
 
-      validatePathSecurity(configPath, workspacePath);
+      this.assertPathSecurity(configPath, workspacePath);
 
       let config: Record<string, unknown> = {};
       try {

@@ -123,3 +123,57 @@ test('migrations create the provider model index on an install that lacks it', a
     await rm(tempDirectory, { recursive: true, force: true });
   }
 });
+
+test('migrations upgrade legacy 4-provider CHECK constraint to include zcode and antigravity', async () => {
+  const previousDatabasePath = process.env.DATABASE_PATH;
+  const tempDirectory = await mkdtemp(path.join(os.tmpdir(), 'provider-model-check-'));
+  const databasePath = path.join(tempDirectory, 'auth.db');
+
+  closeConnection();
+  process.env.DATABASE_PATH = databasePath;
+  await writeFile(databasePath, '');
+  await initializeDatabase();
+
+  try {
+    const db = getConnection();
+    // Simulate an existing database created with the upstream 4-provider schema
+    db.exec(`
+      DROP TABLE IF EXISTS provider_models;
+      CREATE TABLE provider_models (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        provider TEXT NOT NULL CHECK (provider IN ('claude', 'cursor', 'codex', 'opencode')),
+        model_id TEXT NOT NULL,
+        model_name TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(provider, model_id)
+      );
+    `);
+
+    // Running migrations must detect the legacy CHECK constraint and rebuild the table
+    runMigrations(db);
+
+    // Verify zcode and antigravity models can now be inserted without constraint errors
+    const zcodeModel = providerModelsDb.createCustomProviderModel('zcode', {
+      model: 'Custom GLM 4.5',
+      id: 'glm-4.5',
+    });
+    assert.equal(zcodeModel.modelId, 'glm-4.5');
+
+    const agyModel = providerModelsDb.createCustomProviderModel('antigravity', {
+      model: 'Custom Gemini Experimental',
+      id: 'gemini-exp-custom',
+    });
+    assert.equal(agyModel.modelId, 'gemini-exp-custom');
+  } finally {
+    closeConnection();
+    if (previousDatabasePath === undefined) {
+      delete process.env.DATABASE_PATH;
+    } else {
+      process.env.DATABASE_PATH = previousDatabasePath;
+    }
+    await rm(tempDirectory, { recursive: true, force: true });
+  }
+});
+

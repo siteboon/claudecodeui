@@ -153,7 +153,7 @@ const readZCodeModelConfig = async (): Promise<ProviderModelsDefinition> => {
  * already holds the provider session id and skips redundant `session/setModel`
  * calls when the requested model matches). Returns null when unknown.
  */
-export function readZCodeSessionModelFromDb(providerSessionId: string): string | null {
+export function readZCodeSessionModelInfoFromDb(providerSessionId: string): { modelId: string; variant?: string } | null {
   const dbPath = getZCodeDatabasePath();
 
   let db: Database.Database | null = null;
@@ -173,7 +173,22 @@ export function readZCodeSessionModelFromDb(providerSessionId: string): string |
     }
 
     const messageData = readObjectRecord(JSON.parse(recentMessage.data));
-    return readOptionalString(messageData?.modelID) ?? null;
+    const modelRecord = readObjectRecord(messageData?.model);
+    const modelId = readOptionalString(messageData?.modelID)
+      || readOptionalString(modelRecord?.modelID)
+      || readOptionalString(modelRecord?.modelId);
+
+    if (!modelId) {
+      return null;
+    }
+
+    const variant = readOptionalString(messageData?.variant)
+      || readOptionalString(modelRecord?.variant);
+
+    return {
+      modelId,
+      variant: variant || undefined,
+    };
   } catch {
     // Database missing or unreadable - model unknown
     return null;
@@ -185,21 +200,40 @@ export function readZCodeSessionModelFromDb(providerSessionId: string): string |
 }
 
 /**
+ * Reads the model a ZCode session last ran with from ZCode's own SQLite
+ * store (most recent `message.data.modelID` per integration plan §3.2.5).
+ *
+ * Consumers: `ZCodeProviderModels.getCurrentActiveModel` (app session id
+ * mapped to the provider id first) and the zcode runtime provider (which
+ * already holds the provider session id and skips redundant `session/setModel`
+ * calls when the requested model matches). Returns null when unknown.
+ */
+export function readZCodeSessionModelFromDb(providerSessionId: string): string | null {
+  return readZCodeSessionModelInfoFromDb(providerSessionId)?.modelId ?? null;
+}
+
+/**
  * Resolves a model name/key string into ZCode's protocol model object `{ providerId, modelId, variant? }`.
  *
  * Handles:
  * - Full model refs formatted as `providerId/modelId` (e.g. `builtin:bigmodel-coding-plan/GLM-5.3`)
  * - Bare model keys (e.g. `GLM-5.3`), by looking up the active/enabled provider from config or defaulting
+ * - Optional reasoning effort variant (e.g. `low`, `medium`, `high`, `max`)
  *
  * Consumer: `server/modules/providers/list/zcode/zcode-runtime.provider.ts`
  */
-export function resolveZCodeModelRef(modelKey: string): { providerId: string; modelId: string; variant?: string } {
+export function resolveZCodeModelRef(
+  modelKey: string,
+  variant?: string,
+): { providerId: string; modelId: string; variant?: string } {
   const trimmed = modelKey.trim();
+  const trimmedVariant = variant && variant !== 'default' ? variant.trim() : undefined;
   const slashIndex = trimmed.indexOf('/');
   if (slashIndex >= 0) {
     return {
       providerId: trimmed.slice(0, slashIndex).trim(),
       modelId: trimmed.slice(slashIndex + 1).trim(),
+      ...(trimmedVariant ? { variant: trimmedVariant } : {}),
     };
   }
 
@@ -215,7 +249,11 @@ export function resolveZCodeModelRef(modelKey: string): { providerId: string; mo
         if (providerRecord?.enabled === false) continue;
         const models = readObjectRecord(providerRecord?.models);
         if (models && trimmed in models) {
-          return { providerId, modelId: trimmed };
+          return {
+            providerId,
+            modelId: trimmed,
+            ...(trimmedVariant ? { variant: trimmedVariant } : {}),
+          };
         }
       }
       // Fallback: search even disabled providers if matching model
@@ -223,7 +261,11 @@ export function resolveZCodeModelRef(modelKey: string): { providerId: string; mo
         const providerRecord = readObjectRecord(providerConfig);
         const models = readObjectRecord(providerRecord?.models);
         if (models && trimmed in models) {
-          return { providerId, modelId: trimmed };
+          return {
+            providerId,
+            modelId: trimmed,
+            ...(trimmedVariant ? { variant: trimmedVariant } : {}),
+          };
         }
       }
     }
@@ -234,6 +276,7 @@ export function resolveZCodeModelRef(modelKey: string): { providerId: string; mo
   return {
     providerId: 'builtin:bigmodel-coding-plan',
     modelId: trimmed,
+    ...(trimmedVariant ? { variant: trimmedVariant } : {}),
   };
 }
 
@@ -264,12 +307,15 @@ export class ZCodeProviderModels implements IProviderModels {
     if (sessionId?.trim()) {
       const session = sessionsDb.getSessionById(sessionId);
       const providerSessionId = session ? readOptionalString(session.provider_session_id) : null;
-      const activeModel = providerSessionId
-        ? readZCodeSessionModelFromDb(providerSessionId)
+      const modelInfo = providerSessionId
+        ? readZCodeSessionModelInfoFromDb(providerSessionId)
         : null;
 
-      if (activeModel) {
-        return { model: activeModel };
+      if (modelInfo?.modelId) {
+        if (session && !session.effort && modelInfo.variant) {
+          sessionsDb.setSessionEffort(sessionId, modelInfo.variant);
+        }
+        return { model: modelInfo.modelId };
       }
     }
 

@@ -55,6 +55,9 @@ export class CodexMcpProvider extends McpProvider {
     const filePath = scope === 'user'
       ? path.join(os.homedir(), '.codex', 'config.toml')
       : path.join(workspacePath, '.codex', 'config.toml');
+    if (scope === 'project') {
+      this.assertPathSecurity(filePath, workspacePath);
+    }
     const config = await readTomlConfig(filePath);
     config.mcp_servers = servers;
     await writeTomlConfig(filePath, config);

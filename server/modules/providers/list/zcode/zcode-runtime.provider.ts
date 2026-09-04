@@ -27,9 +27,11 @@ import type {
 import { createCompleteMessage, createNormalizedMessage, generateMessageId, readOptionalString } from '@/shared/utils.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
 
+import { sessionsDb } from '@/modules/database/index.js';
+
 import { SESSION_LOST_METHOD } from './zcode-codec.js';
 import { protocolClient } from './zcode-protocol.client.js';
-import { readZCodeSessionModelFromDb, resolveZCodeModelRef } from './zcode-models.provider.js';
+import { readZCodeSessionModelInfoFromDb, resolveZCodeModelRef } from './zcode-models.provider.js';
 
 /**
  * Permission mode mapping from CloudCLI to ZCode (§5 of integration plan).
@@ -398,28 +400,43 @@ export class ZCodeRuntimeProvider implements IProviderRuntime {
   }
 
   /**
-   * Configures session model when it differs from the session's current model.
+   * Configures session model and reasoning effort when it differs from the session's current configuration.
    *
-   * The current model is read from ZCode's own database (most recent
-   * `message.data.modelID`); `session/setModel` is skipped when the requested
-   * model already matches, per §3.2.3 step 2.
+   * The current model and variant are read from ZCode's own database (most recent
+   * `message.data.modelID` / `model.variant`).
    */
   private async configureSessionModel(
     sessionId: string,
     options: AnyRecord,
   ): Promise<void> {
     const requestedModel = readOptionalString(options.model);
+    let requestedEffort = readOptionalString(options.effort);
+    const appSessionId = readOptionalString(options.sessionId);
+    if ((!requestedEffort || requestedEffort === 'default') && appSessionId) {
+      const sessionRow = sessionsDb.getSessionById(appSessionId);
+      if (sessionRow?.effort && sessionRow.effort !== 'default') {
+        requestedEffort = sessionRow.effort;
+      }
+    }
 
     if (!requestedModel) {
       return; // No model change requested
     }
 
-    const currentModel = readZCodeSessionModelFromDb(sessionId);
-    if (currentModel === requestedModel) {
-      return; // Session already runs the requested model
+    const normalizedVariant = requestedEffort && requestedEffort !== 'default'
+      ? requestedEffort.toLowerCase().trim()
+      : undefined;
+
+    const currentModelInfo = readZCodeSessionModelInfoFromDb(sessionId);
+    if (
+      currentModelInfo
+      && currentModelInfo.modelId === requestedModel
+      && (currentModelInfo.variant || undefined) === normalizedVariant
+    ) {
+      return; // Session already runs the requested model and effort variant
     }
 
-    const modelObj = resolveZCodeModelRef(requestedModel);
+    const modelObj = resolveZCodeModelRef(requestedModel, normalizedVariant);
 
     try {
       await protocolClient.sendRequest('session/setModel', {

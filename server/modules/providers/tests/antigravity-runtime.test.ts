@@ -30,6 +30,10 @@ const argsFilePath = path.join(stubDir, 'args.txt');
 
 const stubScript = `#!/usr/bin/env node
 const fs = require('fs');
+if (process.argv.includes('--version')) {
+  console.log('1.0.0');
+  process.exit(0);
+}
 fs.writeFileSync(process.env.AGY_ARGS_FILE, process.argv.slice(2).join('\\n') + '\\n');
 const mode = process.env.AGY_STUB_MODE;
 if (mode === 'sleep') {

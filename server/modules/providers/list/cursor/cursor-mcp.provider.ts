@@ -34,6 +34,9 @@ export class CursorMcpProvider extends McpProvider {
     const filePath = scope === 'user'
       ? path.join(os.homedir(), '.cursor', 'mcp.json')
       : path.join(workspacePath, '.cursor', 'mcp.json');
+    if (scope === 'project') {
+      this.assertPathSecurity(filePath, workspacePath);
+    }
     const config = await readJsonConfig(filePath);
     config.mcpServers = servers;
     await writeJsonConfig(filePath, config);

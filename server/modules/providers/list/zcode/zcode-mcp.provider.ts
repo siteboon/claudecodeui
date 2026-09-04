@@ -11,7 +11,6 @@ import {
   readOptionalString,
   readStringArray,
   readStringRecord,
-  validatePathSecurity,
   writeJsonConfig,
 } from '@/shared/utils.js';
 
@@ -99,18 +98,21 @@ export class ZCodeMcpProvider extends McpProvider {
     servers: Record<string, unknown>
   ): Promise<void> {
     if (scope === 'project') {
-      const configPath = await findProjectConfigPath(workspacePath);
+      let configPath = await findProjectConfigPath(workspacePath);
 
       if (!configPath) {
-        // Create new zcode.json if none exists
-        await writeJsonConfig(path.join(workspacePath, 'zcode.json'), { mcp: { servers } });
-        return;
+        configPath = path.join(workspacePath, 'zcode.json');
       }
 
-      // Validate path security
-      validatePathSecurity(configPath, workspacePath);
+      // Validate path security for all project config paths
+      this.assertPathSecurity(configPath, workspacePath);
 
-      const config = await readJsonConfig(configPath);
+      let config: Record<string, unknown> = {};
+      try {
+        config = await readJsonConfig(configPath);
+      } catch {
+        config = {};
+      }
       config.mcp = { ...readObjectRecord(config.mcp), servers };
       await writeJsonConfig(configPath, config);
       return;

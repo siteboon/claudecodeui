@@ -174,7 +174,15 @@ test('resolveZCodeModelRef parses full ref and bare model key', async () => {
     modelId: 'GLM-5.3',
   });
 
-  // Case 2: Bare model with config
+  // Case 2: With reasoning effort variant
+  const fullWithVariant = resolveZCodeModelRef('builtin:zai/GLM-5.3', 'high');
+  assert.deepEqual(fullWithVariant, {
+    providerId: 'builtin:zai',
+    modelId: 'GLM-5.3',
+    variant: 'high',
+  });
+
+  // Case 3: Bare model with config and variant
   await withZCodeStorage(async (storageDir) => {
     const v2Dir = path.join(storageDir, 'v2');
     await mkdir(v2Dir, { recursive: true });
@@ -193,10 +201,47 @@ test('resolveZCodeModelRef parses full ref and bare model key', async () => {
       'utf8'
     );
 
-    const resolved = resolveZCodeModelRef('GLM-5.3');
+    const resolved = resolveZCodeModelRef('GLM-5.3', 'max');
     assert.deepEqual(resolved, {
       providerId: 'builtin:custom-provider',
       modelId: 'GLM-5.3',
+      variant: 'max',
+    });
+  });
+});
+
+test('readZCodeSessionModelInfoFromDb returns model and variant from latest message', async () => {
+  await withZCodeStorage(async (storageDir) => {
+    const dbDir = path.join(storageDir, 'cli', 'db');
+    await mkdir(dbDir, { recursive: true });
+
+    const db = new Database(path.join(dbDir, 'db.sqlite'));
+    try {
+      db.exec(`
+        CREATE TABLE message (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          time_created INTEGER NOT NULL,
+          time_updated INTEGER NOT NULL,
+          data TEXT NOT NULL,
+          sequence INTEGER
+        );
+      `);
+      const insert = db.prepare(
+        'INSERT INTO message (id, session_id, time_created, time_updated, data, sequence) VALUES (?, ?, ?, ?, ?, ?)'
+      );
+      insert.run('m1', 'sess_var', 1000, 1000, JSON.stringify({
+        role: 'user',
+        model: { modelID: 'GLM-5.3', variant: 'high' },
+      }), 0);
+    } finally {
+      db.close();
+    }
+
+    const { readZCodeSessionModelInfoFromDb } = await import('@/modules/providers/list/zcode/zcode-models.provider.js');
+    assert.deepEqual(readZCodeSessionModelInfoFromDb('sess_var'), {
+      modelId: 'GLM-5.3',
+      variant: 'high',
     });
   });
 });

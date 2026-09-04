@@ -52,6 +52,7 @@ const resolver = createCliEnginePathResolver({
       return trimmed || null;
     },
   },
+  eagerVersionProbe: true,
 });
 
 /**

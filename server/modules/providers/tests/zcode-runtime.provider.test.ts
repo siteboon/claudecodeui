@@ -101,7 +101,13 @@ rl.on('line', (line) => {
     return;
   }
 
-  // subscribe / setMode / setModel / stop / anything else: empty success.
+  if (msg.method === 'session/setModel') {
+    log('setModel', msg.params);
+    send({ id: msg.id, result: {} });
+    return;
+  }
+
+  // subscribe / setMode / stop / anything else: empty success.
   send({ id: msg.id, result: {} });
 });
 `;
@@ -198,4 +204,23 @@ test('runtime reports turn.failed as an error and completes with a failing exit 
   const complete = messages.find((msg) => msg.kind === 'complete');
   assert.ok(complete, 'run must still terminate with a complete event');
   assert.equal(complete.exitCode, 1);
+});
+
+test('runtime configures model and reasoning effort variant', async () => {
+  fsSync.writeFileSync(modeFilePath, 'ok\n');
+  const runtime = new ZCodeRuntimeProvider();
+  const { writer } = createWriter();
+
+  await runtime.run('hello', {
+    sessionId: 'app-sess-effort',
+    model: 'GLM-5.3',
+    effort: 'high',
+    cwd: stubDir,
+  }, writer, context);
+
+  const setModelEntry = readStubLog().find((entry) => entry.name === 'setModel');
+  assert.ok(setModelEntry, 'session/setModel must be called when model and effort are specified');
+  const setModelPayload = setModelEntry.value as { model: { modelId: string; variant?: string } };
+  assert.equal(setModelPayload.model.modelId, 'GLM-5.3');
+  assert.equal(setModelPayload.model.variant, 'high');
 });
