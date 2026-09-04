@@ -485,12 +485,12 @@ const migrateProviderModelsSchema = (db: Database): void => {
     .get() as { sql: string } | undefined;
   if (!row || !row.sql) return;
 
-  if (row.sql.includes('CHECK') && (!row.sql.includes('zcode') || !row.sql.includes('antigravity'))) {
-    console.log('Running migration: Updating provider_models table schema to support zcode and antigravity');
+  if (row.sql.includes('CHECK') && !row.sql.includes('antigravity')) {
+    console.log('Running migration: Updating provider_models table schema to support antigravity');
     db.exec(`
       CREATE TABLE provider_models_new (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        provider TEXT NOT NULL CHECK (provider IN ('claude', 'cursor', 'codex', 'opencode', 'zcode', 'antigravity')),
+        provider TEXT NOT NULL CHECK (provider IN ('claude', 'cursor', 'codex', 'opencode', 'antigravity')),
         model_id TEXT NOT NULL,
         model_name TEXT NOT NULL,
         sort_order INTEGER NOT NULL DEFAULT 0,

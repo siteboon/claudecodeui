@@ -12,7 +12,6 @@ const PROVIDER_DISPLAY_NAMES: Record<LLMProvider, string> = {
   cursor: 'Cursor',
   codex: 'Codex',
   opencode: 'OpenCode',
-  zcode: 'ZCode',
   antigravity: 'Antigravity',
 };
 

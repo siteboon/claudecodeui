@@ -3,7 +3,7 @@ import { useCallback, useState } from 'react';
 import { api } from '@/shared/api';
 import type { LLMProvider, ProviderAuthStatus, ProviderAuthStatusMap } from '@/shared/types';
 
-const CLI_PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode', 'zcode', 'antigravity'];
+const CLI_PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode', 'antigravity'];
 
 const createInitialProviderAuthStatus = (loading = true) => ({
   installed: false,
@@ -20,7 +20,6 @@ const createInitialProviderAuthStatusMap = (loading = true): ProviderAuthStatusM
   cursor: createInitialProviderAuthStatus(loading),
   codex: createInitialProviderAuthStatus(loading),
   opencode: createInitialProviderAuthStatus(loading),
-  zcode: createInitialProviderAuthStatus(loading),
   antigravity: createInitialProviderAuthStatus(loading),
 });
 

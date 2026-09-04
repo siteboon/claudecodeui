@@ -5,7 +5,7 @@ import type { NavigateFunction } from 'react-router-dom';
 //----------------- LLM PROVIDER MODEL CATALOG ------------
 
 /** Identifies which coding-agent CLI backs a session, project selection or model list. */
-export type LLMProvider = 'claude' | 'cursor' | 'codex' | 'opencode' | 'zcode' | 'antigravity';
+export type LLMProvider = 'claude' | 'cursor' | 'codex' | 'opencode' | 'antigravity';
 
 /** One selectable model in a provider's model menu, including its optional reasoning-effort choices. */
 export type ProviderModelOption = {
@@ -1076,9 +1076,8 @@ export type ProviderAuthStatus = {
   method: string | null;
   error: string | null;
   /**
-   * Backend-suggested login command for the terminal login modal. Only
-   * providers needing a resolved engine path (zcode) provide it; the modal
-   * falls back to its static per-provider command when null.
+   * Backend-suggested login command for the terminal login modal.
+   * The modal falls back to its static per-provider command when null.
    */
   loginCommand: string | null;
   loading: boolean;

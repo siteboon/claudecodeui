@@ -43,7 +43,7 @@ export default function AgentsSettingsTab({
       : ['account', 'permissions', 'mcp', 'skills']
   ), [selectedAgent]);
 
-  const allAgents: AgentProvider[] = ['claude', 'cursor', 'codex', 'opencode', 'zcode', 'antigravity'];
+  const allAgents: AgentProvider[] = ['claude', 'cursor', 'codex', 'opencode', 'antigravity'];
 
   const visibleAgents = useMemo<AgentProvider[]>(() => {
     return allAgents.filter((agent) => providerAuthStatus[agent].installed);
@@ -66,10 +66,6 @@ export default function AgentsSettingsTab({
       authStatus: providerAuthStatus.opencode,
       onLogin: () => onProviderLogin('opencode'),
     },
-    zcode: {
-      authStatus: providerAuthStatus.zcode,
-      onLogin: () => onProviderLogin('zcode'),
-    },
     antigravity: {
       authStatus: providerAuthStatus.antigravity,
       onLogin: () => onProviderLogin('antigravity'),
@@ -80,7 +76,6 @@ export default function AgentsSettingsTab({
     providerAuthStatus.codex,
     providerAuthStatus.cursor,
     providerAuthStatus.opencode,
-    providerAuthStatus.zcode,
     providerAuthStatus.antigravity,
   ]);
 

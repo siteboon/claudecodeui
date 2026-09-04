@@ -40,7 +40,7 @@ const TRAILING_URL_PUNCTUATION_REGEX = /[)\]}>.,;:!?]+$/;
 /**
  * Decides whether a shell init's `initialCommand` is a provider login flow:
  * `agy`, `claude ... /login`, `claude setup-token`, `codex login`,
- * `zcode login`, `cursor-agent login`, `opencode auth login`. Login shells
+ * `cursor-agent login`, `opencode auth login`. Login shells
  * must always start a fresh PTY instead of reconnecting to a retained one —
  * a retained login CLI can be stuck in a dead OAuth/state screen, and then
  * every login click would silently reconnect to that broken process.
@@ -168,8 +168,6 @@ const SAFE_SESSION_ID_PATTERN = /^[a-zA-Z0-9_.\-:]+$/;
  * fresh interactive CLI, and (when the CLI supports resuming) a builder that
  * derives the resume command from the provider-native session id.
  *
- * zcode has no known resume flag today (its runtime is the app-server
- * protocol, not CLI flags), so it always launches a fresh interactive CLI.
  * `agy`'s bare invocation is classified as a login command by
  * isLoginShellCommand, so a fresh antigravity shell restarts its PTY on
  * reconnect — resume-mode shells (with --conversation) reattach normally.
@@ -204,10 +202,6 @@ const SHELL_PROVIDER_CLI: Record<string, {
     name: 'OpenCode',
     launch: 'opencode',
     resume: (id) => `opencode --session "${id}"`,
-  },
-  zcode: {
-    name: 'ZCode',
-    launch: 'zcode',
   },
   antigravity: {
     name: 'Antigravity',

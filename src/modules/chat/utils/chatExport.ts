@@ -19,7 +19,6 @@ export function getAssistantDisplayName(provider?: string, customName?: string):
     codex: 'Codex',
     cursor: 'Cursor',
     opencode: 'OpenCode',
-    zcode: 'ZCode',
   };
   return map[provider.toLowerCase()] || provider.charAt(0).toUpperCase() + provider.slice(1);
 }

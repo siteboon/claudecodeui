@@ -22,6 +22,9 @@ import {
   X,
 } from 'lucide-react';
 
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
+
 import { Badge, Button, Dialog, DialogContent, DialogTitle, Input } from '@/shared/ui';
 import type {
   LLMProvider,
@@ -424,24 +427,24 @@ function ModelsContent({
   );
 }
 
-function formatRemainingCountdown(resetTime?: string): string {
+function formatRemainingCountdown(t: TFunction, resetTime?: string): string {
   if (!resetTime) return '';
   const resetMs = new Date(resetTime).getTime();
   if (!Number.isFinite(resetMs)) return '';
   const diffMs = resetMs - Date.now();
-  if (diffMs <= 0) return '即将重置';
+  if (diffMs <= 0) return t('cost.resetSoon', { defaultValue: '即将重置' });
   const totalMinutes = Math.floor(diffMs / 60_000);
   const days = Math.floor(totalMinutes / (60 * 24));
   const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
   const minutes = totalMinutes % 60;
 
   if (days > 0) {
-    return `${days} 天 ${hours} 小时后重置`;
+    return t('cost.resetDaysHours', { days, hours, defaultValue: `${days} 天 ${hours} 小时后重置` });
   }
   if (hours > 0) {
-    return `${hours} 小时 ${minutes} 分钟后重置`;
+    return t('cost.resetHoursMinutes', { hours, minutes, defaultValue: `${hours} 小时 ${minutes} 分钟后重置` });
   }
-  return `${Math.max(1, minutes)} 分钟后重置`;
+  return t('cost.resetMinutes', { minutes: Math.max(1, minutes), defaultValue: `${Math.max(1, minutes)} 分钟后重置` });
 }
 
 function getQuotaTone(remainingFraction: number) {
@@ -470,10 +473,12 @@ function QuotaGroupCard({
   group,
   defaultExpanded,
   isCurrentGroup,
+  t,
 }: {
   group: QuotaGroup;
   defaultExpanded: boolean;
   isCurrentGroup: boolean;
+  t: TFunction;
 }) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
@@ -493,11 +498,11 @@ function QuotaGroupCard({
               <span className="truncate text-sm font-semibold text-foreground">{group.name}</span>
               {isCurrentGroup ? (
                 <span className="shrink-0 rounded-md border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
-                  当前会话模型组
+                  {t('cost.currentGroup', { defaultValue: '当前会话模型组' })}
                 </span>
               ) : (
                 <span className="shrink-0 rounded-md border border-border/60 bg-muted/30 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                  其他模型组
+                  {t('cost.otherGroup', { defaultValue: '其他模型组' })}
                 </span>
               )}
             </div>
@@ -507,7 +512,7 @@ function QuotaGroupCard({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1.5 pl-3 text-xs text-muted-foreground">
-          <span>{isExpanded ? '收起' : '展开查看'}</span>
+          <span>{isExpanded ? t('cost.collapse', { defaultValue: '收起' }) : t('cost.expand', { defaultValue: '展开查看' })}</span>
           {isExpanded ? (
             <ChevronDown className="h-4 w-4" />
           ) : (
@@ -523,12 +528,12 @@ function QuotaGroupCard({
             const tone = getQuotaTone(bucket.remainingFraction);
             const isFiveHour = bucket.window === '5h' || bucket.id.includes('5h');
             const isWeekly = bucket.window === 'weekly' || bucket.id.includes('weekly');
-            const countdown = formatRemainingCountdown(bucket.resetTime);
+            const countdown = formatRemainingCountdown(t, bucket.resetTime);
             const Icon = isFiveHour ? Clock : isWeekly ? Calendar : Timer;
             const limitTitle = isFiveHour
-              ? '5 小时滑动窗口限额'
+              ? t('cost.fiveHourWindow', { defaultValue: '5 小时滑动窗口限额' })
               : isWeekly
-                ? '周配额'
+                ? t('cost.weeklyWindow', { defaultValue: '周配额' })
                 : bucket.name;
 
             return (
@@ -541,7 +546,7 @@ function QuotaGroupCard({
                     </span>
                   </div>
                   <span className={`shrink-0 font-mono text-xs font-bold ${tone.text}`}>
-                    剩余 {percent}%
+                    {t('cost.remainingPercent', { percent, defaultValue: `剩余 ${percent}%` })}
                   </span>
                 </div>
 
@@ -572,6 +577,7 @@ function QuotaGroupCard({
 }
 
 function CostContent({ data }: { data: CostCommandData }) {
+  const { t } = useTranslation('chat');
   const used = Number(data.tokenUsage?.used ?? 0);
   const total = Number(data.tokenUsage?.total ?? 0);
   const model = data.model || 'Unknown';
@@ -608,7 +614,7 @@ function CostContent({ data }: { data: CostCommandData }) {
     } catch (error) {
       if (requestSequence !== quotaRequestSequence.current) return;
       console.warn(`Failed to load ${quotaProvider} quota:`, error);
-      setQuotaError('配额读取失败，请稍后重试');
+      setQuotaError(t('cost.fetchFailed', { defaultValue: '配额读取失败，请稍后重试' }));
     } finally {
       if (requestSequence === quotaRequestSequence.current) {
         setHasLoadedQuota(true);
@@ -616,7 +622,7 @@ function CostContent({ data }: { data: CostCommandData }) {
         setIsRefreshing(false);
       }
     }
-  }, [quotaProvider]);
+  }, [quotaProvider, t]);
 
   useEffect(() => {
     quotaRequestSequence.current += 1;
@@ -639,23 +645,23 @@ function CostContent({ data }: { data: CostCommandData }) {
     typeof data.tokenBreakdown?.input === 'number' ||
     typeof data.tokenBreakdown?.output === 'number';
   const usageRows = [
-    { label: 'Total tokens used', value: formatNumber(used), icon: Activity },
+    { label: t('cost.totalTokensUsed', { defaultValue: 'Total tokens used' }), value: formatNumber(used), icon: Activity },
     ...(hasBreakdown
       ? [
           {
-            label: 'Input tokens',
+            label: t('cost.inputTokens', { defaultValue: 'Input tokens' }),
             value: formatNumber(Number(data.tokenBreakdown?.input ?? 0)),
             icon: TerminalSquare,
           },
           {
-            label: 'Output tokens',
+            label: t('cost.outputTokens', { defaultValue: 'Output tokens' }),
             value: formatNumber(Number(data.tokenBreakdown?.output ?? 0)),
             icon: Coins,
           },
         ]
       : []),
     ...(total > 0
-      ? [{ label: 'Context window', value: formatNumber(total), icon: Gauge }]
+      ? [{ label: t('cost.contextWindow', { defaultValue: 'Context window' }), value: formatNumber(total), icon: Gauge }]
       : []),
   ];
 
@@ -693,12 +699,15 @@ function CostContent({ data }: { data: CostCommandData }) {
         <div className="space-y-3">
           <div className="flex items-center justify-between px-1">
             <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-              账号配额与速率限额
+              {t('cost.quotaTitle', { defaultValue: '账号配额与速率限额' })}
             </h4>
             <div className="flex items-center gap-2">
               {quotaData?.updatedAt && (
                 <span className="text-[11px] text-muted-foreground/70">
-                  更新于 {new Date(quotaData.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {t('cost.updatedAt', {
+                    time: new Date(quotaData.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    defaultValue: `更新于 ${new Date(quotaData.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                  })}
                 </span>
               )}
               <button
@@ -706,10 +715,10 @@ function CostContent({ data }: { data: CostCommandData }) {
                 onClick={() => void fetchQuota(true)}
                 disabled={loadingQuota || isRefreshing}
                 className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-background/80 px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
-                title="刷新最新配额"
+                title={t('cost.refreshTitle', { defaultValue: '刷新最新配额' })}
               >
                 <RotateCw className={`h-3 w-3 ${isRefreshing ? 'animate-spin text-primary' : ''}`} />
-                <span>刷新</span>
+                <span>{t('cost.refresh', { defaultValue: '刷新' })}</span>
               </button>
             </div>
           </div>
@@ -718,9 +727,11 @@ function CostContent({ data }: { data: CostCommandData }) {
             <div className="shadow-xs flex items-center gap-3 rounded-2xl border border-border/70 bg-background/75 p-4">
               <Loader2 className="h-5 w-5 animate-spin text-primary" />
               <div>
-                <p className="text-xs font-semibold text-foreground">正在获取最新配额...</p>
+                <p className="text-xs font-semibold text-foreground">
+                  {t('cost.fetchingQuota', { defaultValue: '正在获取最新配额...' })}
+                </p>
                 <p className="text-[11px] text-muted-foreground">
-                  正在从 {provider} 同步 5 小时限额与周配额
+                  {t('cost.syncingWithProvider', { provider, defaultValue: `正在从 ${provider} 同步 5 小时限额与周配额` })}
                 </p>
               </div>
             </div>
@@ -729,11 +740,11 @@ function CostContent({ data }: { data: CostCommandData }) {
           {!loadingQuota && hasLoadedQuota && quotaGroups.length === 0 && (
             <div className="rounded-2xl border border-dashed border-border bg-background/60 px-4 py-6 text-center">
               <p className="text-xs font-semibold text-foreground">
-                {quotaError || '当前账号没有可显示的配额数据'}
+                {quotaError || t('cost.noQuotaData', { defaultValue: '当前账号没有可显示的配额数据' })}
               </p>
               {!quotaError && data.provider === 'codex' && (
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  API Key 登录通常不会提供 ChatGPT 账号的 5 小时和周限额
+                  {t('cost.apiKeyNotice', { defaultValue: 'API Key 登录通常不会提供 ChatGPT 账号的 5 小时和周限额' })}
                 </p>
               )}
             </div>
@@ -741,7 +752,7 @@ function CostContent({ data }: { data: CostCommandData }) {
 
           {!loadingQuota && quotaError && quotaGroups.length > 0 && (
             <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300">
-              刷新失败，当前显示的是上次成功获取的配额数据
+              {t('cost.refreshFailedNotice', { defaultValue: '刷新失败，当前显示的是上次成功获取的配额数据' })}
             </div>
           )}
 
@@ -762,6 +773,7 @@ function CostContent({ data }: { data: CostCommandData }) {
                     group={group}
                     defaultExpanded={isCurrent || index === 0}
                     isCurrentGroup={isCurrent}
+                    t={t}
                   />
                 );
               })}

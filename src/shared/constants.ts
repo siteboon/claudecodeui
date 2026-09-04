@@ -120,7 +120,6 @@ export const MCP_PROVIDER_NAMES: Record<McpProvider, string> = {
   cursor: 'Cursor',
   codex: 'Codex',
   opencode: 'OpenCode',
-  zcode: 'ZCode',
   antigravity: 'Antigravity',
 };
 
@@ -130,7 +129,6 @@ export const MCP_SUPPORTED_SCOPES: Record<McpProvider, McpScope[]> = {
   cursor: ['user', 'project'],
   codex: ['user', 'project'],
   opencode: ['user', 'project'],
-  zcode: ['user', 'project'],
   antigravity: ['user', 'project'],
 };
 
@@ -140,7 +138,6 @@ export const MCP_SUPPORTED_TRANSPORTS: Record<McpProvider, McpTransport[]> = {
   cursor: ['stdio', 'http'],
   codex: ['stdio', 'http'],
   opencode: ['stdio', 'http'],
-  zcode: ['stdio', 'http'],
   antigravity: ['stdio', 'http', 'sse'],
 };
 
@@ -153,7 +150,6 @@ export const MCP_SUPPORTS_WORKING_DIRECTORY: Record<McpProvider, boolean> = {
   cursor: false,
   codex: true,
   opencode: false,
-  zcode: false,
   antigravity: false,
 };
 
@@ -225,6 +221,5 @@ export const PROVIDER_PERMISSION_PREFERENCE_KEYS: Record<LLMProvider, UserPrefer
   cursor: 'cursorPermissions',
   codex: 'codexPermissions',
   opencode: 'opencodePermissions',
-  zcode: 'zcodePermissions',
   antigravity: 'antigravityPermissions',
 };

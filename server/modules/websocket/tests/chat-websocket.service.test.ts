@@ -29,16 +29,16 @@ test('runtime failure without a prior error event emits one error message', () =
   const { run, sent } = createRun([]);
 
   emitRuntimeFailureFallback(run, {
-    provider: 'zcode',
+    provider: 'antigravity',
     sessionId: 'app-sess-1',
-    message: 'Failed to create ZCode session: timeout',
+    message: 'Failed to create Antigravity session: timeout',
   });
 
   assert.equal(sent.length, 1);
   const message = sent[0] as NormalizedMessage;
   assert.equal(message.kind, 'error');
   assert.equal(message.sessionId, 'app-sess-1');
-  assert.equal(message.text, 'Failed to create ZCode session: timeout');
+  assert.equal(message.text, 'Failed to create Antigravity session: timeout');
 });
 
 test('runtime failure after a self-reported error is not duplicated', () => {

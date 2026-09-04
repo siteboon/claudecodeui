@@ -66,7 +66,7 @@ export type AuthenticatedWebSocketRequest = IncomingMessage & {
  * Use this as the source of truth whenever a function or payload needs to identify
  * a specific LLM integration.
  */
-export type LLMProvider = 'claude' | 'codex' | 'cursor' | 'opencode' | 'zcode' | 'antigravity';
+export type LLMProvider = 'claude' | 'codex' | 'cursor' | 'opencode' | 'antigravity';
 
 /**
  * Single quota bucket representing rolling or windowed token limit information
@@ -789,7 +789,7 @@ export type ProviderAuthStatus = {
    * Provider-suggested login command for the terminal-based login modal.
    *
    * Only providers whose login requires a resolved absolute engine path
-   * (zcode: `node <engine-path> login`) populate it; the frontend falls back
+   * populate it; the frontend falls back
    * to its own static per-provider command when absent.
    */
   loginCommand?: string | null;

@@ -7,6 +7,5 @@ export const createInitialProviderAuthStatusMap = (loading = true): ProviderAuth
   cursor: { installed: true, authenticated: false, email: null, method: null, error: null, loginCommand: null, loading },
   codex: { installed: true, authenticated: false, email: null, method: null, error: null, loginCommand: null, loading },
   opencode: { installed: true, authenticated: false, email: null, method: null, error: null, loginCommand: null, loading },
-  zcode: { installed: true, authenticated: false, email: null, method: null, error: null, loginCommand: null, loading },
   antigravity: { installed: true, authenticated: false, email: null, method: null, error: null, loginCommand: null, loading },
 });

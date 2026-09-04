@@ -18,7 +18,6 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
-    "zcode": "ZCode",
     "antigravity": "Antigravity"
   },
   "tools": {
@@ -257,5 +256,32 @@
     "failed": "Gönderilmedi — {{reason}}",
     "cancel": "Zamanlanmış mesajı iptal et",
     "dismiss": "Hata bildirimini kapat"
+  },
+  "cost": {
+    "totalTokensUsed": "Kullanılan toplam token",
+    "inputTokens": "Girdi tokenleri",
+    "outputTokens": "Çıktı tokenleri",
+    "contextWindow": "Bağlam penceresi",
+    "quotaTitle": "Hesap Kotası ve Hız Limitleri",
+    "updatedAt": "{{time}} güncellendi",
+    "refresh": "Yenile",
+    "refreshTitle": "Güncel kotayı yenile",
+    "fetchingQuota": "En güncel kota bilgisi alınıyor...",
+    "syncingWithProvider": "{{provider}} üzerinden 5 saatlik ve haftalık limitler eşitleniyor",
+    "noQuotaData": "Bu hesap için gösterilecek kota verisi yok",
+    "apiKeyNotice": "API Anahtarı ile girişler genellikle 5 saatlik veya haftalık limitleri bildirmez",
+    "refreshFailedNotice": "Yenileme başarısız; en son başarıyla alınan kota verisi gösteriliyor",
+    "fetchFailed": "Kota bilgisi yüklenemedi, lütfen daha sonra tekrar deneyin",
+    "currentGroup": "Geçerli Oturum Modelleri",
+    "otherGroup": "Diğer Modeller",
+    "collapse": "Daralt",
+    "expand": "Genişlet",
+    "fiveHourWindow": "5 Saatlik Kayan Pencere Limiti",
+    "weeklyWindow": "Haftalık Kota",
+    "remainingPercent": "%{{percent}} kaldı",
+    "resetSoon": "Yakında sıfırlanacak",
+    "resetDaysHours": "{{days}}g {{hours}}sa sonra sıfırlanır",
+    "resetHoursMinutes": "{{hours}}sa {{minutes}}dk sonra sıfırlanır",
+    "resetMinutes": "{{minutes}}dk sonra sıfırlanır"
   }
 }

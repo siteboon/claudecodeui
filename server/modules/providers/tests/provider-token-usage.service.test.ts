@@ -60,7 +60,7 @@ test('token usage dispatches to the provider sessions facet with the mapped sess
 
   const service = createProviderTokenUsageService({
     getSessionById: () => createSessionRow({
-      provider: 'zcode',
+      provider: 'antigravity',
       provider_session_id: 'sess_native',
       jsonl_path: '/data/transcript.jsonl',
       project_path: '/workspaces/demo',

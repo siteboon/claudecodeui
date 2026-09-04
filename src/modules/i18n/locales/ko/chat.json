@@ -19,7 +19,6 @@
     "cursor": "Cursor",
     "codex": "Codex",
     "opencode": "OpenCode",
-    "zcode": "ZCode",
     "antigravity": "Antigravity"
   },
   "tools": {
@@ -278,5 +277,32 @@
     "failed": "전송되지 않음 — {{reason}}",
     "cancel": "예약 취소",
     "dismiss": "실패 알림 닫기"
+  },
+  "cost": {
+    "totalTokensUsed": "총 사용 토큰",
+    "inputTokens": "입력 토큰",
+    "outputTokens": "출력 토큰",
+    "contextWindow": "컨텍스트 윈도우",
+    "quotaTitle": "계정 한도 및 속도 제한",
+    "updatedAt": "{{time}} 업데이트됨",
+    "refresh": "새로고침",
+    "refreshTitle": "최신 한도 정보 새로고침",
+    "fetchingQuota": "최신 한도 정보 가져오는 중...",
+    "syncingWithProvider": "{{provider}}에서 5시간 및 주간 한도 동기화 중",
+    "noQuotaData": "이 계정에 표시할 한도 데이터가 없습니다",
+    "apiKeyNotice": "API 키 로그인은 일반적으로 5시간 또는 주간 한도를 제공하지 않습니다",
+    "refreshFailedNotice": "새로고침 실패. 마지막으로 성공한 한도 데이터를 표시합니다",
+    "fetchFailed": "한도 정보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요",
+    "currentGroup": "현재 세션 모델 그룹",
+    "otherGroup": "기타 모델 그룹",
+    "collapse": "접기",
+    "expand": "펼쳐보기",
+    "fiveHourWindow": "5시간 롤링 윈도우 한도",
+    "weeklyWindow": "주간 한도",
+    "remainingPercent": "{{percent}}% 남음",
+    "resetSoon": "곧 리셋됨",
+    "resetDaysHours": "{{days}}일 {{hours}}시간 후 리셋",
+    "resetHoursMinutes": "{{hours}}시간 {{minutes}}분 후 리셋",
+    "resetMinutes": "{{minutes}}분 후 리셋"
   }
 }

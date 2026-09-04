@@ -65,9 +65,6 @@ describe('markdown export', () => {
     expect(markdown).toContain('### Claude');
     expect(markdown).toContain('const renamed = 1;');
 
-    const zcodeMd = await buildTranscriptExport('markdown', { ...input, provider: 'zcode' }, exportedAt);
-    expect(zcodeMd).toContain('### ZCode');
-
     const agyMd = await buildTranscriptExport('markdown', { ...input, provider: 'antigravity' }, exportedAt);
     expect(agyMd).toContain('### Antigravity');
   });

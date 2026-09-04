@@ -2,7 +2,7 @@
  * OpenCode Data Root
  *
  * Single source of truth for OpenCode CLI filesystem locations. Mirrors the
- * antigravity/zcode data-root convention so provider path knowledge lives in
+ * antigravity data-root convention so provider path knowledge lives in
  * the provider module rather than the global shared layer.
  *
  * @module opencode-data-root

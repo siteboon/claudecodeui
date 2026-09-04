@@ -30,14 +30,13 @@ const providerTokenUsageService = dependencies.tokenUsage;
 const process = dependencies.runtime;
 const router = express.Router();
 
-const MODEL_PROVIDERS = ["claude", "cursor", "codex", "opencode", "zcode", "antigravity"];
+const MODEL_PROVIDERS = ["claude", "cursor", "codex", "opencode", "antigravity"];
 
 const MODEL_PROVIDER_LABELS = {
   claude: "Claude",
   cursor: "Cursor",
   codex: "Codex",
   opencode: "OpenCode",
-  zcode: "ZCode",
   antigravity: "Antigravity",
 };
 

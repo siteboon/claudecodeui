@@ -19,7 +19,6 @@
     "cursor": "Cursor",
     "codex": "Codex",
     "opencode": "OpenCode",
-    "zcode": "ZCode",
     "antigravity": "Antigravity"
   },
   "tools": {
@@ -284,5 +283,32 @@
     "failed": "No enviado — {{reason}}",
     "cancel": "Cancelar mensaje programado",
     "dismiss": "Descartar el aviso de fallo"
+  },
+  "cost": {
+    "totalTokensUsed": "Tokens totales usados",
+    "inputTokens": "Tokens de entrada",
+    "outputTokens": "Tokens de salida",
+    "contextWindow": "Ventana de contexto",
+    "quotaTitle": "Cuota de cuenta y límites de frecuencia",
+    "updatedAt": "Actualizado a las {{time}}",
+    "refresh": "Actualizar",
+    "refreshTitle": "Actualizar cuota más reciente",
+    "fetchingQuota": "Obteniendo cuota más reciente...",
+    "syncingWithProvider": "Sincronizando límites de 5 horas y semanales desde {{provider}}",
+    "noQuotaData": "No hay datos de cuota disponibles para esta cuenta",
+    "apiKeyNotice": "Los inicios de sesión con API Key no suelen indicar límites de 5 horas o semanales",
+    "refreshFailedNotice": "Fallo al actualizar; mostrando los últimos datos obtenidos con éxito",
+    "fetchFailed": "Error al cargar la cuota, inténtalo de nuevo más tarde",
+    "currentGroup": "Modelos de la sesión actual",
+    "otherGroup": "Otros modelos",
+    "collapse": "Contraer",
+    "expand": "Expandir",
+    "fiveHourWindow": "Ventana deslizante de 5 horas",
+    "weeklyWindow": "Cuota semanal",
+    "remainingPercent": "{{percent}}% restante",
+    "resetSoon": "Reinicio inminente",
+    "resetDaysHours": "Se reinicia en {{days}}d {{hours}}h",
+    "resetHoursMinutes": "Se reinicia en {{hours}}h {{minutes}}m",
+    "resetMinutes": "Se reinicia en {{minutes}}m"
   }
 }

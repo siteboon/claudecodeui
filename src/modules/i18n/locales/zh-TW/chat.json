@@ -18,7 +18,6 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
-    "zcode": "ZCode",
     "antigravity": "Antigravity"
   },
   "tools": {
@@ -293,5 +292,32 @@
     "failed": "未傳送 — {{reason}}",
     "cancel": "取消排程訊息",
     "dismiss": "關閉失敗提示"
+  },
+  "cost": {
+    "totalTokensUsed": "總用量",
+    "inputTokens": "輸入用量",
+    "outputTokens": "輸出用量",
+    "contextWindow": "上下文窗口",
+    "quotaTitle": "帳號配額與速率限額",
+    "updatedAt": "更新於 {{time}}",
+    "refresh": "重新整理",
+    "refreshTitle": "重新整理最新配額",
+    "fetchingQuota": "正在取得最新配額...",
+    "syncingWithProvider": "正在從 {{provider}} 同步 5 小時限額與週配額",
+    "noQuotaData": "目前帳號沒有可顯示的配額資料",
+    "apiKeyNotice": "API Key 登入通常不會提供 5 小時和週限額",
+    "refreshFailedNotice": "重新整理失敗，目前顯示上次成功取得的配額資料",
+    "fetchFailed": "配額讀取失敗，請稍後重試",
+    "currentGroup": "目前對話模型群組",
+    "otherGroup": "其他模型群組",
+    "collapse": "收起",
+    "expand": "展開檢視",
+    "fiveHourWindow": "5 小時滑動窗口限額",
+    "weeklyWindow": "週配額",
+    "remainingPercent": "剩餘 {{percent}}%",
+    "resetSoon": "即將重設",
+    "resetDaysHours": "{{days}} 天 {{hours}} 小時後重設",
+    "resetHoursMinutes": "{{hours}} 小時 {{minutes}} 分鐘後重設",
+    "resetMinutes": "{{minutes}} 分鐘後重設"
   }
 }

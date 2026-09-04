@@ -21,7 +21,7 @@ class FixtureSynchronizer extends SqliteSessionSynchronizer<FixtureRow> {
   protected readonly watchedFileBasenames = ['fixture.db', 'fixture.db-wal'];
 
   constructor(private readonly dbPath: string) {
-    super('zcode');
+    super('antigravity');
   }
 
   protected getDatabasePath(): string {
@@ -142,7 +142,7 @@ test('scan upserts rows, keeps custom names, and reports the first session id', 
     await withIsolatedDatabase(async () => {
       // A pre-existing app session with a custom name keeps it; the fallback
       // title on an existing row does not.
-      sessionsDb.createAppSession('app-b', 'zcode', '/workspace/sess_b', 'My custom name');
+      sessionsDb.createAppSession('app-b', 'antigravity', '/workspace/sess_b', 'My custom name');
 
       const synchronizer = new FixtureSynchronizer(dbPath);
       const processed = await synchronizer.synchronize();
@@ -205,7 +205,7 @@ test('binds provider-discovered sessions to pending app sessions', async () => {
   try {
     await withIsolatedDatabase(async () => {
       // The app created a session and is waiting for the provider id to arrive.
-      sessionsDb.createAppSession('app-pending', 'zcode', '/workspace/sess_pending');
+      sessionsDb.createAppSession('app-pending', 'antigravity', '/workspace/sess_pending');
 
       const synchronizer = new FixtureSynchronizer(dbPath);
       assert.equal(await synchronizer.synchronize(), 1);

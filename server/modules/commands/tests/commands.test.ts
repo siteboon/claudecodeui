@@ -115,12 +115,10 @@ test('cost and status commands report the same resolved model as /models', async
   assert.equal((status.data as { model: string }).model, 'haiku');
 });
 
-test('cost command preserves antigravity and zcode provider names', async () => {
+test('cost command preserves antigravity provider name', async () => {
   const antigravityCost = await executeCommand('/cost', { provider: 'antigravity' });
-  const zcodeCost = await executeCommand('/cost', { provider: 'zcode' });
 
   assert.equal((antigravityCost.data as { provider: string }).provider, 'antigravity');
-  assert.equal((zcodeCost.data as { provider: string }).provider, 'zcode');
 });
 
 test('cost command falls back to injected tokenUsage service when context has no usage', async () => {

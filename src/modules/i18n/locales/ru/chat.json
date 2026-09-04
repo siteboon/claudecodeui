@@ -18,7 +18,6 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
-    "zcode": "ZCode",
     "antigravity": "Antigravity"
   },
   "tools": {
@@ -257,5 +256,32 @@
     "failed": "Не отправлено — {{reason}}",
     "cancel": "Отменить запланированное сообщение",
     "dismiss": "Скрыть уведомление об ошибке"
+  },
+  "cost": {
+    "totalTokensUsed": "Всего использовано токенов",
+    "inputTokens": "Входящие токены",
+    "outputTokens": "Исходящие токены",
+    "contextWindow": "Окно контекста",
+    "quotaTitle": "Квоты аккаунта и лимиты запросов",
+    "updatedAt": "Обновлено в {{time}}",
+    "refresh": "Обновить",
+    "refreshTitle": "Обновить последние данные о квоте",
+    "fetchingQuota": "Получение данных о квоте...",
+    "syncingWithProvider": "Синхронизация 5-часовых и недельных лимитов из {{provider}}",
+    "noQuotaData": "Нет данных о квотах для этого аккаунта",
+    "apiKeyNotice": "Вход по API Key обычно не сообщает о 5-часовых и недельных лимитах",
+    "refreshFailedNotice": "Ошибка обновления; отображаются последние сохраненные данные",
+    "fetchFailed": "Не удалось загрузить квоту, попробуйте позже",
+    "currentGroup": "Модели текущей сессии",
+    "otherGroup": "Другие модели",
+    "collapse": "Свернуть",
+    "expand": "Развернуть",
+    "fiveHourWindow": "Скользящее 5-часовое окно",
+    "weeklyWindow": "Недельная квота",
+    "remainingPercent": "Осталось {{percent}}%",
+    "resetSoon": "Сброс скоро",
+    "resetDaysHours": "Сброс через {{days}}д {{hours}}ч",
+    "resetHoursMinutes": "Сброс через {{hours}}ч {{minutes}}мин",
+    "resetMinutes": "Сброс через {{minutes}}мин"
   }
 }

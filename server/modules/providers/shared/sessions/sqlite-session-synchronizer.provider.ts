@@ -2,8 +2,8 @@
  * SQLite Session Synchronizer Base Class
  *
  * Template-method base for providers whose sessions are indexed in one shared
- * SQLite database (zcode, antigravity, opencode). It owns the scan skeleton
- * the three implementations used to duplicate: watch-file filtering, the
+ * SQLite database (antigravity, opencode). It owns the scan skeleton
+ * the implementations used to duplicate: watch-file filtering, the
  * high-water-mark incremental cursor, the short read-only connection
  * discipline, the pending-app-session binding protocol, custom-name
  * preservation, and the createSession upsert.
@@ -36,7 +36,7 @@ export type SqliteSynchronizerRow = {
 /**
  * Template-method base for SQLite-backed session synchronizers.
  *
- * Consumers: zcode, antigravity, and opencode session synchronizers. Follows
+ * Consumers: antigravity and opencode session synchronizers. Follows
  * the shared McpProvider/SkillsProvider style: public template methods,
  * protected abstract hooks for provider data, and protected concrete helpers
  * for the cross-provider protocol.
@@ -50,7 +50,7 @@ export abstract class SqliteSessionSynchronizer<Row extends SqliteSynchronizerRo
   /** Title used when the provider row and the app DB both name nothing. */
   protected abstract readonly fallbackTitle: string;
 
-  /** Log tag prefixing scan failures (e.g. '[ZCodeProvider]'). */
+  /** Log tag prefixing scan failures (e.g. '[AntigravityProvider]'). */
   protected abstract readonly logTag: string;
 
   /** Watched artifact file names; also drives `getSessionWatchTarget`. */
@@ -130,8 +130,8 @@ export abstract class SqliteSessionSynchronizer<Row extends SqliteSynchronizerRo
   protected abstract deriveSessionName(db: Database.Database, row: Row): string | null;
 
   /**
-   * Extracts the provider-native session id from a row. Adapters may override
-   * to add defensive filtering (zcode's subagent-prefix double-check).
+   * Override when an adapter needs to filter candidate rows before writing
+   * sessions to the DB.
    */
   protected getSessionId(row: Row): string | null {
     return readOptionalString(row.id) ?? null;

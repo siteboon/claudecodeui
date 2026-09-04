@@ -3,7 +3,6 @@ import { ClaudeProvider } from '@/modules/providers/list/claude/claude.provider.
 import { CodexProvider } from '@/modules/providers/list/codex/codex.provider.js';
 import { CursorProvider } from '@/modules/providers/list/cursor/cursor.provider.js';
 import { OpenCodeProvider } from '@/modules/providers/list/opencode/opencode.provider.js';
-import { ZCodeProvider } from '@/modules/providers/list/zcode/zcode.provider.js';
 import type { IProvider } from '@/shared/interfaces.js';
 import type { LLMProvider } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
@@ -13,7 +12,6 @@ const providers: Record<LLMProvider, IProvider> = {
   codex: new CodexProvider(),
   cursor: new CursorProvider(),
   opencode: new OpenCodeProvider(),
-  zcode: new ZCodeProvider(),
   antigravity: new AntigravityProvider(),
 };
 

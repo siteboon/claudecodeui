@@ -124,7 +124,7 @@ test('migrations create the provider model index on an install that lacks it', a
   }
 });
 
-test('migrations upgrade legacy 4-provider CHECK constraint to include zcode and antigravity', async () => {
+test('migrations upgrade legacy 4-provider CHECK constraint to include antigravity', async () => {
   const previousDatabasePath = process.env.DATABASE_PATH;
   const tempDirectory = await mkdtemp(path.join(os.tmpdir(), 'provider-model-check-'));
   const databasePath = path.join(tempDirectory, 'auth.db');
@@ -154,13 +154,7 @@ test('migrations upgrade legacy 4-provider CHECK constraint to include zcode and
     // Running migrations must detect the legacy CHECK constraint and rebuild the table
     runMigrations(db);
 
-    // Verify zcode and antigravity models can now be inserted without constraint errors
-    const zcodeModel = providerModelsDb.createCustomProviderModel('zcode', {
-      model: 'Custom GLM 4.5',
-      id: 'glm-4.5',
-    });
-    assert.equal(zcodeModel.modelId, 'glm-4.5');
-
+    // Verify antigravity models can now be inserted without constraint errors
     const agyModel = providerModelsDb.createCustomProviderModel('antigravity', {
       model: 'Custom Gemini Experimental',
       id: 'gemini-exp-custom',

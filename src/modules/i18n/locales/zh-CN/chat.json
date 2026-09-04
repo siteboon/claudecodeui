@@ -19,7 +19,6 @@
     "cursor": "Cursor",
     "codex": "Codex",
     "opencode": "OpenCode",
-    "zcode": "ZCode",
     "antigravity": "Antigravity"
   },
   "tools": {
@@ -278,5 +277,32 @@
     "failed": "未发送 — {{reason}}",
     "cancel": "取消定时消息",
     "dismiss": "关闭失败提示"
+  },
+  "cost": {
+    "totalTokensUsed": "总用量",
+    "inputTokens": "输入用量",
+    "outputTokens": "输出用量",
+    "contextWindow": "上下文窗口",
+    "quotaTitle": "账号配额与速率限额",
+    "updatedAt": "更新于 {{time}}",
+    "refresh": "刷新",
+    "refreshTitle": "刷新最新配额",
+    "fetchingQuota": "正在获取最新配额...",
+    "syncingWithProvider": "正在从 {{provider}} 同步 5 小时限额与周配额",
+    "noQuotaData": "当前账号没有可显示的配额数据",
+    "apiKeyNotice": "API Key 登录通常不会提供 ChatGPT 账号的 5 小时和周限额",
+    "refreshFailedNotice": "刷新失败，当前显示的是上次成功获取的配额数据",
+    "fetchFailed": "配额读取失败，请稍后重试",
+    "currentGroup": "当前会话模型组",
+    "otherGroup": "其他模型组",
+    "collapse": "收起",
+    "expand": "展开查看",
+    "fiveHourWindow": "5 小时滑动窗口限额",
+    "weeklyWindow": "周配额",
+    "remainingPercent": "剩余 {{percent}}%",
+    "resetSoon": "即将重置",
+    "resetDaysHours": "{{days}} 天 {{hours}} 小时后重置",
+    "resetHoursMinutes": "{{hours}} 小时 {{minutes}} 分钟后重置",
+    "resetMinutes": "{{minutes}} 分钟后重置"
   }
 }

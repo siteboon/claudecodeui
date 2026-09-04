@@ -19,7 +19,6 @@
     "cursor": "Cursor",
     "codex": "Codex",
     "opencode": "OpenCode",
-    "zcode": "ZCode",
     "antigravity": "Antigravity"
   },
   "tools": {
@@ -259,5 +258,32 @@
     "failed": "Non envoyé — {{reason}}",
     "cancel": "Annuler le message programmé",
     "dismiss": "Masquer l'avis d'échec"
+  },
+  "cost": {
+    "totalTokensUsed": "Jetons totaux utilisés",
+    "inputTokens": "Jetons d'entrée",
+    "outputTokens": "Jetons de sortie",
+    "contextWindow": "Fenêtre de contexte",
+    "quotaTitle": "Quotas du compte & Limites de débit",
+    "updatedAt": "Mis à jour à {{time}}",
+    "refresh": "Actualiser",
+    "refreshTitle": "Actualiser le quota récent",
+    "fetchingQuota": "Récupération du quota en cours...",
+    "syncingWithProvider": "Synchronisation des limites de 5 h et hebdomadaires depuis {{provider}}",
+    "noQuotaData": "Aucune donnée de quota disponible pour ce compte",
+    "apiKeyNotice": "La connexion par clé API n'indique généralement pas de limite de 5 h ou hebdomadaire",
+    "refreshFailedNotice": "Échec de l'actualisation ; affichage des dernières données récupérées",
+    "fetchFailed": "Impossible de charger les quotas, veuillez réessayer plus tard",
+    "currentGroup": "Modèles de la session active",
+    "otherGroup": "Autres modèles",
+    "collapse": "Réduire",
+    "expand": "Développer",
+    "fiveHourWindow": "Fenêtre glissante de 5 heures",
+    "weeklyWindow": "Quota hebdomadaire",
+    "remainingPercent": "{{percent}}% restant",
+    "resetSoon": "Réinitialisation imminente",
+    "resetDaysHours": "Réinitialisation dans {{days}}j {{hours}}h",
+    "resetHoursMinutes": "Réinitialisation dans {{hours}}h {{minutes}}m",
+    "resetMinutes": "Réinitialisation dans {{minutes}}m"
   }
 }

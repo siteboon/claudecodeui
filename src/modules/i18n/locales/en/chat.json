@@ -19,7 +19,6 @@
     "cursor": "Cursor",
     "codex": "Codex",
     "opencode": "OpenCode",
-    "zcode": "ZCode",
     "antigravity": "Antigravity"
   },
   "tools": {
@@ -284,5 +283,32 @@
     "failed": "Not sent — {{reason}}",
     "cancel": "Cancel scheduled message",
     "dismiss": "Dismiss failure notice"
+  },
+  "cost": {
+    "totalTokensUsed": "Total tokens used",
+    "inputTokens": "Input tokens",
+    "outputTokens": "Output tokens",
+    "contextWindow": "Context window",
+    "quotaTitle": "Account Quota & Rate Limits",
+    "updatedAt": "Updated at {{time}}",
+    "refresh": "Refresh",
+    "refreshTitle": "Refresh latest quota",
+    "fetchingQuota": "Fetching latest quota...",
+    "syncingWithProvider": "Syncing 5-hour and weekly limits from {{provider}}",
+    "noQuotaData": "No quota data available for this account",
+    "apiKeyNotice": "API Key logins typically do not report 5-hour or weekly account limits",
+    "refreshFailedNotice": "Refresh failed; showing last successfully retrieved quota data",
+    "fetchFailed": "Failed to load quota, please try again later",
+    "currentGroup": "Active Session Models",
+    "otherGroup": "Other Models",
+    "collapse": "Collapse",
+    "expand": "Expand",
+    "fiveHourWindow": "5-Hour Sliding Window",
+    "weeklyWindow": "Weekly Quota",
+    "remainingPercent": "{{percent}}% remaining",
+    "resetSoon": "Resets soon",
+    "resetDaysHours": "Resets in {{days}}d {{hours}}h",
+    "resetHoursMinutes": "Resets in {{hours}}h {{minutes}}m",
+    "resetMinutes": "Resets in {{minutes}}m"
   }
 }

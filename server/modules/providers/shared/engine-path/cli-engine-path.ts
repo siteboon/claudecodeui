@@ -6,11 +6,6 @@
  * locations, with module-level caching, TTL-bounded negative caching, and an
  * optional asynchronous version probe.
  *
- * Extracted from the twin `antigravity-engine-path` / `zcode-engine-path`
- * modules, whose resolution order, caching, and version probing were ~80%
- * identical; each provider now contributes only its data (env names, binary
- * name, platform paths, path-validity rule, probe shape).
- *
  * @module cli-engine-path
  */
 
@@ -22,7 +17,7 @@ import { DEFAULT_NEGATIVE_PROBE_TTL_MS } from '../installation/cli-installation-
 /**
  * One version probe attempt, built from the resolved engine path.
  *
- * Consumers: antigravity/zcode engine-path modules when describing how their
+ * Consumers: CLI engine-path modules when describing how their
  * CLI reports its version (direct `--version` vs `node engine.cjs version`).
  */
 export type CliEngineVersionProbeInvocation = (enginePath: string) => {
@@ -48,11 +43,10 @@ export type CliEngineVersionProbe = {
 /**
  * Per-provider resolution data for one CLI engine.
  *
- * Consumers: antigravity-engine-path and zcode-engine-path (the only two
- * adapters today); future CLI-type providers add theirs the same way.
+ * Consumers: antigravity-engine-path and future CLI-type providers.
  */
 export type CliEnginePathResolverConfig = {
-  /** Log tag prefixing diagnostics (e.g. '[ZCode]'). */
+  /** Log tag prefixing diagnostics (e.g. '[Antigravity]'). */
   logTag: string;
   /** Environment variable overrides, tried in order. */
   envVars: string[];
@@ -94,7 +88,7 @@ export type CliEnginePathResolver = {
 /**
  * Creates one provider's engine path resolver from its resolution data.
  *
- * Consumers: antigravity-engine-path and zcode-engine-path. Tests may inject
+ * Consumers: antigravity-engine-path and future CLI-type providers. Tests may inject
  * `spawnSync` to stub subprocesses and `now` to control the negative TTL;
  * production uses the defaults.
  */

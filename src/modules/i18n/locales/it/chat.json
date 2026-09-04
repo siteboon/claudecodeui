@@ -18,7 +18,6 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
-    "zcode": "ZCode",
     "antigravity": "Antigravity"
   },
   "tools": {
@@ -257,5 +256,32 @@
     "failed": "Non inviato — {{reason}}",
     "cancel": "Annulla messaggio programmato",
     "dismiss": "Ignora l'avviso di errore"
+  },
+  "cost": {
+    "totalTokensUsed": "Token totali usati",
+    "inputTokens": "Token di input",
+    "outputTokens": "Token di output",
+    "contextWindow": "Finestra di contesto",
+    "quotaTitle": "Quote account e limiti di frequenza",
+    "updatedAt": "Aggiornato alle {{time}}",
+    "refresh": "Aggiorna",
+    "refreshTitle": "Aggiorna quota più recente",
+    "fetchingQuota": "Recupero quota più recente...",
+    "syncingWithProvider": "Sincronizzazione dei limiti di 5 ore e settimanali da {{provider}}",
+    "noQuotaData": "Nessun dato di quota disponibile per questo account",
+    "apiKeyNotice": "L'accesso tramite chiave API di solito non riporta limiti di 5 ore o settimanali",
+    "refreshFailedNotice": "Aggiornamento non riuscito; visualizzazione degli ultimi dati recuperati",
+    "fetchFailed": "Impossibile caricare la quota, riprova più tardi",
+    "currentGroup": "Modelli della sessione corrente",
+    "otherGroup": "Altri modelli",
+    "collapse": "Comprimi",
+    "expand": "Espandi",
+    "fiveHourWindow": "Finestra mobile di 5 ore",
+    "weeklyWindow": "Quota settimanale",
+    "remainingPercent": "{{percent}}% rimanente",
+    "resetSoon": "Ripristino a breve",
+    "resetDaysHours": "Si ripristina in {{days}}g {{hours}}h",
+    "resetHoursMinutes": "Si ripristina in {{hours}}h {{minutes}}m",
+    "resetMinutes": "Si ripristina in {{minutes}}m"
   }
 }

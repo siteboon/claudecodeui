@@ -18,7 +18,6 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
-    "zcode": "ZCode",
     "antigravity": "Antigravity"
   },
   "tools": {
@@ -244,5 +243,32 @@
     "failed": "未送信 — {{reason}}",
     "cancel": "予約を取り消す",
     "dismiss": "失敗の通知を閉じる"
+  },
+  "cost": {
+    "totalTokensUsed": "使用トークン総数",
+    "inputTokens": "入力トークン",
+    "outputTokens": "出力トークン",
+    "contextWindow": "コンテキストウィンドウ",
+    "quotaTitle": "アカウント使用量とレート制限",
+    "updatedAt": "{{time}} に更新",
+    "refresh": "更新",
+    "refreshTitle": "最新の使用状況を更新",
+    "fetchingQuota": "最新の使用状況を取得中...",
+    "syncingWithProvider": "{{provider}} から 5 時間制限と週間クォータを同期中",
+    "noQuotaData": "このアカウントで表示できるクォータデータはありません",
+    "apiKeyNotice": "API キーでのログインでは通常、5時間や週間の制限は提供されません",
+    "refreshFailedNotice": "更新に失敗しました。前回取得したデータを表示しています",
+    "fetchFailed": "クォータの取得に失敗しました。後でもう一度お試しください",
+    "currentGroup": "現在のセッションモデル",
+    "otherGroup": "その他のモデル",
+    "collapse": "折りたたむ",
+    "expand": "展開する",
+    "fiveHourWindow": "5時間スライド枠制限",
+    "weeklyWindow": "週間クォータ",
+    "remainingPercent": "残り {{percent}}%",
+    "resetSoon": "まもなくリセット",
+    "resetDaysHours": "{{days}}日{{hours}}時間後にリセット",
+    "resetHoursMinutes": "{{hours}}時間{{minutes}}分後にリセット",
+    "resetMinutes": "{{minutes}}分後にリセット"
   }
 }

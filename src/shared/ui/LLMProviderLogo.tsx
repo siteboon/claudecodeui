@@ -4,7 +4,6 @@ import ClaudeLogo from '@/shared/ui/ClaudeLogo';
 import CodexLogo from '@/shared/ui/CodexLogo';
 import CursorLogo from '@/shared/ui/CursorLogo';
 import OpenCodeLogo from '@/shared/ui/OpenCodeLogo';
-import ZCodeLogo from '@/shared/ui/ZCodeLogo';
 
 type LLMProviderLogoProps = {
   provider?: LLMProvider | string | null;
@@ -26,10 +25,6 @@ export function LLMProviderLogo({
 
   if (provider === 'opencode') {
     return <OpenCodeLogo className={className} />;
-  }
-
-  if (provider === 'zcode') {
-    return <ZCodeLogo className={className} />;
   }
 
   if (provider === 'antigravity') {

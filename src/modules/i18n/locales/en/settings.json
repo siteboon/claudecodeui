@@ -145,7 +145,6 @@
       "content": "Archiving only removes old sessions from the active sidebar list. Your conversation history and files on disk are never deleted. You can browse or restore archived sessions at any time in the sidebar Archive view."
     }
   },
-
   "notifications": {
     "title": "Notifications",
     "description": "Control which notification events you receive.",
@@ -507,8 +506,7 @@
       "claude": "Model Context Protocol servers provide additional tools and data sources to Claude",
       "cursor": "Model Context Protocol servers provide additional tools and data sources to Cursor",
       "codex": "Model Context Protocol servers provide additional tools and data sources to Codex",
-      "opencode": "Model Context Protocol servers provide additional tools and data sources to OpenCode",
-      "zcode": "Model Context Protocol servers provide additional tools and data sources to ZCode. Native config files: ~/.zcode/cli/config.json (user) and zcode.json in the project root (project)."
+      "opencode": "Model Context Protocol servers provide additional tools and data sources to OpenCode"
     },
     "addButton": "Add MCP Server",
     "empty": "No MCP servers configured",

@@ -25,7 +25,6 @@ export type UserPreferences = {
   cursorPermissions: unknown;
   codexPermissions: unknown;
   opencodePermissions: unknown;
-  zcodePermissions: unknown;
   antigravityPermissions: unknown;
   codeEditorSettings: unknown;
   uiPreferences: unknown;
@@ -64,7 +63,6 @@ const LEGACY_STORAGE_KEYS: Record<UserPreferenceKey, string> = {
   cursorPermissions: 'cursor-tools-settings',
   codexPermissions: 'codex-settings',
   opencodePermissions: 'opencode-settings',
-  zcodePermissions: 'zcode-settings',
   antigravityPermissions: 'antigravity-settings',
   // Unused: the four code-editor settings never shared one key, so they are
   // read by readLegacyCodeEditorSettings instead.

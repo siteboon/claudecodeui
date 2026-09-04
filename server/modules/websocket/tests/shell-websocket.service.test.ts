@@ -138,8 +138,6 @@ test('shell init launches the selected provider CLI and resumes via provider-nat
     { sessionId: `agy-resume-${Date.now()}`, provider: 'antigravity', hasSession: true, expected: (id: string) => `agy --conversation "agy-conv-for-${id}"`, expectedBanner: 'Antigravity' },
     // antigravity without a session launches a fresh interactive agy.
     { sessionId: `agy-fresh-${Date.now()}`, provider: 'antigravity', hasSession: false, expected: () => 'agy', expectedBanner: 'Antigravity' },
-    // zcode has no known resume flag; it always launches its interactive CLI.
-    { sessionId: `zcode-fresh-${Date.now()}`, provider: 'zcode', hasSession: true, expected: () => 'zcode', expectedBanner: 'ZCode' },
     // Regression guards: the previously supported providers keep their commands.
     { sessionId: `claude-resume-${Date.now()}`, provider: 'claude', hasSession: true, expected: () => 'claude --resume "claude-resume-id" || claude', expectedBanner: 'Claude' },
     { sessionId: `cursor-resume-${Date.now()}`, provider: 'cursor', hasSession: true, expected: () => 'cursor-agent --resume="cursor-resume-id"', expectedBanner: 'Cursor' },
@@ -191,7 +189,6 @@ test('isLoginShellCommand recognizes every provider login command', () => {
     'claude --dangerously-skip-permissions /login',
     'codex login',
     'codex login --device-auth',
-    'zcode login',
     'cursor-agent login',
     'opencode auth login',
     'claude setup-token',

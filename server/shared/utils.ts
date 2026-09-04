@@ -334,7 +334,7 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
  * Validates that a target path stays strictly inside its intended root directory.
  * Throws a 400 AppError with PATH_SECURITY_VIOLATION if directory traversal is detected.
  *
- * Consumed by provider MCP implementations (Antigravity, ZCode) when writing
+ * Consumed by provider MCP implementations (Antigravity) when writing
  * configuration files into user or workspace directories.
  */
 export function validatePathSecurity(targetPath: string, rootPath: string): void {
