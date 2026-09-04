@@ -397,7 +397,9 @@ function ChatInterface({
         ? t('messageTypes.codex')
         : provider === 'opencode'
             ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
-          : t('messageTypes.claude');
+            : provider === 'command-code'
+              ? t('messageTypes.commandCode', { defaultValue: 'Command Code' })
+              : t('messageTypes.claude');
 
   if (!selectedProject) {
     return (

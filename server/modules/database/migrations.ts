@@ -476,6 +476,53 @@ const ensureProjectsForSessionPaths = (db: Database): void => {
   `);
 };
 
+/**
+ * Rebuilds the provider_models table when its provider CHECK constraint does
+ * not yet allow the `command-code` provider.
+ *
+ * SQLite cannot ALTER a CHECK constraint, so widening the provider allow-list
+ * requires a table rebuild. Rows are preserved verbatim; only the constraint
+ * changes.
+ */
+const rebuildProviderModelsTableWithCommandCodeProvider = (db: Database): void => {
+  if (!tableExists(db, 'provider_models')) {
+    db.exec(PROVIDER_MODELS_TABLE_SCHEMA_SQL);
+    return;
+  }
+
+  const createSql = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'provider_models'")
+    .get() as { sql: string } | undefined;
+  if (createSql?.sql?.includes("'command-code'")) {
+    return;
+  }
+
+  console.log('Running migration: Rebuilding provider_models table to allow command-code provider');
+
+  db.exec('PRAGMA foreign_keys = OFF');
+  try {
+    db.exec('BEGIN TRANSACTION');
+    db.exec('DROP TABLE IF EXISTS provider_models__new');
+    db.exec(PROVIDER_MODELS_TABLE_SCHEMA_SQL.replace(
+      'CREATE TABLE IF NOT EXISTS provider_models',
+      'CREATE TABLE provider_models__new'
+    ));
+    db.exec(`
+      INSERT INTO provider_models__new (id, provider, model_id, model_name, sort_order, created_at, updated_at)
+      SELECT id, provider, model_id, model_name, sort_order, created_at, updated_at
+      FROM provider_models
+    `);
+    db.exec('DROP TABLE provider_models');
+    db.exec('ALTER TABLE provider_models__new RENAME TO provider_models');
+    db.exec('COMMIT');
+  } catch (migrationError) {
+    db.exec('ROLLBACK');
+    throw migrationError;
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON');
+  }
+};
+
 export const runMigrations = (db: Database) => {
   try {
     const usersTableInfo = db.prepare('PRAGMA table_info(users)').all() as { name: string }[];
@@ -500,6 +547,7 @@ export const runMigrations = (db: Database) => {
     db.exec('CREATE INDEX IF NOT EXISTS idx_notification_channel_endpoints_user_channel ON notification_channel_endpoints(user_id, channel)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_notification_channel_endpoints_enabled ON notification_channel_endpoints(enabled)');
     db.exec(PROVIDER_MODELS_TABLE_SCHEMA_SQL);
+    rebuildProviderModelsTableWithCommandCodeProvider(db);
     db.exec(`
       CREATE INDEX IF NOT EXISTS idx_provider_models_provider_order
       ON provider_models(provider, sort_order, id)

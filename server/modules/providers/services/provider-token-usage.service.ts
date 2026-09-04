@@ -182,6 +182,65 @@ function emptyCodexTokenUsage(): TokenUsageResult {
 }
 
 /**
+ * Latest usage from a Command Code transcript's already-parsed rows.
+ *
+ * Command Code records per-assistant-message `usage` (with `input_tokens` /
+ * `output_tokens`, camelCase variants accepted). Reads the newest usage-bearing
+ * assistant row only so a session's counter reflects the current conversation,
+ * mirroring the Claude reader.
+ */
+export function summarizeCommandCodeTokenUsage(fileContent: string): TokenUsageResult {
+  let inputTokens = 0;
+  let outputTokens = 0;
+
+  const lines = fileContent.trim().split('\n');
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    try {
+      const entry = JSON.parse(lines[index]) as AnyRecord;
+      const message = entry?.type === 'message' ? entry.message : null;
+      const usage = message?.usage;
+      if (!usage) {
+        continue;
+      }
+
+      const rowInput = readUsageNumber(usage.input_tokens ?? usage.inputTokens ?? usage.input);
+      const rowOutput = readUsageNumber(usage.output_tokens ?? usage.outputTokens ?? usage.output);
+      if (rowInput === 0 && rowOutput === 0) {
+        continue;
+      }
+
+      inputTokens = rowInput;
+      outputTokens = rowOutput;
+      break;
+    } catch {
+      // A provider may be writing the last JSONL line while this read happens.
+    }
+  }
+
+  return {
+    used: inputTokens + outputTokens,
+    inputTokens,
+    outputTokens,
+    breakdown: { input: inputTokens, output: outputTokens },
+  };
+}
+
+function commandCodeUsageRows(fileContent: string): boolean {
+  const lines = fileContent.trim().split('\n');
+  for (const line of lines) {
+    try {
+      const entry = JSON.parse(line) as AnyRecord;
+      if (entry?.type === 'message' && entry.message?.usage) {
+        return true;
+      }
+    } catch {
+      // Skip malformed lines.
+    }
+  }
+  return false;
+}
+
+/**
  * Latest context-window usage from a Claude transcript's already-parsed rows.
  *
  * Exported because the session-messages reader hands the same usage back on
@@ -432,6 +491,23 @@ export function createProviderTokenUsageService(
         // whole file is still authoritative when it happens.
         return findCodexTokenUsage(await dependencies.readTextFile(sessionFilePath))
           ?? emptyCodexTokenUsage();
+      }
+
+      if (session.provider === 'command-code') {
+        const sessionFilePath = session.jsonl_path;
+        if (!sessionFilePath || !dependencies.fileExists(sessionFilePath)) {
+          throw new AppError(`Command Code session file for "${sessionId}" was not found.`, {
+            code: 'SESSION_FILE_NOT_FOUND',
+            statusCode: 404,
+          });
+        }
+
+        const tail = await dependencies.readTextFileTail(sessionFilePath, TOKEN_USAGE_TAIL_BYTES);
+        if (commandCodeUsageRows(tail.content) || tail.isComplete) {
+          return summarizeCommandCodeTokenUsage(tail.content);
+        }
+
+        return summarizeCommandCodeTokenUsage(await dependencies.readTextFile(sessionFilePath));
       }
 
       let sessionFilePath = session.jsonl_path;

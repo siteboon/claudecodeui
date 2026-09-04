@@ -178,7 +178,7 @@ CREATE TABLE IF NOT EXISTS app_config (
 export const PROVIDER_MODELS_TABLE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS provider_models (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    provider TEXT NOT NULL CHECK (provider IN ('claude', 'cursor', 'codex', 'opencode')),
+    provider TEXT NOT NULL CHECK (provider IN ('claude', 'cursor', 'codex', 'opencode', 'command-code')),
     model_id TEXT NOT NULL,
     model_name TEXT NOT NULL,
     sort_order INTEGER NOT NULL DEFAULT 0,
