@@ -476,6 +476,162 @@ const ensureProjectsForSessionPaths = (db: Database): void => {
   `);
 };
 
+/**
+ * Folds projects that differ only in the case of their Windows drive letter.
+ *
+ * `a:\work` and `A:\work` are the same directory on Windows, but `projects`
+ * keys on the raw string, so both spellings produced two rows. The second one
+ * looked like a brand-new, empty project sitting next to the real one, and its
+ * sessions were split across the pair. `normalizeProjectPath` now uppercases
+ * the drive letter, which stops new duplicates; this migration merges the ones
+ * already on disk.
+ *
+ * Order matters, and it is chosen to hold whether or not `PRAGMA foreign_keys`
+ * is on. `sessions.project_path` references `projects.project_path` with
+ * `ON DELETE SET NULL` and `ON UPDATE CASCADE`:
+ *
+ * - merging into an existing row: move the sessions first, then delete the
+ *   lowercase row. Deleting first would null out the very sessions to be kept.
+ * - renaming a row with no counterpart: rename the project first, so the
+ *   sessions never point at a parent that does not exist yet.
+ */
+const mergeProjectsDifferingOnlyByDriveLetterCase = (db: Database): void => {
+  if (!tableExists(db, 'projects')) {
+    return;
+  }
+
+  // GLOB is case-sensitive in SQLite, unlike LIKE - only lowercase drive
+  // letters are candidates, and an already-uppercase path is left untouched.
+  const lowercaseDriveProjects = db
+    .prepare("SELECT project_id, project_path FROM projects WHERE project_path GLOB '[a-z]:*'")
+    .all() as { project_id: string; project_path: string }[];
+
+  if (lowercaseDriveProjects.length === 0) {
+    return;
+  }
+
+  const findProjectByPath = db.prepare('SELECT project_id FROM projects WHERE project_path = ?');
+  const inheritStar = db.prepare(
+    'UPDATE projects SET isStarred = 1 WHERE project_path = ? AND isStarred = 0',
+  );
+  const inheritName = db.prepare(`
+    UPDATE projects
+    SET custom_project_name = ?
+    WHERE project_path = ? AND (custom_project_name IS NULL OR trim(custom_project_name) = '')
+  `);
+  const inheritActive = db.prepare(
+    'UPDATE projects SET isArchived = 0 WHERE project_path = ? AND isArchived = 1',
+  );
+  // Prepared lazily: better-sqlite3 resolves table names at prepare time, so
+  // preparing this against a database without a sessions table would throw
+  // before the guard below could skip it.
+  const moveSessions = tableExists(db, 'sessions')
+    ? db.prepare('UPDATE sessions SET project_path = ? WHERE project_path = ?')
+    : null;
+  const renameProject = db.prepare(
+    'UPDATE projects SET project_path = ? WHERE project_id = ?',
+  );
+  const dropProject = db.prepare('DELETE FROM projects WHERE project_id = ?');
+  const readProject = db.prepare(
+    'SELECT custom_project_name, isStarred, isArchived FROM projects WHERE project_id = ?',
+  );
+
+  const merge = db.transaction(() => {
+    for (const duplicate of lowercaseDriveProjects) {
+      const uppercasePath = `${duplicate.project_path[0].toUpperCase()}${duplicate.project_path.slice(1)}`;
+      const counterpart = findProjectByPath.get(uppercasePath) as { project_id: string } | undefined;
+
+      if (!counterpart) {
+        renameProject.run(uppercasePath, duplicate.project_id);
+        moveSessions?.run(uppercasePath, duplicate.project_path);
+        continue;
+      }
+
+      const losing = readProject.get(duplicate.project_id) as
+        | { custom_project_name: string | null; isStarred: number; isArchived: number }
+        | undefined;
+
+      moveSessions?.run(uppercasePath, duplicate.project_path);
+
+      // A star or a custom name set on the duplicate would otherwise be lost.
+      if (losing?.isStarred) {
+        inheritStar.run(uppercasePath);
+      }
+      if (losing?.custom_project_name && losing.custom_project_name.trim() !== '') {
+        inheritName.run(losing.custom_project_name, uppercasePath);
+      }
+      // Being archived must not survive the merge when the duplicate was the
+      // one in use: the surviving row keeps every session, and archiving it
+      // would take a project the user works in out of the list.
+      if (losing && !losing.isArchived) {
+        inheritActive.run(uppercasePath);
+      }
+
+      dropProject.run(duplicate.project_id);
+    }
+  });
+
+  console.log(
+    `Running migration: Normalizing ${lowercaseDriveProjects.length} project path(s) with a lowercase drive letter`,
+  );
+
+  // The order above holds as long as `sessions.project_path` cascades on
+  // update. A database from an older schema may reference `projects` without
+  // `ON UPDATE CASCADE`, and there SQLite refuses the rename outright while
+  // foreign keys are on - the sessions would be left pointing at a parent that
+  // no longer exists. Rebuilding that table here would be a heavier operation
+  // than the migration itself, so the constraint is lifted for the length of
+  // the merge, which moves the sessions over by hand anyway.
+  //
+  // The pragma has to be set outside the transaction: inside one it is a
+  // no-op, and the merge below is a transaction.
+  const cascades = !tableExists(db, 'sessions') || sessionsCascadeOnUpdate(db);
+  const foreignKeysWereOn = Boolean(db.pragma('foreign_keys', { simple: true }));
+  const mustLift = !cascades && foreignKeysWereOn;
+
+  if (mustLift) {
+    console.log('  (legacy sessions schema without ON UPDATE CASCADE - foreign keys lifted for the merge)');
+    db.exec('PRAGMA foreign_keys = OFF');
+  }
+
+  try {
+    merge();
+  } finally {
+    if (mustLift) {
+      db.exec('PRAGMA foreign_keys = ON');
+    }
+  }
+};
+
+/**
+ * Whether `sessions.project_path` follows a renamed project on its own.
+ *
+ * `PRAGMA foreign_key_list` reports one row per foreign key, with the action
+ * SQLite takes when the referenced key changes. Anything other than `CASCADE`
+ * means a rename of `projects.project_path` is refused rather than followed.
+ */
+const sessionsCascadeOnUpdate = (db: Database): boolean => {
+  try {
+    const keys = db.prepare('PRAGMA foreign_key_list(sessions)').all() as {
+      table: string;
+      to: string | null;
+      on_update: string;
+    }[];
+
+    const toProjects = keys.filter((key) => key.table === 'projects');
+    if (toProjects.length === 0) {
+      // No constraint at all: nothing can refuse the rename.
+      return true;
+    }
+
+    return toProjects.every((key) => String(key.on_update).toUpperCase() === 'CASCADE');
+  } catch {
+    // An unreadable pragma is not a reason to skip the migration; the merge
+    // moves the sessions itself either way.
+    return true;
+  }
+};
+
 export const runMigrations = (db: Database) => {
   try {
     const usersTableInfo = db.prepare('PRAGMA table_info(users)').all() as { name: string }[];
@@ -520,6 +676,7 @@ export const runMigrations = (db: Database) => {
     addSessionEffortColumn(db);
     addForkedFromSessionIdColumn(db);
     ensureProjectsForSessionPaths(db);
+    mergeProjectsDifferingOnlyByDriveLetterCase(db);
     db.exec(SCHEDULED_MESSAGES_TABLE_SCHEMA_SQL);
 
     db.exec('CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id)');
