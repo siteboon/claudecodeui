@@ -240,6 +240,7 @@
     },
     "pending": "{{when}} に送信予定",
     "failed": "未送信 — {{reason}}",
-    "cancel": "予約を取り消す"
+    "cancel": "予約を取り消す",
+    "dismiss": "失敗の通知を閉じる"
   }
 }
