@@ -114,6 +114,20 @@ export function useClaudeSpeech(
       return;
     }
 
+    // Two things here need an encrypted connection, and the browser only
+    // enforces the first: it hands out no microphone outside a secure context.
+    // The second is the login in the socket address below, which over plain
+    // ws:// to a machine on the network travels in the clear along with the
+    // audio. Loopback counts as secure, so a window on this machine is
+    // unaffected; reaching the same server over the LAN address is the case
+    // this stops. Without it the failure is `navigator.mediaDevices` being
+    // undefined, which surfaces as "cannot read properties of undefined" and
+    // reads like a bug in the app rather than a missing https.
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+      onError?.('Dictation needs an encrypted connection. Open CloudCLI over https, or on the machine it runs on.');
+      return;
+    }
+
     starting.current = true;
     transcript.current = '';
     sendOnEnd.current = false;
