@@ -130,8 +130,8 @@ export const MCP_SUPPORTED_SCOPES: Record<McpProvider, McpScope[]> = {
   cursor: ['user', 'project'],
   codex: ['user', 'project'],
   opencode: ['user', 'project'],
-  zcode: [],
-  antigravity: [],
+  zcode: ['user', 'project'],
+  antigravity: ['user', 'project'],
 };
 
 /** Transports each provider can talk to an MCP server over; drives the transport selector and validation. */
@@ -140,8 +140,8 @@ export const MCP_SUPPORTED_TRANSPORTS: Record<McpProvider, McpTransport[]> = {
   cursor: ['stdio', 'http'],
   codex: ['stdio', 'http'],
   opencode: ['stdio', 'http'],
-  zcode: [],
-  antigravity: [],
+  zcode: ['stdio', 'http'],
+  antigravity: ['stdio', 'http', 'sse'],
 };
 
 /** Transports offered when configuring a global (provider-agnostic) MCP server. */
