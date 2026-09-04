@@ -12,12 +12,32 @@ export type ApiRequestOptions = Omit<RequestInit, 'headers'> & {
   headers?: Record<string, string>;
 };
 
+let authRequestSequence = 0;
+let lastAuthorizedRequest = 0;
+
+const rejectionStillApplies = (requestSequence: number, sentToken: string | null): boolean => {
+  if (requestSequence < lastAuthorizedRequest) {
+    return false;
+  }
+
+  const storedToken = localStorage.getItem('auth-token');
+  return sentToken ? storedToken === sentToken : storedToken === null;
+};
+
+// Reads the token out of an `Authorization` header value, or null when the
+// header carries a credential this client does not own.
+const bearerCredential = (header: string): string | null => {
+  const match = /^Bearer (.+)$/.exec(header);
+  return match ? match[1] : null;
+};
+
 // Utility function for authenticated API calls
 export const authenticatedFetch = (
   url: string,
   options: ApiRequestOptions = {},
 ): Promise<Response> => {
   const token = getStoredAuthToken();
+  const requestSequence = (authRequestSequence += 1);
 
   const defaultHeaders: Record<string, string> = {};
 
@@ -30,19 +50,26 @@ export const authenticatedFetch = (
     defaultHeaders['Authorization'] = `Bearer ${token}`;
   }
 
-  return fetch(url, {
-    ...options,
-    headers: {
-      ...defaultHeaders,
-      ...options.headers,
-    },
-  }).then((response) => {
+  const headers = { ...defaultHeaders, ...options.headers };
+
+  // A rejection belongs to the credential the request actually carried, so a
+  // caller that overrides `Authorization` cannot end the session held in
+  // storage. With no such header at all - platform builds authenticate by
+  // cookie - the stored token is still what the rejection ends.
+  const authorization = headers.Authorization ?? headers.authorization;
+  const sentToken = authorization === undefined ? token : bearerCredential(authorization);
+
+  return fetch(url, { ...options, headers }).then((response) => {
     const refreshedToken = response.headers.get('X-Refreshed-Token');
     if (refreshedToken) {
       storeAuthToken(refreshedToken);
     }
     if (response.headers.get('X-Auth-Error')) {
-      expireAuthSession();
+      if (rejectionStillApplies(requestSequence, sentToken)) {
+        expireAuthSession();
+      }
+    } else if (response.ok && requestSequence > lastAuthorizedRequest) {
+      lastAuthorizedRequest = requestSequence;
     }
     return response;
   });
