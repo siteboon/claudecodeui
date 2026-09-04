@@ -74,22 +74,12 @@ function ChatInterface({
   const {
     provider,
     setProvider,
-    cursorModel,
-    setCursorModel,
-    claudeModel,
-    setClaudeModel,
-    codexModel,
-    setCodexModel,
+    providerModels,
+    setProviderModel,
     currentProviderEffort,
     currentProviderEffortOptions,
     currentProviderModel,
     currentProviderModelOptions,
-    opencodeModel,
-    setOpenCodeModel,
-    zcodeModel,
-    setZcodeModel,
-    antigravityModel,
-    setAntigravityModel,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
@@ -370,18 +360,8 @@ function ChatInterface({
           provider={provider}
           setProvider={handlePaneProviderChange}
           textareaRef={textareaRef}
-          claudeModel={claudeModel}
-          setClaudeModel={setClaudeModel}
-          cursorModel={cursorModel}
-          setCursorModel={setCursorModel}
-          codexModel={codexModel}
-          setCodexModel={setCodexModel}
-          opencodeModel={opencodeModel}
-          setOpenCodeModel={setOpenCodeModel}
-          zcodeModel={zcodeModel}
-          setZcodeModel={setZcodeModel}
-          antigravityModel={antigravityModel}
-          setAntigravityModel={setAntigravityModel}
+          providerModels={providerModels}
+          setProviderModel={setProviderModel}
           providerModelCatalog={providerModelCatalog}
           providerModelActions={providerModelActions}
           providerModelsLoading={providerModelsLoading}

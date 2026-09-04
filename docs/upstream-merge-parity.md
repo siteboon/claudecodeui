@@ -23,7 +23,7 @@
 |---|---|---|
 | 滚动稳定 | scrollPositionRef + 手动锚点捕获 | **保留 fork 方案**：原生锚定 + RO 贴底更优，且有量化护航 |
 | 流式渲染 | StreamingMarkdown（已删） | 当前转换缓存 + memo 够用；超长流式消息如有重 parse 开销可借鉴其分块思路 |
-| Provider 模型选择 | `providerModels` 统一 map + `setProviderModel` | **上游更优**，建议后续独立重构（动 useChatProviderState / ChatInterface / ProviderSelectionEmptyState） |
+| Provider 模型选择 | `providerModels` 统一 map + `setProviderModel` | ✅ **已采用上游方案**（18ea04e 后续提交）：6 个 per-provider state + 12 个 props 收敛为单 map + 2 props，6 段重复 reconcile effect 合并为一段；存储键保持 `<provider>-model` 不变，用户既有选择不受影响 |
 | 消息编辑/fork | transcriptAnchorId + resolveEditAnchor/rewindSession | 服务端 facet 已并入（codex 完整）；**前端编辑入口未接**，可选缺口 |
 | 定时消息 | ScheduleMessagePopover 等组件 | 组件在树但 fork composer 未挂载，可选缺口 |
 | 导出 | buildTranscriptExport（JSON/markdown） | fork 的 exportToMarkdown/downloadHTML 够用，暂不换 |

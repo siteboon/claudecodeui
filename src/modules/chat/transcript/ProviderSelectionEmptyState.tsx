@@ -59,18 +59,8 @@ type ProviderSelectionEmptyStateProps = {
   provider: LLMProvider;
   setProvider: (next: LLMProvider) => void;
   textareaRef: React.RefObject<HTMLTextAreaElement>;
-  claudeModel: string;
-  setClaudeModel: (model: string) => void;
-  cursorModel: string;
-  setCursorModel: (model: string) => void;
-  codexModel: string;
-  setCodexModel: (model: string) => void;
-  opencodeModel: string;
-  setOpenCodeModel: (model: string) => void;
-  zcodeModel: string;
-  setZcodeModel: (model: string) => void;
-  antigravityModel?: string;
-  setAntigravityModel?: (model: string) => void;
+  providerModels: Record<LLMProvider, string>;
+  setProviderModel: (provider: LLMProvider, model: string) => void;
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
   providerModelActions: ProviderModelActions;
   providerModelsLoading: boolean;
@@ -95,23 +85,6 @@ function getModelConfig(
   return entry ?? { OPTIONS: [], DEFAULT: "" };
 }
 
-function getCurrentModel(
-  p: LLMProvider,
-  c: string,
-  cu: string,
-  co: string,
-  o: string,
-  z: string,
-  ag: string = "",
-) {
-  if (p === "claude") return c;
-  if (p === "codex") return co;
-  if (p === "opencode") return o;
-  if (p === "zcode") return z;
-  if (p === "antigravity") return ag;
-  return cu;
-}
-
 function getProviderDisplayName(p: LLMProvider) {
   if (p === "claude") return "Claude";
   if (p === "cursor") return "Cursor";
@@ -128,18 +101,8 @@ export default function ProviderSelectionEmptyState({
   provider,
   setProvider,
   textareaRef,
-  claudeModel,
-  setClaudeModel,
-  cursorModel,
-  setCursorModel,
-  codexModel,
-  setCodexModel,
-  opencodeModel,
-  setOpenCodeModel,
-  zcodeModel,
-  setZcodeModel,
-  antigravityModel = "",
-  setAntigravityModel,
+  providerModels,
+  setProviderModel,
   providerModelCatalog,
   providerModelActions,
   providerModelsLoading,
@@ -179,15 +142,7 @@ export default function ProviderSelectionEmptyState({
     defaultValue: "Start the next task",
   });
 
-  const currentModel = getCurrentModel(
-    provider,
-    claudeModel,
-    cursorModel,
-    codexModel,
-    opencodeModel,
-    zcodeModel,
-    antigravityModel,
-  );
+  const currentModel = providerModels[provider] ?? "";
 
   const currentModelLabel = useMemo(() => {
     const config = getModelConfig(provider, providerModelCatalog);
@@ -197,40 +152,15 @@ export default function ProviderSelectionEmptyState({
     return found?.label || currentModel;
   }, [provider, currentModel, providerModelCatalog]);
 
-  const setModelForProvider = useCallback(
-    (providerId: LLMProvider, modelValue: string) => {
-      if (providerId === "claude") {
-        setClaudeModel(modelValue);
-        localStorage.setItem("claude-model", modelValue);
-      } else if (providerId === "codex") {
-        setCodexModel(modelValue);
-        localStorage.setItem("codex-model", modelValue);
-      } else if (providerId === "opencode") {
-        setOpenCodeModel(modelValue);
-        localStorage.setItem("opencode-model", modelValue);
-      } else if (providerId === "zcode") {
-        setZcodeModel(modelValue);
-        localStorage.setItem("zcode-model", modelValue);
-      } else if (providerId === "antigravity") {
-        setAntigravityModel?.(modelValue);
-        localStorage.setItem("antigravity-model", modelValue);
-      } else {
-        setCursorModel(modelValue);
-        localStorage.setItem("cursor-model", modelValue);
-      }
-    },
-    [setClaudeModel, setCursorModel, setCodexModel, setOpenCodeModel, setZcodeModel, setAntigravityModel],
-  );
-
   const handleModelSelect = useCallback(
     (providerId: LLMProvider, modelValue: string) => {
       setProvider(providerId);
       localStorage.setItem("selected-provider", providerId);
-      setModelForProvider(providerId, modelValue);
+      setProviderModel(providerId, modelValue);
       setDialogOpen(false);
       setTimeout(() => textareaRef.current?.focus(), 100);
     },
-    [setProvider, setModelForProvider, textareaRef],
+    [setProvider, setProviderModel, textareaRef],
   );
 
   const openModelLibrary = () => {
@@ -412,24 +342,24 @@ export default function ProviderSelectionEmptyState({
             {
               {
                 claude: t("providerSelection.readyPrompt.claude", {
-                  model: claudeModel,
+                  model: providerModels.claude,
                 }),
                 cursor: t("providerSelection.readyPrompt.cursor", {
-                  model: cursorModel,
+                  model: providerModels.cursor,
                 }),
                 codex: t("providerSelection.readyPrompt.codex", {
-                  model: codexModel,
+                  model: providerModels.codex,
                 }),
                 opencode: t("providerSelection.readyPrompt.opencode", {
-                  model: opencodeModel,
+                  model: providerModels.opencode,
                   defaultValue: "Ready with OpenCode {{model}}",
                 }),
                 zcode: t("providerSelection.readyPrompt.zcode", {
-                  model: zcodeModel,
+                  model: providerModels.zcode,
                   defaultValue: "Ready with ZCode {{model}}",
                 }),
                 antigravity: t("providerSelection.readyPrompt.antigravity", {
-                  model: antigravityModel,
+                  model: providerModels.antigravity,
                   defaultValue: "Ready with Antigravity {{model}}",
                 }),
               }[provider]

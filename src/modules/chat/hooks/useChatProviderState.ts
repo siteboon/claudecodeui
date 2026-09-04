@@ -123,29 +123,20 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('default');
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
   const [provider, setProvider] = useState<LLMProvider>(readStoredProvider);
-  const [cursorModel, setCursorModel] = useState<string>(() => {
-    return localStorage.getItem('cursor-model') || FALLBACK_DEFAULT_MODEL.cursor;
-  });
-  const [claudeModel, setClaudeModel] = useState<string>(() => {
-    return localStorage.getItem('claude-model') || FALLBACK_DEFAULT_MODEL.claude;
-  });
-  const [codexModel, setCodexModel] = useState<string>(() => {
-    return localStorage.getItem('codex-model') || FALLBACK_DEFAULT_MODEL.codex;
-  });
+  // One map for the per-provider default model, mirroring the upstream
+  // providerModels API. Each provider keeps its own `<provider>-model`
+  // storage key so selections made before the merge still resolve.
+  const [providerModels, setProviderModels] = useState<Record<LLMProvider, string>>(() => (
+    PROVIDERS.reduce<Record<LLMProvider, string>>((acc, targetProvider) => {
+      acc[targetProvider] = localStorage.getItem(`${targetProvider}-model`) || FALLBACK_DEFAULT_MODEL[targetProvider];
+      return acc;
+    }, {} as Record<LLMProvider, string>)
+  ));
   const [providerEfforts, setProviderEfforts] = useState<Partial<Record<LLMProvider, string>>>(() => {
     return PROVIDERS.reduce<Partial<Record<LLMProvider, string>>>((acc, targetProvider) => {
       acc[targetProvider] = localStorage.getItem(`${targetProvider}-effort`) || DEFAULT_EFFORT_VALUE;
       return acc;
     }, {});
-  });
-  const [opencodeModel, setOpenCodeModel] = useState<string>(() => {
-    return localStorage.getItem('opencode-model') || FALLBACK_DEFAULT_MODEL.opencode;
-  });
-  const [zcodeModel, setZcodeModel] = useState<string>(() => {
-    return localStorage.getItem('zcode-model') || FALLBACK_DEFAULT_MODEL.zcode;
-  });
-  const [antigravityModel, setAntigravityModel] = useState<string>(() => {
-    return localStorage.getItem('antigravity-model') || FALLBACK_DEFAULT_MODEL.antigravity;
   });
 
   /**
@@ -169,39 +160,13 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   const sessionModelMutationIdRef = useRef(0);
   const sessionEffortMutationIdRef = useRef(0);
 
-  const setStoredProviderModel = useCallback((targetProvider: LLMProvider, model: string) => {
-    if (targetProvider === 'claude') {
-      setClaudeModel(model);
-      localStorage.setItem('claude-model', model);
-      return;
-    }
-
-    if (targetProvider === 'cursor') {
-      setCursorModel(model);
-      localStorage.setItem('cursor-model', model);
-      return;
-    }
-
-    if (targetProvider === 'codex') {
-      setCodexModel(model);
-      localStorage.setItem('codex-model', model);
-      return;
-    }
-
-    if (targetProvider === 'zcode') {
-      setZcodeModel(model);
-      localStorage.setItem('zcode-model', model);
-      return;
-    }
-
-    if (targetProvider === 'antigravity') {
-      setAntigravityModel(model);
-      localStorage.setItem('antigravity-model', model);
-      return;
-    }
-
-    setOpenCodeModel(model);
-    localStorage.setItem('opencode-model', model);
+  const setProviderModel = useCallback((targetProvider: LLMProvider, model: string) => {
+    setProviderModels((previous) => (
+      previous[targetProvider] === model
+        ? previous
+        : { ...previous, [targetProvider]: model }
+    ));
+    localStorage.setItem(`${targetProvider}-model`, model);
   }, []);
 
   const setStoredProviderEffort = useCallback((targetProvider: LLMProvider, effort: string) => {
@@ -383,92 +348,39 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     return DEFAULT_EFFORT_VALUE;
   }, [getAllowedEffortValues]);
 
-  const providerModels = useMemo<Record<LLMProvider, string>>(() => ({
-    claude: claudeModel,
-    cursor: cursorModel,
-    codex: codexModel,
-    opencode: opencodeModel,
-    zcode: zcodeModel,
-    antigravity: antigravityModel,
-  }), [claudeModel, cursorModel, codexModel, opencodeModel, zcodeModel, antigravityModel]);
-
+  // One reconciliation pass over every provider: when a catalog arrives,
+  // resolve each stored model against it (falling back to the catalog
+  // default) instead of running one near-identical effect per provider.
   useEffect(() => {
-    const claude = providerModelCatalog.claude;
-    if (claude) {
-      const next = pickStoredOrCurrent('claude-model', claudeModel, claude);
-      if (next !== claudeModel) {
-        setClaudeModel(next);
-      }
-      if (localStorage.getItem('claude-model') !== next) {
-        localStorage.setItem('claude-model', next);
-      }
-    }
-  }, [providerModelCatalog.claude, claudeModel]);
+    setProviderModels((previous) => {
+      let changed = false;
+      const next = { ...previous };
 
-  useEffect(() => {
-    const cursor = providerModelCatalog.cursor;
-    if (cursor) {
-      const next = pickStoredOrCurrent('cursor-model', cursorModel, cursor);
-      if (next !== cursorModel) {
-        setCursorModel(next);
-      }
-      if (localStorage.getItem('cursor-model') !== next) {
-        localStorage.setItem('cursor-model', next);
-      }
-    }
-  }, [providerModelCatalog.cursor, cursorModel]);
+      for (const targetProvider of PROVIDERS) {
+        const definition = providerModelCatalog[targetProvider];
+        if (!definition) {
+          continue;
+        }
 
-  useEffect(() => {
-    const codex = providerModelCatalog.codex;
-    if (codex) {
-      const next = pickStoredOrCurrent('codex-model', codexModel, codex);
-      if (next !== codexModel) {
-        setCodexModel(next);
-      }
-      if (localStorage.getItem('codex-model') !== next) {
-        localStorage.setItem('codex-model', next);
-      }
-    }
-  }, [providerModelCatalog.codex, codexModel]);
+        const stored = localStorage.getItem(`${targetProvider}-model`);
+        const current = previous[targetProvider];
+        let resolved = definition.DEFAULT;
+        if (stored && definition.OPTIONS.some((option) => option.value === stored)) {
+          resolved = stored;
+        } else if (current && definition.OPTIONS.some((option) => option.value === current)) {
+          resolved = current;
+        }
 
-  useEffect(() => {
-    const opencode = providerModelCatalog.opencode;
-    if (opencode) {
-      const next = pickStoredOrCurrent('opencode-model', opencodeModel, opencode);
-      if (next !== opencodeModel) {
-        setOpenCodeModel(next);
+        if (resolved !== current) {
+          next[targetProvider] = resolved;
+          localStorage.setItem(`${targetProvider}-model`, resolved);
+          changed = true;
+        }
       }
-      if (localStorage.getItem('opencode-model') !== next) {
-        localStorage.setItem('opencode-model', next);
-      }
-    }
-  }, [providerModelCatalog.opencode, opencodeModel]);
 
-  useEffect(() => {
-    const zcode = providerModelCatalog.zcode;
-    if (zcode) {
-      const next = pickStoredOrCurrent('zcode-model', zcodeModel, zcode);
-      if (next !== zcodeModel) {
-        setZcodeModel(next);
-      }
-      if (localStorage.getItem('zcode-model') !== next) {
-        localStorage.setItem('zcode-model', next);
-      }
-    }
-  }, [providerModelCatalog.zcode, zcodeModel]);
-
-  useEffect(() => {
-    const antigravity = providerModelCatalog.antigravity;
-    if (antigravity) {
-      const next = pickStoredOrCurrent('antigravity-model', antigravityModel, antigravity);
-      if (next !== antigravityModel) {
-        setAntigravityModel(next);
-      }
-      if (localStorage.getItem('antigravity-model') !== next) {
-        localStorage.setItem('antigravity-model', next);
-      }
-    }
-  }, [providerModelCatalog.antigravity, antigravityModel]);
+      return changed ? next : previous;
+    });
+  }, [providerModelCatalog]);
 
   useEffect(() => {
     const nextEfforts: Partial<Record<LLMProvider, string>> = {};
@@ -647,7 +559,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     model: string,
     sessionId?: string | null,
   ) => {
-    setStoredProviderModel(targetProvider, model);
+    setProviderModel(targetProvider, model);
 
     const normalizedSessionId = typeof sessionId === 'string' ? sessionId.trim() : '';
     if (!normalizedSessionId) {
@@ -689,7 +601,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       }));
     }
     return { scope: 'session' as const, model: storedModel };
-  }, [setStoredProviderModel]);
+  }, [setProviderModel]);
 
   /**
    * Applies an effort choice optimistically and persists it for the open
@@ -846,7 +758,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     applyProviderCatalog(targetProvider, result.models);
 
     if (providerModels[targetProvider] === existing.value) {
-      setStoredProviderModel(targetProvider, result.model.value);
+      setProviderModel(targetProvider, result.model.value);
     }
     if (provider === targetProvider && sessionModel === existing.value) {
       setSessionSelection((current) => current ? {
@@ -860,7 +772,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     providerModels,
     readModelMutationResponse,
     sessionModel,
-    setStoredProviderModel,
+    setProviderModel,
   ]);
 
   const removeCustomModel = useCallback(async (
@@ -879,7 +791,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     applyProviderCatalog(targetProvider, result.models);
 
     if (providerModels[targetProvider] === existing.value) {
-      setStoredProviderModel(targetProvider, result.models.DEFAULT);
+      setProviderModel(targetProvider, result.models.DEFAULT);
     }
     if (provider === targetProvider && sessionModel === existing.value) {
       setSessionSelection((current) => current ? {
@@ -893,7 +805,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     providerModels,
     readModelMutationResponse,
     sessionModel,
-    setStoredProviderModel,
+    setProviderModel,
   ]);
 
   const providerModelActions = useMemo<ProviderModelActions>(() => ({
@@ -905,22 +817,13 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   return {
     provider,
     setProvider,
-    cursorModel,
-    setCursorModel,
-    claudeModel,
-    setClaudeModel,
-    codexModel,
-    setCodexModel,
+    providerModels,
+    setProviderModel,
     currentProviderEffort,
     currentProviderEffortOptions,
     currentProviderModel,
     currentProviderModelOptions,
-    opencodeModel,
-    setOpenCodeModel,
-    zcodeModel,
-    setZcodeModel,
-    antigravityModel,
-    setAntigravityModel,
+
     permissionMode,
     setPermissionMode,
     pendingPermissionRequests,
