@@ -274,6 +274,7 @@
     },
     "pending": "将于 {{when}} 发送",
     "failed": "未发送 — {{reason}}",
-    "cancel": "取消定时消息"
+    "cancel": "取消定时消息",
+    "dismiss": "关闭失败提示"
   }
 }
