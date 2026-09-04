@@ -10,7 +10,7 @@ import type {
   ProviderModelActions,
   ProviderModelsDefinition,
 } from '@/shared/types';
-import type { ProviderAuthStatusMap } from '@/modules/provider-auth/types';
+import type { ProviderAuthStatusMap } from '@/modules/provider-auth';
 import { getIntrinsicMessageKey } from '@/modules/chat/utils/messageKeys';
 import { groupConsecutiveTools, isToolGroupItem } from '@/modules/chat/utils/toolGrouping';
 

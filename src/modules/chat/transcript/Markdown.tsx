@@ -8,11 +8,11 @@ import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/pris
 import { useTranslation } from 'react-i18next';
 
 import { SyntaxHighlighter, isRegisteredLanguage } from '@/modules/chat/composer/codeHighlightLanguages';
-import MermaidDiagram from '@/modules/code-editor/markdown/MermaidDiagram';
+import { MermaidDiagram } from '@/modules/code-editor';
 import { normalizeInlineCodeFences } from '@/modules/chat/utils/chatFormatting';
 import { filePathFromFileUrl, markdownUrlTransform } from '@/modules/chat/utils/fileLink';
 import { copyTextToClipboard } from '@/shared/utils';
-import { usePaletteOps } from '@/modules/command-palette/context/PaletteOpsContext';
+import { usePaletteOps } from '@/modules/command-palette';
 import { useTheme } from '@/shared/context/ThemeContext';
 
 type MarkdownProps = {

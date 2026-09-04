@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { safeLocalStorage } from '@/modules/chat/utils/chatStorage';
+import { safeLocalStorage } from '@/shared/utils';
 import { api } from '@/shared/api';
 
 import { getIsPWA } from '@/shared/hooks/useDeviceSettings';

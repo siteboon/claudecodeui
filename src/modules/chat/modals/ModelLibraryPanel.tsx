@@ -17,7 +17,7 @@ import type {
   ProviderModelOption,
   ProviderModelsDefinition,
 } from '@/shared/types';
-import type { ProviderAuthStatusMap } from '@/modules/provider-auth/types';
+import type { ProviderAuthStatusMap } from '@/modules/provider-auth';
 
 const ALL_PROVIDERS: Array<{ id: LLMProvider; label: string }> = [
   { id: 'claude', label: 'Claude' },

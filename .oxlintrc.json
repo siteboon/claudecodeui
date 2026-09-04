@@ -273,7 +273,7 @@
         "importx/no-useless-path-segments": "warn",
         "import/no-absolute-path": "error",
         "boundaries/dependencies": [
-          "warn",
+          "error",
           {
             "default": "allow",
             "checkInternals": false,
@@ -322,7 +322,7 @@
             ]
           }
         ],
-        "boundaries/no-unknown": "warn"
+        "boundaries/no-unknown": "error"
       }
     },
     {

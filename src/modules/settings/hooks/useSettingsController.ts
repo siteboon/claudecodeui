@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useTheme } from '@/shared/context/ThemeContext';
 import { authenticatedFetch } from '@/shared/api';
-import { setNotificationSoundEnabled } from '@/modules/chat/utils/notificationSound';
-import { useProviderAuthStatus } from '@/modules/provider-auth/hooks/useProviderAuthStatus';
+import { setNotificationSoundEnabled } from '@/modules/chat';
+import { useProviderAuthStatus } from '@/modules/provider-auth';
 import {
   DEFAULT_CODE_EDITOR_SETTINGS,
   DEFAULT_CURSOR_PERMISSIONS,

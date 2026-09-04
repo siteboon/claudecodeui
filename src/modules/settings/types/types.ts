@@ -1,7 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 
 import type { LLMProvider } from '@/shared/types';
-import type { ProviderAuthStatus } from '@/modules/provider-auth/types';
+import type { ProviderAuthStatus } from '@/modules/provider-auth';
 
 export type SettingsMainTab = 'agents' | 'sessions' | 'appearance' | 'git' | 'api' | 'voice' | 'tasks' | 'browser' | 'notifications' | 'plugins' | 'about';
 export type AgentProvider = LLMProvider;

@@ -9,7 +9,7 @@ import type {
   ProviderModelOption,
   ProviderModelsDefinition,
 } from "@/shared/types";
-import type { ProviderAuthStatusMap } from "@/modules/provider-auth/types";
+import type { ProviderAuthStatusMap } from "@/modules/provider-auth";
 import LLMProviderLogo from "@/shared/ui/LLMProviderLogo";
 import { NextTaskBanner } from "@/modules/task-master";
 import {
