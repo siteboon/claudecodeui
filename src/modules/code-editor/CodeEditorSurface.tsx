@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
+import { EditorView } from '@codemirror/view';
 import { oneDark } from '@codemirror/theme-one-dark';
 import type { Extension } from '@codemirror/state';
 
@@ -13,6 +15,8 @@ type CodeEditorSurfaceProps = {
   fontSize: number;
   showLineNumbers: boolean;
   extensions: Extension[];
+  // 1-based line to reveal once the document is loaded (`path:line` references).
+  gotoLine?: number | null;
 };
 
 /** Rendered by CodeEditor inside the code-editor module to show either the CodeMirror editing surface or the markdown preview. */
@@ -25,7 +29,25 @@ export default function CodeEditorSurface({
   fontSize,
   showLineNumbers,
   extensions,
+  gotoLine = null,
 }: CodeEditorSurfaceProps) {
+  // Tracked as state, not a ref: the editor view is created after the first
+  // render, and a ref would not re-run the effect once it lands.
+  const [view, setView] = useState<EditorView | null>(null);
+
+  // Content arrives asynchronously, so the jump waits for both the view and the
+  // document, and runs again whenever either changes for the requested line.
+  useEffect(() => {
+    if (!view || !gotoLine || !content) {
+      return;
+    }
+    const target = Math.min(Math.max(gotoLine, 1), view.state.doc.lines);
+    const line = view.state.doc.line(target);
+    view.dispatch({
+      selection: { anchor: line.from },
+      effects: EditorView.scrollIntoView(line.from, { y: 'center' }),
+    });
+  }, [view, gotoLine, content]);
   if (markdownPreview && isMarkdownFile) {
     return (
       <div className="h-full overflow-y-auto bg-white dark:bg-gray-900">
@@ -38,6 +60,7 @@ export default function CodeEditorSurface({
 
   return (
     <CodeMirror
+      onCreateEditor={(editorView) => setView(editorView)}
       value={content}
       onChange={onChange}
       extensions={extensions}

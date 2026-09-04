@@ -25,10 +25,13 @@ import ImageViewer from '@/modules/file-tree/ImageViewer';
 type FileTreeProps = {
   selectedProject: Project | null;
   onFileOpen?: (filePath: string) => void;
+  // Directory to reveal (from an in-chat `path/` reference): its ancestors are
+  // expanded so the folder is visible without hunting through the tree.
+  revealDirectory?: string | null;
 };
 
 /** Exported through the file-tree barrel; the project-workspace module renders it as the Files sidebar tab. */
-export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps) {
+export default function FileTree({ selectedProject, onFileOpen, revealDirectory }: FileTreeProps) {
   const { t } = useTranslation();
   const [selectedImage, setSelectedImage] = useState<FileTreeImageSelection | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -55,6 +58,26 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
     files,
     expandDirectories,
   });
+
+  // Expand every ancestor between the project root and the requested folder.
+  useEffect(() => {
+    if (!revealDirectory || !selectedProject?.path) {
+      return;
+    }
+    const root = selectedProject.path.replace(/\/+$/, '');
+    const target = revealDirectory.replace(/\/+$/, '');
+    if (!target.startsWith(root)) {
+      return;
+    }
+    const segments = target.slice(root.length).split('/').filter(Boolean);
+    const paths: string[] = [];
+    let current = root;
+    for (const segment of segments) {
+      current = `${current}/${segment}`;
+      paths.push(current);
+    }
+    expandDirectories(paths);
+  }, [revealDirectory, selectedProject?.path, expandDirectories, files]);
 
   // File operations
   const operations = useFileTreeOperations({

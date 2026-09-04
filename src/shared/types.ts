@@ -707,6 +707,8 @@ export type CodeEditorFile = {
   // URLs for reading and saving content.
   projectId?: string;
   diffInfo?: CodeEditorDiffInfo | null;
+  // 1-based line to reveal when the file opens (from a `path:line` reference).
+  line?: number | null;
   [key: string]: unknown;
 };
 

@@ -417,6 +417,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
         mapFileSystemError(error, {
           ENOENT: { message: 'File not found', statusCode: 404 },
           EACCES: { message: 'Permission denied', statusCode: 403 },
+          EISDIR: { message: 'Path is a directory, not a file', statusCode: 400 },
         });
       }
     },
