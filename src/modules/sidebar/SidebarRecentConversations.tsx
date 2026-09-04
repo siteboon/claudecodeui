@@ -122,15 +122,17 @@ export default function SidebarRecentConversations({
               onClick={handleClick}
               data-testid="recent-conversation-row"
               className={cn(
-                'group flex min-w-0 items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors',
+                'relative group flex min-w-0 items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors',
+                // Marked the same way as an open session in the project list,
+                // so "which chat am I in" reads the same in both places.
                 isSelected
-                  ? 'bg-primary/10 text-foreground'
+                  ? 'bg-primary/15 text-foreground before:absolute before:left-0 before:top-1/2 before:h-6 before:w-[3px] before:-translate-y-1/2 before:rounded-r-full before:bg-primary'
                   : 'text-foreground hover:bg-accent/60',
               )}
             >
               <span className={cn(
                 'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md',
-                isSelected ? 'bg-primary/10' : 'bg-muted/60',
+                isSelected ? 'bg-primary/25' : 'bg-muted/60',
               )}>
                 <LLMProviderLogo provider={conversation.provider} className="h-3.5 w-3.5" />
               </span>
