@@ -409,6 +409,10 @@
     },
     "actions": {
       "add": "Aggiungi"
+    },
+    "keepSessionAlive": {
+      "label": "Mantieni il processo attivo per l'intera conversazione",
+      "description": "Risposte più veloci: la CLI si avvia una volta per conversazione invece che a ogni messaggio. Costa un processo per ogni conversazione aperta e cambiare progetto o livello di ragionamento ne avvia comunque uno nuovo."
     }
   },
   "mcpServers": {
