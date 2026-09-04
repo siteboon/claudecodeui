@@ -74,7 +74,13 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
 
         const response = await api.readFile(fileProjectId, filePath);
         if (!response.ok) {
-          throw new Error(`Failed to load file: ${response.status} ${response.statusText}`);
+          // The API explains *why* it refused (directory, outside the project
+          // root, missing). Surfacing the raw status instead turns those into
+          // an opaque "403 Forbidden" in the editor pane.
+          const detail = await response.json().catch(() => null);
+          throw new Error(
+            detail?.error || `Failed to load file: ${response.status} ${response.statusText}`,
+          );
         }
 
         const data = await response.json();

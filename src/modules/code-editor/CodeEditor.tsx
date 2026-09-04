@@ -297,6 +297,7 @@ export default function CodeEditor({
               fontSize={fontSize}
               showLineNumbers={showLineNumbers}
               extensions={extensions}
+              gotoLine={file.line ?? null}
             />
           </div>
 

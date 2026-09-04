@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, type Dispatch, type SetStateAction } from 'react';
+import React, { useCallback, useEffect, type Dispatch, type SetStateAction, useState } from 'react';
 
 import { ChatInterface } from '@/modules/chat';
 import { FileTree } from '@/modules/file-tree';
@@ -63,6 +63,8 @@ function WorkspaceMain({
   const browserUseEnabled = useBrowserUseEnabled();
 
   useTaskMasterProjectSync(selectedProject);
+  // Wrapped in an object so re-clicking the same folder re-triggers the reveal.
+  const [revealDirectory, setRevealDirectory] = useState<{ path: string } | null>(null);
 
   const shouldShowTasksTab = Boolean(tasksEnabled && isTaskMasterInstalled);
   const shouldShowBrowserTab = browserUseEnabled;
@@ -111,13 +113,20 @@ function WorkspaceMain({
   }, [handleFileOpen, setActiveTab]);
 
   // Opens the editor side panel in place, keeping the current tab (e.g. chat).
-  const openFileInEditor = useCallback((filePath: string) => {
-    resolvedFileOpen(filePath);
+  const openFileInEditor = useCallback((filePath: string, line?: number | null) => {
+    resolvedFileOpen(filePath, undefined, line);
   }, [resolvedFileOpen]);
+
+  // Directories cannot be read as text: reveal them in the file tree instead.
+  const openDirectory = useCallback((directoryPath: string) => {
+    setActiveTab('files');
+    // New object each time so clicking the same folder twice still reveals it.
+    setRevealDirectory({ path: directoryPath });
+  }, [setActiveTab]);
 
   // Stable arguments keep usePaletteOpsRegister's effect from tearing down and
   // rewriting the whole palette registry on every render.
-  usePaletteOpsRegister({ openFile, openFileInEditor });
+  usePaletteOpsRegister({ openFile, openFileInEditor, openDirectory });
 
   if (isLoading) {
     return <WorkspaceStateView mode="loading" isMobile={isMobile} onMenuClick={onMenuClick} />;
@@ -166,7 +175,11 @@ function WorkspaceMain({
 
           {activeTab === 'files' && (
             <div className="h-full overflow-hidden">
-              <FileTree selectedProject={selectedProject} onFileOpen={handleFileOpen} />
+              <FileTree
+                selectedProject={selectedProject}
+                onFileOpen={handleFileOpen}
+                revealDirectory={revealDirectory?.path ?? null}
+              />
             </div>
           )}
 

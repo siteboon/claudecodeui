@@ -17,9 +17,14 @@ type FlatFile = {
 
 // `diffInfo` is intentionally `any` so this resolver can wrap editor handlers
 // that expect a concrete diff payload type as well as generic callers.
-type OnFileOpen = (filePath: string, diffInfo?: any) => void;
+type OnFileOpen = (filePath: string, diffInfo?: any, line?: number | null) => void;
 
 const normalize = (value: string): string => value.replace(/\\/g, '/');
+
+// Backslashes are already normalized above, so a Windows path arrives as
+// `C:/…`; counting it as absolute lets a Windows server resolve it as-is and a
+// POSIX one answer an honest 404 instead of opening some other file.
+const isAbsoluteRef = (value: string): boolean => /^(\/|[A-Za-z]:\/)/.test(value);
 
 const flatten = (nodes: FileNode[], out: FlatFile[]): void => {
   for (const node of nodes) {
@@ -96,11 +101,22 @@ export function useFileOpenResolver(
   }, [projectId]);
 
   return useCallback(
-    (filePath: string, diffInfo?: any) => {
+    (filePath: string, diffInfo?: any, line?: number | null) => {
       const ref = normalize(filePath).trim();
+      // An absolute path already names one exact file: matching it against the
+      // tree can only send it somewhere else. `/home/user/.config/NOTES.md`
+      // used to fall through to the filename match and silently open the
+      // project's own `NOTES.md`. An absolute path inside the project already
+      // resolved to itself via the suffix match, so this shortcut does not
+      // change that case; for one outside, the API answers "Path must be under
+      // project root" and the editor now shows it.
+      if (isAbsoluteRef(ref)) {
+        onFileOpen(filePath, diffInfo, line);
+        return;
+      }
       void loadFiles().then((files) => {
         const match = findBestMatch(files, ref);
-        onFileOpen(match ?? filePath, diffInfo);
+        onFileOpen(match ?? filePath, diffInfo, line);
       });
     },
     [loadFiles, onFileOpen],

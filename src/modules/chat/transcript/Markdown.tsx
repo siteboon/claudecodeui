@@ -27,6 +27,12 @@ type MarkdownProps = {
 const isExternalHref = (href?: string): boolean =>
   !!href && (/^(https?:|mailto:|tel:|data:)/i.test(href) || href.startsWith('#'));
 
+// Read the trailing `:line` / `:line:col` suffix so the editor can reveal it.
+const lineFromRef = (value: string): number | null => {
+  const match = value.trim().match(/:(\d+)(?::\d+)?$/);
+  return match ? Number(match[1]) : null;
+};
+
 // Strip a trailing `:line` / `:line:col` suffix (e.g. `src/foo.ts:130`).
 const stripLineSuffix = (value: string): string => value.replace(/:\d+(?::\d+)?$/, '');
 
@@ -266,7 +272,7 @@ function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 
     [breaks, hasMath],
   );
   const rehypePlugins = useMemo(() => (hasMath ? [rehypeKatex] : EMPTY_PLUGINS), [hasMath]);
-  const { openFileInEditor } = usePaletteOps();
+  const { openFileInEditor, openDirectory } = usePaletteOps();
 
   const components = useMemo(
     () => ({
@@ -284,7 +290,11 @@ function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 
               className="cursor-pointer text-blue-600 hover:underline dark:text-blue-400"
               onClick={(event) => {
                 event.preventDefault();
-                openFileInEditor(stripLineSuffix(fileRef));
+                if (fileRef.trim().endsWith('/')) {
+                  openDirectory(fileRef.trim());
+                  return;
+                }
+                openFileInEditor(stripLineSuffix(fileRef), lineFromRef(fileRef));
               }}
             >
               {linkChildren}
@@ -304,7 +314,7 @@ function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 
         );
       },
     }),
-    [openFileInEditor],
+    [openFileInEditor, openDirectory],
   );
 
   return (
