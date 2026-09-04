@@ -406,30 +406,7 @@ export default function ChatComposer({
 
           <input {...getInputProps()} />
 
-          <PromptInputBody>
-            <div ref={inputHighlightRef} aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
-              <div className="chat-input-placeholder block w-full whitespace-pre-wrap break-words px-4 py-2 text-sm leading-6 text-transparent">
-                {renderInputWithMentions(input)}
-              </div>
-            </div>
-
-            <PromptInputTextarea
-              ref={textareaRef}
-              dir="auto"
-              value={input}
-              onChange={onInputChange}
-              onClick={onTextareaClick}
-              onKeyDown={onTextareaKeyDown}
-              onPaste={onTextareaPaste}
-              onScroll={(event) => onTextareaScrollSync(event.target as HTMLTextAreaElement)}
-              onFocus={() => onInputFocusChange?.(true)}
-              onBlur={() => onInputFocusChange?.(false)}
-              onInput={onTextareaInput}
-              placeholder={placeholder}
-            />
-        </PromptInputBody>
-
-        <PromptInputFooter className="flex-wrap gap-y-1">
+        <PromptInputFooter className="flex-wrap gap-y-1 border-b border-t-0">
           <PromptInputTools className="min-w-0">
             <PromptInputButton
               tooltip={{ content: t('input.attachFiles') }}
@@ -540,6 +517,30 @@ export default function ChatComposer({
             {submitHint}
           </div>
         </PromptInputFooter>
+
+          <PromptInputBody>
+            <div ref={inputHighlightRef} aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
+              <div className="chat-input-placeholder block w-full whitespace-pre-wrap break-words px-4 py-2 text-sm leading-6 text-transparent">
+                {renderInputWithMentions(input)}
+              </div>
+            </div>
+
+            <PromptInputTextarea
+              ref={textareaRef}
+              dir="auto"
+              value={input}
+              onChange={onInputChange}
+              onClick={onTextareaClick}
+              onKeyDown={onTextareaKeyDown}
+              onPaste={onTextareaPaste}
+              onScroll={(event) => onTextareaScrollSync(event.target as HTMLTextAreaElement)}
+              onFocus={() => onInputFocusChange?.(true)}
+              onBlur={() => onInputFocusChange?.(false)}
+              onInput={onTextareaInput}
+              placeholder={placeholder}
+            />
+        </PromptInputBody>
+
       </PromptInput>
       </div>}
     </div>
