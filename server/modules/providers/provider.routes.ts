@@ -4,6 +4,7 @@ import { providerAuthService } from '@/modules/providers/services/provider-auth.
 import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
 import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
 import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
+import { openCodeModelSettingsService } from '@/modules/providers/list/opencode/opencode-model-settings.service.js';
 import { providerTokenUsageService } from '@/modules/providers/services/provider-token-usage.service.js';
 import { providerSkillsService } from '@/modules/providers/services/skills.service.js';
 import { sessionConversationsSearchService } from '@/modules/providers/services/session-conversations-search.service.js';
@@ -510,6 +511,23 @@ router.get(
     const provider = parseProvider(req.params.provider);
     const status = await providerAuthService.getProviderAuthStatus(provider);
     res.json(createApiSuccessResponse(status));
+  }),
+);
+
+// Per-model sampling settings for OpenCode. They are stored in a file of our
+// own and handed to OpenCode through OPENCODE_CONFIG, so the user's
+// opencode.json[c] is never rewritten.
+router.get(
+  '/opencode/model-settings',
+  asyncHandler(async (_req: Request, res: Response) => {
+    res.json(createApiSuccessResponse(await openCodeModelSettingsService.getSettings()));
+  }),
+);
+
+router.put(
+  '/opencode/model-settings',
+  asyncHandler(async (req: Request, res: Response) => {
+    res.json(createApiSuccessResponse(await openCodeModelSettingsService.updateModel(req.body)));
   }),
 );
 
