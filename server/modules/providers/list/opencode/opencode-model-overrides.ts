@@ -81,6 +81,41 @@ function asNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+/**
+ * The value as a map, or an empty one.
+ *
+ * The overlay is a file on disk and can be hand-edited. `{"provider":{"ollama":
+ * true}}` is valid JSON and survives `JSON.parse`, but `true.models = {}`
+ * throws `Cannot create property 'models' on boolean` - a module is strict
+ * mode, so that is a crash rather than a silent no-op, and it would come out of
+ * a settings page as an opaque 500. Anything that is not a plain object where a
+ * map belongs is treated as absent.
+ */
+function asRecord<T = unknown>(value: unknown): Record<string, T> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, T>)
+    : {};
+}
+
+/**
+ * Overlay writes run one after another.
+ *
+ * `writeModelOverride` reads the whole overlay, changes one model in it and
+ * writes it back. Two calls that overlap read the same snapshot, and whichever
+ * writes last drops the other's change - saving two models in quick succession
+ * is all it takes. One process owns this file, so a promise chain is the whole
+ * lock needed here; a second server writing the same path would want one on
+ * disk instead.
+ */
+let overlayWrites: Promise<unknown> = Promise.resolve();
+
+function serialized<T>(work: () => Promise<T>): Promise<T> {
+  const next = overlayWrites.then(work, work);
+  // A rejected write must not take everything queued behind it with it.
+  overlayWrites = next.then(() => undefined, () => undefined);
+  return next;
+}
+
 async function readOverlay(): Promise<Overlay> {
   try {
     const text = await fs.readFile(getOverridesPath(), 'utf8');
@@ -98,8 +133,8 @@ export async function readModelOverrides(): Promise<ModelOverrides> {
   const overlay = await readOverlay();
   const overrides: ModelOverrides = {};
 
-  for (const [providerId, provider] of Object.entries(overlay.provider ?? {})) {
-    for (const [modelId, model] of Object.entries(provider?.models ?? {})) {
+  for (const [providerId, provider] of Object.entries(asRecord(overlay.provider))) {
+    for (const [modelId, model] of Object.entries(asRecord<OverlayModel>(asRecord(provider).models))) {
       const override: ModelOverride = {};
       const temperature = asNumber(model?.options?.temperature);
       const topP = asNumber(model?.options?.top_p);
@@ -134,7 +169,14 @@ export async function readModelOverrides(): Promise<ModelOverrides> {
  * replace it, and without one an output override is refused rather than
  * written.
  */
-export async function writeModelOverride(
+export function writeModelOverride(
+  modelValue: string,
+  override: ModelOverride,
+): Promise<ModelOverrides> {
+  return serialized(() => applyModelOverride(modelValue, override));
+}
+
+async function applyModelOverride(
   modelValue: string,
   override: ModelOverride,
 ): Promise<ModelOverrides> {
@@ -144,13 +186,19 @@ export async function writeModelOverride(
   }
 
   const overlay = await readOverlay();
-  overlay.provider ??= {};
-  overlay.provider[split.providerId] ??= {};
-  overlay.provider[split.providerId].models ??= {};
+  // Not `??=`: a key that is present but holds something other than a map is
+  // exactly the case that crashes on the assignment below. See `asRecord`.
+  overlay.provider = asRecord<{ models?: Record<string, OverlayModel> }>(overlay.provider);
+  overlay.provider[split.providerId] = asRecord<Record<string, OverlayModel>>(
+    overlay.provider[split.providerId],
+  );
+  overlay.provider[split.providerId].models = asRecord<OverlayModel>(
+    overlay.provider[split.providerId].models,
+  );
 
   const models = overlay.provider[split.providerId].models as Record<string, OverlayModel>;
-  const model: OverlayModel = models[split.modelId] ?? {};
-  const options = { ...(model.options ?? {}) };
+  const model: OverlayModel = asRecord(models[split.modelId]);
+  const options = { ...asRecord(model.options) };
 
   if (override.temperature === undefined) {
     delete options.temperature;

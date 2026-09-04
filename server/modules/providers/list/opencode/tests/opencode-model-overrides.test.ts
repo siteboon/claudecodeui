@@ -212,3 +212,48 @@ test('a missing catalog is not an error', async () => {
     assert.deepEqual(await readModelCapabilities(['openai/gpt-4o']), {});
   });
 });
+
+test('an overlay whose shape is wrong is treated as absent, not crashed on', async () => {
+  await withTempEnvironment(null, async ({ overrides }) => {
+    // Valid JSON, and exactly what a hand-edited file can look like. Assigning
+    // `.models` to that `true` throws in strict mode, which is every module.
+    await fs.writeFile(overrides, JSON.stringify({ provider: { ollama: true } }), 'utf8');
+    assert.deepEqual(await readModelOverrides(), {}, 'nothing to read out of it');
+
+    const after = await writeModelOverride('ollama/qwen3.8:27b', { temperature: 0.4 });
+    assert.deepEqual(after, { 'ollama/qwen3.8:27b': { temperature: 0.4 } });
+
+    assert.deepEqual(JSON.parse(await fs.readFile(overrides, 'utf8')), {
+      provider: { ollama: { models: { 'qwen3.8:27b': { options: { temperature: 0.4 } } } } },
+    });
+  });
+});
+
+test('the same goes for a models key that is not a map', async () => {
+  await withTempEnvironment(null, async ({ overrides }) => {
+    await fs.writeFile(overrides, JSON.stringify({ provider: { ollama: { models: 'nope' } } }), 'utf8');
+    assert.deepEqual(await readModelOverrides(), {});
+
+    await writeModelOverride('ollama/qwen3.8:27b', { topP: 0.8 });
+    assert.deepEqual(JSON.parse(await fs.readFile(overrides, 'utf8')), {
+      provider: { ollama: { models: { 'qwen3.8:27b': { options: { top_p: 0.8 } } } } },
+    });
+  });
+});
+
+test('two saves at once keep both, rather than the later dropping the earlier', async () => {
+  await withTempEnvironment(null, async () => {
+    // Each call reads the whole overlay, changes one model and writes it back.
+    // Started together, both read the same empty snapshot; whichever writes
+    // last would be the only one left.
+    await Promise.all([
+      writeModelOverride('ollama/first', { temperature: 0.1 }),
+      writeModelOverride('ollama/second', { temperature: 0.2 }),
+    ]);
+
+    assert.deepEqual(await readModelOverrides(), {
+      'ollama/first': { temperature: 0.1 },
+      'ollama/second': { temperature: 0.2 },
+    });
+  });
+});
