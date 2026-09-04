@@ -187,9 +187,10 @@ function emptyCodexTokenUsage(): TokenUsageResult {
  * Command Code records per-assistant-message `usage` (with `input_tokens` /
  * `output_tokens`, camelCase variants accepted). Reads the newest usage-bearing
  * assistant row only so a session's counter reflects the current conversation,
- * mirroring the Claude reader.
+ * mirroring the Claude reader. Returns `null` when no nonzero usage row exists
+ * so the caller can fall back to reading the whole file.
  */
-export function summarizeCommandCodeTokenUsage(fileContent: string): TokenUsageResult {
+export function summarizeCommandCodeTokenUsage(fileContent: string): TokenUsageResult | null {
   let inputTokens = 0;
   let outputTokens = 0;
 
@@ -217,6 +218,10 @@ export function summarizeCommandCodeTokenUsage(fileContent: string): TokenUsageR
     }
   }
 
+  if (inputTokens === 0 && outputTokens === 0) {
+    return null;
+  }
+
   return {
     used: inputTokens + outputTokens,
     inputTokens,
@@ -225,19 +230,14 @@ export function summarizeCommandCodeTokenUsage(fileContent: string): TokenUsageR
   };
 }
 
-function commandCodeUsageRows(fileContent: string): boolean {
-  const lines = fileContent.trim().split('\n');
-  for (const line of lines) {
-    try {
-      const entry = JSON.parse(line) as AnyRecord;
-      if (entry?.type === 'message' && entry.message?.usage) {
-        return true;
-      }
-    } catch {
-      // Skip malformed lines.
-    }
-  }
-  return false;
+/** Zero usage result returned when a Command Code transcript reports no usage. */
+function emptyCommandCodeTokenUsage(): TokenUsageResult {
+  return {
+    used: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    breakdown: { input: 0, output: 0 },
+  };
 }
 
 /**
@@ -503,11 +503,13 @@ export function createProviderTokenUsageService(
         }
 
         const tail = await dependencies.readTextFileTail(sessionFilePath, TOKEN_USAGE_TAIL_BYTES);
-        if (commandCodeUsageRows(tail.content) || tail.isComplete) {
-          return summarizeCommandCodeTokenUsage(tail.content);
+        const tailUsage = summarizeCommandCodeTokenUsage(tail.content);
+        if (tailUsage || tail.isComplete) {
+          return tailUsage ?? emptyCommandCodeTokenUsage();
         }
 
-        return summarizeCommandCodeTokenUsage(await dependencies.readTextFile(sessionFilePath));
+        return summarizeCommandCodeTokenUsage(await dependencies.readTextFile(sessionFilePath))
+          ?? emptyCommandCodeTokenUsage();
       }
 
       let sessionFilePath = session.jsonl_path;

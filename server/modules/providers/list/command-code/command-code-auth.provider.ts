@@ -51,17 +51,37 @@ const parseStatusPayload = (raw: unknown): CommandCodeStatusPayload | null => {
  * public status contract rather than hand-parsing it.
  */
 export class CommandCodeProviderAuth implements IProviderAuth {
-  private checkInstalled(): boolean {
-    try {
-      const result = spawn.sync(COMMAND_CODE_BINARY, ['--version'], {
-        stdio: 'pipe',
-        timeout: 5000,
-        encoding: 'utf8',
+  /**
+   * Checks whether the Command Code CLI is available without blocking the
+   * event loop. Resolves after at most five seconds.
+   */
+  private checkInstalled(): Promise<boolean> {
+    return new Promise((resolve) => {
+      let child: ReturnType<typeof spawn.spawn>;
+      try {
+        child = spawn(COMMAND_CODE_BINARY, ['--version'], {
+          stdio: 'ignore',
+        });
+      } catch {
+        resolve(false);
+        return;
+      }
+
+      const timeout = setTimeout(() => {
+        child.kill('SIGTERM');
+        resolve(false);
+      }, 5000);
+
+      child.on('error', () => {
+        clearTimeout(timeout);
+        resolve(false);
       });
-      return result.status === 0;
-    } catch {
-      return false;
-    }
+
+      child.on('close', (code) => {
+        clearTimeout(timeout);
+        resolve(code === 0);
+      });
+    });
   }
 
   /**
@@ -144,7 +164,7 @@ export class CommandCodeProviderAuth implements IProviderAuth {
   }
 
   async getStatus(): Promise<ProviderAuthStatus> {
-    const installed = this.checkInstalled();
+    const installed = await this.checkInstalled();
 
     if (!installed) {
       return {

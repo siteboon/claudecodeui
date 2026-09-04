@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -43,16 +44,22 @@ export class CommandCodeMcpProvider extends McpProvider {
   }
 
   /**
-   * Encodes a workspace path into Command Code's project-slug directory name.
+   * Encodes a workspace path into a collision-resistant project-slug directory
+   * name for the machine-local MCP config.
    *
-   * The CLI slugs the working directory (e.g. `d-rn-d-claudecodeui-contrib`).
-   * This mirrors that transformation closely enough to read/write the
-   * machine-local config; sessions are keyed the same way on disk.
+   * Command Code itself keys project state under `~/.commandcode/projects/<slug>`
+   * using its own slug of the working directory. Two distinct workspaces whose
+   * basenames collide (e.g. `/a/project` and `/b/project`) would otherwise share
+   * one local config file and overwrite each other's MCP servers, so a short
+   * hash of the full normalized path is appended to keep every workspace's local
+   * config distinct while staying readable.
    */
   private slugifyProjectPath(workspacePath: string): string {
-    const normalized = workspacePath.trim().replace(/[\\/]+$/, '');
+    const normalized = path.resolve(workspacePath.trim());
     const baseName = normalized.split(/[\\/]/).filter(Boolean).pop() || 'default';
-    return baseName.toLowerCase().replace(/[^a-z0-9._-]+/g, '-');
+    const readable = baseName.toLowerCase().replace(/[^a-z0-9._-]+/g, '-');
+    const digest = createHash('sha1').update(normalized).digest('hex').slice(0, 8);
+    return `${readable}-${digest}`;
   }
 
   protected async readScopedServers(scope: McpScope, workspacePath: string): Promise<Record<string, unknown>> {

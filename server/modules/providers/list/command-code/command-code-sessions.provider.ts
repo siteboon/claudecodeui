@@ -61,8 +61,9 @@ const readTranscriptRows = async (jsonlPath: string): Promise<AnyRecord[]> => {
     }
   }
 
-  // The last row is always on the active branch. Walk parent pointers from it
-  // to the root, preferring later siblings at each level.
+  // Walk direct parent pointers from the last row up to the root. The last
+  // row is always part of the active conversation, so following its parentId
+  // chain recovers the live path without stacking every fork.
   const activeBranch = new Set<string>();
   let cursor: AnyRecord | null = rows[rows.length - 1];
   const visited = new Set<string>();
@@ -81,15 +82,27 @@ const readTranscriptRows = async (jsonlPath: string): Promise<AnyRecord[]> => {
     cursor = parentId ? (rowsById.get(parentId) ?? null) : null;
   }
 
-  const branchRows = rows.filter((row) => {
-    if (!row.id) {
-      // Header and other non-message rows are included only when they carry a
-      // role-bearing message (they should not); keep non-id rows out of the
-      // transcript except the header is skipped by the caller via type checks.
-      return false;
-    }
-    return activeBranch.has(String(row.id));
+  // Count the message rows actually reachable via the parent chain. When the
+  // chain is incomplete or shorter than the full set of message rows (e.g. a
+  // transcript whose pointers do not form one connected path), fall back to
+  // every message row in file order so history is never dropped.
+  const messageRows = rows.filter((row) => row.type === 'message');
+  const reachableMessageRows = messageRows.filter((row) => {
+    const rowId = String(row.id ?? '');
+    return rowId && activeBranch.has(rowId);
   });
+
+  // The parent walk normally reaches every message row on the live path; only
+  // when it misses some (a gap in the chain) do we fall back to all messages.
+  const branchRows = reachableMessageRows.length < messageRows.length
+    ? messageRows
+    : rows.filter((row) => {
+        if (!row.id) {
+          // Header and other non-message rows are not transcript entries.
+          return false;
+        }
+        return activeBranch.has(String(row.id));
+      });
 
   // Keep chronological order (rows were appended oldest-first).
   return branchRows;
@@ -116,7 +129,9 @@ const normalizeCommandCodeRow = (raw: AnyRecord, sessionId: string | null): Norm
     ? raw.id
     : generateMessageId('command-code');
 
-  // Extract text content from either a plain string or an array of content parts.
+  // Extract text content from either a plain string or an array of content
+  // parts. Only `text` parts contribute to the prose so persisted tool parts
+  // (handled separately below) never leak their payloads into the message text.
   const readContent = (): string => {
     if (typeof message.content === 'string') {
       return message.content;
@@ -131,10 +146,11 @@ const normalizeCommandCodeRow = (raw: AnyRecord, sessionId: string | null): Norm
           if (!record) {
             return '';
           }
-          if (typeof record.text === 'string') {
+          const partType = typeof record.type === 'string' ? record.type : '';
+          if (partType === 'text' && typeof record.text === 'string') {
             return record.text;
           }
-          if (record.type === 'text' && typeof record.text === 'string') {
+          if (partType === '' && typeof record.text === 'string') {
             return record.text;
           }
           return '';
@@ -146,43 +162,92 @@ const normalizeCommandCodeRow = (raw: AnyRecord, sessionId: string | null): Norm
   };
 
   const role = message.role === 'user' ? 'user' : message.role === 'assistant' ? 'assistant' : undefined;
+
   const content = readContent().trim();
+  const normalized: NormalizedMessage[] = [];
+
+  // Persisted tool activity: a message content array can carry `tool_use`
+  // and `tool_result` parts (Command Code records tool calls inline). Emit
+  // each as its own normalized message so fetchHistory's toolResultMap pairing
+  // can restore tool results after a reload instead of dropping them.
+  if (Array.isArray(message.content)) {
+    for (const part of message.content) {
+      const record = readObjectRecord(part);
+      if (!record) {
+        continue;
+      }
+      const partType = typeof record.type === 'string' ? record.type : '';
+      if (partType === 'tool_use' || partType === 'toolUse') {
+        const toolId = typeof record.id === 'string'
+          ? record.id
+          : typeof record.toolCallId === 'string' ? record.toolCallId : `${rowId}_tool`;
+        normalized.push(createNormalizedMessage({
+          id: `${rowId}_${toolId}`,
+          sessionId,
+          timestamp,
+          provider: PROVIDER,
+          kind: 'tool_use',
+          toolName: typeof record.name === 'string' ? record.name : 'Unknown',
+          toolInput: record.input ?? record.arguments ?? {},
+          toolId,
+          transcriptAnchorId: rowId,
+        }));
+      } else if (partType === 'tool_result' || partType === 'toolResult') {
+        const toolId = typeof record.toolCallId === 'string'
+          ? record.toolCallId
+          : typeof record.id === 'string' ? record.id : `${rowId}_tool`;
+        normalized.push(createNormalizedMessage({
+          id: `${rowId}_${toolId}_result`,
+          sessionId,
+          timestamp,
+          provider: PROVIDER,
+          kind: 'tool_result',
+          toolId,
+          content: typeof record.content === 'string'
+            ? record.content
+            : typeof record.output === 'string' ? record.output : '',
+          isError: Boolean(record.isError),
+          transcriptAnchorId: rowId,
+        }));
+      }
+    }
+  }
 
   if (role === 'user') {
-    if (!content) {
-      return [];
+    if (content) {
+      normalized.push(createNormalizedMessage({
+        id: `${rowId}_user`,
+        sessionId,
+        timestamp,
+        provider: PROVIDER,
+        kind: 'text',
+        role: 'user',
+        content,
+        // Stable row identity for future edit/fork anchors (Command Code rows
+        // carry stable ids).
+        transcriptAnchorId: rowId,
+      }));
     }
-    return [createNormalizedMessage({
-      id: `${rowId}_user`,
-      sessionId,
-      timestamp,
-      provider: PROVIDER,
-      kind: 'text',
-      role: 'user',
-      content,
-      // Stable row identity for future edit/fork anchors (Command Code rows
-      // carry stable ids).
-      transcriptAnchorId: rowId,
-    })];
+    return normalized;
   }
 
   if (role === 'assistant') {
-    if (!content) {
-      return [];
+    if (content) {
+      normalized.push(createNormalizedMessage({
+        id: `${rowId}_assistant`,
+        sessionId,
+        timestamp,
+        provider: PROVIDER,
+        kind: 'text',
+        role: 'assistant',
+        content,
+        transcriptAnchorId: rowId,
+      }));
     }
-    return [createNormalizedMessage({
-      id: `${rowId}_assistant`,
-      sessionId,
-      timestamp,
-      provider: PROVIDER,
-      kind: 'text',
-      role: 'assistant',
-      content,
-      transcriptAnchorId: rowId,
-    })];
+    return normalized;
   }
 
-  return [];
+  return normalized;
 };
 
 export class CommandCodeSessionsProvider implements IProviderSessions {

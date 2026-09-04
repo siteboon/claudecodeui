@@ -297,6 +297,13 @@ async function spawnCommandCode(command, options = {}, ws, context) {
         activeCommandCodeProcesses.delete(finalSessionId);
         activeCommandCodeProcesses.delete(processKey);
 
+        if (commandCodeProcess.aborted) {
+          // The abort caller already reported terminal completion; do nothing
+          // further so an aborted run never triggers a second notification or
+          // an install probe.
+          return;
+        }
+
         if (stdoutLineBuffer.trim()) {
           processCommandCodeOutputLine(stdoutLineBuffer.trim());
           stdoutLineBuffer = '';
@@ -304,7 +311,7 @@ async function spawnCommandCode(command, options = {}, ws, context) {
 
         // Terminal complete — skipped for aborted runs (abort-session already
         // sent the aborted complete on this run's behalf).
-        if (!completeSent && !commandCodeProcess.aborted) {
+        if (!completeSent) {
           completeSent = true;
           ws.send(createCompleteMessage({ provider: 'command-code', sessionId: finalSessionId, exitCode: code }));
         }
@@ -346,6 +353,11 @@ async function spawnCommandCode(command, options = {}, ws, context) {
         activeCommandCodeProcesses.delete(finalSessionId);
         activeCommandCodeProcesses.delete(processKey);
 
+        if (commandCodeProcess.aborted) {
+          // Abort already reported terminal completion.
+          return;
+        }
+
         const installed = await context.isProviderInstalled();
         const errorContent = !installed
           ? 'Command Code CLI is not installed. Install it with: npm i -g command-code'
@@ -357,7 +369,7 @@ async function spawnCommandCode(command, options = {}, ws, context) {
           sessionId: finalSessionId,
           provider: 'command-code',
         }));
-        if (!completeSent && !commandCodeProcess.aborted) {
+        if (!completeSent) {
           completeSent = true;
           ws.send(createCompleteMessage({ provider: 'command-code', sessionId: finalSessionId, exitCode: 1 }));
         }
