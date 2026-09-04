@@ -13,7 +13,11 @@ import type {
 import { PaperclipIcon, MessageSquareIcon, XIcon, Loader2, ArrowUpIcon, PencilIcon } from 'lucide-react';
 
 import { useVoiceInput } from '@/modules/chat/hooks/useVoiceInput';
-import { useVoiceAvailable } from '@/modules/chat/hooks/useVoiceAvailable';
+import { useVoiceAvailable, useVoiceBackendReady } from '@/modules/chat/hooks/useVoiceAvailable';
+import { isSpeechRecognitionSupported, useSpeechRecognition } from '@/modules/chat/hooks/useSpeechRecognition';
+import { useClaudeSpeech } from '@/modules/chat/hooks/useClaudeSpeech';
+import { usePushToTalkKey } from '@/modules/chat/hooks/usePushToTalkKey';
+import { useSelectedProvider } from '@/shared/hooks/useSelectedProvider';
 import type { QueuedDraft, ScheduledMessage, SlashCommand,SessionActivity,PendingPermissionRequest,PermissionMode,ProviderModelOption } from '@/shared/types';
 import {
   PromptInput,
@@ -101,7 +105,10 @@ type ChatComposerProps = {
   renderInputWithMentions: (text: string) => ReactNode;
   textareaRef: RefObject<HTMLTextAreaElement>;
   input: string;
-  onVoiceTranscript?: (text: string, send?: boolean) => void;
+  onVoiceTranscript?: (text: string, send?: boolean, final?: boolean) => void;
+  /** Called when a dictation ends without a final transcript, so the
+   *  composer can drop the base the next one would replace back to. */
+  onVoiceAborted?: () => void;
   onInputChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
   onTextareaClick: (event: MouseEvent<HTMLTextAreaElement>) => void;
   onTextareaKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
@@ -175,6 +182,7 @@ export default function ChatComposer({
   textareaRef,
   input,
   onVoiceTranscript,
+  onVoiceAborted,
   onInputChange,
   onTextareaClick,
   onTextareaKeyDown,
@@ -224,22 +232,61 @@ export default function ChatComposer({
   // Voice state is hosted here (not in the mic button) so the main Send button can stop
   // recording and send the transcript in one tap, the way the mic button drops it in the box.
   const voiceAvailable = useVoiceAvailable();
+  const voiceBackendReady = useVoiceBackendReady();
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const voiceErrorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleVoiceError = useCallback((msg: string) => {
     setVoiceError(msg);
+    // A dictation that errors never sends a final transcript, so the composer
+    // would keep the base it started from. Someone who just records again
+    // touches no key in between, and that stale base is what the next
+    // recording replaces back to - losing what this one already put there.
+    onVoiceAborted?.();
     if (voiceErrorTimer.current) clearTimeout(voiceErrorTimer.current);
     voiceErrorTimer.current = setTimeout(() => setVoiceError(null), 4000);
-  }, []);
+  }, [onVoiceAborted]);
   useEffect(() => () => {
     if (voiceErrorTimer.current) clearTimeout(voiceErrorTimer.current);
   }, []);
   const noopTranscript = useCallback(() => {}, []);
-  const { state: voiceState, toggle: voiceToggle, stop: voiceStop } = useVoiceInput(
+  const backendVoice = useVoiceInput(
     onVoiceTranscript ?? noopTranscript,
     handleVoiceError,
   );
+  const browserVoice = useSpeechRecognition(
+    onVoiceTranscript ?? noopTranscript,
+    handleVoiceError,
+  );
+  const claudeVoice = useClaudeSpeech(
+    onVoiceTranscript ?? noopTranscript,
+    handleVoiceError,
+  );
+
+  // Which dictation, in this order:
+  //   claude    always, when the provider is Claude: Anthropic's own
+  //             speech-to-text, the one Claude Code uses. No key needed, it
+  //             goes through this machine's Claude login.
+  //   whisper   for every other provider, when a backend is configured
+  //             (VOICE_API_BASE_URL - a groq or openai key, say).
+  //   browser   otherwise the browser's own recognition, as the Chrome
+  //             extension uses. Present in Chrome, usually silent in Electron.
+  // The provider is read where the chat itself keeps it (useChatProviderState);
+  // the composer only receives a display label.
+  // The provider is read from the shared preference store, which is where it
+  // lives since it moved out of localStorage - the old `selected-provider` key
+  // is no longer written, so reading it meant every profile looked like Claude.
+  const useClaudeVoice = useSelectedProvider() === 'claude';
+  const useBrowserVoice = !useClaudeVoice && !voiceBackendReady && isSpeechRecognitionSupported();
+  const activeVoice = useClaudeVoice ? claudeVoice : useBrowserVoice ? browserVoice : backendVoice;
+  const { state: voiceState, toggle: voiceToggle, stop: voiceStop, start: voiceStart } = activeVoice;
   const isRecording = voiceState === 'recording';
+  // Ctrl+D does what holding the mic button does, without reaching for it.
+  usePushToTalkKey({
+    enabled: Boolean(onVoiceTranscript && voiceAvailable),
+    isRecording,
+    onStart: () => { void voiceStart(); },
+    onStop: () => voiceStop({ send: true }),
+  });
   const isTranscribing = voiceState === 'transcribing';
 
   // Detect if the AskUserQuestion interactive panel is active
@@ -440,7 +487,13 @@ export default function ChatComposer({
             </PromptInputButton>
 
             {onVoiceTranscript && voiceAvailable && (
-              <VoiceInputButton state={voiceState} onToggle={voiceToggle} errorMsg={voiceError} />
+              <VoiceInputButton
+                state={voiceState}
+                onToggle={voiceToggle}
+                onHoldStart={() => { void voiceStart(); }}
+                onHoldEnd={() => voiceStop({ send: true })}
+                errorMsg={voiceError}
+              />
             )}
 
             <TokenUsageSummary usage={tokenBudget} onClick={onShowTokenUsage} />

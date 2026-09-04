@@ -145,5 +145,9 @@ export function useVoiceInput(
     else if (state === 'idle') start();
   }, [state, start, stop]);
 
-  return { state, toggle, stop };
+  // `start` goes out as well so the button can hold-to-talk: press to record,
+  // release to stop and send. That is what the Claude extension calls voice
+  // mode "hold", its default - `mode: "hold" | "tap"`, with `autoSubmit` on
+  // release. A short tap keeps the toggle behaviour, which is its "tap" mode.
+  return { state, toggle, stop, start };
 }
