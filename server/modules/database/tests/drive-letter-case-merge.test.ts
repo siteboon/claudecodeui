@@ -174,3 +174,58 @@ test('runMigrations leaves a database without lowercase drive letters alone', as
     assert.deepEqual(paths, [{ project_path: 'C:\\Users\\Someone\\project' }]);
   });
 });
+
+test('runMigrations renames a project even when sessions predate ON UPDATE CASCADE', async () => {
+  await withIsolatedDatabase(async () => {
+    const db = getConnection();
+
+    // A sessions table from before the cascade was added. With foreign keys on,
+    // SQLite refuses to update the referenced key rather than following it, so
+    // the rename below fails unless the migration lifts the constraint.
+    // Every column the current schema has, so the rebuild step leaves this
+    // table alone - the only thing missing is ON UPDATE CASCADE, which is
+    // exactly the schema the rebuild skips and the rename then trips over.
+    db.exec('PRAGMA foreign_keys = OFF');
+    db.exec('DROP TABLE IF EXISTS sessions');
+    db.exec(`
+      CREATE TABLE sessions (
+        session_id TEXT NOT NULL,
+        provider TEXT NOT NULL DEFAULT 'claude',
+        custom_name TEXT,
+        project_path TEXT,
+        jsonl_path TEXT,
+        isArchived BOOLEAN DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (session_id),
+        FOREIGN KEY (project_path) REFERENCES projects(project_path)
+        ON DELETE SET NULL
+      )
+    `);
+    db.pragma('foreign_keys = ON');
+
+    db.prepare(
+      'INSERT INTO projects (project_id, project_path, custom_project_name, isStarred, isArchived) VALUES (?, ?, NULL, 0, 0)',
+    ).run('legacy-solo', 'c:\legacy');
+    db.prepare('INSERT INTO sessions (session_id, project_path, provider) VALUES (?, ?, ?)')
+      .run('legacy-session', 'c:\legacy', 'claude');
+
+    runMigrations(db);
+
+    const project = db
+      .prepare('SELECT project_path FROM projects WHERE project_id = ?')
+      .get('legacy-solo') as { project_path: string } | undefined;
+    assert.equal(project?.project_path, 'C:\legacy', 'the project was renamed');
+
+    const session = db
+      .prepare('SELECT project_path FROM sessions WHERE session_id = ?')
+      .get('legacy-session') as { project_path: string } | undefined;
+    assert.equal(session?.project_path, 'C:\legacy', 'and its session came along');
+
+    assert.equal(
+      Boolean(db.pragma('foreign_keys', { simple: true })),
+      true,
+      'foreign keys are back on afterwards',
+    );
+  });
+});

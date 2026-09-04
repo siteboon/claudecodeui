@@ -574,7 +574,62 @@ const mergeProjectsDifferingOnlyByDriveLetterCase = (db: Database): void => {
   console.log(
     `Running migration: Normalizing ${lowercaseDriveProjects.length} project path(s) with a lowercase drive letter`,
   );
-  merge();
+
+  // The order above holds as long as `sessions.project_path` cascades on
+  // update. A database from an older schema may reference `projects` without
+  // `ON UPDATE CASCADE`, and there SQLite refuses the rename outright while
+  // foreign keys are on - the sessions would be left pointing at a parent that
+  // no longer exists. Rebuilding that table here would be a heavier operation
+  // than the migration itself, so the constraint is lifted for the length of
+  // the merge, which moves the sessions over by hand anyway.
+  //
+  // The pragma has to be set outside the transaction: inside one it is a
+  // no-op, and the merge below is a transaction.
+  const cascades = !tableExists(db, 'sessions') || sessionsCascadeOnUpdate(db);
+  const foreignKeysWereOn = Boolean(db.pragma('foreign_keys', { simple: true }));
+  const mustLift = !cascades && foreignKeysWereOn;
+
+  if (mustLift) {
+    console.log('  (legacy sessions schema without ON UPDATE CASCADE - foreign keys lifted for the merge)');
+    db.exec('PRAGMA foreign_keys = OFF');
+  }
+
+  try {
+    merge();
+  } finally {
+    if (mustLift) {
+      db.exec('PRAGMA foreign_keys = ON');
+    }
+  }
+};
+
+/**
+ * Whether `sessions.project_path` follows a renamed project on its own.
+ *
+ * `PRAGMA foreign_key_list` reports one row per foreign key, with the action
+ * SQLite takes when the referenced key changes. Anything other than `CASCADE`
+ * means a rename of `projects.project_path` is refused rather than followed.
+ */
+const sessionsCascadeOnUpdate = (db: Database): boolean => {
+  try {
+    const keys = db.prepare('PRAGMA foreign_key_list(sessions)').all() as {
+      table: string;
+      to: string | null;
+      on_update: string;
+    }[];
+
+    const toProjects = keys.filter((key) => key.table === 'projects');
+    if (toProjects.length === 0) {
+      // No constraint at all: nothing can refuse the rename.
+      return true;
+    }
+
+    return toProjects.every((key) => String(key.on_update).toUpperCase() === 'CASCADE');
+  } catch {
+    // An unreadable pragma is not a reason to skip the migration; the merge
+    // moves the sessions itself either way.
+    return true;
+  }
 };
 
 export const runMigrations = (db: Database) => {
