@@ -49,7 +49,14 @@ function chatMessageToNormalized(
     : typeof msg.timestamp === 'number'
       ? new Date(msg.timestamp).toISOString()
       : String(msg.timestamp);
-  const base = { id, sessionId, timestamp: ts, provider };
+  const base = {
+    id,
+    sessionId,
+    timestamp: ts,
+    provider,
+    transcriptAnchorId: msg.transcriptAnchorId,
+    replacesAnchorId: msg.replacesAnchorId,
+  };
 
   if (msg.isToolUse) {
     return {

@@ -165,3 +165,35 @@ test('a finalized row is recognised as echo when streaming loses whitespace at t
 
   assert.equal(isAssistantTextEchoedInSameTurnOnServer(realtime[1], server, realtime), true);
 });
+
+test('identical assistant replies across different user turns are not treated as echoes', () => {
+  const server = [
+    msg('text', 'user', 'turn 1 question', '2026-01-01T00:00:01Z'),
+    msg('text', 'assistant', 'Done.', '2026-01-01T00:00:02Z'),
+    msg('text', 'user', 'turn 2 question', '2026-01-01T00:00:10Z'),
+  ];
+  const realtime = [
+    msg('text', 'assistant', 'Done.', '2026-01-01T00:00:12Z'),
+  ];
+
+  assert.equal(isAssistantTextEchoedInSameTurnOnServer(realtime[0], server, realtime), false);
+});
+
+test('anchored turns match accurately using transcriptAnchorId', () => {
+  const serverUser: NormalizedMessage = {
+    ...msg('text', 'user', 'anchor question', '2026-01-01T00:00:01Z'),
+    transcriptAnchorId: 'anchor-123',
+  };
+  const serverAssistant = msg('text', 'assistant', 'Anchored response.', '2026-01-01T00:00:02Z');
+  const server = [serverUser, serverAssistant];
+
+  const realtime: NormalizedMessage[] = [
+    {
+      ...msg('text', 'assistant', 'Anchored response.', '2026-01-01T00:00:03Z'),
+      transcriptAnchorId: 'anchor-123',
+    },
+  ];
+
+  assert.equal(isAssistantTextEchoedInSameTurnOnServer(realtime[0], server, realtime), true);
+});
+

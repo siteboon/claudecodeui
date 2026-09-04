@@ -140,6 +140,7 @@ function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedM
   for (const m of merged) {
     if (m.kind === 'text' && m.role === 'user') {
       currentTurnAssistantTexts = new Set<string>();
+      seenAssistantTexts.clear();
       out.push(m);
       continue;
     }
@@ -800,7 +801,7 @@ export function useSessionStore() {
     slot.offset = slot.serverMessages.length;
     recomputeMergedIfNeeded(slot);
     notify(sessionId);
-  }, []);
+  }, [notify]);
 
   /**
    * Clear realtime messages for a session (e.g., after stream completes and server fetch catches up).
@@ -849,7 +850,7 @@ export function useSessionStore() {
     getSlot, has, fetchFromServer, fetchMore,
     appendRealtime, appendRealtimeBatch, refreshLatestFromServer,
     setActiveSession, setStatus, isStale, updateStreaming, finalizeStreaming,
-    clearRealtime, getMessages, getSessionSlot,
+    truncateAt, clearRealtime, getMessages, getSessionSlot,
   ]);
 }
 

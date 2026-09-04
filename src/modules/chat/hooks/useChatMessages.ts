@@ -124,6 +124,7 @@ function convertRow(
       isLocalCommand: msg.isLocalCommand,
       isLocalCommandStdout: msg.isLocalCommandStdout,
       isCompactSummary: msg.isCompactSummary,
+      transcriptAnchorId: msg.transcriptAnchorId,
     };
 
     switch (msg.kind) {

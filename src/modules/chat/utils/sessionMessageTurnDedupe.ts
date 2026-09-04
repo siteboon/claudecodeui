@@ -43,9 +43,11 @@ export function isAssistantTextMatch(candidate: string, target: string): boolean
     return true;
   }
 
-  // 2. Match with substring containment for substantial messages (>= 20 compact chars)
-  if (compactA.length >= 20 && compactB.length >= 20) {
-    if (compactA.includes(compactB) || compactB.includes(compactA)) {
+  // 2. Match streaming progressive prefix (where one is an in-progress prefix of the other)
+  const minLen = Math.min(compactA.length, compactB.length);
+  const maxLen = Math.max(compactA.length, compactB.length);
+  if (minLen >= 20 && (compactA.startsWith(compactB) || compactB.startsWith(compactA))) {
+    if (minLen / maxLen >= 0.75 || minLen >= 100) {
       return true;
     }
   }
@@ -143,6 +145,31 @@ export function isAssistantTextEchoedInSameTurnOnServer(
   const assistantText = (message.content || '').trim();
   if (!assistantText) {
     return false;
+  }
+
+  // 0. Precise turn anchor match when transcriptAnchorId is available
+  if (message.transcriptAnchorId) {
+    const anchorIndex = serverMessages.findIndex(
+      (sm) => sm.kind === 'text' && sm.role === 'user' && sm.transcriptAnchorId === message.transcriptAnchorId,
+    );
+    if (anchorIndex >= 0) {
+      let turnEnd = serverMessages.length;
+      for (let j = anchorIndex + 1; j < serverMessages.length; j++) {
+        if (serverMessages[j].kind === 'text' && serverMessages[j].role === 'user') {
+          turnEnd = j;
+          break;
+        }
+      }
+      const turnSegments = serverMessages
+        .slice(anchorIndex + 1, turnEnd)
+        .filter((sm) => sm.kind === 'text' && sm.role === 'assistant' && (sm.content || '').length > 0);
+
+      if (turnSegments.some((sm) => isAssistantTextMatch(sm.content || '', assistantText))) {
+        return true;
+      }
+      const joinedText = turnSegments.map((sm) => sm.content || '').join('');
+      return isAssistantTextMatch(joinedText, assistantText);
+    }
   }
 
   // 1. Precise preceding-user matching (robust against pagination slices and duplicate counts)
