@@ -5,6 +5,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { readConfiguredOpenCodeModels } from '@/modules/providers/list/opencode/opencode-config-models.js';
 import type { IProviderModels } from '@/shared/interfaces.js';
 import type {
   ProviderCurrentActiveModel,
@@ -243,11 +244,34 @@ const parseOpenCodeSessionModelValue = (rawModel: unknown): string | null => {
 
 /** Provider registry model adapter for OpenCode predefined models and session metadata. */
 export class OpenCodeProviderModels implements IProviderModels {
+  /**
+   * The curated catalog plus the models declared in the local OpenCode config.
+   *
+   * A provider the user configures themselves - a local Ollama, an OpenRouter
+   * key, an internal gateway - is not in any published catalog, so its models
+   * cannot be listed here without reading that config. Without one, or with
+   * nothing new in it, the catalog is exactly what it was.
+   */
   async getSupportedModels(): Promise<ProviderModelsDefinition> {
-    return filterOpenCodeModelsByProvider(
+    const connected = filterOpenCodeModelsByProvider(
       OPENCODE_PREDEFINED_MODELS,
       await readConnectedOpenCodeProviderIds(),
     );
+
+    // Added after the filter, never before it: a provider written into the
+    // config by hand is not one OpenCode reports as connected, so filtering
+    // afterwards would throw away exactly the models only the config knows.
+    const configuredModels = await readConfiguredOpenCodeModels();
+    const known = new Set(connected.OPTIONS.map((option) => option.value));
+    const additions = configuredModels.filter((option) => !known.has(option.value));
+    if (additions.length === 0) {
+      return connected;
+    }
+
+    return {
+      ...connected,
+      OPTIONS: [...connected.OPTIONS, ...additions],
+    };
   }
 
   async getCurrentActiveModel(sessionId?: string): Promise<ProviderCurrentActiveModel> {

@@ -8,8 +8,12 @@ import {
   OpenCodeProviderModels,
   OPENCODE_PREDEFINED_MODELS,
 } from '@/modules/providers/list/opencode/opencode-models.provider.js';
+import { resetOpenCodeConfigModelCache } from '@/modules/providers/list/opencode/opencode-config-models.js';
 
-const OPENCODE_ENV_KEYS = ['OPENCODE_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY'];
+// XDG_CONFIG_HOME belongs in this list: the config reader consults it before
+// os.homedir(), so leaving it set would let the machine decide the outcome
+// again - the very thing the throwaway home is here to prevent.
+const OPENCODE_ENV_KEYS = ['OPENCODE_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'XDG_CONFIG_HOME'];
 
 /**
  * Runs one case against a throwaway OpenCode home, so the catalog the adapter
