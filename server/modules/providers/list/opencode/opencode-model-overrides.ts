@@ -119,8 +119,12 @@ function serialized<T>(work: () => Promise<T>): Promise<T> {
 async function readOverlay(): Promise<Overlay> {
   try {
     const text = await fs.readFile(getOverridesPath(), 'utf8');
-    const parsed = JSON.parse(text) as Overlay;
-    return parsed && typeof parsed === 'object' ? parsed : {};
+    // `typeof === 'object'` is not enough: an array passes it. A named property
+    // assigned to an array lives in memory but `JSON.stringify` leaves it out,
+    // so a save on top of `[]` would return the new override and write `[]` -
+    // success reported, nothing stored. That is worse than the crash `asRecord`
+    // prevents one level down, because nothing says anything went wrong.
+    return asRecord<never>(JSON.parse(text)) as Overlay;
   } catch {
     // Not written yet, or damaged: start from an empty overlay rather than
     // failing a settings page over it.

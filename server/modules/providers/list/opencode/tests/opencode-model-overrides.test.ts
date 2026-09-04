@@ -257,3 +257,21 @@ test('two saves at once keep both, rather than the later dropping the earlier', 
     });
   });
 });
+
+test('an overlay that is a root array is replaced, not written back empty', async () => {
+  await withTempEnvironment(null, async ({ overrides }) => {
+    // `typeof [] === 'object'`, so an array survives a naive check. Assigning
+    // `provider` to it works in memory and vanishes in `JSON.stringify` - the
+    // save would answer with the override and store nothing.
+    await fs.writeFile(overrides, '[]', 'utf8');
+    assert.deepEqual(await readModelOverrides(), {});
+
+    await writeModelOverride('ollama/qwen3.8:27b', { temperature: 0.4 });
+
+    assert.deepEqual(JSON.parse(await fs.readFile(overrides, 'utf8')), {
+      provider: { ollama: { models: { 'qwen3.8:27b': { options: { temperature: 0.4 } } } } },
+    });
+    // The point of the test: read it back off disk, not out of the answer.
+    assert.deepEqual(await readModelOverrides(), { 'ollama/qwen3.8:27b': { temperature: 0.4 } });
+  });
+});
