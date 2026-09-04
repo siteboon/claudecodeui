@@ -1,4 +1,5 @@
 import type { IncomingMessage } from 'node:http';
+import type { Readable } from 'node:stream';
 
 //----------------- HTTP RESPONSE SHAPES ------------
 /**
@@ -74,6 +75,10 @@ export type ProviderModelOption = {
   value: string;
   label: string;
   description?: string;
+  /** Stable SQLite row id used only by model-management actions. */
+  recordId?: number;
+  /** True for user-created rows; false for immutable CloudCLI defaults. */
+  isCustom?: boolean;
   effort?: {
     default?: string;
     values: {
@@ -92,28 +97,31 @@ export type ProviderModelsDefinition = {
 };
 
 /**
- * Cache metadata returned alongside one provider model catalog.
+ * One persisted custom-model row in the provider model library.
  *
- * `updatedAt` is when the current cached snapshot was last refreshed from the
- * provider itself. `expiresAt` is the backend cache expiry timestamp, and
- * `source` tells callers whether the current response came from in-memory cache,
- * persisted disk cache, or a fresh provider fetch.
+ * Provider modules use this shape at the database boundary. Predefined models
+ * never use this type because they remain source-controlled in provider
+ * adapters. `modelId` is sent to the provider runtime, while `model` is the
+ * user-supplied display name shown in pickers.
  */
-export type ProviderModelsCacheInfo = {
-  updatedAt: string;
-  expiresAt: string;
-  source: 'memory' | 'disk' | 'fresh';
+export type CustomProviderModelRecord = {
+  recordId: number;
+  provider: LLMProvider;
+  modelId: string;
+  model: string;
+  sortOrder: number;
 };
 
 /**
- * Full provider model lookup result returned by the backend service layer.
+ * User-editable values accepted when creating or changing a custom model.
  *
- * Use this shape when a caller needs both the selectable model catalog and the
- * cache metadata that explains how current the catalog is.
+ * `id` must be the exact provider-facing model identifier and cannot contain
+ * whitespace. `model` is a concise display name. The provider is supplied by
+ * the route path so a row can never be moved across providers accidentally.
  */
-export type ProviderModelsResult = {
-  models: ProviderModelsDefinition;
-  cache: ProviderModelsCacheInfo;
+export type CustomProviderModelInput = {
+  id: string;
+  model: string;
 };
 
 // ---------------------------
@@ -131,34 +139,35 @@ export type ProviderCurrentActiveModel = {
 };
 
 /**
- * Input payload used when one session needs to use a different model on its
- * next resumed turn.
+ * Where a resolved session model came from.
  *
- * This is a backend-owned session override, not a claim that the provider has
- * already switched the currently running session in-place. Provider adapters
- * persist this request so the next CLI/SDK resume can inject the chosen model
- * using the provider-specific mechanism supported by that runtime.
+ * `session` means the app has recorded a model for this session (the user
+ * picked one, or the session has been sent on at least once) and that value is
+ * authoritative. `provider` means the session predates any app-recorded model
+ * and the value was read back from the provider's own session state — the case
+ * for sessions started directly in a provider CLI. `default` means neither was
+ * available and the catalog default is standing in.
+ *
+ * Routes surface this so the frontend can tell a real selection apart from a
+ * placeholder without re-deriving the precedence chain.
  */
-export type ProviderChangeActiveModelInput = {
-  sessionId: string;
-  model: string;
-};
+export type ProviderSessionModelSource = 'session' | 'provider' | 'default';
 
 /**
- * Provider-neutral session model-change state.
+ * The model one session runs with, its persisted reasoning effort when one has
+ * been recorded, and where the model answer came from.
  *
- * `supported` indicates whether the provider adapter supports the app's
- * session-scoped resume override flow. `changed` is the persisted boolean the
- * resume layer checks before forcing a model on the next resumed turn. When
- * `changed` is `false`, `model` is `null` and the runtime should use the
- * normal request/default model selection path.
+ * Returned by `providerModelsService.resolveSessionModel` and used by the
+ * `/models`, `/cost` and `/status` commands, the active-model route, and the
+ * composer's model picker so every surface agrees on one answer.
  */
-export type ProviderSessionActiveModelChange = {
+export type ProviderSessionModel = {
   provider: LLMProvider;
-  sessionId: string;
-  supported: boolean;
-  changed: boolean;
-  model: string | null;
+  sessionId: string | null;
+  model: string;
+  /** NULL means this session has not recorded an effort choice yet. */
+  effort: string | null;
+  source: ProviderSessionModelSource;
 };
 
 /**
@@ -177,9 +186,10 @@ export type MessageKind =
   | 'complete'
   | 'status'
   | 'permission_request'
+  | 'permission_resolved'
   | 'permission_cancelled'
   | 'session_created'
-  | 'interactive_prompt'
+  | 'history_truncated'
   | 'task_notification';
 
 /**
@@ -206,6 +216,42 @@ export type GatewayEventKind =
  */
 export type ServerEventKind = MessageKind | GatewayEventKind;
 
+/** The owning project as it appears inside a `session_upserted` delta. */
+export type SessionUpsertedProject = {
+  projectId: string;
+  path: string;
+  fullPath: string;
+  displayName: string;
+  isStarred: boolean;
+};
+
+/**
+ * The `session_upserted` sidebar delta, built only by
+ * `modules/websocket/services/session-upsert-broadcast.service.ts`.
+ *
+ * Typed rather than assembled as an untyped object literal because the payload
+ * used to be built in two places and silently drifted apart: one copy set
+ * `providerSessionId` and the other did not, and nothing could detect it.
+ *
+ * `providerSessionId` is how a client recognises that a row it is currently
+ * showing has been merged into its canonical app-session row, so it is always
+ * present — `null` only while the provider has not reported an id yet.
+ */
+export type SessionUpsertedEvent = {
+  kind: 'session_upserted';
+  sessionId: string;
+  providerSessionId: string | null;
+  provider: LLMProvider;
+  session: {
+    id: string;
+    summary: string;
+    messageCount: number;
+    lastActivity: string;
+  };
+  project: SessionUpsertedProject | null;
+  timestamp: string;
+};
+
 /**
  * Provider-neutral message envelope used in REST responses and realtime channels.
  *
@@ -214,6 +260,13 @@ export type ServerEventKind = MessageKind | GatewayEventKind;
  */
 export type NormalizedMessage = {
   id: string;
+  /**
+   * The provider's own identifier for the transcript row this message came
+   * from, when the provider has stable per-row identity (today: Claude's
+   * `uuid`). It is what "edit this message" and "fork from here" address, so it
+   * has to survive a reload — never a value this app synthesized.
+   */
+  transcriptAnchorId?: string;
   sessionId: string;
   timestamp: string;
   provider: LLMProvider;
@@ -243,6 +296,8 @@ export type NormalizedMessage = {
   isLocalCommandStdout?: boolean;
   isCompactSummary?: boolean;
   images?: unknown;
+  /** Non-image files attached to a user turn after provider history normalization. */
+  files?: unknown;
   toolName?: string;
   toolInput?: unknown;
   toolId?: string;
@@ -263,12 +318,138 @@ export type NormalizedMessage = {
   status?: string;
   summary?: string;
   tokenBudget?: unknown;
-  subagentTools?: unknown;
+  /**
+   * Timeline of everything a subagent did, attached to the `tool_use` that
+   * spawned it. Present for Claude `Agent`/`Task` calls and Codex
+   * `spawn_agent` calls; absent for every other tool.
+   */
+  subagentTools?: SubagentActivity[];
+  /** Identity and lifecycle of the subagent this `tool_use` spawned. */
+  subagent?: SubagentInfo;
+  /** Stored memory the reply drew on, when the provider reports it. */
+  memoryCitations?: MemoryCitation[];
   toolUseResult?: unknown;
   sequence?: number;
   rowid?: number;
   [key: string]: unknown;
 };
+
+/**
+ * One stored memory an assistant reply drew on.
+ *
+ * Codex appends these to a reply that used its memory files, naming the file
+ * and line range it read plus a short note on what it took from there. The
+ * transcript shows them as a footnote so a memory-derived claim is traceable
+ * rather than arriving as an unattributed assertion.
+ */
+export type MemoryCitation = {
+  /** File and line range that was read, e.g. `MEMORY.md:137-142`. */
+  source: string;
+  /** What the reply took from that range, when the provider states it. */
+  note?: string;
+};
+
+/**
+ * One entry in a subagent's recorded timeline.
+ *
+ * Providers store a subagent's work in a separate transcript (Claude:
+ * `<session>/subagents/agent-<id>.jsonl`; Codex: a sibling rollout keyed by
+ * `agent_thread_id`). Both are flattened into this shape so the transcript can
+ * replay a subagent's run with the same renderers the main thread uses.
+ *
+ * `kind` decides which fields matter: `tool` uses the tool fields, `text` and
+ * `thinking` use `content`. Consumers must not assume tool fields exist on the
+ * text kinds.
+ */
+export type SubagentActivity = {
+  kind: 'tool' | 'text' | 'thinking';
+  timestamp?: string;
+  /** Tool-call identity; only set when `kind` is `tool`. */
+  toolId?: string;
+  toolName?: string;
+  toolInput?: unknown;
+  toolResult?: { content?: string; isError?: boolean } | null;
+  /** Message body; only set when `kind` is `text` or `thinking`. */
+  content?: string;
+};
+
+/**
+ * Identity and lifecycle of one spawned subagent, normalized across providers.
+ *
+ * `status` is `running` until the call that spawned the agent resolves. After
+ * that it is whatever the provider reported — Claude's task notification
+ * carries one — and `completed` when the provider reported nothing. A failed
+ * tool call *inside* the agent is not a failed agent, so it is never inferred
+ * from the transcript.
+ */
+export type SubagentInfo = {
+  /** Provider-native agent id — Claude `agentId`, Codex `agent_thread_id`. */
+  id: string;
+  /** Human-facing label: Claude's agent type, or Codex's assigned nickname. */
+  name?: string;
+  /** Agent type/preset when the provider records one (Claude `agentType`). */
+  type?: string;
+  /** One-line task summary shown in the collapsed header. */
+  description?: string;
+  status: 'running' | 'completed' | 'failed';
+  /** Model the subagent ran on, when the provider records it. */
+  model?: string;
+  /**
+   * How many activities the agent actually recorded. It exceeds
+   * `subagentTools.length` when a long run was truncated for transport, which
+   * lets the UI say so instead of silently showing a partial timeline.
+   */
+  activityCount?: number;
+};
+
+/**
+ * Output gateway shared by WebSocket and SSE provider runs.
+ *
+ * Runtime adapters only depend on this structural surface, which keeps them
+ * independent from the transport that ultimately delivers normalized events.
+ */
+export type ProviderRuntimeWriter = {
+  send(data: unknown): void;
+  setSessionId?(sessionId: string): void;
+  userId?: string | number | null;
+  isWebSocketWriter?: boolean;
+  isSSEStreamWriter?: boolean;
+};
+
+export type ProviderPermissionDecision = {
+  allow: boolean;
+  updatedInput?: unknown;
+  message?: string;
+  rememberEntry?: unknown;
+};
+
+export type ProviderRuntimePermissionGateway = {
+  resolve(requestId: string, decision: ProviderPermissionDecision): void;
+  listPending(sessionId: string): unknown[];
+};
+
+/**
+ * Provider-scoped application capabilities supplied to a runtime for one run.
+ *
+ * Keeping these lookups outside concrete SDK/CLI adapters prevents the
+ * adapters from importing services that resolve back through providerRegistry.
+ */
+export type ProviderRuntimeContext = {
+  resolveProviderSessionId(sessionId: string | null | undefined): string | null;
+  resolveResumeModel(
+    sessionId: string | undefined,
+    requestedModel?: string | null,
+  ): Promise<string | undefined>;
+  getProviderModels(): Promise<ProviderModelsDefinition>;
+  normalizeMessage(raw: unknown, sessionId: string | null): NormalizedMessage[];
+  isProviderInstalled(): Promise<boolean>;
+};
+
+export type ProviderRunFunction = (
+  command: string,
+  options: AnyRecord,
+  writer: ProviderRuntimeWriter,
+) => Promise<unknown>;
 
 /**
  * Shared options used to fetch historical provider messages.
@@ -579,4 +760,592 @@ export type WorkspacePathValidationResult = {
   valid: boolean;
   resolvedPath?: string;
   error?: string;
+};
+
+// ---------------------------
+//----------------- GIT WORKTREE MANAGEMENT ------------
+/**
+ * Captured output of one completed `git` invocation.
+ *
+ * Returned by `GitCommandRunner` implementations so worktree services can read
+ * both streams without caring about process plumbing.
+ */
+export type GitCommandResult = {
+  stdout: string;
+  stderr: string;
+};
+
+/**
+ * Executes `git <args>` inside `cwd` and resolves with the captured output.
+ *
+ * All worktree services receive their git access through this contract so
+ * tests can inject a fake runner instead of spawning real processes. The
+ * promise must reject (with `stderr` attached when available) on a non-zero
+ * exit code.
+ */
+export type GitCommandRunner = (args: string[], cwd: string) => Promise<GitCommandResult>;
+
+/**
+ * One entry parsed from `git worktree list --porcelain`.
+ *
+ * This is the raw repository-level view (path/HEAD/branch/flags) before any
+ * enrichment with project links or ahead/behind counts. `branch` is null for
+ * detached-HEAD worktrees.
+ */
+export type WorktreePorcelainEntry = {
+  path: string;
+  headSha: string | null;
+  branch: string | null;
+  isDetached: boolean;
+  isLocked: boolean;
+  isPrunable: boolean;
+};
+
+/**
+ * Fully enriched worktree row served to the UI.
+ *
+ * Extends the porcelain entry with everything the Worktrees panel renders:
+ * dirty-file count, ahead/behind relative to the base branch (the branch
+ * checked out in the main worktree), last-commit metadata, and the CloudCLI
+ * project row linked to the worktree directory (if one was registered).
+ */
+export type WorktreeDescriptor = {
+  path: string;
+  branch: string | null;
+  headSha: string | null;
+  isMain: boolean;
+  isCurrent: boolean;
+  isLocked: boolean;
+  isDetached: boolean;
+  changedFileCount: number;
+  ahead: number;
+  behind: number;
+  lastCommitSubject: string | null;
+  lastCommitDate: string | null;
+  linkedProjectId: string | null;
+  linkedProjectArchived: boolean;
+};
+
+/**
+ * Response payload of `GET /api/worktrees`.
+ *
+ * `baseBranch` is the branch checked out in the main worktree — the merge
+ * target offered by the UI. `worktrees` always lists the main worktree first.
+ */
+export type WorktreeListResult = {
+  repositoryRoot: string;
+  baseBranch: string | null;
+  worktrees: WorktreeDescriptor[];
+};
+
+// ---------------------------
+//----------------- WORKTREE SERVICE INPUTS AND RESULTS ------------
+/**
+ * Input accepted by the worktree-listing workflow.
+ *
+ * `projectPath` may point at the main checkout or any linked worktree. The
+ * service uses Git to resolve the complete repository-level worktree list.
+ */
+export type ListWorktreesInput = {
+  projectPath: string;
+};
+
+/**
+ * Input accepted when creating a linked Git worktree.
+ *
+ * `branch` is checked out when it already exists, otherwise it is created from
+ * `baseBranch`. When `baseBranch` is omitted, the main worktree branch is used.
+ */
+export type CreateWorktreeInput = {
+  projectPath: string;
+  branch: string;
+  baseBranch?: string | null;
+};
+
+/**
+ * Result of successfully creating a linked Git worktree.
+ *
+ * `createdBranch` distinguishes a new branch from an existing branch checkout,
+ * allowing API clients to accurately describe what Git changed.
+ */
+export type CreateWorktreeResult = {
+  worktreePath: string;
+  branch: string;
+  createdBranch: boolean;
+};
+
+/**
+ * Result of atomically creating and registering a worktree for project use.
+ *
+ * The Worktrees application service compensates the Git creation if project
+ * registration fails, so routes only receive this shape after both steps pass.
+ */
+export type CreateAndOpenWorktreeResult = CreateWorktreeResult & {
+  project: WorktreeProjectView;
+};
+
+/**
+ * Input accepted when registering an existing worktree as a CloudCLI project.
+ *
+ * The service verifies that `worktreePath` belongs to the repository containing
+ * `projectPath` before it creates or restores any project record.
+ */
+export type OpenWorktreeInput = {
+  projectPath: string;
+  worktreePath: string;
+};
+
+/**
+ * Project view returned after a worktree is opened in CloudCLI.
+ *
+ * This deliberately mirrors the project-selection payload used by the Projects
+ * module so the frontend can switch to the worktree without another lookup.
+ */
+export type WorktreeProjectView = {
+  projectId: string;
+  path: string;
+  fullPath: string;
+  displayName: string;
+  isStarred: boolean;
+  sessions: [];
+  sessionMeta: { hasMore: false; total: 0 };
+};
+
+/**
+ * Input accepted when removing a linked Git worktree.
+ *
+ * `force` permits removal with local changes. `deleteBranch` requests
+ * best-effort branch cleanup after the worktree directory is removed.
+ */
+export type RemoveWorktreeInput = {
+  projectPath: string;
+  worktreePath: string;
+  force?: boolean;
+  deleteBranch?: boolean;
+};
+
+/**
+ * Result of removing a linked Git worktree.
+ *
+ * `archivalError` reports best-effort project archival failure after Git has
+ * already removed the worktree, allowing callers to represent partial success.
+ */
+export type RemoveWorktreeResult = {
+  removedPath: string;
+  branch: string | null;
+  branchDeleted: boolean;
+  archivedProjectId: string | null;
+  archivalError: string | null;
+};
+
+/**
+ * Input accepted when merging a linked worktree into the main worktree branch.
+ *
+ * The service verifies both worktrees are clean, supports squash and regular
+ * merges, and may remove the source worktree after a successful merge.
+ */
+export type MergeWorktreeInput = {
+  projectPath: string;
+  worktreePath: string;
+  squash?: boolean;
+  message?: string | null;
+  removeAfterMerge?: boolean;
+};
+
+/**
+ * Result of a completed worktree merge.
+ *
+ * `removedWorktree` is populated only when post-merge removal succeeds.
+ * `cleanupError` reports failed optional removal without misrepresenting the
+ * already-completed merge as a failure.
+ */
+export type MergeWorktreeResult = {
+  mergedBranch: string;
+  targetBranch: string;
+  squash: boolean;
+  removedWorktree: RemoveWorktreeResult | null;
+  cleanupError: string | null;
+};
+
+// ---------------------------
+//----------------- WORKTREE MODULE DEPENDENCY CONTRACTS ------------
+/**
+ * Filesystem capability required by the Worktrees module.
+ *
+ * Production wiring checks the real filesystem; unit tests provide a small
+ * deterministic fake so worktree creation never touches developer directories.
+ */
+export type WorktreeFileSystem = {
+  pathExists(candidatePath: string): Promise<boolean>;
+};
+
+/**
+ * Project-management boundary consumed by Worktrees workflows.
+ *
+ * The Worktrees module uses this contract instead of importing Database or
+ * Projects internals. Production adapters delegate through those modules'
+ * `index.ts` barrels, while unit tests supply in-memory functions.
+ */
+export type WorktreeProjectGateway = {
+  getProjectPathById(projectId: string): string | null;
+  getProjectByPath(projectPath: string): ProjectRepositoryRow | null;
+  createProject(input: {
+    projectPath: string;
+    customName: string;
+  }): Promise<{
+    outcome: 'created' | 'reactivated_archived';
+    project: { projectId: string };
+  }>;
+  restoreProject(projectId: string): void | Promise<void>;
+  archiveProject(projectId: string): void | Promise<void>;
+};
+
+/**
+ * Complete application-service surface used by the Worktrees HTTP router.
+ *
+ * Routes parse transport values and call these functions; they do not import
+ * repositories, filesystem adapters, Git runners, or individual service files.
+ */
+export type WorktreeServices = {
+  resolveProjectPath(projectId: string): string;
+  list(input: ListWorktreesInput): Promise<WorktreeListResult>;
+  create(input: CreateWorktreeInput): Promise<CreateWorktreeResult>;
+  createAndOpen(input: CreateWorktreeInput): Promise<CreateAndOpenWorktreeResult>;
+  open(input: OpenWorktreeInput): Promise<WorktreeProjectView>;
+  merge(input: MergeWorktreeInput): Promise<MergeWorktreeResult>;
+  remove(input: RemoveWorktreeInput): Promise<RemoveWorktreeResult>;
+};
+
+// ---------------------------
+//----------------- FILE TREE MODULE CONTRACTS ------------
+/**
+ * One filesystem item returned by the File Tree API.
+ *
+ * The service populates metadata without following symlinks and recursively
+ * attaches `children` only while the requested depth permits traversal. The
+ * frontend uses the absolute `path` as the stable identifier for editor and
+ * file-operation requests.
+ */
+export type FileTreeNode = {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  size: number;
+  modified: string | null;
+  permissions: string;
+  permissionsRwx: string;
+  isSymlink?: boolean;
+  children?: FileTreeNode[];
+};
+
+/**
+ * Minimal directory-entry shape required during File Tree traversal.
+ *
+ * Production adapts Node `Dirent` objects to this structural contract. Tests
+ * provide small handwritten entries and therefore never read real directories.
+ */
+export type FileTreeDirectoryEntry = {
+  name: string;
+  isDirectory(): boolean;
+};
+
+/**
+ * Minimal file-stat shape used for tree metadata and delete decisions.
+ *
+ * The numeric mode is converted to octal and rwx strings for the UI. `lstat`
+ * supplies symlink state while `stat` is used when deciding file versus folder
+ * deletion behavior.
+ */
+export type FileTreeStats = {
+  size: number;
+  mtime: Date;
+  mode: number;
+  isDirectory(): boolean;
+  isSymbolicLink(): boolean;
+};
+
+/**
+ * Complete filesystem capability injected into File Tree services.
+ *
+ * The production composition root delegates these operations to Node's fs
+ * APIs. Unit tests provide deterministic path-keyed fakes so service tests
+ * cannot inspect, write, rename, or delete developer files.
+ */
+export type FileTreeFileSystem = {
+  access(candidatePath: string): Promise<void>;
+  stat(candidatePath: string): Promise<FileTreeStats>;
+  lstat(candidatePath: string): Promise<FileTreeStats>;
+  // Streamed rather than returned as an array so a directory with millions of
+  // children is abandoned at the entry limit instead of being materialized.
+  openDirectory(directoryPath: string): AsyncIterable<FileTreeDirectoryEntry>;
+  realpath(candidatePath: string): Promise<string>;
+  readTextFile(filePath: string): Promise<string>;
+  writeTextFile(filePath: string, content: string): Promise<void>;
+  makeDirectory(directoryPath: string, recursive: boolean): Promise<void>;
+  rename(oldPath: string, newPath: string): Promise<void>;
+  removeDirectory(directoryPath: string): Promise<void>;
+  unlink(filePath: string): Promise<void>;
+  copyFile(sourcePath: string, destinationPath: string): Promise<void>;
+  createReadStream(filePath: string): Readable;
+};
+
+/**
+ * Project lookup boundary consumed by File Tree workflows.
+ *
+ * File Tree services resolve DB-assigned project ids through this contract and
+ * never import the Database module or its repositories directly.
+ */
+export type FileTreeProjectGateway = {
+  getProjectPathById(projectId: string): string | null | Promise<string | null>;
+};
+
+/**
+ * Workspace validation boundary used by filesystem browsing and folder creation.
+ *
+ * The injected validator enforces the configured workspace root and resolves
+ * symlinks before the File Tree service exposes or mutates paths.
+ */
+export type FileTreeWorkspaceGateway = {
+  rootPath: string;
+  validatePath(candidatePath: string): Promise<WorkspacePathValidationResult>;
+};
+
+/**
+ * Uploaded-file record passed from the Multer transport adapter into the File
+ * Tree service.
+ *
+ * Transport-specific field names are normalized so upload workflows do not
+ * depend on Express or Multer types.
+ */
+export type FileTreeUploadedFile = {
+  originalName: string;
+  temporaryPath: string;
+  size: number;
+  mimeType: string;
+};
+
+/**
+ * Logger boundary for expected File Tree diagnostics.
+ *
+ * Production delegates to the server console. Unit tests use no-op or captured
+ * loggers and never patch the global console singleton.
+ */
+export type FileTreeLogger = {
+  error(message: string, error?: unknown): void;
+};
+
+/**
+ * Required production dependencies for the File Tree application service.
+ *
+ * Filesystem, project lookup, workspace policy, MIME detection, concurrency,
+ * and logging are all explicit so service construction has no hidden process,
+ * repository, or machine-wide defaults.
+ */
+export type FileTreeServiceDependencies = {
+  fileSystem: FileTreeFileSystem;
+  projects: FileTreeProjectGateway;
+  workspace: FileTreeWorkspaceGateway;
+  resolveMimeType(filePath: string): string;
+  fileSystemConcurrency: number;
+  logger: FileTreeLogger;
+};
+
+/**
+ * Complete File Tree application-service surface consumed by HTTP routes.
+ *
+ * Routes parse transport inputs and call these methods; they never resolve
+ * project repositories, validate filesystem ownership, or perform filesystem
+ * mutations themselves.
+ */
+export type FileTreeServices = {
+  browseWorkspace(inputPath: string | null): Promise<{
+    path: string;
+    suggestions: Array<{ path: string; name: string; type: 'directory' }>;
+  }>;
+  createWorkspaceFolder(folderPath: string): Promise<{ success: true; path: string }>;
+  readTextFile(projectId: string, filePath: string): Promise<{ content: string; path: string }>;
+  openFile(projectId: string, filePath: string): Promise<{ contentType: string; stream: Readable }>;
+  saveTextFile(projectId: string, filePath: string, content: string): Promise<{
+    success: true;
+    path: string;
+    message: string;
+  }>;
+  listProjectFiles(
+    projectId: string,
+    options?: { respectGitignore: boolean },
+  ): Promise<FileTreeNode[]>;
+  createEntry(input: {
+    projectId: string;
+    parentPath: string;
+    type: 'file' | 'directory';
+    name: string;
+  }): Promise<{ success: true; path: string; name: string; type: 'file' | 'directory'; message: string }>;
+  renameEntry(input: { projectId: string; oldPath: string; newName: string }): Promise<{
+    success: true;
+    oldPath: string;
+    newPath: string;
+    newName: string;
+    message: string;
+  }>;
+  deleteEntry(input: { projectId: string; targetPath: string }): Promise<{
+    success: true;
+    path: string;
+    type: 'file' | 'directory';
+    message: string;
+  }>;
+  storeUploadedFiles(input: {
+    projectId: string;
+    targetPath: string;
+    relativePaths: string[];
+    requestedFileCount: number;
+    files: FileTreeUploadedFile[];
+  }): Promise<{
+    success: true;
+    files: Array<{ name: string; path: string; size: number; mimeType: string }>;
+    uploadedCount: number;
+    requestedFileCount: number;
+    targetPath: string;
+    message: string;
+  }>;
+};
+
+// ---------------------------
+//----------------- VOICE MODULE CONTRACTS ------------
+/**
+ * Per-request voice settings parsed from authenticated HTTP headers.
+ *
+ * The Voice routes create this value from the optional `x-voice-*` headers and
+ * pass it to the Voice service. Empty values mean "use the server-configured
+ * default"; the backend base URL is intentionally absent because clients must
+ * never control the server's outbound destination.
+ */
+export type VoiceRequestOverrides = {
+  apiKey?: string;
+  sttModel?: string;
+  ttsModel?: string;
+  ttsVoice?: string;
+  ttsFormat?: string;
+};
+
+/**
+ * Uploaded audio accepted by the Voice transcription service.
+ *
+ * Routes translate Multer's transport-specific file object into this minimal
+ * shape so the service does not depend on Express or Multer types.
+ */
+export type VoiceAudioUpload = {
+  bytes: Buffer;
+  mimeType: string;
+  fileName: string;
+};
+
+/**
+ * Successful speech payload returned by the Voice service.
+ *
+ * The route copies `contentType` to the client response and pipes `body`
+ * without buffering the complete synthesized audio in application memory.
+ */
+export type VoiceSpeechPayload = {
+  contentType: string;
+  body: ReadableStream<Uint8Array> | null;
+};
+
+/**
+ * Explicit service result used by Voice routes instead of transport-aware
+ * exceptions.
+ *
+ * Services return `ok: false` with the exact client status/message for expected
+ * backend, validation, and timeout failures. Routes only translate the result
+ * into HTTP output, while unexpected programming errors still reject normally.
+ */
+export type VoiceServiceResult<TValue> =
+  | { ok: true; value: TValue }
+  | { ok: false; status: number; error: string };
+
+/**
+ * Complete application-service surface consumed by the Voice HTTP router.
+ *
+ * The composition root supplies a concrete implementation with environment
+ * configuration and an injected outbound HTTP adapter. Unit tests use the same
+ * contract with handwritten fetch fakes and never patch global state.
+ */
+export type VoiceService = {
+  getHealth(): { configured: boolean };
+  transcribe(input: {
+    audio: VoiceAudioUpload;
+    overrides: VoiceRequestOverrides;
+  }): Promise<VoiceServiceResult<{ text: string }>>;
+  synthesizeSpeech(input: {
+    text: string;
+    overrides: VoiceRequestOverrides;
+  }): Promise<VoiceServiceResult<VoiceSpeechPayload>>;
+};
+
+// ---------------------------
+//----------------- CLI MODULE CONTRACTS ------------
+/**
+ * Output boundary used by the CLI and Sandbox services.
+ *
+ * Production wiring delegates to the real console. Unit tests collect these
+ * calls in arrays, which keeps command assertions deterministic and avoids
+ * monkey-patching the global console singleton.
+ */
+export type CliOutput = {
+  log(message?: string): void;
+  error(message?: string): void;
+};
+
+/**
+ * Minimal synchronous filesystem surface shared by CLI status reporting and
+ * sandbox workspace validation.
+ *
+ * The production composition root adapts Node's filesystem module. Tests supply
+ * path-keyed fakes, so service tests never inspect or modify the real machine.
+ */
+export type CliFileSystem = {
+  pathExists(filePath: string): boolean;
+  getFileStats(filePath: string): { size: number; modifiedAt: Date };
+};
+
+/**
+ * Mutable environment view owned by the CLI application.
+ *
+ * CLI options update this object before the server starts. Production passes
+ * `process.env`; tests pass a plain record to verify option precedence without
+ * changing process-wide environment state.
+ */
+export type CliEnvironment = Record<string, string | undefined>;
+
+/**
+ * Package metadata displayed by CLI help, status, version, and update commands.
+ *
+ * The composition root reads this once from the application package file and
+ * injects only the fields the service needs.
+ */
+export type CliPackageMetadata = {
+  version: string;
+  homepage?: string;
+  bugsUrl?: string;
+};
+
+/**
+ * Executable CLI application returned by the CLI composition root.
+ *
+ * The thin executable entrypoint passes `process.argv` arguments to `run` and
+ * copies the returned code to `process.exitCode`. Tests invoke the same method
+ * directly with isolated dependencies.
+ */
+export type CliApplication = {
+  run(argumentsList: string[]): Promise<number>;
+};
+
+/**
+ * Sandbox command service consumed by the top-level CLI command dispatcher.
+ *
+ * Keeping this behind one required dependency lets CLI tests use a tiny fake,
+ * while focused Sandbox tests exercise subprocess and filesystem behavior with
+ * their own handwritten adapters.
+ */
+export type SandboxCommandService = {
+  execute(argumentsList: string[]): Promise<number>;
 };

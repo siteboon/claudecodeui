@@ -23,7 +23,11 @@
     // The backend build emits both /server and /shared into dist-server, so rootDir must
     // stay one level above this file even though the config itself now lives in /server.
     "rootDir": "..",
-    "outDir": "../dist-server",
+    // The build stages into dist-server.next; scripts/promote-dist-server.mjs
+    // (postbuild:server) swaps it into dist-server once tsc and tsc-alias have
+    // both finished. Never emit into the live dist-server: an interrupted build
+    // must not be able to destroy the build the server is running from.
+    "outDir": "../dist-server.next",
     "sourceMap": true,
     "resolveJsonModule": true,
     "esModuleInterop": true,
@@ -32,5 +36,5 @@
     "types": ["node"]
   },
   "include": ["./**/*.js", "./**/*.ts", "../shared/**/*.js", "../shared/**/*.ts"],
-  "exclude": ["../dist", "../dist-server", "../node_modules", "../src"]
+  "exclude": ["../dist", "../dist-server", "../dist-server.next", "../dist-server.old", "../node_modules", "../src"]
 }
