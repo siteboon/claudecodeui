@@ -206,21 +206,21 @@ test('runMigrations renames a project even when sessions predate ON UPDATE CASCA
 
     db.prepare(
       'INSERT INTO projects (project_id, project_path, custom_project_name, isStarred, isArchived) VALUES (?, ?, NULL, 0, 0)',
-    ).run('legacy-solo', 'c:\legacy');
+    ).run('legacy-solo', 'c:\\legacy');
     db.prepare('INSERT INTO sessions (session_id, project_path, provider) VALUES (?, ?, ?)')
-      .run('legacy-session', 'c:\legacy', 'claude');
+      .run('legacy-session', 'c:\\legacy', 'claude');
 
     runMigrations(db);
 
     const project = db
       .prepare('SELECT project_path FROM projects WHERE project_id = ?')
       .get('legacy-solo') as { project_path: string } | undefined;
-    assert.equal(project?.project_path, 'C:\legacy', 'the project was renamed');
+    assert.equal(project?.project_path, 'C:\\legacy', 'the project was renamed');
 
     const session = db
       .prepare('SELECT project_path FROM sessions WHERE session_id = ?')
       .get('legacy-session') as { project_path: string } | undefined;
-    assert.equal(session?.project_path, 'C:\legacy', 'and its session came along');
+    assert.equal(session?.project_path, 'C:\\legacy', 'and its session came along');
 
     assert.equal(
       Boolean(db.pragma('foreign_keys', { simple: true })),
