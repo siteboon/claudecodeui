@@ -20,7 +20,7 @@ const hasErrorCode = (error: unknown, code: string): boolean => (
 );
 
 const installationProbe = createCliInstallationProbe({
-  command: () => resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH),
+  command: () => resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH) ?? 'claude',
 });
 
 export class ClaudeProviderAuth implements IProviderAuth {
@@ -116,6 +116,24 @@ export class ClaudeProviderAuth implements IProviderAuth {
         const expiresAt = typeof oauth?.expiresAt === 'number' ? oauth.expiresAt : undefined;
         const email = readOptionalString(creds.email) ?? readOptionalString(creds.user) ?? null;
         if (!expiresAt || Date.now() < expiresAt) {
+          return {
+            authenticated: true,
+            email,
+            method: 'credentials_file',
+          };
+        }
+
+        // `accessToken` is short-lived (hours). Claude Code renews it silently
+        // from `refreshToken` on the next CLI invocation, so an expired access
+        // token alongside a live refresh token is still a working login. Before
+        // this check, a still-signed-in account read as "login has expired"
+        // until something else happened to run the CLI — which is why opening
+        // the Shell tab and coming back made Settings flip to Connected.
+        const refreshToken = readOptionalString(oauth?.refreshToken);
+        const refreshTokenExpiresAt = typeof oauth?.refreshTokenExpiresAt === 'number'
+          ? oauth.refreshTokenExpiresAt
+          : undefined;
+        if (refreshToken && (!refreshTokenExpiresAt || Date.now() < refreshTokenExpiresAt)) {
           return {
             authenticated: true,
             email,

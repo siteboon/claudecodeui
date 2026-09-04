@@ -14,3 +14,7 @@ This project is managed and monitored via **PM2**:
 - Default service port: `3001` (`http://localhost:3001`)
 
 Always use PM2 commands when restarting or inspecting the server process, rather than running ad-hoc background node processes.
+
+## Frontend code
+
+For every task that creates, modifies, refactors, or reviews frontend code under `src/`, load and follow `$frontend-module-standards` from `.agents/skills/frontend-module-standards/SKILL.md`. Apply it only to frontend code; do not impose those architecture rules on the backend.

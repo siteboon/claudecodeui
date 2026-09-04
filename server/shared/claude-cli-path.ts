@@ -69,13 +69,24 @@ function resolveClaudeWrapperBinary(
   return null;
 }
 
+/**
+ * Windows has no PATH lookup to fall back on: the SDK spawns the path we hand
+ * it with a raw `child_process.spawn`, which never consults PATH or PATHEXT.
+ * A bare `claude` therefore fails with "native binary not found at claude"
+ * even on a machine where the CLI is installed and on PATH, so an unresolved
+ * default returns undefined and lets the SDK use its own bundled binary.
+ */
 function resolveWindowsClaudeExecutablePath(
   configuredPath: string,
+  configuredExplicitly: boolean,
   deps: Required<ResolveClaudeCodeExecutablePathDependencies>,
-): string {
+): string | undefined {
   const pathApi = getPathApi(deps.platform);
   const extension = pathApi.extname(configuredPath).toLowerCase();
   const explicitPath = isPathLike(configuredPath) || pathApi.isAbsolute(configuredPath);
+  // An explicit CLAUDE_CLI_PATH is the operator's call even when we cannot
+  // verify it; only our own `claude` default defers to the SDK.
+  const unresolved = configuredExplicitly ? configuredPath : undefined;
 
   if (CLAUDE_SCRIPT_EXTENSIONS.has(extension)) {
     return configuredPath;
@@ -86,7 +97,7 @@ function resolveWindowsClaudeExecutablePath(
   }
 
   if (explicitPath) {
-    return resolveClaudeWrapperBinary(configuredPath, deps) ?? configuredPath;
+    return resolveClaudeWrapperBinary(configuredPath, deps) ?? unresolved;
   }
 
   try {
@@ -113,16 +124,22 @@ function resolveWindowsClaudeExecutablePath(
       }
     }
   } catch {
-    return configuredPath;
+    return unresolved;
   }
 
-  return configuredPath;
+  return unresolved;
 }
 
+/**
+ * Resolves the Claude Code executable to hand the SDK.
+ *
+ * Returns undefined when no real executable could be found and the caller did
+ * not configure one, which means "let the SDK pick its own bundled binary".
+ */
 export function resolveClaudeCodeExecutablePath(
   configuredPath: string | undefined = process.env.CLAUDE_CLI_PATH,
   dependencies: ResolveClaudeCodeExecutablePathDependencies = {},
-): string {
+): string | undefined {
   const deps: Required<ResolveClaudeCodeExecutablePathDependencies> = {
     execFileSync: dependencies.execFileSync ?? execFileSync,
     existsSync: dependencies.existsSync ?? fs.existsSync,
@@ -130,10 +147,11 @@ export function resolveClaudeCodeExecutablePath(
     readFileSync: dependencies.readFileSync ?? fs.readFileSync,
   };
 
+  const configuredExplicitly = Boolean(stripWrappingQuotes(configuredPath || ''));
   const normalizedPath = stripWrappingQuotes(configuredPath || DEFAULT_CLAUDE_COMMAND);
   if (deps.platform !== 'win32') {
     return normalizedPath;
   }
 
-  return resolveWindowsClaudeExecutablePath(normalizedPath, deps);
+  return resolveWindowsClaudeExecutablePath(normalizedPath, configuredExplicitly, deps);
 }

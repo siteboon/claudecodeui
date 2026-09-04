@@ -19,6 +19,7 @@ type ShellIncomingMessage = {
   initialCommand?: string;
   isPlainShell?: boolean;
   forceRestart?: boolean;
+  bypassPermissions?: boolean;
 };
 
 type PtySessionEntry = {
@@ -264,8 +265,21 @@ function buildShellCommand(
   }
 
   const integration = SHELL_PROVIDER_CLI[provider] ?? SHELL_PROVIDER_CLI.claude;
+
+  // Launching with the flag is what unlocks "bypass permissions" in the CLI's
+  // own approval flow; resuming must carry it through as well.
+  const bypassFlag = readBoolean(message.bypassPermissions) && provider === 'claude'
+    ? ' --dangerously-skip-permissions'
+    : '';
+
   if (resumeSessionId && integration.resume) {
+    if (bypassFlag) {
+      return `claude --resume "${resumeSessionId}"${bypassFlag} || claude${bypassFlag}`;
+    }
     return integration.resume(resumeSessionId);
+  }
+  if (provider === 'claude' && bypassFlag) {
+    return `claude${bypassFlag}`;
   }
   return initialCommand || integration.launch;
 }

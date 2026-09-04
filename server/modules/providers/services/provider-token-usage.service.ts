@@ -1,7 +1,8 @@
 import { sessionsDb } from '@/modules/database/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import type { IProvider } from '@/shared/interfaces.js';
-import type { ProviderQuotaData, ProviderTokenUsageResult } from '@/shared/types.js';
+import type { AnyRecord, ProviderQuotaData, ProviderTokenUsageResult } from '@/shared/types.js';
+export { summarizeClaudeTokenUsage } from './claude-usage.js';
 import { AppError } from '@/shared/utils.js';
 
 type SessionRow = NonNullable<ReturnType<typeof sessionsDb.getSessionById>>;
@@ -9,11 +10,21 @@ type SessionRow = NonNullable<ReturnType<typeof sessionsDb.getSessionById>>;
 type ProviderTokenUsageServiceDependencies = {
   getSessionById: (sessionId: string) => SessionRow | null | undefined;
   resolveProvider: (provider: string) => Pick<IProvider, 'sessions' | 'auth'>;
+  isProviderSessionSuperseded: (providerSessionId: string, provider: string) => boolean;
 };
 
 const defaultDependencies: ProviderTokenUsageServiceDependencies = {
   getSessionById: (sessionId) => sessionsDb.getSessionById(sessionId),
   resolveProvider: (provider) => providerRegistry.resolveProvider(provider),
+  isProviderSessionSuperseded: (providerSessionId, provider) => {
+    try {
+      return sessionsDb.isProviderSessionSuperseded(providerSessionId, provider);
+    } catch {
+      // No database context (unit tests, early startup): treat as live so the
+      // provider facet still answers.
+      return false;
+    }
+  },
 };
 
 /**
@@ -62,6 +73,24 @@ export function createProviderTokenUsageService(
         });
       }
 
+      // The fallback covers rows whose provider id was never recorded, and for
+      // a session discovered from disk the app id *is* its provider id. That
+      // stops being true the moment an edit rewinds the conversation off a
+      // thread: until the replacement run announces its own id, the fallback
+      // would resolve the retired transcript and report the discarded
+      // conversation's usage against an empty one.
+      if (
+        !session.provider_session_id
+        && dependencies.isProviderSessionSuperseded(sessionId, session.provider)
+      ) {
+        return {
+          used: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          breakdown: { input: 0, output: 0 },
+        };
+      }
+
       const provider = dependencies.resolveProvider(session.provider);
       if (!provider.sessions.getTokenUsage) {
         return createUnsupportedTokenUsage(session.provider);
@@ -92,3 +121,4 @@ export function createProviderTokenUsageService(
  * Used by the provider routes to serve token usage from only an app session id.
  */
 export const providerTokenUsageService = createProviderTokenUsageService();
+
