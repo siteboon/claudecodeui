@@ -13,21 +13,22 @@ type SettingsSidebarProps = {
 type NavItem = {
   id: SettingsMainTab;
   labelKey: string;
+  fallback: string;
   icon: typeof Bot;
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'agents', labelKey: 'mainTabs.agents', icon: Bot },
-  { id: 'sessions', labelKey: 'mainTabs.sessions', icon: MessageSquare },
-  { id: 'appearance', labelKey: 'mainTabs.appearance', icon: Palette },
-  { id: 'git', labelKey: 'mainTabs.git', icon: GitBranch },
-  { id: 'api', labelKey: 'mainTabs.apiTokens', icon: Key },
-  { id: 'voice', labelKey: 'mainTabs.voice', icon: Mic },
-  { id: 'tasks', labelKey: 'mainTabs.tasks', icon: ListChecks },
-  { id: 'browser', labelKey: 'mainTabs.browser', icon: MonitorPlay },
-  { id: 'plugins', labelKey: 'mainTabs.plugins', icon: Puzzle },
-  { id: 'notifications', labelKey: 'mainTabs.notifications', icon: Bell },
-  { id: 'about', labelKey: 'mainTabs.about', icon: Info },
+  { id: 'agents', labelKey: 'mainTabs.agents', fallback: 'Agents', icon: Bot },
+  { id: 'sessions', labelKey: 'mainTabs.sessions', fallback: 'Sessions', icon: MessageSquare },
+  { id: 'appearance', labelKey: 'mainTabs.appearance', fallback: 'Appearance', icon: Palette },
+  { id: 'git', labelKey: 'mainTabs.git', fallback: 'Git', icon: GitBranch },
+  { id: 'api', labelKey: 'mainTabs.apiTokens', fallback: 'API & Tokens', icon: Key },
+  { id: 'voice', labelKey: 'mainTabs.voice', fallback: 'Voice', icon: Mic },
+  { id: 'tasks', labelKey: 'mainTabs.tasks', fallback: 'Tasks', icon: ListChecks },
+  { id: 'browser', labelKey: 'mainTabs.browser', fallback: 'Browser', icon: MonitorPlay },
+  { id: 'plugins', labelKey: 'mainTabs.plugins', fallback: 'Plugins', icon: Puzzle },
+  { id: 'notifications', labelKey: 'mainTabs.notifications', fallback: 'Notifications', icon: Bell },
+  { id: 'about', labelKey: 'mainTabs.about', fallback: 'About', icon: Info },
 ];
 
 /** Rendered by Settings to switch between the settings dialog's main sections. */
@@ -55,7 +56,7 @@ export default function SettingsSidebar({ activeTab, onChange }: SettingsSidebar
                 )}
               >
                 <Icon className="h-4 w-4 flex-shrink-0" />
-                {t(item.labelKey)}
+                {t(item.labelKey, item.fallback)}
               </button>
             );
           })}
@@ -76,7 +77,7 @@ export default function SettingsSidebar({ activeTab, onChange }: SettingsSidebar
                 className="flex-shrink-0"
               >
                 <Icon className="h-3.5 w-3.5" />
-                {t(item.labelKey)}
+                {t(item.labelKey, item.fallback)}
               </Pill>
             );
           })}

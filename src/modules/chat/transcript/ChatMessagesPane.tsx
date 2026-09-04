@@ -19,6 +19,8 @@ import ProviderSelectionEmptyState from '@/modules/chat/transcript/ProviderSelec
 import ToolGroupContainer from '@/modules/chat/transcript/ToolGroupContainer';
 import LoadAllMessagesOverlay from '@/modules/chat/transcript/LoadAllMessagesOverlay';
 import ChatExportMenu from '@/modules/chat/transcript/ChatExportMenu';
+import LazyMessageRow from '@/modules/chat/transcript/LazyMessageRow';
+import { useLazyRowObserver } from '@/modules/chat/hooks/useLazyRowObserver';
 
 type ChatMessagesPaneProps = {
   scrollContainerRef: RefObject<HTMLDivElement>;
@@ -118,6 +120,7 @@ function ChatMessagesPane({
   selectedProject,
 }: ChatMessagesPaneProps) {
   const { t } = useTranslation('chat');
+  const lazyRows = useLazyRowObserver(scrollContainerRef);
 
   useEffect(() => {
     onPaneMounted();
@@ -260,13 +263,18 @@ function ChatMessagesPane({
 
           {(() => {
             let prevMessage: ChatMessage | null = null;
+            const totalCount = groupedVisibleMessages.length;
+            const enableLazy = totalCount > 25;
+            const activeTailCount = 15;
 
-            return groupedVisibleMessages.map((item) => {
+            return groupedVisibleMessages.map((item, index) => {
+              const isNearTail = index >= totalCount - activeTailCount;
+
               if (isToolGroupItem(item)) {
                 const groupPrevMessage = prevMessage;
                 prevMessage = item.messages[item.messages.length - 1] || prevMessage;
 
-                return (
+                const rowContent = (
                   <div key={`tool-group-${getMessageKey(item.messages[0])}`} data-anchor-id={`tool-group-${getMessageKey(item.messages[0])}`}>
                     <ToolGroupContainer
                       group={item}
@@ -283,12 +291,27 @@ function ChatMessagesPane({
                     />
                   </div>
                 );
+
+                if (!enableLazy) {
+                  return rowContent;
+                }
+
+                return (
+                  <LazyMessageRow
+                    key={`lazy-tool-group-${getMessageKey(item.messages[0])}`}
+                    lazyRows={lazyRows}
+                    timestamp={item.messages[0]?.timestamp}
+                    initiallyNearViewport={isNearTail}
+                  >
+                    {rowContent}
+                  </LazyMessageRow>
+                );
               }
 
               const messagePrevMessage = prevMessage;
               prevMessage = item;
 
-              return (
+              const rowContent = (
                 <div key={getMessageKey(item)} data-anchor-id={getMessageKey(item)}>
                   <MessageComponent
                     message={item}
@@ -305,6 +328,21 @@ function ChatMessagesPane({
                     onForkFromMessage={onForkFromMessage}
                   />
                 </div>
+              );
+
+              if (!enableLazy) {
+                return rowContent;
+              }
+
+              return (
+                <LazyMessageRow
+                  key={`lazy-${getMessageKey(item)}`}
+                  lazyRows={lazyRows}
+                  timestamp={item.timestamp}
+                  initiallyNearViewport={isNearTail}
+                >
+                  {rowContent}
+                </LazyMessageRow>
               );
             });
           })()}

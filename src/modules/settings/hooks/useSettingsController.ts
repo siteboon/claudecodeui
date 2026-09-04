@@ -248,6 +248,11 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     setShowLoginModal(true);
   }, []);
 
+  const closeLoginModal = useCallback(() => {
+    setShowLoginModal(false);
+    void refreshProviderAuthStatuses();
+  }, [refreshProviderAuthStatuses]);
+
   const handleLoginComplete = useCallback((exitCode: number) => {
     if (!loginProvider) {
       return;
@@ -427,6 +432,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     openLoginForProvider,
     showLoginModal,
     setShowLoginModal,
+    closeLoginModal,
     loginProvider,
     handleLoginComplete,
   };
