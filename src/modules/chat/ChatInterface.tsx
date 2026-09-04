@@ -212,6 +212,7 @@ function ChatInterface({
     editQueuedDraft,
     deleteQueuedDraft,
     handleVoiceTranscript,
+    handleVoiceAborted,
     handleInputChange,
     handleKeyDown,
     handlePaste,
@@ -546,6 +547,7 @@ function ChatInterface({
           textareaRef={textareaRef}
           input={input}
           onVoiceTranscript={handleVoiceTranscript}
+          onVoiceAborted={handleVoiceAborted}
           onInputChange={handleInputChange}
           onTextareaClick={handleTextareaClick}
           onTextareaKeyDown={handleKeyDown}

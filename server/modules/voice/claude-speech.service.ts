@@ -195,14 +195,22 @@ export class ClaudeSpeechStream {
     this.events.onEnd();
   }
 
-  async open(language: string): Promise<void> {
+  /**
+   * Opens the upstream socket.
+   *
+   * Returns false when no upstream was opened at all. The caller cannot see
+   * that from `onError` alone - the stream object exists either way - and a
+   * bridge that keeps holding a stream with no upstream behind it would queue
+   * a finish operation that can never produce an `end`.
+   */
+  async open(language: string): Promise<boolean> {
     const token = await readClaudeToken();
     if (!token) {
       // Nothing will come of this stream, so it must not go on collecting the
       // audio the page keeps sending until someone closes it.
       this.closing = true;
       this.events.onError('No Claude credentials. Run "claude /login" once.');
-      return;
+      return false;
     }
 
     const base = (process.env.VOICE_STREAM_BASE_URL || DEFAULT_API_BASE)
@@ -216,7 +224,7 @@ export class ClaudeSpeechStream {
     if (base.startsWith('ws://') && !/^ws:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|$|\/)/.test(base)) {
       this.closing = true;
       this.events.onError('VOICE_STREAM_BASE_URL must use https for anything but localhost.');
-      return;
+      return false;
     }
 
     const params = new URLSearchParams({
@@ -292,6 +300,7 @@ export class ClaudeSpeechStream {
     });
 
     this.upstream = socket;
+    return true;
   }
 
   private handleMessage(text: string): void {

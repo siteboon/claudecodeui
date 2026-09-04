@@ -951,6 +951,18 @@ export function useChatComposerState({
     if (send) handleSubmitRef.current?.(createFakeSubmitEvent());
   }, [setInput]);
 
+  /**
+   * Ends a dictation's claim on the box when it stopped without ever sending a
+   * final transcript - an upstream error, a dropped connection, a cancelled
+   * recording. Typing does the same (see `handleInputChange`), but someone who
+   * simply records again touches no key in between: the stale base would then
+   * be what the next recording replaces back to, throwing away the text the
+   * failed one had already put in the box.
+   */
+  const handleVoiceAborted = useCallback(() => {
+    voiceBase.current = null;
+  }, []);
+
   useEffect(() => {
     inputValueRef.current = input;
   }, [input]);
@@ -1254,6 +1266,7 @@ export function useChatComposerState({
     editQueuedDraft,
     deleteQueuedDraft,
     handleVoiceTranscript,
+    handleVoiceAborted,
     handleInputChange,
     handleKeyDown,
     handlePaste,

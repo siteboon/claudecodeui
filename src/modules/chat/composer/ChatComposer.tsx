@@ -106,6 +106,9 @@ type ChatComposerProps = {
   textareaRef: RefObject<HTMLTextAreaElement>;
   input: string;
   onVoiceTranscript?: (text: string, send?: boolean, final?: boolean) => void;
+  /** Called when a dictation ends without a final transcript, so the
+   *  composer can drop the base the next one would replace back to. */
+  onVoiceAborted?: () => void;
   onInputChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
   onTextareaClick: (event: MouseEvent<HTMLTextAreaElement>) => void;
   onTextareaKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
@@ -179,6 +182,7 @@ export default function ChatComposer({
   textareaRef,
   input,
   onVoiceTranscript,
+  onVoiceAborted,
   onInputChange,
   onTextareaClick,
   onTextareaKeyDown,
@@ -233,9 +237,14 @@ export default function ChatComposer({
   const voiceErrorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleVoiceError = useCallback((msg: string) => {
     setVoiceError(msg);
+    // A dictation that errors never sends a final transcript, so the composer
+    // would keep the base it started from. Someone who just records again
+    // touches no key in between, and that stale base is what the next
+    // recording replaces back to - losing what this one already put there.
+    onVoiceAborted?.();
     if (voiceErrorTimer.current) clearTimeout(voiceErrorTimer.current);
     voiceErrorTimer.current = setTimeout(() => setVoiceError(null), 4000);
-  }, []);
+  }, [onVoiceAborted]);
   useEffect(() => () => {
     if (voiceErrorTimer.current) clearTimeout(voiceErrorTimer.current);
   }, []);

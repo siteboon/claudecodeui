@@ -39,7 +39,13 @@ export function handleVoiceWebSocket(ws: WebSocket): void {
       onError: (message) => say({ type: 'error', message }),
     });
 
-    await stream.open(language);
+    // A stream whose upstream never opened is not a stream: keeping it here
+    // would let a later `stop` queue a finish that can never produce an `end`,
+    // and the next `start` would find this one still in place and do nothing.
+    // The error itself has already gone to the page from inside `open`.
+    if (!await stream.open(language)) {
+      stream = null;
+    }
   };
 
   ws.on('message', (raw: Buffer, isBinary: boolean) => {
