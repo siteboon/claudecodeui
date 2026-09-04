@@ -1,38 +1,50 @@
 import { useState } from 'react';
 import { Download, FileJson, FileText } from 'lucide-react';
 
-import type { ChatMessage } from '@/shared/types';
-import { downloadMarkdown, downloadHTML, downloadPDF, EXPORT_FORMATS } from '@/modules/chat/utils/chatExport';
+import type { ChatMessage, DiffLine } from '@/shared/types';
+import { buildTranscriptExport, downloadTranscriptExport, toExportFileStem, downloadPDF, EXPORT_FORMATS } from '@/modules/chat/utils/chatExport';
 
 type ChatExportMenuProps = {
   messages: ChatMessage[];
   sessionTitle?: string;
   provider?: string;
+  createDiff: (oldStr: string, newStr: string) => DiffLine[];
 };
 
-export default function ChatExportMenu({ messages, sessionTitle, provider }: ChatExportMenuProps) {
+export default function ChatExportMenu({ messages, sessionTitle, provider, createDiff }: ChatExportMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   if (messages.length === 0) {
     return null;
   }
 
-  const handleExport = (format: 'markdown' | 'html' | 'pdf') => {
-    const timestamp = new Date().toISOString().split('T')[0];
-    const filename = `${sessionTitle || 'chat'}-${timestamp}`;
-    const options = { provider };
-
-    switch (format) {
-      case 'markdown':
-        downloadMarkdown(messages, `${filename}.md`, sessionTitle, options);
-        break;
-      case 'html':
-        downloadHTML(messages, `${filename}.html`, sessionTitle, options);
-        break;
-      case 'pdf':
-        downloadPDF(messages, filename, sessionTitle, options);
-        break;
+  const options = { provider };
+  const handleExport = async (format: 'markdown' | 'html' | 'json' | 'pdf') => {
+    if (format === 'pdf') {
+      const timestamp = new Date().toISOString().split('T')[0];
+      const filename = `${sessionTitle || 'chat'}-${timestamp}`;
+      downloadPDF(messages, filename, sessionTitle, options);
+      setIsOpen(false);
+      return;
     }
+
+    const exportedAt = new Date();
+    const content = await buildTranscriptExport(format, {
+      messages,
+      sessionTitle: sessionTitle || 'chat',
+      provider: provider || 'claude',
+      createDiff,
+    }, exportedAt);
+    const filename = `${toExportFileStem(sessionTitle || 'chat', exportedAt)}.${format === 'markdown' ? 'md' : format}`;
+
+    const url = URL.createObjectURL(new Blob([content], { type: format === 'json' ? 'application/json;charset=utf-8' : format === 'html' ? 'text/html;charset=utf-8' : 'text/markdown;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
     setIsOpen(false);
   };
 
@@ -56,7 +68,7 @@ export default function ChatExportMenu({ messages, sessionTitle, provider }: Cha
               <button
                 key={fmt.id}
                 type="button"
-                onClick={() => handleExport(fmt.id as 'markdown' | 'html' | 'pdf')}
+                onClick={() => void handleExport(fmt.id as 'markdown' | 'html' | 'pdf')}
                 className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
               >
                 {fmt.id === 'markdown' ? (

@@ -773,6 +773,35 @@ export function useSessionStore() {
     }
   }, [notify]);
 
+/**
+   * Drops every persisted row from `anchorId` onwards after an edit replaced
+   * an already-sent message, plus the live rows that belonged to the replaced
+   * turn. The optimistic replacement echo survives — it is stamped with the
+   * surviving row count so the transcript renderer can tell it apart from the
+   * turns it now sits after.
+   */
+  const truncateAt = useCallback((sessionId: string, anchorId: string) => {
+    const slot = storeRef.current.get(sessionId);
+    if (!slot) return;
+
+    const cutIndex = slot.serverMessages.findIndex(
+      (message) => message.transcriptAnchorId === anchorId,
+    );
+    if (cutIndex < 0) return;
+
+    slot.serverMessages = slot.serverMessages.slice(0, cutIndex);
+    const replacements = slot.realtimeMessages.filter(
+      (message) => message.replacesAnchorId === anchorId,
+    );
+    slot.realtimeMessages = replacements.length > 0
+      ? [{ ...replacements[replacements.length - 1], replacesAfterRowCount: cutIndex }]
+      : [];
+    slot.total = slot.serverMessages.length;
+    slot.offset = slot.serverMessages.length;
+    recomputeMergedIfNeeded(slot);
+    notify(sessionId);
+  }, []);
+
   /**
    * Clear realtime messages for a session (e.g., after stream completes and server fetch catches up).
    */
@@ -812,6 +841,7 @@ export function useSessionStore() {
     isStale,
     updateStreaming,
     finalizeStreaming,
+    truncateAt,
     clearRealtime,
     getMessages,
     getSessionSlot,

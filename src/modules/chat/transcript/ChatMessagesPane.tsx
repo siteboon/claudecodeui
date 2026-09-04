@@ -39,6 +39,10 @@ type ChatMessagesPaneProps = {
   textareaRef: RefObject<HTMLTextAreaElement>;
   providerModels: Record<LLMProvider, string>;
   setProviderModel: (provider: LLMProvider, model: string) => void;
+  /** Present when the provider supports editing an already-sent message. */
+  onEditMessage?: (message: ChatMessage) => void;
+  /** Present when the provider supports forking the session from a message. */
+  onForkFromMessage?: (message: ChatMessage) => void;
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
   providerModelActions: ProviderModelActions;
   providerModelsLoading: boolean;
@@ -83,6 +87,8 @@ function ChatMessagesPane({
   textareaRef,
   providerModels,
   setProviderModel,
+  onEditMessage,
+  onForkFromMessage,
   providerModelCatalog,
   providerModelActions,
   providerModelsLoading,
@@ -172,6 +178,7 @@ function ChatMessagesPane({
               messages={chatMessages}
               sessionTitle={selectedSession?.title}
               provider={selectedSession?.provider || provider}
+              createDiff={createDiff}
             />
           </div>
         </div>
@@ -294,6 +301,8 @@ function ChatMessagesPane({
                     showThinking={showThinking}
                     selectedProject={selectedProject}
                     provider={provider}
+                    onEditMessage={onEditMessage}
+                    onForkFromMessage={onForkFromMessage}
                   />
                 </div>
               );

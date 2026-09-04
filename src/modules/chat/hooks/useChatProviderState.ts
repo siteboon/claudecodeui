@@ -60,6 +60,8 @@ type ProviderCapabilities = {
   supportsPermissionRequests: boolean;
   supportsTokenUsage: boolean;
   supportsEffort?: boolean;
+  supportsMessageEditing?: boolean;
+  supportsSessionForking?: boolean;
 };
 
 type ProviderCapabilitiesApiResponse = {
@@ -702,6 +704,12 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     [provider, providerModelCatalog],
   );
 
+  // Capability gates for the transcript affordances (edit & resend, fork from
+  // here). Server matrix wins once loaded; until then assume supported, since
+  // the primary providers (claude, codex) implement both.
+  const supportsMessageEditing = providerCapabilities?.[provider]?.supportsMessageEditing ?? true;
+  const supportsSessionForking = providerCapabilities?.[provider]?.supportsSessionForking ?? true;
+
   const applyProviderCatalog = useCallback((
     targetProvider: LLMProvider,
     models: ProviderModelsDefinition,
@@ -817,6 +825,8 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   return {
     provider,
     setProvider,
+    supportsMessageEditing,
+    supportsSessionForking,
     providerModels,
     setProviderModel,
     currentProviderEffort,

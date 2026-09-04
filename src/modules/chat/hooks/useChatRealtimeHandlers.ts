@@ -117,6 +117,16 @@ export function useChatRealtimeHandlers({
           onWebSocketReconnect?.();
           return;
 
+        case 'history_truncated': {
+          // An already-sent message was replaced. Every client watching this
+          // session drops the superseded turns before the replacement streams
+          // in, so a second tab does not end up showing the question twice.
+          if (sid && typeof msg.anchorId === 'string') {
+            sessionStore.truncateAt(sid, msg.anchorId);
+          }
+          return;
+        }
+
         case 'chat_subscribed': {
           // Ack for chat.subscribe: authoritative processing state plus any
           // pending tool-permission prompts for the run.

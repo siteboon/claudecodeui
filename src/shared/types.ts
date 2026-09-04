@@ -448,6 +448,18 @@ export type NormalizedMessage = {
   subagentTools?: unknown[];
   isFinal?: boolean;
   subagent?: SubagentInfo;
+  /**
+   * The provider's identifier for the persisted row this event came from, when
+   * the provider has stable per-row identity. Client counterpart of the
+   * transcript anchor used by message editing.
+   */
+  transcriptAnchorId?: string;
+  /**
+   * Set on the optimistic echo of a message sent as a replacement for an
+   * already-sent one; the truncate that follows spares the newest echo with
+   * this stamp from being dropped with the turns it replaces.
+   */
+  replacesAnchorId?: string;
   replacesAfterRowCount?: number;
   // Cursor-specific ordering
   sequence?: number;

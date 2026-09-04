@@ -14,7 +14,10 @@ import { useSessionStore } from '@/modules/chat/hooks/useSessionStore';
 import { getProviderDisplayName } from '@/shared/providerDisplay';
 import { useProviderAuthStatus } from '@/modules/provider-auth';
 
+import { useScheduledMessages } from '@/modules/chat/composer/useScheduledMessages';
 import ChatMessagesPane from '@/modules/chat/transcript/ChatMessagesPane';
+import type { ChatMessage } from '@/shared/types';
+import { api } from '@/shared/api';
 import ChatComposer from '@/modules/chat/composer/ChatComposer';
 import CommandResultModal from '@/modules/chat/modals/CommandResultModal';
 
@@ -76,6 +79,8 @@ function ChatInterface({
     setProvider,
     providerModels,
     setProviderModel,
+    supportsMessageEditing,
+    supportsSessionForking,
     currentProviderEffort,
     currentProviderEffortOptions,
     currentProviderModel,
@@ -183,6 +188,9 @@ function ChatInterface({
     openAttachmentPicker,
     handleSubmit,
     queuedDraft,
+    editingAnchorId,
+    beginEditMessage,
+    cancelEditMessage,
     editQueuedDraft,
     deleteQueuedDraft,
     handleVoiceTranscript,
@@ -320,6 +328,41 @@ function ChatInterface({
   // overlapping the last message.
   const hasActivityIndicator = Boolean(sessionActivity && pendingPermissionRequests.length === 0);
 
+  const { scheduledMessages, schedule: scheduleMessage, cancel: cancelScheduledMessage } =
+    useScheduledMessages(currentSessionId || selectedSession?.id || null);
+
+  const handleScheduleMessage = useCallback(async (scheduledFor: Date) => {
+    const content = input.trim();
+    if (!content) return;
+
+    const scheduled = await scheduleMessage({
+      content,
+      scheduledFor,
+      options: { model: currentProviderModel, effort: currentProviderEffort, permissionMode },
+    });
+    if (scheduled) {
+      setInput('');
+    }
+  }, [currentProviderEffort, currentProviderModel, input, permissionMode, scheduleMessage, setInput]);
+
+  const handleForkFromMessage = useCallback(async (message: ChatMessage) => {
+    const anchorId = message.transcriptAnchorId;
+    const sourceSessionId = selectedSession?.id;
+    if (!anchorId || !sourceSessionId) return;
+
+    try {
+      const response = await api.forkSession(sourceSessionId, { upToAnchorId: anchorId });
+      const payload = await response.json();
+      const forkedSessionId = payload?.data?.sessionId;
+      if (!response.ok || typeof forkedSessionId !== 'string') {
+        throw new Error(payload?.message || `HTTP ${response.status}`);
+      }
+      onNavigateToSession?.(forkedSessionId);
+    } catch (error) {
+      console.error('Error forking session:', error);
+    }
+  }, [onNavigateToSession, selectedSession?.id]);
+
   // Stable adapter so ChatMessagesPane's React.memo is not defeated by an
   // inline arrow recreated on every render.
   const handlePaneProviderChange = useCallback(
@@ -362,6 +405,8 @@ function ChatInterface({
           textareaRef={textareaRef}
           providerModels={providerModels}
           setProviderModel={setProviderModel}
+          onEditMessage={supportsMessageEditing && !isProcessing ? beginEditMessage : undefined}
+          onForkFromMessage={supportsSessionForking ? handleForkFromMessage : undefined}
           providerModelCatalog={providerModelCatalog}
           providerModelActions={providerModelActions}
           providerModelsLoading={providerModelsLoading}
@@ -468,6 +513,11 @@ function ChatInterface({
           onTextareaScrollSync={syncInputOverlayScroll}
           onTextareaInput={handleTextareaInput}
           isInputFocused={isInputFocused}
+          isEditingSentMessage={Boolean(editingAnchorId)}
+          onCancelEditMessage={cancelEditMessage}
+          scheduledMessages={scheduledMessages}
+          onScheduleMessage={handleScheduleMessage}
+          onCancelScheduledMessage={cancelScheduledMessage}
           onInputFocusChange={handleInputFocusChange}
           placeholder={t('input.placeholder', { provider: selectedProviderLabel })}
           isTextareaExpanded={isTextareaExpanded}

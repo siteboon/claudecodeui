@@ -10,12 +10,12 @@ import type {
   RefObject,
   TouchEvent,
 } from 'react';
-import { PaperclipIcon, MessageSquareIcon, XIcon, Loader2, ArrowUpIcon } from 'lucide-react';
+import { PaperclipIcon, MessageSquareIcon, XIcon, Loader2, ArrowUpIcon, PencilIcon } from 'lucide-react';
 
 import { useVoiceInput } from '@/modules/chat/hooks/useVoiceInput';
 import { useVoiceAvailable } from '@/modules/chat/hooks/useVoiceAvailable';
 import type { QueuedDraft } from '@/modules/chat/hooks/useChatComposerState';
-import type { SessionActivity } from '@/shared/types';
+import type { SessionActivity, ScheduledMessage } from '@/shared/types';
 import type { PendingPermissionRequest, PermissionMode } from '@/shared/types';
 import type { ProviderModelOption } from '@/shared/types';
 import {
@@ -36,6 +36,8 @@ import VoiceInputButton from '@/modules/chat/composer/VoiceInputButton';
 import PermissionRequestsBanner from '@/modules/chat/composer/PermissionRequestsBanner';
 import TokenUsageSummary from '@/modules/chat/composer/TokenUsageSummary';
 import QueuedMessageCard from '@/modules/chat/composer/QueuedMessageCard';
+import { ScheduleMessagePopover } from '@/modules/chat/composer/ScheduleMessagePopover';
+import { ScheduledMessageList } from '@/modules/chat/composer/ScheduledMessageList';
 import ComposerModelMenu from '@/modules/chat/composer/ComposerModelMenu';
 import ComposerPermissionMenu from '@/modules/chat/composer/ComposerPermissionMenu';
 
@@ -85,6 +87,12 @@ type ChatComposerProps = {
   isDragActive: boolean;
   queuedDraft: QueuedDraft | null;
   onEditQueuedDraft: () => void;
+  /** True while the composer is editing an already-sent message (edit & resend). */
+  isEditingSentMessage: boolean;
+  onCancelEditMessage: () => void;
+  scheduledMessages: ScheduledMessage[];
+  onScheduleMessage: (scheduledFor: Date) => void;
+  onCancelScheduledMessage: (id: string) => void;
   onDeleteQueuedDraft: () => void;
   attachedFiles: File[];
   onRemoveAttachment: (index: number) => void;
@@ -149,6 +157,11 @@ function ChatComposer({
   isDragActive,
   queuedDraft,
   onEditQueuedDraft,
+  isEditingSentMessage,
+  onCancelEditMessage,
+  scheduledMessages,
+  onScheduleMessage,
+  onCancelScheduledMessage,
   onDeleteQueuedDraft,
   attachedFiles,
   onRemoveAttachment,
@@ -280,6 +293,29 @@ function ChatComposer({
             handlePermissionDecision={handlePermissionDecision}
             handleGrantToolPermission={handleGrantToolPermission}
           />
+        </div>
+      )}
+
+      <ScheduledMessageList
+        scheduledMessages={scheduledMessages}
+        onCancel={onCancelScheduledMessage}
+      />
+
+      {isEditingSentMessage && (
+        <div className="mx-auto mb-2 flex max-w-[54.25rem] items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-foreground">
+          <PencilIcon className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <span className="min-w-0 flex-1">
+            {t('composer.editing.title')}
+            {' — '}
+            <span className="text-muted-foreground">{t('composer.editing.filesNotReverted')}</span>
+          </span>
+          <button
+            type="button"
+            onClick={onCancelEditMessage}
+            className="shrink-0 rounded-md px-2 py-1 font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            {t('composer.editing.cancel')}
+          </button>
         </div>
       )}
 
@@ -455,6 +491,11 @@ function ChatComposer({
             >
               {submitHint}
             </div>
+
+            <ScheduleMessagePopover
+              disabled={!input.trim()}
+              onSchedule={onScheduleMessage}
+            />
 
             <ComposerModelMenu
               effort={effort}
