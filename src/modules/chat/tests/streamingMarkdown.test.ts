@@ -155,3 +155,35 @@ test('a closed $$ block can be settled once its delimiter arrives', () => {
   assert.equal(settled, 'Intro.\n\n$$\na = b\n\nc = d\n$$\n\n');
   assert.equal(pending, 'After');
 });
+
+test('a self-closing TeX display line does not leave math tracking stuck open', () => {
+  const content = 'Intro.\n\n\\[E = mc^2\\]\n\nA settled paragraph.\n\nStill writing';
+  const { settled, pending } = splitStreamingMarkdown(content);
+
+  assert.equal(pending, 'Still writing');
+  assert.ok(settled.includes('A settled paragraph.'));
+});
+
+test('a blank line inside an unterminated TeX display block is not a boundary', () => {
+  const content = 'Intro.\n\n\\[\na = b\n\nc = d';
+  const { settled, pending } = splitStreamingMarkdown(content);
+
+  assert.equal(settled, 'Intro.\n\n', 'the open math block must stay in one piece');
+  assert.equal(pending, '\\[\na = b\n\nc = d');
+});
+
+test('a closed TeX display block can be settled once its delimiter arrives', () => {
+  const content = 'Intro.\n\n\\[\na = b\n\nc = d\n\\]\n\nAfter';
+  const { settled, pending } = splitStreamingMarkdown(content);
+
+  assert.equal(settled, 'Intro.\n\n\\[\na = b\n\nc = d\n\\]\n\n');
+  assert.equal(pending, 'After');
+});
+
+test('a TeX line-break option does not close display math', () => {
+  const content = 'Intro.\n\n\\[\n\\begin{cases}x \\\\[1em]\n\nc = d';
+  const { settled, pending } = splitStreamingMarkdown(content);
+
+  assert.equal(settled, 'Intro.\n\n');
+  assert.equal(pending, '\\[\n\\begin{cases}x \\\\[1em]\n\nc = d');
+});
