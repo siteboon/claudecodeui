@@ -1,4 +1,10 @@
 {
+  "codexSessionConflict": {
+    "title": "此会话仍被另一个 Codex 进程占用",
+    "explanation": "回答结束后，交互式 Codex 会话仍可能保持打开。其他终端或客户端持有写锁，因此这条网页消息未能启动。",
+    "recovery": "如果你曾在 CloudCLI 的终端中打开此会话，请重新连接该终端，点击“结束终端”，然后回到这里重新发送。如果占用来自外部 Codex 客户端，请先在那里退出此会话。结束终端会中断其中尚未完成的任务。",
+    "details": "技术详情"
+  },
   "codeBlock": {
     "copy": "复制",
     "copied": "已复制",
@@ -183,6 +189,9 @@
     "actions": {
       "disconnect": "断开连接",
       "disconnectTitle": "断开 Shell 连接",
+      "endTerminal": "结束终端",
+      "endTerminalTitle": "停止此终端进程，以便在聊天中继续同一会话。正在执行的任务将被中断。",
+      "codexWriterHint": "Codex 回答结束后仍会占用此会话。切回聊天继续同一会话前，请点击“结束终端”。",
       "restart": "重启",
       "restartTitle": "重启 Shell（请先断开连接）",
       "connect": "在 Shell 中继续",

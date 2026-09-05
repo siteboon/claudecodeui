@@ -15,6 +15,7 @@ import MessageCopyControl from '@/modules/chat/transcript/MessageCopyControl';
 import MessageSpeakControl from '@/modules/chat/transcript/MessageSpeakControl';
 import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
 import { MemoryCitations } from '@/modules/chat/transcript/MemoryCitations';
+import { CodexSessionConflict } from '@/modules/chat/transcript/CodexSessionConflict';
 
 type MessageComponentProps = {
   message: ChatMessage;
@@ -205,7 +206,9 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
 
           <div className="w-full">
 
-            {message.isSubagentContainer ? (
+            {provider === 'codex' && message.type === 'error' && /thread[^\r\n]*already has an active writer/i.test(String(message.content || '')) ? (
+              <CodexSessionConflict details={String(message.content)} />
+            ) : message.isSubagentContainer ? (
               /* A spawned agent owns its whole card — header, timeline and
                  result — so it never goes through the tool input/result pair. */
               <SubagentPanel
@@ -375,4 +378,3 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
 });
 
 export default MessageComponent;
-
