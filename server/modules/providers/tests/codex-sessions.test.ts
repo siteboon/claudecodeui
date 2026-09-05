@@ -5,8 +5,14 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
+import { CODEX_RUNTIME_MODE_ENV } from '@/modules/providers/list/codex/codex-app-server.config.js';
+import { codexAppServerRuntime } from '@/modules/providers/list/codex/codex-app-server.runtime.js';
 import { CodexSessionSynchronizer } from '@/modules/providers/list/codex/codex-session-synchronizer.provider.js';
 import { CodexSessionsProvider, parseCodexExecScript, readCodexMemoryCitations } from '@/modules/providers/list/codex/codex-sessions.provider.js';
+
+const createSdkSessionsProvider = () => new CodexSessionsProvider({
+  readRuntimeMode: () => 'sdk',
+});
 
 const patchHomeDir = (nextHomeDir: string) => {
   const original = os.homedir;
@@ -152,6 +158,40 @@ test('Codex synchronizer leaves indexed sessions untitled when no name is availa
   }
 });
 
+test('Codex background indexing does not start app-server', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-session-sync-lazy-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tempRoot);
+  const previousRuntimeMode = process.env[CODEX_RUNTIME_MODE_ENV];
+  const originalListThreads = codexAppServerRuntime.listThreads;
+  let listThreadCalls = 0;
+
+  process.env[CODEX_RUNTIME_MODE_ENV] = 'app-server';
+  codexAppServerRuntime.listThreads = async () => {
+    listThreadCalls += 1;
+    return { data: [], nextCursor: null };
+  };
+
+  try {
+    await writeCodexTranscript(tempRoot, 'codex-lazy-1', workspacePath);
+    await withIsolatedDatabase(async () => {
+      assert.equal(await new CodexSessionSynchronizer().synchronize(), 1);
+      assert.equal(listThreadCalls, 0);
+      assert.ok(sessionsDb.getSessionById('codex-lazy-1'));
+    });
+  } finally {
+    codexAppServerRuntime.listThreads = originalListThreads;
+    if (previousRuntimeMode === undefined) {
+      delete process.env[CODEX_RUNTIME_MODE_ENV];
+    } else {
+      process.env[CODEX_RUNTIME_MODE_ENV] = previousRuntimeMode;
+    }
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('Codex history translates wrapped exec scripts into the tools they ran', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-exec-history-'));
   const workspacePath = path.join(tempRoot, 'workspace');
@@ -217,7 +257,7 @@ test('Codex history translates wrapped exec scripts into the tools they ran', { 
       sessionsDb.assignProviderSessionId('app-exec-1', providerSessionId);
       await new CodexSessionSynchronizer().synchronize();
 
-      const history = await new CodexSessionsProvider().fetchHistory('app-exec-1');
+      const history = await createSdkSessionsProvider().fetchHistory('app-exec-1');
       const toolUses = history.messages.filter((message) => message.kind === 'tool_use');
       const toolUsesById = new Map(toolUses.map((message) => [message.toolId, message]));
 
@@ -276,7 +316,7 @@ test('Codex history strips the sandbox envelopes from shell output', { concurren
       sessionsDb.assignProviderSessionId('app-output-1', providerSessionId);
       await new CodexSessionSynchronizer().synchronize();
 
-      const history = await new CodexSessionsProvider().fetchHistory('app-output-1');
+      const history = await createSdkSessionsProvider().fetchHistory('app-output-1');
       const bash = history.messages.find((message) => message.kind === 'tool_use');
 
       assert.equal(bash?.toolName, 'Bash');
@@ -342,7 +382,7 @@ test('Codex history renders one file row per patched file, from the applied diff
       sessionsDb.assignProviderSessionId('app-patch-1', providerSessionId);
       await new CodexSessionSynchronizer().synchronize();
 
-      const history = await new CodexSessionsProvider().fetchHistory('app-patch-1');
+      const history = await createSdkSessionsProvider().fetchHistory('app-patch-1');
       const edits = history.messages.filter((message) => message.kind === 'tool_use');
 
       assert.equal(edits.length, 2, 'the patch must not be rendered twice');
@@ -439,7 +479,7 @@ test('Codex history attaches a spawned agent\'s own transcript to the Task row',
       sessionsDb.assignProviderSessionId('app-parent-2', providerSessionId);
       await new CodexSessionSynchronizer().synchronize();
 
-      const history = await new CodexSessionsProvider().fetchHistory('app-parent-2');
+      const history = await createSdkSessionsProvider().fetchHistory('app-parent-2');
       const task = history.messages.find((message) => message.kind === 'tool_use' && message.toolName === 'Task');
 
       assert.ok(task, 'a spawned agent must produce a Task row');
@@ -515,7 +555,7 @@ test('a plan followed by a memory citation is still recognized as a plan', async
       sessionsDb.assignProviderSessionId('app-plan-citation-1', providerSessionId);
       await new CodexSessionSynchronizer().synchronize();
 
-      const history = await new CodexSessionsProvider().fetchHistory('app-plan-citation-1');
+      const history = await createSdkSessionsProvider().fetchHistory('app-plan-citation-1');
       const plan = history.messages.find((message) => message.toolName === 'ExitPlanMode');
 
       assert.ok(plan, 'the trailing citation block must not hide the plan envelope');

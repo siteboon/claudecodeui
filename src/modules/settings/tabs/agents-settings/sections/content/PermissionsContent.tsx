@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { AlertTriangle, Plus, Shield, X } from 'lucide-react';
+import { AlertTriangle, Plus, RefreshCw, Shield, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Button, Input } from '@/shared/ui';
-import type { CodexPermissionMode } from '@/shared/types';
+import { api, readApiJson } from '@/shared/api';
+import type { CodexPermissionMode, CodexRuntimeMode } from '@/shared/types';
 
 const COMMON_CLAUDE_TOOLS = [
   'Bash(git log:*)',
@@ -475,13 +476,98 @@ type CodexPermissionsProps = {
   agent: 'codex';
   permissionMode: CodexPermissionMode;
   onPermissionModeChange: (value: CodexPermissionMode) => void;
+  runtimeMode: CodexRuntimeMode;
+  onRuntimeModeChange: (value: CodexRuntimeMode) => void;
 };
 
-function CodexPermissions({ permissionMode, onPermissionModeChange }: Omit<CodexPermissionsProps, 'agent'>) {
+function CodexPermissions({
+  permissionMode,
+  onPermissionModeChange,
+  runtimeMode,
+  onRuntimeModeChange,
+}: Omit<CodexPermissionsProps, 'agent'>) {
   const { t } = useTranslation('settings');
+  const [restartStatus, setRestartStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+
+  const restartAppServer = async () => {
+    setRestartStatus('loading');
+    try {
+      await readApiJson(await api.restartCodexAppServer());
+      setRestartStatus('success');
+    } catch {
+      setRestartStatus('error');
+    }
+  };
 
   return (
     <div className="space-y-6">
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <Shield className="h-5 w-5 text-blue-500" />
+          <h3 className="text-lg font-medium text-foreground">{t('permissions.codex.runtime.title')}</h3>
+        </div>
+        <p className="text-sm text-muted-foreground">{t('permissions.codex.runtime.description')}</p>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          {(['app-server', 'sdk'] as const).map((mode) => (
+            <label
+              key={mode}
+              className={`cursor-pointer rounded-lg border p-4 transition-all ${runtimeMode === mode
+                ? 'border-blue-400 bg-blue-50 dark:border-blue-600 dark:bg-blue-900/20'
+                : 'border-border bg-card/50 active:border-border active:bg-accent/50'
+                }`}
+            >
+              <div className="flex items-start gap-3">
+                <input
+                  type="radio"
+                  name="codexRuntimeMode"
+                  checked={runtimeMode === mode}
+                  onChange={() => onRuntimeModeChange(mode)}
+                  className="mt-1 h-4 w-4 text-blue-600"
+                />
+                <div>
+                  <div className="font-medium text-foreground">
+                    {t(`permissions.codex.runtime.modes.${mode}.title`)}
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    {t(`permissions.codex.runtime.modes.${mode}.description`)}
+                  </div>
+                </div>
+              </div>
+            </label>
+          ))}
+        </div>
+
+        <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="font-medium text-foreground">{t('permissions.codex.runtime.restart.title')}</div>
+            <div className="text-sm text-muted-foreground">{t('permissions.codex.runtime.restart.description')}</div>
+            {restartStatus === 'success' && (
+              <div className="mt-1 text-sm text-green-600 dark:text-green-400">
+                {t('permissions.codex.runtime.restart.success')}
+              </div>
+            )}
+            {restartStatus === 'error' && (
+              <div className="mt-1 text-sm text-red-600 dark:text-red-400">
+                {t('permissions.codex.runtime.restart.error')}
+              </div>
+            )}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={restartStatus === 'loading'}
+            onClick={() => void restartAppServer()}
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${restartStatus === 'loading' ? 'animate-spin' : ''}`} />
+            {t(restartStatus === 'loading'
+              ? 'permissions.codex.runtime.restart.restarting'
+              : 'permissions.codex.runtime.restart.action')}
+          </Button>
+        </div>
+      </div>
+
       <div className="space-y-4">
         <div className="flex items-center gap-3">
           <Shield className="h-5 w-5 text-green-500" />

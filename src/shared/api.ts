@@ -212,6 +212,7 @@ export const api = {
     post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/fork`, body),
   renameSession: (sessionId: string, summary: string) =>
     put(`/api/providers/sessions/${sessionId}`, { summary }),
+  restartCodexAppServer: () => post('/api/providers/codex/app-server/restart'),
 
   // Scheduled messages: send a message to a session at a future time.
   scheduledMessages: {

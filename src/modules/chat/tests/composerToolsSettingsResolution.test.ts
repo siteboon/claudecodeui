@@ -32,6 +32,7 @@ type SentMessage = {
   options?: {
     toolsSettings?: { allowedTools?: string[]; skipPermissions?: boolean };
     skipPermissions?: boolean;
+    codexRuntimeMode?: 'app-server' | 'sdk';
   };
 };
 
@@ -137,6 +138,20 @@ test('skipPermissions follows the sending provider, not Claude', async () => {
 
   const opencodeOptions = await submit('opencode');
   assert.equal(opencodeOptions.skipPermissions, false);
+});
+
+test('a Codex send carries the selected runtime mode', async () => {
+  writeUserPreference('codexPermissions', { runtimeMode: 'sdk' });
+
+  const options = await submit('codex');
+
+  assert.equal(options.codexRuntimeMode, 'sdk');
+});
+
+test('Codex defaults to app-server when no runtime mode is stored', async () => {
+  const options = await submit('codex');
+
+  assert.equal(options.codexRuntimeMode, 'app-server');
 });
 
 test('a provider with nothing stored sends empty tool settings, not Claude settings', async () => {
