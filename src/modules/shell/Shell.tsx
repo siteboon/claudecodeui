@@ -69,6 +69,7 @@ export default function Shell({
     isConnecting,
     connectToShell,
     disconnectFromShell,
+    terminateShell,
   } = useShellRuntime({
     selectedProject,
     selectedSession,
@@ -234,8 +235,12 @@ export default function Shell({
       restartTimerRef.current = null;
     }
     setIsRestarting(false);
-    disconnectFromShell({ suppressAutoConnect: true });
-  }, [disconnectFromShell]);
+    if (shellProvider === 'codex') {
+      terminateShell();
+    } else {
+      disconnectFromShell({ suppressAutoConnect: true });
+    }
+  }, [disconnectFromShell, shellProvider, terminateShell]);
 
   useEffect(() => {
     if (
@@ -307,8 +312,8 @@ export default function Shell({
         statusNewSessionText={t('shell.status.newSession')}
         statusInitializingText={t('shell.status.initializing')}
         statusRestartingText={t('shell.status.restarting')}
-        disconnectLabel={t('shell.actions.disconnect')}
-        disconnectTitle={t('shell.actions.disconnectTitle')}
+        disconnectLabel={shellProvider === 'codex' ? t('shell.actions.endTerminal', { defaultValue: 'End terminal' }) : t('shell.actions.disconnect')}
+        disconnectTitle={shellProvider === 'codex' ? t('shell.actions.endTerminalTitle', { defaultValue: 'Stop this terminal process to continue the session in chat. Running work will be interrupted.' }) : t('shell.actions.disconnectTitle')}
         restartLabel={t('shell.actions.restart')}
         restartTitle={t('shell.actions.restartTitle')}
         disableRestart={isRestarting || !isInitialized}
@@ -320,6 +325,12 @@ export default function Shell({
           bypassPermissions ? 'shell.actions.bypassOnTitle' : 'shell.actions.bypassOffTitle',
         )}
       />
+
+      {shellProvider === 'codex' && isConnected && (
+        <p className="px-4 py-2 text-xs text-amber-200" role="note">
+          {t('shell.actions.codexWriterHint', { defaultValue: 'Codex keeps this session open even after a reply finishes. Use End terminal before continuing the same session in Chat.' })}
+        </p>
+      )}
 
       <div className="relative flex-1 overflow-hidden p-2">
         <div

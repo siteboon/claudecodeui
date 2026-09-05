@@ -16,6 +16,7 @@ vi.mock('@/modules/shell/utils/socket', async (importOriginal) => ({
 }));
 
 class FakeSocket {
+  static OPEN = 1;
   static last: FakeSocket | null = null;
 
   readyState = 1;
@@ -45,10 +46,11 @@ function renderConnection() {
   const clearTerminalScreen = vi.fn();
   const closeSocket = vi.fn();
   const terminalRef = ref({ write, cols: 80, rows: 24 } as unknown as Terminal | null);
+  const wsRef = ref<WebSocket | null>(null);
 
   const view = renderHook(() =>
     useShellConnection({
-      wsRef: ref<WebSocket | null>(null),
+      wsRef,
       terminalRef,
       fitAddonRef: ref({ fit: vi.fn() } as unknown as FitAddon | null),
       selectedProjectRef: ref<Project | null | undefined>({
@@ -98,6 +100,23 @@ describe('shell socket error frames', () => {
 
     expect(write).toHaveBeenCalledTimes(1);
     expect(write.mock.calls[0][0]).toContain('Invalid project path');
+  });
+
+  it('explicit termination waits for process exit before disconnecting', () => {
+    const { view, socket, closeSocket } = renderConnection();
+    closeSocket.mockImplementation(() => {
+      expect(socket.sent.map((frame) => JSON.parse(frame))).toContainEqual({ type: 'terminate' });
+    });
+    act(() => view.result.current.terminateShell());
+    expect(closeSocket).not.toHaveBeenCalled();
+    act(() => socket.onmessage?.({ data: JSON.stringify({ type: 'terminated' }) }));
+    expect(closeSocket).toHaveBeenCalledOnce();
+  });
+
+  it('ordinary disconnect never terminates the background process', () => {
+    const { view, socket } = renderConnection();
+    act(() => view.result.current.disconnectFromShell());
+    expect(socket.sent.map((frame) => JSON.parse(frame))).not.toContainEqual({ type: 'terminate' });
   });
 
   it('keeps the socket open so the message it just wrote is not cleared', () => {

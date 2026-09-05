@@ -1,4 +1,10 @@
 {
+  "codexSessionConflict": {
+    "title": "This session is still open in another Codex process",
+    "explanation": "A completed reply does not close an interactive Codex session. Another terminal or client can still hold its write lock, so this chat message could not start.",
+    "recovery": "If you opened this session in CloudCLI Terminal, reconnect to that terminal and choose End terminal, then resend here. For an external Codex client, exit that session there first. Ending a terminal interrupts any work still running in it.",
+    "details": "Technical details"
+  },
   "codeBlock": {
     "copy": "Copy",
     "copied": "Copied",
@@ -196,6 +202,9 @@
     "actions": {
       "disconnect": "Disconnect",
       "disconnectTitle": "Disconnect from shell",
+      "endTerminal": "End terminal",
+      "endTerminalTitle": "Stop this terminal process to continue the session in chat. Running work will be interrupted.",
+      "codexWriterHint": "Codex keeps this session open even after a reply finishes. Use End terminal before continuing the same session in Chat.",
       "restart": "Restart",
       "restartTitle": "Restart Shell",
       "connect": "Continue in Shell",
