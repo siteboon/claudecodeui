@@ -81,8 +81,31 @@ Agent **display** is also in better shape than the handover implies:
 running/completed/failed status (`STATUS_STYLES:64`, derived at `:123`). It is
 the right building block to extend for the `Workflow` tree — do not start fresh.
 
+## Open — terminal fidelity (`06`)
+
+| ID | What | Where |
+|---|---|---|
+| **O19** | `convertEol: true` on a PTY source. xterm's own typings say the setting "should not be used" when the source is a PTY, because termios already translates. Double EOL translation desyncs xterm's line accounting from the TUI's absolute cursor addressing — this is the reported row-jumping. | `useShellTerminal.ts:25`; doc at `@xterm/xterm/typings/xterm.d.ts:56` |
+| O20 | Reattach replays up to 5000 raw output chunks instead of screen state. Cursor-addressing escapes replayed out of context — possibly at a different terminal size — cannot reconstruct the screen. | buffer at `shell-websocket.service.ts:437`, replay at `:365` |
+| **O21** | `~/.pm2/dump.pm2` has `CLAUDE_CODE_CHILD_SESSION: "1"` frozen in from a `pm2 save` run inside a Claude session on 2026-08-25 19:38; `pm2 resurrect` replays it at every boot (host booted 2026-09-04 11:22:26, app inherited it anyway). The PTY passes `...process.env` verbatim, so Shell-tab sessions believe they are child sessions and **write no transcript** — unresumable, invisible in history. Fossil markers still present: `CLAUDE_PID=1972065` (dead), `AI_AGENT=claude-code_2-1-233_agent`. SDK chat sessions are unaffected. | `shell-websocket.service.ts:413` |
+
+## Open — session switching (`07`)
+
+| ID | What | Where |
+|---|---|---|
+| **O22** | The stale-while-revalidate fast path is gated on `lastLoadedSessionKeyRef`, which holds **one** key — so it only fires when returning to the same session. Switching sessions always takes the cold path, despite the store still holding that session's slot. | `useChatSessionState.ts:713-726` |
+| O23 | The cold path calls `setIsLoadingSessionMessages(true)` (the flicker) and resets `visibleMessageCount`/offset/`hasMore`/`total`, discarding pagination and scroll even when the data is cached. | `useChatSessionState.ts:734-760` |
+| O24 | Per-session view state (`visibleMessageCount`, offset, `hasMore`, `total`, scroll) lives in component state on the single mounted `ChatInterface` (`WorkspaceMain.tsx:147`, no `key`, never remounts), so it is per-component rather than per-session and cannot survive a switch. | `useChatSessionState.ts` |
+
+### Shell tab
+
+| ID | What | Where |
+|---|---|---|
+| **O25** | A session change disconnects but never disposes or resets the terminal (`disposeTerminal` runs only on project change/restart), so the previous session's screen stays in the xterm buffer and the next session is drawn on top of it. No `terminal.reset()` on that path. | `useShellRuntime.ts:131-138`, dispose paths at `:113-129` |
+| **O26** | Reattach sends the buffered output as **one websocket frame per chunk**, up to 5000 — the client parses and writes 5000 messages on the main thread on every switch. Compounds with O20: it is a byte log, not screen state. | `shell-websocket.service.ts:365`, cap at `:437` |
+
 ## Open — performance
 
 | ID | What | Where |
 |---|---|---|
-| O18 | `fetchHistory` reads and parses the entire session JSONL *plus every* `agent-*.jsonl`, normalizes all of it, then slices ~20 rows — on **every paginated request**. No caching: grep for `mtime\|cache` in the provider returns **zero hits**. `Workflow` transcripts are dominated by `tool_result` rows, so the skew is worst exactly there. | `claude-sessions.provider.ts` |
+| O18 | **Measured on this host: `kido-stack` main transcript is 98 MB / 6999 lines — 216 ms to read+parse alone, before normalize; that session's `subagents/` directory holds 869 MB across 598 files (1.6 GB / 774 files for the whole project directory). This is the server half of `07`, not a low-priority nicety.** `fetchHistory` reads and parses the entire session JSONL *plus every* `agent-*.jsonl`, normalizes all of it, then slices ~20 rows — on **every paginated request**. No caching: grep for `mtime\|cache` in the provider returns **zero hits**. `Workflow` transcripts are dominated by `tool_result` rows, so the skew is worst exactly there. | `claude-sessions.provider.ts` |

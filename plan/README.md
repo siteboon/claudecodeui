@@ -19,7 +19,9 @@ some of these files are crowded.
 | `02-survivability.md` | Stop a big `Workflow` run from taking down the whole host. |
 | `03-task-notifications.md` | `system` SDK frames → the declared `task_notification` kind. |
 | `04-agents-and-workflow-ui.md` | Per-agent grouping and the `Workflow` container UI. |
-| `05-history-performance.md` | `fetchHistory` re-parsing everything on every page. |
+| `05-history-performance.md` | `fetchHistory` re-parsing everything on every page. **Promoted** — it is the server half of `07`. |
+| `06-terminal-fidelity.md` | Shell-tab scroll instability, reattach corruption, and the inherited `CLAUDE_CODE_CHILD_SESSION` marker that stops transcripts being written. |
+| `07-session-switch.md` | Switching chats blanks the pane and refetches, despite the store already caching per session. |
 
 ## Status legend
 
@@ -32,8 +34,17 @@ some of these files are crowded.
 ```
 01 background lifecycle ──┬─→ 03 task notifications ──→ 04 agents + workflow UI
                           │
-02 survivability ─────────┘        05 history perf (independent)
+02 survivability ─────────┘
+
+05 history perf ──→ 07 fast session switch        06 terminal fidelity (independent)
 ```
+
+`06` and `07` came out of a 2026-09-05 review of what actually hurts in daily
+use. They are cheap, they are unclaimed upstream, and `06`'s first item is a
+one-line change — start there. Note that the strategy question above them (keep
+driving sessions through the chat pane at all, versus the TUI plus Remote
+Control) is still open; if it resolves away from the chat pane, `01`, `03` and
+`04` lose most of their value while `02`, `05`, `06` and `07` keep all of theirs.
 
 `02` is independent of `01` and can go first if stability is the priority — it
 is the only item where the failure mode is "the whole process dies and takes
