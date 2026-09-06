@@ -177,6 +177,7 @@ export const sessionsDb = {
     provider: string,
     projectPath: string,
     customName?: string,
+    options: { forkedFromSessionId?: string; model?: string } = {},
   ): string {
     const db = getConnection();
     const normalizedProjectPath = normalizeProjectPathForProvider(provider, projectPath);
@@ -184,9 +185,16 @@ export const sessionsDb = {
     projectsDb.createProjectPath(normalizedProjectPath);
 
     db.prepare(
-      `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, project_path, jsonl_path, isArchived, created_at, updated_at)
-       VALUES (?, ?, NULL, ?, ?, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
-    ).run(sessionId, provider, customName ?? null, normalizedProjectPath);
+      `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, project_path, jsonl_path, forked_from_session_id, model, isArchived, created_at, updated_at)
+       VALUES (?, ?, NULL, ?, ?, NULL, ?, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+    ).run(
+      sessionId,
+      provider,
+      customName ?? null,
+      normalizedProjectPath,
+      options.forkedFromSessionId ?? null,
+      options.model ?? null,
+    );
 
     return sessionId;
   },

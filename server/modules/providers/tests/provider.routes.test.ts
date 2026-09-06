@@ -10,10 +10,12 @@ import express, { type NextFunction, type Request, type Response } from 'express
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import providerRouter from '@/modules/providers/provider.routes.js';
+import { sessionHandoffService } from '@/modules/providers/services/session-handoff.service.js';
 import { AppError } from '@/shared/utils.js';
 
 async function withProviderServer(
   run: (baseUrl: string, workspacePath: string) => Promise<void>,
+  authenticated = false,
 ): Promise<void> {
   const previousDatabasePath = process.env.DATABASE_PATH;
   const tempDirectory = await mkdtemp(path.join(os.tmpdir(), 'provider-routes-'));
@@ -23,7 +25,10 @@ async function withProviderServer(
   await writeFile(process.env.DATABASE_PATH, '');
   await initializeDatabase();
 
-  const app = express().use(express.json()).use('/api/providers', providerRouter);
+  const app = express().use(express.json()).use((req, _res, next) => {
+    if (authenticated) Object.assign(req, { user: { id: 1 } });
+    next();
+  }).use('/api/providers', providerRouter);
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (error instanceof AppError) {
       res.status(error.statusCode).json({
@@ -75,6 +80,36 @@ test('session creation route names a CloudCLI session from the initial message',
       sessionsDb.getSessionById(payload.data.sessionId)?.custom_name,
       'abcd efg hij klm',
     );
+  });
+});
+
+test('handoff route uses the authenticated user and validates provider and model', async (context) => {
+  const createHandoff = context.mock.method(sessionHandoffService, 'createHandoff', async () => ({
+    sessionId: 'new-session', provider: 'codex' as const, projectPath: '/workspace', sessionName: 'New chat', draft: 'Context',
+  }));
+  await withProviderServer(async (baseUrl) => {
+    const url = `${baseUrl}/api/providers/sessions/source/handoff`;
+    const send = (body: unknown) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    assert.equal((await send({ provider: 'unknown', model: 'target' })).status, 400);
+    assert.equal((await send({ provider: 'codex' })).status, 400);
+    assert.equal((await send({ provider: 'codex', model: '   ' })).status, 400);
+    assert.equal(createHandoff.mock.callCount(), 0);
+    const response = await send({ provider: 'codex', model: 'target', userId: 99 });
+    assert.equal(response.status, 201);
+    assert.deepEqual(createHandoff.mock.calls[0].arguments, ['source', { provider: 'codex', model: 'target', userId: 1 }]);
+    const payload = await response.json() as { data: { sessionId: string } };
+    assert.equal(payload.data.sessionId, 'new-session');
+  }, true);
+});
+
+test('handoff route requires authentication before creating a draft', async (context) => {
+  const createHandoff = context.mock.method(sessionHandoffService, 'createHandoff');
+  await withProviderServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/providers/sessions/source/handoff`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ provider: 'codex', model: 'target' }),
+    });
+    assert.equal(response.status, 401);
+    assert.equal(createHandoff.mock.callCount(), 0);
   });
 });
 

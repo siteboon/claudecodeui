@@ -1,4 +1,14 @@
 {
+  "handoff": {
+    "title": "Continue with another provider",
+    "description": "Create a linked chat in the same workspace with a conversation-context draft. Review or edit it before sending; the original chat stays unchanged. Nothing is sent to the new provider yet.",
+    "model": "New provider and model",
+    "chooseModel": "Choose a model",
+    "limitations": "Transfers conversation text and tool context, not private reasoning, attachment contents, or provider-specific state. Long conversations and tool results are truncated. Finish the current turn first, and avoid running both chats against the same files at once.",
+    "cancel": "Cancel",
+    "createDraft": "Create context draft",
+    "error": "Could not prepare the handoff. Please try again."
+  },
   "codeBlock": {
     "copy": "Copy",
     "copied": "Copied",

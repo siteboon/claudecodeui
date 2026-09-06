@@ -8,6 +8,7 @@ import { providerTokenUsageService } from '@/modules/providers/services/provider
 import { providerSkillsService } from '@/modules/providers/services/skills.service.js';
 import { sessionConversationsSearchService } from '@/modules/providers/services/session-conversations-search.service.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
+import { sessionHandoffService } from '@/modules/providers/services/session-handoff.service.js';
 import type {
   CustomProviderModelInput,
   LLMProvider,
@@ -811,6 +812,22 @@ router.post(
     const sessionId = parseSessionId(req.params.sessionId);
     const result = sessionsService.restoreSessionById(sessionId);
     res.json(createApiSuccessResponse(result));
+  }),
+);
+
+router.post(
+  '/sessions/:sessionId/handoff',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const provider = parseProvider(body.provider);
+    const model = parseSessionModelPayload(body);
+    const userId = Number((req as Request & { user?: { id?: number | string } }).user?.id);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      throw new AppError('Authentication required.', { code: 'UNAUTHORIZED', statusCode: 401 });
+    }
+    const result = await sessionHandoffService.createHandoff(sessionId, { provider, model, userId });
+    res.status(201).json(createApiSuccessResponse(result));
   }),
 );
 
