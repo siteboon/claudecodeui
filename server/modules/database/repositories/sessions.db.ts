@@ -117,12 +117,10 @@ export const sessionsDb = {
            isArchived = 0,
            custom_name = CASE
              WHEN custom_name_source = 'manual' THEN custom_name
-             WHEN session_id <> provider_session_id AND custom_name IS NOT NULL THEN custom_name
              ELSE COALESCE(?, custom_name)
            END,
            custom_name_source = CASE
              WHEN custom_name_source = 'manual' THEN custom_name_source
-             WHEN session_id <> provider_session_id AND custom_name IS NOT NULL THEN custom_name_source
              WHEN ? IS NOT NULL THEN 'provider'
              ELSE custom_name_source
            END
@@ -155,14 +153,10 @@ export const sessionsDb = {
          isArchived = 0,
          custom_name = CASE
            WHEN sessions.custom_name_source = 'manual' THEN sessions.custom_name
-           WHEN sessions.session_id <> sessions.provider_session_id AND sessions.custom_name IS NOT NULL
-             THEN sessions.custom_name
            ELSE COALESCE(excluded.custom_name, sessions.custom_name)
          END,
          custom_name_source = CASE
            WHEN sessions.custom_name_source = 'manual' THEN sessions.custom_name_source
-           WHEN sessions.session_id <> sessions.provider_session_id AND sessions.custom_name IS NOT NULL
-             THEN sessions.custom_name_source
            ELSE COALESCE(excluded.custom_name_source, sessions.custom_name_source)
          END`
     ).run(
@@ -187,7 +181,9 @@ export const sessionsDb = {
    * `session_id` is the stable app-facing id, while `provider_session_id`
    * stays NULL until the provider runtime announces its own id and
    * `assignProviderSessionId` records the mapping. `customName` is derived
-   * from the first visible CloudCLI message by the sessions service.
+   * from the first visible CloudCLI message by the sessions service; when
+   * present, it is treated as an app-owned name so provider indexing cannot
+   * replace it.
    */
   createAppSession(
     sessionId: string,
@@ -201,9 +197,9 @@ export const sessionsDb = {
     projectsDb.createProjectPath(normalizedProjectPath);
 
     db.prepare(
-      `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, project_path, jsonl_path, isArchived, created_at, updated_at)
-       VALUES (?, ?, NULL, ?, ?, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
-    ).run(sessionId, provider, customName ?? null, normalizedProjectPath);
+      `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, custom_name_source, project_path, jsonl_path, isArchived, created_at, updated_at)
+       VALUES (?, ?, NULL, ?, CASE WHEN NULLIF(trim(?), '') IS NULL THEN NULL ELSE 'manual' END, ?, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+    ).run(sessionId, provider, customName ?? null, customName ?? null, normalizedProjectPath);
 
     return sessionId;
   },

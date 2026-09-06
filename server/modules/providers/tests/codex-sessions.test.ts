@@ -129,9 +129,38 @@ test('Codex synchronizer replaces an app-created fallback with the indexed threa
         `${JSON.stringify({ id: 'codex-app-titled', thread_name: 'Old title' })}\n${JSON.stringify({ id: 'codex-app-titled', thread_name: 'Fix login redirect' })}\n`,
         'utf8'
       );
+      const nextIndexMtime = new Date(Date.now() + 60_000);
+      await utimes(path.join(tempRoot, '.codex', 'session_index.jsonl'), nextIndexMtime, nextIndexMtime);
       await synchronizer.synchronizeFile(transcriptPath);
 
       assert.equal(sessionsDb.getSessionById('app-titled')?.custom_name, 'Fix login redirect');
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('Codex synchronizer preserves an existing title when the indexed name is blank', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-session-sync-blank-title-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  await mkdir(path.join(tempRoot, '.codex'), { recursive: true });
+  await writeFile(
+    path.join(tempRoot, '.codex', 'session_index.jsonl'),
+    `${JSON.stringify({ id: 'codex-blank-title', thread_name: '   ' })}\n`,
+    'utf8',
+  );
+  const restoreHomeDir = patchHomeDir(tempRoot);
+
+  try {
+    await writeCodexTranscript(tempRoot, 'codex-blank-title', workspacePath);
+    await withIsolatedDatabase(async () => {
+      sessionsDb.createSession('codex-blank-title', 'codex', workspacePath, 'Existing title');
+
+      await new CodexSessionSynchronizer().synchronize();
+
+      assert.equal(sessionsDb.getSessionById('codex-blank-title')?.custom_name, 'Existing title');
     });
   } finally {
     restoreHomeDir();
