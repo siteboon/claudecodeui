@@ -1,26 +1,39 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { fetchGithubTokenCredentials } from '@/modules/project-creation-wizard/utils/workspaceApi';
-import type { GithubTokenCredential } from '@/shared/types';
+import { fetchGitTokenCredentials } from '@/modules/project-creation-wizard/utils/workspaceApi';
+import type { GitTokenCredential } from '@/shared/types';
 
-type UseGithubTokensParams = {
+type UseGitTokensParams = {
   shouldLoad: boolean;
+  credentialType: string;
   selectedTokenId: string;
   onAutoSelectToken: (tokenId: string) => void;
 };
 
-export const useGithubTokens = ({
+/** Loads stored token credentials of one type (e.g. 'github_token'), reloading when credentialType changes (the user switched providers). */
+export const useGitTokens = ({
   shouldLoad,
+  credentialType,
   selectedTokenId,
   onAutoSelectToken,
-}: UseGithubTokensParams) => {
-  const [tokens, setTokens] = useState<GithubTokenCredential[]>([]);
+}: UseGitTokensParams) => {
+  const [tokens, setTokens] = useState<GitTokenCredential[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const hasLoadedRef = useRef(false);
+  const loadedForTypeRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!shouldLoad || hasLoadedRef.current) {
+    if (!shouldLoad) {
+      if (loadedForTypeRef.current !== null) {
+        loadedForTypeRef.current = null;
+        setTokens([]);
+        setLoadError(null);
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (loadedForTypeRef.current === credentialType) {
       return;
     }
 
@@ -31,20 +44,20 @@ export const useGithubTokens = ({
       setLoadError(null);
 
       try {
-        const activeTokens = await fetchGithubTokenCredentials();
+        const activeTokens = await fetchGitTokenCredentials(credentialType);
         if (isDisposed) {
           return;
         }
 
         setTokens(activeTokens);
-        hasLoadedRef.current = true;
+        loadedForTypeRef.current = credentialType;
 
         if (activeTokens.length > 0 && !selectedTokenId) {
           onAutoSelectToken(String(activeTokens[0].id));
         }
       } catch (error) {
         if (!isDisposed) {
-          setLoadError(error instanceof Error ? error.message : 'Failed to load GitHub tokens');
+          setLoadError(error instanceof Error ? error.message : 'Failed to load stored tokens');
         }
       } finally {
         if (!isDisposed) {
@@ -58,7 +71,7 @@ export const useGithubTokens = ({
     return () => {
       isDisposed = true;
     };
-  }, [onAutoSelectToken, selectedTokenId, shouldLoad]);
+  }, [credentialType, onAutoSelectToken, selectedTokenId, shouldLoad]);
 
   const selectedTokenName = useMemo(
     () => tokens.find((token) => String(token.id) === selectedTokenId)?.credential_name || null,

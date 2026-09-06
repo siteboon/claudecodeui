@@ -28,6 +28,7 @@ function createDependencies(
     users: { getFirstUser: () => ({ id: 1, username: 'test-user' }) },
     apiKeys: { validateApiKey: () => undefined },
     githubTokens: { getActiveGithubToken: () => null },
+    gitCredentials: { getActiveCredential: () => null },
     projects: { createProjectPath: () => ({ outcome: 'created' }) },
     models: {} as AgentDependencies['models'],
     queryClaude: unexpectedProviderCall as AgentDependencies['queryClaude'],
@@ -105,8 +106,109 @@ test('Agent route rejects GitHub lookalike hosts before cloning', async () => {
     });
     const body = await response.json() as { error: string };
 
+    assert.equal(response.status, 400);
+    assert.equal(
+      body.error,
+      'The repository URL\'s host ("github.com.evil.example") doesn\'t match the selected provider (github, expected github.com).',
+    );
+  });
+});
+
+test('Agent route clones a GitLab repository when gitProvider is set explicitly', async () => {
+  let cloneEnvironment: NodeJS.ProcessEnv | undefined;
+  const child = new EventEmitter() as EventEmitter & {
+    stdout: PassThrough;
+    stderr: PassThrough;
+  };
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+
+  await withAgentServer(createDependencies({
+    fileSystem: {
+      access: async () => { throw new Error('missing'); },
+      mkdir: async () => undefined,
+    } as unknown as AgentDependencies['fileSystem'],
+    spawnProcess: ((_command: string, _args: readonly string[], options: { env?: NodeJS.ProcessEnv }) => {
+      cloneEnvironment = options.env;
+      process.nextTick(() => child.emit('error', new Error('expected test failure')));
+      return child;
+    }) as unknown as AgentDependencies['spawnProcess'],
+  }), async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/agent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        githubUrl: 'https://gitlab.com/owner/repo.git',
+        gitProvider: 'gitlab',
+        githubToken: 'gitlab-secret',
+        message: 'Run',
+        stream: false,
+      }),
+    });
     assert.equal(response.status, 500);
-    assert.equal(body.error, 'Invalid GitHub URL');
+  });
+
+  assert.equal(cloneEnvironment?.CLOUDCLI_GITHUB_TOKEN, 'gitlab-secret');
+  assert.ok(cloneEnvironment?.GIT_CONFIG_VALUE_1?.includes('username=oauth2'));
+});
+
+test('Agent route clones a Bitbucket repository with the API-token username', async () => {
+  let cloneEnvironment: NodeJS.ProcessEnv | undefined;
+  const child = new EventEmitter() as EventEmitter & {
+    stdout: PassThrough;
+    stderr: PassThrough;
+  };
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+
+  await withAgentServer(createDependencies({
+    fileSystem: {
+      access: async () => { throw new Error('missing'); },
+      mkdir: async () => undefined,
+    } as unknown as AgentDependencies['fileSystem'],
+    spawnProcess: ((_command: string, _args: readonly string[], options: { env?: NodeJS.ProcessEnv }) => {
+      cloneEnvironment = options.env;
+      process.nextTick(() => child.emit('error', new Error('expected test failure')));
+      return child;
+    }) as unknown as AgentDependencies['spawnProcess'],
+  }), async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/agent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        githubUrl: 'https://bitbucket.org/owner/repo.git',
+        gitProvider: 'bitbucket',
+        githubToken: 'bitbucket-secret',
+        message: 'Run',
+        stream: false,
+      }),
+    });
+    assert.equal(response.status, 500);
+  });
+
+  assert.equal(cloneEnvironment?.CLOUDCLI_GITHUB_TOKEN, 'bitbucket-secret');
+  assert.ok(cloneEnvironment?.GIT_CONFIG_VALUE_1?.includes('username=x-bitbucket-api-token-auth'));
+});
+
+test('Agent route rejects a provider/host mismatch for a non-default gitProvider', async () => {
+  await withAgentServer(createDependencies(), async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/agent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        githubUrl: 'https://github.com/owner/repo',
+        gitProvider: 'gitlab',
+        message: 'Run',
+        stream: false,
+      }),
+    });
+    const body = await response.json() as { error: string };
+
+    assert.equal(response.status, 400);
+    assert.equal(
+      body.error,
+      'The repository URL\'s host ("github.com") doesn\'t match the selected provider (gitlab, expected gitlab.com).',
+    );
   });
 });
 

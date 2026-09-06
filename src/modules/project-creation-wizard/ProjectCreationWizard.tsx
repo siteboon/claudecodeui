@@ -7,10 +7,10 @@ import StepConfiguration from '@/modules/project-creation-wizard/StepConfigurati
 import StepReview from '@/modules/project-creation-wizard/StepReview';
 import WizardFooter from '@/modules/project-creation-wizard/WizardFooter';
 import WizardProgress from '@/modules/project-creation-wizard/WizardProgress';
-import { useGithubTokens } from '@/modules/project-creation-wizard/hooks/useGithubTokens';
+import { useGitTokens } from '@/modules/project-creation-wizard/hooks/useGitTokens';
 import { cloneWorkspaceWithProgress, createProjectRequest } from '@/modules/project-creation-wizard/utils/workspaceApi';
 import { isCloneWorkflow, shouldShowGithubAuthentication } from '@/modules/project-creation-wizard/utils/pathUtils';
-import type { TokenMode, WizardFormState, WizardStep } from '@/shared/types';
+import type { GitProvider, TokenMode, WizardFormState, WizardStep } from '@/shared/types';
 
 type ProjectCreationWizardProps = {
   onClose: () => void;
@@ -20,9 +20,17 @@ type ProjectCreationWizardProps = {
 const initialFormState: WizardFormState = {
   workspacePath: '',
   githubUrl: '',
+  gitProvider: 'github',
   tokenMode: 'stored',
   selectedGithubToken: '',
   newGithubToken: '',
+};
+
+// 'custom' has no stored-credential bucket (no single sensible type for an unknown host).
+const CREDENTIAL_TYPE_BY_PROVIDER: Record<Exclude<GitProvider, 'custom'>, string> = {
+  github: 'github_token',
+  gitlab: 'gitlab_token',
+  bitbucket: 'bitbucket_token',
 };
 
 /** Rendered by the sidebar module's modal layer to create a new project or clone one from GitHub. */
@@ -37,8 +45,12 @@ export default function ProjectCreationWizard({
   const [error, setError] = useState<string | null>(null);
   const [cloneProgress, setCloneProgress] = useState('');
 
+  const credentialType = formState.gitProvider === 'custom'
+    ? null
+    : CREDENTIAL_TYPE_BY_PROVIDER[formState.gitProvider];
+
   const shouldLoadTokens =
-    step === 1 && shouldShowGithubAuthentication(formState.githubUrl);
+    step === 1 && shouldShowGithubAuthentication(formState.githubUrl) && credentialType !== null;
 
   const autoSelectToken = useCallback((tokenId: string) => {
     setFormState((previous) => ({ ...previous, selectedGithubToken: tokenId }));
@@ -49,8 +61,9 @@ export default function ProjectCreationWizard({
     loading: loadingTokens,
     loadError: tokenLoadError,
     selectedTokenName,
-  } = useGithubTokens({
+  } = useGitTokens({
     shouldLoad: shouldLoadTokens,
+    credentialType: credentialType || '',
     selectedTokenId: formState.selectedGithubToken,
     onAutoSelectToken: autoSelectToken,
   });
@@ -64,6 +77,17 @@ export default function ProjectCreationWizard({
     (tokenMode: TokenMode) => updateField('tokenMode', tokenMode),
     [updateField],
   );
+
+  const updateGitProvider = useCallback((gitProvider: GitProvider) => {
+    // Switching providers invalidates whatever token selection/entry applied to the previous one.
+    setFormState((previous) => ({
+      ...previous,
+      gitProvider,
+      tokenMode: 'stored',
+      selectedGithubToken: '',
+      newGithubToken: '',
+    }));
+  }, []);
 
   const handleNext = useCallback(() => {
     setError(null);
@@ -95,6 +119,7 @@ export default function ProjectCreationWizard({
           {
             workspacePath: formState.workspacePath,
             githubUrl: formState.githubUrl,
+            gitProvider: formState.gitProvider,
             tokenMode: formState.tokenMode,
             selectedGithubToken: formState.selectedGithubToken,
             newGithubToken: formState.newGithubToken,
@@ -161,6 +186,7 @@ export default function ProjectCreationWizard({
             <StepConfiguration
               workspacePath={formState.workspacePath}
               githubUrl={formState.githubUrl}
+              gitProvider={formState.gitProvider}
               tokenMode={formState.tokenMode}
               selectedGithubToken={formState.selectedGithubToken}
               newGithubToken={formState.newGithubToken}
@@ -170,6 +196,7 @@ export default function ProjectCreationWizard({
               isCreating={isCreating}
               onWorkspacePathChange={(workspacePath) => updateField('workspacePath', workspacePath)}
               onGithubUrlChange={(githubUrl) => updateField('githubUrl', githubUrl)}
+              onGitProviderChange={updateGitProvider}
               onTokenModeChange={updateTokenMode}
               onSelectedGithubTokenChange={(selectedGithubToken) =>
                 updateField('selectedGithubToken', selectedGithubToken)

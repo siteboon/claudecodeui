@@ -2,18 +2,27 @@ import { Key, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Input } from '@/shared/ui';
-import type { GithubTokenCredential, TokenMode } from '@/shared/types';
+import type { GitProvider, GitTokenCredential, TokenMode } from '@/shared/types';
 
-type GithubAuthenticationCardProps = {
+type GitAuthenticationCardProps = {
+  provider: GitProvider;
   tokenMode: TokenMode;
   selectedGithubToken: string;
   newGithubToken: string;
-  availableTokens: GithubTokenCredential[];
+  availableTokens: GitTokenCredential[];
   loadingTokens: boolean;
   tokenLoadError: string | null;
   onTokenModeChange: (tokenMode: TokenMode) => void;
   onSelectedGithubTokenChange: (tokenId: string) => void;
   onNewGithubTokenChange: (tokenValue: string) => void;
+};
+
+/** New-token placeholder per provider; 'custom' avoids a fake-looking fixed prefix since it has no host worth guessing at. */
+const NEW_TOKEN_PLACEHOLDER: Record<GitProvider, string> = {
+  github: 'ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+  gitlab: 'glpat-xxxxxxxxxxxxxxxxxxxx',
+  bitbucket: 'Bitbucket API token',
+  custom: 'Personal access token',
 };
 
 const getModeClassName = (mode: TokenMode, selectedMode: TokenMode) =>
@@ -25,8 +34,9 @@ const getModeClassName = (mode: TokenMode, selectedMode: TokenMode) =>
       : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
   }`;
 
-/** Rendered by StepConfiguration to choose the GitHub token used when cloning a repository. */
-export default function GithubAuthenticationCard({
+/** Rendered by StepConfiguration to choose the token used when cloning a repository, shaped by the selected provider. */
+export default function GitAuthenticationCard({
+  provider,
   tokenMode,
   selectedGithubToken,
   newGithubToken,
@@ -36,8 +46,9 @@ export default function GithubAuthenticationCard({
   onTokenModeChange,
   onSelectedGithubTokenChange,
   onNewGithubTokenChange,
-}: GithubAuthenticationCardProps) {
+}: GitAuthenticationCardProps) {
   const { t } = useTranslation();
+  const newTokenPlaceholder = NEW_TOKEN_PLACEHOLDER[provider];
 
   return (
     <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/50">
@@ -118,7 +129,7 @@ export default function GithubAuthenticationCard({
                 type="password"
                 value={newGithubToken}
                 onChange={(event) => onNewGithubTokenChange(event.target.value)}
-                placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                placeholder={newTokenPlaceholder}
                 className="w-full"
               />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -149,7 +160,7 @@ export default function GithubAuthenticationCard({
                 onNewGithubTokenChange(tokenValue);
                 onTokenModeChange(tokenValue.trim() ? 'new' : 'none');
               }}
-              placeholder={t('projectWizard.step2.tokenPublicPlaceholder')}
+              placeholder={provider === 'github' ? t('projectWizard.step2.tokenPublicPlaceholder') : newTokenPlaceholder}
               className="w-full"
             />
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">

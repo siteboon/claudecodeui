@@ -4,14 +4,30 @@ import path from 'node:path';
 // cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
 import spawn from 'cross-spawn';
 
-import { githubTokensDb } from '@/modules/database/index.js';
+import { credentialsDb } from '@/modules/database/index.js';
 import { createProject } from '@/modules/projects/services/project-management.service.js';
 import type { WorkspacePathValidationResult } from '@/shared/types.js';
-import { AppError, validateWorkspacePath } from '@/shared/utils.js';
+import {
+  AppError,
+  CREDENTIAL_TYPE_BY_PROVIDER,
+  getNonGithubBasicAuthCredentials,
+  validateUrlMatchesProvider,
+  validateWorkspacePath,
+  type GitProvider,
+} from '@/shared/utils.js';
+
+const SCP_LIKE_SSH_PATTERN = /^(?:ssh:\/\/)?git@([^:/]+)[:/]/;
+
+/** Extracts the host from an SCP-style SSH URL (`git@host:owner/repo.git`), which `new URL()` rejects outright. */
+function extractScpLikeSshHost(url: string): string | null {
+  const match = SCP_LIKE_SSH_PATTERN.exec(url.trim());
+  return match ? match[1] : null;
+}
 
 type CloneProjectInput = {
   workspacePath: string;
   githubUrl: string;
+  gitProvider?: GitProvider;
   githubTokenId?: number | null;
   newGithubToken?: string | null;
   userId: number | string;
@@ -40,10 +56,11 @@ type CloneProjectDependencies = {
   ensureDirectory: (directoryPath: string) => Promise<void>;
   pathExists: (targetPath: string) => Promise<boolean>;
   removePath: (targetPath: string) => Promise<void>;
-  getGithubTokenById: (
-    tokenId: number,
+  getCredentialById: (
+    credentialId: number,
     userId: number,
-  ) => Promise<{ github_token: string } | null>;
+    credentialType: string,
+  ) => Promise<{ credential_value: string } | null>;
   spawnGitClone: (cloneUrl: string, clonePath: string) => GitCloneProcess;
   registerProject: (projectPath: string, customName: string) => Promise<{ project: Record<string, unknown> }>;
   logError: (message: string, error: unknown) => void;
@@ -117,14 +134,12 @@ const defaultDependencies: CloneProjectDependencies = {
   removePath: async (targetPath: string): Promise<void> => {
     await rm(targetPath, { recursive: true, force: true });
   },
-  getGithubTokenById: async (
-    tokenId: number,
+  getCredentialById: async (
+    credentialId: number,
     userId: number,
-  ): Promise<{ github_token: string } | null> => {
-    const tokenRow = githubTokensDb.getGithubTokenById(userId, tokenId) as
-      | { github_token: string }
-      | null;
-    return tokenRow;
+    credentialType: string,
+  ): Promise<{ credential_value: string } | null> => {
+    return credentialsDb.getCredentialById(userId, credentialId, credentialType);
   },
   spawnGitClone: (cloneUrl: string, clonePath: string): GitCloneProcess =>
     spawn('git', ['clone', '--progress', '--', cloneUrl, clonePath], {
@@ -187,8 +202,18 @@ export async function startCloneProject(
   const absolutePath = pathValidation.resolvedPath;
   await dependencies.ensureDirectory(absolutePath);
 
+  const gitProvider: GitProvider = input.gitProvider || 'github';
+  const credentialType = gitProvider === 'custom' ? null : CREDENTIAL_TYPE_BY_PROVIDER[gitProvider];
+
   let githubToken: string | null = null;
   if (typeof input.githubTokenId === 'number') {
+    if (!credentialType) {
+      throw new AppError('Stored credentials are not supported for Custom Git; paste a token for this clone instead.', {
+        code: 'CUSTOM_PROVIDER_NO_STORED_CREDENTIAL',
+        statusCode: 400,
+      });
+    }
+
     const numericUserId =
       typeof input.userId === 'number' ? input.userId : Number.parseInt(String(input.userId), 10);
     if (Number.isNaN(numericUserId)) {
@@ -198,15 +223,15 @@ export async function startCloneProject(
       });
     }
 
-    const token = await dependencies.getGithubTokenById(input.githubTokenId, numericUserId);
-    if (!token) {
-      throw new AppError('GitHub token not found', {
+    const credential = await dependencies.getCredentialById(input.githubTokenId, numericUserId, credentialType);
+    if (!credential) {
+      throw new AppError('Credential not found', {
         code: 'GITHUB_TOKEN_NOT_FOUND',
         statusCode: 404,
       });
     }
 
-    githubToken = token.github_token;
+    githubToken = credential.credential_value;
   } else if (input.newGithubToken && input.newGithubToken.trim().length > 0) {
     githubToken = input.newGithubToken.trim();
   }
@@ -226,15 +251,42 @@ export async function startCloneProject(
   }
 
   let cloneUrl = normalizedGithubUrl;
-  if (githubToken) {
-    try {
-      const url = new URL(normalizedGithubUrl);
-      url.username = githubToken;
-      url.password = '';
-      cloneUrl = url.toString();
-    } catch {
-      // SSH URLs cannot be represented by URL constructor and are used as-is.
+  try {
+    const url = new URL(normalizedGithubUrl);
+    if (url.protocol !== 'https:') {
+      throw new AppError('Repository URL must use HTTPS', {
+        code: 'INVALID_GITHUB_URL',
+        statusCode: 400,
+      });
     }
+    validateUrlMatchesProvider(gitProvider, url.hostname);
+
+    if (githubToken) {
+      const providerCreds = getNonGithubBasicAuthCredentials(gitProvider, githubToken);
+      if (providerCreds) {
+        url.username = providerCreds.username;
+        url.password = providerCreds.password;
+      } else {
+        url.username = githubToken;
+        url.password = '';
+      }
+      cloneUrl = url.toString();
+    }
+  } catch (error) {
+    if (error instanceof AppError) {
+      throw error;
+    }
+
+    // new URL() rejects SCP-style SSH syntax (git@host:owner/repo.git) outright;
+    // validate the host it names directly instead of skipping validation.
+    const sshHost = extractScpLikeSshHost(normalizedGithubUrl);
+    if (!sshHost) {
+      throw new AppError('Invalid githubUrl', {
+        code: 'INVALID_GITHUB_URL',
+        statusCode: 400,
+      });
+    }
+    validateUrlMatchesProvider(gitProvider, sshHost);
   }
 
   handlers.onProgress(`Cloning into '${repoName}'...`);

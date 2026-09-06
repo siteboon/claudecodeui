@@ -1,8 +1,8 @@
 import { api } from '@/shared/api';
-import type { FolderSuggestion, GithubTokenCredential, TokenMode } from '@/shared/types';
+import type { FolderSuggestion, GitProvider, GitTokenCredential, TokenMode } from '@/shared/types';
 
 type CredentialsResponse = {
-  credentials?: GithubTokenCredential[];
+  credentials?: GitTokenCredential[];
   error?: string;
 };
 
@@ -47,6 +47,7 @@ type CloneProgressEvent = {
 type CloneWorkspaceParams = {
   workspacePath: string;
   githubUrl: string;
+  gitProvider: GitProvider;
   tokenMode: TokenMode;
   selectedGithubToken: string;
   newGithubToken: string;
@@ -97,12 +98,12 @@ const resolveCreateProjectErrorMessage = (responseData: CreateProjectResponse): 
   return null;
 };
 
-export const fetchGithubTokenCredentials = async () => {
-  const response = await api.settings.credentials('github_token');
+export const fetchGitTokenCredentials = async (credentialType: string) => {
+  const response = await api.settings.credentials(credentialType);
   const data = await parseJson<CredentialsResponse>(response);
 
   if (!response.ok) {
-    throw new Error(data.error || 'Failed to load GitHub tokens');
+    throw new Error(data.error || 'Failed to load stored tokens');
   }
 
   return (data.credentials || []).filter((credential) => credential.is_active);
@@ -147,6 +148,7 @@ export const createProjectRequest = async (payload: CreateProjectPayload) => {
 const buildCloneProgressUrl = ({
   workspacePath,
   githubUrl,
+  gitProvider,
   tokenMode,
   selectedGithubToken,
   newGithubToken,
@@ -154,6 +156,7 @@ const buildCloneProgressUrl = ({
   api.cloneProjectProgressUrl({
     path: workspacePath.trim(),
     githubUrl: githubUrl.trim(),
+    gitProvider,
     githubTokenId: tokenMode === 'stored' ? selectedGithubToken : null,
     newGithubToken: tokenMode === 'new' ? newGithubToken.trim() : null,
   });

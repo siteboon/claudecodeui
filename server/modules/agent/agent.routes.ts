@@ -5,7 +5,12 @@ import express from 'express';
 
 import type { ProviderRunFunction } from '@/shared/types.js';
 
-import { normalizeProjectPath } from '../../shared/utils.js';
+import {
+  AppError,
+  getNonGithubBasicAuthCredentials,
+  normalizeProjectPath,
+  validateUrlMatchesProvider,
+} from '../../shared/utils.js';
 
 type AgentRouterDependencies = {
   fileSystem: typeof import('node:fs/promises');
@@ -16,6 +21,7 @@ type AgentRouterDependencies = {
   users: { getFirstUser(): unknown };
   apiKeys: { validateApiKey(apiKey: string): unknown };
   githubTokens: { getActiveGithubToken(userId: number): string | null };
+  gitCredentials: { getActiveCredential(userId: number, credentialType: string): string | null };
   projects: { createProjectPath(projectPath: string, customName: string | null): unknown };
   models: typeof import('../providers/index.js').providerModelsService;
   queryClaude: ProviderRunFunction;
@@ -38,6 +44,16 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
   const userDb = dependencies.users;
   const apiKeysDb = dependencies.apiKeys;
   const githubTokensDb = dependencies.githubTokens;
+  const gitCredentialsDb = dependencies.gitCredentials;
+
+  /** Resolves the stored token to fall back on when the caller didn't pass one explicitly. 'custom' has no stored bucket (see cloneGitHubRepo). */
+  function resolveStoredGitToken(gitProvider, userId) {
+    if (gitProvider === 'github') return githubTokensDb.getActiveGithubToken(userId);
+    if (gitProvider === 'gitlab' || gitProvider === 'bitbucket') {
+      return gitCredentialsDb.getActiveCredential(userId, `${gitProvider}_token`);
+    }
+    return null;
+  }
   const projectsDb = dependencies.projects;
   const providerModelsService = dependencies.models;
   const queryClaudeSDK = dependencies.queryClaude;
@@ -328,13 +344,14 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
   }
 
   /**
-   * Clone a GitHub repository to a directory
-   * @param {string} githubUrl - GitHub repository URL
-   * @param {string} githubToken - Optional GitHub token for private repos
+   * Clone a git repository to a directory
+   * @param {string} githubUrl - Repository URL
+   * @param {string} githubToken - Optional token for private repos
    * @param {string} projectPath - Path for cloning the repository
+   * @param {string} gitProvider - 'github' (default), 'gitlab', 'bitbucket', or 'custom' (skips host validation and provider-specific auth)
    * @returns {Promise<{path: string, created: boolean}>} - Checkout path and ownership flag
    */
-  async function cloneGitHubRepo(githubUrl, githubToken = null, projectPath) {
+  async function cloneGitHubRepo(githubUrl, githubToken = null, projectPath, gitProvider = 'github') {
     return new Promise(async (resolve, reject) => {
       try {
         // Validate the host before using credentials or invoking Git.
@@ -342,16 +359,16 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
         try {
           parsedGithubUrl = new URL(githubUrl);
         } catch {
-          throw new Error('Invalid GitHub URL');
+          throw new Error('Invalid repository URL');
         }
         if (
           parsedGithubUrl.protocol !== 'https:'
-          || parsedGithubUrl.hostname !== 'github.com'
           || parsedGithubUrl.username
           || parsedGithubUrl.password
         ) {
-          throw new Error('Invalid GitHub URL');
+          throw new Error('Invalid repository URL');
         }
+        validateUrlMatchesProvider(gitProvider, parsedGithubUrl.hostname);
         const cloneUrl = parsedGithubUrl.toString();
 
         const cloneDir = path.resolve(projectPath);
@@ -384,14 +401,18 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
         console.log('🔄 Cloning repository:', githubUrl);
         console.log('📁 Destination:', cloneDir);
 
-        // Execute git clone
+        // Execute git clone. The credential helper reads the token from an env
+        // var rather than interpolating it into the shell snippet directly, to
+        // avoid shell-escaping a raw secret.
+        const nonGithubCreds = githubToken ? getNonGithubBasicAuthCredentials(gitProvider, githubToken) : null;
+        const credentialHelperUsername = nonGithubCreds ? nonGithubCreds.username : 'x-access-token';
         const gitEnvironment = githubToken ? {
           ...process.env,
           GIT_CONFIG_COUNT: '2',
           GIT_CONFIG_KEY_0: 'credential.helper',
           GIT_CONFIG_VALUE_0: '',
           GIT_CONFIG_KEY_1: 'credential.helper',
-          GIT_CONFIG_VALUE_1: '!f() { echo username=x-access-token; echo "password=$CLOUDCLI_GITHUB_TOKEN"; }; f',
+          GIT_CONFIG_VALUE_1: `!f() { echo username=${credentialHelperUsername}; echo "password=$CLOUDCLI_GITHUB_TOKEN"; }; f`,
           CLOUDCLI_GITHUB_TOKEN: githubToken,
           GIT_TERMINAL_PROMPT: '0'
         } : process.env;
@@ -644,12 +665,22 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
    * REQUEST BODY PARAMETERS
    * ================================================================================================
    *
-   * @param {string} githubUrl - (Conditionally Required) GitHub repository URL to clone.
+   * @param {string} githubUrl - (Conditionally Required) Repository URL to clone.
    *                             Supported formats:
    *                             - HTTPS: https://github.com/owner/repo
    *                             - HTTPS with .git: https://github.com/owner/repo.git
    *                             - SSH: git@github.com:owner/repo
    *                             - SSH with .git: git@github.com:owner/repo.git
+   *
+   * @param {string} gitProvider - (Optional) Which host githubUrl points at. Options:
+   *                              'github' (default) | 'gitlab' | 'bitbucket' | 'custom'.
+   *                              For 'github'/'gitlab'/'bitbucket', the URL's host must match
+   *                              the provider (github.com/gitlab.com/bitbucket.org respectively)
+   *                              and githubToken is applied using that provider's HTTPS auth
+   *                              convention. 'custom' skips host validation entirely (any HTTPS
+   *                              or SSH host) and applies githubToken generically. Branch/PR
+   *                              creation (createBranch/createPR) remains GitHub-only regardless
+   *                              of this value.
    *
    * @param {string} projectPath - (Conditionally Required) Path to existing project OR destination for cloning.
    *                               Behavior depends on usage:
@@ -874,7 +905,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
    *   }
    */
   router.post('/', validateExternalApiKey, async (req, res) => {
-    const { githubUrl, projectPath, message, provider = 'claude', model, githubToken, branchName, sessionId } = req.body;
+    const { githubUrl, projectPath, message, provider = 'claude', model, githubToken, branchName, sessionId, gitProvider = 'github' } = req.body;
     const effort = typeof req.body.effort === 'string' && req.body.effort.trim()
       ? req.body.effort.trim()
       : undefined;
@@ -914,7 +945,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       // Determine the final project path
       if (githubUrl) {
         // Clone repository (to projectPath if provided, otherwise generate path)
-        const tokenToUse = githubToken || githubTokensDb.getActiveGithubToken(req.user.id);
+        const tokenToUse = githubToken || resolveStoredGitToken(gitProvider, req.user.id);
 
         let targetPath;
         if (projectPath) {
@@ -925,7 +956,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           targetPath = path.join(os.homedir(), '.claude', 'external-projects', repoHash);
         }
 
-        const clonedProject = await cloneGitHubRepo(githubUrl.trim(), tokenToUse, targetPath);
+        const clonedProject = await cloneGitHubRepo(githubUrl.trim(), tokenToUse, targetPath, gitProvider);
         finalProjectPath = clonedProject.path;
         clonedProjectCreated = clonedProject.created;
       } else {
@@ -1275,7 +1306,8 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           writer.end();
         }
       } else if (!res.headersSent) {
-        res.status(500).json({
+        const statusCode = error instanceof AppError ? error.statusCode : 500;
+        res.status(statusCode).json({
           success: false,
           error: error.message
         });

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { api } from '@/shared/api';
-import type { ApiKeyItem, CreatedApiKey, GithubCredentialItem } from '@/shared/types';
+import type { ApiKeyItem, CreatedApiKey } from '@/shared/types';
 import { copyTextToClipboard } from '@/shared/utils';
 
 type ApiKeysResponse = {
@@ -11,38 +11,24 @@ type ApiKeysResponse = {
   apiKey?: CreatedApiKey;
 };
 
-type GithubCredentialsResponse = {
-  credentials?: GithubCredentialItem[];
-  success?: boolean;
-  error?: string;
-};
-
 type UseCredentialsSettingsArgs = {
   confirmDeleteApiKeyText: string;
-  confirmDeleteGithubCredentialText: string;
 };
 
 const getApiError = (payload: { error?: string } | undefined, fallback: string) => (
   payload?.error || fallback
 );
 
+/** Manages CloudCLI API keys (used to authenticate the external /api/agent endpoint). Git credentials are managed separately, per provider, by useGitCredentialsSection. */
 export function useCredentialsSettings({
   confirmDeleteApiKeyText,
-  confirmDeleteGithubCredentialText,
 }: UseCredentialsSettingsArgs) {
   const [apiKeys, setApiKeys] = useState<ApiKeyItem[]>([]);
-  const [githubCredentials, setGithubCredentials] = useState<GithubCredentialItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [showNewKeyForm, setShowNewKeyForm] = useState(false);
   const [newKeyName, setNewKeyName] = useState('');
 
-  const [showNewGithubForm, setShowNewGithubForm] = useState(false);
-  const [newGithubName, setNewGithubName] = useState('');
-  const [newGithubToken, setNewGithubToken] = useState('');
-  const [newGithubDescription, setNewGithubDescription] = useState('');
-
-  const [showToken, setShowToken] = useState<Record<string, boolean>>({});
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [newlyCreatedKey, setNewlyCreatedKey] = useState<CreatedApiKey | null>(null);
 
@@ -50,18 +36,10 @@ export function useCredentialsSettings({
     try {
       setLoading(true);
 
-      const [apiKeysResponse, credentialsResponse] = await Promise.all([
-        api.settings.apiKeys(),
-        api.settings.credentials('github_token'),
-      ]);
-
-      const [apiKeysPayload, credentialsPayload] = await Promise.all([
-        apiKeysResponse.json() as Promise<ApiKeysResponse>,
-        credentialsResponse.json() as Promise<GithubCredentialsResponse>,
-      ]);
+      const apiKeysResponse = await api.settings.apiKeys();
+      const apiKeysPayload = await apiKeysResponse.json() as ApiKeysResponse;
 
       setApiKeys(apiKeysPayload.apiKeys || []);
-      setGithubCredentials(credentialsPayload.credentials || []);
     } catch (error) {
       console.error('Error fetching settings:', error);
     } finally {
@@ -130,72 +108,6 @@ export function useCredentialsSettings({
     }
   }, [fetchData]);
 
-  const createGithubCredential = useCallback(async () => {
-    if (!newGithubName.trim() || !newGithubToken.trim()) {
-      return;
-    }
-
-    try {
-      const response = await api.settings.createCredential({
-        credentialName: newGithubName.trim(),
-        credentialType: 'github_token',
-        credentialValue: newGithubToken,
-        description: newGithubDescription.trim(),
-      });
-
-      const payload = await response.json() as GithubCredentialsResponse;
-      if (!response.ok || !payload.success) {
-        console.error('Error creating GitHub credential:', getApiError(payload, 'Failed to create GitHub credential'));
-        return;
-      }
-
-      setNewGithubName('');
-      setNewGithubToken('');
-      setNewGithubDescription('');
-      setShowNewGithubForm(false);
-      setShowToken((prev) => ({ ...prev, new: false }));
-      await fetchData();
-    } catch (error) {
-      console.error('Error creating GitHub credential:', error);
-    }
-  }, [fetchData, newGithubDescription, newGithubName, newGithubToken]);
-
-  const deleteGithubCredential = useCallback(async (credentialId: string) => {
-    if (!window.confirm(confirmDeleteGithubCredentialText)) {
-      return;
-    }
-
-    try {
-      const response = await api.settings.deleteCredential(credentialId);
-
-      if (!response.ok) {
-        const payload = await response.json() as GithubCredentialsResponse;
-        console.error('Error deleting GitHub credential:', getApiError(payload, 'Failed to delete GitHub credential'));
-        return;
-      }
-
-      await fetchData();
-    } catch (error) {
-      console.error('Error deleting GitHub credential:', error);
-    }
-  }, [confirmDeleteGithubCredentialText, fetchData]);
-
-  const toggleGithubCredential = useCallback(async (credentialId: string, isActive: boolean) => {
-    try {
-      const response = await api.settings.toggleCredential(credentialId, !isActive);
-
-      if (!response.ok) {
-        const payload = await response.json() as GithubCredentialsResponse;
-        console.error('Error toggling GitHub credential:', getApiError(payload, 'Failed to toggle GitHub credential'));
-        return;
-      }
-
-      await fetchData();
-    } catch (error) {
-      console.error('Error toggling GitHub credential:', error);
-    }
-  }, [fetchData]);
-
   const copyToClipboard = useCallback(async (text: string, id: string) => {
     try {
       await copyTextToClipboard(text);
@@ -215,51 +127,24 @@ export function useCredentialsSettings({
     setNewKeyName('');
   }, []);
 
-  const cancelNewGithubForm = useCallback(() => {
-    setShowNewGithubForm(false);
-    setNewGithubName('');
-    setNewGithubToken('');
-    setNewGithubDescription('');
-    setShowToken((prev) => ({ ...prev, new: false }));
-  }, []);
-
-  const toggleNewGithubTokenVisibility = useCallback(() => {
-    setShowToken((prev) => ({ ...prev, new: !prev.new }));
-  }, []);
-
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
 
   return {
     apiKeys,
-    githubCredentials,
     loading,
     showNewKeyForm,
     setShowNewKeyForm,
     newKeyName,
     setNewKeyName,
-    showNewGithubForm,
-    setShowNewGithubForm,
-    newGithubName,
-    setNewGithubName,
-    newGithubToken,
-    setNewGithubToken,
-    newGithubDescription,
-    setNewGithubDescription,
-    showToken,
     copiedKey,
     newlyCreatedKey,
     createApiKey,
     deleteApiKey,
     toggleApiKey,
-    createGithubCredential,
-    deleteGithubCredential,
-    toggleGithubCredential,
     copyToClipboard,
     dismissNewlyCreatedKey,
     cancelNewApiKeyForm,
-    cancelNewGithubForm,
-    toggleNewGithubTokenVisibility,
   };
 }

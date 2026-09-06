@@ -1199,3 +1199,73 @@ export function findApplicationRoot(startDirectory: string): string {
     ? path.dirname(parentDirectory)
     : parentDirectory;
 }
+
+//----------------- GIT CLONE PROVIDER UTILITIES ------------
+
+/** The git host a clone/auth request is targeting. 'custom' opts out of provider-specific validation and auth-scheme handling entirely (any host, today's existing generic behavior). */
+export type GitProvider = 'github' | 'gitlab' | 'bitbucket' | 'custom';
+
+/** The expected SaaS hostname for every provider except 'custom', which intentionally has no fixed host. */
+export const PROVIDER_HOSTS: Record<'github' | 'gitlab' | 'bitbucket', string> = {
+  github: 'github.com',
+  gitlab: 'gitlab.com',
+  bitbucket: 'bitbucket.org',
+};
+
+/**
+ * The `user_credentials.credential_type` value stored for each provider's
+ * tokens. 'custom' is intentionally absent: there's no single sensible
+ * bucket for an unknown host, so stored/reusable credentials aren't offered
+ * for it at all (see getNonGithubBasicAuthCredentials and the wizard/settings
+ * UI, which both skip 'custom' the same way).
+ */
+export const CREDENTIAL_TYPE_BY_PROVIDER: Record<'github' | 'gitlab' | 'bitbucket', string> = {
+  github: 'github_token',
+  gitlab: 'gitlab_token',
+  bitbucket: 'bitbucket_token',
+};
+
+/**
+ * HTTPS Basic-auth username/password shape each provider expects for a
+ * PAT-style credential. Returns null for 'github' and 'custom' so callers
+ * keep using their own already-working generic convention (token as
+ * username, empty password, or a provider-specific script) unchanged.
+ */
+export function getNonGithubBasicAuthCredentials(
+  provider: GitProvider,
+  token: string,
+): { username: string; password: string } | null {
+  switch (provider) {
+    case 'gitlab':
+      return { username: 'oauth2', password: token };
+    // Bitbucket Cloud retired app passwords in favor of API tokens, which
+    // authenticate under a different username than the older access-token
+    // scheme (x-token-auth).
+    case 'bitbucket':
+      return { username: 'x-bitbucket-api-token-auth', password: token };
+    default:
+      return null;
+  }
+}
+
+/**
+ * Rejects a URL whose hostname doesn't match the explicitly selected
+ * provider (e.g. picked "GitHub" but pasted a bitbucket.org URL). No-op for
+ * 'custom', which has no fixed host.
+ */
+export function validateUrlMatchesProvider(provider: GitProvider, hostname: string): void {
+  if (provider === 'custom') {
+    return;
+  }
+
+  const expectedHost = PROVIDER_HOSTS[provider];
+  if (hostname !== expectedHost) {
+    throw new AppError(
+      `The repository URL's host ("${hostname}") doesn't match the selected provider (${provider}, expected ${expectedHost}).`,
+      {
+        code: 'GIT_PROVIDER_HOST_MISMATCH',
+        statusCode: 400,
+      },
+    );
+  }
+}

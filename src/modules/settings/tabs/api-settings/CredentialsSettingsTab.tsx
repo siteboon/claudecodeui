@@ -1,47 +1,42 @@
 import { useTranslation } from 'react-i18next';
 
 import { useCredentialsSettings } from '@/modules/settings/hooks/useCredentialsSettings';
+import { useGitCredentialsSection } from '@/modules/settings/hooks/useGitCredentialsSection';
 import ApiKeysSection from '@/modules/settings/tabs/api-settings/sections/ApiKeysSection';
-import GithubCredentialsSection from '@/modules/settings/tabs/api-settings/sections/GithubCredentialsSection';
+import GitCredentialsSection from '@/modules/settings/tabs/api-settings/sections/GitCredentialsSection';
 import NewApiKeyAlert from '@/modules/settings/tabs/api-settings/sections/NewApiKeyAlert';
 
-/** Rendered by Settings for the "api" tab, managing CloudCLI API keys and GitHub credentials. */
+const GIT_PROVIDERS = ['github', 'gitlab', 'bitbucket'] as const;
+
+/** Rendered by Settings for the "api" tab, managing CloudCLI API keys and per-provider git credentials. */
 export default function CredentialsSettingsTab() {
   const { t } = useTranslation('settings');
   const {
     apiKeys,
-    githubCredentials,
     loading,
     showNewKeyForm,
     setShowNewKeyForm,
     newKeyName,
     setNewKeyName,
-    showNewGithubForm,
-    setShowNewGithubForm,
-    newGithubName,
-    setNewGithubName,
-    newGithubToken,
-    setNewGithubToken,
-    newGithubDescription,
-    setNewGithubDescription,
-    showToken,
     copiedKey,
     newlyCreatedKey,
     createApiKey,
     deleteApiKey,
     toggleApiKey,
-    createGithubCredential,
-    deleteGithubCredential,
-    toggleGithubCredential,
     copyToClipboard,
     dismissNewlyCreatedKey,
     cancelNewApiKeyForm,
-    cancelNewGithubForm,
-    toggleNewGithubTokenVisibility,
   } = useCredentialsSettings({
     confirmDeleteApiKeyText: t('apiKeys.confirmDelete'),
-    confirmDeleteGithubCredentialText: t('apiKeys.github.confirmDelete'),
   });
+
+  // Fixed-size array of hooks (one per provider in GIT_PROVIDERS), same pattern as calling
+  // useCredentialsSettings once for API keys — not a variable-length list, so this doesn't
+  // violate the rules of hooks.
+  const github = useGitCredentialsSection({ provider: 'github', confirmDeleteText: t('apiKeys.github.confirmDelete') });
+  const gitlab = useGitCredentialsSection({ provider: 'gitlab', confirmDeleteText: t('apiKeys.gitlab.confirmDelete') });
+  const bitbucket = useGitCredentialsSection({ provider: 'bitbucket', confirmDeleteText: t('apiKeys.bitbucket.confirmDelete') });
+  const gitSections = { github, gitlab, bitbucket };
 
   if (loading) {
     return <div className="text-muted-foreground">{t('apiKeys.loading')}</div>;
@@ -70,24 +65,31 @@ export default function CredentialsSettingsTab() {
         onDeleteApiKey={deleteApiKey}
       />
 
-      <GithubCredentialsSection
-        githubCredentials={githubCredentials}
-        showNewGithubForm={showNewGithubForm}
-        showNewTokenPlainText={Boolean(showToken.new)}
-        newGithubName={newGithubName}
-        newGithubToken={newGithubToken}
-        newGithubDescription={newGithubDescription}
-        onShowNewGithubFormChange={setShowNewGithubForm}
-        onNewGithubNameChange={setNewGithubName}
-        onNewGithubTokenChange={setNewGithubToken}
-        onNewGithubDescriptionChange={setNewGithubDescription}
-        onToggleNewTokenVisibility={toggleNewGithubTokenVisibility}
-        onCreateGithubCredential={createGithubCredential}
-        onCancelCreateGithubCredential={cancelNewGithubForm}
-        onToggleGithubCredential={toggleGithubCredential}
-        onDeleteGithubCredential={deleteGithubCredential}
-      />
-
+      {GIT_PROVIDERS.map((provider) => {
+        const section = gitSections[provider];
+        return (
+          <GitCredentialsSection
+            key={provider}
+            provider={provider}
+            credentials={section.credentials}
+            loadError={section.loadError}
+            showNewForm={section.showNewForm}
+            showTokenPlainText={section.showTokenPlainText}
+            newName={section.newName}
+            newToken={section.newToken}
+            newDescription={section.newDescription}
+            onShowNewFormChange={section.setShowNewForm}
+            onNewNameChange={section.setNewName}
+            onNewTokenChange={section.setNewToken}
+            onNewDescriptionChange={section.setNewDescription}
+            onToggleNewTokenVisibility={section.toggleNewTokenVisibility}
+            onCreateCredential={section.createCredential}
+            onCancelCreateCredential={section.cancelNewForm}
+            onToggleCredential={section.toggleCredential}
+            onDeleteCredential={section.deleteCredential}
+          />
+        );
+      })}
     </div>
   );
 }

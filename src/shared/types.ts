@@ -1041,6 +1041,9 @@ export type WizardStep = 1 | 2;
 /** How the project-creation wizard authenticates a GitHub clone: reuse a 'stored' credential, enter a 'new' token, or use 'none' and rely on public access or an SSH key. */
 export type TokenMode = 'stored' | 'new' | 'none';
 
+/** The git host a clone request targets. 'custom' covers self-hosted/other hosts: no stored-credential bucket, no provider-specific auth or host validation. */
+export type GitProvider = 'github' | 'gitlab' | 'bitbucket' | 'custom';
+
 /** One filesystem directory returned by the browse-filesystem endpoint, used to populate workspace-path autocomplete and the folder browser. */
 export type FolderSuggestion = {
   name: string;
@@ -1048,8 +1051,8 @@ export type FolderSuggestion = {
   type?: string;
 };
 
-/** A stored GitHub token credential as returned by the credentials endpoint, listed so the user can pick which token authenticates a clone. */
-export type GithubTokenCredential = {
+/** A stored git token credential as returned by the credentials endpoint, listed so the user can pick which token authenticates a clone. */
+export type GitTokenCredential = {
   id: number;
   credential_name: string;
   is_active: boolean;
@@ -1059,6 +1062,7 @@ export type GithubTokenCredential = {
 export type WizardFormState = {
   workspacePath: string;
   githubUrl: string;
+  gitProvider: GitProvider;
   tokenMode: TokenMode;
   selectedGithubToken: string;
   newGithubToken: string;
@@ -1206,8 +1210,8 @@ export type CreatedApiKey = {
   createdAt?: string;
 };
 
-/** One stored GitHub credential as the server returns it, in snake_case, carrying its name, optional description, creation timestamp and active flag - never the token itself. */
-export type GithubCredentialItem = {
+/** One stored git credential as the server returns it, in snake_case, carrying its name, optional description, creation timestamp and active flag - never the token itself. */
+export type GitCredentialItem = {
   id: string;
   credential_name: string;
   description?: string | null;

@@ -3,7 +3,7 @@ import express from 'express';
 import { createProject, updateProjectDisplayName } from '@/modules/projects/services/project-management.service.js';
 import { startCloneProject } from '@/modules/projects/services/project-clone.service.js';
 import { getProjectTaskMaster } from '@/modules/projects/services/projects-has-taskmaster.service.js';
-import { AppError, asyncHandler, createApiSuccessResponse } from '@/shared/utils.js';
+import { AppError, asyncHandler, createApiSuccessResponse, type GitProvider } from '@/shared/utils.js';
 import { getArchivedProjectsWithSessions, getProjectSessionsPage, getProjectsWithSessions } from '@/modules/projects/services/projects-with-sessions-fetch.service.js';
 import { deleteOrArchiveProject, restoreArchivedProject } from '@/modules/projects/services/project-delete.service.js';
 import { applyLegacyStarredProjectIds, toggleProjectStar } from '@/modules/projects/services/project-star.service.js';
@@ -177,6 +177,7 @@ router.get('/clone-progress', async (req, res) => {
     const queryParams = req.query as Record<string, unknown>;
     const workspacePath = readQueryStringValue(queryParams.path);
     const githubUrl = readQueryStringValue(queryParams.githubUrl);
+    const gitProvider = (readQueryStringValue(queryParams.gitProvider) || 'github') as GitProvider;
     const githubTokenId = readOptionalNumericQueryValue(queryParams.githubTokenId);
     const newGithubToken = readQueryStringValue(queryParams.newGithubToken) || null;
 
@@ -193,6 +194,7 @@ router.get('/clone-progress', async (req, res) => {
       {
         workspacePath,
         githubUrl,
+        gitProvider,
         githubTokenId,
         newGithubToken,
         userId,

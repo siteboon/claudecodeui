@@ -7,6 +7,7 @@ import spawn from 'cross-spawn';
 
 import {
   apiKeysDb,
+  credentialsDb,
   githubTokensDb,
   projectsDb,
   userDb,
@@ -40,6 +41,9 @@ export function createAgentModule(externalDependencies: AgentExternalDependencie
     },
     githubTokens: {
       getActiveGithubToken: (userId) => githubTokensDb.getActiveGithubToken(userId),
+    },
+    gitCredentials: {
+      getActiveCredential: (userId, credentialType) => credentialsDb.getActiveCredential(userId, credentialType),
     },
     projects: {
       createProjectPath: (projectPath, customName) =>

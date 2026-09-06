@@ -274,6 +274,40 @@
       "added": "新增時間：",
       "confirmDelete": "確定要刪除此 GitHub 權杖嗎？"
     },
+    "gitlab": {
+      "title": "GitLab Tokens",
+      "description": "Add GitLab Personal Access Tokens to clone private repositories via the external API.",
+      "descriptionAlt": "Add GitLab Personal Access Tokens to clone private repositories. You can also pass tokens directly in API requests without storing them.",
+      "addButton": "Add Token",
+      "form": {
+        "namePlaceholder": "Token Name (e.g., Personal Repos)",
+        "tokenPlaceholder": "GitLab Personal Access Token (glpat-...)",
+        "descriptionPlaceholder": "Description (optional)",
+        "addButton": "Add Token",
+        "cancelButton": "Cancel",
+        "howToCreate": "How to create a GitLab Personal Access Token →"
+      },
+      "empty": "No GitLab tokens added yet.",
+      "added": "Added:",
+      "confirmDelete": "Are you sure you want to delete this GitLab token?"
+    },
+    "bitbucket": {
+      "title": "Bitbucket Tokens",
+      "description": "Add Bitbucket API tokens to clone private repositories via the external API.",
+      "descriptionAlt": "Add Bitbucket API tokens to clone private repositories. You can also pass tokens directly in API requests without storing them.",
+      "addButton": "Add Token",
+      "form": {
+        "namePlaceholder": "Token Name (e.g., Personal Repos)",
+        "tokenPlaceholder": "Bitbucket API token",
+        "descriptionPlaceholder": "Description (optional)",
+        "addButton": "Add Token",
+        "cancelButton": "Cancel",
+        "howToCreate": "How to create a Bitbucket API token →"
+      },
+      "empty": "No Bitbucket tokens added yet.",
+      "added": "Added:",
+      "confirmDelete": "Are you sure you want to delete this Bitbucket token?"
+    },
     "apiDocsLink": "API 文件",
     "documentation": {
       "title": "外部 API 文件",
