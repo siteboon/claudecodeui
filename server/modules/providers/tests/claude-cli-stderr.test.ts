@@ -53,6 +53,44 @@ test('claude cli stderr: ordinary diagnostics pass through untouched', () => {
   assert.ok(!out.includes('<redacted>'));
 });
 
+// The URL rule below keys on `user:pass@`. A plain URL -- including one with a
+// port, which also contains a colon -- must survive untouched, or the rule
+// would blank exactly the addresses a reader needs to see.
+test('claude cli stderr: URLs without credentials are left alone', () => {
+  for (const line of [
+    'GET https://registry.example.com/pkg failed with 503',
+    'connect ECONNREFUSED http://127.0.0.1:8080/health',
+    'proxy postgres://db.internal:5432/app unreachable',
+  ]) {
+    const out = formatCliStderrLine(TAG, line);
+    assert.equal(out, `[claude-cli-stderr] ${TAG} ${line}`, `wrongly redacted: ${line}`);
+  }
+});
+
+// Opaque credentials with no recognisable prefix: nothing in the token itself
+// marks it as a secret, so the scheme word is the only handle there is.
+test('claude cli stderr: opaque bearer and basic credentials are redacted', () => {
+  const bearer = formatCliStderrLine(TAG, 'auth: Bearer aGVsbG8td29ybGQtb3BhcXVlLXZhbHVl');
+  assert.ok(!bearer.includes('aGVsbG8td29ybGQtb3BhcXVlLXZhbHVl'), bearer);
+  // The scheme word survives -- "Bearer <redacted>" still says what kind of
+  // credential was involved.
+  assert.ok(bearer.includes('Bearer <redacted>'), bearer);
+
+  const basic = formatCliStderrLine(TAG, 'auth: Basic dXNlcjpwYXNzd29yZA==');
+  assert.ok(!basic.includes('dXNlcjpwYXNzd29yZA'), basic);
+  assert.ok(basic.includes('Basic <redacted>'), basic);
+});
+
+// Credentials in URL userinfo. The host is the diagnostic half of the line and
+// must survive -- knowing WHICH registry rejected the login is the point.
+test('claude cli stderr: URL credentials go, the host stays', () => {
+  const out = formatCliStderrLine(TAG, 'npm ERR! https://deploy:hunter2primary@registry.example.com/pkg 401');
+
+  assert.ok(!out.includes('hunter2primary'), out);
+  assert.ok(!out.includes('deploy:'), out);
+  assert.ok(out.includes('https://<redacted>@registry.example.com/pkg'), out);
+});
+
 test('claude cli stderr: long lines are capped, short ones are not', () => {
   const long = 'x'.repeat(4000);
   const short = 'x'.repeat(10);

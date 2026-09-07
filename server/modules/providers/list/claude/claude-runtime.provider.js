@@ -111,14 +111,26 @@ const CLI_STDERR_MAX_PENDING_CHARS = 8 * 1024;
 // Redaction runs BEFORE truncation. Truncating first can cut a secret in half
 // and leave the tail in place: the pattern no longer matches, so the filter
 // stops working silently on exactly the line that needed it.
+// Each entry replaces only the secret-shaped RUN, not the context around it.
+// Two of them keep a capture group deliberately: this channel exists to make a
+// failure readable, and a rule that blanks the whole line to hide the secret in
+// it takes the diagnosis away with it. `https://<redacted>@registry.example.com`
+// still says WHICH registry rejected the credentials.
 const CLI_STDERR_REDACTIONS = [
-  /-----BEGIN[^-]{0,40}PRIVATE KEY-----/g,
-  /\b(sk|pk|ghp|gho|ghs|github_pat|xox[abprs])[-_][A-Za-z0-9_-]{8,}/g,
-  /\bsk-ant-[A-Za-z0-9_-]{16,}/g,
-  /\bAKIA[0-9A-Z]{12,}\b/g,
-  /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}/g,
-  /api\.telegram\.org\/bot[^/\s]+/g,
-  /[A-Za-z0-9_-]*(TOKEN|KEY|SECRET|PASSWORD|PASSWD|CREDENTIAL|APIKEY)[A-Za-z0-9_-]*\s*[=:]\s*\S+/gi,
+  { pattern: /-----BEGIN[^-]{0,40}PRIVATE KEY-----/g, replacement: '<redacted>' },
+  // Opaque bearer/basic credentials: no recognisable prefix to key on, so the
+  // scheme word is the only handle. Keep it -- "Bearer <redacted>" tells the
+  // reader an auth header was involved, which "<redacted>" alone does not.
+  { pattern: /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/gi, replacement: '$1 <redacted>' },
+  // Credentials in URL userinfo (scheme://user:pass@host). Host and scheme
+  // survive on purpose; they are the diagnostic half of the line.
+  { pattern: /\b([a-z][a-z0-9+.-]*:\/\/)[^/\s:@]+:[^/\s@]+@/gi, replacement: '$1<redacted>@' },
+  { pattern: /\b(sk|pk|ghp|gho|ghs|github_pat|xox[abprs])[-_][A-Za-z0-9_-]{8,}/g, replacement: '<redacted>' },
+  { pattern: /\bsk-ant-[A-Za-z0-9_-]{16,}/g, replacement: '<redacted>' },
+  { pattern: /\bAKIA[0-9A-Z]{12,}\b/g, replacement: '<redacted>' },
+  { pattern: /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}/g, replacement: '<redacted>' },
+  { pattern: /api\.telegram\.org\/bot[^/\s]+/g, replacement: '<redacted>' },
+  { pattern: /[A-Za-z0-9_-]*(TOKEN|KEY|SECRET|PASSWORD|PASSWD|CREDENTIAL|APIKEY)[A-Za-z0-9_-]*\s*[=:]\s*\S+/gi, replacement: '<redacted>' },
 ];
 
 /**
@@ -129,8 +141,8 @@ const CLI_STDERR_REDACTIONS = [
  */
 function redactCliStderr(text) {
   let out = String(text);
-  for (const pattern of CLI_STDERR_REDACTIONS) {
-    out = out.replace(pattern, '<redacted>');
+  for (const { pattern, replacement } of CLI_STDERR_REDACTIONS) {
+    out = out.replace(pattern, replacement);
   }
   return out;
 }
