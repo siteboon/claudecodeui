@@ -149,7 +149,22 @@
   "appearanceSettings": {
     "darkMode": {
       "label": "다크 모드",
-      "description": "라이트/다크 테마 전환"
+      "description": "라이트/다크 테마 전환",
+      "themeControlled": "이 테마는 라이트/다크 모양을 자체적으로 지정합니다"
+    },
+    "colorTheme": {
+      "label": "색상 테마",
+      "description": "앱 전체에서 사용되는 색상 팔레트",
+      "remove": "테마 제거",
+      "importFailed": "테마를 가져오지 못했습니다.",
+      "import": {
+        "label": "VS Code 테마 가져오기",
+        "description": "*-color-theme.json 파일 또는 .vsix 확장을 색상 팔레트로 변환합니다",
+        "button": "테마 가져오기",
+        "urlLabel": "또는 확장 URL 붙여넣기",
+        "urlPlaceholder": "https://marketplace.visualstudio.com/items?itemName=…",
+        "urlButton": "가져오기"
+      }
     },
     "projectSorting": {
       "label": "프로젝트 정렬",
