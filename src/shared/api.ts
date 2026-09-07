@@ -105,7 +105,7 @@ export async function readApiJson<T>(response: Response): Promise<T> {
     const message = (typeof raw === 'string' ? raw : payload?.message) || data.details || `Request failed (${response.status})`;
     throw new ApiRequestError(message, {
       code: typeof payload?.code === 'string' ? payload.code : undefined,
-      details: payload?.details,
+      details: payload?.details ?? data.details,
       status: response.status,
     });
   }
