@@ -170,6 +170,42 @@ test('an auth error on the response ends the session', async () => {
   assert.equal(localStorage.getItem('auth-token'), null);
 });
 
+test('a late rejection cannot expire a session a newer request authorized', async () => {
+  const token = liveToken();
+  localStorage.setItem('auth-token', token);
+  const firstResponse: { resolve?: (response: Response) => void } = {};
+  let requestCount = 0;
+  vi.stubGlobal('fetch', vi.fn(() => {
+    requestCount += 1;
+    if (requestCount === 1) {
+      return new Promise<Response>((resolve) => {
+        firstResponse.resolve = resolve;
+      });
+    }
+    return Promise.resolve(new Response('{}', { status: 200 }));
+  }));
+
+  let expiries = 0;
+  const onExpired = () => {
+    expiries += 1;
+  };
+  window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, onExpired);
+
+  const authenticatedFetch = await loadFetch(false);
+  const olderRequest = authenticatedFetch('/api/auth/user');
+  await authenticatedFetch('/api/projects');
+  assert.ok(firstResponse.resolve);
+  firstResponse.resolve(new Response('{}', {
+    status: 401,
+    headers: { 'X-Auth-Error': 'invalid-token' },
+  }));
+  await olderRequest;
+
+  window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, onExpired);
+  assert.equal(expiries, 0);
+  assert.equal(localStorage.getItem('auth-token'), token);
+});
+
 test('an ordinary response leaves the stored token alone', async () => {
   const token = liveToken();
   localStorage.setItem('auth-token', token);
@@ -177,5 +213,25 @@ test('an ordinary response leaves the stored token alone', async () => {
 
   await (await loadFetch(false))('/api/projects');
 
+  assert.equal(localStorage.getItem('auth-token'), token);
+});
+
+test('a caller Authorization header cannot end the stored session', async () => {
+  const token = liveToken();
+  const otherToken = liveToken().replace('signature', 'other');
+  localStorage.setItem('auth-token', token);
+  let expiries = 0;
+  const onExpired = () => {
+    expiries += 1;
+  };
+  window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, onExpired);
+  respondWith({ 'X-Auth-Error': 'invalid-token' });
+
+  await (await loadFetch(false))('/api/projects', {
+    headers: { Authorization: `Bearer ${otherToken}` },
+  });
+
+  window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, onExpired);
+  assert.equal(expiries, 0);
   assert.equal(localStorage.getItem('auth-token'), token);
 });
