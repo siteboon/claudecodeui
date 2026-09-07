@@ -132,7 +132,9 @@ function ComposerPermissionMenu({
                 key={mode}
                 icon={<ModeIcon className="h-4 w-4" />}
                 label={t(`codex.modes.${mode}`, { defaultValue: mode })}
-                description={t(`codex.descriptions.${mode}`, { defaultValue: '' }) || undefined}
+                description={providerLabel === 'omp' && mode === 'default'
+                  ? t('composer.ompDefaultPermissions')
+                  : t(`codex.descriptions.${mode}`, { defaultValue: '' }) || undefined}
                 isSelected={mode === permissionMode}
                 onSelect={() => {
                   onSelectPermissionMode(mode);

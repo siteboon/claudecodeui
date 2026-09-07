@@ -554,6 +554,10 @@ function normalizeJsonlMessage(entry: AnyRecord, sessionId: string | null): Norm
 
 async function readOmpJsonl(filePath: string): Promise<AnyRecord[]> {
   const entries: AnyRecord[] = [];
+  // Undated rows inherit their preceding source timestamp. Stable sorting then
+  // keeps them beside that row instead of moving them to the read-time tail.
+  // The epoch keeps an undated prefix before recorded dates without using now.
+  let timestamp = new Date(0).toISOString();
   const rl = readline.createInterface({ input: fs.createReadStream(filePath), crlfDelay: Infinity });
   for await (const line of rl) {
     const trimmed = line.trim();
@@ -563,6 +567,8 @@ async function readOmpJsonl(filePath: string): Promise<AnyRecord[]> {
     try {
       const parsed = readObjectRecord(JSON.parse(trimmed));
       if (parsed) {
+        timestamp = readOptionalString(parsed.timestamp) ?? timestamp;
+        parsed.timestamp = timestamp;
         entries.push(parsed);
       }
     } catch {
@@ -646,7 +652,10 @@ function selectActiveBranch(entries: AnyRecord[]): AnyRecord[] {
 
   const onBranch = new Set<string>();
   let cursor: AnyRecord | null = head;
-  while (cursor && typeof cursor.id === 'string' && !onBranch.has(cursor.id)) {
+  while (cursor && typeof cursor.id === 'string') {
+    if (onBranch.has(cursor.id)) {
+      return entries; // a cycle cannot establish an active branch; keep all history
+    }
     onBranch.add(cursor.id);
     if (typeof cursor.parentId !== 'string') {
       break; // reached the root

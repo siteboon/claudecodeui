@@ -84,6 +84,8 @@ type SearchRuntime = {
 type SearchablePathEntry = {
   normalizedPath: string;
   absolutePath: string;
+  isOmp: boolean;
+  sidecarName: string;
 };
 
 type ProjectBucket = {
@@ -98,7 +100,7 @@ const SUPPORTED_PROVIDERS = new Set<SearchableProvider>(['claude', 'codex', 'omp
 const MAX_MATCHES_PER_SESSION = 2;
 const RIPGREP_FILE_CHUNK_SIZE = 40;
 const RIPGREP_CHUNK_CONCURRENCY = 6;
-const NORMALIZED_SEARCH_PREFILTER_ALIASES: Record<string, string> = {
+const OMP_SEARCH_PREFILTER_ALIASES: Record<string, string> = {
   askuserquestion: 'ask',
   checklist: 'todo',
   todowrite: 'todo',
@@ -662,12 +664,6 @@ async function runRipgrepFilesWithMatches(
   if (!pattern || filePaths.length === 0 || signal?.aborted) {
     return new Set();
   }
-  const normalizedPattern = pattern.toLowerCase();
-  const pathMatches = new Set(
-    filePaths
-      .filter((filePath) => normalizeComparablePath(filePath).toLowerCase().includes(normalizedPattern))
-      .map(normalizeComparablePath),
-  );
 
   // Executor form: this file compiles against ES2022, which predates Promise.withResolvers.
   return new Promise((resolve, reject) => {
@@ -736,7 +732,7 @@ async function runRipgrepFilesWithMatches(
       }
 
       const stdout = Buffer.concat(stdoutChunks).toString('utf8');
-      const matchedPaths = new Set(pathMatches);
+      const matchedPaths = new Set<string>();
 
       for (const line of stdout.split(/\r?\n/)) {
         const trimmed = line.trim();
@@ -754,59 +750,11 @@ async function runRipgrepFilesWithMatches(
 
 async function findMatchedFileKeys(
   searchablePathEntries: SearchablePathEntry[],
-  rawQuery: string,
   words: string[],
   signal?: AbortSignal,
 ): Promise<Set<string>> {
   if (searchablePathEntries.length === 0 || words.length === 0 || signal?.aborted) {
     return new Set();
-  }
-
-  const normalizedQuery = rawQuery.trim().replace(/\s+/g, ' ');
-  const requireExactPhrase = words.length > 1 && normalizedQuery.length > 0;
-
-  if (requireExactPhrase) {
-    let matchedForPhrase = searchablePathEntries.slice();
-
-    // Keep ripgrep as an over-approximation for exact phrase mode by requiring
-    // each word to appear somewhere in the file, then defer strict phrase
-    // validation to the in-memory matcher.
-    for (const word of words) {
-      if (signal?.aborted) {
-        return new Set();
-      }
-
-      const matchedForWord = new Set<string>();
-      const fileChunks = chunkArray(
-        matchedForPhrase.map((entry) => entry.absolutePath),
-        RIPGREP_FILE_CHUNK_SIZE,
-      );
-
-      let nextChunkIndex = 0;
-      const workerCount = Math.min(RIPGREP_CHUNK_CONCURRENCY, fileChunks.length);
-      const workers = Array.from({ length: workerCount }, async () => {
-        while (nextChunkIndex < fileChunks.length && !signal?.aborted) {
-          const currentIndex = nextChunkIndex;
-          nextChunkIndex += 1;
-          const chunkMatches = await runRipgrepFilesWithMatches(word, fileChunks[currentIndex], signal);
-          for (const matchedPath of chunkMatches) {
-            matchedForWord.add(matchedPath);
-          }
-        }
-      });
-
-      await Promise.all(workers);
-      if (signal?.aborted) {
-        return new Set();
-      }
-
-      matchedForPhrase = matchedForPhrase.filter((entry) => matchedForWord.has(entry.normalizedPath));
-      if (matchedForPhrase.length === 0) {
-        break;
-      }
-    }
-
-    return new Set(matchedForPhrase.map((entry) => entry.normalizedPath));
   }
 
   let remainingEntries = searchablePathEntries.slice();
@@ -820,7 +768,7 @@ async function findMatchedFileKeys(
 
     const matchedForWord = new Set<string>();
     const fileChunks = chunkArray(
-      remainingEntries.map((entry) => entry.absolutePath),
+      remainingEntries,
       RIPGREP_FILE_CHUNK_SIZE,
     );
 
@@ -831,7 +779,32 @@ async function findMatchedFileKeys(
       while (nextChunkIndex < fileChunks.length && !signal?.aborted) {
         const currentIndex = nextChunkIndex;
         nextChunkIndex += 1;
-        const chunkMatches = await runRipgrepFilesWithMatches(word, fileChunks[currentIndex], signal);
+        const entries = fileChunks[currentIndex];
+        const chunkMatches = await runRipgrepFilesWithMatches(
+          word, entries.map((entry) => entry.absolutePath), signal,
+        );
+        // Normalized OMP tool labels need a wider disk prefilter, never a
+        // replacement for the literal query or an alias for other providers.
+        const alias = Object.hasOwn(OMP_SEARCH_PREFILTER_ALIASES, word)
+          ? OMP_SEARCH_PREFILTER_ALIASES[word]
+          : undefined;
+        if (alias) {
+          const aliasMatches = await runRipgrepFilesWithMatches(
+            alias,
+            entries.filter((entry) => entry.isOmp).map((entry) => entry.absolutePath),
+            signal,
+          );
+          for (const matchedPath of aliasMatches) {
+            chunkMatches.add(matchedPath);
+          }
+        }
+        // Advisor names live in sidecar filenames, not necessarily their rows.
+        // Parent directories and ordinary transcript names are not content.
+        for (const entry of entries) {
+          if (entry.sidecarName.includes(word)) {
+            chunkMatches.add(entry.normalizedPath);
+          }
+        }
         for (const matchedPath of chunkMatches) {
           matchedForWord.add(matchedPath);
         }
@@ -1162,6 +1135,9 @@ function extractOmpSearchText(message: NormalizedMessage): string {
   } else if (message.kind === 'text' || message.kind === 'thinking') {
     values.push(message.content);
   } else if (message.kind === 'tool_use') {
+    if (message.toolName === 'TodoWrite') {
+      values.push('Checklist');
+    }
     values.push(
       message.displayText,
       message.toolName,
@@ -1275,7 +1251,6 @@ export async function searchConversations(
   const safeQuery = typeof query === 'string' ? query.trim() : '';
   const safeLimit = Math.max(1, Math.min(Number.isFinite(limit) ? limit : 50, 200));
   const words = safeQuery.toLowerCase().split(/\s+/).filter((word) => word.length > 0);
-  const prefilterWords = words.map((word) => NORMALIZED_SEARCH_PREFILTER_ALIASES[word] ?? word);
 
   if (words.length === 0) {
     return { results: [], titleResults: [], totalMatches: 0, query: safeQuery };
@@ -1313,6 +1288,10 @@ export async function searchConversations(
         searchablePathEntries.push({
           normalizedPath,
           absolutePath: candidatePath,
+          isOmp: session.provider === 'omp',
+          sidecarName: session.provider === 'omp' && candidatePath !== session.jsonl_path
+            ? path.basename(candidatePath).toLowerCase()
+            : '',
         });
       }
 
@@ -1323,8 +1302,7 @@ export async function searchConversations(
 
   const matchedFileKeys = await findMatchedFileKeys(
     searchablePathEntries,
-    safeQuery,
-    prefilterWords,
+    words,
     signal ?? undefined,
   );
   if (isAborted() || matchedFileKeys.size === 0) {

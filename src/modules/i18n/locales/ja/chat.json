@@ -111,6 +111,7 @@
     "showAllCommands": "すべてのコマンドを表示"
   },
   "providerSelection": {
+    "ompDefaultModel": "ompのデフォルトを使用",
     "title": "AIアシスタントを選択",
     "description": "新しい会話を始めるプロバイダーを選択してください",
     "selectModel": "モデルを選択",
@@ -173,6 +174,15 @@
     "defaultCommand": "コマンド"
   },
   "claudeStatus": {
+    "config": {
+      "thinking": "思考",
+      "mode": "モード",
+      "model": "モデル",
+      "planning": "計画中",
+      "value": "{{label}}: {{value}}",
+      "updated": "{{label}}を更新しました",
+      "modeChanged": "モードを変更しました"
+    },
     "actions": {
       "thinking": "Thinking",
       "processing": "Processing",
@@ -204,6 +214,7 @@
     "forkFromHere": "ここから分岐"
   },
   "composer": {
+    "ompDefaultPermissions": "ompのデフォルトモードでは、write、eval、ast_edit、memory_edit、manage_skill、browser、taskは確認なしで実行されます。ACPの承認制御の対象はbash、edit、delete、moveのみです。",
     "editing": {
       "title": "以前のメッセージを置き換えています",
       "filesNotReverted": "変更済みのファイルは元に戻りません",

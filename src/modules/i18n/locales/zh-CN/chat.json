@@ -132,6 +132,7 @@
     }
   },
   "providerSelection": {
+    "ompDefaultModel": "使用 omp 默认模型",
     "title": "选择您的 AI 助手",
     "description": "选择一个供应商以开始新对话",
     "selectModel": "选择模型",
@@ -200,6 +201,15 @@
     "defaultCommand": "命令"
   },
   "claudeStatus": {
+    "config": {
+      "thinking": "思考",
+      "mode": "模式",
+      "model": "模型",
+      "planning": "规划中",
+      "value": "{{label}}: {{value}}",
+      "updated": "{{label}}已更新",
+      "modeChanged": "模式已更改"
+    },
     "actions": {
       "thinking": "Thinking",
       "processing": "Processing",
@@ -238,6 +248,7 @@
     "forkFromHere": "从此处派生"
   },
   "composer": {
+    "ompDefaultPermissions": "在 omp 默认模式下，write、eval、ast_edit、memory_edit、manage_skill、browser 和 task 无需提示即可运行。只有 bash、edit、delete 和 move 受 ACP 审批控制。",
     "editing": {
       "title": "正在替换先前的消息",
       "filesNotReverted": "已修改的文件不会被还原",

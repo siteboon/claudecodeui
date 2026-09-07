@@ -198,34 +198,28 @@ export function approvalProfileFor(permissionMode: string): ApprovalProfile {
   return permissionMode === 'plan' ? 'plan' : 'gated';
 }
 
-const approvalOverlayPaths = new Map<ApprovalProfile, string>();
 let approvalOverlayDir: string | null = null;
 function getApprovalOverlayPath(profile: ApprovalProfile) {
-  const cached = approvalOverlayPaths.get(profile);
-  // Re-create if never made OR the tmp file was reaped (systemd-tmpfiles clears
-  // /tmp ~10d), else a long-lived server spawns `omp acp --config <missing>`.
-  if (!cached || !existsSync(cached)) {
-    // One dir, one file per profile — the profiles differ only in content.
-    if (!approvalOverlayDir || !existsSync(approvalOverlayDir)) {
-      approvalOverlayDir = mkdtempSync(path.join(os.tmpdir(), 'omp-acp-'));
-    }
-    const overlayPath = path.join(approvalOverlayDir, `${profile}.yml`);
-    // See APPROVAL_PROFILES for what each overlay buys and what it costs.
-    // NOTE (always-ask profiles only): omp's bash approval is INPUT-dependent —
-    // destructive commands (rm -rf /, sudo rm, mkfs, dd of=/dev/, curl|bash,
-    // shutdown, fork-bombs, …) are "override" tools where omp IGNORES per-tool
-    // `allow` (only `deny` is honored), so the inner gate still fires headlessly
-    // and such a command is denied even after the user clicks Allow. This FAILS
-    // CLOSED (desirable) — don't debug it as a regression. This backstop is
-    // precisely why no profile uses omp's `yolo`, which auto-approves them.
-    // INFO: --config deep-merges OVER user config, so a user's own
-    // `tools.approval.bash: deny` becomes allow for the session; acceptable
-    // because our ACP prompt still gates interactively.
-    writeFileSync(overlayPath, APPROVAL_PROFILES[profile]);
-    approvalOverlayPaths.set(profile, overlayPath);
-    return overlayPath;
+  // One dir, one file per profile. Re-create the directory if tmp cleanup removed it.
+  if (!approvalOverlayDir || !existsSync(approvalOverlayDir)) {
+    approvalOverlayDir = mkdtempSync(path.join(os.tmpdir(), 'omp-acp-'));
   }
-  return cached;
+  const overlayPath = path.join(approvalOverlayDir, `${profile}.yml`);
+  // Restore trusted content before EVERY spawn: a same-user process can rewrite
+  // this file between runs. Existence alone does not preserve the approval gate.
+  // See APPROVAL_PROFILES for what each overlay buys and what it costs.
+  // NOTE (always-ask profiles only): omp's bash approval is INPUT-dependent —
+  // destructive commands (rm -rf /, sudo rm, mkfs, dd of=/dev/, curl|bash,
+  // shutdown, fork-bombs, …) are "override" tools where omp IGNORES per-tool
+  // `allow` (only `deny` is honored), so the inner gate still fires headlessly
+  // and such a command is denied even after the user clicks Allow. This FAILS
+  // CLOSED (desirable) — don't debug it as a regression. This backstop is
+  // precisely why no profile uses omp's `yolo`, which auto-approves them.
+  // INFO: --config deep-merges OVER user config, so a user's own
+  // `tools.approval.bash: deny` becomes allow for the session; acceptable
+  // because our ACP prompt still gates interactively.
+  writeFileSync(overlayPath, APPROVAL_PROFILES[profile]);
+  return overlayPath;
 }
 
 // Max bytes for a single delegated fs read/write.
@@ -355,13 +349,12 @@ export async function writeFileNoFollow(
 
 // Active runs keyed by native session id. Resume reservations close the setup
 // window before a run has a connection-backed entry in activeOmpSessions.
-// Abortedness lives only on the per-run entry (`entry.aborted`); spawnOmp holds
-// the entry by reference until its finally unwinds.
+// Abortedness lives on the setup reservation until a connection-backed entry
+// takes ownership; spawnOmp keeps both references until its finally unwinds.
 const activeOmpSessions = new Map<string, OmpSessionEntry>();
 const reservedOmpSessionIds = new Set<string>();
-// New app sessions do not have a native id to key activeOmpSessions by until
-// session/new resolves. Reserve the app id so abort and duplicate sends still
-// see the run during that setup window.
+// Reserve the app id for both new and resumed sessions so abort and duplicate
+// sends see the run while its child is still spawning or initializing.
 const pendingOmpSetups = new Map<string, OmpSetupReservation>();
 
 function createRequestId() {
@@ -519,9 +512,10 @@ function createPermissionDecision(
     return { outcome: { outcome: 'cancelled' } };
   }
   if (decision.allow) {
-    const optionId = decision.rememberEntry
+    const rememberedOptionId = decision.rememberEntry
       ? findPermissionOption(options, ['allow_always', 'allow_session'], ['allow_always', 'allow_session'])
-      : findPermissionOption(options, ['allow_once'], ['allow_once']);
+      : null;
+    const optionId = rememberedOptionId ?? findPermissionOption(options, ['allow_once'], ['allow_once']);
     if (!optionId) {
       return { outcome: { outcome: 'cancelled' } };
     }
@@ -618,8 +612,7 @@ function routePermissionRequest(sessions: Map<string, OmpSessionEntry>, params: 
 
 // --- per-cwd persistent connection manager ---------------------------------
 // A dead child is evicted so the next turn respawns.
-// No idle reaper: children accumulate per project. Acceptable because each is
-// idle and cheap; add a reaper if long-lived servers pile them up.
+// No idle reaper: children persist per project until retirement or server exit.
 // Keyed by cwd AND approval profile: the overlay is fixed when the child spawns,
 // so a plan run cannot share a child with a gated one. Cost: up to one child per
 // PROFILE per cwd — two, since default and bypassPermissions share `gated` (the
@@ -677,6 +670,8 @@ function createConnection(workingDir: string, profile: ApprovalProfile): OmpConn
       return connection;
     })
     .catch((error) => {
+      // A protocol rejection or timeout does not mean the child exited.
+      try { child.kill('SIGKILL'); } catch { /* already gone */ }
       evict();
       throw error;
     });
@@ -692,15 +687,22 @@ export function __setConnectionFactoryForTest(
   connectionFactory = factory ?? createConnection;
 }
 
-// Tests spawn real fake-omp children via the connection manager; without this
-// the persistent children keep the event loop alive and hang the test runner.
-export function __closeConnectionsForTest() {
+// Exit hooks must be synchronous. Include retired children still serving a run,
+// not just the cached children (which also include pending initialize requests).
+function closeConnections() {
   for (const connection of [...connectionsByKey.values(), ...retiringConnections]) {
     try { connection.child?.kill('SIGKILL'); } catch { /* already gone */ }
   }
   connectionsByKey.clear();
   retiringConnections.clear();
   runsByConnection.clear();
+}
+
+process.once('exit', closeConnections);
+
+// Provider subprocess tests use the same cleanup as server shutdown.
+export function __closeConnectionsForTest() {
+  closeConnections();
 }
 
 function attachConnectionHandlers(connection: OmpConnection, workingDir: string) {
@@ -938,7 +940,7 @@ export async function spawnOmp(
       reservedOmpSessionIds.add(providerSessionId);
       reservedSessionId = providerSessionId;
     }
-    if (!providerSessionId && appSessionId) {
+    if (appSessionId) {
       if (
         pendingOmpSetups.has(appSessionId)
         || [...activeOmpSessions.values()].some((run) => run.appSessionId === appSessionId)
@@ -951,6 +953,10 @@ export async function spawnOmp(
 
     let connection = await getConnection(workingDir, approvalProfile);
     runConnection = connection; // claimed by getConnection; the finally releases it
+    if (setupReservation?.aborted) {
+      notifyTerminalState({ stopReason: 'aborted' });
+      return;
+    }
     if (providerSessionId) {
       // A warm child ignores session/load for a session it already holds, so make
       // sure this one is not answering from a snapshot the terminal has moved past.
@@ -961,6 +967,11 @@ export async function spawnOmp(
         runConnection = connection;
         reapRetiredConnections(); // the retired one may be free to kill now
       }
+    }
+    // The disk fingerprint check can itself spawn and initialize a replacement.
+    if (setupReservation?.aborted) {
+      notifyTerminalState({ stopReason: 'aborted' });
+      return;
     }
 
     // Resume: register the connection-backed run before session/load so an abort
@@ -978,10 +989,9 @@ export async function spawnOmp(
         normalizeMessage,
       };
       activeOmpSessions.set(providerSessionId, entry);
-    }
-    if (setupReservation?.aborted) {
-      notifyTerminalState({ stopReason: 'aborted' });
-      return;
+      if (appSessionId && pendingOmpSetups.get(appSessionId) === setupReservation) {
+        pendingOmpSetups.delete(appSessionId);
+      }
     }
 
     let sessionResult;
@@ -1231,7 +1241,9 @@ export async function spawnOmp(
       // that so only a foreign writer (the terminal) counts as drift next turn.
       // An aborted turn may sample before omp flushes after its cancel notify; the
       // cost is one needless respawn on the next turn, never a stale one.
-      if (runConnection && capturedSessionId) {
+      // Setup aborted before acquiring an entry has not loaded this session.
+      // Re-baselining then could incorrectly mark a stale child as synchronized.
+      if (runConnection && capturedSessionId && entry) {
         loadedSessionsOf(runConnection).set(capturedSessionId, await sessionFileFingerprint(capturedSessionId));
       }
     } finally {

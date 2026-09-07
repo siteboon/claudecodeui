@@ -1,4 +1,7 @@
 {
+  "providerAuth": {
+    "ompSetup": "omp kurulumu"
+  },
   "buttons": {
     "save": "Kaydet",
     "cancel": "İptal",

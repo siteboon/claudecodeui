@@ -45,6 +45,7 @@ Current provider ids in this repo are:
 - `codex`
 - `cursor`
 - `opencode`
+- `omp`
 
 Those ids are mirrored in backend unions and frontend provider constants. If
 adding a new provider, update every place that hardcodes this list.
@@ -65,7 +66,7 @@ server/modules/providers/list/<provider>/
   <provider>-session-synchronizer.provider.ts
 ```
 
-The existing provider folders are `claude`, `codex`, `cursor`, and `opencode`.
+The existing provider folders are `claude`, `codex`, `cursor`, `opencode`, and `omp`.
 
 Each provider wrapper owns its SDK/CLI runtime alongside its auth, model, and
 session facets. Runtime adapters receive registry-backed model and session
@@ -143,6 +144,10 @@ Current MCP formats in this repo are:
 | Codex | `.codex/config.toml` | `user`, `project` | `stdio`, `http` |
 | Cursor | `.cursor/mcp.json` | `user`, `project` | `stdio`, `http` |
 | OpenCode | `~/.config/opencode/opencode.json` or `<workspace>/opencode.json` (`.jsonc` is read when present) | `user`, `project` | `stdio`, `http` |
+| OMP | MCP management is not exposed by this adapter | None | None |
+
+OMP MCP reads return empty lists and direct mutations return HTTP 501. Global
+add/remove operations skip providers whose `supportedScopes` is empty.
 
 5. Implement skills.
 
@@ -163,6 +168,7 @@ Current skill discovery roots are:
 | Codex | `~/.agents/skills`, `~/.codex/skills/.system`, `/etc/codex/skills` | `<workspace>/.agents/skills`, `path.dirname(workspacePath)/.agents/skills`, topmost git root `.agents/skills` | `$` | Overlapping roots are deduplicated before scanning. |
 | Cursor | `~/.cursor/skills` | `<workspace>/.cursor/skills`, `<workspace>/.agents/skills` | `/` | Uses slash-style commands. |
 | OpenCode | `~/.config/opencode/skills`, `~/.claude/skills`, `~/.agents/skills` | Cwd-to-topmost-git-root `.opencode/skills`, `.claude/skills`, and `.agents/skills` | `/` | Reuses OpenCode, Claude, and Agents skill locations. Overlapping roots are deduplicated before scanning. |
+| OMP | `~/.omp/agent/skills`, `~/.claude/skills`, `~/.agent/skills`, `~/.agents/skills`, `~/.codex/skills`, `~/.config/opencode/skills`, `~/.omp/agent/managed-skills` | Cwd-to-topmost-git-root `.omp/skills`, `.claude/skills`, `.agent/skills`, `.agents/skills`, `.codex/skills`, `.opencode/skills`, `.github/skills` | `/` | Native OMP skills rank first, then Claude directories, Claude plugin skills, compatibility roots and managed skills. First name wins; `skills.ignoredSkills` hides names across tiers. A malformed Claude plugin config does not hide other tiers. |
 
 Command forms currently used by the providers are:
 
@@ -171,6 +177,7 @@ Command forms currently used by the providers are:
 - Codex skills: `$skill-name`
 - Cursor skills: `/skill-name`
 - OpenCode skills: `/skill-name`
+- OMP skills: `/skill-name`
 
 6. Implement sessions.
 
@@ -208,6 +215,7 @@ Current session sync roots are:
 | Codex | `~/.codex/sessions/**/*.jsonl` | Uses `~/.codex/session_index.jsonl` for title lookup and the last `task_complete` message for a fallback title. |
 | Cursor | `~/.cursor/projects/**/*.jsonl` | Uses sibling `worker.log` to recover `workspacePath`, then derives the session title from the first user prompt. |
 | OpenCode | `~/.local/share/opencode/opencode.db` | Reads active sessions/messages/parts from OpenCode's shared SQLite database and stores `jsonl_path` as `null` so deleting one app session cannot remove the shared DB. |
+| OMP | `~/.omp/agent/sessions/**/*.jsonl` | Native JSONL transcripts carry branch ancestry, titles, messages and tool results. Advisor `__advisor*.jsonl` sidecars in the transcript's sibling directory belong to the main session; sidecar-only changes announce that owner. History selects the active branch and includes advisor notes. |
 
 8. Register the provider.
 
@@ -231,6 +239,26 @@ If the provider is visible in the UI, update:
 - `src/components/chat/view/subcomponents/ProviderSelectionEmptyState.tsx`
 - `src/components/provider-auth/view/ProviderLoginModal.tsx`
 - `src/components/mcp/constants.ts`
+
+## OMP approval and lifecycle limits
+
+OMP runs as an ACP stdio child. Default mode prompts through ACP for `bash`,
+`edit`, `delete` and `move` only. Seven tools run without a prompt in that mode:
+`write`, `eval`, `ast_edit`, `memory_edit`, `manage_skill`, `browser` and `task`.
+Default mode therefore does not provide Claude-style approval coverage for
+whole-file writes or code execution through `eval`. The composer displays this
+limitation. Plan mode uses a separate approval profile; non-interactive agent API
+runs use `bypassPermissions`.
+
+Children are cached per working directory and approval profile. The runtime
+rewrites the profile overlay before spawning, kills failed initializations and
+retires cached children on server exit. There is no idle reaper.
+
+OMP history currently reads and normalizes the complete transcript and advisor
+sidecars on each page request. Pagination limits the returned rows and image
+loads, not transcript parsing. Cyclic branch ancestry falls back to complete
+history; undated entries inherit the preceding source timestamp, or the epoch
+for an undated prefix, so repeated reads do not reorder them by wall-clock time.
 
 ## Minimal Wrapper Template
 

@@ -26,7 +26,6 @@ import ModelGroupList, { type ModelGroup } from "@/modules/chat/composer/ModelGr
 import ModelLibraryPanel from "@/modules/chat/modals/ModelLibraryPanel";
 import { writeSelectedProvider } from '@/shared/selectedProvider';
 import {
-  OMP_CONFIGURED_MODEL_LABEL,
   OMP_CONFIGURED_MODEL_SENTINEL,
 } from '@/shared/constants';
 
@@ -146,14 +145,14 @@ export default function ProviderSelectionEmptyState({
 
   const currentModelLabel = useMemo(() => {
     if (provider === 'omp' && currentModel === OMP_CONFIGURED_MODEL_SENTINEL) {
-      return OMP_CONFIGURED_MODEL_LABEL;
+      return t('providerSelection.ompDefaultModel');
     }
     const config = getModelConfig(provider, providerModelCatalog);
     const found = config.OPTIONS.find(
       (o: { value: string; label: string }) => o.value === currentModel,
     );
     return found?.label || currentModel;
-  }, [provider, currentModel, providerModelCatalog]);
+  }, [provider, currentModel, providerModelCatalog, t]);
 
   const handleModelSelect = useCallback(
     (providerId: LLMProvider, modelValue: string) => {

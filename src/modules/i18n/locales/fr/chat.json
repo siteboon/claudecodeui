@@ -114,6 +114,7 @@
     "scrollToBottom": "Défiler vers le bas"
   },
   "providerSelection": {
+    "ompDefaultModel": "Utiliser le modèle par défaut d’omp",
     "title": "Choisissez votre assistant IA",
     "description": "Sélectionnez un fournisseur pour démarrer une nouvelle conversation",
     "selectModel": "Sélectionner un modèle",
@@ -182,6 +183,15 @@
     "defaultCommand": "commande"
   },
   "claudeStatus": {
+    "config": {
+      "thinking": "Réflexion",
+      "mode": "Mode",
+      "model": "Modèle",
+      "planning": "Planification",
+      "value": "{{label}}: {{value}}",
+      "updated": "Mise à jour : {{label}}",
+      "modeChanged": "Mode modifié"
+    },
     "actions": {
       "thinking": "Réflexion",
       "processing": "Traitement",
@@ -219,6 +229,7 @@
     "forkFromHere": "Dupliquer à partir d’ici"
   },
   "composer": {
+    "ompDefaultPermissions": "En mode par défaut d’omp, write, eval, ast_edit, memory_edit, manage_skill, browser et task s’exécutent sans demander d’autorisation. Seuls bash, edit, delete et move passent par les contrôles d’approbation ACP.",
     "editing": {
       "title": "Remplacement d’un message précédent",
       "filesNotReverted": "les fichiers déjà modifiés ne sont pas restaurés",

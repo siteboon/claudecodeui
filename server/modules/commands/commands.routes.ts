@@ -66,7 +66,7 @@ const resolveCommandModel = async (modelsService, provider, context) => {
  * Resolves the model the latest turn actually used.
  *
  * OMP records a configured-default sentinel on the session, while token usage
- * carries the concrete model. The catalog label is used for any raw default.
+ * carries the concrete model. Only OMP's default sentinel uses a catalog label.
  */
 const resolveCostModel = async (modelsService, provider, context) => {
   const turnModel = typeof context?.tokenUsage?.model === 'string'
@@ -80,7 +80,7 @@ const resolveCostModel = async (modelsService, provider, context) => {
     resolveCommandModel(modelsService, provider, context),
     modelsService.getProviderModels(provider),
   ]);
-  if (resolved !== catalog.DEFAULT) {
+  if (provider !== 'omp' || resolved !== catalog.DEFAULT) {
     return resolved;
   }
   return catalog.OPTIONS.find((option) => option.value === resolved)?.label || resolved;

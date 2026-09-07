@@ -118,14 +118,39 @@ function parseOmpContextWindows(stdout: string): Map<string, number> {
   return windows;
 }
 
-// The catalog only changes with the omp binary, and the exec costs ~1s, so it is
-// read once per process. A failure is held for a short window rather than
-// cleared: this runs at every turn end and on every REST token-usage read, and
-// clearing it made an omp that is missing or hanging cost the full
-// OMP_MODELS_TIMEOUT_MS on each one of them.
-const CONTEXT_WINDOW_RETRY_MS = 60_000;
-let contextWindowCache: Promise<Map<string, number>> | null = null;
-let contextWindowRetryAt = 0;
+// Share one subprocess across model and context-window lookups. Expire successful
+// reads too, so catalog/config changes become visible without restarting.
+const OMP_MODELS_CACHE_MS = 5 * 60_000;
+const OMP_MODELS_RETRY_MS = 60_000;
+type OmpCatalog = {
+  definition: ProviderModelsDefinition;
+  contextWindows: Map<string, number>;
+};
+let catalogCache: Promise<OmpCatalog> | null = null;
+let catalogExpiresAt = 0;
+
+function readOmpCatalog(): Promise<OmpCatalog> {
+  if (catalogCache && Date.now() < catalogExpiresAt) {
+    return catalogCache;
+  }
+
+  // An in-flight read cannot expire and start a second subprocess.
+  catalogExpiresAt = Infinity;
+  catalogCache = runOmpModelsCommand()
+    .then((stdout) => {
+      const catalog = {
+        definition: parseOmpModels(stdout),
+        contextWindows: parseOmpContextWindows(stdout),
+      };
+      catalogExpiresAt = Date.now() + OMP_MODELS_CACHE_MS;
+      return catalog;
+    })
+    .catch(() => {
+      catalogExpiresAt = Date.now() + OMP_MODELS_RETRY_MS;
+      return { definition: OMP_FALLBACK_MODELS, contextWindows: new Map<string, number>() };
+    });
+  return catalogCache;
+}
 
 /**
  * Context window for the model a recorded turn ran on; null when unlisted.
@@ -135,30 +160,13 @@ let contextWindowRetryAt = 0;
  */
 export async function readOmpContextWindow(provider: string | null, model: string | null): Promise<number | null> {
   if (!provider || !model) return null;
-  if (contextWindowRetryAt && Date.now() >= contextWindowRetryAt) {
-    contextWindowCache = null;
-    contextWindowRetryAt = 0;
-  }
-  if (!contextWindowCache) {
-    contextWindowCache = runOmpModelsCommand()
-      .then(parseOmpContextWindows)
-      .catch(() => {
-        contextWindowRetryAt = Date.now() + CONTEXT_WINDOW_RETRY_MS;
-        return new Map<string, number>();
-      });
-  }
-  return (await contextWindowCache).get(`${provider}/${model}`) ?? null;
+  return (await readOmpCatalog()).contextWindows.get(`${provider}/${model}`) ?? null;
 }
 
 // The IProviderModels half of the omp provider, consumed by `omp.provider.ts`.
 export class OmpProviderModels implements IProviderModels {
   async getSupportedModels(): Promise<ProviderModelsDefinition> {
-    try {
-      const definition = parseOmpModels(await runOmpModelsCommand());
-      return definition.OPTIONS.length > 1 ? definition : OMP_FALLBACK_MODELS;
-    } catch {
-      return OMP_FALLBACK_MODELS;
-    }
+    return (await readOmpCatalog()).definition;
   }
 
   // omp's live current model comes from session/new configOptions (read by the

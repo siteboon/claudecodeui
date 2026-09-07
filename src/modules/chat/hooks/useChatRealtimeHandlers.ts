@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { ServerEvent,MarkSessionIdle,MarkSessionProcessing,PendingPermissionRequest,ProjectSession,LLMProvider,NormalizedMessage } from '@/shared/types';
 import { showCompletionTitleIndicator } from '@/modules/chat/utils/pageTitleNotification';
@@ -73,6 +74,7 @@ export function useChatRealtimeHandlers({
   requestLatestMessages,
   sessionStore,
 }: UseChatRealtimeHandlersArgs) {
+  const { t } = useTranslation('chat');
   // Session switches can send `chat.subscribe` before this effect has a chance
   // to rebind the websocket listener. Read the visible session id from a ref
   // so a fast `chat_subscribed` ack is matched against the current view, not
@@ -337,16 +339,20 @@ export function useChatRealtimeHandlers({
             const value = typeof msg.status === 'string' ? msg.status : undefined;
             const configId = typeof msg.configId === 'string' ? msg.configId : undefined;
             const configLabel = configId === 'thinking'
-              ? 'Thinking'
+              ? t('claudeStatus.config.thinking')
               : configId === 'mode'
-                ? 'Mode'
-                : 'Model';
+                ? t('claudeStatus.config.mode')
+                : t('claudeStatus.config.model');
             const statusText = msg.text === 'plan'
-              ? 'Planning'
+              ? t('claudeStatus.config.planning')
               : msg.text === 'config_option_update'
-                ? (value ? `${configLabel}: ${value}` : `${configLabel} updated`)
+                ? (value
+                  ? t('claudeStatus.config.value', { label: configLabel, value })
+                  : t('claudeStatus.config.updated', { label: configLabel }))
                 : msg.text === 'current_mode_update'
-                  ? (value ? `Mode: ${value}` : 'Mode changed')
+                  ? (value
+                    ? t('claudeStatus.config.value', { label: t('claudeStatus.config.mode'), value })
+                    : t('claudeStatus.config.modeChanged'))
                   : msg.text;
             onSessionProcessing?.(sid, {
               statusText,
@@ -381,5 +387,6 @@ export function useChatRealtimeHandlers({
     onWebSocketReconnect,
     requestLatestMessages,
     sessionStore,
+    t,
   ]);
 }

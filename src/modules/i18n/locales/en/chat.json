@@ -140,6 +140,7 @@
     }
   },
   "composer": {
+    "ompDefaultPermissions": "In omp default mode, write, eval, ast_edit, memory_edit, manage_skill, browser and task run without prompts. Only bash, edit, delete and move have ACP approval gates.",
     "reasoning": "Reasoning",
     "model": "Model",
     "effortDefault": "Default",
@@ -153,6 +154,7 @@
     }
   },
   "providerSelection": {
+    "ompDefaultModel": "Use omp default",
     "title": "Choose Your AI Assistant",
     "description": "Select a provider to start a new conversation",
     "selectModel": "Select Model",
@@ -230,6 +232,15 @@
     "defaultCommand": "command"
   },
   "claudeStatus": {
+    "config": {
+      "thinking": "Thinking",
+      "mode": "Mode",
+      "model": "Model",
+      "planning": "Planning",
+      "value": "{{label}}: {{value}}",
+      "updated": "{{label}} updated",
+      "modeChanged": "Mode changed"
+    },
     "actions": {
       "thinking": "Thinking",
       "processing": "Processing",

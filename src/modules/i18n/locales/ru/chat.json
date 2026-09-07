@@ -113,6 +113,7 @@
     "scrollToBottom": "Прокрутить вниз"
   },
   "providerSelection": {
+    "ompDefaultModel": "Использовать модель omp по умолчанию",
     "title": "Выберите вашего AI-ассистента",
     "description": "Выберите провайдера для начала нового разговора",
     "selectModel": "Выбрать модель",
@@ -180,6 +181,15 @@
     "defaultCommand": "команда"
   },
   "claudeStatus": {
+    "config": {
+      "thinking": "Размышление",
+      "mode": "Режим",
+      "model": "Модель",
+      "planning": "Планирование",
+      "value": "{{label}}: {{value}}",
+      "updated": "Обновлено: {{label}}",
+      "modeChanged": "Режим изменён"
+    },
     "actions": {
       "thinking": "Думает",
       "processing": "Обрабатывает",
@@ -217,6 +227,7 @@
     "forkFromHere": "Ответвить отсюда"
   },
   "composer": {
+    "ompDefaultPermissions": "В режиме omp по умолчанию write, eval, ast_edit, memory_edit, manage_skill, browser и task выполняются без запроса разрешения. Только bash, edit, delete и move проходят проверку разрешений ACP.",
     "editing": {
       "title": "Замена предыдущего сообщения",
       "filesNotReverted": "уже изменённые файлы не возвращаются",

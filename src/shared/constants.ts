@@ -76,8 +76,8 @@ export const SETTINGS_MAIN_TABS: SettingsMainTabMeta[] = [
  */
 export const DEFAULT_EFFORT_VALUE = 'default';
 
+/** Selects omp's configured model without sending an explicit model override. */
 export const OMP_CONFIGURED_MODEL_SENTINEL = '__omp_configured_model__';
-export const OMP_CONFIGURED_MODEL_LABEL = 'Use omp default';
 
 // ---------------------------
 

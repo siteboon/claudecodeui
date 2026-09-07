@@ -113,6 +113,7 @@
     "scrollToBottom": "En alta git"
   },
   "providerSelection": {
+    "ompDefaultModel": "omp varsayılanını kullan",
     "title": "AI Asistanını Seç",
     "description": "Yeni bir konuşma başlatmak için bir sağlayıcı seç",
     "selectModel": "Model Seç",
@@ -180,6 +181,15 @@
     "defaultCommand": "komut"
   },
   "claudeStatus": {
+    "config": {
+      "thinking": "Düşünme",
+      "mode": "Mod",
+      "model": "Model",
+      "planning": "Planlanıyor",
+      "value": "{{label}}: {{value}}",
+      "updated": "{{label}} güncellendi",
+      "modeChanged": "Mod değiştirildi"
+    },
     "actions": {
       "thinking": "Düşünüyor",
       "processing": "İşliyor",
@@ -217,6 +227,7 @@
     "forkFromHere": "Buradan çatalla"
   },
   "composer": {
+    "ompDefaultPermissions": "omp varsayılan modunda write, eval, ast_edit, memory_edit, manage_skill, browser ve task onay sorulmadan çalışır. ACP onay denetimleri yalnızca bash, edit, delete ve move için uygulanır.",
     "editing": {
       "title": "Önceki bir mesaj değiştiriliyor",
       "filesNotReverted": "zaten değiştirilen dosyalar geri alınmaz",

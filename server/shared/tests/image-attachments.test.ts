@@ -86,6 +86,13 @@ test('normalizeAttachmentDescriptors preserves file metadata and identifies imag
   assert.equal(isImageAttachmentDescriptor(image), true);
 });
 
+test('inherited object keys do not classify non-image attachments as images', () => {
+  for (const mimeType of ['constructor', 'toString', '__proto__']) {
+    assert.equal(isImageAttachmentDescriptor({ path: 'document.bin', mimeType }), false, mimeType);
+  }
+  assert.equal(isImageAttachmentDescriptor({ path: 'document.bin', mimeType: 'image/png' }), true);
+});
+
 test('appendFilesInputTag and parseFilesInputTag round-trip non-image files', () => {
   const prompt = 'Summarize the attached materials.';
   const tagged = appendFilesInputTag(prompt, [
@@ -253,6 +260,31 @@ test('buildClaudeUserContent skips unsupported types and unreadable files', asyn
 
     // Only the text block survives; the prompt still goes through.
     assert.deepEqual(content, [{ type: 'text', text: 'prompt' }]);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('buildClaudeUserContent rejects inherited MIME keys even for readable images', async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'image-attachments-'));
+  try {
+    await writeFile(path.join(tempDir, 'shot.png'), PNG_BYTES);
+    const images = ['constructor', 'toString', '__proto__', 'image/png']
+      .map((mimeType) => ({ path: 'shot.png', mimeType }));
+
+    const content = await buildClaudeUserContent('prompt', images, tempDir);
+
+    assert.deepEqual(content, [
+      { type: 'text', text: 'prompt' },
+      {
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: 'image/png',
+          data: PNG_BYTES.toString('base64'),
+        },
+      },
+    ]);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

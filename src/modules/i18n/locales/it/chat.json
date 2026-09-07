@@ -113,6 +113,7 @@
     "scrollToBottom": "Scorri in basso"
   },
   "providerSelection": {
+    "ompDefaultModel": "Usa il modello predefinito di omp",
     "title": "Scegli il tuo assistente AI",
     "description": "Seleziona un provider per iniziare una nuova conversazione",
     "selectModel": "Seleziona modello",
@@ -180,6 +181,15 @@
     "defaultCommand": "comando"
   },
   "claudeStatus": {
+    "config": {
+      "thinking": "Ragionamento",
+      "mode": "Modalità",
+      "model": "Modello",
+      "planning": "Pianificazione",
+      "value": "{{label}}: {{value}}",
+      "updated": "Aggiornamento: {{label}}",
+      "modeChanged": "Modalità cambiata"
+    },
     "actions": {
       "thinking": "Ragionamento",
       "processing": "Elaborazione",
@@ -217,6 +227,7 @@
     "forkFromHere": "Dirama da qui"
   },
   "composer": {
+    "ompDefaultPermissions": "Nella modalità predefinita di omp, write, eval, ast_edit, memory_edit, manage_skill, browser e task vengono eseguiti senza chiedere conferma. Solo bash, edit, delete e move sono soggetti ai controlli di approvazione ACP.",
     "editing": {
       "title": "Sostituzione di un messaggio precedente",
       "filesNotReverted": "i file già modificati non vengono ripristinati",

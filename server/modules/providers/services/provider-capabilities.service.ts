@@ -126,16 +126,17 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
   },
 };
 
-let cachedOmpDefaultMode: string | null = null;
+const OMP_DEFAULT_MODE_CACHE_MS = 30_000;
+let cachedOmpDefaultMode: { mode: string; expiresAt: number } | null = null;
 
 /**
  * Maps omp's configured approval mode to the composer's first-use default.
  *
- * The UI persists later choices, so this reads the config once per process.
+ * Cache briefly, including missing config, so installs and edits are picked up.
  */
 function readOmpDefaultPermissionMode(): string {
-  if (cachedOmpDefaultMode !== null) {
-    return cachedOmpDefaultMode;
+  if (cachedOmpDefaultMode !== null && Date.now() < cachedOmpDefaultMode.expiresAt) {
+    return cachedOmpDefaultMode.mode;
   }
 
   let mode = 'default';
@@ -149,7 +150,7 @@ function readOmpDefaultPermissionMode(): string {
     // Missing config uses the interactive default.
   }
 
-  cachedOmpDefaultMode = mode;
+  cachedOmpDefaultMode = { mode, expiresAt: Date.now() + OMP_DEFAULT_MODE_CACHE_MS };
   return mode;
 }
 

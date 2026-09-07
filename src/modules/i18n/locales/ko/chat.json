@@ -132,6 +132,7 @@
     }
   },
   "providerSelection": {
+    "ompDefaultModel": "omp 기본 모델 사용",
     "title": "AI 어시스턴트 선택",
     "description": "새 대화를 시작할 프로바이더를 선택하세요",
     "selectModel": "모델 선택",
@@ -200,6 +201,15 @@
     "defaultCommand": "명령어"
   },
   "claudeStatus": {
+    "config": {
+      "thinking": "사고",
+      "mode": "모드",
+      "model": "모델",
+      "planning": "계획 중",
+      "value": "{{label}}: {{value}}",
+      "updated": "{{label}} 업데이트됨",
+      "modeChanged": "모드 변경됨"
+    },
     "actions": {
       "thinking": "Thinking",
       "processing": "Processing",
@@ -238,6 +248,7 @@
     "forkFromHere": "여기서 분기"
   },
   "composer": {
+    "ompDefaultPermissions": "omp 기본 모드에서는 write, eval, ast_edit, memory_edit, manage_skill, browser, task가 확인 없이 실행됩니다. ACP 승인 제어는 bash, edit, delete, move에만 적용됩니다.",
     "editing": {
       "title": "이전 메시지를 교체하는 중",
       "filesNotReverted": "이미 변경된 파일은 되돌리지 않습니다",

@@ -202,6 +202,33 @@ test('default mode: inbound permission request → UI prompt → resolveToolAppr
   }
 });
 
+test('allow and remember still allows once when the agent offers no persistent option', async () => {
+  const fake = makeFakeConnection();
+  __setConnectionFactoryForTest(() => fake.connection);
+  try {
+    const writer = makeWriter();
+    const run = spawnOmp('run the tool', { cwd: '/appr-remember-once' }, writer, TEST_CONTEXT);
+    await flush();
+
+    const decisionPromise = fake.firePermission({
+      sessionId: 'S1',
+      toolName: 'Bash',
+      input: { command: 'pwd' },
+      options: ALLOW_OPTIONS.filter((option) => option.kind !== 'allow_always'),
+    });
+    const permission = writer.sent.find((message) => message.kind === 'permission_request');
+    assert.ok(permission);
+    resolveToolApproval(permission.requestId, { allow: true, rememberEntry: 'Bash' });
+    const decision = await decisionPromise;
+    await fake.releaseAllPrompts();
+    await run;
+
+    assert.deepEqual(decision, { outcome: { outcome: 'selected', optionId: 'ao' } });
+  } finally {
+    __setConnectionFactoryForTest(null);
+  }
+});
+
 test('bypassPermissions: inbound permission request auto-allows with NO UI prompt', async () => {
   const fake = makeFakeConnection();
   __setConnectionFactoryForTest(() => fake.connection);
@@ -582,6 +609,127 @@ test('a mapped session resumes with omp\u2019s native id, and abort accepts the 
 
     await fake.releaseAllPrompts();
     await run;
+  } finally {
+    __setConnectionFactoryForTest(null);
+  }
+});
+
+test('abort during initialize stops a resumed app session before load and leaves the connection reusable', async (t) => {
+  const fake = makeFakeConnection();
+  const calls: string[] = [];
+  t.mock.method(fake.connection.client, 'request', async (method: string) => {
+    calls.push(method);
+    return method === 'session/prompt' ? { stopReason: 'end_turn' } : {};
+  });
+  let finishInitialize = () => {};
+  fake.connection.ready = new Promise<OmpConnection>((resolve) => {
+    finishInitialize = () => resolve(fake.connection);
+  });
+  __setConnectionFactoryForTest(() => fake.connection);
+  const context: ProviderRuntimeContext = {
+    ...TEST_CONTEXT,
+    resolveProviderSessionId: () => 'NATIVE-INITIALIZING',
+  };
+  const options = { cwd: '/resume-initialize-abort', sessionId: 'APP-INITIALIZING' };
+
+  try {
+    const writer = makeWriter();
+    const run = spawnOmp('must not run', options, writer, context);
+    const aborted = await abortOmpSession('APP-INITIALIZING');
+    finishInitialize();
+    await run;
+
+    assert.equal(aborted, true, 'abort finds the app reservation before initialize resolves');
+    assert.deepEqual(calls, [], 'an aborted connection setup sends neither session/load nor session/prompt');
+    assert.equal(writer.sent.some((message) => message.kind === 'complete'), false,
+      'the gateway owns the aborted completion');
+    assert.equal(await abortOmpSession('APP-INITIALIZING'), false, 'the setup reservation was released');
+
+    const retryWriter = makeWriter();
+    await spawnOmp('retry', options, retryWriter, context);
+    assert.deepEqual(calls, ['session/load', 'session/prompt']);
+    assert.equal(retryWriter.sent.find((message) => message.kind === 'complete')?.exitCode, 0);
+  } finally {
+    finishInitialize();
+    __setConnectionFactoryForTest(null);
+  }
+});
+
+test('abort during a stale resume connection replacement prevents session/load', async (t) => {
+  const stale = makeFakeConnection();
+  stale.connection.loadedSessions = new Map([['NATIVE-STALE', 'obsolete-fingerprint']]);
+  const replacement = makeFakeConnection();
+  const calls: string[] = [];
+  t.mock.method(replacement.connection.client, 'request', async (method: string) => {
+    calls.push(method);
+    return method === 'session/prompt' ? { stopReason: 'end_turn' } : {};
+  });
+  const releaseReplacement: Array<() => void> = [];
+  let spawned = 0;
+  __setConnectionFactoryForTest(() => {
+    if (spawned++ === 0) return stale.connection;
+    replacement.connection.ready = new Promise<OmpConnection>((resolve) => {
+      releaseReplacement.push(() => resolve(replacement.connection));
+    });
+    return replacement.connection;
+  });
+
+  try {
+    const run = spawnOmp(
+      'must not run',
+      { cwd: '/stale-resume-initialize-abort', sessionId: 'APP-STALE' },
+      makeWriter(),
+      { ...TEST_CONTEXT, resolveProviderSessionId: () => 'NATIVE-STALE' },
+    );
+    await waitForPending(releaseReplacement, 'replacement initialize');
+    const aborted = await abortOmpSession('APP-STALE');
+    releaseReplacement.splice(0).forEach((release) => release());
+    await run;
+
+    assert.equal(aborted, true, 'the app reservation covers the replacement initialize too');
+    assert.deepEqual(calls, [], 'the resumed session must not load or prompt on the replacement child');
+  } finally {
+    releaseReplacement.splice(0).forEach((release) => release());
+    __setConnectionFactoryForTest(null);
+  }
+});
+
+test('aborting before the stale check cannot mark an old child as synchronized', async (t) => {
+  const stale = makeFakeConnection();
+  stale.connection.loadedSessions = new Map([['NATIVE-ABORTED-STALE', 'obsolete-fingerprint']]);
+  const fresh = makeFakeConnection();
+  for (const [fake, text] of [[stale, 'stale transcript'], [fresh, 'fresh transcript']] as const) {
+    t.mock.method(fake.connection.client, 'request', async (method: string) => {
+      if (method === 'session/prompt') {
+        fake.fireUpdate({
+          sessionId: 'NATIVE-ABORTED-STALE',
+          update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } },
+        });
+      }
+      return method === 'session/prompt' ? { stopReason: 'end_turn' } : {};
+    });
+  }
+  let spawned = 0;
+  __setConnectionFactoryForTest(() => spawned++ === 0 ? stale.connection : fresh.connection);
+  const context: ProviderRuntimeContext = {
+    ...TEST_CONTEXT,
+    resolveProviderSessionId: () => 'NATIVE-ABORTED-STALE',
+  };
+  const options = { cwd: '/abort-before-stale-check', sessionId: 'APP-ABORTED-STALE' };
+
+  try {
+    const run = spawnOmp('cancel this', options, makeWriter(), context);
+    const aborted = await abortOmpSession('APP-ABORTED-STALE');
+    await run;
+    assert.equal(aborted, true);
+
+    const writer = makeWriter();
+    await spawnOmp('retry', options, writer, context);
+    assert.deepEqual(
+      writer.sent.filter((message) => message.kind === 'stream_delta').map((message) => message.content),
+      ['fresh transcript'],
+      'the retry must read current history rather than trust the aborted stale child',
+    );
   } finally {
     __setConnectionFactoryForTest(null);
   }

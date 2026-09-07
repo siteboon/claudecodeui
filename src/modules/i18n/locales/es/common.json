@@ -1,4 +1,7 @@
 {
+  "providerAuth": {
+    "ompSetup": "Configuración de omp"
+  },
   "buttons": {
     "save": "Guardar",
     "cancel": "Cancelar",

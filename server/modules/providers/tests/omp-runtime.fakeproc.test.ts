@@ -1,12 +1,15 @@
 // P9: end-to-end adapter test through the REAL spawnOmp path against a FAKE
 // `omp` process (a node script speaking ACP JSON-RPC 2.0 over stdio, put on
 // OMP_PATH). No paid omp calls. Run with tsx:
-//   ./node_modules/.bin/tsx --tsconfig server/tsconfig.json --test server/modules/providers/list/omp/omp-runtime.fakeproc.test.js
+//   ./node_modules/.bin/tsx --tsconfig server/tsconfig.json --test server/modules/providers/tests/omp-runtime.fakeproc.test.ts
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, mkdirSync, appendFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, mkdirSync, appendFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import type { AnyRecord, ProviderRuntimeContext } from '@/shared/types.js';
 
@@ -17,6 +20,11 @@ import type { AnyRecord, ProviderRuntimeContext } from '@/shared/types.js';
 const FAKE_OMP = `#!/usr/bin/env node
 const fs = require('node:fs');
 fs.writeFileSync(process.env.OMP_FAKE_ARGV_FILE, process.argv.slice(2).join(' '));
+const configPath = process.argv[process.argv.indexOf('--config') + 1];
+const autoApprove = /approvalMode:\\s*yolo/.test(fs.readFileSync(configPath, 'utf8'));
+// Keep an orphan alive even after its parent's stdio closes, so shutdown tests
+// cannot pass just because this fixture has less background work than real omp.
+if (process.env.OMP_FAKE_KEEP_ALIVE) setInterval(() => {}, 1000);
 // One line per child, so a test can count how many times omp was spawned.
 if (process.env.OMP_FAKE_SPAWN_FILE) fs.appendFileSync(process.env.OMP_FAKE_SPAWN_FILE, process.pid + '\\n');
 // Real omp writes a session_exit entry when it exits gracefully; record the polite
@@ -35,6 +43,14 @@ const OPTIONS = [
 let promptId = null;
 let buf = '';
 const send = (o) => process.stdout.write(JSON.stringify(o) + '\\n');
+const finishTool = (allowed) => {
+  send({ jsonrpc: '2.0', method: 'session/update', params: { sessionId: SID, update: {
+    sessionUpdate: 'tool_call_update', toolCallId: 't1',
+    status: allowed ? 'completed' : 'failed',
+    content: allowed ? 'ran' : 'Tool call denied by user: bash',
+  } } });
+  if (promptId !== null) send({ jsonrpc: '2.0', id: promptId, result: { stopReason: 'end_turn' } });
+};
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => {
   buf += chunk;
@@ -52,16 +68,17 @@ process.stdin.on('data', (chunk) => {
     if (f.id === PERM_ID && f.method === undefined) {
       const opt = OPTIONS.find((o) => o.optionId === f?.result?.outcome?.optionId);
       const allowed = f?.result?.outcome?.outcome === 'selected' && opt && opt.kind.startsWith('allow');
-      send({ jsonrpc: '2.0', method: 'session/update', params: { sessionId: SID, update: {
-        sessionUpdate: 'tool_call_update', toolCallId: 't1',
-        status: allowed ? 'completed' : 'failed',
-        content: allowed ? 'ran' : 'Tool call denied by user: bash',
-      } } });
-      if (promptId !== null) send({ jsonrpc: '2.0', id: promptId, result: { stopReason: 'end_turn' } });
+      finishTool(allowed);
       continue;
     }
     if (f.method === 'initialize') {
-      send({ jsonrpc: '2.0', id: f.id, result: { agentCapabilities: { loadSession: true, promptCapabilities: { image: true } } } });
+      if (process.env.OMP_FAKE_INITIALIZE_FILE) fs.appendFileSync(process.env.OMP_FAKE_INITIALIZE_FILE, process.pid + '\\n');
+      if (process.env.OMP_FAKE_HOLD_INITIALIZE) continue;
+      if (process.env.OMP_FAKE_INITIALIZE_ERROR) {
+        send({ jsonrpc: '2.0', id: f.id, error: { code: -32603, message: process.env.OMP_FAKE_INITIALIZE_ERROR } });
+      } else {
+        send({ jsonrpc: '2.0', id: f.id, result: { agentCapabilities: { loadSession: true, promptCapabilities: { image: true } } } });
+      }
     } else if (f.method === 'session/new') {
       send({ jsonrpc: '2.0', id: f.id, result: { sessionId: SID, configOptions: [] } });
     } else if (f.method === 'session/prompt') {
@@ -69,7 +86,8 @@ process.stdin.on('data', (chunk) => {
       send({ jsonrpc: '2.0', method: 'session/update', params: { sessionId: SID, update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'hi' } } } });
       send({ jsonrpc: '2.0', method: 'session/update', params: { sessionId: SID, update: { sessionUpdate: 'tool_call', toolCallId: 't1', title: 'Bash', rawInput: { command: 'ls' } } } });
       // Tool does NOT run until the permission response validates as an allow.
-      send({ jsonrpc: '2.0', id: PERM_ID, method: 'session/request_permission', params: { sessionId: SID, toolName: 'Bash', input: { command: 'ls' }, options: OPTIONS } });
+      if (autoApprove) finishTool(true);
+      else send({ jsonrpc: '2.0', id: PERM_ID, method: 'session/request_permission', params: { sessionId: SID, toolName: 'Bash', input: { command: 'ls' }, options: OPTIONS } });
     } else if (f.id !== undefined && f.method !== undefined) {
       send({ jsonrpc: '2.0', id: f.id, result: {} });
     }
@@ -173,6 +191,19 @@ test('DENY: rejected approval blocks the tool but still completes', async () => 
   assert.equal(captured.filter((m) => m.kind === 'complete').length, 1, 'a terminal complete still arrives');
 });
 
+test('a tampered approval overlay cannot make the next child run tools without approval', async () => {
+  const first = await runFakeTurn();
+  const configPath = readFileSync(first.argvFile, 'utf8').match(/--config\s+(\S+)/)?.[1];
+  assert.ok(configPath);
+  writeFileSync(configPath, 'tools:\n  approvalMode: yolo\n');
+
+  const { captured } = await runFakeTurn({ allow: false });
+  assert.ok(captured.some((message) => message.kind === 'permission_request'),
+    'a new child must still ask after another process rewrites its overlay');
+  assert.equal(captured.find((message) => message.kind === 'tool_result')?.isError, true,
+    'rejecting the requested permission prevents the tool from running');
+});
+
 // A warm child ignores session/load for a session it already holds, so a session
 // the user's terminal has appended to since must be resumed on a NEW child —
 // otherwise the turn continues from a frozen snapshot and forks the transcript.
@@ -258,4 +289,131 @@ test('PLAN mode: sensitive tool auto-denied client-side with NO UI prompt', asyn
   const toolResult = captured.find((m) => m.kind === 'tool_result');
   assert.equal(toolResult?.isError, true, 'plan mode auto-denies the sensitive tool (not run)');
   assert.equal(captured.filter((m) => m.kind === 'complete').length, 1, 'a terminal complete still arrives');
+});
+
+test('failed initialize is reaped, retry works, and server exit kills idle and initializing children', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'omp-fake-lifecycle-'));
+  const fakePath = join(dir, 'omp');
+  const spawnFile = join(dir, 'spawns.txt');
+  const initializeFile = join(dir, 'initializes.txt');
+  const runtimeUrl = new URL('../list/omp/omp-runtime.provider.ts', import.meta.url).href;
+  const root = fileURLToPath(new URL('../../../../', import.meta.url));
+  writeFileSync(fakePath, FAKE_OMP, { mode: 0o755 });
+
+  // The server must really exit: invoking the test cleanup helper would not
+  // catch a missing process exit hook. Keep all files and credentials isolated.
+  const hostScript = `
+    import { readFileSync, existsSync, writeFileSync } from 'node:fs';
+    import { spawnOmp } from ${JSON.stringify(runtimeUrl)};
+    const captured = [];
+    const context = {
+      normalizeMessage: () => [],
+      resolveProviderSessionId: () => null,
+      resolveResumeModel: async () => undefined,
+      getProviderModels: async () => ({ OPTIONS: [], DEFAULT: '' }),
+      isProviderInstalled: async () => true,
+    };
+    const writer = { userId: null, send: (message) => captured.push(message), setSessionId() {} };
+    const pids = (file) => existsSync(file)
+      ? readFileSync(file, 'utf8').trim().split(/\\s+/).map(Number).filter((pid) => Number.isSafeInteger(pid) && pid > 0)
+      : [];
+    // These conditions depend on OS child exit and another process's file write;
+    // advancing this process's fake timers cannot advance either event.
+    const waitFor = async (predicate) => {
+      const deadline = Date.now() + 8000;
+      while (Date.now() < deadline) {
+        if (predicate()) return true;
+        await new Promise((resolve) => setTimeout(resolve, 15));
+      }
+      return false;
+    };
+    process.env.OMP_FAKE_INITIALIZE_ERROR = 'fixture initialize failure';
+    await spawnOmp('', { cwd: process.env.HOME }, writer, context);
+    const failedPid = pids(process.env.OMP_FAKE_SPAWN_FILE)[0];
+    const failedInitializeReported = captured.some((message) =>
+      message.kind === 'error' && message.content.includes('fixture initialize failure'));
+    const failedInitializeExited = Number.isSafeInteger(failedPid) && await waitFor(() => {
+      try { process.kill(failedPid, 0); return false; }
+      catch (error) { if (error.code === 'ESRCH') return true; throw error; }
+    });
+    delete process.env.OMP_FAKE_INITIALIZE_ERROR;
+    captured.length = 0;
+    await spawnOmp('', { cwd: process.env.HOME }, writer, context);
+    const retrySucceeded = captured.some((message) => message.kind === 'complete' && message.exitCode === 0)
+      && pids(process.env.OMP_FAKE_SPAWN_FILE).length === 2;
+    process.env.OMP_FAKE_HOLD_INITIALIZE = '1';
+    void spawnOmp('', { cwd: process.env.HOME, permissionMode: 'plan' }, writer, context);
+    const initializingStarted = await waitFor(() => pids(process.env.OMP_FAKE_INITIALIZE_FILE).length === 3);
+    writeFileSync(1, 'LIFECYCLE_RESULT ' + JSON.stringify({
+      failedInitializeReported, failedInitializeExited, retrySucceeded, initializingStarted,
+    }) + '\\n');
+    process.exit(0);
+  `;
+  const host = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '--eval', hostScript], {
+    cwd: root,
+    env: {
+      ...process.env,
+      HOME: dir,
+      DATABASE_PATH: join(dir, 'auth.db'),
+      TSX_TSCONFIG_PATH: join(root, 'server/tsconfig.json'),
+      OMP_PATH: fakePath,
+      OMP_FAKE_ARGV_FILE: join(dir, 'argv.txt'),
+      OMP_FAKE_SPAWN_FILE: spawnFile,
+      OMP_FAKE_INITIALIZE_FILE: initializeFile,
+      OMP_FAKE_KEEP_ALIVE: '1',
+      OMP_FAKE_INITIALIZE_ERROR: '',
+      OMP_FAKE_HOLD_INITIALIZE: '',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 30_000,
+    killSignal: 'SIGKILL',
+  });
+  let output = '';
+  host.stdout.on('data', (chunk) => { output += chunk; });
+  host.stderr.on('data', (chunk) => { output += chunk; });
+  const childPids = () => existsSync(spawnFile)
+    ? readFileSync(spawnFile, 'utf8').trim().split(/\s+/).map(Number).filter((pid) => Number.isSafeInteger(pid) && pid > 0)
+    : [];
+  const isRunning = (pid: number) => {
+    try {
+      process.kill(pid, 0);
+      // An exited orphan can briefly remain a zombie until its new parent reaps
+      // it. It cannot execute tools and does not count as a surviving child.
+      return process.platform !== 'linux'
+        || readFileSync(`/proc/${pid}/stat`, 'utf8').match(/\) ([A-Z]) /)?.[1] !== 'Z';
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && (error.code === 'ESRCH' || error.code === 'ENOENT')) {
+        return false;
+      }
+      throw error;
+    }
+  };
+
+  try {
+    const [exitCode, signal] = await once(host, 'close');
+    assert.equal(signal, null, output);
+    assert.equal(exitCode, 0, output);
+    const resultLine = output.split('\n').find((line) => line.startsWith('LIFECYCLE_RESULT '));
+    assert.ok(resultLine, output);
+    const result: unknown = JSON.parse(resultLine.slice('LIFECYCLE_RESULT '.length));
+    assert.deepEqual(result, {
+      failedInitializeReported: true,
+      failedInitializeExited: true,
+      retrySucceeded: true,
+      initializingStarted: true,
+    });
+    const pids = childPids();
+    assert.equal(pids.length, 3);
+    assert.equal(await waitFor(() => pids.every((pid) => !isRunning(pid))), true,
+      'no omp child may survive the server, including a pending initialize');
+  } finally {
+    if (host.exitCode === null && host.signalCode === null) {
+      host.kill('SIGKILL');
+      await once(host, 'close');
+    }
+    for (const pid of childPids()) {
+      if (isRunning(pid)) process.kill(pid, 'SIGKILL');
+    }
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

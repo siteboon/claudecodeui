@@ -1,4 +1,7 @@
 {
+  "providerAuth": {
+    "ompSetup": "omp 设置"
+  },
   "buttons": {
     "save": "保存",
     "cancel": "取消",

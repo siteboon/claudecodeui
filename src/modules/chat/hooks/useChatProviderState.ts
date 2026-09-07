@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { api } from '@/shared/api';
 import type { PendingPermissionRequest, PermissionMode,
@@ -11,7 +12,6 @@ import type { PendingPermissionRequest, PermissionMode,
   ProviderModelsDefinition } from '@/shared/types';
 import {
   DEFAULT_EFFORT_VALUE,
-  OMP_CONFIGURED_MODEL_LABEL,
   OMP_CONFIGURED_MODEL_SENTINEL,
 } from '@/shared/constants';
 import { readSelectedProvider, writeSelectedProvider } from '@/shared/selectedProvider';
@@ -26,10 +26,6 @@ const FALLBACK_PROVIDER_EFFORT_VALUES: Partial<Record<LLMProvider, readonly stri
   // valid Max/Ultra selection from being reset during catalog hydration.
   codex: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
   opencode: ['none', 'low', 'medium', 'high', 'xhigh', 'max'],
-};
-
-const FALLBACK_MODEL_OPTIONS: Partial<Record<LLMProvider, ProviderModelOption[]>> = {
-  omp: [{ value: OMP_CONFIGURED_MODEL_SENTINEL, label: OMP_CONFIGURED_MODEL_LABEL }],
 };
 
 const toProviderEffortOptions = (
@@ -135,6 +131,7 @@ const getSessionSelectionKey = (provider: LLMProvider, sessionId: string): strin
 );
 
 export function useChatProviderState({ selectedSession, selectedProject: _selectedProject }: UseChatProviderStateArgs) {
+  const { t } = useTranslation('chat');
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('default');
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
   // The provider the composer sends under. Held here rather than read from
@@ -718,9 +715,25 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
         ?? DEFAULT_EFFORT_VALUE,
     );
   }, [activeSessionSelection?.effort, currentProviderModel, provider, providerEfforts, reconcileStoredEffort]);
+  // Localize presentation only. Raw catalog values still drive model selection and persistence.
+  const localizedProviderModelCatalog = useMemo(() => {
+    const omp = providerModelCatalog.omp;
+    if (!omp) return providerModelCatalog;
+    return {
+      ...providerModelCatalog,
+      omp: {
+        ...omp,
+        OPTIONS: omp.OPTIONS.map((option) => option.value === OMP_CONFIGURED_MODEL_SENTINEL
+          ? { ...option, label: t('providerSelection.ompDefaultModel') }
+          : option),
+      },
+    };
+  }, [providerModelCatalog, t]);
   const currentProviderModelOptions = useMemo(
-    () => providerModelCatalog[provider]?.OPTIONS ?? FALLBACK_MODEL_OPTIONS[provider] ?? [],
-    [provider, providerModelCatalog],
+    () => localizedProviderModelCatalog[provider]?.OPTIONS ?? (provider === 'omp'
+      ? [{ value: OMP_CONFIGURED_MODEL_SENTINEL, label: t('providerSelection.ompDefaultModel') }]
+      : []),
+    [provider, localizedProviderModelCatalog, t],
   );
 
   const applyProviderCatalog = useCallback((
@@ -838,7 +851,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     availablePermissionModes,
     selectPermissionMode,
     cyclePermissionMode,
-    providerModelCatalog,
+    providerModelCatalog: localizedProviderModelCatalog,
     providerModelsLoading,
     providerModelActions,
     selectProviderModel,

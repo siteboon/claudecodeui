@@ -113,6 +113,24 @@ test('cost and status commands report the same resolved model as /models', async
   assert.equal((status.data as { model: string }).model, 'haiku');
 });
 
+test('cost, status and models preserve the catalog default value for existing providers', async () => {
+  for (const provider of ['claude', 'codex', 'cursor', 'opencode']) {
+    const context = { provider };
+    const cost = await executeCommand('/cost', context);
+    const status = await executeCommand('/status', context);
+    const models = await executeCommand('/models', context);
+
+    assert.ok(cost.data && typeof cost.data === 'object' && 'model' in cost.data);
+    assert.ok(status.data && typeof status.data === 'object' && 'model' in status.data);
+    assert.ok(models.data && typeof models.data === 'object' && 'current' in models.data);
+    const current = models.data.current;
+    assert.ok(current && typeof current === 'object' && 'model' in current);
+    assert.equal(current.model, 'default', provider);
+    assert.equal(cost.data.model, current.model, provider);
+    assert.equal(status.data.model, current.model, provider);
+  }
+});
+
 test('cost reports the concrete OMP backend and model from the latest turn', async () => {
   const result = await executeCommand('/cost', {
     provider: 'omp',

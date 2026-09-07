@@ -111,7 +111,7 @@ export class OmpSkillsProvider extends SkillsProvider {
           skills
             .filter((skill) => skill.scope === 'plugin')
             .map((skill) => ({ ...skill, provider: this.provider })),
-        ),
+        ).catch(() => []),
         this.scanSkillSources(rankedBelowPlugins),
         readIgnoredSkillNames(path.join(os.homedir(), '.omp', 'agent')),
       ]);

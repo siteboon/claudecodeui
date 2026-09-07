@@ -71,7 +71,6 @@ const getProviderTitle = (provider: LLMProvider) => {
   if (provider === 'cursor') return 'Cursor CLI Login';
   if (provider === 'codex') return 'Codex CLI Login';
   if (provider === 'opencode') return 'OpenCode CLI Login';
-  if (provider === 'omp') return 'omp Setup';
   return 'Claude CLI Login';
 };
 
@@ -90,7 +89,7 @@ export default function ProviderLoginModal({
   }
 
   const command = getProviderCommand({ provider, customCommand, isAuthenticated });
-  const title = getProviderTitle(provider);
+  const title = provider === 'omp' ? t('common:providerAuth.ompSetup') : getProviderTitle(provider);
 
   const handleComplete = (exitCode: number) => {
     onComplete?.(exitCode);

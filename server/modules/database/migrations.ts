@@ -466,8 +466,7 @@ const addSessionProviderNameColumn = (db: Database): void => {
 };
 
 /**
- * Adds explicit title ownership and schedules one full scan to classify legacy
- * rows where the previous schema could not distinguish user and provider names.
+ * Adds explicit title ownership.
  */
 const addSessionNameSourceColumn = (db: Database): void => {
   const columnNames = getTableInfo(db, 'sessions').map((column) => column.name);
@@ -476,9 +475,6 @@ const addSessionNameSourceColumn = (db: Database): void => {
   }
 
   addColumnToTableIfNotExists(db, 'sessions', columnNames, 'name_source', 'TEXT');
-  if (tableExists(db, 'scan_state')) {
-    db.exec('UPDATE scan_state SET last_scanned_at = NULL');
-  }
 };
 
 /**

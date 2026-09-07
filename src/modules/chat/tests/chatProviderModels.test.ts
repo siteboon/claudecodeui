@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
 
+import { createElement } from 'react';
+import type { PropsWithChildren } from 'react';
+import { createInstance } from 'i18next';
+import { I18nextProvider } from 'react-i18next';
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, test, vi } from 'vitest';
+import { beforeEach, test, vi } from 'vitest';
 
 import { resetUserPreferences, writeUserPreference } from '@/shared/userSettings';
+import { useChatProviderState } from '@/modules/chat/hooks/useChatProviderState';
 import {
-  OMP_CONFIGURED_MODEL_LABEL,
   OMP_CONFIGURED_MODEL_SENTINEL,
 } from '@/shared/constants';
 
@@ -44,12 +48,19 @@ vi.mock('@/shared/api', () => ({
 }));
 
 const renderProviderState = async () => {
-  const { useChatProviderState } = await import(
-    '@/modules/chat/hooks/useChatProviderState'
+  const i18n = createInstance();
+  await i18n.init({
+    lng: 'en',
+    resources: {
+      en: { chat: { providerSelection: { ompDefaultModel: 'Configured model' } } },
+      fr: { chat: { providerSelection: { ompDefaultModel: 'Modèle configuré' } } },
+    },
+  });
+  const view = renderHook(
+    () => useChatProviderState({ selectedSession: null, selectedProject: null }),
+    { wrapper: ({ children }: PropsWithChildren) => createElement(I18nextProvider, { i18n }, children) },
   );
-  return renderHook(() =>
-    useChatProviderState({ selectedSession: null, selectedProject: null }),
-  );
+  return { ...view, i18n };
 };
 
 beforeEach(() => {
@@ -59,9 +70,6 @@ beforeEach(() => {
   resetUserPreferences();
 });
 
-afterEach(() => {
-  vi.resetModules();
-});
 
 test('each provider gets its own model from its own storage key', async () => {
   localStorage.setItem('claude-model', 'claude-stored');
@@ -96,18 +104,25 @@ test('a provider with no stored model falls back to its own default, not another
   );
 });
 
-test('OMP shows a friendly configured-default label when its catalog is unavailable', async () => {
+test('OMP fallback model follows the UI language without changing the selected model', async () => {
   writeUserPreference('selectedProvider', 'omp');
-  const { result } = await renderProviderState();
+  const { result, i18n } = await renderProviderState();
 
   await waitFor(() => {
     assert.equal(result.current.provider, 'omp');
   });
+  const englishLabel = result.current.currentProviderModelOptions[0].label;
+  await act(async () => {
+    await i18n.changeLanguage('fr');
+  });
+
   assert.equal(result.current.currentProviderModel, OMP_CONFIGURED_MODEL_SENTINEL);
-  assert.deepEqual(result.current.currentProviderModelOptions, [{
-    value: OMP_CONFIGURED_MODEL_SENTINEL,
-    label: OMP_CONFIGURED_MODEL_LABEL,
-  }]);
+  assert.equal(result.current.currentProviderModelOptions[0].value, OMP_CONFIGURED_MODEL_SENTINEL);
+  assert.equal(
+    result.current.currentProviderModelOptions[0].label,
+    i18n.t('providerSelection.ompDefaultModel', { ns: 'chat' }),
+  );
+  assert.notEqual(result.current.currentProviderModelOptions[0].label, englishLabel);
 });
 
 test('OMP preserves a stored effort until its dynamic model catalog loads', async () => {

@@ -122,7 +122,7 @@ const IMAGE_FILE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp']
  * provider-native image input instead of the general file reference channel.
  */
 export function isImageAttachmentDescriptor(descriptor: ChatAttachmentDescriptor): boolean {
-  if (descriptor.mimeType && SUPPORTED_IMAGE_MEDIA_TYPES[descriptor.mimeType]) {
+  if (descriptor.mimeType && Object.hasOwn(SUPPORTED_IMAGE_MEDIA_TYPES, descriptor.mimeType)) {
     return true;
   }
   return IMAGE_FILE_EXTENSIONS.has(path.extname(descriptor.path).toLowerCase());
@@ -393,7 +393,7 @@ export async function buildClaudeUserContent(
 
   for (const descriptor of normalizeImageDescriptors(images)) {
     const mediaType = resolveImageMediaType(descriptor);
-    if (!mediaType || !SUPPORTED_IMAGE_MEDIA_TYPES[mediaType]) {
+    if (!mediaType || !Object.hasOwn(SUPPORTED_IMAGE_MEDIA_TYPES, mediaType)) {
       console.warn(`[Images] Skipping unsupported Claude image type for ${descriptor.path}`);
       continue;
     }
@@ -475,7 +475,7 @@ export async function buildAcpPromptBlocks(
 
   for (const descriptor of normalizeImageDescriptors(images)) {
     const mediaType = resolveImageMediaType(descriptor);
-    if (!mediaType || !SUPPORTED_IMAGE_MEDIA_TYPES[mediaType]) {
+    if (!mediaType || !Object.hasOwn(SUPPORTED_IMAGE_MEDIA_TYPES, mediaType)) {
       console.warn(`[Images] Skipping unsupported omp image type for ${descriptor.path}`);
       continue;
     }

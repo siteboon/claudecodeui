@@ -4,6 +4,9 @@
  * Isolated SQLite DB + tmp `~/.omp/agent/sessions` tree: drops a fixture jsonl
  * (header + title + a toolCall/toolResult pair + usage), runs synchronizeFile,
  * then fetchHistory — asserting the DB row and the normalized/paged messages.
+ *
+ * Provider imports stay inside the tests because their dependencies capture HOME
+ * and DATABASE_PATH at module load, after the before hook sets up isolation.
  */
 import assert from 'node:assert/strict';
 import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
@@ -239,6 +242,90 @@ describe('omp synchronizer + fetchHistory', () => {
     );
 
     closeConnection();
+  });
+
+  it('keeps unrelated history when the active ancestor chain contains a cycle', async () => {
+    const { readNormalizedOmpHistory } = await import('@/modules/providers/list/omp/omp-sessions.provider.js');
+    const historyPath = path.join(tempHome, 'cyclic-history.jsonl');
+    const message = (id: string, parentId: string | null) => ({
+      type: 'message', id, parentId,
+      message: { role: 'user', content: [{ type: 'text', text: id }] },
+    });
+    await writeFile(historyPath, [
+      message('root', null),
+      message('unrelated-first', 'root'),
+      message('unrelated-second', 'root'),
+      message('cycle-first', 'cycle-second'),
+      message('cycle-second', 'cycle-first'),
+    ].map((entry) => JSON.stringify(entry)).join('\n') + '\n');
+
+    const history = await readNormalizedOmpHistory(historyPath, 'cyclic-history');
+    assert.deepEqual(history.map((row) => row.content), [
+      'root', 'unrelated-first', 'unrelated-second', 'cycle-first', 'cycle-second',
+    ]);
+  });
+
+  it('keeps undated history rows in source order with stable timestamps across reads', async () => {
+    const { readNormalizedOmpHistory } = await import('@/modules/providers/list/omp/omp-sessions.provider.js');
+    const historyPath = path.join(tempHome, 'undated-history.jsonl');
+    const firstTimestamp = '2026-07-21T00:00:01.000Z';
+    const lastTimestamp = '2026-07-21T00:00:03.000Z';
+    const message = (id: string, timestamp?: string) => ({
+      type: 'message', id, timestamp,
+      message: { role: 'user', content: [{ type: 'text', text: id }] },
+    });
+    await writeFile(historyPath, [
+      message('leading'),
+      message('dated-first', firstTimestamp),
+      message('undated'),
+      { type: 'custom_message', customType: 'collab-prompt', id: 'collab', content: 'continue' },
+      { type: 'custom_message', customType: 'advisor', id: 'advisor',
+        details: { advisor: 'luna', note: 'check the history' } },
+      { type: 'message', id: 'tool', message: { role: 'assistant', content: [
+        { type: 'toolCall', id: 'read-tool', name: 'read', arguments: { path: '/tmp/example' } },
+      ] } },
+      message('dated-last', lastTimestamp),
+      message('trailing'),
+    ].map((entry) => JSON.stringify(entry)).join('\n') + '\n');
+
+    const first = await readNormalizedOmpHistory(historyPath, 'undated-history');
+    const second = await readNormalizedOmpHistory(historyPath, 'undated-history');
+    assert.deepEqual(first.map((row) => row.id), [
+      'leading_t0', 'dated-first_t0', 'undated_t0', 'collab', 'advisor_advisor_0',
+      'read-tool', 'dated-last_t0', 'trailing_t0',
+    ]);
+    assert.ok(first[0].timestamp < firstTimestamp);
+    assert.ok(first.slice(1, 6).every((row) => row.timestamp === firstTimestamp));
+    assert.equal(first[7].timestamp, lastTimestamp);
+    assert.deepEqual(second, first);
+  });
+
+  it('keeps undated advisor sidecar notes between their recorded neighbors', async () => {
+    const { readNormalizedOmpHistory } = await import('@/modules/providers/list/omp/omp-sessions.provider.js');
+    const historyPath = path.join(tempHome, 'undated-advisor.jsonl');
+    await writeFile(historyPath, '');
+    const sidecarDirectory = historyPath.replace(/\.jsonl$/, '');
+    await mkdir(sidecarDirectory);
+    const advise = (id: string, timestamp?: string) => ({
+      type: 'message', id, timestamp,
+      message: { role: 'assistant', content: [
+        { type: 'toolCall', id, name: 'advise', arguments: { note: id } },
+      ] },
+    });
+    await writeFile(path.join(sidecarDirectory, '__advisor.luna.jsonl'), [
+      advise('leading'),
+      advise('dated-first', '2026-07-21T00:00:01.000Z'),
+      advise('undated'),
+      advise('dated-last', '2026-07-21T00:00:03.000Z'),
+    ].map((entry) => JSON.stringify(entry)).join('\n') + '\n');
+
+    const first = await readNormalizedOmpHistory(historyPath, 'undated-advisor');
+    const second = await readNormalizedOmpHistory(historyPath, 'undated-advisor');
+    assert.deepEqual(first.map((row) => row.advisorNote), [
+      'leading', 'dated-first', 'undated', 'dated-last',
+    ]);
+    assert.equal(first[2].timestamp, first[1].timestamp);
+    assert.deepEqual(second, first);
   });
 
   it('preserves a user rename on an APP-created row across re-sync (bug #1)', async () => {

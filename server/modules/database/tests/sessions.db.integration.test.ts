@@ -4,8 +4,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { closeConnection } from '@/modules/database/connection.js';
+import { closeConnection, getConnection } from '@/modules/database/connection.js';
 import { initializeDatabase } from '@/modules/database/init-db.js';
+import { runMigrations } from '@/modules/database/migrations.js';
 import { projectsDb } from '@/modules/database/repositories/projects.db.js';
 import { sessionsDb } from '@/modules/database/repositories/sessions.db.js';
 
@@ -30,6 +31,35 @@ async function withIsolatedDatabase(runTest: () => void | Promise<void>): Promis
     await rm(tempDirectory, { recursive: true, force: true });
   }
 }
+
+test('adding session title ownership preserves the existing transcript scan watermark', async () => {
+  await withIsolatedDatabase(() => {
+    const db = getConnection();
+    db.exec('ALTER TABLE sessions DROP COLUMN name_source');
+    const lastScannedAt = '2026-08-12T13:42:17.000Z';
+    db.prepare('INSERT OR REPLACE INTO scan_state (id, last_scanned_at) VALUES (1, ?)').run(lastScannedAt);
+
+    runMigrations(db);
+
+    assert.deepEqual(db.prepare('SELECT * FROM scan_state').all(), [
+      { id: 1, last_scanned_at: lastScannedAt },
+    ]);
+    // This write requires the migrated column, not just an unchanged watermark.
+    sessionsDb.createSession('migrated-session', 'omp', '/workspace/project-a');
+    db.prepare('UPDATE sessions SET name_source = ? WHERE session_id = ?')
+      .run('user', 'migrated-session');
+
+    runMigrations(db);
+
+    assert.deepEqual(db.prepare('SELECT * FROM scan_state').all(), [
+      { id: 1, last_scanned_at: lastScannedAt },
+    ]);
+    assert.deepEqual(
+      db.prepare('SELECT name_source FROM sessions WHERE session_id = ?').get('migrated-session'),
+      { name_source: 'user' },
+    );
+  });
+});
 
 test('session archive queries hide archived rows from active project views', async () => {
   await withIsolatedDatabase(() => {

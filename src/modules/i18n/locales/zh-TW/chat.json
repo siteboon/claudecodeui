@@ -149,6 +149,7 @@
     "buttonTitle": "思考模式：{{mode}}"
   },
   "providerSelection": {
+    "ompDefaultModel": "使用 omp 預設模型",
     "title": "選擇您的 AI 助手",
     "description": "選擇一個提供者以開始新對話",
     "selectModel": "選擇模型",
@@ -216,6 +217,15 @@
     "defaultCommand": "指令"
   },
   "claudeStatus": {
+    "config": {
+      "thinking": "思考",
+      "mode": "模式",
+      "model": "模型",
+      "planning": "規劃中",
+      "value": "{{label}}: {{value}}",
+      "updated": "{{label}}已更新",
+      "modeChanged": "模式已變更"
+    },
     "actions": {
       "thinking": "思考中",
       "processing": "處理中",
@@ -253,6 +263,7 @@
     "forkFromHere": "從此處分支"
   },
   "composer": {
+    "ompDefaultPermissions": "在 omp 預設模式下，write、eval、ast_edit、memory_edit、manage_skill、browser 和 task 無需提示即可執行。只有 bash、edit、delete 和 move 受 ACP 核准控制。",
     "editing": {
       "title": "正在取代先前的訊息",
       "filesNotReverted": "已修改的檔案不會還原",

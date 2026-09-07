@@ -1,10 +1,11 @@
-/**
- * Unit test for the omp `omp models --json` catalog parse (P6). Pure — no exec.
- */
+/** Catalog parsing and subprocess-cache behavior. */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
-import { parseOmpModels, OMP_CONFIGURED_MODEL_SENTINEL } from '@/modules/providers/list/omp/omp-models.provider.js';
+import { parseOmpModels, OMP_CONFIGURED_MODEL_SENTINEL, OmpProviderModels, readOmpContextWindow } from '@/modules/providers/list/omp/omp-models.provider.js';
 
 describe('parseOmpModels', () => {
   it('maps selector/name, marks thinking models with effort, sentinel first, dedupes', () => {
@@ -37,4 +38,69 @@ describe('parseOmpModels', () => {
   it('falls back to sentinel-only on empty catalog', () => {
     assert.deepEqual(parseOmpModels('{"models":[]}').OPTIONS.map((o) => o.value), [OMP_CONFIGURED_MODEL_SENTINEL]);
   });
+});
+
+it('shares catalog loads, expires successes and holds failures before retrying', async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'omp-catalog-cache-'));
+  const script = path.join(root, 'omp.cjs');
+  const binary = process.platform === 'win32' ? path.join(root, 'omp.cmd') : script;
+  const response = path.join(root, 'response.json');
+  const calls = path.join(root, 'calls');
+  const previousPath = process.env.OMP_PATH;
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  try {
+    await fs.writeFile(script, `#!/usr/bin/env node
+const fs = require('node:fs');
+fs.appendFileSync(${JSON.stringify(calls)}, 'call\\n');
+process.stdout.write(fs.readFileSync(${JSON.stringify(response)}, 'utf8'));
+`, { mode: 0o755 });
+    if (process.platform === 'win32') {
+      await fs.writeFile(binary, `@"${process.execPath}" "${script}" %*\r\n`);
+    }
+    process.env.OMP_PATH = binary;
+    await fs.writeFile(response, JSON.stringify({ models: [
+      { provider: 'test', id: 'first', selector: 'test/first', contextWindow: 123_456 },
+    ] }));
+    const provider = new OmpProviderModels();
+    const [first, concurrent, contextWindow] = await Promise.all([
+      provider.getSupportedModels(),
+      new OmpProviderModels().getSupportedModels(),
+      readOmpContextWindow('test', 'first'),
+    ]);
+    assert.deepEqual(first.OPTIONS.map((option) => option.value), [OMP_CONFIGURED_MODEL_SENTINEL, 'test/first']);
+    assert.deepEqual(concurrent, first);
+    assert.equal(contextWindow, 123_456);
+    assert.equal(await fs.readFile(calls, 'utf8'), 'call\n');
+
+    await fs.writeFile(response, JSON.stringify({ models: [
+      { provider: 'test', id: 'second', selector: 'test/second', contextWindow: 654_321 },
+    ] }));
+    now += 299_999;
+    assert.deepEqual(await provider.getSupportedModels(), first);
+    now += 1;
+    const refreshed = await provider.getSupportedModels();
+    assert.deepEqual(refreshed.OPTIONS.map((option) => option.value), [OMP_CONFIGURED_MODEL_SENTINEL, 'test/second']);
+    assert.equal(await readOmpContextWindow('test', 'second'), 654_321);
+    assert.equal(await fs.readFile(calls, 'utf8'), 'call\ncall\n');
+
+    await fs.writeFile(response, 'malformed json');
+    now += 300_000;
+    assert.deepEqual((await provider.getSupportedModels()).OPTIONS.map((option) => option.value), [OMP_CONFIGURED_MODEL_SENTINEL]);
+    await fs.writeFile(response, JSON.stringify({ models: [
+      { provider: 'test', id: 'recovered', selector: 'test/recovered', contextWindow: 777_777 },
+    ] }));
+    now += 59_999;
+    assert.equal(await readOmpContextWindow('test', 'recovered'), null);
+    assert.deepEqual((await provider.getSupportedModels()).OPTIONS.map((option) => option.value), [OMP_CONFIGURED_MODEL_SENTINEL]);
+    assert.equal(await fs.readFile(calls, 'utf8'), 'call\ncall\ncall\n');
+    now += 1;
+    assert.equal(await readOmpContextWindow('test', 'recovered'), 777_777);
+    assert.deepEqual((await provider.getSupportedModels()).OPTIONS.map((option) => option.value), [OMP_CONFIGURED_MODEL_SENTINEL, 'test/recovered']);
+    assert.equal(await fs.readFile(calls, 'utf8'), 'call\ncall\ncall\ncall\n');
+  } finally {
+    if (previousPath === undefined) delete process.env.OMP_PATH;
+    else process.env.OMP_PATH = previousPath;
+    await fs.rm(root, { recursive: true, force: true });
+  }
 });

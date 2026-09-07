@@ -132,6 +132,7 @@
     }
   },
   "composer": {
+    "ompDefaultPermissions": "En el modo predeterminado de omp, write, eval, ast_edit, memory_edit, manage_skill, browser y task se ejecutan sin pedir permiso. Solo bash, edit, delete y move pasan por los controles de aprobación de ACP.",
     "reasoning": "Razonamiento",
     "model": "Modelo",
     "effortDefault": "Por defecto",
@@ -145,6 +146,7 @@
     }
   },
   "providerSelection": {
+    "ompDefaultModel": "Usar el modelo predeterminado de omp",
     "title": "Elige tu asistente de IA",
     "description": "Selecciona un proveedor para iniciar una conversación nueva",
     "selectModel": "Seleccionar modelo",
@@ -213,6 +215,15 @@
     "defaultCommand": "comando"
   },
   "claudeStatus": {
+    "config": {
+      "thinking": "Razonamiento",
+      "mode": "Modo",
+      "model": "Modelo",
+      "planning": "Planificando",
+      "value": "{{label}}: {{value}}",
+      "updated": "Se actualizó: {{label}}",
+      "modeChanged": "Modo cambiado"
+    },
     "actions": {
       "thinking": "Pensando",
       "processing": "Procesando",
