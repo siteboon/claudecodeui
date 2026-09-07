@@ -1167,6 +1167,20 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       return;
     }
 
+    // The run's terminal record goes FIRST, before anything that can throw on
+    // the way to it. Everything below talks to the outside world:
+    // `isProviderInstalled()` can reject, and `ws.send()` throws on a socket
+    // that closed while the run was failing. Either one used to jump straight
+    // to `finally`, and the run ended with no terminal record at all -- the
+    // exact blind spot this logging was added to remove, reappearing on the
+    // path where it matters most.
+    logRunEnd({
+      reason: 'error',
+      exitCode: 1,
+      durationMs: Date.now() - runStartedAt,
+      error: error?.message || String(error)
+    });
+
     // Check if Claude CLI is installed for a clearer error message
     const installed = await context.isProviderInstalled();
     const errorContent = !installed
@@ -1177,18 +1191,9 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     // reported completion and then failed during its post-turn hold still
     // surfaces the error, but must not emit a second terminal complete.
     ws.send(createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
-    // The logging sits after the guard on purpose: it belongs to the RUN, not
-    // to the client-facing message, and runEndLogged gives it its own
-    // exactly-once guarantee.
     if (!turnCompleteSent) {
       ws.send(createCompleteMessage({ provider: 'claude', sessionId: capturedSessionId || sessionId || null, exitCode: 1 }));
     }
-    logRunEnd({
-      reason: 'error',
-      exitCode: 1,
-      durationMs: Date.now() - runStartedAt,
-      error: error?.message || String(error)
-    });
     notifyRunFailed({
       userId: ws?.userId || null,
       provider: 'claude',
@@ -1197,6 +1202,24 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       error
     });
   } finally {
+    // Last resort, and it runs FIRST here on purpose: every path above either
+    // records its own outcome or throws on the way there. A throw inside the
+    // catch block itself has no other place left to be noticed, and a run that
+    // ends without any terminal record is indistinguishable from one that is
+    // still going. `runEndLogged` keeps this from ever double-counting a run
+    // that already reported properly.
+    //
+    // `logRunStart()` comes first so the net cannot itself produce the shape
+    // 67bae5cd removed -- a `run_end` with no matching `run_start`. Today no
+    // path reaches here unstarted; stating it here keeps that true when the
+    // paths above change.
+    logRunStart();
+    logRunEnd({
+      reason: 'unknown',
+      exitCode: null,
+      durationMs: Date.now() - runStartedAt
+    });
+
     // Always close stdin — otherwise an aborted or failed run leaves the CLI
     // process (and its MCP servers) alive until the server exits.
     if (idleReleaseTimer) {
