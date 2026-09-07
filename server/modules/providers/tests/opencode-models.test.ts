@@ -70,7 +70,7 @@ test('OpenCode exposes only the curated predefined catalog', async () => {
   const providerIds = new Set(
     OPENCODE_PREDEFINED_MODELS.OPTIONS.map((option) => option.value.split('/')[0]),
   );
-  assert.deepEqual([...providerIds].sort(), ['anthropic', 'opencode', 'openai'].sort());
+  assert.deepEqual([...providerIds].sort(), ['anthropic', 'opencode', 'opencode-go', 'openai'].sort());
   assert.equal(
     OPENCODE_PREDEFINED_MODELS.OPTIONS.every((option) => /^[a-z0-9-]+\/.+/.test(option.value)),
     true,
@@ -89,6 +89,34 @@ test('OpenCode exposes only the curated predefined catalog', async () => {
   assert.ok(
     OPENCODE_PREDEFINED_MODELS.OPTIONS.some((option) => option.value === 'openai/gpt-5.6'),
   );
+  // The Go gateway carries its own provider id, so its models must be curated
+  // too - a Go subscriber otherwise authenticates while the picker offers
+  // nothing they can run.
+  const opencodeGoOptions = OPENCODE_PREDEFINED_MODELS.OPTIONS.filter(
+    (option) => option.value.startsWith('opencode-go/'),
+  );
+  assert.equal(opencodeGoOptions.length, 27);
+  assert.ok(opencodeGoOptions.every((option) => option.description === 'OpenCode Go'));
+  const glmFlash = opencodeGoOptions.find(
+    (option) => option.value === 'opencode-go/glm-5.3-flash',
+  );
+  assert.ok(glmFlash);
+  // Effort choices come from `opencode models --verbose` variants; the runtime
+  // turns a selected value into `--variant`, so the values have to match the
+  // CLI's exactly.
+  assert.deepEqual(
+    glmFlash?.effort?.values.map((value) => value.value),
+    ['low', 'high', 'max'],
+  );
+  assert.ok(
+    opencodeGoOptions
+      .filter((option) => !option.effort)
+      .every((option) =>
+        ['glm-5.1', 'kimi-k2.6', 'kimi-k2.7-code', 'mimo-v2.5', 'mimo-v2.5-pro',
+          'minimax-m2.7', 'qwen3.6-plus', 'qwen3.7-max', 'qwen3.7-plus']
+          .includes(option.value.slice('opencode-go/'.length)),
+      ),
+  );
 });
 
 test('OpenCode offers only models the install can route to', async () => {
@@ -104,6 +132,23 @@ test('OpenCode offers only models the install can route to', async () => {
       assert.deepEqual([...providerIds], ['anthropic']);
       assert.ok(catalog.OPTIONS.length > 0);
       assert.equal(catalog.DEFAULT.startsWith('anthropic/'), true);
+      assert.ok(catalog.OPTIONS.some((option) => option.value === catalog.DEFAULT));
+      assert.equal((await adapter.getCurrentActiveModel()).model, catalog.DEFAULT);
+    },
+  );
+
+  // A Go subscriber's auth store holds only `opencode-go`, so the whole catalog
+  // has to resolve to Go models and the default has to move onto one of them
+  // instead of the unreachable Zen default.
+  await withOpenCodeHome(
+    (homeDir) => writeOpenCodeAuth(homeDir, { 'opencode-go': { type: 'api', key: 'test' } }),
+    async (adapter) => {
+      const catalog = await adapter.getSupportedModels();
+      const providerIds = new Set(catalog.OPTIONS.map((option) => option.value.split('/')[0]));
+
+      assert.deepEqual([...providerIds], ['opencode-go']);
+      assert.equal(catalog.OPTIONS.length, 27);
+      assert.equal(catalog.DEFAULT, 'opencode-go/grok-4.6');
       assert.ok(catalog.OPTIONS.some((option) => option.value === catalog.DEFAULT));
       assert.equal((await adapter.getCurrentActiveModel()).model, catalog.DEFAULT);
     },
