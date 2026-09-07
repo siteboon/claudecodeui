@@ -128,10 +128,20 @@ const CLI_STDERR_REDACTIONS = [
   // Opaque bearer/basic credentials: no recognisable prefix to key on, so the
   // scheme word is the only handle. Keep it -- "Bearer <redacted>" tells the
   // reader an auth header was involved, which "<redacted>" alone does not.
-  { pattern: /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/gi, replacement: '$1 <redacted>' },
-  // Credentials in URL userinfo (scheme://user:pass@host). Host and scheme
-  // survive on purpose; they are the diagnostic half of the line.
-  { pattern: /\b([a-z][a-z0-9+.-]*:\/\/)[^/\s:@]+:[^/\s@]+@/gi, replacement: '$1<redacted>@' },
+  // No minimum length: `Basic dTpw` is the base64 of a two-character
+  // `u:p`, four characters long, and is exactly as real a credential as a
+  // longer one. A length floor here does not screen out prose -- "Basic
+  // authentication" already matched at the old floor of 8 -- it only
+  // screens out short secrets, which is the one thing this pattern exists
+  // to catch.
+  { pattern: /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi, replacement: '$1 <redacted>' },
+  // Credentials in URL userinfo (scheme://user[:pass]@host). The password is
+  // optional: a bare token used as the username (scheme://<token>@host, a
+  // common shape for registry/CI credentials) carries the same secret with
+  // no colon in sight, and the old mandatory `:pass` let it straight
+  // through. Host and scheme survive on purpose; they are the diagnostic
+  // half of the line.
+  { pattern: /\b([a-z][a-z0-9+.-]*:\/\/)[^/\s:@]+(?::[^/\s@]+)?@/gi, replacement: '$1<redacted>@' },
   { pattern: /\b(sk|pk|ghp|gho|ghs|github_pat|xox[abprs])[-_][A-Za-z0-9_-]{8,}/g, replacement: '<redacted>' },
   { pattern: /\bsk-ant-[A-Za-z0-9_-]{16,}/g, replacement: '<redacted>' },
   { pattern: /\bAKIA[0-9A-Z]{12,}\b/g, replacement: '<redacted>' },

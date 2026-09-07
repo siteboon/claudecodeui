@@ -81,6 +81,23 @@ test('claude cli stderr: opaque bearer and basic credentials are redacted', () =
   assert.ok(basic.includes('Basic <redacted>'), basic);
 });
 
+// A four-character credential is still a credential. The old `{8,}` floor
+// let exactly this shape -- short opaque Basic auth -- through unredacted.
+test('claude cli stderr: a short opaque credential is still redacted', () => {
+  const out = formatCliStderrLine(TAG, 'auth: Basic dTpw');
+  assert.ok(!out.includes('dTpw'), out);
+  assert.ok(out.includes('Basic <redacted>'), out);
+});
+
+// "Basic" as an ordinary word, not a scheme, must survive. The pattern only
+// fires on `Basic`/`Bearer` followed by whitespace and a token; punctuation
+// glued directly onto the word never satisfies that, so prose is untouched.
+test('claude cli stderr: "Basic" as a plain word in prose is left alone', () => {
+  const line = 'This tier supports Basic, Standard, and Pro plans.';
+  const out = formatCliStderrLine(TAG, line);
+  assert.equal(out, `[claude-cli-stderr] ${TAG} ${line}`, out);
+});
+
 // Credentials in URL userinfo. The host is the diagnostic half of the line and
 // must survive -- knowing WHICH registry rejected the login is the point.
 test('claude cli stderr: URL credentials go, the host stays', () => {
@@ -89,6 +106,17 @@ test('claude cli stderr: URL credentials go, the host stays', () => {
   assert.ok(!out.includes('hunter2primary'), out);
   assert.ok(!out.includes('deploy:'), out);
   assert.ok(out.includes('https://<redacted>@registry.example.com/pkg'), out);
+});
+
+// A token used AS the username, with no password at all -- a common shape
+// for registry/CI credentials (`https://<token>@host`). No colon anywhere in
+// the userinfo, so the old mandatory `:pass` group let this straight
+// through.
+test('claude cli stderr: a username-only URL credential is redacted, the host stays', () => {
+  const out = formatCliStderrLine(TAG, 'fetch https://build-token@registry.example/pkg failed');
+
+  assert.ok(!out.includes('build-token'), out);
+  assert.ok(out.includes('https://<redacted>@registry.example/pkg'), out);
 });
 
 test('claude cli stderr: long lines are capped, short ones are not', () => {
