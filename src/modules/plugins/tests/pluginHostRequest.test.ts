@@ -27,6 +27,14 @@ test('only same-origin, non-traversing /api/ paths are accepted', () => {
   assert.equal(normalizePluginHostPath('/api/projects?skipSync=1'), '/api/projects?skipSync=1');
   assert.equal(normalizePluginHostPath('/api/projects/abc/sessions?limit=1'), '/api/projects/abc/sessions?limit=1');
 
+  // Traversal is a property of the path, not of what the plugin is searching
+  // for: '..' inside a query value is an ordinary search term.
+  assert.equal(normalizePluginHostPath('/api/search?q=version..next'), '/api/search?q=version..next');
+  assert.equal(normalizePluginHostPath('/api/search?q=a/../b'), '/api/search?q=a/../b');
+  // The parser normalises the path it returns, so an escaped segment is resolved
+  // rather than passed through.
+  assert.equal(normalizePluginHostPath('/api/a/./b'), '/api/a/b');
+
   for (const rejected of [
     '/etc/passwd',
     '//evil.example/x',

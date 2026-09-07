@@ -35,29 +35,51 @@ export type PluginApi = {
   readonly surface: 'tab' | 'sidebar';
 };
 
+// Any absolute base works: it exists only so a relative path can be resolved and
+// normalised, and the result is compared back against it to catch a path that
+// escaped same-origin (`//evil.example/api/x` parses as another host).
+const PLUGIN_HOST_BASE = 'https://plugin-host.invalid';
+
 /**
  * Accepts only same-origin, non-traversing paths under `/api/`.
  *
- * Returns the path to use, or `null` if the request must be refused. Encoded
- * traversal is caught by decoding first: `/api/%2e%2e/secret` is `/api/../secret`.
+ * Returns the path to use, or `null` if the request must be refused.
+ *
+ * The checks run on the *pathname* the URL parser produces, not on the raw
+ * string: it resolves `..` and its encoded spellings (`%2e%2e`) for us, and a
+ * query value is none of our business — `?q=version..next` is an ordinary
+ * search, not traversal.
  */
 export function normalizePluginHostPath(rawPath: unknown): string | null {
   if (typeof rawPath !== 'string') return null;
 
   const path = rawPath.trim();
   if (!path.startsWith('/api/')) return null; // rules out schemes, `//host` and relative paths
-  if (path.includes('\\') || /\s/.test(path)) return null;
+  if (path.includes('\\')) return null;
+  // Whitespace is malformed in a path, but a query value may legitimately hold
+  // anything the plugin can encode, so only the part before `?` is checked.
+  if (/\s/.test(path.split('?')[0])) return null;
 
-  let decoded = path;
+  let url: URL;
   try {
-    decoded = decodeURIComponent(path);
+    url = new URL(path, PLUGIN_HOST_BASE);
+  } catch {
+    return null; // malformed URL or percent-encoding
+  }
+
+  if (url.origin !== PLUGIN_HOST_BASE) return null;
+
+  let decodedPathname = url.pathname;
+  try {
+    decodedPathname = decodeURIComponent(url.pathname);
   } catch {
     return null; // malformed percent-encoding
   }
 
-  if (decoded.includes('..') || decoded.includes('\\') || !decoded.startsWith('/api/')) return null;
+  if (decodedPathname.includes('..') || decodedPathname.includes('\\')) return null;
+  if (!decodedPathname.startsWith('/api/')) return null;
 
-  return path;
+  return `${url.pathname}${url.search}`;
 }
 
 /**
