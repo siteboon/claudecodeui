@@ -712,7 +712,8 @@
     "close": "Close",
     "statusReadySession": "ready",
     "statusStoppedSession": "stopped",
-    "statusUnavailableSession": "unavailable"
+    "statusUnavailableSession": "unavailable",
+    "installFailed": "Failed to install browser runtime"
   },
   "browserUseSettings": {
     "sectionTitle": "Browser",

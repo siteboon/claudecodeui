@@ -77,14 +77,40 @@ const query = (params: Record<string, QueryValue>): string => {
  * payload, abort-aware reads in the git panel); this is the shared form for
  * callers that want a failed request to throw.
  */
+export class ApiRequestError extends Error {
+  readonly code?: string;
+  readonly details?: unknown;
+  readonly status: number;
+
+  constructor(message: string, options: { code?: string; details?: unknown; status: number }) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.code = options.code;
+    this.details = options.details;
+    this.status = options.status;
+  }
+}
+
+/**
+ * Reads a `{ success, error, details }` envelope response, throwing an
+ * ApiRequestError carrying the server's machine-readable error code when one
+ * is present. Accepts both legacy string envelopes (`error: 'message'`) and
+ * the structured AppError envelope (`error: { code, message, details }`).
+ */
 export async function readApiJson<T>(response: Response): Promise<T> {
   const data = await response.json();
   if (!response.ok || data.success === false) {
-    throw new Error(data.error || data.details || `Request failed (${response.status})`);
+    const raw = data.error ?? data.details;
+    const payload = raw && typeof raw === 'object' ? raw : {};
+    const message = (typeof raw === 'string' ? raw : payload?.message) || data.details || `Request failed (${response.status})`;
+    throw new ApiRequestError(message, {
+      code: typeof payload?.code === 'string' ? payload.code : undefined,
+      details: payload?.details,
+      status: response.status,
+    });
   }
   return data as T;
 }
-
 const get = (url: string, options: ApiRequestOptions = {}) => authenticatedFetch(url, options);
 
 const withBody =

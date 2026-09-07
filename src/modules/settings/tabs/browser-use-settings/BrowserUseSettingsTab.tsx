@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Download, Loader2 } from 'lucide-react';
 
 import { Button } from '@/shared/ui';
-import { api, readApiJson } from '@/shared/api';
+import { api, readApiJson, ApiRequestError } from '@/shared/api';
 import SettingsCard from '@/modules/settings/SettingsCard';
 import SettingsRow from '@/modules/settings/SettingsRow';
 import SettingsSection from '@/modules/settings/SettingsSection';
@@ -23,6 +23,20 @@ type BrowserUseStatus = {
 };
 
 /** Rendered by Settings for the "browser" tab, configuring the browser automation integration. */
+const BROWSER_USE_ERROR_KEYS: Record<string, string> = {
+  BROWSER_USE_STATUS_LOAD_FAILED: 'browserUseSettings.loadStatusFailed',
+  BROWSER_USE_SETTINGS_LOAD_FAILED: 'browserUseSettings.loadSettingsFailed',
+  BROWSER_USE_SETTINGS_SAVE_FAILED: 'browserUseSettings.saveFailed',
+  BROWSER_USE_RUNTIME_INSTALL_FAILED: 'browserUseSettings.installFailed',
+};
+
+function localizeApiError(err: unknown, fallbackKey: string, t: (key: string) => string): string {
+  if (err instanceof ApiRequestError && err.code && BROWSER_USE_ERROR_KEYS[err.code]) {
+    return t(BROWSER_USE_ERROR_KEYS[err.code]);
+  }
+  return t(fallbackKey);
+}
+
 export default function BrowserUseSettingsTab() {
   const { t } = useTranslation('settings');
   const [settings, setSettings] = useState<BrowserUseSettings | null>(null);
@@ -51,11 +65,11 @@ export default function BrowserUseSettingsTab() {
     setIsStatusLoading(true);
 
     void loadSettings()
-      .catch(() => setError(t('browserUseSettings.loadSettingsFailed')))
+      .catch((err) => setError(localizeApiError(err, 'browserUseSettings.loadSettingsFailed', t)))
       .finally(() => setIsSettingsLoading(false));
 
     void loadStatus()
-      .catch(() => setError(t('browserUseSettings.loadStatusFailed')))
+      .catch((err) => setError(localizeApiError(err, 'browserUseSettings.loadStatusFailed', t)))
       .finally(() => setIsStatusLoading(false));
   }, [loadSettings, loadStatus, t]);
 
@@ -69,8 +83,8 @@ export default function BrowserUseSettingsTab() {
       window.dispatchEvent(new Event('browserUseSettingsChanged'));
       setIsStatusLoading(true);
       await loadStatus();
-    } catch {
-      setError(t('browserUseSettings.saveFailed'));
+    } catch (err) {
+      setError(localizeApiError(err, 'browserUseSettings.saveFailed', t));
     } finally {
       setIsStatusLoading(false);
       setIsSaving(false);
@@ -85,8 +99,8 @@ export default function BrowserUseSettingsTab() {
       await readApiJson(response);
       setIsStatusLoading(true);
       await loadStatus();
-    } catch {
-      setError(t('browserUseSettings.installFailed'));
+    } catch (err) {
+      setError(localizeApiError(err, 'browserUseSettings.installFailed', t));
     } finally {
       setIsStatusLoading(false);
       setIsInstalling(false);

@@ -17,7 +17,7 @@ import {
 
 import { cn } from '@/shared/utils';
 import { Badge, Button } from '@/shared/ui';
-import { api, readApiJson } from '@/shared/api';
+import { api, readApiJson, ApiRequestError } from '@/shared/api';
 import type { SettingsMainTab } from '@/shared/types';
 
 type BrowserUseStatus = {
@@ -59,6 +59,21 @@ type BrowserUsePanelProps = {
 };
 
 type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
+
+const BROWSER_USE_PANEL_ERROR_KEYS: Record<string, string> = {
+  BROWSER_USE_STATUS_LOAD_FAILED: 'browserUse.loadFailed',
+  BROWSER_USE_SESSIONS_LOAD_FAILED: 'browserUse.loadFailed',
+  BROWSER_USE_SESSION_STOP_FAILED: 'browserUse.actionFailed',
+  BROWSER_USE_SESSION_DELETE_FAILED: 'browserUse.actionFailed',
+  BROWSER_USE_RUNTIME_INSTALL_FAILED: 'browserUse.installFailed',
+};
+
+function localizeApiError(err: unknown, fallbackKey: string, t: TranslateFn): string {
+  if (err instanceof ApiRequestError && err.code && BROWSER_USE_PANEL_ERROR_KEYS[err.code]) {
+    return t(BROWSER_USE_PANEL_ERROR_KEYS[err.code]);
+  }
+  return t(fallbackKey);
+}
 
 
 function formatRelativeTime(value: string | null, t: TranslateFn): string {
@@ -178,7 +193,7 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
       ));
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('browserUse.loadFailed'));
+      setError(localizeApiError(err, 'browserUse.loadFailed', t));
     } finally {
       setIsRefreshing(false);
     }
@@ -196,7 +211,7 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
       await action();
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('browserUse.actionFailed'));
+      setError(localizeApiError(err, 'browserUse.actionFailed', t));
     } finally {
       setIsBusy(false);
     }
