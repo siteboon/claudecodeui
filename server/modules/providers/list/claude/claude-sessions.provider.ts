@@ -79,11 +79,6 @@ type ClaudeHistoryMessagesResult =
 type ClaudeSubagentTranscript = {
   activity: SubagentActivity[];
   model?: string;
-  /**
-   * True when the transcript's last tool call never received a result, which
-   * is the only evidence in the file that the agent stopped mid-flight.
-   */
-  endedMidToolCall: boolean;
 };
 
 /**
@@ -95,7 +90,7 @@ type ClaudeSubagentTranscript = {
  */
 async function readClaudeSubagentTranscript(filePath: string): Promise<ClaudeSubagentTranscript> {
   const activity: SubagentActivity[] = [];
-  const transcript: ClaudeSubagentTranscript = { activity, endedMidToolCall: false };
+  const transcript: ClaudeSubagentTranscript = { activity };
   const toolsById = new Map<string, SubagentActivity>();
 
   try {
@@ -175,9 +170,6 @@ async function readClaudeSubagentTranscript(filePath: string): Promise<ClaudeSub
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`Error parsing agent file ${filePath}:`, message);
   }
-
-  const lastActivity = activity[activity.length - 1];
-  transcript.endedMidToolCall = lastActivity?.kind === 'tool' && !lastActivity.toolResult;
 
   return transcript;
 }
@@ -486,7 +478,6 @@ async function getSessionMessages(
     const subagentsById = new Map<string, {
       activity: SubagentActivity[];
       info: SubagentInfo;
-      endedMidToolCall: boolean;
     }>();
     for (const agentId of agentIds) {
       const located = await findClaudeSubagentTranscript(projectDir, providerSessionId, agentId);
@@ -500,7 +491,6 @@ async function getSessionMessages(
       ]);
 
       subagentsById.set(agentId, {
-        endedMidToolCall: transcript.endedMidToolCall,
         activity: transcript.activity
           .slice(0, MAX_TRANSMITTED_SUBAGENT_ACTIVITIES)
           .map(truncateSubagentActivity),
@@ -534,12 +524,21 @@ async function getSessionMessages(
       const toolUseId = readAgentToolUseId(message);
       const notification = toolUseId ? notificationsByToolUseId.get(toolUseId) : undefined;
       // An async agent's launch row never tells you it finished — only the
-      // later notification does. When that notification is missing (a live run,
-      // or one compacted out of the transcript), the agent's own transcript is
-      // the evidence: a timeline that does not stop mid-tool-call is done.
-      const isAwaitingAsyncAgent = message.toolUseResult?.isAsync === true
-        && !notification
-        && (!subagent || subagent.endedMidToolCall);
+      // later notification does, so a missing notification means the outcome is
+      // still unknown.
+      //
+      // The agent's own transcript cannot stand in for that. A background agent
+      // routinely ends its turn cleanly while its work is still outstanding: it
+      // replies "I've started that, waiting for it to finish" and stops, or it
+      // has live background children of its own, which is precisely when the
+      // harness holds the notification back. Treating a cleanly-ended timeline
+      // as proof of completion therefore marked every background agent
+      // `completed` the moment it launched, collapsing its card and dropping
+      // its spinner while it was still working.
+      //
+      // The predicate is gated on `isAsync`, so a synchronous agent — whose
+      // answer arrives inline on its own tool result — is untouched.
+      const isAwaitingAsyncAgent = message.toolUseResult?.isAsync === true && !notification;
 
       if (subagent) {
         if (subagent.activity.length > 0) {

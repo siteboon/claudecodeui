@@ -120,7 +120,16 @@ export const SubagentPanel = memo(({
   const resultText = useMemo(() => readResultText(toolResult?.content), [toolResult?.content]);
 
   const entries = activity ?? [];
-  const status = subagent?.status ?? (toolResult ? 'completed' : 'running');
+  // A background agent's tool result is only its launch acknowledgement — the
+  // real answer arrives later as a task notification — so its arrival says
+  // nothing about whether the agent finished. Treating it as an outcome marked
+  // every background agent `completed` a second after it launched, which is
+  // where the spinner went. Until the server reports one on `subagent`, an
+  // async launch is still outstanding.
+  const isAsyncAgentLaunch = Boolean(
+    (toolResult?.toolUseResult as { isAsync?: boolean } | undefined)?.isAsync,
+  );
+  const status = subagent?.status ?? (toolResult && !isAsyncAgentLaunch ? 'completed' : 'running');
   const toolCount = entries.filter((entry) => entry.kind === 'tool').length;
   // Claude names its agent presets (Explore, Plan); Codex has none, so the
   // neutral label carries and the assigned nickname shows alongside it.

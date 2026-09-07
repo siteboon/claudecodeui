@@ -360,8 +360,8 @@ async function dropTaskNotification(parentPath: string): Promise<void> {
   );
 }
 
-test('Claude history reads a missing notification off the agent\'s own transcript', { concurrency: false }, async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-finished-agent-'));
+test('Claude history keeps a background agent running until its outcome is reported', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-live-agent-'));
 
   try {
     const parentPath = await writeClaudeSubagentSession(tempRoot);
@@ -378,10 +378,13 @@ test('Claude history reads a missing notification off the agent\'s own transcrip
         (message) => message.kind === 'tool_use' && message.toolId === AGENT_TOOL_USE_ID,
       );
 
-      // The notification can be compacted out of a long session. The agent's
-      // transcript ends on a resolved tool call, so it finished — reporting it
-      // as still running would leave a spinner on the card forever.
-      assert.equal(agentRow?.subagent?.status, 'completed');
+      // This agent's transcript ends on a resolved tool call, which used to be
+      // read as proof it had finished. A background agent routinely stops there
+      // while its work is outstanding — it says it is waiting on something and
+      // ends its turn — so the transcript proves nothing and only the
+      // notification does. Reporting `completed` here dropped the spinner and
+      // collapsed the card while the agent was still working.
+      assert.equal(agentRow?.subagent?.status, 'running');
       assert.equal(agentRow?.toolResult?.content, '', 'the launch acknowledgement must never show as a result');
     });
   } finally {
@@ -389,15 +392,20 @@ test('Claude history reads a missing notification off the agent\'s own transcrip
   }
 });
 
-test('Claude history keeps an agent running when its transcript stops mid tool call', { concurrency: false }, async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-running-agent-'));
+test('Claude history still settles a synchronous agent that stops mid tool call', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-sync-agent-'));
 
   try {
     const parentPath = await writeClaudeSubagentSession(tempRoot);
     await dropTaskNotification(parentPath);
 
-    // Drop the child tool result: the agent is mid-call, which is the only
-    // in-file evidence that it is still working.
+    // A synchronous agent hands its answer back on its own tool result and
+    // never sends a notification, so "no notification" must not read as
+    // "still running" for one — not even with a dangling tool call, the
+    // strongest possible hint that it stopped mid-flight.
+    const parentRaw = await readFile(parentPath, 'utf8');
+    await writeFile(parentPath, parentRaw.replace('"isAsync":true', '"isAsync":false'), 'utf8');
+
     const agentPath = path.join(tempRoot, SESSION_ID, 'subagents', `agent-${AGENT_ID}.jsonl`);
     const agentRaw = await readFile(agentPath, 'utf8');
     await writeFile(
@@ -417,7 +425,7 @@ test('Claude history keeps an agent running when its transcript stops mid tool c
         (message) => message.kind === 'tool_use' && message.toolId === AGENT_TOOL_USE_ID,
       );
 
-      assert.equal(agentRow?.subagent?.status, 'running');
+      assert.equal(agentRow?.subagent?.status, 'completed');
     });
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
