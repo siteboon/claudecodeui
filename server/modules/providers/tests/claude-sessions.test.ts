@@ -248,6 +248,108 @@ test('Claude history folds an agent task notification into the call that spawned
   }
 });
 
+/**
+ * Rewrites the notification turn into the shape the harness writes when it
+ * consumes the report inline, while the parent turn is still running: a
+ * top-level `queue-operation` record with the payload in `content`, no
+ * `message`, no `uuid`, and no user-role turn anywhere in the file.
+ */
+async function useQueueOperationNotification(
+  parentPath: string,
+  operation: 'remove' | 'enqueue',
+): Promise<void> {
+  const lines = (await readFile(parentPath, 'utf8')).split('\n').filter(Boolean);
+  const rewritten = lines.map((line) => {
+    const row = JSON.parse(line) as Record<string, any>;
+    if (!line.includes('task-notification')) {
+      return line;
+    }
+
+    return JSON.stringify({
+      type: 'queue-operation',
+      operation,
+      timestamp: row.timestamp,
+      sessionId: row.sessionId,
+      content: row.message.content[0].text,
+    });
+  });
+  await writeFile(parentPath, `${rewritten.join('\n')}\n`, 'utf8');
+}
+
+for (const operation of ['remove', 'enqueue'] as const) {
+  test(`Claude history folds a ${operation} queue-operation notification onto the agent card`, { concurrency: false }, async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-queued-notification-'));
+
+    try {
+      const parentPath = await writeClaudeSubagentSession(tempRoot);
+      await useQueueOperationNotification(parentPath, operation);
+
+      await withIsolatedDatabase(async () => {
+        const now = new Date().toISOString();
+        sessionsDb.createSession(SESSION_ID, 'claude', tempRoot, 'Subagent session', now, now, parentPath);
+
+        const history = await new ClaudeSessionsProvider().fetchHistory(SESSION_ID, {
+          providerSessionId: SESSION_ID,
+        });
+        const agentRow = history.messages.find(
+          (message) => message.kind === 'tool_use' && message.toolId === AGENT_TOOL_USE_ID,
+        );
+
+        // The report is in the file, just in the shape the collector used to
+        // skip — so the card has to read exactly as it does for a user-role
+        // notification: the agent's answer on the card, and a settled status.
+        assert.equal(agentRow?.toolResult?.content, 'The repo has two packages.');
+        assert.equal(agentRow?.subagent?.status, 'completed');
+
+        const strayNotification = history.messages.find(
+          (message) => typeof message.content === 'string' && message.content.includes('<task-notification>'),
+        );
+        assert.equal(strayNotification, undefined, 'a folded notification must never also render on its own');
+      });
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+}
+
+test('Claude history keeps rows that have no uuid when a queue-operation notification is folded', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-uuidless-row-'));
+
+  try {
+    const parentPath = await writeClaudeSubagentSession(tempRoot);
+    await useQueueOperationNotification(parentPath, 'remove');
+    // A queue-operation record carries no `uuid`, so folding it must not put an
+    // empty string in the drop set — that would match every other uuid-less row
+    // and delete it from the transcript.
+    await writeFile(
+      parentPath,
+      `${(await readFile(parentPath, 'utf8')).trim()}\n${JSON.stringify({
+        type: 'assistant',
+        sessionId: SESSION_ID,
+        timestamp: '2026-08-21T10:06:00.000Z',
+        message: { role: 'assistant', content: [{ type: 'text', text: 'A row with no uuid.' }] },
+      })}\n`,
+      'utf8',
+    );
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(SESSION_ID, 'claude', tempRoot, 'Subagent session', now, now, parentPath);
+
+      const history = await new ClaudeSessionsProvider().fetchHistory(SESSION_ID, {
+        providerSessionId: SESSION_ID,
+      });
+
+      assert.ok(
+        history.messages.some((message) => message.content === 'A row with no uuid.'),
+        'a row without a uuid must survive the fold',
+      );
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 /** Strips the `<task-notification>` turn so the agent has no reported outcome. */
 async function dropTaskNotification(parentPath: string): Promise<void> {
   const raw = await readFile(parentPath, 'utf8');

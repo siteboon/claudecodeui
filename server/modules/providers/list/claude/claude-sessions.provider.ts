@@ -232,7 +232,11 @@ async function findClaudeSubagentTranscript(
 }
 
 type ClaudeTaskNotification = {
-  /** `uuid` of the transcript row the notification came from, so it can be dropped. */
+  /**
+   * `uuid` of the transcript row the notification came from, so it can be
+   * dropped once folded. Empty for a queue-operation record: those carry no
+   * `uuid` and never render on their own, so there is nothing to drop.
+   */
   sourceUuid: string;
   toolUseId: string;
   status: string;
@@ -246,8 +250,46 @@ function readTaggedValue(content: string, tagName: string): string {
 }
 
 /**
- * Collects every `<task-notification>` turn keyed by the tool call that
- * spawned the agent it reports on.
+ * Reads every `<task-notification>` payload one transcript row carries.
+ *
+ * Claude writes the same completion report in two shapes, and which one you get
+ * depends only on when the agent happened to finish:
+ *
+ * - as an ordinary user-role turn, when the queued notification is delivered
+ *   between turns (the harness also logs a contentless `dequeue` for it);
+ * - as a top-level `queue-operation` record whose `content` holds the payload,
+ *   when the harness consumes it inline while the parent turn is still running
+ *   (`remove`), or when the session ends before it is ever delivered
+ *   (`enqueue`).
+ *
+ * The operation names the queue's bookkeeping, not whether the agent finished,
+ * so every queue-operation payload counts. Reading only the user-role shape
+ * loses the majority of them: across the 919 transcripts this was measured on,
+ * 31 of 56 background agent launches report *only* through a queue-operation
+ * record, and their result and status were invisible to every consumer.
+ */
+function readTaskNotificationTexts(message: AnyRecord): string[] {
+  if (message.type === 'queue-operation') {
+    return typeof message.content === 'string' ? [message.content] : [];
+  }
+
+  if (message.message?.role !== 'user') {
+    return [];
+  }
+
+  const content = message.message.content;
+  if (typeof content === 'string') {
+    return [content];
+  }
+
+  return Array.isArray(content)
+    ? content.filter((part: AnyRecord) => part?.type === 'text').map((part: AnyRecord) => String(part.text ?? ''))
+    : [];
+}
+
+/**
+ * Collects every `<task-notification>` keyed by the tool call that spawned the
+ * agent it reports on.
  *
  * Only notifications that name a tool-use id are collected: without one there
  * is no card to fold them into, and they must keep rendering on their own.
@@ -256,18 +298,7 @@ function collectTaskNotifications(messages: AnyRecord[]): Map<string, ClaudeTask
   const notifications = new Map<string, ClaudeTaskNotification>();
 
   for (const message of messages) {
-    if (message.message?.role !== 'user') {
-      continue;
-    }
-
-    const content = message.message.content;
-    const texts: string[] = typeof content === 'string'
-      ? [content]
-      : Array.isArray(content)
-        ? content.filter((part: AnyRecord) => part?.type === 'text').map((part: AnyRecord) => String(part.text ?? ''))
-        : [];
-
-    for (const text of texts) {
+    for (const text of readTaskNotificationTexts(message)) {
       if (!text.trimStart().startsWith('<task-notification>')) {
         continue;
       }
@@ -530,7 +561,11 @@ async function getSessionMessages(
 
       if (notification) {
         replaceAgentToolResultContent(message, notification.result || notification.summary);
-        foldedNotificationUuids.add(notification.sourceUuid);
+        if (notification.sourceUuid) {
+          // A queue-operation record has no `uuid`; adding its empty string
+          // here would match — and drop — every other row that lacks one.
+          foldedNotificationUuids.add(notification.sourceUuid);
+        }
       } else if (message.toolUseResult?.isAsync === true) {
         // Without a notification there is no answer to show, and the launch
         // acknowledgement is internal bookkeeping the user must never read.
