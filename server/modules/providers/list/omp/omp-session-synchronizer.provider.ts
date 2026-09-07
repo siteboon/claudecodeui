@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import readline from 'node:readline';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { OMP_ADVISOR_SIDECAR_PATTERN } from '@/modules/providers/list/omp/omp-session-files.js';
 import {
   buildCloudCliSessionName,
   findFilesRecursivelyCreatedAfter,
@@ -27,6 +28,24 @@ type ParsedSession = {
 };
 
 const UNTITLED = 'Untitled omp Session';
+
+/**
+ * Maps `<ts>_<id>/__advisor.<name>.jsonl` back to the `<ts>_<id>.jsonl` that
+ * owns it, deriving the owner the same way the history reader derives the
+ * sidecar directory from a main transcript path: by the `.jsonl` suffix alone.
+ * Nothing here may assume a shape for the native id — the header parser accepts
+ * whatever omp wrote, and an id-shaped guard here would silently deny those
+ * sessions the broadcast. An existing owning transcript is the whole condition,
+ * so unrelated `__` files stay ignored.
+ */
+function resolveOmpSidecarParent(filePath: string): string | null {
+  if (!OMP_ADVISOR_SIDECAR_PATTERN.test(path.basename(filePath))) {
+    return null;
+  }
+
+  const parentTranscript = `${path.dirname(filePath)}.jsonl`;
+  return fs.existsSync(parentTranscript) ? parentTranscript : null;
+}
 
 // omp asks its title model for this wrapper. A failed extraction can persist
 // the opening tag by itself, so remove wrappers from auto-generated titles.
@@ -94,8 +113,24 @@ export class OmpSessionSynchronizer implements IProviderSessionSynchronizer {
     const files = await findFilesRecursivelyCreatedAfter(this.sessionsRoot, '.jsonl', since ?? null);
 
     let processed = 0;
+    // Owners already synchronized by this scan. A sidecar is not a session; it
+    // stands in for the transcript that owns it, and this scan usually reaches
+    // that transcript directly as well. Resolving without deduplicating would
+    // re-synchronize an owner once per sidecar it owns — the whole per-file
+    // scan, multiplied, on the one path that walks every file under the root.
+    // Skipping sidecars outright would be cheaper still, but an incremental
+    // scan only sees files born since its cursor, so a new sidecar is the one
+    // thing that can bring an older, not-yet-indexed owner back into view.
+    const synchronizedOwners = new Set<string>();
     for (const filePath of files) {
-      if (await this.synchronizeFile(filePath)) {
+      const owner = path.basename(filePath).startsWith('__')
+        ? resolveOmpSidecarParent(filePath)
+        : filePath;
+      if (!owner || synchronizedOwners.has(owner)) {
+        continue;
+      }
+      synchronizedOwners.add(owner);
+      if (await this.synchronizeFile(owner)) {
         processed += 1;
       }
     }
@@ -103,11 +138,20 @@ export class OmpSessionSynchronizer implements IProviderSessionSynchronizer {
   }
 
   async synchronizeFile(filePath: string): Promise<string | null> {
-    // Skip OMP sub-agent sidecars such as `__advisor.jsonl`. Indexing one
-    // would create a misleading standalone session. The parent history reader
-    // folds its substantive advisor notes into the owning transcript instead.
-    if (!filePath.endsWith('.jsonl') || path.basename(filePath).startsWith('__')) {
+    if (!filePath.endsWith('.jsonl')) {
       return null;
+    }
+
+    if (path.basename(filePath).startsWith('__')) {
+      // A sidecar is never a session of its own, but `readNormalizedOmpHistory`
+      // folds its advisor notes into the owning transcript, so its content is
+      // part of that session's history. Index the owner instead. The watcher
+      // drops any event whose sync reported nothing indexed, so returning null
+      // here left a turn that wrote only advisor output with no
+      // `session_upserted`, and an open chat never learned that the history it
+      // was showing had changed.
+      const parentTranscript = resolveOmpSidecarParent(filePath);
+      return parentTranscript ? this.synchronizeFile(parentTranscript) : null;
     }
 
     const parsed = await this.parseSessionHeader(filePath);

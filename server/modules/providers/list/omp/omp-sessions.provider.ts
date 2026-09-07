@@ -4,7 +4,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 
 import { sessionsDb } from '@/modules/database/index.js';
-import { locateOmpSessionFile } from '@/modules/providers/list/omp/omp-session-files.js';
+import { locateOmpSessionFile, OMP_ADVISOR_SIDECAR_PATTERN } from '@/modules/providers/list/omp/omp-session-files.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
 import { createNormalizedMessage, generateMessageId, readObjectRecord, readOptionalString, sliceTailPage } from '@/shared/utils.js';
@@ -723,7 +723,7 @@ async function readOmpAdvisorSidecars(
   let sidecarNames: string[];
   try {
     sidecarNames = (await fs.promises.readdir(sidecarDirectory))
-      .filter((name) => /^__advisor(\..+)?\.jsonl$/.test(name))
+      .filter((name) => OMP_ADVISOR_SIDECAR_PATTERN.test(name))
       .sort();
   } catch {
     return [];

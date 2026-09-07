@@ -713,4 +713,117 @@ describe('omp synchronizer + fetchHistory', () => {
 
     closeConnection();
   });
+
+  /**
+   * Advisor sidecars are not sessions, but `readNormalizedOmpHistory` folds
+   * their notes into the owning transcript, so a turn that writes only advisor
+   * output still changes what an open chat should show. The watcher broadcasts
+   * `session_upserted` only for a file whose sync reported a row.
+   */
+  it('reports the owning session when only an advisor sidecar changes', async () => {
+    // Imported here, not statically: the synchronizer captures `os.homedir()`
+    // and the DB module reads `DATABASE_PATH` at load, both set in `before`.
+    const { closeConnection, initializeDatabase } = await import('@/modules/database/index.js');
+    const { OmpSessionSynchronizer } = await import('@/modules/providers/list/omp/omp-session-synchronizer.provider.js');
+    closeConnection();
+    await initializeDatabase();
+
+    const sessionId = '01a06b63-6293-722b-a0c3-21462bd30b0c';
+    const slugDir = path.join(tempHome, '.omp', 'agent', 'sessions', '-work-omp-proj');
+    const stem = `2026-07-23T05-00-00-000Z_${sessionId}`;
+    const mainPath = path.join(slugDir, `${stem}.jsonl`);
+    await writeFile(
+      mainPath,
+      `${JSON.stringify({ type: 'session', id: sessionId, cwd: CWD, timestamp: '2026-07-23T05:00:00.000Z' })}\n`,
+    );
+
+    const synchronizer = new OmpSessionSynchronizer();
+    const ownerRowId = await synchronizer.synchronizeFile(mainPath);
+    assert.ok(ownerRowId);
+
+    await mkdir(path.join(slugDir, stem), { recursive: true });
+    const sidecarPath = path.join(slugDir, stem, '__advisor.muse.jsonl');
+    await writeFile(
+      sidecarPath,
+      `${JSON.stringify({ type: 'message', message: { role: 'assistant', content: [] } })}\n`,
+    );
+
+    assert.equal(
+      await synchronizer.synchronizeFile(sidecarPath),
+      ownerRowId,
+      'a sidecar-only write must announce the session whose history includes it',
+    );
+
+    const unrelated = path.join(slugDir, '__scratch.jsonl');
+    await writeFile(unrelated, '{}\n');
+    assert.equal(
+      await synchronizer.synchronizeFile(unrelated),
+      null,
+      'a non-sidecar underscore file is still not a session',
+    );
+
+    // The header parser accepts whatever id omp wrote, and the history reader
+    // folds sidecars for any transcript stem, so owner resolution must not
+    // depend on the id looking like a UUID.
+    const plainId = 'plainsession07';
+    const plainStem = `2026-07-23T06-00-00-000Z_${plainId}`;
+    const plainMain = path.join(slugDir, `${plainStem}.jsonl`);
+    await writeFile(
+      plainMain,
+      `${JSON.stringify({ type: 'session', id: plainId, cwd: CWD, timestamp: '2026-07-23T06:00:00.000Z' })}\n`,
+    );
+    const plainOwnerRowId = await synchronizer.synchronizeFile(plainMain);
+    assert.ok(plainOwnerRowId);
+
+    await mkdir(path.join(slugDir, plainStem), { recursive: true });
+    const plainSidecar = path.join(slugDir, plainStem, '__advisor.luna.jsonl');
+    await writeFile(
+      plainSidecar,
+      `${JSON.stringify({ type: 'message', message: { role: 'assistant', content: [] } })}\n`,
+    );
+    assert.equal(
+      await synchronizer.synchronizeFile(plainSidecar),
+      plainOwnerRowId,
+      'owner resolution must not require a UUID-shaped native id',
+    );
+  });
+
+  /**
+   * The bulk scan is the one path that walks every transcript under the root,
+   * so it must not also follow each sidecar back to an owner it already
+   * visited — that multiplies the whole per-file scan by the sidecar count.
+   */
+  it('does not re-synchronize an owner once per sidecar during a bulk scan', async () => {
+    // Imported here, not statically: the synchronizer captures `os.homedir()`
+    // and the DB module reads `DATABASE_PATH` at load, both set in `before`.
+    const { closeConnection, initializeDatabase } = await import('@/modules/database/index.js');
+    const { OmpSessionSynchronizer } = await import('@/modules/providers/list/omp/omp-session-synchronizer.provider.js');
+    closeConnection();
+    await initializeDatabase();
+
+    const sessionId = '01a06b64-0000-7000-8000-000000000001';
+    const slugDir = path.join(tempHome, '.omp', 'agent', 'sessions', '-work-omp-bulk');
+    const stem = `2026-07-24T05-00-00-000Z_${sessionId}`;
+    await mkdir(path.join(slugDir, stem), { recursive: true });
+    await writeFile(
+      path.join(slugDir, `${stem}.jsonl`),
+      `${JSON.stringify({ type: 'session', id: sessionId, cwd: CWD, timestamp: '2026-07-24T05:00:00.000Z' })}\n`,
+    );
+
+    // Two scans over the same set of transcripts, differing only by sidecars.
+    // Comparing them needs no clock and no assumption about what the other
+    // cases left under the shared root.
+    const synchronizer = new OmpSessionSynchronizer();
+    const withoutSidecars = await synchronizer.synchronize();
+
+    const advisorNote = `${JSON.stringify({ type: 'message', message: { role: 'assistant', content: [] } })}\n`;
+    await writeFile(path.join(slugDir, stem, '__advisor.muse.jsonl'), advisorNote);
+    await writeFile(path.join(slugDir, stem, '__advisor.luna.jsonl'), advisorNote);
+
+    assert.equal(
+      await synchronizer.synchronize(),
+      withoutSidecars,
+      'adding two sidecars to an indexed session must not index anything more',
+    );
+  });
 });

@@ -10,6 +10,17 @@ import path from 'node:path';
 const sessionFileByIdCache = new Map<string, string>();
 
 /**
+ * `__advisor.<name>.jsonl` sidecars written beside a session's own transcript
+ * directory.
+ *
+ * Two things key off this: history folds their notes into the owning
+ * transcript, and the synchronizer announces the owner when one of them
+ * changes. They have to agree on what a sidecar is, so the pattern lives here
+ * with the other cross-file omp path knowledge.
+ */
+export const OMP_ADVISOR_SIDECAR_PATTERN = /^__advisor(\..+)?\.jsonl$/;
+
+/**
  * Locates a session's jsonl transcript by its exact native omp session id.
  *
  * Files are named `<ISO-ts>_<id>.jsonl`, so the id is the last `_`-delimited
