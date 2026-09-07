@@ -171,16 +171,90 @@ test('claude cli stderr: the trailing fragment is flushed, not lost', () => {
   assert.equal(seen.length, 2);
 });
 
+// An oversized, newline-less fragment used to be handed to `emit()` as if it
+// were one complete line, then thrown away. That is wrong on both ends: a
+// fragment that never got its newline is not a real line (see the PEM tests
+// below for what that costs), and resetting to '' meant an operator had no
+// way to learn stderr bytes were dropped at all. The fix discards down to a
+// short tail instead of to nothing, and announces the discard.
 test('claude cli stderr: a newline-less stream does not buffer without bound', () => {
   const seen: string[] = [];
-  const chunker = createCliStderrChunker((line) => seen.push(line), 32);
+  const overflows: number[] = [];
+  const chunker = createCliStderrChunker(
+    (line) => seen.push(line),
+    32,
+    (discardedChars) => overflows.push(discardedChars),
+  );
 
   chunker.push('x'.repeat(20));
   assert.equal(seen.length, 0, 'below the cap it keeps buffering');
 
-  chunker.push('y'.repeat(20));
-  assert.equal(seen.length, 1, 'above the cap it gives up and emits');
-  assert.equal(seen[0].length, 40);
+  chunker.push('y'.repeat(200));
+  assert.equal(seen.length, 0, 'an oversized fragment is discarded, not emitted as a line');
+  assert.deepEqual(overflows, [92], '220 buffered chars minus the 128-char tail that is kept');
+});
+
+// The counter-direction, and the reason the discard is a tail-keep rather
+// than a reset to '': dropping to '' also drops a PEM header that started
+// forming right at the cut, so the formatter never turns `insidePem` on for
+// the body lines that follow -- they leak in plain text. Keeping a short
+// tail across the discard means the header can still complete.
+test('claude cli stderr: a PEM header split across the overflow boundary is still detected', () => {
+  const seen: string[] = [];
+  const chunker = createCliStderrChunker((line) => seen.push(line), 50);
+  const format = createCliStderrFormatter(() => 'tag');
+
+  const header = '-----BEGIN PRIVATE KEY-----';
+  const headerFirstHalf = header.slice(0, 15);
+  const headerSecondHalf = header.slice(15);
+
+  // Push enough filler that the header's first half arrives right at the
+  // overflow boundary, with no newline yet -- the exact shape the finding
+  // describes.
+  chunker.push('x'.repeat(200) + headerFirstHalf);
+  assert.equal(seen.length, 0, 'still buffering, nothing to reassemble into a line yet');
+
+  // The rest of the header, plus a key-material body line and the END
+  // marker, arrives in the next chunk.
+  chunker.push(`${headerSecondHalf}\nMIIEsecretKeyMaterial\n-----END PRIVATE KEY-----\nordinary after\n`);
+
+  const formatted = seen.map((line) => format(line));
+
+  assert.ok(
+    formatted[0].includes('<redacted private key>'),
+    `the reassembled header line must be recognised as PEM: ${formatted[0]}`,
+  );
+  assert.ok(
+    formatted[1].includes('<redacted private key>'),
+    `the body line must be redacted while the block is open: ${formatted[1]}`,
+  );
+  assert.ok(!formatted.join('\n').includes('MIIEsecretKeyMaterial'), 'the key material itself must not appear');
+  assert.equal(formatted[3], '[claude-cli-stderr] tag ordinary after', 'the block must close, not stay stuck open');
+});
+
+// The other half of the same fix: an ordinary oversized line -- no PEM
+// anywhere near it -- must not start looking like key material just because
+// some of it survives the discard, and the run must recover normally once a
+// newline finally arrives.
+test('claude cli stderr: an ordinary oversized line discards cleanly, without false PEM detection', () => {
+  const seen: string[] = [];
+  const overflows: number[] = [];
+  const chunker = createCliStderrChunker(
+    (line) => seen.push(line),
+    50,
+    (discardedChars) => overflows.push(discardedChars),
+  );
+  const format = createCliStderrFormatter(() => 'tag');
+
+  chunker.push('z'.repeat(300));
+  assert.equal(overflows.length, 1);
+  assert.ok(overflows[0] > 0);
+
+  chunker.push('\nordinary diagnostics\n');
+
+  const formatted = seen.map((line) => format(line));
+  assert.ok(!formatted.some((line) => line.includes('<redacted private key>')), 'nothing here is PEM');
+  assert.equal(formatted[formatted.length - 1], '[claude-cli-stderr] tag ordinary diagnostics');
 });
 
 // --- PEM blocks ------------------------------------------------------------

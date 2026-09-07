@@ -107,6 +107,13 @@ const CLI_STDERR_WINDOW_MS = 60 * 1000;
 // `data` events, so a logical line can arrive in pieces; without a bound, a
 // stream that never emits a newline would grow this buffer without limit.
 const CLI_STDERR_MAX_PENDING_CHARS = 8 * 1024;
+// How much of an oversized, newline-less fragment survives an overflow
+// discard. A PEM header's longest possible match (see PEM_BEGIN below) is
+// well under 100 chars; keeping this much of the tail means a header that
+// started forming right at the discard boundary can still complete once the
+// rest of it arrives, instead of vanishing along with the rest of the
+// discarded fragment.
+const CLI_STDERR_OVERFLOW_TAIL_CHARS = 128;
 
 // Redaction runs BEFORE truncation. Truncating first can cut a secret in half
 // and leave the tail in place: the pattern no longer matches, so the filter
@@ -208,22 +215,41 @@ function createCliStderrFormatter(sessionTag) {
  * the kind of state that is easy to get subtly wrong and impossible to see
  * afterwards in a log that looks plausible.
  *
+ * The overflow branch used to hand the whole oversized fragment to `emit()`
+ * as if it were a complete line, then reset to `''`. If a PEM header started
+ * forming right at the cut, that fragment is an incomplete header the
+ * formatter's PEM_BEGIN regex correctly does not match -- and resetting to
+ * `''` throws the incomplete header away for good, so the formatter's
+ * `insidePem` state never turns on and the real key-body lines that follow
+ * pass through unredacted. Keeping a short, bounded tail instead of
+ * discarding everything means that header can still complete.
+ *
  * @param {(line: string) => void} emit - Receives each complete line.
  * @param {number} [maxPending] - Cap on a held-back fragment.
+ * @param {(discardedChars: number) => void} [onOverflow] - Told how many
+ *   characters of an oversized, newline-less fragment were dropped. Silence
+ *   here would mean an operator has no way to learn that some stderr bytes
+ *   never reached the log at all.
  * @returns {{push: (chunk: string) => void, flush: () => void}}
  */
-function createCliStderrChunker(emit, maxPending = CLI_STDERR_MAX_PENDING_CHARS) {
+function createCliStderrChunker(
+  emit,
+  maxPending = CLI_STDERR_MAX_PENDING_CHARS,
+  onOverflow = () => {},
+) {
   let pending = '';
   return {
     push(chunk) {
       pending += String(chunk ?? '');
       // A stream that never emits a newline must not grow this buffer forever.
-      // Flushing early can in principle split a secret, but at this size that
-      // needs a line two orders of magnitude longer than any credential
-      // format — unbounded memory is the worse failure.
+      // Discarding down to a short tail -- instead of to '' -- bounds memory
+      // the same way while still letting a PEM header that straddles the cut
+      // complete once the rest of it arrives (see the tail-size comment on
+      // CLI_STDERR_OVERFLOW_TAIL_CHARS).
       if (pending.length > maxPending && !pending.includes('\n')) {
-        emit(pending);
-        pending = '';
+        const kept = Math.min(pending.length, CLI_STDERR_OVERFLOW_TAIL_CHARS);
+        onOverflow(pending.length - kept);
+        pending = pending.slice(-kept);
         return;
       }
       const parts = pending.split('\n');
@@ -1147,7 +1173,13 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       ),
     });
 
-    stderrChunker = createCliStderrChunker(stderrEmitter.push);
+    stderrChunker = createCliStderrChunker(
+      stderrEmitter.push,
+      undefined,
+      (discardedChars) => console.error(
+        `[claude-cli-stderr] ${sessionTag()} [oversized line: discarded ${discardedChars} chars without a newline]`,
+      ),
+    );
     sdkOptions.stderr = (data) => stderrChunker.push(data);
 
     sdkOptions.hooks = {
