@@ -1,0 +1,132 @@
+{
+  "projects": {
+    "title": "プロジェクト",
+    "newProject": "新規プロジェクト",
+    "deleteProject": "プロジェクトを除去",
+    "renameProject": "プロジェクト名を変更",
+    "noProjects": "プロジェクトが見つかりません",
+    "loadingProjects": "プロジェクトを読み込んでいます...",
+    "searchPlaceholder": "プロジェクトを検索...",
+    "projectNamePlaceholder": "プロジェクト名",
+    "starred": "お気に入り",
+    "all": "すべて",
+    "untitledSession": "無題のセッション",
+    "newSession": "新しいセッション",
+    "codexSession": "Codexセッション",
+    "fetchingProjects": "Claudeのプロジェクトとセッションを取得しています",
+    "projects": "プロジェクト",
+    "noMatchingProjects": "一致するプロジェクトがありません",
+    "tryDifferentSearch": "検索語を変えてお試しください",
+    "runClaudeCli": "プロジェクトディレクトリでClaude CLIを実行して始めましょう"
+  },
+  "app": {
+    "title": "CloudCLI",
+    "subtitle": "AIコーディングアシスタント"
+  },
+  "sessions": {
+    "title": "セッション",
+    "newSession": "新しいセッション",
+    "deleteSession": "セッションを削除",
+    "renameSession": "セッション名を変更",
+    "noSessions": "セッションはまだありません",
+    "loadingSessions": "セッションを読み込んでいます...",
+    "unnamed": "名称未設定",
+    "loading": "読み込み中...",
+    "showMore": "さらにセッションを表示"
+  },
+  "tooltips": {
+    "viewEnvironments": "環境を表示",
+    "hideSidebar": "サイドバーを隠す",
+    "createProject": "新しいプロジェクトを作成",
+    "refresh": "プロジェクトとセッションを更新 (Ctrl+R)",
+    "renameProject": "プロジェクト名を変更 (F2)",
+    "deleteProject": "サイドバーからプロジェクトを除去 (Delete)",
+    "addToFavorites": "お気に入りに追加",
+    "removeFromFavorites": "お気に入りから削除",
+    "editSessionName": "セッション名を手動で編集",
+    "deleteSession": "このセッションを完全に削除",
+    "activeSessionIndicator": "最近アクティブなセッション（過去10分以内）",
+    "save": "保存",
+    "cancel": "キャンセル",
+    "openCommandPalette": "コマンドパレットを開く",
+    "attentionRequiredIndicator": "セッションが対応を必要としています"
+  },
+  "navigation": {
+    "chat": "チャット",
+    "files": "ファイル",
+    "git": "Git",
+    "terminal": "ターミナル",
+    "tasks": "タスク"
+  },
+  "actions": {
+    "refresh": "更新",
+    "settings": "設定",
+    "collapseAll": "すべて折りたたむ",
+    "expandAll": "すべて展開",
+    "cancel": "キャンセル",
+    "save": "保存",
+    "delete": "削除",
+    "rename": "名前の変更",
+    "joinCommunity": "コミュニティに参加",
+    "reportIssue": "問題を報告",
+    "starOnGithub": "GitHubでスター"
+  },
+  "branding": {
+    "openSource": "オープンソース"
+  },
+  "status": {
+    "active": "アクティブ",
+    "inactive": "非アクティブ",
+    "thinking": "思考中...",
+    "error": "エラー",
+    "aborted": "中断",
+    "unknown": "不明"
+  },
+  "time": {
+    "justNow": "たった今",
+    "oneMinuteAgo": "1分前",
+    "minutesAgo": "{{count}}分前",
+    "oneHourAgo": "1時間前",
+    "hoursAgo": "{{count}}時間前",
+    "oneDayAgo": "1日前",
+    "daysAgo": "{{count}}日前"
+  },
+  "messages": {
+    "deleteConfirm": "本当に削除しますか？",
+    "renameSuccess": "名前を変更しました",
+    "deleteSuccess": "削除しました",
+    "errorOccurred": "エラーが発生しました",
+    "deleteSessionConfirm": "このセッションを削除してもよろしいですか？この操作は取り消せません。",
+    "deleteProjectConfirm": "サイドバーからこのプロジェクトを除去しますか？プロジェクトファイル、メモリ、セッションデータは削除されません。",
+    "enterProjectPath": "プロジェクトのパスを入力してください",
+    "deleteSessionFailed": "セッションの削除に失敗しました。もう一度お試しください。",
+    "deleteSessionError": "セッションの削除でエラーが発生しました。もう一度お試しください。",
+    "renameSessionFailed": "セッション名の変更に失敗しました。もう一度お試しください。",
+    "renameSessionError": "セッション名の変更でエラーが発生しました。もう一度お試しください。",
+    "deleteProjectFailed": "プロジェクトの除去に失敗しました。もう一度お試しください。",
+    "deleteProjectError": "プロジェクトの除去でエラーが発生しました。もう一度お試しください。",
+    "createProjectFailed": "プロジェクトの作成に失敗しました。もう一度お試しください。",
+    "createProjectError": "プロジェクトの作成でエラーが発生しました。もう一度お試しください。",
+    "updateProjectError": "プロジェクトの更新でエラーが発生しました。もう一度お試しください。",
+    "refreshError": "更新に失敗しました。もう一度お試しください。",
+    "restoreProjectFailed": "プロジェクトの復元に失敗しました。もう一度お試しください。",
+    "restoreProjectError": "プロジェクトの復元でエラーが発生しました。もう一度お試しください。",
+    "restoreSessionFailed": "セッションの復元に失敗しました。もう一度お試しください。",
+    "restoreSessionError": "セッションの復元でエラーが発生しました。もう一度お試しください。",
+    "forkSessionError": "このセッションを分岐できませんでした。もう一度お試しください。"
+  },
+  "version": {
+    "updateAvailable": "アップデートあり",
+    "restartRequired": "更新が適用されていません。サーバーを再起動してください"
+  },
+  "deleteConfirmation": {
+    "deleteProject": "プロジェクトを除去",
+    "deleteSession": "セッションを削除",
+    "confirmDelete": "このプロジェクトをどうしますか：",
+    "sessionCount": "このプロジェクトには{{count}}件の会話があります。",
+    "removeFromSidebar": "サイドバーからのみ除去",
+    "deleteAllData": "すべてのデータを完全に削除",
+    "allConversationsDeleted": "プロジェクトはサイドバーから除去されます。ファイル、メモリ、セッションデータは保持されます。",
+    "cannotUndo": "後からプロジェクトを再追加できます。"
+  }
+}

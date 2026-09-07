@@ -1,0 +1,4 @@
+interface:
+  display_name: "Frontend Module Standards"
+  short_description: "Enforce repository frontend architecture rules"
+  default_prompt: "Use $frontend-module-standards when creating or modifying frontend code in this repository."

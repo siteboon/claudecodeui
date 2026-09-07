@@ -27,6 +27,7 @@ import type {
   ProviderCurrentActiveModel,
   ProviderModelsDefinition,
   ProviderSkillSource,
+  SubagentActivity,
   WorkspacePathValidationResult,
 } from '@/shared/types.js';
 
@@ -389,6 +390,45 @@ export function createCompleteMessage(opts: {
     success: exitCode === 0 && !aborted,
     aborted,
   });
+}
+
+// ---------------------------
+//----------------- SUBAGENT TIMELINE UTILITIES ------------
+/**
+ * Longest tool output kept on one subagent activity.
+ *
+ * A subagent's timeline is nested inside a collapsed panel, so it is a preview
+ * of what the agent did, never the primary place its output is read. Sending
+ * every child command's full output made the history payload of an
+ * agent-heavy session grow by megabytes for content almost nobody expands.
+ */
+const MAX_SUBAGENT_ACTIVITY_CONTENT = 4000;
+
+function truncateForPreview(value: string | undefined): string | undefined {
+  if (typeof value !== 'string' || value.length <= MAX_SUBAGENT_ACTIVITY_CONTENT) {
+    return value;
+  }
+  const omitted = value.length - MAX_SUBAGENT_ACTIVITY_CONTENT;
+  return `${value.slice(0, MAX_SUBAGENT_ACTIVITY_CONTENT)}\n… ${omitted} more characters`;
+}
+
+/**
+ * Trims one subagent activity down to what its nested preview can show.
+ *
+ * Used by both provider session adapters so a Claude agent's timeline and a
+ * Codex agent's timeline cost the same to transport.
+ */
+export function truncateSubagentActivity(activity: SubagentActivity): SubagentActivity {
+  const truncatedContent = truncateForPreview(activity.content);
+  const truncatedResult = activity.toolResult
+    ? { ...activity.toolResult, content: truncateForPreview(activity.toolResult.content) }
+    : activity.toolResult;
+
+  if (truncatedContent === activity.content && truncatedResult === activity.toolResult) {
+    return activity;
+  }
+
+  return { ...activity, content: truncatedContent, toolResult: truncatedResult };
 }
 
 // ---------------------------

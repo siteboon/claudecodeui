@@ -43,10 +43,22 @@ async function unlinkJsonlIfExists(filePath: string): Promise<void> {
  */
 export async function deleteSessionJsonlFilesForProjectPath(projectPath: string): Promise<void> {
   const sessions = sessionsDb.getSessionsByProjectPathIncludingArchived(projectPath);
-  const paths = uniqueJsonlPathsFromSessions(sessions);
+  // Including the transcripts a session has left behind: editing a message on
+  // a provider that rewinds by branching moves the session onto a copy, and
+  // the row stops pointing at the file the replaced turns are still in.
+  const paths = uniqueJsonlPathsFromSessions([
+    ...sessions,
+    ...sessions.flatMap((session) => sessionsDb
+      .getSupersededTranscriptPaths(session.session_id)
+      .map((jsonl_path) => ({ jsonl_path }))),
+  ]);
 
   for (const filePath of paths) {
     await unlinkJsonlIfExists(filePath);
+  }
+
+  for (const session of sessions) {
+    sessionsDb.clearSupersededProviderSessions(session.session_id);
   }
 }
 

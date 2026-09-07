@@ -40,7 +40,7 @@ export function applyLegacyStarredProjectIds(projectIds: string[]): ApplyLegacyS
       continue;
     }
 
-    if (Boolean(project.isStarred)) {
+    if (project.isStarred) {
       continue;
     }
 
@@ -71,7 +71,7 @@ export function toggleProjectStar(projectId: string): ToggleProjectStarResult {
     });
   }
 
-  const nextStarredState = !Boolean(project.isStarred);
+  const nextStarredState = !project.isStarred;
   projectsDb.updateProjectIsStarredById(normalizedProjectId, nextStarredState);
 
   return { isStarred: nextStarredState };

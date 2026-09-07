@@ -1,0 +1,316 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "ignorePatterns": ["dist/**", "dist-server/**", "node_modules/**", "public/**"],
+
+  // Rust-native plugins. oxlint's "import" plugin is the port of eslint-plugin-import-x,
+  // and "react" also carries the react-hooks rules.
+  "plugins": ["typescript", "oxc", "react", "import"],
+
+  // ESLint plugins that oxlint has not ported, loaded through oxlint's JS plugin bridge.
+  // The alias names avoid oxlint's reserved plugin names ("import", "import-x", "react", ...).
+  "jsPlugins": [
+    { "name": "importx", "specifier": "eslint-plugin-import-x" },
+    { "name": "tailwind", "specifier": "eslint-plugin-tailwindcss" },
+    { "name": "boundaries", "specifier": "eslint-plugin-boundaries" }
+  ],
+
+  // oxlint's closest analogue to js.configs.recommended + tseslint.configs.recommended.
+  "categories": { "correctness": "error" },
+
+  "settings": {
+    "react": { "version": "18.2.0" },
+
+    // Read by the bridged eslint-plugin-import-x rules. The key must stay "import-x/..."
+    // (the plugin hardcodes its own name), even though the plugin is aliased to "importx".
+    "import-x/resolver": {
+      "typescript": {
+        "project": ["tsconfig.json", "server/tsconfig.json"],
+        "alwaysTryTypes": true,
+        "noWarnOnMultipleProjects": true
+      },
+      "node": { "extensions": [".mjs", ".cjs", ".js", ".json", ".node", ".ts", ".tsx"] }
+    },
+    // eslint-plugin-boundaries resolves through eslint-module-utils, which reads the
+    // classic "import/resolver" key instead.
+    "import/resolver": {
+      "typescript": {
+        "project": ["tsconfig.json", "server/tsconfig.json"],
+        "alwaysTryTypes": true,
+        "noWarnOnMultipleProjects": true
+      },
+      "node": { "extensions": [".mjs", ".cjs", ".js", ".json", ".node", ".ts", ".tsx"] }
+    },
+    "boundaries/include": [
+      "server/**/*.js",
+      "server/**/*.ts",
+      "src/modules/**/*.ts",
+      "src/modules/**/*.tsx",
+      "src/shared/*.ts",
+      "src/shared/hooks/**/*.ts",
+      "src/shared/hooks/**/*.tsx",
+      "src/shared/context/**/*.ts",
+      "src/shared/context/**/*.tsx",
+      "src/shared/ui/**/*.ts",
+      "src/shared/ui/**/*.tsx"
+    ],
+    "boundaries/elements": [
+      {
+        "type": "backend-shared-type-contract",
+        "pattern": ["server/shared/types.{js,ts}", "server/shared/interfaces.{js,ts}"],
+        "mode": "file"
+      },
+      {
+        "type": "backend-shared-utils",
+        "pattern": [
+          "server/shared/utils.{js,ts}",
+          "server/shared/frontmatter.ts",
+          "server/shared/claude-cli-path.ts",
+          "server/shared/image-attachments.ts",
+          "server/shared/message-unification.ts"
+        ],
+        "mode": "file"
+      },
+      {
+        "type": "backend-module",
+        "pattern": "server/modules/*",
+        "mode": "folder",
+        "capture": ["moduleName"]
+      },
+      {
+        "type": "frontend-shared-type-contract",
+        "pattern": "src/shared/types.ts",
+        "mode": "file"
+      },
+      {
+        "type": "frontend-shared-file",
+        "pattern": [
+          "src/shared/utils.ts",
+          "src/shared/constants.ts",
+          "src/shared/api.ts",
+          "src/shared/uiPreferences.ts",
+          "src/shared/selectedProvider.ts",
+          "src/shared/authToken.ts",
+          "src/shared/voiceConfig.ts",
+          "src/shared/codeEditorSettings.ts",
+          "src/shared/userSettings.ts",
+          "src/shared/chatDrafts.ts",
+          "src/shared/syntaxHighlighter.ts"
+        ],
+        "mode": "file"
+      },
+      {
+        "type": "frontend-shared-folder",
+        "pattern": ["src/shared/hooks", "src/shared/context", "src/shared/ui"],
+        "mode": "folder"
+      },
+      {
+        "type": "frontend-module",
+        "pattern": "src/modules/*",
+        "mode": "folder",
+        "capture": ["moduleName"]
+      }
+    ]
+  },
+
+  "rules": {
+    // --- Disabled base rules (mirrors eslint.config.js) ---
+    "no-case-declarations": "off",
+    "no-control-regex": "off",
+    "no-useless-escape": "off",
+    "typescript/no-explicit-any": "off",
+    "typescript/no-require-imports": "off",
+
+    // React Compiler rules. oxlint ships these under "correctness"; ESLint never ran
+    // them here, so they are new signal (~129 findings at time of adoption). Kept at
+    // "warn" rather than inheriting "error" so `npm run lint` and the pre-commit hook
+    // stay green while the backlog is burned down. Promote to "error" per rule as each
+    // one reaches zero.
+    "react/set-state-in-effect": "warn",
+    "react/refs": "warn",
+    "react/static-components": "warn",
+    "react/preserve-manual-memoization": "warn",
+    "react/immutability": "warn",
+    "react/purity": "warn"
+  },
+
+  "overrides": [
+    {
+      "files": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.js", "src/**/*.jsx"],
+      "rules": {
+        // --- Unused imports/vars ---
+        "no-unused-vars": [
+          "warn",
+          {
+            "vars": "all",
+            "varsIgnorePattern": "^_",
+            "args": "after-used",
+            "argsIgnorePattern": "^_",
+            "caughtErrors": "none"
+          }
+        ],
+
+        // --- React ---
+        "react/jsx-key": "warn",
+        "react/jsx-no-duplicate-props": "error",
+        "react/jsx-no-undef": "error",
+        "react/no-children-prop": "warn",
+        "react/no-danger-with-children": "error",
+        "react/no-direct-mutation-state": "error",
+        "react/no-unknown-property": "warn",
+        "react/react-in-jsx-scope": "off",
+
+        // --- React Hooks ---
+        "react/rules-of-hooks": "error",
+        "react/exhaustive-deps": "warn",
+
+        // --- React Refresh (Vite HMR) ---
+        "react/only-export-components": ["warn", { "allowConstantExport": true }],
+
+        // --- Import ordering & hygiene ---
+        "import/no-duplicates": "warn",
+        "importx/order": [
+          "warn",
+          {
+            "groups": ["builtin", "external", "internal", "parent", "sibling", "index"],
+            "newlines-between": "always"
+          }
+        ],
+
+        // --- Tailwind CSS ---
+        "tailwind/classnames-order": "warn",
+        "tailwind/no-contradicting-classname": "warn",
+        "tailwind/no-unnecessary-arbitrary-value": "warn"
+      }
+    },
+    {
+      // Strict architecture rules start applying as legacy frontend code moves into
+      // src/modules and the canonical src/shared locations.
+      "files": [
+        "src/modules/**/*.ts",
+        "src/modules/**/*.tsx",
+        "src/shared/*.ts",
+        "src/shared/hooks/**/*.ts",
+        "src/shared/hooks/**/*.tsx",
+        "src/shared/context/**/*.ts",
+        "src/shared/context/**/*.tsx",
+        "src/shared/ui/**/*.ts",
+        "src/shared/ui/**/*.tsx",
+        "src/shared/tests/**/*.ts",
+        "src/shared/tests/**/*.tsx"
+      ],
+      "rules": {
+        // --- TypeScript type hygiene (frontend modules) ---
+        "typescript/consistent-type-definitions": ["error", "type"],
+        "typescript/consistent-type-imports": [
+          "error",
+          { "prefer": "type-imports", "fixStyle": "separate-type-imports" }
+        ],
+        "typescript/consistent-type-exports": [
+          "error",
+          { "fixMixedExportsWithInlineTypeSpecifier": true }
+        ],
+
+        // --- Source-root imports ---
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.{1,2}/",
+                "message": "Use the @/ source-root alias for frontend application imports."
+              }
+            ]
+          }
+        ],
+        "importx/no-unresolved": "error",
+        "importx/no-useless-path-segments": "warn",
+        "import/no-absolute-path": "error",
+
+        // --- Architecture boundaries (frontend modules) ---
+        "boundaries/dependencies": [
+          "error",
+          {
+            "default": "allow",
+            "checkInternals": false,
+            "rules": [
+              {
+                "from": { "type": "frontend-module" },
+                "to": { "type": "frontend-shared-type-contract" },
+                "disallow": { "dependency": { "kind": ["value", "typeof"] } },
+                "message": "Frontend modules may only use `import type` when importing from src/shared/types.ts."
+              },
+              {
+                "to": { "type": "frontend-module" },
+                "disallow": { "to": { "internalPath": "**" } },
+                "message": "Cross-module imports must go through that module's barrel file (src/modules/<module>/index.ts)."
+              },
+              {
+                "to": { "type": "frontend-module" },
+                "allow": { "to": { "internalPath": ["index", "index.{ts,tsx}"] } }
+              }
+            ]
+          }
+        ],
+        "boundaries/no-unknown": "error"
+      }
+    },
+    {
+      "files": ["server/**/*.js", "server/**/*.ts"],
+      "excludeFiles": ["server/**/*.d.ts"],
+      "rules": {
+        "no-unused-vars": "off",
+
+        // eslint:recommended rules that the old ESLint server block never extended, so
+        // these surface pre-existing code as new findings. Kept at "warn" instead of the
+        // inherited "error" so the swap does not turn `npm run lint` red; each one is a
+        // real issue worth fixing, then promoting back to "error".
+        "no-async-promise-executor": "warn",
+        "no-extra-boolean-cast": "warn",
+        "no-unsafe-optional-chaining": "warn",
+
+        // --- Import hygiene (backend) ---
+        "import/no-duplicates": "warn",
+        "importx/order": [
+          "warn",
+          {
+            "groups": ["builtin", "external", "internal", "parent", "sibling", "index"],
+            "newlines-between": "always"
+          }
+        ],
+        "importx/no-unresolved": "error",
+        "importx/no-useless-path-segments": "warn",
+        "import/no-absolute-path": "error",
+
+        // --- General safety/style (backend) ---
+        "eqeqeq": ["warn", "always", { "null": "ignore" }],
+
+        // --- Architecture boundaries (backend modules) ---
+        "boundaries/dependencies": [
+          "error",
+          {
+            "default": "allow",
+            "checkInternals": false,
+            "rules": [
+              {
+                "from": { "type": "backend-module" },
+                "to": { "type": "backend-shared-type-contract" },
+                "disallow": { "dependency": { "kind": ["value", "typeof"] } },
+                "message": "Backend modules may only use `import type` when importing from server/shared/types.ts or server/shared/interfaces.ts."
+              },
+              {
+                "to": { "type": "backend-module" },
+                "disallow": { "to": { "internalPath": "**" } },
+                "message": "Cross-module imports must go through that module's barrel file (server/modules/<module>/index.ts or index.js)."
+              },
+              {
+                "to": { "type": "backend-module" },
+                "allow": { "to": { "internalPath": ["index", "index.{js,mjs,cjs,ts,tsx}"] } }
+              }
+            ]
+          }
+        ],
+        "boundaries/no-unknown": "error"
+      }
+    }
+  ]
+}

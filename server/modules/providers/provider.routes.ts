@@ -297,6 +297,28 @@ const parseProvider = (value: unknown): LLMProvider => {
   });
 };
 
+/** Both fields are optional: an empty body forks the whole conversation. */
+const parseSessionForkPayload = (payload: unknown): { upToAnchorId?: string; title?: string } => {
+  if (payload === undefined || payload === null) {
+    return {};
+  }
+  if (typeof payload !== 'object') {
+    throw new AppError('Request body must be an object.', {
+      code: 'INVALID_REQUEST_BODY',
+      statusCode: 400,
+    });
+  }
+
+  const body = payload as Record<string, unknown>;
+  const upToAnchorId = typeof body.upToAnchorId === 'string' ? body.upToAnchorId.trim() : '';
+  const title = typeof body.title === 'string' ? body.title.trim() : '';
+
+  return {
+    ...(upToAnchorId ? { upToAnchorId } : {}),
+    ...(title ? { title } : {}),
+  };
+};
+
 const parseSessionRenameSummary = (payload: unknown): string => {
   if (!payload || typeof payload !== 'object') {
     throw new AppError('Request body must be an object.', {
@@ -789,6 +811,15 @@ router.post(
     const sessionId = parseSessionId(req.params.sessionId);
     const result = sessionsService.restoreSessionById(sessionId);
     res.json(createApiSuccessResponse(result));
+  }),
+);
+
+router.post(
+  '/sessions/:sessionId/fork',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const result = await sessionsService.forkSessionById(sessionId, parseSessionForkPayload(req.body));
+    res.status(201).json(createApiSuccessResponse(result));
   }),
 );
 
