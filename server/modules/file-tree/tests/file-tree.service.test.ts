@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { createReadStream } from 'node:fs';
+import fsPromises from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import test from 'node:test';
@@ -8,9 +11,10 @@ import type {
   FileTreeDirectoryEntry,
   FileTreeFileSystem,
   FileTreeServiceDependencies,
+  FileTreeServices,
   FileTreeStats,
 } from '@/shared/types.js';
-import { AppError } from '@/shared/utils.js';
+import { AppError, resolveReadOnlyRootPath, validateWorkspacePath } from '@/shared/utils.js';
 
 function createDirectoryEntry(name: string, directory: boolean): FileTreeDirectoryEntry {
   return {
@@ -80,6 +84,7 @@ function createDependencies(
     workspace: {
       rootPath: projectRoot,
       validatePath: async (candidatePath) => ({ valid: true, resolvedPath: candidatePath }),
+      resolveReadOnlyRootPath: async () => null,
     },
     resolveMimeType: () => 'text/plain',
     fileSystemConcurrency: 4,
@@ -388,4 +393,107 @@ test('createEntry performs filesystem mutation only through the injected adapter
 
   assert.equal(result.path, targetPath);
   assert.deepEqual(writtenFiles, [{ filePath: targetPath, content: '' }]);
+});
+
+/**
+ * Builds the service against the real filesystem and the real workspace policy,
+ * which is the only way to exercise the read-only roots: the whole guarantee
+ * rests on `realpath` resolving symlinks before the comparison.
+ */
+function createRealFileSystemService(projectRoot: string): FileTreeServices {
+  return createFileTreeService({
+    fileSystem: {
+      access: (candidatePath) => fsPromises.access(candidatePath),
+      stat: (candidatePath) => fsPromises.stat(candidatePath),
+      lstat: (candidatePath) => fsPromises.lstat(candidatePath),
+      openDirectory: async function* (directoryPath) {
+        yield* await fsPromises.opendir(directoryPath);
+      },
+      realpath: (candidatePath) => fsPromises.realpath(candidatePath),
+      readTextFile: (filePath) => fsPromises.readFile(filePath, 'utf8'),
+      writeTextFile: (filePath, content) => fsPromises.writeFile(filePath, content, 'utf8'),
+      async makeDirectory(directoryPath, recursive) {
+        await fsPromises.mkdir(directoryPath, { recursive });
+      },
+      rename: (oldPath, newPath) => fsPromises.rename(oldPath, newPath),
+      async removeDirectory(directoryPath) {
+        await fsPromises.rm(directoryPath, { recursive: true, force: true });
+      },
+      unlink: (filePath) => fsPromises.unlink(filePath),
+      copyFile: (source, destination) => fsPromises.copyFile(source, destination),
+      createReadStream: (filePath) => createReadStream(filePath),
+    },
+    projects: { getProjectPathById: async () => projectRoot },
+    workspace: {
+      rootPath: projectRoot,
+      validatePath: (candidatePath) => validateWorkspacePath(candidatePath),
+      resolveReadOnlyRootPath: (candidatePath) => resolveReadOnlyRootPath(candidatePath),
+    },
+    resolveMimeType: () => 'text/plain',
+    fileSystemConcurrency: 4,
+    logger: { error: () => undefined },
+  });
+}
+
+test('the temp directory can be browsed and read, but never written to', async () => {
+  const temporaryDirectory = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'file-tree-tmp-'));
+  const projectRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'file-tree-project-'));
+
+  try {
+    // The shape a task notification quotes: an agent's output file written to
+    // the system temp directory, outside every project.
+    await fsPromises.mkdir(path.join(temporaryDirectory, 'tasks'));
+    const outputPath = path.join(temporaryDirectory, 'tasks', 'agent.output');
+    await fsPromises.writeFile(outputPath, 'what the agent found', 'utf8');
+
+    const service = createRealFileSystemService(projectRoot);
+
+    const browsed = await service.browseWorkspace(temporaryDirectory);
+    assert.deepEqual(browsed.suggestions.map((entry) => entry.name), ['tasks']);
+
+    const opened = await service.readTextFile('project-1', outputPath);
+    assert.equal(opened.content, 'what the agent found');
+
+    const streamed = await service.openFile('project-1', outputPath);
+    streamed.stream.destroy();
+
+    // Read-only means read-only: nothing may be created or changed there.
+    await assert.rejects(
+      service.saveTextFile('project-1', outputPath, 'overwritten'),
+      (error: unknown) => (error as AppError).code === 'PATH_OUTSIDE_PROJECT',
+    );
+    await assert.rejects(
+      service.createWorkspaceFolder(path.join(temporaryDirectory, 'new-folder')),
+      (error: unknown) => (error as AppError).code === 'INVALID_WORKSPACE_PATH',
+    );
+    await assert.rejects(
+      service.deleteEntry({ projectId: 'project-1', targetPath: outputPath }),
+      (error: unknown) => (error as AppError).code === 'PATH_OUTSIDE_PROJECT',
+    );
+    assert.equal(await fsPromises.readFile(outputPath, 'utf8'), 'what the agent found');
+  } finally {
+    await fsPromises.rm(temporaryDirectory, { recursive: true, force: true });
+    await fsPromises.rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test('reading through a symlink out of the temp directory is still refused', async () => {
+  const temporaryDirectory = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'file-tree-tmp-'));
+  const projectRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'file-tree-project-'));
+  const outsideDirectory = await fsPromises.mkdtemp(path.join(os.homedir(), 'file-tree-outside-'));
+
+  try {
+    await fsPromises.writeFile(path.join(outsideDirectory, 'secret.txt'), 'secret', 'utf8');
+    await fsPromises.symlink(outsideDirectory, path.join(temporaryDirectory, 'escape'));
+
+    const service = createRealFileSystemService(projectRoot);
+    await assert.rejects(
+      service.readTextFile('project-1', path.join(temporaryDirectory, 'escape', 'secret.txt')),
+      (error: unknown) => (error as AppError).code === 'PATH_OUTSIDE_PROJECT',
+    );
+  } finally {
+    await fsPromises.rm(temporaryDirectory, { recursive: true, force: true });
+    await fsPromises.rm(projectRoot, { recursive: true, force: true });
+    await fsPromises.rm(outsideDirectory, { recursive: true, force: true });
+  }
 });

@@ -154,6 +154,49 @@ export const FORBIDDEN_WORKSPACE_PATHS = [
   'C:\\$Recycle.Bin',
 ];
 
+/**
+ * Roots that may be read from but never written to or registered as a project.
+ *
+ * Claude writes a background agent's output file and a background command's log
+ * under the system temp directory, and a transcript quotes those paths
+ * verbatim, so the file browser and the file viewer have to be able to follow
+ * them. `/tmp` is listed literally as well as via `os.tmpdir()` because the two
+ * differ on macOS, where the temp directory is under `/var/folders`.
+ *
+ * These stay out of `validateWorkspacePath`, which is the write policy, so
+ * nothing can be created here and none of it can become a workspace root.
+ */
+const READ_ONLY_ROOTS = [...new Set(['/tmp', os.tmpdir()])];
+
+/**
+ * Resolves a path that is readable because it lives under a read-only root,
+ * or `null` when it does not.
+ *
+ * Symlinks are resolved before the comparison, so a link planted in the temp
+ * directory cannot be used to read somewhere else through it.
+ */
+export async function resolveReadOnlyRootPath(targetPath: string): Promise<string | null> {
+  const normalizedTarget = normalizeProjectPath(targetPath);
+  if (!normalizedTarget || !path.isAbsolute(normalizedTarget)) {
+    return null;
+  }
+
+  try {
+    const resolvedPath = normalizeProjectPath(await realpath(path.resolve(normalizedTarget)));
+
+    for (const root of READ_ONLY_ROOTS) {
+      const resolvedRoot = normalizeProjectPath(await realpath(root));
+      if (resolvedPath === resolvedRoot || resolvedPath.startsWith(`${resolvedRoot}${path.sep}`)) {
+        return resolvedPath;
+      }
+    }
+  } catch {
+    // A path that cannot be resolved is not readable through here either.
+  }
+
+  return null;
+}
+
 function stripWindowsLongPathPrefix(inputPath: string): string {
   if (inputPath.startsWith('\\\\?\\UNC\\')) {
     return `\\\\${inputPath.slice('\\\\?\\UNC\\'.length)}`;
