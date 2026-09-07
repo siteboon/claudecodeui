@@ -253,6 +253,7 @@
     },
     "pending": "{{when}} için zamanlandı",
     "failed": "Gönderilmedi — {{reason}}",
-    "cancel": "Zamanlanmış mesajı iptal et"
+    "cancel": "Zamanlanmış mesajı iptal et",
+    "dismiss": "Hata bildirimini kapat"
   }
 }

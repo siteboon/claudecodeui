@@ -280,6 +280,7 @@
     },
     "pending": "Scheduled for {{when}}",
     "failed": "Not sent — {{reason}}",
-    "cancel": "Cancel scheduled message"
+    "cancel": "Cancel scheduled message",
+    "dismiss": "Dismiss failure notice"
   }
 }

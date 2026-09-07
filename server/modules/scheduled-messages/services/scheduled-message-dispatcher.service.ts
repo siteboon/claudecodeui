@@ -111,14 +111,18 @@ async function sendClaimedMessage(
         userId: row.user_id,
         content: row.content,
         options: readOptions(row.options),
+        // The user picked this time on purpose; a run that happens to be going
+        // is aborted so the scheduled message lands when it was due, instead
+        // of being recorded as "not sent — session was busy".
+        interruptActiveRun: true,
       },
       { runtime },
     );
 
     // Recorded rather than retried, and recorded whether the run never started
-    // (deleted session, unavailable provider, session already busy) or started
-    // and then failed. Silently dropping a message the user scheduled is worse
-    // than telling them it did not go.
+    // (deleted session, unavailable provider) or started and then failed.
+    // Silently dropping a message the user scheduled is worse than telling
+    // them it did not go.
     if (!result.started || result.error) {
       scheduledMessagesDb.markFailed(row.id, result.error ?? 'The session was unavailable when this was due.');
     }
