@@ -201,6 +201,71 @@
       "label": "Mode sombre",
       "description": "Basculer entre les thèmes clair et sombre"
     },
+    "colorTheme": {
+      "description": "Une palette pour le mode clair, une pour le mode sombre",
+      "remove": "Supprimer le thème",
+      "removeConfirm": "Supprimer {{name}} et tous ses thèmes ?",
+      "removeCancel": "Annuler",
+      "removeButton": "Supprimer",
+      "importFailed": "Ce thème n'a pas pu être importé.",
+      "slots": {
+        "light": "Clair",
+        "dark": "Sombre",
+        "active": "Affiché"
+      },
+      "list": {
+        "lightTitle": "Thèmes pour le mode clair",
+        "darkTitle": "Thèmes pour le mode sombre",
+        "lightOnly": "Clair uniquement : {{names}}",
+        "darkOnly": "Sombre uniquement : {{names}}"
+      },
+      "add": {
+        "button": "Ajouter un thème",
+        "title": "Ajouter un thème",
+        "description": "Installez un thème de couleurs VS Code depuis Open VSX, ou importez le vôtre.",
+        "close": "Fermer",
+        "tabs": {
+          "browse": "Parcourir Open VSX",
+          "import": "Importer"
+        },
+        "browse": {
+          "recommended": "Recommandés",
+          "downloadCount": "Les plus populaires",
+          "timestamp": "Mis à jour récemment"
+        },
+        "search": {
+          "placeholder": "Rechercher sur Open VSX ou coller un lien Marketplace / Open VSX…",
+          "results": "Résultats",
+          "sort": {
+            "label": "Trier",
+            "downloadCount": "Les plus téléchargés",
+            "rating": "Les mieux notés",
+            "timestamp": "Mis à jour récemment",
+            "relevance": "Les plus pertinents"
+          },
+          "downloads": "{{value}} téléchargements",
+          "empty": "Aucun thème de couleurs trouvé pour « {{query}} ».",
+          "failed": "La recherche Open VSX est indisponible pour le moment.",
+          "source": "Code source",
+          "install": "Installer",
+          "update": "Mettre à jour",
+          "installed": "Installé",
+          "installing": "Installation…",
+          "fromUrl": "Installe {{id}} directement depuis ce lien"
+        },
+        "file": {
+          "label": "Déposez vos fichiers de thème ici",
+          "description": "Thèmes de couleurs .json ou extensions .vsix complètes",
+          "button": "Choisir des fichiers"
+        },
+        "json": {
+          "label": "JSON du thème",
+          "description": "Collez le contenu d’un fichier *-color-theme.json de VS Code"
+        },
+        "submit": "Ajouter le thème",
+        "notice": "Les recherches et téléchargements passent par votre serveur CloudCLI ; les icônes des extensions sont chargées depuis open-vsx.org."
+      }
+    },
     "theme": {
       "label": "Thème",
       "description": "Choisissez une apparence claire ou sombre, ou suivez celle de votre système d'exploitation",

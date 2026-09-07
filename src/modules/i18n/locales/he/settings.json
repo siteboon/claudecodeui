@@ -228,6 +228,71 @@
       "label": "מצב כהה",
       "description": "מעבר בין ערכת נושא בהירה לכהה"
     },
+    "colorTheme": {
+      "description": "ערכת צבעים אחת למצב בהיר ואחת למצב כהה",
+      "remove": "הסרת ערכת הנושא",
+      "removeConfirm": "להסיר את {{name}} ואת כל ערכות הנושא שלו?",
+      "removeCancel": "ביטול",
+      "removeButton": "הסרה",
+      "importFailed": "לא ניתן היה לייבא את ערכת הנושא.",
+      "slots": {
+        "light": "בהיר",
+        "dark": "כהה",
+        "active": "מוצג"
+      },
+      "list": {
+        "lightTitle": "ערכות נושא למצב בהיר",
+        "darkTitle": "ערכות נושא למצב כהה",
+        "lightOnly": "בהיר בלבד: {{names}}",
+        "darkOnly": "כהה בלבד: {{names}}"
+      },
+      "add": {
+        "button": "הוספת ערכת נושא",
+        "title": "הוספת ערכת נושא",
+        "description": "התקינו ערכת צבעים של VS Code מ-Open VSX, או ייבאו ערכה משלכם.",
+        "close": "סגירה",
+        "tabs": {
+          "browse": "עיון ב-Open VSX",
+          "import": "ייבוא"
+        },
+        "browse": {
+          "recommended": "מומלצות",
+          "downloadCount": "הפופולריות ביותר",
+          "timestamp": "עודכנו לאחרונה"
+        },
+        "search": {
+          "placeholder": "חיפוש ב-Open VSX או הדבקת קישור מ-Marketplace / Open VSX…",
+          "results": "תוצאות",
+          "sort": {
+            "label": "מיון",
+            "downloadCount": "הכי מורדות",
+            "rating": "המדורגות ביותר",
+            "timestamp": "עודכנו לאחרונה",
+            "relevance": "הרלוונטיות ביותר"
+          },
+          "downloads": "{{value}} הורדות",
+          "empty": "לא נמצאו ערכות צבעים עבור „{{query}}”.",
+          "failed": "החיפוש ב-Open VSX אינו זמין כרגע.",
+          "source": "קוד מקור",
+          "install": "התקנה",
+          "update": "עדכון",
+          "installed": "מותקנת",
+          "installing": "מתקין…",
+          "fromUrl": "מתקין את {{id}} ישירות מהקישור הזה"
+        },
+        "file": {
+          "label": "גררו לכאן קובצי ערכות נושא",
+          "description": "ערכות צבעים ‎.json או הרחבות ‎.vsix שלמות",
+          "button": "בחירת קבצים"
+        },
+        "json": {
+          "label": "JSON של ערכת הנושא",
+          "description": "הדביקו את התוכן של קובץ ‎*-color-theme.json של VS Code"
+        },
+        "submit": "הוספת ערכת הנושא",
+        "notice": "חיפושים והורדות עוברים דרך שרת CloudCLI שלכם; סמלי ההרחבות נטענים מ-open-vsx.org."
+      }
+    },
     "theme": {
       "label": "ערכת נושא",
       "description": "בחירת מראה בהיר או כהה, או מעקב אחרי מערכת ההפעלה",

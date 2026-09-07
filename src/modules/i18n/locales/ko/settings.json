@@ -227,6 +227,71 @@
       "label": "다크 모드",
       "description": "라이트/다크 테마 전환"
     },
+    "colorTheme": {
+      "description": "라이트 모드용 팔레트와 다크 모드용 팔레트를 하나씩 고르세요",
+      "remove": "테마 제거",
+      "removeConfirm": "{{name}} 및 모든 테마를 삭제할까요?",
+      "removeCancel": "취소",
+      "removeButton": "삭제",
+      "importFailed": "테마를 가져오지 못했습니다.",
+      "slots": {
+        "light": "라이트",
+        "dark": "다크",
+        "active": "표시 중"
+      },
+      "list": {
+        "lightTitle": "라이트 모드 테마",
+        "darkTitle": "다크 모드 테마",
+        "lightOnly": "라이트 전용: {{names}}",
+        "darkOnly": "다크 전용: {{names}}"
+      },
+      "add": {
+        "button": "테마 추가",
+        "title": "테마 추가",
+        "description": "Open VSX에서 VS Code 색 테마를 설치하거나 직접 가져오세요.",
+        "close": "닫기",
+        "tabs": {
+          "browse": "Open VSX 둘러보기",
+          "import": "가져오기"
+        },
+        "browse": {
+          "recommended": "추천",
+          "downloadCount": "인기순",
+          "timestamp": "최근 업데이트"
+        },
+        "search": {
+          "placeholder": "Open VSX 검색 또는 Marketplace / Open VSX 링크 붙여넣기…",
+          "results": "검색 결과",
+          "sort": {
+            "label": "정렬",
+            "downloadCount": "다운로드 많은 순",
+            "rating": "평점 높은 순",
+            "timestamp": "최근 업데이트 순",
+            "relevance": "관련도 순"
+          },
+          "downloads": "다운로드 {{value}}회",
+          "empty": "“{{query}}”에 해당하는 색상 테마가 없습니다.",
+          "failed": "지금은 Open VSX 검색을 사용할 수 없습니다.",
+          "source": "소스 코드",
+          "install": "설치",
+          "update": "업데이트",
+          "installed": "설치됨",
+          "installing": "설치 중…",
+          "fromUrl": "이 링크에서 {{id}}을(를) 바로 설치합니다"
+        },
+        "file": {
+          "label": "테마 파일을 여기에 놓으세요",
+          "description": ".json 색 테마 또는 .vsix 확장 전체",
+          "button": "파일 선택"
+        },
+        "json": {
+          "label": "테마 JSON",
+          "description": "VS Code *-color-theme.json 파일의 내용을 붙여 넣으세요"
+        },
+        "submit": "테마 추가",
+        "notice": "검색과 다운로드는 CloudCLI 서버를 거칩니다. 확장 아이콘은 open-vsx.org에서 불러옵니다."
+      }
+    },
     "theme": {
       "label": "테마",
       "description": "밝은 테마나 어두운 테마를 선택하거나 운영체제 설정을 따릅니다",

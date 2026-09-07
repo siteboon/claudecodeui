@@ -227,6 +227,71 @@
       "label": "深色模式",
       "description": "切换浅色和深色主题"
     },
+    "colorTheme": {
+      "description": "为浅色模式和深色模式各选一套配色",
+      "remove": "移除主题",
+      "removeConfirm": "删除 {{name}} 及其所有主题？",
+      "removeCancel": "取消",
+      "removeButton": "删除",
+      "importFailed": "无法导入该主题。",
+      "slots": {
+        "light": "浅色",
+        "dark": "深色",
+        "active": "当前显示"
+      },
+      "list": {
+        "lightTitle": "浅色模式主题",
+        "darkTitle": "深色模式主题",
+        "lightOnly": "仅浅色：{{names}}",
+        "darkOnly": "仅深色：{{names}}"
+      },
+      "add": {
+        "button": "添加主题",
+        "title": "添加主题",
+        "description": "从 Open VSX 安装 VS Code 颜色主题，或导入你自己的主题。",
+        "close": "关闭",
+        "tabs": {
+          "browse": "浏览 Open VSX",
+          "import": "导入"
+        },
+        "browse": {
+          "recommended": "推荐",
+          "downloadCount": "最受欢迎",
+          "timestamp": "最近更新"
+        },
+        "search": {
+          "placeholder": "搜索 Open VSX，或粘贴 Marketplace / Open VSX 链接…",
+          "results": "搜索结果",
+          "sort": {
+            "label": "排序",
+            "downloadCount": "下载最多",
+            "rating": "评分最高",
+            "timestamp": "最近更新",
+            "relevance": "最相关"
+          },
+          "downloads": "{{value}} 次下载",
+          "empty": "未找到与“{{query}}”匹配的配色主题。",
+          "failed": "Open VSX 搜索暂时不可用。",
+          "source": "源代码",
+          "install": "安装",
+          "update": "更新",
+          "installed": "已安装",
+          "installing": "正在安装…",
+          "fromUrl": "直接从此链接安装 {{id}}"
+        },
+        "file": {
+          "label": "将主题文件拖放到这里",
+          "description": ".json 颜色主题或完整的 .vsix 扩展",
+          "button": "选择文件"
+        },
+        "json": {
+          "label": "主题 JSON",
+          "description": "粘贴 VS Code *-color-theme.json 文件的内容"
+        },
+        "submit": "添加主题",
+        "notice": "搜索和下载通过你的 CloudCLI 服务器进行；扩展图标从 open-vsx.org 加载。"
+      }
+    },
     "theme": {
       "label": "主题",
       "description": "选择浅色或深色外观，或跟随操作系统设置",

@@ -2017,3 +2017,76 @@ type TaskStatus =
 
 /** A TaskMaster task's priority; high, medium and low are the known values and the string fallback tolerates anything else TaskMaster emits. */
 type TaskPriority = 'high' | 'medium' | 'low' | string;
+
+// ---------------------------
+
+//----------------- COLOUR THEMES ------------
+
+/**
+ * Whether a theme paints a light or a dark surface.
+ *
+ * `system` means the palette ships both variants — only the default theme does —
+ * so it fits both slots. Any other value restricts the theme to the matching slot.
+ */
+export type ThemeAppearance = 'system' | 'light' | 'dark';
+
+/**
+ * One of the two palettes a user picks: the one shown in light mode and the one
+ * shown in dark mode. The dark-mode setting decides which slot is in force.
+ */
+export type ThemeSlot = 'light' | 'dark';
+
+/**
+ * One selectable colour palette.
+ *
+ * Built-in themes ship a matching `src/shared/themes/<id>.css`; imported ones
+ * carry their variables in `tokens` instead, because they arrive at runtime and
+ * have no stylesheet to point at.
+ */
+export type ColorTheme = {
+  id: string;
+  name: string;
+  appearance: ThemeAppearance;
+  /** Swatches for the settings picker, as CSS colours: background, surface, primary. */
+  previewColors: [string, string, string];
+  /** The dark variant's swatches, for a `system` theme shown in the dark slot. */
+  darkPreviewColors?: [string, string, string];
+  /** Set only on imported themes: CSS variable name (without `--`) to value. */
+  tokens?: ThemeTokens;
+  /** Set only on themes installed from an extension, so reinstalling it updates them in place. */
+  source?: ThemeSource;
+};
+
+/**
+ * The extension an imported theme was installed from. Installing the same
+ * extension again replaces its themes instead of adding a second copy of each,
+ * and the picker groups an extension's themes under `displayName`.
+ * `extensionId` is `namespace.name` as Open VSX and the Marketplace spell it,
+ * compared case-insensitively; `version` is absent when the install came from a
+ * URL that named none.
+ */
+export type ThemeSource = { extensionId: string; version?: string; displayName?: string };
+
+/** The orders the theme search offers; Open VSX sorts by these and refuses others. */
+export type ThemeSearchSort = 'downloadCount' | 'rating' | 'timestamp' | 'relevance';
+
+/**
+ * One Open VSX extension that contributes colour themes, as `/api/themes/search`
+ * returns it. Only extensions whose manifest contributes colour themes are
+ * listed; `url` is the extension page, which the download endpoint accepts.
+ */
+export type ThemeSearchResult = {
+  id: string;
+  namespace: string;
+  name: string;
+  displayName: string;
+  description: string;
+  downloadCount: number;
+  version: string;
+  iconUrl: string | null;
+  sourceUrl: string | null;
+  url: string;
+};
+
+/** A theme's CSS custom properties, keyed by variable name without the leading `--`. */
+export type ThemeTokens = Record<string, string>;

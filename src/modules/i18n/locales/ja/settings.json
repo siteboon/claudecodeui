@@ -201,6 +201,71 @@
       "label": "ダークモード",
       "description": "ライトテーマとダークテーマを切り替えます"
     },
+    "colorTheme": {
+      "description": "ライトモード用とダークモード用に 1 つずつパレットを選べます",
+      "remove": "テーマを削除",
+      "removeConfirm": "{{name}} とそのすべてのテーマを削除しますか？",
+      "removeCancel": "キャンセル",
+      "removeButton": "削除",
+      "importFailed": "このテーマをインポートできませんでした。",
+      "slots": {
+        "light": "ライト",
+        "dark": "ダーク",
+        "active": "表示中"
+      },
+      "list": {
+        "lightTitle": "ライトモードのテーマ",
+        "darkTitle": "ダークモードのテーマ",
+        "lightOnly": "ライトのみ：{{names}}",
+        "darkOnly": "ダークのみ：{{names}}"
+      },
+      "add": {
+        "button": "テーマを追加",
+        "title": "テーマを追加",
+        "description": "Open VSX から VS Code のカラーテーマをインストールするか、手持ちのテーマをインポートします。",
+        "close": "閉じる",
+        "tabs": {
+          "browse": "Open VSX を探す",
+          "import": "インポート"
+        },
+        "browse": {
+          "recommended": "おすすめ",
+          "downloadCount": "人気順",
+          "timestamp": "最近の更新"
+        },
+        "search": {
+          "placeholder": "Open VSX を検索、または Marketplace / Open VSX のリンクを貼り付け…",
+          "results": "検索結果",
+          "sort": {
+            "label": "並べ替え",
+            "downloadCount": "ダウンロード数順",
+            "rating": "評価順",
+            "timestamp": "最近更新された順",
+            "relevance": "関連度順"
+          },
+          "downloads": "{{value}} ダウンロード",
+          "empty": "「{{query}}」に一致するカラーテーマはありません。",
+          "failed": "Open VSX の検索は現在利用できません。",
+          "source": "ソースコード",
+          "install": "インストール",
+          "update": "更新",
+          "installed": "インストール済み",
+          "installing": "インストール中…",
+          "fromUrl": "このリンクから {{id}} を直接インストールします"
+        },
+        "file": {
+          "label": "テーマファイルをここにドロップ",
+          "description": ".json のカラーテーマ、または .vsix 拡張機能全体",
+          "button": "ファイルを選択"
+        },
+        "json": {
+          "label": "テーマの JSON",
+          "description": "VS Code の *-color-theme.json ファイルの内容を貼り付けてください"
+        },
+        "submit": "テーマを追加",
+        "notice": "検索とダウンロードは CloudCLI サーバー経由で行われます。拡張機能のアイコンは open-vsx.org から読み込まれます。"
+      }
+    },
     "theme": {
       "label": "テーマ",
       "description": "ライトまたはダークの外観を選ぶか、OS の設定に合わせます",

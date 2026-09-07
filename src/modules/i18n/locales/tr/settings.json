@@ -228,6 +228,71 @@
       "label": "Koyu Mod",
       "description": "Açık ve koyu temalar arasında geçiş yap"
     },
+    "colorTheme": {
+      "description": "Açık mod için bir palet, koyu mod için bir palet",
+      "remove": "Temayı kaldır",
+      "removeConfirm": "{{name}} ve tüm temaları kaldırılsın mı?",
+      "removeCancel": "İptal",
+      "removeButton": "Kaldır",
+      "importFailed": "Bu tema içe aktarılamadı.",
+      "slots": {
+        "light": "Açık",
+        "dark": "Koyu",
+        "active": "Görünen"
+      },
+      "list": {
+        "lightTitle": "Açık mod temaları",
+        "darkTitle": "Koyu mod temaları",
+        "lightOnly": "Yalnızca açık: {{names}}",
+        "darkOnly": "Yalnızca koyu: {{names}}"
+      },
+      "add": {
+        "button": "Tema ekle",
+        "title": "Tema ekle",
+        "description": "Open VSX'ten bir VS Code renk teması yükleyin veya kendinizinkini içe aktarın.",
+        "close": "Kapat",
+        "tabs": {
+          "browse": "Open VSX'e göz at",
+          "import": "İçe aktar"
+        },
+        "browse": {
+          "recommended": "Önerilenler",
+          "downloadCount": "En popüler",
+          "timestamp": "Yakın zamanda güncellenen"
+        },
+        "search": {
+          "placeholder": "Open VSX'te arayın veya bir Marketplace / Open VSX bağlantısı yapıştırın…",
+          "results": "Sonuçlar",
+          "sort": {
+            "label": "Sırala",
+            "downloadCount": "En çok indirilen",
+            "rating": "En yüksek puanlı",
+            "timestamp": "Son güncellenen",
+            "relevance": "En alakalı"
+          },
+          "downloads": "{{value}} indirme",
+          "empty": "“{{query}}” için renk teması bulunamadı.",
+          "failed": "Open VSX araması şu anda kullanılamıyor.",
+          "source": "Kaynak kodu",
+          "install": "Yükle",
+          "update": "Güncelle",
+          "installed": "Yüklendi",
+          "installing": "Yükleniyor…",
+          "fromUrl": "{{id}} doğrudan bu bağlantıdan yüklenir"
+        },
+        "file": {
+          "label": "Tema dosyalarını buraya bırakın",
+          "description": ".json renk temaları veya tam .vsix uzantıları",
+          "button": "Dosya seç"
+        },
+        "json": {
+          "label": "Tema JSON'u",
+          "description": "Bir VS Code *-color-theme.json dosyasının içeriğini yapıştırın"
+        },
+        "submit": "Temayı ekle",
+        "notice": "Aramalar ve indirmeler CloudCLI sunucunuz üzerinden yapılır; uzantı simgeleri open-vsx.org'dan yüklenir."
+      }
+    },
     "theme": {
       "label": "Tema",
       "description": "Açık veya koyu bir görünüm seçin ya da işletim sisteminizi izleyin",

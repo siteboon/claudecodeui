@@ -201,6 +201,71 @@
       "label": "Darkmode",
       "description": "Zwischen hellem und dunklem Design wechseln"
     },
+    "colorTheme": {
+      "description": "Eine Palette für den hellen und eine für den dunklen Modus",
+      "remove": "Design entfernen",
+      "removeConfirm": "{{name}} und alle zugehörigen Themes entfernen?",
+      "removeCancel": "Abbrechen",
+      "removeButton": "Entfernen",
+      "importFailed": "Dieses Design konnte nicht importiert werden.",
+      "slots": {
+        "light": "Hell",
+        "dark": "Dunkel",
+        "active": "Aktiv"
+      },
+      "list": {
+        "lightTitle": "Themes für den hellen Modus",
+        "darkTitle": "Themes für den dunklen Modus",
+        "lightOnly": "Nur hell: {{names}}",
+        "darkOnly": "Nur dunkel: {{names}}"
+      },
+      "add": {
+        "button": "Design hinzufügen",
+        "title": "Design hinzufügen",
+        "description": "Installiere ein VS-Code-Farbthema von Open VSX oder importiere dein eigenes.",
+        "close": "Schließen",
+        "tabs": {
+          "browse": "Open VSX durchsuchen",
+          "import": "Importieren"
+        },
+        "browse": {
+          "recommended": "Empfohlen",
+          "downloadCount": "Am beliebtesten",
+          "timestamp": "Kürzlich aktualisiert"
+        },
+        "search": {
+          "placeholder": "Open VSX durchsuchen oder Marketplace-/Open-VSX-Link einfügen…",
+          "results": "Ergebnisse",
+          "sort": {
+            "label": "Sortieren",
+            "downloadCount": "Meiste Downloads",
+            "rating": "Beste Bewertung",
+            "timestamp": "Zuletzt aktualisiert",
+            "relevance": "Relevanteste"
+          },
+          "downloads": "{{value}} Downloads",
+          "empty": "Keine Farbdesigns für „{{query}}“ gefunden.",
+          "failed": "Die Open-VSX-Suche ist gerade nicht verfügbar.",
+          "source": "Quellcode",
+          "install": "Installieren",
+          "update": "Aktualisieren",
+          "installed": "Installiert",
+          "installing": "Wird installiert…",
+          "fromUrl": "Installiert {{id}} direkt über diesen Link"
+        },
+        "file": {
+          "label": "Theme-Dateien hier ablegen",
+          "description": ".json-Farbthemen oder komplette .vsix-Erweiterungen",
+          "button": "Dateien auswählen"
+        },
+        "json": {
+          "label": "Design-JSON",
+          "description": "Füge den Inhalt einer VS-Code-Datei *-color-theme.json ein"
+        },
+        "submit": "Design hinzufügen",
+        "notice": "Suchen und Downloads laufen über deinen CloudCLI-Server; Erweiterungssymbole werden von open-vsx.org geladen."
+      }
+    },
     "theme": {
       "label": "Design",
       "description": "Wählen Sie ein helles oder dunkles Erscheinungsbild oder folgen Sie Ihrem Betriebssystem",

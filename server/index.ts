@@ -30,6 +30,7 @@ import {
 import { taskmasterRoutes } from './modules/taskmaster/index.js';
 import { commandsRoutes } from './modules/commands/index.js';
 import { settingsRoutes } from './modules/settings/index.js';
+import { themeRoutes } from './modules/themes/index.js';
 import { createSystemModule } from './modules/system/index.js';
 import { createAgentModule } from './modules/agent/index.js';
 import projectModuleRoutes from './modules/projects/projects.routes.js';
@@ -189,6 +190,9 @@ app.use('/api/commands', authenticateToken, parseAuthenticatedBody, commandsRout
 
 // Settings API Routes (protected)
 app.use('/api/settings', authenticateToken, parseAuthenticatedBody, settingsRoutes);
+
+// Downloads a VS Code theme extension the browser cannot fetch itself.
+app.use('/api/themes', authenticateToken, parseAuthenticatedBody, themeRoutes);
 
 app.use('/api/system', authenticateToken, parseAuthenticatedBody, systemRoutes);
 

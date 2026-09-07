@@ -5,6 +5,7 @@ import React from 'react';
 import { afterEach, beforeEach, test } from 'vitest';
 
 import { ThemeProvider, useTheme } from '@/shared/context/ThemeContext';
+import { applyStoredColorTheme } from '@/shared/themes';
 import {
   readUserPreference,
   resetUserPreferences,
@@ -58,6 +59,8 @@ beforeEach(() => {
   // outlives localStorage.clear() and would leak one test's writes into the next.
   resetUserPreferences();
   document.documentElement.classList.remove('dark');
+  delete document.documentElement.dataset.theme;
+  document.getElementById('imported-color-themes')?.remove();
   emulateSystemDarkAppearance(false);
 });
 
@@ -196,4 +199,269 @@ test('a stored value written by a newer client falls back to following the syste
 
   assert.equal(result.current.themeMode, 'system');
   assert.equal(result.current.isDarkMode, true);
+});
+
+/**
+ * Two palettes, one per mode: the light slot shows in light mode and the dark
+ * slot in dark mode. The `dark` class always follows the mode, and a slot only
+ * takes a palette of its own appearance, so the hundreds of `dark:` utility
+ * classes never contradict the variables.
+ */
+
+const importedTheme = (id: string, appearance: 'light' | 'dark') => ({
+  id,
+  name: id,
+  appearance,
+  previewColors: ['#000000', '#111111', '#cba6f7'] as [string, string, string],
+  tokens: { background: appearance === 'dark' ? '0 0% 8%' : '0 0% 96%' },
+});
+
+test('both slots start on the default theme, which follows light and dark', () => {
+  writeUserPreference('theme', 'dark');
+  const { result } = renderHook(() => useTheme(), { wrapper });
+
+  assert.deepEqual(result.current.slotThemes, { light: 'default', dark: 'default' });
+  assert.equal(result.current.activeSlot, 'dark');
+  assert.equal(document.documentElement.dataset.theme, 'default');
+  assert.ok(document.documentElement.classList.contains('dark'));
+});
+
+test('the dark-mode setting picks which slot is on screen', () => {
+  writeUserPreference('theme', 'light');
+  const { result } = renderHook(() => useTheme(), { wrapper });
+
+  act(() => {
+    result.current.installImportedThemes([importedTheme('imported-dark', 'dark'), importedTheme('imported-light', 'light')]);
+  });
+  act(() => {
+    result.current.setSlotTheme('dark', 'imported-dark');
+    result.current.setSlotTheme('light', 'imported-light');
+  });
+
+  assert.equal(readUserPreference('lightColorTheme', null), 'imported-light');
+  assert.equal(readUserPreference('darkColorTheme', null), 'imported-dark');
+  assert.equal(document.documentElement.dataset.theme, 'imported-light');
+  assert.ok(!document.documentElement.classList.contains('dark'));
+
+  act(() => {
+    result.current.toggleDarkMode();
+  });
+
+  assert.equal(result.current.activeSlot, 'dark');
+  assert.equal(document.documentElement.dataset.theme, 'imported-dark');
+  assert.ok(document.documentElement.classList.contains('dark'));
+});
+
+test('a slot never shows a palette of the other appearance', () => {
+  // The shape of a hand-edited or stale preference.
+  writeUserPreference('theme', 'light');
+  writeUserPreference('importedThemes', [importedTheme('imported-dark', 'dark')]);
+  writeUserPreference('lightColorTheme', 'imported-dark');
+
+  const { result } = renderHook(() => useTheme(), { wrapper });
+
+  assert.equal(result.current.slotThemes.light, 'default');
+  assert.equal(document.documentElement.dataset.theme, 'default');
+  assert.ok(!document.documentElement.classList.contains('dark'));
+});
+
+test('an imported theme is applied from its own stored variables', () => {
+  writeUserPreference('theme', 'dark');
+  const { result } = renderHook(() => useTheme(), { wrapper });
+
+  act(() => {
+    result.current.installImportedThemes([{
+      id: 'imported-test-1',
+      name: 'Imported',
+      appearance: 'dark',
+      previewColors: ['#000000', '#111111', '#89b4fa'],
+      tokens: { background: '0 0% 0%', foreground: '0 0% 100%' },
+    }]);
+  });
+  act(() => {
+    result.current.setSlotTheme('dark', 'imported-test-1');
+  });
+
+  const injected = document.getElementById('imported-color-themes');
+  assert.ok(injected, 'the imported palette needs a stylesheet to live in');
+  assert.match(injected.textContent ?? '', /:root\[data-theme="imported-test-1"\]/);
+  assert.match(injected.textContent ?? '', /--background: 0 0% 0%;/);
+  assert.equal(document.documentElement.dataset.theme, 'imported-test-1');
+});
+
+test('removing the themes a slot uses puts it back on the default', () => {
+  writeUserPreference('theme', 'dark');
+  const { result } = renderHook(() => useTheme(), { wrapper });
+
+  act(() => {
+    result.current.installImportedThemes([importedTheme('imported-a', 'dark'), importedTheme('imported-b', 'light')]);
+  });
+  act(() => {
+    result.current.setSlotTheme('dark', 'imported-a');
+    result.current.setSlotTheme('light', 'imported-b');
+  });
+  act(() => {
+    result.current.removeImportedThemes(['imported-a', 'imported-b']);
+  });
+
+  assert.deepEqual(result.current.slotThemes, { light: 'default', dark: 'default' });
+  assert.equal(readUserPreference('darkColorTheme', null), 'default');
+  assert.equal(readUserPreference('lightColorTheme', null), 'default');
+  assert.equal(document.documentElement.dataset.theme, 'default');
+  assert.ok(!document.getElementById('imported-color-themes'));
+});
+
+test('a corrupted imported theme is dropped instead of crashing the first render', () => {
+  // The value round-trips through the server as opaque JSON; one null in the
+  // array would otherwise be read for its id before anything could recover.
+  writeUserPreference('importedThemes', [
+    null,
+    'not a theme',
+    { id: 'imported-valid', name: 'Valid', appearance: 'dark', previewColors: ['#000', '#111', '#222'], tokens: { background: '0 0% 0%' } },
+    { id: 42, name: 'Bad id', appearance: 'dark', previewColors: [] },
+  ]);
+
+  const { result } = renderHook(() => useTheme(), { wrapper });
+
+  assert.deepEqual(
+    result.current.availableThemes.map((theme) => theme.id),
+    ['default', 'imported-valid'],
+  );
+});
+
+test('a theme id whose theme is gone falls back without erasing the stored choice', () => {
+  // The shape of deleting an imported palette on another device.
+  writeUserPreference('darkColorTheme', 'imported-deleted-elsewhere');
+
+  const { result } = renderHook(() => useTheme(), { wrapper });
+
+  assert.equal(result.current.slotThemes.dark, 'default');
+  assert.equal(
+    readUserPreference('darkColorTheme', null),
+    'imported-deleted-elsewhere',
+    'the choice stays stored in case the theme comes back',
+  );
+});
+
+test('the first paint follows the OS for a user who chose "system"', () => {
+  // Before the system option, any stored value other than 'dark' meant light.
+  writeUserPreference('theme', 'system');
+  emulateSystemDarkAppearance(true);
+
+  applyStoredColorTheme();
+
+  assert.ok(document.documentElement.classList.contains('dark'));
+});
+
+test('the first paint uses the slot for the mode the OS is in', () => {
+  writeUserPreference('theme', 'system');
+  writeUserPreference('importedThemes', [importedTheme('imported-dark', 'dark'), importedTheme('imported-light', 'light')]);
+  writeUserPreference('lightColorTheme', 'imported-light');
+  writeUserPreference('darkColorTheme', 'imported-dark');
+  emulateSystemDarkAppearance(true);
+
+  applyStoredColorTheme();
+
+  assert.equal(document.documentElement.dataset.theme, 'imported-dark');
+});
+
+test('the OS switching appearance under "system" swaps to the other slot', () => {
+  emulateSystemDarkAppearance(false);
+  const { result } = renderHook(() => useTheme(), { wrapper });
+  act(() => {
+    result.current.setThemeMode('system');
+    result.current.installImportedThemes([importedTheme('imported-dark', 'dark'), importedTheme('imported-light', 'light')]);
+  });
+  act(() => {
+    result.current.setSlotTheme('light', 'imported-light');
+    result.current.setSlotTheme('dark', 'imported-dark');
+  });
+  assert.equal(document.documentElement.dataset.theme, 'imported-light');
+
+  act(() => {
+    changeSystemAppearance(true);
+  });
+
+  assert.equal(result.current.themeMode, 'system');
+  assert.equal(document.documentElement.dataset.theme, 'imported-dark');
+  assert.ok(document.documentElement.classList.contains('dark'));
+});
+
+test('updating an extension keeps the slot on its variant and adds no copies', () => {
+  const { result } = renderHook(() => useTheme(), { wrapper });
+  const source = { extensionId: 'acme.night', version: '1.0.0' };
+
+  let firstIds: string[] = [];
+  act(() => {
+    firstIds = result.current.installImportedThemes(
+      [{ ...importedTheme('imported-night-old', 'dark'), name: 'Night' }, { ...importedTheme('imported-day-old', 'light'), name: 'Day' }],
+      source,
+    );
+  });
+  act(() => {
+    result.current.setSlotTheme('dark', firstIds[0]);
+  });
+
+  act(() => {
+    result.current.installImportedThemes(
+      [{ ...importedTheme('imported-night-new', 'dark'), name: 'Night' }],
+      { ...source, version: '2.0.0' },
+    );
+  });
+
+  const imported = result.current.availableThemes.filter((entry) => entry.tokens);
+  assert.deepEqual(imported.map((entry) => entry.id), [firstIds[0]], 'the dropped variant is gone, nothing duplicated');
+  assert.equal(result.current.slotThemes.dark, firstIds[0]);
+  assert.equal(imported[0].source?.version, '2.0.0');
+});
+
+test('an update that drops a slot\'s variant moves it to a kept variant of the same mode', () => {
+  const { result } = renderHook(() => useTheme(), { wrapper });
+  const source = { extensionId: 'acme.night', version: '1.0.0' };
+
+  let firstIds: string[] = [];
+  act(() => {
+    firstIds = result.current.installImportedThemes(
+      [{ ...importedTheme('a', 'dark'), name: 'Night' }, { ...importedTheme('b', 'light'), name: 'Day' }],
+      source,
+    );
+  });
+  act(() => {
+    result.current.setSlotTheme('dark', firstIds[0]);
+    result.current.setSlotTheme('light', firstIds[1]);
+  });
+
+  let secondIds: string[] = [];
+  act(() => {
+    secondIds = result.current.installImportedThemes(
+      [{ ...importedTheme('c', 'dark'), name: 'Midnight' }, { ...importedTheme('d', 'light'), name: 'Dawn' }],
+      source,
+    );
+  });
+
+  assert.deepEqual(result.current.slotThemes, { dark: secondIds[0], light: secondIds[1] });
+  assert.equal(readUserPreference('lightColorTheme', null), secondIds[1]);
+});
+
+test('an update that leaves no variant for a slot puts it back on the default', () => {
+  const { result } = renderHook(() => useTheme(), { wrapper });
+  const source = { extensionId: 'acme.night', version: '1.0.0' };
+
+  let firstIds: string[] = [];
+  act(() => {
+    firstIds = result.current.installImportedThemes(
+      [{ ...importedTheme('a', 'dark'), name: 'Night' }, { ...importedTheme('b', 'light'), name: 'Day' }],
+      source,
+    );
+  });
+  act(() => {
+    result.current.setSlotTheme('light', firstIds[1]);
+  });
+
+  act(() => {
+    result.current.installImportedThemes([{ ...importedTheme('c', 'dark'), name: 'Night' }], source);
+  });
+
+  assert.equal(result.current.slotThemes.light, 'default');
+  assert.equal(readUserPreference('lightColorTheme', null), 'default');
 });

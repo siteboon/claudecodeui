@@ -3,6 +3,7 @@ import {
   getStoredAuthToken,
   storeAuthToken,
 } from '@/shared/authToken';
+import type { ThemeSearchSort } from '@/shared/types';
 import { IS_PLATFORM } from '@/shared/utils';
 import { readVoiceConfig, voiceConfigHeaders } from '@/shared/voiceConfig';
 
@@ -550,6 +551,17 @@ export const api = {
     appendQueuedMessage: (scope: string, queuedMessage: unknown) =>
       post('/api/user/drafts/queued-message', { scope, queuedMessage }),
     clearQueuedMessage: (scope: string) => del('/api/user/drafts/queued-message', { scope }),
+  },
+
+  // Colour themes. The download is proxied because the Visual Studio
+  // Marketplace serves no CORS headers, so the browser cannot fetch a `.vsix`
+  // itself; the response is the raw archive, parsed on this side.
+  themes: {
+    // Searched through the server too, so every registry request leaves from one
+    // allowlisted place and icon themes are filtered out before the dialog sees them.
+    search: (q: string, sort: ThemeSearchSort, signal?: AbortSignal) =>
+      get(`/api/themes/search${query({ q, sort })}`, { signal }),
+    downloadExtension: (url: string) => post('/api/themes/download', { url }),
   },
 
   // Server-side settings: API keys, stored credentials, notifications, web push
