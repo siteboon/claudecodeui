@@ -1251,12 +1251,14 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
   const turns = createCodexTurnTracker();
   /** Turns whose prompt already carries the anchor, so only the first does. */
   const anchoredTurnIds = new Set<string>();
-  /** True once the file carries canonical `item_completed` typed rows. */
-  let hasTypedItems = false;
   /** User rows built from typed `UserMessage` items, keyed by their turn. */
   const typedUserRows = new Map<AnyRecord, string>();
-  /** User rows built from legacy `user_message` events, removed when typed rows win. */
-  const legacyUserRows = new Set<AnyRecord>();
+  /**
+   * User rows built from legacy `user_message` events, keyed by their turn id
+   * (undefined when no turn could be attributed). Removed only when a typed
+   * row exists for the same turn.
+   */
+  const legacyUserRows = new Map<AnyRecord, string | undefined>();
 
   const fileStream = fsSync.createReadStream(sessionFilePath);
   const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
@@ -1379,7 +1381,6 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
       // (hook prompts, environment scaffolding) that must stay out of the
       // transcript.
       if (payload.type === 'item_completed') {
-        hasTypedItems = true;
         const item = readObjectRecord(payload.item);
         if (item?.type === 'UserMessage') {
           const content = extractCodexTextContent(item.content);
@@ -1427,7 +1428,7 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
           images: extractCodexUserImages(payload),
           ...(isFirstPromptOfTurn ? { turnId } : {}),
         });
-        legacyUserRows.add(messages[messages.length - 1]);
+        legacyUserRows.set(messages[messages.length - 1], turnId);
       }
       continue;
     }
@@ -1828,30 +1829,33 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
 
   await attachCodexSubagentTranscripts(sessionFilePath, subagentsByCallId);
 
-  // A canonical file carries typed `UserMessage` items; any legacy
-  // `user_message` events in the same file are the same prompts written twice
-  // (for example after a rollback over a format boundary). Keep the typed rows
-  // and drop the legacy ones, then hand every remaining typed prompt its
-  // anchor afresh because the legacy row may have claimed it first.
-  if (hasTypedItems && legacyUserRows.size > 0) {
+  // A file spanning a format boundary can carry the same prompt twice: once
+  // as a legacy `user_message` event and once as a typed `UserMessage` item
+  // for the same turn. Drop a legacy row only when a typed row for that exact
+  // turn exists — legacy-only turns from before the boundary must survive —
+  // then hand every remaining typed prompt its anchor afresh because the
+  // dropped legacy row may have claimed it first.
+  const typedTurnIds = new Set(typedUserRows.values());
+  if (typedTurnIds.size > 0 && legacyUserRows.size > 0) {
     for (let index = messages.length - 1; index >= 0; index -= 1) {
-      if (legacyUserRows.has(messages[index])) {
+      const message = messages[index];
+      const legacyTurnId = legacyUserRows.get(message);
+      if (legacyTurnId && typedTurnIds.has(legacyTurnId)) {
         messages.splice(index, 1);
       }
     }
-    if (typedUserRows.size > 0) {
-      anchoredTurnIds.clear();
-      for (const message of messages) {
-        const typedTurnId = typedUserRows.get(message);
-        if (!typedTurnId) {
-          continue;
-        }
-        if (!anchoredTurnIds.has(typedTurnId)) {
-          anchoredTurnIds.add(typedTurnId);
-          message.turnId = typedTurnId;
-        } else {
-          delete message.turnId;
-        }
+
+    anchoredTurnIds.clear();
+    for (const message of messages) {
+      const typedTurnId = typedUserRows.get(message);
+      if (!typedTurnId) {
+        continue;
+      }
+      if (!anchoredTurnIds.has(typedTurnId)) {
+        anchoredTurnIds.add(typedTurnId);
+        message.turnId = typedTurnId;
+      } else {
+        delete message.turnId;
       }
     }
   }

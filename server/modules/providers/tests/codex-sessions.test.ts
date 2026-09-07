@@ -682,3 +682,64 @@ test('Codex history prefers typed user rows over legacy user_message events in o
     await rm(tempRoot, { recursive: true, force: true });
   }
 });
+
+
+test('Codex history keeps legacy prompts for turns that have no typed copy', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-mixed-era-history-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tempRoot);
+
+  try {
+    const providerSessionId = 'codex-mixed-era-1';
+    const transcriptPath = await writeCodexTranscript(tempRoot, providerSessionId, workspacePath);
+    // Turn 1 predates the canonical format and exists only as a legacy event;
+    // turn 2 was written after the format boundary and exists only as a typed
+    // item. Both prompts must render — dropping the legacy row would lose the
+    // earlier turn even though no typed copy of it exists.
+    await writeFile(
+      transcriptPath,
+      [
+        JSON.stringify({ timestamp: '2026-09-07T10:00:00.000Z', ordinal: 1, type: 'session_meta', payload: { id: providerSessionId, cwd: workspacePath } }),
+        JSON.stringify({
+          timestamp: '2026-09-07T10:00:01.000Z',
+          ordinal: 2,
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'Prompt from the legacy era', turn_id: 'legacy-only-turn' },
+        }),
+        JSON.stringify({
+          timestamp: '2026-09-07T10:00:02.000Z',
+          ordinal: 3,
+          type: 'event_msg',
+          payload: {
+            type: 'item_completed',
+            thread_id: providerSessionId,
+            turn_id: 'typed-only-turn',
+            item: { type: 'UserMessage', id: 'item-user-3', content: [{ type: 'text', text: 'Prompt from the typed era', text_elements: [] }] },
+            started_at_ms: 1,
+            completed_at_ms: 2,
+          },
+        }),
+      ].join('\n') + '\n',
+      'utf8',
+    );
+
+    await withIsolatedDatabase(async () => {
+      sessionsDb.createAppSession('app-mixed-era-1', 'codex', workspacePath);
+      sessionsDb.assignProviderSessionId('app-mixed-era-1', providerSessionId);
+      await new CodexSessionSynchronizer().synchronize();
+
+      const history = await new CodexSessionsProvider().fetchHistory('app-mixed-era-1');
+      const users = history.messages.filter((message) => message.role === 'user');
+
+      assert.equal(users.length, 2, 'a legacy-only turn must survive next to typed turns');
+      assert.deepEqual(users.map((message) => message.content), [
+        'Prompt from the legacy era',
+        'Prompt from the typed era',
+      ]);
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
