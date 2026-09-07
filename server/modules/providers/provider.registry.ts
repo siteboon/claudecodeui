@@ -1,5 +1,6 @@
 import { ClaudeProvider } from '@/modules/providers/list/claude/claude.provider.js';
 import { CodexProvider } from '@/modules/providers/list/codex/codex.provider.js';
+import { CommandCodeProvider } from '@/modules/providers/list/command-code/command-code.provider.js';
 import { CursorProvider } from '@/modules/providers/list/cursor/cursor.provider.js';
 import { OpenCodeProvider } from '@/modules/providers/list/opencode/opencode.provider.js';
 import type { IProvider } from '@/shared/interfaces.js';
@@ -11,6 +12,7 @@ const providers: Record<LLMProvider, IProvider> = {
   codex: new CodexProvider(),
   cursor: new CursorProvider(),
   opencode: new OpenCodeProvider(),
+  'command-code': new CommandCodeProvider(),
 };
 
 /**

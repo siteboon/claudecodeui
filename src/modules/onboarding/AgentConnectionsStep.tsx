@@ -35,6 +35,13 @@ const providerCards = [
     iconContainerClassName: 'bg-zinc-100 dark:bg-zinc-800',
     loginButtonClassName: 'bg-zinc-800 hover:bg-zinc-900 dark:bg-zinc-700 dark:hover:bg-zinc-600',
   },
+  {
+    provider: 'command-code' as const,
+    title: 'Command Code',
+    connectedClassName: 'bg-neutral-100 dark:bg-neutral-800/50 border-neutral-300 dark:border-neutral-600',
+    iconContainerClassName: 'bg-neutral-100 dark:bg-neutral-800',
+    loginButtonClassName: 'bg-neutral-800 hover:bg-neutral-900 dark:bg-neutral-700 dark:hover:bg-neutral-600',
+  },
 ];
 
 /** Rendered by Onboarding as its second step, listing every CLI provider the user can log into. */

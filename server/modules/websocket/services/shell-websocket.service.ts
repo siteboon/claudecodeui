@@ -217,6 +217,15 @@ function buildShellCommand(
     return initialCommand || 'opencode';
   }
 
+  if (provider === 'command-code') {
+    if (resumeSessionId) {
+      return `command-code --resume "${resumeSessionId}"`;
+    }
+    // `command-code` works on every OS; `cmdc` is a Windows-only alias that
+    // would shadow the cmd.exe shell name on other platforms.
+    return initialCommand || 'command-code';
+  }
+
   // Launching with the flag is what unlocks "bypass permissions" in the CLI's
   // shift+tab permission-mode cycle; it cannot be enabled from inside a
   // session started without it.
@@ -543,7 +552,9 @@ export function handleShellConnection(
                 ? 'Codex'
                 : provider === 'opencode'
                     ? 'OpenCode'
-                  : 'Claude';
+                  : provider === 'command-code'
+                      ? 'Command Code'
+                    : 'Claude';
           welcomeMsg = hasSession && resumeSessionId
             ? `\x1b[36mResuming ${providerName} session ${resumeSessionId} in: ${projectPath}\x1b[0m\r\n`
             : `\x1b[36mStarting new ${providerName} session in: ${projectPath}\x1b[0m\r\n`;

@@ -27,6 +27,10 @@ const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> =
     provider: 'opencode',
     rootPath: path.join(os.homedir(), '.local', 'share', 'opencode'),
   },
+  {
+    provider: 'command-code',
+    rootPath: path.join(os.homedir(), '.commandcode', 'projects'),
+  },
 ];
 
 const WATCHER_IGNORED_PATTERNS = [
@@ -39,6 +43,9 @@ const WATCHER_IGNORED_PATTERNS = [
   '**/*.tmp',
   '**/*.swp',
   '**/.DS_Store',
+  '**/*.checkpoints.jsonl',
+  '**/*.prompts.jsonl',
+  '**/*.share.jsonl',
 ];
 
 const PROJECTS_UPDATE_DEBOUNCE_MS = 500;

@@ -3,13 +3,14 @@ import { useCallback, useState } from 'react';
 import { api } from '@/shared/api';
 import type { LLMProvider, ProviderAuthStatus, ProviderAuthStatusMap } from '@/shared/types';
 
-const CLI_PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode'];
+const CLI_PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode', 'command-code'];
 
 const createInitialProviderAuthStatusMap = (loading = true): ProviderAuthStatusMap => ({
   claude: { authenticated: false, email: null, method: null, error: null, loading },
   cursor: { authenticated: false, email: null, method: null, error: null, loading },
   codex: { authenticated: false, email: null, method: null, error: null, loading },
   opencode: { authenticated: false, email: null, method: null, error: null, loading },
+  'command-code': { authenticated: false, email: null, method: null, error: null, loading },
 });
 
 type ProviderAuthStatusPayload = {

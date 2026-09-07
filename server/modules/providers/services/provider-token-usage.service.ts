@@ -182,6 +182,65 @@ function emptyCodexTokenUsage(): TokenUsageResult {
 }
 
 /**
+ * Latest usage from a Command Code transcript's already-parsed rows.
+ *
+ * Command Code records per-assistant-message `usage` (with `input_tokens` /
+ * `output_tokens`, camelCase variants accepted). Reads the newest usage-bearing
+ * assistant row only so a session's counter reflects the current conversation,
+ * mirroring the Claude reader. Returns `null` when no nonzero usage row exists
+ * so the caller can fall back to reading the whole file.
+ */
+export function summarizeCommandCodeTokenUsage(fileContent: string): TokenUsageResult | null {
+  let inputTokens = 0;
+  let outputTokens = 0;
+
+  const lines = fileContent.trim().split('\n');
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    try {
+      const entry = JSON.parse(lines[index]) as AnyRecord;
+      const message = entry?.type === 'message' ? entry.message : null;
+      const usage = message?.usage;
+      if (!usage) {
+        continue;
+      }
+
+      const rowInput = readUsageNumber(usage.input_tokens ?? usage.inputTokens ?? usage.input);
+      const rowOutput = readUsageNumber(usage.output_tokens ?? usage.outputTokens ?? usage.output);
+      if (rowInput === 0 && rowOutput === 0) {
+        continue;
+      }
+
+      inputTokens = rowInput;
+      outputTokens = rowOutput;
+      break;
+    } catch {
+      // A provider may be writing the last JSONL line while this read happens.
+    }
+  }
+
+  if (inputTokens === 0 && outputTokens === 0) {
+    return null;
+  }
+
+  return {
+    used: inputTokens + outputTokens,
+    inputTokens,
+    outputTokens,
+    breakdown: { input: inputTokens, output: outputTokens },
+  };
+}
+
+/** Zero usage result returned when a Command Code transcript reports no usage. */
+function emptyCommandCodeTokenUsage(): TokenUsageResult {
+  return {
+    used: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    breakdown: { input: 0, output: 0 },
+  };
+}
+
+/**
  * Latest context-window usage from a Claude transcript's already-parsed rows.
  *
  * Exported because the session-messages reader hands the same usage back on
@@ -432,6 +491,25 @@ export function createProviderTokenUsageService(
         // whole file is still authoritative when it happens.
         return findCodexTokenUsage(await dependencies.readTextFile(sessionFilePath))
           ?? emptyCodexTokenUsage();
+      }
+
+      if (session.provider === 'command-code') {
+        const sessionFilePath = session.jsonl_path;
+        if (!sessionFilePath || !dependencies.fileExists(sessionFilePath)) {
+          throw new AppError(`Command Code session file for "${sessionId}" was not found.`, {
+            code: 'SESSION_FILE_NOT_FOUND',
+            statusCode: 404,
+          });
+        }
+
+        const tail = await dependencies.readTextFileTail(sessionFilePath, TOKEN_USAGE_TAIL_BYTES);
+        const tailUsage = summarizeCommandCodeTokenUsage(tail.content);
+        if (tailUsage || tail.isComplete) {
+          return tailUsage ?? emptyCommandCodeTokenUsage();
+        }
+
+        return summarizeCommandCodeTokenUsage(await dependencies.readTextFile(sessionFilePath))
+          ?? emptyCommandCodeTokenUsage();
       }
 
       let sessionFilePath = session.jsonl_path;

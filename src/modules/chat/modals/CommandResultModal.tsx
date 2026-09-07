@@ -55,6 +55,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   cursor: 'Cursor',
   codex: 'Codex',
   opencode: 'OpenCode',
+  'command-code': 'Command Code',
 };
 
 const FALLBACK_COMMANDS: CommandEntry[] = [

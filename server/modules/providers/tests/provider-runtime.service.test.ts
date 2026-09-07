@@ -76,6 +76,7 @@ test('providerRegistry owns one runtime for every registered provider', () => {
     'codex',
     'cursor',
     'opencode',
+    'command-code',
   ]);
   assert.equal(providers.every((provider) => typeof provider.runtime.run === 'function'), true);
   assert.equal(providers.every((provider) => typeof provider.runtime.abort === 'function'), true);

@@ -13,6 +13,7 @@ const AGENT_NAMES: Record<AgentProvider, string> = {
   cursor: 'Cursor',
   codex: 'Codex',
   opencode: 'OpenCode',
+  'command-code': 'Command Code',
 };
 
 /** Rendered by AgentsSettingsTab to pick which agent provider the tab is configuring. */
@@ -29,7 +30,8 @@ export default function AgentSelectorSection({
           const dotColor =
             agent === 'claude' ? 'bg-blue-500' :
             agent === 'cursor' ? 'bg-purple-500' :
-            agent === 'opencode' ? 'bg-zinc-500' : 'bg-foreground/60';
+            agent === 'opencode' ? 'bg-zinc-500' :
+            agent === 'command-code' ? 'bg-neutral-500' : 'bg-foreground/60';
 
           return (
             <Pill

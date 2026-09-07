@@ -5,7 +5,7 @@ import type { NavigateFunction } from 'react-router-dom';
 //----------------- LLM PROVIDER MODEL CATALOG ------------
 
 /** Identifies which coding-agent CLI backs a session, project selection or model list. */
-export type LLMProvider = 'claude' | 'cursor' | 'codex' | 'opencode';
+export type LLMProvider = 'claude' | 'cursor' | 'codex' | 'opencode' | 'command-code';
 
 /** One selectable model in a provider's model menu, including its optional reasoning-effort choices. */
 export type ProviderModelOption = {

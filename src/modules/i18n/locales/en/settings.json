@@ -351,6 +351,9 @@
       },
       "opencode": {
         "description": "OpenCode CLI assistant"
+      },
+      "command-code": {
+        "description": "Command Code CLI assistant"
       }
     },
     "connectionStatus": "Connection Status",

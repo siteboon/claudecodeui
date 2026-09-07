@@ -18,7 +18,7 @@ import { createAgentRouter } from './agent.routes.js';
 
 type AgentExternalDependencies = Pick<
   Parameters<typeof createAgentRouter>[0],
-  'queryClaude' | 'queryCursor' | 'queryCodex' | 'queryOpenCode'
+  'queryClaude' | 'queryCursor' | 'queryCodex' | 'queryOpenCode' | 'queryCommandCode'
 >;
 
 /**
