@@ -61,6 +61,7 @@
 - **Git Explorer** - View, stage and commit your changes. You can also switch branches 
 - **Browser Use** - Open browser sessions for web research, testing, and agent-driven browser tasks
 - **Session Management** - Resume conversations, manage multiple sessions, and track history
+- **Provider Handoff** - Use **Continue with another provider** in an idle chat to choose a different provider and model. A linked chat opens in the same workspace with a saved context draft; review it and press Send to continue. The original chat is unchanged. Conversation text and bounded tool context transfer, but attachment contents, private reasoning, and provider-specific state do not. Long histories are truncated with a notice; avoid running both chats against the same files simultaneously.
 - **Plugin System** - Extend CloudCLI with custom plugins — add new tabs, backend services, and integrations. [Build your own →](https://github.com/cloudcli-ai/cloudcli-plugin-starter)
 - **TaskMaster AI Integration** *(Optional)* - Advanced project management with AI-powered task planning, PRD parsing, and workflow automation
 - **Model Compatibility** - Works with Claude and GPT model families (the full list of supported models is available at runtime via `GET /api/providers/:provider/models`)

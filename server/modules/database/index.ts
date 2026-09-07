@@ -12,7 +12,7 @@ export { providerModelsDb } from '@/modules/database/repositories/provider-model
 export { projectsDb } from '@/modules/database/repositories/projects.db.js';
 export { pushSubscriptionsDb } from '@/modules/database/repositories/push-subscriptions.js';
 export { scanStateDb } from '@/modules/database/repositories/scan-state.db.js';
-// sessionDraftsDb: used by User for drafts and Scheduled Messages for server-owned queued turns.
+// sessionDraftsDb: used by User for drafts, Providers for handoffs, and Scheduled Messages for queued turns.
 export { sessionDraftsDb } from '@/modules/database/repositories/session-drafts.db.js';
 export type {
   QueuedSessionMessageRecord,

@@ -5,6 +5,7 @@ import {
 } from '@/shared/authToken';
 import { IS_PLATFORM } from '@/shared/utils';
 import { readVoiceConfig, voiceConfigHeaders } from '@/shared/voiceConfig';
+import type { LLMProvider } from '@/shared/types';
 
 // Headers are a plain record rather than the full `HeadersInit` union so the
 // defaults below can be merged with a caller's headers by spreading.
@@ -210,6 +211,8 @@ export const api = {
   // `upToAnchorId` (all of it when omitted). The source is left untouched.
   forkSession: (sessionId: string, body: { upToAnchorId?: string; title?: string } = {}) =>
     post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/fork`, body),
+  handoffSession: (sessionId: string, body: { provider: LLMProvider; model: string }) =>
+    post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/handoff`, body),
   renameSession: (sessionId: string, summary: string) =>
     put(`/api/providers/sessions/${sessionId}`, { summary }),
 
