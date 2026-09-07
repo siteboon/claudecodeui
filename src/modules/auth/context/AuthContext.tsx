@@ -17,11 +17,11 @@ type AuthUser = {
 const AUTH_TOKEN_STORAGE_KEY = 'auth-token';
 
 const AUTH_ERROR_MESSAGES = {
-  authStatusCheckFailed: 'Failed to check authentication status',
-  loginFailed: 'Login failed',
-  registrationFailed: 'Registration failed',
-  networkError: 'Network error. Please try again.',
-  sessionExpired: 'Your session expired. Please log in again.',
+  authStatusCheckFailed: 'errors.authStatusCheckFailed',
+  loginFailed: 'errors.loginFailed',
+  registrationFailed: 'errors.registrationFailed',
+  networkError: 'errors.networkError',
+  sessionExpired: 'errors.sessionExpired',
 } as const;
 
 type AuthActionResult = { success: true } | { success: false; error: string };
@@ -106,7 +106,7 @@ export function useAuth(): AuthContextValue {
 
 /** Used by App to expose the session, and its login/logout actions, to every module through useAuth. */
 export function AuthProvider({ children }: AuthProviderProps) {
-  const { t } = useTranslation();
+  const { t } = useTranslation('auth');
   const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setToken] = useState<string | null>(() => readStoredToken());
   const [isLoading, setIsLoading] = useState(true);

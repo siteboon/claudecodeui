@@ -1,5 +1,5 @@
 import { ArrowRight, GitMerge, RefreshCw } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { MergeWorktreeOptions, WorktreeInfo } from '@/shared/types';
@@ -22,34 +22,46 @@ export default function MergeWorktreeModal({
   onClose,
   onMerge,
 }: MergeWorktreeModalProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [squash, setSquash] = useState(true);
   const [message, setMessage] = useState('');
   const [removeAfterMerge, setRemoveAfterMerge] = useState(true);
   /** Tracks whether the user edited the message, so toggling squash only rewrites untouched defaults. */
   const [messageEdited, setMessageEdited] = useState(false);
-
   // Default commit message for the current branch/squash combination.
-  const defaultMessage = (branch: string | null, nextSquash: boolean): string => {
+  const defaultMessage = useCallback((branch: string | null, nextSquash: boolean): string => {
     if (!branch) {
       return '';
     }
     return nextSquash
       ? t('git:merge.defaultSquash', { branch })
       : t('git:merge.defaultMerge', { branch });
-  };
+  }, [t]);
+
+  // Remembers which worktree the editable message belongs to, so the effect
+  // below can tell a newly opened worktree apart from a locale change.
+  const messageWorktreeRef = useRef<WorktreeInfo | null>(null);
 
   useEffect(() => {
-    if (worktree) {
+    if (!worktree) {
+      return;
+    }
+    if (messageWorktreeRef.current !== worktree) {
+      // A new worktree resets every field, including the commit message.
+      messageWorktreeRef.current = worktree;
       setSquash(true);
       setRemoveAfterMerge(true);
       setMessage(defaultMessage(worktree.branch, true));
       setMessageEdited(false);
+      return;
     }
-    // Intentionally excludes defaultMessage: the default message should only
-    // reset when a new worktree is opened, not when the language changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [worktree]);
+    // Same worktree after the locale changed: refresh the untouched default
+    // message so the submitted merge uses the active language.
+    if (!messageEdited) {
+      setMessage(defaultMessage(worktree.branch, squash));
+    }
+  }, [worktree, i18n.language, squash, messageEdited, defaultMessage]);
+
 
   const handleSquashChange = (nextSquash: boolean) => {
     setSquash(nextSquash);

@@ -350,6 +350,8 @@
     "tokensUsed_other": "{{count}} tokens used",
     "expandImage": "Expand {{name}}",
     "tokensLabel_one": "token",
-    "tokensLabel_other": "tokens"
+    "tokensLabel_other": "tokens",
+    "escClosesModal": "Esc closes the modal.",
+    "close": "Close"
   }
 }

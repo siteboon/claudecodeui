@@ -51,11 +51,11 @@ export default function BrowserUseSettingsTab() {
     setIsStatusLoading(true);
 
     void loadSettings()
-      .catch((err) => setError(err instanceof Error ? err.message : t('browserUseSettings.loadSettingsFailed')))
+      .catch(() => setError(t('browserUseSettings.loadSettingsFailed')))
       .finally(() => setIsSettingsLoading(false));
 
     void loadStatus()
-      .catch((err) => setError(err instanceof Error ? err.message : t('browserUseSettings.loadStatusFailed')))
+      .catch(() => setError(t('browserUseSettings.loadStatusFailed')))
       .finally(() => setIsStatusLoading(false));
   }, [loadSettings, loadStatus, t]);
 
@@ -69,8 +69,8 @@ export default function BrowserUseSettingsTab() {
       window.dispatchEvent(new Event('browserUseSettingsChanged'));
       setIsStatusLoading(true);
       await loadStatus();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('browserUseSettings.saveFailed'));
+    } catch {
+      setError(t('browserUseSettings.saveFailed'));
     } finally {
       setIsStatusLoading(false);
       setIsSaving(false);
@@ -85,8 +85,8 @@ export default function BrowserUseSettingsTab() {
       await readApiJson(response);
       setIsStatusLoading(true);
       await loadStatus();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('browserUseSettings.installFailed'));
+    } catch {
+      setError(t('browserUseSettings.installFailed'));
     } finally {
       setIsStatusLoading(false);
       setIsInstalling(false);
@@ -149,7 +149,7 @@ export default function BrowserUseSettingsTab() {
                 <div className="min-w-0 space-y-1">
                   <div className="text-sm font-medium text-foreground">{t('browserUseSettings.runtimeRequiredTitle')}</div>
                   <p className="text-sm text-muted-foreground">
-                    {status?.message || t('browserUseSettings.runtimeRequiredFallback')}
+                    {t('browserUseSettings.runtimeRequiredFallback')}
                   </p>
                 </div>
 

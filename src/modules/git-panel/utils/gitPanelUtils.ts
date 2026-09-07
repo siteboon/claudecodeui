@@ -2,10 +2,10 @@ import { FILE_STATUS_GROUPS } from '@/shared/constants';
 import type { FileStatusCode, GitStatusResponse } from '@/shared/types';
 
 const FILE_STATUS_LABELS: Record<FileStatusCode, string> = {
-  M: 'Modified',
-  A: 'Added',
-  D: 'Deleted',
-  U: 'Untracked',
+  M: 'git:status.modified',
+  A: 'git:status.added',
+  D: 'git:status.deleted',
+  U: 'git:status.untracked',
 };
 
 const FILE_STATUS_BADGE_CLASSES: Record<FileStatusCode, string> = {
