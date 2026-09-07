@@ -280,6 +280,7 @@
     },
     "pending": "Programado para {{when}}",
     "failed": "No enviado — {{reason}}",
-    "cancel": "Cancelar mensaje programado"
+    "cancel": "Cancelar mensaje programado",
+    "dismiss": "Descartar el aviso de fallo"
   }
 }

@@ -7,7 +7,7 @@
   },
   "npm": {
     "publish": true,
-    "publishArgs": ["--access public"]
+    "publishArgs": ["--access public", "--loglevel warn"]
   },
   "github": {
     "release": true,
