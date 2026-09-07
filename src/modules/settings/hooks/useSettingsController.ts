@@ -20,11 +20,6 @@ const DEFAULT_CURSOR_PERMISSIONS: CursorPermissionsState = {
   skipPermissions: false,
 };
 
-type ThemeContextValue = {
-  isDarkMode: boolean;
-  toggleDarkMode: () => void;
-};
-
 type UseSettingsControllerArgs = {
   isOpen: boolean;
   initialTab: string;
@@ -120,7 +115,7 @@ const normalizeNotificationPreferences = (
 };
 
 export function useSettingsController({ isOpen, initialTab }: UseSettingsControllerArgs) {
-  const { isDarkMode, toggleDarkMode } = useTheme() as ThemeContextValue;
+  const { isDarkMode, toggleDarkMode } = useTheme();
   const closeTimerRef = useRef<number | null>(null);
 
   const [activeTab, setActiveTab] = useState<SettingsMainTab>(() => normalizeMainTab(initialTab));
