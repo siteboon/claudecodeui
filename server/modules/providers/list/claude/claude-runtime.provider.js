@@ -387,6 +387,38 @@ function logRunLifecycle(event, fields) {
 }
 
 /**
+ * Decides the terminal outcome of a run that ended by throwing.
+ *
+ * A run can fail AFTER it already reported success: the `result` message sends
+ * the client a terminal complete with exit code 0, and the held stream can then
+ * throw while winding down. Recording `error`/1 for that run gives it two
+ * contradicting terminal outcomes -- the client was told it worked, the log says
+ * it did not. Whoever reads the two together later cannot tell which is true.
+ *
+ * So the outcome the client already saw wins, and the late failure is recorded
+ * beside it as `lateError` rather than replacing it. Nothing is lost: the error
+ * is still in the record, it just no longer contradicts the run's own result.
+ *
+ * Pure on purpose -- this is the part worth testing without a live SDK.
+ *
+ * @param {Object} args
+ * @param {boolean} args.turnCompleteSent - Client already got a terminal complete.
+ * @param {*} args.error - The thrown value.
+ * @returns {{reason: string, exitCode: number|null, error?: string, lateError?: string}}
+ *   Fields for the run_end record. Exactly one of `error` / `lateError` is set:
+ *   `error` when the run failed outright, `lateError` when it had already
+ *   reported success. Which one carries the message is the whole point -- a
+ *   reader treats `error` as "this run failed".
+ */
+function resolveRunEndOutcome({ turnCompleteSent, error }) {
+  const message = error?.message || String(error);
+  if (turnCompleteSent) {
+    return { reason: 'completed', exitCode: 0, lateError: message };
+  }
+  return { reason: 'error', exitCode: 1, error: message };
+}
+
+/**
  * Transforms SDK messages to WebSocket format expected by frontend
  * @param {Object} sdkMessage - SDK message object
  * @returns {Object} Transformed message ready for WebSocket
@@ -1175,10 +1207,8 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     // exact blind spot this logging was added to remove, reappearing on the
     // path where it matters most.
     logRunEnd({
-      reason: 'error',
-      exitCode: 1,
-      durationMs: Date.now() - runStartedAt,
-      error: error?.message || String(error)
+      ...resolveRunEndOutcome({ turnCompleteSent, error }),
+      durationMs: Date.now() - runStartedAt
     });
 
     // Check if Claude CLI is installed for a clearer error message
@@ -1338,6 +1368,7 @@ export const claudeRuntime = {
 
 // Export public API
 export {
+  resolveRunEndOutcome,
   queryClaudeSDK,
   abortClaudeSDKSession,
   isClaudeSDKSessionActive,
