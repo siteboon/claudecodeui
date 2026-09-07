@@ -401,6 +401,13 @@ function logRunLifecycle(event, fields) {
  *
  * Pure on purpose -- this is the part worth testing without a live SDK.
  *
+ * The message itself has to survive `JSON.stringify()` in `logRunLifecycle()`.
+ * `error` is whatever got thrown -- there is no guarantee `error.message` is a
+ * string, or that stringifying it cannot itself throw (a BigInt message, or an
+ * object whose `toString()` throws). By the time this runs, `logRunEnd()` has
+ * already set `runEndLogged`, so a throw here would drop the terminal record
+ * entirely with no fallback able to re-emit it.
+ *
  * @param {Object} args
  * @param {boolean} args.turnCompleteSent - Client already got a terminal complete.
  * @param {*} args.error - The thrown value.
@@ -411,7 +418,12 @@ function logRunLifecycle(event, fields) {
  *   reader treats `error` as "this run failed".
  */
 function resolveRunEndOutcome({ turnCompleteSent, error }) {
-  const message = error?.message || String(error);
+  let message;
+  try {
+    message = String(error?.message ?? error);
+  } catch {
+    message = 'Unserializable error';
+  }
   if (turnCompleteSent) {
     return { reason: 'completed', exitCode: 0, lateError: message };
   }
