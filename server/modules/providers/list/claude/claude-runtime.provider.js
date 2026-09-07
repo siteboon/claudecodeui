@@ -724,6 +724,12 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   const sessionKey = () => sessionId || capturedSessionId || null;
   // Wall-clock start of this run, so every run_end can report a duration.
   const runStartedAt = Date.now();
+  // Identifies THIS run, not the conversation. `sessionKey` cannot do that job:
+  // a superseding run reuses the same key while the older one is still
+  // unwinding, so without this the two runs' records interleave under identical
+  // session and user fields and cannot be told apart afterwards -- which is the
+  // one thing these records exist for.
+  const runId = createRequestId();
   // Guarantees exactly one terminal lifecycle record per run: the success path
   // emits run_end before the notification calls, and a throw from one of those
   // would otherwise reach the catch and log a second, contradicting one.
@@ -734,6 +740,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     }
     runEndLogged = true;
     logRunLifecycle('run_end', {
+      runId,
       sessionKey: sessionKey(),
       providerSessionId: capturedSessionId || null,
       userId: ws?.userId || null,
@@ -803,6 +810,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     }
     runStartLogged = true;
     logRunLifecycle('run_start', {
+      runId,
       sessionKey: sessionKey(),
       providerSessionId: providerSessionId || null,
       // A run either resumes a known provider session or creates a new one.
@@ -992,6 +1000,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         if (!providerSessionId && !sessionCreatedSent) {
           sessionCreatedSent = true;
           logRunLifecycle('session_created', {
+            runId,
             sessionKey: sessionKey(),
             providerSessionId: capturedSessionId,
             userId: ws?.userId || null
