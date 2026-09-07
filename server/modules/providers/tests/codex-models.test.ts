@@ -134,6 +134,11 @@ test('Codex models serve the model_catalog_json entries with their metadata', as
         visibility: 'hide',
       },
       {
+        slug: 'internal/not-for-picker',
+        display_name: 'Not For Picker',
+        visibility: 'none',
+      },
+      {
         slug: '',
         display_name: 'Missing slug',
       },

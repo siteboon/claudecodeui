@@ -115,14 +115,15 @@ export const CODEX_PREDEFINED_MODELS: ProviderModelsDefinition = {
 
 const isHiddenCatalogVisibility = (rawVisibility: unknown): boolean => {
   const visibility = readOptionalString(rawVisibility)?.toLowerCase();
-  return visibility === 'hide' || visibility === 'hidden';
+  return visibility === 'hide' || visibility === 'hidden' || visibility === 'none';
 };
 
 /**
  * Maps one entry of a Codex `model_catalog_json` file onto a selectable model.
  *
  * Entries that lack a slug or are explicitly hidden from Codex's own picker
- * (`visibility = "hide"`) are dropped, mirroring which models the TUI shows.
+ * (`visibility = "hide"` or `"none"`) are dropped, mirroring which models the
+ * TUI shows.
  */
 const toCatalogModelOption = (rawEntry: unknown): ProviderModelOption | null => {
   const entry = readObjectRecord(rawEntry);
