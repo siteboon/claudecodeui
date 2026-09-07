@@ -26,6 +26,14 @@ const SEARCH_SCROLL_RETRIES = 20;
 const SEARCH_SCROLL_RETRY_DELAY_MS = 150;
 
 /**
+ * A deliberate upward reading gesture parks the transcript a few pixels above
+ * the bottom, inside the `isNearBottom` tolerance, and the gesture emits a
+ * scroll event of its own. Following therefore re-arms only once the view is
+ * back at the true bottom, so that event cannot cancel the gesture.
+ */
+const AT_BOTTOM_EPSILON_PX = 4;
+
+/**
  * Finds the rendered row for a resolved search target.
  *
  * Only an exact timestamp match counts while retries remain: the widened window
@@ -223,6 +231,9 @@ export function useChatSessionState({
    * beat layout effects scheduled by the same render.
    */
   const isUserScrolledUpRef = useRef(false);
+  // Set by an explicit upward gesture, cleared at the true bottom. Without it
+  // the scroll event the gesture emits resets the flag it just set.
+  const readingGestureRef = useRef(false);
   const isLoadingMoreRef = useRef(false);
   const allMessagesLoadedRef = useRef(false);
   const topLoadLockRef = useRef(false);
@@ -240,6 +251,7 @@ export function useChatSessionState({
     transcriptGenerationRef.current += 1;
     isLoadingMoreRef.current = false;
     isUserScrolledUpRef.current = false;
+    readingGestureRef.current = false;
   }
   const transcriptGeneration = transcriptGenerationRef.current;
   /**
@@ -473,6 +485,7 @@ export function useChatSessionState({
 
   const handleUserScrollGesture = useCallback(() => {
     if (transcriptGeneration !== transcriptGenerationRef.current) return;
+    readingGestureRef.current = true;
     setIsUserScrolledUp(true);
   }, [setIsUserScrolledUp, transcriptGeneration]);
 
@@ -557,8 +570,15 @@ export function useChatSessionState({
     const container = scrollContainerRef.current;
     if (!container) return;
 
-    const nearBottom = isNearBottom();
-    setIsUserScrolledUp(!nearBottom);
+    if (
+      container.scrollHeight - container.scrollTop - container.clientHeight
+      <= AT_BOTTOM_EPSILON_PX
+    ) {
+      readingGestureRef.current = false;
+    }
+    if (!readingGestureRef.current) {
+      setIsUserScrolledUp(!isNearBottom());
+    }
     scrollPositionRef.current = {
       height: container.scrollHeight,
       top: container.scrollTop,

@@ -152,8 +152,15 @@ describe('transcript follow ownership', () => {
     const container = createContainer(5000, 500);
     (result.current.scrollContainerRef as { current: HTMLDivElement | null }).current = container.element;
 
+    // A 30px reading gesture. It sits inside the 50px `isNearBottom`
+    // tolerance and emits a scroll event of its own, so the flag it sets has
+    // to survive the handler that event runs.
     act(() => {
       result.current.handleUserScrollGesture();
+    });
+    container.element.scrollTop = container.scrollHeight - 500 - 30;
+    await act(async () => {
+      await result.current.handleScroll();
     });
     container.writes.length = 0;
 
