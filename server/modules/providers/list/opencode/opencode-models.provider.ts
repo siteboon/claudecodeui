@@ -21,9 +21,9 @@ import {
  * Curated OpenCode catalog shipped as immutable CloudCLI defaults.
  *
  * OpenCode routes by `<providerID>/<modelID>`, so this list mirrors the
- * providers `opencode models --verbose` reports: the OpenCode Zen gateway plus
- * the Anthropic and OpenAI providers OpenCode can address directly with the
- * user's own credentials.
+ * providers `opencode models --verbose` reports: the OpenCode Zen gateway, the
+ * OpenCode Go subscription gateway, and the Anthropic and OpenAI providers
+ * OpenCode can address directly with the user's own credentials.
  */
 export const OPENCODE_PREDEFINED_MODELS: ProviderModelsDefinition = {
   OPTIONS: [
@@ -81,6 +81,178 @@ export const OPENCODE_PREDEFINED_MODELS: ProviderModelsDefinition = {
     { value: 'opencode/north-mini-code-free', label: 'North Mini Code Free', description: 'OpenCode Zen · Free' },
     { value: 'opencode/nemotron-3-ultra-free', label: 'Nemotron 3 Ultra Free', description: 'OpenCode Zen · Free' },
     { value: 'opencode/deepseek-v4-flash-free', label: 'DeepSeek V4 Flash Free', description: 'OpenCode Zen · Free' },
+    {
+      value: 'opencode-go/grok-4.6',
+      label: 'Grok 4.6',
+      description: 'OpenCode Go',
+      effort: {
+        values: [{ value: 'low' }, { value: 'medium' }, { value: 'high' }, { value: 'xhigh' }],
+      },
+    },
+    {
+      value: 'opencode-go/glm-5.3-flash',
+      label: 'GLM 5.3 Flash',
+      description: 'OpenCode Go',
+      effort: {
+        values: [{ value: 'low' }, { value: 'high' }, { value: 'max' }],
+      },
+    },
+    {
+      value: 'opencode-go/glm-5.3',
+      label: 'GLM 5.3',
+      description: 'OpenCode Go',
+      effort: {
+        values: [{ value: 'low' }, { value: 'high' }, { value: 'max' }],
+      },
+    },
+    {
+      value: 'opencode-go/glm-5.2',
+      label: 'GLM 5.2',
+      description: 'OpenCode Go',
+      effort: {
+        values: [{ value: 'high' }, { value: 'max' }],
+      },
+    },
+    { value: 'opencode-go/glm-5.1', label: 'GLM 5.1', description: 'OpenCode Go' },
+    {
+      value: 'opencode-go/gpt-5.6-luna',
+      label: 'GPT 5.6 Luna',
+      description: 'OpenCode Go',
+      effort: {
+        values: [
+          { value: 'none' },
+          { value: 'low' },
+          { value: 'medium' },
+          { value: 'high' },
+          { value: 'xhigh' },
+          { value: 'max' },
+        ],
+      },
+    },
+    {
+      value: 'opencode-go/kimi-k3',
+      label: 'Kimi K3',
+      description: 'OpenCode Go',
+      effort: {
+        values: [{ value: 'max' }],
+      },
+    },
+    { value: 'opencode-go/kimi-k2.7-code', label: 'Kimi K2.7 Code', description: 'OpenCode Go' },
+    { value: 'opencode-go/kimi-k2.6', label: 'Kimi K2.6', description: 'OpenCode Go' },
+    {
+      value: 'opencode-go/longcat-2.0',
+      label: 'LongCat 2.0',
+      description: 'OpenCode Go',
+      effort: {
+        values: [{ value: 'low' }, { value: 'medium' }, { value: 'high' }],
+      },
+    },
+    { value: 'opencode-go/mimo-v2.5', label: 'MiMo V2.5', description: 'OpenCode Go' },
+    { value: 'opencode-go/mimo-v2.5-pro', label: 'MiMo V2.5 Pro', description: 'OpenCode Go' },
+    {
+      value: 'opencode-go/minimax-m3',
+      label: 'MiniMax M3',
+      description: 'OpenCode Go',
+      effort: {
+        values: [{ value: 'none' }, { value: 'thinking' }],
+      },
+    },
+    { value: 'opencode-go/minimax-m2.7', label: 'MiniMax M2.7', description: 'OpenCode Go' },
+    {
+      value: 'opencode-go/muse-spark-1.3-contributor',
+      label: 'Muse Spark 1.3 Contributor',
+      description: 'OpenCode Go',
+      effort: {
+        values: [
+          { value: 'minimal' },
+          { value: 'low' },
+          { value: 'medium' },
+          { value: 'high' },
+          { value: 'xhigh' },
+        ],
+      },
+    },
+    {
+      value: 'opencode-go/muse-spark-1.2-contributor',
+      label: 'Muse Spark 1.2 Contributor',
+      description: 'OpenCode Go',
+      effort: {
+        values: [
+          { value: 'minimal' },
+          { value: 'low' },
+          { value: 'medium' },
+          { value: 'high' },
+          { value: 'xhigh' },
+        ],
+      },
+    },
+    {
+      value: 'opencode-go/qwen3.8-max',
+      label: 'Qwen3.8 Max',
+      description: 'OpenCode Go',
+      effort: {
+        values: [{ value: 'low' }, { value: 'medium' }, { value: 'xhigh' }],
+      },
+    },
+    {
+      value: 'opencode-go/qwen3.8-flash',
+      label: 'Qwen3.8 Flash',
+      description: 'OpenCode Go',
+      effort: {
+        values: [{ value: 'low' }, { value: 'medium' }, { value: 'xhigh' }],
+      },
+    },
+    { value: 'opencode-go/qwen3.7-max', label: 'Qwen3.7 Max', description: 'OpenCode Go' },
+    { value: 'opencode-go/qwen3.7-plus', label: 'Qwen3.7 Plus', description: 'OpenCode Go' },
+    { value: 'opencode-go/qwen3.6-plus', label: 'Qwen3.6 Plus', description: 'OpenCode Go' },
+    {
+      value: 'opencode-go/deepseek-v4-pro',
+      label: 'DeepSeek V4 Pro',
+      description: 'OpenCode Go',
+      effort: {
+        values: [{ value: 'high' }, { value: 'max' }],
+      },
+    },
+    {
+      value: 'opencode-go/deepseek-v4-flash',
+      label: 'DeepSeek V4 Flash',
+      description: 'OpenCode Go',
+      effort: {
+        values: [{ value: 'low' }, { value: 'high' }, { value: 'max' }],
+      },
+    },
+    {
+      value: 'opencode-go/deepseek-v4-flash-vision-exp',
+      label: 'DeepSeek V4 Flash Vision Exp',
+      description: 'OpenCode Go',
+      effort: {
+        values: [{ value: 'low' }, { value: 'high' }, { value: 'max' }],
+      },
+    },
+    {
+      value: 'opencode-go/hy4-preview',
+      label: 'Hy4 Preview',
+      description: 'OpenCode Go',
+      effort: {
+        values: [{ value: 'none' }, { value: 'high' }],
+      },
+    },
+    {
+      value: 'opencode-go/hy3',
+      label: 'Hy3',
+      description: 'OpenCode Go',
+      effort: {
+        values: [{ value: 'none' }, { value: 'low' }, { value: 'high' }],
+      },
+    },
+    {
+      value: 'opencode-go/omen-alpha',
+      label: 'Omen Alpha',
+      description: 'OpenCode Go',
+      effort: {
+        values: [{ value: 'low' }, { value: 'high' }],
+      },
+    },
     { value: 'anthropic/claude-opus-5', label: 'Claude Opus 5', description: 'Anthropic' },
     { value: 'anthropic/claude-opus-5-fast', label: 'Claude Opus 5 Fast', description: 'Anthropic' },
     { value: 'anthropic/claude-fable-5', label: 'Claude Fable 5', description: 'Anthropic' },
