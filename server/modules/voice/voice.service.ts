@@ -6,6 +6,8 @@ import type {
   VoiceSpeechPayload,
 } from '@/shared/types.js';
 
+import { getMiniMaxSpeechEndpoint, synthesizeMiniMaxSpeech } from '../../../shared/minimaxSpeech.js';
+
 type VoiceServiceDependencies = {
   defaults: {
     baseUrl: string;
@@ -160,7 +162,10 @@ export function createVoiceService(dependencies: VoiceServiceDependencies): Voic
       }
 
       try {
-        const response = await dependencies.fetchBackend(`${config.baseUrl}/audio/speech`, {
+        const miniMaxEndpoint = getMiniMaxSpeechEndpoint(config.baseUrl);
+        const response = miniMaxEndpoint
+          ? await synthesizeMiniMaxSpeech(miniMaxEndpoint, input.text, config, dependencies.fetchBackend)
+          : await dependencies.fetchBackend(`${config.baseUrl}/audio/speech`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

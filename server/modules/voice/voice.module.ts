@@ -1,5 +1,7 @@
 import multer from 'multer';
 
+import { getMiniMaxSpeechEndpoint } from '../../../shared/minimaxSpeech.js';
+
 import { createVoiceRouter } from './voice.routes.js';
 import { createVoiceService } from './voice.service.js';
 
@@ -18,6 +20,11 @@ const voiceService = createVoiceService({
     sttModel: process.env.VOICE_STT_MODEL || 'whisper-1',
     ttsModel: process.env.VOICE_TTS_MODEL || 'tts-1',
     ttsVoice: process.env.VOICE_TTS_VOICE || 'alloy',
+    // Let the native adapter supply its own defaults for MiniMax endpoints.
+    ...(getMiniMaxSpeechEndpoint(process.env.VOICE_API_BASE_URL || '') ? {
+      ttsModel: process.env.VOICE_TTS_MODEL || '',
+      ttsVoice: process.env.VOICE_TTS_VOICE || '',
+    } : {}),
   },
   timeoutMs: voiceTimeoutMs,
   fetchBackend: async (url, options) => {

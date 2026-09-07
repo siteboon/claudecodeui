@@ -1,3 +1,4 @@
+import { getMiniMaxSpeechEndpoint, synthesizeMiniMaxSpeech } from '@shared/minimaxSpeech';
 import {
   expireAuthSession,
   getStoredAuthToken,
@@ -563,11 +564,16 @@ export function transcribeVoice(blob: Blob, filename: string): Promise<Response>
 }
 
 /**
- * Synthesizes speech for the given text, using the user's configured OpenAI-compatible
+ * Synthesizes speech for the chat module using the user's configured voice
  * endpoint when one is set and otherwise the CloudCLI voice proxy.
  */
 export function synthesizeVoice(text: string, signal: AbortSignal): Promise<Response> {
   const config = readVoiceConfig();
+  const miniMaxEndpoint = getMiniMaxSpeechEndpoint(config.baseUrl);
+
+  if (miniMaxEndpoint) {
+    return synthesizeMiniMaxSpeech(miniMaxEndpoint, text, config, fetch, signal);
+  }
 
   if (config.baseUrl.trim()) {
     return fetch(voiceDirectUrl(config.baseUrl.trim(), '/audio/speech'), {
