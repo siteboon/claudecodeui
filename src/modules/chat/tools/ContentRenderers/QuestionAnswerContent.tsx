@@ -41,15 +41,20 @@ export const QuestionAnswerContent: React.FC<QuestionAnswerContentProps> = ({
         }
         const q = rawQuestion;
         const answer = answers?.[q.question];
-        // `answer` may be a non-string (or absent) in malformed payloads.
-        const answerLabels = typeof answer === 'string' ? answer.split(', ') : [];
-        const skipped = !answer;
-        const isExpanded = expandedIdx === idx;
         // `options` is typed as an array but comes from untrusted runtime data;
         // keep only valid entries so `.some`/`.map` below never throw.
         const options = Array.isArray(q.options)
           ? q.options.filter((opt) => opt && typeof opt === 'object' && typeof opt.label === 'string')
           : [];
+        // Match one exact option before splitting a multi-select answer. A
+        // single label may itself contain ", ".
+        const answerLabels = typeof answer !== 'string'
+          ? []
+          : options.some((option) => option.label === answer)
+            ? [answer]
+            : answer.split(', ');
+        const skipped = !answer;
+        const isExpanded = expandedIdx === idx;
 
         return (
           <div
