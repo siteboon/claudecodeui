@@ -37,7 +37,7 @@ async function withIsolatedDatabase(runTest: (userId: number) => void | Promise<
 
 type RunCall = { provider: string; command: string; options: Record<string, unknown> };
 
-function createRuntime(runs: RunCall[], behaviour: 'ok' | 'throw' = 'ok') {
+function createRuntime(runs: RunCall[], behaviour: 'ok' | 'throw' = 'ok', aborts: string[] = []) {
   return {
     hasRuntime: () => true,
     run: async (provider: string, command: string, options: Record<string, unknown>) => {
@@ -45,6 +45,10 @@ function createRuntime(runs: RunCall[], behaviour: 'ok' | 'throw' = 'ok') {
         throw new Error('provider exploded');
       }
       runs.push({ provider, command, options });
+    },
+    abort: async (_provider: string, sessionId: string) => {
+      aborts.push(sessionId);
+      return true;
     },
   } as never;
 }
@@ -110,6 +114,33 @@ test('a queued message stays pending while its session is busy', async () => {
     assert.deepEqual(sessionDraftsDb.getDrafts(userId)[0]?.queuedMessage, {
       content: 'send after this run',
     });
+  });
+});
+
+test('a due message interrupts a run in progress instead of failing', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    scheduledMessagesService.schedule({
+      userId,
+      sessionId: SESSION_ID,
+      content: 'the schedule wins',
+      scheduledFor: new Date(Date.now() - 1_000).toISOString(),
+    });
+    chatRunRegistry.startRun({
+      appSessionId: SESSION_ID,
+      provider: 'claude',
+      providerSessionId: null,
+      connection: null,
+      userId,
+    });
+
+    const runs: RunCall[] = [];
+    const aborts: string[] = [];
+    assert.equal(await dispatchDueScheduledMessages(createRuntime(runs, 'ok', aborts)), 1);
+
+    assert.deepEqual(aborts, [SESSION_ID]);
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0].command, 'the schedule wins');
+    assert.equal(scheduledMessagesDb.listForSession(userId, SESSION_ID)[0].status, 'sent');
   });
 });
 
@@ -197,6 +228,23 @@ test('a cancelled message never fires', async () => {
     const runs: RunCall[] = [];
     assert.equal(await dispatchDueScheduledMessages(createRuntime(runs)), 0);
     assert.equal(runs.length, 0);
+  });
+});
+
+test('a failed message can be dismissed, and stays dismissed', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    const scheduled = scheduledMessagesService.schedule({
+      userId,
+      sessionId: SESSION_ID,
+      content: 'will fail',
+      scheduledFor: new Date(Date.now() - 1_000).toISOString(),
+    });
+    await dispatchDueScheduledMessages(createRuntime([], 'throw'));
+    assert.equal(scheduledMessagesDb.listForSession(userId, SESSION_ID)[0].status, 'failed');
+
+    scheduledMessagesService.cancel(userId, scheduled.id);
+
+    assert.equal(scheduledMessagesDb.listForSession(userId, SESSION_ID)[0].status, 'cancelled');
   });
 });
 
