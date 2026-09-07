@@ -253,6 +253,7 @@
     },
     "pending": "Programmato per {{when}}",
     "failed": "Non inviato — {{reason}}",
-    "cancel": "Annulla messaggio programmato"
+    "cancel": "Annulla messaggio programmato",
+    "dismiss": "Ignora l'avviso di errore"
   }
 }

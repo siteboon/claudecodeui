@@ -38,8 +38,12 @@ export const getLanguageExtensions = (filename: string) => {
   switch (ext) {
     case 'js':
     case 'jsx':
+    case 'mjs':
+    case 'cjs':
     case 'ts':
     case 'tsx':
+    case 'mts':
+    case 'cts':
       return [javascript({ jsx: true, typescript: ext.includes('ts') })];
     case 'py':
       return [python()];
