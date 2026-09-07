@@ -1,5 +1,6 @@
 import { FILE_STATUS_GROUPS } from '@/shared/constants';
 import type { FileStatusCode, GitDiffMap, GitStatusResponse } from '@/shared/types';
+
 import FileChangeItem from '@/modules/git-panel/changes/FileChangeItem';
 
 type FileChangeListProps = {
