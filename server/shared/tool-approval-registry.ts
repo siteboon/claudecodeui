@@ -22,6 +22,7 @@ type ApprovalMeta = {
 type PendingApproval = {
   resolver: ApprovalResolver;
   onCancel?: ApprovalCancellation;
+  expires: boolean;
   sessionId: string | null;
   provider: LLMProvider | null;
   meta: ApprovalMeta;
@@ -52,10 +53,13 @@ function coerceReceivedAt(value: unknown): Date {
   return Number.isFinite(time) ? (value as Date) : new Date();
 }
 
-// Drop approvals whose run died without resolving them (WS disconnect, process
-// crash) so their captured payloads/closures don't accumulate unbounded.
+// Bound the lifetime of approvals whose provider delegates expiry to the
+// registry. Provider-owned waits are settled by that runtime's lifecycle.
 function sweepExpiredApprovals(now = Date.now()): void {
   for (const [requestId, entry] of pendingApprovals) {
+    if (!entry.expires) {
+      continue;
+    }
     const receivedAt = entry.receivedAt instanceof Date ? entry.receivedAt.getTime() : Number.NaN;
     // Unknown age expires rather than persists: the fail-safe direction is to
     // unblock a waiter we can no longer reason about, not to hang it forever.
@@ -84,11 +88,10 @@ function sweepExpiredApprovals(now = Date.now()): void {
   }
 }
 
-// Registration-time sweeping alone leaves the LAST stalled approval pending
-// forever: nothing else calls the sweep, and unlike the Claude runtime (which
-// applies its own per-request timeout) the omp ACP handler awaits its resolver
-// indefinitely. An unref'd interval bounds that wait without holding the process
-// open, and only runs while approvals are actually outstanding.
+// Sweep periodically so the last stalled, expiring approval is cancelled even
+// when no later registration triggers a sweep. Provider-owned waits are skipped.
+// The unref'd interval runs only while approvals are outstanding and never keeps
+// the process open.
 const SWEEP_INTERVAL_MS = 60 * 1000;
 let sweepTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -113,19 +116,29 @@ function ensureSweepTimer(): void {
   sweepTimer.unref?.();
 }
 
-// Consumed by each provider runtime in `@/modules/providers` (currently the
-// Claude runtime) to park a turn until the user answers its permission prompt.
+/**
+ * Used by provider runtimes in `@/modules/providers`, currently Claude, to park
+ * a turn until the user answers its permission prompt.
+ *
+ * By default, the registry cancels approvals older than 30 minutes. Providers
+ * that own timeout policy must pass `expires: false` and settle or unregister
+ * their approvals themselves. Claude does this for both configurable timeouts
+ * and interactive tools that wait indefinitely.
+ */
 export function registerApproval(
   requestId: string,
   {
     resolver,
     onCancel,
+    expires = true,
     sessionId = null,
     provider = null,
     meta = {},
   }: {
     resolver: ApprovalResolver;
     onCancel?: ApprovalCancellation;
+    /** Whether registry age-based expiry applies. Defaults to true. */
+    expires?: boolean;
     sessionId?: string | null;
     provider?: LLMProvider | null;
     meta?: ApprovalMeta;
@@ -140,6 +153,7 @@ export function registerApproval(
   pendingApprovals.set(requestId, {
     resolver,
     onCancel,
+    expires,
     sessionId,
     provider,
     meta,

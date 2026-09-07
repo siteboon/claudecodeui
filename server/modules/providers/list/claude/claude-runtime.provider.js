@@ -173,7 +173,9 @@ function waitForToolApproval(requestId, options = {}) {
     };
     registerApproval(requestId, {
       resolver,
-      onCancel: () => onCancel?.('expired'),
+      // Claude owns timeout and abort policy for every approval. The registry
+      // must not cap configurable timeouts or indefinite interactive waits.
+      expires: false,
       sessionId: metadata?._sessionId ?? null,
       provider: 'claude',
       meta: metadata ?? {},

@@ -11,8 +11,6 @@ import {
 
 const APPROVAL_MAX_AGE_MS = 30 * 60 * 1000;
 const SWEEP_INTERVAL_MS = 60 * 1000;
-// Expiry is age-based (`now - receivedAt`), so a realistic epoch keeps the
-// arithmetic honest and matches what a real run registers.
 const CLOCK_START_MS = Date.UTC(2026, 0, 1);
 
 // The registry is a process-wide singleton, so every test uses its own request
@@ -197,6 +195,62 @@ test('a stalled approval expires on its own timer and cancels the waiter it left
   assert.equal(cancellationCount, 1, 'an expired approval must not be cancelled again');
 });
 
+test('provider-owned approvals outlive registry expiry and remain answerable exactly once', (t) => {
+  t.mock.timers.enable({ apis: ['setInterval', 'Date'], now: CLOCK_START_MS });
+  t.after(() => {
+    unregisterApproval('req-provider-owned');
+    unregisterApproval('req-default-expiry');
+    mock.timers.reset();
+  });
+
+  const providerOwned = collector();
+  const expiring = collector();
+  const cancelProviderOwned = t.mock.fn();
+  const cancelExpiring = t.mock.fn();
+  const receivedAt = new Date();
+
+  registerApproval('req-provider-owned', {
+    resolver: providerOwned.resolver,
+    onCancel: cancelProviderOwned,
+    expires: false,
+    sessionId: 'session-mixed-expiry',
+    provider: 'claude',
+    meta: { toolName: 'AskUserQuestion', input: { question: 'Continue?' }, receivedAt },
+  });
+  registerApproval('req-default-expiry', {
+    resolver: expiring.resolver,
+    onCancel: cancelExpiring,
+    sessionId: 'session-mixed-expiry',
+  });
+
+  t.mock.timers.tick(APPROVAL_MAX_AGE_MS + SWEEP_INTERVAL_MS);
+
+  assert.deepEqual(expiring.outcomes, [{ cancelled: true }]);
+  assert.equal(cancelExpiring.mock.callCount(), 1);
+  assert.equal(resolveToolApproval('req-default-expiry', { allow: true }), false);
+  assert.deepEqual(providerOwned.outcomes, []);
+  assert.equal(cancelProviderOwned.mock.callCount(), 0);
+  assert.deepEqual(getPendingApprovalsForSession('session-mixed-expiry'), [{
+    requestId: 'req-provider-owned',
+    toolName: 'AskUserQuestion',
+    input: { question: 'Continue?' },
+    context: undefined,
+    sessionId: 'session-mixed-expiry',
+    provider: 'claude',
+    receivedAt,
+  }]);
+
+  const decision: ProviderPermissionDecision = { allow: true, updatedInput: { answer: 'Yes' } };
+  assert.equal(resolveToolApproval('req-provider-owned', decision), true);
+  assert.equal(resolveToolApproval('req-provider-owned', { allow: false }), false);
+  t.mock.timers.tick(APPROVAL_MAX_AGE_MS + SWEEP_INTERVAL_MS);
+
+  assert.deepEqual(providerOwned.outcomes, [decision]);
+  assert.equal(cancelProviderOwned.mock.callCount(), 0);
+  assert.equal(cancelExpiring.mock.callCount(), 1);
+  assert.deepEqual(getPendingApprovalsForSession('session-mixed-expiry'), []);
+});
+
 test('an approval resolved inside its window is never cancelled by the sweep', (t) => {
   t.mock.timers.enable({ apis: ['setInterval', 'Date'], now: CLOCK_START_MS });
   t.after(() => {
@@ -269,7 +323,7 @@ test('a non-Date receivedAt is pinned to a real timestamp and still expires', (t
 });
 
 test('an approval received at the Unix epoch expires like any other', (t) => {
-  t.mock.timers.enable({ apis: ['setInterval', 'Date'], now: CLOCK_START_MS });
+  t.mock.timers.enable({ apis: ['setInterval', 'Date'], now: 0 });
   t.after(() => {
     unregisterApproval('req-epoch');
     mock.timers.reset();
@@ -278,6 +332,8 @@ test('an approval received at the Unix epoch expires like any other', (t) => {
   const { outcomes, resolver } = collector();
 
   // A timestamp of 0 is a valid age, not a missing one.
+  // Register later so replacing the epoch with Date.now() is observable too.
+  t.mock.timers.tick(SWEEP_INTERVAL_MS);
   registerApproval('req-epoch', {
     resolver,
     sessionId: 'session-epoch',
@@ -285,8 +341,14 @@ test('an approval received at the Unix epoch expires like any other', (t) => {
   });
 
   t.mock.timers.tick(SWEEP_INTERVAL_MS);
+  assert.deepEqual(outcomes, [], 'a valid timestamp of zero must survive the first sweep');
+  assert.equal(getPendingApprovalsForSession('session-epoch')[0]?.receivedAt.getTime(), 0);
 
-  assert.deepEqual(outcomes, [{ cancelled: true }], 'an epoch-old approval is long expired');
+  t.mock.timers.tick(APPROVAL_MAX_AGE_MS - 2 * SWEEP_INTERVAL_MS);
+  assert.deepEqual(outcomes, [], 'the epoch approval must keep its full expiry window');
+  t.mock.timers.tick(SWEEP_INTERVAL_MS);
+
+  assert.deepEqual(outcomes, [{ cancelled: true }], 'the approval expires only once its age exceeds the window');
   assert.deepEqual(getPendingApprovalsForSession('session-epoch'), []);
 });
 
