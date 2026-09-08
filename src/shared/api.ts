@@ -366,8 +366,8 @@ export const api = {
 
     previewCatalogSync: (provider: string) =>
       get(`/api/providers/${provider}/models/catalog-sync/preview`),
-    applyCatalogSync: (provider: string) =>
-      post(`/api/providers/${provider}/models/catalog-sync`),
+    applyCatalogSync: (provider: string, fingerprint: string) =>
+      post(`/api/providers/${provider}/models/catalog-sync`, { fingerprint }),
 
     createSession: (payload: {
       provider: string;

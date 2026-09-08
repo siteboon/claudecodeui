@@ -74,6 +74,8 @@ export type ProviderCatalogSyncPlan = {
   updates: ProviderCatalogSyncEntry[];
   removals: ProviderCatalogSyncEntry[];
   skipped: ProviderCatalogSyncSkip[];
+  /** Fingerprint of the catalog and rows the preview reviewed; apply must echo it. */
+  fingerprint: string;
 };
 
 /**
@@ -83,7 +85,7 @@ export type ProviderCatalogSyncPlan = {
  */
 export type ProviderCatalogSyncActions = {
   preview(provider: LLMProvider): Promise<ProviderCatalogSyncPlan>;
-  apply(provider: LLMProvider): Promise<ProviderCatalogSyncPlan>;
+  apply(provider: LLMProvider, fingerprint: string): Promise<ProviderCatalogSyncPlan>;
 };
 
 // ---------------------------

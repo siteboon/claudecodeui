@@ -256,9 +256,8 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     predefined: ProviderModelsDefinition,
     external: ProviderModelsDefinition,
   ): ProviderCatalogSyncPlan => {
-    const existingById = new Map(
-      catalog.listCustomProviderModels(provider).map((record) => [record.modelId, record]),
-    );
+    const currentRows = catalog.listCustomProviderModels(provider);
+    const existingById = new Map(currentRows.map((record) => [record.modelId, record]));
     const predefinedIds = new Set(predefined.OPTIONS.map((option) => option.value));
     const additions: ProviderCatalogSyncPlan['additions'] = [];
     const updates: ProviderCatalogSyncPlan['updates'] = [];
@@ -283,12 +282,29 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
       }
     }
 
-    const keptIds = new Set(external.OPTIONS.map((option) => option.value));
+    // A stored row whose id the curated list now owns cannot survive apply
+    // (apply only stores non-built-in entries), so such rows must surface as
+    // removals here or the preview would claim the library already matches.
+    const keptIds = new Set(
+      external.OPTIONS
+        .filter((option) => !predefinedIds.has(option.value))
+        .map((option) => option.value),
+    );
     const removals = [...existingById.values()]
       .filter((record) => !keptIds.has(record.modelId))
       .map((record) => ({ id: record.modelId, model: record.model }));
 
-    return { provider, additions, updates, removals, skipped };
+    return {
+      provider,
+      additions,
+      updates,
+      removals,
+      skipped,
+      fingerprint: JSON.stringify({
+        catalog: external.OPTIONS.map((option) => [option.value, option.label]),
+        rows: currentRows.map((record) => [record.modelId, record.model]),
+      }),
+    };
   };
 
   /**
@@ -308,11 +324,27 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
    */
   const applyCatalogSync = async (
     provider: LLMProvider,
+    fingerprint?: string,
   ): Promise<{ plan: ProviderCatalogSyncPlan; models: ProviderModelsDefinition }> => {
+    if (typeof fingerprint !== 'string' || !fingerprint.trim()) {
+      throw new AppError('A catalog-sync preview fingerprint is required.', {
+        code: 'CATALOG_SYNC_FINGERPRINT_REQUIRED',
+        statusCode: 400,
+      });
+    }
     const models = resolveProvider(provider).models;
     const predefined = await models.getSupportedModels();
     const external = await readExternalCatalogOrThrow(provider);
     const plan = buildCatalogSyncPlan(provider, predefined, external);
+    if (plan.fingerprint !== fingerprint) {
+      throw new AppError(
+        'The Codex catalog or your custom models changed since the preview. Preview again and confirm.',
+        {
+          code: 'CATALOG_SYNC_CONFLICT',
+          statusCode: 409,
+        },
+      );
+    }
     const skippedIds = new Set(plan.skipped.map((entry) => entry.id));
     const finalEntries = external.OPTIONS
       .filter((option) => !skippedIds.has(option.value))

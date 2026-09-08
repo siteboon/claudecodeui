@@ -416,10 +416,20 @@ test('catalog sync apply replaces custom rows and returns the merged catalog', a
   });
   await service.createCustomModel('codex', { model: 'Vendor A old', id: 'vendor/a' });
   await service.createCustomModel('codex', { model: 'Gone model', id: 'vendor/old' });
+  // A row that predates its id becoming curated: the service cannot create it
+  // anymore, but apply must still report and remove it.
+  catalog.rows.set('codex', [
+    ...(catalog.rows.get('codex') ?? []),
+    { recordId: 99, provider: 'codex', modelId: 'codex-default', model: 'Old curated clash', sortOrder: 9 },
+  ]);
 
-  const result = await service.applyCatalogSync('codex');
+  const previewed = await service.previewCatalogSync('codex');
+  const result = await service.applyCatalogSync('codex', previewed.fingerprint);
 
-  assert.deepEqual(result.plan.removals, [{ id: 'vendor/old', model: 'Gone model' }]);
+  assert.deepEqual(result.plan.removals, [
+    { id: 'vendor/old', model: 'Gone model' },
+    { id: 'codex-default', model: 'Old curated clash' },
+  ]);
   assert.deepEqual(result.plan.skipped.map((entry) => entry.id), ['codex-default']);
   assert.deepEqual(
     catalog.rows.get('codex')?.map((row) => [row.modelId, row.model]),
@@ -440,5 +450,29 @@ test('catalog sync is rejected when unsupported or no usable catalog exists', as
   await assert.rejects(
     () => unconfigured.service.previewCatalogSync('codex'),
     (error) => error instanceof AppError && error.code === 'CODEX_CATALOG_UNAVAILABLE',
+  );
+});
+
+
+test('catalog sync apply rejects a missing or stale fingerprint', async () => {
+  const { service } = createTestService({
+    externalCatalog: () => ({
+      OPTIONS: [{ value: 'vendor/a', label: 'Vendor A' }],
+      DEFAULT: 'vendor/a',
+    }),
+  });
+  await service.createCustomModel('codex', { model: 'Vendor A', id: 'vendor/a' });
+
+  await assert.rejects(
+    () => service.applyCatalogSync('codex'),
+    (error) => error instanceof AppError && error.code === 'CATALOG_SYNC_FINGERPRINT_REQUIRED',
+  );
+
+  const previewed = await service.previewCatalogSync('codex');
+  await service.createCustomModel('codex', { model: 'Late addition', id: 'vendor/late' });
+
+  await assert.rejects(
+    () => service.applyCatalogSync('codex', previewed.fingerprint),
+    (error) => error instanceof AppError && error.code === 'CATALOG_SYNC_CONFLICT',
   );
 });

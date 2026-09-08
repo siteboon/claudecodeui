@@ -566,7 +566,15 @@ router.post(
   '/:provider/models/catalog-sync',
   asyncHandler(async (req: Request, res: Response) => {
     const provider = parseProvider(req.params.provider);
-    const result = await providerModelsService.applyCatalogSync(provider);
+    const body = (req.body ?? {}) as { fingerprint?: unknown };
+    const fingerprint = typeof body.fingerprint === 'string' ? body.fingerprint.trim() : '';
+    if (!fingerprint) {
+      throw new AppError('A catalog-sync preview fingerprint is required.', {
+        code: 'CATALOG_SYNC_FINGERPRINT_REQUIRED',
+        statusCode: 400,
+      });
+    }
+    const result = await providerModelsService.applyCatalogSync(provider, fingerprint);
     res.json(createApiSuccessResponse({ provider, ...result }));
   }),
 );

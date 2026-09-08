@@ -180,7 +180,10 @@ export default function ModelLibraryPanel({
     setNotice(null);
     try {
       const plan = await actions.catalogSync.preview(selectedProvider);
-      if (plan.additions.length === 0 && plan.updates.length === 0 && plan.removals.length === 0) {
+      if (plan.additions.length === 0
+        && plan.updates.length === 0
+        && plan.removals.length === 0
+        && plan.skipped.length === 0) {
         setNotice('Your Codex models already match the catalog.');
       } else {
         setCatalogSyncPlan(plan);
@@ -202,7 +205,7 @@ export default function ModelLibraryPanel({
     setCatalogSyncError(null);
     setNotice(null);
     try {
-      const plan = await actions.catalogSync.apply(selectedProvider);
+      const plan = await actions.catalogSync.apply(selectedProvider, catalogSyncPlan.fingerprint);
       setCatalogSyncPlan(null);
       const changes = plan.additions.length + plan.updates.length;
       const removals = plan.removals.length;

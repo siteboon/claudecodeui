@@ -152,6 +152,12 @@ export type ProviderCatalogSyncPlan = {
   updates: ProviderCatalogSyncEntry[];
   removals: ProviderCatalogSyncEntry[];
   skipped: ProviderCatalogSyncSkip[];
+  /**
+   * Opaque fingerprint of the catalog and custom rows the preview reviewed.
+   * Apply requests must echo it so a changed store or catalog cannot be
+   * overwritten without a fresh confirmation.
+   */
+  fingerprint: string;
 };
 
 // ---------------------------

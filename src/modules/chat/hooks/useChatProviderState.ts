@@ -829,17 +829,31 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
    * Replaces the provider's custom rows with the external catalog after the
    * user confirmed the preview, then refreshes the in-memory catalog.
    */
-  const applyCatalogSync = useCallback<ProviderCatalogSyncActions['apply']>(async (targetProvider) => {
-    const response = await api.providers.applyCatalogSync(targetProvider);
+  const applyCatalogSync = useCallback<ProviderCatalogSyncActions['apply']>(async (targetProvider, fingerprint) => {
+    const response = await api.providers.applyCatalogSync(targetProvider, fingerprint);
     const body = (await response.json()) as CatalogSyncApiResponse;
-    if (!response.ok || !body.success || !body.data?.plan) {
+    const data = body.data;
+    if (!response.ok || !body.success || !data?.plan) {
       throw new Error(body.error?.message || 'Unable to apply the model catalog sync.');
     }
-    if (body.data.models) {
-      applyProviderCatalog(targetProvider, body.data.models);
+    if (data.models) {
+      const models = data.models;
+      applyProviderCatalog(targetProvider, models);
+      const removedIds = new Set(data.plan.removals.map((entry) => entry.id));
+      if (removedIds.has(providerModels[targetProvider])) {
+        setStoredProviderModel(targetProvider, models.DEFAULT);
+      }
+      if (provider === targetProvider && sessionModel && removedIds.has(sessionModel)) {
+        // The server already reset the session row to the fallback model and
+        // cleared its effort; mirror that in the in-memory selection so the
+        // composer never keeps offering a removed model id.
+        setSessionSelection((current) => (current
+          ? { ...current, model: models.DEFAULT, effort: null }
+          : current));
+      }
     }
-    return body.data.plan;
-  }, [applyProviderCatalog]);
+    return data.plan;
+  }, [applyProviderCatalog, provider, providerModels, sessionModel, setStoredProviderModel]);
 
   const providerModelActions = useMemo<ProviderModelActions>(() => ({
     create: createCustomModel,
