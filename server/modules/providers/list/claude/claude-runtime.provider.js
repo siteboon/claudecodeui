@@ -539,9 +539,12 @@ function extractCumulativeTokenBudget(sdkMessage) {
   };
 }
 
-// Tool calls that leave work running past the end of a turn. Bash only counts
-// when it is explicitly backgrounded; the rest defer or watch work by nature.
-const DEFERRED_WORK_TOOLS = new Set(['Monitor', 'ScheduleWakeup', 'CronCreate', 'TaskCreate']);
+// Tool calls that leave work running past the end of a turn. Bash and Agent only
+// count when they are backgrounded; the rest defer or watch work by nature.
+// Workflow belongs here rather than in a branch of its own: its input schema has
+// no foreground option at all, so every call returns a task id immediately and
+// reports back in a later turn.
+const DEFERRED_WORK_TOOLS = new Set(['Monitor', 'ScheduleWakeup', 'CronCreate', 'TaskCreate', 'Workflow']);
 
 /**
  * Detects tool calls that keep working after the turn's `result` arrives.
@@ -564,6 +567,15 @@ function startsBackgroundWork(sdkMessage) {
     }
     if (block.name === 'Bash') {
       return block.input?.run_in_background === true;
+    }
+    // A backgrounded subagent outlives the turn exactly like a backgrounded
+    // Bash does, so the process has to be held open for it to report back.
+    // Agents background by default — `run_in_background` is optional and only
+    // an explicit `false` opts out — hence `!== false` rather than `=== true`.
+    // A foreground agent must stay out of DEFERRED_WORK_TOOLS: it never pushes
+    // a follow-up turn, so it would pin the process for the full ceiling.
+    if (block.name === 'Agent') {
+      return block.input?.run_in_background !== false;
     }
     return DEFERRED_WORK_TOOLS.has(block.name);
   });
@@ -1213,5 +1225,6 @@ export {
   getPendingApprovalsForSession,
   reconnectSessionWriter,
   extractTokenBudget,
-  extractCumulativeTokenBudget
+  extractCumulativeTokenBudget,
+  startsBackgroundWork
 };
