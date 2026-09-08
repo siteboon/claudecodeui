@@ -80,3 +80,19 @@ describe('compaction rows', () => {
     expect(converted[0].compact?.phase).toBe('running');
   });
 });
+
+describe('compaction rows and the projection cache', () => {
+  it('does not mutate the row it folds into, since that row can be shared', () => {
+    const boundaryRow = boundary();
+    const first = normalizedToChatMessages([boundaryRow]);
+    const firstRow = first[0];
+
+    const second = normalizedToChatMessages([boundaryRow, summary()]);
+
+    // The row handed back by the earlier pass is untouched; the fold produced a
+    // new one, which is what makes a memoized row redraw.
+    expect(firstRow.compactSummary).toBeUndefined();
+    expect(second[0].compactSummary).toBe('The summary body');
+    expect(second[0]).not.toBe(firstRow);
+  });
+});

@@ -132,7 +132,10 @@ function appendCompactionRow(
 
     const previous = converted[converted.length - 1];
     if (previous?.compact && !previous.compactSummary) {
-      previous.compactSummary = content;
+      // Replaced rather than mutated: that row can be one the projection cache
+      // handed back, which is shared across renders, and a memoized row that
+      // keeps its identity while its content changes does not redraw.
+      converted[converted.length - 1] = { ...previous, compactSummary: content };
       return true;
     }
 
