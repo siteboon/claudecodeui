@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { FolderOpen } from 'lucide-react';
 
 import { Button, Input } from '@/shared/ui';
@@ -21,6 +22,7 @@ export default function WorkspacePathField({
   onChange,
   onAdvanceToConfirm,
 }: WorkspacePathFieldProps) {
+  const { t } = useTranslation();
   const [pathSuggestions, setPathSuggestions] = useState<FolderSuggestion[]>([]);
   const [showPathDropdown, setShowPathDropdown] = useState(false);
   const [showFolderBrowser, setShowFolderBrowser] = useState(false);
@@ -114,7 +116,7 @@ export default function WorkspacePathField({
           variant="outline"
           onClick={() => setShowFolderBrowser(true)}
           className="px-3"
-          title="Browse folders"
+          title={t('common:misc.browseFolders')}
           disabled={disabled}
         >
           <FolderOpen className="h-4 w-4" />

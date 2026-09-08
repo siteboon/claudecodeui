@@ -395,7 +395,7 @@
       "modes": {
         "default": {
           "title": "デフォルト",
-          "description": "信頼されたコマンド（ls、cat、grep、git statusなど）のみ自動実行。その他のコマンドはスキップ。ワークスペースへの書き込みは可能。"
+          "description": "ワークスペースのサンドボックス内でコマンドを実行します。承認が必要かどうかはCodexが判断します。この非対話型の連携では承認リクエストを許可できません。"
         },
         "acceptEdits": {
           "title": "編集を許可",
@@ -408,7 +408,7 @@
       },
       "technicalDetails": "技術的な詳細",
       "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=untrusted。信頼されたコマンド: cat, cd, grep, head, ls, pwd, tail, git status/log/diff/show, find（-execなし）など。",
+        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. ワークスペースのサンドボックス内でコマンドを実行します。承認が必要かどうかはCodexが判断します。この非対話型の連携では承認リクエストを許可できません。",
         "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never。すべてのコマンドがプロジェクトディレクトリ内で自動実行。",
         "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never。完全なシステムアクセス。信頼された環境でのみ使用してください。",
         "overrideNote": "チャットインターフェースのモードボタンを使用してセッションごとに上書きできます。"

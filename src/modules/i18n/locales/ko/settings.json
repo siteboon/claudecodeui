@@ -424,7 +424,7 @@
       "modes": {
         "default": {
           "title": "기본",
-          "description": "신뢰할 수 있는 명령어(ls, cat, grep, git status 등)만 자동 실행됩니다. 다른 명령어는 건너뜁니다. 워크스페이스에 쓰기 가능."
+          "description": "작업 공간 샌드박스에서 명령을 실행합니다. Codex가 승인 필요 여부를 결정하며, 이 비대화형 통합에서는 요청을 승인할 수 없습니다."
         },
         "acceptEdits": {
           "title": "편집 허용",
@@ -437,7 +437,7 @@
       },
       "technicalDetails": "기술 상세",
       "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=untrusted. 신뢰할 수 있는 명령어: cat, cd, grep, head, ls, pwd, tail, git status/log/diff/show, find(-exec 제외) 등.",
+        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. 작업 공간 샌드박스에서 명령을 실행합니다. Codex가 승인 필요 여부를 결정하며, 이 비대화형 통합에서는 요청을 승인할 수 없습니다.",
         "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. 프로젝트 디렉토리 내에서 모든 명령어 자동 실행.",
         "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. 전체 시스템 접근, 신뢰할 수 있는 환경에서만 사용하세요.",
         "overrideNote": "채팅 인터페이스의 모드 버튼을 사용하여 세션별로 재정의할 수 있습니다."
