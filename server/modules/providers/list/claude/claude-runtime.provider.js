@@ -544,6 +544,23 @@ function extractCumulativeTokenBudget(sdkMessage) {
 const DEFERRED_WORK_TOOLS = new Set(['Monitor', 'ScheduleWakeup', 'CronCreate', 'TaskCreate']);
 
 /**
+ * Whether a task-list update is worth a row of its own.
+ *
+ * Any change to a non-empty list is: work being armed, and equally work
+ * finishing while more is still outstanding — the row says what is running now,
+ * so `2 tasks → 1 task` has to replace it or the reader is left with a count
+ * that is no longer true. An empty list is the end of the wait, reported
+ * separately.
+ */
+function shouldAnnounceBackgroundTasks(previousTasks, nextTasks) {
+  if (!nextTasks.length) {
+    return false;
+  }
+  const key = (tasks) => tasks.map((task) => task?.id ?? '').join(',');
+  return key(previousTasks) !== key(nextTasks);
+}
+
+/**
  * Whether this turn's process should be held open for work that outlives it.
  *
  * `pendingFromThisTurn` is what this turn armed; `outstandingTasks` is what the
@@ -1038,7 +1055,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       // The CLI's own accounting of outstanding work. A list that empties after
       // being full is the work reporting in — the one way a wait ends well.
       if (message?.type === 'system' && message.subtype === 'background_tasks_changed') {
-        const previousCount = backgroundTasks.length;
+        const previousTasks = backgroundTasks;
         backgroundTasks = (Array.isArray(message.tasks) ? message.tasks : []).map((task) => ({
           id: typeof task?.task_id === 'string' ? task.task_id : undefined,
           type: typeof task?.task_type === 'string' ? task.task_type : undefined,
@@ -1046,17 +1063,17 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         }));
         const sid = capturedSessionId || sessionId || null;
 
-        if (previousCount && !backgroundTasks.length && holdStartedAt) {
+        if (previousTasks.length && !backgroundTasks.length && holdStartedAt) {
           ws.send(backgroundWaitRow(
             sid,
             `Background work reported in after ${formatWaitDuration(Date.now() - holdStartedAt)}`,
             { phase: 'reported' }
           ));
           holdStartedAt = 0;
-        } else if (backgroundTasks.length > previousCount) {
+        } else if (shouldAnnounceBackgroundTasks(previousTasks, backgroundTasks)) {
           // Nothing said what was armed except the tool call that armed it,
           // which scrolls away and says nothing about what is still outstanding
-          // once several are running.
+          // once several are running -- or once one of several has finished.
           ws.send(backgroundWaitRow(
             sid,
             `Running ${describeBackgroundTasks(backgroundTasks)}`,
@@ -1321,6 +1338,7 @@ export {
   // directly.
   describeBackgroundTasks,
   formatWaitDuration,
+  shouldAnnounceBackgroundTasks,
   shouldHoldForBackgroundWork,
   queryClaudeSDK,
   abortClaudeSDKSession,
