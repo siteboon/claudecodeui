@@ -1,8 +1,18 @@
 const MINIMAX_SPEECH_ENDPOINTS = [
-  "https://api.minimax.io/v1/t2a_v2",
-  "https://api.minimaxi.com/v1/t2a_v2"
+  'https://api.minimax.io/v1/t2a_v2',
+  'https://api.minimaxi.com/v1/t2a_v2',
 ];
-const MINIMAX_SPEECH_MODEL = "speech-2.8-hd";
+const MINIMAX_SPEECH_MODELS = [
+  'speech-2.8-hd',
+  'speech-2.8-turbo',
+  'speech-2.6-hd',
+  'speech-2.6-turbo',
+  'speech-02-hd',
+  'speech-02-turbo',
+  'speech-01-hd',
+  'speech-01-turbo',
+] as const;
+const MINIMAX_SPEECH_MODEL = MINIMAX_SPEECH_MODELS[0];
 const MINIMAX_AUDIO_TYPES: Record<string, string> = {
   mp3: 'audio/mpeg',
   wav: 'audio/wav',
