@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   describeBackgroundTasks,
   formatWaitDuration,
+  shouldHoldForBackgroundWork,
 } from '@/modules/providers/list/claude/claude-runtime.provider.js';
 
 /**
@@ -30,4 +31,14 @@ test('a duration reads the way the CLI writes one', () => {
   assert.equal(formatWaitDuration(142_000), '2m 22s');
   assert.equal(formatWaitDuration(1_800_000), '30m 0s');
   assert.equal(formatWaitDuration(-5), '0s');
+});
+
+test('the hold stands for work this turn armed, and for work the CLI still lists', () => {
+  // What this turn armed, as before.
+  assert.equal(shouldHoldForBackgroundWork(true, []), true);
+  // What an earlier turn armed and the CLI still lists: a turn resumed mid-wait
+  // used to release the process under it, and the follow-up turn went missing.
+  assert.equal(shouldHoldForBackgroundWork(false, [{ id: 't1' }]), true);
+  // Nothing outstanding: the process exits at once, as it always has.
+  assert.equal(shouldHoldForBackgroundWork(false, []), false);
 });
