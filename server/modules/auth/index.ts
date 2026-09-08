@@ -7,3 +7,5 @@ export { authenticateToken } from './auth.middleware.js';
 export { authenticateWebSocket } from './auth.middleware.js';
 // validateApiKey: used by the server entrypoint for optional API-wide key validation.
 export { validateApiKey } from './auth.middleware.js';
+// preventApiResponseCaching: used by the server entrypoint before API routes can emit auth state.
+export { preventApiResponseCaching } from './auth.middleware.js';

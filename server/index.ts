@@ -25,6 +25,7 @@ import {
     authenticateWebSocket,
     authRoutes,
     validateApiKey,
+    preventApiResponseCaching,
 } from './modules/auth/index.js';
 import { taskmasterRoutes } from './modules/taskmaster/index.js';
 import { commandsRoutes } from './modules/commands/index.js';
@@ -143,6 +144,8 @@ app.get('/health', (req, res) => {
         version: RUNNING_VERSION
     });
 });
+
+app.use('/api', preventApiResponseCaching);
 
 // Optional API key validation (if configured)
 app.use('/api', validateApiKey);

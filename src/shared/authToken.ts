@@ -92,6 +92,23 @@ export const storeAuthToken = (token: unknown): boolean => {
     return false;
   }
 
+  const claims = readTokenClaims(token);
+  if (!claims) {
+    return false;
+  }
+
+  // Issue time is the ordering key, even when the newer response arrives already expired.
+  // Different tokens minted in the same second have no safe ordering, so keep the stored one.
+  const storedToken = localStorage.getItem('auth-token');
+  const storedClaims = readTokenClaims(storedToken);
+  if (
+    storedClaims &&
+    (claims.issuedAt < storedClaims.issuedAt ||
+      (claims.issuedAt === storedClaims.issuedAt && token !== storedToken))
+  ) {
+    return false;
+  }
+
   localStorage.setItem('auth-token', token);
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(AUTH_TOKEN_REFRESHED_EVENT, { detail: token }));

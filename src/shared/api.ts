@@ -32,6 +32,8 @@ export const authenticatedFetch = (
 
   return fetch(url, {
     ...options,
+    // Auth responses carry session headers, so callers cannot opt back into caching.
+    cache: 'no-store',
     headers: {
       ...defaultHeaders,
       ...options.headers,
