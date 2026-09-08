@@ -39,6 +39,25 @@ test('a per-call payload with no cache accounting emits no budget', () => {
   assert.equal(budget, null);
 });
 
+test('one cache half without the other emits no budget', () => {
+  // Half an account is still partial: the missing half defaults to zero in the
+  // prompt total, so the reading would understate the context by whatever that
+  // half held. Both halves are reported together in every payload observed, so
+  // requiring both costs nothing and keeps the last complete reading standing.
+  const budget = extractTokenBudget({
+    type: 'assistant',
+    message: {
+      usage: {
+        input_tokens: 12,
+        cache_read_input_tokens: 40_000,
+        output_tokens: 500,
+      },
+    },
+  });
+
+  assert.equal(budget, null);
+});
+
 test('zero cache fields still count as an account', () => {
   // A first request against a cold cache reports both cache halves as zero.
   // Presence is the test, not the value, or the opening turn of every session
