@@ -449,6 +449,30 @@ function buildTokenBudget(messageUsage) {
 }
 
 /**
+ * The two halves of a request's cache accounting, each in every casing the SDK
+ * has used for it.
+ */
+const CACHE_USAGE_KEY_GROUPS = [
+  ['cache_creation_input_tokens', 'cacheCreationInputTokens', 'cacheCreationTokens'],
+  ['cache_read_input_tokens', 'cacheReadInputTokens', 'cacheReadTokens'],
+];
+
+/**
+ * Whether a usage payload accounts for the whole cache.
+ *
+ * Anthropic usage reports both halves, as zero when unused, so presence is the
+ * test and not the value — and both are required, since a half reported alone
+ * still leaves the other defaulting to zero in the prompt total.
+ * @param {Object} messageUsage - Anthropic usage payload
+ * @returns {boolean} True when both cache halves are reported
+ */
+function reportsCacheAccount(messageUsage) {
+  return CACHE_USAGE_KEY_GROUPS.every((keys) =>
+    keys.some((key) => messageUsage[key] != null && Number.isFinite(Number(messageUsage[key])))
+  );
+}
+
+/**
  * Extracts the session's context-window usage from an SDK stream message.
  *
  * Only assistant messages describe the context window: each one reports the
@@ -482,7 +506,25 @@ function extractTokenBudget(sdkMessage) {
     return null;
   }
 
-  return buildTokenBudget(messageUsage);
+  // A reading is one request's whole prompt: the uncached input plus both cache
+  // halves. A payload that does not report both is a partial account, and its
+  // `input_tokens` is only the uncached remainder — single digits against a warm
+  // cache — so publishing it replaces a real figure with a wrong one.
+  if (!reportsCacheAccount(messageUsage)) {
+    return null;
+  }
+
+  const budget = buildTokenBudget(messageUsage);
+
+  // There is no context window without a prompt: an account that is zero
+  // throughout is one of the messages the CLI writes itself (model
+  // `<synthetic>`: the interrupt notice, an API error, the usage-limit line),
+  // not a measurement of this conversation.
+  if (budget.inputTokens <= 0) {
+    return null;
+  }
+
+  return budget;
 }
 
 /**
