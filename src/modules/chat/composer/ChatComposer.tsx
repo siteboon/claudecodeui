@@ -29,6 +29,8 @@ import CommandMenu from '@/modules/chat/composer/CommandMenu';
 import ActivityIndicator from '@/modules/chat/composer/ActivityIndicator';
 import ComposerAttachment from '@/modules/chat/composer/ComposerAttachment';
 import VoiceInputButton from '@/modules/chat/composer/VoiceInputButton';
+import AutoSpeakToggle from '@/modules/chat/composer/AutoSpeakToggle';
+import { useAutoSpeak } from '@/modules/chat/hooks/useAutoSpeak';
 import PermissionRequestsBanner from '@/modules/chat/composer/PermissionRequestsBanner';
 import TokenUsageSummary from '@/modules/chat/composer/TokenUsageSummary';
 import QueuedMessageCard from '@/modules/chat/composer/QueuedMessageCard';
@@ -101,6 +103,8 @@ type ChatComposerProps = {
   renderInputWithMentions: (text: string) => ReactNode;
   textareaRef: RefObject<HTMLTextAreaElement>;
   input: string;
+  /** Active session, needed for the per-session auto read-aloud toggle. */
+  sessionId: string | null;
   onVoiceTranscript?: (text: string, send?: boolean) => void;
   onInputChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
   onTextareaClick: (event: MouseEvent<HTMLTextAreaElement>) => void;
@@ -174,6 +178,7 @@ export default function ChatComposer({
   renderInputWithMentions,
   textareaRef,
   input,
+  sessionId,
   onVoiceTranscript,
   onInputChange,
   onTextareaClick,
@@ -224,6 +229,7 @@ export default function ChatComposer({
   // Voice state is hosted here (not in the mic button) so the main Send button can stop
   // recording and send the transcript in one tap, the way the mic button drops it in the box.
   const voiceAvailable = useVoiceAvailable();
+  const { enabled: autoSpeakEnabled, toggle: toggleAutoSpeak } = useAutoSpeak(sessionId);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const voiceErrorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleVoiceError = useCallback((msg: string) => {
@@ -441,6 +447,10 @@ export default function ChatComposer({
 
             {onVoiceTranscript && voiceAvailable && (
               <VoiceInputButton state={voiceState} onToggle={voiceToggle} errorMsg={voiceError} />
+            )}
+
+            {voiceAvailable && sessionId && (
+              <AutoSpeakToggle enabled={autoSpeakEnabled} onToggle={toggleAutoSpeak} />
             )}
 
             <TokenUsageSummary usage={tokenBudget} onClick={onShowTokenUsage} />

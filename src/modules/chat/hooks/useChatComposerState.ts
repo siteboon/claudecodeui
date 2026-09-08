@@ -26,6 +26,9 @@ import {
   writeQueuedMessage,
 } from '@/shared/chatDrafts';
 import { escapeRegExp } from '@/modules/chat/utils/chatFormatting';
+import { autoSpeakSessions } from '@/modules/chat/utils/autoSpeakSessions';
+import { withAutoSpeakHint } from '@/modules/chat/utils/autoSpeakPrompt';
+import { voicePlayer } from '@/modules/chat/utils/voicePlayer';
 import { useFileMentions } from '@/modules/chat/hooks/useFileMentions';
 import { useInputHistory } from '@/modules/chat/hooks/useInputHistory';
 import { useSlashCommands } from '@/modules/chat/hooks/useSlashCommands';
@@ -617,6 +620,16 @@ export function useChatComposerState({
       queuedSubmission?: QueuedDraft,
     ) => {
       event.preventDefault();
+
+      // The only gesture guaranteed on a device where auto read-aloud is already
+      // on: the setting is per session on the server, so a phone that opens a
+      // conversation the laptop enabled never clicks the toggle, and mobile
+      // browsers then refuse playback. Must stay before the await below, which is
+      // past the point where the browser still credits the gesture.
+      if (autoSpeakSessions.isEnabled(sessionKey)) {
+        voicePlayer.unlock();
+      }
+
       const currentInput = queuedSubmission?.content ?? inputValueRef.current;
       const currentAttachments = queuedSubmission?.attachments ?? attachedFiles;
       const previouslyUploadedAttachments = queuedSubmission?.uploadedAttachments ?? [];
@@ -814,10 +827,17 @@ export function useChatComposerState({
         });
       }
 
+      // The echo must show exactly what was sent: an optimistic row is matched to
+      // its persisted turn by exact text equality.
+      const sentContent = withAutoSpeakHint(
+        messageContent,
+        autoSpeakSessions.isEnabled(targetSessionId),
+      );
+
       const attachmentRecords = uploadedAttachments as ChatAttachment[];
       const userMessage: ChatMessage = {
         type: 'user',
-        content: currentInput,
+        content: sentContent,
         images: attachmentRecords.filter(isImageAttachment),
         files: attachmentRecords.filter((attachment) => !isImageAttachment(attachment)),
         timestamp: new Date(),
@@ -849,7 +869,7 @@ export function useChatComposerState({
         type: editingAnchorId ? 'chat.edit-send' : 'chat.send',
         sessionId: targetSessionId,
         ...(editingAnchorId ? { anchorId: editingAnchorId } : {}),
-        content: messageContent,
+        content: sentContent,
         options: {
           ...(queuedSubmission?.options ?? buildSendOptions(messageContent)),
           attachments: uploadedAttachments,

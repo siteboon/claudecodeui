@@ -87,6 +87,18 @@ class VoicePlayer {
     void this.play(id, content);
   }
 
+  /**
+   * Starts playback without the stop-on-second-press behaviour of `toggle`.
+   *
+   * Used by auto read-aloud, which is not a button press: a turn completing
+   * while its own audio is somehow already playing must not silence it.
+   */
+  speak(content: string) {
+    const id = voiceId(content);
+    if (this.currentId === id && (this.state === 'playing' || this.state === 'loading')) return;
+    void this.play(id, content);
+  }
+
   stop() {
     this.token++; // ignore any stale in-flight result
     this.abortActive(); // and actually cancel the network request

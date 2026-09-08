@@ -13,6 +13,7 @@ import type {
   SessionEstablishedContext,
   SessionNavigationOptions,
 } from '@/shared/types';
+import { useAutoSpeakArrivals } from '@/modules/chat/hooks/useAutoSpeakArrivals';
 import { useChatProviderState } from '@/modules/chat/hooks/useChatProviderState';
 import { useScheduledMessages } from '@/modules/chat/composer/useScheduledMessages';
 import { useChatSessionState } from '@/modules/chat/hooks/useChatSessionState';
@@ -168,6 +169,19 @@ function ChatInterface({
     resetStreamingState,
     statusCheckSentAtRef,
     lastSeqRef,
+    sessionStore,
+  });
+
+  // Turns that arrive without this client streaming them — another device, the
+  // provider CLI, a scheduled message — are read aloud from here rather than
+  // from the `complete` event, which only ever reaches one client per run.
+  useAutoSpeakArrivals({
+    sessionId: currentSessionId || selectedSession?.id || null,
+    provider,
+    chatMessages,
+    isProcessing,
+    isActive,
+    isLoadingSessionMessages,
     sessionStore,
   });
 
@@ -545,6 +559,7 @@ function ChatInterface({
           renderInputWithMentions={renderInputWithMentions}
           textareaRef={textareaRef}
           input={input}
+          sessionId={currentSessionId || selectedSession?.id || null}
           onVoiceTranscript={handleVoiceTranscript}
           onInputChange={handleInputChange}
           onTextareaClick={handleTextareaClick}

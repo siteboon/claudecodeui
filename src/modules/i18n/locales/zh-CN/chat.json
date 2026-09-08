@@ -102,7 +102,9 @@
     "transcribing": "转写中…",
     "speak": "朗读",
     "stopSpeaking": "停止",
-    "loading": "加载中…"
+    "loading": "加载中…",
+    "autoSpeakOn": "自动朗读已开启",
+    "autoSpeakOff": "自动朗读已关闭"
   },
   "input": {
     "placeholder": "输入 / 调用命令，@ 选择文件，或向 {{provider}} 提问...",

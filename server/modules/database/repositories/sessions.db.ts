@@ -13,6 +13,8 @@ type SessionRow = {
   model: string | null;
   /** Reasoning effort this session runs with; NULL until the app records one. */
   effort: string | null;
+  /** 1 when this session reads assistant turns aloud as they complete. */
+  auto_speak: number | null;
   /** The app session this one was branched from; NULL unless it is a fork. */
   forked_from_session_id: string | null;
   isArchived: number;
@@ -26,7 +28,7 @@ type RecentSessionsPage = {
 };
 
 const SESSION_ROW_COLUMNS =
-  'session_id, provider, provider_session_id, project_path, jsonl_path, custom_name, model, effort, forked_from_session_id, isArchived, created_at, updated_at';
+  'session_id, provider, provider_session_id, project_path, jsonl_path, custom_name, model, effort, auto_speak, forked_from_session_id, isArchived, created_at, updated_at';
 
 const SQLITE_UTC_TIMESTAMP_REGEX = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 
@@ -212,6 +214,7 @@ export const sessionsDb = {
     forkedFromSessionId: string;
     model: string | null;
     effort: string | null;
+    autoSpeak: boolean;
   }): string {
     const db = getConnection();
     const normalizedProjectPath = normalizeProjectPathForProvider(input.provider, input.projectPath);
@@ -225,8 +228,8 @@ export const sessionsDb = {
       db.prepare('DELETE FROM sessions WHERE session_id = ? AND session_id <> ?')
         .run(input.providerSessionId, input.sessionId);
       db.prepare(
-        `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, project_path, jsonl_path, model, effort, forked_from_session_id, isArchived, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+        `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, project_path, jsonl_path, model, effort, auto_speak, forked_from_session_id, isArchived, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
       ).run(
         input.sessionId,
         input.provider,
@@ -236,6 +239,7 @@ export const sessionsDb = {
         input.jsonlPath,
         input.model,
         input.effort,
+        input.autoSpeak ? 1 : 0,
         input.forkedFromSessionId,
       );
     })();
@@ -437,6 +441,34 @@ export const sessionsDb = {
        SET effort = ?
        WHERE session_id = ?`
     ).run(effort, sessionId);
+  },
+
+  /**
+   * Records whether one session reads assistant turns aloud.
+   *
+   * Returns false when no row was updated, which means the session gateway has
+   * not allocated the row yet. The caller reports the choice back regardless so
+   * a toggle made before the first send is not silently lost from the UI.
+   */
+  setSessionAutoSpeak(sessionId: string, autoSpeak: boolean): boolean {
+    const db = getConnection();
+    const result = db.prepare(
+      `UPDATE sessions
+       SET auto_speak = ?
+       WHERE session_id = ?`
+    ).run(autoSpeak ? 1 : 0, sessionId);
+
+    return result.changes > 0;
+  },
+
+  /** Whether a session reads assistant turns aloud; false for an unknown id. */
+  getSessionAutoSpeak(sessionId: string): boolean {
+    const db = getConnection();
+    const row = db.prepare(
+      'SELECT auto_speak FROM sessions WHERE session_id = ?'
+    ).get(sessionId) as Pick<SessionRow, 'auto_speak'> | undefined;
+
+    return row?.auto_speak === 1;
   },
 
   updateSessionCustomName(sessionId: string, customName: string): void {
