@@ -265,7 +265,8 @@
       "showSidebar": "Show sidebar",
       "settings": "Settings",
       "updateAvailable": "Update available",
-      "closeSidebar": "Close sidebar"
+      "closeSidebar": "Close sidebar",
+      "resizeSidebar": "Resize sidebar"
     },
     "startingUpdate": "Starting update...",
     "updateStartedRestarting": "Update started. The server appears to be restarting to apply it.",
