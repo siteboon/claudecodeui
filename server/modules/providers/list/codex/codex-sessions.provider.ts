@@ -208,12 +208,7 @@ function extractCodexTextContent(content: unknown): string {
 
       const record = item as AnyRecord;
       if (
-        (
-          record.type === 'input_text'
-          || record.type === 'output_text'
-          || record.type === 'text'
-          || record.type === 'Text'
-        )
+        (record.type === 'input_text' || record.type === 'output_text' || record.type === 'text')
         && typeof record.text === 'string'
       ) {
         return record.text;
@@ -225,16 +220,7 @@ function extractCodexTextContent(content: unknown): string {
     .join('\n');
 }
 
-/**
- * Reads the image attachments Codex persists inside a typed `UserMessage`
- * item.
- *
- * Typed content keeps the same shapes as live `UserInput` values: local
- * images carry a filesystem `path`, pre-encoded images carry an `image_url`
- * data URI. Both map onto the attachment shape the UI already renders for
- * legacy `user_message` events; audio and other non-image inputs are not
- * drawn in history.
- */
+/** Reads image inputs from a typed UserMessage item. */
 function extractCodexTypedUserImages(
   content: unknown,
 ): Array<{ path?: string; data?: string }> | undefined {
@@ -249,24 +235,18 @@ function extractCodexTypedUserImages(
       continue;
     }
 
-    if (entry.type === 'local_image') {
-      const entryPath = readNonEmptyString(entry.path);
-      if (entryPath) {
-        attachments.push(...toImageAttachments([entryPath]));
-      }
+    const value = entry.type === 'local_image'
+      ? readNonEmptyString(entry.path)
+      : entry.type === 'image'
+        ? readNonEmptyString(entry.image_url)
+        : undefined;
+    if (!value) {
       continue;
     }
-
-    if (entry.type === 'image') {
-      const imageUrl = readNonEmptyString(entry.image_url);
-      if (!imageUrl) {
-        continue;
-      }
-      if (imageUrl.startsWith('data:')) {
-        attachments.push({ data: imageUrl });
-      } else {
-        attachments.push(...toImageAttachments([imageUrl]));
-      }
+    if (value.startsWith('data:')) {
+      attachments.push({ data: value });
+    } else {
+      attachments.push(...toImageAttachments([value]));
     }
   }
 
@@ -1251,14 +1231,6 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
   const turns = createCodexTurnTracker();
   /** Turns whose prompt already carries the anchor, so only the first does. */
   const anchoredTurnIds = new Set<string>();
-  /** User rows built from typed `UserMessage` items, keyed by their turn. */
-  const typedUserRows = new Map<AnyRecord, string>();
-  /**
-   * User rows built from legacy `user_message` events, keyed by their turn id
-   * (undefined when no turn could be attributed). Removed only when a typed
-   * row exists for the same turn.
-   */
-  const legacyUserRows = new Map<AnyRecord, string | undefined>();
 
   const fileStream = fsSync.createReadStream(sessionFilePath);
   const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
@@ -1373,13 +1345,8 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
         continue;
       }
 
-      // Canonical (paginated) rollouts record every completed turn item as an
-      // `item_completed` event carrying the typed item. Real user prompts are
-      // `UserMessage` items there; the older `user_message` event fan-out no
-      // longer exists in these files. Wire-level `response_item` rows are
-      // deliberately not used for prompts: they can carry internal content
-      // (hook prompts, environment scaffolding) that must stay out of the
-      // transcript.
+      // Paginated rollouts carry user prompts as `item_completed` /
+      // `UserMessage`; wire `response_item` user rows are internal, not prompts.
       if (payload.type === 'item_completed') {
         const item = readObjectRecord(payload.item);
         if (item?.type === 'UserMessage') {
@@ -1389,7 +1356,7 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
             // Only the first prompt of a turn is anchored, matching the legacy
             // `user_message` branch below: a turn can hold several prompts and
             // the edit cut is per turn.
-            const turnId = readNonEmptyString(payload.turn_id as string | undefined)
+            const turnId = readNonEmptyString(payload.turn_id)
               ?? turns.getCurrentTurnId();
             const isFirstPromptOfTurn = Boolean(turnId) && !anchoredTurnIds.has(turnId as string);
             if (isFirstPromptOfTurn) {
@@ -1403,9 +1370,6 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
               ...(isFirstPromptOfTurn ? { turnId } : {}),
             };
             messages.push(row);
-            if (turnId) {
-              typedUserRows.set(row, turnId);
-            }
           }
         }
         continue;
@@ -1428,7 +1392,6 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
           images: extractCodexUserImages(payload),
           ...(isFirstPromptOfTurn ? { turnId } : {}),
         });
-        legacyUserRows.set(messages[messages.length - 1], turnId);
       }
       continue;
     }
@@ -1828,37 +1791,6 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
   }
 
   await attachCodexSubagentTranscripts(sessionFilePath, subagentsByCallId);
-
-  // A file spanning a format boundary can carry the same prompt twice: once
-  // as a legacy `user_message` event and once as a typed `UserMessage` item
-  // for the same turn. Drop a legacy row only when a typed row for that exact
-  // turn exists — legacy-only turns from before the boundary must survive —
-  // then hand every remaining typed prompt its anchor afresh because the
-  // dropped legacy row may have claimed it first.
-  const typedTurnIds = new Set(typedUserRows.values());
-  if (typedTurnIds.size > 0 && legacyUserRows.size > 0) {
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      const message = messages[index];
-      const legacyTurnId = legacyUserRows.get(message);
-      if (legacyTurnId && typedTurnIds.has(legacyTurnId)) {
-        messages.splice(index, 1);
-      }
-    }
-
-    anchoredTurnIds.clear();
-    for (const message of messages) {
-      const typedTurnId = typedUserRows.get(message);
-      if (!typedTurnId) {
-        continue;
-      }
-      if (!anchoredTurnIds.has(typedTurnId)) {
-        anchoredTurnIds.add(typedTurnId);
-        message.turnId = typedTurnId;
-      } else {
-        delete message.turnId;
-      }
-    }
-  }
 
   // A rollback is recorded after the turns it retires, so a prompt can be
   // anchored and then retired later in the same file. Its rows still render —

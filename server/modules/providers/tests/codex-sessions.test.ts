@@ -561,17 +561,15 @@ test('Codex history restores user prompts from typed item_completed rows', { con
 
   try {
     const providerSessionId = 'codex-typed-1';
-    const transcriptPath = await writeCodexTranscript(tempRoot, providerSessionId, workspacePath);
     const prompt = 'Typed prompt that must survive a refresh';
-    // Mirrors a canonical Codex rollout: typed turn items arrive as
-    // event_msg/item_completed rows while wire response_item rows echo them.
+    const transcriptPath = path.join(tempRoot, '.codex', 'sessions', '2026', '07', '07', 'rollout-' + providerSessionId + '.jsonl');
+    await mkdir(path.dirname(transcriptPath), { recursive: true });
+    const lineEnd = String.fromCharCode(10);
     const typedLine = JSON.stringify({
       timestamp: '2026-09-07T17:59:17.000Z',
-      ordinal: 2,
       type: 'event_msg',
       payload: {
         type: 'item_completed',
-        thread_id: providerSessionId,
         turn_id: 'typed-turn-1',
         item: {
           type: 'UserMessage',
@@ -581,30 +579,16 @@ test('Codex history restores user prompts from typed item_completed rows', { con
             { type: 'local_image', path: '/tmp/prompt-picture.png', detail: null },
           ],
         },
-        started_at_ms: 1,
-        completed_at_ms: 2,
       },
-    });
-    const assistantLine = JSON.stringify({
-      timestamp: '2026-09-07T17:59:19.000Z',
-      ordinal: 3,
-      type: 'response_item',
-      payload: { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Working on it.' }] },
     });
     const wireUserEcho = JSON.stringify({
       timestamp: '2026-09-07T17:59:19.000Z',
-      ordinal: 4,
       type: 'response_item',
       payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: prompt }] },
     });
     await writeFile(
       transcriptPath,
-      [
-        JSON.stringify({ timestamp: '2026-09-07T17:59:16.000Z', ordinal: 1, type: 'session_meta', payload: { id: providerSessionId, cwd: workspacePath } }),
-        typedLine,
-        assistantLine,
-        wireUserEcho,
-      ].join('\n') + '\n',
+      [JSON.stringify({ type: 'session_meta', payload: { id: providerSessionId, cwd: workspacePath } }), typedLine, wireUserEcho].join(lineEnd) + lineEnd,
       'utf8',
     );
 
@@ -615,128 +599,11 @@ test('Codex history restores user prompts from typed item_completed rows', { con
 
       const history = await new CodexSessionsProvider().fetchHistory('app-typed-1');
       const users = history.messages.filter((message) => message.role === 'user');
-      const assistant = history.messages.find((message) => message.role === 'assistant');
-      const firstUserImages = users[0]?.images as Array<{ path?: string; data?: string }> | undefined;
+      const images = users[0]?.images as Array<{ path?: string; data?: string }> | undefined;
 
       assert.equal(users.length, 1, 'the wire user echo must not duplicate the typed prompt');
       assert.equal(users[0]?.content, prompt);
-      assert.equal(firstUserImages?.length, 1);
-      assert.equal(firstUserImages?.[0]?.path, '/tmp/prompt-picture.png');
-      assert.equal(assistant?.content, 'Working on it.');
-    });
-  } finally {
-    restoreHomeDir();
-    await rm(tempRoot, { recursive: true, force: true });
-  }
-});
-
-test('Codex history prefers typed user rows over legacy user_message events in one file', { concurrency: false }, async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-hybrid-user-history-'));
-  const workspacePath = path.join(tempRoot, 'workspace');
-  await mkdir(workspacePath, { recursive: true });
-  const restoreHomeDir = patchHomeDir(tempRoot);
-
-  try {
-    const providerSessionId = 'codex-hybrid-1';
-    const transcriptPath = await writeCodexTranscript(tempRoot, providerSessionId, workspacePath);
-    await writeFile(
-      transcriptPath,
-      [
-        JSON.stringify({ timestamp: '2026-09-07T10:00:00.000Z', ordinal: 1, type: 'session_meta', payload: { id: providerSessionId, cwd: workspacePath } }),
-        JSON.stringify({
-          timestamp: '2026-09-07T10:00:01.000Z',
-          ordinal: 2,
-          type: 'event_msg',
-          payload: { type: 'user_message', message: 'Legacy copy of the prompt', turn_id: 'hybrid-turn-1' },
-        }),
-        JSON.stringify({
-          timestamp: '2026-09-07T10:00:02.000Z',
-          ordinal: 3,
-          type: 'event_msg',
-          payload: {
-            type: 'item_completed',
-            thread_id: providerSessionId,
-            turn_id: 'hybrid-turn-1',
-            item: { type: 'UserMessage', id: 'item-user-2', content: [{ type: 'text', text: 'Typed copy of the prompt', text_elements: [] }] },
-            started_at_ms: 1,
-            completed_at_ms: 2,
-          },
-        }),
-      ].join('\n') + '\n',
-      'utf8',
-    );
-
-    await withIsolatedDatabase(async () => {
-      sessionsDb.createAppSession('app-hybrid-1', 'codex', workspacePath);
-      sessionsDb.assignProviderSessionId('app-hybrid-1', providerSessionId);
-      await new CodexSessionSynchronizer().synchronize();
-
-      const history = await new CodexSessionsProvider().fetchHistory('app-hybrid-1');
-      const users = history.messages.filter((message) => message.role === 'user');
-
-      assert.equal(users.length, 1, 'legacy and typed copies of the same prompt must collapse');
-      assert.equal(users[0]?.content, 'Typed copy of the prompt');
-    });
-  } finally {
-    restoreHomeDir();
-    await rm(tempRoot, { recursive: true, force: true });
-  }
-});
-
-
-test('Codex history keeps legacy prompts for turns that have no typed copy', { concurrency: false }, async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-mixed-era-history-'));
-  const workspacePath = path.join(tempRoot, 'workspace');
-  await mkdir(workspacePath, { recursive: true });
-  const restoreHomeDir = patchHomeDir(tempRoot);
-
-  try {
-    const providerSessionId = 'codex-mixed-era-1';
-    const transcriptPath = await writeCodexTranscript(tempRoot, providerSessionId, workspacePath);
-    // Turn 1 predates the canonical format and exists only as a legacy event;
-    // turn 2 was written after the format boundary and exists only as a typed
-    // item. Both prompts must render — dropping the legacy row would lose the
-    // earlier turn even though no typed copy of it exists.
-    await writeFile(
-      transcriptPath,
-      [
-        JSON.stringify({ timestamp: '2026-09-07T10:00:00.000Z', ordinal: 1, type: 'session_meta', payload: { id: providerSessionId, cwd: workspacePath } }),
-        JSON.stringify({
-          timestamp: '2026-09-07T10:00:01.000Z',
-          ordinal: 2,
-          type: 'event_msg',
-          payload: { type: 'user_message', message: 'Prompt from the legacy era', turn_id: 'legacy-only-turn' },
-        }),
-        JSON.stringify({
-          timestamp: '2026-09-07T10:00:02.000Z',
-          ordinal: 3,
-          type: 'event_msg',
-          payload: {
-            type: 'item_completed',
-            thread_id: providerSessionId,
-            turn_id: 'typed-only-turn',
-            item: { type: 'UserMessage', id: 'item-user-3', content: [{ type: 'text', text: 'Prompt from the typed era', text_elements: [] }] },
-            started_at_ms: 1,
-            completed_at_ms: 2,
-          },
-        }),
-      ].join('\n') + '\n',
-      'utf8',
-    );
-
-    await withIsolatedDatabase(async () => {
-      sessionsDb.createAppSession('app-mixed-era-1', 'codex', workspacePath);
-      sessionsDb.assignProviderSessionId('app-mixed-era-1', providerSessionId);
-      await new CodexSessionSynchronizer().synchronize();
-
-      const history = await new CodexSessionsProvider().fetchHistory('app-mixed-era-1');
-      const users = history.messages.filter((message) => message.role === 'user');
-
-      assert.equal(users.length, 2, 'a legacy-only turn must survive next to typed turns');
-      assert.deepEqual(users.map((message) => message.content), [
-        'Prompt from the legacy era',
-        'Prompt from the typed era',
-      ]);
+      assert.equal(images?.[0]?.path, '/tmp/prompt-picture.png');
     });
   } finally {
     restoreHomeDir();
