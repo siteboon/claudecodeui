@@ -352,6 +352,7 @@
     "tokensLabel_one": "token",
     "tokensLabel_other": "tokens",
     "escClosesModal": "Esc closes the modal.",
-    "close": "Close"
+    "close": "Close",
+    "backgroundTask": "background task"
   }
 }

@@ -264,6 +264,23 @@ export type SubagentActivity = {
 };
 
 /** Identity and lifecycle of one spawned subagent as the backend reports it; present on the tool call that spawned the agent and used to draw its container header. */
+/**
+ * What a session is waiting for, when it is holding its CLI process open for
+ * work that outlives the turn that started it.
+ *
+ * `started` is work being armed, `holding` a turn whose process is being kept
+ * open for it, `reported` that work coming back, `expired` a hold that ran out
+ * with nothing reported.
+ */
+export type BackgroundWaitInfo = {
+  phase: 'started' | 'holding' | 'reported' | 'expired';
+  /** What the CLI still lists as outstanding, newest list wins. */
+  tasks?: Array<{ id?: string; type?: string; description?: string }>;
+  /** How long the hold will last at most, and when it runs out. */
+  ceilingMs?: number;
+  until?: string;
+};
+
 export type SubagentInfo = {
   id: string;
   name?: string;
@@ -309,6 +326,8 @@ export type ChatMessage = {
   isLocalCommand?: boolean;
   isLocalCommandStdout?: boolean;
   isCompactSummary?: boolean;
+  /** Set on the row that says what a held session is waiting for. */
+  backgroundWait?: BackgroundWaitInfo;
   isSubagentContainer?: boolean;
   /** The agent this row spawned, when it spawned one. Its presence is what makes a row a subagent container. */
   subagent?: SubagentInfo;
@@ -453,6 +472,8 @@ export type NormalizedMessage = {
   isLocalCommand?: boolean;
   isLocalCommandStdout?: boolean;
   isCompactSummary?: boolean;
+  /** Set by the provider on the row that says what a held session is waiting for. */
+  backgroundWait?: BackgroundWaitInfo;
   images?: Array<{ path?: string; data?: string; name?: string }>;
   files?: Array<{ path?: string; name?: string; mimeType?: string; size?: number }>;
   toolName?: string;

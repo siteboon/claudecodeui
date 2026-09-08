@@ -258,6 +258,23 @@ export type SessionUpsertedEvent = {
  * Every provider-specific message must be converted into this shape before being
  * emitted outside provider-specific modules.
  */
+/**
+ * What a session is waiting for, when it is holding its CLI process open for
+ * work that outlives the turn that started it.
+ *
+ * `started` is work being armed, `holding` a turn whose process is being kept
+ * open for it, `reported` that work coming back, `expired` a hold that ran out
+ * with nothing reported.
+ */
+export type BackgroundWaitInfo = {
+  phase: 'started' | 'holding' | 'reported' | 'expired';
+  /** What the CLI still lists as outstanding, newest list wins. */
+  tasks?: Array<{ id?: string; type?: string; description?: string }>;
+  /** How long the hold will last at most, and when it runs out. */
+  ceilingMs?: number;
+  until?: string;
+};
+
 export type NormalizedMessage = {
   id: string;
   /**
@@ -295,6 +312,8 @@ export type NormalizedMessage = {
   isLocalCommand?: boolean;
   isLocalCommandStdout?: boolean;
   isCompactSummary?: boolean;
+  /** Set on the row that says what a held session is waiting for. */
+  backgroundWait?: BackgroundWaitInfo;
   images?: unknown;
   /** Non-image files attached to a user turn after provider history normalization. */
   files?: unknown;
