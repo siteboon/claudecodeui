@@ -264,6 +264,22 @@ export type SubagentActivity = {
 };
 
 /** Identity and lifecycle of one spawned subagent as the backend reports it; present on the tool call that spawned the agent and used to draw its container header. */
+/**
+ * A compaction, as the transcript records it.
+ *
+ * `running` is the status the CLI sends when it starts compacting, `done` the
+ * boundary it sends when it has, `failed` a compaction that did not finish.
+ * The token counts and duration only come with a boundary.
+ */
+export type CompactionInfo = {
+  phase: 'running' | 'done' | 'failed';
+  trigger?: 'manual' | 'auto';
+  preTokens?: number;
+  postTokens?: number;
+  durationMs?: number;
+  error?: string | null;
+};
+
 export type SubagentInfo = {
   id: string;
   name?: string;
@@ -309,6 +325,10 @@ export type ChatMessage = {
   isLocalCommand?: boolean;
   isLocalCommandStdout?: boolean;
   isCompactSummary?: boolean;
+  /** Set on the row that stands in for a compaction, so it is drawn as one. */
+  compact?: CompactionInfo;
+  /** The summary that compaction produced, folded into the row above rather than left loose. */
+  compactSummary?: string;
   isSubagentContainer?: boolean;
   /** The agent this row spawned, when it spawned one. Its presence is what makes a row a subagent container. */
   subagent?: SubagentInfo;
@@ -453,6 +473,8 @@ export type NormalizedMessage = {
   isLocalCommand?: boolean;
   isLocalCommandStdout?: boolean;
   isCompactSummary?: boolean;
+  /** Set by the provider on the row that stands in for a compaction. */
+  compact?: CompactionInfo;
   images?: Array<{ path?: string; data?: string; name?: string }>;
   files?: Array<{ path?: string; name?: string; mimeType?: string; size?: number }>;
   toolName?: string;
