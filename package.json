@@ -226,7 +226,7 @@
     "concurrently": "^8.2.2",
     "cross-env": "^10.1.0",
     "electron": "^38.0.0",
-    "electron-builder": "^26.15.3",
+    "electron-builder": "^26.16.1",
     "eslint": "^9.39.3",
     "eslint-import-resolver-typescript": "^4.4.4",
     "eslint-plugin-boundaries": "^6.0.2",
