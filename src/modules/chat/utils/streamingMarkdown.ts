@@ -21,7 +21,10 @@
 const FENCE_PATTERN = /^ {0,3}(`{3,}|~{3,})/;
 
 /** A `$$` display-math delimiter. remark-math is configured for block math only. */
-const MATH_DELIMITER_PATTERN = /^ {0,3}\$\$/;
+const DOLLAR_MATH_DELIMITER_PATTERN = /^ {0,3}\$\$/;
+
+/** A TeX display-math opener at the start of a Markdown flow line. */
+const TEX_DISPLAY_MATH_OPEN_PATTERN = /^ {0,3}\\\[/;
 
 /**
  * Block starters whose meaning depends on the surrounding lines, checked on both
@@ -65,7 +68,7 @@ export function splitStreamingMarkdown(content: string): StreamingMarkdownSplit 
 
   const lines = content.split('\n');
   let openFence: OpenFence | null = null;
-  let insideMath = false;
+  let openMath: 'dollar' | 'tex' | null = null;
   let boundaryLine = -1;
 
   // Offset of each line's first character, so the split is an exact slice.
@@ -90,16 +93,39 @@ export function splitStreamingMarkdown(content: string): StreamingMarkdownSplit 
       continue;
     }
 
-    if (!openFence && MATH_DELIMITER_PATTERN.test(line)) {
-      // A self-contained `$$x$$` line opens and closes in one go; toggling on it
-      // would leave the tracker stuck open and suppress every later boundary.
-      if (countMathDelimiters(line) % 2 === 1) {
-        insideMath = !insideMath;
+    if (!openFence && openMath === 'dollar' && DOLLAR_MATH_DELIMITER_PATTERN.test(line)) {
+      if (countDollarMathDelimiters(line) % 2 === 1) {
+        openMath = null;
       }
       continue;
     }
 
-    if (openFence || insideMath || line.trim() !== '') {
+    if (!openFence && openMath === 'tex') {
+      if (hasTexDisplayMathClose(line)) {
+        openMath = null;
+      }
+      continue;
+    }
+
+    if (!openFence && DOLLAR_MATH_DELIMITER_PATTERN.test(line)) {
+      // A self-contained `$$x$$` line opens and closes in one go; tracking it
+      // would suppress every later boundary in the reply.
+      if (countDollarMathDelimiters(line) % 2 === 1) {
+        openMath = 'dollar';
+      }
+      continue;
+    }
+
+    if (!openFence && TEX_DISPLAY_MATH_OPEN_PATTERN.test(line)) {
+      // `\[x\]` is complete on one line; a multiline opener remains pending
+      // until an unescaped closing delimiter reaches the end of a line.
+      if (!hasTexDisplayMathClose(line.slice(line.indexOf('\\[') + 2))) {
+        openMath = 'tex';
+      }
+      continue;
+    }
+
+    if (openFence || openMath || line.trim() !== '') {
       continue;
     }
 
@@ -131,8 +157,22 @@ export function splitStreamingMarkdown(content: string): StreamingMarkdownSplit 
   };
 }
 
-function countMathDelimiters(line: string): number {
+function countDollarMathDelimiters(line: string): number {
   return line.split('$$').length - 1;
+}
+
+/** A close is valid when `]` ends the line and is preceded by an odd backslash run. */
+function hasTexDisplayMathClose(line: string): boolean {
+  const content = line.trimEnd();
+  if (!content.endsWith(']')) {
+    return false;
+  }
+
+  let backslashCount = 0;
+  for (let index = content.length - 2; index >= 0 && content[index] === '\\'; index--) {
+    backslashCount += 1;
+  }
+  return backslashCount % 2 === 1;
 }
 
 function readFence(line: string): OpenFence | null {

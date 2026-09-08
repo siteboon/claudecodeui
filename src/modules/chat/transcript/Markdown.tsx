@@ -2,7 +2,6 @@ import React, { memo, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useTranslation } from 'react-i18next';
@@ -14,6 +13,7 @@ import { SyntaxHighlighter } from '@/shared/syntaxHighlighter';
 import { usePaletteOps } from '@/modules/command-palette';
 import { buildSyntaxTheme } from '@/modules/chat/utils/syntaxHighlightTheme';
 import type { PrismStyleSheet } from '@/modules/chat/utils/syntaxHighlightTheme';
+import { MARKDOWN_MATH_REMARK_PLUGINS } from '@/shared/markdownMath';
 
 type MarkdownProps = {
   children: React.ReactNode;
@@ -57,7 +57,7 @@ const childrenToText = (children: React.ReactNode): string => {
   return '';
 };
 
-// The delimiters `remark-math` recognizes with `singleDollarTextMath` off.
+// Delimiters recognized by the combined remark-math and TeX-style extension.
 const MATH_DELIMITER = /\$\$|\\\(|\\\[/;
 
 const EMPTY_PLUGINS: never[] = [];
@@ -256,7 +256,7 @@ function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 
     () => {
       const plugins: unknown[] = [remarkGfm];
       if (hasMath) {
-        plugins.push([remarkMath, { singleDollarTextMath: false }]);
+        plugins.push(...MARKDOWN_MATH_REMARK_PLUGINS);
       }
       if (breaks) {
         plugins.push(remarkBreaks);
