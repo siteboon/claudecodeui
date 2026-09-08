@@ -4,12 +4,18 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/shared/context/ThemeContext';
 import { api } from '@/shared/api';
 import { usePlugins } from '@/modules/plugins/context/PluginsContext';
+import { usePluginHostApi } from '@/modules/plugins/hooks/usePluginHostApi';
+import { createPluginApi } from '@/modules/plugins/utils/pluginHostRequest';
 import type { Project, ProjectSession } from '@/shared/types';
 
 type PluginTabContentProps = {
   pluginName: string;
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
+  /** Opens a new chat for a project on the plugin's behalf. */
+  onStartNewSession: (project: Project) => void;
+  /** Navigates to an existing session on the plugin's behalf. */
+  onOpenSession: (sessionId: string) => void;
 };
 
 type PluginContext = {
@@ -48,12 +54,21 @@ export default function PluginTabContent({
   pluginName,
   selectedProject,
   selectedSession,
+  onStartNewSession,
+  onOpenSession,
 }: PluginTabContentProps) {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const { isDarkMode } = useTheme();
   const { plugins } = usePlugins();
+  const hostApi = usePluginHostApi({ onStartNewSession, onOpenSession });
+  // Read through a ref for the same reason as the context: the plugin module
+  // captures the api object once, on mount.
+  const hostApiRef = useRef(hostApi);
+  useEffect(() => {
+    hostApiRef.current = hostApi;
+  }, [hostApi]);
 
   // Stable refs so effects don't need context values in their dep arrays
   const contextRef = useRef<PluginContext>(buildContext(isDarkMode, selectedProject, selectedSession));
@@ -101,8 +116,8 @@ export default function PluginTabContent({
 
         // The host surface handed to the plugin module, distinct from the
         // app's own `api` client that backs `rpc` below.
-        const pluginHostApi = {
-          get context(): PluginContext { return contextRef.current; },
+        const pluginHostApi = createPluginApi({
+          getContext: () => contextRef.current,
 
           onContextChange(cb: (ctx: PluginContext) => void): () => void {
             contextCallbacks.add(cb);
@@ -114,7 +129,10 @@ export default function PluginTabContent({
             if (!res.ok) throw new Error(`RPC error ${res.status}`);
             return res.json();
           },
-        };
+
+          getHost: () => hostApiRef.current,
+          surface: 'tab',
+        });
 
         await mod.mount?.(container, pluginHostApi);
         if (!active) {
