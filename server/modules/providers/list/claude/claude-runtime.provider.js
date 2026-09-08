@@ -543,6 +543,18 @@ function extractCumulativeTokenBudget(sdkMessage) {
 // when it is explicitly backgrounded; the rest defer or watch work by nature.
 const DEFERRED_WORK_TOOLS = new Set(['Monitor', 'ScheduleWakeup', 'CronCreate', 'TaskCreate']);
 
+/**
+ * Whether this turn's process should be held open for work that outlives it.
+ *
+ * `pendingFromThisTurn` is what this turn armed; `outstandingTasks` is what the
+ * CLI still lists, which survives a turn boundary. Either holds the process, so
+ * a turn resumed mid-wait does not release it under work an earlier turn armed.
+ * The ceiling still bounds the hold, so nothing is held indefinitely.
+ */
+function shouldHoldForBackgroundWork(pendingFromThisTurn, outstandingTasks) {
+  return Boolean(pendingFromThisTurn) || outstandingTasks.length > 0;
+}
+
 /** A duration the way the CLI writes one: `2m 22s`. */
 function formatWaitDuration(milliseconds) {
   const seconds = Math.max(0, Math.round(milliseconds / 1000));
@@ -1076,7 +1088,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
             sessionName: sessionSummary
           });
         }
-        if (backgroundWorkPending || backgroundTasks.length) {
+        if (shouldHoldForBackgroundWork(backgroundWorkPending, backgroundTasks)) {
           // Work started during this turn is still running. Hold the process
           // open so it can finish and report back in a follow-up turn; the
           // ceiling is only a backstop for work that never reports. The CLI's
@@ -1305,9 +1317,11 @@ export const claudeRuntime = {
 
 // Export public API
 export {
-  // Exported for the tests, which assert the wait sentences directly.
+  // Exported for the tests, which assert the wait sentences and the hold rule
+  // directly.
   describeBackgroundTasks,
   formatWaitDuration,
+  shouldHoldForBackgroundWork,
   queryClaudeSDK,
   abortClaudeSDKSession,
   isClaudeSDKSessionActive,
