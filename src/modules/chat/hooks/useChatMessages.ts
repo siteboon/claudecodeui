@@ -78,6 +78,21 @@ function parseTaskNotification(content: string): ParsedTaskNotification | null {
  * transcript artifacts such as local slash commands and compact summaries are
  * intentionally preserved and annotated so they can render like normal chat.
  */
+/**
+ * A wait row describes a *state*, not an event, so only the newest live one is
+ * drawn: keeping every one turns a single wait into a pile of stale rows, while
+ * keeping the newest reads as what the session is doing now. A wait that has
+ * ended (`reported`, `expired`) stays, because that is history worth reading.
+ */
+function isSupersededWaitRow(
+  msg: NormalizedMessage,
+  index: number,
+  newestLiveWaitIndex: number,
+): boolean {
+  const phase = msg.backgroundWait?.phase;
+  return (phase === 'started' || phase === 'holding') && index < newestLiveWaitIndex;
+}
+
 export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMessage[] {
   const converted: ChatMessage[] = [];
 
@@ -158,9 +173,31 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
     }
   }
 
-  for (const msg of messages) {
+  // The newest row saying the session is still waiting; everything before it is
+  // a countdown that has since been replaced.
+  let newestLiveWaitIndex = -1;
+  messages.forEach((msg, index) => {
+    const phase = msg.backgroundWait?.phase;
+    if (phase === 'started' || phase === 'holding') {
+      newestLiveWaitIndex = index;
+    }
+  });
+
+  for (const [index, msg] of messages.entries()) {
     // Subagent rows were folded into their container's timeline above.
     if (msg.parentToolUseId) {
+      continue;
+    }
+
+    if (msg.backgroundWait) {
+      if (!isSupersededWaitRow(msg, index, newestLiveWaitIndex)) {
+        converted.push({
+          type: 'assistant',
+          content: msg.content || '',
+          timestamp: msg.timestamp,
+          backgroundWait: msg.backgroundWait,
+        });
+      }
       continue;
     }
 
