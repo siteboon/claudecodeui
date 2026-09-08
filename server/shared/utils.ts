@@ -213,6 +213,19 @@ export function normalizeProjectPath(inputPath: string): string {
 }
 
 /**
+ * Reports whether `target` is `root` itself or nested under it.
+ *
+ * Uses `path.relative` rather than string-prefix matching so this is correct
+ * for root paths (e.g. "/" or "C:\\") that already end in a separator, where
+ * naively appending another separator before comparing would never match.
+ */
+function isPathWithinRoot(root: string, target: string): boolean {
+  const relative = path.relative(root, target);
+  const isParentTraversal = relative === '..' || relative.startsWith(`..${path.sep}`);
+  return relative === '' || (!isParentTraversal && !path.isAbsolute(relative));
+}
+
+/**
  * Validates that a user-supplied workspace path is safe to use.
  *
  * Call this before any filesystem mutation that creates or registers projects.
@@ -283,10 +296,7 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
     }
 
     const resolvedWorkspaceRoot = normalizeProjectPath(await realpath(WORKSPACES_ROOT));
-    if (
-      !resolvedPath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)
-      && resolvedPath !== resolvedWorkspaceRoot
-    ) {
+    if (!isPathWithinRoot(resolvedWorkspaceRoot, resolvedPath)) {
       return {
         valid: false,
         error: `Workspace path must be within the allowed workspace root: ${WORKSPACES_ROOT}`,
@@ -300,10 +310,7 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
         const symlinkTarget = await readlink(absolutePath);
         const resolvedSymlinkPath = path.resolve(path.dirname(absolutePath), symlinkTarget);
         const realSymlinkPath = await realpath(resolvedSymlinkPath);
-        if (
-          !realSymlinkPath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)
-          && realSymlinkPath !== resolvedWorkspaceRoot
-        ) {
+        if (!isPathWithinRoot(resolvedWorkspaceRoot, realSymlinkPath)) {
           return {
             valid: false,
             error: 'Symlink target is outside the allowed workspace root',
