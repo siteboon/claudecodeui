@@ -161,6 +161,36 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
             </div>
           )}
         </div>
+      ) : message.compact ? (
+        /* A compaction: one row, its numbers, and its summary folded into it */
+        <div className="w-full">
+          <div className="flex items-center gap-2 py-0.5">
+            <span
+              className={`inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${
+                message.compact.phase === 'running'
+                  ? 'animate-pulse bg-amber-400 dark:bg-amber-500'
+                  : message.compact.phase === 'failed'
+                    ? 'bg-red-400 dark:bg-red-500'
+                    : 'bg-gray-400 dark:bg-gray-500'
+              }`}
+            />
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              {message.content || t('chat:misc.compacted', 'Compacted')}
+            </span>
+          </div>
+          {message.compactSummary && (
+            <details className="ml-3.5 mt-0.5">
+              <summary className="cursor-pointer text-xs text-gray-500 hover:text-foreground dark:text-gray-400">
+                {t('chat:misc.compactionSummary', 'full summary')}
+              </summary>
+              <div className="mt-1">
+                <Markdown className="prose prose-sm prose-gray max-w-none font-serif dark:prose-invert">
+                  {message.compactSummary}
+                </Markdown>
+              </div>
+            </details>
+          )}
+        </div>
       ) : message.isTaskNotification ? (
         /* Compact task notification on the left */
         <div className="w-full">
