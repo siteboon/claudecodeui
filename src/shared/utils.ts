@@ -214,7 +214,10 @@ type CssVariableTarget = Pick<CSSStyleDeclaration, 'setProperty'>;
 
 /** Converts persisted or user-entered chat font sizes to a supported integer value. */
 export function normalizeChatBodyFontSize(value: unknown): number {
-  if (typeof value === 'string' && value.trim() === '') {
+  if (
+    value === null ||
+    (typeof value === 'string' && value.trim() === '')
+  ) {
     return DEFAULT_CHAT_BODY_FONT_SIZE;
   }
 
@@ -231,10 +234,11 @@ export function normalizeChatBodyFontSize(value: unknown): number {
 
 /** Reads the saved chat font size, falling back safely when storage is unavailable. */
 export function readChatBodyFontSize(
-  storage: FontSizeStorageReader = window.localStorage,
+  storage?: FontSizeStorageReader,
 ): number {
   try {
-    return normalizeChatBodyFontSize(storage.getItem(CHAT_BODY_FONT_SIZE_STORAGE_KEY));
+    const targetStorage = storage ?? window.localStorage;
+    return normalizeChatBodyFontSize(targetStorage.getItem(CHAT_BODY_FONT_SIZE_STORAGE_KEY));
   } catch {
     return DEFAULT_CHAT_BODY_FONT_SIZE;
   }
@@ -253,13 +257,14 @@ export function applyChatBodyFontSize(
 /** Saves and immediately applies a chat font size selected in appearance settings. */
 export function persistChatBodyFontSize(
   value: unknown,
-  storage: FontSizeStorageWriter = window.localStorage,
+  storage?: FontSizeStorageWriter,
   style: CssVariableTarget = document.documentElement.style,
 ): number {
   const normalized = applyChatBodyFontSize(value, style);
 
   try {
-    storage.setItem(CHAT_BODY_FONT_SIZE_STORAGE_KEY, String(normalized));
+    const targetStorage = storage ?? window.localStorage;
+    targetStorage.setItem(CHAT_BODY_FONT_SIZE_STORAGE_KEY, String(normalized));
   } catch {
     // Applying the live preference is still useful when storage is unavailable.
   }
