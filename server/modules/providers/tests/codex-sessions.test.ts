@@ -551,3 +551,62 @@ test('an exec script that updates the plan yields the steps it set', () => {
     ],
   }]);
 });
+
+
+test('Codex history restores user prompts from typed item_completed rows', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-typed-user-history-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tempRoot);
+
+  try {
+    const providerSessionId = 'codex-typed-1';
+    const prompt = 'Typed prompt that must survive a refresh';
+    const transcriptPath = path.join(tempRoot, '.codex', 'sessions', '2026', '07', '07', 'rollout-' + providerSessionId + '.jsonl');
+    await mkdir(path.dirname(transcriptPath), { recursive: true });
+    const lineEnd = String.fromCharCode(10);
+    const typedLine = JSON.stringify({
+      timestamp: '2026-09-07T17:59:17.000Z',
+      type: 'event_msg',
+      payload: {
+        type: 'item_completed',
+        turn_id: 'typed-turn-1',
+        item: {
+          type: 'UserMessage',
+          id: 'item-user-1',
+          content: [
+            { type: 'text', text: prompt, text_elements: [] },
+            { type: 'local_image', path: '/tmp/prompt-picture.png', detail: null },
+          ],
+        },
+      },
+    });
+    const wireUserEcho = JSON.stringify({
+      timestamp: '2026-09-07T17:59:19.000Z',
+      type: 'response_item',
+      payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: prompt }] },
+    });
+    await writeFile(
+      transcriptPath,
+      [JSON.stringify({ type: 'session_meta', payload: { id: providerSessionId, cwd: workspacePath } }), typedLine, wireUserEcho].join(lineEnd) + lineEnd,
+      'utf8',
+    );
+
+    await withIsolatedDatabase(async () => {
+      sessionsDb.createAppSession('app-typed-1', 'codex', workspacePath);
+      sessionsDb.assignProviderSessionId('app-typed-1', providerSessionId);
+      await new CodexSessionSynchronizer().synchronize();
+
+      const history = await new CodexSessionsProvider().fetchHistory('app-typed-1');
+      const users = history.messages.filter((message) => message.role === 'user');
+      const images = users[0]?.images as Array<{ path?: string; data?: string }> | undefined;
+
+      assert.equal(users.length, 1, 'the wire user echo must not duplicate the typed prompt');
+      assert.equal(users[0]?.content, prompt);
+      assert.equal(images?.[0]?.path, '/tmp/prompt-picture.png');
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
