@@ -70,6 +70,21 @@ describe('background wait rows', () => {
     expect(converted[0].backgroundWait?.phase).toBe('expired');
   });
 
+  it("does not let a subagent's wait suppress this session's row", () => {
+    const subagentWait: NormalizedMessage = {
+      ...waitRow('Running 1 background task', { phase: 'started' }),
+      parentToolUseId: 'toolu_1',
+    } as NormalizedMessage;
+
+    const converted = normalizedToChatMessages([
+      waitRow('Holding the session open for background work', { phase: 'holding' }),
+      subagentWait,
+    ]);
+
+    expect(converted.map((message) => message.content))
+      .toEqual(['Holding the session open for background work']);
+  });
+
   it('leaves every other row alone', () => {
     const converted = normalizedToChatMessages([
       textRow('before'),

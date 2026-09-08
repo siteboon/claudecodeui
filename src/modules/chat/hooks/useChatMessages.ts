@@ -177,6 +177,12 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
   // a countdown that has since been replaced.
   let newestLiveWaitIndex = -1;
   messages.forEach((msg, index) => {
+    // A subagent's wait is its own, and its rows are folded into their container
+    // below rather than drawn — so one must not decide which of this session's
+    // rows is the current one.
+    if (msg.parentToolUseId) {
+      return;
+    }
     const phase = msg.backgroundWait?.phase;
     if (phase === 'started' || phase === 'holding') {
       newestLiveWaitIndex = index;
