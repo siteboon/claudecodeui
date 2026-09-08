@@ -19,6 +19,7 @@ type ShellIncomingMessage = {
   initialCommand?: string;
   isPlainShell?: boolean;
   forceRestart?: boolean;
+  bypassPermissions?: boolean;
 };
 
 type PtySessionEntry = {
@@ -216,12 +217,18 @@ function buildShellCommand(
     return initialCommand || 'opencode';
   }
 
-  const command = initialCommand || 'claude';
+  // Launching with the flag is what unlocks "bypass permissions" in the CLI's
+  // shift+tab permission-mode cycle; it cannot be enabled from inside a
+  // session started without it.
+  const bypassFlag = readBoolean(message.bypassPermissions)
+    ? ' --dangerously-skip-permissions'
+    : '';
+  const command = initialCommand || `claude${bypassFlag}`;
   if (resumeSessionId) {
     if (os.platform() === 'win32') {
-      return `claude --resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { claude }`;
+      return `claude --resume "${resumeSessionId}"${bypassFlag}; if ($LASTEXITCODE -ne 0) { claude${bypassFlag} }`;
     }
-    return `claude --resume "${resumeSessionId}" || claude`;
+    return `claude --resume "${resumeSessionId}"${bypassFlag} || claude${bypassFlag}`;
   }
   return command;
 }

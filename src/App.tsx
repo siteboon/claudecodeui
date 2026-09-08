@@ -1,14 +1,14 @@
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import { I18nextProvider } from 'react-i18next';
 
-import { ThemeProvider } from './contexts/ThemeContext';
-import { AuthProvider, ProtectedRoute } from './components/auth';
-import { TaskMasterProvider } from './contexts/TaskMasterContext';
-import { TasksSettingsProvider } from './contexts/TasksSettingsContext';
-import { WebSocketProvider } from './contexts/WebSocketContext';
-import { PluginsProvider } from './contexts/PluginsContext';
-import AppContent from './components/app/AppContent';
-import i18n from './i18n/config.js';
+import { ThemeProvider } from '@/shared/context/ThemeContext';
+import { UiPreferencesProvider } from '@/shared/context/UiPreferencesContext';
+import { AuthProvider, ProtectedRoute } from '@/modules/auth';
+import { TaskMasterProvider,TasksSettingsProvider } from '@/modules/task-master';
+import { WebSocketProvider } from '@/shared/context/WebSocketContext';
+import { PluginsProvider } from '@/modules/plugins';
+import { ProjectWorkspaceRoute } from '@/modules/project-workspace';
+import { i18n } from '@/modules/i18n';
 
 const DEPLOYMENT_ASSET_DIRECTORIES = new Set(['assets', 'static', 'icons', 'images']);
 
@@ -26,7 +26,12 @@ const DEPLOYMENT_ASSET_DIRECTORIES = new Set(['assets', 'static', 'icons', 'imag
  * contain a directory even though there is no application basename.
  */
 function detectRouterBasename() {
-  const explicitBasename = typeof window !== 'undefined' ? window.__ROUTER_BASENAME__ || '' : '';
+  // Deployments can pin the router basename by setting window.__ROUTER_BASENAME__ in
+  // index.html, so read it through a local widening instead of augmenting global Window.
+  const explicitBasename =
+    typeof window !== 'undefined'
+      ? (window as Window & { __ROUTER_BASENAME__?: string }).__ROUTER_BASENAME__ || ''
+      : '';
   if (explicitBasename) {
     // Keep the deployment escape hatch authoritative. A trailing slash is
     // harmless for humans but React Router expects a normalized basename.
@@ -100,12 +105,14 @@ function detectRouterBasename() {
   return detectedBasename;
 }
 
+/** Rendered by main.tsx; mounts the shared providers, the auth gate and the project workspace routes. */
 export default function App() {
   const routerBasename = detectRouterBasename();
 
   return (
     <I18nextProvider i18n={i18n}>
       <ThemeProvider>
+        <UiPreferencesProvider>
         <AuthProvider>
           <WebSocketProvider>
             <PluginsProvider>
@@ -114,8 +121,8 @@ export default function App() {
                 <ProtectedRoute>
                   <Router basename={routerBasename}>
                     <Routes>
-                      <Route path="/" element={<AppContent />} />
-                      <Route path="/session/:sessionId" element={<AppContent />} />
+                      <Route path="/" element={<ProjectWorkspaceRoute />} />
+                      <Route path="/session/:sessionId" element={<ProjectWorkspaceRoute />} />
                     </Routes>
                   </Router>
                 </ProtectedRoute>
@@ -124,6 +131,7 @@ export default function App() {
             </PluginsProvider>
           </WebSocketProvider>
         </AuthProvider>
+        </UiPreferencesProvider>
       </ThemeProvider>
     </I18nextProvider>
   );

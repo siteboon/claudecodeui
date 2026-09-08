@@ -122,6 +122,15 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
       return null;
     }
 
+    // A thread a session was edited off is left on disk on purpose, but it is
+    // nobody's conversation any more. Re-indexing it would add a sidebar entry
+    // for the version the user edited away from — and for a session that was
+    // itself discovered from disk, whose app id is its original thread id, it
+    // would hand the row back to that thread.
+    if (sessionsDb.isProviderSessionSuperseded(parsed.sessionId, this.provider)) {
+      return null;
+    }
+
     // App-created sessions are keyed by an app id, so disk-discovered provider
     // ids must be resolved through the provider-id mapping first.
     const existingSession = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)

@@ -13,6 +13,8 @@ import path from 'path';
 
 import express from 'express';
 
+import { WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
+
 import type { createTaskmasterService } from './taskmaster.service.js';
 // cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution — required
 // here since task-master/npx are .cmd shims on Windows.
@@ -25,22 +27,30 @@ type TaskmasterRouterDependencies = {
     taskmasterService: ReturnType<typeof createTaskmasterService>;
 };
 
-function broadcastTaskMasterUpdate(wss, type, projectId, payloadKey, payload) {
-    if (!wss || !projectId) return;
+/**
+ * These frames are `type`-keyed and only TaskMasterContext, which lives on the
+ * `/ws` chat socket, knows what to do with them. Broadcasting over the raw
+ * `wss.clients` set instead delivered them to every `/shell`, `/plugin-ws` and
+ * `/desktop-notifications` socket as well, where they were parsed and dropped —
+ * and, on `/plugin-ws`, handed to third-party plugin frontends that have no
+ * business seeing them. `connectedClients` is the `/ws`-only set every other
+ * broadcast in the server already uses.
+ */
+function broadcastTaskMasterUpdate(type, projectId, payloadKey, payload) {
+    if (!projectId) return;
     const message = JSON.stringify({
         type,
         projectId,
         ...(payload === undefined ? {} : { [payloadKey]: payload }),
         timestamp: new Date().toISOString(),
     });
-    wss.clients.forEach((client) => {
-        if (client.readyState === 1) client.send(message);
+    connectedClients.forEach((client) => {
+        if (client.readyState === WS_OPEN_STATE) client.send(message);
     });
 }
 
-function broadcastTaskMasterProjectUpdate(wss, projectId, taskMasterData) {
+function broadcastTaskMasterProjectUpdate(projectId, taskMasterData) {
     broadcastTaskMasterUpdate(
-        wss,
         'taskmaster-project-updated',
         projectId,
         'taskMasterData',
@@ -48,8 +58,8 @@ function broadcastTaskMasterProjectUpdate(wss, projectId, taskMasterData) {
     );
 }
 
-function broadcastTaskMasterTasksUpdate(wss, projectId, tasksData) {
-    broadcastTaskMasterUpdate(wss, 'taskmaster-tasks-updated', projectId, 'tasksData', tasksData);
+function broadcastTaskMasterTasksUpdate(projectId, tasksData) {
+    broadcastTaskMasterUpdate('taskmaster-tasks-updated', projectId, 'tasksData', tasksData);
 }
 
 /**
@@ -596,13 +606,7 @@ export function createTaskmasterRouter(dependencies: TaskmasterRouterDependencie
                     // Broadcast TaskMaster project update via WebSocket. The
                     // WebSocket payload keeps using `projectId` so the frontend
                     // can match notifications against the current selection.
-                    if (req.app.locals.wss) {
-                        broadcastTaskMasterProjectUpdate(
-                            req.app.locals.wss,
-                            projectId,
-                            { hasTaskmaster: true, status: 'initialized' }
-                        );
-                    }
+                    broadcastTaskMasterProjectUpdate(projectId, { hasTaskmaster: true, status: 'initialized' });
 
                     res.json({
                         projectId,
@@ -688,12 +692,7 @@ export function createTaskmasterRouter(dependencies: TaskmasterRouterDependencie
                 if (code === 0) {
                     // Broadcast task update via WebSocket using the projectId so
                     // clients subscribed to this project get notified immediately.
-                    if (req.app.locals.wss) {
-                        broadcastTaskMasterTasksUpdate(
-                            req.app.locals.wss,
-                            projectId
-                        );
-                    }
+                    broadcastTaskMasterTasksUpdate(projectId);
 
                     res.json({
                         projectId,
@@ -748,9 +747,7 @@ export function createTaskmasterRouter(dependencies: TaskmasterRouterDependencie
                 }, ({ code, error, stdout, stderr }) => {
                     if (code === 0) {
                         // Broadcast task update via WebSocket
-                        if (req.app.locals.wss) {
-                            broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectId);
-                        }
+                        broadcastTaskMasterTasksUpdate(projectId);
 
                         res.json({
                             projectId,
@@ -787,9 +784,7 @@ export function createTaskmasterRouter(dependencies: TaskmasterRouterDependencie
                 }, ({ code, error, stdout, stderr }) => {
                     if (code === 0) {
                         // Broadcast task update via WebSocket
-                        if (req.app.locals.wss) {
-                            broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectId);
-                        }
+                        broadcastTaskMasterTasksUpdate(projectId);
 
                         res.json({
                             projectId,
@@ -870,12 +865,7 @@ export function createTaskmasterRouter(dependencies: TaskmasterRouterDependencie
             }, ({ code, error, stdout, stderr }) => {
                 if (code === 0) {
                     // Broadcast task update via WebSocket
-                    if (req.app.locals.wss) {
-                        broadcastTaskMasterTasksUpdate(
-                            req.app.locals.wss,
-                            projectId
-                        );
-                    }
+                    broadcastTaskMasterTasksUpdate(projectId);
 
                     res.json({
                         projectId,
