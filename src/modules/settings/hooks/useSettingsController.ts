@@ -12,7 +12,7 @@ import {
   writeUserPreferences,
 } from '@/shared/userSettings';
 import { useProviderAuthStatus } from '@/modules/provider-auth';
-import type { AgentProvider, ClaudePermissionsState, CodeEditorSettingsState, CodexPermissionMode, CursorPermissionsState, NotificationPreferencesState, ProjectSortOrder, SettingsMainTab } from '@/shared/types';
+import type { AgentProvider, ClaudePermissionsState, CodeEditorSettingsState, CodexPermissionMode, CodexRuntimeMode, CursorPermissionsState, NotificationPreferencesState, ProjectSortOrder, SettingsMainTab } from '@/shared/types';
 
 const DEFAULT_CURSOR_PERMISSIONS: CursorPermissionsState = {
   allowedCommands: [],
@@ -45,6 +45,7 @@ type CursorSettingsStorage = {
 
 type CodexSettingsStorage = {
   permissionMode?: CodexPermissionMode;
+  runtimeMode?: CodexRuntimeMode;
 };
 
 type NotificationPreferencesResponse = {
@@ -72,6 +73,10 @@ const toCodexPermissionMode = (value: unknown): CodexPermissionMode => {
 
   return 'default';
 };
+
+const toCodexRuntimeMode = (value: unknown): CodexRuntimeMode => (
+  value === 'sdk' ? 'sdk' : 'app-server'
+);
 
 const toResponseJson = async <T>(response: Response): Promise<T> => response.json() as Promise<T>;
 
@@ -140,6 +145,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     createDefaultNotificationPreferences()
   ));
   const [codexPermissionMode, setCodexPermissionMode] = useState<CodexPermissionMode>('default');
+  const [codexRuntimeMode, setCodexRuntimeMode] = useState<CodexRuntimeMode>('app-server');
 
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginProvider, setLoginProvider] = useState<ActiveLoginProvider>('');
@@ -168,6 +174,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
 
       const savedCodexSettings = readUserPreference<CodexSettingsStorage>('codexPermissions', {});
       setCodexPermissionMode(toCodexPermissionMode(savedCodexSettings.permissionMode));
+      setCodexRuntimeMode(toCodexRuntimeMode(savedCodexSettings.runtimeMode));
 
       try {
         const notificationResponse = await api.settings.notificationPreferences();
@@ -191,6 +198,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
       setCursorPermissions(createEmptyCursorPermissions());
       setNotificationPreferences(createDefaultNotificationPreferences());
       setCodexPermissionMode('default');
+      setCodexRuntimeMode('app-server');
       setProjectSortOrder('name');
     }
   }, []);
@@ -236,6 +244,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
         },
         codexPermissions: {
           permissionMode: codexPermissionMode,
+          runtimeMode: codexRuntimeMode,
         },
       });
 
@@ -256,6 +265,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     claudePermissions.disallowedTools,
     claudePermissions.skipPermissions,
     codexPermissionMode,
+    codexRuntimeMode,
     cursorPermissions.allowedCommands,
     cursorPermissions.disallowedCommands,
     cursorPermissions.skipPermissions,
@@ -368,6 +378,8 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     setNotificationPreferences,
     codexPermissionMode,
     setCodexPermissionMode,
+    codexRuntimeMode,
+    setCodexRuntimeMode,
     providerAuthStatus,
     openLoginForProvider,
     showLoginModal,

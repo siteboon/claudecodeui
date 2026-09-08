@@ -11,6 +11,10 @@ import { codexAppServer } from '@/modules/providers/list/codex/codex-app-server.
 import { CodexSessionSynchronizer } from '@/modules/providers/list/codex/codex-session-synchronizer.provider.js';
 import { CodexSessionsProvider } from '@/modules/providers/list/codex/codex-sessions.provider.js';
 
+const createSdkSessionsProvider = () => new CodexSessionsProvider({
+  readRuntimeMode: () => 'sdk',
+});
+
 /**
  * Codex rows carry no id of their own, so an edit addresses the enclosing
  * *turn*. These cover the two halves of that: that the reader can name the
@@ -107,7 +111,7 @@ const THREE_TURNS = [
 
 test('every Codex prompt is anchored to the turn that contains it', { concurrency: false }, async () => {
   await withIndexedSession(THREE_TURNS, async ({ sessionId }) => {
-    const history = await new CodexSessionsProvider().fetchHistory(sessionId);
+    const history = await createSdkSessionsProvider().fetchHistory(sessionId);
     const prompts = history.messages.filter((message) => message.role === 'user');
 
     assert.deepEqual(
@@ -132,7 +136,7 @@ test('only the first prompt of a turn is anchored', { concurrency: false }, asyn
   // turn. The cut is per turn, so anchoring the follow-up would silently take
   // the prompt before it as well.
   await withIndexedSession(turn('turn-a', ['first prompt', 'queued follow-up']), async ({ sessionId }) => {
-    const history = await new CodexSessionsProvider().fetchHistory(sessionId);
+    const history = await createSdkSessionsProvider().fetchHistory(sessionId);
     const prompts = history.messages.filter((message) => message.role === 'user');
 
     assert.deepEqual(
@@ -154,7 +158,7 @@ test('a turn the thread rolled back keeps its rows but loses its anchor', { conc
   ];
 
   await withIndexedSession(rows, async ({ sessionId }) => {
-    const provider = new CodexSessionsProvider();
+    const provider = createSdkSessionsProvider();
     const history = await provider.fetchHistory(sessionId);
     const prompts = history.messages.filter((message) => message.role === 'user');
 
@@ -183,7 +187,7 @@ test('a turn the thread rolled back keeps its rows but loses its anchor', { conc
 
 test('the edit anchor resolves to the turn before the one being replaced', { concurrency: false }, async () => {
   await withIndexedSession(THREE_TURNS, async ({ sessionId }) => {
-    const provider = new CodexSessionsProvider();
+    const provider = createSdkSessionsProvider();
 
     assert.deepEqual(
       await provider.resolveEditAnchor(sessionId, 'turn-c'),
@@ -215,7 +219,7 @@ test('rewinding a Codex session moves it onto the branch and retires the old thr
     };
 
     try {
-      await new CodexSessionsProvider().rewindSession(sessionId, 'turn-b');
+      await createSdkSessionsProvider().rewindSession(sessionId, 'turn-b');
     } finally {
       codexAppServer.forkThread = realForkThread;
     }
@@ -242,7 +246,7 @@ test('editing the first prompt starts the conversation over', { concurrency: fal
     };
 
     try {
-      await new CodexSessionsProvider().rewindSession(sessionId, null);
+      await createSdkSessionsProvider().rewindSession(sessionId, null);
     } finally {
       codexAppServer.forkThread = realForkThread;
     }
@@ -264,7 +268,7 @@ test('the indexer does not hand back a thread a session was edited off', { concu
     const realForkThread = codexAppServer.forkThread;
     codexAppServer.forkThread = async () => ({ threadId: 'thread-2', path: forkPath });
     try {
-      await new CodexSessionsProvider().rewindSession(sessionId, 'turn-b');
+      await createSdkSessionsProvider().rewindSession(sessionId, 'turn-b');
     } finally {
       codexAppServer.forkThread = realForkThread;
     }
@@ -292,7 +296,7 @@ test('deleting an edited session removes every transcript it lived in', { concur
     const realForkThread = codexAppServer.forkThread;
     codexAppServer.forkThread = async () => ({ threadId: 'thread-2', path: forkPath });
     try {
-      await new CodexSessionsProvider().rewindSession(sessionId, 'turn-b');
+      await createSdkSessionsProvider().rewindSession(sessionId, 'turn-b');
     } finally {
       codexAppServer.forkThread = realForkThread;
     }
@@ -329,7 +333,7 @@ test('a session detached by an edit reports no token usage of its own', { concur
 
     assert.equal((await service.getSessionTokenUsage(sessionId)).used, 125_000);
 
-    await new CodexSessionsProvider().rewindSession(sessionId, null);
+    await createSdkSessionsProvider().rewindSession(sessionId, null);
 
     // A session discovered from disk is keyed by its own thread id, so the
     // "no provider id was ever recorded" fallback resolves the very thread the

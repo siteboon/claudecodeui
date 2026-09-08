@@ -10,6 +10,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import providerRouter from '@/modules/providers/provider.routes.js';
+import { providerRuntimeService } from '@/modules/providers/services/provider-runtime.service.js';
 import { AppError } from '@/shared/utils.js';
 
 async function withProviderServer(
@@ -76,6 +77,32 @@ test('session creation route names a CloudCLI session from the initial message',
       'abcd efg hij klm',
     );
   });
+});
+
+test('Codex app-server restart route delegates to the provider runtime service', async () => {
+  const originalRestart = providerRuntimeService.restart;
+  let restartedProvider: string | null = null;
+  providerRuntimeService.restart = async (provider) => {
+    restartedProvider = provider;
+    return { provider, restarted: true };
+  };
+
+  try {
+    await withProviderServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/providers/codex/app-server/restart`, {
+        method: 'POST',
+      });
+      const payload = await response.json() as {
+        data: { provider: string; restarted: boolean };
+      };
+
+      assert.equal(response.status, 200);
+      assert.equal(restartedProvider, 'codex');
+      assert.deepEqual(payload.data, { provider: 'codex', restarted: true });
+    });
+  } finally {
+    providerRuntimeService.restart = originalRestart;
+  }
 });
 
 test('conversation search streams title matches before transcript results', async () => {

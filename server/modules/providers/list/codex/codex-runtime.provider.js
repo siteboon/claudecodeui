@@ -23,6 +23,11 @@ import {
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
 import { createCompleteMessage, createNormalizedMessage } from '@/shared/utils.js';
 
+import {
+  codexAppServerRuntime,
+} from './codex-app-server.runtime.js';
+import { resolveCodexRuntimeMode } from './codex-app-server.config.js';
+
 const activeCodexSessions = new Map();
 
 /**
@@ -237,11 +242,13 @@ function mapPermissionModeToCodexOptions(permissionMode) {
 
 /**
  * Execute a Codex query with streaming
+ * @deprecated Use the app-server runtime unless the user explicitly selects
+ * the SDK in settings.
  * @param {string} command - The prompt to send
  * @param {object} options - Options including cwd, sessionId, model, permissionMode
  * @param {WebSocket|object} ws - WebSocket connection or response writer
  */
-export async function queryCodex(command, options = {}, ws, context) {
+async function queryLegacyCodex(command, options = {}, ws, context) {
   const {
     sessionId,
     sessionSummary,
@@ -477,15 +484,40 @@ export async function queryCodex(command, options = {}, ws, context) {
 }
 
 /**
+ * Selects the provider implementation without changing the browser contract.
+ * The mode is explicit: there is no automatic retry through a second runtime.
+ */
+export async function queryCodex(command, options = {}, ws, context) {
+  const mode = resolveCodexRuntimeMode(options.codexRuntimeMode);
+  if (mode === 'sdk') {
+    return queryLegacyCodex(command, options, ws, context);
+  }
+
+  try {
+    return await codexAppServerRuntime.run(command, options, ws, context);
+  } catch (error) {
+    const content = error instanceof Error ? error.message : String(error);
+    sendMessage(ws, createNormalizedMessage({
+      kind: 'error',
+      content,
+      sessionId: options.sessionId || null,
+      provider: 'codex',
+    }));
+    throw error;
+  }
+}
+
+/**
  * Abort an active Codex session
  * @param {string} sessionId - Session ID to abort
- * @returns {boolean} - Whether abort was successful
+ * @returns {Promise<boolean>} - Whether abort was successful
  */
-export function abortCodexSession(sessionId) {
+export async function abortCodexSession(sessionId) {
+  const appServerAborted = await codexAppServerRuntime.abort(sessionId);
   const session = activeCodexSessions.get(sessionId);
 
   if (!session) {
-    return false;
+    return appServerAborted;
   }
 
   session.status = 'aborted';
@@ -531,6 +563,8 @@ export function getActiveCodexSessions() {
 export const codexRuntime = {
   run: queryCodex,
   abort: abortCodexSession,
+  restart: codexAppServerRuntime.restart,
+  permissions: codexAppServerRuntime.permissions,
 };
 
 /**
