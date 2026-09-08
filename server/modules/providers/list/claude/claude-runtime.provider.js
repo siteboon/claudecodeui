@@ -552,10 +552,14 @@ const DEFERRED_WORK_TOOLS = new Set(['Monitor', 'ScheduleWakeup', 'CronCreate', 
  * Only turns that start background work need their CLI process held open; every
  * other turn can let it exit immediately, as it did before the hold existed.
  *
+ * Used by the providers module's tests, which pin the tool matching directly:
+ * the alternative is driving a whole SDK run to observe whether stdin was held,
+ * and the cost of getting this wrong is silently killed background work.
+ *
  * @param {Object} sdkMessage - SDK stream message
  * @returns {boolean} True when the message launches work that outlives the turn
  */
-function startsBackgroundWork(sdkMessage) {
+export function startsBackgroundWork(sdkMessage) {
   const content = sdkMessage?.message?.content;
   if (!Array.isArray(content)) {
     return false;
@@ -1225,6 +1229,5 @@ export {
   getPendingApprovalsForSession,
   reconnectSessionWriter,
   extractTokenBudget,
-  extractCumulativeTokenBudget,
-  startsBackgroundWork
+  extractCumulativeTokenBudget
 };
