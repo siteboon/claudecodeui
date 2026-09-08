@@ -71,6 +71,57 @@ describe('compaction rows', () => {
     ]);
   });
 
+  it('replaces the running row with the row that says how it ended', () => {
+    const running = () => row({ content: 'Compacting conversation…', compact: { phase: 'running' } });
+
+    expect(normalizedToChatMessages([running(), boundary()]))
+      .toMatchObject([{ compact: { phase: 'done' } }]);
+
+    const failed = row({
+      content: 'Compaction failed: context still too large',
+      compact: { phase: 'failed', error: 'context still too large' },
+    });
+    expect(normalizedToChatMessages([running(), failed]))
+      .toMatchObject([{ compact: { phase: 'failed' } }]);
+  });
+
+  it('keeps the summary when it folded into a running row the boundary then replaced', () => {
+    const converted = normalizedToChatMessages([
+      row({ content: 'Compacting conversation…', compact: { phase: 'running' } }),
+      summary(),
+      boundary(),
+    ]);
+
+    expect(converted).toHaveLength(1);
+    expect(converted[0].compact?.phase).toBe('done');
+    expect(converted[0].compactSummary).toBe('The summary body');
+  });
+
+  it('leaves an earlier compaction alone: only the row directly above is superseded', () => {
+    const converted = normalizedToChatMessages([
+      summary(),
+      row({ content: 'on with the work' }),
+      boundary(),
+    ]);
+
+    expect(converted).toHaveLength(3);
+    expect(converted[0].compactSummary).toBe('The summary body');
+    expect(converted[1].content).toBe('on with the work');
+    expect(converted[2].compactSummary).toBeUndefined();
+  });
+
+  it('never takes a user row for a stray copy of the summary', () => {
+    const userEcho: NormalizedMessage = {
+      ...row({ content: 'The summary body' }),
+      role: 'user',
+    } as NormalizedMessage;
+
+    const converted = normalizedToChatMessages([userEcho, boundary(), summary()]);
+
+    expect(converted.map((message) => message.type)).toEqual(['user', 'assistant']);
+    expect(converted[1].compactSummary).toBe('The summary body');
+  });
+
   it('keeps a running compaction, and its phase, so the row can say so', () => {
     const converted = normalizedToChatMessages([
       row({ content: 'Compacting conversation…', compact: { phase: 'running' } }),

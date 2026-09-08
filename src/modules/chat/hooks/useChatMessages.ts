@@ -124,7 +124,8 @@ function appendCompactionRow(
     // directly above, so it is searched for — newest first, ordinary rows only.
     for (let index = converted.length - 1; index >= 0; index -= 1) {
       const row = converted[index];
-      if (!row.compact && (row.content || '').trim() === text) {
+      // Assistant rows only: a user who pastes the same text is not a duplicate.
+      if (row.type === 'assistant' && !row.compact && (row.content || '').trim() === text) {
         converted.splice(index, 1);
         break;
       }
@@ -156,16 +157,19 @@ function appendCompactionRow(
     return false;
   }
 
-  // Live, the summary arrived before this row and made one of its own. Take it
-  // back: this row says what that one could not.
-  let summary: string | undefined;
-  for (let index = converted.length - 1; index >= 0; index -= 1) {
-    const row = converted[index];
-    if (row.compact && row.compactSummary && !row.content) {
-      summary = row.compactSummary;
-      converted.splice(index, 1);
-      break;
-    }
+  // This row supersedes the one directly above it in two cases, and only when it
+  // is directly above — a compaction further back belongs to itself:
+  //
+  //   - a `running` row, now that the compaction has finished or failed;
+  //   - the summary-only row a summary makes when it arrives before its
+  //     boundary, which is the live order. Its summary comes along, since this
+  //     row says what that one could not.
+  const previous = converted[converted.length - 1];
+  const supersedes = Boolean(previous?.compact)
+    && (previous.compact?.phase === 'running' || !previous.content);
+  const summary = supersedes ? previous.compactSummary : undefined;
+  if (supersedes) {
+    converted.pop();
   }
 
   converted.push({
