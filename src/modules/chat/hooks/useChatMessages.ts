@@ -78,19 +78,28 @@ function parseTaskNotification(content: string): ParsedTaskNotification | null {
  * transcript artifacts such as local slash commands and compact summaries are
  * intentionally preserved and annotated so they can render like normal chat.
  */
+const LIVE_WAIT_PHASES = new Set(['started', 'holding']);
+
 /**
- * A wait row describes a *state*, not an event, so only the newest live one is
- * drawn: keeping every one turns a single wait into a pile of stale rows, while
- * keeping the newest reads as what the session is doing now. A wait that has
- * ended (`reported`, `expired`) stays, because that is history worth reading.
+ * A wait row describes a *state*, not an event, so only one live row is ever
+ * drawn: keeping every one turns a single wait into a pile of stale countdowns.
+ *
+ * A live row survives only if it is the newest live row **and** nothing has
+ * ended the wait since — a `holding` row above the `reported` row that answers
+ * it is a pulsing countdown for work that already came back. A row that ends a
+ * wait always stays: that is history worth reading, and for an expired hold it
+ * is the only report there is.
  */
 function isSupersededWaitRow(
   msg: NormalizedMessage,
   index: number,
   newestLiveWaitIndex: number,
+  latestEndedWaitIndex: number,
 ): boolean {
-  const phase = msg.backgroundWait?.phase;
-  return (phase === 'started' || phase === 'holding') && index < newestLiveWaitIndex;
+  if (!LIVE_WAIT_PHASES.has(msg.backgroundWait?.phase ?? '')) {
+    return false;
+  }
+  return index !== newestLiveWaitIndex || index < latestEndedWaitIndex;
 }
 
 export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMessage[] {
@@ -176,6 +185,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
   // The newest row saying the session is still waiting; everything before it is
   // a countdown that has since been replaced.
   let newestLiveWaitIndex = -1;
+  let latestEndedWaitIndex = -1;
   messages.forEach((msg, index) => {
     // A subagent's wait is its own, and its rows are folded into their container
     // below rather than drawn — so one must not decide which of this session's
@@ -184,8 +194,13 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
       return;
     }
     const phase = msg.backgroundWait?.phase;
-    if (phase === 'started' || phase === 'holding') {
+    if (!phase) {
+      return;
+    }
+    if (LIVE_WAIT_PHASES.has(phase)) {
       newestLiveWaitIndex = index;
+    } else {
+      latestEndedWaitIndex = index;
     }
   });
 
@@ -196,7 +211,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
     }
 
     if (msg.backgroundWait) {
-      if (!isSupersededWaitRow(msg, index, newestLiveWaitIndex)) {
+      if (!isSupersededWaitRow(msg, index, newestLiveWaitIndex, latestEndedWaitIndex)) {
         converted.push({
           type: 'assistant',
           content: msg.content || '',

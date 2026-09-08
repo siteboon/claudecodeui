@@ -61,6 +61,25 @@ describe('background wait rows', () => {
       .toEqual(['reported', 'holding']);
   });
 
+  it('drops the live row once the wait it describes has ended', () => {
+    const converted = normalizedToChatMessages([
+      waitRow('Holding the session open for background work', { phase: 'holding' }),
+      waitRow('Background work reported in after 2m 10s', { phase: 'reported' }),
+    ]);
+
+    expect(converted.map((message) => message.backgroundWait?.phase)).toEqual(['reported']);
+  });
+
+  it('keeps a live row that began after the last wait ended', () => {
+    const converted = normalizedToChatMessages([
+      waitRow('Holding the session open for background work', { phase: 'holding' }),
+      waitRow('Background work reported in after 2m 10s', { phase: 'reported' }),
+      waitRow('Running 1 background task', { phase: 'started' }),
+    ]);
+
+    expect(converted.map((message) => message.backgroundWait?.phase)).toEqual(['reported', 'started']);
+  });
+
   it('keeps an expired wait, which is the case nothing else reports', () => {
     const converted = normalizedToChatMessages([
       waitRow('Stopped waiting for background work after 30m', { phase: 'expired' }),

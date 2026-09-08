@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   describeBackgroundTasks,
   formatWaitDuration,
+  shouldAnnounceBackgroundTasks,
   shouldHoldForBackgroundWork,
 } from '@/modules/providers/list/claude/claude-runtime.provider.js';
 
@@ -41,4 +42,21 @@ test('the hold stands for work this turn armed, and for work the CLI still lists
   assert.equal(shouldHoldForBackgroundWork(false, [{ id: 't1' }]), true);
   // Nothing outstanding: the process exits at once, as it always has.
   assert.equal(shouldHoldForBackgroundWork(false, []), false);
+});
+
+test('any change to a non-empty task list is worth a row, not only a longer one', () => {
+  const one = [{ id: 't1' }];
+  const two = [{ id: 't1' }, { id: 't2' }];
+
+  // work armed
+  assert.equal(shouldAnnounceBackgroundTasks([], one), true);
+  assert.equal(shouldAnnounceBackgroundTasks(one, two), true);
+  // one of two finished: the row said "2 background tasks" and no longer should
+  assert.equal(shouldAnnounceBackgroundTasks(two, one), true);
+  // the same work, re-sent: nothing new to say
+  assert.equal(shouldAnnounceBackgroundTasks(one, [{ id: 't1' }]), false);
+  // one swapped for another, same count
+  assert.equal(shouldAnnounceBackgroundTasks(one, [{ id: 't9' }]), true);
+  // the list emptying is the end of the wait, reported on its own
+  assert.equal(shouldAnnounceBackgroundTasks(two, []), false);
 });
