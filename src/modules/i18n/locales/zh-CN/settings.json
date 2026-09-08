@@ -179,6 +179,13 @@
         "label": "字体大小",
         "description": "编辑器字体大小（px）"
       }
+    },
+    "mobileNavigation": {
+      "title": "移动端导航",
+      "backOpensSessionList": {
+        "label": "返回键打开会话列表",
+        "description": "在手机尺寸的屏幕上，会话列表关闭时，返回操作会打开会话列表，而不是离开页面。如果列表已打开，返回操作会照常导航。页面刚加载后，在你与页面交互之前，返回操作保持不变。"
+      }
     }
   },
   "mcpForm": {

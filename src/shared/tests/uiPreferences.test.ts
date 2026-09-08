@@ -35,6 +35,7 @@ test('a fresh install gets the documented defaults', () => {
     showRawParameters: false,
     showThinking: true,
     sendByCtrlEnter: false,
+    backOpensSessionList: false,
     sidebarVisible: true,
     voiceEnabled: false,
   });

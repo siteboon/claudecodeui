@@ -179,6 +179,13 @@
         "label": "Tamaño de fuente",
         "description": "Tamaño de fuente del editor en píxeles"
       }
+    },
+    "mobileNavigation": {
+      "title": "Navegación móvil",
+      "backOpensSessionList": {
+        "label": "Atrás abre la lista de sesiones",
+        "description": "En pantallas de tamaño teléfono, Atrás abre la lista de sesiones en lugar de salir de la página cuando la lista está cerrada. Si la lista ya está abierta, Atrás navega con normalidad. Justo después de cargar la página, Atrás no cambia hasta que interactúes con la página."
+      }
     }
   },
   "mcpForm": {
