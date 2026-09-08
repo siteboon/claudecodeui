@@ -391,7 +391,7 @@
       "modes": {
         "default": {
           "title": "Par défaut",
-          "description": "Seules les commandes de confiance (ls, cat, grep, git status, etc.) s'exécutent automatiquement. Les autres sont ignorées. Peut écrire dans l'espace de travail."
+          "description": "Exécute les commandes dans le bac à sable de l’espace de travail. Codex décide quand une approbation est nécessaire ; les demandes ne peuvent pas être approuvées dans cette intégration non interactive."
         },
         "acceptEdits": {
           "title": "Accepter les modifications",
@@ -404,7 +404,7 @@
       },
       "technicalDetails": "Détails techniques",
       "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=untrusted. Commandes de confiance : cat, cd, grep, head, ls, pwd, tail, git status/log/diff/show, find (sans -exec), etc.",
+        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. Exécute les commandes dans le bac à sable de l’espace de travail. Codex décide quand une approbation est nécessaire ; les demandes ne peuvent pas être approuvées dans cette intégration non interactive.",
         "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. Toutes les commandes s'exécutent automatiquement dans le répertoire du projet.",
         "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. Accès système complet, à utiliser uniquement dans des environnements de confiance.",
         "overrideNote": "Vous pouvez remplacer ce mode par session via le bouton de mode dans l'interface de chat."

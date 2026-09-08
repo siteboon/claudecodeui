@@ -7,6 +7,7 @@
   },
   "npm": {
     "publish": true,
+    "skipChecks": true,
     "publishArgs": ["--access public", "--loglevel warn"]
   },
   "github": {
