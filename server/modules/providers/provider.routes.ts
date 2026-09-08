@@ -553,6 +553,24 @@ router.delete(
   }),
 );
 
+router.get(
+  '/:provider/models/catalog-sync/preview',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const plan = await providerModelsService.previewCatalogSync(provider);
+    res.json(createApiSuccessResponse({ provider, plan }));
+  }),
+);
+
+router.post(
+  '/:provider/models/catalog-sync',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const result = await providerModelsService.applyCatalogSync(provider);
+    res.json(createApiSuccessResponse({ provider, ...result }));
+  }),
+);
+
 /**
  * Reports which model one session is using. `requestedModel` lets the client
  * pass the default it would otherwise send, so a session that has not been

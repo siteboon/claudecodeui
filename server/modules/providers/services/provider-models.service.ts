@@ -8,6 +8,7 @@ import type {
   ProviderCurrentActiveModel,
   ProviderModelOption,
   ProviderModelsDefinition,
+  ProviderCatalogSyncPlan,
   ProviderSessionModel,
 } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
@@ -28,6 +29,7 @@ type ProviderModelsCatalogStore = Pick<
   | 'createCustomProviderModel'
   | 'updateCustomProviderModel'
   | 'deleteCustomProviderModel'
+  | 'replaceCustomProviderModels'
 >;
 
 type ProviderModelsServiceDependencies = {
@@ -211,6 +213,119 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     };
   };
 
+  /**
+   * Loads the external model catalog a provider CLI reads from a
+   * user-configured file, or throws when the provider has no such source or
+   * the configured file is unusable.
+   */
+  const readExternalCatalogOrThrow = async (
+    provider: LLMProvider,
+  ): Promise<ProviderModelsDefinition> => {
+    const models = resolveProvider(provider).models;
+    if (!models.readExternalCatalog) {
+      throw new AppError(`${provider} does not support syncing an external model catalog.`, {
+        code: 'CATALOG_SYNC_UNSUPPORTED',
+        statusCode: 404,
+      });
+    }
+
+    const definition = await models.readExternalCatalog();
+    if (!definition || definition.OPTIONS.length === 0) {
+      throw new AppError(
+        'No usable Codex model catalog is configured. Set model_catalog_json in ~/.codex/config.toml first.',
+        {
+          code: 'CODEX_CATALOG_UNAVAILABLE',
+          statusCode: 400,
+        },
+      );
+    }
+
+    return definition;
+  };
+
+  /**
+   * Diffs stored custom rows against the provider's external catalog.
+   *
+   * Catalog entries whose id the curated predefined list already offers are
+   * skipped instead of stored, matching the single-row create path that
+   * rejects such ids. Everything else is added, renamed when the display name
+   * changed, or removed when the catalog no longer lists it.
+   */
+  const buildCatalogSyncPlan = (
+    provider: LLMProvider,
+    predefined: ProviderModelsDefinition,
+    external: ProviderModelsDefinition,
+  ): ProviderCatalogSyncPlan => {
+    const existingById = new Map(
+      catalog.listCustomProviderModels(provider).map((record) => [record.modelId, record]),
+    );
+    const predefinedIds = new Set(predefined.OPTIONS.map((option) => option.value));
+    const additions: ProviderCatalogSyncPlan['additions'] = [];
+    const updates: ProviderCatalogSyncPlan['updates'] = [];
+    const skipped: ProviderCatalogSyncPlan['skipped'] = [];
+
+    for (const option of external.OPTIONS) {
+      if (predefinedIds.has(option.value)) {
+        skipped.push({ id: option.value, model: option.label, reason: 'builtin' });
+        continue;
+      }
+
+      const existing = existingById.get(option.value);
+      const entry = {
+        id: option.value,
+        model: option.label,
+        ...(existing && existing.model !== option.label ? { previousModel: existing.model } : {}),
+      };
+      if (!existing) {
+        additions.push(entry);
+      } else if (existing.model !== option.label) {
+        updates.push(entry);
+      }
+    }
+
+    const keptIds = new Set(external.OPTIONS.map((option) => option.value));
+    const removals = [...existingById.values()]
+      .filter((record) => !keptIds.has(record.modelId))
+      .map((record) => ({ id: record.modelId, model: record.model }));
+
+    return { provider, additions, updates, removals, skipped };
+  };
+
+  /**
+   * Returns the diff a catalog sync would apply, without touching the store.
+   */
+  const previewCatalogSync = async (provider: LLMProvider): Promise<ProviderCatalogSyncPlan> => {
+    const [predefined, external] = await Promise.all([
+      resolveProvider(provider).models.getSupportedModels(),
+      readExternalCatalogOrThrow(provider),
+    ]);
+    return buildCatalogSyncPlan(provider, predefined, external);
+  };
+
+  /**
+   * Replaces the provider's custom rows with the external catalog entries and
+   * returns the applied plan plus the refreshed merged catalog.
+   */
+  const applyCatalogSync = async (
+    provider: LLMProvider,
+  ): Promise<{ plan: ProviderCatalogSyncPlan; models: ProviderModelsDefinition }> => {
+    const models = resolveProvider(provider).models;
+    const predefined = await models.getSupportedModels();
+    const external = await readExternalCatalogOrThrow(provider);
+    const plan = buildCatalogSyncPlan(provider, predefined, external);
+    const skippedIds = new Set(plan.skipped.map((entry) => entry.id));
+    const finalEntries = external.OPTIONS
+      .filter((option) => !skippedIds.has(option.value))
+      .map((option) => ({ id: option.value, model: option.label }));
+
+    catalog.replaceCustomProviderModels(provider, finalEntries, predefined.DEFAULT);
+
+    return {
+      plan,
+      models: mergeProviderModels(predefined, catalog.listCustomProviderModels(provider)),
+    };
+  };
+
   const readRecordedSessionSelection = (
     sessionId: string,
   ): { model: string | null; effort: string | null } | null => {
@@ -390,6 +505,8 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     createCustomModel,
     updateCustomModel,
     deleteCustomModel,
+    previewCatalogSync,
+    applyCatalogSync,
     setSessionModel,
     setSessionEffort,
     resolveSessionModel,

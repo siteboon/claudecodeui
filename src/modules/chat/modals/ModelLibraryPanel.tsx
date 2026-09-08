@@ -7,6 +7,7 @@ import {
   LockKeyhole,
   Pencil,
   Plus,
+  RefreshCw,
   Trash2,
   X,
 } from 'lucide-react';
@@ -16,6 +17,7 @@ import type {
   LLMProvider,
   ProviderModelActions,
   ProviderModelOption,
+  ProviderCatalogSyncPlan,
   ProviderModelsDefinition,
 } from '@/shared/types';
 
@@ -57,6 +59,13 @@ export default function ModelLibraryPanel({
   const [confirmDeleteRecordId, setConfirmDeleteRecordId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Holds the catalog-sync diff shown for confirmation before any write.
+  const [catalogSyncPlan, setCatalogSyncPlan] = useState<ProviderCatalogSyncPlan | null>(null);
+  // True while a catalog-sync preview or apply request is in flight.
+  const [catalogSyncing, setCatalogSyncing] = useState(false);
+  // Explains why a catalog sync could not start or finish (for example when no
+  // model_catalog_json is configured on this machine).
+  const [catalogSyncError, setCatalogSyncError] = useState<string | null>(null);
 
   useEffect(() => {
     setSelectedProvider(initialProvider);
@@ -75,6 +84,8 @@ export default function ModelLibraryPanel({
     [options],
   );
 
+  const supportsCatalogSync = actions.catalogSync !== undefined && selectedProvider === 'codex';
+
   const resetForm = () => {
     setEditing(null);
     setModel('');
@@ -86,6 +97,8 @@ export default function ModelLibraryPanel({
     setSelectedProvider(provider);
     setConfirmDeleteRecordId(null);
     setNotice(null);
+    setCatalogSyncPlan(null);
+    setCatalogSyncError(null);
     resetForm();
   };
 
@@ -155,6 +168,55 @@ export default function ModelLibraryPanel({
       setError(caughtError instanceof Error ? caughtError.message : t('chat:misc.modelDeleteFailed'));
     } finally {
       setDeletingRecordId(null);
+    }
+  };
+
+  const previewCatalogSync = async () => {
+    if (!actions.catalogSync) {
+      return;
+    }
+    setCatalogSyncing(true);
+    setCatalogSyncError(null);
+    setNotice(null);
+    try {
+      const plan = await actions.catalogSync.preview(selectedProvider);
+      if (plan.additions.length === 0 && plan.updates.length === 0 && plan.removals.length === 0) {
+        setNotice('Your Codex models already match the catalog.');
+      } else {
+        setCatalogSyncPlan(plan);
+      }
+    } catch (caughtError) {
+      setCatalogSyncError(
+        caughtError instanceof Error ? caughtError.message : 'Unable to preview the Codex catalog.',
+      );
+    } finally {
+      setCatalogSyncing(false);
+    }
+  };
+
+  const applyCatalogSync = async () => {
+    if (!actions.catalogSync || !catalogSyncPlan) {
+      return;
+    }
+    setCatalogSyncing(true);
+    setCatalogSyncError(null);
+    setNotice(null);
+    try {
+      const plan = await actions.catalogSync.apply(selectedProvider);
+      setCatalogSyncPlan(null);
+      const changes = plan.additions.length + plan.updates.length;
+      const removals = plan.removals.length;
+      setNotice(
+        removals > 0
+          ? `Synced ${changes} model(s) from the Codex catalog and removed ${removals}.`
+          : `Synced ${changes} model(s) from the Codex catalog.`,
+      );
+    } catch (caughtError) {
+      setCatalogSyncError(
+        caughtError instanceof Error ? caughtError.message : 'Unable to sync the Codex catalog.',
+      );
+    } finally {
+      setCatalogSyncing(false);
     }
   };
 
@@ -281,6 +343,105 @@ export default function ModelLibraryPanel({
         </form>
 
         <div className="min-h-0 space-y-4">
+          {supportsCatalogSync && (
+            <section className="rounded-2xl border border-border/70 bg-muted/20 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold text-foreground">Sync from Codex catalog</p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    Replace your Codex models with the entries Codex lists in model_catalog_json.
+                  </p>
+                </div>
+                {!catalogSyncPlan && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={catalogSyncing}
+                    onClick={() => void previewCatalogSync()}
+                    className="h-8 rounded-lg"
+                  >
+                    {catalogSyncing ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-3.5 w-3.5" />
+                    )}
+                    Preview sync
+                  </Button>
+                )}
+              </div>
+
+              {catalogSyncError && !catalogSyncPlan && (
+                <div role="alert" className="mt-3 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                  {catalogSyncError}
+                </div>
+              )}
+
+              {catalogSyncPlan && (
+                <div className="mt-3 space-y-2 border-t border-border/60 pt-3">
+                  <p className="text-xs font-medium text-foreground">This sync will:</p>
+                  {(catalogSyncPlan.additions.length > 0
+                    || catalogSyncPlan.updates.length > 0
+                    || catalogSyncPlan.removals.length > 0) ? (
+                    <ul className="space-y-1 text-[11px] text-muted-foreground">
+                      {catalogSyncPlan.additions.map((entry) => (
+                        <li key={`add-${entry.id}`}>
+                          Add {entry.model} (<span className="font-mono text-foreground">{entry.id}</span>)
+                        </li>
+                      ))}
+                      {catalogSyncPlan.updates.map((entry) => (
+                        <li key={`update-${entry.id}`}>
+                          Rename {entry.previousModel ?? entry.id} to {entry.model}
+                        </li>
+                      ))}
+                      {catalogSyncPlan.removals.map((entry) => (
+                        <li key={`remove-${entry.id}`}>
+                          Remove {entry.model} (<span className="font-mono text-foreground">{entry.id}</span>)
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground">Make no changes.</p>
+                  )}
+                  {catalogSyncPlan.skipped.length > 0 && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Skipping {catalogSyncPlan.skipped.length} catalog id(s) already offered as built-in models.
+                    </p>
+                  )}
+                  {catalogSyncError && (
+                    <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                      {catalogSyncError}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 pt-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={catalogSyncing}
+                      onClick={() => {
+                        setCatalogSyncPlan(null);
+                        setCatalogSyncError(null);
+                      }}
+                      className="h-8 rounded-lg"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={catalogSyncing}
+                      onClick={() => void applyCatalogSync()}
+                      className="h-8 rounded-lg"
+                    >
+                      {catalogSyncing && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                      Apply sync
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
           <section>
             <div className="mb-2 flex items-center justify-between gap-3 px-1">
               <div>

@@ -165,4 +165,55 @@ export const providerModelsDb = {
     const row = remove();
     return row ? toCustomProviderModelRecord(row) : null;
   },
+
+  /**
+   * Replaces every custom row of one provider with `entries`, atomically.
+   *
+   * Used by the catalog-sync workflow, where the external catalog is the
+   * source of truth for the provider's custom rows. Rows the catalog no
+   * longer names are deleted and sessions that recorded one of the removed
+   * ids fall back to `fallbackModelId` (with effort cleared), mirroring the
+   * single-row delete path.
+   */
+  replaceCustomProviderModels(
+    provider: LLMProvider,
+    entries: Array<{ id: string; model: string }>,
+    fallbackModelId: string,
+  ): void {
+    const db = getConnection();
+    const replace = db.transaction(() => {
+      const existing = db.prepare(`
+        SELECT model_id
+        FROM provider_models
+        WHERE provider = ?
+      `).all(provider) as Array<{ model_id: string }>;
+
+      const nextIds = new Set(entries.map((entry) => entry.id));
+      const fallbackSessions = db.prepare(`
+        UPDATE sessions
+        SET model = ?, effort = NULL, updated_at = CURRENT_TIMESTAMP
+        WHERE provider = ? AND model = ?
+      `);
+      for (const row of existing) {
+        if (!nextIds.has(row.model_id)) {
+          fallbackSessions.run(fallbackModelId, provider, row.model_id);
+        }
+      }
+
+      db.prepare(`
+        DELETE FROM provider_models
+        WHERE provider = ?
+      `).run(provider);
+
+      const insert = db.prepare(`
+        INSERT INTO provider_models (provider, model_id, model_name, sort_order)
+        VALUES (?, ?, ?, ?)
+      `);
+      entries.forEach((entry, index) => {
+        insert.run(provider, entry.id, entry.model, index);
+      });
+    });
+
+    replace();
+  },
 };

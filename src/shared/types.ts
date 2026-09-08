@@ -44,6 +44,46 @@ export type ProviderModelActions = {
     input: CustomProviderModelInput,
   ): Promise<void>;
   remove(provider: LLMProvider, existing: ProviderModelOption): Promise<void>;
+  /** Catalog-sync entry point, present only when the provider exposes one. */
+  catalogSync?: ProviderCatalogSyncActions;
+};
+
+/** One provider model a catalog sync will add, rename or remove. */
+export type ProviderCatalogSyncEntry = {
+  id: string;
+  model: string;
+  /** Current display name when the sync renames an existing row. */
+  previousModel?: string;
+};
+
+/** One external catalog entry a sync skips, and why. */
+export type ProviderCatalogSyncSkip = {
+  id: string;
+  model: string;
+  /** The curated predefined list already offers this id, so it cannot be stored. */
+  reason: 'builtin';
+};
+
+/**
+ * Diff between one provider's stored custom rows and the provider CLI's
+ * external model catalog, produced by a catalog-sync preview.
+ */
+export type ProviderCatalogSyncPlan = {
+  provider: LLMProvider;
+  additions: ProviderCatalogSyncEntry[];
+  updates: ProviderCatalogSyncEntry[];
+  removals: ProviderCatalogSyncEntry[];
+  skipped: ProviderCatalogSyncSkip[];
+};
+
+/**
+ * Opt-in catalog sync callbacks. Only providers whose CLI reads an external
+ * model catalog (Codex model_catalog_json) provide these; preview shows the
+ * diff and apply replaces the provider's custom rows after user confirmation.
+ */
+export type ProviderCatalogSyncActions = {
+  preview(provider: LLMProvider): Promise<ProviderCatalogSyncPlan>;
+  apply(provider: LLMProvider): Promise<ProviderCatalogSyncPlan>;
 };
 
 // ---------------------------

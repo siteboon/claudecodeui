@@ -364,6 +364,11 @@ export const api = {
     deleteModel: (provider: string, recordId: string | number) =>
       del(`/api/providers/${provider}/models/${recordId}`),
 
+    previewCatalogSync: (provider: string) =>
+      get(`/api/providers/${provider}/models/catalog-sync/preview`),
+    applyCatalogSync: (provider: string) =>
+      post(`/api/providers/${provider}/models/catalog-sync`),
+
     createSession: (payload: {
       provider: string;
       projectPath: string;

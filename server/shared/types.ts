@@ -124,6 +124,36 @@ export type CustomProviderModelInput = {
   model: string;
 };
 
+/** One provider model a catalog sync will add, rename or remove. */
+export type ProviderCatalogSyncEntry = {
+  /** Provider-facing identifier, stored as `model_id`. */
+  id: string;
+  /** Display name, stored as `model_name`. */
+  model: string;
+  /** Current display name when the sync renames an existing row. */
+  previousModel?: string;
+};
+
+/** One external catalog entry a sync skips, and why. */
+export type ProviderCatalogSyncSkip = {
+  id: string;
+  model: string;
+  /** The curated predefined list already offers this id, so it cannot be stored. */
+  reason: 'builtin';
+};
+
+/**
+ * Diff between one provider's stored custom rows and the provider CLI's
+ * external model catalog, produced by a catalog-sync preview.
+ */
+export type ProviderCatalogSyncPlan = {
+  provider: LLMProvider;
+  additions: ProviderCatalogSyncEntry[];
+  updates: ProviderCatalogSyncEntry[];
+  removals: ProviderCatalogSyncEntry[];
+  skipped: ProviderCatalogSyncSkip[];
+};
+
 // ---------------------------
 //----------------- PROVIDER ACTIVE MODEL TYPES ------------
 /**

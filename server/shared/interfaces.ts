@@ -101,6 +101,18 @@ export interface IProviderModels {
   getSupportedModels(): Promise<ProviderModelsDefinition>;
 
   /**
+   * Returns the models the provider CLI itself loads from a user-configured
+   * external file (Codex's `model_catalog_json`), or null when no usable file
+   * is configured.
+   *
+   * Only providers whose runtime reads such a file implement this. The
+   * provider-models service calls it from the catalog-sync workflow so users
+   * can import those entries as editable custom-model rows instead of the app
+   * silently reading the file on every catalog request.
+   */
+  readExternalCatalog?(): Promise<ProviderModelsDefinition | null>;
+
+  /**
    * Reads the model the provider itself believes one session is running with.
    *
    * Only consulted for sessions the app has never recorded a model for — a

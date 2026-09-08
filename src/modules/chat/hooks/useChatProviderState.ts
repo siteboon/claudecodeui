@@ -7,6 +7,8 @@ import type { PendingPermissionRequest, PermissionMode,
   Project,
   CustomProviderModelInput,
   ProviderModelActions,
+  ProviderCatalogSyncActions,
+  ProviderCatalogSyncPlan,
   ProviderModelOption,
   ProviderModelsDefinition } from '@/shared/types';
 import { DEFAULT_EFFORT_VALUE } from '@/shared/constants';
@@ -112,6 +114,15 @@ type SessionSelectionApiResponse = {
     source?: 'session' | 'provider' | 'default';
   };
 };
+
+type CatalogSyncApiResponse = {
+   success?: boolean;
+   data?: {
+     plan?: ProviderCatalogSyncPlan;
+     models?: ProviderModelsDefinition;
+   };
+   error?: { message?: string };
+ };
 
 type SessionProviderSelection = {
   provider: LLMProvider;
@@ -801,11 +812,44 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     setStoredProviderModel,
   ]);
 
+  /**
+   * Fetches the diff between the provider's stored custom rows and its
+   * external model catalog; the library panel shows it before any write.
+   */
+  const previewCatalogSync = useCallback<ProviderCatalogSyncActions['preview']>(async (targetProvider) => {
+    const response = await api.providers.previewCatalogSync(targetProvider);
+    const body = (await response.json()) as CatalogSyncApiResponse;
+    if (!response.ok || !body.success || !body.data?.plan) {
+      throw new Error(body.error?.message || 'Unable to preview the model catalog sync.');
+    }
+    return body.data.plan;
+  }, []);
+
+  /**
+   * Replaces the provider's custom rows with the external catalog after the
+   * user confirmed the preview, then refreshes the in-memory catalog.
+   */
+  const applyCatalogSync = useCallback<ProviderCatalogSyncActions['apply']>(async (targetProvider) => {
+    const response = await api.providers.applyCatalogSync(targetProvider);
+    const body = (await response.json()) as CatalogSyncApiResponse;
+    if (!response.ok || !body.success || !body.data?.plan) {
+      throw new Error(body.error?.message || 'Unable to apply the model catalog sync.');
+    }
+    if (body.data.models) {
+      applyProviderCatalog(targetProvider, body.data.models);
+    }
+    return body.data.plan;
+  }, [applyProviderCatalog]);
+
   const providerModelActions = useMemo<ProviderModelActions>(() => ({
     create: createCustomModel,
     update: updateCustomModel,
     remove: removeCustomModel,
-  }), [createCustomModel, removeCustomModel, updateCustomModel]);
+    catalogSync: {
+      preview: previewCatalogSync,
+      apply: applyCatalogSync,
+    },
+  }), [applyCatalogSync, createCustomModel, previewCatalogSync, removeCustomModel, updateCustomModel]);
 
   return {
     provider,

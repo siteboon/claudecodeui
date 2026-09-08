@@ -96,6 +96,18 @@ const createCatalogStore = () => {
       rows.set(provider, readRows(provider).filter((record) => record.recordId !== recordId));
       return existing;
     },
+    replaceCustomProviderModels(
+      provider: LLMProvider,
+      entries: Array<{ id: string; model: string }>,
+    ) {
+      rows.set(provider, entries.map((entry, index) => ({
+        recordId: nextRecordId++,
+        provider,
+        modelId: entry.id,
+        model: entry.model,
+        sortOrder: index,
+      })));
+    },
   };
 };
 
@@ -104,6 +116,7 @@ const createTestService = (options: {
   sessions?: ReturnType<typeof createSessionStore>;
   activeModel?: (provider: LLMProvider, sessionId?: string) => string;
   onCatalogRead?: (provider: LLMProvider) => void;
+  externalCatalog?: (provider: LLMProvider) => ProviderModelsDefinition | null;
 } = {}) => {
   const catalog = options.catalog ?? createCatalogStore();
   const sessions = options.sessions ?? createSessionStore();
@@ -119,6 +132,9 @@ const createTestService = (options: {
         getCurrentActiveModel: async (sessionId) => createCurrentActiveModel(
           options.activeModel?.(provider, sessionId) ?? `${provider}-default`,
         ),
+        ...(options.externalCatalog
+          ? { readExternalCatalog: async () => options.externalCatalog?.(provider) ?? null }
+          : {}),
       },
     }),
   });
@@ -350,4 +366,79 @@ test('resolveResumeModel never consults provider-global state', async () => {
 
   assert.equal(model, 'gpt-5.5');
   assert.equal(providerLookups, 0);
+});
+
+test('catalog sync preview diffs additions, renames, removals and builtin skips', async () => {
+  const { service, catalog } = createTestService({
+    externalCatalog: () => ({
+      OPTIONS: [
+        { value: 'codex-default', label: 'Builtin duplicate' },
+        { value: 'vendor/a', label: 'Vendor A renamed' },
+        { value: 'vendor/b', label: 'Vendor B kept' },
+        { value: 'vendor/c', label: 'Vendor C fresh' },
+      ],
+      DEFAULT: 'vendor/a',
+    }),
+  });
+  await service.createCustomModel('codex', { model: 'Vendor A', id: 'vendor/a' });
+  await service.createCustomModel('codex', { model: 'Vendor B kept', id: 'vendor/b' });
+  await service.createCustomModel('codex', { model: 'Gone model', id: 'vendor/old' });
+
+  const plan = await service.previewCatalogSync('codex');
+
+  assert.deepEqual(plan.provider, 'codex');
+  assert.deepEqual(plan.additions, [{ id: 'vendor/c', model: 'Vendor C fresh' }]);
+  assert.deepEqual(plan.updates, [{
+    id: 'vendor/a',
+    model: 'Vendor A renamed',
+    previousModel: 'Vendor A',
+  }]);
+  assert.deepEqual(plan.removals, [{ id: 'vendor/old', model: 'Gone model' }]);
+  assert.deepEqual(plan.skipped, [{
+    id: 'codex-default',
+    model: 'Builtin duplicate',
+    reason: 'builtin',
+  }]);
+  // The preview must not touch the store.
+  assert.equal(catalog.rows.get('codex')?.length, 3);
+});
+
+test('catalog sync apply replaces custom rows and returns the merged catalog', async () => {
+  const { service, catalog } = createTestService({
+    externalCatalog: () => ({
+      OPTIONS: [
+        { value: 'codex-default', label: 'Builtin duplicate' },
+        { value: 'vendor/a', label: 'Vendor A' },
+        { value: 'vendor/b', label: 'Vendor B fresh' },
+      ],
+      DEFAULT: 'vendor/a',
+    }),
+  });
+  await service.createCustomModel('codex', { model: 'Vendor A old', id: 'vendor/a' });
+  await service.createCustomModel('codex', { model: 'Gone model', id: 'vendor/old' });
+
+  const result = await service.applyCatalogSync('codex');
+
+  assert.deepEqual(result.plan.removals, [{ id: 'vendor/old', model: 'Gone model' }]);
+  assert.deepEqual(result.plan.skipped.map((entry) => entry.id), ['codex-default']);
+  assert.deepEqual(
+    catalog.rows.get('codex')?.map((row) => [row.modelId, row.model]),
+    [['vendor/a', 'Vendor A'], ['vendor/b', 'Vendor B fresh']],
+  );
+  assert.equal(result.models.OPTIONS.filter((option) => option.value === 'codex-default').length, 1);
+  assert.equal(result.models.OPTIONS.some((option) => option.value === 'vendor/b'), true);
+});
+
+test('catalog sync is rejected when unsupported or no usable catalog exists', async () => {
+  const unsupported = createTestService();
+  await assert.rejects(
+    () => unsupported.service.previewCatalogSync('claude'),
+    (error) => error instanceof AppError && error.code === 'CATALOG_SYNC_UNSUPPORTED',
+  );
+
+  const unconfigured = createTestService({ externalCatalog: () => null });
+  await assert.rejects(
+    () => unconfigured.service.previewCatalogSync('codex'),
+    (error) => error instanceof AppError && error.code === 'CODEX_CATALOG_UNAVAILABLE',
+  );
 });
