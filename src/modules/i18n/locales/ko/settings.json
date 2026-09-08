@@ -157,6 +157,13 @@
       "alphabetical": "알파벳순",
       "recentActivity": "최근 활동순"
     },
+    "chatContent": {
+      "title": "채팅 콘텐츠",
+      "fontSize": {
+        "label": "본문 글자 크기",
+        "description": "채팅 본문, 수식 및 표 내용의 크기를 조정합니다"
+      }
+    },
     "codeEditor": {
       "title": "코드 에디터",
       "theme": {

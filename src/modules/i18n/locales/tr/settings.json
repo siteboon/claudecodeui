@@ -132,6 +132,13 @@
       "alphabetical": "Alfabetik",
       "recentActivity": "Son Etkinlik"
     },
+    "chatContent": {
+      "title": "Sohbet İçeriği",
+      "fontSize": {
+        "label": "Gövde Metni Boyutu",
+        "description": "Sohbet metni, formüller ve tablo içeriğinin boyutunu ayarla"
+      }
+    },
     "codeEditor": {
       "title": "Kod Editörü",
       "theme": {

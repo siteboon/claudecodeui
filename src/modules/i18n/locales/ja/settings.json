@@ -131,6 +131,13 @@
       "alphabetical": "アルファベット順",
       "recentActivity": "最近のアクティビティ順"
     },
+    "chatContent": {
+      "title": "チャット内容",
+      "fontSize": {
+        "label": "本文の文字サイズ",
+        "description": "チャットの本文、数式、表の内容のサイズを調整します"
+      }
+    },
     "codeEditor": {
       "title": "コードエディタ",
       "theme": {

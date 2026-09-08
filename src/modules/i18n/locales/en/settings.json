@@ -157,6 +157,13 @@
       "alphabetical": "Alphabetical",
       "recentActivity": "Recent Activity"
     },
+    "chatContent": {
+      "title": "Chat Content",
+      "fontSize": {
+        "label": "Body Text Size",
+        "description": "Adjust chat text, formulas, and table content"
+      }
+    },
     "codeEditor": {
       "title": "Code Editor",
       "theme": {
