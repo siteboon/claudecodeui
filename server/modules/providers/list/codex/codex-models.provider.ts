@@ -238,11 +238,9 @@ export class CodexProviderModels implements IProviderModels {
       }
 
       const configuredModel = readOptionalString(config.model);
-      if (configuredModel && !options.some((option) => option.value === configuredModel)) {
-        // Keep the configured default selectable even when the catalog omits it.
-        options.push({ value: configuredModel, label: configuredModel });
-      }
-
+      // Only picker-visible entries are importable. A configured default that
+      // the catalog hides or does not declare stays the DEFAULT value but must
+      // never become a selectable custom row through catalog sync.
       const defaultModel = configuredModel
         ?? (options.some((option) => option.value === CODEX_PREDEFINED_MODELS.DEFAULT)
           ? CODEX_PREDEFINED_MODELS.DEFAULT

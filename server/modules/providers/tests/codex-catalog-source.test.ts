@@ -99,18 +99,21 @@ test('Codex external catalog lists only picker-visible entries with metadata', a
   }
 });
 
-test('Codex external catalog appends and defaults to the configured model', async () => {
+test('Codex external catalog keeps a configured default out of OPTIONS when it is not list-visible', async () => {
   const { adapter, homeDir } = await makeAdapter(null);
   try {
-    const catalogPath = await catalogLine(homeDir, [{ slug: 'vendor/alpha', visibility: 'list' }]);
-    await writeConfig(
-      path.join(homeDir, 'config.toml'),
-      'model = "vendor/custom-default"\nmodel_catalog_json = "' + catalogPath + '"\n',
-    );
+    const catalogPath = await catalogLine(homeDir, [
+      { slug: 'vendor/alpha', visibility: 'list' },
+      { slug: 'vendor/hidden-default', visibility: 'hide' },
+    ]);
+    const config = 'model = "vendor/hidden-default"'
+      + String.fromCharCode(10)
+      + 'model_catalog_json = "' + catalogPath + '"';
+    await writeConfig(path.join(homeDir, 'config.toml'), config);
 
     const models = await adapter.readExternalCatalog();
-    assert.deepEqual(models?.OPTIONS.map((option) => option.value), ['vendor/alpha', 'vendor/custom-default']);
-    assert.equal(models?.DEFAULT, 'vendor/custom-default');
+    assert.deepEqual(models?.OPTIONS.map((option) => option.value), ['vendor/alpha']);
+    assert.equal(models?.DEFAULT, 'vendor/hidden-default');
   } finally {
     await rm(homeDir, { recursive: true, force: true });
   }

@@ -843,17 +843,26 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       if (removedIds.has(providerModels[targetProvider])) {
         setStoredProviderModel(targetProvider, models.DEFAULT);
       }
-      if (provider === targetProvider && sessionModel && removedIds.has(sessionModel)) {
+      // Guard inside the updater: the request may resolve after the user
+      // switched sessions or picked another model, and that newer selection
+      // must not be reset to the fallback.
+      setSessionSelection((current) => {
+        if (
+          !current
+          || current.provider !== targetProvider
+          || !current.model
+          || !removedIds.has(current.model)
+        ) {
+          return current;
+        }
         // The server already reset the session row to the fallback model and
         // cleared its effort; mirror that in the in-memory selection so the
         // composer never keeps offering a removed model id.
-        setSessionSelection((current) => (current
-          ? { ...current, model: models.DEFAULT, effort: null }
-          : current));
-      }
+        return { ...current, model: models.DEFAULT, effort: null };
+      });
     }
     return data.plan;
-  }, [applyProviderCatalog, provider, providerModels, sessionModel, setStoredProviderModel]);
+  }, [applyProviderCatalog, providerModels, setStoredProviderModel]);
 
   const providerModelActions = useMemo<ProviderModelActions>(() => ({
     create: createCustomModel,
