@@ -449,29 +449,26 @@ function buildTokenBudget(messageUsage) {
 }
 
 /**
- * Usage keys that carry a request's cache accounting, in every casing the SDK
- * has used for them.
+ * The two halves of a request's cache accounting, each in every casing the SDK
+ * has used for it.
  */
-const CACHE_USAGE_KEYS = [
-  'cache_creation_input_tokens',
-  'cacheCreationInputTokens',
-  'cacheCreationTokens',
-  'cache_read_input_tokens',
-  'cacheReadInputTokens',
-  'cacheReadTokens',
+const CACHE_USAGE_KEY_GROUPS = [
+  ['cache_creation_input_tokens', 'cacheCreationInputTokens', 'cacheCreationTokens'],
+  ['cache_read_input_tokens', 'cacheReadInputTokens', 'cacheReadTokens'],
 ];
 
 /**
- * Whether a usage payload accounts for the cache at all.
+ * Whether a usage payload accounts for the whole cache.
  *
- * Anthropic usage always reports both cache halves, as zero when unused, so
- * presence is the test and not the value.
+ * Anthropic usage reports both halves, as zero when unused, so presence is the
+ * test and not the value — and both are required, since a half reported alone
+ * still leaves the other defaulting to zero in the prompt total.
  * @param {Object} messageUsage - Anthropic usage payload
- * @returns {boolean} True when at least one cache field is reported
+ * @returns {boolean} True when both cache halves are reported
  */
 function reportsCacheAccount(messageUsage) {
-  return CACHE_USAGE_KEYS.some(
-    (key) => messageUsage[key] != null && Number.isFinite(Number(messageUsage[key]))
+  return CACHE_USAGE_KEY_GROUPS.every((keys) =>
+    keys.some((key) => messageUsage[key] != null && Number.isFinite(Number(messageUsage[key])))
   );
 }
 
@@ -510,9 +507,9 @@ function extractTokenBudget(sdkMessage) {
   }
 
   // A reading is one request's whole prompt: the uncached input plus both cache
-  // halves. A payload that reports no cache accounting is a partial account, and
-  // its `input_tokens` is only the uncached remainder — single digits against a
-  // warm cache — so publishing it replaces a real figure with a wrong one.
+  // halves. A payload that does not report both is a partial account, and its
+  // `input_tokens` is only the uncached remainder — single digits against a warm
+  // cache — so publishing it replaces a real figure with a wrong one.
   if (!reportsCacheAccount(messageUsage)) {
     return null;
   }
