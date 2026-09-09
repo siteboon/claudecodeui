@@ -219,7 +219,7 @@ async function dropTaskNotification(parentPath: string): Promise<void> {
   );
 }
 
-test('Claude history reads a missing notification off the agent\'s own transcript', { concurrency: false }, async () => {
+test('Claude history leaves an async agent running while its outcome is unknown', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-finished-agent-'));
 
   try {
@@ -237,10 +237,19 @@ test('Claude history reads a missing notification off the agent\'s own transcrip
         (message) => message.kind === 'tool_use' && message.toolId === AGENT_TOOL_USE_ID,
       );
 
-      // The notification can be compacted out of a long session. The agent's
-      // transcript ends on a resolved tool call, so it finished — reporting it
-      // as still running would leave a spinner on the card forever.
-      assert.equal(agentRow?.subagent?.status, 'completed');
+      // This case is ambiguous from the transcript alone: an agent whose
+      // notification was compacted away and one that is still working in the
+      // background both end their turn cleanly, so nothing on disk separates
+      // them. The tie is resolved in favour of the live agent, because calling
+      // a running agent `completed` drops it from the UI while it is still
+      // working.
+      //
+      // The cost is real and does not heal: once the notification has been
+      // compacted out, it is gone from the file, so a historical session keeps
+      // showing this agent as running on every load. Separating the two needs
+      // evidence the transcript does not carry — a staleness cutoff, or a
+      // liveness signal from the run registry.
+      assert.equal(agentRow?.subagent?.status, 'running');
       assert.equal(agentRow?.toolResult?.content, '', 'the launch acknowledgement must never show as a result');
     });
   } finally {
