@@ -30,18 +30,33 @@ export const authenticatedFetch = (
     defaultHeaders['Authorization'] = `Bearer ${token}`;
   }
 
+  const requestHeaders = {
+    ...defaultHeaders,
+    ...options.headers,
+  };
+
+  // Whether this request went out under the stored token, decided from the
+  // headers that are actually sent. Having a token in storage is not the
+  // same thing: platform mode never sends one, and a caller's own headers
+  // can replace the one set above.
+  const sentStoredToken = Boolean(token)
+    && requestHeaders.Authorization === `Bearer ${token}`;
+
   return fetch(url, {
     ...options,
-    headers: {
-      ...defaultHeaders,
-      ...options.headers,
-    },
+    headers: requestHeaders,
   }).then((response) => {
     const refreshedToken = response.headers.get('X-Refreshed-Token');
     if (refreshedToken) {
       storeAuthToken(refreshedToken);
     }
-    if (response.headers.get('X-Auth-Error')) {
+    // Only a request that actually carried the stored token can have had it
+    // rejected. The server answers a request without any `Authorization`
+    // header with the same `X-Auth-Error`, and acting on that threw away a
+    // perfectly good login: one call going out before the token was in place
+    // - a desktop window that has just been handed one, a tab restored from a
+    // cold start - was enough to sign the user out, over and over.
+    if (sentStoredToken && response.headers.get('X-Auth-Error')) {
       expireAuthSession();
     }
     return response;
