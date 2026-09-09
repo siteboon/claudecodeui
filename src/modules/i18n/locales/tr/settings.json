@@ -389,7 +389,7 @@
       "modes": {
         "default": {
           "title": "Varsayılan",
-          "description": "Sadece güvenilir komutlar (ls, cat, grep, git status, vb.) otomatik çalışır. Diğer komutlar atlanır. Çalışma alanına yazabilir."
+          "description": "Komutları çalışma alanı korumalı ortamında çalıştırır. Onay gerektiğine Codex karar verir; bu etkileşimsiz entegrasyonda istekler onaylanamaz."
         },
         "acceptEdits": {
           "title": "Düzenlemeleri Kabul Et",
@@ -402,7 +402,7 @@
       },
       "technicalDetails": "Teknik ayrıntılar",
       "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=untrusted. Güvenilir komutlar: cat, cd, grep, head, ls, pwd, tail, git status/log/diff/show, find (-exec olmadan), vb.",
+        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. Komutları çalışma alanı korumalı ortamında çalıştırır. Onay gerektiğine Codex karar verir; bu etkileşimsiz entegrasyonda istekler onaylanamaz.",
         "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. Tüm komutlar proje dizini içinde otomatik çalışır.",
         "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. Tam sistem erişimi, yalnızca güvenilir ortamlarda kullan.",
         "overrideNote": "Sohbet arayüzündeki mod düğmesini kullanarak bunu oturum başına geçersiz kılabilirsin."

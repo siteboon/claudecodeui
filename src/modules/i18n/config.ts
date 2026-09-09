@@ -21,6 +21,8 @@ import enChat from '@/modules/i18n/locales/en/chat.json';
 import enCodeEditor from '@/modules/i18n/locales/en/codeEditor.json';
 // oxlint-disable-next-line importx/order
 import enTasks from '@/modules/i18n/locales/en/tasks.json';
+// oxlint-disable-next-line importx/order
+import enGit from '@/modules/i18n/locales/en/git.json';
 
 import frCommon from '@/modules/i18n/locales/fr/common.json';
 import frSettings from '@/modules/i18n/locales/fr/settings.json';
@@ -142,6 +144,7 @@ i18n
         chat: enChat,
         codeEditor: enCodeEditor,
         tasks: enTasks,
+git: enGit,
       },
       fr: {
         common: frCommon,
@@ -245,7 +248,7 @@ i18n
     debug: false,
 
     // Namespaces - load only what's needed
-    ns: ['common', 'settings', 'auth', 'sidebar', 'chat', 'codeEditor', 'tasks'],
+    ns: ['common', 'settings', 'auth', 'sidebar', 'chat', 'codeEditor', 'tasks', 'git'],
     defaultNS: 'common',
 
     // Key separator for nested keys (default: '.')
