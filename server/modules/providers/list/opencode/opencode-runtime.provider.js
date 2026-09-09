@@ -9,7 +9,7 @@ import {
   normalizeAttachmentDescriptors
 } from '@/shared/image-attachments.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
-import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell, getOpenCodeDatabasePath } from '@/shared/utils.js';
+import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell, getOpenCodeDatabasePath, stripAnsiSequences } from '@/shared/utils.js';
 
 // cross-spawn resolves .cmd shims/PATHEXT on Windows and delegates to
 // child_process.spawn everywhere else.
@@ -308,7 +308,10 @@ async function spawnOpenCode(command, options = {}, ws, context) {
       });
 
       opencodeProcess.stderr.on('data', (data) => {
-        const stderrText = data.toString();
+        // opencode styles its stderr for a terminal; the chat renders plain
+        // text, so the escapes have to go before the text is surfaced. A chunk
+        // that was styling only cleans down to nothing and is not an error.
+        const stderrText = stripAnsiSequences(data.toString());
         if (!stderrText.trim()) {
           return;
         }

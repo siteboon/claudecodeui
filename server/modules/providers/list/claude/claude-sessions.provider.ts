@@ -19,6 +19,7 @@ import {
   generateMessageId,
   readObjectRecord,
   sliceTailPage,
+  stripAnsiSequences,
   truncateSubagentActivity,
 } from '@/shared/utils.js';
 import { sessionsDb } from '@/modules/database/index.js';
@@ -638,14 +639,6 @@ function buildLocalCommandDisplayText(payload: ClaudeLocalCommandPayload): strin
   return commandArgs ? `${baseCommand} ${commandArgs}` : baseCommand;
 }
 
-/**
- * Claude local-command stdout may contain ANSI styling codes because it was
- * captured from the terminal. The web chat should receive readable plain text.
- */
-function stripAnsiFormatting(text: string): string {
-  return text.replace(/\u001B\[[0-9;?]*[ -/]*[@-~]/g, '');
-}
-
 export class ClaudeSessionsProvider implements IProviderSessions {
   /**
    * Normalizes one Claude JSONL entry or live SDK stream event into the shared
@@ -840,7 +833,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
          */
         const localCommandStdout = extractTaggedContent(text, 'local-command-stdout');
         if (localCommandStdout !== null) {
-          const stdoutText = stripAnsiFormatting(localCommandStdout).trim();
+          const stdoutText = stripAnsiSequences(localCommandStdout).trim();
           if (stdoutText) {
             messages.push(createNormalizedMessage({
               id: baseId,
