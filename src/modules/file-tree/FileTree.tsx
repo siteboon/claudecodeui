@@ -11,8 +11,9 @@ import { useFileTreeOperations } from '@/modules/file-tree/hooks/useFileTreeOper
 import { useFileTreeSearch } from '@/modules/file-tree/hooks/useFileTreeSearch';
 import { useFileTreeViewMode } from '@/modules/file-tree/hooks/useFileTreeViewMode';
 import { useFileTreeUpload } from '@/modules/file-tree/hooks/useFileTreeUpload';
-import type { FileTreeImageSelection, FileTreeNode,Project } from '@/shared/types';
+import type { DirectoryRevealRequest, FileTreeImageSelection, FileTreeNode,Project } from '@/shared/types';
 import { formatFileSize, formatRelativeTime, isImageFile } from '@/modules/file-tree/utils/fileTreeUtils';
+import { directoryRevealPaths } from '@/modules/file-tree/utils/revealDirectory';
 import { ScrollArea, Input } from '@/shared/ui';
 import FileTreeBody from '@/modules/file-tree/FileTreeBody';
 import FileTreeDetailedColumns from '@/modules/file-tree/FileTreeDetailedColumns';
@@ -27,7 +28,7 @@ type FileTreeProps = {
   onFileOpen?: (filePath: string) => void;
   // Directory to reveal (from an in-chat `path/` reference): its ancestors are
   // expanded so the folder is visible without hunting through the tree.
-  revealDirectory?: string | null;
+  revealDirectory?: DirectoryRevealRequest | null;
 };
 
 /** Exported through the file-tree barrel; the project-workspace module renders it as the Files sidebar tab. */
@@ -59,25 +60,25 @@ export default function FileTree({ selectedProject, onFileOpen, revealDirectory 
     expandDirectories,
   });
 
+  // The reveal request already served, so a later tree refresh does not fold
+  // the folders open again over a collapse the user has since made.
+  const revealedRef = useRef<DirectoryRevealRequest | null>(null);
+
   // Expand every ancestor between the project root and the requested folder.
+  // A request that arrives before the tree finds nothing to expand and is
+  // retried when `files` lands.
   useEffect(() => {
-    if (!revealDirectory || !selectedProject?.path) {
+    const projectRoot = selectedProject?.path || selectedProject?.fullPath;
+    if (!revealDirectory || !projectRoot || revealedRef.current === revealDirectory) {
       return;
     }
-    const root = selectedProject.path.replace(/\/+$/, '');
-    const target = revealDirectory.replace(/\/+$/, '');
-    if (!target.startsWith(root)) {
+    const paths = directoryRevealPaths(files, projectRoot, revealDirectory.path);
+    if (paths.length === 0) {
       return;
     }
-    const segments = target.slice(root.length).split('/').filter(Boolean);
-    const paths: string[] = [];
-    let current = root;
-    for (const segment of segments) {
-      current = `${current}/${segment}`;
-      paths.push(current);
-    }
+    revealedRef.current = revealDirectory;
     expandDirectories(paths);
-  }, [revealDirectory, selectedProject?.path, expandDirectories, files]);
+  }, [revealDirectory, selectedProject?.path, selectedProject?.fullPath, expandDirectories, files]);
 
   // File operations
   const operations = useFileTreeOperations({

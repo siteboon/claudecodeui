@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { EditorView } from '@codemirror/view';
 import { oneDark } from '@codemirror/theme-one-dark';
 import type { Extension } from '@codemirror/state';
+
+import type { CodeEditorGotoTarget } from '@/shared/types';
 
 import MarkdownPreview from '@/modules/code-editor/markdown/MarkdownPreview';
 
@@ -15,8 +17,8 @@ type CodeEditorSurfaceProps = {
   fontSize: number;
   showLineNumbers: boolean;
   extensions: Extension[];
-  // 1-based line to reveal once the document is loaded (`path:line` references).
-  gotoLine?: number | null;
+  // Line to reveal once the document is loaded (`path:line` references).
+  gotoTarget?: CodeEditorGotoTarget | null;
 };
 
 /** Rendered by CodeEditor inside the code-editor module to show either the CodeMirror editing surface or the markdown preview. */
@@ -29,25 +31,32 @@ export default function CodeEditorSurface({
   fontSize,
   showLineNumbers,
   extensions,
-  gotoLine = null,
+  gotoTarget = null,
 }: CodeEditorSurfaceProps) {
   // Tracked as state, not a ref: the editor view is created after the first
   // render, and a ref would not re-run the effect once it lands.
   const [view, setView] = useState<EditorView | null>(null);
 
+  // The last request already jumped to. `content` is the editor's own state and
+  // changes on every keystroke, so without this the caret would be dragged back
+  // to the requested line while the file is being edited.
+  const jumpedToRef = useRef<CodeEditorGotoTarget | null>(null);
+
   // Content arrives asynchronously, so the jump waits for both the view and the
-  // document, and runs again whenever either changes for the requested line.
+  // document; each request is then applied exactly once.
   useEffect(() => {
-    if (!view || !gotoLine || !content) {
+    if (!view || !gotoTarget || !content || jumpedToRef.current === gotoTarget) {
       return;
     }
-    const target = Math.min(Math.max(gotoLine, 1), view.state.doc.lines);
+    jumpedToRef.current = gotoTarget;
+    const target = Math.min(Math.max(gotoTarget.line, 1), view.state.doc.lines);
     const line = view.state.doc.line(target);
     view.dispatch({
       selection: { anchor: line.from },
       effects: EditorView.scrollIntoView(line.from, { y: 'center' }),
     });
-  }, [view, gotoLine, content]);
+  }, [view, gotoTarget, content]);
+
   if (markdownPreview && isMarkdownFile) {
     return (
       <div className="h-full overflow-y-auto bg-white dark:bg-gray-900">
@@ -60,7 +69,7 @@ export default function CodeEditorSurface({
 
   return (
     <CodeMirror
-      onCreateEditor={(editorView) => setView(editorView)}
+      onCreateEditor={setView}
       value={content}
       onChange={onChange}
       extensions={extensions}

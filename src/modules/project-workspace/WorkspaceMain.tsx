@@ -8,7 +8,7 @@ import { PluginTabContent } from '@/modules/plugins';
 import { BrowserUsePanel, useBrowserUseEnabled } from '@/modules/browser-use';
 import { usePaletteOpsRegister } from '@/modules/command-palette';
 import { TaskMasterPanel, useTaskMasterProjectSync, useTasksSettings } from '@/modules/task-master';
-import type { AppTab, Project, ProjectSession, SessionEstablishedContext, SessionNavigationOptions, SettingsMainTab } from '@/shared/types';
+import type { AppTab, DirectoryRevealRequest, Project, ProjectSession, SessionEstablishedContext, SessionNavigationOptions, SettingsMainTab } from '@/shared/types';
 import { useUiPreferences } from '@/shared/context/UiPreferencesContext';
 import { useFileOpenResolver } from '@/modules/project-workspace/hooks/useFileOpenResolver';
 import { EditorSidebar, useEditorSidebar } from '@/modules/code-editor';
@@ -63,8 +63,9 @@ function WorkspaceMain({
   const browserUseEnabled = useBrowserUseEnabled();
 
   useTaskMasterProjectSync(selectedProject);
-  // Wrapped in an object so re-clicking the same folder re-triggers the reveal.
-  const [revealDirectory, setRevealDirectory] = useState<{ path: string } | null>(null);
+  // The folder an in-chat `path/` reference asked to reveal. Held as an object
+  // so that re-clicking the same folder is a new request the tree acts on.
+  const [revealDirectory, setRevealDirectory] = useState<DirectoryRevealRequest | null>(null);
 
   const shouldShowTasksTab = Boolean(tasksEnabled && isTaskMasterInstalled);
   const shouldShowBrowserTab = browserUseEnabled;
@@ -120,7 +121,6 @@ function WorkspaceMain({
   // Directories cannot be read as text: reveal them in the file tree instead.
   const openDirectory = useCallback((directoryPath: string) => {
     setActiveTab('files');
-    // New object each time so clicking the same folder twice still reveals it.
     setRevealDirectory({ path: directoryPath });
   }, [setActiveTab]);
 
@@ -178,7 +178,7 @@ function WorkspaceMain({
               <FileTree
                 selectedProject={selectedProject}
                 onFileOpen={handleFileOpen}
-                revealDirectory={revealDirectory?.path ?? null}
+                revealDirectory={revealDirectory}
               />
             </div>
           )}

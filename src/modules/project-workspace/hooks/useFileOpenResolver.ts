@@ -102,21 +102,22 @@ export function useFileOpenResolver(
 
   return useCallback(
     (filePath: string, diffInfo?: any, line?: number | null) => {
+      // Normalized once and used for every outcome: a reference picked up from
+      // link text can carry surrounding whitespace, which the API would take as
+      // part of the filename and answer with a 404.
       const ref = normalize(filePath).trim();
       // An absolute path already names one exact file: matching it against the
-      // tree can only send it somewhere else. `/home/user/.config/NOTES.md`
+      // tree can only send it somewhere else — `/home/user/.config/NOTES.md`
       // used to fall through to the filename match and silently open the
-      // project's own `NOTES.md`. An absolute path inside the project already
-      // resolved to itself via the suffix match, so this shortcut does not
-      // change that case; for one outside, the API answers "Path must be under
-      // project root" and the editor now shows it.
+      // project's own `NOTES.md`. A path that exists is unaffected; one that no
+      // longer does now reports that instead of opening a same-named file.
       if (isAbsoluteRef(ref)) {
-        onFileOpen(filePath, diffInfo, line);
+        onFileOpen(ref, diffInfo, line);
         return;
       }
       void loadFiles().then((files) => {
         const match = findBestMatch(files, ref);
-        onFileOpen(match ?? filePath, diffInfo, line);
+        onFileOpen(match ?? ref, diffInfo, line);
       });
     },
     [loadFiles, onFileOpen],

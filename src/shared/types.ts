@@ -712,6 +712,12 @@ export type CodeEditorFile = {
   [key: string]: unknown;
 };
 
+/** One request to reveal a line in the editor. The code editor builds a new object per opened file so the surface can tell a fresh request apart from a re-render, and jump only once per request. */
+export type CodeEditorGotoTarget = {
+  // 1-based, clamped to the document by the editor surface.
+  line: number;
+};
+
 /** The category of browser-renderable media a file maps to, used by the code editor to decide whether to show an inline image, PDF, video or audio preview instead of a text buffer. */
 export type PreviewKind = 'image' | 'pdf' | 'video' | 'audio';
 
@@ -732,6 +738,12 @@ export type FileTreeUploadProgressState = {
 
 /** Which density the file tree renders its rows at (simple, compact or detailed), chosen in the file tree header and persisted in local storage. */
 export type FileTreeViewMode = 'simple' | 'compact' | 'detailed';
+
+/** One request to reveal a directory in the file tree, coming from a `path/` reference in a chat message. The workspace builds a new object per click so the tree re-reveals a folder the user collapsed again in the meantime. */
+export type DirectoryRevealRequest = {
+  // As written in the message: relative to the project root, or absolute.
+  path: string;
+};
 
 /** One file or directory entry in a project's file listing, with directories carrying their loaded `children`; used across the file tree for rendering, searching and filtering. */
 export type FileTreeNode = {

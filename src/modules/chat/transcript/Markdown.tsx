@@ -28,8 +28,10 @@ const isExternalHref = (href?: string): boolean =>
   !!href && (/^(https?:|mailto:|tel:|data:)/i.test(href) || href.startsWith('#'));
 
 // Read the trailing `:line` / `:line:col` suffix so the editor can reveal it.
+// Both this and stripLineSuffix are anchored at the end, so callers pass an
+// already-trimmed reference.
 const lineFromRef = (value: string): number | null => {
-  const match = value.trim().match(/:(\d+)(?::\d+)?$/);
+  const match = value.match(/:(\d+)(?::\d+)?$/);
   return match ? Number(match[1]) : null;
 };
 
@@ -290,11 +292,16 @@ function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 
               className="cursor-pointer text-blue-600 hover:underline dark:text-blue-400"
               onClick={(event) => {
                 event.preventDefault();
-                if (fileRef.trim().endsWith('/')) {
-                  openDirectory(fileRef.trim());
+                // Normalized once for every branch below: the href arrives
+                // trimmed from the parser, but the link-text fallback keeps a
+                // trailing space (``[`src/foo.ts:12` ]()``), and that space
+                // defeats the `$`-anchored suffix strip.
+                const reference = fileRef.trim();
+                if (reference.endsWith('/')) {
+                  openDirectory(reference);
                   return;
                 }
-                openFileInEditor(stripLineSuffix(fileRef), lineFromRef(fileRef));
+                openFileInEditor(stripLineSuffix(reference), lineFromRef(reference));
               }}
             >
               {linkChildren}

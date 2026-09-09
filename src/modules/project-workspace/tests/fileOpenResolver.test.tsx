@@ -21,10 +21,10 @@ vi.mock('@/shared/api', () => ({
   api: { getFiles: (...args: unknown[]) => getFiles(...args) },
 }));
 
-const { useFileOpenResolver } = await import('../hooks/useFileOpenResolver');
+const { useFileOpenResolver } = await import('@/modules/project-workspace/hooks/useFileOpenResolver');
 
 const ROOT = '/home/odoo/workspace/personal';
-const project = { projectId: 'p1', name: 'personal', path: ROOT } as unknown as Project;
+const project: Project = { projectId: 'p1', displayName: 'personal', fullPath: ROOT };
 
 const tree = [
   { type: 'file', name: 'CLAUDE.md', path: `${ROOT}/CLAUDE.md` },
@@ -72,9 +72,22 @@ test('partial references still match against the tree', async () => {
   assert.equal(second.onFileOpen.mock.calls[0][0], `${ROOT}/src/foo.ts`);
 });
 
-test('line and diffInfo survive the absolute-path shortcut', async () => {
+test('diffInfo and line survive the absolute-path shortcut', async () => {
   const { resolve, onFileOpen } = setup();
-  resolve('/home/odoo/.claude/CLAUDE.md', undefined, 150);
+  const diffInfo = { old_string: 'a', new_string: 'b' };
+  resolve('/home/odoo/.claude/CLAUDE.md', diffInfo, 150);
   await waitFor(() => assert.equal(onFileOpen.mock.calls.length, 1));
-  assert.equal(onFileOpen.mock.calls[0][2], 150);
+  assert.deepEqual(onFileOpen.mock.calls[0].slice(1), [diffInfo, 150]);
+});
+
+test('surrounding whitespace never reaches the API as part of the path', async () => {
+  const { resolve, onFileOpen } = setup();
+  resolve('  /home/odoo/.claude/CLAUDE.md ');
+  await waitFor(() => assert.equal(onFileOpen.mock.calls.length, 1));
+  assert.equal(onFileOpen.mock.calls[0][0], '/home/odoo/.claude/CLAUDE.md');
+
+  const second = setup();
+  second.resolve('nope.ts ');
+  await waitFor(() => assert.equal(second.onFileOpen.mock.calls.length, 1));
+  assert.equal(second.onFileOpen.mock.calls[0][0], 'nope.ts');
 });
