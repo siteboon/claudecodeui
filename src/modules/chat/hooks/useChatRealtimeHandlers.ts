@@ -36,7 +36,6 @@ type UseChatRealtimeHandlersArgs = {
   statusCheckSentAtRef: MutableRefObject<Map<string, number>>;
   onSessionProcessing?: MarkSessionProcessing;
   onSessionIdle?: MarkSessionIdle;
-  onWebSocketReconnect?: () => void;
   requestLatestMessages: (sessionId: string, allowNetwork?: boolean) => Promise<void>;
   sessionStore: SessionStore;
 };
@@ -69,7 +68,6 @@ export function useChatRealtimeHandlers({
   statusCheckSentAtRef,
   onSessionProcessing,
   onSessionIdle,
-  onWebSocketReconnect,
   requestLatestMessages,
   sessionStore,
 }: UseChatRealtimeHandlersArgs) {
@@ -109,10 +107,6 @@ export function useChatRealtimeHandlers({
       }
 
       switch (msg.kind) {
-        case 'websocket_reconnected':
-          onWebSocketReconnect?.();
-          return;
-
         case 'history_truncated': {
           // An already-sent message was replaced. Every client watching this
           // session drops the superseded turns before the replacement streams
@@ -364,7 +358,6 @@ export function useChatRealtimeHandlers({
     statusCheckSentAtRef,
     onSessionProcessing,
     onSessionIdle,
-    onWebSocketReconnect,
     requestLatestMessages,
     sessionStore,
   ]);

@@ -161,6 +161,7 @@ function ChatInterface({
     selectedSession,
     ws,
     sendMessage,
+    subscribe,
     externalMessageUpdate,
     newSessionTrigger,
     processingSessions,

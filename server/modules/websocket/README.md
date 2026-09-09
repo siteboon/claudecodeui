@@ -108,7 +108,7 @@ When a chat socket connects:
 
 1. Add socket to `connectedClients`.
 2. Parse each incoming message with `parseIncomingJsonObject`.
-3. Dispatch by `data.type` (four message types, none provider-specific).
+3. Dispatch by `data.type`; chat commands are provider-neutral.
 4. On close, remove socket from `connectedClients`.
 
 ### Session identity model
@@ -139,10 +139,31 @@ flowchart TD
 
 ### Chat Notes
 
-1. **Unified envelope**: every server-to-client frame carries a `kind` — either a provider `NormalizedMessage` kind or a gateway kind (`chat_subscribed`, `session_upserted`, `loading_progress`, `protocol_error`). There is no second `type`-based protocol.
+1. **Unified envelope**: every server-to-client frame carries a `kind` — either a provider `NormalizedMessage` kind or a gateway kind (`chat_subscribed`, `pong`, `session_upserted`, `loading_progress`, `protocol_error`). There is no second `type`-based protocol.
 2. **Unified terminal lifecycle**: every provider run ends with exactly one `complete` message built by `createCompleteMessage()` (`server/shared/utils.ts`): `{ kind: "complete", sessionId, actualSessionId, exitCode, success, aborted }`. The chat handler emits a synthetic `complete` for runs that crash or get aborted, and the run registry drops duplicate completes.
 3. **Per-run event log**: every live event gets a monotonically increasing `seq`. `chat.subscribe { sessions: [{ sessionId, lastSeq }] }` re-attaches the live stream to the requesting socket (any provider, not just Claude) and replays events with `seq > lastSeq`. If the buffer no longer covers `lastSeq`, the client refreshes over REST.
 4. `chat_subscribed` includes `isProcessing` (replaces `check-session-status`) and `pendingPermissions` (replaces `get-pending-permissions`).
+
+### Broken-channel recovery
+
+The browser sends `chat.ping { nonce }` every 30 seconds after connection or a
+matching pong. The gateway replies only to that socket with `{ kind: "pong",
+nonce }`, without invoking a provider. A missing matching pong after 3 seconds
+retires the socket and schedules a new connection after the existing 3-second
+retry delay. A handshake that stays connecting for 30 seconds is also retired.
+Only one handshake, ping, pong, or retry timer is active at a time.
+
+`visibilitychange` to visible and `pageshow` can probe earlier, but recovery does
+not require either event. Repeated page events do not extend a pending pong
+deadline. Browser suspension and background timer throttling can delay checks;
+the client cannot promise a wall-clock recovery deadline while timers are paused.
+
+On replacement, the selected chat sends `chat.subscribe` and waits for its
+matching `chat_subscribed` acknowledgement before refreshing the persisted tail.
+Replay follows the acknowledgement and can overlap the HTTP request. Hidden chat
+still subscribes but defers persisted-tail HTTP until activation. Initial session
+loading is unchanged, and visibility-only changes do not resubscribe.
+Failed application messages are not automatically resent.
 
 ## `/shell` Terminal Flow
 
