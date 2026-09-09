@@ -203,6 +203,7 @@ export type MessageKind =
  */
 export type GatewayEventKind =
   | 'chat_subscribed'
+  | 'pong'
   | 'session_upserted'
   | 'loading_progress'
   | 'protocol_error';

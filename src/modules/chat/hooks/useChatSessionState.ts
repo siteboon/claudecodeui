@@ -2,7 +2,17 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { MutableRefObject } from 'react';
 
 import { api } from '@/shared/api';
-import type { MarkSessionIdle, SessionActivityMap,Project,ProjectSession,LLMProvider,NormalizedMessage,ChatMessage,DiffCalculator } from '@/shared/types';
+import type {
+  MarkSessionIdle,
+  SessionActivityMap,
+  Project,
+  ProjectSession,
+  LLMProvider,
+  NormalizedMessage,
+  ChatMessage,
+  DiffCalculator,
+  ServerEvent,
+} from '@/shared/types';
 import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
 import { SESSION_MESSAGES_PAGE_SIZE } from '@/modules/chat/utils/sessionMessagePagination';
 import { createMessageHistoryRefreshCoordinator } from '@/modules/chat/utils/messageHistoryRefreshCoordinator';
@@ -13,6 +23,9 @@ import { readSelectedProvider } from '@/shared/selectedProvider';
 import type { SearchTarget } from '@/modules/chat/utils/searchTargetLocator';
 
 const INITIAL_VISIBLE_MESSAGES = 100;
+
+/** A live transport must still acknowledge reattachment before history can refresh. */
+const RECONNECT_ACK_TIMEOUT_MS = 10_000;
 
 /** Messages kept below a search hit so it lands mid-viewport rather than at the edge. */
 const SEARCH_TARGET_CONTEXT_MESSAGES = 20;
@@ -84,6 +97,7 @@ type UseChatSessionStateArgs = {
   selectedSession: ProjectSession | null;
   ws: WebSocket | null;
   sendMessage: (message: unknown) => void;
+  subscribe: (listener: (event: ServerEvent) => void) => () => void;
   externalMessageUpdate?: number;
   newSessionTrigger?: number;
   processingSessions?: SessionActivityMap;
@@ -184,6 +198,7 @@ export function useChatSessionState({
   selectedSession,
   ws,
   sendMessage,
+  subscribe,
   externalMessageUpdate,
   newSessionTrigger,
   processingSessions,
@@ -235,6 +250,10 @@ export function useChatSessionState({
   const loadAllFinishedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadAllOverlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastLoadedSessionKeyRef = useRef<string | null>(null);
+  // Distinguish a lost subscription from a different session's initial load.
+  const lastSubscriptionRef = useRef<{ socket: WebSocket; sessionId: string } | null>(null);
+  // A replacement must acknowledge this session before any queued tail refresh.
+  const pendingReconnectRef = useRef<{ socket: WebSocket; sessionId: string } | null>(null);
   /**
    * Tracks the last processed value from `useProjectsState.newSessionTrigger`.
    *
@@ -323,8 +342,11 @@ export function useChatSessionState({
 
   const isActiveRef = useRef(isActive);
   const activeSessionIdRef = useRef(activeSessionId);
+  // Reject acknowledgements delivered by listeners for a replaced socket.
+  const wsRef = useRef(ws);
   isActiveRef.current = isActive;
   activeSessionIdRef.current = activeSessionId;
+  wsRef.current = ws;
 
   const latestRefreshExecutorRef = useRef<(sessionId: string) => Promise<boolean | void>>(
     async () => true,
@@ -335,6 +357,7 @@ export function useChatSessionState({
       canRequest: () => (
         isActiveRef.current
         && activeSessionIdRef.current === sessionId
+        && pendingReconnectRef.current?.sessionId !== sessionId
       ),
     });
     const slot = result.slot;
@@ -353,7 +376,11 @@ export function useChatSessionState({
   if (!refreshCoordinatorRef.current) {
     refreshCoordinatorRef.current = createMessageHistoryRefreshCoordinator(
       (sessionId) => latestRefreshExecutorRef.current(sessionId),
-      (sessionId) => isActiveRef.current && activeSessionIdRef.current === sessionId,
+      (sessionId) => (
+        isActiveRef.current
+        && activeSessionIdRef.current === sessionId
+        && pendingReconnectRef.current?.sessionId !== sessionId
+      ),
     );
   }
 
@@ -659,20 +686,70 @@ export function useChatSessionState({
     };
   }, [chatMessages.length, isActive, isLoadingSessionMessages, scrollToBottom]);
 
-  // Session replay/subscription remains active regardless of which main tab is
-  // visible. Only persisted-history HTTP traffic is visibility-gated below.
+  const selectedSessionId = selectedSession?.id;
+  const selectedProjectId = selectedProject?.projectId;
+  // One owner subscribes on socket/session changes, including while hidden.
+  // The ack confirms attachment, not replay completion: replay follows the ack
+  // and can arrive while the persisted-tail request is in flight.
   useEffect(() => {
-    if (!selectedSession || !selectedProject || !ws) return;
+    if (!selectedSessionId || !selectedProjectId || !ws) return;
 
-    statusCheckSentAtRef.current.set(selectedSession.id, Date.now());
+    const isReconnect = lastSubscriptionRef.current?.sessionId === selectedSessionId
+      && lastSubscriptionRef.current.socket !== ws;
+    lastSubscriptionRef.current = { socket: ws, sessionId: selectedSessionId };
+    const pending = isReconnect ? lastSubscriptionRef.current : null;
+    pendingReconnectRef.current = pending;
+    // Recover through the transport's existing reconnect lifecycle, not an
+    // unattached HTTP refresh. Cleanup or the next subscription owns pending.
+    const ackTimeout = pending ? setTimeout(() => {
+      if (
+        pendingReconnectRef.current === pending
+        && wsRef.current === pending.socket
+        && activeSessionIdRef.current === pending.sessionId
+      ) {
+        pending.socket.close();
+      }
+    }, RECONNECT_ACK_TIMEOUT_MS) : undefined;
+    // Arm the listener and pending state before send, including synchronous acks.
+    const unsubscribe = subscribe((event) => {
+      if (
+        !pending
+        || pendingReconnectRef.current !== pending
+        || wsRef.current !== pending.socket
+        || activeSessionIdRef.current !== pending.sessionId
+        || event.kind !== 'chat_subscribed'
+        || event.sessionId !== pending.sessionId
+      ) return;
+
+      clearTimeout(ackTimeout);
+      pendingReconnectRef.current = null;
+      void requestLatestMessages(pending.sessionId);
+    });
+    statusCheckSentAtRef.current.set(selectedSessionId, Date.now());
     sendMessage({
       type: 'chat.subscribe',
       sessions: [{
-        sessionId: selectedSession.id,
-        lastSeq: lastSeqRef.current.get(selectedSession.id) ?? 0,
+        sessionId: selectedSessionId,
+        lastSeq: lastSeqRef.current.get(selectedSessionId) ?? 0,
       }],
     });
-  }, [lastSeqRef, selectedProject, selectedSession, sendMessage, statusCheckSentAtRef, ws]);
+    return () => {
+      clearTimeout(ackTimeout);
+      unsubscribe();
+      if (pendingReconnectRef.current === pending) {
+        pendingReconnectRef.current = null;
+      }
+    };
+  }, [
+    lastSeqRef,
+    requestLatestMessages,
+    selectedProjectId,
+    selectedSessionId,
+    sendMessage,
+    statusCheckSentAtRef,
+    subscribe,
+    ws,
+  ]);
 
   // Main session loading effect — store-based.
   //

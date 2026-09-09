@@ -529,10 +529,11 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  * - `chat.abort`               { sessionId }
  * - `chat.subscribe`           { sessions: [{ sessionId, lastSeq? }] }
  * - `chat.permission-response` { requestId, allow, updatedInput?, message?, rememberEntry? }
+ * - `chat.ping`                { nonce }
  *
  * Outbound protocol (server to client): every frame is `kind`-based — either
  * a provider `NormalizedMessage` (with `seq`) or a gateway event
- * (`chat_subscribed`, `session_upserted`, `loading_progress`,
+ * (`chat_subscribed`, `pong`, `session_upserted`, `loading_progress`,
  * `protocol_error`).
  */
 /**
@@ -635,6 +636,16 @@ export function handleChatConnection(
           return;
         case 'chat.permission-response':
           handlePermissionResponse(data, dependencies);
+          return;
+        case 'chat.ping':
+          if (typeof data.nonce !== 'string') {
+            sendProtocolError(ws, 'INVALID_NONCE', 'chat.ping requires a string nonce.');
+            return;
+          }
+          sendJson(ws, {
+            kind: 'pong',
+            nonce: data.nonce,
+          });
           return;
         default:
           sendProtocolError(ws, 'UNKNOWN_MESSAGE_TYPE', `Unknown message type "${messageType}".`);

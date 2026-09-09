@@ -33,7 +33,7 @@ Benefits:
 |---|---|
 | `services/websocket-server.service.ts` | Creates `WebSocketServer`, binds `verifyClient`, routes connection by pathname |
 | `services/websocket-auth.service.ts` | Authenticates upgrade requests and attaches `request.user` |
-| `services/chat-websocket.service.ts` | Handles the `/ws` chat protocol (`chat.send` / `chat.abort` / `chat.subscribe` / `chat.permission-response`) |
+| `services/chat-websocket.service.ts` | Handles the `/ws` chat protocol (`chat.send` / `chat.abort` / `chat.subscribe` / `chat.permission-response` / `chat.ping`) |
 | `services/chat-run-registry.service.ts` | Tracks live provider runs per app session id: seq numbering, event replay buffer, provider-id mapping, completion state |
 | `services/chat-session-writer.service.ts` | Gateway writer handed to provider runtimes: remaps provider session ids to app ids, swallows `session_created`, assigns `seq` |
 | `services/shell-websocket.service.ts` | Handles `/shell` PTY lifecycle, reconnect buffering, auth URL detection |
@@ -108,7 +108,7 @@ When a chat socket connects:
 
 1. Add socket to `connectedClients`.
 2. Parse each incoming message with `parseIncomingJsonObject`.
-3. Dispatch by `data.type` (four message types, none provider-specific).
+3. Dispatch by `data.type`; chat commands are provider-neutral.
 4. On close, remove socket from `connectedClients`.
 
 ### Session identity model
@@ -133,15 +133,47 @@ flowchart TD
   D -->|chat.abort| F[providerRuntimeService.abort + synthetic complete]
   D -->|chat.subscribe| G[chat_subscribed ack + attach socket + replay events seq > lastSeq]
   D -->|chat.permission-response| H[providerRuntimeService.resolveToolApproval]
+  D -->|chat.ping| J[send kind:pong with matching nonce]
   D -->|other| I[send kind:protocol_error]
 ```
 
 ### Chat Notes
 
-1. **Unified envelope**: every server-to-client frame carries a `kind` — either a provider `NormalizedMessage` kind or a gateway kind (`chat_subscribed`, `session_upserted`, `loading_progress`, `protocol_error`). There is no second `type`-based protocol.
+1. **Unified envelope**: every server-to-client frame carries a `kind` — either a provider `NormalizedMessage` kind or a gateway kind (`chat_subscribed`, `pong`, `session_upserted`, `loading_progress`, `protocol_error`). There is no second `type`-based protocol.
 2. **Unified terminal lifecycle**: every provider run ends with exactly one `complete` message built by `createCompleteMessage()` (`server/shared/utils.ts`): `{ kind: "complete", sessionId, actualSessionId, exitCode, success, aborted }`. The chat handler emits a synthetic `complete` for runs that crash or get aborted, and the run registry drops duplicate completes.
 3. **Per-run event log**: every live event gets a monotonically increasing `seq`. `chat.subscribe { sessions: [{ sessionId, lastSeq }] }` re-attaches the live stream to the requesting socket (any provider, not just Claude) and replays events with `seq > lastSeq`. If the buffer no longer covers `lastSeq`, the client refreshes over REST.
 4. `chat_subscribed` includes `isProcessing` (replaces `check-session-status`) and `pendingPermissions` (replaces `get-pending-permissions`).
+
+### Broken-channel recovery
+
+The browser sends `chat.ping { nonce }` every 30 seconds after connection or a
+matching pong. The gateway replies only to that socket with `{ kind: "pong",
+nonce }`, without invoking a provider. A missing matching pong after 3 seconds
+retires the socket and schedules a new connection after the existing 3-second
+retry delay. A handshake that stays connecting for 30 seconds is also retired.
+Only one handshake, ping, pong, or retry timer is active at a time.
+
+The nonce must be a string. Missing or non-string nonces receive
+`protocol_error` with code `INVALID_NONCE`, never a `pong`. The socket remains
+available for subsequent valid requests.
+
+`visibilitychange` to visible and `pageshow` can probe earlier, but recovery does
+not require either event. Repeated page events do not extend a pending pong
+deadline. Browser suspension and background timer throttling can delay checks;
+the client cannot promise a wall-clock recovery deadline while timers are paused.
+
+On replacement, the selected chat sends `chat.subscribe` and waits for its
+matching `chat_subscribed` acknowledgement before refreshing the persisted tail.
+A separate 10-second deadline bounds that acknowledgement wait. If it expires,
+the client closes that socket so normal reconnect and resubscription can restore
+the live stream. Protocol errors and successful heartbeats do not cancel the
+deadline. History stays gated until a replacement subscription is acknowledged;
+an HTTP refresh alone would not establish live delivery. A matching acknowledgement
+or a socket/session change cancels the deadline.
+Replay follows the acknowledgement and can overlap the HTTP request. Hidden chat
+still subscribes but defers persisted-tail HTTP until activation. Initial session
+loading is unchanged, and visibility-only changes do not resubscribe.
+Failed application messages are not automatically resent.
 
 ## `/shell` Terminal Flow
 
