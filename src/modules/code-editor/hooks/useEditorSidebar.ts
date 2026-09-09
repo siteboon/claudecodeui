@@ -22,7 +22,7 @@ export const useEditorSidebar = ({
   const resizeHandleRef = useRef<HTMLDivElement | null>(null);
 
   const handleFileOpen = useCallback(
-    (filePath: string, diffInfo: CodeEditorDiffInfo | null = null) => {
+    (filePath: string, diffInfo: CodeEditorDiffInfo | null = null, line: number | null = null) => {
       const normalizedPath = filePath.replace(/\\/g, '/');
       const fileName = normalizedPath.split('/').pop() || filePath;
 
@@ -33,6 +33,7 @@ export const useEditorSidebar = ({
         // via `/api/file-tree/projects/:projectId/file` endpoints.
         projectId: selectedProject?.projectId,
         diffInfo,
+        line,
       });
     },
     [selectedProject?.projectId],
