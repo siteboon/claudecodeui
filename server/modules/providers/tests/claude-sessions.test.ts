@@ -571,3 +571,97 @@ test('resolving an edit anchor skips rows that are not conversation turns', { co
     await rm(tempRoot, { recursive: true, force: true });
   }
 });
+
+test('claude: queue-operation remove with task-notification emits user-role text', () => {
+  const provider = new ClaudeSessionsProvider();
+
+  const notifications = provider.normalizeMessage(
+    {
+      uuid: 'qop-remove-1',
+      timestamp: '2026-08-25T10:00:00.000Z',
+      type: 'queue-operation',
+      operation: 'remove',
+      content: '<task-notification>\n<task-id>abc123</task-id>\n<status>completed</status>\n<summary>Agent finished</summary>\n</task-notification>',
+    },
+    SESSION_ID,
+  );
+
+  assert.equal(notifications.length, 1);
+  assert.equal(notifications[0]?.kind, 'text');
+  assert.equal(notifications[0]?.role, 'user');
+  assert.equal(notifications[0]?.id, 'qop-remove-1');
+  assert.ok(String(notifications[0]?.content ?? '').startsWith('<task-notification>'));
+});
+
+test('claude: queue-operation enqueue is ignored', () => {
+  const provider = new ClaudeSessionsProvider();
+
+  const notifications = provider.normalizeMessage(
+    {
+      uuid: 'qop-enq-1',
+      timestamp: '2026-08-25T10:00:00.000Z',
+      type: 'queue-operation',
+      operation: 'enqueue',
+      content: '<task-notification>\n<task-id>abc123</task-id>\n<status>completed</status>\n</task-notification>',
+    },
+    SESSION_ID,
+  );
+
+  assert.deepEqual(notifications, []);
+});
+
+test('claude: queue-operation dequeue without content is ignored', () => {
+  const provider = new ClaudeSessionsProvider();
+
+  const notifications = provider.normalizeMessage(
+    {
+      uuid: 'qop-deq-1',
+      timestamp: '2026-08-25T10:00:00.000Z',
+      type: 'queue-operation',
+      operation: 'dequeue',
+    },
+    SESSION_ID,
+  );
+
+  assert.deepEqual(notifications, []);
+});
+
+test('claude: queue-operation remove without task-notification prefix is ignored', () => {
+  const provider = new ClaudeSessionsProvider();
+
+  const notifications = provider.normalizeMessage(
+    {
+      uuid: 'qop-other-1',
+      timestamp: '2026-08-25T10:00:00.000Z',
+      type: 'queue-operation',
+      operation: 'remove',
+      content: 'Some other queue content',
+    },
+    SESSION_ID,
+  );
+
+  assert.deepEqual(notifications, []);
+});
+
+test('claude: existing user-role task-notification from dequeue still works', () => {
+  const provider = new ClaudeSessionsProvider();
+
+  const notifications = provider.normalizeMessage(
+    {
+      uuid: 'u-deq-1',
+      timestamp: '2026-08-25T10:00:00.000Z',
+      message: {
+        role: 'user',
+        content: '<task-notification>\n<task-id>xyz789</task-id>\n<status>completed</status>\n<summary>Done</summary>\n</task-notification>',
+      },
+    },
+    SESSION_ID,
+  );
+
+  // Already handled by the existing user-role text branch — just verify no
+  // regression (it doesn't get caught by the queue-operation branch above).
+  assert.equal(notifications.length, 1);
+  assert.equal(notifications[0]?.kind, 'text');
+  assert.equal(notifications[0]?.role, 'user');
+  assert.ok(String(notifications[0]?.content ?? '').startsWith('<task-notification>'));
+});
