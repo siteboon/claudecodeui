@@ -109,7 +109,9 @@
     "transcribing": "Transcribing…",
     "speak": "Read aloud",
     "stopSpeaking": "Stop",
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "autoSpeakOn": "Auto read-aloud is on",
+    "autoSpeakOff": "Auto read-aloud is off"
   },
   "input": {
     "placeholder": "Type / for commands, @ for files, or ask {{provider}} anything...",

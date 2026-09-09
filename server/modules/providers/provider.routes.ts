@@ -445,6 +445,32 @@ const parseSessionEffortPayload = (payload: unknown): string => {
   return effort;
 };
 
+/**
+ * Reads the `autoSpeak` flag from a request body.
+ *
+ * Strict about the type rather than coercing: a missing or misspelled field
+ * would otherwise read as `false` and look like the user turning the feature
+ * off, which is indistinguishable from a real toggle in the UI.
+ */
+const parseAutoSpeakPayload = (payload: unknown): boolean => {
+  if (!payload || typeof payload !== 'object') {
+    throw new AppError('Request body must be an object.', {
+      code: 'INVALID_REQUEST_BODY',
+      statusCode: 400,
+    });
+  }
+
+  const { autoSpeak } = payload as Record<string, unknown>;
+  if (typeof autoSpeak !== 'boolean') {
+    throw new AppError('autoSpeak must be a boolean.', {
+      code: 'INVALID_AUTO_SPEAK',
+      statusCode: 400,
+    });
+  }
+
+  return autoSpeak;
+};
+
 const parseModelRecordId = (value: unknown): number => {
   const rawRecordId = readPathParam(value, 'recordId').trim();
   if (!/^\d+$/.test(rawRecordId)) {
@@ -776,6 +802,26 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const sessionId = parseSessionId(req.params.sessionId);
     const result = await providerTokenUsageService.getSessionTokenUsage(sessionId);
+    res.json(createApiSuccessResponse(result));
+  }),
+);
+
+/** Whether one session reads assistant turns aloud as they complete. */
+router.get(
+  '/sessions/:sessionId/auto-speak',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const result = sessionsService.getSessionAutoSpeak(sessionId);
+    res.json(createApiSuccessResponse(result));
+  }),
+);
+
+router.post(
+  '/sessions/:sessionId/auto-speak',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const autoSpeak = parseAutoSpeakPayload(req.body);
+    const result = sessionsService.setSessionAutoSpeak(sessionId, autoSpeak);
     res.json(createApiSuccessResponse(result));
   }),
 );
