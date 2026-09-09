@@ -15,9 +15,12 @@ export function DarkModeToggle({
   onToggle,
   ariaLabel = 'Toggle dark mode',
 }: DarkModeToggleProps) {
-  const { isDarkMode, toggleDarkMode } = useTheme();
+  const { isDarkMode, toggleDarkMode, canToggleDarkMode } = useTheme();
   const isControlled = typeof checked === 'boolean' && typeof onToggle === 'function';
   const isEnabled = isControlled ? checked : isDarkMode;
+  // A palette that fixes its own appearance owns this switch: flipping it would
+  // change nothing on screen, so the control says so instead of pretending.
+  const isDisabled = !isControlled && !canToggleDarkMode;
 
   const handleToggle = () => {
     if (isControlled && onToggle) {
@@ -31,10 +34,12 @@ export function DarkModeToggle({
   return (
     <button
       onClick={handleToggle}
+      disabled={isDisabled}
       className={cn(
         'relative inline-flex h-7 w-12 flex-shrink-0 touch-manipulation cursor-pointer items-center rounded-full border-2 transition-colors duration-200',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
         isEnabled ? 'border-primary bg-primary' : 'border-border bg-muted',
+        isDisabled && 'cursor-not-allowed opacity-50',
       )}
       role="switch"
       aria-checked={isEnabled}

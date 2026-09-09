@@ -149,7 +149,22 @@
   "appearanceSettings": {
     "darkMode": {
       "label": "Dark Mode",
-      "description": "Toggle between light and dark themes"
+      "description": "Toggle between light and dark themes",
+      "themeControlled": "This theme sets its own light or dark appearance"
+    },
+    "colorTheme": {
+      "label": "Color Theme",
+      "description": "The palette used across the app",
+      "remove": "Remove theme",
+      "importFailed": "That theme could not be imported.",
+      "import": {
+        "label": "Import a VS Code theme",
+        "description": "Turn a *-color-theme.json file or a .vsix extension into a palette",
+        "button": "Import theme",
+        "urlLabel": "Or paste an extension URL",
+        "urlPlaceholder": "https://marketplace.visualstudio.com/items?itemName=…",
+        "urlButton": "Fetch"
+      }
     },
     "projectSorting": {
       "label": "Project Sorting",

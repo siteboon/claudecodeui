@@ -123,7 +123,22 @@
   "appearanceSettings": {
     "darkMode": {
       "label": "Darkmode",
-      "description": "Zwischen hellem und dunklem Design wechseln"
+      "description": "Zwischen hellem und dunklem Design wechseln",
+      "themeControlled": "Dieses Design gibt sein helles oder dunkles Erscheinungsbild selbst vor"
+    },
+    "colorTheme": {
+      "label": "Farbdesign",
+      "description": "Die in der gesamten App verwendete Farbpalette",
+      "remove": "Design entfernen",
+      "importFailed": "Dieses Design konnte nicht importiert werden.",
+      "import": {
+        "label": "VS-Code-Design importieren",
+        "description": "Macht aus einer *-color-theme.json-Datei oder einer .vsix-Erweiterung eine Farbpalette",
+        "button": "Design importieren",
+        "urlLabel": "Oder eine Erweiterungs-URL einfügen",
+        "urlPlaceholder": "https://marketplace.visualstudio.com/items?itemName=…",
+        "urlButton": "Abrufen"
+      }
     },
     "projectSorting": {
       "label": "Projektsortierung",

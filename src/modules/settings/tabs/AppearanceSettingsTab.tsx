@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 
+import { useTheme } from '@/shared/context/ThemeContext';
 import { DarkModeToggle } from '@/shared/ui';
 import type { CodeEditorSettingsState, ProjectSortOrder } from '@/shared/types';
 import { LanguageSelector } from '@/modules/i18n';
@@ -7,6 +8,7 @@ import SettingsCard from '@/modules/settings/SettingsCard';
 import SettingsRow from '@/modules/settings/SettingsRow';
 import SettingsSection from '@/modules/settings/SettingsSection';
 import SettingsToggle from '@/modules/settings/SettingsToggle';
+import ColorThemeSection from '@/modules/settings/tabs/appearance-settings/ColorThemeSection';
 
 type AppearanceSettingsTabProps = {
   projectSortOrder: ProjectSortOrder;
@@ -29,14 +31,19 @@ export default function AppearanceSettingsTab({
   onCodeEditorFontSizeChange,
 }: AppearanceSettingsTabProps) {
   const { t } = useTranslation('settings');
+  const { canToggleDarkMode } = useTheme();
 
   return (
     <div className="space-y-8">
+      <ColorThemeSection />
+
       <SettingsSection title={t('appearanceSettings.darkMode.label')}>
         <SettingsCard>
           <SettingsRow
             label={t('appearanceSettings.darkMode.label')}
-            description={t('appearanceSettings.darkMode.description')}
+            description={canToggleDarkMode
+              ? t('appearanceSettings.darkMode.description')
+              : t('appearanceSettings.darkMode.themeControlled')}
           >
             <DarkModeToggle ariaLabel={t('appearanceSettings.darkMode.label')} />
           </SettingsRow>
