@@ -14,3 +14,14 @@ export function withAutoSpeakHint(content: string, autoSpeakEnabled: boolean): s
   if (!autoSpeakEnabled || !content.trim()) return content;
   return `${content}\n\n${AUTO_SPEAK_PROMPT_HINT}`;
 }
+
+/**
+ * Removes a trailing hint, for loading an already-sent message back into the
+ * composer. Editing works on the persisted text, which carries the hint, so
+ * without this the resend would append a second copy.
+ */
+export function withoutAutoSpeakHint(content: string): string {
+  const suffix = `\n\n${AUTO_SPEAK_PROMPT_HINT}`;
+  if (!content.endsWith(suffix)) return content;
+  return content.slice(0, -suffix.length);
+}

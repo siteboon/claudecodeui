@@ -27,7 +27,7 @@ import {
 } from '@/shared/chatDrafts';
 import { escapeRegExp } from '@/modules/chat/utils/chatFormatting';
 import { autoSpeakSessions } from '@/modules/chat/utils/autoSpeakSessions';
-import { withAutoSpeakHint } from '@/modules/chat/utils/autoSpeakPrompt';
+import { withAutoSpeakHint, withoutAutoSpeakHint } from '@/modules/chat/utils/autoSpeakPrompt';
 import { voicePlayer } from '@/modules/chat/utils/voicePlayer';
 import { useFileMentions } from '@/modules/chat/hooks/useFileMentions';
 import { useInputHistory } from '@/modules/chat/hooks/useInputHistory';
@@ -1227,8 +1227,9 @@ export function useChatComposerState({
   const beginEditMessage = useCallback((message: ChatMessage) => {
     if (!message.transcriptAnchorId) return;
     setEditingAnchorId(message.transcriptAnchorId);
-    setInput(message.content || '');
-    inputValueRef.current = message.content || '';
+    const content = withoutAutoSpeakHint(message.content || '');
+    setInput(content);
+    inputValueRef.current = content;
     textareaRef.current?.focus();
   }, [setInput]);
 
