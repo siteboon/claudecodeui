@@ -166,6 +166,10 @@ export function useChatRealtimeHandlers({
           return;
         }
 
+        // useChatSessionState owns reconnect catch-up; this is not a transcript row.
+        case 'websocket_reconnected':
+          return;
+
         // Sidebar/global events — owned by useProjectsState.
         case 'session_upserted':
         case 'loading_progress':

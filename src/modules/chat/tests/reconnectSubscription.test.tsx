@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 import { useChatSessionState } from '@/modules/chat/hooks/useChatSessionState';
+import { useChatRealtimeHandlers } from '@/modules/chat/hooks/useChatRealtimeHandlers';
 import { useSessionStore } from '@/modules/chat/hooks/useSessionStore';
 import { SESSION_MESSAGES_PAGE_SIZE } from '@/modules/chat/utils/sessionMessagePagination';
 import { api } from '@/shared/api';
@@ -251,4 +252,40 @@ test('unmount clears an outstanding reconnect acknowledgement', async () => {
 
   await act(async () => staleListener(ack()));
   expect(sessionMessages).toHaveBeenCalledTimes(1);
+});
+
+test('reconnect notifications never become transcript rows', () => {
+  const listeners = new Set<(event: ServerEvent) => void>();
+  const subscribe = (listener: (event: ServerEvent) => void) => {
+    listeners.add(listener);
+    return () => { listeners.delete(listener); };
+  };
+  const { result } = renderHook(() => {
+    const store = useSessionStore();
+    useChatRealtimeHandlers({
+      isActive: true,
+      subscribe,
+      provider: 'claude',
+      selectedSession: session,
+      currentSessionId: SESSION_ID,
+      setTokenBudget: vi.fn(),
+      pendingPermissionRequests: [],
+      setPendingPermissionRequests: vi.fn(),
+      streamTimerRef: { current: null },
+      accumulatedStreamRef: { current: '' },
+      lastSeqRef: { current: new Map() },
+      statusCheckSentAtRef: { current: new Map() },
+      requestLatestMessages: vi.fn(async () => {}),
+      sessionStore: store,
+    });
+    return store;
+  });
+  const message = historyMessage(SESSION_ID);
+  act(() => {
+    for (const listener of listeners) {
+      listener(message);
+      listener({ kind: 'websocket_reconnected', timestamp: Date.now() });
+    }
+  });
+  expect(result.current.getMessages(SESSION_ID)).toEqual([message]);
 });
