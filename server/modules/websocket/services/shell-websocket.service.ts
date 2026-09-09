@@ -29,6 +29,7 @@ type PtySessionEntry = {
   timeoutId: NodeJS.Timeout | null;
   projectPath: string;
   sessionId: string | null;
+  terminating?: boolean;
 };
 
 const ptySessionsMap = new Map<string, PtySessionEntry>();
@@ -203,11 +204,13 @@ function buildShellCommand(
   if (provider === 'codex') {
     if (resumeSessionId) {
       if (os.platform() === 'win32') {
-        return `codex resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { codex }`;
+        return `codex resume "${resumeSessionId}"`;
       }
-      return `codex resume "${resumeSessionId}" || codex`;
+      // Replace the shell so ending the PTY also ends the thread writer.
+      // A failed resume must not silently start an unrelated conversation.
+      return `exec codex resume "${resumeSessionId}"`;
     }
-    return 'codex';
+    return os.platform() === 'win32' ? 'codex' : 'exec codex';
   }
 
   if (provider === 'opencode') {
@@ -337,6 +340,11 @@ export function handleShellConnection(
             ? `_cmd_${Buffer.from(initialCommand).toString('base64').slice(0, 16)}`
             : '';
         ptySessionKey = `${projectPath}_${sessionId ?? 'default'}${commandSuffix}`;
+
+        if (ptySessionsMap.get(ptySessionKey)?.terminating) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Terminal is stopping. Wait for it to exit before reconnecting.' }));
+          return;
+        }
 
         if (isLoginCommand || forceRestart) {
           const oldSession = ptySessionsMap.get(ptySessionKey);
@@ -516,6 +524,9 @@ export function handleShellConnection(
           }
 
           if (session && session.ws && session.ws.readyState === WebSocket.OPEN) {
+            if (session.terminating) {
+              session.ws.send(JSON.stringify({ type: 'terminated' }));
+            }
             session.ws.send(
               JSON.stringify({
                 type: 'output',
@@ -555,6 +566,24 @@ export function handleShellConnection(
             data: welcomeMsg,
           })
         );
+        return;
+      }
+
+      if (data.type === 'terminate') {
+        const session = ptySessionKey ? ptySessionsMap.get(ptySessionKey) : null;
+        // A replaced browser socket must never terminate the new owner's PTY.
+        if (session && session.ws === ws && session.pty === shellProcess) {
+          if (!session.terminating) {
+            session.terminating = true;
+            try {
+              session.pty.kill();
+            } catch (error) {
+              session.terminating = false;
+              throw error;
+            }
+          }
+        }
+        // Keep the entry until onExit confirms the process has released its lock.
         return;
       }
 
