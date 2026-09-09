@@ -214,7 +214,11 @@ function readLegacyPreference(key: UserPreferenceKey): unknown {
     return undefined;
   }
 
-  if (key === 'theme' || key === 'userLanguage' || key === 'selectedProvider') {
+  if (key === 'theme') {
+    return raw === 'light' || raw === 'dark' ? raw : undefined;
+  }
+
+  if (key === 'userLanguage' || key === 'selectedProvider') {
     return raw;
   }
 
@@ -282,11 +286,13 @@ export async function hydrateUserPreferences(): Promise<void> {
 
   try {
     const response = await api.user.preferences();
-    if (response.ok) {
-      const payload = (await response.json()) as { preferences?: unknown };
-      if (isRecord(payload.preferences)) {
-        serverPreferences = payload.preferences as PreferenceRecord;
-      }
+    // HTTP errors are failed reads, not authoritative preference resets.
+    if (!response.ok) {
+      return;
+    }
+    const payload = (await response.json()) as { preferences?: unknown };
+    if (isRecord(payload.preferences)) {
+      serverPreferences = payload.preferences as PreferenceRecord;
     }
   } catch (error) {
     // Keep whatever the mirror holds; an offline load must still render the
@@ -297,7 +303,7 @@ export async function hydrateUserPreferences(): Promise<void> {
 
   const migrated: PreferenceRecord = {};
   for (const key of PREFERENCE_KEYS) {
-    if (serverPreferences[key] !== undefined) {
+    if (serverPreferences[key] !== undefined || pendingServerWrites[key] !== undefined) {
       continue;
     }
 
@@ -318,9 +324,18 @@ export async function hydrateUserPreferences(): Promise<void> {
     delete pendingServerWrites[key];
   }
 
-  preferences = { ...serverPreferences, ...migrated };
+  // Keep queued choices for keys the server did not supply; legacy values cannot replace them.
+  preferences = { ...serverPreferences, ...migrated, ...pendingServerWrites };
   hasHydrated = true;
   writeMirror();
+  if (serverPreferences.theme !== undefined) {
+    try {
+      // Retire legacy only once the server owns the theme, not while migration is still queued.
+      localStorage.removeItem(LEGACY_STORAGE_KEYS.theme);
+    } catch {
+      // The adopted in-memory preferences remain authoritative without storage.
+    }
+  }
 
   if (Object.keys(migrated).length > 0) {
     queueServerWrite(migrated);
@@ -357,6 +372,8 @@ export function resetUserPreferences(): void {
 // The mirror is read at module load rather than on first use because the theme
 // and language readers run during module initialization, before any component
 // has mounted.
-if (typeof localStorage !== 'undefined') {
-  preferences = readMirror();
+preferences = readMirror();
+// Seed legacy theme only at startup. Later reads must respect server hydration and resets.
+if (preferences.theme === undefined) {
+  preferences.theme = readLegacyPreference('theme');
 }

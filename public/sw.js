@@ -57,8 +57,12 @@ self.addEventListener('fetch', event => {
     fetch(event.request)
       .then(async response => {
         if (shouldRefreshCache && response.ok) {
-          const cache = await caches.open(CACHE_NAME);
-          await cache.put(event.request, response.clone());
+          try {
+            const cache = await caches.open(CACHE_NAME);
+            await cache.put(event.request, response.clone());
+          } catch {
+            // Cache refresh is best-effort; keep the successful network response.
+          }
         }
         return response;
       })

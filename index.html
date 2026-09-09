@@ -13,9 +13,8 @@
         let savedTheme;
         try {
           const mirroredTheme = JSON.parse(localStorage.getItem('user-preferences') || 'null')?.theme;
-          savedTheme = mirroredTheme === 'system' || mirroredTheme === 'light' || mirroredTheme === 'dark'
-            ? mirroredTheme
-            : localStorage.getItem('theme');
+          // A present but unsupported value follows the system, rather than reviving a legacy theme.
+          savedTheme = mirroredTheme !== undefined ? mirroredTheme : localStorage.getItem('theme');
         } catch {
           try {
             savedTheme = localStorage.getItem('theme');
@@ -24,7 +23,7 @@
           }
         }
         const isDark = savedTheme === 'dark'
-          || (savedTheme !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          || (savedTheme !== 'light' && window.matchMedia?.('(prefers-color-scheme: dark)').matches === true);
         const themeColor = isDark ? '#141414' : '#f6f4ef';
         document.documentElement.classList.toggle('dark', isDark);
         document.querySelectorAll('meta[name="theme-color"], meta[name="msapplication-TileColor"]').forEach(meta => {
