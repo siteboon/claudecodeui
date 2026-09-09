@@ -410,6 +410,10 @@
     },
     "actions": {
       "add": "Ekle"
+    },
+    "keepSessionAlive": {
+      "label": "Süreci tüm konuşma boyunca açık tut",
+      "description": "Daha hızlı yanıtlar: CLI her mesajda değil, konuşma başına bir kez başlar. Açık olan her konuşma için bir süreç harcar ve proje ya da akıl yürütme düzeyi değişirse yine de yenisi başlar."
     }
   },
   "mcpServers": {

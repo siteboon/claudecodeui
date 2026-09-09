@@ -54,6 +54,8 @@ type ClaudePermissionsProps = {
   agent: 'claude';
   skipPermissions: boolean;
   onSkipPermissionsChange: (value: boolean) => void;
+  keepSessionAlive: boolean;
+  onKeepSessionAliveChange: (value: boolean) => void;
   allowedTools: string[];
   onAllowedToolsChange: (value: string[]) => void;
   disallowedTools: string[];
@@ -63,6 +65,8 @@ type ClaudePermissionsProps = {
 function ClaudePermissions({
   skipPermissions,
   onSkipPermissionsChange,
+  keepSessionAlive,
+  onKeepSessionAliveChange,
   allowedTools,
   onAllowedToolsChange,
   disallowedTools,
@@ -113,6 +117,25 @@ function ClaudePermissions({
               </div>
               <div className="text-sm text-orange-700 dark:text-orange-300">
                 {t('permissions.skipPermissions.claudeDescription')}
+              </div>
+            </div>
+          </label>
+        </div>
+
+        <div className="rounded-lg border border-border bg-muted/30 p-4">
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={keepSessionAlive}
+              onChange={(event) => onKeepSessionAliveChange(event.target.checked)}
+              className="h-4 w-4 rounded border-input bg-card text-primary focus:ring-2 focus:ring-primary"
+            />
+            <div>
+              <div className="font-medium text-foreground">
+                {t('permissions.keepSessionAlive.label')}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {t('permissions.keepSessionAlive.description')}
               </div>
             </div>
           </label>
