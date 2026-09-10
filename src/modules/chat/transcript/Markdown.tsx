@@ -8,6 +8,7 @@ import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/pris
 import { useTranslation } from 'react-i18next';
 
 import { MermaidDiagram } from '@/modules/code-editor';
+import { MarkdownImage } from '@/modules/chat/transcript/MarkdownImage';
 import { normalizeInlineCodeFences } from '@/modules/chat/utils/chatFormatting';
 import { copyTextToClipboard } from '@/shared/utils';
 import { SyntaxHighlighter } from '@/shared/syntaxHighlighter';
@@ -195,6 +196,9 @@ if (!document.getElementById(SYNTAX_THEME_STYLE_ELEMENT_ID)) {
 
 const markdownComponents = {
   code: CodeBlock,
+  // Workspace image paths are fetched through the authenticated files route;
+  // a bare <img src> would resolve against the web origin and 404.
+  img: MarkdownImage,
   // Fenced/indented code arrives as <pre><code>. Re-render the child CodeBlock
   // with `forceBlock` so it always gets the block treatment (react-markdown v9+
   // no longer passes an `inline` flag), and skip the outer <pre> so Tailwind
