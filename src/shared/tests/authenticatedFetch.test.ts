@@ -179,3 +179,35 @@ test('an ordinary response leaves the stored token alone', async () => {
 
   assert.equal(localStorage.getItem('auth-token'), token);
 });
+
+test('a refreshed token older than the stored one is ignored', async () => {
+  // A 304 makes the browser replay a cached response together with its cached
+  // headers, so an X-Refreshed-Token minted before the current login can show
+  // up on a fresh request. It must not overwrite the newer token.
+  const now = Math.floor(Date.now() / 1000);
+  const current = makeToken({ iat: now, exp: now + 600 });
+  const stale = makeToken({ iat: now - 300, exp: now + 300 });
+  localStorage.setItem('auth-token', current);
+  respondWith({ 'X-Refreshed-Token': stale });
+
+  await (await loadFetch(false))('/api/projects');
+
+  assert.equal(localStorage.getItem('auth-token'), current);
+});
+
+test('an expired refreshed token never replaces a live one', async () => {
+  const current = liveToken();
+  localStorage.setItem('auth-token', current);
+  let expiries = 0;
+  const onExpired = () => {
+    expiries += 1;
+  };
+  window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, onExpired);
+  respondWith({ 'X-Refreshed-Token': expiredToken() });
+
+  await (await loadFetch(false))('/api/projects');
+
+  window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, onExpired);
+  assert.equal(localStorage.getItem('auth-token'), current);
+  assert.equal(expiries, 0);
+});

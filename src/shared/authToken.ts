@@ -87,6 +87,25 @@ export const getStoredAuthToken = (): string | null => {
   return token;
 };
 
+// A refreshed token arriving on a response is only trustworthy if it is newer
+// than what we already hold. Browsers replay cached responses on a 304 together
+// with their original headers, so an X-Refreshed-Token minted days ago can show
+// up again long after it expired; storing it would overwrite a token obtained
+// seconds earlier and end the session (#1308).
+export const acceptRefreshedToken = (token: unknown): boolean => {
+  const claims = readTokenClaims(token);
+  if (!claims || isAuthTokenExpired(token)) {
+    return false;
+  }
+
+  const current = readTokenClaims(localStorage.getItem('auth-token'));
+  if (current && claims.issuedAt < current.issuedAt) {
+    return false;
+  }
+
+  return storeAuthToken(token);
+};
+
 export const storeAuthToken = (token: unknown): boolean => {
   if (!isValidRefreshedToken(token)) {
     return false;
