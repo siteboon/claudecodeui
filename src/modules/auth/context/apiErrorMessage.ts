@@ -20,14 +20,17 @@ export function resolveApiErrorMessage(payload: ApiErrorPayload | null, fallback
   }
 
   const { error, message } = payload;
-  if (typeof error === 'string' && error) {
-    return error;
-  }
-  if (error && typeof error === 'object' && typeof error.message === 'string' && error.message) {
-    return error.message;
-  }
-  if (typeof message === 'string' && message) {
-    return message;
+  // A blank or whitespace-only message would render an empty alert, so it
+  // counts as absent and the fallback is used instead.
+  const candidates = [
+    error,
+    error && typeof error === 'object' ? error.message : undefined,
+    message,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
   }
 
   return fallback;

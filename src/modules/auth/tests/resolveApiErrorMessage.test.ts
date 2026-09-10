@@ -33,3 +33,11 @@ test('resolveApiErrorMessage: never returns anything but a string', () => {
   assert.equal(resolveApiErrorMessage({ error: { code: 'INTERNAL_ERROR' } }, FALLBACK), FALLBACK);
   assert.equal(resolveApiErrorMessage({ error: { message: '' } }, FALLBACK), FALLBACK);
 });
+
+test('resolveApiErrorMessage: treats blank and whitespace-only messages as absent', () => {
+  expect(resolveApiErrorMessage({ error: '   ' }, 'fallback')).toBe('fallback');
+  expect(resolveApiErrorMessage({ error: { message: '\n\t' } }, 'fallback')).toBe('fallback');
+  expect(resolveApiErrorMessage({ error: '  ', message: '   ' }, 'fallback')).toBe('fallback');
+  expect(resolveApiErrorMessage({ error: '  Invalid credentials  ' }, 'fallback')).toBe('Invalid credentials');
+});
+
