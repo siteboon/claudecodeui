@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { test } from 'vitest';
+import { expect, test } from 'vitest';
 
 import { resolveApiErrorMessage } from '@/modules/auth/context/apiErrorMessage';
 
