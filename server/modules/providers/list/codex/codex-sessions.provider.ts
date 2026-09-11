@@ -1,5 +1,6 @@
 import fsSync from 'node:fs';
 import fsp from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
 
@@ -192,22 +193,14 @@ function createCodexTurnTracker() {
  * A separate pass rather than a by-product of the transcript reader: this runs
  * once when a message is edited, while the reader runs on every history fetch,
  * and both share the one rule for what a live turn is.
+ *
+ * Exported for the fork adapter, which needs the same ordered view of the
+ * thread to name the turn before an anchor.
  */
-async function readCodexLiveTurnIds(filePath: string): Promise<string[]> {
+export async function readCodexLiveTurnIds(filePath: string): Promise<string[]> {
   const turns = createCodexTurnTracker();
-  const stream = fsSync.createReadStream(filePath);
-  const lines = readline.createInterface({ input: stream, crlfDelay: Infinity });
 
-  for await (const line of lines) {
-    if (!line.trim()) {
-      continue;
-    }
-    let entry: AnyRecord;
-    try {
-      entry = JSON.parse(line) as AnyRecord;
-    } catch {
-      continue;
-    }
+  for await (const entry of iterateCodexTranscriptEntries(filePath)) {
     const payload = readObjectRecord(entry.payload);
     if (payload) {
       turns.observe(entry.type, payload);
@@ -215,6 +208,133 @@ async function readCodexLiveTurnIds(filePath: string): Promise<string[]> {
   }
 
   return turns.getLiveTurnIds();
+}
+
+/**
+ * The fork inheritance recorded in a rollout's `session_meta`.
+ *
+ * Since the paginated-history format, `thread/fork` copies nothing: the new
+ * rollout starts empty and names the thread whose first
+ * `endOrdinalExclusive` rows it inherits. A reader that walks only the file
+ * itself therefore sees a forked thread's post-fork turns and nothing else —
+ * present to the model (Codex assembles the chain itself), absent from the
+ * transcript UI.
+ */
+type CodexHistoryBase = {
+  threadId: string;
+  endOrdinalExclusive: number;
+};
+
+/** Reads a rollout's `session_meta` payload, the first row of the file. */
+async function readCodexSessionMeta(filePath: string): Promise<AnyRecord | null> {
+  // Only the first line is ever the meta row; a bounded read keeps a
+  // multi-megabyte rollout from being slurped just to inspect its header.
+  let handle;
+  try {
+    handle = await fsp.open(filePath, 'r');
+    const buffer = Buffer.alloc(64_000);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    const text = buffer.toString('utf8', 0, bytesRead);
+    const lineEnd = text.indexOf('\n');
+    try {
+      const entry = JSON.parse(lineEnd < 0 ? text : text.slice(0, lineEnd)) as AnyRecord;
+      return entry.type === 'session_meta' ? readObjectRecord(entry.payload) : null;
+    } catch {
+      return null;
+    }
+  } catch {
+    return null;
+  } finally {
+    await handle?.close().catch(() => {});
+  }
+}
+
+/**
+ * Finds the rollout file a thread id belongs to.
+ *
+ * Fork chains have to be resolved to files to be read, and a thread id is a
+ * filename suffix rather than anything indexed — the same naming the subagent
+ * lookup relies on, over the same tree the synchronizer scans.
+ */
+async function findCodexRolloutByThreadId(threadId: string): Promise<string | null> {
+  if (!/^[0-9a-fA-F-]+$/.test(threadId)) {
+    return null;
+  }
+  const sessionsRoot = path.join(os.homedir(), '.codex', 'sessions');
+  return findFileWithSuffix(sessionsRoot, `-${threadId}.jsonl`, SUBAGENT_LOOKUP_PARENT_LEVELS + 2);
+}
+
+/** Yields one rollout's parsed rows, in file order. */
+async function* readCodexRolloutRows(filePath: string): AsyncGenerator<AnyRecord> {
+  const fileStream = fsSync.createReadStream(filePath);
+  const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
+  try {
+    for await (const line of rl) {
+      if (!line.trim()) {
+        continue;
+      }
+      try {
+        yield JSON.parse(line) as AnyRecord;
+      } catch {
+        // Not a reply to anything; the same tolerance the callers had inline.
+      }
+    }
+  } finally {
+    rl.close();
+    fileStream.destroy();
+  }
+}
+
+/**
+ * Streams every row that makes up a thread's conversation: the inherited
+ * prefix first, then the rows the thread wrote itself.
+ *
+ * The inherited rows come from the base thread's own rollout file, truncated
+ * by the same `ordinal` Codex truncates its model input with — an inclusive
+ * prefix ends just before `endOrdinalExclusive`, and a row that stopped
+ * carrying an ordinal means the numbering (and so the boundary) can no longer
+ * be trusted. A base file that is gone is logged and skipped rather than
+ * sinking the transcript the fork did write.
+ */
+async function* iterateCodexTranscriptEntries(filePath: string): AsyncGenerator<AnyRecord> {
+  const meta = await readCodexSessionMeta(filePath);
+  const historyBase = meta?.history_mode === 'paginated'
+    ? readObjectRecord(meta.history_base)
+    : null;
+  const baseThreadId = readNonEmptyString(historyBase?.thread_id);
+  const endOrdinalExclusive = typeof historyBase?.end_ordinal_exclusive === 'number'
+    ? historyBase.end_ordinal_exclusive
+    : null;
+
+  if (baseThreadId && endOrdinalExclusive !== null && endOrdinalExclusive > 0) {
+    const basePath = await findCodexRolloutByThreadId(baseThreadId);
+    if (basePath) {
+      let truncated = false;
+      for await (const entry of readCodexRolloutRows(basePath)) {
+        if (entry.type === 'session_meta') {
+          continue;
+        }
+        const ordinal = entry.ordinal;
+        if (typeof ordinal !== 'number') {
+          // Past the point where numbering is known, nothing may be assumed.
+          truncated = true;
+          break;
+        }
+        if (ordinal >= endOrdinalExclusive) {
+          break;
+        }
+        yield entry;
+      }
+      if (!truncated) {
+        // Fewer numbered rows than the boundary promised: the base file was
+        // trimmed under the fork. What it still holds was yielded.
+      }
+    } else {
+      console.warn(`[CodexProvider] Fork ${filePath} inherits from thread ${baseThreadId}, whose rollout was not found; showing only the fork's own turns.`);
+    }
+  }
+
+  yield* readCodexRolloutRows(filePath);
 }
 
 /**
@@ -1257,9 +1377,6 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
   /** Turns whose prompt already carries the anchor, so only the first does. */
   const anchoredTurnIds = new Set<string>();
 
-  const fileStream = fsSync.createReadStream(sessionFilePath);
-  const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
-
   /** Emits a tool_result row unless the call already produced one. */
   const pushToolResult = (callId: string, timestamp: string, output: string, isError: boolean) => {
     if (completedExecCalls.has(callId)) {
@@ -1293,18 +1410,7 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
     });
   };
 
-  for await (const line of rl) {
-    if (!line.trim()) {
-      continue;
-    }
-
-    let entry: AnyRecord;
-    try {
-      entry = JSON.parse(line) as AnyRecord;
-    } catch {
-      continue;
-    }
-
+  for await (const entry of iterateCodexTranscriptEntries(sessionFilePath)) {
     const payload = readObjectRecord(entry.payload);
     if (!payload) {
       continue;
