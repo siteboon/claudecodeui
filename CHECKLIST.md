@@ -14,11 +14,13 @@
       （比另立 `SessionInsightsProvider` 基类更贴合现有接口的可选方法惯例，前端不感知 provider。）
 - [x] `ProviderCapabilities` 增加 `supportsSessionInsights: boolean`
       （claude=true，codex/opencode 一期 false，cursor=false）。
-- [ ] MCP 列表/技能列表**复用已有** provider 实现（`claude-mcp.provider.ts`、
+- [x] MCP 列表/技能列表**复用已有** provider 实现（`claude-mcp.provider.ts`、
       `claude-skills.provider.ts`），不另造读取路径。
+      （MCP 节与来源节共用同一份 `useSessionMcpServers` 数据，来源节零额外请求；
+      技能走既有 skills 端点。）
 - [x] 运行中的会话：上下文节优先用 SDK `Query.getContextUsage({ detail: 'summary' })` 的
       `percentage/totalTokens/maxTokens`；拿不到运行实例时回退 `tokenBudget` 帧推算。
-- [ ] 全部新 UI 文案进 `src/modules/i18n/locales/{en,zh-CN}/chat.json` 的 `sessionInfoPanel.*`。
+- [x] 全部新 UI 文案进 `src/modules/i18n/locales/{en,zh-CN}/chat.json` 的 `sessionInfoPanel.*`。
 
 ## Commit 1 — 轮次统计管道（服务器）
 
@@ -102,10 +104,19 @@
 
 ## Commit 7 — 上下文来源节 + i18n + 打磨
 
-- [ ] `ContextSourcesSection.tsx`：技能 n（既有 skills 端点）、MCP 服务器 n（MCP 节共用 state）。
-- [ ] `chat.json` 双语补全全部 `sessionInfoPanel.*`。
-- [ ] 全量测试跑通：`npm run test`（或项目既有测试脚本）。
+- [x] `ContextSourcesSection.tsx`：技能 n（既有 skills 端点）、MCP 服务器 n（MCP 节共用 state）。
+      （取数与开关解耦：`useSessionMcpServers` 拆 `enabled`（面板打开即取列表）与
+      `canToggle`（能力位才允许开关）；非 claude provider 列表只读展示，
+      footer 换成 `mcpReadOnlyHint`。技能走既有 `GET /api/providers/:provider/skills`。）
+- [x] `chat.json` 双语补全全部 `sessionInfoPanel.*`（新增 `sourcesSkills`/`sourcesMcp`/
+      `mcpReadOnlyHint`，双语同入；面板测试里的双语键集深比较自动兜底缺 key）。
+- [x] 全量测试跑通：面板相关全绿（`sessionInfoPanelRender` 7 例、`mcpServersSection` 8 例、
+      `contextSourcesSection` 2 例、服务器 MCP 禁用集 12 例）；前端其余 450 例全过。
+      （仓库预存失败与本提交无关：干净工作区复跑 `claude-auth` 同样 7 例失败、
+      `projects.db.integration` 1 例失败；`transcriptScrollOwnership` 3 例失败源自并行
+      transcript 改动的未完成引用，非面板文件。）
 - 验收：六节齐全、双语无缺 key、无控制台报错。
+      ✅（六节全部渲染有测试断言；双语键集一致有测试断言；面板数据路径全有 catch 降级）
 
 ## 暂缓项（不进本期）
 

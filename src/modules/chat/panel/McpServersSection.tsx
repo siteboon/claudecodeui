@@ -11,6 +11,8 @@ type McpServersSectionProps = {
   disabledSet: Set<string>;
   pendingNames: Set<string>;
   onToggle: (name: string) => Promise<boolean>;
+  /** False when the runtime ignores the set — rows render read-only. */
+  canToggle?: boolean;
 };
 
 /**
@@ -29,6 +31,7 @@ export const McpServersSection = memo(({
   disabledSet,
   pendingNames,
   onToggle,
+  canToggle = true,
 }: McpServersSectionProps) => {
   const { t } = useTranslation('chat');
 
@@ -55,7 +58,7 @@ export const McpServersSection = memo(({
               role="switch"
               aria-checked={!disabled}
               aria-label={t('sessionInfoPanel.mcpToggleAria', { name: server.name })}
-              disabled={pending}
+              disabled={!canToggle || pending}
               onClick={() => void onToggle(server.name)}
               className={cn(
                 'relative h-4 w-7 flex-shrink-0 rounded-full transition-colors disabled:opacity-50',
@@ -88,7 +91,7 @@ export const McpServersSection = memo(({
         );
       })}
       <p className="mt-1 px-1 text-[10px] leading-snug text-muted-foreground/70">
-        {t('sessionInfoPanel.mcpToggleHint')}
+        {canToggle ? t('sessionInfoPanel.mcpToggleHint') : t('sessionInfoPanel.mcpReadOnlyHint')}
       </p>
     </div>
   );

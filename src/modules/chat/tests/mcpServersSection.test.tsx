@@ -87,3 +87,15 @@ test('a loading empty list shows the loading line, not the empty one', () => {
   renderSection({ servers: [], loading: true });
   assert.ok(screen.getByText('sessionInfoPanel.mcpLoading'));
 });
+
+test('canToggle=false renders read-only switches that swallow clicks', async () => {
+  const { toggles } = renderSection({ canToggle: false });
+  const first = screen.getAllByRole('switch')[0];
+  assert.equal(first.hasAttribute('disabled'), true);
+
+  fireEvent.click(first);
+  assert.deepEqual(toggles, []);
+
+  // The footer swaps to the read-only explanation.
+  assert.ok(screen.getByText('sessionInfoPanel.mcpReadOnlyHint'));
+});

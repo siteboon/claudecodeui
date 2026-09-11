@@ -47,6 +47,9 @@ const renderPanel = (overrides: Partial<Parameters<typeof SessionInfoPanel>[0]> 
       mcpDisabledSet={new Set()}
       mcpPendingNames={new Set()}
       onToggleMcpServer={async () => true}
+      mcpCanToggle={true}
+      skills={[]}
+      skillsLoading={false}
       isMobile={false}
       onClose={() => toggles.push('close')}
       {...overrides}

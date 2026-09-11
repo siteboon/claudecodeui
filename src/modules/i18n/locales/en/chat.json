@@ -396,6 +396,9 @@
     "subagentsContinueAskIntro": "The user now wants to continue the conversation. Respond based on the context above:",
     "mcpLoading": "Loading servers…",
     "mcpToggleAria": "Enable {{name}}",
-    "mcpToggleHint": "Switches apply to new sessions."
+    "mcpToggleHint": "Switches apply to new sessions.",
+    "mcpReadOnlyHint": "This provider's runtime does not read the disabled list, so the switches are display-only.",
+    "sourcesSkills": "Skills",
+    "sourcesMcp": "MCP servers"
   }
 }

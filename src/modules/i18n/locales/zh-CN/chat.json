@@ -319,6 +319,9 @@
     "subagentsContinueAskIntro": "用户现在要继续与你对话，请基于上述上下文回应：",
     "mcpLoading": "正在加载服务器…",
     "mcpToggleAria": "启用 {{name}}",
-    "mcpToggleHint": "开关对新会话生效。"
+    "mcpToggleHint": "开关对新会话生效。",
+    "mcpReadOnlyHint": "该供应商的运行器不读取禁用列表，开关仅作展示。",
+    "sourcesSkills": "技能",
+    "sourcesMcp": "MCP 服务器"
   }
 }

@@ -2,7 +2,7 @@ import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/shared/utils';
-import type { NormalizedMessage, ProviderContextInfo, ProviderMcpServer, SubagentSummary, TurnStats } from '@/shared/types';
+import type { NormalizedMessage, ProviderContextInfo, ProviderMcpServer, ProviderSkill, SubagentSummary, TurnStats } from '@/shared/types';
 import type { SessionInfoPanelSection } from '@/shared/sessionInfoPanelPrefs';
 import { InfoSection } from '@/modules/chat/panel/InfoSection';
 import { ContextRingSection } from '@/modules/chat/panel/ContextRingSection';
@@ -10,6 +10,7 @@ import { TurnStatsSection } from '@/modules/chat/panel/TurnStatsSection';
 import { TasksSection } from '@/modules/chat/panel/TasksSection';
 import { SubagentsSection } from '@/modules/chat/panel/SubagentsSection';
 import { McpServersSection } from '@/modules/chat/panel/McpServersSection';
+import { ContextSourcesSection } from '@/modules/chat/panel/ContextSourcesSection';
 import { buildSessionTaskLedger } from '@/modules/chat/utils/sessionTaskList';
 
 type SessionInfoPanelProps = {
@@ -28,6 +29,9 @@ type SessionInfoPanelProps = {
   mcpDisabledSet: Set<string>;
   mcpPendingNames: Set<string>;
   onToggleMcpServer: (name: string) => Promise<boolean>;
+  mcpCanToggle: boolean;
+  skills: ProviderSkill[];
+  skillsLoading: boolean;
   isMobile: boolean;
   onClose: () => void;
 };
@@ -54,6 +58,9 @@ export const SessionInfoPanel = memo(({
   mcpDisabledSet,
   mcpPendingNames,
   onToggleMcpServer,
+  mcpCanToggle,
+  skills,
+  skillsLoading,
   isMobile,
   onClose,
 }: SessionInfoPanelProps) => {
@@ -129,6 +136,7 @@ export const SessionInfoPanel = memo(({
           disabledSet={mcpDisabledSet}
           pendingNames={mcpPendingNames}
           onToggle={onToggleMcpServer}
+          canToggle={mcpCanToggle}
         />
       </InfoSection>
 
@@ -137,7 +145,12 @@ export const SessionInfoPanel = memo(({
         collapsed={collapsed.sources ?? false}
         onToggle={() => onToggleSection('sources')}
       >
-        <div className="py-1 text-xs text-muted-foreground">{t('sessionInfoPanel.empty')}</div>
+        <ContextSourcesSection
+          skills={skills}
+          skillsLoading={skillsLoading}
+          mcpServers={mcpServers}
+          mcpLoading={mcpLoading}
+        />
       </InfoSection>
     </aside>
   );

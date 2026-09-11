@@ -23,6 +23,7 @@ import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState'
 import { useSessionStore } from '@/modules/chat/hooks/useSessionStore';
 import { useSessionSubagents } from '@/modules/chat/hooks/useSessionSubagents';
 import { useSessionMcpServers } from '@/modules/chat/hooks/useSessionMcpServers';
+import { useSessionSkills } from '@/modules/chat/hooks/useSessionSkills';
 import {
   useProcessingSessions,
   useSessionProtectionActions,
@@ -219,7 +220,15 @@ function ChatInterface({
   const mcpSection = useSessionMcpServers({
     provider,
     projectPath: selectedProject?.fullPath || selectedProject?.path || null,
-    enabled: sessionInfo.prefs.open && supportsMcpToggle,
+    enabled: sessionInfo.prefs.open,
+    canToggle: supportsMcpToggle,
+  });
+  // The sources section's skill count; every provider answers the skills
+  // endpoint, so no capability gate — the panel being open is the gate.
+  const skillList = useSessionSkills({
+    provider,
+    projectPath: selectedProject?.fullPath || selectedProject?.path || null,
+    enabled: sessionInfo.prefs.open,
   });
   // The agent whose conversation overlay is open, if any. Cleared whenever
   // the roster's session changes so an overlay never outlives its parent.
@@ -675,6 +684,9 @@ function ChatInterface({
             mcpDisabledSet={mcpSection.disabledSet}
             mcpPendingNames={mcpSection.pendingNames}
             onToggleMcpServer={mcpSection.toggleServer}
+            mcpCanToggle={mcpSection.canToggle}
+            skills={skillList.skills}
+            skillsLoading={skillList.loading}
             isMobile={isMobile}
             onClose={() => sessionInfo.setOpen(false)}
           />

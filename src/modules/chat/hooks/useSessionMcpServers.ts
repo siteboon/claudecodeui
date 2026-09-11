@@ -8,8 +8,10 @@ type UseSessionMcpServersArgs = {
   provider: LLMProvider;
   /** Workspace whose project-scoped servers join the global ones. */
   projectPath: string | null;
-  /** Panel open AND the runtime honors the switches (capability-gated). */
+  /** Panel open — the list is worth reading (the sources section uses it too). */
   enabled: boolean;
+  /** Whether the runtime honors the disabled set; switches otherwise read-only. */
+  canToggle: boolean;
 };
 
 /** Server shapes the MCP routes can answer with: grouped by scope, or flat. */
@@ -54,7 +56,7 @@ export function flattenMcpServers(payload: McpServersPayload): ProviderMcpServer
  * hydrate. Toggling writes both the server (immediately, for the runtime) and
  * the mirror (debounced), and a failed write rolls the row back.
  */
-export function useSessionMcpServers({ provider, projectPath, enabled }: UseSessionMcpServersArgs) {
+export function useSessionMcpServers({ provider, projectPath, enabled, canToggle }: UseSessionMcpServersArgs) {
   const [servers, setServers] = useState<ProviderMcpServer[]>([]);
   const [loading, setLoading] = useState(false);
   // Names the PUT is still in flight for, so the switch cannot be flipped
@@ -105,6 +107,11 @@ export function useSessionMcpServers({ provider, projectPath, enabled }: UseSess
 
   /** Flip one server's global switch; returns whether the server accepted it. */
   const toggleServer = useCallback(async (name: string): Promise<boolean> => {
+    // A provider whose runtime ignores the set shows rows read-only: the
+    // switch would change what the panel says without changing what runs.
+    if (!canToggle) {
+      return false;
+    }
     const trimmed = name.trim();
     if (!trimmed || pendingNames.has(trimmed)) {
       return false;
@@ -142,7 +149,7 @@ export function useSessionMcpServers({ provider, projectPath, enabled }: UseSess
         return copy;
       });
     }
-  }, [pendingNames]);
+  }, [pendingNames, canToggle]);
 
-  return { servers, loading, disabledSet, toggleServer, pendingNames };
+  return { servers, loading, disabledSet, toggleServer, pendingNames, canToggle };
 }
