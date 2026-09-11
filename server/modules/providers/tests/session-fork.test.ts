@@ -171,3 +171,69 @@ test('forking a session that does not exist is a 404', async () => {
     );
   });
 });
+
+test('a shared-database provider forks a session that names no transcript file', async () => {
+  const previousDatabasePath = process.env.DATABASE_PATH;
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'session-fork-shared-'));
+
+  closeConnection();
+  process.env.DATABASE_PATH = path.join(directory, 'auth.db');
+  await initializeDatabase();
+
+  const opencode = providerRegistry.resolveProvider('opencode') as { fork?: IProviderFork };
+  const realFork = opencode.fork;
+  const calls: { providerSessionId: string; jsonlPath: string | null }[] = [];
+  Object.defineProperty(opencode, 'fork', {
+    value: {
+      transcriptIsSharedDatabase: true,
+      forkSession: async (input: { providerSessionId: string; jsonlPath: string | null }) => {
+        calls.push({ providerSessionId: input.providerSessionId, jsonlPath: input.jsonlPath });
+        return { providerSessionId: 'ses_forked', jsonlPath: null };
+      },
+    } as IProviderFork,
+    configurable: true,
+    writable: true,
+  });
+
+  try {
+    const now = new Date().toISOString();
+    // An OpenCode row as the synchronizer writes one: a provider id and no
+    // file, because the transcript is rows in opencode.db.
+    sessionsDb.createSession('oc-source', 'opencode', directory, 'OpenCode session', now, now, null);
+    sessionsDb.assignProviderSessionId('oc-source', 'ses_source');
+
+    const result = await sessionsService.forkSessionById('oc-source');
+
+    assert.deepEqual(calls, [{ providerSessionId: 'ses_source', jsonlPath: null }]);
+    const forked = sessionsDb.getSessionById(result.sessionId);
+    assert.equal(forked?.provider, 'opencode');
+    assert.equal(forked?.provider_session_id, 'ses_forked');
+    // Naming no file is what keeps deleting this row from deleting the database.
+    assert.equal(forked?.jsonl_path, null);
+    assert.equal(forked?.forked_from_session_id, 'oc-source');
+  } finally {
+    Object.defineProperty(opencode, 'fork', { value: realFork, configurable: true, writable: true });
+    closeConnection();
+    if (previousDatabasePath === undefined) {
+      delete process.env.DATABASE_PATH;
+    } else {
+      process.env.DATABASE_PATH = previousDatabasePath;
+    }
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('a file-based provider is still refused when its transcript is missing', async () => {
+  await withForkableClaude(async ({ directory }) => {
+    // Same shape as the OpenCode row above, but the (Claude) fork adapter does
+    // not claim a shared store, so a missing file really means nothing to copy.
+    const now = new Date().toISOString();
+    sessionsDb.createSession('no-file', 'claude', directory, 'Missing file', now, now, null);
+    sessionsDb.assignProviderSessionId('no-file', 'native-no-file');
+
+    await assert.rejects(
+      () => sessionsService.forkSessionById('no-file'),
+      (error: Error & { code?: string }) => error.code === 'FORK_SOURCE_NOT_READY',
+    );
+  });
+});
