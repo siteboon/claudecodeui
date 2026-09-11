@@ -519,22 +519,31 @@ const runOpenCodeModelsCli = async (): Promise<string | null> =>
     let child: ReturnType<typeof crossSpawn>;
     try {
       child = crossSpawn('opencode', ['models', '--verbose'], {
-        stdio: ['ignore', 'pipe', 'ignore'],
+        stdio: ['ignore', 'pipe', 'pipe'],
         shell: false,
       });
-    } catch {
+    } catch (error) {
+      console.warn('[OpenCode] `opencode models --verbose` failed to start:', error);
       resolve(null);
       return;
     }
 
     let stdout = '';
+    let stderr = '';
     let settled = false;
-    const finish = (value: string | null) => {
+    const finish = (value: string | null, reason?: string) => {
       if (settled) {
         return;
       }
       settled = true;
       clearTimeout(timer);
+      if (value === null) {
+        console.warn(
+          '[OpenCode] `opencode models --verbose` unusable (%s). stderr: %s',
+          reason ?? 'unknown',
+          stderr.trim().slice(0, 400) || '(empty)',
+        );
+      }
       resolve(value);
     };
 
@@ -544,14 +553,22 @@ const runOpenCodeModelsCli = async (): Promise<string | null> =>
       } catch {
         // A dead child is exactly what the timeout wants anyway.
       }
-      finish(null);
+      finish(null, 'timeout');
     }, OPENCODE_MODELS_CLI_TIMEOUT_MS);
 
     child.stdout?.on('data', (chunk: Buffer) => {
       stdout += chunk.toString();
     });
-    child.on('error', () => finish(null));
-    child.on('close', (code) => finish(code === 0 && stdout.trim() ? stdout : null));
+    child.stderr?.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    child.on('error', (error) => {
+      console.warn('[OpenCode] `opencode models --verbose` spawn error:', error);
+      finish(null, 'spawn-error');
+    });
+    child.on('close', (code) => {
+      finish(code === 0 && stdout.trim() ? stdout : null, `exit=${code} stdout=${stdout.length}B`);
+    });
   });
 
 /**
