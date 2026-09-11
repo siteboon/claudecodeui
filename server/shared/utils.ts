@@ -213,6 +213,44 @@ export function normalizeProjectPath(inputPath: string): string {
 }
 
 /**
+ * Checks whether an already-normalized path equals or is nested inside a
+ * normalized workspace root.
+ *
+ * The naive `startsWith(root + sep)` comparison breaks for Windows drive
+ * roots: `normalizeProjectPath` keeps the trailing separator for filesystem
+ * roots (`D:\`), so appending another separator never matches paths like
+ * `D:\Claude code`. Windows paths are also case-insensitive, so drive letters
+ * and path segments are compared without regard to case.
+ */
+export function isPathWithinRoot(candidatePath: string, normalizedRoot: string): boolean {
+  if (!candidatePath || !normalizedRoot) {
+    return false;
+  }
+
+  const useWindowsRules = shouldUseWindowsPathNormalization(normalizedRoot);
+  const parser = useWindowsRules ? path.win32 : path.posix;
+
+  if (candidatePath === normalizedRoot) {
+    return true;
+  }
+
+  // A Windows drive root ("D:" / "D:." / "D:\") contains every path on the same
+  // drive, so compare drive letters instead of doing a string prefix check.
+  if (useWindowsRules && /^[a-zA-Z]:(\\?|\.)$/.test(normalizedRoot)) {
+    const rootDrive = normalizedRoot.slice(0, 2).toLowerCase();
+    const candidateRoot = parser.parse(candidatePath).root.toLowerCase();
+    return candidateRoot === `${rootDrive}\\`;
+  }
+
+  const prefix = normalizedRoot.endsWith(parser.sep) ? normalizedRoot : `${normalizedRoot}${parser.sep}`;
+  if (!useWindowsRules) {
+    return candidatePath.startsWith(prefix);
+  }
+
+  return candidatePath.toLowerCase().startsWith(prefix.toLowerCase());
+}
+
+/**
  * Validates that a user-supplied workspace path is safe to use.
  *
  * Call this before any filesystem mutation that creates or registers projects.
@@ -282,11 +320,21 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
       }
     }
 
-    const resolvedWorkspaceRoot = normalizeProjectPath(await realpath(WORKSPACES_ROOT));
-    if (
-      !resolvedPath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)
-      && resolvedPath !== resolvedWorkspaceRoot
-    ) {
+    let resolvedWorkspaceRoot: string;
+    try {
+      resolvedWorkspaceRoot = normalizeProjectPath(await realpath(path.resolve(WORKSPACES_ROOT)));
+    } catch (error) {
+      const fileError = error as NodeJS.ErrnoException;
+      if (fileError.code !== 'ENOENT') {
+        throw fileError;
+      }
+
+      // The configured root does not exist yet (e.g. a fresh drive root);
+      // fall back to its absolute normalized form.
+      resolvedWorkspaceRoot = normalizeProjectPath(path.resolve(WORKSPACES_ROOT));
+    }
+
+    if (!isPathWithinRoot(resolvedPath, resolvedWorkspaceRoot)) {
       return {
         valid: false,
         error: `Workspace path must be within the allowed workspace root: ${WORKSPACES_ROOT}`,
@@ -300,10 +348,7 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
         const symlinkTarget = await readlink(absolutePath);
         const resolvedSymlinkPath = path.resolve(path.dirname(absolutePath), symlinkTarget);
         const realSymlinkPath = await realpath(resolvedSymlinkPath);
-        if (
-          !realSymlinkPath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)
-          && realSymlinkPath !== resolvedWorkspaceRoot
-        ) {
+        if (!isPathWithinRoot(normalizeProjectPath(realSymlinkPath), resolvedWorkspaceRoot)) {
           return {
             valid: false,
             error: 'Symlink target is outside the allowed workspace root',
