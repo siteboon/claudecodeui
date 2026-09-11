@@ -57,7 +57,7 @@
     "start": "npm run build && npm run server",
     "release": "./release.sh",
     "prepublishOnly": "npm run build",
-    "postinstall": "node scripts/fix-node-pty.js",
+    "postinstall": "node scripts/fix-node-pty.js && node scripts/fix-codex-sdk-windows-hide.js",
     "prepare": "husky",
     "update:platform": "./update-platform.sh"
   },

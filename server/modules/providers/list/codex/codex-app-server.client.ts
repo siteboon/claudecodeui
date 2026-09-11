@@ -74,9 +74,12 @@ async function withAppServer<T>(
   run: (call: (method: string, params: unknown) => Promise<unknown>) => Promise<T>,
 ): Promise<T> {
   const launcher = resolveCodexLauncher();
+  // windowsHide keeps Windows from allocating a console for the child; without
+  // it every fork flashes a cmd window when the server runs without one.
   const child = spawn(process.execPath, [launcher, 'app-server'], {
     env: process.env,
     stdio: ['pipe', 'pipe', 'pipe'],
+    windowsHide: true,
   });
 
   // The server logs sandbox and skill warnings to stderr on every start. They
