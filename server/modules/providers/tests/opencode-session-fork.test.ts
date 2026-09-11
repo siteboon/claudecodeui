@@ -12,8 +12,9 @@ import { OpenCodeForkProvider } from '@/modules/providers/list/opencode/opencode
 /**
  * The fork endpoint itself is exercised against a real `opencode serve` during
  * manual verification; what these cover is the mapping either side of it: what
- * the provider asks the endpoint for, and how a message anchor turns into the
- * endpoint's exclusive cut point.
+ * the provider asks the endpoint for, and the anchor checks that stand in for
+ * the endpoint's too-forgiving cut (an unknown or first-message id silently
+ * copies everything).
  */
 
 /** Seeds an opencode.db whose messages land in a known read order. */
@@ -78,7 +79,7 @@ test('an OpenCode fork without an anchor copies the whole session', { concurrenc
   assert.deepEqual(forkCalls, [{ sessionId: 'ses_source', directory: '/tmp/workspace' }]);
 });
 
-test('an OpenCode fork cuts before the message after the anchored one', { concurrency: false }, async () => {
+test('an OpenCode fork cuts at the anchored message itself, exclusive', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'opencode-fork-anchor-'));
   const restoreHomeDir = patchHomeDir(tempRoot);
   await seedOpenCodeDatabase(tempRoot, 'ses_source', ['msg_a', 'msg_b', 'msg_c']);
@@ -104,16 +105,16 @@ test('an OpenCode fork cuts before the message after the anchored one', { concur
   }
 
   // The endpoint's cut is EXCLUSIVE of the id it names (verified against a
-  // live server), while the contract's anchor means "keep this one too" — so
-  // the fork must be asked to cut at the NEXT message, keeping msg_b itself.
+  // live server), which is exactly the contract's anchor: keep what came
+  // before msg_b, without msg_b itself — the fork retakes that prompt.
   assert.deepEqual(forkCalls, [{
     sessionId: 'ses_source',
-    cutBeforeMessageId: 'msg_c',
+    cutBeforeMessageId: 'msg_b',
     directory: '/tmp/workspace',
   }]);
 });
 
-test('forking from the last OpenCode message copies the whole session', { concurrency: false }, async () => {
+test('forking from the last OpenCode message keeps everything before it', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'opencode-fork-last-'));
   const restoreHomeDir = patchHomeDir(tempRoot);
   await seedOpenCodeDatabase(tempRoot, 'ses_source', ['msg_a', 'msg_b']);
@@ -138,9 +139,46 @@ test('forking from the last OpenCode message copies the whole session', { concur
     await rm(tempRoot, { recursive: true, force: true });
   }
 
-  // Nothing follows the anchor, so "everything before the next message" is
-  // the whole session — reported by asking without a cut point at all.
-  assert.deepEqual(forkCalls, [{ sessionId: 'ses_source', directory: '/tmp/workspace' }]);
+  // Even the last message is a cut point: the fork is the conversation minus
+  // that final exchange, not a whole-session copy.
+  assert.deepEqual(forkCalls, [{
+    sessionId: 'ses_source',
+    cutBeforeMessageId: 'msg_b',
+    directory: '/tmp/workspace',
+  }]);
+});
+
+test('forking from the first OpenCode message is refused', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'opencode-fork-first-'));
+  const restoreHomeDir = patchHomeDir(tempRoot);
+  await seedOpenCodeDatabase(tempRoot, 'ses_source', ['msg_a', 'msg_b']);
+
+  const realFork = openCodeServer.forkSession;
+  let called = false;
+  openCodeServer.forkSession = async (input) => {
+    called = true;
+    void input;
+    return { sessionId: 'ses_forked' };
+  };
+
+  try {
+    await assert.rejects(
+      () => new OpenCodeForkProvider().forkSession({
+        providerSessionId: 'ses_source',
+        jsonlPath: null,
+        projectPath: '/tmp/workspace',
+        upToAnchorId: 'msg_a',
+      }),
+      (error: Error & { code?: string }) => error.code === 'FORK_NOTHING_TO_COPY',
+    );
+    // The endpoint answers a keeps-nothing cut by copying everything, so it
+    // must not be asked at all here.
+    assert.equal(called, false);
+  } finally {
+    openCodeServer.forkSession = realFork;
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
 });
 
 test('forking from a message that is gone from the database is refused', { concurrency: false }, async () => {

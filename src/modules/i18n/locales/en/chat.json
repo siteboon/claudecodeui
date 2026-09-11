@@ -263,7 +263,7 @@
   },
   "message": {
     "editAndResend": "Edit and resend",
-    "forkFromHere": "Fork from here"
+    "forkFromHere": "Fork from here (without this message)"
   },
   "export": {
     "trigger": "Export conversation",

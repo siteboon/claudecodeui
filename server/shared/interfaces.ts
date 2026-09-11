@@ -76,8 +76,17 @@ export interface IProviderFork {
   readonly transcriptIsSharedDatabase?: boolean;
 
   /**
-   * Copies a session's transcript, up to and including `upToAnchorId` (the
-   * whole conversation when omitted), into a brand-new provider session.
+   * Copies a session's transcript up to — but NOT including — the message
+   * `upToAnchorId` names, into a brand-new provider session. The whole
+   * conversation is copied when the anchor is omitted.
+   *
+   * Exclusive of the anchored message (and its answer, where the provider
+   * groups them) is the point of the feature: the fork is where the user
+   * takes a different turn from that message, so the copy stops above it.
+   * Adapters whose native cut points are inclusive translate accordingly. When
+   * nothing precedes the anchor — forking from the very first message — there
+   * is no conversation to branch, and adapters report that rather than
+   * silently copying everything.
    *
    * Returns the new provider-native id and the path of the artifact it wrote,
    * so the caller can insert the database row before the filesystem watcher

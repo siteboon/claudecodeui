@@ -122,9 +122,13 @@ export const openCodeServer = {
    *
    * The cut is EXCLUSIVE of the message named — verified against a live
    * v1.18 server: forking at a session's second user prompt kept everything
-   * before it and neither that prompt nor its answer. This contract's
-   * `upToAnchorId` means "keep this message too", so callers hand over the id
-   * to cut BEFORE, not the anchor itself.
+   * before it and neither that prompt nor its answer. That is exactly the
+   * fork contract's anchor ("everything before the message the user forked
+   * from, without it"), so the fork adapter passes the anchor straight
+   * through as the cut point — but only after checking the anchor actually
+   * exists and is not the session's first message, since this endpoint
+   * answers an unknown id, and a cut that keeps nothing, by copying
+   * everything instead.
    *
    * `directory` decides where OpenCode files the copy. It is passed through
    * whenever the session has a working directory so the fork is found by the

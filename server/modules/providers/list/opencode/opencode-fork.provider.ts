@@ -11,10 +11,10 @@ import { openCodeServer } from '@/modules/providers/list/opencode/opencode-serve
  *
  * The copy is performed by `opencode serve`'s own fork endpoint (see
  * opencode-server.client.ts for why this app does not touch opencode.db
- * itself). The endpoint cuts EXCLUSively at the message it names, while this
- * contract's `upToAnchorId` means "keep this message and its answer", so the
- * anchor is translated here into "the id to cut before" — the message
- * following the anchored one in the same order fetchHistory reads them.
+ * itself). The endpoint cuts EXCLUSively at the message it names, which is
+ * exactly what this contract's anchor asks for — everything before the
+ * anchored message, without it — so the anchor goes straight through as the
+ * cut point.
  */
 export class OpenCodeForkProvider implements IProviderFork {
   readonly transcriptIsSharedDatabase = true;
@@ -29,13 +29,13 @@ export class OpenCodeForkProvider implements IProviderFork {
     // `title` is deliberately not forwarded. The sidebar name lives in this
     // app's own session row, and OpenCode names the copy itself ("... (fork
     // #1)"), which a later rename of the app row already overrides.
-    const cutBeforeMessageId = input.upToAnchorId
-      ? await this.resolveCutPoint(input.providerSessionId, input.upToAnchorId)
-      : undefined;
+    if (input.upToAnchorId) {
+      await this.assertAnchorIsNotFirst(input.providerSessionId, input.upToAnchorId);
+    }
 
     const forked = await openCodeServer.forkSession({
       sessionId: input.providerSessionId,
-      ...(cutBeforeMessageId ? { cutBeforeMessageId } : {}),
+      ...(input.upToAnchorId ? { cutBeforeMessageId: input.upToAnchorId } : {}),
       ...(input.projectPath ? { directory: input.projectPath } : {}),
     });
 
@@ -45,16 +45,19 @@ export class OpenCodeForkProvider implements IProviderFork {
   }
 
   /**
-   * Turns "keep up to and including this message" into the endpoint's
-   * "everything before this message".
+   * Rejects the two anchors the exclusive endpoint cannot honour.
    *
-   * Reading the order straight from opencode.db with the same ORDER BY
-   * fetchHistory uses guarantees the cut point is the row the user would see
-   * next. When the anchor is the very last message there is nothing to cut
-   * before, which is exactly a whole-session copy — reported as undefined so
-   * the endpoint is asked without a messageID at all.
+   * The endpoint answers an unknown messageID by copying everything, so a
+   * stale anchor (the UI was open across a rollback) would silently fork the
+   * whole conversation instead of the prefix the user asked for — it is
+   * reported instead. An anchor that is the session's first message leaves
+   * nothing to keep before it, and the endpoint's no-cut behaviour (copy
+   * everything) is the exact opposite of what that fork means.
+   *
+   * Checking against opencode.db with the same ORDER BY fetchHistory uses
+   * guarantees "first" means first in what the user actually sees.
    */
-  private async resolveCutPoint(providerSessionId: string, anchorId: string): Promise<string | undefined> {
+  private async assertAnchorIsNotFirst(providerSessionId: string, anchorId: string): Promise<void> {
     const dbPath = getOpenCodeDatabasePath();
     if (!fsSync.existsSync(dbPath)) {
       throw new AppError('OpenCode has no session database, so this fork cannot be cut.', {
@@ -78,8 +81,12 @@ export class OpenCodeForkProvider implements IProviderFork {
           statusCode: 409,
         });
       }
-
-      return rows[anchorIndex + 1]?.id;
+      if (anchorIndex === 0) {
+        throw new AppError('Forking from the first message would copy nothing. Fork the whole session instead.', {
+          code: 'FORK_NOTHING_TO_COPY',
+          statusCode: 409,
+        });
+      }
     } finally {
       db.close();
     }
