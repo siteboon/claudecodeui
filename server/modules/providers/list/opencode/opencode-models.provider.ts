@@ -2,12 +2,16 @@ import { readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
+// cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution, matching
+// the choice made in the OpenCode runtime adapter.
+import crossSpawn from 'cross-spawn';
 import Database from 'better-sqlite3';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import type { IProviderModels } from '@/shared/interfaces.js';
 import type {
   ProviderCurrentActiveModel,
+  ProviderModelOption,
   ProviderModelsDefinition,
 } from '@/shared/types.js';
 import {
@@ -20,10 +24,12 @@ import {
 /**
  * Curated OpenCode catalog shipped as immutable CloudCLI defaults.
  *
- * OpenCode routes by `<providerID>/<modelID>`, so this list mirrors the
- * providers `opencode models --verbose` reports: the OpenCode Zen gateway, the
- * OpenCode Go subscription gateway, and the Anthropic and OpenAI providers
- * OpenCode can address directly with the user's own credentials.
+ * The live catalog comes from `opencode models --verbose`, so this list is now
+ * metadata rather than the source of truth: it upgrades the bare ids the CLI
+ * reports for the four built-in gateways (OpenCode Zen, OpenCode Go, and the
+ * Anthropic and OpenAI providers OpenCode addresses with the user's own
+ * credentials) into curated labels, groupings, and verified effort variants,
+ * and it keeps the picker populated when the CLI cannot run at all.
  */
 export const OPENCODE_PREDEFINED_MODELS: ProviderModelsDefinition = {
   OPTIONS: [
@@ -303,12 +309,18 @@ const OPENCODE_ENV_PROVIDER_IDS: Record<string, string> = {
   OPENAI_API_KEY: 'openai',
 };
 
+/** How long a successful `opencode models --verbose` answer stays fresh. */
+const LIVE_CATALOG_TTL_MS = 60_000;
+
+/** Kill bound for one discovery invocation; the CLI answers in ~2s normally. */
+const OPENCODE_MODELS_CLI_TIMEOUT_MS = 15_000;
+
 const readOpenCodeJsonFile = async (filePath: string): Promise<Record<string, unknown> | null> => {
   try {
     return readObjectRecord(JSON.parse(await readFile(filePath, 'utf8')));
   } catch {
     // Missing, unreadable, or comment-bearing (.jsonc) files simply contribute
-    // nothing; the auth store is the authoritative source below.
+    // nothing; the CLI and the auth store are the authoritative sources.
     return null;
   }
 };
@@ -316,8 +328,9 @@ const readOpenCodeJsonFile = async (filePath: string): Promise<Record<string, un
 /**
  * Lists the upstream providers this OpenCode install can actually route to.
  *
- * OpenCode resolves `<providerID>/<modelID>` against the providers the user has
- * connected, and rejects anything else outright - `Model
+ * Only consulted as a fallback when the CLI is unavailable. OpenCode resolves
+ * `<providerID>/<modelID>` against the providers the user has connected, and
+ * rejects anything else outright - `Model
  * opencode/claude-sonnet-4-6 is not valid` is what a run gets for asking for an
  * OpenCode Zen model on a machine that only has an Anthropic key. The curated
  * catalog spans every provider OpenCode can address, so it has to be narrowed
@@ -357,11 +370,254 @@ const readConnectedOpenCodeProviderIds = async (): Promise<Set<string> | null> =
   return providerIds.size > 0 ? providerIds : null;
 };
 
+/** One `opencode models --verbose` record, narrowed to the picker's fields. */
+type OpenCodeCliModel = {
+  id: string;
+  providerId: string;
+  name: string | null;
+  variants: string[] | null;
+};
+
+/**
+ * Maps CLI variant names onto the picker's effort block.
+ *
+ * The CLI exposes variants by name only; the runtime forwards the chosen value
+ * as `--variant`, so the names pass through untouched.
+ */
+const toOpenCodeEffort = (
+  variantKeys: string[],
+): ProviderModelOption['effort'] => ({
+  values: variantKeys.map((value) => ({ value })),
+});
+
+const countJsonBraces = (text: string): number => {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (const char of text) {
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+    } else if (char === '{') {
+      depth += 1;
+    } else if (char === '}') {
+      depth -= 1;
+    }
+  }
+  return depth;
+};
+
+const safeJsonParse = (text: string): unknown => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+};
+
+const parseOpenCodeCliModels = (stdout: string): OpenCodeCliModel[] => {
+  // `--verbose` prints `providerID/modelID` lines interleaved with one pretty-
+  // printed JSON object per model. The objects are the payload; the bare lines
+  // only fill in the provider id when an object is missing one.
+  const lines = stdout.split(/\r?\n/);
+  const models: OpenCodeCliModel[] = [];
+  const seen = new Set<string>();
+  let pendingLine: string | null = null;
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index].trim();
+    index += 1;
+    if (!line) {
+      continue;
+    }
+
+    if (!line.startsWith('{')) {
+      if (line.includes('/')) {
+        pendingLine = line;
+      }
+      continue;
+    }
+
+    // Pretty-printed objects span many lines; buffer until the braces balance.
+    let json = line;
+    while (index < lines.length && countJsonBraces(json) > 0) {
+      json += `\n${lines[index]}`;
+      index += 1;
+    }
+
+    const record = readObjectRecord(safeJsonParse(json));
+    if (!record) {
+      continue;
+    }
+
+    const modelId = readOptionalString(record.id);
+    const providerId = readOptionalString(record.providerID)
+      ?? readOptionalString(record.providerId)
+      ?? pendingLine?.split('/')[0]
+      ?? null;
+    if (!modelId || !providerId) {
+      continue;
+    }
+
+    // Retired catalog entries still print; offering them would hand the picker
+    // a model the CLI refuses to run.
+    const status = readOptionalString(record.status);
+    if (status && status !== 'active') {
+      continue;
+    }
+
+    const value = `${providerId}/${modelId}`;
+    if (seen.has(value)) {
+      continue;
+    }
+    seen.add(value);
+
+    models.push({
+      id: value,
+      providerId,
+      name: readOptionalString(record.name) ?? null,
+      variants: Object.keys(readObjectRecord(record.variants) ?? {}),
+    });
+  }
+
+  return models;
+};
+
+/**
+ * Runs `opencode models --verbose` and parses its answer.
+ *
+ * Returns null when the CLI cannot produce a catalog - not installed, errored,
+ * timed out, or unparseable - so the caller keeps the curated fallback rather
+ * than leaving the picker empty. This is the only path that sees providers the
+ * user defined themselves, because it asks the same resolver the run command
+ * uses instead of re-deriving connectivity from config files.
+ */
+const readOpenCodeCliModels = async (
+  runModelsCli: () => Promise<string | null>,
+): Promise<OpenCodeCliModel[] | null> => {
+  const raw = await runModelsCli();
+  if (raw === null) {
+    return null;
+  }
+
+  const models = parseOpenCodeCliModels(raw);
+  return models.length > 0 ? models : null;
+};
+
+const runOpenCodeModelsCli = async (): Promise<string | null> =>
+  new Promise((resolve) => {
+    let child: ReturnType<typeof crossSpawn>;
+    try {
+      child = crossSpawn('opencode', ['models', '--verbose'], {
+        stdio: ['ignore', 'pipe', 'ignore'],
+        shell: false,
+      });
+    } catch {
+      resolve(null);
+      return;
+    }
+
+    let stdout = '';
+    let settled = false;
+    const finish = (value: string | null) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      resolve(value);
+    };
+
+    const timer = setTimeout(() => {
+      try {
+        child.kill();
+      } catch {
+        // A dead child is exactly what the timeout wants anyway.
+      }
+      finish(null);
+    }, OPENCODE_MODELS_CLI_TIMEOUT_MS);
+
+    child.stdout?.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+    child.on('error', () => finish(null));
+    child.on('close', (code) => finish(code === 0 && stdout.trim() ? stdout : null));
+  });
+
+/**
+ * Builds the picker catalog from the live CLI answer, upgraded by curated rows.
+ *
+ * Curated options come first so the grouped Zen/Go/Anthropic/OpenAI entries keep
+ * their labels, descriptions, and effort metadata; the user's own providers then
+ * append as-is. `description` carries the provider id, which is what makes a
+ * `bit-openai/gpt-5.6-sol` entry distinguishable from the curated `openai/` one.
+ */
+const buildCatalogFromCli = (
+  cliModels: OpenCodeCliModel[],
+): ProviderModelsDefinition => {
+  const cliById = new Map(cliModels.map((model) => [model.id, model]));
+  const options: ProviderModelOption[] = [];
+  const seen = new Set<string>();
+
+  // Curated rows first, in curated order, but only for models this install
+  // actually has; that keeps the grouped Zen/Go/Anthropic/OpenAI entries on
+  // their labels, descriptions, and verified effort blocks.
+  for (const curated of OPENCODE_PREDEFINED_MODELS.OPTIONS) {
+    if (cliById.has(curated.value) && !seen.has(curated.value)) {
+      seen.add(curated.value);
+      options.push(curated);
+    }
+  }
+
+  // Everything the CLI reports that the curated catalog does not know - the
+  // user's own providers above all - appends as-is. `description` carries the
+  // provider id, which is what makes a `bit-openai/gpt-5.6-sol` entry
+  // distinguishable from the curated `openai/` one.
+  for (const model of cliModels) {
+    if (seen.has(model.id)) {
+      continue;
+    }
+    seen.add(model.id);
+
+    const effort = model.variants && model.variants.length > 0
+      ? toOpenCodeEffort(model.variants)
+      : undefined;
+    options.push({
+      value: model.id,
+      label: model.name ?? model.id.split('/').slice(1).join('/'),
+      description: model.providerId,
+      ...(effort ? { effort } : {}),
+    });
+  }
+
+  if (options.length === 0) {
+    return OPENCODE_PREDEFINED_MODELS;
+  }
+
+  return {
+    OPTIONS: options,
+    DEFAULT: options.some((option) => option.value === OPENCODE_PREDEFINED_MODELS.DEFAULT)
+      ? OPENCODE_PREDEFINED_MODELS.DEFAULT
+      : options[0].value,
+  };
+};
+
 /**
  * Narrows the curated catalog to the providers OpenCode can route to.
  *
- * The default has to move with the list: leaving it on an OpenCode Zen model
- * would hand every new session a model the CLI refuses to run.
+ * Fallback path only - used when the CLI is unavailable. The default has to move
+ * with the list: leaving it on an OpenCode Zen model would hand every new
+ * session a model the CLI refuses to run.
  */
 const filterOpenCodeModelsByProvider = (
   definition: ProviderModelsDefinition,
@@ -385,6 +641,11 @@ const filterOpenCodeModelsByProvider = (
       ? definition.DEFAULT
       : options[0].value,
   };
+};
+
+/** Test seam: replaces the CLI invocation with a fixture-backed reader. */
+export type OpenCodeProviderModelsDependencies = {
+  runModelsCli?: () => Promise<string | null>;
 };
 
 const parseOpenCodeSessionModelValue = (rawModel: unknown): string | null => {
@@ -415,7 +676,45 @@ const parseOpenCodeSessionModelValue = (rawModel: unknown): string | null => {
 
 /** Provider registry model adapter for OpenCode predefined models and session metadata. */
 export class OpenCodeProviderModels implements IProviderModels {
+  private readonly runModelsCli: () => Promise<string | null>;
+  private liveCatalog: Promise<ProviderModelsDefinition | null> | null = null;
+  private liveCatalogExpiresAt = 0;
+
+  constructor(dependencies: OpenCodeProviderModelsDependencies = {}) {
+    this.runModelsCli = dependencies.runModelsCli ?? runOpenCodeModelsCli;
+  }
+
+  /**
+   * Reports the picker catalog: live CLI answer first, curated fallback second.
+   *
+   * The CLI is the only source that sees user-defined providers, but it costs
+   * ~2s, so a successful answer is cached briefly and concurrent callers share
+   * one in-flight run (the picker, the active-model lookup, and effort
+   * validation all resolve the catalog within the same page load). A failed run
+   * is not cached; the next caller retries rather than waiting out the TTL on a
+   * null answer.
+   */
   async getSupportedModels(): Promise<ProviderModelsDefinition> {
+    if (!this.liveCatalog || Date.now() >= this.liveCatalogExpiresAt) {
+      const run = (async (): Promise<ProviderModelsDefinition | null> => {
+        const cliModels = await readOpenCodeCliModels(this.runModelsCli);
+        return cliModels ? buildCatalogFromCli(cliModels) : null;
+      })();
+      this.liveCatalog = run;
+      this.liveCatalogExpiresAt = Date.now() + LIVE_CATALOG_TTL_MS;
+      void run.catch(() => {
+        if (this.liveCatalog === run) {
+          this.liveCatalog = null;
+          this.liveCatalogExpiresAt = 0;
+        }
+      });
+    }
+
+    const live = await this.liveCatalog.catch(() => null);
+    if (live) {
+      return live;
+    }
+
     return filterOpenCodeModelsByProvider(
       OPENCODE_PREDEFINED_MODELS,
       await readConnectedOpenCodeProviderIds(),

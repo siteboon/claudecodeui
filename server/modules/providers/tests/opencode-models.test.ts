@@ -12,6 +12,25 @@ import {
 const OPENCODE_ENV_KEYS = ['OPENCODE_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY'];
 
 /**
+ * Builds the `providerID/modelID` + pretty-printed JSON records that
+ * `opencode models --verbose` prints, from minimal per-model fixtures.
+ */
+const buildVerboseCliOutput = (
+  models: { id: string; providerId: string; name?: string; variants?: string[]; status?: string }[],
+): string => models.map((model) => [
+  `${model.providerId}/${model.id}`,
+  JSON.stringify({
+    id: model.id,
+    providerID: model.providerId,
+    ...(model.name ? { name: model.name } : {}),
+    ...(model.status ? { status: model.status } : {}),
+    ...(model.variants
+      ? { variants: Object.fromEntries(model.variants.map((variant) => [variant, {}])) }
+      : {}),
+  }, null, 2),
+].join('\n')).join('\n');
+
+/**
  * Runs one case against a throwaway OpenCode home, so the catalog the adapter
  * reports depends on the fixture rather than on the providers the machine
  * running the suite happens to be logged into.
@@ -19,6 +38,7 @@ const OPENCODE_ENV_KEYS = ['OPENCODE_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_
 const withOpenCodeHome = async (
   setUp: (homeDir: string) => Promise<void>,
   runTest: (adapter: OpenCodeProviderModels) => Promise<void>,
+  options: { runModelsCli?: () => Promise<string | null> } = {},
 ): Promise<void> => {
   const homeDir = await mkdtemp(path.join(os.tmpdir(), 'opencode-catalog-'));
   const originalHomedir = os.homedir;
@@ -31,7 +51,11 @@ const withOpenCodeHome = async (
 
   try {
     await setUp(homeDir);
-    await runTest(new OpenCodeProviderModels());
+    // Default to "the CLI produced nothing" so file-probing fallback tests do
+    // not spawn the real CLI from the developer machine running the suite.
+    await runTest(new OpenCodeProviderModels({
+      runModelsCli: options.runModelsCli ?? (async () => null),
+    }));
   } finally {
     (os as any).homedir = originalHomedir;
     for (const [key, value] of originalEnv) {
@@ -50,6 +74,84 @@ const writeOpenCodeAuth = async (homeDir: string, auth: Record<string, unknown>)
   await mkdir(authDir, { recursive: true });
   await writeFile(path.join(authDir, 'auth.json'), JSON.stringify(auth), 'utf8');
 };
+
+test('OpenCode catalog reports user-defined providers from the CLI', async () => {
+  // The curated catalog can never know a user's own providers, so the picker
+  // only shows them because the adapter asks `opencode models --verbose`.
+  const cliOutput = buildVerboseCliOutput([
+    { id: 'gpt-5.6-sol', providerId: 'bit-openai', name: 'GPT 5.6 Sol', variants: ['low', 'xhigh', 'max'] },
+    { id: 'deepseek-v4-pro', providerId: 'deepseek', name: 'DeepSeek V4 Pro' },
+    { id: 'opencode/gpt-5.6-terra', providerId: 'opencode', name: 'GPT 5.6 Terra' },
+  ]);
+
+  await withOpenCodeHome(async () => {}, async (adapter) => {
+    const catalog = await adapter.getSupportedModels();
+    const byValue = new Map(catalog.OPTIONS.map((option) => [option.value, option]));
+
+    const custom = byValue.get('bit-openai/gpt-5.6-sol');
+    assert.ok(custom, 'user-defined provider model must reach the picker');
+    assert.equal(custom.label, 'GPT 5.6 Sol');
+    assert.equal(custom.description, 'bit-openai');
+    assert.deepEqual(custom.effort?.values.map((entry) => entry.value), ['low', 'xhigh', 'max']);
+
+    assert.ok(byValue.get('deepseek/deepseek-v4-pro'));
+    assert.equal(byValue.get('deepseek/deepseek-v4-pro')?.effort, undefined);
+
+    // A CLI id that already embeds a slash keeps its full value intact.
+    assert.ok(byValue.get('opencode/opencode/gpt-5.6-terra'));
+  }, { runModelsCli: async () => cliOutput });
+});
+
+test('OpenCode catalog prefers curated rows and CLI-listed models', async () => {
+  const cliOutput = buildVerboseCliOutput([
+    { id: 'gpt-5.6-terra', providerId: 'opencode' },
+    { id: 'claude-fable-5', providerId: 'anthropic' },
+    // A retired entry must never reach the picker.
+    { id: 'gpt-4.9', providerId: 'openai', status: 'deprecated' },
+  ]);
+
+  await withOpenCodeHome(async () => {}, async (adapter) => {
+    const catalog = await adapter.getSupportedModels();
+    const values = catalog.OPTIONS.map((option) => option.value);
+
+    assert.deepEqual(values, ['opencode/gpt-5.6-terra', 'anthropic/claude-fable-5']);
+    // Curated metadata survives: curated labels and descriptions win over the
+    // bare CLI record.
+    const terra = catalog.OPTIONS.find((option) => option.value === 'opencode/gpt-5.6-terra');
+    assert.equal(terra?.label, 'GPT 5.6 Terra');
+    assert.equal(terra?.description, 'OpenCode Zen');
+    assert.equal(catalog.DEFAULT, 'opencode/gpt-5.6-terra');
+  }, { runModelsCli: async () => cliOutput });
+});
+
+test('OpenCode catalog default moves to a live model when curated default is absent', async () => {
+  const cliOutput = buildVerboseCliOutput([
+    { id: 'kimi-k2.6', providerId: 'volcengine-plan', name: 'Kimi K2.6' },
+  ]);
+
+  await withOpenCodeHome(async () => {}, async (adapter) => {
+    const catalog = await adapter.getSupportedModels();
+    assert.equal(catalog.DEFAULT, 'volcengine-plan/kimi-k2.6');
+    assert.equal((await adapter.getCurrentActiveModel()).model, catalog.DEFAULT);
+  }, { runModelsCli: async () => cliOutput });
+});
+
+test('OpenCode catalog shares one CLI run across concurrent lookups', async () => {
+  let cliRuns = 0;
+  const cliOutput = buildVerboseCliOutput([
+    { id: 'glm-5.2', providerId: 'volcengine-plan', name: 'GLM 5.2' },
+  ]);
+
+  await withOpenCodeHome(async () => {}, async (adapter) => {
+    const [first, second] = await Promise.all([
+      adapter.getSupportedModels(),
+      adapter.getCurrentActiveModel(),
+    ]);
+    assert.equal(cliRuns, 1);
+    assert.equal(first.OPTIONS.length, 1);
+    assert.equal(second.model, 'volcengine-plan/glm-5.2');
+  }, { runModelsCli: async () => { cliRuns += 1; return cliOutput; } });
+});
 
 test('OpenCode exposes only the curated predefined catalog', async () => {
   await withOpenCodeHome(async () => {}, async (adapter) => {
@@ -118,7 +220,8 @@ test('OpenCode exposes only the curated predefined catalog', async () => {
 test('OpenCode offers only models the install can route to', async () => {
   // Asking for a provider the user never connected fails the whole run with
   // "Model <id> is not valid", so an OpenCode Zen model must not be offered -
-  // or defaulted to - on a machine that only holds an Anthropic key.
+  // or defaulted to - on a machine that only holds an Anthropic key. This
+  // covers the file-probing fallback taken when the CLI cannot answer.
   await withOpenCodeHome(
     (homeDir) => writeOpenCodeAuth(homeDir, { anthropic: { type: 'api', key: 'test' } }),
     async (adapter) => {
