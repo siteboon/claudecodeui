@@ -46,7 +46,7 @@ type OnboardingStatusPayload = {
 };
 
 type ApiErrorPayload = {
-  error?: string;
+  error?: string | { code?: string; message?: string };
   message?: string;
 };
 
@@ -80,7 +80,17 @@ function resolveApiErrorMessage(payload: ApiErrorPayload | null, fallback: strin
     return fallback;
   }
 
-  return payload.error ?? payload.message ?? fallback;
+  // AppError responses carry `error` as an object ({ code, message }) while
+  // older endpoints send a plain string; rendering the object as a React
+  // child crashes the whole app, so only a string is ever passed through.
+  if (typeof payload.error === 'string') {
+    return payload.error;
+  }
+  if (payload.error && typeof payload.error.message === 'string') {
+    return payload.error.message;
+  }
+
+  return typeof payload.message === 'string' ? payload.message : fallback;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
