@@ -320,6 +320,11 @@ export type NormalizedMessage = {
   summary?: string;
   tokenBudget?: unknown;
   /**
+   * The turn's bill, forwarded from the SDK's `result` message on a
+   * `status`/`turn_stats` frame. Absent on every other message.
+   */
+  turnStats?: TurnStats;
+  /**
    * Timeline of everything a subagent did, attached to the `tool_use` that
    * spawned it. Present for Claude `Agent`/`Task` calls and Codex
    * `spawn_agent` calls; absent for every other tool.
@@ -333,6 +338,27 @@ export type NormalizedMessage = {
   sequence?: number;
   rowid?: number;
   [key: string]: unknown;
+};
+
+/**
+ * The turn's bill, forwarded from the SDK's `result` message.
+ *
+ * Field semantics follow the SDK's result contract: `usage` is this turn's
+ * main-loop bill (per-turn, excludes subagents), while `costUsd` and
+ * `modelUsage` are cumulative across the streaming-input session — the
+ * frontend reads the latest frame instead of summing.
+ */
+export type TurnStats = {
+  costUsd: number | null;
+  durationMs: number | null;
+  apiDurationMs: number | null;
+  numTurns: number | null;
+  usage: {
+    inputTokens: number | null;
+    outputTokens: number | null;
+    cacheReadTokens: number | null;
+    cacheCreationTokens: number | null;
+  } | null;
 };
 
 /**

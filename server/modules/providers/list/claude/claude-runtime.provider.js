@@ -551,6 +551,44 @@ function extractCumulativeTokenBudget(sdkMessage) {
   };
 }
 
+/**
+ * Extract the turn's bill from a turn-ending `result` message.
+ *
+ * The SDK's result carries the cost/duration/token accounting the rest of the
+ * stream never emits, and it is not persisted to the transcript jsonl, so a
+ * `status`/`turn_stats` frame is the only way it reaches the client. Follows
+ * the SDK contract: `usage` is this turn's main-loop bill (subagent requests
+ * excluded), while `total_cost_usd` and `modelUsage` are cumulative across the
+ * streaming-input session — consumers read the latest frame, never sum.
+ * @param {?Object} sdkMessage - SDK stream message (null probes the missing-message case)
+ * @returns {?{costUsd: ?number, durationMs: ?number, apiDurationMs: ?number, numTurns: ?number, usage: ?{inputTokens: ?number, outputTokens: ?number, cacheReadTokens: ?number, cacheCreationTokens: ?number}}} TurnStats payload, or null for anything not a result
+ */
+function extractTurnStats(sdkMessage) {
+  if (!sdkMessage || typeof sdkMessage !== 'object' || sdkMessage.type !== 'result') {
+    return null;
+  }
+
+  // Distinct from the module-level readNumber, which defaults to 0; the panel
+  // needs missing-vs-zero distinguishable.
+  const readNullable = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+  const usage = sdkMessage.usage && typeof sdkMessage.usage === 'object'
+    ? {
+        inputTokens: readNullable(sdkMessage.usage.input_tokens),
+        outputTokens: readNullable(sdkMessage.usage.output_tokens),
+        cacheReadTokens: readNullable(sdkMessage.usage.cache_read_input_tokens),
+        cacheCreationTokens: readNullable(sdkMessage.usage.cache_creation_input_tokens),
+      }
+    : null;
+
+  return {
+    costUsd: readNullable(sdkMessage.total_cost_usd),
+    durationMs: readNullable(sdkMessage.duration_ms),
+    apiDurationMs: readNullable(sdkMessage.duration_api_ms),
+    numTurns: readNullable(sdkMessage.num_turns),
+    usage,
+  };
+}
+
 // Tool calls that leave work running past the end of a turn. Bash only counts
 // when it is explicitly backgrounded; the rest defer or watch work by nature.
 const DEFERRED_WORK_TOOLS = new Set(['Monitor', 'ScheduleWakeup', 'CronCreate', 'TaskCreate']);
@@ -983,6 +1021,14 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       }
 
       if (message.type === 'result') {
+        // Forward the turn's bill (cost/duration/tokens) before the terminal
+        // complete — the jsonl never stores it, so this frame is its only
+        // route to the client. Each result in a streaming-input session
+        // carries the running totals; consumers read the latest frame.
+        const turnStats = extractTurnStats(message);
+        if (turnStats) {
+          ws.send(createNormalizedMessage({ kind: 'status', text: 'turn_stats', turnStats, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+        }
         // The turn is done as far as the client is concerned.
         const abortPending = sessionKey() ? abortedSessionIds.has(sessionKey()) : false;
         if (!turnCompleteSent && !abortPending) {
@@ -1223,5 +1269,6 @@ export {
   getPendingApprovalsForSession,
   reconnectSessionWriter,
   extractTokenBudget,
-  extractCumulativeTokenBudget
+  extractCumulativeTokenBudget,
+  extractTurnStats
 };
