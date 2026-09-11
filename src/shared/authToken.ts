@@ -94,7 +94,11 @@ export const getStoredAuthToken = (): string | null => {
 // seconds earlier and end the session (#1308).
 export const acceptRefreshedToken = (token: unknown): boolean => {
   const claims = readTokenClaims(token);
-  if (!claims || isAuthTokenExpired(token)) {
+  // No clock-skew allowance here: the skew tolerance in isAuthTokenExpired only
+  // exists to avoid discarding a token we already hold. A replayed refreshed
+  // token past its exp must never replace a live one, and rejecting a
+  // borderline token is harmless because the current token stays in place.
+  if (!claims || Date.now() >= claims.expiresAt) {
     return false;
   }
 

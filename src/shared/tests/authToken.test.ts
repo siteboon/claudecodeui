@@ -158,6 +158,23 @@ test('acceptRefreshedToken: rejects a token issued before the current one', () =
   assert.equal(localStorage.getItem('auth-token'), current);
 });
 
+test('acceptRefreshedToken: rejects a token that expired within the clock-skew tolerance', () => {
+  const now = Math.floor(Date.now() / 1000);
+  const skewSeconds = TOKEN_EXPIRY_SKEW_MS / 1000;
+  const current = makeToken({ iat: now - 60, exp: now + 540 });
+  localStorage.setItem('auth-token', current);
+  // Expired 30s ago: isAuthTokenExpired() still tolerates it, but a refreshed
+  // token past its exp must never replace a live one.
+  const justExpired = makeToken({ iat: now, exp: now - Math.floor(skewSeconds / 2) });
+  assert.equal(acceptRefreshedToken(justExpired), false);
+  assert.equal(localStorage.getItem('auth-token'), current);
+
+  // Same token with nothing stored yet must not become the session either.
+  localStorage.removeItem('auth-token');
+  assert.equal(acceptRefreshedToken(justExpired), false);
+  assert.equal(localStorage.getItem('auth-token'), null);
+});
+
 test('acceptRefreshedToken: rejects an expired or malformed token', () => {
   const now = Math.floor(Date.now() / 1000);
   const current = makeToken({ iat: now, exp: now + 600 });
