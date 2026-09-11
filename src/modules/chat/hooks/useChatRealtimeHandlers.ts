@@ -25,6 +25,8 @@ type UseChatRealtimeHandlersArgs = {
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
   streamTimerRef: MutableRefObject<number | null>;
   accumulatedStreamRef: MutableRefObject<string>;
+  thinkingStreamTimerRef: MutableRefObject<number | null>;
+  accumulatedThinkingStreamRef: MutableRefObject<string>;
   /**
    * Highest live `seq` observed per session. Essential for reconnect catch-up:
    * `chat.subscribe` sends this value as `lastSeq` so the server replays only
@@ -65,6 +67,8 @@ export function useChatRealtimeHandlers({
   setPendingPermissionRequests,
   streamTimerRef,
   accumulatedStreamRef,
+  thinkingStreamTimerRef,
+  accumulatedThinkingStreamRef,
   lastSeqRef,
   statusCheckSentAtRef,
   onSessionProcessing,
@@ -186,9 +190,43 @@ export function useChatRealtimeHandlers({
       /* -------------------------------------------------------------- */
 
       // --- Streaming: buffer for performance ---
+      if (msg.kind === 'thinking_delta') {
+        const text = (msg.content as string) || '';
+        if (!text) return;
+        accumulatedThinkingStreamRef.current += text;
+        if (!thinkingStreamTimerRef.current) {
+          thinkingStreamTimerRef.current = window.setTimeout(() => {
+            thinkingStreamTimerRef.current = null;
+            if (sid) {
+              sessionStore.updateStreamingThinking(sid, accumulatedThinkingStreamRef.current, provider);
+            }
+          }, 100);
+        }
+        // Also route to store for non-active sessions
+        if (sid && sid !== activeViewSessionId) {
+          sessionStore.appendRealtime(sid, msg as unknown as NormalizedMessage);
+        }
+        return;
+      }
+
       if (msg.kind === 'stream_delta') {
         const text = (msg.content as string) || '';
         if (!text) return;
+        // Reasoning precedes the answer, so the first answer delta means the
+        // thinking stream is over: freeze the accumulated bubble.
+        if (accumulatedThinkingStreamRef.current || thinkingStreamTimerRef.current) {
+          if (thinkingStreamTimerRef.current) {
+            clearTimeout(thinkingStreamTimerRef.current);
+            thinkingStreamTimerRef.current = null;
+          }
+          if (sid && accumulatedThinkingStreamRef.current) {
+            sessionStore.updateStreamingThinking(sid, accumulatedThinkingStreamRef.current, provider);
+          }
+          if (sid) {
+            sessionStore.finalizeStreamingThinking(sid);
+          }
+          accumulatedThinkingStreamRef.current = '';
+        }
         accumulatedStreamRef.current += text;
         if (!streamTimerRef.current) {
           streamTimerRef.current = window.setTimeout(() => {
@@ -210,11 +248,20 @@ export function useChatRealtimeHandlers({
           clearTimeout(streamTimerRef.current);
           streamTimerRef.current = null;
         }
+        if (thinkingStreamTimerRef.current) {
+          clearTimeout(thinkingStreamTimerRef.current);
+          thinkingStreamTimerRef.current = null;
+        }
         if (sid) {
           if (accumulatedStreamRef.current) {
             sessionStore.updateStreaming(sid, accumulatedStreamRef.current, provider);
           }
           sessionStore.finalizeStreaming(sid);
+          if (accumulatedThinkingStreamRef.current) {
+            sessionStore.updateStreamingThinking(sid, accumulatedThinkingStreamRef.current, provider);
+            sessionStore.finalizeStreamingThinking(sid);
+            accumulatedThinkingStreamRef.current = '';
+          }
         }
         accumulatedStreamRef.current = '';
         return;
@@ -245,6 +292,15 @@ export function useChatRealtimeHandlers({
             sessionStore.finalizeStreaming(sid);
           }
           accumulatedStreamRef.current = '';
+          if (thinkingStreamTimerRef.current) {
+            clearTimeout(thinkingStreamTimerRef.current);
+            thinkingStreamTimerRef.current = null;
+          }
+          if (sid && accumulatedThinkingStreamRef.current) {
+            sessionStore.updateStreamingThinking(sid, accumulatedThinkingStreamRef.current, provider);
+            sessionStore.finalizeStreamingThinking(sid);
+          }
+          accumulatedThinkingStreamRef.current = '';
 
           // `complete` is the unified terminal event — every provider run ends
           // with exactly one, regardless of success, failure, or abort. The
@@ -360,6 +416,8 @@ export function useChatRealtimeHandlers({
     setPendingPermissionRequests,
     streamTimerRef,
     accumulatedStreamRef,
+    thinkingStreamTimerRef,
+    accumulatedThinkingStreamRef,
     lastSeqRef,
     statusCheckSentAtRef,
     onSessionProcessing,

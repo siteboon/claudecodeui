@@ -308,6 +308,22 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
         }
         break;
 
+      case 'thinking_delta':
+        // Accumulated reasoning row from the session store's thinking stream
+        // (updateStreamingThinking); renders as a live-open Reasoning bubble
+        // that the finished `thinking` row replaces.
+        if (msg.content?.trim()) {
+          converted.push({
+            type: 'assistant',
+            content: msg.content,
+            timestamp: msg.timestamp,
+            isThinking: true,
+            isStreaming: true,
+            ...sharedMetadata,
+          });
+        }
+        break;
+
       case 'error':
         converted.push({
           type: 'error',

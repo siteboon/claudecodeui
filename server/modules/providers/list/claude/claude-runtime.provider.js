@@ -291,6 +291,13 @@ function mapCliOptionsToSDK(options = {}) {
 
   sdkOptions.settingSources = ['project', 'user', 'local'];
 
+  // Token-level streaming: without this the SDK only yields whole assistant
+  // messages, so reply text and thinking appear one lump per turn. The
+  // partial `stream_event` frames feed the client's accumulated stream_delta /
+  // thinking_delta rendering; the complete assistant messages still arrive
+  // alongside and remain the persisted record.
+  sdkOptions.includePartialMessages = true;
+
   // The SDK resumes with the provider-native session id, never the app id.
   // `resumeFromScratch` is set when the very first prompt of a conversation was
   // edited: there is nothing before it to resume through, so the turn has to
