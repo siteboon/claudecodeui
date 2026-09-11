@@ -216,3 +216,27 @@ test('a search result keeps every file it found', () => {
   assert.equal(result.numFiles, 900);
   assert.deepEqual(result.filenames, filenames);
 });
+
+test('a content-block array keeps image blocks whole while capping text', () => {
+  const base64 = 'iVBORw0KGgo'.padEnd(60_000, 'A');
+  const longText = 't'.repeat(100_000);
+  const blocks = [
+    { type: 'text', text: longText },
+    { type: 'image', source: { type: 'base64', media_type: 'image/png', data: base64 } },
+  ];
+  const [unified] = prepareTranscriptMessages([
+    message({
+      kind: 'tool_use',
+      toolName: 'mcp__browser__take_screenshot',
+      toolId: 's1',
+      toolInput: {},
+      toolResult: { content: JSON.stringify(blocks) },
+    }),
+  ]);
+
+  const content = String(unified.toolResult?.content);
+  const parsed = JSON.parse(content);
+  assert.equal(parsed.length, 2, 'both blocks survive');
+  assert.equal(parsed[1].source.data, base64, 'the image payload must not be cut mid-base64');
+  assert.match(parsed[0].text, /… \d+ more characters$/, 'oversized text still caps');
+});
