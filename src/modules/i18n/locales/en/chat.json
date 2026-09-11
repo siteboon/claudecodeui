@@ -379,6 +379,20 @@
       "cost": "Cost"
     },
     "openButton": "Show session panel",
-    "closeButton": "Hide session panel"
+    "closeButton": "Hide session panel",
+    "subagentsAgentLabel": "Agent",
+    "subagentsLoading": "Loading…",
+    "subagentsStatusRunning": "running",
+    "subagentsCloseChat": "Close agent conversation",
+    "subagentsLoadEarlier": "Load earlier messages",
+    "subagentsContinuePlaceholder": "Continue the conversation with this agent…",
+    "subagentsContinueSend": "Continue",
+    "subagentsContinueHint": "Sends as a new session carrying this agent's identity and work log.",
+    "subagentsContinueIdentity": "You are \"{{type}}\".",
+    "subagentsContinueIdentityWithDescription": "You are \"{{type}}\" ({{description}}).",
+    "subagentsContinueIdentityBare": "You are a subagent whose previous task was: {{description}}.",
+    "subagentsContinueIdentityPlain": "You are a subagent.",
+    "subagentsContinueLogIntro": "Below is your own working record from the earlier session as this subagent",
+    "subagentsContinueAskIntro": "The user now wants to continue the conversation. Respond based on the context above:"
   }
 }

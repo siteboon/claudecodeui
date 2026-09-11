@@ -39,6 +39,9 @@ const renderPanel = (overrides: Partial<Parameters<typeof SessionInfoPanel>[0]> 
       turnStats={null}
       tokenBudget={null}
       contextInfo={null}
+      subagents={[]}
+      subagentsLoading={false}
+      onSelectSubagent={() => undefined}
       isMobile={false}
       onClose={() => toggles.push('close')}
       {...overrides}

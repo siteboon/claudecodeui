@@ -2,12 +2,13 @@ import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/shared/utils';
-import type { NormalizedMessage, ProviderContextInfo, TurnStats } from '@/shared/types';
+import type { NormalizedMessage, ProviderContextInfo, SubagentSummary, TurnStats } from '@/shared/types';
 import type { SessionInfoPanelSection } from '@/shared/sessionInfoPanelPrefs';
 import { InfoSection } from '@/modules/chat/panel/InfoSection';
 import { ContextRingSection } from '@/modules/chat/panel/ContextRingSection';
 import { TurnStatsSection } from '@/modules/chat/panel/TurnStatsSection';
 import { TasksSection } from '@/modules/chat/panel/TasksSection';
+import { SubagentsSection } from '@/modules/chat/panel/SubagentsSection';
 import { buildSessionTaskLedger } from '@/modules/chat/utils/sessionTaskList';
 
 type SessionInfoPanelProps = {
@@ -18,6 +19,9 @@ type SessionInfoPanelProps = {
   tokenBudget: Record<string, unknown> | null;
   contextInfo: ProviderContextInfo | null;
   onShowTokenDetails?: () => void;
+  subagents: SubagentSummary[];
+  subagentsLoading: boolean;
+  onSelectSubagent: (summary: SubagentSummary) => void;
   isMobile: boolean;
   onClose: () => void;
 };
@@ -38,6 +42,9 @@ export const SessionInfoPanel = memo(({
   tokenBudget,
   contextInfo,
   onShowTokenDetails,
+  subagents,
+  subagentsLoading,
+  onSelectSubagent,
   isMobile,
   onClose,
 }: SessionInfoPanelProps) => {
@@ -84,6 +91,15 @@ export const SessionInfoPanel = memo(({
       </InfoSection>
 
       <InfoSection
+        title={t('sessionInfoPanel.subagents')}
+        countLabel={subagents.length > 0 ? String(subagents.length) : undefined}
+        collapsed={collapsed.subagents ?? false}
+        onToggle={() => onToggleSection('subagents')}
+      >
+        <SubagentsSection subagents={subagents} loading={subagentsLoading} onSelect={onSelectSubagent} />
+      </InfoSection>
+
+      <InfoSection
         title={t('sessionInfoPanel.tasks')}
         countLabel={taskLedger.total > 0 ? `${taskLedger.completed}/${taskLedger.total}` : undefined}
         collapsed={collapsed.tasks ?? false}
@@ -92,7 +108,7 @@ export const SessionInfoPanel = memo(({
         <TasksSection tasks={taskLedger.tasks} />
       </InfoSection>
 
-      {SECTION_KEYS.filter((section) => section !== 'context' && section !== 'turnStats' && section !== 'tasks').map((section) => (
+      {SECTION_KEYS.filter((section) => section === 'mcp' || section === 'sources').map((section) => (
         <InfoSection
           key={section}
           title={t(`sessionInfoPanel.${section}`)}

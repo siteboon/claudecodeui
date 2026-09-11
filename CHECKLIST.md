@@ -8,14 +8,15 @@
 
 ## 架构约定（贯穿所有提交）
 
-- [ ] 新增抽象：`server/modules/providers/shared/session-insights/session-insights.provider.ts`
-      定义 `SessionInsightsProvider` 基类（方法：`listSubagents`、`fetchSubagentHistory`、
-      `getContextSnapshot`），各 CLI 目录各建一个实现文件；无能力的 CLI 返回空数组/`AppError`。
+- [x] 新增抽象：子代理/上下文读取走 **`IProviderSessions` 与 `IProviderRuntime` 的可选方法**
+      （`listSubagents`、`fetchSubagentHistory`、`contextInfo?`，仿既有可选 `rewindSession`），
+      仅 Claude 实现；未实现的 CLI 由服务层降级为空数组/`null`，无需每个 CLI 建占位类。
+      （比另立 `SessionInsightsProvider` 基类更贴合现有接口的可选方法惯例，前端不感知 provider。）
 - [x] `ProviderCapabilities` 增加 `supportsSessionInsights: boolean`
       （claude=true，codex/opencode 一期 false，cursor=false）。
 - [ ] MCP 列表/技能列表**复用已有** provider 实现（`claude-mcp.provider.ts`、
       `claude-skills.provider.ts`），不另造读取路径。
-- [ ] 运行中的会话：上下文节优先用 SDK `Query.getContextUsage({ detail: 'summary' })` 的
+- [x] 运行中的会话：上下文节优先用 SDK `Query.getContextUsage({ detail: 'summary' })` 的
       `percentage/totalTokens/maxTokens`；拿不到运行实例时回退 `tokenBudget` 帧推算。
 - [ ] 全部新 UI 文案进 `src/modules/i18n/locales/{en,zh-CN}/chat.json` 的 `sessionInfoPanel.*`。
 
@@ -63,17 +64,21 @@
 
 ## Commit 5 — 子代理节 + 端点 + 对话浮层
 
-- [ ] 服务器：`SessionInsightsProvider` 基类 + `ClaudeSessionInsightsProvider`
-      （listSubagents / fetchSubagentHistory，补读 `.meta.json` 的 `toolUseId/spawnDepth`）。
-- [ ] `provider.registry.ts`/`claude.provider.ts` 挂接；`sessions.service.ts` 透传；
-      `provider.routes.ts` 两条 GET（仿 :836 messages 路由）。
-- [ ] codex/opencode/cursor 各建占位实现（空数组/unsupported）。
-- [ ] 前端 `api.ts` 两方法；`sessionSubagents.ts` 提取+`parentToolUseId` 分组。
-- [ ] `SubagentsSection.tsx`（描述 (@agentType)+状态）+ `SubagentChatModal.tsx`
-      （REST 历史 + slot 剥离 parentToolUseId 实时；「交流」= createSession+chat.send 开新会话）。
-- [ ] 测试：`claude-subagents-endpoint.test.ts`（临时目录造 jsonl/.meta.json）、
-      `sessionSubagentsExtraction.test.ts`。
-- 验收：面板列出子代理、点开见完整对话、交流能开新会话；服务器测试绿。
+- [x] 服务器：`ClaudeSessionsProvider.listSubagents` / `fetchSubagentHistory`
+      （直读 `<projectDir>/<providerSessionId>/subagents/` 与旧平铺布局；`.meta.json`
+      补读 `toolUseId/spawnDepth`；roster 流式统计，>500KB 只数结构；状态三态合成：
+      父 task-notification→completed/failed，无通知∧父在跑∧mtime<120s→running）。
+- [x] `IProviderSessions` 可选方法挂接；`sessions.service.ts` 透传
+      （`parentRunning` 取 chat-run-registry；不进 sessionHistoryCache）；
+      `provider.routes.ts` 两条 GET（仿 :845 messages 路由）。
+- [x] codex/opencode/cursor 不实现 = 接口可选方法缺省，服务层降级空数组/空页（无需占位文件）。
+- [x] 前端 `api.ts` 两方法（`sessionSubagents`/`sessionSubagentMessages` + `subagentMessagesUrl`）；
+      `sessionSubagents.ts` 提取（按 `parentToolUseId===toolUseId` 过滤+剥离+去重）+ 续聊提示词打包。
+- [x] `SubagentsSection.tsx`（描述 (@agentType)+状态）+ `SubagentChatModal.tsx`
+      （REST 历史分页 + 父 slot 实时合流；「交流」= createSession+草稿预填+导航开新会话）。
+- [x] 测试：`claude-subagents-roster.test.ts`（6，临时目录造 jsonl/.meta.json，含 tool_result
+      折叠/分页/旧布局/三态）、`sessionSubagentsExtraction.test.ts`（7）。
+- 验收：面板列出子代理、点开见完整对话、交流能开新会话；服务器测试绿。✅（服务器 6/6、前端 279 全绿）
 
 ## Commit 6 — MCP 节（含开关）
 

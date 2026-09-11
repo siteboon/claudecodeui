@@ -275,6 +275,20 @@ export type SubagentInfo = {
   activityCount?: number;
 };
 
+/** One row of the info panel's subagent roster, composed server-side from the CLI's subagents directory plus the parent's task notifications. */
+export type SubagentSummary = {
+  agentId: string;
+  agentType?: string;
+  description?: string;
+  /** The parent's tool call that spawned this agent; the live stream keys off it. */
+  toolUseId?: string;
+  status: 'running' | 'completed' | 'failed';
+  activityCount: number;
+  startedAt?: string;
+  lastActivityAt?: string;
+  model?: string;
+};
+
 /** A running session's context-window snapshot, answered by the provider's own tooling; null fields mean that category could not be classified and render as `—`. */
 export type ProviderContextInfo = {
   totalTokens: number | null;

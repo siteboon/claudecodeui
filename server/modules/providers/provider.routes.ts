@@ -857,6 +857,31 @@ router.get(
   }),
 );
 
+router.get(
+  '/sessions/:sessionId/subagents',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const subagents = await sessionsService.listSessionSubagents(sessionId);
+    res.json(createApiSuccessResponse({ subagents }));
+  }),
+);
+
+router.get(
+  '/sessions/:sessionId/subagents/:agentId/messages',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const agentId = parseSessionId(req.params.agentId);
+    const limit = parseBoundedIntegerQuery(req.query.limit, 'limit', null, 0);
+    const offset = parseBoundedIntegerQuery(req.query.offset, 'offset', 0, 0);
+
+    const result = await sessionsService.fetchSubagentHistory(sessionId, agentId, {
+      limit,
+      offset,
+    });
+    res.json(createApiSuccessResponse(result));
+  }),
+);
+
 router.get('/search/sessions', asyncHandler(async (req: Request, res: Response) => {
   const query = parseSessionSearchQuery(req.query.q);
   const limit = parseSessionSearchLimit(req.query.limit);

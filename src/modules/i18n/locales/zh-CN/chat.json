@@ -302,6 +302,20 @@
       "cost": "费用"
     },
     "openButton": "打开会话面板",
-    "closeButton": "收起会话面板"
+    "closeButton": "收起会话面板",
+    "subagentsAgentLabel": "智能体",
+    "subagentsLoading": "加载中…",
+    "subagentsStatusRunning": "运行中",
+    "subagentsCloseChat": "关闭智能体对话",
+    "subagentsLoadEarlier": "加载更早的消息",
+    "subagentsContinuePlaceholder": "继续与该智能体对话…",
+    "subagentsContinueSend": "继续",
+    "subagentsContinueHint": "将作为携带该智能体身份与工作记录的新会话发出。",
+    "subagentsContinueIdentity": "你是「{{type}}」。",
+    "subagentsContinueIdentityWithDescription": "你是「{{type}}」（{{description}}）。",
+    "subagentsContinueIdentityBare": "你是一名子智能体，此前的任务是：{{description}}。",
+    "subagentsContinueIdentityPlain": "你是一名子智能体。",
+    "subagentsContinueLogIntro": "以下是你作为该子智能体在先前会话中的工作记录",
+    "subagentsContinueAskIntro": "用户现在要继续与你对话，请基于上述上下文回应："
   }
 }

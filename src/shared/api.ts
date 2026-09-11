@@ -146,6 +146,17 @@ export const sessionMessagesUrl = (
     : `${base}${query({ limit, offset: offset ?? 0 })}`;
 };
 
+export const subagentMessagesUrl = (
+  sessionId: string,
+  agentId: string,
+  { limit = null, offset = 0 }: { limit?: number | null; offset?: number } = {},
+): string => {
+  const base = `/api/providers/sessions/${encodeURIComponent(sessionId)}/subagents/${encodeURIComponent(agentId)}/messages`;
+  return limit === null || limit === undefined
+    ? base
+    : `${base}${query({ limit, offset: offset ?? 0 })}`;
+};
+
 const fileContentPath = (projectId: string, filePath: string) =>
   `/api/file-tree/projects/${projectId}/files/content${query({ path: filePath })}`;
 
@@ -378,6 +389,14 @@ export const api = {
       get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/token-usage`),
     sessionContextInfo: (sessionId: string) =>
       get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/context-info`),
+    sessionSubagents: (sessionId: string) =>
+      get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/subagents`),
+    sessionSubagentMessages: (
+      sessionId: string,
+      agentId: string,
+      pagination: { limit?: number | null; offset?: number } = {},
+      options: ApiRequestOptions = {},
+    ) => get(subagentMessagesUrl(sessionId, agentId, pagination), options),
     sessionActiveModel: (provider: string, sessionId: string) =>
       get(`/api/providers/${provider}/sessions/${encodeURIComponent(sessionId)}/active-model`),
     setSessionActiveModel: (provider: string, sessionId: string, model: string) =>

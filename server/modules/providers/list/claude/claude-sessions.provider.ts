@@ -11,6 +11,7 @@ import type {
   NormalizedMessage,
   SubagentActivity,
   SubagentInfo,
+  SubagentSummary,
 } from '@/shared/types.js';
 import { parseFilesInputTag } from '@/shared/image-attachments.js';
 import { prepareTranscriptMessages } from '@/shared/message-unification.js';
@@ -169,6 +170,8 @@ async function readClaudeSubagentTranscript(filePath: string): Promise<ClaudeSub
 type ClaudeSubagentMeta = {
   agentType?: string;
   description?: string;
+  toolUseId?: string;
+  spawnDepth?: number;
 };
 
 /** Reads the sidecar `.meta.json` Claude writes next to a subagent transcript. */
@@ -178,6 +181,8 @@ async function readClaudeSubagentMeta(metaPath: string): Promise<ClaudeSubagentM
     return {
       agentType: typeof parsed.agentType === 'string' ? parsed.agentType : undefined,
       description: typeof parsed.description === 'string' ? parsed.description : undefined,
+      toolUseId: typeof parsed.toolUseId === 'string' ? parsed.toolUseId : undefined,
+      spawnDepth: typeof parsed.spawnDepth === 'number' ? parsed.spawnDepth : undefined,
     };
   } catch {
     return {};
@@ -213,6 +218,98 @@ async function findClaudeSubagentTranscript(
   }
 
   return null;
+}
+
+/** Above this size the roster counts lines without keeping any of their content. */
+const MAX_ROSTER_PARSE_BYTES = 500_000;
+
+type ClaudeSubagentRosterEntry = {
+  agentId: string;
+  transcriptPath: string;
+  metaPath: string;
+  /** Activity rows the transcript holds; content-free above the size cap. */
+  activityCount: number;
+  model?: string;
+  startedAt?: string;
+  lastActivityAt?: string;
+  /** Seconds since the file was last written — the running-heuristic input. */
+  idleSeconds: number;
+};
+
+/**
+ * Streams one agent transcript for the roster: counts activities and notes the
+ * first/last timestamps and model, without keeping any text. A finished agent
+ * can have recorded over a megabyte and the sidebar only needs its shape, so
+ * past the cap lines are counted structurally and timestamps stop being read.
+ */
+async function readClaudeSubagentRosterEntry(
+  agentId: string,
+  transcriptPath: string,
+  stat: { size: number; mtimeMs: number },
+): Promise<ClaudeSubagentRosterEntry> {
+  const entry: ClaudeSubagentRosterEntry = {
+    agentId,
+    transcriptPath,
+    metaPath: transcriptPath.replace(/\.jsonl$/, '.meta.json'),
+    activityCount: 0,
+    idleSeconds: Math.max(0, (Date.now() - stat.mtimeMs) / 1000),
+  };
+
+  try {
+    const fileStream = fs.createReadStream(transcriptPath);
+    const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
+    const detailed = stat.size <= MAX_ROSTER_PARSE_BYTES;
+    const pendingToolIds = new Set<string>();
+
+    for await (const line of rl) {
+      if (!line.trim()) {
+        continue;
+      }
+
+      try {
+        const parsed = JSON.parse(line) as AnyRecord;
+        if (!detailed) {
+          continue;
+        }
+
+        const timestamp = typeof parsed.timestamp === 'string' ? parsed.timestamp : undefined;
+        if (timestamp) {
+          entry.startedAt = entry.startedAt ?? timestamp;
+          entry.lastActivityAt = timestamp;
+        }
+
+        const role = parsed.message?.role;
+        if (role === 'assistant' && Array.isArray(parsed.message?.content)) {
+          if (typeof parsed.message.model === 'string') {
+            entry.model = parsed.message.model;
+          }
+          for (const part of parsed.message.content as AnyRecord[]) {
+            if (part?.type === 'tool_use') {
+              entry.activityCount += 1;
+              if (part.id) {
+                pendingToolIds.add(String(part.id));
+              }
+            } else if (part?.type === 'text' || part?.type === 'thinking') {
+              entry.activityCount += 1;
+            }
+          }
+        } else if (role === 'user' && Array.isArray(parsed.message?.content)) {
+          for (const part of parsed.message.content as AnyRecord[]) {
+            if (part?.type === 'tool_result') {
+              pendingToolIds.delete(String(part.tool_use_id ?? ''));
+            }
+          }
+        }
+      } catch {
+        // A half-written trailing line during a live run is not an entry.
+      }
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`Error rostering agent file ${transcriptPath}:`, message);
+  }
+
+  return entry;
 }
 
 type ClaudeTaskNotification = {
@@ -326,6 +423,31 @@ async function readTranscriptRows(jsonlPath: string, providerSessionId: string):
       if (entry.sessionId === providerSessionId) {
         rows.push(entry);
       }
+    } catch {
+      // A row can be half-written while the CLI is streaming into the file.
+    }
+  }
+
+  return rows;
+}
+
+/**
+ * Reads every JSON row of one transcript file. Unlike `readTranscriptRows`
+ * this does not filter by sessionId — an agent transcript holds exactly one
+ * conversation and its rows carry the parent's session id (or none at all),
+ * so the file itself is the scope.
+ */
+async function readTranscriptLines(jsonlPath: string): Promise<AnyRecord[]> {
+  const rows: AnyRecord[] = [];
+  const fileStream = fs.createReadStream(jsonlPath);
+  const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
+
+  for await (const line of rl) {
+    if (!line.trim()) {
+      continue;
+    }
+    try {
+      rows.push(JSON.parse(line) as AnyRecord);
     } catch {
       // A row can be half-written while the CLI is streaming into the file.
     }
@@ -1127,6 +1249,187 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       // composer's counter tracks the conversation instead of being frozen at
       // whatever it was when the session was opened.
       tokenUsage: summarizeClaudeTokenUsage(rawMessages),
+    };
+  }
+
+  /**
+   * Lists the agents this session spawned by reading the CLI's own
+   * `subagents/` directory — not the parent transcript's `agentId` mentions,
+   * so an agent that is still running (its launch row may not be flushed)
+   * still appears. Status is composed per the doc on `SubagentSummary`.
+   */
+  async listSubagents(
+    sessionId: string,
+    providerSessionId: string,
+    parentRunning: boolean,
+  ): Promise<SubagentSummary[]> {
+    const jsonlPath = sessionsDb.getSessionById(sessionId)?.jsonl_path;
+    if (!jsonlPath) {
+      return [];
+    }
+
+    const projectDir = path.dirname(jsonlPath);
+    const roster: ClaudeSubagentRosterEntry[] = [];
+
+    // Newest layout: one directory per provider session. Older CLIs dropped
+    // agent files next to the parent transcript; both are still on disk in
+    // projects upgraded across CLI versions.
+    const directories = [
+      path.join(projectDir, providerSessionId, 'subagents'),
+      projectDir,
+    ];
+
+    for (const dir of directories) {
+      let names: string[];
+      try {
+        names = await fsp.readdir(dir);
+      } catch {
+        continue;
+      }
+
+      for (const name of names) {
+        if (!name.startsWith('agent-') || !name.endsWith('.jsonl')) {
+          continue;
+        }
+        const agentId = name.slice('agent-'.length, -'.jsonl'.length);
+        if (roster.some((entry) => entry.agentId === agentId)) {
+          continue;
+        }
+
+        const transcriptPath = path.join(dir, name);
+        try {
+          const stat = await fsp.stat(transcriptPath);
+          roster.push(await readClaudeSubagentRosterEntry(agentId, transcriptPath, stat));
+        } catch {
+          // Vanished between readdir and stat; the next poll will see it.
+        }
+      }
+    }
+
+    if (roster.length === 0) {
+      return [];
+    }
+
+    // The parent transcript answers two questions the agent files cannot:
+    // which tool call spawned each agent, and whether each finished.
+    let notificationsByToolUseId = new Map<string, ClaudeTaskNotification>();
+    const toolUseIdsByAgentId = new Map<string, string>();
+    try {
+      const rows = await readTranscriptRows(jsonlPath, providerSessionId);
+      notificationsByToolUseId = collectTaskNotifications(rows);
+      for (const row of rows) {
+        const agentId = row.toolUseResult?.agentId;
+        const toolUseId = readAgentToolUseId(row);
+        if (agentId && toolUseId) {
+          toolUseIdsByAgentId.set(String(agentId), toolUseId);
+        }
+      }
+    } catch {
+      // A parent file we cannot read leaves statuses to the mtime heuristic.
+    }
+
+    const summaries = await Promise.all(roster.map(async (entry): Promise<SubagentSummary> => {
+      const meta = await readClaudeSubagentMeta(entry.metaPath);
+      const toolUseId = meta.toolUseId ?? toolUseIdsByAgentId.get(entry.agentId);
+      const notification = toolUseId ? notificationsByToolUseId.get(toolUseId) : undefined;
+
+      // No notification means the parent never reported an ending. That is
+      // only believable as "still running" while the parent itself runs and
+      // the agent's file is being written; otherwise it is a crash leftover
+      // and the row must not spin forever.
+      const status: SubagentSummary['status'] = notification
+        ? (notification.status && notification.status !== 'completed' ? 'failed' : 'completed')
+        : (parentRunning && entry.idleSeconds < 120 ? 'running' : 'completed');
+
+      return {
+        agentId: entry.agentId,
+        agentType: meta.agentType,
+        description: meta.description,
+        toolUseId,
+        status,
+        activityCount: entry.activityCount,
+        startedAt: entry.startedAt,
+        lastActivityAt: entry.lastActivityAt,
+        model: entry.model,
+      };
+    }));
+
+    // The freshest work reads as the headline of the list.
+    return summaries.sort((a, b) =>
+      new Date(b.lastActivityAt ?? b.startedAt ?? 0).getTime() -
+      new Date(a.lastActivityAt ?? a.startedAt ?? 0).getTime());
+  }
+
+  /**
+   * Reads one agent's own transcript as a normal history page. Goes through
+   * the same normalization as the parent transcript; agent rows never carry a
+   * `parentToolUseId`, so the timeline comes out ungrouped, and the folded
+   * view's transport cap deliberately does not apply here.
+   */
+  async fetchSubagentHistory(
+    sessionId: string,
+    providerSessionId: string,
+    agentId: string,
+    options: FetchHistoryOptions = {},
+  ): Promise<FetchHistoryResult> {
+    const { limit = null, offset = 0 } = options;
+    const jsonlPath = sessionsDb.getSessionById(sessionId)?.jsonl_path;
+    if (!jsonlPath) {
+      return { messages: [], total: 0, hasMore: false, offset: 0, limit };
+    }
+
+    const located = await findClaudeSubagentTranscript(path.dirname(jsonlPath), providerSessionId, agentId);
+    if (!located) {
+      return { messages: [], total: 0, hasMore: false, offset: 0, limit };
+    }
+
+    const rows = await readTranscriptLines(located.transcriptPath);
+    const normalized: NormalizedMessage[] = [];
+    for (const row of rows) {
+      normalized.push(...this.normalizeMessage(row, sessionId));
+    }
+
+    // Same pairing fetchHistory does: a call row and its result row normalize
+    // apart, and the fold onto the call is what the parent transcript's flow
+    // does through toolResultMap before prepareTranscriptMessages runs.
+    const toolResultMap = new Map<string, { content: string; isError: boolean; toolUseResult?: unknown }>();
+    for (const row of rows) {
+      if (row.message?.role === 'user' && Array.isArray(row.message?.content)) {
+        for (const part of row.message.content as AnyRecord[]) {
+          if (part?.type === 'tool_result' && typeof part.tool_use_id === 'string') {
+            toolResultMap.set(part.tool_use_id, {
+              content: typeof part.content === 'string' ? part.content : JSON.stringify(part.content),
+              isError: Boolean(part.is_error),
+              toolUseResult: row.toolUseResult,
+            });
+          }
+        }
+      }
+    }
+
+    for (const message of normalized) {
+      if (message.kind === 'tool_use' && message.toolId && toolResultMap.has(message.toolId)) {
+        const result = toolResultMap.get(message.toolId);
+        if (result) {
+          message.toolResult = result;
+        }
+      }
+    }
+
+    // Same visibility pass the parent transcript gets, so internal reminders
+    // and skill bodies stay out of the agent's conversation too.
+    const transcript = prepareTranscriptMessages(normalized);
+    const total = transcript.length;
+    const normalizedOffset = Math.max(0, offset);
+    const normalizedLimit = limit === null ? null : Math.max(0, limit);
+    const { page, hasMore } = sliceTailPage(transcript, normalizedLimit, normalizedOffset);
+
+    return {
+      messages: page,
+      total,
+      hasMore,
+      offset: normalizedOffset,
+      limit: normalizedLimit,
     };
   }
 }

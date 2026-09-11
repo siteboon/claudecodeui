@@ -430,6 +430,28 @@ export type SubagentInfo = {
 };
 
 /**
+ * One entry of the sidebar's subagent list — what an agent was, what it was
+ * asked to do, and whether it finished. `status` is composed, not stored: the
+ * agent's `.meta.json` carries no state, so the answer comes from the parent's
+ * task-notification rows and, with no notification yet, from how fresh the
+ * agent's own transcript looks while the parent runs (a quiet parent never
+ * shows a running row, which is what keeps a crashed run's leftover from
+ * spinning forever once the run ends).
+ */
+export type SubagentSummary = {
+  agentId: string;
+  agentType?: string;
+  description?: string;
+  /** The parent's tool call that spawned this agent; the live stream keys off it. */
+  toolUseId?: string;
+  status: 'running' | 'completed' | 'failed';
+  activityCount: number;
+  startedAt?: string;
+  lastActivityAt?: string;
+  model?: string;
+};
+
+/**
  * Output gateway shared by WebSocket and SSE provider runs.
  *
  * Runtime adapters only depend on this structural surface, which keeps them

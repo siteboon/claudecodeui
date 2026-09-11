@@ -16,6 +16,7 @@ import type {
   ProviderRuntimeContext,
   ProviderRuntimePermissionGateway,
   ProviderRuntimeWriter,
+  SubagentSummary,
   UpsertProviderMcpServerInput,
 } from '@/shared/types.js';
 
@@ -243,6 +244,31 @@ export interface IProviderSessions {
    * gateway branches on.
    */
   rewindSession?(sessionId: string, keepThroughId: string | null): Promise<void>;
+
+  /**
+   * The agents one session spawned, newest transcript first, with just enough
+   * per-agent state for a sidebar list: what it was, what it was asked to do,
+   * whether it finished. Providers whose CLI keeps no per-agent transcript
+   * file leave this undefined, and the panel shows them as unsupported.
+   */
+  listSubagents?(
+    sessionId: string,
+    providerSessionId: string,
+    parentRunning: boolean,
+  ): Promise<SubagentSummary[]>;
+
+  /**
+   * One agent's own conversation, normalized like any other history page.
+   * Unlike the folded timeline behind a parent tool call (which caps how much
+   * it transmits), this is the complete record the subagent view pages
+   * through, so the panel can read an agent's whole working log.
+   */
+  fetchSubagentHistory?(
+    sessionId: string,
+    providerSessionId: string,
+    agentId: string,
+    options?: FetchHistoryOptions,
+  ): Promise<FetchHistoryResult>;
 }
 
 // ---------------------------
