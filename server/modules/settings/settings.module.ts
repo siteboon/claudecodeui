@@ -1,6 +1,7 @@
 import {
   apiKeysDb,
   credentialsDb,
+  mcpDisabledServersDb,
   notificationPreferencesDb,
   pushSubscriptionsDb,
 } from '@/modules/database/index.js';
@@ -42,6 +43,10 @@ const settingsService = createSettingsService({
     save: (userId, endpoint, p256dh, auth) =>
       pushSubscriptionsDb.saveSubscription(userId, endpoint, p256dh, auth),
     remove: (endpoint) => pushSubscriptionsDb.removeSubscription(endpoint),
+  },
+  mcpDisabledServers: {
+    get: (userId) => mcpDisabledServersDb.get(userId),
+    set: (userId, value) => mcpDisabledServersDb.set(userId, value),
   },
   getVapidPublicKey: getPublicKey,
 });

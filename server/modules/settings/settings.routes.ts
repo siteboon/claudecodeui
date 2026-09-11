@@ -42,6 +42,10 @@ export function createSettingsRouter(
   router.put('/notification-preferences', respond((req) => service.updateNotificationPreferences(
     userId(req), req.body ?? {},
   )));
+  router.get('/mcp-disabled-servers', respond((req) => service.getMcpDisabledServers(userId(req))));
+  router.put('/mcp-disabled-servers', respond((req) => service.updateMcpDisabledServers(
+    userId(req), req.body?.servers,
+  )));
   router.get('/push/vapid-public-key', respond(() => service.getVapidPublicKey()));
   router.post('/push/subscribe', respond((req) => service.subscribeToPush(userId(req), req.body ?? {})));
   router.post('/push/unsubscribe', respond((req) => service.unsubscribeFromPush(

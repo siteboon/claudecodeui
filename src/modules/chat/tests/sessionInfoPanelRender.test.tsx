@@ -42,6 +42,11 @@ const renderPanel = (overrides: Partial<Parameters<typeof SessionInfoPanel>[0]> 
       subagents={[]}
       subagentsLoading={false}
       onSelectSubagent={() => undefined}
+      mcpServers={[]}
+      mcpLoading={false}
+      mcpDisabledSet={new Set()}
+      mcpPendingNames={new Set()}
+      onToggleMcpServer={async () => true}
       isMobile={false}
       onClose={() => toggles.push('close')}
       {...overrides}

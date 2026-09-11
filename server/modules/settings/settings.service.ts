@@ -34,6 +34,10 @@ type SettingsDependencies = {
     save(userId: number, endpoint: string, p256dh: string, auth: string): void;
     remove(endpoint: string): void;
   };
+  mcpDisabledServers: {
+    get(userId: number): string[];
+    set(userId: number, value: unknown): string[];
+  };
   getVapidPublicKey(): string | null;
 };
 
@@ -140,6 +144,12 @@ export function createSettingsService(dependencies: SettingsDependencies) {
     },
     getNotificationPreferences(userId: number) {
       return { success: true, preferences: dependencies.notifications.getPreferences(userId) };
+    },
+    getMcpDisabledServers(userId: number) {
+      return { success: true, servers: dependencies.mcpDisabledServers.get(userId) };
+    },
+    updateMcpDisabledServers(userId: number, servers: unknown) {
+      return { success: true, servers: dependencies.mcpDisabledServers.set(userId, servers) };
     },
     updateNotificationPreferences(userId: number, preferences: NotificationPreferences) {
       return {

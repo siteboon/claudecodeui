@@ -40,6 +40,12 @@ type ProviderCapabilities = {
    * it still get the usage-derived sections, which need no provider help.
    */
   supportsSessionInsights: boolean;
+  /**
+   * Whether the panel's MCP switches actually bite: the runtime has to consult
+   * the user's disabled-server set when it assembles the MCP config, and only
+   * the Claude adapter reads it today.
+   */
+  supportsMcpToggle: boolean;
 };
 
 /**
@@ -66,6 +72,9 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     // Subagent transcripts, the /context snapshot, and the task ledger all
     // come from the Claude CLI's own files and control requests.
     supportsSessionInsights: true,
+    // The Claude runtime filters the merged MCP config against the user's
+    // disabled-server set before the SDK spawns servers.
+    supportsMcpToggle: true,
   },
   cursor: {
     provider: 'cursor',
@@ -80,6 +89,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsMessageEditing: false,
     supportsSessionForking: false,
     supportsSessionInsights: false,
+    supportsMcpToggle: false,
   },
   codex: {
     provider: 'codex',
@@ -100,6 +110,9 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     // Codex keeps no per-subagent transcript file, so the panel's subagent
     // section has nothing to read yet; it renders the usage-derived sections.
     supportsSessionInsights: false,
+    // The Codex runtime builds its own MCP config and does not read the
+    // panel's disabled set, so its switches would be decorative.
+    supportsMcpToggle: false,
   },
   opencode: {
     provider: 'opencode',
@@ -117,6 +130,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsMessageEditing: false,
     supportsSessionForking: false,
     supportsSessionInsights: false,
+    supportsMcpToggle: false,
   },
 };
 

@@ -393,6 +393,9 @@
     "subagentsContinueIdentityBare": "You are a subagent whose previous task was: {{description}}.",
     "subagentsContinueIdentityPlain": "You are a subagent.",
     "subagentsContinueLogIntro": "Below is your own working record from the earlier session as this subagent",
-    "subagentsContinueAskIntro": "The user now wants to continue the conversation. Respond based on the context above:"
+    "subagentsContinueAskIntro": "The user now wants to continue the conversation. Respond based on the context above:",
+    "mcpLoading": "Loading servers…",
+    "mcpToggleAria": "Enable {{name}}",
+    "mcpToggleHint": "Switches apply to new sessions."
   }
 }

@@ -82,12 +82,23 @@
 
 ## Commit 6 — MCP 节（含开关）
 
-- [ ] `settings.service.ts`/`settings.routes.ts`：`mcpDisabledServers` GET/PUT（auth.db JSON blob，仿 notification-preferences）。
-- [ ] `claude-runtime.provider.js`：`loadMcpConfig` 出口过 `applyMcpDisabledFilter(servers, disabledSet)`（按 name 全局禁用）。
-- [ ] 面板 MCP 行开关：乐观更新+失败回滚；提示「切换对新会话生效」。
-- [ ] 列表数据走既有 `GET /api/providers/:provider/mcp/servers`（CLI provider 实现），不另造。
-- [ ] 测试 `claude-mcp-disabled-filter.test.ts`。
+- [x] `settings.service.ts`/`settings.routes.ts`：`mcpDisabledServers` GET/PUT。
+      （落在既有 `user_preferences` 键值表的 `mcpDisabledServers` 键上而非新表——
+      值就是一个名字数组，键值 merge-patch 形态正好合用，免一次建表迁移；
+      且前端经偏好镜像零额外读取即可见，跨设备同步白拿。）
+- [x] `claude-runtime.provider.js`：`loadMcpConfig` 出口过 `applyMcpDisabledFilter(servers, disabledSet)`
+      （按 name 全局禁用，导出为纯函数；userId 由 queryClaudeSDK 的 `ws?.userId` 下传，
+      读库失败降级为"全不禁用"，不阻断会话）。
+- [x] `ProviderCapabilities.supportsMcpToggle`（claude=true，其余 false），
+      面板开关按能力位启停，不写 provider 分支。
+- [x] 面板 MCP 行开关：乐观更新+失败回滚（回滚走偏好镜像，其他读取方同步复原）；
+      提示「开关对新会话生效」。
+- [x] 列表数据走既有 `GET /api/providers/:provider/mcp/servers`，不另造
+      （scopes/扁平两种响应形状统一过 `flattenMcpServers` 按 name 去重排序）。
+- [x] 测试 `claude-mcp-disabled-filter.test.ts`（过滤纯函数 9 例，含仓储读写与脏数据降级）、
+      `settings.service.test.ts` 往返 1 例、`mcpServersSection.test.tsx` 7 例。
 - 验收：关掉一个 MCP 后新会话不再注入该服务器；测试绿。
+      ✅（路由 GET/PUT 往返 + 偏好镜像可见 + 列表端点形状，10091 真实验证通过）
 
 ## Commit 7 — 上下文来源节 + i18n + 打磨
 

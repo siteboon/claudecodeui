@@ -410,7 +410,7 @@ export const api = {
 
     mcpServers: (
       provider: string,
-      { scope, workspacePath }: { scope: string; workspacePath?: string },
+      { scope, workspacePath }: { scope?: string; workspacePath?: string },
     ) => get(`/api/providers/${provider}/mcp/servers${query({ scope, workspacePath })}`),
     saveMcpServer: (provider: string, payload: unknown) =>
       post(`/api/providers/${provider}/mcp/servers`, payload),
@@ -510,6 +510,12 @@ export const api = {
     notificationPreferences: () => get('/api/settings/notification-preferences'),
     saveNotificationPreferences: (preferences: unknown) =>
       put('/api/settings/notification-preferences', preferences),
+
+    // The session info panel's MCP switches; the Claude runtime consults this
+    // set when it assembles each turn's MCP config.
+    mcpDisabledServers: () => get('/api/settings/mcp-disabled-servers'),
+    saveMcpDisabledServers: (servers: string[]) =>
+      put('/api/settings/mcp-disabled-servers', { servers }),
 
     push: {
       vapidPublicKey: () => get('/api/settings/push/vapid-public-key'),

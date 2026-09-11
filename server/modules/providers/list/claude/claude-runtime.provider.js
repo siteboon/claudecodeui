@@ -35,6 +35,7 @@ import {
   notifyRunStopped,
   notifyUserIfEnabled
 } from '@/modules/notifications/index.js';
+import { mcpDisabledServersDb } from '@/modules/database/index.js';
 import { createCompleteMessage, createNormalizedMessage } from '@/shared/utils.js';
 
 const activeSessions = new Map();
@@ -679,11 +680,42 @@ function createHeldPromptStream(messages) {
 }
 
 /**
+ * Drops the MCP servers the user switched off in the info panel.
+ *
+ * Pure (and exported for tests) so the name-matching rules are pinned without
+ * a database: a name disabled at any scope drops every server with that name,
+ * which is what a single global switch per server means to the user.
+ *
+ * @param {Record<string, unknown>|null} servers merged MCP config, if any
+ * @param {Iterable<string>|null} disabledSet server names the user disabled
+ * @returns {Record<string, unknown>|null} the survivors, or null when empty
+ */
+export function applyMcpDisabledFilter(servers, disabledSet) {
+  if (!servers || typeof servers !== 'object') {
+    return null;
+  }
+  const disabled = new Set(
+    Array.from(disabledSet ?? []).map((name) => String(name).trim()).filter(Boolean),
+  );
+  if (disabled.size === 0) {
+    return servers;
+  }
+  const survivors = {};
+  for (const [name, config] of Object.entries(servers)) {
+    if (!disabled.has(String(name).trim())) {
+      survivors[name] = config;
+    }
+  }
+  return Object.keys(survivors).length > 0 ? survivors : null;
+}
+
+/**
  * Loads MCP server configurations from ~/.claude.json
  * @param {string} cwd - Current working directory for project-specific configs
+ * @param {number|null} [userId] - Whose info-panel MCP switches to honor; null loads everything
  * @returns {Object|null} MCP servers object or null if none found
  */
-async function loadMcpConfig(cwd) {
+async function loadMcpConfig(cwd, userId = null) {
   try {
     const claudeConfigPath = path.join(os.homedir(), '.claude.json');
 
@@ -728,7 +760,18 @@ async function loadMcpConfig(cwd) {
     if (Object.keys(mcpServers).length === 0) {
       return null;
     }
-    return mcpServers;
+    // The info panel's MCP switches: drop the names this user disabled before
+    // the SDK ever spawns them. A failing lookup must never block the turn —
+    // an unreadable disable list means "run everything", the safe direction.
+    let disabledSet = null;
+    if (userId) {
+      try {
+        disabledSet = new Set(mcpDisabledServersDb.get(Number(userId)));
+      } catch (error) {
+        console.warn('[Claude SDK] Unable to load disabled MCP servers:', error);
+      }
+    }
+    return applyMcpDisabledFilter(mcpServers, disabledSet);
   } catch (error) {
     console.error('Error loading MCP config:', error.message);
     return null;
@@ -819,7 +862,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       effortModels,
     });
 
-    const mcpServers = await loadMcpConfig(options.cwd);
+    const mcpServers = await loadMcpConfig(options.cwd, ws?.userId || null);
     if (mcpServers) {
       sdkOptions.mcpServers = mcpServers;
     }

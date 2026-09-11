@@ -2,13 +2,14 @@ import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/shared/utils';
-import type { NormalizedMessage, ProviderContextInfo, SubagentSummary, TurnStats } from '@/shared/types';
+import type { NormalizedMessage, ProviderContextInfo, ProviderMcpServer, SubagentSummary, TurnStats } from '@/shared/types';
 import type { SessionInfoPanelSection } from '@/shared/sessionInfoPanelPrefs';
 import { InfoSection } from '@/modules/chat/panel/InfoSection';
 import { ContextRingSection } from '@/modules/chat/panel/ContextRingSection';
 import { TurnStatsSection } from '@/modules/chat/panel/TurnStatsSection';
 import { TasksSection } from '@/modules/chat/panel/TasksSection';
 import { SubagentsSection } from '@/modules/chat/panel/SubagentsSection';
+import { McpServersSection } from '@/modules/chat/panel/McpServersSection';
 import { buildSessionTaskLedger } from '@/modules/chat/utils/sessionTaskList';
 
 type SessionInfoPanelProps = {
@@ -22,11 +23,14 @@ type SessionInfoPanelProps = {
   subagents: SubagentSummary[];
   subagentsLoading: boolean;
   onSelectSubagent: (summary: SubagentSummary) => void;
+  mcpServers: ProviderMcpServer[];
+  mcpLoading: boolean;
+  mcpDisabledSet: Set<string>;
+  mcpPendingNames: Set<string>;
+  onToggleMcpServer: (name: string) => Promise<boolean>;
   isMobile: boolean;
   onClose: () => void;
 };
-
-const SECTION_KEYS = ['context', 'turnStats', 'subagents', 'tasks', 'mcp', 'sources'] as const;
 
 /**
  * The right-hand conversation sidebar: six collapsible sections covering
@@ -45,6 +49,11 @@ export const SessionInfoPanel = memo(({
   subagents,
   subagentsLoading,
   onSelectSubagent,
+  mcpServers,
+  mcpLoading,
+  mcpDisabledSet,
+  mcpPendingNames,
+  onToggleMcpServer,
   isMobile,
   onClose,
 }: SessionInfoPanelProps) => {
@@ -108,16 +117,28 @@ export const SessionInfoPanel = memo(({
         <TasksSection tasks={taskLedger.tasks} />
       </InfoSection>
 
-      {SECTION_KEYS.filter((section) => section === 'mcp' || section === 'sources').map((section) => (
-        <InfoSection
-          key={section}
-          title={t(`sessionInfoPanel.${section}`)}
-          collapsed={collapsed[section] ?? false}
-          onToggle={() => onToggleSection(section)}
-        >
-          <div className="py-1 text-xs text-muted-foreground">{t('sessionInfoPanel.empty')}</div>
-        </InfoSection>
-      ))}
+      <InfoSection
+        title={t('sessionInfoPanel.mcp')}
+        countLabel={mcpServers.length > 0 ? String(mcpServers.length) : undefined}
+        collapsed={collapsed.mcp ?? false}
+        onToggle={() => onToggleSection('mcp')}
+      >
+        <McpServersSection
+          servers={mcpServers}
+          loading={mcpLoading}
+          disabledSet={mcpDisabledSet}
+          pendingNames={mcpPendingNames}
+          onToggle={onToggleMcpServer}
+        />
+      </InfoSection>
+
+      <InfoSection
+        title={t('sessionInfoPanel.sources')}
+        collapsed={collapsed.sources ?? false}
+        onToggle={() => onToggleSection('sources')}
+      >
+        <div className="py-1 text-xs text-muted-foreground">{t('sessionInfoPanel.empty')}</div>
+      </InfoSection>
     </aside>
   );
 });

@@ -22,6 +22,7 @@ import { useChatRealtimeHandlers } from '@/modules/chat/hooks/useChatRealtimeHan
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
 import { useSessionStore } from '@/modules/chat/hooks/useSessionStore';
 import { useSessionSubagents } from '@/modules/chat/hooks/useSessionSubagents';
+import { useSessionMcpServers } from '@/modules/chat/hooks/useSessionMcpServers';
 import {
   useProcessingSessions,
   useSessionProtectionActions,
@@ -137,6 +138,7 @@ function ChatInterface({
     supportsMessageEditing,
     supportsSessionForking,
     supportsSessionInsights,
+    supportsMcpToggle,
   } = useChatProviderState({
     selectedSession,
     selectedProject,
@@ -210,6 +212,14 @@ function ChatInterface({
     enabled: sessionInfo.prefs.open,
     supportsInsights: supportsSessionInsights,
     parentRunning: isProcessing,
+  });
+  // The MCP section reads the provider's own server list and the user's
+  // disabled-name set; switches only bite for providers whose runtime
+  // consults the set (the capability matrix says which those are).
+  const mcpSection = useSessionMcpServers({
+    provider,
+    projectPath: selectedProject?.fullPath || selectedProject?.path || null,
+    enabled: sessionInfo.prefs.open && supportsMcpToggle,
   });
   // The agent whose conversation overlay is open, if any. Cleared whenever
   // the roster's session changes so an overlay never outlives its parent.
@@ -660,6 +670,11 @@ function ChatInterface({
             subagents={subagentRoster.subagents}
             subagentsLoading={subagentRoster.loading}
             onSelectSubagent={(summary) => setOpenSubagent({ parentSessionId: activeSessionId ?? '', summary })}
+            mcpServers={mcpSection.servers}
+            mcpLoading={mcpSection.loading}
+            mcpDisabledSet={mcpSection.disabledSet}
+            mcpPendingNames={mcpSection.pendingNames}
+            onToggleMcpServer={mcpSection.toggleServer}
             isMobile={isMobile}
             onClose={() => sessionInfo.setOpen(false)}
           />
