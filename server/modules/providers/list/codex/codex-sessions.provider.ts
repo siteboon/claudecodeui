@@ -70,6 +70,64 @@ function isVisibleCodexUserMessage(payload: AnyRecord | null | undefined): boole
 }
 
 /**
+ * Reads the prompt out of a new-format rollout's completed `UserMessage` item.
+ *
+ * Codex 0.14x+ stopped writing the `event_msg/user_message` row entirely (a
+ * census of real rollouts found the two styles never coexist in one file) and
+ * records the prompt instead as `event_msg/item_completed` whose `item` is
+ * `{ type: 'UserMessage', content: [{ type: 'text', text }] }`. The item text
+ * is only what the user typed — injected boilerplate (AGENTS.md, environment
+ * context) arrives through separate `response_item/message` rows, which the
+ * reader never renders — so this is the new format's one visible-prompt row.
+ *
+ * Returns the joined text, or null when the row is not a user prompt.
+ */
+function readCodexCompletedUserMessage(payload: AnyRecord | null | undefined): string | null {
+  if (!payload || payload.type !== 'item_completed') {
+    return null;
+  }
+
+  const item = readObjectRecord(payload.item);
+  if (!item || item.type !== 'UserMessage') {
+    return null;
+  }
+
+  const text = extractCodexTextContent(item.content);
+  return text.trim().length > 0 ? text : null;
+}
+
+/**
+ * Image attachments carried on a completed `UserMessage` item.
+ *
+ * The old row kept paths on the payload itself; the item keeps its content as
+ * typed parts, so non-text parts (an image sent inline) join the same
+ * attachment shape `extractCodexUserImages` produces for the legacy row.
+ */
+function extractCodexCompletedUserImages(
+  payload: AnyRecord | null | undefined,
+): Array<{ path?: string; data?: string }> | undefined {
+  const item = readObjectRecord(payload?.item);
+  if (!Array.isArray(item?.content)) {
+    return undefined;
+  }
+
+  const attachments: Array<{ path?: string; data?: string }> = [];
+  for (const part of item.content as unknown[]) {
+    const record = readObjectRecord(part);
+    if (!record || record.type === 'text') {
+      continue;
+    }
+    if (typeof record.path === 'string' && record.path.trim()) {
+      attachments.push(...toImageAttachments([record.path]));
+    } else if (typeof record.url === 'string' && record.url.startsWith('data:')) {
+      attachments.push({ data: record.url });
+    }
+  }
+
+  return attachments.length > 0 ? attachments : undefined;
+}
+
+/**
  * Follows which turn a Codex rollout is inside as its rows stream past.
  *
  * Codex writes no per-row id — every line is `{timestamp, type, payload}` and
@@ -1211,6 +1269,30 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
     messages.push({ type: 'tool_result', timestamp, toolCallId: callId, output, isError });
   };
 
+  /**
+   * Pushes one visible user prompt, anchoring only the first of a turn.
+   *
+   * A turn can hold more than one prompt — a follow-up queued while the turn
+   * was running is written into it — and the fork/edit cut is per turn, so
+   * anchoring the second would quietly take the first with it when the user
+   * edited only the second. Shared by the old `user_message` row and the new
+   * `item_completed/UserMessage` row so both formats obey one rule.
+   */
+  const pushUserPrompt = (timestamp: string, content: string, images?: Array<{ path?: string; data?: string }>) => {
+    const turnId = turns.getCurrentTurnId();
+    const isFirstPromptOfTurn = Boolean(turnId) && !anchoredTurnIds.has(turnId as string);
+    if (isFirstPromptOfTurn) {
+      anchoredTurnIds.add(turnId as string);
+    }
+    messages.push({
+      type: 'user',
+      timestamp,
+      message: { role: 'user', content },
+      images,
+      ...(isFirstPromptOfTurn ? { turnId } : {}),
+    });
+  };
+
   for await (const line of rl) {
     if (!line.trim()) {
       continue;
@@ -1313,22 +1395,16 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
       }
 
       if (isVisibleCodexUserMessage(payload)) {
-        // Only the first prompt of a turn is anchored. A turn can hold more
-        // than one — a follow-up queued while the turn was running is written
-        // into it — and the cut is per turn, so anchoring the second would
-        // quietly take the first with it when the user edited only the second.
-        const turnId = turns.getCurrentTurnId();
-        const isFirstPromptOfTurn = Boolean(turnId) && !anchoredTurnIds.has(turnId as string);
-        if (isFirstPromptOfTurn) {
-          anchoredTurnIds.add(turnId as string);
-        }
-        messages.push({
-          type: 'user',
-          timestamp,
-          message: { role: 'user', content: payload.message },
-          images: extractCodexUserImages(payload),
-          ...(isFirstPromptOfTurn ? { turnId } : {}),
-        });
+        pushUserPrompt(timestamp, String(payload.message), extractCodexUserImages(payload));
+      }
+
+      // The new rollout format's prompt row, forking from here only ever
+      // coexists with the old `user_message` style in theory and never in
+      // practice, but sharing `pushUserPrompt` keeps even a hypothetical mix
+      // from double-anchoring: the per-turn first-anchor set is the arbiter.
+      const completedPrompt = readCodexCompletedUserMessage(payload);
+      if (completedPrompt) {
+        pushUserPrompt(timestamp, completedPrompt, extractCodexCompletedUserImages(payload));
       }
       continue;
     }

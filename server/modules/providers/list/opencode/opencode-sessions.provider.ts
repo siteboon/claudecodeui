@@ -425,6 +425,12 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
             content: parsedFiles.text,
             images: parsedImages.attachments.length > 0 ? parsedImages.attachments : undefined,
             files: parsedFiles.attachments.length > 0 ? parsedFiles.attachments : undefined,
+            // The native `msg_...` row id: stable across reads (unlike the
+            // synthesized `baseId`, which renews every fetch) and exactly what
+            // the fork endpoint's messageID parameter addresses. Several text
+            // parts of one message sharing the anchor is harmless — they all
+            // fork at the same message.
+            ...(messageRole === 'user' ? { transcriptAnchorId: row.message_id } : {}),
           }));
         }
         continue;

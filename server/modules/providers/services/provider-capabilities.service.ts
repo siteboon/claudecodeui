@@ -101,8 +101,12 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsPermissionRequests: false,
     supportsTokenUsage: true,
     supportsEffort: true,
+    // Fork rides OpenCode's own server API (`POST /session/{id}/fork` on a
+    // short-lived `opencode serve`), not a write into the shared opencode.db.
+    // Editing stays false: cutting a conversation and re-asking the prompt
+    // needs a revert the one-shot `opencode run` runtime cannot express.
     supportsMessageEditing: false,
-    supportsSessionForking: false,
+    supportsSessionForking: true,
   },
 };
 

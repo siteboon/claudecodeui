@@ -68,21 +68,32 @@ export interface IProvider {
  */
 export interface IProviderFork {
   /**
+   * True when the provider keeps every transcript in one shared store rather
+   * than one artifact file per session (OpenCode's opencode.db). The sessions
+   * service then accepts a source row whose `jsonl_path` is legitimately NULL,
+   * and a fork writing back no path of its own.
+   */
+  readonly transcriptIsSharedDatabase?: boolean;
+
+  /**
    * Copies a session's transcript, up to and including `upToAnchorId` (the
    * whole conversation when omitted), into a brand-new provider session.
    *
    * Returns the new provider-native id and the path of the artifact it wrote,
    * so the caller can insert the database row before the filesystem watcher
-   * notices the file and indexes it as an unrelated session.
+   * notices the file and indexes it as an unrelated session. `jsonlPath` is
+   * null for providers with `transcriptIsSharedDatabase` — the copy lives in
+   * the shared store and there is no path to point a row at.
    */
   forkSession(input: {
     providerSessionId: string;
-    jsonlPath: string;
+    /** Null when the source itself lives in a shared store. */
+    jsonlPath: string | null;
     /** The session's working directory — how providers scope a session lookup. */
     projectPath: string;
     upToAnchorId?: string;
     title?: string;
-  }): Promise<{ providerSessionId: string; jsonlPath: string }>;
+  }): Promise<{ providerSessionId: string; jsonlPath: string | null }>;
 }
 
 // ---------------------------

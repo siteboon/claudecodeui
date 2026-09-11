@@ -200,7 +200,10 @@ export const sessionsDb = {
    * Unlike `createAppSession` this writes `provider_session_id` and
    * `jsonl_path` immediately, because a fork's transcript file exists before
    * the row does — and the filesystem watcher would otherwise index it as an
-   * unrelated session under its own id.
+   * unrelated session under its own id. `jsonlPath` is null for providers that
+   * keep transcripts in a shared database (OpenCode), where the copy exists
+   * without any per-session file; keeping it null there is also what stops
+   * deleting one app session from deleting everybody's store.
    */
   createForkedSession(input: {
     sessionId: string;
@@ -208,7 +211,7 @@ export const sessionsDb = {
     projectPath: string;
     customName: string | null;
     providerSessionId: string;
-    jsonlPath: string;
+    jsonlPath: string | null;
     forkedFromSessionId: string;
     model: string | null;
     effort: string | null;
