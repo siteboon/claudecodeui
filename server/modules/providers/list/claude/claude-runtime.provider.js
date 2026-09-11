@@ -25,7 +25,6 @@ import {
   normalizeImageDescriptors
 } from '@/shared/image-attachments.js';
 import {
-  CLAUDE_PREDEFINED_MODELS,
   CLAUDE_ULTRACODE_EFFORT
 } from '@/modules/providers/list/claude/claude-models.provider.js';
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
@@ -78,7 +77,7 @@ const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode'])
 // selection is translated back into the two options the SDK actually understands here.
 const ULTRACODE_SDK_EFFORT = 'xhigh';
 
-function resolveClaudeEffort(model, effort, modelsDefinition = CLAUDE_PREDEFINED_MODELS) {
+function resolveClaudeEffort(model, effort, modelsDefinition) {
   const selectedModel = modelsDefinition?.OPTIONS?.find((option) => option.value === model) || null;
   const allowedEfforts = selectedModel?.effort?.values
     ?.map((value) => value.value) || [];
@@ -271,12 +270,18 @@ function mapCliOptionsToSDK(options = {}) {
 
   sdkOptions.disallowedTools = settings.disallowedTools || [];
 
-  sdkOptions.model = options.model || CLAUDE_PREDEFINED_MODELS.DEFAULT;
+  // No curated fallback: an absent model is left unset so the CLI runs the
+  // account's own default rather than a source-controlled alias. The websocket
+  // send path records a model on every turn, so this only covers callers that
+  // deliberately omit it.
+  if (options.model) {
+    sdkOptions.model = options.model;
+  }
 
   applyClaudeEffort(sdkOptions, resolveClaudeEffort(
     sdkOptions.model,
     effort,
-    options.effortModels || CLAUDE_PREDEFINED_MODELS,
+    options.effortModels,
   ));
 
   sdkOptions.systemPrompt = {
@@ -757,12 +762,10 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
 
   try {
     const resolvedModel = await context.resolveResumeModel(sessionId, options.model);
-    let effortModels = CLAUDE_PREDEFINED_MODELS;
-    try {
-      effortModels = await context.getProviderModels();
-    } catch (error) {
-      console.warn('[Claude SDK] Unable to load provider models for effort validation:', error);
-    }
+    // No curated fallback: effort choices are validated against the live CLI
+    // catalog, and a catalog that cannot load fails the turn with the CLI's
+    // own error rather than silently validating against stale defaults.
+    const effortModels = await context.getProviderModels();
 
     const sdkOptions = mapCliOptionsToSDK({
       ...options,
