@@ -121,6 +121,20 @@ createWebSocketServer(server, {
 });
 
 app.use(cors({ exposedHeaders: ['X-Refreshed-Token', 'X-Auth-Error'] }));
+
+// API responses must never come out of the browser's HTTP cache. Express adds a
+// weak ETag to every JSON body by default and nothing here set Cache-Control, so
+// browsers cached /api/* responses and revalidated them. On a 304 the browser
+// replays the cached response *with its cached headers*, including a stale
+// X-Refreshed-Token minted days earlier — the client then stored that expired
+// token over the fresh one and bounced the user to login (#1308).
+app.set('etag', false);
+app.use((req, res, next) => {
+    if (req.path.startsWith('/api/')) {
+        res.setHeader('Cache-Control', 'no-store');
+    }
+    next();
+});
 app.use(express.json({
     limit: '50mb',
     type: (req) => {
