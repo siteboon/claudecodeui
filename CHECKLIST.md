@@ -30,17 +30,16 @@
 
 ## Commit 2 — 轮次统计（前端）+ 偏好骨架
 
-- [ ] `src/shared/types.ts` 镜像 `TurnStats`。
-- [ ] `useChatRealtimeHandlers.ts`：`case 'status'` 增 `turn_stats` 分支，按 `sid===activeViewSessionId` 作用域。
-- [ ] `useChatSessionState.ts`：新增 `turnStats` state，会话切换/新建处随 tokenBudget 一并 reset。
-- [ ] `src/modules/chat/utils/sessionTurnStats.ts` 纯函数：七指标口径
+- [x] `src/shared/types.ts` 镜像 `TurnStats`。
+- [x] `useChatRealtimeHandlers.ts`：`case 'status'` 增 `turn_stats` 分支，按 `sid===activeViewSessionId` 作用域。
+- [x] `useChatSessionState.ts`：新增 `turnStats` state，会话切换/新建处随 tokenBudget 一并 reset。
+- [x] `src/modules/chat/utils/sessionTurnStats.ts` 纯函数：七指标口径
       （回答速度/整个请求速度/模型耗时/工具耗时/步骤/Token↑↓/缓存命中率/费用；缺帧降级 `—`；
       本轮=最后一条 user text 之后）。
-- [ ] `src/shared/sessionInfoPanelPrefs.ts` + `userSettings.ts` 增 `sessionInfoPanel` 槽 +
-      `UiPreferencesContext` 持久化（open + collapsedSections）。
-- [ ] 测试：`turnStatsDerivation.test.ts`、`tokenStatsSessionScope.test.tsx`（仿 tokenBudgetSessionScope）、
-      `sessionInfoPanelPrefs.test.ts`。
-- 验收：上述三个测试绿；此步 UI 尚不可见。
+- [x] `src/shared/sessionInfoPanelPrefs.ts` + `userSettings.ts` 增 `sessionInfoPanel` 槽
+      （open + collapsedSections；读取器规范化掉 false 值）。
+- [x] 测试：`sessionTurnStats.test.ts`(7)、`turnStatsSessionScope.test.tsx`(2)、
+      `sessionInfoPanelPrefs.test.ts`(4)；`npm run typecheck` 前后端全绿。此步 UI 尚不可见。
 
 ## Commit 3 — 面板壳 + 上下文节 + 轮次统计节
 

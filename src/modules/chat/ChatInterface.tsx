@@ -150,11 +150,15 @@ function ChatInterface({
     setIsUserScrolledUp,
     tokenBudget,
     setTokenBudget,
+    turnStats,
+    setTurnStats,
     visibleMessageCount,
     visibleMessages,
     loadEarlierMessages,
     loadAllMessages,
     loadFullTranscript,
+    requestOlderMessages,
+    scrollToPromptEntry,
     allMessagesLoaded,
     isLoadingAllMessages,
     loadAllJustFinished,
@@ -290,6 +294,7 @@ function ChatInterface({
     selectedSession,
     currentSessionId,
     setTokenBudget,
+    setTurnStats,
     pendingPermissionRequests,
     setPendingPermissionRequests,
     streamTimerRef,
@@ -332,7 +337,8 @@ function ChatInterface({
   }, [resetStreamingState]);
 
   /**
-   * Branches the conversation into a new session that ends at this message,
+   * Branches the conversation into a new session holding everything BEFORE
+   * this message (without it — the fork is where the user retakes that turn),
    * then opens it. The session being viewed is left exactly as it was.
    */
   const handleForkFromMessage = useCallback(async (message: ChatMessage) => {
@@ -482,6 +488,8 @@ function ChatInterface({
           onEditMessage={supportsMessageEditing && !isProcessing ? beginEditMessage : undefined}
           onForkFromMessage={supportsSessionForking ? handleForkFromMessage : undefined}
           onLoadFullTranscript={loadFullTranscript}
+          onSelectPrompt={scrollToPromptEntry}
+          onRequestOlderMessages={requestOlderMessages}
         />
 
         <div className="relative flex-shrink-0">

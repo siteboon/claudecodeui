@@ -2,9 +2,14 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { extractTurnStats } from '@/modules/providers/list/claude/claude-runtime.provider.js';
+import type { TurnStats } from '@/shared/types.js';
+
+// The runtime adapter is plain JavaScript, so the extractor arrives untyped;
+// assertions below check the shape the frontend `TurnStats` expects.
+const statsFrom = (message: unknown): TurnStats | null => extractTurnStats(message as never) as TurnStats | null;
 
 test('a turn-ending result yields the turn bill', () => {
-  const stats = extractTurnStats({
+  const stats = statsFrom({
     type: 'result',
     subtype: 'success',
     duration_ms: 181_000,
@@ -35,7 +40,7 @@ test('a turn-ending result yields the turn bill', () => {
 test('missing numbers stay null instead of zero', () => {
   // The panel renders "—" for absent metrics; coercing to 0 would claim a
   // free turn and a zero-length run.
-  const stats = extractTurnStats({ type: 'result' });
+  const stats = statsFrom({ type: 'result' });
 
   assert.ok(stats);
   assert.equal(stats.costUsd, null);
@@ -46,7 +51,7 @@ test('missing numbers stay null instead of zero', () => {
 });
 
 test('a partial usage object keeps the reported fields', () => {
-  const stats = extractTurnStats({
+  const stats = statsFrom({
     type: 'result',
     usage: { output_tokens: 320 },
   });
@@ -61,7 +66,7 @@ test('a partial usage object keeps the reported fields', () => {
 });
 
 test('anything that is not a result emits no stats', () => {
-  assert.equal(extractTurnStats(null), null);
-  assert.equal(extractTurnStats({ type: 'assistant', usage: { output_tokens: 1 } }), null);
-  assert.equal(extractTurnStats({ type: 'system', subtype: 'task_progress' }), null);
+  assert.equal(statsFrom(null), null);
+  assert.equal(statsFrom({ type: 'assistant', usage: { output_tokens: 1 } }), null);
+  assert.equal(statsFrom({ type: 'system', subtype: 'task_progress' }), null);
 });

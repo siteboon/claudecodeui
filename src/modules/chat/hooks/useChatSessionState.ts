@@ -2,13 +2,15 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { MutableRefObject } from 'react';
 
 import { api } from '@/shared/api';
-import type { MarkSessionIdle, SessionActivityMap,Project,ProjectSession,LLMProvider,NormalizedMessage,ChatMessage,DiffCalculator } from '@/shared/types';
+import type { MarkSessionIdle, SessionActivityMap,Project,ProjectSession,LLMProvider,NormalizedMessage,ChatMessage,DiffCalculator,TurnStats } from '@/shared/types';
 import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
 import { SESSION_MESSAGES_PAGE_SIZE } from '@/modules/chat/utils/sessionMessagePagination';
 import { createMessageHistoryRefreshCoordinator } from '@/modules/chat/utils/messageHistoryRefreshCoordinator';
 import { createCachedDiffCalculator } from '@/modules/chat/utils/messageTransforms';
 import { normalizedToChatMessages } from '@/modules/chat/hooks/useChatMessages';
 import { findSearchTargetIndex, resolveSearchWindowSize } from '@/modules/chat/utils/searchTargetLocator';
+import { buildPromptPreview } from '@/modules/chat/utils/promptNavigator';
+import type { PromptEntry } from '@/modules/chat/utils/promptNavigator';
 import { readSelectedProvider } from '@/shared/selectedProvider';
 import type { SearchTarget } from '@/modules/chat/utils/searchTargetLocator';
 
@@ -200,6 +202,7 @@ export function useChatSessionState({
   const [totalMessages, setTotalMessages] = useState(0);
   const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
   const [tokenBudget, setTokenBudget] = useState<Record<string, unknown> | null>(null);
+  const [turnStats, setTurnStats] = useState<TurnStats | null>(null);
   const [visibleMessageCount, setVisibleMessageCount] = useState(INITIAL_VISIBLE_MESSAGES);
   const [allMessagesLoaded, setAllMessagesLoaded] = useState(false);
   const [isLoadingAllMessages, setIsLoadingAllMessages] = useState(false);
@@ -227,6 +230,16 @@ export function useChatSessionState({
   const isUserScrolledUpRef = useRef(false);
   const isLoadingMoreRef = useRef(false);
   const allMessagesLoadedRef = useRef(false);
+  /**
+   * Per-session outcome of the prompt navigator's full-transcript prefetch:
+   * 'inflight' while the unbounded fetch runs, 'complete' once the store holds
+   * the whole transcript, 'unsupported' when the provider refused the
+   * unbounded page (so we stop hammering it and let "load older" walk instead).
+   * 'complete' is re-checked against the slot on every activation: a bounded
+   * reload that shrank the cache again must re-arm the prefetch instead of
+   * being trusted forever.
+   */
+  const promptNavigatorPrefetchRef = useRef(new Map<string, 'inflight' | 'complete' | 'unsupported'>());
   const topLoadLockRef = useRef(false);
   const pendingScrollRestoreRef = useRef<ScrollRestoreState | null>(null);
   const pendingInitialScrollRef = useRef(true);
@@ -278,6 +291,7 @@ export function useChatSessionState({
     setTotalMessages(0);
     
     setTokenBudget(null);
+    setTurnStats(null);
     setVisibleMessageCount(INITIAL_VISIBLE_MESSAGES);
     setAllMessagesLoaded(false);
     allMessagesLoadedRef.current = false;
@@ -330,8 +344,14 @@ export function useChatSessionState({
     async () => true,
   );
   latestRefreshExecutorRef.current = async (sessionId: string) => {
+    // Once the prompt navigator's prefetch has hydrated the whole transcript,
+    // every refresh must re-request the whole transcript. A bounded 20-row
+    // tail page cannot bridge against the full cache (no overlap), and the
+    // store would fall back to keeping — effectively shrinking the rail back
+    // to one page.
+    const limit = allMessagesLoadedRef.current ? null : SESSION_MESSAGES_PAGE_SIZE;
     const result = await sessionStore.refreshLatestFromServer(sessionId, {
-      limit: SESSION_MESSAGES_PAGE_SIZE,
+      limit,
       canRequest: () => (
         isActiveRef.current
         && activeSessionIdRef.current === sessionId
@@ -344,6 +364,9 @@ export function useChatSessionState({
       messagesOffsetRef.current = slot.offset;
       if (slot.tokenUsage !== undefined) {
         setTokenBudget((slot.tokenUsage as Record<string, unknown> | null) ?? null);
+        // The turn bill has no transcript backing (the jsonl never stores the
+        // provider's result) — a session switch must not carry the old one.
+        setTurnStats(null);
       }
     }
     return !result.deferred;
@@ -483,6 +506,9 @@ export function useChatSessionState({
         messagesOffsetRef.current = slot.offset;
         if (slot.tokenUsage !== undefined) {
           setTokenBudget((slot.tokenUsage as Record<string, unknown> | null) ?? null);
+        // The turn bill has no transcript backing (the jsonl never stores the
+        // provider's result) — a session switch must not carry the old one.
+        setTurnStats(null);
         }
 
         if (prependedCount === 0) {
@@ -556,8 +582,21 @@ export function useChatSessionState({
       }
       const didLoad = await loadOlderMessages(container);
       if (didLoad) topLoadLockRef.current = true;
+      return;
     }
-  }, [hasMoreMessages, isActive, isNearBottom, loadOlderMessages]);
+
+    // Everything is in the store (prefetch finished, or load-all ran), yet the
+    // render window still clips older rows. Reaching the top widens it another
+    // page — scrolling up keeps yielding history without a "load 100" click.
+    // The same lock pattern re-arms after the user scrolls away from the top
+    // and back, so one arrival at the top reveals one page, not all of it.
+    if (visibleMessageCount >= chatMessages.length) return;
+    // No anchor restore here (unlike the server path): the user is at the
+    // top, nothing exists above them to shift, and the prepended rows mount
+    // into view from the top of the container.
+    setVisibleMessageCount((prev) => Math.min(chatMessages.length, prev + SESSION_MESSAGES_PAGE_SIZE * 5));
+    topLoadLockRef.current = true;
+  }, [chatMessages.length, hasMoreMessages, isActive, isNearBottom, loadOlderMessages, visibleMessageCount]);
 
   const wasChatActiveRef = useRef(isActive);
   useLayoutEffect(() => {
@@ -698,6 +737,7 @@ export function useChatSessionState({
       setHasMoreMessages(false);
       setTotalMessages(0);
       setTokenBudget(null);
+      setTurnStats(null);
       lastLoadedSessionKeyRef.current = null;
       return;
     }
@@ -745,6 +785,7 @@ export function useChatSessionState({
 
     if (sessionChanged) {
       setTokenBudget(null);
+      setTurnStats(null);
     }
 
     setCurrentSessionId(selectedSessionId);
@@ -753,6 +794,24 @@ export function useChatSessionState({
 
     // Fetch from server → store updates → chatMessages re-derives automatically
     setIsLoadingSessionMessages(true);
+    // A session whose transcript the prompt navigator already hydrated does
+    // not re-enter through fetchFromServer: that replaces the cache wholesale,
+    // so re-downloading everything to catch a few new rows wastes the whole
+    // transcript. Reconcile instead — the latest-page refresh reads from the
+    // newest cached row and only bridges the rows added since.
+    if (
+      promptNavigatorPrefetchRef.current.get(selectedSessionId) === 'complete'
+      && existingSlot
+      && existingSlot.serverMessages.length > 0
+    ) {
+      void requestLatestMessages(selectedSessionId).finally(() => {
+        if (activeSessionIdRef.current === selectedSessionId) {
+          setIsLoadingSessionMessages(false);
+        }
+      });
+      return;
+    }
+
     sessionStore.fetchFromServer(selectedSessionId, {
       limit: SESSION_MESSAGES_PAGE_SIZE,
       offset: 0,
@@ -765,8 +824,19 @@ export function useChatSessionState({
         setHasMoreMessages(slot.hasMore);
         setTotalMessages(slot.total);
         messagesOffsetRef.current = slot.offset;
+        // Only trust a reported end-of-history when the page could actually
+        // hold it; a bounded page claiming hasMore=false over a larger total
+        // is a provider lie, and flagging it as loaded would strand the rail
+        // on one page (the prefetch would see hasMore=false and stand down).
+        if (!slot.hasMore && slot.total <= slot.offset) {
+          allMessagesLoadedRef.current = true;
+          setAllMessagesLoaded(true);
+        }
         if (slot.tokenUsage !== undefined) {
           setTokenBudget((slot.tokenUsage as Record<string, unknown> | null) ?? null);
+        // The turn bill has no transcript backing (the jsonl never stores the
+        // provider's result) — a session switch must not carry the old one.
+        setTurnStats(null);
         }
       }
       setIsLoadingSessionMessages(false);
@@ -954,6 +1024,7 @@ export function useChatSessionState({
   useEffect(() => {
     if (!selectedSession?.id) {
       setTokenBudget(null);
+      setTurnStats(null);
       return;
     }
     const fetchInitialTokenUsage = async () => {
@@ -965,6 +1036,7 @@ export function useChatSessionState({
           setTokenBudget(payload.data ?? null);
         } else {
           setTokenBudget(null);
+      setTurnStats(null);
         }
       } catch (error) {
         console.error('Failed to fetch initial token usage:', error);
@@ -1098,6 +1170,163 @@ export function useChatSessionState({
     setVisibleMessageCount((prev) => prev + 100);
   }, []);
 
+  /* ------------------------------------------------------------------ */
+  /*  Full-transcript prefetch (prompt navigator)                        */
+  /* ------------------------------------------------------------------ */
+
+  // The rail is a map of the whole conversation, not of the loaded page: its
+  // ticks and jump targets must exist before the user scrolls there. Once a
+  // session's first page lands, pull the rest of the transcript into the store
+  // in the background. Rendering stays windowed (rows lazy-mount near the
+  // viewport), so this grows the data, never the visible DOM.
+  useEffect(() => {
+    if (!isActive) return;
+    const sessionId = selectedSession?.id;
+    if (!sessionId || isLoadingSessionMessages || chatMessages.length === 0) return;
+    const prefetchState = promptNavigatorPrefetchRef.current.get(sessionId);
+    if (prefetchState === 'inflight' || prefetchState === 'unsupported') return;
+    const slot = sessionStore.getSessionSlot(sessionId);
+    if (!slot || !slot.hasMore) return;
+
+    promptNavigatorPrefetchRef.current.set(sessionId, 'inflight');
+    void sessionStore
+      .fetchFromServer(sessionId, {
+        limit: null,
+        offset: 0,
+        canRequest: () => isActiveRef.current && activeSessionIdRef.current === sessionId,
+      })
+      .then((refreshed) => {
+        if (!refreshed) {
+          // Cancelled mid-flight (session switched away); let a later
+          // re-select retry instead of caching a no-op as complete.
+          promptNavigatorPrefetchRef.current.delete(sessionId);
+          return;
+        }
+        if (!refreshed.hasMore) {
+          promptNavigatorPrefetchRef.current.set(sessionId, 'complete');
+          if (activeSessionIdRef.current === sessionId) {
+            setHasMoreMessages(false);
+            setTotalMessages(refreshed.total);
+            messagesOffsetRef.current = refreshed.offset;
+            // The store now owns the whole transcript, so scrolling to the top
+            // switches from "fetch older" to "widen the render window" in
+            // handleScroll. Without this the flag stays false forever and the
+            // widening branch is unreachable.
+            allMessagesLoadedRef.current = true;
+            setAllMessagesLoaded(true);
+          }
+        } else {
+          // The provider could not serve the unbounded page; stop retrying the
+          // unbounded fetch and let a scroll-to-top "load older" walk the
+          // history instead.
+          promptNavigatorPrefetchRef.current.set(sessionId, 'unsupported');
+        }
+      })
+      .catch(() => {
+        // The rail just covers what is loaded until a retry succeeds.
+        promptNavigatorPrefetchRef.current.delete(sessionId);
+      });
+  }, [isActive, isLoadingSessionMessages, chatMessages.length, sessionStore, selectedSession?.id]);
+
+  /**
+   * Server-side "load older": fetches the previous page of history, the same
+   * path scroll-to-top triggers. The prompt navigator's load-more button calls
+   * this so ticks for not-yet-loaded prompts can appear.
+   */
+  const requestOlderMessages = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (container) {
+      return loadOlderMessages(container);
+    }
+    return Promise.resolve(false);
+  }, [loadOlderMessages]);
+
+  /**
+   * Widens the render window so the tail slice covers `requiredCount` messages.
+   * The prompt navigator jumps to prompts outside the current window; covering
+   * an index means rendering everything after it.
+   */
+  const expandVisibleWindow = useCallback((requiredCount: number) => {
+    setVisibleMessageCount((prev) => Math.max(prev, requiredCount));
+  }, []);
+
+  /**
+   * Scrolls the transcript to a prompt-navigator entry, widening the render
+   * window first when the target sits above it. Used by the prompt navigator
+   * rail; it mirrors the sidebar-search jump (retry on DOM commit, then flash).
+   * The processed preview disambiguates repeated timestamps.
+   */
+  const scrollToPromptEntry = useCallback((entry: PromptEntry) => {
+    if (!isActive) return;
+
+    const targetTimestamp = String(entry.timestamp);
+    const matches = (message: ChatMessage, withHint: boolean) =>
+      String(message.timestamp) === targetTimestamp &&
+      (!withHint || buildPromptPreview(message.displayText ?? message.content) === entry.preview);
+
+    let targetIndex = -1;
+    if (entry.preview) {
+      targetIndex = chatMessages.findIndex((message) => matches(message, true));
+    }
+    if (targetIndex < 0) {
+      targetIndex = chatMessages.findIndex((message) => matches(message, false));
+    }
+    if (targetIndex < 0) return;
+
+    // Widen the window so the target is rendered; covering index N means
+    // rendering everything after it.
+    expandVisibleWindow(resolveSearchWindowSize(
+      chatMessages.length,
+      targetIndex,
+      SEARCH_TARGET_CONTEXT_MESSAGES,
+    ));
+
+    // Suppress the follow-bottom auto-scroll while the jump settles.
+    searchScrollActiveRef.current = true;
+    if (searchScrollTimerRef.current !== null) {
+      clearTimeout(searchScrollTimerRef.current);
+    }
+
+    const scrollToRenderedTarget = (retriesLeft: number) => {
+      const container = scrollContainerRef.current;
+      if (!container) {
+        searchScrollActiveRef.current = false;
+        return;
+      }
+
+      const targetElement = findRenderedMessageElement(
+        container,
+        targetTimestamp,
+        retriesLeft === 0,
+      );
+
+      if (targetElement) {
+        targetElement.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        targetElement.classList.add('search-highlight-flash');
+        setTimeout(() => targetElement.classList.remove('search-highlight-flash'), 4000);
+        searchScrollTimerRef.current = null;
+        searchScrollActiveRef.current = false;
+        return;
+      }
+
+      if (retriesLeft > 0) {
+        searchScrollTimerRef.current = setTimeout(
+          () => scrollToRenderedTarget(retriesLeft - 1),
+          SEARCH_SCROLL_RETRY_DELAY_MS,
+        );
+        return;
+      }
+
+      searchScrollTimerRef.current = null;
+      searchScrollActiveRef.current = false;
+    };
+
+    searchScrollTimerRef.current = setTimeout(
+      () => scrollToRenderedTarget(SEARCH_SCROLL_RETRIES),
+      150,
+    );
+  }, [chatMessages, expandVisibleWindow, isActive]);
+
   return {
     chatMessages,
     addMessage,
@@ -1114,11 +1343,16 @@ export function useChatSessionState({
     setIsUserScrolledUp,
     tokenBudget,
     setTokenBudget,
+    turnStats,
+    setTurnStats,
     visibleMessageCount,
     visibleMessages,
     loadEarlierMessages,
     loadAllMessages,
     loadFullTranscript,
+    requestOlderMessages,
+    expandVisibleWindow,
+    scrollToPromptEntry,
     allMessagesLoaded,
     isLoadingAllMessages,
     loadAllJustFinished,

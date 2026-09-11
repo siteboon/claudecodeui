@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 
-import type { ServerEvent,MarkSessionIdle,MarkSessionProcessing,PendingPermissionRequest,ProjectSession,LLMProvider,NormalizedMessage } from '@/shared/types';
+import type { ServerEvent,MarkSessionIdle,MarkSessionProcessing,PendingPermissionRequest,ProjectSession,LLMProvider,NormalizedMessage,TurnStats } from '@/shared/types';
 import { showCompletionTitleIndicator } from '@/modules/chat/utils/pageTitleNotification';
 import { playChatCompletionSound, playNotificationSound } from '@/shared/utils';
 import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
@@ -21,6 +21,7 @@ type UseChatRealtimeHandlersArgs = {
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
   setTokenBudget: (budget: Record<string, unknown> | null) => void;
+  setTurnStats: (stats: TurnStats | null) => void;
   pendingPermissionRequests: PendingPermissionRequest[];
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
   streamTimerRef: MutableRefObject<number | null>;
@@ -63,6 +64,7 @@ export function useChatRealtimeHandlers({
   selectedSession,
   currentSessionId,
   setTokenBudget,
+  setTurnStats,
   pendingPermissionRequests,
   setPendingPermissionRequests,
   streamTimerRef,
@@ -389,6 +391,13 @@ export function useChatRealtimeHandlers({
             if (sid === activeViewSessionId) {
               setTokenBudget(msg.tokenBudget as Record<string, unknown>);
             }
+          } else if (msg.text === 'turn_stats' && msg.turnStats) {
+            // Same session-scoping rule as the budget: the panel shows the
+            // viewed session's bill, and a sibling run's result frame must not
+            // replace it.
+            if (sid === activeViewSessionId) {
+              setTurnStats(msg.turnStats as TurnStats);
+            }
           } else if (msg.text && sid) {
             onSessionProcessing?.(sid, {
               statusText: msg.text as string,
@@ -412,6 +421,7 @@ export function useChatRealtimeHandlers({
     selectedSession,
     currentSessionId,
     setTokenBudget,
+    setTurnStats,
     pendingPermissionRequests,
     setPendingPermissionRequests,
     streamTimerRef,
