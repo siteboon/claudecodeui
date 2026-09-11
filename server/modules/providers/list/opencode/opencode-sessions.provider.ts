@@ -201,6 +201,14 @@ const aggregateOpenCodeSessionTokenUsage = (
 export class OpenCodeSessionsProvider implements IProviderSessions {
   /**
    * Normalizes live `opencode run --format json` events into frontend messages.
+   *
+   * Verified against a live v1.18 CLI: every event carries the payload nested
+   * under `part` (top level is only `type` / `timestamp` / `sessionID`), each
+   * part is emitted as ONE whole event when it finishes (the CLI has no
+   * token-delta frames), and reasoning parts only appear at all when the run
+   * passes `--thinking` — which the runtime now always does. Ids are the
+   * provider's own (`part.id`, and `part.callID` for tools) so an in-flight
+   * row and its later update replace the same transcript entry.
    */
   normalizeMessage(rawMessage: unknown, sessionId: string | null): NormalizedMessage[] {
     const raw = readObjectRecord(rawMessage);
@@ -210,8 +218,12 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
 
     const type = readOptionalString(raw.type) ?? readOptionalString(raw.event);
     const eventSessionId = readOptionalString(raw.sessionID) ?? readOptionalString(raw.sessionId) ?? sessionId;
-    const timestamp = normalizeProviderTimestamp(raw.time ?? raw.timestamp);
-    const baseId = readOptionalString(raw.id)
+    const part = readObjectRecord(raw.part);
+    const timestamp = normalizeProviderTimestamp(
+      readObjectRecord(part?.time)?.end ?? raw.time ?? raw.timestamp,
+    );
+    const baseId = readOptionalString(part?.id)
+      ?? readOptionalString(raw.id)
       ?? readOptionalString(raw.messageID)
       ?? generateMessageId('opencode');
 
@@ -222,7 +234,7 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
         return [];
       }
 
-      const content = extractText(raw.text ?? raw.delta ?? raw.message);
+      const content = extractText(part?.text ?? raw.text ?? raw.delta ?? raw.message);
       if (!content.trim()) {
         return [];
       }
@@ -238,7 +250,7 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
     }
 
     if (type === 'reasoning') {
-      const content = extractText(raw.text ?? raw.delta ?? raw.message);
+      const content = extractText(part?.text ?? raw.text ?? raw.delta ?? raw.message);
       if (!content.trim()) {
         return [];
       }
@@ -254,8 +266,19 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
     }
 
     if (type === 'tool_use') {
-      const toolName = readOptionalString(raw.tool) ?? readOptionalString(raw.name) ?? 'Tool';
-      const toolId = readOptionalString(raw.callID) ?? readOptionalString(raw.toolCallId) ?? baseId;
+      // Live tool parts carry { tool, callID, state: { status, input, output,
+      // error } }; a running part arrives first and the completed one reuses
+      // the same callID, so the client updates the one row instead of stacking.
+      const toolName = readOptionalString(part?.tool)
+        ?? readOptionalString(raw.tool)
+        ?? readOptionalString(raw.name)
+        ?? 'Tool';
+      const toolId = readOptionalString(part?.callID)
+        ?? readOptionalString(raw.callID)
+        ?? readOptionalString(raw.toolCallId)
+        ?? baseId;
+      const state = readObjectRecord(part?.state);
+      const status = readOptionalString(state?.status);
       const toolMessage = createNormalizedMessage({
         id: baseId,
         sessionId: eventSessionId,
@@ -263,14 +286,15 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
         provider: PROVIDER,
         kind: 'tool_use',
         toolName,
-        toolInput: raw.input ?? raw.arguments ?? {},
+        toolInput: state?.input ?? part?.input ?? raw.input ?? raw.arguments ?? {},
         toolId,
+        ...(status ? { status } : {}),
       });
 
-      if (raw.output !== undefined || raw.error !== undefined) {
+      if (status === 'completed' || status === 'error' || state?.output !== undefined || state?.error !== undefined) {
         toolMessage.toolResult = {
-          content: formatToolContent(raw.output ?? raw.error),
-          isError: raw.error !== undefined,
+          content: formatToolContent(state?.output ?? state?.error ?? raw.output ?? raw.error),
+          isError: status === 'error' || raw.error !== undefined,
         };
       }
 

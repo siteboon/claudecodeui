@@ -379,6 +379,105 @@ test('OpenCode sessions provider normalizes quoted live text and skips user echo
   assert.deepEqual(userEcho, []);
 });
 
+// Shapes below are verbatim captures from a live `opencode run --thinking
+// --format json` (v1.18.30): payload nested under `part`, one whole event per
+// finished part, and reasoning only present because of --thinking.
+test('OpenCode sessions provider normalizes real CLI reasoning events as thinking rows', () => {
+  const provider = new OpenCodeSessionsProvider();
+  const normalized = provider.normalizeMessage({
+    type: 'reasoning',
+    timestamp: 1789132139489,
+    sessionID: 'ses_probe',
+    part: {
+      id: 'prt_reasoning1',
+      messageID: 'msg_assistant1',
+      sessionID: 'ses_probe',
+      type: 'reasoning',
+      text: '用户要求执行 echo，直接执行即可。',
+      time: { start: 1789132139400, end: 1789132139473 },
+    },
+  }, null);
+
+  assert.equal(normalized.length, 1);
+  assert.equal(normalized[0]?.kind, 'thinking');
+  assert.equal(normalized[0]?.content, '用户要求执行 echo，直接执行即可。');
+  assert.equal(normalized[0]?.id, 'prt_reasoning1');
+  assert.equal(normalized[0]?.timestamp, new Date(1789132139473).toISOString());
+});
+
+test('OpenCode sessions provider normalizes real CLI text events nested under part', () => {
+  const provider = new OpenCodeSessionsProvider();
+  const normalized = provider.normalizeMessage({
+    type: 'text',
+    timestamp: 1789132140420,
+    sessionID: 'ses_probe',
+    part: {
+      id: 'prt_text1',
+      messageID: 'msg_assistant2',
+      sessionID: 'ses_probe',
+      type: 'text',
+      text: 'hello-tool-probe',
+      time: { start: 1789132140391, end: 1789132140403 },
+    },
+  }, null);
+
+  assert.equal(normalized.length, 1);
+  assert.equal(normalized[0]?.kind, 'stream_delta');
+  assert.equal(normalized[0]?.content, 'hello-tool-probe');
+});
+
+test('OpenCode sessions provider normalizes real CLI tool parts with stable call ids', () => {
+  const provider = new OpenCodeSessionsProvider();
+  const running = provider.normalizeMessage({
+    type: 'tool_use',
+    timestamp: 1789132139550,
+    sessionID: 'ses_probe',
+    part: {
+      type: 'tool',
+      tool: 'bash',
+      callID: 'call_probe1',
+      state: { status: 'running', input: { command: 'echo hi' } },
+      id: 'prt_tool1',
+      sessionID: 'ses_probe',
+      messageID: 'msg_assistant1',
+    },
+  }, null);
+
+  assert.equal(running.length, 1);
+  assert.equal(running[0]?.kind, 'tool_use');
+  assert.equal(running[0]?.toolName, 'bash');
+  assert.equal(running[0]?.toolId, 'call_probe1');
+  assert.deepEqual(running[0]?.toolInput, { command: 'echo hi' });
+  assert.equal(running[0]?.toolResult, undefined);
+
+  const completed = provider.normalizeMessage({
+    type: 'tool_use',
+    timestamp: 1789132139699,
+    sessionID: 'ses_probe',
+    part: {
+      type: 'tool',
+      tool: 'bash',
+      callID: 'call_probe1',
+      state: {
+        status: 'completed',
+        input: { command: 'echo hi' },
+        output: 'hi\n',
+        metadata: { output: 'hi\n', exit: 0, truncated: false },
+        title: 'echo hi',
+        time: { start: 1789132139501, end: 1789132139664 },
+      },
+      id: 'prt_tool1',
+      sessionID: 'ses_probe',
+      messageID: 'msg_assistant1',
+    },
+  }, null);
+
+  assert.equal(completed.length, 1);
+  // Same part id → the client replaces the in-flight row instead of stacking.
+  assert.equal(completed[0]?.id, running[0]?.id);
+  assert.deepEqual(completed[0]?.toolResult, { content: 'hi\n', isError: false });
+});
+
 test('OpenCode sessions provider reads sqlite history and token usage', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'opencode-session-history-'));
   const workspacePath = path.join(tempRoot, 'workspace');

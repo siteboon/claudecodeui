@@ -105,8 +105,11 @@ test('spawnOpenCode emits session_created before normalized live messages for ne
     const capture = JSON.parse(await readFile(argsCapturePath, 'utf8'));
     const launchedArgs = capture.args;
     assert.ok(Array.isArray(launchedArgs));
-    assert.deepEqual(launchedArgs.slice(0, 4), ['run', '--format', 'json', '--dir']);
-    assert.equal(launchedArgs[4], tempRoot);
+    // --thinking must stay on: without it the json stream drops every
+    // reasoning part and the live thinking bubble never fills.
+    assert.deepEqual(launchedArgs.slice(0, 4), ['run', '--format', 'json', '--thinking']);
+    assert.equal(launchedArgs[4], '--dir');
+    assert.equal(launchedArgs[5], tempRoot);
     // No permission mode requested → no permission flags and no env override.
     assert.equal(launchedArgs.includes('--auto'), false);
     assert.equal(launchedArgs.includes('--agent'), false);

@@ -680,11 +680,35 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       return [];
     }
 
-    if (raw.type === 'content_block_delta' && raw.delta?.text) {
-      return [createNormalizedMessage({ kind: 'stream_delta', content: raw.delta.text, sessionId, provider: PROVIDER })];
+    // Partial-message frames from the SDK arrive as { type: 'stream_event',
+    // event: <raw anthropic stream frame> } (verified against the SDK types:
+    // SDKPartialAssistantMessage). The per-delta branches below answer both
+    // that envelope and the bare frame, since the client folds each kind into
+    // one accumulated row anyway. input_json_delta / signature_delta are
+    // deliberately ignored: tool input only renders from the complete
+    // assistant message that follows.
+    const streamEvent = raw.type === 'stream_event' ? readObjectRecord(raw.event) : null;
+    const deltaFrame = streamEvent?.type
+      ? streamEvent
+      : (raw.type === 'content_block_delta' || raw.type === 'content_block_stop' ? raw : null);
+
+    if (deltaFrame?.type === 'content_block_delta') {
+      const delta = readObjectRecord(deltaFrame.delta);
+      if (delta?.type === 'thinking_delta' && typeof delta.thinking === 'string' && delta.thinking) {
+        return [createNormalizedMessage({ kind: 'thinking_delta', content: delta.thinking, sessionId, provider: PROVIDER })];
+      }
+      if (delta?.type === 'text_delta' && typeof delta.text === 'string' && delta.text) {
+        return [createNormalizedMessage({ kind: 'stream_delta', content: delta.text, sessionId, provider: PROVIDER })];
+      }
+      return [];
     }
-    if (raw.type === 'content_block_stop') {
+    if (deltaFrame?.type === 'content_block_stop') {
       return [createNormalizedMessage({ kind: 'stream_end', sessionId, provider: PROVIDER })];
+    }
+    if (raw.type === 'stream_event') {
+      // message_start / message_delta / message_stop and the tool-input
+      // deltas: nothing to render until the complete message arrives.
+      return [];
     }
 
     const messages: NormalizedMessage[] = [];

@@ -64,6 +64,30 @@ const writeCodexTranscript = async (
   return filePath;
 };
 
+test('Codex live reasoning ticks normalize onto one row by itemId', () => {
+  const provider = new CodexSessionsProvider();
+
+  // Shape the runtime's transformCodexEvent produces for item.started/updated/
+  // completed reasoning items: a stable itemId, and isReasoning + assistant
+  // role so it routes through the history-entry branch.
+  const tick = (content: string) => ({
+    type: 'item',
+    itemType: 'reasoning',
+    itemId: 'item_reason_1',
+    message: { role: 'assistant', content, isReasoning: true },
+  });
+
+  const first = provider.normalizeMessage(tick('partial'), 'codex-live-1');
+  const second = provider.normalizeMessage(tick('partial plus more'), 'codex-live-1');
+
+  assert.equal(first.length, 1);
+  assert.equal(first[0]?.kind, 'thinking');
+  // Same itemId → same message id, so the client replaces the row in place
+  // rather than stacking one thinking bubble per SDK tick.
+  assert.equal(second[0]?.id, first[0]?.id);
+  assert.equal(second[0]?.content, 'partial plus more');
+});
+
 test('Codex synchronizer preserves the title assigned when CloudCLI creates a session', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-session-sync-app-'));
   const workspacePath = path.join(tempRoot, 'workspace');

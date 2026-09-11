@@ -491,6 +491,7 @@ type MessageKind =
   | 'tool_use'
   | 'tool_result'
   | 'thinking'
+  | 'thinking_delta'
   | 'stream_delta'
   | 'stream_end'
   | 'error'

@@ -35,6 +35,8 @@ const renderHandlers = () => {
     },
     streamTimerRef: { current: null },
     accumulatedStreamRef: { current: '' },
+    thinkingStreamTimerRef: { current: null },
+    accumulatedThinkingStreamRef: { current: '' },
     lastSeqRef: { current: new Map() },
     statusCheckSentAtRef: { current: new Map() },
     requestLatestMessages: async () => {},

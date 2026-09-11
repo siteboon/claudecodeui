@@ -32,6 +32,49 @@ const SESSION_ID = 'claude-session-1';
 const AGENT_ID = 'a1b2c3d4e5f60718';
 const AGENT_TOOL_USE_ID = 'toolu_agent_1';
 
+test('Claude sessions provider normalizes SDK partial stream_event deltas', () => {
+  const provider = new ClaudeSessionsProvider();
+
+  // SDKPartialAssistantMessage shape: { type: 'stream_event', event: <raw frame> }
+  const thinking = provider.normalizeMessage({
+    type: 'stream_event',
+    session_id: SESSION_ID,
+    uuid: 'partial-1',
+    event: { type: 'content_block_delta', delta: { type: 'thinking_delta', thinking: '想一' } },
+  }, SESSION_ID);
+  assert.equal(thinking.length, 1);
+  assert.equal(thinking[0]?.kind, 'thinking_delta');
+  assert.equal(thinking[0]?.content, '想一');
+
+  const text = provider.normalizeMessage({
+    type: 'stream_event',
+    session_id: SESSION_ID,
+    uuid: 'partial-2',
+    event: { type: 'content_block_delta', delta: { type: 'text_delta', text: '你好' } },
+  }, SESSION_ID);
+  assert.equal(text.length, 1);
+  assert.equal(text[0]?.kind, 'stream_delta');
+  assert.equal(text[0]?.content, '你好');
+
+  // Tool-input and signature deltas carry nothing renderable — the complete
+  // assistant message that follows is what shows them.
+  const ignored = provider.normalizeMessage({
+    type: 'stream_event',
+    session_id: SESSION_ID,
+    uuid: 'partial-3',
+    event: { type: 'content_block_delta', delta: { type: 'input_json_delta', partial_json: '{"a"' } },
+  }, SESSION_ID);
+  assert.deepEqual(ignored, []);
+
+  const messageStart = provider.normalizeMessage({
+    type: 'stream_event',
+    session_id: SESSION_ID,
+    uuid: 'partial-4',
+    event: { type: 'message_start' },
+  }, SESSION_ID);
+  assert.deepEqual(messageStart, []);
+});
+
 /**
  * Writes the transcript pair current Claude versions produce for one async
  * subagent: the parent session, and the agent's own transcript plus sidecar
