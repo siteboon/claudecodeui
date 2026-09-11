@@ -1196,6 +1196,68 @@ async function abortClaudeSDKSession(sessionId) {
 }
 
 /**
+ * Asks a live CLI for the session's context-window breakdown — the same
+ * answer the interactive `/context` renders, via the SDK's getContextUsage.
+ * `summary` detail answers from the last response's usage and local estimates,
+ * which is what a read-only sidebar needs; `full` would spend token-count API
+ * calls per category on every panel open.
+ * @param {string} sessionId - App session id, which is the process-map key
+ *   for UI-started runs (legacy direct callers key by provider-native id)
+ * @returns {Promise<{totalTokens: (number|null), maxTokens: (number|null), percentage: (number|null), model: (string|null), categories: Array<{name: string, tokens: number, kind: string}>, agents: Array<{agentType: string, tokens: number}>, mcpTools: Array<{name: string, serverName: string, tokens: number}>, memoryFiles: Array<{path: string, tokens: number}>, slashCommands: ({totalCommands: number, includedCommands: number}|null)}|null>}
+ *   ProviderContextInfo, or null when no CLI is holding the session (idle
+ *   sessions between runs have no live handle)
+ */
+async function getContextInfo(sessionId) {
+  const session = getSession(sessionId);
+  if (!session?.instance?.getContextUsage) {
+    return null;
+  }
+
+  try {
+    const usage = await session.instance.getContextUsage({ detail: 'summary' });
+    if (!usage || !Array.isArray(usage.categories)) {
+      return null;
+    }
+
+    return {
+      totalTokens: typeof usage.totalTokens === 'number' ? usage.totalTokens : null,
+      maxTokens: typeof usage.maxTokens === 'number' ? usage.maxTokens : null,
+      percentage: typeof usage.percentage === 'number' ? usage.percentage : null,
+      model: usage.model ?? null,
+      categories: usage.categories.map((category) => ({
+        name: String(category?.name ?? ''),
+        tokens: typeof category?.tokens === 'number' ? category.tokens : 0,
+        kind: String(category?.kind ?? 'used'),
+      })),
+      agents: Array.isArray(usage.agents)
+        ? usage.agents.map((agent) => ({ agentType: String(agent?.agentType ?? ''), tokens: typeof agent?.tokens === 'number' ? agent.tokens : 0 }))
+        : [],
+      mcpTools: Array.isArray(usage.mcpTools)
+        ? usage.mcpTools.map((tool) => ({
+            name: String(tool?.name ?? ''),
+            serverName: String(tool?.serverName ?? ''),
+            tokens: typeof tool?.tokens === 'number' ? tool.tokens : 0,
+          }))
+        : [],
+      memoryFiles: Array.isArray(usage.memoryFiles)
+        ? usage.memoryFiles.map((file) => ({ path: String(file?.path ?? ''), tokens: typeof file?.tokens === 'number' ? file.tokens : 0 }))
+        : [],
+      slashCommands: usage.slashCommands && typeof usage.slashCommands === 'object'
+        ? {
+            totalCommands: usage.slashCommands.totalCommands ?? 0,
+            includedCommands: usage.slashCommands.includedCommands ?? 0,
+          }
+        : null,
+    };
+  } catch (error) {
+    // A CLI that predates the control request, or one mid-shutdown, simply
+    // has no answer; the panel falls back to the streamed usage frames.
+    console.warn(`getContextUsage failed for session ${sessionId}:`, error?.message || error);
+    return null;
+  }
+}
+
+/**
  * Checks if an SDK session is currently active
  * @param {string} sessionId - Session identifier
  * @returns {boolean} True if session is active
@@ -1253,6 +1315,7 @@ function reconnectSessionWriter(sessionId, newRawWs) {
 export const claudeRuntime = {
   run: queryClaudeSDK,
   abort: abortClaudeSDKSession,
+  contextInfo: getContextInfo,
   permissions: {
     resolve: resolveToolApproval,
     listPending: getPendingApprovalsForSession,

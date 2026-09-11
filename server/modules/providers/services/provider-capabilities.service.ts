@@ -34,6 +34,12 @@ type ProviderCapabilities = {
    * Whether a session's transcript can be branched into an independent one.
    */
   supportsSessionForking: boolean;
+  /**
+   * Whether the provider exposes the conversation sidebars of the info panel:
+   * subagent transcripts, context snapshots, task ledgers. Providers without
+   * it still get the usage-derived sections, which need no provider help.
+   */
+  supportsSessionInsights: boolean;
 };
 
 /**
@@ -57,6 +63,9 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     // `forkSession` copies a transcript prefix into a new session file.
     supportsMessageEditing: true,
     supportsSessionForking: true,
+    // Subagent transcripts, the /context snapshot, and the task ledger all
+    // come from the Claude CLI's own files and control requests.
+    supportsSessionInsights: true,
   },
   cursor: {
     provider: 'cursor',
@@ -70,6 +79,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsEffort: false,
     supportsMessageEditing: false,
     supportsSessionForking: false,
+    supportsSessionInsights: false,
   },
   codex: {
     provider: 'codex',
@@ -87,6 +97,9 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     // which is how Codex's own IDE clients do it.
     supportsMessageEditing: true,
     supportsSessionForking: true,
+    // Codex keeps no per-subagent transcript file, so the panel's subagent
+    // section has nothing to read yet; it renders the usage-derived sections.
+    supportsSessionInsights: false,
   },
   opencode: {
     provider: 'opencode',
@@ -103,6 +116,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsEffort: true,
     supportsMessageEditing: false,
     supportsSessionForking: false,
+    supportsSessionInsights: false,
   },
 };
 

@@ -12,6 +12,7 @@ import type {
   LLMProvider,
   NormalizedMessage,
 } from '@/shared/types.js';
+import type { ProviderContextInfo } from '@/shared/interfaces.js';
 import { AppError, sliceTailPage } from '@/shared/utils.js';
 
 type CreateAppSessionResult = {
@@ -407,6 +408,29 @@ export const sessionsService = {
 
     const sessions = providerRegistry.resolveProvider(session.provider as LLMProvider).sessions;
     await sessions.rewindSession?.(sessionId, keepThroughId);
+  },
+
+  /**
+   * The session's context-window snapshot, answered by the provider runtime
+   * when it holds a live handle (Claude: the SDK query's getContextUsage —
+   * the CLI's own `/context` data). Null tells the info panel to fall back to
+   * the usage frames it already streams.
+   */
+  async getContextInfo(sessionId: string): Promise<ProviderContextInfo | null> {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session) {
+      throw new AppError(`Session "${sessionId}" was not found.`, {
+        code: 'SESSION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    const runtime = providerRegistry.resolveProvider(session.provider as LLMProvider).runtime;
+    if (!runtime.contextInfo) {
+      return null;
+    }
+
+    return runtime.contextInfo(sessionId);
   },
 
   async fetchHistory(

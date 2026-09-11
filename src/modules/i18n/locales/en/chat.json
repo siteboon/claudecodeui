@@ -357,5 +357,28 @@
   "promptNavigator": {
     "aria": "Prompt navigator",
     "noTextContent": "(no text content)"
+  },
+  "sessionInfoPanel": {
+    "title": "Session",
+    "close": "Close session panel",
+    "empty": "Nothing to show yet",
+    "context": "Context",
+    "turnStats": "Turn stats",
+    "subagents": "Subagents",
+    "tasks": "Tasks",
+    "mcp": "MCP",
+    "sources": "Context sources",
+    "stats": {
+      "answerSpeed": "Answer speed",
+      "requestSpeed": "Whole request",
+      "modelTime": "Model time",
+      "toolTime": "Tool time",
+      "steps": "Steps",
+      "tokens": "Tokens",
+      "cacheHit": "Cache hit",
+      "cost": "Cost"
+    },
+    "openButton": "Show session panel",
+    "closeButton": "Hide session panel"
   }
 }

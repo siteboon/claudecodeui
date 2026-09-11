@@ -36,7 +36,34 @@ export interface IProviderRuntime {
   ): Promise<unknown>;
   abort(sessionId: string): boolean | Promise<boolean>;
   permissions?: ProviderRuntimePermissionGateway;
+  /**
+   * Snapshot of the session's context-window occupancy, answered by the
+   * provider's own tooling (Claude: the SDK query's `getContextUsage`, the
+   * same data the CLI's `/context` renders). Present only for providers whose
+   * runtime can hold a live handle on the conversation; the info panel then
+   * falls back to deriving the percentage from streamed usage frames.
+   */
+  contextInfo?(sessionId: string): Promise<ProviderContextInfo | null>;
 }
+
+/**
+ * A narrowed view of the provider's context-usage answer — the numbers the
+ * panel's context ring and sources section render. Null fields mean the
+ * provider could not classify that category, and the panel draws `—`.
+ */
+export type ProviderContextInfo = {
+  totalTokens: number | null;
+  maxTokens: number | null;
+  /** 0-100, as the provider itself computed it. */
+  percentage: number | null;
+  model: string | null;
+  categories: Array<{ name: string; tokens: number; kind: 'used' | 'free' | 'buffer' | 'deferred' | string }>;
+  /** Distinct agents / MCP tools / memory files drawing on the window. */
+  agents: Array<{ agentType: string; tokens: number }>;
+  mcpTools: Array<{ name: string; serverName: string; tokens: number }>;
+  memoryFiles: Array<{ path: string; tokens: number }>;
+  slashCommands: { totalCommands: number; includedCommands: number } | null;
+};
 
 /**
  * Main provider contract for CLI and SDK integrations.

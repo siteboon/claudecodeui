@@ -1345,6 +1345,10 @@ export function useChatSessionState({
     setTokenBudget,
     turnStats,
     setTurnStats,
+    // The merged normalized transcript behind chatMessages, for consumers that
+    // need the raw kinds (tool_use replay, subagent grouping) instead of the
+    // rendered projection.
+    mergedMessages: storeMessages,
     visibleMessageCount,
     visibleMessages,
     loadEarlierMessages,

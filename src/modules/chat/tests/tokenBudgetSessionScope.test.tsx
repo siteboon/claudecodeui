@@ -29,6 +29,7 @@ const renderHandlers = () => {
     selectedSession: { id: 'viewed-session' } as ProjectSession,
     currentSessionId: 'viewed-session',
     setTokenBudget: (budget) => budgets.push(budget),
+    setTurnStats: () => {},
     pendingPermissionRequests: [],
     setPendingPermissionRequests: () => {},
     streamTimerRef: { current: null },

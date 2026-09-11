@@ -26,6 +26,9 @@ import {
 import ChatMessagesPane from '@/modules/chat/transcript/ChatMessagesPane';
 import ChatComposer from '@/modules/chat/composer/ChatComposer';
 import CommandResultModal from '@/modules/chat/modals/CommandResultModal';
+import { SessionInfoPanel } from '@/modules/chat/panel/SessionInfoPanel';
+import { useSessionInfoPanel } from '@/modules/chat/hooks/useSessionInfoPanel';
+import { useDeviceSettings } from '@/shared/hooks/useDeviceSettings';
 
 type ChatInterfaceProps = {
   isActive: boolean;
@@ -129,6 +132,7 @@ function ChatInterface({
     resolvePermissionModeForProvider,
     supportsMessageEditing,
     supportsSessionForking,
+    supportsSessionInsights,
   } = useChatProviderState({
     selectedSession,
     selectedProject,
@@ -152,6 +156,7 @@ function ChatInterface({
     setTokenBudget,
     turnStats,
     setTurnStats,
+    mergedMessages,
     visibleMessageCount,
     visibleMessages,
     loadEarlierMessages,
@@ -183,6 +188,16 @@ function ChatInterface({
     statusCheckSentAtRef,
     lastSeqRef,
     sessionStore,
+  });
+
+  // The right-hand conversation sidebar. Its layout lives in the shared
+  // preference store so the header's toggle button and this mount stay in
+  // step without prop-drilling through the workspace shell.
+  const { isMobile } = useDeviceSettings();
+  const sessionInfo = useSessionInfoPanel({
+    provider,
+    sessionId: selectedSession?.id || currentSessionId || null,
+    supportsInsights: supportsSessionInsights,
   });
 
   // Brand-new conversation: the composer allocated a stable session id via
@@ -435,7 +450,8 @@ function ChatInterface({
 
   return (
     <PermissionContext.Provider value={permissionContextValue}>
-      <div className="flex h-full min-h-0 flex-col">
+      <div className="relative flex h-full min-h-0">
+      <div className="flex h-full min-h-0 flex-1 flex-col">
         <ChatMessagesPane
           scrollContainerRef={scrollContainerRef}
           // Not redundant with the `scroll` listener. A first page is 20 rows,
@@ -579,6 +595,30 @@ function ChatInterface({
           sendByCtrlEnter={sendByCtrlEnter}
         />
         </div>
+      </div>
+
+      {sessionInfo.prefs.open && (selectedSession || currentSessionId) && (
+        <>
+          {isMobile && (
+            <div
+              className="fixed inset-0 z-30 bg-black/40"
+              onClick={() => sessionInfo.setOpen(false)}
+              aria-hidden="true"
+            />
+          )}
+          <SessionInfoPanel
+            collapsed={sessionInfo.prefs.collapsedSections}
+            onToggleSection={sessionInfo.toggleSection}
+            mergedMessages={mergedMessages}
+            turnStats={turnStats}
+            tokenBudget={tokenBudget}
+            contextInfo={sessionInfo.contextInfo}
+            onShowTokenDetails={showCostModal}
+            isMobile={isMobile}
+            onClose={() => sessionInfo.setOpen(false)}
+          />
+        </>
+      )}
       </div>
 
       <CommandResultModal

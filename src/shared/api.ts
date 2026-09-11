@@ -376,6 +376,8 @@ export const api = {
     ) => get(sessionMessagesUrl(sessionId, pagination), options),
     sessionTokenUsage: (sessionId: string) =>
       get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/token-usage`),
+    sessionContextInfo: (sessionId: string) =>
+      get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/context-info`),
     sessionActiveModel: (provider: string, sessionId: string) =>
       get(`/api/providers/${provider}/sessions/${encodeURIComponent(sessionId)}/active-model`),
     setSessionActiveModel: (provider: string, sessionId: string, model: string) =>

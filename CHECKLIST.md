@@ -11,7 +11,7 @@
 - [ ] 新增抽象：`server/modules/providers/shared/session-insights/session-insights.provider.ts`
       定义 `SessionInsightsProvider` 基类（方法：`listSubagents`、`fetchSubagentHistory`、
       `getContextSnapshot`），各 CLI 目录各建一个实现文件；无能力的 CLI 返回空数组/`AppError`。
-- [ ] `ProviderCapabilities` 增加 `supportsSessionInsights: boolean`
+- [x] `ProviderCapabilities` 增加 `supportsSessionInsights: boolean`
       （claude=true，codex/opencode 一期 false，cursor=false）。
 - [ ] MCP 列表/技能列表**复用已有** provider 实现（`claude-mcp.provider.ts`、
       `claude-skills.provider.ts`），不另造读取路径。
@@ -43,13 +43,13 @@
 
 ## Commit 3 — 面板壳 + 上下文节 + 轮次统计节
 
-- [ ] `src/modules/chat/panel/`：`SessionInfoPanel.tsx`、`InfoSection.tsx`、
+- [x] `src/modules/chat/panel/`：`SessionInfoPanel.tsx`、`InfoSection.tsx`、
       `ContextRingSection.tsx`、`TurnStatsSection.tsx`。
-- [ ] 挂载：`ChatInterface.tsx` 内层 relative 行容器，右栏 `w-72`；`isMobile` 走抽屉+遮罩。
-- [ ] `WorkspaceHeader.tsx` 开关按钮（PanelRightOpen/Close），默认 open=false。
-- [ ] 上下文节：运行中优先 CLI `getContextUsage`（服务器把调用透传成 REST 或由 runtime 缓存），
-      回退 tokenBudget；点击开既有 token 明细 modal。
-- [ ] 测试 `sessionInfoPanelRender.test.tsx`（六节壳、折叠卸载、窄屏分支）。
+- [x] 挂载：`ChatInterface.tsx` 内层 relative 行容器，右栏 `w-72`；`isMobile` 走抽屉+遮罩。
+- [x] `WorkspaceHeader.tsx` 开关按钮（PanelRightOpen/Close），默认 open=false。
+- [x] 上下文节：运行中优先 CLI `getContextUsage`（REST `GET /sessions/:id/context-info`
+      → runtime `contextInfo?()`，仅 Claude 实现），回退 tokenBudget；点击开既有 token 明细 modal。
+- [x] 测试 `sessionInfoPanelRender.test.tsx`（六节壳、折叠卸载、窄屏分支）。
 - 验收：手动开面板可见上下文环+轮次统计且随流刷新；测试绿。
 
 ## Commit 4 — 任务节

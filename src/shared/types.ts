@@ -275,6 +275,20 @@ export type SubagentInfo = {
   activityCount?: number;
 };
 
+/** A running session's context-window snapshot, answered by the provider's own tooling; null fields mean that category could not be classified and render as `—`. */
+export type ProviderContextInfo = {
+  totalTokens: number | null;
+  maxTokens: number | null;
+  /** 0-100, as the provider itself computed it. */
+  percentage: number | null;
+  model: string | null;
+  categories: Array<{ name: string; tokens: number; kind: string }>;
+  agents: Array<{ agentType: string; tokens: number }>;
+  mcpTools: Array<{ name: string; serverName: string; tokens: number }>;
+  memoryFiles: Array<{ path: string; tokens: number }>;
+  slashCommands: { totalCommands: number; includedCommands: number } | null;
+};
+
 /**
  * The turn's bill, forwarded from the provider's turn-complete signal on a
  * `status`/`turn_stats` frame. `usage` covers this turn's main loop only;

@@ -29,6 +29,7 @@ const renderHandlers = () => {
     selectedSession: { id: 'viewed-session' } as ProjectSession,
     currentSessionId: 'viewed-session',
     setTokenBudget: () => {},
+    setTurnStats: () => {},
     pendingPermissionRequests: [],
     setPendingPermissionRequests: (next) => {
       pending = typeof next === 'function' ? next(pending) : next;
