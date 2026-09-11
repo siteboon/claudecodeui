@@ -79,6 +79,29 @@ test('clicking a header asks the parent to toggle that section', () => {
   assert.deepEqual(toggles, ['tasks']);
 });
 
+test('the task section counts completed rows and shows activeForm while running', () => {
+  const taskRows: NormalizedMessage[] = [
+    {
+      id: 'tc1', sessionId: 's1', timestamp: '2026-09-12T00:00:00.000Z', provider: 'claude',
+      kind: 'tool_use', toolName: 'TaskCreate', toolId: 't1',
+      toolInput: { subject: 'Read notes', activeForm: 'Reading notes' },
+      toolResult: { content: 'ok', isError: false, toolUseResult: { task: { id: '1', status: 'completed' } } },
+    },
+    {
+      id: 'tc2', sessionId: 's1', timestamp: '2026-09-12T00:00:01.000Z', provider: 'claude',
+      kind: 'tool_use', toolName: 'TaskCreate', toolId: 't2',
+      toolInput: { subject: 'Ship it', activeForm: 'Shipping it' },
+      toolResult: { content: 'ok', isError: false, toolUseResult: { task: { id: '2', status: 'in_progress' } } },
+    },
+  ] as unknown as NormalizedMessage[];
+
+  renderPanel({ mergedMessages: taskRows });
+
+  assert.ok(screen.getByText('1/2'), 'header shows the completed/total count');
+  assert.ok(screen.getByText('Read notes'), 'a pending row shows its subject');
+  assert.ok(screen.getByText('Shipping it'), 'the running row uses its present-tense wording');
+});
+
 test('mobile renders as a fixed drawer with the close affordance', () => {
   const { toggles } = renderPanel({ isMobile: true });
 

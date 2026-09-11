@@ -54,11 +54,11 @@
 
 ## Commit 4 — 任务节
 
-- [ ] `src/modules/chat/utils/sessionTaskList.ts`：重放 `TodoWrite` 快照与
+- [x] `src/modules/chat/utils/sessionTaskList.ts`：重放 `TodoWrite` 快照与
       live `TaskCreate/TaskUpdate` 增量（移植 `message-unification.ts` ChecklistState 逻辑，互指注释）。
-- [ ] `TasksSection.tsx`：n/m + Target/Clock/CircleCheck 图标，in_progress 显示 activeForm。
-- [ ] 排除 `subagent` 行与 `parentToolUseId` 非空行。
-- [ ] 测试 `sessionTaskListReplay.test.ts`（与 message-unification.test.ts 同口径）。
+- [x] `TasksSection.tsx`：n/m + CircleDashed/Loader/CircleCheck 图标，in_progress 显示 activeForm。
+- [x] 排除 `subagent` 行与 `parentToolUseId` 非空行。
+- [x] 测试 `sessionTaskListReplay.test.ts`（与 message-unification.test.ts 同口径）。
 - 验收：跑一轮带任务的会话，面板计数与 `TaskList` 实际一致。
 
 ## Commit 5 — 子代理节 + 端点 + 对话浮层

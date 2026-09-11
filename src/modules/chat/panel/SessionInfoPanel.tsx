@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/shared/utils';
@@ -7,6 +7,8 @@ import type { SessionInfoPanelSection } from '@/shared/sessionInfoPanelPrefs';
 import { InfoSection } from '@/modules/chat/panel/InfoSection';
 import { ContextRingSection } from '@/modules/chat/panel/ContextRingSection';
 import { TurnStatsSection } from '@/modules/chat/panel/TurnStatsSection';
+import { TasksSection } from '@/modules/chat/panel/TasksSection';
+import { buildSessionTaskLedger } from '@/modules/chat/utils/sessionTaskList';
 
 type SessionInfoPanelProps = {
   collapsed: Partial<Record<SessionInfoPanelSection, boolean>>;
@@ -40,6 +42,10 @@ export const SessionInfoPanel = memo(({
   onClose,
 }: SessionInfoPanelProps) => {
   const { t } = useTranslation('chat');
+
+  // Rebuilt from the merged transcript on each stream change; the replay is
+  // linear over tool rows, and the panel only renders it while open.
+  const taskLedger = useMemo(() => buildSessionTaskLedger(mergedMessages), [mergedMessages]);
 
   return (
     <aside
@@ -77,7 +83,16 @@ export const SessionInfoPanel = memo(({
         <TurnStatsSection mergedMessages={mergedMessages} turnStats={turnStats} tokenBudget={tokenBudget} />
       </InfoSection>
 
-      {SECTION_KEYS.filter((section) => section !== 'context' && section !== 'turnStats').map((section) => (
+      <InfoSection
+        title={t('sessionInfoPanel.tasks')}
+        countLabel={taskLedger.total > 0 ? `${taskLedger.completed}/${taskLedger.total}` : undefined}
+        collapsed={collapsed.tasks ?? false}
+        onToggle={() => onToggleSection('tasks')}
+      >
+        <TasksSection tasks={taskLedger.tasks} />
+      </InfoSection>
+
+      {SECTION_KEYS.filter((section) => section !== 'context' && section !== 'turnStats' && section !== 'tasks').map((section) => (
         <InfoSection
           key={section}
           title={t(`sessionInfoPanel.${section}`)}
