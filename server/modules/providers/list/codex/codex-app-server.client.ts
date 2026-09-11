@@ -3,7 +3,7 @@ import { stat } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import readline from 'node:readline';
 
-import { AppError } from '@/shared/utils.js';
+import { AppError, readObjectRecord, readOptionalString } from '@/shared/utils.js';
 
 /**
  * Minimal JSON-RPC client for `codex app-server`.
@@ -191,7 +191,47 @@ async function withAppServer<T>(
   }
 }
 
+/**
+ * One model entry from the app-server's `model/list`.
+ *
+ * Only the fields the picker needs are typed; the server also sends service
+ * tiers, modalities, and marketing copy this app does not surface.
+ */
+export type CodexServerModel = {
+  id: string;
+  displayName?: string | null;
+  description?: string | null;
+  hidden?: boolean;
+  isDefault?: boolean;
+  supportedReasoningEfforts?: { reasoningEffort: string }[] | null;
+  defaultReasoningEffort?: string | null;
+};
+
 export const codexAppServer = {
+  /**
+   * Asks the CLI which models this install can actually run.
+   *
+   * This is the same catalog `codex` itself shows its model picker, so it
+   * follows logins, feature flags, and CLI upgrades without a curated list
+   * going stale. Retired entries come back flagged `hidden` and are dropped
+   * here - offering one would hand the picker a model the CLI refuses to run.
+   */
+  async listModels(): Promise<CodexServerModel[]> {
+    return withAppServer(async (call) => {
+      const result = await call('model/list', {}) as { data?: unknown } | undefined;
+      if (!Array.isArray(result?.data)) {
+        throw new AppError('Codex reported no models.', {
+          code: 'CODEX_MODELS_UNAVAILABLE',
+          statusCode: 502,
+        });
+      }
+
+      return result.data.filter((entry): entry is CodexServerModel => {
+        const record = readObjectRecord(entry);
+        return Boolean(readOptionalString(record?.id)) && record?.hidden !== true;
+      });
+    });
+  },
   /**
    * Copies a thread into a new one that ends at `lastTurnId`, or copies the
    * whole thread when it is omitted.
