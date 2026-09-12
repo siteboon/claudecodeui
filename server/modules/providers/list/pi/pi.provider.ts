@@ -1,6 +1,7 @@
 import { PiProviderAuth } from '@/modules/providers/list/pi/pi-auth.provider.js';
 import { PiMcpProvider } from '@/modules/providers/list/pi/pi-mcp.provider.js';
 import { PiProviderModels } from '@/modules/providers/list/pi/pi-models.provider.js';
+import { piRuntime } from '@/modules/providers/list/pi/pi-runtime.provider.js';
 import { PiSessionSynchronizer } from '@/modules/providers/list/pi/pi-session-synchronizer.provider.js';
 import { PiSessionsProvider } from '@/modules/providers/list/pi/pi-sessions.provider.js';
 import { PiSkillsProvider } from '@/modules/providers/list/pi/pi-skills.provider.js';
@@ -14,31 +15,13 @@ import type {
   IProviderSkills,
   IProviderSessions,
 } from '@/shared/interfaces.js';
-import { AppError } from '@/shared/utils.js';
-
-/**
- * Phase 1 runtime placeholder for Pi.
- *
- * The real adapter spawns `pi -p --mode json` and streams its JSON events onto
- * the normalized writer. Until it lands, every run fails with a typed
- * `NOT_SUPPORTED` error instead of a raw crash, and abort reports "nothing was
- * running" so an in-flight cancel stays a no-op rather than an exception.
- */
-const piRuntime: IProviderRuntime = {
-  async run(): Promise<unknown> {
-    throw new AppError('Pi runtime is not implemented yet.', {
-      code: 'NOT_SUPPORTED',
-    });
-  },
-  abort: () => false,
-};
 
 /**
  * Registration for the `pi` provider.
  *
- * All seven facets are instantiable today; the runtime, session, and MCP
- * adapters are deliberately inert placeholders that the runtime, sessions, and
- * MCP tasks replace with real spawn/parse/config implementations.
+ * All seven facets are instantiable today; the session and MCP adapters are
+ * deliberately inert placeholders that the sessions and MCP tasks replace
+ * with real config implementations.
  */
 export class PiProvider extends AbstractProvider {
   readonly runtime: IProviderRuntime = piRuntime;
