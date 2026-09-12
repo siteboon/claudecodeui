@@ -34,13 +34,17 @@ export default function AgentsSettingsTab({
   const [selectedAgent, setSelectedAgent] = useState<AgentProvider>('claude');
   const [selectedCategory, setSelectedCategory] = useState<AgentCategory>('account');
   const visibleCategories = useMemo<AgentCategory[]>(() => (
+    // OpenCode hides its own skills folder from this tab; Pi has neither
+    // permissions nor MCP support, so it only offers account and skills.
     selectedAgent === 'opencode'
       ? ['account', 'permissions', 'mcp']
-      : ['account', 'permissions', 'mcp', 'skills']
+      : selectedAgent === 'pi'
+        ? ['account', 'skills']
+        : ['account', 'permissions', 'mcp', 'skills']
   ), [selectedAgent]);
 
   const visibleAgents = useMemo<AgentProvider[]>(() => {
-    return ['claude', 'cursor', 'codex', 'opencode'];
+    return ['claude', 'cursor', 'codex', 'opencode', 'pi'];
   }, []);
 
   const agentContextById = useMemo<AgentContextByProvider>(() => ({

@@ -36,7 +36,7 @@ const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   pi: 'anthropic/claude-sonnet-4',
 };
 
-const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode'];
+const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode', 'pi'];
 
 /** localStorage key holding the user's default model for one provider. */
 const providerModelStorageKey = (provider: LLMProvider): string => `${provider}-model`;

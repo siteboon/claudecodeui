@@ -59,6 +59,12 @@ const getProviderCommand = ({
     return 'opencode auth login';
   }
 
+  // Pi ships no login subcommand — credentials come from its own models.json
+  // or environment variables — so open its TUI and let the user configure it.
+  if (provider === 'pi') {
+    return 'pi';
+  }
+
   return 'claude --dangerously-skip-permissions /login';
 };
 
@@ -67,6 +73,7 @@ const getProviderTitle = (provider: LLMProvider) => {
   if (provider === 'cursor') return 'Cursor CLI Login';
   if (provider === 'codex') return 'Codex CLI Login';
   if (provider === 'opencode') return 'OpenCode CLI Login';
+  if (provider === 'pi') return 'Pi CLI Login';
   return 'Claude CLI Login';
 };
 
