@@ -26,7 +26,7 @@ import type {
 export class PiProvider extends AbstractProvider {
   readonly runtime: IProviderRuntime = piRuntime;
   readonly models: IProviderModels = new PiProviderModels();
-  readonly mcp = new PiMcpProvider();
+  readonly mcp: IProviderMcp = new PiMcpProvider();
   readonly auth: IProviderAuth = new PiProviderAuth();
   readonly skills: IProviderSkills = new PiSkillsProvider();
   readonly sessions: IProviderSessions = new PiSessionsProvider();

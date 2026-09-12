@@ -394,13 +394,17 @@ export function createProviderTokenUsageService(
       }
 
       // Pi reports usage through its runtime event stream (Phase 1); it has no
-      // on-disk artifact to read back, so the endpoint answers with zeros.
+      // on-disk artifact to read back, so the endpoint answers with an explicit
+      // unsupported result the same way Cursor does.
       if (session.provider === 'pi') {
         return {
           used: 0,
+          total: 0,
           inputTokens: 0,
           outputTokens: 0,
           breakdown: { input: 0, output: 0 },
+          unsupported: true,
+          message: 'Token usage tracking not available for Pi sessions',
         };
       }
 
