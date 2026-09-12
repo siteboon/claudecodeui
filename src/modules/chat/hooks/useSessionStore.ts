@@ -477,7 +477,7 @@ function olderPagePrecedesCachedHistory(
 async function refreshLatestSlotFromServer(
   sessionId: string,
   slot: SessionSlot,
-  limit: number,
+  limit: number | null,
   canRequest: CanRequestHistory = () => true,
 ): Promise<LatestHistoryRefreshResult> {
   if (!canRequest()) {
@@ -495,9 +495,15 @@ async function refreshLatestSlotFromServer(
   let nextServerMessages: NormalizedMessage[] | null = null;
   let nextHasMore = previousHasMore;
 
-  // A page with no older rows is the complete authoritative transcript. This
-  // also removes cached rows after a provider-side truncation.
-  if (!latestPage.hasMore) {
+  // A page with no older rows is the complete authoritative transcript — but
+  // only when it can actually hold the whole thing. Providers have been seen
+  // to answer a bounded tail page with hasMore=false on a 100+ row transcript;
+  // trusting that replaced the full cache with one page and shrank the prompt
+  // navigator rail. A bounded page whose total exceeds its rows falls through
+  // to the bridge/merge path, which keeps the older cached rows.
+  const pageIsWholeTranscript =
+    !latestPage.hasMore && latestPage.total <= latestPage.messages.length;
+  if (pageIsWholeTranscript) {
     nextServerMessages = latestPage.messages;
     nextHasMore = false;
   } else if (previousServerMessages.length === 0) {
@@ -837,7 +843,7 @@ export function useSessionStore() {
   const refreshLatestFromServer = useCallback(async (
     sessionId: string,
     opts: {
-      limit?: number;
+      limit?: number | null;
       canRequest?: CanRequestHistory;
     } = {},
   ) => {
@@ -845,10 +851,17 @@ export function useSessionStore() {
 
     return enqueueHistoryMutation(slot, async () => {
       try {
+        // `undefined` → bounded tail page; `null` → the whole transcript.
+        // Callers that have already hydrated the full history refresh with
+        // `null`: a bounded 20-row page would fail to bridge against the
+        // full cache (no overlapping rows) and shrink it back to one page.
+        const limit = 'limit' in opts && opts.limit !== undefined
+          ? opts.limit
+          : SESSION_MESSAGES_PAGE_SIZE;
         const result = await refreshLatestSlotFromServer(
           sessionId,
           slot,
-          opts.limit ?? SESSION_MESSAGES_PAGE_SIZE,
+          limit,
           opts.canRequest,
         );
         if (result.changed) notify(sessionId);

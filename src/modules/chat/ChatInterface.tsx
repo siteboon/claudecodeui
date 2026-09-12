@@ -164,9 +164,6 @@ function ChatInterface({
     turnStats,
     setTurnStats,
     mergedMessages,
-    visibleMessageCount,
-    visibleMessages,
-    loadEarlierMessages,
     loadAllMessages,
     loadFullTranscript,
     requestOlderMessages,
@@ -545,9 +542,6 @@ function ChatInterface({
           hasMoreMessages={hasMoreMessages}
           totalMessages={totalMessages}
           sessionMessagesCount={chatMessages.length}
-          visibleMessageCount={visibleMessageCount}
-          visibleMessages={visibleMessages}
-          loadEarlierMessages={loadEarlierMessages}
           loadAllMessages={loadAllMessages}
           allMessagesLoaded={allMessagesLoaded}
           isLoadingAllMessages={isLoadingAllMessages}
