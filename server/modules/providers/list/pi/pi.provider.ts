@@ -19,9 +19,9 @@ import type {
 /**
  * Registration for the `pi` provider.
  *
- * All seven facets are instantiable today; the session and MCP adapters are
- * deliberately inert placeholders that the sessions and MCP tasks replace
- * with real config implementations.
+ * All seven facets are implemented. pi itself has no fork or MCP support, so
+ * those facets expose no capability beyond what pi's CLI offers: MCP is a
+ * NOT_SUPPORTED stub and session forking stays disabled.
  */
 export class PiProvider extends AbstractProvider {
   readonly runtime: IProviderRuntime = piRuntime;

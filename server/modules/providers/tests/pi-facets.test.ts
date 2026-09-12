@@ -28,14 +28,15 @@ const patchHomeDir = (nextHomeDir: string) => {
 
 /**
  * Environment variables pi accepts as credentials. The list mirrors the auth
- * adapter's own probe set so "no credentials" tests stay honest even when the
- * developer machine running the suite has a real key exported.
+ * adapter's own probe set (pi's env-api-keys mapping) so "no credentials"
+ * tests stay honest even when the developer machine running the suite has a
+ * real key exported.
  */
 const PI_ENV_CREDENTIAL_KEYS = [
   'ANTHROPIC_API_KEY',
   'ANTHROPIC_AUTH_TOKEN',
   'OPENAI_API_KEY',
-  'GOOGLE_GENERATIVE_AI_API_KEY',
+  'GEMINI_API_KEY',
   'ZAI_CODING_CN_API_KEY',
 ];
 

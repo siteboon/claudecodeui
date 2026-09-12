@@ -106,9 +106,8 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
   },
   pi: {
     provider: 'pi',
-    // Placeholder until the pi adapters land: the runtime accepts no
-    // permission modes yet, and only image attachments plus abort (SIGTERM)
-    // are known wire capabilities.
+    // pi has no permission system, fork, or MCP support, so only the default
+    // mode is offered; image attachments and abort (SIGTERM) are supported.
     permissionModes: ['default'],
     defaultPermissionMode: 'default',
     supportsImages: true,

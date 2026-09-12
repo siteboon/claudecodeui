@@ -13,12 +13,16 @@ type PiCredentialsStatus = {
   method: string | null;
 };
 
-/** Provider API keys pi reads straight from the environment. */
+/**
+ * Provider API keys pi reads straight from the environment. The names follow
+ * pi's own env-api-keys mapping (packages/ai/src/env-api-keys.ts in pi-mono),
+ * which resolves its `google` provider from `GEMINI_API_KEY`.
+ */
 const PI_ENV_CREDENTIAL_KEYS = [
   'ANTHROPIC_API_KEY',
   'ANTHROPIC_AUTH_TOKEN',
   'OPENAI_API_KEY',
-  'GOOGLE_GENERATIVE_AI_API_KEY',
+  'GEMINI_API_KEY',
   'ZAI_CODING_CN_API_KEY',
 ];
 

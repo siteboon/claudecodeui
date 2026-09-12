@@ -45,6 +45,7 @@ Current provider ids in this repo are:
 - `codex`
 - `cursor`
 - `opencode`
+- `pi`
 
 Those ids are mirrored in backend unions and frontend provider constants. If
 adding a new provider, update every place that hardcodes this list.
@@ -65,7 +66,8 @@ server/modules/providers/list/<provider>/
   <provider>-session-synchronizer.provider.ts
 ```
 
-The existing provider folders are `claude`, `codex`, `cursor`, and `opencode`.
+The existing provider folders are `claude`, `codex`, `cursor`, `opencode`, and
+`pi`.
 
 Each provider wrapper owns its SDK/CLI runtime alongside its auth, model, and
 session facets. Runtime adapters receive registry-backed model and session
@@ -96,7 +98,7 @@ import the service from `server/modules/providers/index.ts`.
 1. Add the provider id everywhere it is part of the contract.
 
 - Update `server/shared/types.ts` `LLMProvider`.
-- Update `src/types/app.ts` `LLMProvider` if the frontend should know about it.
+- Update `src/shared/types.ts` `LLMProvider` if the frontend should know about it.
 - Update `server/modules/providers/provider.routes.ts`.
 - Update `server/modules/agent/agent.routes.ts` if the provider is launchable from the agent runtime.
 - Update `server/index.ts` if the provider needs runtime boot or shutdown wiring.
@@ -143,6 +145,9 @@ Current MCP formats in this repo are:
 | Codex | `.codex/config.toml` | `user`, `project` | `stdio`, `http` |
 | Cursor | `.cursor/mcp.json` | `user`, `project` | `stdio`, `http` |
 | OpenCode | `~/.config/opencode/opencode.json` or `<workspace>/opencode.json` (`.jsonc` is read when present) | `user`, `project` | `stdio`, `http` |
+| pi | not applicable | none | none |
+
+pi has no MCP integration; every facet method answers `NOT_SUPPORTED`.
 
 5. Implement skills.
 
@@ -163,6 +168,7 @@ Current skill discovery roots are:
 | Codex | `~/.agents/skills`, `~/.codex/skills/.system`, `/etc/codex/skills` | `<workspace>/.agents/skills`, `path.dirname(workspacePath)/.agents/skills`, topmost git root `.agents/skills` | `$` | Overlapping roots are deduplicated before scanning. |
 | Cursor | `~/.cursor/skills` | `<workspace>/.cursor/skills`, `<workspace>/.agents/skills` | `/` | Uses slash-style commands. |
 | OpenCode | `~/.config/opencode/skills`, `~/.claude/skills`, `~/.agents/skills` | Cwd-to-topmost-git-root `.opencode/skills`, `.claude/skills`, and `.agents/skills` | `/` | Reuses OpenCode, Claude, and Agents skill locations. Overlapping roots are deduplicated before scanning. |
+| pi | `~/.pi/agent/skills`, plus every directory listed in the `skills` array of `~/.pi/agent/settings.json` | `<workspace>/.pi/skills` | `/` | Non-existent directories from the settings `skills` array are skipped. |
 
 Command forms currently used by the providers are:
 
@@ -171,6 +177,7 @@ Command forms currently used by the providers are:
 - Codex skills: `$skill-name`
 - Cursor skills: `/skill-name`
 - OpenCode skills: `/skill-name`
+- pi skills: `/skill-name`
 
 6. Implement sessions.
 
@@ -208,6 +215,7 @@ Current session sync roots are:
 | Codex | `~/.codex/sessions/**/*.jsonl` | Uses `~/.codex/session_index.jsonl` for title lookup and the last `task_complete` message for a fallback title. |
 | Cursor | `~/.cursor/projects/**/*.jsonl` | Uses sibling `worker.log` to recover `workspacePath`, then derives the session title from the first user prompt. |
 | OpenCode | `~/.local/share/opencode/opencode.db` | Reads active sessions/messages/parts from OpenCode's shared SQLite database and stores `jsonl_path` as `null` so deleting one app session cannot remove the shared DB. |
+| pi | `~/.pi/agent/sessions/**/*.jsonl` | Derives `workspacePath` from the transcript header's `cwd`; the title prefers an explicit `session_info` name and falls back to the first user prompt. |
 
 8. Register the provider.
 
@@ -230,7 +238,7 @@ If the provider is visible in the UI, update:
 - `src/components/chat/hooks/useChatProviderState.ts`
 - `src/components/chat/view/subcomponents/ProviderSelectionEmptyState.tsx`
 - `src/components/provider-auth/view/ProviderLoginModal.tsx`
-- `src/components/mcp/constants.ts`
+- `src/shared/constants.ts`
 
 ## Minimal Wrapper Template
 
@@ -331,7 +339,7 @@ Requirements:
     - server/modules/providers/provider.registry.ts
     - server/modules/providers/provider.routes.ts
    - server/shared/types.ts LLMProvider
-   - src/types/app.ts LLMProvider
+   - src/shared/types.ts LLMProvider
 3) Mirror the nearest existing provider implementation for file naming, style,
    and error handling.
 4) Implement skills support with SkillsProvider and the current skill roots.
@@ -339,7 +347,7 @@ Requirements:
 6) Ensure sessions use unique ids, safe path handling, and correct pagination.
 7) Keep `sessions` and `sessionSynchronizer` separate.
 8) Run:
-   - npx eslint <touched files>
+   - npx oxlint <touched files>
    - npx tsc --noEmit -p server/tsconfig.json
 ```
 
@@ -348,7 +356,7 @@ Requirements:
 After adding or changing a provider, run the relevant checks:
 
 ```bash
-npx eslint server/modules/providers/**/*.ts server/shared/types.ts server/shared/interfaces.ts
+npx oxlint server/modules/providers server/shared/types.ts server/shared/interfaces.ts
 npx tsc --noEmit -p server/tsconfig.json
 ```
 
@@ -357,6 +365,11 @@ Useful tests in this repo:
 - `server/modules/providers/tests/mcp.test.ts`
 - `server/modules/providers/tests/skills.test.ts`
 - `server/modules/providers/tests/opencode-sessions.test.ts`
+- `server/modules/providers/tests/pi-registry.test.ts`
+- `server/modules/providers/tests/pi-facets.test.ts`
+- `server/modules/providers/tests/pi-session-synchronizer.test.ts`
+- `server/modules/providers/list/pi/pi-runtime.provider.test.js`
+- `server/modules/providers/list/pi/pi-sessions.provider.test.ts`
 
 If you touch sessions or session synchronization, add or update focused tests
 alongside the implementation.
@@ -366,7 +379,7 @@ alongside the implementation.
 - Adding provider files but forgetting `provider.registry.ts` or
   `provider.routes.ts`.
 - Adding a live runtime without exposing it from the provider wrapper.
-- Updating backend provider ids but not `src/types/app.ts` or the frontend
+- Updating backend provider ids but not `src/shared/types.ts` or the frontend
   provider constants.
 - Omitting `runtime`, `skills`, or `sessionSynchronizer` from the wrapper.
 - Returning duplicate normalized message ids for split content.

@@ -393,8 +393,9 @@ export function createProviderTokenUsageService(
         };
       }
 
-      // Pi reports usage through its runtime event stream (Phase 1); it has no
-      // on-disk artifact to read back, so the endpoint answers with an explicit
+      // Pi already carries cumulative usage in its live runtime events, and
+      // reading historical usage back is the sessions API's job (it parses the
+      // JSONL transcripts), so this endpoint answers with an explicit
       // unsupported result the same way Cursor does.
       if (session.provider === 'pi') {
         return {
