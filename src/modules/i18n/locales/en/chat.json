@@ -353,5 +353,9 @@
     "tokensLabel_other": "tokens",
     "escClosesModal": "Esc closes the modal.",
     "close": "Close"
+  },
+  "promptNavigator": {
+    "aria": "Prompt navigator",
+    "noTextContent": "(no text content)"
   }
 }

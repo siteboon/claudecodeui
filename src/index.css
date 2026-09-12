@@ -589,13 +589,14 @@
   }
 
   .chat-message {
+    /* Layout containment stays, but NOT `content-visibility: auto`: with a
+       1500-row transcript the browser's own "skip painting what's off
+       screen" bookkeeping goes stale on huge scrollers, and rows render as
+       blank patches whose text is still selectable — the invisible-but-
+       highlightable bug. LazyMessageRow already virtualizes the transcript
+       (unmounted rows are 100px placeholders), so a second layer of
+       browser-side laziness buys nothing and loses content. */
     contain: layout style paint;
-    content-visibility: auto;
-    contain-intrinsic-size: auto 180px;
-  }
-
-  .chat-message.assistant {
-    contain-intrinsic-size: auto 240px;
   }
 
   .chat-message.user,

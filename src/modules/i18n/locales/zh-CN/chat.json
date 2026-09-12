@@ -276,5 +276,9 @@
     "failed": "未发送 — {{reason}}",
     "cancel": "取消定时消息",
     "dismiss": "关闭失败提示"
+  },
+  "promptNavigator": {
+    "aria": "提示词导航",
+    "noTextContent": "（无文本内容）"
   }
 }
