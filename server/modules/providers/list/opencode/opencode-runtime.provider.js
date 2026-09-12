@@ -257,6 +257,10 @@ async function spawnOpenCode(command, options = {}, ws, context) {
 
       const resolvedEffort = resolveOpenCodeEffort(resolvedModel, effort, effortModels);
       const args = ['run', '--format', 'json'];
+      // Without --thinking the json stream silently omits every reasoning part
+      // even when the model produced one (verified against v1.18.30) — the
+      // thinking accordion would only ever fill from the reload path.
+      args.push('--thinking');
       // OpenCode's `run` command owns workspace selection through `--dir`.
       // Relying on the child-process cwd alone is not enough on Linux, where
       // the CLI can still resolve the session under the server install dir.

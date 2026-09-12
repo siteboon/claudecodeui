@@ -80,6 +80,11 @@ function ChatInterface({
   const sessionStore = useSessionStore();
   const streamTimerRef = useRef<number | null>(null);
   const accumulatedStreamRef = useRef('');
+  // Thinking stream buffers parallel to the text ones: a turn streams
+  // reasoning first and answer second, and one shared buffer would clobber
+  // the other whenever the two overlapped.
+  const thinkingStreamTimerRef = useRef<number | null>(null);
+  const accumulatedThinkingStreamRef = useRef('');
   // When each session's `chat.subscribe` was last sent; idle acks older than
   // a later local request are discarded as stale.
   const statusCheckSentAtRef = useRef(new Map<string, number>());
@@ -94,6 +99,11 @@ function ChatInterface({
       streamTimerRef.current = null;
     }
     accumulatedStreamRef.current = '';
+    if (thinkingStreamTimerRef.current) {
+      clearTimeout(thinkingStreamTimerRef.current);
+      thinkingStreamTimerRef.current = null;
+    }
+    accumulatedThinkingStreamRef.current = '';
   }, []);
 
   const {
@@ -284,6 +294,8 @@ function ChatInterface({
     setPendingPermissionRequests,
     streamTimerRef,
     accumulatedStreamRef,
+    thinkingStreamTimerRef,
+    accumulatedThinkingStreamRef,
     lastSeqRef,
     statusCheckSentAtRef,
     onSessionProcessing,

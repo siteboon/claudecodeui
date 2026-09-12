@@ -36,9 +36,11 @@ const activeCodexSessions = new Map<string, ActiveCodexSession>();
 
 /**
  * Item types whose in-flight updates are worth showing. These are the ones a
- * user waits on — a shell command's output, an MCP call, and the running plan.
+ * user waits on — a shell command's output, an MCP call, the running plan,
+ * and the growing reasoning summary (each `item.updated` carries the text
+ * snapshot so far, and the stable itemId makes it update one row).
  */
-const PROGRESSIVE_CODEX_ITEM_TYPES = new Set(['command_execution', 'mcp_tool_call', 'todo_list']);
+const PROGRESSIVE_CODEX_ITEM_TYPES = new Set(['command_execution', 'mcp_tool_call', 'todo_list', 'reasoning']);
 
 function readUsageNumber(value: unknown) {
   const parsed = Number(value);

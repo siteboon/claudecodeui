@@ -271,8 +271,13 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                 )}
               </>
             ) : message.isThinking ? (
-              /* Thinking messages — Reasoning component (ai-elements pattern) */
-              <Reasoning defaultOpen={isExporting}>
+              /* Thinking messages — Reasoning component (ai-elements pattern).
+                 A streamed row (isStreaming) auto-opens and shimmers; the
+                 finalized row lands collapsed as before. */
+              <Reasoning
+                defaultOpen={isExporting || Boolean(message.isStreaming)}
+                isStreaming={Boolean(message.isStreaming)}
+              >
                 <ReasoningTrigger />
                 <ReasoningContent>
                   <Markdown className="prose prose-sm prose-gray max-w-none font-serif dark:prose-invert">

@@ -1894,13 +1894,20 @@ export class CodexSessionsProvider implements IProviderSessions {
       })];
     }
 
-    if (raw.type === 'thinking' || raw.isReasoning) {
+    // The live item transform marks reasoning on the message itself
+    // (message.isReasoning); history rows carry the flag at top level. Both
+    // mean the same row — missing the nested one rendered reasoning as an
+    // ordinary assistant bubble.
+    if (raw.type === 'thinking' || raw.isReasoning || readObjectRecord(raw.message)?.isReasoning) {
       const thinkingContent = typeof raw.message?.content === 'string' ? raw.message.content : '';
       if (!thinkingContent.trim()) {
         return [];
       }
       return [createNormalizedMessage({
-        id: baseId,
+        // Live SDK items carry their stable `itemId`, so an in-progress
+        // reasoning tick and its completion normalize onto one row; history
+        // entries have no itemId and keep their uuid.
+        id: (typeof raw.itemId === 'string' && raw.itemId) || baseId,
         sessionId,
         timestamp: ts,
         provider: PROVIDER,
