@@ -268,8 +268,9 @@ export const sessionsService = {
     }
 
     // A session that has never run has no transcript to copy, so there is
-    // nothing a fork of it could resume from.
-    if (!source.provider_session_id || !source.jsonl_path) {
+    // nothing a fork of it could resume from. Providers that keep every
+    // transcript in one shared database have no per-session file to demand.
+    if (!source.provider_session_id || (!fork.transcriptIsSharedDatabase && !source.jsonl_path)) {
       throw new AppError('This session has not produced a transcript yet.', {
         code: 'FORK_SOURCE_NOT_READY',
         statusCode: 409,
