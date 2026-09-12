@@ -393,21 +393,30 @@ const rebuildSessionsTableWithProjectSchema = (db: Database): void => {
  * provider. SQLite exposes CHECK constraints only through the stored schema
  * text, so the cheapest exact test is to attempt the very insert the
  * constraint must allow and roll the probe row back.
+ *
+ * A CHECK rejection is the only answer that means "rebuild me": any other
+ * failure (locked database, full disk, ...) is surfaced instead of pushing an
+ * otherwise healthy install through a copy-the-whole-table migration.
  */
 const providerModelsTableAcceptsPi = (db: Database): boolean => {
   db.exec('SAVEPOINT provider_models_pi_probe');
   try {
+    // The random suffix keeps the probe row clear of the UNIQUE(provider,
+    // model_id) index no matter what a user has stored.
     db.prepare(`
       INSERT INTO provider_models (provider, model_id, model_name)
-      VALUES ('pi', '__pi_migration_probe__', '__pi_migration_probe__')
+      VALUES ('pi', '__pi_migration_probe__' || lower(hex(randomblob(16))), '__pi_migration_probe__')
     `).run();
     db.exec('ROLLBACK TO provider_models_pi_probe');
     db.exec('RELEASE provider_models_pi_probe');
     return true;
-  } catch {
+  } catch (error: any) {
     db.exec('ROLLBACK TO provider_models_pi_probe');
     db.exec('RELEASE provider_models_pi_probe');
-    return false;
+    if (error?.code === 'SQLITE_CONSTRAINT_CHECK') {
+      return false;
+    }
+    throw error;
   }
 };
 
