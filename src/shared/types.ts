@@ -275,6 +275,53 @@ export type SubagentInfo = {
   activityCount?: number;
 };
 
+/** One row of the info panel's subagent roster, composed server-side from the CLI's subagents directory plus the parent's task notifications. */
+export type SubagentSummary = {
+  agentId: string;
+  agentType?: string;
+  description?: string;
+  /** The parent's tool call that spawned this agent; the live stream keys off it. */
+  toolUseId?: string;
+  status: 'running' | 'completed' | 'failed';
+  activityCount: number;
+  startedAt?: string;
+  lastActivityAt?: string;
+  model?: string;
+};
+
+/** A running session's context-window snapshot, answered by the provider's own tooling; null fields mean that category could not be classified and render as `—`. */
+export type ProviderContextInfo = {
+  totalTokens: number | null;
+  maxTokens: number | null;
+  /** 0-100, as the provider itself computed it. */
+  percentage: number | null;
+  model: string | null;
+  categories: Array<{ name: string; tokens: number; kind: string }>;
+  agents: Array<{ agentType: string; tokens: number }>;
+  mcpTools: Array<{ name: string; serverName: string; tokens: number }>;
+  memoryFiles: Array<{ path: string; tokens: number }>;
+  slashCommands: { totalCommands: number; includedCommands: number } | null;
+};
+
+/**
+ * The turn's bill, forwarded from the provider's turn-complete signal on a
+ * `status`/`turn_stats` frame. `usage` covers this turn's main loop only;
+ * `costUsd` and the token totals are cumulative across the session, so
+ * consumers read the latest frame rather than summing across frames.
+ */
+export type TurnStats = {
+  costUsd: number | null;
+  durationMs: number | null;
+  apiDurationMs: number | null;
+  numTurns: number | null;
+  usage: {
+    inputTokens: number | null;
+    outputTokens: number | null;
+    cacheReadTokens: number | null;
+    cacheCreationTokens: number | null;
+  } | null;
+};
+
 /** One rendered entry in a chat transcript — user turn, assistant turn, tool call and result, local command output, or subagent container — and the shape the chat message list and message components consume. */
 export type ChatMessage = {
   type: string;
@@ -464,6 +511,8 @@ export type NormalizedMessage = {
   tokens?: number;
   canInterrupt?: boolean;
   tokenBudget?: unknown;
+  /** The turn's bill from a `status`/`turn_stats` frame; absent on every other message. */
+  turnStats?: TurnStats;
   requestId?: string;
   input?: unknown;
   context?: unknown;
@@ -491,6 +540,7 @@ type MessageKind =
   | 'tool_use'
   | 'tool_result'
   | 'thinking'
+  | 'thinking_delta'
   | 'stream_delta'
   | 'stream_end'
   | 'error'

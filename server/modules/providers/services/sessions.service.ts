@@ -11,7 +11,9 @@ import type {
   FetchHistoryResult,
   LLMProvider,
   NormalizedMessage,
+  SubagentSummary,
 } from '@/shared/types.js';
+import type { ProviderContextInfo } from '@/shared/interfaces.js';
 import { AppError, sliceTailPage } from '@/shared/utils.js';
 
 type CreateAppSessionResult = {
@@ -266,8 +268,9 @@ export const sessionsService = {
     }
 
     // A session that has never run has no transcript to copy, so there is
-    // nothing a fork of it could resume from.
-    if (!source.provider_session_id || !source.jsonl_path) {
+    // nothing a fork of it could resume from. Providers that keep every
+    // transcript in one shared database have no per-session file to demand.
+    if (!source.provider_session_id || (!fork.transcriptIsSharedDatabase && !source.jsonl_path)) {
       throw new AppError('This session has not produced a transcript yet.', {
         code: 'FORK_SOURCE_NOT_READY',
         statusCode: 409,
@@ -407,6 +410,86 @@ export const sessionsService = {
 
     const sessions = providerRegistry.resolveProvider(session.provider as LLMProvider).sessions;
     await sessions.rewindSession?.(sessionId, keepThroughId);
+  },
+
+  /**
+   * The session's context-window snapshot, answered by the provider runtime
+   * when it holds a live handle (Claude: the SDK query's getContextUsage —
+   * the CLI's own `/context` data). Null tells the info panel to fall back to
+   * the usage frames it already streams.
+   */
+  async getContextInfo(sessionId: string): Promise<ProviderContextInfo | null> {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session) {
+      throw new AppError(`Session "${sessionId}" was not found.`, {
+        code: 'SESSION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    const runtime = providerRegistry.resolveProvider(session.provider as LLMProvider).runtime;
+    if (!runtime.contextInfo) {
+      return null;
+    }
+
+    return runtime.contextInfo(sessionId);
+  },
+
+  /**
+   * The agents one session spawned, for the info panel's sidebar. A provider
+   * without a per-agent transcript store simply reports none, which renders as
+   * an empty section rather than an error. Deliberately outside the
+   * sessionHistoryCache: that cache is keyed by the parent transcript and this
+   * reads the subagents directory the watcher never touches.
+   */
+  async listSessionSubagents(sessionId: string): Promise<SubagentSummary[]> {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session) {
+      throw new AppError(`Session "${sessionId}" was not found.`, {
+        code: 'SESSION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    const sessions = providerRegistry.resolveProvider(session.provider as LLMProvider).sessions;
+    if (!sessions.listSubagents || !session.provider_session_id) {
+      return [];
+    }
+
+    return sessions.listSubagents(
+      sessionId,
+      session.provider_session_id,
+      chatRunRegistry.isProcessing(sessionId),
+    );
+  },
+
+  /**
+   * One agent's own conversation as a history page. Bypasses the history
+   * cache for the same reason the roster does — the artifact is the agent's
+   * file, not the parent transcript the cache keys on.
+   */
+  async fetchSubagentHistory(
+    sessionId: string,
+    agentId: string,
+    options: Pick<FetchHistoryOptions, 'limit' | 'offset'> = {},
+  ): Promise<FetchHistoryResult> {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session) {
+      throw new AppError(`Session "${sessionId}" was not found.`, {
+        code: 'SESSION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    const sessions = providerRegistry.resolveProvider(session.provider as LLMProvider).sessions;
+    if (!sessions.fetchSubagentHistory || !session.provider_session_id) {
+      return { messages: [], total: 0, hasMore: false, offset: options.offset ?? 0, limit: options.limit ?? null };
+    }
+
+    return sessions.fetchSubagentHistory(sessionId, session.provider_session_id, agentId, {
+      limit: options.limit ?? null,
+      offset: options.offset ?? 0,
+    });
   },
 
   async fetchHistory(

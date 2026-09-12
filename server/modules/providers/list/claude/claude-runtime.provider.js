@@ -25,7 +25,6 @@ import {
   normalizeImageDescriptors
 } from '@/shared/image-attachments.js';
 import {
-  CLAUDE_PREDEFINED_MODELS,
   CLAUDE_ULTRACODE_EFFORT
 } from '@/modules/providers/list/claude/claude-models.provider.js';
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
@@ -36,6 +35,7 @@ import {
   notifyRunStopped,
   notifyUserIfEnabled
 } from '@/modules/notifications/index.js';
+import { mcpDisabledServersDb } from '@/modules/database/index.js';
 import { createCompleteMessage, createNormalizedMessage } from '@/shared/utils.js';
 
 const activeSessions = new Map();
@@ -78,7 +78,7 @@ const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode'])
 // selection is translated back into the two options the SDK actually understands here.
 const ULTRACODE_SDK_EFFORT = 'xhigh';
 
-function resolveClaudeEffort(model, effort, modelsDefinition = CLAUDE_PREDEFINED_MODELS) {
+function resolveClaudeEffort(model, effort, modelsDefinition) {
   const selectedModel = modelsDefinition?.OPTIONS?.find((option) => option.value === model) || null;
   const allowedEfforts = selectedModel?.effort?.values
     ?.map((value) => value.value) || [];
@@ -271,12 +271,18 @@ function mapCliOptionsToSDK(options = {}) {
 
   sdkOptions.disallowedTools = settings.disallowedTools || [];
 
-  sdkOptions.model = options.model || CLAUDE_PREDEFINED_MODELS.DEFAULT;
+  // No curated fallback: an absent model is left unset so the CLI runs the
+  // account's own default rather than a source-controlled alias. The websocket
+  // send path records a model on every turn, so this only covers callers that
+  // deliberately omit it.
+  if (options.model) {
+    sdkOptions.model = options.model;
+  }
 
   applyClaudeEffort(sdkOptions, resolveClaudeEffort(
     sdkOptions.model,
     effort,
-    options.effortModels || CLAUDE_PREDEFINED_MODELS,
+    options.effortModels,
   ));
 
   sdkOptions.systemPrompt = {
@@ -285,6 +291,13 @@ function mapCliOptionsToSDK(options = {}) {
   };
 
   sdkOptions.settingSources = ['project', 'user', 'local'];
+
+  // Token-level streaming: without this the SDK only yields whole assistant
+  // messages, so reply text and thinking appear one lump per turn. The
+  // partial `stream_event` frames feed the client's accumulated stream_delta /
+  // thinking_delta rendering; the complete assistant messages still arrive
+  // alongside and remain the persisted record.
+  sdkOptions.includePartialMessages = true;
 
   // The SDK resumes with the provider-native session id, never the app id.
   // `resumeFromScratch` is set when the very first prompt of a conversation was
@@ -539,6 +552,44 @@ function extractCumulativeTokenBudget(sdkMessage) {
   };
 }
 
+/**
+ * Extract the turn's bill from a turn-ending `result` message.
+ *
+ * The SDK's result carries the cost/duration/token accounting the rest of the
+ * stream never emits, and it is not persisted to the transcript jsonl, so a
+ * `status`/`turn_stats` frame is the only way it reaches the client. Follows
+ * the SDK contract: `usage` is this turn's main-loop bill (subagent requests
+ * excluded), while `total_cost_usd` and `modelUsage` are cumulative across the
+ * streaming-input session — consumers read the latest frame, never sum.
+ * @param {?Object} sdkMessage - SDK stream message (null probes the missing-message case)
+ * @returns {?{costUsd: ?number, durationMs: ?number, apiDurationMs: ?number, numTurns: ?number, usage: ?{inputTokens: ?number, outputTokens: ?number, cacheReadTokens: ?number, cacheCreationTokens: ?number}}} TurnStats payload, or null for anything not a result
+ */
+function extractTurnStats(sdkMessage) {
+  if (!sdkMessage || typeof sdkMessage !== 'object' || sdkMessage.type !== 'result') {
+    return null;
+  }
+
+  // Distinct from the module-level readNumber, which defaults to 0; the panel
+  // needs missing-vs-zero distinguishable.
+  const readNullable = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+  const usage = sdkMessage.usage && typeof sdkMessage.usage === 'object'
+    ? {
+        inputTokens: readNullable(sdkMessage.usage.input_tokens),
+        outputTokens: readNullable(sdkMessage.usage.output_tokens),
+        cacheReadTokens: readNullable(sdkMessage.usage.cache_read_input_tokens),
+        cacheCreationTokens: readNullable(sdkMessage.usage.cache_creation_input_tokens),
+      }
+    : null;
+
+  return {
+    costUsd: readNullable(sdkMessage.total_cost_usd),
+    durationMs: readNullable(sdkMessage.duration_ms),
+    apiDurationMs: readNullable(sdkMessage.duration_api_ms),
+    numTurns: readNullable(sdkMessage.num_turns),
+    usage,
+  };
+}
+
 // Tool calls that leave work running past the end of a turn. Bash only counts
 // when it is explicitly backgrounded; the rest defer or watch work by nature.
 const DEFERRED_WORK_TOOLS = new Set(['Monitor', 'ScheduleWakeup', 'CronCreate', 'TaskCreate']);
@@ -629,11 +680,42 @@ function createHeldPromptStream(messages) {
 }
 
 /**
+ * Drops the MCP servers the user switched off in the info panel.
+ *
+ * Pure (and exported for tests) so the name-matching rules are pinned without
+ * a database: a name disabled at any scope drops every server with that name,
+ * which is what a single global switch per server means to the user.
+ *
+ * @param {Record<string, unknown>|null} servers merged MCP config, if any
+ * @param {Iterable<string>|null} disabledSet server names the user disabled
+ * @returns {Record<string, unknown>|null} the survivors, or null when empty
+ */
+export function applyMcpDisabledFilter(servers, disabledSet) {
+  if (!servers || typeof servers !== 'object') {
+    return null;
+  }
+  const disabled = new Set(
+    Array.from(disabledSet ?? []).map((name) => String(name).trim()).filter(Boolean),
+  );
+  if (disabled.size === 0) {
+    return servers;
+  }
+  const survivors = {};
+  for (const [name, config] of Object.entries(servers)) {
+    if (!disabled.has(String(name).trim())) {
+      survivors[name] = config;
+    }
+  }
+  return Object.keys(survivors).length > 0 ? survivors : null;
+}
+
+/**
  * Loads MCP server configurations from ~/.claude.json
  * @param {string} cwd - Current working directory for project-specific configs
+ * @param {number|null} [userId] - Whose info-panel MCP switches to honor; null loads everything
  * @returns {Object|null} MCP servers object or null if none found
  */
-async function loadMcpConfig(cwd) {
+async function loadMcpConfig(cwd, userId = null) {
   try {
     const claudeConfigPath = path.join(os.homedir(), '.claude.json');
 
@@ -678,7 +760,18 @@ async function loadMcpConfig(cwd) {
     if (Object.keys(mcpServers).length === 0) {
       return null;
     }
-    return mcpServers;
+    // The info panel's MCP switches: drop the names this user disabled before
+    // the SDK ever spawns them. A failing lookup must never block the turn —
+    // an unreadable disable list means "run everything", the safe direction.
+    let disabledSet = null;
+    if (userId) {
+      try {
+        disabledSet = new Set(mcpDisabledServersDb.get(Number(userId)));
+      } catch (error) {
+        console.warn('[Claude SDK] Unable to load disabled MCP servers:', error);
+      }
+    }
+    return applyMcpDisabledFilter(mcpServers, disabledSet);
   } catch (error) {
     console.error('Error loading MCP config:', error.message);
     return null;
@@ -757,12 +850,10 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
 
   try {
     const resolvedModel = await context.resolveResumeModel(sessionId, options.model);
-    let effortModels = CLAUDE_PREDEFINED_MODELS;
-    try {
-      effortModels = await context.getProviderModels();
-    } catch (error) {
-      console.warn('[Claude SDK] Unable to load provider models for effort validation:', error);
-    }
+    // No curated fallback: effort choices are validated against the live CLI
+    // catalog, and a catalog that cannot load fails the turn with the CLI's
+    // own error rather than silently validating against stale defaults.
+    const effortModels = await context.getProviderModels();
 
     const sdkOptions = mapCliOptionsToSDK({
       ...options,
@@ -771,7 +862,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       effortModels,
     });
 
-    const mcpServers = await loadMcpConfig(options.cwd);
+    const mcpServers = await loadMcpConfig(options.cwd, ws?.userId || null);
     if (mcpServers) {
       sdkOptions.mcpServers = mcpServers;
     }
@@ -973,6 +1064,14 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       }
 
       if (message.type === 'result') {
+        // Forward the turn's bill (cost/duration/tokens) before the terminal
+        // complete — the jsonl never stores it, so this frame is its only
+        // route to the client. Each result in a streaming-input session
+        // carries the running totals; consumers read the latest frame.
+        const turnStats = extractTurnStats(message);
+        if (turnStats) {
+          ws.send(createNormalizedMessage({ kind: 'status', text: 'turn_stats', turnStats, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+        }
         // The turn is done as far as the client is concerned.
         const abortPending = sessionKey() ? abortedSessionIds.has(sessionKey()) : false;
         if (!turnCompleteSent && !abortPending) {
@@ -1140,6 +1239,68 @@ async function abortClaudeSDKSession(sessionId) {
 }
 
 /**
+ * Asks a live CLI for the session's context-window breakdown — the same
+ * answer the interactive `/context` renders, via the SDK's getContextUsage.
+ * `summary` detail answers from the last response's usage and local estimates,
+ * which is what a read-only sidebar needs; `full` would spend token-count API
+ * calls per category on every panel open.
+ * @param {string} sessionId - App session id, which is the process-map key
+ *   for UI-started runs (legacy direct callers key by provider-native id)
+ * @returns {Promise<{totalTokens: (number|null), maxTokens: (number|null), percentage: (number|null), model: (string|null), categories: Array<{name: string, tokens: number, kind: string}>, agents: Array<{agentType: string, tokens: number}>, mcpTools: Array<{name: string, serverName: string, tokens: number}>, memoryFiles: Array<{path: string, tokens: number}>, slashCommands: ({totalCommands: number, includedCommands: number}|null)}|null>}
+ *   ProviderContextInfo, or null when no CLI is holding the session (idle
+ *   sessions between runs have no live handle)
+ */
+async function getContextInfo(sessionId) {
+  const session = getSession(sessionId);
+  if (!session?.instance?.getContextUsage) {
+    return null;
+  }
+
+  try {
+    const usage = await session.instance.getContextUsage({ detail: 'summary' });
+    if (!usage || !Array.isArray(usage.categories)) {
+      return null;
+    }
+
+    return {
+      totalTokens: typeof usage.totalTokens === 'number' ? usage.totalTokens : null,
+      maxTokens: typeof usage.maxTokens === 'number' ? usage.maxTokens : null,
+      percentage: typeof usage.percentage === 'number' ? usage.percentage : null,
+      model: usage.model ?? null,
+      categories: usage.categories.map((category) => ({
+        name: String(category?.name ?? ''),
+        tokens: typeof category?.tokens === 'number' ? category.tokens : 0,
+        kind: String(category?.kind ?? 'used'),
+      })),
+      agents: Array.isArray(usage.agents)
+        ? usage.agents.map((agent) => ({ agentType: String(agent?.agentType ?? ''), tokens: typeof agent?.tokens === 'number' ? agent.tokens : 0 }))
+        : [],
+      mcpTools: Array.isArray(usage.mcpTools)
+        ? usage.mcpTools.map((tool) => ({
+            name: String(tool?.name ?? ''),
+            serverName: String(tool?.serverName ?? ''),
+            tokens: typeof tool?.tokens === 'number' ? tool.tokens : 0,
+          }))
+        : [],
+      memoryFiles: Array.isArray(usage.memoryFiles)
+        ? usage.memoryFiles.map((file) => ({ path: String(file?.path ?? ''), tokens: typeof file?.tokens === 'number' ? file.tokens : 0 }))
+        : [],
+      slashCommands: usage.slashCommands && typeof usage.slashCommands === 'object'
+        ? {
+            totalCommands: usage.slashCommands.totalCommands ?? 0,
+            includedCommands: usage.slashCommands.includedCommands ?? 0,
+          }
+        : null,
+    };
+  } catch (error) {
+    // A CLI that predates the control request, or one mid-shutdown, simply
+    // has no answer; the panel falls back to the streamed usage frames.
+    console.warn(`getContextUsage failed for session ${sessionId}:`, error?.message || error);
+    return null;
+  }
+}
+
+/**
  * Checks if an SDK session is currently active
  * @param {string} sessionId - Session identifier
  * @returns {boolean} True if session is active
@@ -1197,6 +1358,7 @@ function reconnectSessionWriter(sessionId, newRawWs) {
 export const claudeRuntime = {
   run: queryClaudeSDK,
   abort: abortClaudeSDKSession,
+  contextInfo: getContextInfo,
   permissions: {
     resolve: resolveToolApproval,
     listPending: getPendingApprovalsForSession,
@@ -1213,5 +1375,6 @@ export {
   getPendingApprovalsForSession,
   reconnectSessionWriter,
   extractTokenBudget,
-  extractCumulativeTokenBudget
+  extractCumulativeTokenBudget,
+  extractTurnStats
 };

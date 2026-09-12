@@ -27,6 +27,9 @@ export type UserPreferences = {
   opencodePermissions: unknown;
   codeEditorSettings: unknown;
   uiPreferences: unknown;
+  sessionInfoPanel: unknown;
+  /** MCP server names the info panel switched off; the Claude runtime drops them. */
+  mcpDisabledServers: string[];
   selectedProvider: string;
 };
 
@@ -66,6 +69,10 @@ const LEGACY_STORAGE_KEYS: Record<UserPreferenceKey, string> = {
   // read by readLegacyCodeEditorSettings instead.
   codeEditorSettings: '',
   uiPreferences: 'uiPreferences',
+  // Panel layout is new; nothing to migrate from localStorage.
+  sessionInfoPanel: '',
+  // Also new, and only ever set from the panel; no legacy key exists.
+  mcpDisabledServers: '',
   selectedProvider: 'selected-provider',
 };
 

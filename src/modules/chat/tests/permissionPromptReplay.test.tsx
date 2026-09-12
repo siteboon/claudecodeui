@@ -29,12 +29,15 @@ const renderHandlers = () => {
     selectedSession: { id: 'viewed-session' } as ProjectSession,
     currentSessionId: 'viewed-session',
     setTokenBudget: () => {},
+    setTurnStats: () => {},
     pendingPermissionRequests: [],
     setPendingPermissionRequests: (next) => {
       pending = typeof next === 'function' ? next(pending) : next;
     },
     streamTimerRef: { current: null },
     accumulatedStreamRef: { current: '' },
+    thinkingStreamTimerRef: { current: null },
+    accumulatedThinkingStreamRef: { current: '' },
     lastSeqRef: { current: new Map() },
     statusCheckSentAtRef: { current: new Map() },
     requestLatestMessages: async () => {},

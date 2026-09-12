@@ -1,9 +1,11 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { AppTab, Project, ProjectSession } from '@/shared/types';
 import { cn } from '@/shared/utils';
+import { readStoredSessionInfoPanelPrefs } from '@/shared/sessionInfoPanelPrefs';
+import { writeUserPreference, USER_PREFERENCES_CHANGED_EVENT } from '@/shared/userSettings';
 import MobileMenuButton from '@/modules/project-workspace/MobileMenuButton';
 import WorkspaceTabs from '@/modules/project-workspace/WorkspaceTabs';
 import WorkspaceTitle from '@/modules/project-workspace/WorkspaceTitle';
@@ -35,6 +37,22 @@ export default function WorkspaceHeader({
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
   const hasOverflow = canScrollLeft || canScrollRight;
+
+  // Mirrors the shared preference the chat panel itself owns; the change
+  // event keeps the icon in sync while another tab's panel toggles it.
+  const [infoPanelOpen, setInfoPanelOpen] = useState(() => readStoredSessionInfoPanelPrefs().open);
+  useEffect(() => {
+    const sync = () => setInfoPanelOpen(readStoredSessionInfoPanelPrefs().open);
+    window.addEventListener(USER_PREFERENCES_CHANGED_EVENT, sync);
+    return () => window.removeEventListener(USER_PREFERENCES_CHANGED_EVENT, sync);
+  }, []);
+
+  const toggleInfoPanel = useCallback(() => {
+    const current = readStoredSessionInfoPanelPrefs();
+    const open = !current.open;
+    writeUserPreference('sessionInfoPanel', { ...current, open });
+    setInfoPanelOpen(open);
+  }, []);
 
   const updateScrollState = useCallback(() => {
     const el = scrollRef.current;
@@ -150,6 +168,26 @@ export default function WorkspaceHeader({
             )}
           </div>
         </div>
+
+        {activeTab === 'chat' && selectedSession && (
+          <button
+            type="button"
+            onClick={toggleInfoPanel}
+            aria-label={infoPanelOpen
+              ? t('sessionInfoPanel.closeButton', { defaultValue: 'Hide session panel' })
+              : t('sessionInfoPanel.openButton', { defaultValue: 'Show session panel' })}
+            aria-pressed={infoPanelOpen}
+            title={infoPanelOpen
+              ? t('sessionInfoPanel.closeButton', { defaultValue: 'Hide session panel' })
+              : t('sessionInfoPanel.openButton', { defaultValue: 'Show session panel' })}
+            className={cn(
+              'hidden h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border border-border/70 text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/60 sm:flex',
+              infoPanelOpen && 'bg-accent/60 text-foreground',
+            )}
+          >
+            {infoPanelOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
+          </button>
+        )}
       </div>
     </header>
   );

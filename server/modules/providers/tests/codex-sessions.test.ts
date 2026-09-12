@@ -551,3 +551,158 @@ test('an exec script that updates the plan yields the steps it set', () => {
     ],
   }]);
 });
+
+/**
+ * The rollout format `thread/fork` has written since paginated history: the
+ * fork's own file carries only its post-fork turns, and `session_meta` names
+ * the base thread plus an exclusive row ordinal whose prefix it inherits. The
+ * model sees the chain because Codex assembles it; the app's reader has to
+ * follow the same reference or the fork opens onto an empty transcript.
+ */
+const turnWithOrdinals = (turnId: string, prompt: string, answer: string, firstOrdinal: number): string[] => [
+  JSON.stringify({ type: 'event_msg', ordinal: firstOrdinal, payload: { type: 'task_started', turn_id: turnId } }),
+  JSON.stringify({ type: 'event_msg', ordinal: firstOrdinal + 1, payload: {
+    type: 'item_completed', turn_id: turnId,
+    item: { type: 'UserMessage', id: `umsg-${turnId}`, content: [{ type: 'text', text: prompt }] },
+  } }),
+  JSON.stringify({ type: 'event_msg', ordinal: firstOrdinal + 2, payload: {
+    type: 'item_completed', turn_id: turnId,
+    item: { type: 'AgentMessage', id: `amsg-${turnId}`, content: [{ type: 'text', text: answer }] },
+  } }),
+  // What actually renders the answer: the reader draws assistant text from
+  // the model-facing response_item row, alongside the item_completed mirror.
+  JSON.stringify({ type: 'response_item', ordinal: firstOrdinal + 3, payload: {
+    type: 'message', role: 'assistant', content: [{ type: 'output_text', text: answer }],
+  } }),
+  JSON.stringify({ type: 'event_msg', ordinal: firstOrdinal + 4, payload: { type: 'task_complete', turn_id: turnId } }),
+];
+
+const writePaginatedForkPair = async (
+  homeDir: string,
+  workspacePath: string,
+  options: { baseTurnCount: number; forkInheritsTurns: number },
+): Promise<{ baseThreadId: string; forkThreadId: string }> => {
+  const baseThreadId = '01a00000-0000-7000-8000-00000000000b';
+  const forkThreadId = '01a00000-0000-7000-8000-00000000000f';
+  const sessionsDir = path.join(homeDir, '.codex', 'sessions', '2026', '07', '07');
+  await mkdir(sessionsDir, { recursive: true });
+
+  const baseLines = [JSON.stringify({ type: 'session_meta', ordinal: 0, payload: { id: baseThreadId, cwd: workspacePath } })];
+  for (let turn = 0; turn < options.baseTurnCount; turn += 1) {
+    baseLines.push(...turnWithOrdinals(`turn-${turn}`, `inherited prompt ${turn}`, `inherited answer ${turn}`, baseLines.length));
+  }
+  await writeFile(path.join(sessionsDir, `rollout-${baseThreadId}.jsonl`), `${baseLines.join('\n')}\n`, 'utf8');
+
+  // The fork writes only its own turn; the inherited ordinal is what the
+  // live server recorded when the fork was taken (one turn per 5 rows plus
+  // the meta row).
+  const forkLines = [
+    JSON.stringify({ type: 'session_meta', payload: {
+      id: forkThreadId,
+      cwd: workspacePath,
+      forked_from_id: baseThreadId,
+      forked_from_ordinal_exclusive: String(1 + options.forkInheritsTurns * 5),
+      history_mode: 'paginated',
+      history_base: {
+        thread_id: baseThreadId,
+        end_ordinal_exclusive: 1 + options.forkInheritsTurns * 5,
+        end_byte_offset: 1234,
+      },
+    } }),
+    ...turnWithOrdinals('turn-fork', 'the fork prompt', 'the fork answer', 0),
+  ];
+  await writeFile(path.join(sessionsDir, `rollout-${forkThreadId}.jsonl`), `${forkLines.join('\n')}\n`, 'utf8');
+
+  return { baseThreadId, forkThreadId };
+};
+
+test('a paginated Codex fork shows the turns it inherited, oldest first', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-fork-chain-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tempRoot);
+
+  try {
+    const { forkThreadId } = await writePaginatedForkPair(tempRoot, workspacePath, { baseTurnCount: 2, forkInheritsTurns: 2 });
+
+    await withIsolatedDatabase(async () => {
+      await new CodexSessionSynchronizer().synchronize();
+
+      const history = await new CodexSessionsProvider().fetchHistory(forkThreadId);
+      const texts = history.messages
+        .filter((message) => message.kind === 'text')
+        .map((message) => `${message.role}:${message.content}`);
+
+      assert.deepEqual(texts, [
+        'user:inherited prompt 0',
+        'assistant:inherited answer 0',
+        'user:inherited prompt 1',
+        'assistant:inherited answer 1',
+        'user:the fork prompt',
+        'assistant:the fork answer',
+      ]);
+      // Inherited prompts are addressable too — their turn rows went through
+      // the same tracker, so editing works on the copied part of the thread.
+      const firstPrompt = history.messages.find((message) => message.content === 'inherited prompt 0');
+      assert.equal(firstPrompt?.transcriptAnchorId, 'turn-0');
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('a paginated fork shows only the turns its ordinal cut kept', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-fork-cut-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tempRoot);
+
+  try {
+    // The thread had two turns when the fork was taken after the first one:
+    // the base file still holds both, and only the ordinal says where to cut.
+    const { forkThreadId } = await writePaginatedForkPair(tempRoot, workspacePath, { baseTurnCount: 2, forkInheritsTurns: 1 });
+
+    await withIsolatedDatabase(async () => {
+      await new CodexSessionSynchronizer().synchronize();
+
+      const history = await new CodexSessionsProvider().fetchHistory(forkThreadId);
+      const prompts = history.messages
+        .filter((message) => message.kind === 'text' && message.role === 'user')
+        .map((message) => message.content);
+
+      assert.deepEqual(prompts, ['inherited prompt 0', 'the fork prompt']);
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('a paginated fork whose base file was deleted still shows its own turns', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-fork-orphan-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tempRoot);
+
+  try {
+    const { baseThreadId, forkThreadId } = await writePaginatedForkPair(tempRoot, workspacePath, { baseTurnCount: 1, forkInheritsTurns: 1 });
+    await rm(path.join(tempRoot, '.codex', 'sessions', '2026', '07', '07', `rollout-${baseThreadId}.jsonl`));
+
+    await withIsolatedDatabase(async () => {
+      await new CodexSessionSynchronizer().synchronize();
+
+      const history = await new CodexSessionsProvider().fetchHistory(forkThreadId);
+      const prompts = history.messages
+        .filter((message) => message.kind === 'text' && message.role === 'user')
+        .map((message) => message.content);
+
+      // Missing inherited rows are logged and skipped, never a blank screen
+      // for the turns the fork itself wrote.
+      assert.deepEqual(prompts, ['the fork prompt']);
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});

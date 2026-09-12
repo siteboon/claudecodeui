@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowDownIcon } from 'lucide-react';
 
@@ -12,13 +12,18 @@ import type {
   ProjectSession,
   SessionEstablishedContext,
   SessionNavigationOptions,
+  SubagentSummary,
 } from '@/shared/types';
+import { writeDraftText } from '@/shared/chatDrafts';
 import { useChatProviderState } from '@/modules/chat/hooks/useChatProviderState';
 import { useScheduledMessages } from '@/modules/chat/composer/useScheduledMessages';
 import { useChatSessionState } from '@/modules/chat/hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '@/modules/chat/hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
 import { useSessionStore } from '@/modules/chat/hooks/useSessionStore';
+import { useSessionSubagents } from '@/modules/chat/hooks/useSessionSubagents';
+import { useSessionMcpServers } from '@/modules/chat/hooks/useSessionMcpServers';
+import { useSessionSkills } from '@/modules/chat/hooks/useSessionSkills';
 import {
   useProcessingSessions,
   useSessionProtectionActions,
@@ -26,6 +31,10 @@ import {
 import ChatMessagesPane from '@/modules/chat/transcript/ChatMessagesPane';
 import ChatComposer from '@/modules/chat/composer/ChatComposer';
 import CommandResultModal from '@/modules/chat/modals/CommandResultModal';
+import { SessionInfoPanel } from '@/modules/chat/panel/SessionInfoPanel';
+import { SubagentChatModal } from '@/modules/chat/panel/SubagentChatModal';
+import { useSessionInfoPanel } from '@/modules/chat/hooks/useSessionInfoPanel';
+import { useDeviceSettings } from '@/shared/hooks/useDeviceSettings';
 
 type ChatInterfaceProps = {
   isActive: boolean;
@@ -80,6 +89,11 @@ function ChatInterface({
   const sessionStore = useSessionStore();
   const streamTimerRef = useRef<number | null>(null);
   const accumulatedStreamRef = useRef('');
+  // Thinking stream buffers parallel to the text ones: a turn streams
+  // reasoning first and answer second, and one shared buffer would clobber
+  // the other whenever the two overlapped.
+  const thinkingStreamTimerRef = useRef<number | null>(null);
+  const accumulatedThinkingStreamRef = useRef('');
   // When each session's `chat.subscribe` was last sent; idle acks older than
   // a later local request are discarded as stale.
   const statusCheckSentAtRef = useRef(new Map<string, number>());
@@ -94,6 +108,11 @@ function ChatInterface({
       streamTimerRef.current = null;
     }
     accumulatedStreamRef.current = '';
+    if (thinkingStreamTimerRef.current) {
+      clearTimeout(thinkingStreamTimerRef.current);
+      thinkingStreamTimerRef.current = null;
+    }
+    accumulatedThinkingStreamRef.current = '';
   }, []);
 
   const {
@@ -119,6 +138,8 @@ function ChatInterface({
     resolvePermissionModeForProvider,
     supportsMessageEditing,
     supportsSessionForking,
+    supportsSessionInsights,
+    supportsMcpToggle,
   } = useChatProviderState({
     selectedSession,
     selectedProject,
@@ -140,11 +161,13 @@ function ChatInterface({
     setIsUserScrolledUp,
     tokenBudget,
     setTokenBudget,
-    visibleMessageCount,
-    visibleMessages,
-    loadEarlierMessages,
+    turnStats,
+    setTurnStats,
+    mergedMessages,
     loadAllMessages,
     loadFullTranscript,
+    requestOlderMessages,
+    scrollToPromptEntry,
     allMessagesLoaded,
     isLoadingAllMessages,
     loadAllJustFinished,
@@ -171,6 +194,43 @@ function ChatInterface({
     sessionStore,
   });
 
+  // The right-hand conversation sidebar. Its layout lives in the shared
+  // preference store so the header's toggle button and this mount stay in
+  // step without prop-drilling through the workspace shell.
+  const { isMobile } = useDeviceSettings();
+  const activeSessionId = selectedSession?.id || currentSessionId || null;
+  const sessionInfo = useSessionInfoPanel({
+    provider,
+    sessionId: activeSessionId,
+    supportsInsights: supportsSessionInsights,
+  });
+  const subagentRoster = useSessionSubagents({
+    provider,
+    sessionId: activeSessionId,
+    enabled: sessionInfo.prefs.open,
+    supportsInsights: supportsSessionInsights,
+    parentRunning: isProcessing,
+  });
+  // The MCP section reads the provider's own server list and the user's
+  // disabled-name set; switches only bite for providers whose runtime
+  // consults the set (the capability matrix says which those are).
+  const mcpSection = useSessionMcpServers({
+    provider,
+    projectPath: selectedProject?.fullPath || selectedProject?.path || null,
+    enabled: sessionInfo.prefs.open,
+    canToggle: supportsMcpToggle,
+  });
+  // The sources section's skill count; every provider answers the skills
+  // endpoint, so no capability gate — the panel being open is the gate.
+  const skillList = useSessionSkills({
+    provider,
+    projectPath: selectedProject?.fullPath || selectedProject?.path || null,
+    enabled: sessionInfo.prefs.open,
+  });
+  // The agent whose conversation overlay is open, if any. Cleared whenever
+  // the roster's session changes so an overlay never outlives its parent.
+  const [openSubagent, setOpenSubagent] = useState<{ parentSessionId: string; summary: SubagentSummary } | null>(null);
+
   // Brand-new conversation: the composer allocated a stable session id via
   // the session gateway before the first send. Record it locally and put it
   // in the URL — this id never changes again, so there is no later handoff.
@@ -179,6 +239,34 @@ function ChatInterface({
     onSessionEstablished?.(sessionId, context);
     onNavigateToSession?.(sessionId);
   }, [setCurrentSessionId, onSessionEstablished, onNavigateToSession]);
+
+  // "Continue" with a finished agent: its process is gone, so the
+  // conversation restarts as a brand-new session. The packaged first message
+  // (identity + work log + the user's words) is written into that session's
+  // draft and the workspace navigates there — the user sees the packed
+  // context, may edit it, and sends it through the composer's full pipeline
+  // (model, permission mode, attachments) exactly like any first message.
+  const handleSubagentContinue = useCallback(async (prompt: string): Promise<boolean> => {
+    if (!selectedProject) return false;
+    const response = await api.providers.createSession({
+      provider,
+      projectPath: selectedProject.fullPath || selectedProject.path || '',
+      initialMessage: prompt,
+    });
+    if (!response.ok) return false;
+    const body = (await response.json()) as { data?: { sessionId?: string; sessionName?: string } };
+    const newSessionId = body?.data?.sessionId || null;
+    if (!newSessionId) return false;
+
+    writeDraftText(newSessionId, prompt);
+    const returnedName = typeof body?.data?.sessionName === 'string' ? body.data.sessionName.trim() : '';
+    handleSessionEstablished(newSessionId, {
+      provider,
+      project: selectedProject,
+      summary: returnedName || prompt.slice(0, 60),
+    });
+    return true;
+  }, [provider, selectedProject, handleSessionEstablished]);
 
   const {
     input,
@@ -280,10 +368,13 @@ function ChatInterface({
     selectedSession,
     currentSessionId,
     setTokenBudget,
+    setTurnStats,
     pendingPermissionRequests,
     setPendingPermissionRequests,
     streamTimerRef,
     accumulatedStreamRef,
+    thinkingStreamTimerRef,
+    accumulatedThinkingStreamRef,
     lastSeqRef,
     statusCheckSentAtRef,
     onSessionProcessing,
@@ -320,7 +411,8 @@ function ChatInterface({
   }, [resetStreamingState]);
 
   /**
-   * Branches the conversation into a new session that ends at this message,
+   * Branches the conversation into a new session holding everything BEFORE
+   * this message (without it — the fork is where the user retakes that turn),
    * then opens it. The session being viewed is left exactly as it was.
    */
   const handleForkFromMessage = useCallback(async (message: ChatMessage) => {
@@ -417,7 +509,12 @@ function ChatInterface({
 
   return (
     <PermissionContext.Provider value={permissionContextValue}>
-      <div className="flex h-full min-h-0 flex-col">
+      <div className="relative flex h-full min-h-0">
+      {/* min-w-0: without it the flex item's automatic minimum size lets one
+          wide message (a long code line, a wide table) inflate the whole
+          transcript column past the viewport on narrow screens, and the pane's
+          overflow-x then clips the right-hand content out of view. */}
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
         <ChatMessagesPane
           scrollContainerRef={scrollContainerRef}
           // Not redundant with the `scroll` listener. A first page is 20 rows,
@@ -449,9 +546,6 @@ function ChatInterface({
           hasMoreMessages={hasMoreMessages}
           totalMessages={totalMessages}
           sessionMessagesCount={chatMessages.length}
-          visibleMessageCount={visibleMessageCount}
-          visibleMessages={visibleMessages}
-          loadEarlierMessages={loadEarlierMessages}
           loadAllMessages={loadAllMessages}
           allMessagesLoaded={allMessagesLoaded}
           isLoadingAllMessages={isLoadingAllMessages}
@@ -470,6 +564,8 @@ function ChatInterface({
           onEditMessage={supportsMessageEditing && !isProcessing ? beginEditMessage : undefined}
           onForkFromMessage={supportsSessionForking ? handleForkFromMessage : undefined}
           onLoadFullTranscript={loadFullTranscript}
+          onSelectPrompt={scrollToPromptEntry}
+          onRequestOlderMessages={requestOlderMessages}
         />
 
         <div className="relative flex-shrink-0">
@@ -560,6 +656,53 @@ function ChatInterface({
         />
         </div>
       </div>
+
+      {sessionInfo.prefs.open && (selectedSession || currentSessionId) && (
+        <>
+          {isMobile && (
+            <div
+              className="fixed inset-0 z-30 bg-black/40"
+              onClick={() => sessionInfo.setOpen(false)}
+              aria-hidden="true"
+            />
+          )}
+          <SessionInfoPanel
+            collapsed={sessionInfo.prefs.collapsedSections}
+            onToggleSection={sessionInfo.toggleSection}
+            mergedMessages={mergedMessages}
+            turnStats={turnStats}
+            tokenBudget={tokenBudget}
+            contextInfo={sessionInfo.contextInfo}
+            onShowTokenDetails={showCostModal}
+            subagents={subagentRoster.subagents}
+            subagentsLoading={subagentRoster.loading}
+            onSelectSubagent={(summary) => setOpenSubagent({ parentSessionId: activeSessionId ?? '', summary })}
+            mcpServers={mcpSection.servers}
+            mcpLoading={mcpSection.loading}
+            mcpDisabledSet={mcpSection.disabledSet}
+            mcpPendingNames={mcpSection.pendingNames}
+            onToggleMcpServer={mcpSection.toggleServer}
+            mcpCanToggle={mcpSection.canToggle}
+            skills={skillList.skills}
+            skillsLoading={skillList.loading}
+            isMobile={isMobile}
+            onClose={() => sessionInfo.setOpen(false)}
+          />
+        </>
+      )}
+      </div>
+
+      {openSubagent && openSubagent.parentSessionId && (
+        <SubagentChatModal
+          parentSessionId={openSubagent.parentSessionId}
+          summary={openSubagent.summary}
+          parentLiveMessages={openSubagent.parentSessionId === activeSessionId ? mergedMessages : sessionStore.getMessages(openSubagent.parentSessionId)}
+          provider={provider}
+          selectedProject={selectedProject}
+          onClose={() => setOpenSubagent(null)}
+          onContinue={handleSubagentContinue}
+        />
+      )}
 
       <CommandResultModal
         payload={commandModalPayload}

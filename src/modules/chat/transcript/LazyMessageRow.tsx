@@ -34,6 +34,13 @@ type LazyMessageRowProps = {
    * placeholder and mounts when scrolled toward.
    */
   initiallyNearViewport: boolean;
+  /**
+   * Receives the row element (and its windowing key) on mount/unmount so the
+   * transcript virtualization can cache the row's real height.
+   */
+  onElement?: (element: HTMLDivElement | null, key: string) => void;
+  /** Stable identity for the height cache; `onElement` is keyed by it. */
+  heightKey?: string;
   children: ReactNode;
 };
 
@@ -41,6 +48,8 @@ export default function LazyMessageRow({
   lazyRows,
   timestamp,
   initiallyNearViewport,
+  onElement,
+  heightKey,
   children,
 }: LazyMessageRowProps) {
   const [isNearViewport, setIsNearViewport] = useState(initiallyNearViewport);
@@ -54,10 +63,13 @@ export default function LazyMessageRow({
       const height = elementRef.current?.offsetHeight ?? 0;
       if (height > 0) {
         setMeasuredHeight(height);
+        if (onElement && heightKey) {
+          onElement(elementRef.current, heightKey);
+        }
       }
     }
     setIsNearViewport(nextIsNearViewport);
-  }, []);
+  }, [onElement, heightKey]);
 
   useEffect(() => {
     const element = elementRef.current;
@@ -67,9 +79,16 @@ export default function LazyMessageRow({
 
   const isMounted = lazyRows === null || isNearViewport;
 
+  const attachRef = useCallback((element: HTMLDivElement | null) => {
+    elementRef.current = element;
+    if (element && onElement && heightKey) {
+      onElement(element, heightKey);
+    }
+  }, [onElement, heightKey]);
+
   return (
     <div
-      ref={elementRef}
+      ref={attachRef}
       data-message-timestamp={timestamp || undefined}
       style={isMounted ? undefined : { height: measuredHeight ?? ESTIMATED_ROW_HEIGHT_PX }}
     >

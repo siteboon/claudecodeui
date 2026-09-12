@@ -16,6 +16,10 @@ function dependencies(overrides: Partial<Dependencies> = {}): Dependencies {
       notifyUser: () => undefined,
     },
     pushSubscriptions: { save: () => undefined, remove: () => undefined },
+    mcpDisabledServers: {
+      get: () => [],
+      set: (_userId, value) => (Array.isArray(value) ? value.map(String) : []),
+    },
     getVapidPublicKey: () => null,
     ...overrides,
   };
@@ -51,4 +55,21 @@ test('subscribeToPush persists the subscription and enables Web Push', () => {
     keys: { p256dh: 'key', auth: 'auth' },
   });
   assert.deepEqual(operations, ['save:https://push.example.test', 'preferences', 'notify']);
+});
+
+test('mcp-disabled-servers round-trips through the injected repository', () => {
+  const operations: string[] = [];
+  const service = createSettingsService(dependencies({
+    mcpDisabledServers: {
+      get: (userId) => { operations.push(`get:${userId}`); return ['github']; },
+      set: (userId, value) => { operations.push(`set:${userId}`); return Array.isArray(value) ? value.map(String) : []; },
+    },
+  }));
+
+  assert.deepEqual(service.getMcpDisabledServers(7), { success: true, servers: ['github'] });
+  assert.deepEqual(service.updateMcpDisabledServers(7, ['fetch', 'github']), {
+    success: true,
+    servers: ['fetch', 'github'],
+  });
+  assert.deepEqual(operations, ['get:7', 'set:7']);
 });

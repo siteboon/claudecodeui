@@ -276,5 +276,52 @@
     "failed": "未发送 — {{reason}}",
     "cancel": "取消定时消息",
     "dismiss": "关闭失败提示"
+  },
+  "promptNavigator": {
+    "aria": "提示词导航",
+    "noTextContent": "（无文本内容）"
+  },
+  "sessionInfoPanel": {
+    "title": "会话",
+    "close": "关闭会话面板",
+    "empty": "暂无内容",
+    "context": "上下文",
+    "turnStats": "轮次统计",
+    "subagents": "子代理",
+    "tasks": "任务",
+    "mcp": "MCP",
+    "sources": "上下文来源",
+    "stats": {
+      "answerSpeed": "回答速度",
+      "requestSpeed": "整个请求",
+      "modelTime": "模型耗时",
+      "toolTime": "工具耗时",
+      "steps": "步骤",
+      "tokens": "Token",
+      "cacheHit": "缓存命中率",
+      "cost": "费用"
+    },
+    "openButton": "打开会话面板",
+    "closeButton": "收起会话面板",
+    "subagentsAgentLabel": "智能体",
+    "subagentsLoading": "加载中…",
+    "subagentsStatusRunning": "运行中",
+    "subagentsCloseChat": "关闭智能体对话",
+    "subagentsLoadEarlier": "加载更早的消息",
+    "subagentsContinuePlaceholder": "继续与该智能体对话…",
+    "subagentsContinueSend": "继续",
+    "subagentsContinueHint": "将作为携带该智能体身份与工作记录的新会话发出。",
+    "subagentsContinueIdentity": "你是「{{type}}」。",
+    "subagentsContinueIdentityWithDescription": "你是「{{type}}」（{{description}}）。",
+    "subagentsContinueIdentityBare": "你是一名子智能体，此前的任务是：{{description}}。",
+    "subagentsContinueIdentityPlain": "你是一名子智能体。",
+    "subagentsContinueLogIntro": "以下是你作为该子智能体在先前会话中的工作记录",
+    "subagentsContinueAskIntro": "用户现在要继续与你对话，请基于上述上下文回应：",
+    "mcpLoading": "正在加载服务器…",
+    "mcpToggleAria": "启用 {{name}}",
+    "mcpToggleHint": "开关对新会话生效。",
+    "mcpReadOnlyHint": "该供应商的运行器不读取禁用列表，开关仅作展示。",
+    "sourcesSkills": "技能",
+    "sourcesMcp": "MCP 服务器"
   }
 }

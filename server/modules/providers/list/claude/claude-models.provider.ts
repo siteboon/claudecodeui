@@ -1,5 +1,7 @@
 import { readFile } from 'node:fs/promises';
 
+import { query } from '@anthropic-ai/claude-agent-sdk';
+
 import { sessionsDb } from '@/modules/database/index.js';
 import type { IProviderModels } from '@/shared/interfaces.js';
 import type {
@@ -7,7 +9,7 @@ import type {
   ProviderModelOption,
   ProviderModelsDefinition,
 } from '@/shared/types.js';
-import { buildDefaultProviderCurrentActiveModel } from '@/shared/utils.js';
+import { AppError, buildDefaultProviderCurrentActiveModel } from '@/shared/utils.js';
 
 /**
  * Ultracode is not one of the SDK's reasoning-effort levels. Selecting it runs the turn at
@@ -22,151 +24,6 @@ const ULTRACODE_EFFORT_OPTION = {
   description: 'Highest effort plus standing workflow orchestration.',
 };
 
-export const CLAUDE_PREDEFINED_MODELS: ProviderModelsDefinition = {
-  OPTIONS: [
-    {
-      value: 'default',
-      label: 'Default (recommended)',
-      description: 'Use the recommended model for your Claude account and deployment.',
-      effort: {
-        default: 'high',
-        values: [
-          { value: 'low' },
-          { value: 'medium' },
-          { value: 'high' },
-          { value: 'max' },
-        ],
-      },
-    },
-    {
-      value: 'best',
-      label: 'Best available',
-      description: 'Use Fable 5 when available, otherwise the latest Opus model.',
-      effort: {
-        default: 'high',
-        values: [
-          { value: 'low' },
-          { value: 'medium' },
-          { value: 'high' },
-          { value: 'xhigh' },
-          { value: 'max' },
-          ULTRACODE_EFFORT_OPTION,
-        ],
-      },
-    },
-    {
-      value: 'fable',
-      label: 'Fable 5',
-      description: 'Most capable Claude model for the hardest, longest-running tasks.',
-      effort: {
-        default: 'high',
-        values: [
-          { value: 'low' },
-          { value: 'medium' },
-          { value: 'high' },
-          { value: 'xhigh' },
-          { value: 'max' },
-          ULTRACODE_EFFORT_OPTION,
-        ],
-      },
-    },
-    {
-      value: 'sonnet',
-      label: 'Sonnet',
-      description: 'Latest Sonnet model for everyday coding tasks.',
-      effort: {
-        default: 'high',
-        values: [
-          { value: 'low' },
-          { value: 'medium' },
-          { value: 'high' },
-          { value: 'xhigh' },
-          { value: 'max' },
-          ULTRACODE_EFFORT_OPTION,
-        ],
-      },
-    },
-    {
-      value: 'sonnet[1m]',
-      label: 'Sonnet (1M context)',
-      description: 'Latest Sonnet model with a 1M context window.',
-      effort: {
-        default: 'high',
-        values: [
-          { value: 'low' },
-          { value: 'medium' },
-          { value: 'high' },
-          { value: 'xhigh' },
-          { value: 'max' },
-          ULTRACODE_EFFORT_OPTION,
-        ],
-      },
-    },
-    {
-      value: 'opus',
-      label: 'Opus',
-      description: 'Latest Opus model for complex reasoning and coding tasks.',
-      effort: {
-        default: 'high',
-        values: [
-          { value: 'low' },
-          { value: 'medium' },
-          { value: 'high' },
-          { value: 'xhigh' },
-          { value: 'max' },
-          ULTRACODE_EFFORT_OPTION,
-        ],
-      },
-    },
-    {
-      value: 'opus[1m]',
-      label: 'Opus (1M context)',
-      description: 'Latest Opus model with a 1M context window.',
-      effort: {
-        default: 'high',
-        values: [
-          { value: 'low' },
-          { value: 'medium' },
-          { value: 'high' },
-          { value: 'xhigh' },
-          { value: 'max' },
-          ULTRACODE_EFFORT_OPTION,
-        ],
-      },
-    },
-    {
-      value: 'haiku',
-      label: 'Haiku',
-      description: 'Fast and efficient Claude model for simple tasks.',
-    },
-    {
-      value: 'opusplan',
-      label: 'Opus Plan',
-      description: 'Use Opus while planning, then switch to Sonnet for execution.',
-      effort: {
-        default: 'high',
-        values: [
-          { value: 'low' },
-          { value: 'medium' },
-          { value: 'high' },
-          { value: 'xhigh' },
-          { value: 'max' },
-          ULTRACODE_EFFORT_OPTION,
-        ],
-      },
-    },
-  ],
-  DEFAULT: 'default',
-};
-
-export const findClaudeModelOption = (model: string | undefined | null): ProviderModelOption | null => {
-  const normalizedModel = typeof model === 'string' ? model.trim() : '';
-  if (!normalizedModel) {
-    return null;
-  }
-
-  return CLAUDE_PREDEFINED_MODELS.OPTIONS.find((option) => option.value === normalizedModel) ?? null;
-};
 type ClaudeInitEvent = {
   sessionId?: string;
   session_id?: string;
@@ -288,20 +145,130 @@ const readClaudeSessionModelFromJsonl = async (
   return null;
 };
 
+/** One entry of the SDK's `supportedModels()` answer, narrowed to the picker's fields. */
+type ClaudeSdkModelInfo = {
+  value: string;
+  displayName?: string;
+  description?: string;
+  supportsEffort?: boolean;
+  supportedEffortLevels?: string[];
+};
+
+/** How long a successful `supportedModels()` answer stays fresh. */
+const LIVE_CATALOG_TTL_MS = 60_000;
+
+/** Test seam: replaces the SDK round-trip with a fixture-backed reader. */
+export type ClaudeProviderModelsDependencies = {
+  readSupportedModels?: () => Promise<ClaudeSdkModelInfo[]>;
+};
+
+/**
+ * Asks the Claude CLI which models this install can actually run.
+ *
+ * `supportedModels()` reads the initialize handshake the SDK already performs
+ * when a query starts; it does not run a model turn. The original attempt at
+ * this was disabled because the throwaway query left a session jsonl behind
+ * (and listed the server's workspace as a project). `persistSession: false`
+ * is exactly that fix, and an empty prompt generator makes the child exit as
+ * soon as the handshake answer is in.
+ */
+const readClaudeCliModels = async (): Promise<ClaudeSdkModelInfo[]> => {
+  // The SDK types the prompt loosely; the generator never yields, so nothing
+  // reaches the model even if the CLI's stdin stays open past the handshake.
+  const queryInstance = query({
+    prompt: (async function* emptyPrompt() { /* yields nothing */ })(),
+    options: { persistSession: false, maxTurns: 1 },
+  } as Parameters<typeof query>[0]);
+  try {
+    return await queryInstance.supportedModels();
+  } finally {
+    try {
+      await queryInstance.close();
+    } catch {
+      // A child that already exited on its own makes close() reject; the
+      // catalog answer is in hand either way.
+    }
+  }
+};
+
+/**
+ * Builds the picker catalog from the CLI answer.
+ *
+ * There is deliberately no curated fallback list behind this: a hardcoded
+ * catalog goes stale against every CLI upgrade and account change, and the
+ * picker surfacing the CLI failure beats quietly offering models this install
+ * may not run. Ultracode stays a CloudCLI-side addition - the SDK has never
+ * heard of it - and keeps its xhigh-only precondition.
+ */
+const buildCatalogFromCli = (models: ClaudeSdkModelInfo[]): ProviderModelsDefinition => {
+  const options: ProviderModelOption[] = models
+    .filter((model) => typeof model?.value === 'string' && model.value.trim())
+    .map((model) => {
+      const effortValues = model.supportsEffort === false
+        ? []
+        : [...new Set(model.supportedEffortLevels ?? [])];
+      const effortOptions = effortValues.map((value) => ({ value }));
+      return {
+        value: model.value,
+        label: model.displayName?.trim() || model.value,
+        ...(model.description?.trim() ? { description: model.description.trim() } : {}),
+        ...(effortOptions.length > 0
+          ? {
+            effort: {
+              values: effortValues.includes('xhigh')
+                ? [...effortOptions, ULTRACODE_EFFORT_OPTION]
+                : effortOptions,
+            },
+          }
+          : {}),
+      };
+    });
+
+  if (options.length === 0) {
+    throw new AppError('Claude reported no usable models.', {
+      code: 'CLAUDE_MODELS_UNAVAILABLE',
+      statusCode: 502,
+    });
+  }
+
+  return {
+    OPTIONS: options,
+    DEFAULT: options.find((option) => option.value === 'default')?.value ?? options[0].value,
+  };
+};
+
 export class ClaudeProviderModels implements IProviderModels {
+  private readonly readSupportedModels: () => Promise<ClaudeSdkModelInfo[]>;
+  private liveCatalog: Promise<ProviderModelsDefinition> | null = null;
+  private liveCatalogExpiresAt = 0;
+
+  constructor(dependencies: ClaudeProviderModelsDependencies = {}) {
+    this.readSupportedModels = dependencies.readSupportedModels ?? readClaudeCliModels;
+  }
+
+  /**
+   * Reports the picker catalog from the Claude CLI's initialize handshake.
+   *
+   * Spawning the CLI costs about a second, so a successful answer is cached
+   * briefly and concurrent callers share one in-flight run (the picker, the
+   * active-model lookup, and effort validation all resolve the catalog within
+   * the same page load). A failed run is not cached; the next caller retries
+   * rather than waiting out the TTL on an error.
+   */
   async getSupportedModels(): Promise<ProviderModelsDefinition> {
-    // claude creates a new jsonl file as a separate session for this request.
-    // As a result, it lists the workspace where this is invoked when it shouldn't.
-    //
-    // Disabled for now:
-    // const queryInstance = query({
-    //   prompt: 'Get supported models',
-    //   options: buildClaudeQueryOptions(),
-    // });
-    // const supportedModels = await queryInstance.supportedModels();
-    // queryInstance.close();
-    // return buildClaudeModelsDefinition(supportedModels);
-    return CLAUDE_PREDEFINED_MODELS;
+    if (!this.liveCatalog || Date.now() >= this.liveCatalogExpiresAt) {
+      const run = (async () => buildCatalogFromCli(await this.readSupportedModels()))();
+      this.liveCatalog = run;
+      this.liveCatalogExpiresAt = Date.now() + LIVE_CATALOG_TTL_MS;
+      void run.catch(() => {
+        if (this.liveCatalog === run) {
+          this.liveCatalog = null;
+          this.liveCatalogExpiresAt = 0;
+        }
+      });
+    }
+
+    return this.liveCatalog;
   }
 
   async getCurrentActiveModel(sessionId?: string): Promise<ProviderCurrentActiveModel> {

@@ -305,7 +305,67 @@ function readChecklistSignature(message: NormalizedMessage): string {
  */
 const MAX_TOOL_RESULT_CONTENT = 40_000;
 
+/**
+ * True for the shapes that carry a renderable image: an Anthropic/MCP image
+ * block or a bare base64 source. The transcript renders these as pictures, so
+ * their base64 must survive truncation whole — a cut-off payload parses as
+ * neither JSON nor a decodable image and the UI falls back to a base64 wall.
+ */
+function isImageBearingBlock(value: unknown): boolean {
+  const record = readObjectRecord(value);
+  if (!record || typeof record.type !== 'string') {
+    return false;
+  }
+  if (record.type === 'image' || record.type === 'base64') {
+    return true;
+  }
+  const source = readObjectRecord((record as AnyRecord).source);
+  return Boolean(source && source.type === 'base64');
+}
+
+/**
+ * Caps a tool result's content without shredding image blocks.
+ *
+ * When the content is a JSON array of content blocks, each block is capped
+ * separately: text keeps the plain-text rule, and anything image-bearing is
+ * kept whole. Anything else falls back to the plain truncation.
+ */
+function capBlockAware(value: string): string | null {
+  if (!value.startsWith('[')) {
+    return null;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return null;
+  }
+
+  if (!Array.isArray(parsed) || !parsed.some(isImageBearingBlock)) {
+    return null;
+  }
+
+  const capped = parsed.map((block) => {
+    if (isImageBearingBlock(block)) {
+      return block;
+    }
+    const record = readObjectRecord(block);
+    if (record && typeof record.text === 'string') {
+      return { ...record, text: truncateOutput(record.text) };
+    }
+    return block;
+  });
+
+  return JSON.stringify(capped);
+}
+
 function truncateOutput(value: string): string {
+  const capped = capBlockAware(value);
+  if (capped !== null) {
+    return capped;
+  }
+
   if (value.length <= MAX_TOOL_RESULT_CONTENT) {
     return value;
   }

@@ -281,10 +281,50 @@ function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedM
           continue;
         }
       }
+      // Same story for reasoning: the streamed thinking row finalizes under a
+      // synthetic id, and the provider's complete message re-emits the same
+      // text as a fresh `thinking` row beside it. Collapse onto the latter.
+      if (prev.kind === 'thinking' && m.kind === 'thinking') {
+        const ms = (m.content || '').trim();
+        if (ms.length > 0 && ms === (prev.content || '').trim()) {
+          out[out.length - 1] = m;
+          continue;
+        }
+      }
     }
     out.push(m);
   }
   return out;
+}
+
+/**
+ * Thinking counterpart of the assistant-echo check: a live reasoning row (or
+ * its frozen finalization) is superseded once the persisted transcript carries
+ * the same reasoning inside the same user turn. Without this the streamed
+ * thinking bubble stacks on top of the reloaded one until realtime clears.
+ */
+function isThinkingEchoedInSameTurnOnServer(
+  message: NormalizedMessage,
+  serverMessages: NormalizedMessage[],
+  realtimeMessages: NormalizedMessage[],
+): boolean {
+  const thinkingText = (message.content || '').trim();
+  if (!thinkingText) {
+    return false;
+  }
+
+  const turnOrdinal = getUserTurnOrdinalBefore(message, serverMessages, realtimeMessages);
+  const turnRange = findServerTurnRangeByOrdinal(serverMessages, turnOrdinal);
+  if (!turnRange) {
+    return false;
+  }
+
+  return serverMessages
+    .slice(turnRange.start + 1, turnRange.end)
+    .some((serverMessage) =>
+      serverMessage.kind === 'thinking'
+      && (serverMessage.content || '').trim() === thinkingText,
+    );
 }
 
 /**
@@ -313,6 +353,21 @@ function pruneRealtimeSupersededByServer(
       if (isAssistantTextEchoedInSameTurnOnServer(message, serverMessages, realtimeMessages)) {
         return false;
       }
+      return true;
+    }
+
+    if (
+      message.kind === 'thinking'
+      || message.kind === 'thinking_delta'
+      || message.id === `__streaming_thinking_${message.sessionId}`
+    ) {
+      if (isThinkingEchoedInSameTurnOnServer(message, serverMessages, realtimeMessages)) {
+        return false;
+      }
+      // A thinking_delta that got no finalization tick (aborted run) must not
+      // linger as an orphan streaming row once the turn is on disk either —
+      // but while nothing is persisted it is the only view of the reasoning,
+      // so it survives exactly like the text stream row above.
       return true;
     }
 
@@ -422,7 +477,7 @@ function olderPagePrecedesCachedHistory(
 async function refreshLatestSlotFromServer(
   sessionId: string,
   slot: SessionSlot,
-  limit: number,
+  limit: number | null,
   canRequest: CanRequestHistory = () => true,
 ): Promise<LatestHistoryRefreshResult> {
   if (!canRequest()) {
@@ -440,9 +495,15 @@ async function refreshLatestSlotFromServer(
   let nextServerMessages: NormalizedMessage[] | null = null;
   let nextHasMore = previousHasMore;
 
-  // A page with no older rows is the complete authoritative transcript. This
-  // also removes cached rows after a provider-side truncation.
-  if (!latestPage.hasMore) {
+  // A page with no older rows is the complete authoritative transcript — but
+  // only when it can actually hold the whole thing. Providers have been seen
+  // to answer a bounded tail page with hasMore=false on a 100+ row transcript;
+  // trusting that replaced the full cache with one page and shrank the prompt
+  // navigator rail. A bounded page whose total exceeds its rows falls through
+  // to the bridge/merge path, which keeps the older cached rows.
+  const pageIsWholeTranscript =
+    !latestPage.hasMore && latestPage.total <= latestPage.messages.length;
+  if (pageIsWholeTranscript) {
     nextServerMessages = latestPage.messages;
     nextHasMore = false;
   } else if (previousServerMessages.length === 0) {
@@ -754,7 +815,18 @@ export function useSessionStore() {
       msg.sessionId === sessionId
         ? msg
         : { ...msg, sessionId };
-    let updated = [...slot.realtimeMessages, normalizedMessage];
+    // A live provider event that repeats an id already in the transcript is
+    // an update to that row, not a new one — the Codex SDK pushes `item.updated`
+    // ticks for the same item, and appending them stacked one bubble per tick.
+    // Replace in place, keeping the row's position.
+    const existingIdx = slot.realtimeMessages.findIndex(m => m.id === normalizedMessage.id);
+    let updated: NormalizedMessage[];
+    if (existingIdx >= 0) {
+      updated = [...slot.realtimeMessages];
+      updated[existingIdx] = normalizedMessage;
+    } else {
+      updated = [...slot.realtimeMessages, normalizedMessage];
+    }
     if (updated.length > MAX_REALTIME_MESSAGES) {
       updated = updated.slice(-MAX_REALTIME_MESSAGES);
     }
@@ -771,7 +843,7 @@ export function useSessionStore() {
   const refreshLatestFromServer = useCallback(async (
     sessionId: string,
     opts: {
-      limit?: number;
+      limit?: number | null;
       canRequest?: CanRequestHistory;
     } = {},
   ) => {
@@ -779,10 +851,17 @@ export function useSessionStore() {
 
     return enqueueHistoryMutation(slot, async () => {
       try {
+        // `undefined` → bounded tail page; `null` → the whole transcript.
+        // Callers that have already hydrated the full history refresh with
+        // `null`: a bounded 20-row page would fail to bridge against the
+        // full cache (no overlapping rows) and shrink it back to one page.
+        const limit = 'limit' in opts && opts.limit !== undefined
+          ? opts.limit
+          : SESSION_MESSAGES_PAGE_SIZE;
         const result = await refreshLatestSlotFromServer(
           sessionId,
           slot,
-          opts.limit ?? SESSION_MESSAGES_PAGE_SIZE,
+          limit,
           opts.canRequest,
         );
         if (result.changed) notify(sessionId);
@@ -853,6 +932,57 @@ export function useSessionStore() {
   }, [notify]);
 
   /**
+   * Thinking counterpart of `updateStreaming`: one well-known row carrying the
+   * accumulated reasoning text, replaced in place on every throttled tick.
+   * Separate from the text sentinel because a turn streams both at once
+   * (reasoning first, then the answer) and one buffer would clobber the other.
+   */
+  const updateStreamingThinking = useCallback((sessionId: string, accumulatedText: string, msgProvider: LLMProvider) => {
+    const slot = getSlot(sessionId);
+    const streamId = `__streaming_thinking_${sessionId}`;
+    const msg: NormalizedMessage = {
+      id: streamId,
+      sessionId,
+      timestamp: new Date().toISOString(),
+      provider: msgProvider,
+      kind: 'thinking_delta',
+      content: accumulatedText,
+    };
+    const idx = slot.realtimeMessages.findIndex(m => m.id === streamId);
+    if (idx >= 0) {
+      slot.realtimeMessages = [...slot.realtimeMessages];
+      slot.realtimeMessages[idx] = msg;
+    } else {
+      slot.realtimeMessages = [...slot.realtimeMessages, msg];
+    }
+    recomputeMergedIfNeeded(slot);
+    notify(sessionId);
+  }, [getSlot, notify]);
+
+  /**
+   * Finalize thinking streaming: freeze the accumulated row into a regular
+   * `thinking` message so it renders as the finished reasoning bubble and
+   * survives until the persisted-history refresh retires it.
+   */
+  const finalizeStreamingThinking = useCallback((sessionId: string) => {
+    const slot = storeRef.current.get(sessionId);
+    if (!slot) return;
+    const streamId = `__streaming_thinking_${sessionId}`;
+    const idx = slot.realtimeMessages.findIndex(m => m.id === streamId);
+    if (idx >= 0) {
+      const stream = slot.realtimeMessages[idx];
+      slot.realtimeMessages = [...slot.realtimeMessages];
+      slot.realtimeMessages[idx] = {
+        ...stream,
+        id: `thinking_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        kind: 'thinking',
+      };
+      recomputeMergedIfNeeded(slot);
+      notify(sessionId);
+    }
+  }, [notify]);
+
+  /**
    * Get merged messages for a session (for rendering).
    */
   const getMessages = useCallback((sessionId: string): NormalizedMessage[] => {
@@ -876,11 +1006,14 @@ export function useSessionStore() {
     isStale,
     updateStreaming,
     finalizeStreaming,
+    updateStreamingThinking,
+    finalizeStreamingThinking,
     getMessages,
     getSessionSlot,
   }), [
     fetchFromServer, fetchMore, appendRealtime, truncateAt, refreshLatestFromServer,
     setActiveSession, isStale, updateStreaming, finalizeStreaming,
+    updateStreamingThinking, finalizeStreamingThinking,
     getMessages, getSessionSlot,
   ]);
 }
