@@ -14,6 +14,7 @@ const createInitialProviderAuthStatusMap = (loading = true): ProviderAuthStatusM
 });
 
 type ProviderAuthStatusPayload = {
+  installed?: boolean;
   authenticated?: boolean;
   email?: string | null;
   method?: string | null;
@@ -36,6 +37,7 @@ const toProviderAuthStatus = (
   payload: ProviderAuthStatusPayload,
   fallbackError: string | null = null,
 ): ProviderAuthStatus => ({
+  installed: payload.installed,
   authenticated: Boolean(payload.authenticated),
   email: payload.email ?? null,
   method: payload.method ?? null,

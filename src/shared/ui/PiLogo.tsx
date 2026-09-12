@@ -5,8 +5,10 @@ type PiLogoProps = {
 /**
  * Rendered by the shared LLMProviderLogo when the provider is Pi.
  *
- * Draws a terminal prompt (`>_`) on the same filled tile the other agent
- * logos use, so it reads as a CLI tool at 16-24px.
+ * Draws a terminal prompt (`>_`) on the same filled tile the other agent logos
+ * use. The glyph is sized so it carries the same visual weight as OpenCode's
+ * brackets inside the tile, and the stroke width and caps match the sibling
+ * logos so the five marks read as one family at 16-24px.
  */
 const PiLogo = ({ className = 'w-5 h-5' }: PiLogoProps) => (
   <svg
@@ -19,14 +21,14 @@ const PiLogo = ({ className = 'w-5 h-5' }: PiLogoProps) => (
   >
     <rect x="2.5" y="2.5" width="19" height="19" rx="4" className="fill-foreground" />
     <path
-      d="M6.6 8.4 10.3 12l-3.7 3.6"
+      d="M5.9 7.6 11.2 12 5.9 16.4"
       className="stroke-background"
       strokeWidth="1.9"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
     <path
-      d="M13.2 15.6h4.2"
+      d="M13.5 16.4h4.6"
       className="stroke-background"
       strokeWidth="1.9"
       strokeLinecap="round"
