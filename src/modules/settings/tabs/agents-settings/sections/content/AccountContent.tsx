@@ -54,6 +54,14 @@ const agentConfig: Record<AgentProvider, AgentVisualConfig> = {
     subtextClass: 'text-zinc-700 dark:text-zinc-300',
     buttonClass: 'bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-950 dark:bg-zinc-700 dark:hover:bg-zinc-600',
   },
+  pi: {
+    name: 'Pi',
+    bgClass: 'bg-muted/50',
+    borderClass: 'border-gray-300 dark:border-gray-600',
+    textClass: 'text-gray-900 dark:text-gray-100',
+    subtextClass: 'text-gray-700 dark:text-gray-300',
+    buttonClass: 'bg-gray-800 hover:bg-gray-900 active:bg-gray-950 dark:bg-gray-700 dark:hover:bg-gray-600 dark:active:bg-gray-500',
+  },
 };
 
 /** Rendered by AgentCategoryContentSection for the "account" category to show sign-in state for one provider. */

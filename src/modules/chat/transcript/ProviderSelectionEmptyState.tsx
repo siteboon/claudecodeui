@@ -310,6 +310,10 @@ export default function ProviderSelectionEmptyState({
                   model: providerModels.opencode,
                   defaultValue: "Ready with OpenCode {{model}}",
                 }),
+                pi: t("providerSelection.readyPrompt.pi", {
+                  model: providerModels.pi,
+                  defaultValue: "Ready with Pi {{model}}",
+                }),
               }[provider]
             }
           </p>

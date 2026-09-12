@@ -104,6 +104,22 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsMessageEditing: false,
     supportsSessionForking: false,
   },
+  pi: {
+    provider: 'pi',
+    // Placeholder until the pi adapters land: the runtime accepts no
+    // permission modes yet, and only image attachments plus abort (SIGTERM)
+    // are known wire capabilities.
+    permissionModes: ['default'],
+    defaultPermissionMode: 'default',
+    supportsImages: true,
+    supportsFiles: false,
+    supportsAbort: true,
+    supportsPermissionRequests: false,
+    supportsTokenUsage: false,
+    supportsEffort: false,
+    supportsMessageEditing: false,
+    supportsSessionForking: false,
+  },
 };
 
 /**
