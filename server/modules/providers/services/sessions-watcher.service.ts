@@ -6,6 +6,7 @@ import chokidar, { type FSWatcher } from 'chokidar';
 
 import { sessionSynchronizerService } from '@/modules/providers/services/session-synchronizer.service.js';
 import { broadcastSessionUpsertedBatch } from '@/modules/websocket/index.js';
+import { getPiSessionDir } from '@/shared/utils.js';
 import type { LLMProvider } from '@/shared/types.js';
 
 type WatcherEventType = 'add' | 'change';
@@ -29,7 +30,7 @@ const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> =
   },
   {
     provider: 'pi',
-    rootPath: path.join(os.homedir(), '.pi', 'agent', 'sessions'),
+    rootPath: getPiSessionDir(),
   },
 ];
 

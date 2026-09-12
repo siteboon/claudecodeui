@@ -237,8 +237,13 @@ const findPiSessionTranscript = (sessionId: string): string | null => {
   return matches.sort().at(-1) ?? null;
 };
 
-/** Reads a pi JSONL transcript into parsed entries, skipping malformed lines. */
-const readPiTranscriptEntries = (transcriptPath: string): AnyRecord[] => {
+/**
+ * Reads a pi JSONL transcript into parsed entries, skipping malformed lines.
+ *
+ * Exported so the session synchronizer reuses the exact reader (torn last
+ * line tolerance included) when indexing the same transcripts into the DB.
+ */
+export const readPiTranscriptEntries = (transcriptPath: string): AnyRecord[] => {
   const entries: AnyRecord[] = [];
   const lines = fsSync.readFileSync(transcriptPath, 'utf8').split(/\r?\n/);
 
@@ -271,8 +276,11 @@ const readPiTranscriptEntries = (transcriptPath: string): AnyRecord[] => {
  * - `assistant`  → content blocks expand in order: text → `text`,
  *                  thinking → `thinking`, toolCall → `tool_use`
  * - `toolResult` → standalone `tool_result` keyed by its toolCallId
+ *
+ * Exported so the session synchronizer titles sessions from the same user-text
+ * extraction (attachment tags stripped) that history rendering uses.
  */
-const normalizeTranscriptEntry = (entry: AnyRecord, sessionId: string | null): NormalizedMessage[] => {
+export const normalizeTranscriptEntry = (entry: AnyRecord, sessionId: string | null): NormalizedMessage[] => {
   if (readOptionalString(entry.type) !== 'message') {
     return [];
   }
