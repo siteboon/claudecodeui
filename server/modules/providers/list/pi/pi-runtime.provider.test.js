@@ -14,33 +14,16 @@ import {
   piRuntime,
   processPiOutputLine,
 } from './pi-runtime.provider.js';
+import { mapPiEventToMessages } from './pi-sessions.provider.js';
 
 // The runtime contract only cares that normalizeMessage maps one raw pi event
-// onto zero or more normalized messages; the real mapping is Task 6's
-// `mapPiEventToMessages`. This inline stub is the smallest mapping that lets
-// the runtime tests observe a live stream delta.
-const piNormalizeStub = (raw, sessionId) => {
-  if (
-    raw
-    && typeof raw === 'object'
-    && raw.type === 'message_update'
-    && raw.assistantMessageEvent?.type === 'text_delta'
-  ) {
-    return [{
-      kind: 'stream_delta',
-      content: raw.assistantMessageEvent.delta,
-      sessionId,
-      provider: 'pi',
-    }];
-  }
-  return [];
-};
-
+// onto zero or more normalized messages, so the context wires the sessions
+// facet's real mapping — the same one the live provider registry serves.
 const makeRuntimeContext = (overrides = {}) => ({
   resolveProviderSessionId: (sessionId) => sessionId || null,
   resolveResumeModel: async (_sessionId, requestedModel) => requestedModel || undefined,
   getProviderModels: async () => ({ OPTIONS: [], DEFAULT: '' }),
-  normalizeMessage: (raw, sessionId) => piNormalizeStub(raw, sessionId),
+  normalizeMessage: (raw, sessionId) => mapPiEventToMessages(raw, sessionId),
   isProviderInstalled: async () => true,
   ...overrides,
 });
@@ -360,7 +343,7 @@ test('processPiOutputLine forwards non-JSON lines as stream deltas', () => {
     setCapturedSessionId: () => {},
     setUsage: () => {},
     registerSession: () => {},
-    normalizeMessage: piNormalizeStub,
+    normalizeMessage: mapPiEventToMessages,
   });
 
   assert.equal(messages.length, 1);
