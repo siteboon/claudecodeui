@@ -58,6 +58,13 @@ type PromptNavigatorRailProps = {
    * history. The gutter forwards its wheel here instead.
    */
   scrollContainerRef: React.RefObject<HTMLDivElement>;
+  /**
+   * Park the rail INSIDE the pane's right edge (in the gutter the message
+   * column gave up) instead of hanging it outside the message column. The
+   * pane sets this once it is too narrow for the outside hang to stay inside
+   * the pane's clipped edge.
+   */
+  dockedInside?: boolean;
   loadMoreLabel: string;
   emptyPreviewLabel: string;
   navigatorLabel: string;
@@ -82,6 +89,7 @@ export function PromptNavigatorRail({
   isLoadingOlder,
   onLoadEarlier,
   scrollContainerRef,
+  dockedInside = false,
   loadMoreLabel,
   emptyPreviewLabel,
   navigatorLabel,
@@ -544,13 +552,20 @@ export function PromptNavigatorRail({
   return (
     <nav
       aria-label={navigatorLabel}
-      // The rail's left edge sits on the message column's right edge: the
-      // column wrapper's right:100% anchor pushes the whole gutter outward
-      // into the pane margin instead of overlapping the bubbles. On phones
-      // there is no pane margin to push into (the column spans the viewport),
-      // so it instead sits inside the gutter the column's `max-sm:pr-10`
-      // gave up, aligned to the layer's right edge.
-      className="pointer-events-none absolute left-full top-1/2 z-20 -translate-y-1/2 pl-1.5 max-sm:left-auto max-sm:right-0 max-sm:pl-0"
+      // Docked (the pane is too narrow to hang into): the rail sits INSIDE the
+      // layer's right edge, in the gutter the message column gives up — with a
+      // 20px desktop inset so the ticks clear the classic scrollbar, no inset
+      // on phones where the scrollbar is an overlay. Hung (wide pane): the
+      // rail's left edge sits on the message column's right edge — the
+      // right:100%/left-full anchor pushes the whole gutter outward into the
+      // pane margin instead of overlapping the bubbles, stepping 20px back on
+      // desktop to clear the scrollbar.
+      className={cn(
+        'pointer-events-none absolute top-1/2 z-20 -translate-y-1/2',
+        dockedInside
+          ? 'right-0 pl-0 sm:right-5'
+          : 'left-full pl-1.5 sm:-ml-5',
+      )}
     >
       <div className="pointer-events-auto flex flex-col items-end" onWheel={handleGutterWheel}>
         {canLoadEarlier ? (

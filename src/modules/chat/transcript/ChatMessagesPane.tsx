@@ -1,6 +1,8 @@
 import { useTranslation } from 'react-i18next';
-import { memo, useCallback, useMemo } from 'react';
-import type { Dispatch, RefObject, SetStateAction } from 'react';
+import { memo, useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import type { CSSProperties, Dispatch, RefObject, SetStateAction } from 'react';
+
+import { cn } from '@/shared/utils';
 
 import type { ChatMessage,
   Project,
@@ -15,6 +17,7 @@ import { buildPromptEntries } from '@/modules/chat/utils/promptNavigator';
 import type { PromptEntry } from '@/modules/chat/utils/promptNavigator';
 import { useLazyRowObserver } from '@/modules/chat/hooks/useLazyRowObserver';
 import { useActivePromptEntry } from '@/modules/chat/hooks/useActivePromptEntry';
+import { useElementWidth } from '@/modules/chat/hooks/useElementWidth';
 import { useTranscriptVirtualization } from '@/modules/chat/hooks/useTranscriptVirtualization';
 import LazyMessageRow from '@/modules/chat/transcript/LazyMessageRow';
 import MessageComponent from '@/modules/chat/transcript/MessageComponent';
@@ -229,6 +232,19 @@ function ChatMessagesPane({
     disabled: false,
   });
 
+  // The rail hangs OUTSIDE the message column (left:100%), into the pane
+  // margin. Once the pane shrinks below the column's max width plus the rail
+  //'s gutter, there is no margin left to hang into and the rail falls past
+  // the pane's clipped edge — invisible. Below that threshold (phones always,
+  // narrow desktop windows too) the rail docks inside the gutter the message
+  // column gives up on its right instead. Measured on the pane, not the
+  // viewport: split views and resizable panels change the room without
+  // changing the window width.
+  const MESSAGE_COLUMN_MAX_PX = 54.25 * 16;
+  const RAIL_GUTTER_PX = 48;
+  const paneWidth = useElementWidth(scrollContainerRef);
+  const railDockedInside = paneWidth > 0 && paneWidth < MESSAGE_COLUMN_MAX_PX + RAIL_GUTTER_PX;
+
   const getMessageKey = useCallback(
     (message: ChatMessage) =>
       rowKeysData.messageKeys.get(message) ?? getIntrinsicMessageKey(message) ?? 'message-generated',
@@ -246,7 +262,7 @@ function ChatMessagesPane({
       }`}
     >
       {chatMessages.length > 0 && (
-        <div className="pointer-events-none sticky right-4 top-3 z-10 mb-2 flex justify-end sm:px-4">
+        <div className="pointer-events-none sticky right-4 top-3 z-10 mb-2 flex justify-end sm:right-[calc(1rem+20px)] sm:px-4">
           <div className="pointer-events-auto">
             <ChatExportMenu
               messages={chatMessages}
@@ -259,11 +275,18 @@ function ChatMessagesPane({
           </div>
         </div>
       )}
-      {/* On phones the pane is narrower than the rail's desktop margin can
-          offer, so the column gives up a rail-width gutter on its right and
-          the rail's positioning layer matches — the ticks then sit inside the
-          viewport instead of past its edge. */}
-      <div className="mx-auto w-full max-w-[54.25rem] space-y-3 px-4 sm:space-y-4 max-sm:pr-10">
+      {/* The rail needs a rail-width gutter on the column's right: on phones
+          (always docked) and on any pane too narrow for the rail to hang
+          outside the column, the column gives up `pr-10` (+ the scrollbar
+          inset on desktop) and the docked rail sits inside it; on a wide pane
+          the rail hangs into the pane margin instead and the column only
+          keeps the 30px scrollbar clearance. */}
+      <div className={cn(
+        'mx-auto w-full max-w-[54.25rem] space-y-3 px-4 sm:space-y-4',
+        railDockedInside
+          ? 'pr-10 sm:pr-[calc(2.5rem+30px)]'
+          : 'sm:pr-[calc(1rem+30px)]',
+      )}>
       {(isLoadingSessionMessages || isProcessing) && chatMessages.length === 0 ? (
         <div className="mt-8 text-center text-gray-500 dark:text-gray-400">
           <div className="flex items-center justify-center space-x-2">
@@ -416,6 +439,7 @@ function ChatMessagesPane({
               isLoadingOlder={isLoadingMoreMessages}
               onLoadEarlier={onRequestOlderMessages ?? loadAllMessages}
               scrollContainerRef={scrollContainerRef}
+              dockedInside={railDockedInside}
               loadMoreLabel={t('session.messages.loadEarlier')}
               emptyPreviewLabel={t('promptNavigator.noTextContent', {
                 defaultValue: '(no text content)',

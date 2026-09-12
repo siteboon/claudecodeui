@@ -510,7 +510,11 @@ function ChatInterface({
   return (
     <PermissionContext.Provider value={permissionContextValue}>
       <div className="relative flex h-full min-h-0">
-      <div className="flex h-full min-h-0 flex-1 flex-col">
+      {/* min-w-0: without it the flex item's automatic minimum size lets one
+          wide message (a long code line, a wide table) inflate the whole
+          transcript column past the viewport on narrow screens, and the pane's
+          overflow-x then clips the right-hand content out of view. */}
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
         <ChatMessagesPane
           scrollContainerRef={scrollContainerRef}
           // Not redundant with the `scroll` listener. A first page is 20 rows,
