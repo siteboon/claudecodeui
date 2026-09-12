@@ -394,6 +394,11 @@ test('OpenCode sessions provider reads sqlite history and token usage', { concur
     assert.equal(history.messages[0]?.kind, 'text');
     assert.equal(history.messages[0]?.role, 'user');
     assert.equal(history.messages[0]?.content, 'Build the OpenCode integration.');
+    // The fork/edit anchor is the native message row id, stable across reads
+    // (unlike the per-read synthesized id) and what the fork endpoint's
+    // messageID addresses. Only prompts carry one.
+    assert.equal(history.messages[0]?.transcriptAnchorId, 'message-user');
+    assert.equal(history.messages[2]?.transcriptAnchorId, undefined);
     assert.equal(history.messages[1]?.kind, 'thinking');
     assert.equal(history.messages[2]?.content, 'The provider is wired.');
     assert.equal(history.messages[3]?.kind, 'tool_use');

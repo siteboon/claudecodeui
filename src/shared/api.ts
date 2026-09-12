@@ -146,6 +146,17 @@ export const sessionMessagesUrl = (
     : `${base}${query({ limit, offset: offset ?? 0 })}`;
 };
 
+export const subagentMessagesUrl = (
+  sessionId: string,
+  agentId: string,
+  { limit = null, offset = 0 }: { limit?: number | null; offset?: number } = {},
+): string => {
+  const base = `/api/providers/sessions/${encodeURIComponent(sessionId)}/subagents/${encodeURIComponent(agentId)}/messages`;
+  return limit === null || limit === undefined
+    ? base
+    : `${base}${query({ limit, offset: offset ?? 0 })}`;
+};
+
 const fileContentPath = (projectId: string, filePath: string) =>
   `/api/file-tree/projects/${projectId}/files/content${query({ path: filePath })}`;
 
@@ -376,6 +387,16 @@ export const api = {
     ) => get(sessionMessagesUrl(sessionId, pagination), options),
     sessionTokenUsage: (sessionId: string) =>
       get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/token-usage`),
+    sessionContextInfo: (sessionId: string) =>
+      get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/context-info`),
+    sessionSubagents: (sessionId: string) =>
+      get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/subagents`),
+    sessionSubagentMessages: (
+      sessionId: string,
+      agentId: string,
+      pagination: { limit?: number | null; offset?: number } = {},
+      options: ApiRequestOptions = {},
+    ) => get(subagentMessagesUrl(sessionId, agentId, pagination), options),
     sessionActiveModel: (provider: string, sessionId: string) =>
       get(`/api/providers/${provider}/sessions/${encodeURIComponent(sessionId)}/active-model`),
     setSessionActiveModel: (provider: string, sessionId: string, model: string) =>
@@ -389,7 +410,7 @@ export const api = {
 
     mcpServers: (
       provider: string,
-      { scope, workspacePath }: { scope: string; workspacePath?: string },
+      { scope, workspacePath }: { scope?: string; workspacePath?: string },
     ) => get(`/api/providers/${provider}/mcp/servers${query({ scope, workspacePath })}`),
     saveMcpServer: (provider: string, payload: unknown) =>
       post(`/api/providers/${provider}/mcp/servers`, payload),
@@ -489,6 +510,12 @@ export const api = {
     notificationPreferences: () => get('/api/settings/notification-preferences'),
     saveNotificationPreferences: (preferences: unknown) =>
       put('/api/settings/notification-preferences', preferences),
+
+    // The session info panel's MCP switches; the Claude runtime consults this
+    // set when it assembles each turn's MCP config.
+    mcpDisabledServers: () => get('/api/settings/mcp-disabled-servers'),
+    saveMcpDisabledServers: (servers: string[]) =>
+      put('/api/settings/mcp-disabled-servers', { servers }),
 
     push: {
       vapidPublicKey: () => get('/api/settings/push/vapid-public-key'),

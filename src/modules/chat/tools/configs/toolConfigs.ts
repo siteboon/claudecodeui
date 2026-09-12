@@ -1,7 +1,9 @@
 /**
  * Centralized tool configuration registry
- * Defines display behavior for all tool types 
+ * Defines display behavior for all tool types
  */
+
+import { extractToolResultImages, withoutImageBlocks } from '@/modules/chat/utils/toolResultImages';
 
 export type ToolDisplayConfig = {
   input: {
@@ -752,32 +754,39 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       title: 'Output',
       contentType: 'text',
       getContentProps: (result) => {
-        let content = result?.content || '';
+        // ToolRenderer hands the parsed tool-result object ({ content, isError })
+        // or, for other call sites, the blocks themselves — unwrap to the payload.
+        if (result && typeof result === 'object' && !Array.isArray(result) && 'content' in result) {
+          result = result.content;
+        }
+
+        // Image blocks render as pictures through ToolResultImages; drop them
+        // from the text pass so their base64 payload is not dumped as JSON.
+        let content = withoutImageBlocks(result ?? '');
+
+        const collectText = (blocks: unknown[]) =>
+          blocks
+            .filter((p: any) => p && p.type === 'text' && p.text)
+            .map((p: any) => p.text);
 
         // Handle MCP format: array of objects with type and text fields
         if (typeof content === 'string') {
           try {
             const parsed = JSON.parse(content);
             if (Array.isArray(parsed)) {
-              const textParts = parsed
-                .filter((p: any) => p.type === 'text' && p.text)
-                .map((p: any) => p.text);
+              const textParts = collectText(parsed);
               if (textParts.length > 0) {
                 content = textParts.join('\n');
+              } else if (extractToolResultImages(parsed).length > 0) {
+                content = '';
               }
             }
           } catch {
             // Not JSON or not MCP format, use as-is
           }
         } else if (Array.isArray(content)) {
-          const textParts = content
-            .filter((p: any) => p.type === 'text' && p.text)
-            .map((p: any) => p.text);
-          if (textParts.length > 0) {
-            content = textParts.join('\n');
-          } else {
-            content = JSON.stringify(content, null, 2);
-          }
+          const textParts = collectText(content);
+          content = textParts.length > 0 ? textParts.join('\n') : '';
         } else if (typeof content === 'object' && content !== null) {
           content = JSON.stringify(content, null, 2);
         }

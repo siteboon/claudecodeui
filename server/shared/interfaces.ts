@@ -16,6 +16,7 @@ import type {
   ProviderRuntimeContext,
   ProviderRuntimePermissionGateway,
   ProviderRuntimeWriter,
+  SubagentSummary,
   UpsertProviderMcpServerInput,
 } from '@/shared/types.js';
 
@@ -36,7 +37,34 @@ export interface IProviderRuntime {
   ): Promise<unknown>;
   abort(sessionId: string): boolean | Promise<boolean>;
   permissions?: ProviderRuntimePermissionGateway;
+  /**
+   * Snapshot of the session's context-window occupancy, answered by the
+   * provider's own tooling (Claude: the SDK query's `getContextUsage`, the
+   * same data the CLI's `/context` renders). Present only for providers whose
+   * runtime can hold a live handle on the conversation; the info panel then
+   * falls back to deriving the percentage from streamed usage frames.
+   */
+  contextInfo?(sessionId: string): Promise<ProviderContextInfo | null>;
 }
+
+/**
+ * A narrowed view of the provider's context-usage answer — the numbers the
+ * panel's context ring and sources section render. Null fields mean the
+ * provider could not classify that category, and the panel draws `—`.
+ */
+export type ProviderContextInfo = {
+  totalTokens: number | null;
+  maxTokens: number | null;
+  /** 0-100, as the provider itself computed it. */
+  percentage: number | null;
+  model: string | null;
+  categories: Array<{ name: string; tokens: number; kind: 'used' | 'free' | 'buffer' | 'deferred' | string }>;
+  /** Distinct agents / MCP tools / memory files drawing on the window. */
+  agents: Array<{ agentType: string; tokens: number }>;
+  mcpTools: Array<{ name: string; serverName: string; tokens: number }>;
+  memoryFiles: Array<{ path: string; tokens: number }>;
+  slashCommands: { totalCommands: number; includedCommands: number } | null;
+};
 
 /**
  * Main provider contract for CLI and SDK integrations.
@@ -68,21 +96,41 @@ export interface IProvider {
  */
 export interface IProviderFork {
   /**
-   * Copies a session's transcript, up to and including `upToAnchorId` (the
-   * whole conversation when omitted), into a brand-new provider session.
+   * True when the provider keeps every transcript in one shared store rather
+   * than one artifact file per session (OpenCode's opencode.db). The sessions
+   * service then accepts a source row whose `jsonl_path` is legitimately NULL,
+   * and a fork writing back no path of its own.
+   */
+  readonly transcriptIsSharedDatabase?: boolean;
+
+  /**
+   * Copies a session's transcript up to — but NOT including — the message
+   * `upToAnchorId` names, into a brand-new provider session. The whole
+   * conversation is copied when the anchor is omitted.
+   *
+   * Exclusive of the anchored message (and its answer, where the provider
+   * groups them) is the point of the feature: the fork is where the user
+   * takes a different turn from that message, so the copy stops above it.
+   * Adapters whose native cut points are inclusive translate accordingly. When
+   * nothing precedes the anchor — forking from the very first message — there
+   * is no conversation to branch, and adapters report that rather than
+   * silently copying everything.
    *
    * Returns the new provider-native id and the path of the artifact it wrote,
    * so the caller can insert the database row before the filesystem watcher
-   * notices the file and indexes it as an unrelated session.
+   * notices the file and indexes it as an unrelated session. `jsonlPath` is
+   * null for providers with `transcriptIsSharedDatabase` — the copy lives in
+   * the shared store and there is no path to point a row at.
    */
   forkSession(input: {
     providerSessionId: string;
-    jsonlPath: string;
+    /** Null when the source itself lives in a shared store. */
+    jsonlPath: string | null;
     /** The session's working directory — how providers scope a session lookup. */
     projectPath: string;
     upToAnchorId?: string;
     title?: string;
-  }): Promise<{ providerSessionId: string; jsonlPath: string }>;
+  }): Promise<{ providerSessionId: string; jsonlPath: string | null }>;
 }
 
 // ---------------------------
@@ -216,6 +264,31 @@ export interface IProviderSessions {
    * gateway branches on.
    */
   rewindSession?(sessionId: string, keepThroughId: string | null): Promise<void>;
+
+  /**
+   * The agents one session spawned, newest transcript first, with just enough
+   * per-agent state for a sidebar list: what it was, what it was asked to do,
+   * whether it finished. Providers whose CLI keeps no per-agent transcript
+   * file leave this undefined, and the panel shows them as unsupported.
+   */
+  listSubagents?(
+    sessionId: string,
+    providerSessionId: string,
+    parentRunning: boolean,
+  ): Promise<SubagentSummary[]>;
+
+  /**
+   * One agent's own conversation, normalized like any other history page.
+   * Unlike the folded timeline behind a parent tool call (which caps how much
+   * it transmits), this is the complete record the subagent view pages
+   * through, so the panel can read an agent's whole working log.
+   */
+  fetchSubagentHistory?(
+    sessionId: string,
+    providerSessionId: string,
+    agentId: string,
+    options?: FetchHistoryOptions,
+  ): Promise<FetchHistoryResult>;
 }
 
 // ---------------------------

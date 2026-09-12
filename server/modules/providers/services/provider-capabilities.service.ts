@@ -34,6 +34,18 @@ type ProviderCapabilities = {
    * Whether a session's transcript can be branched into an independent one.
    */
   supportsSessionForking: boolean;
+  /**
+   * Whether the provider exposes the conversation sidebars of the info panel:
+   * subagent transcripts, context snapshots, task ledgers. Providers without
+   * it still get the usage-derived sections, which need no provider help.
+   */
+  supportsSessionInsights: boolean;
+  /**
+   * Whether the panel's MCP switches actually bite: the runtime has to consult
+   * the user's disabled-server set when it assembles the MCP config, and only
+   * the Claude adapter reads it today.
+   */
+  supportsMcpToggle: boolean;
 };
 
 /**
@@ -57,6 +69,12 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     // `forkSession` copies a transcript prefix into a new session file.
     supportsMessageEditing: true,
     supportsSessionForking: true,
+    // Subagent transcripts, the /context snapshot, and the task ledger all
+    // come from the Claude CLI's own files and control requests.
+    supportsSessionInsights: true,
+    // The Claude runtime filters the merged MCP config against the user's
+    // disabled-server set before the SDK spawns servers.
+    supportsMcpToggle: true,
   },
   cursor: {
     provider: 'cursor',
@@ -70,6 +88,8 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsEffort: false,
     supportsMessageEditing: false,
     supportsSessionForking: false,
+    supportsSessionInsights: false,
+    supportsMcpToggle: false,
   },
   codex: {
     provider: 'codex',
@@ -87,6 +107,12 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     // which is how Codex's own IDE clients do it.
     supportsMessageEditing: true,
     supportsSessionForking: true,
+    // Codex keeps no per-subagent transcript file, so the panel's subagent
+    // section has nothing to read yet; it renders the usage-derived sections.
+    supportsSessionInsights: false,
+    // The Codex runtime builds its own MCP config and does not read the
+    // panel's disabled set, so its switches would be decorative.
+    supportsMcpToggle: false,
   },
   opencode: {
     provider: 'opencode',
@@ -101,8 +127,14 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsPermissionRequests: false,
     supportsTokenUsage: true,
     supportsEffort: true,
+    // Fork rides OpenCode's own server API (`POST /session/{id}/fork` on a
+    // short-lived `opencode serve`), not a write into the shared opencode.db.
+    // Editing stays false: cutting a conversation and re-asking the prompt
+    // needs a revert the one-shot `opencode run` runtime cannot express.
     supportsMessageEditing: false,
-    supportsSessionForking: false,
+    supportsSessionForking: true,
+    supportsSessionInsights: false,
+    supportsMcpToggle: false,
   },
 };
 

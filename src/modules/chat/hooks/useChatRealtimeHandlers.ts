@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 
-import type { ServerEvent,MarkSessionIdle,MarkSessionProcessing,PendingPermissionRequest,ProjectSession,LLMProvider,NormalizedMessage } from '@/shared/types';
+import type { ServerEvent,MarkSessionIdle,MarkSessionProcessing,PendingPermissionRequest,ProjectSession,LLMProvider,NormalizedMessage,TurnStats } from '@/shared/types';
 import { showCompletionTitleIndicator } from '@/modules/chat/utils/pageTitleNotification';
 import { playChatCompletionSound, playNotificationSound } from '@/shared/utils';
 import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
@@ -21,10 +21,13 @@ type UseChatRealtimeHandlersArgs = {
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
   setTokenBudget: (budget: Record<string, unknown> | null) => void;
+  setTurnStats: (stats: TurnStats | null) => void;
   pendingPermissionRequests: PendingPermissionRequest[];
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
   streamTimerRef: MutableRefObject<number | null>;
   accumulatedStreamRef: MutableRefObject<string>;
+  thinkingStreamTimerRef: MutableRefObject<number | null>;
+  accumulatedThinkingStreamRef: MutableRefObject<string>;
   /**
    * Highest live `seq` observed per session. Essential for reconnect catch-up:
    * `chat.subscribe` sends this value as `lastSeq` so the server replays only
@@ -61,10 +64,13 @@ export function useChatRealtimeHandlers({
   selectedSession,
   currentSessionId,
   setTokenBudget,
+  setTurnStats,
   pendingPermissionRequests,
   setPendingPermissionRequests,
   streamTimerRef,
   accumulatedStreamRef,
+  thinkingStreamTimerRef,
+  accumulatedThinkingStreamRef,
   lastSeqRef,
   statusCheckSentAtRef,
   onSessionProcessing,
@@ -186,9 +192,43 @@ export function useChatRealtimeHandlers({
       /* -------------------------------------------------------------- */
 
       // --- Streaming: buffer for performance ---
+      if (msg.kind === 'thinking_delta') {
+        const text = (msg.content as string) || '';
+        if (!text) return;
+        accumulatedThinkingStreamRef.current += text;
+        if (!thinkingStreamTimerRef.current) {
+          thinkingStreamTimerRef.current = window.setTimeout(() => {
+            thinkingStreamTimerRef.current = null;
+            if (sid) {
+              sessionStore.updateStreamingThinking(sid, accumulatedThinkingStreamRef.current, provider);
+            }
+          }, 100);
+        }
+        // Also route to store for non-active sessions
+        if (sid && sid !== activeViewSessionId) {
+          sessionStore.appendRealtime(sid, msg as unknown as NormalizedMessage);
+        }
+        return;
+      }
+
       if (msg.kind === 'stream_delta') {
         const text = (msg.content as string) || '';
         if (!text) return;
+        // Reasoning precedes the answer, so the first answer delta means the
+        // thinking stream is over: freeze the accumulated bubble.
+        if (accumulatedThinkingStreamRef.current || thinkingStreamTimerRef.current) {
+          if (thinkingStreamTimerRef.current) {
+            clearTimeout(thinkingStreamTimerRef.current);
+            thinkingStreamTimerRef.current = null;
+          }
+          if (sid && accumulatedThinkingStreamRef.current) {
+            sessionStore.updateStreamingThinking(sid, accumulatedThinkingStreamRef.current, provider);
+          }
+          if (sid) {
+            sessionStore.finalizeStreamingThinking(sid);
+          }
+          accumulatedThinkingStreamRef.current = '';
+        }
         accumulatedStreamRef.current += text;
         if (!streamTimerRef.current) {
           streamTimerRef.current = window.setTimeout(() => {
@@ -210,11 +250,20 @@ export function useChatRealtimeHandlers({
           clearTimeout(streamTimerRef.current);
           streamTimerRef.current = null;
         }
+        if (thinkingStreamTimerRef.current) {
+          clearTimeout(thinkingStreamTimerRef.current);
+          thinkingStreamTimerRef.current = null;
+        }
         if (sid) {
           if (accumulatedStreamRef.current) {
             sessionStore.updateStreaming(sid, accumulatedStreamRef.current, provider);
           }
           sessionStore.finalizeStreaming(sid);
+          if (accumulatedThinkingStreamRef.current) {
+            sessionStore.updateStreamingThinking(sid, accumulatedThinkingStreamRef.current, provider);
+            sessionStore.finalizeStreamingThinking(sid);
+            accumulatedThinkingStreamRef.current = '';
+          }
         }
         accumulatedStreamRef.current = '';
         return;
@@ -245,6 +294,15 @@ export function useChatRealtimeHandlers({
             sessionStore.finalizeStreaming(sid);
           }
           accumulatedStreamRef.current = '';
+          if (thinkingStreamTimerRef.current) {
+            clearTimeout(thinkingStreamTimerRef.current);
+            thinkingStreamTimerRef.current = null;
+          }
+          if (sid && accumulatedThinkingStreamRef.current) {
+            sessionStore.updateStreamingThinking(sid, accumulatedThinkingStreamRef.current, provider);
+            sessionStore.finalizeStreamingThinking(sid);
+          }
+          accumulatedThinkingStreamRef.current = '';
 
           // `complete` is the unified terminal event — every provider run ends
           // with exactly one, regardless of success, failure, or abort. The
@@ -333,6 +391,13 @@ export function useChatRealtimeHandlers({
             if (sid === activeViewSessionId) {
               setTokenBudget(msg.tokenBudget as Record<string, unknown>);
             }
+          } else if (msg.text === 'turn_stats' && msg.turnStats) {
+            // Same session-scoping rule as the budget: the panel shows the
+            // viewed session's bill, and a sibling run's result frame must not
+            // replace it.
+            if (sid === activeViewSessionId) {
+              setTurnStats(msg.turnStats as TurnStats);
+            }
           } else if (msg.text && sid) {
             onSessionProcessing?.(sid, {
               statusText: msg.text as string,
@@ -356,10 +421,13 @@ export function useChatRealtimeHandlers({
     selectedSession,
     currentSessionId,
     setTokenBudget,
+    setTurnStats,
     pendingPermissionRequests,
     setPendingPermissionRequests,
     streamTimerRef,
     accumulatedStreamRef,
+    thinkingStreamTimerRef,
+    accumulatedThinkingStreamRef,
     lastSeqRef,
     statusCheckSentAtRef,
     onSessionProcessing,

@@ -180,6 +180,7 @@ export type MessageKind =
   | 'tool_use'
   | 'tool_result'
   | 'thinking'
+  | 'thinking_delta'
   | 'stream_delta'
   | 'stream_end'
   | 'error'
@@ -319,6 +320,11 @@ export type NormalizedMessage = {
   summary?: string;
   tokenBudget?: unknown;
   /**
+   * The turn's bill, forwarded from the SDK's `result` message on a
+   * `status`/`turn_stats` frame. Absent on every other message.
+   */
+  turnStats?: TurnStats;
+  /**
    * Timeline of everything a subagent did, attached to the `tool_use` that
    * spawned it. Present for Claude `Agent`/`Task` calls and Codex
    * `spawn_agent` calls; absent for every other tool.
@@ -332,6 +338,27 @@ export type NormalizedMessage = {
   sequence?: number;
   rowid?: number;
   [key: string]: unknown;
+};
+
+/**
+ * The turn's bill, forwarded from the SDK's `result` message.
+ *
+ * Field semantics follow the SDK's result contract: `usage` is this turn's
+ * main-loop bill (per-turn, excludes subagents), while `costUsd` and
+ * `modelUsage` are cumulative across the streaming-input session — the
+ * frontend reads the latest frame instead of summing.
+ */
+export type TurnStats = {
+  costUsd: number | null;
+  durationMs: number | null;
+  apiDurationMs: number | null;
+  numTurns: number | null;
+  usage: {
+    inputTokens: number | null;
+    outputTokens: number | null;
+    cacheReadTokens: number | null;
+    cacheCreationTokens: number | null;
+  } | null;
 };
 
 /**
@@ -400,6 +427,28 @@ export type SubagentInfo = {
    * lets the UI say so instead of silently showing a partial timeline.
    */
   activityCount?: number;
+};
+
+/**
+ * One entry of the sidebar's subagent list — what an agent was, what it was
+ * asked to do, and whether it finished. `status` is composed, not stored: the
+ * agent's `.meta.json` carries no state, so the answer comes from the parent's
+ * task-notification rows and, with no notification yet, from how fresh the
+ * agent's own transcript looks while the parent runs (a quiet parent never
+ * shows a running row, which is what keeps a crashed run's leftover from
+ * spinning forever once the run ends).
+ */
+export type SubagentSummary = {
+  agentId: string;
+  agentType?: string;
+  description?: string;
+  /** The parent's tool call that spawned this agent; the live stream keys off it. */
+  toolUseId?: string;
+  status: 'running' | 'completed' | 'failed';
+  activityCount: number;
+  startedAt?: string;
+  lastActivityAt?: string;
+  model?: string;
 };
 
 /**

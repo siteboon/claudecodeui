@@ -3,9 +3,13 @@ import type { MouseEvent as ReactMouseEvent, TouchEvent as ReactTouchEvent } fro
 
 import type { QuickSettingsHandleStyle } from '@/shared/types';
 
-const HANDLE_POSITION_STORAGE_KEY = 'quickSettingsHandlePosition';
+// Versioned so an older persisted position does not outlive a changed default.
+const HANDLE_POSITION_STORAGE_KEY = 'quickSettingsHandlePosition.v2';
+const LEGACY_HANDLE_POSITION_STORAGE_KEY = 'quickSettingsHandlePosition';
 
-const DEFAULT_HANDLE_POSITION = 50;
+// A quarter down the edge: high enough to clear the composer activity tab and
+// the bottom of the transcript, low enough to stay thumb-reachable.
+const DEFAULT_HANDLE_POSITION = 25;
 const HANDLE_POSITION_MIN = 10;
 const HANDLE_POSITION_MAX = 90;
 const DRAG_THRESHOLD_PX = 5;
@@ -27,7 +31,8 @@ const readHandlePosition = (): number => {
     return DEFAULT_HANDLE_POSITION;
   }
 
-  const saved = localStorage.getItem(HANDLE_POSITION_STORAGE_KEY);
+  const saved = localStorage.getItem(HANDLE_POSITION_STORAGE_KEY)
+    ?? localStorage.getItem(LEGACY_HANDLE_POSITION_STORAGE_KEY);
   if (!saved) {
     return DEFAULT_HANDLE_POSITION;
   }
@@ -39,6 +44,7 @@ const readHandlePosition = (): number => {
     }
   } catch {
     localStorage.removeItem(HANDLE_POSITION_STORAGE_KEY);
+    localStorage.removeItem(LEGACY_HANDLE_POSITION_STORAGE_KEY);
     return DEFAULT_HANDLE_POSITION;
   }
 
