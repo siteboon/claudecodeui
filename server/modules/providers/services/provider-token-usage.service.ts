@@ -393,6 +393,17 @@ export function createProviderTokenUsageService(
         };
       }
 
+      // Pi reports usage through its runtime event stream (Phase 1); it has no
+      // on-disk artifact to read back, so the endpoint answers with zeros.
+      if (session.provider === 'pi') {
+        return {
+          used: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          breakdown: { input: 0, output: 0 },
+        };
+      }
+
       if (session.provider === 'opencode') {
         const databasePath = dependencies.getOpenCodeDatabasePath();
         if (!dependencies.fileExists(databasePath)) {
