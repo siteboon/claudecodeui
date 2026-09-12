@@ -551,6 +551,13 @@ export function useChatSessionState({
 
     const nearBottom = isNearBottom();
     setIsUserScrolledUp(!nearBottom);
+    // Write the ref mirror here, not just from the [isUserScrolledUp] effect:
+    // during heavy streaming renders, the state→effect round-trip can lag past
+    // the 50 ms follow-bottom timer, which reads the ref at fire time. With a
+    // stale `false` the timer yanked the view back down right after the user
+    // dragged up — and once at the bottom, isNearBottom re-armed sticky
+    // follow, so the snap sustained itself for the rest of the run.
+    isUserScrolledUpRef.current = !nearBottom;
     scrollPositionRef.current = {
       height: container.scrollHeight,
       top: container.scrollTop,
@@ -1070,7 +1077,12 @@ export function useChatSessionState({
         }
       }, 50);
     }
-  }, [chatMessages.length, isActive, isLoadingMoreMessages, isUserScrolledUp, scrollToBottom]);
+    // Dep is the array identity, not `.length`: streaming replaces the
+    // well-known `__streaming_*` row in place, so the transcript grows while
+    // the message count sits still — a length-keyed dep never re-ran during
+    // streaming. The fire-time ref re-check still cancels a snap when the
+    // user scrolls up inside the 50 ms grace.
+  }, [chatMessages, isActive, isLoadingMoreMessages, isUserScrolledUp, scrollToBottom]);
 
   useEffect(() => {
     const container = scrollContainerRef.current;
