@@ -591,6 +591,12 @@
       "description": "Track live Codex plan limits, reset timing, and 30-day account token activity.",
       "install": "Install"
     },
+    "glmUsagePlugin": {
+      "name": "GLM Usage",
+      "badge": "unofficial",
+      "description": "Track live GLM/Zhipu coding-plan quotas and 30-day token history.",
+      "install": "Install"
+    },
     "morePlugins": "More",
     "enable": "Enable",
     "disable": "Disable",
