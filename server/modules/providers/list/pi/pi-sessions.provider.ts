@@ -81,9 +81,19 @@ const buildPiTokenUsage = (usage: AnyRecord): AnyRecord | undefined => {
  *
  * Event → message mapping (verified against probe/*.jsonl, pi 0.85.1):
  * - `message_update` + `text_delta`     → `stream_delta` (content = delta)
- * - `message_update` + `thinking_delta` → `thinking` (content = delta)
- * - `message_update` + `*_start`/`*_end` → [] (they restate what the deltas
- *   already streamed; emitting them would duplicate the block)
+ * - `message_update` + `thinking_end`   → `thinking` (content = the event's
+ *   full content, verbatim) — exactly one message per reasoning block. The
+ *   aggregation lives server-side because the frontend has no thinking
+ *   aggregation channel: only `stream_delta` is throttled into a single
+ *   bubble while every other kind is appended one row per message, so
+ *   forwarding each `thinking_delta` would flood the transcript with one
+ *   fragment per token. pi makes this cheap: `thinking_end` carries the
+ *   block's full content (docs/pi-notes.md).
+ * - `message_update` + `thinking_start`/`thinking_delta` → [] (dropped; the
+ *   `thinking_end` full content replaces them)
+ * - `message_update` + other `*_start`/`*_end` (incl. `text_end`, whose full
+ *   content would duplicate what the stream_delta channel already drew) and
+ *   `toolcall_*` → []
  * - `message_update` + `toolcall_*`     → [] (tool activity is carried by the
  *   top-level `tool_execution_*` events instead)
  * - `tool_execution_start`              → `tool_use` (toolName/toolInput/toolId)
@@ -123,14 +133,33 @@ export function mapPiEventToMessages(rawEvent: unknown, sessionId: string | null
   if (type === 'message_update') {
     const update = readObjectRecord(event.assistantMessageEvent);
     const updateType = readOptionalString(update?.type);
-    const content = readVerbatimString(update?.delta);
 
-    if (updateType === 'text_delta' && content) {
-      return [build({ kind: 'stream_delta', content })];
+    if (updateType === 'text_delta') {
+      const delta = readVerbatimString(update?.delta);
+      if (delta) {
+        return [build({ kind: 'stream_delta', content: delta })];
+      }
+      return [];
     }
-    if (updateType === 'thinking_delta' && content) {
-      return [build({ kind: 'thinking', content })];
+
+    // Thinking aggregates into ONE message per reasoning block, emitted from
+    // `thinking_end`. The aggregation must happen server-side: the frontend
+    // only folds `stream_delta` into a single throttled bubble
+    // (useChatRealtimeHandlers) and appends every other kind verbatim via
+    // sessionStore.appendRealtime, so streaming `thinking_delta` events would
+    // render one thinking fragment per token. pi's `thinking_end` already
+    // carries the full block content (docs/pi-notes.md), so start/delta are
+    // simply dropped. Content is read verbatim — no trim.
+    if (updateType === 'thinking_end') {
+      const content = readVerbatimString(update?.content);
+      if (content) {
+        return [build({ kind: 'thinking', content })];
+      }
+      return [];
     }
+
+    // `*_start` markers, `text_end` (its full content would duplicate what the
+    // stream_delta channel already drew) and `toolcall_*` emit nothing.
     return [];
   }
 

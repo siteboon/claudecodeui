@@ -20,20 +20,45 @@ test('mapPiEventToMessages maps pi stream events onto normalized messages', () =
   assert.equal(delta[0]?.sessionId, 's1');
   assert.equal(delta[0]?.provider, 'pi');
 
-  const thinking = mapPiEventToMessages(
-    { type: 'message_update', assistantMessageEvent: { type: 'thinking_delta', contentIndex: 0, delta: 'hmm' } },
+  // `thinking_delta` emits nothing: the frontend appends every non-
+  // stream_delta message verbatim, so forwarding per-token deltas would
+  // render one thinking fragment per token.
+  assert.deepEqual(
+    mapPiEventToMessages(
+      { type: 'message_update', assistantMessageEvent: { type: 'thinking_delta', contentIndex: 0, delta: 'hmm' } },
+      's1',
+    ),
+    [],
+  );
+
+  // `thinking_end` carries the full block content (docs/pi-notes.md) and is
+  // the single thinking outlet: one message per reasoning block, verbatim
+  // (no trim), so leading/trailing whitespace survives.
+  const thinkingEnd = mapPiEventToMessages(
+    { type: 'message_update', assistantMessageEvent: { type: 'thinking_end', contentIndex: 0, content: '  full reasoning\n' } },
     's1',
   );
-  assert.deepEqual(kinds(thinking), ['thinking']);
-  assert.equal(thinking[0]?.content, 'hmm');
+  assert.deepEqual(kinds(thinkingEnd), ['thinking']);
+  assert.equal(thinkingEnd[0]?.content, '  full reasoning\n');
+  assert.equal(thinkingEnd[0]?.sessionId, 's1');
+  assert.equal(thinkingEnd[0]?.provider, 'pi');
 
-  // Marker events (text_end/thinking_end) repeat what the deltas already
-  // streamed as full content; emitting them would duplicate every turn.
+  // An empty thinking block emits nothing.
+  assert.deepEqual(
+    mapPiEventToMessages(
+      { type: 'message_update', assistantMessageEvent: { type: 'thinking_end', contentIndex: 0, content: '' } },
+      's1',
+    ),
+    [],
+  );
+
+  // Remaining marker events stay silent: `text_end` would duplicate what the
+  // stream_delta channel already drew, `thinking_start` starts nothing that
+  // `thinking_end` does not carry itself.
   for (const eventType of [
     'text_start',
     'text_end',
     'thinking_start',
-    'thinking_end',
     'toolcall_start',
     'toolcall_delta',
     'toolcall_end',
