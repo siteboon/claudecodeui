@@ -368,6 +368,24 @@
       },
       "opencode": {
         "description": "OpenCode CLI assistant"
+      },
+      "pi": {
+        "description": "Pi coding agent CLI"
+      }
+    },
+    "pi": {
+      "setup": {
+        "title": "Set up Pi",
+        "installTitle": "Install Pi",
+        "description": "Pi has no login command: model credentials come from environment variables or its own models.json. Opening the pi CLI lets you finish the setup and verify it.",
+        "button": "Open pi CLI",
+        "installCommand": "npm install -g @earendil-works/pi-coding-agent",
+        "modelsHint": "Configure model providers in ~/.pi/agent/models.json or through environment variables such as $ANTHROPIC_API_KEY."
+      },
+      "authMethod": {
+        "label": "Credential source",
+        "env": "Environment variable",
+        "oauth": "pi auth store"
       }
     },
     "connectionStatus": "Connection Status",
@@ -600,6 +618,7 @@
   },
   "skillsPage": {
     "description": "Manage {{provider}} skills from local files, complete folders, and project-aware locations.",
+    "readOnlyDescription": "Showing the skills {{provider}} discovers on disk. To add a skill, place a SKILL.md folder in one of {{provider}}'s skill directories, then refresh.",
     "searchPlaceholder": "Search skills...",
     "searchAriaLabel": "Search skills",
     "clearSearch": "Clear skill search",
@@ -617,6 +636,7 @@
     "loading": "Loading {{provider}} skills…",
     "emptyTitle": "No skills discovered yet",
     "emptyDescription": "Add a global skill above or create project-specific skill folders in your workspace.",
+    "emptyReadOnlyDescription": "No skills discovered yet. Add a SKILL.md folder to a directory {{provider}} scans, for example:",
     "noMatchTitle": "No matching skills",
     "noMatchDescription": "Try a different command, name, scope, project, or source path.",
     "count_one": "{{count}} skill",

@@ -389,6 +389,108 @@ const rebuildSessionsTableWithProjectSchema = (db: Database): void => {
 };
 
 /**
+ * Detects whether the installed provider_models table already accepts the pi
+ * provider. SQLite exposes CHECK constraints only through the stored schema
+ * text, so the cheapest exact test is to attempt the very insert the
+ * constraint must allow and roll the probe row back.
+ *
+ * A CHECK rejection is the only answer that means "rebuild me": any other
+ * failure (locked database, full disk, ...) is surfaced instead of pushing an
+ * otherwise healthy install through a copy-the-whole-table migration.
+ */
+const providerModelsTableAcceptsPi = (db: Database): boolean => {
+  db.exec('SAVEPOINT provider_models_pi_probe');
+  try {
+    // The random suffix keeps the probe row clear of the UNIQUE(provider,
+    // model_id) index no matter what a user has stored.
+    db.prepare(`
+      INSERT INTO provider_models (provider, model_id, model_name)
+      VALUES ('pi', '__pi_migration_probe__' || lower(hex(randomblob(16))), '__pi_migration_probe__')
+    `).run();
+    db.exec('ROLLBACK TO provider_models_pi_probe');
+    db.exec('RELEASE provider_models_pi_probe');
+    return true;
+  } catch (error: any) {
+    db.exec('ROLLBACK TO provider_models_pi_probe');
+    db.exec('RELEASE provider_models_pi_probe');
+    if (error?.code === 'SQLITE_CONSTRAINT_CHECK') {
+      return false;
+    }
+    throw error;
+  }
+};
+
+/**
+ * Rebuilds provider_models so its provider CHECK constraint accepts 'pi'.
+ *
+ * SQLite cannot edit a CHECK constraint in place — the provider list is baked
+ * into the table's CREATE TABLE text — so a legacy table is copied into a new
+ * one that allows 'pi' and swapped back in under the same name. Rows keep
+ * their ids because the Providers module addresses custom models by record id.
+ * New installs already create the table with 'pi' allowed and skip the copy.
+ */
+const rebuildProviderModelsWithPiSchema = (db: Database): void => {
+  if (!tableExists(db, 'provider_models')) {
+    db.exec(PROVIDER_MODELS_TABLE_SCHEMA_SQL);
+    return;
+  }
+
+  if (providerModelsTableAcceptsPi(db)) {
+    return;
+  }
+
+  console.log('Running migration: Rebuilding provider_models to accept the pi provider');
+
+  db.exec('PRAGMA foreign_keys = OFF');
+  try {
+    db.exec('BEGIN TRANSACTION');
+    db.exec('DROP TABLE IF EXISTS provider_models__new');
+    // Mirrors PROVIDER_MODELS_TABLE_SCHEMA_SQL with 'pi' added; the schema
+    // constant names the real table, so the rebuilt one is spelled out here.
+    db.exec(`
+      CREATE TABLE provider_models__new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        provider TEXT NOT NULL CHECK (provider IN ('claude', 'cursor', 'codex', 'opencode', 'pi')),
+        model_id TEXT NOT NULL,
+        model_name TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(provider, model_id)
+      )
+    `);
+    db.exec(`
+      INSERT INTO provider_models__new (
+        id,
+        provider,
+        model_id,
+        model_name,
+        sort_order,
+        created_at,
+        updated_at
+      )
+      SELECT
+        id,
+        provider,
+        model_id,
+        model_name,
+        sort_order,
+        created_at,
+        updated_at
+      FROM provider_models
+    `);
+    db.exec('DROP TABLE provider_models');
+    db.exec('ALTER TABLE provider_models__new RENAME TO provider_models');
+    db.exec('COMMIT');
+  } catch (migrationError) {
+    db.exec('ROLLBACK');
+    throw migrationError;
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON');
+  }
+};
+
+/**
  * Adds the `provider_session_id` mapping column used by the session gateway.
  *
  * Rows that existed before this migration were always keyed directly by the
@@ -500,6 +602,9 @@ export const runMigrations = (db: Database) => {
     db.exec('CREATE INDEX IF NOT EXISTS idx_notification_channel_endpoints_user_channel ON notification_channel_endpoints(user_id, channel)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_notification_channel_endpoints_enabled ON notification_channel_endpoints(enabled)');
     db.exec(PROVIDER_MODELS_TABLE_SCHEMA_SQL);
+    // Rebuilds before the index below is created: dropping the legacy table
+    // would drop a just-created index along with it.
+    rebuildProviderModelsWithPiSchema(db);
     db.exec(`
       CREATE INDEX IF NOT EXISTS idx_provider_models_provider_order
       ON provider_models(provider, sort_order, id)

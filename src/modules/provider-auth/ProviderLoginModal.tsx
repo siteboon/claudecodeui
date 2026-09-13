@@ -59,6 +59,12 @@ const getProviderCommand = ({
     return 'opencode auth login';
   }
 
+  // Pi ships no login subcommand — credentials come from its own models.json
+  // or environment variables — so open its TUI and let the user configure it.
+  if (provider === 'pi') {
+    return 'pi';
+  }
+
   return 'claude --dangerously-skip-permissions /login';
 };
 
@@ -67,6 +73,7 @@ const getProviderTitle = (provider: LLMProvider) => {
   if (provider === 'cursor') return 'Cursor CLI Login';
   if (provider === 'codex') return 'Codex CLI Login';
   if (provider === 'opencode') return 'OpenCode CLI Login';
+  if (provider === 'pi') return 'Pi CLI Setup';
   return 'Claude CLI Login';
 };
 
@@ -87,6 +94,16 @@ export default function ProviderLoginModal({
   const command = getProviderCommand({ provider, customCommand, isAuthenticated });
   const title = getProviderTitle(provider);
 
+  // Only Pi needs guidance here: its "login" is really a setup step, so the
+  // shell below would otherwise look like it should be asking for credentials.
+  const hint =
+    provider === 'pi'
+      ? t('common:misc.piSetupHint', {
+          defaultValue:
+            'Pi has no login command: credentials come from environment variables or ~/.pi/agent/models.json. The pi CLI below is for setup and verification.',
+        })
+      : null;
+
   const handleComplete = (exitCode: number) => {
     onComplete?.(exitCode);
     // Keep the modal open so users can read terminal output before closing.
@@ -95,8 +112,11 @@ export default function ProviderLoginModal({
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-50 max-md:items-stretch max-md:justify-stretch">
       <div className="flex h-3/4 w-full max-w-4xl flex-col rounded-lg bg-white shadow-xl dark:bg-gray-800 max-md:m-0 max-md:h-full max-md:max-w-none max-md:rounded-none md:m-4 md:h-3/4 md:max-w-4xl md:rounded-lg">
-        <div className="flex items-center justify-between border-b border-gray-200 p-4 dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
+        <div className="flex items-start justify-between gap-4 border-b border-gray-200 p-4 dark:border-gray-700">
+          <div className="min-w-0">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
+            {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
+          </div>
           <button
             onClick={onClose}
             className="text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-gray-300"

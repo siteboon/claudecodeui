@@ -1,4 +1,4 @@
-import { LogIn } from 'lucide-react';
+import { LogIn, Terminal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Badge, Button, LLMProviderLogo } from '@/shared/ui';
@@ -53,6 +53,15 @@ const agentConfig: Record<AgentProvider, AgentVisualConfig> = {
     textClass: 'text-zinc-900 dark:text-zinc-100',
     subtextClass: 'text-zinc-700 dark:text-zinc-300',
     buttonClass: 'bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-950 dark:bg-zinc-700 dark:hover:bg-zinc-600',
+  },
+  pi: {
+    name: 'Pi',
+    description: 'Pi coding agent CLI',
+    bgClass: 'bg-muted/50',
+    borderClass: 'border-gray-300 dark:border-gray-600',
+    textClass: 'text-gray-900 dark:text-gray-100',
+    subtextClass: 'text-gray-700 dark:text-gray-300',
+    buttonClass: 'bg-gray-800 hover:bg-gray-900 active:bg-gray-950 dark:bg-gray-700 dark:hover:bg-gray-600 dark:active:bg-gray-500',
   },
 };
 
@@ -111,29 +120,86 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
             </div>
           </div>
 
-          {authStatus.method !== 'api_key' && (
-            <div className="border-t border-border/50 pt-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className={`font-medium ${config.textClass}`}>
-                    {authStatus.authenticated ? t('agents.login.reAuthenticate') : t('agents.login.title')}
-                  </div>
-                  <div className={`text-sm ${config.subtextClass}`}>
-                    {authStatus.authenticated
-                      ? t('agents.login.reAuthDescription')
-                      : t('agents.login.description', { agent: config.name })}
+          {agent === 'pi' ? (
+            <>
+              {/*
+                Pi has no account to sign into: credentials are a local auth
+                store or an API key from the environment, so this panel walks
+                through install/configure instead of offering a login.
+              */}
+              {authStatus.authenticated && authStatus.method && (
+                <div className="border-t border-border/50 pt-4">
+                  <div className="flex items-center gap-2">
+                    <div className={`text-sm font-medium ${config.textClass}`}>
+                      {t('agents.pi.authMethod.label')}
+                    </div>
+                    <Badge variant="secondary" className="bg-muted">
+                      {authStatus.method === 'oauth'
+                        ? t('agents.pi.authMethod.oauth')
+                        : t('agents.pi.authMethod.env')}
+                    </Badge>
                   </div>
                 </div>
-                <Button
-                  onClick={onLogin}
-                  className={`${config.buttonClass} text-white`}
-                  size="sm"
-                >
-                  <LogIn className="mr-2 h-4 w-4" />
-                  {authStatus.authenticated ? t('agents.login.reLoginButton') : t('agents.login.button')}
-                </Button>
+              )}
+
+              <div className="border-t border-border/50 pt-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className={`font-medium ${config.textClass}`}>
+                      {authStatus.installed === false
+                        ? t('agents.pi.setup.installTitle')
+                        : t('agents.pi.setup.title')}
+                    </div>
+                    <div className={`text-sm ${config.subtextClass}`}>
+                      {t('agents.pi.setup.description')}
+                    </div>
+                  </div>
+                  <Button
+                    onClick={onLogin}
+                    className={`${config.buttonClass} text-white`}
+                    size="sm"
+                  >
+                    <Terminal className="mr-2 h-4 w-4" />
+                    {t('agents.pi.setup.button')}
+                  </Button>
+                </div>
+                {authStatus.installed === false && (
+                  <div className="mt-3 rounded-md border border-border/60 bg-muted/30 px-3 py-2">
+                    <code className="block whitespace-normal break-all text-xs text-foreground">
+                      {t('agents.pi.setup.installCommand')}
+                    </code>
+                  </div>
+                )}
+                <div className={`mt-3 text-sm ${config.subtextClass}`}>
+                  {t('agents.pi.setup.modelsHint')}
+                </div>
               </div>
-            </div>
+            </>
+          ) : (
+            authStatus.method !== 'api_key' && (
+              <div className="border-t border-border/50 pt-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className={`font-medium ${config.textClass}`}>
+                      {authStatus.authenticated ? t('agents.login.reAuthenticate') : t('agents.login.title')}
+                    </div>
+                    <div className={`text-sm ${config.subtextClass}`}>
+                      {authStatus.authenticated
+                        ? t('agents.login.reAuthDescription')
+                        : t('agents.login.description', { agent: config.name })}
+                    </div>
+                  </div>
+                  <Button
+                    onClick={onLogin}
+                    className={`${config.buttonClass} text-white`}
+                    size="sm"
+                  >
+                    <LogIn className="mr-2 h-4 w-4" />
+                    {authStatus.authenticated ? t('agents.login.reLoginButton') : t('agents.login.button')}
+                  </Button>
+                </div>
+              </div>
+            )
           )}
 
           {authStatus.error && (
