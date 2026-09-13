@@ -11,6 +11,13 @@ import type { NormalizedMessage } from '@/shared/types';
  * and thinking alike are therefore matched by content echo — otherwise every
  * reasoning block renders twice once the persisted-tail refresh reconciles
  * realtime.
+ *
+ * The turn locating behind that prune keys off chronology, and live rows
+ * (stamped when the client received them) and persisted rows (stamped when the
+ * provider wrote them) can interleave enough to mislocate the turn. When the
+ * prune misses, the duplicate copies still reach the merged view — woven
+ * between each other's sibling rows rather than adjacent — so the merged-view
+ * dedupe drops same-turn same-kind duplicates by turn scope, not by position.
  */
 
 const sessionMessages = vi.fn();
@@ -161,6 +168,60 @@ describe('thinking echoes between live stream and persisted history', () => {
     assert.deepEqual(
       result.current.getMessages('session-1').map((message) => message.id),
       ['u1', 'a1'],
+    );
+  });
+
+  it('drops interleaved server/live echoes that never sort next to their twin', async () => {
+    // The completion flash: live rows are stamped when the client received
+    // them and persisted rows when the provider wrote them, so the timestamp
+    // sort weaves each copy between the other side's sibling rows —
+    // server text, live thinking, live text, server thinking — and no
+    // duplicate pair is adjacent.
+    page([
+      user(),
+      text('a1', 'assistant', 'first answer', '2026-01-01T00:00:03.000Z'),
+      thinking('p1', 'Let me reason about it.', '2026-01-01T00:00:04.500Z'),
+    ]);
+    const { result } = await loadedStore();
+    await act(async () => {
+      await result.current.fetchFromServer('session-1', { limit: 20, offset: 0 });
+    });
+
+    act(() => {
+      result.current.appendRealtime(
+        'session-1',
+        thinking('live-t1', 'Let me reason about it.', '2026-01-01T00:00:03.500Z'),
+      );
+      result.current.appendRealtime(
+        'session-1',
+        text('live-a1', 'assistant', 'first answer', '2026-01-01T00:00:04.000Z'),
+      );
+    });
+
+    const merged = result.current.getMessages('session-1');
+    assert.deepEqual(merged.map((message) => message.id), ['u1', 'a1', 'live-t1']);
+    const echoedContents = merged
+      .map((message) => `${message.kind}:${(message.content || '').trim()}`);
+    assert.equal(new Set(echoedContents).size, echoedContents.length);
+  });
+
+  it('keeps identical replies that belong to different turns', async () => {
+    page([
+      user(),
+      text('a1', 'assistant', 'same reply', '2026-01-01T00:00:03.000Z'),
+      text('u2', 'user', 'second prompt', '2026-01-01T00:00:05.000Z'),
+      text('a2', 'assistant', 'same reply', '2026-01-01T00:00:07.000Z'),
+    ]);
+    const { result } = await loadedStore();
+    await act(async () => {
+      await result.current.fetchFromServer('session-1', { limit: 20, offset: 0 });
+    });
+
+    // A user prompt starts a new echo scope: two turns answering with the
+    // exact same words are two genuine replies, not a server/live double.
+    assert.deepEqual(
+      result.current.getMessages('session-1').map((message) => message.id),
+      ['u1', 'a1', 'u2', 'a2'],
     );
   });
 });

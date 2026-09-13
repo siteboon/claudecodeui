@@ -120,9 +120,10 @@ async function requestSessionHistoryPage(
 }
 
 /**
- * Compute merged messages: server + realtime, deduped by id and adjacent
- * assistant echo (same trimmed text), so finalized stream rows do not stack
- * on top of the persisted copy before realtime is cleared.
+ * Compute merged messages: server + realtime, deduped by id and by
+ * same-turn assistant echo (same kind, same trimmed text — adjacency not
+ * required), so finalized stream rows do not stack on top of the persisted
+ * copy before realtime is cleared.
  */
 function readMessageTime(m: NormalizedMessage): number | null {
   const time = Date.parse(m.timestamp);
@@ -263,46 +264,87 @@ function isAssistantEchoedInSameTurnOnServer(
 }
 
 /**
+ * The rows this dedupe compares, keyed by (kind, trimmed content).
+ *
+ * Thinking rows carry no role on either side, so only text keeps the
+ * assistant gate. Empty content never dedupes.
+ */
+function assistantEchoScopeKey(message: NormalizedMessage): string | null {
+  const content = (message.content || '').trim();
+  if (content.length === 0) {
+    return null;
+  }
+  if (message.kind === 'thinking') {
+    return `thinking\n${content}`;
+  }
+  if (message.kind === 'text' && message.role === 'assistant') {
+    return `text\n${content}`;
+  }
+  return null;
+}
+
+/**
+ * Collapse duplicated assistant rows in the merged view.
+ *
  * After `finalizeStreaming`, the client holds a synthetic assistant `text` row
- * while the sessions API soon returns the same reply with a different id.
- * Those sit back-to-back in merged order and look like duplicate bubbles until
- * A persisted-tail refresh reconciles realtime. Collapse same-text assistant rows and
- * stream_placeholder → text when content matches. Thinking rows are matched the
- * same way: live event-stream rows and persisted transcript rows never share a
- * message id, so identical adjacent reasoning blocks are one block seen twice.
+ * while the sessions API soon returns the same reply with a different id, and
+ * live event-stream rows never share a message id with their persisted twins
+ * either — text and thinking alike are matched by content echo. The refresh
+ * that pulls the persisted copy back normally prunes the live one
+ * (`pruneRealtimeSupersededByServer`), but that prune locates the owning turn
+ * by walking chronology, and live rows (stamped when the client received them)
+ * and persisted rows (stamped when the provider wrote them) can interleave
+ * enough to mislocate the turn. When it misses, both copies survive into the
+ * merged view — and they are not adjacent: the timestamp sort weaves each copy
+ * in between the other side's sibling rows (server text, live thinking, live
+ * text, server thinking). Adjacency therefore cannot be relied on, so the
+ * comparison is scoped by turn instead of by position: within one user turn, a
+ * row whose (kind, trimmed content) was already emitted is dropped, however
+ * far after its twin it sorts. Rows are only ever removed, never reordered.
+ *
+ * A `stream_delta` row directly followed by its identical finalized text is
+ * still upgraded to the text row, as before.
+ *
+ * Accepted false-merge: a model that genuinely emits the exact same block
+ * twice inside one turn loses the second copy — the same trade the adjacent
+ * merge this replaces already made, over a wider window. Identical replies in
+ * different turns are unaffected: a user prompt or a tool call starts a new
+ * scope.
  */
 function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedMessage[] {
   const out: NormalizedMessage[] = [];
+  // (kind, trimmed content) pairs already emitted within the current turn.
+  let seenInTurn = new Set<string>();
+
   for (const m of merged) {
-    const prev = out[out.length - 1];
-    if (prev) {
-      if (prev.kind === 'stream_delta' && m.kind === 'text' && m.role === 'assistant') {
-        const ps = (prev.content || '').trim();
-        const ms = (m.content || '').trim();
-        if (ps.length > 0 && ps === ms) {
-          out[out.length - 1] = m;
-          continue;
-        }
-      }
-      if (
-        prev.kind === 'text'
-        && m.kind === 'text'
-        && prev.role === 'assistant'
-        && m.role === 'assistant'
-      ) {
-        const ms = (m.content || '').trim();
-        if (ms.length > 0 && ms === (prev.content || '').trim()) {
-          continue;
-        }
-      }
-      if (prev.kind === 'thinking' && m.kind === 'thinking') {
-        const ms = (m.content || '').trim();
-        if (ms.length > 0 && ms === (prev.content || '').trim()) {
-          continue;
-        }
-      }
+    if ((m.kind === 'text' && m.role === 'user') || m.kind === 'tool_use') {
+      seenInTurn = new Set<string>();
+      out.push(m);
+      continue;
     }
-    out.push(m);
+
+    const echoKey = assistantEchoScopeKey(m);
+    if (echoKey !== null && seenInTurn.has(echoKey)) {
+      continue;
+    }
+
+    const prev = out[out.length - 1];
+    if (
+      prev
+      && prev.kind === 'stream_delta'
+      && m.kind === 'text'
+      && m.role === 'assistant'
+      && (prev.content || '').trim().length > 0
+      && (prev.content || '').trim() === (m.content || '').trim()
+    ) {
+      out[out.length - 1] = m;
+    } else {
+      out.push(m);
+    }
+
+    if (echoKey !== null) {
+      seenInTurn.add(echoKey);
+    }
   }
   return out;
 }
