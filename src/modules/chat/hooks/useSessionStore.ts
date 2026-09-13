@@ -225,10 +225,22 @@ function findServerTurnRangeByOrdinal(
   return { start, end };
 }
 
-function isAssistantTextEchoedInSameTurnOnServer(
+type AssistantEchoKind = 'text' | 'thinking';
+
+/**
+ * Whether a live row's content already exists in the persisted transcript as a
+ * row of the same kind inside the same user turn.
+ *
+ * Live event-stream rows and persisted transcript rows derive their message ids
+ * from different sources, so `serverIds.has(id)` never matches them — text and
+ * thinking alike are matched by content echo instead. Thinking rows carry no
+ * role on either side, so only text keeps the assistant gate.
+ */
+function isAssistantEchoedInSameTurnOnServer(
   message: NormalizedMessage,
   serverMessages: NormalizedMessage[],
   realtimeMessages: NormalizedMessage[],
+  kind: AssistantEchoKind = 'text',
 ): boolean {
   const assistantText = (message.content || '').trim();
   if (!assistantText) {
@@ -244,8 +256,8 @@ function isAssistantTextEchoedInSameTurnOnServer(
   return serverMessages
     .slice(turnRange.start + 1, turnRange.end)
     .some((serverMessage) =>
-      serverMessage.kind === 'text'
-      && serverMessage.role === 'assistant'
+      serverMessage.kind === kind
+      && (kind !== 'text' || serverMessage.role === 'assistant')
       && (serverMessage.content || '').trim() === assistantText,
     );
 }
@@ -255,7 +267,9 @@ function isAssistantTextEchoedInSameTurnOnServer(
  * while the sessions API soon returns the same reply with a different id.
  * Those sit back-to-back in merged order and look like duplicate bubbles until
  * A persisted-tail refresh reconciles realtime. Collapse same-text assistant rows and
- * stream_placeholder → text when content matches.
+ * stream_placeholder → text when content matches. Thinking rows are matched the
+ * same way: live event-stream rows and persisted transcript rows never share a
+ * message id, so identical adjacent reasoning blocks are one block seen twice.
  */
 function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedMessage[] {
   const out: NormalizedMessage[] = [];
@@ -276,6 +290,12 @@ function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedM
         && prev.role === 'assistant'
         && m.role === 'assistant'
       ) {
+        const ms = (m.content || '').trim();
+        if (ms.length > 0 && ms === (prev.content || '').trim()) {
+          continue;
+        }
+      }
+      if (prev.kind === 'thinking' && m.kind === 'thinking') {
         const ms = (m.content || '').trim();
         if (ms.length > 0 && ms === (prev.content || '').trim()) {
           continue;
@@ -310,14 +330,24 @@ function pruneRealtimeSupersededByServer(
     }
 
     if (message.kind === 'stream_delta' || message.id === `__streaming_${message.sessionId}`) {
-      if (isAssistantTextEchoedInSameTurnOnServer(message, serverMessages, realtimeMessages)) {
+      if (isAssistantEchoedInSameTurnOnServer(message, serverMessages, realtimeMessages)) {
         return false;
       }
       return true;
     }
 
     if (message.kind === 'text' && message.role === 'assistant') {
-      if (isAssistantTextEchoedInSameTurnOnServer(message, serverMessages, realtimeMessages)) {
+      if (isAssistantEchoedInSameTurnOnServer(message, serverMessages, realtimeMessages)) {
+        return false;
+      }
+      return true;
+    }
+
+    // Live event-stream rows and persisted transcript rows never share a
+    // message id, so thinking is matched by content echo too (same as text);
+    // without this a persisted-tail refresh left every reasoning block doubled.
+    if (message.kind === 'thinking') {
+      if (isAssistantEchoedInSameTurnOnServer(message, serverMessages, realtimeMessages, 'thinking')) {
         return false;
       }
       return true;
