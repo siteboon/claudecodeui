@@ -1,4 +1,5 @@
 import type { ChildProcess } from 'node:child_process';
+import { StringDecoder } from 'node:string_decoder';
 
 import crossSpawn from 'cross-spawn';
 
@@ -17,6 +18,17 @@ const spawnFunction = crossSpawn;
 
 /** Handle registered in the process table, carrying the run's session key. */
 type PiProcessHandle = ChildProcess & { sessionId?: string; aborted?: boolean };
+
+/**
+ * Process-table entry for the window before the child exists (the resume model
+ * is still resolving). It only carries the `aborted` flag: an abort that lands
+ * there flags and removes it, and the spawn path checks the flag afterwards —
+ * without it, `abort` would report "not running" and the run would go on to
+ * spawn pi after the gateway had already closed it.
+ */
+function createPendingEntry(): PiProcessHandle {
+  return Object.assign({} as ChildProcess, { aborted: false });
+}
 
 /**
  * Options the pi runtime reads from one run call.
@@ -239,6 +251,16 @@ async function spawnPi(
     // Unified lifecycle contract: exactly one terminal `complete` per run
     // (close and error handlers can both fire for spawn failures).
     let completeSent = false;
+    // Decoders span chunk boundaries: stdout/stderr arrive in arbitrary Buffer
+    // chunks and a multi-byte character can straddle two of them, which a
+    // chunk-local `toString()` would render as U+FFFD.
+    const stdoutDecoder = new StringDecoder('utf8');
+    const stderrDecoder = new StringDecoder('utf8');
+
+    // Registered before the resume model resolves so abort can reach the run
+    // in that window (see createPendingEntry).
+    const pendingEntry = createPendingEntry();
+    activePiProcesses.set(processKey, pendingEntry);
 
     const notifyTerminalState = ({ code = null, error = null }: { code?: number | null; error?: string | null } = {}): void => {
       if (terminalNotificationSent) {
@@ -311,6 +333,14 @@ async function spawnPi(
     };
 
     void context.resolveResumeModel(sessionId ?? undefined, model).then(async (resolvedModel) => {
+      // Aborted while the model was still resolving: the gateway already sent
+      // this run's terminal complete on the abort path, so spawn nothing and
+      // stay silent.
+      if (pendingEntry.aborted) {
+        resolve();
+        return;
+      }
+
       const args = buildPiArgs({ providerSessionId, model: resolvedModel });
       const hasAttachments =
         normalizeAttachmentDescriptors(images).length > 0
@@ -341,7 +371,7 @@ async function spawnPi(
       piProcess.stdin?.end();
 
       piProcess.stdout?.on('data', (data: Buffer) => {
-        stdoutLineBuffer += data.toString();
+        stdoutLineBuffer += stdoutDecoder.write(data);
         const completeLines = stdoutLineBuffer.split(/\r?\n/);
         stdoutLineBuffer = completeLines.pop() || '';
 
@@ -351,7 +381,7 @@ async function spawnPi(
       });
 
       piProcess.stderr?.on('data', (data: Buffer) => {
-        const stderrText = data.toString();
+        const stderrText = stderrDecoder.write(data);
         if (!stderrText.trim()) {
           return;
         }
@@ -369,6 +399,10 @@ async function spawnPi(
         activePiProcesses.delete(finalSessionId);
         activePiProcesses.delete(processKey);
 
+        // 'close' fires after stdio flushed, so this is the moment to release
+        // whatever the decoder still held back before flushing the trailing
+        // (newline-less) line.
+        stdoutLineBuffer += stdoutDecoder.end();
         if (stdoutLineBuffer.trim()) {
           processPiOutputLine(stdoutLineBuffer.trim(), processCtx);
           stdoutLineBuffer = '';
@@ -451,7 +485,14 @@ async function spawnPi(
         }
         reject(error);
       });
-    }).catch(reject);
+    }).catch((error: unknown) => {
+      // Model resolution failed before any child existed: drop the pending
+      // entry unless a real process (or an abort) already replaced it.
+      if (activePiProcesses.get(processKey) === pendingEntry) {
+        activePiProcesses.delete(processKey);
+      }
+      reject(error);
+    });
   });
 }
 
@@ -462,9 +503,11 @@ function abortPiSession(sessionId: string): boolean {
   }
 
   // The abort handler sends the terminal complete (aborted: true); flag the
-  // process so its close handler does not emit a second one.
+  // process so its close handler does not emit a second one. A pending entry
+  // has no child to signal — flagging it is the whole contract, since the
+  // spawn path checks the flag once model resolution settles.
   process.aborted = true;
-  process.kill('SIGTERM');
+  process.kill?.('SIGTERM');
   activePiProcesses.delete(sessionId);
   return true;
 }

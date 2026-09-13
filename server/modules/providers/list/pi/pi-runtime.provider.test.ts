@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,6 +11,7 @@ import { AppError } from '@/shared/utils.js';
 import {
   abortPiSession,
   buildPiArgs,
+  isPiSessionActive,
   piRuntime,
   processPiOutputLine,
 } from './pi-runtime.provider.js';
@@ -122,6 +124,20 @@ if (mode === 'hang') {
   setTimeout(() => {}, 30_000);
 } else if (mode === 'garbage') {
   console.log('pi: warning: partially written line');
+} else if (mode === 'utf8-split') {
+  // A multi-byte character straddling two stdout chunks: chunk-local decoding
+  // renders U+FFFD, a streaming decoder reassembles it.
+  const line = JSON.stringify({
+    type: 'message_update',
+    usage: ${JSON.stringify(FINAL_USAGE)},
+    assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: '你好世界' },
+  });
+  const bytes = Buffer.from(line + '\\n', 'utf8');
+  const splitAt = bytes.indexOf(Buffer.from('你', 'utf8')) + 1;
+  process.stdout.write(bytes.subarray(0, splitAt));
+  setTimeout(() => {
+    process.stdout.write(bytes.subarray(splitAt));
+  }, 20);
 } else if (mode === 'model-error') {
   // pi exits 0 even when the model call failed; the error only shows up as
   // stopReason/errorMessage on the assistant message (verified against
@@ -394,9 +410,70 @@ test('spawnPi keeps stdout non-JSON lines streaming and still completes once', a
   });
 });
 
+test('spawnPi decodes multi-byte characters that span stdout chunks', async () => {
+  const messages: NormalizedMessage[] = [];
+  await withFakePiOnPath('utf8-split', async (tempRoot) => {
+    const writer = createWriter(messages);
+    await piRuntime.run('Say hi', { sessionId: 'app-utf8', cwd: tempRoot }, writer, makeRuntimeContext());
+
+    // The delta arrives as one intact text run — not as a mangled JSON line
+    // routed through the non-JSON fallback.
+    assert.deepEqual(
+      messages.filter((message) => message.kind === 'stream_delta').map((message) => message.content),
+      ['你好世界'],
+    );
+    assert.equal(JSON.stringify(messages).includes('\uFFFD'), false);
+    assert.equal(messages.filter((message) => message.kind === 'complete').length, 1);
+  });
+});
+
+test('abort during model resolution prevents the spawn entirely', async () => {
+  const messages: NormalizedMessage[] = [];
+  await withFakePiOnPath('replay', async (tempRoot) => {
+    const argsCapturePath = path.join(tempRoot, 'pi-abort-resolve-args.json');
+    process.env.PI_ARGS_CAPTURE = argsCapturePath;
+    const writer = createWriter(messages);
+
+    let releaseModelResolution!: () => void;
+    const modelResolutionGate = new Promise<void>((release) => {
+      releaseModelResolution = release;
+    });
+    const runPromise = piRuntime.run('Say hi', { sessionId: 'app-abort-resolve', cwd: tempRoot }, writer, makeRuntimeContext({
+      resolveResumeModel: async () => {
+        await modelResolutionGate;
+        return undefined;
+      },
+    }));
+    let rejection: unknown = null;
+    runPromise.catch((error) => {
+      rejection = error;
+    });
+
+    // The run is reachable while its model is still resolving — this is the
+    // window that used to report "not running" and then spawn anyway.
+    assert.equal(isPiSessionActive('app-abort-resolve'), true);
+    assert.equal(abortPiSession('app-abort-resolve'), true);
+    assert.equal(abortPiSession('app-abort-resolve'), false);
+
+    releaseModelResolution();
+    // Resolves (the gateway owns the aborted run's terminal complete) instead
+    // of rejecting.
+    await runPromise;
+
+    // No child was ever launched: the fake pi's argv capture never appeared.
+    assert.equal(existsSync(argsCapturePath), false);
+    // The aborted run sends nothing itself.
+    assert.equal(messages.length, 0);
+    assert.equal(rejection, null);
+    assert.equal(isPiSessionActive('app-abort-resolve'), false);
+  });
+});
+
 test('abortPiSession kills the run, suppresses the runtime complete and rejects once', async () => {
   const messages: NormalizedMessage[] = [];
   await withFakePiOnPath('hang', async (tempRoot) => {
+    const argsCapturePath = path.join(tempRoot, 'pi-abort-args.json');
+    process.env.PI_ARGS_CAPTURE = argsCapturePath;
     const writer = createWriter(messages);
     const runPromise = piRuntime.run('Say hi', { sessionId: 'app-abort', cwd: tempRoot }, writer, makeRuntimeContext());
     // The gateway rejects the run promise too; swallow it until assert.rejects.
@@ -405,15 +482,14 @@ test('abortPiSession kills the run, suppresses the runtime complete and rejects 
       rejection = error;
     });
 
-    // Poll until the child is registered in the process table, then abort.
-    let aborted = false;
-    for (let attempt = 0; attempt < 100 && !aborted; attempt += 1) {
-      aborted = abortPiSession('app-abort');
-      if (!aborted) {
-        await sleep(50);
-      }
+    // Poll until the child actually spawned (the fake writes its argv at
+    // startup) and then abort. Aborting earlier would land on the pre-spawn
+    // pending entry — that window has its own contract, covered above.
+    for (let attempt = 0; attempt < 100 && !existsSync(argsCapturePath); attempt += 1) {
+      await sleep(50);
     }
-    assert.equal(aborted, true);
+    assert.equal(existsSync(argsCapturePath), true);
+    assert.equal(abortPiSession('app-abort'), true);
     // A second abort finds nothing running.
     assert.equal(abortPiSession('app-abort'), false);
 

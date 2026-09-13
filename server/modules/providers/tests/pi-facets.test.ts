@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { PiProviderAuth } from '@/modules/providers/list/pi/pi-auth.provider.js';
+import { PI_ENV_CREDENTIAL_KEYS, PiProviderAuth } from '@/modules/providers/list/pi/pi-auth.provider.js';
 import { PiMcpProvider } from '@/modules/providers/list/pi/pi-mcp.provider.js';
 import {
   PI_PREDEFINED_MODELS,
@@ -26,19 +26,10 @@ const patchHomeDir = (nextHomeDir: string) => {
   };
 };
 
-/**
- * Environment variables pi accepts as credentials. The list mirrors the auth
- * adapter's own probe set (pi's env-api-keys mapping) so "no credentials"
- * tests stay honest even when the developer machine running the suite has a
- * real key exported.
- */
-const PI_ENV_CREDENTIAL_KEYS = [
-  'ANTHROPIC_API_KEY',
-  'ANTHROPIC_AUTH_TOKEN',
-  'OPENAI_API_KEY',
-  'GEMINI_API_KEY',
-  'ZAI_CODING_CN_API_KEY',
-];
+// Environment scrubbing uses the auth adapter's own manifest of the env
+// variables pi 0.85.1 reads as credentials (pi's env-api-keys mapping), so
+// "no credentials" tests stay honest even when the developer machine running
+// the suite has a real key exported.
 
 const withEnvironmentCredentials = async (
   values: Record<string, string>,
@@ -122,6 +113,21 @@ const writeSkill = async (skillDir: string, name: string, description: string): 
 // ---------------------------------------------------------------------------
 // auth
 // ---------------------------------------------------------------------------
+
+test('the env credential manifest covers the probed providers and names its exclusions', () => {
+  // The credential probe asks pi about exactly these providers; each must have
+  // its env key in the manifest, or a usable key could sit in the environment
+  // while the scrubbed tests report "no credentials".
+  for (const key of ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'ZAI_CODING_CN_API_KEY']) {
+    assert.ok(PI_ENV_CREDENTIAL_KEYS.includes(key), `${key} is missing from the manifest`);
+  }
+
+  // Deliberate exclusions (see the manifest's comment): special gateways and
+  // the AWS credential chain are not plain per-provider API keys.
+  assert.equal(PI_ENV_CREDENTIAL_KEYS.includes('ANT_LING_API_KEY'), false);
+  assert.equal(PI_ENV_CREDENTIAL_KEYS.includes('OPENCODE_API_KEY'), false);
+  assert.equal(PI_ENV_CREDENTIAL_KEYS.some((key) => key.startsWith('AWS_')), false);
+});
 
 test('auth reports an installed pi with no credentials as merely unauthenticated', async () => {
   await withIsolatedPiHome(async (homeDir) => {
