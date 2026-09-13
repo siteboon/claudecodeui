@@ -88,7 +88,7 @@ const buildPiTokenUsage = (usage: AnyRecord): AnyRecord | undefined => {
  *   bubble while every other kind is appended one row per message, so
  *   forwarding each `thinking_delta` would flood the transcript with one
  *   fragment per token. pi makes this cheap: `thinking_end` carries the
- *   block's full content (docs/pi-notes.md).
+ *   block's full content (pi 0.85.1).
  * - `message_update` + `thinking_start`/`thinking_delta` → [] (dropped; the
  *   `thinking_end` full content replaces them)
  * - `message_update` + other `*_start`/`*_end` (incl. `text_end`, whose full
@@ -148,7 +148,7 @@ export function mapPiEventToMessages(rawEvent: unknown, sessionId: string | null
     // (useChatRealtimeHandlers) and appends every other kind verbatim via
     // sessionStore.appendRealtime, so streaming `thinking_delta` events would
     // render one thinking fragment per token. pi's `thinking_end` already
-    // carries the full block content (docs/pi-notes.md), so start/delta are
+    // carries the full block content (pi 0.85.1), so start/delta are
     // simply dropped. Content is read verbatim — no trim.
     if (updateType === 'thinking_end') {
       const content = readVerbatimString(update?.content);

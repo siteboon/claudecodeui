@@ -1,24 +1,68 @@
+import type { ChildProcess } from 'node:child_process';
+
 import crossSpawn from 'cross-spawn';
 
 import {
   appendFilesInputTag,
   appendImagesInputTag,
-  normalizeAttachmentDescriptors
+  normalizeAttachmentDescriptors,
 } from '@/shared/image-attachments.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
+import type { NormalizedMessage, ProviderRuntimeContext, ProviderRuntimeWriter } from '@/shared/types.js';
 import { AppError, createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell } from '@/shared/utils.js';
 
 // cross-spawn resolves .cmd shims/PATHEXT on Windows and delegates to
 // child_process.spawn everywhere else.
 const spawnFunction = crossSpawn;
 
-const activePiProcesses = new Map();
+/** Handle registered in the process table, carrying the run's session key. */
+type PiProcessHandle = ChildProcess & { sessionId?: string; aborted?: boolean };
+
+/**
+ * Options the pi runtime reads from one run call.
+ *
+ * `permissionMode` and `effort` are deliberately absent: pi has no permission
+ * system and no reasoning-effort lever (see the pi capabilities), so neither
+ * option maps to any CLI flag or env var.
+ */
+type PiRunOptions = {
+  sessionId?: string | null;
+  projectPath?: string;
+  cwd?: string;
+  model?: string | null;
+  sessionSummary?: string;
+  images?: unknown;
+  files?: unknown;
+};
+
+/** Cumulative per-run usage counters pi attaches to every JSON event. */
+type PiUsageCounters = {
+  input?: number;
+  output?: number;
+  cacheRead?: number;
+  totalTokens?: number;
+  cost?: { total?: number };
+};
+
+/** Mutable per-run state bag threaded through `processPiOutputLine`. */
+type PiOutputContext = {
+  ws: ProviderRuntimeWriter;
+  sessionId?: string | null;
+  getCapturedSessionId(): string | null;
+  registerSession(nextSessionId: string): void;
+  setUsage(usage: PiUsageCounters): void;
+  normalizeMessage(raw: unknown, sessionId: string | null): NormalizedMessage[];
+};
+
+const activePiProcesses = new Map<string, PiProcessHandle>();
 
 /**
  * Builds the `pi -p --mode json` argument vector for one run.
  *
- * Verified against pi 0.85.1 (docs/pi-notes.md):
- * - the prompt is the final positional argument (print mode reads it, no stdin);
+ * Verified against pi 0.85.1:
+ * - the prompt is the final positional argument, preceded by `--` so a prompt
+ *   that begins with `-` is never parsed as an option (pi treats everything
+ *   after `--` as positional messages);
  * - `--session` resumes a provider session with its full uuid (resumed runs
  *   keep the same session id and append to the same session file);
  * - `--model` accepts a bare model id or a `provider/model` pair;
@@ -27,7 +71,15 @@ const activePiProcesses = new Map();
  *
  * Exported for tests only.
  */
-export function buildPiArgs({ providerSessionId, model, prompt }) {
+export function buildPiArgs({
+  providerSessionId,
+  model,
+  prompt,
+}: {
+  providerSessionId?: string | null;
+  model?: string | null;
+  prompt?: string | null;
+}): string[] {
   const args = ['-p', '--mode', 'json'];
   if (providerSessionId) {
     args.push('--session', providerSessionId);
@@ -36,7 +88,7 @@ export function buildPiArgs({ providerSessionId, model, prompt }) {
     args.push('--model', model);
   }
   if (prompt && prompt.trim()) {
-    args.push(flattenPromptForWindowsShell(prompt));
+    args.push('--', flattenPromptForWindowsShell(prompt));
   }
   return args;
 }
@@ -47,12 +99,13 @@ export function buildPiArgs({ providerSessionId, model, prompt }) {
  * Only the `session` header carries an id; the streaming events reference
  * messages and tool calls, never the session.
  */
-function readPiSessionId(event) {
+function readPiSessionId(event: unknown): string | null {
   if (!event || typeof event !== 'object') {
     return null;
   }
 
-  return event.type === 'session' && typeof event.id === 'string' ? event.id : null;
+  const candidate = event as { type?: unknown; id?: unknown };
+  return candidate.type === 'session' && typeof candidate.id === 'string' ? candidate.id : null;
 }
 
 /**
@@ -62,7 +115,14 @@ function readPiSessionId(event) {
  *
  * pi reports cache reads separately; like opencode, they count as input.
  */
-function readPiTokenBudget(usage) {
+function readPiTokenBudget(usage: PiUsageCounters | null): {
+  used: number;
+  inputTokens: number;
+  outputTokens: number;
+  breakdown: { input: number; output: number };
+  totalTokens: number;
+  cost?: number;
+} | null {
   if (!usage || typeof usage !== 'object') {
     return null;
   }
@@ -102,12 +162,12 @@ function readPiTokenBudget(usage) {
  * - Event-to-message mapping is `context.normalizeMessage`; the runtime never
  *   interprets event contents itself.
  */
-export function processPiOutputLine(line, ctx) {
+export function processPiOutputLine(line: string, ctx: PiOutputContext): void {
   if (!line || !line.trim()) {
     return;
   }
 
-  let event;
+  let event: unknown;
   try {
     event = JSON.parse(line);
   } catch {
@@ -125,8 +185,11 @@ export function processPiOutputLine(line, ctx) {
     if (nextSessionId) {
       ctx.registerSession(nextSessionId);
     }
-    if (event && typeof event === 'object' && event.usage && typeof event.usage === 'object') {
-      ctx.setUsage(event.usage);
+    if (event && typeof event === 'object' && 'usage' in event) {
+      const usage = (event as { usage?: unknown }).usage;
+      if (usage && typeof usage === 'object') {
+        ctx.setUsage(usage as PiUsageCounters);
+      }
     }
     const normalized = ctx.normalizeMessage(event, ctx.getCapturedSessionId() || ctx.sessionId || null);
     for (const msg of normalized) {
@@ -144,7 +207,12 @@ export function processPiOutputLine(line, ctx) {
   }
 }
 
-async function spawnPi(command, options = {}, ws, context) {
+async function spawnPi(
+  command: string,
+  options: PiRunOptions = {},
+  ws: ProviderRuntimeWriter,
+  context: ProviderRuntimeContext,
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const {
       sessionId,
@@ -153,10 +221,7 @@ async function spawnPi(command, options = {}, ws, context) {
       model,
       sessionSummary,
       images,
-      files
-      // `permissionMode` and `effort` are deliberately NOT destructured: pi
-      // has no permission system and no reasoning-effort lever (see the pi
-      // capabilities), so neither option maps to any CLI flag or env var.
+      files,
     } = options;
     // Callers pass the stable app session id; the CLI resumes with the
     // provider-native id recorded on the session row.
@@ -167,15 +232,15 @@ async function spawnPi(command, options = {}, ws, context) {
     const processKey = sessionId || Date.now().toString();
     let capturedSessionId = providerSessionId;
     let sessionCreatedSent = false;
-    let lastUsage = null;
+    let lastUsage: PiUsageCounters | null = null;
     let stdoutLineBuffer = '';
     let terminalNotificationSent = false;
-    let piProcess = null;
+    let piProcess: PiProcessHandle | null = null;
     // Unified lifecycle contract: exactly one terminal `complete` per run
     // (close and error handlers can both fire for spawn failures).
     let completeSent = false;
 
-    const notifyTerminalState = ({ code = null, error = null } = {}) => {
+    const notifyTerminalState = ({ code = null, error = null }: { code?: number | null; error?: string | null } = {}): void => {
       if (terminalNotificationSent) {
         return;
       }
@@ -203,7 +268,7 @@ async function spawnPi(command, options = {}, ws, context) {
       });
     };
 
-    const registerSession = (nextSessionId) => {
+    const registerSession = (nextSessionId: string): void => {
       if (!nextSessionId || capturedSessionId === nextSessionId) {
         return;
       }
@@ -234,18 +299,18 @@ async function spawnPi(command, options = {}, ws, context) {
       }
     };
 
-    const processCtx = {
+    const processCtx: PiOutputContext = {
       ws,
       sessionId,
       getCapturedSessionId: () => capturedSessionId,
       registerSession,
-      setUsage: (usage) => {
+      setUsage: (usage: PiUsageCounters) => {
         lastUsage = usage;
       },
-      normalizeMessage: (raw, normalizedSessionId) => context.normalizeMessage(raw, normalizedSessionId),
+      normalizeMessage: (raw: unknown, normalizedSessionId: string | null) => context.normalizeMessage(raw, normalizedSessionId),
     };
 
-    void context.resolveResumeModel(sessionId, model).then(async (resolvedModel) => {
+    void context.resolveResumeModel(sessionId ?? undefined, model).then(async (resolvedModel) => {
       const args = buildPiArgs({ providerSessionId, model: resolvedModel });
       const hasAttachments =
         normalizeAttachmentDescriptors(images).length > 0
@@ -254,12 +319,13 @@ async function spawnPi(command, options = {}, ws, context) {
         // Attachment paths ride along as <images_input>/<files_input> blocks
         // appended to the prompt; the session history reader strips the tags
         // back out. pi is a .cmd shim on Windows, so the whole argument must
-        // be newline-free or cmd.exe silently truncates it.
+        // be newline-free or cmd.exe silently truncates it. The leading `--`
+        // keeps a prompt that starts with `-` positional.
         const promptWithAttachments = appendFilesInputTag(
           appendImagesInputTag(command?.trim() || '', images),
-          files
+          files,
         );
-        args.push(flattenPromptForWindowsShell(promptWithAttachments));
+        args.push('--', flattenPromptForWindowsShell(promptWithAttachments));
       }
 
       piProcess = spawnFunction('pi', args, {
@@ -268,13 +334,13 @@ async function spawnPi(command, options = {}, ws, context) {
         // pi has no permission levers, so unlike opencode there is no env
         // override to merge here — the user's own pi config governs.
         env: { ...process.env },
-      });
+      }) as PiProcessHandle;
 
       activePiProcesses.set(processKey, piProcess);
       piProcess.sessionId = processKey;
-      piProcess.stdin.end();
+      piProcess.stdin?.end();
 
-      piProcess.stdout.on('data', (data) => {
+      piProcess.stdout?.on('data', (data: Buffer) => {
         stdoutLineBuffer += data.toString();
         const completeLines = stdoutLineBuffer.split(/\r?\n/);
         stdoutLineBuffer = completeLines.pop() || '';
@@ -284,7 +350,7 @@ async function spawnPi(command, options = {}, ws, context) {
         });
       });
 
-      piProcess.stderr.on('data', (data) => {
+      piProcess.stderr?.on('data', (data: Buffer) => {
         const stderrText = data.toString();
         if (!stderrText.trim()) {
           return;
@@ -298,7 +364,7 @@ async function spawnPi(command, options = {}, ws, context) {
         }));
       });
 
-      piProcess.on('close', async (code) => {
+      piProcess.on('close', async (code: number | null) => {
         const finalSessionId = sessionId || capturedSessionId || processKey;
         activePiProcesses.delete(finalSessionId);
         activePiProcesses.delete(processKey);
@@ -323,7 +389,7 @@ async function spawnPi(command, options = {}, ws, context) {
 
         // Terminal complete — skipped for aborted runs (abort-session
         // already sent the aborted complete on this run's behalf).
-        if (!completeSent && !piProcess.aborted) {
+        if (!completeSent && !piProcess?.aborted) {
           completeSent = true;
           ws.send(createCompleteMessage({
             provider: 'pi',
@@ -355,7 +421,7 @@ async function spawnPi(command, options = {}, ws, context) {
         reject(new Error(code === null ? 'pi process was terminated' : `pi exited with code ${code}`));
       });
 
-      piProcess.on('error', async (error) => {
+      piProcess.on('error', async (error: NodeJS.ErrnoException) => {
         const finalSessionId = sessionId || capturedSessionId || processKey;
         activePiProcesses.delete(finalSessionId);
         activePiProcesses.delete(processKey);
@@ -372,11 +438,11 @@ async function spawnPi(command, options = {}, ws, context) {
           sessionId: finalSessionId,
           provider: 'pi',
         }));
-        if (!completeSent && !piProcess.aborted) {
+        if (!completeSent && !piProcess?.aborted) {
           completeSent = true;
           ws.send(createCompleteMessage({ provider: 'pi', sessionId: finalSessionId, exitCode: 1 }));
         }
-        notifyTerminalState({ error });
+        notifyTerminalState({ error: error.message });
         if (notInstalled) {
           reject(new AppError('Pi CLI is not installed. Install it from https://pi.dev/', {
             code: 'PROVIDER_NOT_INSTALLED',
@@ -389,7 +455,7 @@ async function spawnPi(command, options = {}, ws, context) {
   });
 }
 
-function abortPiSession(sessionId) {
+function abortPiSession(sessionId: string): boolean {
   const process = activePiProcesses.get(sessionId);
   if (!process) {
     return false;
@@ -403,11 +469,11 @@ function abortPiSession(sessionId) {
   return true;
 }
 
-function isPiSessionActive(sessionId) {
+function isPiSessionActive(sessionId: string): boolean {
   return activePiProcesses.has(sessionId);
 }
 
-function getActivePiSessions() {
+function getActivePiSessions(): string[] {
   return Array.from(activePiProcesses.keys());
 }
 

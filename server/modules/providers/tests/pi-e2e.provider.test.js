@@ -379,7 +379,7 @@ test(
       assert.equal(bashResult.toolResult.isError, false);
       assert.match(bashResult.toolResult.content, /pi-e2e-marker-dir/);
 
-      // Calibration observation (docs/pi-notes.md): pi finalizes one assistant
+      // Calibration observation (pi 0.85.1): pi finalizes one assistant
       // message per tool round, so a tool turn streams more than one
       // stream_end. Logged for the e2e calibration notes, not asserted.
       const streamEnds = turn.connection.frames.filter((frame) => frame.kind === 'stream_end');

@@ -247,6 +247,14 @@ function notifyUserIfEnabled({ userId, event }) {
   }
 }
 
+/**
+ * Notifies the user that one provider run stopped or completed.
+ *
+ * Typed via JSDoc so TypeScript provider runtimes can call it while this
+ * module is still JavaScript.
+ *
+ * @param {{ userId?: string | number | null, provider: string, sessionId?: string | null, stopReason?: string, sessionName?: string | null }} options
+ */
 function notifyRunStopped({ userId, provider, sessionId = null, stopReason = 'completed', sessionName = null }) {
   notifyUserIfEnabled({
     userId,
@@ -283,6 +291,14 @@ function notifyBackgroundWorkCompleted({ userId, provider, sessionId = null, ses
   });
 }
 
+/**
+ * Notifies the user that one provider run failed.
+ *
+ * Typed via JSDoc so TypeScript provider runtimes can call it while this
+ * module is still JavaScript.
+ *
+ * @param {{ userId?: string | number | null, provider: string, sessionId?: string | null, error?: unknown, sessionName?: string | null }} options
+ */
 function notifyRunFailed({ userId, provider, sessionId = null, error, sessionName = null }) {
   const errorMessage = normalizeErrorMessage(error);
 

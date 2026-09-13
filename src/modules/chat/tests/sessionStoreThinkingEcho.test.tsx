@@ -199,7 +199,9 @@ describe('thinking echoes between live stream and persisted history', () => {
     });
 
     const merged = result.current.getMessages('session-1');
-    assert.deepEqual(merged.map((message) => message.id), ['u1', 'a1', 'live-t1']);
+    // The persisted rows win over their live twins — the server copy carries
+    // the stable id the rest of the app addresses rows by.
+    assert.deepEqual(merged.map((message) => message.id), ['u1', 'a1', 'p1']);
     const echoedContents = merged
       .map((message) => `${message.kind}:${(message.content || '').trim()}`);
     assert.equal(new Set(echoedContents).size, echoedContents.length);
@@ -222,6 +224,29 @@ describe('thinking echoes between live stream and persisted history', () => {
     assert.deepEqual(
       result.current.getMessages('session-1').map((message) => message.id),
       ['u1', 'a1', 'u2', 'a2'],
+    );
+  });
+
+  it('keeps identical rows repeated within one persisted turn', async () => {
+    // The authoritative source may genuinely contain the same block twice in
+    // one turn (a model repeating itself, identical tool captions). Content
+    // dedupe exists only for server-versus-realtime echoes, so a
+    // persisted-only view must render both rows.
+    page([
+      user(),
+      text('a1', 'assistant', 'done', '2026-01-01T00:00:03.000Z'),
+      text('a2', 'assistant', 'done', '2026-01-01T00:00:04.000Z'),
+      thinking('p1', 'short block', '2026-01-01T00:00:05.000Z'),
+      thinking('p2', 'short block', '2026-01-01T00:00:06.000Z'),
+    ]);
+    const { result } = await loadedStore();
+    await act(async () => {
+      await result.current.fetchFromServer('session-1', { limit: 20, offset: 0 });
+    });
+
+    assert.deepEqual(
+      result.current.getMessages('session-1').map((message) => message.id),
+      ['u1', 'a1', 'a2', 'p1', 'p2'],
     );
   });
 });

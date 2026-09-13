@@ -28,7 +28,10 @@ export const PI_PREDEFINED_MODELS: ProviderModelsDefinition = {
     { value: 'zai-coding-cn/glm-5.3', label: 'GLM 5.3', description: 'Z.ai Coding CN', effort: { values: [] } },
     { value: 'zai-coding-cn/glm-5.3-flash', label: 'GLM 5.3 Flash', description: 'Z.ai Coding CN', effort: { values: [] } },
     { value: 'zai-coding-cn/glm-5.2', label: 'GLM 5.2', description: 'Z.ai Coding CN', effort: { values: [] } },
-    { value: 'openai/gpt-5.6', label: 'GPT-5.6', description: 'OpenAI', effort: { values: [] } },
+    // pi's catalog has no bare `gpt-5.6` — the 5.6 generation ships as
+    // luna/sol/terra tiers (sol is the flagship), so only concrete ids are
+    // listed. Verified against the pi 0.85.1 model catalog.
+    { value: 'openai/gpt-5.6-sol', label: 'GPT-5.6 Sol', description: 'OpenAI', effort: { values: [] } },
     { value: 'openai/gpt-5.4', label: 'GPT-5.4', description: 'OpenAI', effort: { values: [] } },
     { value: 'openai/gpt-5.4-mini', label: 'GPT-5.4 mini', description: 'OpenAI', effort: { values: [] } },
   ],

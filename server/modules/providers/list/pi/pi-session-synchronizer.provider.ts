@@ -16,6 +16,19 @@ import { normalizeTranscriptEntry, readPiTranscriptEntries } from './pi-sessions
 const PROVIDER = 'pi';
 const FALLBACK_TITLE = 'Untitled pi Session';
 
+/**
+ * Clock-skew tolerance when checking that an app row predates a transcript
+ * session (app row created first, then pi spawns and writes the header).
+ */
+const PENDING_BINDING_SKEW_MS = 2 * 60 * 1000;
+
+/**
+ * How long after an app row's creation a first-run transcript may still be
+ * bound to it. Beyond this, the row is a stale leftover from a failed or
+ * abandoned run and must not absorb an unrelated CLI session's provider id.
+ */
+const PENDING_BINDING_WINDOW_MS = 15 * 60 * 1000;
+
 type PiSessionHeader = {
   providerSessionId: string;
   projectPath: string;
@@ -31,9 +44,9 @@ type PiSessionTranscript = {
 /**
  * Extracts the `session` header entry every pi transcript starts with.
  *
- * Verified layout (docs/pi-notes.md, pi 0.85.1): the first line carries the
- * provider-native session id and the working directory the session ran in —
- * the only two values the sidebar needs to place the session.
+ * Verified against pi 0.85.1: the first line carries the provider-native
+ * session id, a timestamp, and the working directory the session ran in —
+ * the values the sidebar needs to place the session.
  */
 const readPiSessionHeader = (entries: AnyRecord[]): PiSessionHeader | null => {
   for (const entry of entries) {
@@ -217,7 +230,7 @@ export class PiSessionSynchronizer implements IProviderSessionSynchronizer {
 
     const pendingAppSession = sessionsDb.getSessionByProviderSessionId(header.providerSessionId)
       ?? sessionsDb.getSessionById(header.providerSessionId)
-      ?? sessionsDb.findLatestPendingAppSession(this.provider, header.projectPath);
+      ?? this.findCorrelatedPendingAppSession(header);
     if (pendingAppSession && !pendingAppSession.provider_session_id) {
       // Slow model responses can let the watcher index the transcript before
       // the runtime reports its provider id back through the websocket
@@ -251,5 +264,39 @@ export class PiSessionSynchronizer implements IProviderSessionSynchronizer {
       transcript.updatedAt,
       null,
     );
+  }
+
+  /**
+   * Project-scoped fallback for the pending-row race, guarded by correlation.
+   *
+   * `findLatestPendingAppSession` matches only provider + project path, so an
+   * unrelated pending row (another tab's in-flight run in the same project, or
+   * a stale row left by a failed run) could otherwise steal the provider id:
+   * `assignProviderSessionId` would bind it, and the sidebar would show a
+   * direct CLI session under that app row. A transcript only correlates with
+   * an app row when the row was created before the transcript's session
+   * started (the app allocates the row first, then spawns pi) and recently
+   * enough to still belong to the run that created it.
+   */
+  private findCorrelatedPendingAppSession(header: PiSessionHeader) {
+    const candidate = sessionsDb.findLatestPendingAppSession(this.provider, header.projectPath);
+    if (!candidate) {
+      return null;
+    }
+
+    const rowCreatedAt = Date.parse(candidate.created_at);
+    const sessionStartedAt = Date.parse(header.createdAt);
+    if (!Number.isFinite(rowCreatedAt) || !Number.isFinite(sessionStartedAt)) {
+      return null;
+    }
+
+    if (rowCreatedAt > sessionStartedAt + PENDING_BINDING_SKEW_MS) {
+      return null;
+    }
+    if (sessionStartedAt - rowCreatedAt > PENDING_BINDING_WINDOW_MS) {
+      return null;
+    }
+
+    return candidate;
   }
 }

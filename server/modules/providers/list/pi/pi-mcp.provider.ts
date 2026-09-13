@@ -17,7 +17,7 @@ export class PiMcpProvider extends McpProvider {
   }
 
   async upsertServer(_input: UpsertProviderMcpServerInput): Promise<ProviderMcpServer> {
-    throw new AppError('Pi does not support MCP', { code: 'NOT_SUPPORTED' });
+    throw new AppError('Pi does not support MCP', { code: 'NOT_SUPPORTED', statusCode: 400 });
   }
 
   async removeServer(_input: {
@@ -25,11 +25,11 @@ export class PiMcpProvider extends McpProvider {
     scope?: McpScope;
     workspacePath?: string;
   }): Promise<{ removed: boolean; provider: 'pi'; name: string; scope: McpScope }> {
-    throw new AppError('Pi does not support MCP', { code: 'NOT_SUPPORTED' });
+    throw new AppError('Pi does not support MCP', { code: 'NOT_SUPPORTED', statusCode: 400 });
   }
 
   protected async readScopedServers(_scope: McpScope, _workspacePath: string): Promise<Record<string, unknown>> {
-    throw new AppError('Pi does not support MCP', { code: 'NOT_SUPPORTED' });
+    throw new AppError('Pi does not support MCP', { code: 'NOT_SUPPORTED', statusCode: 400 });
   }
 
   protected async writeScopedServers(
@@ -37,11 +37,11 @@ export class PiMcpProvider extends McpProvider {
     _workspacePath: string,
     _servers: Record<string, unknown>,
   ): Promise<void> {
-    throw new AppError('Pi does not support MCP', { code: 'NOT_SUPPORTED' });
+    throw new AppError('Pi does not support MCP', { code: 'NOT_SUPPORTED', statusCode: 400 });
   }
 
   protected buildServerConfig(_input: UpsertProviderMcpServerInput): Record<string, unknown> {
-    throw new AppError('Pi does not support MCP', { code: 'NOT_SUPPORTED' });
+    throw new AppError('Pi does not support MCP', { code: 'NOT_SUPPORTED', statusCode: 400 });
   }
 
   protected normalizeServerConfig(
@@ -49,6 +49,6 @@ export class PiMcpProvider extends McpProvider {
     _name: string,
     _rawConfig: unknown,
   ): ProviderMcpServer | null {
-    throw new AppError('Pi does not support MCP', { code: 'NOT_SUPPORTED' });
+    throw new AppError('Pi does not support MCP', { code: 'NOT_SUPPORTED', statusCode: 400 });
   }
 }

@@ -76,12 +76,26 @@ const withPath = async (nextPath: string, run: () => Promise<void>): Promise<voi
   }
 };
 
-/** Writes a `pi` stub that exits 0 for `--version`, then hands back its dir. */
-const writeFakePiCli = async (binDir: string): Promise<string> => {
+/**
+ * Writes a `pi` stub that exits 0 for `--version` and answers
+ * `auth check … --json` with the given document (nothing when null, which
+ * leaves the probe unable to resolve credentials).
+ */
+const writeFakePiCli = async (
+  binDir: string,
+  authCheckJson: Record<string, unknown> | null = null,
+): Promise<string> => {
   await mkdir(binDir, { recursive: true });
   // A shebang script resolves through the kernel on macOS/Linux; the CI and
   // developer suites for this repo never run the server tests on Windows.
-  await writeFile(path.join(binDir, 'pi'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  const authLine = authCheckJson
+    ? `printf '%s' '${JSON.stringify(authCheckJson).replace(/'/g, "'\\''")}'`
+    : ':';
+  await writeFile(
+    path.join(binDir, 'pi'),
+    `#!/bin/sh\nif [ "$1" = "auth" ]; then ${authLine}; fi\nexit 0\n`,
+    { mode: 0o755 },
+  );
   return binDir;
 };
 
@@ -147,31 +161,44 @@ test('auth reports pi as not installed when the CLI is missing from PATH', async
 
 test('auth accepts provider API keys exported into the environment', async () => {
   await withIsolatedPiHome(async (homeDir) => {
-    const binDir = await writeFakePiCli(path.join(homeDir, 'bin'));
+    // pi itself resolves env API keys, so its auth check answers ready with
+    // authType api_key — the adapter passes that contract through.
+    const binDir = await writeFakePiCli(path.join(homeDir, 'bin'), {
+      status: 'ready',
+      provider: 'anthropic',
+      authType: 'api_key',
+    });
     await withPath(binDir, async () => {
       await withEnvironmentCredentials({ ANTHROPIC_API_KEY: 'test-key-placeholder' }, async () => {
         const status = await new PiProviderAuth().getStatus();
 
         assert.equal(status.authenticated, true);
-        assert.equal(status.method, 'env');
+        assert.equal(status.method, 'api_key');
         assert.equal(status.email, null);
       });
     });
   });
 });
 
-test('auth prefers the pi auth store over environment keys', async () => {
+test('auth does not treat an empty auth store as usable credentials', async () => {
   await withIsolatedPiHome(async (homeDir) => {
-    const binDir = await writeFakePiCli(path.join(homeDir, 'bin'));
+    // pi 0.85.1 resolves typed entries through its credential store: an
+    // empty `auth.json` establishes nothing, so the adapter must not report
+    // oauth credentials for a file that merely exists.
+    const binDir = await writeFakePiCli(path.join(homeDir, 'bin'), {
+      status: 'not_ready',
+      provider: 'anthropic',
+      reason: 'credentials_not_configured',
+    });
     const agentDir = path.join(homeDir, '.pi', 'agent');
     await mkdir(agentDir, { recursive: true });
     await writeFile(path.join(agentDir, 'auth.json'), '{}\n', 'utf8');
     await withPath(binDir, async () => {
-      await withEnvironmentCredentials({ OPENAI_API_KEY: 'test-key-placeholder' }, async () => {
+      await withEnvironmentCredentials({}, async () => {
         const status = await new PiProviderAuth().getStatus();
 
-        assert.equal(status.authenticated, true);
-        assert.equal(status.method, 'oauth');
+        assert.equal(status.authenticated, false);
+        assert.equal(status.method, null);
       });
     });
   });

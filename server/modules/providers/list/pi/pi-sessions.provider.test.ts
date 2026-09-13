@@ -31,7 +31,7 @@ test('mapPiEventToMessages maps pi stream events onto normalized messages', () =
     [],
   );
 
-  // `thinking_end` carries the full block content (docs/pi-notes.md) and is
+  // `thinking_end` carries the full block content (pi 0.85.1) and is
   // the single thinking outlet: one message per reasoning block, verbatim
   // (no trim), so leading/trailing whitespace survives.
   const thinkingEnd = mapPiEventToMessages(
@@ -122,7 +122,7 @@ test('mapPiEventToMessages maps pi stream events onto normalized messages', () =
 });
 
 test('mapPiEventToMessages maps model errors to error rows and ignores lifecycle events', () => {
-  // pi exits 0 even when the model call failed (docs/pi-notes.md), so this
+  // pi exits 0 even when the model call failed (pi 0.85.1), so this
   // mapping is the only channel a 403/500 has to the UI.
   const modelError = mapPiEventToMessages(
     {

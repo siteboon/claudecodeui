@@ -204,11 +204,16 @@ test('synchronize(since) skips files whose mtime is older than the cursor', asyn
 test('synchronizeFile adopts the pending app session instead of creating a duplicate', async () => {
   await withIsolatedPiHome(async (homeDir) => {
     const projectPath = path.join(homeDir, 'workspaces', 'race');
+    // The real race: the app allocates its row a few seconds before pi
+    // writes the transcript header, so the header must predate the row's
+    // CURRENT_TIMESTAMP only by a small, correlated margin.
+    const sessionStart = new Date(Date.now() - 3_000);
+    const fileNameStamp = sessionStart.toISOString().replace(/[:.]/g, '-');
     const transcriptPath = await writePiSession(homeDir, {
       encodedCwd: '--race--',
-      fileName: `2026-09-12T17-00-00-000Z_${SESSION_ONE_ID}.jsonl`,
+      fileName: `${fileNameStamp}_${SESSION_ONE_ID}.jsonl`,
       lines: [
-        sessionHeaderLine(SESSION_ONE_ID, '2026-09-12T17:00:00.000Z', projectPath),
+        sessionHeaderLine(SESSION_ONE_ID, sessionStart.toISOString(), projectPath),
         userMessageLine('Why is the build red?'),
       ],
     });
@@ -223,6 +228,65 @@ test('synchronizeFile adopts the pending app session instead of creating a dupli
       const adopted = sessionsDb.getSessionById('app-session-1');
       assert.equal(adopted?.provider_session_id, SESSION_ONE_ID);
       assert.equal(adopted?.custom_name, 'Why is the build red?');
+    });
+  });
+});
+
+test('synchronizeFile does not bind a pending app session newer than the transcript session', async () => {
+  await withIsolatedPiHome(async (homeDir) => {
+    const projectPath = path.join(homeDir, 'workspaces', 'cli-first');
+    // A direct CLI pi run in this project; an hour later the user opens a
+    // fresh app session that is still pending when the watcher indexes the
+    // CLI transcript. The unrelated newer row must keep its null provider id.
+    const sessionStart = new Date(Date.now() - 3_600_000);
+    const fileNameStamp = sessionStart.toISOString().replace(/[:.]/g, '-');
+    const transcriptPath = await writePiSession(homeDir, {
+      encodedCwd: '--cli-first--',
+      fileName: `${fileNameStamp}_${SESSION_ONE_ID}.jsonl`,
+      lines: [
+        sessionHeaderLine(SESSION_ONE_ID, sessionStart.toISOString(), projectPath),
+        userMessageLine('Ran from the terminal'),
+      ],
+    });
+
+    await withIsolatedDatabase(async () => {
+      sessionsDb.createAppSession('app-session-1', 'pi', projectPath, 'Unrelated pending row');
+
+      const sessionId = await new PiSessionSynchronizer().synchronizeFile(transcriptPath);
+
+      // The transcript lands under its own provider-keyed row instead of
+      // stealing the pending app row's identity.
+      assert.equal(sessionId, SESSION_ONE_ID);
+      assert.equal(sessionsDb.getSessionById('app-session-1')?.provider_session_id, null);
+      assert.equal(sessionsDb.getAllSessions().length, 2);
+    });
+  });
+});
+
+test('synchronizeFile does not bind a pending app session older than the binding window', async () => {
+  await withIsolatedPiHome(async (homeDir) => {
+    const projectPath = path.join(homeDir, 'workspaces', 'stale-row');
+    // The pending row is a leftover from a failed run; the transcript's
+    // session starts far after that row was created, so no correlation.
+    const sessionStart = new Date(Date.now() + 3_600_000);
+    const fileNameStamp = sessionStart.toISOString().replace(/[:.]/g, '-');
+    const transcriptPath = await writePiSession(homeDir, {
+      encodedCwd: '--stale-row--',
+      fileName: `${fileNameStamp}_${SESSION_TWO_ID}.jsonl`,
+      lines: [
+        sessionHeaderLine(SESSION_TWO_ID, sessionStart.toISOString(), projectPath),
+        userMessageLine('A brand new session'),
+      ],
+    });
+
+    await withIsolatedDatabase(async () => {
+      sessionsDb.createAppSession('app-session-1', 'pi', projectPath, 'Stale pending row');
+
+      const sessionId = await new PiSessionSynchronizer().synchronizeFile(transcriptPath);
+
+      assert.equal(sessionId, SESSION_TWO_ID);
+      assert.equal(sessionsDb.getSessionById('app-session-1')?.provider_session_id, null);
+      assert.equal(sessionsDb.getAllSessions().length, 2);
     });
   });
 });

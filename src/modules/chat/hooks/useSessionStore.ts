@@ -284,50 +284,15 @@ function assistantEchoScopeKey(message: NormalizedMessage): string | null {
 }
 
 /**
- * Collapse duplicated assistant rows in the merged view.
+ * Upgrade a trailing stream delta to its finalized text row.
  *
- * After `finalizeStreaming`, the client holds a synthetic assistant `text` row
- * while the sessions API soon returns the same reply with a different id, and
- * live event-stream rows never share a message id with their persisted twins
- * either — text and thinking alike are matched by content echo. The refresh
- * that pulls the persisted copy back normally prunes the live one
- * (`pruneRealtimeSupersededByServer`), but that prune locates the owning turn
- * by walking chronology, and live rows (stamped when the client received them)
- * and persisted rows (stamped when the provider wrote them) can interleave
- * enough to mislocate the turn. When it misses, both copies survive into the
- * merged view — and they are not adjacent: the timestamp sort weaves each copy
- * in between the other side's sibling rows (server text, live thinking, live
- * text, server thinking). Adjacency therefore cannot be relied on, so the
- * comparison is scoped by turn instead of by position: within one user turn, a
- * row whose (kind, trimmed content) was already emitted is dropped, however
- * far after its twin it sorts. Rows are only ever removed, never reordered.
- *
- * A `stream_delta` row directly followed by its identical finalized text is
- * still upgraded to the text row, as before.
- *
- * Accepted false-merge: a model that genuinely emits the exact same block
- * twice inside one turn loses the second copy — the same trade the adjacent
- * merge this replaces already made, over a wider window. Identical replies in
- * different turns are unaffected: a user prompt or a tool call starts a new
- * scope.
+ * A `stream_delta` directly followed by its identical finalized text is
+ * replaced by the text row — the delta was only its live preview. This never
+ * removes content, so it is safe on rows from any single source.
  */
-function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedMessage[] {
+function finalizeStreamDeltaUpgrades(rows: NormalizedMessage[]): NormalizedMessage[] {
   const out: NormalizedMessage[] = [];
-  // (kind, trimmed content) pairs already emitted within the current turn.
-  let seenInTurn = new Set<string>();
-
-  for (const m of merged) {
-    if ((m.kind === 'text' && m.role === 'user') || m.kind === 'tool_use') {
-      seenInTurn = new Set<string>();
-      out.push(m);
-      continue;
-    }
-
-    const echoKey = assistantEchoScopeKey(m);
-    if (echoKey !== null && seenInTurn.has(echoKey)) {
-      continue;
-    }
-
+  for (const m of rows) {
     const prev = out[out.length - 1];
     if (
       prev
@@ -341,11 +306,92 @@ function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedM
     } else {
       out.push(m);
     }
-
-    if (echoKey !== null) {
-      seenInTurn.add(echoKey);
-    }
   }
+  return out;
+}
+
+/**
+ * Drop realtime rows the persisted transcript already owns in the same turn.
+ *
+ * After `finalizeStreaming`, the client holds a synthetic assistant `text`
+ * row while the sessions API soon returns the same reply with a different id,
+ * and live event-stream rows never share a message id with their persisted
+ * twins either — text and thinking alike are matched by content echo. The refresh
+ * that pulls the persisted copy back normally prunes the live one
+ * (`pruneRealtimeSupersededByServer`), but that prune locates the owning turn
+ * by walking chronology, and live rows (stamped when the client received them)
+ * and persisted rows (stamped when the provider wrote them) can interleave
+ * enough to mislocate the turn. When it misses, both copies survive into the
+ * merged view — and they are not adjacent: the timestamp sort weaves each copy
+ * in between the other side's sibling rows (server text, live thinking, live
+ * text, server thinking). The comparison is therefore scoped by turn and,
+ * inside a turn, order-independent — however far before or after its twin a
+ * row sorts.
+ *
+ * Only realtime twins are removed — never a server row, and never a realtime
+ * row without a persisted counterpart. Repeated identical output from one
+ * authoritative source (the model genuinely emitting the same block twice in
+ * one turn) is preserved, so history never loses real content. Rows are only
+ * ever removed, never reordered; a `stream_delta` directly followed by its
+ * identical finalized text is still upgraded to the text row.
+ */
+function dropRealtimeEchoesOfServerRows(
+  merged: NormalizedMessage[],
+  serverIds: ReadonlySet<string>,
+): NormalizedMessage[] {
+  const out: NormalizedMessage[] = [];
+  let turnRows: NormalizedMessage[] = [];
+
+  const flushTurn = (): void => {
+    if (turnRows.length === 0) {
+      return;
+    }
+    // (kind, trimmed content) keys the persisted rows own in this turn.
+    const serverKeys = new Set<string>();
+    for (const row of turnRows) {
+      if (!serverIds.has(row.id)) {
+        continue;
+      }
+      const key = assistantEchoScopeKey(row);
+      if (key !== null) {
+        serverKeys.add(key);
+      }
+    }
+
+    for (const row of turnRows) {
+      const echoKey = assistantEchoScopeKey(row);
+      // Only the realtime twin of an already-persisted row is dropped.
+      if (echoKey !== null && !serverIds.has(row.id) && serverKeys.has(echoKey)) {
+        continue;
+      }
+
+      const prev = out[out.length - 1];
+      if (
+        prev
+        && prev.kind === 'stream_delta'
+        && row.kind === 'text'
+        && row.role === 'assistant'
+        && (prev.content || '').trim().length > 0
+        && (prev.content || '').trim() === (row.content || '').trim()
+      ) {
+        out[out.length - 1] = row;
+      } else {
+        out.push(row);
+      }
+    }
+
+    turnRows = [];
+  };
+
+  for (const m of merged) {
+    if ((m.kind === 'text' && m.role === 'user') || m.kind === 'tool_use') {
+      flushTurn();
+      out.push(m);
+      continue;
+    }
+    turnRows.push(m);
+  }
+  flushTurn();
   return out;
 }
 
@@ -411,10 +457,12 @@ function pruneRealtimeSupersededByServer(
 
 function computeMerged(server: NormalizedMessage[], realtime: NormalizedMessage[]): NormalizedMessage[] {
   if (realtime.length === 0) {
-    return dedupeAdjacentAssistantEchoes(server);
+    // Persisted rows only: repeated output within one turn is authoritative
+    // content, so nothing is deduped by content in a single-source view.
+    return finalizeStreamDeltaUpgrades(server);
   }
   if (server.length === 0) {
-    return dedupeAdjacentAssistantEchoes(realtime);
+    return finalizeStreamDeltaUpgrades(realtime);
   }
 
   const serverIds = new Set(server.map((message) => message.id));
@@ -427,7 +475,7 @@ function computeMerged(server: NormalizedMessage[], realtime: NormalizedMessage[
   });
 
   if (extra.length === 0) {
-    return dedupeAdjacentAssistantEchoes(server);
+    return finalizeStreamDeltaUpgrades(server);
   }
 
   // Interleave by timestamp so live rows stay with their turn instead of
@@ -438,10 +486,11 @@ function computeMerged(server: NormalizedMessage[], realtime: NormalizedMessage[
     (newest, message) => Math.max(newest, readMessageTime(message) ?? 0),
     0,
   );
-  return dedupeAdjacentAssistantEchoes(
+  return dropRealtimeEchoesOfServerRows(
     [...server, ...extra].sort(
       (a, b) => readSortTime(a, newestServerTime) - readSortTime(b, newestServerTime),
     ),
+    serverIds,
   );
 }
 

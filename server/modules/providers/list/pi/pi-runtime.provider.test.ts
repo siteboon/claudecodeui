@@ -4,9 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+import type { NormalizedMessage, ProviderRuntimeContext, ProviderRuntimeWriter } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 import {
   abortPiSession,
@@ -16,10 +15,12 @@ import {
 } from './pi-runtime.provider.js';
 import { mapPiEventToMessages } from './pi-sessions.provider.js';
 
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
 // The runtime contract only cares that normalizeMessage maps one raw pi event
 // onto zero or more normalized messages, so the context wires the sessions
 // facet's real mapping — the same one the live provider registry serves.
-const makeRuntimeContext = (overrides = {}) => ({
+const makeRuntimeContext = (overrides: Partial<ProviderRuntimeContext> = {}): ProviderRuntimeContext => ({
   resolveProviderSessionId: (sessionId) => sessionId || null,
   resolveResumeModel: async (_sessionId, requestedModel) => requestedModel || undefined,
   getProviderModels: async () => ({ OPTIONS: [], DEFAULT: '' }),
@@ -28,9 +29,9 @@ const makeRuntimeContext = (overrides = {}) => ({
   ...overrides,
 });
 
-// Fake event stream copied from the recorded `pi -p --mode json` transcript in
-// docs/pi-notes.md (pi 0.85.1). Field shapes are the protocol facts that both
-// the runtime and Task 6's normalizer build on.
+// Fake event stream copied from a recorded `pi -p --mode json` transcript
+// (pi 0.85.1). Field shapes are the protocol facts that both the runtime and
+// the sessions normalizer build on.
 const FAKE_SESSION_ID = '0198c0de-7a5b-7f3e-9a1c-3d2e4f5a6b7c';
 const FINAL_USAGE = {
   input: 1474,
@@ -89,10 +90,10 @@ const FAKE_EVENTS = [
   { type: 'agent_settled' },
 ];
 
-const findEnvKey = (name) =>
+const findEnvKey = (name: string): string =>
   Object.keys(process.env).find((key) => key.toLowerCase() === name.toLowerCase()) || name;
 
-async function writeFakePi(binDir, { mode = 'replay' } = {}) {
+async function writeFakePi(binDir: string, { mode = 'replay' }: { mode?: string } = {}): Promise<void> {
   const scriptPath = path.join(binDir, 'pi.js');
   await writeFile(scriptPath, `
 const fs = require('node:fs');
@@ -123,7 +124,8 @@ if (mode === 'hang') {
   console.log('pi: warning: partially written line');
 } else if (mode === 'model-error') {
   // pi exits 0 even when the model call failed; the error only shows up as
-  // stopReason/errorMessage on the assistant message (docs/pi-notes.md).
+  // stopReason/errorMessage on the assistant message (verified against
+  // pi 0.85.1).
   console.log(header);
   console.log(JSON.stringify({ type: 'agent_start' }));
   console.log(JSON.stringify({
@@ -153,22 +155,25 @@ if (mode === 'hang') {
   await chmod(commandPath, 0o755);
 }
 
-function createWriter(messages) {
-  return {
+function createWriter(
+  messages: NormalizedMessage[],
+): ProviderRuntimeWriter & { setSessionIdCalls: number; sessionId: string | null } {
+  const writer: ProviderRuntimeWriter & { setSessionIdCalls: number; sessionId: string | null } = {
     userId: null,
     sessionId: null,
     setSessionIdCalls: 0,
-    send(message) {
+    send(message: NormalizedMessage) {
       messages.push(message);
     },
-    setSessionId(sessionId) {
+    setSessionId(sessionId: string) {
       this.setSessionIdCalls += 1;
       this.sessionId = sessionId;
     },
   };
+  return writer;
 }
 
-async function withFakePiOnPath(mode, fn) {
+async function withFakePiOnPath(mode: string, fn: (tempRoot: string) => Promise<void>): Promise<void> {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'pi-cli-'));
   const pathKey = findEnvKey('PATH');
   const pathExtKey = findEnvKey('PATHEXT');
@@ -226,15 +231,20 @@ async function withFakePiOnPath(mode, fn) {
 test('buildPiArgs maps options onto the pi print/json invocation', () => {
   assert.deepEqual(
     buildPiArgs({ providerSessionId: 'abc', model: 'anthropic/claude-sonnet-4', prompt: 'hi' }),
-    ['-p', '--mode', 'json', '--session', 'abc', '--model', 'anthropic/claude-sonnet-4', 'hi'],
+    ['-p', '--mode', 'json', '--session', 'abc', '--model', 'anthropic/claude-sonnet-4', '--', 'hi'],
   );
-  assert.deepEqual(buildPiArgs({ prompt: 'hi' }), ['-p', '--mode', 'json', 'hi']);
+  assert.deepEqual(buildPiArgs({ prompt: 'hi' }), ['-p', '--mode', 'json', '--', 'hi']);
+  // A prompt that begins with '-' stays positional behind the `--` guard.
+  assert.deepEqual(
+    buildPiArgs({ prompt: '--dangerous-looking prompt' }),
+    ['-p', '--mode', 'json', '--', '--dangerous-looking prompt'],
+  );
   // Attachment-only runs send no positional prompt at all.
   assert.deepEqual(buildPiArgs({}), ['-p', '--mode', 'json']);
 });
 
 test('spawnPi emits session_created, stream deltas and exactly one terminal complete', async () => {
-  const messages = [];
+  const messages: NormalizedMessage[] = [];
   let argsCapturePath = '';
   await withFakePiOnPath('replay', async (tempRoot) => {
     argsCapturePath = path.join(tempRoot, 'pi-args.json');
@@ -243,7 +253,13 @@ test('spawnPi emits session_created, stream deltas and exactly one terminal comp
     // pi has no permission system: permissionMode/effort must be ignored.
     await piRuntime.run(
       'Say hi',
-      { sessionId: 'app-1', cwd: tempRoot, permissionMode: 'bypassPermissions', effort: 'high' },
+      {
+        sessionId: 'app-1',
+        cwd: tempRoot,
+        // Spread on purpose: pi has no permission/effort levers, so unknown
+        // pass-through options must be ignored, not type-error the caller.
+        ...({ permissionMode: 'bypassPermissions', effort: 'high' } as Record<string, unknown>),
+      },
       writer,
       makeRuntimeContext({ resolveProviderSessionId: () => null }),
     );
@@ -266,7 +282,9 @@ test('spawnPi emits session_created, stream deltas and exactly one terminal comp
 
     // Exactly one terminal complete, and it closes the run.
     assert.equal(kinds.filter((kind) => kind === 'complete').length, 1);
-    assert.equal(messages.at(-1).kind, 'complete');
+    const lastMessage = messages.at(-1);
+    assert.ok(lastMessage);
+    assert.equal(lastMessage.kind, 'complete');
     assert.equal(complete?.success, true);
     assert.equal(complete?.aborted, false);
     assert.equal(complete?.actualSessionId, FAKE_SESSION_ID);
@@ -277,12 +295,18 @@ test('spawnPi emits session_created, stream deltas and exactly one terminal comp
     assert.ok(tokenBudgetIndex > -1 && tokenBudgetIndex < kinds.indexOf('complete'));
     const tokenBudgetMessage = messages[tokenBudgetIndex];
     assert.equal(tokenBudgetMessage.text, 'token_budget');
-    assert.equal(tokenBudgetMessage.tokenBudget.used, FINAL_USAGE.totalTokens);
-    assert.equal(tokenBudgetMessage.tokenBudget.inputTokens, FINAL_USAGE.input + FINAL_USAGE.cacheRead);
-    assert.equal(tokenBudgetMessage.tokenBudget.outputTokens, FINAL_USAGE.output);
-    assert.equal(tokenBudgetMessage.tokenBudget.cost, FINAL_USAGE.cost.total);
+    const budget = tokenBudgetMessage.tokenBudget as {
+      used: number;
+      inputTokens: number;
+      outputTokens: number;
+      cost?: number;
+    };
+    assert.equal(budget.used, FINAL_USAGE.totalTokens);
+    assert.equal(budget.inputTokens, FINAL_USAGE.input + FINAL_USAGE.cacheRead);
+    assert.equal(budget.outputTokens, FINAL_USAGE.output);
+    assert.equal(budget.cost, FINAL_USAGE.cost.total);
 
-    const launchedArgs = JSON.parse(await readFile(argsCapturePath, 'utf8'));
+    const launchedArgs = JSON.parse(await readFile(argsCapturePath, 'utf8')) as string[];
     assert.deepEqual(launchedArgs.slice(0, 3), ['-p', '--mode', 'json']);
     // pi has no --dir flag; the working directory is the spawn cwd option.
     assert.equal(launchedArgs.includes('--dir'), false);
@@ -290,12 +314,15 @@ test('spawnPi emits session_created, stream deltas and exactly one terminal comp
     assert.equal(launchedArgs.includes('--auto'), false);
     assert.equal(launchedArgs.includes('--agent'), false);
     assert.equal(launchedArgs.includes('--variant'), false);
+    // The prompt rides behind `--` and stays the final positional argument.
+    const promptGuardIndex = launchedArgs.indexOf('--');
+    assert.ok(promptGuardIndex > -1);
     assert.equal(launchedArgs.at(-1), 'Say hi');
   });
 });
 
 test('spawnPi resumes with --session and does not re-announce an existing session', async () => {
-  const messages = [];
+  const messages: NormalizedMessage[] = [];
   await withFakePiOnPath('replay', async (tempRoot) => {
     const argsCapturePath = path.join(tempRoot, 'pi-resume-args.json');
     process.env.PI_ARGS_CAPTURE = argsCapturePath;
@@ -312,7 +339,7 @@ test('spawnPi resumes with --session and does not re-announce an existing sessio
     assert.equal(writer.setSessionIdCalls, 0);
     assert.equal(messages.filter((message) => message.kind === 'complete').length, 1);
 
-    const launchedArgs = JSON.parse(await readFile(argsCapturePath, 'utf8'));
+    const launchedArgs = JSON.parse(await readFile(argsCapturePath, 'utf8')) as string[];
     const sessionIndex = launchedArgs.indexOf('--session');
     assert.ok(sessionIndex > -1);
     assert.equal(launchedArgs[sessionIndex + 1], 'existing-session');
@@ -320,7 +347,7 @@ test('spawnPi resumes with --session and does not re-announce an existing sessio
 });
 
 test('spawnPi resolves successfully when the model errored but pi exited 0', async () => {
-  const messages = [];
+  const messages: NormalizedMessage[] = [];
   await withFakePiOnPath('model-error', async (tempRoot) => {
     const writer = createWriter(messages);
     await piRuntime.run('Say hi', { sessionId: 'app-1', cwd: tempRoot }, writer, makeRuntimeContext());
@@ -328,21 +355,22 @@ test('spawnPi resolves successfully when the model errored but pi exited 0', asy
     // Exit code 0 is not success evidence for pi, but the runtime treats the
     // process lifecycle only; error mapping belongs to normalizeMessage.
     assert.equal(messages.filter((message) => message.kind === 'complete').length, 1);
-    assert.equal(messages.at(-1).kind, 'complete');
-    assert.equal(messages.at(-1).success, true);
+    const lastMessage = messages.at(-1);
+    assert.ok(lastMessage);
+    assert.equal(lastMessage.kind, 'complete');
+    assert.equal(lastMessage.success, true);
   });
 });
 
 test('processPiOutputLine forwards non-JSON lines as stream deltas', () => {
-  const messages = [];
+  const messages: NormalizedMessage[] = [];
   const writer = createWriter(messages);
   processPiOutputLine('pi: warning: partially written line', {
     ws: writer,
     sessionId: 'app-1',
     getCapturedSessionId: () => null,
-    setCapturedSessionId: () => {},
-    setUsage: () => {},
     registerSession: () => {},
+    setUsage: () => {},
     normalizeMessage: mapPiEventToMessages,
   });
 
@@ -353,7 +381,7 @@ test('processPiOutputLine forwards non-JSON lines as stream deltas', () => {
 });
 
 test('spawnPi keeps stdout non-JSON lines streaming and still completes once', async () => {
-  const messages = [];
+  const messages: NormalizedMessage[] = [];
   await withFakePiOnPath('garbage', async (tempRoot) => {
     const writer = createWriter(messages);
     await piRuntime.run('Say hi', { sessionId: 'app-1', cwd: tempRoot }, writer, makeRuntimeContext());
@@ -367,12 +395,12 @@ test('spawnPi keeps stdout non-JSON lines streaming and still completes once', a
 });
 
 test('abortPiSession kills the run, suppresses the runtime complete and rejects once', async () => {
-  const messages = [];
+  const messages: NormalizedMessage[] = [];
   await withFakePiOnPath('hang', async (tempRoot) => {
     const writer = createWriter(messages);
     const runPromise = piRuntime.run('Say hi', { sessionId: 'app-abort', cwd: tempRoot }, writer, makeRuntimeContext());
     // The gateway rejects the run promise too; swallow it until assert.rejects.
-    let rejection = null;
+    let rejection: unknown = null;
     runPromise.catch((error) => {
       rejection = error;
     });
@@ -400,7 +428,7 @@ test('abortPiSession kills the run, suppresses the runtime complete and rejects 
 });
 
 test('spawnPi rejects PROVIDER_NOT_INSTALLED when the CLI is missing', async () => {
-  const messages = [];
+  const messages: NormalizedMessage[] = [];
   await withFakePiOnPath('missing', async (tempRoot) => {
     const writer = createWriter(messages);
     await assert.rejects(

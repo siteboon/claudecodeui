@@ -1,7 +1,3 @@
-import { access } from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-
 import spawn from 'cross-spawn';
 
 import type { IProviderAuth } from '@/shared/interfaces.js';
@@ -14,17 +10,17 @@ type PiCredentialsStatus = {
 };
 
 /**
- * Provider API keys pi reads straight from the environment. The names follow
- * pi's own env-api-keys mapping (packages/ai/src/env-api-keys.ts in pi-mono),
- * which resolves its `google` provider from `GEMINI_API_KEY`.
+ * Providers the curated pi model catalog can address. The credential probe
+ * asks pi itself about exactly these, so `authenticated` means "pi can run at
+ * least one model the UI offers".
  */
-const PI_ENV_CREDENTIAL_KEYS = [
-  'ANTHROPIC_API_KEY',
-  'ANTHROPIC_AUTH_TOKEN',
-  'OPENAI_API_KEY',
-  'GEMINI_API_KEY',
-  'ZAI_CODING_CN_API_KEY',
-];
+const PI_CHECKED_PROVIDERS = ['anthropic', 'zai-coding-cn', 'openai'] as const;
+
+/** Shape of one `pi auth check --json` result (pi 0.85.1). */
+type PiAuthCheckResult = {
+  status?: unknown;
+  authType?: unknown;
+};
 
 export class PiProviderAuth implements IProviderAuth {
   /**
@@ -61,20 +57,46 @@ export class PiProviderAuth implements IProviderAuth {
   }
 
   /**
-   * Probes pi's credentials: its own auth store first, then the environment.
+   * Probes pi's credentials through its own `auth check` contract.
+   *
+   * pi 0.85.1 resolves typed provider entries through its credential store
+   * (including env API keys), so an empty or malformed `auth.json` no longer
+   * implies usable credentials — only pi's own resolver can answer that.
+   * Refresh behavior is left at pi's default (the same thing a real run does
+   * for expired OAuth tokens). The first ready provider wins.
    */
-  private async checkCredentials(): Promise<PiCredentialsStatus> {
-    try {
-      const authPath = path.join(os.homedir(), '.pi', 'agent', 'auth.json');
-      await access(authPath);
-      return { authenticated: true, email: null, method: 'oauth' };
-    } catch {
-      // No auth store — fall through to the environment keys.
-    }
+  private checkCredentials(): PiCredentialsStatus {
+    for (const provider of PI_CHECKED_PROVIDERS) {
+      let result: ReturnType<typeof spawn.sync>;
+      try {
+        result = spawn.sync(
+          'pi',
+          ['auth', 'check', '--provider', provider, '--json'],
+          { stdio: ['ignore', 'pipe', 'ignore'], timeout: 15_000, encoding: 'utf8' },
+        );
+      } catch {
+        continue;
+      }
 
-    const envCredential = PI_ENV_CREDENTIAL_KEYS.find((key) => process.env[key]?.trim());
-    if (envCredential) {
-      return { authenticated: true, email: null, method: 'env' };
+      if (result.error || result.status !== 0 || typeof result.stdout !== 'string') {
+        continue;
+      }
+
+      let parsed: PiAuthCheckResult;
+      try {
+        parsed = JSON.parse(result.stdout) as PiAuthCheckResult;
+      } catch {
+        continue;
+      }
+
+      if (parsed.status !== 'ready') {
+        continue;
+      }
+
+      const method = typeof parsed.authType === 'string' && parsed.authType.length > 0
+        ? parsed.authType
+        : null;
+      return { authenticated: true, email: null, method };
     }
 
     return { authenticated: false, email: null, method: null };
