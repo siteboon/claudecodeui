@@ -491,6 +491,13 @@ async function spawnPi(
       if (activePiProcesses.get(processKey) === pendingEntry) {
         activePiProcesses.delete(processKey);
       }
+      // An abort that landed while resolving already sent this run's terminal
+      // cancelled complete, so a resolver failure afterwards is not a run
+      // failure — settle silently like the aborted-resolve path above.
+      if (pendingEntry.aborted) {
+        resolve();
+        return;
+      }
       reject(error);
     });
   });

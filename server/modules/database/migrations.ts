@@ -445,20 +445,14 @@ const rebuildProviderModelsWithPiSchema = (db: Database): void => {
   try {
     db.exec('BEGIN TRANSACTION');
     db.exec('DROP TABLE IF EXISTS provider_models__new');
-    // Mirrors PROVIDER_MODELS_TABLE_SCHEMA_SQL with 'pi' added; the schema
-    // constant names the real table, so the rebuilt one is spelled out here.
-    db.exec(`
-      CREATE TABLE provider_models__new (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        provider TEXT NOT NULL CHECK (provider IN ('claude', 'cursor', 'codex', 'opencode', 'pi')),
-        model_id TEXT NOT NULL,
-        model_name TEXT NOT NULL,
-        sort_order INTEGER NOT NULL DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(provider, model_id)
-      )
-    `);
+    // Reuses the live schema so the provider CHECK list has one definition;
+    // the constant names the real table (its only occurrence) and allows
+    // IF NOT EXISTS, so both are rewritten here before the copy runs.
+    db.exec(
+      PROVIDER_MODELS_TABLE_SCHEMA_SQL
+        .replace(/CREATE TABLE IF NOT EXISTS/i, 'CREATE TABLE')
+        .replace(/\bprovider_models\b/, 'provider_models__new'),
+    );
     db.exec(`
       INSERT INTO provider_models__new (
         id,

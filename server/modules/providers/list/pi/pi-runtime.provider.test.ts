@@ -469,6 +469,46 @@ test('abort during model resolution prevents the spawn entirely', async () => {
   });
 });
 
+test('a resolver failure after abort settles the run instead of rejecting', async () => {
+  const messages: NormalizedMessage[] = [];
+  await withFakePiOnPath('replay', async (tempRoot) => {
+    const argsCapturePath = path.join(tempRoot, 'pi-abort-resolver-error-args.json');
+    process.env.PI_ARGS_CAPTURE = argsCapturePath;
+    const writer = createWriter(messages);
+
+    const resolverError = new Error('model lookup failed');
+    let failModelResolution!: (error: unknown) => void;
+    const modelResolutionGate = new Promise<never>((_resolve, reject) => {
+      failModelResolution = reject;
+    });
+    const runPromise = piRuntime.run('Say hi', { sessionId: 'app-abort-resolver-error', cwd: tempRoot }, writer, makeRuntimeContext({
+      resolveResumeModel: async () => {
+        await modelResolutionGate;
+        return undefined;
+      },
+    }));
+    let rejection: unknown = null;
+    runPromise.catch((error) => {
+      rejection = error;
+    });
+
+    // Abort lands while the model is still resolving — the gateway has already
+    // sent this run's terminal cancelled complete at that point.
+    assert.equal(isPiSessionActive('app-abort-resolver-error'), true);
+    assert.equal(abortPiSession('app-abort-resolver-error'), true);
+
+    // The resolver then fails; the cancelled run must still settle as success.
+    failModelResolution(resolverError);
+    await runPromise;
+
+    // No child was launched and the failure never surfaced anywhere.
+    assert.equal(existsSync(argsCapturePath), false);
+    assert.equal(messages.length, 0);
+    assert.equal(rejection, null);
+    assert.equal(isPiSessionActive('app-abort-resolver-error'), false);
+  });
+});
+
 test('abortPiSession kills the run, suppresses the runtime complete and rejects once', async () => {
   const messages: NormalizedMessage[] = [];
   await withFakePiOnPath('hang', async (tempRoot) => {
