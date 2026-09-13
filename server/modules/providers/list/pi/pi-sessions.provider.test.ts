@@ -94,6 +94,9 @@ test('mapPiEventToMessages maps pi stream events onto normalized messages', () =
   );
   assert.deepEqual(kinds(toolResult), ['tool_result']);
   assert.equal(toolResult[0]?.toolId, 'c1');
+  // The transcript renderer reads the top-level `content` string; without it
+  // the client's formatToolResultContent crashes on `.trim()`.
+  assert.equal(toolResult[0]?.content, 'a\nb');
   assert.deepEqual(toolResult[0]?.toolResult, { content: 'a\nb', isError: false });
 
   // Streaming partial results only exist for live progress; the transcript
@@ -311,6 +314,9 @@ test('fetchHistory reads a pi session jsonl with attachments, tool calls and tok
 
     assert.equal(toolResult?.kind, 'tool_result');
     assert.equal(toolResult?.toolId, 'call_1');
+    // Top-level `content` mirrors claude's tool_result shape; the client
+    // transcript reads it directly and crashes on undefined without it.
+    assert.equal(toolResult?.content, 'a.txt\nb.txt');
     assert.deepEqual(toolResult?.toolResult, { content: 'a.txt\nb.txt', isError: false });
 
     assert.equal(finalText?.content, 'Two files found.');

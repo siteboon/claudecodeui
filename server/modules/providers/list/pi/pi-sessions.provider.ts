@@ -97,7 +97,7 @@ const buildPiTokenUsage = (usage: AnyRecord): AnyRecord | undefined => {
  * - `message_update` + `toolcall_*`     → [] (tool activity is carried by the
  *   top-level `tool_execution_*` events instead)
  * - `tool_execution_start`              → `tool_use` (toolName/toolInput/toolId)
- * - `tool_execution_end`                → `tool_result` (toolId + toolResult)
+ * - `tool_execution_end`                → `tool_result` (toolId + content + toolResult)
  *   Deliberately NOT folded onto the `tool_use`: pi emits start and end as
  *   separate events, so a standalone `tool_result` keyed by `toolId` is what
  *   the transcript renderer already pairs with its `tool_use` row.
@@ -173,8 +173,9 @@ export function mapPiEventToMessages(rawEvent: unknown, sessionId: string | null
   }
 
   if (type === 'tool_execution_end') {
+    const resultText = joinBlockText(readObjectRecord(event.result)?.content ?? event.result);
     const toolResult: NonNullable<NormalizedMessage['toolResult']> = {
-      content: joinBlockText(readObjectRecord(event.result)?.content ?? event.result),
+      content: resultText,
     };
     // pi reports `isError` on the end event (probe/sample4.jsonl); treat it as
     // optional so an absent field stays undefined rather than a false claim.
@@ -186,6 +187,10 @@ export function mapPiEventToMessages(rawEvent: unknown, sessionId: string | null
       kind: 'tool_result',
       toolId: readOptionalString(event.toolCallId),
       toolName: readOptionalString(event.toolName),
+      // The transcript renderer reads the top-level `content` string
+      // (claude tool_result convention); `toolResult` stays for consumers of
+      // the structured payload.
+      content: resultText,
       toolResult,
     })];
   }
@@ -304,7 +309,8 @@ export const readPiTranscriptEntries = (transcriptPath: string): AnyRecord[] => 
  *                  blocks stripped back into images/files fields
  * - `assistant`  → content blocks expand in order: text → `text`,
  *                  thinking → `thinking`, toolCall → `tool_use`
- * - `toolResult` → standalone `tool_result` keyed by its toolCallId
+ * - `toolResult` → standalone `tool_result` keyed by its toolCallId, carrying
+ *                  the block text as the top-level `content` string
  *
  * Exported so the session synchronizer titles sessions from the same user-text
  * extraction (attachment tags stripped) that history rendering uses.
@@ -423,8 +429,9 @@ export const normalizeTranscriptEntry = (entry: AnyRecord, sessionId: string | n
   }
 
   if (role === 'toolResult') {
+    const resultText = joinBlockText(message?.content);
     const toolResult: NonNullable<NormalizedMessage['toolResult']> = {
-      content: joinBlockText(message?.content),
+      content: resultText,
     };
     if (message?.isError !== undefined) {
       toolResult.isError = message.isError === true;
@@ -438,6 +445,10 @@ export const normalizeTranscriptEntry = (entry: AnyRecord, sessionId: string | n
       kind: 'tool_result',
       toolName: readOptionalString(message?.toolName),
       toolId: readOptionalString(message?.toolCallId) ?? baseId,
+      // The transcript renderer reads the top-level `content` string
+      // (claude tool_result convention); `toolResult` stays for consumers of
+      // the structured payload.
+      content: resultText,
       toolResult,
     }));
   }
