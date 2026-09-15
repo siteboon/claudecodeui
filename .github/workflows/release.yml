@@ -41,6 +41,10 @@ jobs:
           git config user.name "${GITHUB_ACTOR}"
           git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
 
+      # Trusted publishing (OIDC) requires npm >= 11.5.1; Node 22 ships npm 10.x.
+      - name: Use an npm that supports trusted publishing
+        run: npm install -g npm@^11.5.1
+
       - run: npm ci
 
       - name: Release
@@ -56,8 +60,6 @@ jobs:
           RELEASE_INCREMENT: ${{ inputs.increment }}
           RELEASE_NAME: ${{ inputs.release_name }}
           GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_LOGS_DIR: ${{ runner.temp }}/release-npm-logs
 
       - name: Show npm failure details
