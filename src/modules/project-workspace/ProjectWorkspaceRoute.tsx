@@ -11,17 +11,20 @@ import { useWebSocket } from '@/shared/context/WebSocketContext';
 import { useDeviceSettings } from '@/shared/hooks/useDeviceSettings';
 import { useVisualViewportKeyboardOffset } from '@/modules/project-workspace/hooks/useVisualViewportKeyboardOffset';
 import ProjectWorkspaceShell from '@/modules/project-workspace/ProjectWorkspaceShell';
+import WorkspaceErrorBoundary from '@/modules/project-workspace/WorkspaceErrorBoundary';
 
 const MemoizedProjectWorkspaceRouteContent = memo(ProjectWorkspaceRouteContent);
 
 /** This module's only public export: rendered by App for the "/" and "/session/:sessionId" routes. */
 export default function ProjectWorkspaceRoute() {
   return (
-    <SessionProtectionProvider>
-      <PaletteOpsProvider>
-        <MemoizedProjectWorkspaceRouteContent />
-      </PaletteOpsProvider>
-    </SessionProtectionProvider>
+    <WorkspaceErrorBoundary showDetails>
+      <SessionProtectionProvider>
+        <PaletteOpsProvider>
+          <MemoizedProjectWorkspaceRouteContent />
+        </PaletteOpsProvider>
+      </SessionProtectionProvider>
+    </WorkspaceErrorBoundary>
   );
 }
 

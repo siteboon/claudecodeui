@@ -10,10 +10,14 @@ type UserTurnFingerprint = {
   fileCount: number;
 };
 
+function normalizeUserText(text: string): string {
+  return (text || '').replace(/\r\n/g, '\n').trim();
+}
+
 function userTurnFingerprint(message: NormalizedMessage): UserTurnFingerprint | null {
   if (message.kind !== 'text' || message.role !== 'user') return null;
 
-  const text = (message.content || '').trim();
+  const text = normalizeUserText(message.content || '');
   const imageCount = Array.isArray(message.images) ? message.images.length : 0;
   const fileCount = Array.isArray(message.files) ? message.files.length : 0;
   if (!text && imageCount === 0 && fileCount === 0) return null;
@@ -26,7 +30,7 @@ function userTurnFingerprintsMatch(
   server: UserTurnFingerprint,
 ): boolean {
   return (
-    local.text === server.text
+    normalizeUserText(local.text) === normalizeUserText(server.text)
     && local.imageCount === server.imageCount
     && local.fileCount === server.fileCount
   );
@@ -115,4 +119,45 @@ export function removeOptimisticUserEchoes(
     claimedServerIds.add(serverEcho.id);
     return false;
   });
+}
+
+/**
+ * Merges a realtime tool_use frame into the session's realtime rows.
+ *
+ * Frames sharing one toolId are successive snapshots of the same call (zcode
+ * streams tool arguments into the already-announced card), so the existing row
+ * is updated in place and keeps its first-frame identity for stable React
+ * keys; a frame with an unseen toolId is appended. Providers whose tool ids
+ * are unique per call only ever hit the append path, so this is safe for every
+ * provider.
+ */
+/**
+ * Whether a frame's toolInput carries usable arguments. An empty object is
+ * treated as "not provided": engines re-announce already-streamed calls with
+ * blank arguments (zcode's post-stream `scheduled` frame), and letting that
+ * overwrite a populated card is exactly the blank-card bug.
+ */
+function hasUsableToolInput(frame: NormalizedMessage): boolean {
+  const input = frame.toolInput;
+  return !!input && typeof input === 'object' && Object.keys(input).length > 0;
+}
+
+export function upsertToolUseRow(rows: NormalizedMessage[], frame: NormalizedMessage): NormalizedMessage[] {
+  if (!frame.toolId) {
+    return [...rows, frame];
+  }
+
+  const index = rows.findIndex((row) => row.kind === 'tool_use' && row.toolId === frame.toolId);
+  if (index < 0) {
+    return [...rows, frame];
+  }
+
+  const next = [...rows];
+  next[index] = {
+    ...next[index],
+    toolName: frame.toolName || next[index].toolName,
+    toolInput: hasUsableToolInput(frame) ? frame.toolInput : next[index].toolInput,
+    content: frame.content || next[index].content,
+  };
+  return next;
 }

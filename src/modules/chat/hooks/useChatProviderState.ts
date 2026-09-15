@@ -22,6 +22,7 @@ const FALLBACK_PROVIDER_EFFORT_VALUES: Partial<Record<LLMProvider, readonly stri
   // valid Max/Ultra selection from being reset during catalog hydration.
   codex: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
   opencode: ['none', 'low', 'medium', 'high', 'xhigh', 'max'],
+  antigravity: ['low', 'medium', 'high'],
 };
 
 const toProviderEffortOptions = (
@@ -33,9 +34,10 @@ const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   cursor: 'gpt-5.3-codex',
   codex: 'gpt-5.4',
   opencode: 'anthropic/claude-sonnet-4-5',
+  antigravity: 'gemini-3.1-pro',
 };
 
-const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode'];
+const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode', 'antigravity'];
 
 /** localStorage key holding the user's default model for one provider. */
 const providerModelStorageKey = (provider: LLMProvider): string => `${provider}-model`;
@@ -51,6 +53,7 @@ const FALLBACK_PERMISSION_MODES: Record<LLMProvider, PermissionMode[]> = {
   cursor: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
   codex: ['default', 'acceptEdits', 'bypassPermissions'],
   opencode: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
+  antigravity: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
 };
 
 type ProviderCapabilities = {

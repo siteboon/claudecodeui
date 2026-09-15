@@ -217,6 +217,16 @@ function buildShellCommand(
     return initialCommand || 'opencode';
   }
 
+  if (provider === 'antigravity') {
+    const bypassFlag = readBoolean(message.bypassPermissions)
+      ? ' --dangerously-skip-permissions'
+      : '';
+    if (resumeSessionId) {
+      return `agy --resume "${resumeSessionId}"${bypassFlag}`;
+    }
+    return initialCommand || `agy${bypassFlag}`;
+  }
+
   // Launching with the flag is what unlocks "bypass permissions" in the CLI's
   // shift+tab permission-mode cycle; it cannot be enabled from inside a
   // session started without it.
@@ -543,6 +553,8 @@ export function handleShellConnection(
                 ? 'Codex'
                 : provider === 'opencode'
                     ? 'OpenCode'
+                    : provider === 'antigravity'
+                      ? 'Antigravity'
                   : 'Claude';
           welcomeMsg = hasSession && resumeSessionId
             ? `\x1b[36mResuming ${providerName} session ${resumeSessionId} in: ${projectPath}\x1b[0m\r\n`

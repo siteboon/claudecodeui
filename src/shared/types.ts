@@ -5,7 +5,7 @@ import type { NavigateFunction } from 'react-router-dom';
 //----------------- LLM PROVIDER MODEL CATALOG ------------
 
 /** Identifies which coding-agent CLI backs a session, project selection or model list. */
-export type LLMProvider = 'claude' | 'cursor' | 'codex' | 'opencode';
+export type LLMProvider = 'claude' | 'cursor' | 'codex' | 'opencode' | 'antigravity';
 
 /** One selectable model in a provider's model menu, including its optional reasoning-effort choices. */
 export type ProviderModelOption = {
@@ -520,6 +520,29 @@ export type ModelCommandData = {
   defaultModel?: string;
 };
 
+export type ProviderQuotaBucket = {
+  id: string;
+  name: string;
+  description?: string;
+  window: '5h' | 'weekly' | string;
+  remainingFraction: number;
+  resetTime?: string;
+};
+
+export type ProviderQuotaGroup = {
+  name: string;
+  description?: string;
+  buckets: ProviderQuotaBucket[];
+};
+
+export type ProviderQuotaData = {
+  groups: ProviderQuotaGroup[];
+  updatedAt?: string;
+};
+
+export type QuotaBucket = ProviderQuotaBucket;
+export type QuotaGroup = ProviderQuotaGroup;
+
 /** Result payload of the chat `/cost` slash command, carrying the session's token usage totals and input/output breakdown for the command modal's usage view. */
 export type CostCommandData = {
   tokenUsage?: {
@@ -532,6 +555,7 @@ export type CostCommandData = {
   };
   provider?: string;
   model?: string;
+  quota?: ProviderQuotaData;
 };
 
 /** Result payload of the chat `/status` slash command, carrying server version, uptime, provider/model and process telemetry for the command modal's status view. */

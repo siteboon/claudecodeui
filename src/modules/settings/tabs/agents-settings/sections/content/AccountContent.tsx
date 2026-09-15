@@ -54,6 +54,15 @@ const agentConfig: Record<AgentProvider, AgentVisualConfig> = {
     subtextClass: 'text-zinc-700 dark:text-zinc-300',
     buttonClass: 'bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-950 dark:bg-zinc-700 dark:hover:bg-zinc-600',
   },
+  antigravity: {
+    name: 'Antigravity',
+    description: 'Google Antigravity CLI assistant',
+    bgClass: 'bg-amber-50 dark:bg-amber-900/20',
+    borderClass: 'border-amber-200 dark:border-amber-700',
+    textClass: 'text-amber-900 dark:text-amber-100',
+    subtextClass: 'text-amber-700 dark:text-amber-300',
+    buttonClass: 'bg-amber-600 hover:bg-amber-700 active:bg-amber-800',
+  },
 };
 
 /** Rendered by AgentCategoryContentSection for the "account" category to show sign-in state for one provider. */

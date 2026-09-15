@@ -22,6 +22,7 @@ type AgentRouterDependencies = {
   queryCursor: ProviderRunFunction;
   queryCodex: ProviderRunFunction;
   queryOpenCode: ProviderRunFunction;
+  queryAntigravity?: ProviderRunFunction;
   GithubClient: typeof import('@octokit/rest').Octokit;
 };
 
@@ -44,6 +45,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
   const spawnCursor = dependencies.queryCursor;
   const queryCodex = dependencies.queryCodex;
   const spawnOpenCode = dependencies.queryOpenCode;
+  const queryAntigravity = dependencies.queryAntigravity;
   const Octokit = dependencies.GithubClient;
   const router = express.Router();
 
@@ -896,8 +898,8 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       return res.status(400).json({ error: 'message is required' });
     }
 
-    if (!['claude', 'cursor', 'codex', 'opencode'].includes(provider)) {
-      return res.status(400).json({ error: 'provider must be "claude", "cursor", "codex", or "opencode"' });
+    if (!['claude', 'cursor', 'codex', 'opencode', 'antigravity'].includes(provider)) {
+      return res.status(400).json({ error: 'provider must be "claude", "cursor", "codex", "opencode", or "antigravity"' });
     }
 
     // Validate GitHub branch/PR creation requirements
@@ -980,6 +982,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
 
       const codexModels = await providerModelsService.getProviderModels('codex');
       const opencodeModels = await providerModelsService.getProviderModels('opencode');
+      const antigravityModels = await providerModelsService.getProviderModels('antigravity');
 
       // Start the appropriate session
       if (provider === 'claude') {
@@ -1025,6 +1028,21 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           model: model || opencodeModels.DEFAULT,
           effort,
           permissionMode: 'bypassPermissions' // Agent runs are non-interactive, like the other providers above
+        }, writer);
+      } else if (provider === 'antigravity') {
+        console.log('Starting Antigravity CLI session');
+
+        if (!queryAntigravity) {
+          throw new Error('Antigravity runner is not configured');
+        }
+
+        await queryAntigravity(message.trim(), {
+          projectPath: finalProjectPath,
+          cwd: finalProjectPath,
+          sessionId: sessionId || null,
+          model: model || antigravityModels.DEFAULT,
+          effort,
+          permissionMode: 'bypassPermissions'
         }, writer);
       }
 

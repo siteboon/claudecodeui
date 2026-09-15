@@ -6,7 +6,9 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 
 import { sessionsDb } from '@/modules/database/index.js';
-import type { AnyRecord } from '@/shared/types.js';
+import { providerRegistry } from '@/modules/providers/provider.registry.js';
+import type { IProvider } from '@/shared/interfaces.js';
+import type { AnyRecord, ProviderQuotaData } from '@/shared/types.js';
 import { AppError, getOpenCodeDatabasePath } from '@/shared/utils.js';
 
 type SessionRow = NonNullable<ReturnType<typeof sessionsDb.getSessionById>>;
@@ -27,6 +29,7 @@ type ProviderTokenUsageServiceDependencies = {
   readTextFileTail: (filePath: string, maxBytes: number) => Promise<FileTail>;
   getClaudeContextWindow: () => string | undefined;
   isProviderSessionSuperseded: (providerSessionId: string, provider: string) => boolean;
+  resolveProvider: (provider: string) => Pick<IProvider, 'sessions' | 'auth'>;
 };
 
 type TokenUsageResult = {
@@ -94,6 +97,7 @@ const defaultDependencies: ProviderTokenUsageServiceDependencies = {
   getClaudeContextWindow: () => process.env.CONTEXT_WINDOW,
   isProviderSessionSuperseded: (providerSessionId, provider) =>
     sessionsDb.isProviderSessionSuperseded(providerSessionId, provider),
+  resolveProvider: (provider) => providerRegistry.resolveProvider(provider),
 };
 
 function readUsageNumber(value: unknown): number {
@@ -393,6 +397,18 @@ export function createProviderTokenUsageService(
         };
       }
 
+      if (session.provider === 'antigravity') {
+        const provider = dependencies.resolveProvider(session.provider);
+        if (provider.sessions.getTokenUsage) {
+          return provider.sessions.getTokenUsage({
+            appSessionId: sessionId,
+            nativeSessionId: providerSessionId,
+            jsonlPath: session.jsonl_path ?? null,
+            projectPath: session.project_path ?? null,
+          });
+        }
+      }
+
       if (session.provider === 'opencode') {
         const databasePath = dependencies.getOpenCodeDatabasePath();
         if (!dependencies.fileExists(databasePath)) {
@@ -474,6 +490,17 @@ export function createProviderTokenUsageService(
         entries = parseClaudeUsageEntries(await dependencies.readTextFile(sessionFilePath));
       }
       return summarizeClaudeTokenUsage(entries, dependencies.getClaudeContextWindow());
+    },
+
+    /**
+     * Retrieves account-level quota status (5-hour and weekly limits) for
+     * providers that expose the optional auth facet method, null otherwise.
+     */
+    async getProviderQuota(
+      provider: string,
+      options?: { forceRefresh?: boolean },
+    ): Promise<ProviderQuotaData | null> {
+      return dependencies.resolveProvider(provider).auth.getQuota?.(options) ?? null;
     },
   };
 }

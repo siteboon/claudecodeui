@@ -16,6 +16,9 @@ import type {
   ProviderRuntimeContext,
   ProviderRuntimePermissionGateway,
   ProviderRuntimeWriter,
+  ProviderQuotaData,
+  ProviderTokenUsageResult,
+  ProviderSessionUsageInput,
   UpsertProviderMcpServerInput,
 } from '@/shared/types.js';
 
@@ -125,6 +128,11 @@ export interface IProviderAuth {
    * Checks whether the provider is installed and has usable credentials.
    */
   getStatus(): Promise<ProviderAuthStatus>;
+
+  /**
+   * Optional account-level quota status (e.g. rate limits, 5-hour and weekly limits).
+   */
+  getQuota?(options?: { forceRefresh?: boolean }): Promise<ProviderQuotaData | null>;
 }
 
 // ---------------------------
@@ -216,6 +224,11 @@ export interface IProviderSessions {
    * gateway branches on.
    */
   rewindSession?(sessionId: string, keepThroughId: string | null): Promise<void>;
+
+  /**
+   * Reads the token usage for one session from provider-native storage.
+   */
+  getTokenUsage?(input: ProviderSessionUsageInput): Promise<ProviderTokenUsageResult>;
 }
 
 // ---------------------------

@@ -66,7 +66,7 @@ export type AuthenticatedWebSocketRequest = IncomingMessage & {
  * Use this as the source of truth whenever a function or payload needs to identify
  * a specific LLM integration.
  */
-export type LLMProvider = 'claude' | 'codex' | 'cursor' | 'opencode';
+export type LLMProvider = 'claude' | 'codex' | 'cursor' | 'opencode' | 'antigravity';
 
 /**
  * One selectable model row in a provider model catalog.
@@ -81,6 +81,7 @@ export type ProviderModelOption = {
   isCustom?: boolean;
   effort?: {
     default?: string;
+    encoding?: 'model-suffix' | string;
     values: {
       value: string;
       description?: string;
@@ -94,6 +95,62 @@ export type ProviderModelOption = {
 export type ProviderModelsDefinition = {
   OPTIONS: ProviderModelOption[];
   DEFAULT: string;
+};
+
+// ---------------------------
+//----------------- PROVIDER QUOTA AND RATE LIMIT TYPES ------------
+export type ProviderQuotaBucket = {
+  id: string;
+  name: string;
+  description?: string;
+  window: '5h' | 'weekly' | string;
+  remainingFraction: number;
+  resetTime?: string;
+};
+
+export type ProviderQuotaGroup = {
+  name: string;
+  description?: string;
+  buckets: ProviderQuotaBucket[];
+};
+
+export type ProviderQuotaData = {
+  groups: ProviderQuotaGroup[];
+  updatedAt: string;
+};
+
+export type AntigravityQuotaBucket = ProviderQuotaBucket;
+export type AntigravityQuotaGroup = ProviderQuotaGroup;
+export type AntigravityQuotaData = ProviderQuotaData;
+
+// ---------------------------
+//----------------- PROVIDER SESSION TOKEN USAGE TYPES ------------
+export type ProviderTokenUsageResult = {
+  used: number;
+  total?: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
+  cacheTokens?: number;
+  breakdown: {
+    input: number;
+    output: number;
+  };
+  unsupported?: boolean;
+  message?: string;
+};
+
+export type ProviderSessionUsageInput = {
+  appSessionId: string;
+  nativeSessionId: string;
+  jsonlPath?: string | null;
+  projectPath?: string | null;
+};
+
+export type ProviderSessionWatchTarget = {
+  rootPath: string;
+  isTargetFile: (filePath: string) => boolean;
 };
 
 /**
@@ -680,6 +737,7 @@ export type ProviderAuthStatus = {
   email: string | null;
   method: string | null;
   error?: string;
+  loginCommand?: string;
 };
 
 // ---------------------------

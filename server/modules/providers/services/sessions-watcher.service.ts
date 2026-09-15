@@ -4,6 +4,7 @@ import { promises as fsPromises } from 'node:fs';
 
 import chokidar, { type FSWatcher } from 'chokidar';
 
+import { getAntigravityDataRoot } from '@/modules/providers/list/antigravity/antigravity-data-root.js';
 import { sessionSynchronizerService } from '@/modules/providers/services/session-synchronizer.service.js';
 import { broadcastSessionUpsertedBatch } from '@/modules/websocket/index.js';
 import type { LLMProvider } from '@/shared/types.js';
@@ -26,6 +27,10 @@ const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> =
   {
     provider: 'opencode',
     rootPath: path.join(os.homedir(), '.local', 'share', 'opencode'),
+  },
+  {
+    provider: 'antigravity',
+    rootPath: getAntigravityDataRoot(),
   },
 ];
 
@@ -69,6 +74,11 @@ let watcherRescheduleAfterRefresh = false;
 function isWatcherTargetFile(provider: LLMProvider, filePath: string): boolean {
   if (provider === 'opencode') {
     return path.basename(filePath) === 'opencode.db';
+  }
+
+  if (provider === 'antigravity') {
+    const base = path.basename(filePath);
+    return base === 'conversation_summaries.db' || base === 'conversation_summaries.db-wal';
   }
 
   return filePath.endsWith('.jsonl');

@@ -85,8 +85,19 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
 
   const formattedTime = useMemo(() => new Date(message.timestamp).toLocaleTimeString(), [message.timestamp]);
   const shouldHideThinkingMessage = Boolean(message.isThinking && !showThinking);
+  const isTransientNotice = Boolean(
+    message.type === 'error' &&
+    message.content &&
+    (
+      /^>?\s*API error\s*\(attempt\s*\d+\)/i.test(String(message.content)) ||
+      /UNAVAILABLE\s*\(code\s*503\)/i.test(String(message.content)) ||
+      /No capacity available for model/i.test(String(message.content)) ||
+      /error:\s*interrupted/i.test(String(message.content)) ||
+      String(message.content).trim() === 'interrupted'
+    )
+  );
 
-  if (shouldHideThinkingMessage) {
+  if (shouldHideThinkingMessage || isTransientNotice) {
     return null;
   }
 
@@ -198,7 +209,9 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                           ? t('messageTypes.codex')
                           : provider === 'opencode'
                               ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
-                              : t('messageTypes.claude'))}
+                              : provider === 'antigravity'
+                                  ? t('messageTypes.antigravity', { defaultValue: 'Antigravity' })
+                                  : t('messageTypes.claude'))}
               </div>
             </div>
           )}

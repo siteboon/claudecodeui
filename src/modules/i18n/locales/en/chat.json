@@ -18,7 +18,8 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "antigravity": "Antigravity"
   },
   "tools": {
     "settings": "Tool Settings",
@@ -353,5 +354,39 @@
     "tokensLabel_other": "tokens",
     "escClosesModal": "Esc closes the modal.",
     "close": "Close"
+  },
+  "cost": {
+    "totalTokensUsed": "Total tokens used",
+    "inputTokens": "Input tokens",
+    "outputTokens": "Output tokens",
+    "contextWindow": "Context window",
+    "quotaTitle": "Account Quota & Rate Limits",
+    "updatedAt": "Updated at {{time}}",
+    "refresh": "Refresh",
+    "refreshTitle": "Refresh latest quota",
+    "fetchingQuota": "Fetching latest quota...",
+    "syncingWithProvider": "Syncing 5-hour and weekly limits from {{provider}}",
+    "noQuotaData": "No quota data available for this account",
+    "apiKeyNotice": "API Key logins typically do not report 5-hour or weekly account limits",
+    "refreshFailedNotice": "Refresh failed; showing last successfully retrieved quota data",
+    "fetchFailed": "Failed to load quota, please try again later",
+    "currentGroup": "Active Session Models",
+    "otherGroup": "Other Models",
+    "collapse": "Collapse",
+    "expand": "Expand",
+    "fiveHourWindow": "5-Hour Sliding Window",
+    "weeklyWindow": "Weekly Quota",
+    "cycleWindow": "Cycle Request Limit",
+    "cycleCallsDesc": "{{remaining}} of {{total}} calls remaining",
+    "cycleGeneralDesc": "Cycle model & tool request quota",
+    "fiveHourRollingDesc": "5-hour rolling token rate limit",
+    "groupDescBigModel": "BigModel Coding Plan account quota",
+    "groupDescZai": "Z.AI Coding Plan account quota",
+    "groupDescCodex": "Codex account-level rate limits",
+    "remainingPercent": "{{percent}}% remaining",
+    "resetSoon": "Resets soon",
+    "resetDaysHours": "Resets in {{days}}d {{hours}}h",
+    "resetHoursMinutes": "Resets in {{hours}}h {{minutes}}m",
+    "resetMinutes": "Resets in {{minutes}}m"
   }
 }

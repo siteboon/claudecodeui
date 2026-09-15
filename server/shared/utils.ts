@@ -9,6 +9,7 @@ import {
   readlink,
   realpath,
   stat,
+  rm,
   writeFile,
 } from 'node:fs/promises';
 import os from 'node:os';
@@ -326,6 +327,25 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
       valid: false,
       error: `Path validation failed: ${(error as Error).message}`,
     };
+  }
+}
+
+/**
+ * Validates that a target path stays strictly inside its intended root directory.
+ * Throws a 400 AppError with PATH_SECURITY_VIOLATION if directory traversal is detected.
+ *
+ * Consumed by provider MCP implementations when writing configuration files into
+ * user or workspace directories.
+ */
+export function validatePathSecurity(targetPath: string, rootPath: string): void {
+  const resolvedTarget = path.resolve(targetPath);
+  const resolvedRoot = path.resolve(rootPath);
+
+  if (!resolvedTarget.startsWith(`${resolvedRoot}${path.sep}`) && resolvedTarget !== resolvedRoot) {
+    throw new AppError('Path validation failed: potential directory traversal attempt.', {
+      code: 'PATH_SECURITY_VIOLATION',
+      statusCode: 400,
+    });
   }
 }
 
@@ -891,6 +911,210 @@ export function readJsonRecord(value: unknown): AnyRecord | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Resolves reasoning effort for provider chat runs that carry effort options in
+ * their SDK/CLI: only non-`default` string values that the selected model
+ * actually lists under `effort.values` survive; anything else (including an
+ * unknown or missing catalog, so the lookup tolerates `null`) yields
+ * `undefined`, letting the provider runtime fall back to its own default.
+ */
+export function resolveModelEffort(
+  model: string | null | undefined,
+  effort: unknown,
+  modelsDefinition: ProviderModelsDefinition | null | undefined,
+): string | undefined {
+  const selectedModel = modelsDefinition?.OPTIONS?.find((option) => option.value === model) || null;
+  const allowedEfforts = selectedModel?.effort?.values?.map((value) => value.value) || [];
+  return typeof effort === 'string' && effort !== 'default' && allowedEfforts.includes(effort)
+    ? effort
+    : undefined;
+}
+
+// ---------------------------
+//----------------- AUTH AND CREDENTIAL UTILITIES ------------
+/**
+ * Decodes a JWT token string without verification and extracts the user email.
+ *
+ * Consumed by provider auth adapters (Antigravity, Codex) when inspecting OAuth
+ * `id_token` credentials to surface the authenticated account email.
+ * Returns null if the token cannot be decoded or carries no email field.
+ */
+export function extractEmailFromJwt(jwtToken: string | null | undefined): string | null {
+  if (!jwtToken || typeof jwtToken !== 'string') {
+    return null;
+  }
+
+  try {
+    const parts = jwtToken.split('.');
+    if (parts.length >= 2 && parts[1]) {
+      const payload = readObjectRecord(
+        JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8')),
+      );
+      return readOptionalString(payload?.email) ?? readOptionalString(payload?.user) ?? null;
+    }
+  } catch {
+    // Unparseable JWT token
+  }
+
+  return null;
+}
+
+// ---------------------------
+//----------------- TOKEN USAGE UTILITIES ------------
+type ProviderQuotaCacheOptions = {
+  forceRefresh?: boolean;
+};
+
+type ProviderQuotaCache<T> = {
+  get(
+    options: ProviderQuotaCacheOptions,
+    loader: () => Promise<T | null>,
+    now?: () => number,
+  ): Promise<T | null>;
+  reset(): void;
+};
+
+/**
+ * Creates a short-lived nullable cache for provider account quota adapters.
+ *
+ * Antigravity and Codex use this to avoid repeatedly spawning their CLIs when
+ * the Token Usage dialog is opened. Successful `null` reads are cached because
+ * they represent a provider returning no account quota. Loader failures remain
+ * rejected so routes can distinguish an unavailable provider from empty data.
+ * Concurrent completions commit by request order, preventing an older read
+ * from overwriting the result of a newer forced refresh.
+ */
+export function createProviderQuotaCache<T>(ttlMs: number): ProviderQuotaCache<T> {
+  let cachedValue: T | null = null;
+  let cachedTimestamp = 0;
+  let inFlightPromise: Promise<T | null> | null = null;
+  let inFlightRequestId = 0;
+  let latestRequestId = 0;
+  let latestCommittedRequestId = 0;
+
+  return {
+    async get(options, loader, now = Date.now): Promise<T | null> {
+      const currentTime = now();
+      if (
+        !options.forceRefresh
+        && cachedTimestamp > 0
+        && currentTime - cachedTimestamp < ttlMs
+      ) {
+        return cachedValue;
+      }
+
+      if (!options.forceRefresh && inFlightPromise) {
+        return inFlightPromise;
+      }
+
+      const requestId = ++latestRequestId;
+      const loadPromise = (async () => {
+        try {
+          const loadedValue = await loader();
+          if (requestId > latestCommittedRequestId) {
+            cachedValue = loadedValue;
+            cachedTimestamp = now();
+            latestCommittedRequestId = requestId;
+          }
+          return loadedValue;
+        } finally {
+          if (inFlightRequestId === requestId) {
+            inFlightPromise = null;
+            inFlightRequestId = 0;
+          }
+        }
+      })();
+
+      if (!options.forceRefresh) {
+        inFlightPromise = loadPromise;
+        inFlightRequestId = requestId;
+      }
+
+      return loadPromise;
+    },
+
+    reset(): void {
+      cachedValue = null;
+      cachedTimestamp = 0;
+      inFlightPromise = null;
+      inFlightRequestId = 0;
+      latestCommittedRequestId = ++latestRequestId;
+    },
+  };
+}
+
+/**
+ * Coerces an unknown usage field into a finite number, defaulting to 0.
+ *
+ * Provider token-usage readers (Claude, Codex, Antigravity, OpenCode) sum
+ * counters that may be absent, null, or malformed JSON numbers; every reader
+ * must treat those cases as 0 rather than propagating NaN into totals.
+ */
+export function readUsageNumber(value: unknown): number {
+  const parsedValue = Number(value);
+  return Number.isFinite(parsedValue) ? parsedValue : 0;
+}
+
+/**
+ * Removes one file or directory recursively if it exists.
+ *
+ * Used by provider session implementations and session cleanup services to
+ * remove transcript files, subagents, and provider project folders safely.
+ * Returns true if deletion succeeded, false if path was missing or failed.
+ */
+export async function removePathIfExists(targetPath: string): Promise<boolean> {
+  try {
+    await rm(targetPath, { recursive: true, force: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Parses workspace directory from Antigravity workspace_uris JSON array or raw string.
+ *
+ * Antigravity stores workspace paths in conversation_summaries.db as JSON arrays of file URIs
+ * like `["file:///path/to/project"]` or raw strings.
+ */
+export function parseAntigravityWorkspacePath(workspaceUris: string | null): string | null {
+  if (!workspaceUris) return null;
+
+  const tryParseUri = (uri: string): string | null => {
+    if (uri.startsWith('file://')) {
+      try {
+        return fileURLToPath(uri);
+      } catch {
+        try {
+          return decodeURIComponent(uri.slice(7));
+        } catch {
+          return null;
+        }
+      }
+    }
+    return uri;
+  };
+
+  try {
+    const uris = JSON.parse(workspaceUris);
+    if (Array.isArray(uris) && uris.length > 0) {
+      const firstUri = uris[0];
+      if (typeof firstUri === 'string') {
+        return tryParseUri(firstUri);
+      }
+    }
+  } catch {
+    if (workspaceUris.startsWith('file://')) {
+      return tryParseUri(workspaceUris);
+    }
+    if (workspaceUris.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(workspaceUris)) {
+      return workspaceUris;
+    }
+  }
+
+  return null;
 }
 
 // ---------------------------

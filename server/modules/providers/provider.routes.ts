@@ -287,6 +287,7 @@ const parseProvider = (value: unknown): LLMProvider => {
     || normalized === 'codex'
     || normalized === 'cursor'
     || normalized === 'opencode'
+    || normalized === 'antigravity'
   ) {
     return normalized;
   }
@@ -776,6 +777,16 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const sessionId = parseSessionId(req.params.sessionId);
     const result = await providerTokenUsageService.getSessionTokenUsage(sessionId);
+    res.json(createApiSuccessResponse(result));
+  }),
+);
+
+router.get(
+  '/quota',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = readOptionalQueryString(req.query.provider) || 'antigravity';
+    const forceRefresh = parseOptionalBooleanQuery(req.query.refresh, 'refresh') ?? false;
+    const result = await providerTokenUsageService.getProviderQuota(provider, { forceRefresh });
     res.json(createApiSuccessResponse(result));
   }),
 );

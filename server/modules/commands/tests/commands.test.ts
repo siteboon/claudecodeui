@@ -112,3 +112,12 @@ test('cost and status commands report the same resolved model as /models', async
   assert.equal((cost.data as { model: string }).model, 'haiku');
   assert.equal((status.data as { model: string }).model, 'haiku');
 });
+
+test('cost and status commands preserve antigravity provider name', async () => {
+  const context = { provider: 'antigravity', sessionId: 'session-1', model: 'gemini-3.8-flash' };
+  const cost = await executeCommand('/cost', context);
+  const status = await executeCommand('/status', context);
+
+  assert.equal((cost.data as { provider: string }).provider, 'antigravity');
+  assert.equal((status.data as { provider: string }).provider, 'antigravity');
+});
