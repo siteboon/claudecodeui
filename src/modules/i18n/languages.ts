@@ -70,6 +70,11 @@ export const languages: Language[] = [
     label: 'Italian',
     nativeName: 'Italiano',
   },
+  {
+    value: 'id',
+    label: 'Indonesian',
+    nativeName: 'Bahasa Indonesia',
+  },
 ];
 
 /** Get language object by value, or undefined when it is not supported. */
