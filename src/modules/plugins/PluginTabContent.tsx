@@ -137,9 +137,13 @@ export default function PluginTabContent({
     };
   }, [pluginName, plugin?.entry, plugin?.enabled]); // re-mount when plugin or enabled state changes
 
+  const containerClassName = pluginName === 'web-terminal'
+    ? 'h-full w-full overflow-auto [&_.wt-root]:!font-mono'
+    : 'h-full w-full overflow-auto';
+
   return (
     <div className="relative h-full w-full overflow-auto">
-      <div ref={containerRef} className="h-full w-full overflow-auto" />
+      <div ref={containerRef} className={containerClassName} />
       {loadError && (
         <div className="absolute inset-0 p-4 text-[13px] text-red-600">
           {t('common:misc.pluginLoadFailed', { error: loadError })}

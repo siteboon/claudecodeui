@@ -19,7 +19,7 @@ const TERMINAL_RESIZE_DELAY_MS = 50;
 const TERMINAL_OPTIONS: ITerminalOptions = {
   cursorBlink: true,
   fontSize: 14,
-  fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+  fontFamily: 'monospace',
   allowProposedApi: true,
   allowTransparency: false,
   convertEol: true,
