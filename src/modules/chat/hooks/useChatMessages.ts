@@ -434,12 +434,22 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
         break;
 
       case 'error':
-        converted.push({
-          type: 'error',
-          content: msg.content || 'Unknown error',
-          timestamp: msg.timestamp,
-          ...sharedMetadata,
-        });
+        // An abort rides on the same kind but is not a failure, so it keeps its
+        // own type and skips the "Unknown error" fallback text.
+        converted.push(msg.isAbortNotice
+          ? {
+            type: 'abort_notice',
+            content: '',
+            timestamp: msg.timestamp,
+            isAbortNotice: true,
+            ...sharedMetadata,
+          }
+          : {
+            type: 'error',
+            content: msg.content || 'Unknown error',
+            timestamp: msg.timestamp,
+            ...sharedMetadata,
+          });
         break;
 
       case 'task_notification':

@@ -247,9 +247,11 @@
       "startingNow": "Starting now"
     },
     "stop": "Stop",
+    "runStopped": "Run stopped",
     "controls": {
       "stopGeneration": "Stop Generation",
-      "pressEscToStop": "Press Esc anytime to stop"
+      "pressEscToStop": "Press Esc anytime to stop",
+      "pressEscAgainToStop": "Press esc again to stop"
     },
     "providers": {
       "assistant": "Assistant"

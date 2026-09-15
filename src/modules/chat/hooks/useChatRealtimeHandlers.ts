@@ -257,8 +257,22 @@ export function useChatRealtimeHandlers({
           }
 
           if (msg.aborted) {
-            // Abort was requested — the complete event confirms it. No
-            // further UI action is needed beyond clearing the entry above.
+            // Abort was requested — the complete event confirms it. `complete`
+            // itself is never persisted, and an aborted run deliberately skips
+            // the transcript refresh below, so this row is the only trace the
+            // stop leaves. Without it a cancelled turn is indistinguishable
+            // from one that simply stalled.
+            if (sid) {
+              sessionStore.appendRealtime(sid, {
+                id: `abort_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                sessionId: sid,
+                timestamp: new Date().toISOString(),
+                provider,
+                kind: 'error',
+                isAbortNotice: true,
+                content: '',
+              } as NormalizedMessage);
+            }
             break;
           }
 

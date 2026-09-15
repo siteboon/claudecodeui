@@ -8,6 +8,11 @@ type ActivityIndicatorProps = {
   activity: SessionActivity | null;
   onAbort?: () => void;
   isInputFocused?: boolean;
+  /**
+   * True once a first Escape has armed the abort. The button is the only place
+   * that says so, which is what keeps the second press from being a surprise.
+   */
+  isAbortArmed?: boolean;
 };
 
 const ACTION_KEYS = [
@@ -31,7 +36,7 @@ const EXIT_ANIMATION_MS = 220;
  * Rendered by chat's ChatComposer above the input so the user can see and
  * interrupt the in-flight turn without leaving the composer.
  */
-export default function ActivityIndicator({ activity, onAbort, isInputFocused = false }: ActivityIndicatorProps) {
+export default function ActivityIndicator({ activity, onAbort, isInputFocused = false, isAbortArmed = false }: ActivityIndicatorProps) {
   const { t } = useTranslation('chat');
   const [renderedActivity, setRenderedActivity] = useState<SessionActivity | null>(activity);
   const [isExiting, setIsExiting] = useState(false);
@@ -99,16 +104,27 @@ export default function ActivityIndicator({ activity, onAbort, isInputFocused = 
           <button
             type="button"
             onClick={onAbort}
-            className={`${tabSurfaceClassName} pointer-events-auto gap-1.5 text-muted-foreground hover:bg-card hover:text-destructive`}
+            className={`${tabSurfaceClassName} pointer-events-auto gap-1.5 ${
+              isAbortArmed
+                ? 'border-destructive/40 text-destructive'
+                : 'text-muted-foreground hover:bg-card hover:text-destructive'
+            }`}
             aria-label={t('claudeStatus.stop', { defaultValue: 'Stop' })}
+            aria-live="polite"
           >
             <svg className="h-2.5 w-2.5 fill-current" viewBox="0 0 24 24" aria-hidden>
               <rect x="5" y="5" width="14" height="14" rx="2" />
             </svg>
-            <span>{t('claudeStatus.stop', { defaultValue: 'Stop' })}</span>
-            <kbd className="hidden rounded border border-border/60 px-1 text-[10px] text-muted-foreground/70 sm:inline-block">
-              esc
-            </kbd>
+            <span>
+              {isAbortArmed
+                ? t('claudeStatus.controls.pressEscAgainToStop', { defaultValue: 'Press esc again to stop' })
+                : t('claudeStatus.stop', { defaultValue: 'Stop' })}
+            </span>
+            {!isAbortArmed && (
+              <kbd className="hidden rounded border border-border/60 px-1 text-[10px] text-muted-foreground/70 sm:inline-block">
+                esc
+              </kbd>
+            )}
           </button>
         )}
       </div>

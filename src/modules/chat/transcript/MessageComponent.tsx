@@ -90,6 +90,23 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
     return null;
   }
 
+  // A stopped run is a fact about the conversation, not a message in it, so it
+  // renders as a centred rule rather than taking an avatar and a speech slot.
+  if (message.isAbortNotice) {
+    return (
+      <div
+        data-message-timestamp={message.timestamp || undefined}
+        className="chat-message abort_notice flex items-center gap-3 px-3 py-1 sm:px-0"
+      >
+        <span className="h-px flex-1 bg-border/60" aria-hidden />
+        <span className="flex-shrink-0 text-[11px] text-muted-foreground">
+          {t('claudeStatus.runStopped', { defaultValue: 'Run stopped' })}
+        </span>
+        <span className="h-px flex-1 bg-border/60" aria-hidden />
+      </div>
+    );
+  }
+
   return (
     <div
       ref={messageRef}

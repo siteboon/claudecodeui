@@ -329,6 +329,11 @@ export type ChatMessage = {
   compact?: CompactionInfo;
   /** The summary that compaction produced, folded into the row above rather than left loose. */
   compactSummary?: string;
+  /**
+   * Marks the row that records an aborted run. Rendered as a plain notice
+   * rather than an error: the user asked for the stop, nothing failed.
+   */
+  isAbortNotice?: boolean;
   isSubagentContainer?: boolean;
   /** The agent this row spawned, when it spawned one. Its presence is what makes a row a subagent container. */
   subagent?: SubagentInfo;
@@ -475,6 +480,12 @@ export type NormalizedMessage = {
   isCompactSummary?: boolean;
   /** Set by the provider on the row that stands in for a compaction. */
   compact?: CompactionInfo;
+  /**
+   * Set on the client-built row that records an aborted run. Never sent by the
+   * backend — the abort is confirmed by `complete`, which is not persisted, so
+   * without this row the transcript keeps no trace of the stop at all.
+   */
+  isAbortNotice?: boolean;
   images?: Array<{ path?: string; data?: string; name?: string }>;
   files?: Array<{ path?: string; name?: string; mimeType?: string; size?: number }>;
   toolName?: string;

@@ -176,3 +176,24 @@ test('a tool_use carrying an attached result with no content renders as empty', 
   assert.equal(converted.length, 1);
   assert.equal(converted[0]?.toolResult?.content, '');
 });
+
+test('an aborted run becomes its own notice row, not an error', () => {
+  const notice = message('abort-1', { kind: 'error', isAbortNotice: true, content: '' });
+
+  const [converted] = normalizedToChatMessages([notice]);
+
+  assert.equal(converted?.type, 'abort_notice');
+  assert.equal(converted?.isAbortNotice, true);
+  // The "Unknown error" fallback would read as a failure the user did not have.
+  assert.equal(converted?.content, '');
+});
+
+test('a real error is still an error row', () => {
+  const failure = message('err-1', { kind: 'error', content: '' });
+
+  const [converted] = normalizedToChatMessages([failure]);
+
+  assert.equal(converted?.type, 'error');
+  assert.equal(converted?.isAbortNotice, undefined);
+  assert.equal(converted?.content, 'Unknown error');
+});
