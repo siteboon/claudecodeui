@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { IS_PLATFORM } from '@/shared/utils';
 
@@ -18,6 +19,7 @@ export default function AuthScreenLayout({
   footerText,
   logo,
 }: AuthScreenLayoutProps) {
+  const { t } = useTranslation('auth');
   return (
     <div className="relative h-screen overflow-y-auto bg-background">
       {/* Ambient, on-brand backdrop that gives the screen depth without
@@ -60,7 +62,7 @@ export default function AuthScreenLayout({
                 rel="noopener noreferrer"
                 className="text-xs text-muted-foreground/50 transition-colors hover:text-muted-foreground"
               >
-                CloudCLI is open source
+                {t('misc.openSource')}
               </a>
             </div>
           )}

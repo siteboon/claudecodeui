@@ -1,14 +1,14 @@
-import { memo, useEffect, useRef, useState } from 'react';
-import { Check, Copy, Edit2, GitBranch, Loader2, MoreHorizontal, Trash2, X } from 'lucide-react';
+import { memo, useState } from 'react';
+import { Check, Edit2, Loader2, MoreHorizontal, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
-import { ActionMenu, Badge, Dialog, DialogContent, DialogTitle, LLMProviderLogo, Tooltip, buttonVariants } from '@/shared/ui';
-import { cn,copyTextToClipboard } from '@/shared/utils';
+import { Badge, Dialog, DialogContent, DialogTitle, LLMProviderLogo, Tooltip, buttonVariants } from '@/shared/ui';
+import { cn } from '@/shared/utils';
 import type { LLMProvider, Project, ProjectSession, SessionWithProvider } from '@/shared/types';
-import { api } from '@/shared/api';
-import { useSessionForkingProviders } from '@/shared/hooks/useProviderCapabilities';
-import { createSessionViewModel, formatCompactAge } from '@/modules/sidebar/utils/sidebarProjectFormatting';
+import { PROVIDER_LABELS, createSessionViewModel, formatCompactAge } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import { useCompactSidebar } from '@/modules/sidebar/hooks/useCompactSidebar';
+import { useProviderSessionIdCopy } from '@/modules/sidebar/hooks/useProviderSessionIdCopy';
+import SessionOptions from '@/modules/sidebar/SessionOptions';
 
 type SidebarSessionItemProps = {
   project: Project;
@@ -32,14 +32,6 @@ type SidebarSessionItemProps = {
   t: TFunction;
 };
 
-const PROVIDER_LABELS: Record<LLMProvider, string> = {
-  claude: 'Claude',
-  codex: 'Codex',
-  cursor: 'Cursor',
-  opencode: 'OpenCode',
-};
-
-type CopyState = 'loading' | 'idle' | 'copying' | 'copied' | 'error';
 /** Rendered by SidebarProjectSessions for one session row, including its rename, copy and delete controls. */
 function SidebarSessionItem({
   project,
@@ -64,33 +56,16 @@ function SidebarSessionItem({
   const sessionView = createSessionViewModel(session, currentTime, t);
   const isSelected = selectedSession?.id === session.id;
   const compactSessionAge = formatCompactAge(sessionView.sessionTime, currentTime);
-  const editingContainerRef = useRef<HTMLDivElement>(null);
   const [isMobileOptionsOpen, setIsMobileOptionsOpen] = useState(false);
-  const [copyState, setCopyState] = useState<CopyState>('idle');
-  const [providerSessionId, setProviderSessionId] = useState<string | null>(null);
-  const providerIdRequestRef = useRef(0);
   const showAttentionIndicator = needsAttention && !isSelected;
   const showRecentIndicator = !showAttentionIndicator && !isProcessing && sessionView.isActive;
   const providerLabel = PROVIDER_LABELS[session.__provider];
 
-  // While editing, dismiss only when the user clicks outside the inline rename panel
-  // (matches Escape / cancel-button behaviour). The mobile rename lives inside the
-  // bottom sheet, which owns its own dismissal, so the listener stays off there.
-  useEffect(() => {
-    if (!isEditing || isMobileOptionsOpen) {
-      return;
-    }
-
-    const handlePointerDown = (event: MouseEvent) => {
-      const container = editingContainerRef.current;
-      if (container && !container.contains(event.target as Node)) {
-        onCancelEditingSession();
-      }
-    };
-
-    document.addEventListener('mousedown', handlePointerDown);
-    return () => document.removeEventListener('mousedown', handlePointerDown);
-  }, [isEditing, isMobileOptionsOpen, onCancelEditingSession]);
+  // The desktop controls live in SessionOptions, which owns the rename panel and
+  // its outside-click dismissal. The mobile rename sits inside the bottom sheet,
+  // which owns its own.
+  const { copyState, copyLabel, setOptionsOpen, handleCopyAction, isCopyPending, CopyStateIcon } =
+    useProviderSessionIdCopy(session.id, providerLabel);
 
   // Sessions are owned by a project identified by `projectId` (DB primary key)
   // after the projectName → projectId migration.
@@ -103,50 +78,8 @@ function SidebarSessionItem({
     onSaveEditingSession(project.projectId, session.id, renameDraft, session.__provider);
   };
 
-  // Read from the backend capability matrix rather than branching on the
-  // provider id here; the underlying request is cached module-side, so every
-  // row in the sidebar shares one fetch.
-  const forkableProviders = useSessionForkingProviders();
-  const canForkThisSession = forkableProviders.has(session.__provider);
-
   const requestDeleteSession = () => {
     onDeleteSession(session.id, sessionView.sessionName);
-  };
-
-  const loadProviderSessionId = async () => {
-    const requestId = ++providerIdRequestRef.current;
-    setCopyState('loading');
-    try {
-      const response = await api.providerSessionId(session.id);
-      const payload = await response.json();
-      const loadedSessionId = payload?.data?.sessionId;
-      if (!response.ok || typeof loadedSessionId !== 'string' || !loadedSessionId) {
-        throw new Error('Provider session ID is unavailable');
-      }
-
-      if (requestId !== providerIdRequestRef.current) return;
-      setProviderSessionId(loadedSessionId);
-      setCopyState('idle');
-    } catch {
-      if (requestId !== providerIdRequestRef.current) return;
-      setProviderSessionId(null);
-      setCopyState('error');
-    }
-  };
-
-  const resetCopyState = () => {
-    providerIdRequestRef.current += 1;
-    setCopyState('idle');
-    setProviderSessionId(null);
-  };
-
-  const setOptionsOpen = (open: boolean) => {
-    if (open) {
-      setProviderSessionId(null);
-      void loadProviderSessionId();
-    } else {
-      resetCopyState();
-    }
   };
 
   const setMobileOptionsOpen = (open: boolean) => {
@@ -165,37 +98,6 @@ function SidebarSessionItem({
     saveEditedSession();
     setMobileOptionsOpen(false);
   };
-
-  const copyProviderSessionId = async () => {
-    if (!providerSessionId) {
-      setCopyState('error');
-      return;
-    }
-
-    setCopyState('copying');
-    const didCopy = await copyTextToClipboard(providerSessionId);
-    setCopyState(didCopy ? 'copied' : 'error');
-  };
-
-  const handleCopyAction = () => {
-    if (copyState === 'error' && !providerSessionId) {
-      void loadProviderSessionId();
-    } else {
-      void copyProviderSessionId();
-    }
-  };
-
-  const isCopyPending = copyState === 'loading' || copyState === 'copying';
-  const CopyStateIcon = copyState === 'copied' ? Check : Copy;
-  const copyLabel = copyState === 'loading'
-    ? `Loading ${providerLabel} session ID…`
-    : copyState === 'copied'
-      ? `${providerLabel} session ID copied`
-      : copyState === 'error'
-        ? providerSessionId
-          ? `Couldn't copy ${providerLabel} session ID`
-          : `${providerLabel} session ID unavailable`
-        : `Copy ${providerLabel} session ID`;
 
   return (
     <div className="group relative">
@@ -491,104 +393,23 @@ function SidebarSessionItem({
           </div>
         </a>
 
-        <div
-          ref={editingContainerRef}
-          className="absolute right-2 top-1/2 flex -translate-y-1/2 transform items-center gap-1 opacity-100 transition-all duration-200"
-        >
-            {isEditing ? (
-              <>
-                <input
-                  type="text"
-                  value={renameDraft}
-                  onChange={(event) => onRenameDraftChange(event.target.value)}
-                  onKeyDown={(event) => {
-                    event.stopPropagation();
-                    if (event.key === 'Enter') {
-                      saveEditedSession();
-                    } else if (event.key === 'Escape') {
-                      onCancelEditingSession();
-                    }
-                  }}
-                  onClick={(event) => event.stopPropagation()}
-                  className="w-32 rounded border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                  autoFocus
-                />
-                <button
-                  className="flex h-6 w-6 items-center justify-center rounded bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:hover:bg-green-900/40"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    saveEditedSession();
-                  }}
-                  title={t('tooltips.save')}
-                >
-                  <Check className="h-3 w-3 text-green-600 dark:text-green-400" />
-                </button>
-                <button
-                  className="flex h-6 w-6 items-center justify-center rounded bg-gray-50 hover:bg-gray-100 dark:bg-gray-900/20 dark:hover:bg-gray-900/40"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onCancelEditingSession();
-                  }}
-                  title={t('tooltips.cancel')}
-                >
-                  <X className="h-3 w-3 text-gray-600 dark:text-gray-400" />
-                </button>
-              </>
-            ) : (
-              <ActionMenu
-                label="Session options"
-                ariaLabel={`Session options for ${sessionView.sessionName}`}
-                icon={MoreHorizontal}
-                iconOnly
-                portal
-                variant="ghost"
-                size="icon"
-                onOpenChange={setOptionsOpen}
-                triggerClassName="h-7 w-7 text-muted-foreground opacity-70 hover:bg-muted hover:opacity-100"
-                menuClassName="w-[260px] rounded-xl p-1.5 shadow-xl"
-                header={(
-                  <div className="mb-1 border-b border-border px-3 py-2">
-                    <p className="truncate text-xs font-medium text-foreground" title={sessionView.sessionName}>
-                      {sessionView.sessionName}
-                    </p>
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">{providerLabel} session</p>
-                  </div>
-                )}
-                items={[
-                  {
-                    key: 'rename',
-                    label: 'Rename session',
-                    icon: Edit2,
-                    onSelect: () => onStartEditingSession(project.projectId, session.id, sessionView.sessionName),
-                  },
-                  {
-                    key: 'copy',
-                    label: copyLabel,
-                    description: copyState === 'error' ? 'Click to try again.' : undefined,
-                    icon: CopyStateIcon,
-                    loading: isCopyPending,
-                    closeOnSelect: false,
-                    onSelect: handleCopyAction,
-                  },
-                  ...(onForkSession && canForkThisSession && !isProcessing ? [{
-                    key: 'fork',
-                    label: 'Fork session',
-                    description: 'Continue from a copy, leaving this one untouched.',
-                    icon: GitBranch,
-                    onSelect: () => onForkSession(session),
-                  }] : []),
-                  ...(!isProcessing ? [{
-                    key: 'delete',
-                    label: 'Archive or delete session',
-                    icon: Trash2,
-                    isDanger: true,
-                    showDividerBefore: true,
-                    onSelect: requestDeleteSession,
-                  }] : []),
-                ]}
-              />
-            )}
-          </div>
+        <SessionOptions
+          className="absolute right-2 top-1/2 -translate-y-1/2 transform transition-all duration-200"
+          sessionId={session.id}
+          sessionName={sessionView.sessionName}
+          provider={session.__provider}
+          projectId={project.projectId}
+          isProcessing={isProcessing}
+          isEditing={isEditing}
+          renameDraft={renameDraft}
+          onRenameDraftChange={onRenameDraftChange}
+          onStartEditingSession={onStartEditingSession}
+          onCancelEditingSession={onCancelEditingSession}
+          onSaveEditingSession={onSaveEditingSession}
+          onDeleteSession={onDeleteSession}
+          onFork={onForkSession ? () => onForkSession(session) : undefined}
+          t={t}
+        />
       </div>
       )}
     </div>
