@@ -26,8 +26,14 @@ const storage = multer.diskStorage({
   },
 });
 
+// Browsers send multipart filenames as raw UTF-8 bytes, but multer/busboy
+// decode them as latin1 by default, which garbles non-ASCII names (Korean,
+// Japanese, Chinese, accented characters) in `file.originalname`.
+const MULTIPART_PARAM_CHARSET = 'utf8';
+
 const upload = multer({
   storage,
+  defParamCharset: MULTIPART_PARAM_CHARSET,
   fileFilter: (req, file, cb) => {
     if (isAllowedImageMimeType(file.mimetype)) {
       cb(null, true);
@@ -43,6 +49,7 @@ const upload = multer({
 
 const attachmentUpload = multer({
   storage,
+  defParamCharset: MULTIPART_PARAM_CHARSET,
   limits: {
     fileSize: 10 * 1024 * 1024,
     files: 10,

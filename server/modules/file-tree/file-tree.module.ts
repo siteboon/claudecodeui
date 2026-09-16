@@ -95,6 +95,9 @@ const fileUploadMiddleware = multer({
       callback(null, `cloudcli-file-upload-${randomUUID()}`);
     },
   }),
+  // Decode multipart filenames as UTF-8 so non-ASCII names survive intact
+  // (multer/busboy default to latin1).
+  defParamCharset: 'utf8',
   limits: {
     fileSize: MAXIMUM_UPLOAD_SIZE_BYTES,
     files: MAXIMUM_UPLOAD_FILE_COUNT,
