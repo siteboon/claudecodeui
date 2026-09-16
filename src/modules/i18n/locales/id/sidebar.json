@@ -1,0 +1,161 @@
+{
+  "projects": {
+    "title": "Proyek",
+    "newProject": "Proyek Baru",
+    "deleteProject": "Hapus Proyek",
+    "renameProject": "Ganti Nama Proyek",
+    "noProjects": "Tidak ada proyek",
+    "loadingProjects": "Memuat proyek...",
+    "searchPlaceholder": "Cari proyek...",
+    "projectNamePlaceholder": "Nama proyek",
+    "starred": "Berbintang",
+    "all": "Semua",
+    "untitledSession": "Sesi Tanpa Judul",
+    "newSession": "Sesi Baru",
+    "codexSession": "Sesi Codex",
+    "fetchingProjects": "Mengambil proyek dan sesi Claude",
+    "projects": "proyek",
+    "noMatchingProjects": "Tidak ada proyek yang cocok",
+    "tryDifferentSearch": "Coba ubah kata pencarian",
+    "runClaudeCli": "Jalankan Claude CLI di direktori proyek untuk memulai"
+  },
+  "app": {
+    "title": "CloudCLI",
+    "subtitle": "Antarmuka asisten coding AI"
+  },
+  "sessions": {
+    "title": "Sesi",
+    "newSession": "Sesi Baru",
+    "deleteSession": "Hapus Sesi",
+    "renameSession": "Ganti Nama Sesi",
+    "noSessions": "Belum ada sesi",
+    "loadingSessions": "Memuat sesi...",
+    "unnamed": "Tanpa Nama",
+    "loading": "Memuat...",
+    "showMore": "Tampilkan sesi lainnya"
+  },
+  "tooltips": {
+    "viewEnvironments": "Lihat Lingkungan",
+    "hideSidebar": "Sembunyikan sidebar",
+    "createProject": "Buat proyek baru",
+    "refresh": "Segarkan proyek dan sesi (Ctrl+R)",
+    "renameProject": "Ganti nama proyek (F2)",
+    "deleteProject": "Hapus proyek dari sidebar (Delete)",
+    "addToFavorites": "Tambahkan ke favorit",
+    "removeFromFavorites": "Hapus dari favorit",
+    "editSessionName": "Edit nama sesi secara manual",
+    "deleteSession": "Hapus sesi ini secara permanen",
+    "activeSessionIndicator": "Sesi baru-baru ini aktif (10 menit terakhir)",
+    "save": "Simpan",
+    "cancel": "Batal",
+    "clearSearch": "Hapus pencarian",
+    "openCommandPalette": "Buka palet perintah",
+    "attentionRequiredIndicator": "Sesi memerlukan perhatian"
+  },
+  "navigation": {
+    "chat": "Chat",
+    "files": "File",
+    "git": "Git",
+    "terminal": "Terminal",
+    "tasks": "Tugas"
+  },
+  "actions": {
+    "refresh": "Segarkan",
+    "settings": "Pengaturan",
+    "collapseAll": "Ciutkan Semua",
+    "expandAll": "Perluas Semua",
+    "cancel": "Batal",
+    "save": "Simpan",
+    "delete": "Hapus",
+    "rename": "Ganti Nama",
+    "joinCommunity": "Gabung Komunitas",
+    "reportIssue": "Laporkan Masalah",
+    "starOnGithub": "Beri Bintang di GitHub"
+  },
+  "branding": {
+    "openSource": "Open Source"
+  },
+  "status": {
+    "active": "Aktif",
+    "inactive": "Tidak Aktif",
+    "thinking": "Berpikir...",
+    "error": "Kesalahan",
+    "aborted": "Dibatalkan",
+    "unknown": "Tidak Diketahui"
+  },
+  "time": {
+    "justNow": "Baru saja",
+    "oneMinuteAgo": "1 menit lalu",
+    "minutesAgo": "{{count}} menit lalu",
+    "oneHourAgo": "1 jam lalu",
+    "hoursAgo": "{{count}} jam lalu",
+    "oneDayAgo": "1 hari lalu",
+    "daysAgo": "{{count}} hari lalu"
+  },
+  "messages": {
+    "deleteConfirm": "Yakin ingin menghapus ini?",
+    "renameSuccess": "Nama berhasil diubah",
+    "deleteSuccess": "Berhasil dihapus",
+    "errorOccurred": "Terjadi kesalahan",
+    "deleteSessionConfirm": "Yakin ingin menghapus sesi ini? Tindakan ini tidak dapat dibatalkan.",
+    "deleteProjectConfirm": "Hapus proyek ini dari sidebar? File proyek, memori, dan data sesi tidak akan dihapus.",
+    "enterProjectPath": "Masukkan path proyek",
+    "deleteSessionFailed": "Gagal menghapus sesi. Silakan coba lagi.",
+    "deleteSessionError": "Terjadi kesalahan saat menghapus sesi. Silakan coba lagi.",
+    "renameSessionFailed": "Gagal mengganti nama sesi. Silakan coba lagi.",
+    "renameSessionError": "Terjadi kesalahan saat mengganti nama sesi. Silakan coba lagi.",
+    "deleteProjectFailed": "Gagal menghapus proyek. Silakan coba lagi.",
+    "deleteProjectError": "Terjadi kesalahan saat menghapus proyek. Silakan coba lagi.",
+    "createProjectFailed": "Gagal membuat proyek. Silakan coba lagi.",
+    "createProjectError": "Terjadi kesalahan saat membuat proyek. Silakan coba lagi.",
+    "updateProjectError": "Terjadi kesalahan saat memperbarui proyek. Silakan coba lagi.",
+    "refreshError": "Gagal menyegarkan. Silakan coba lagi.",
+    "restoreProjectFailed": "Gagal memulihkan proyek. Silakan coba lagi.",
+    "restoreProjectError": "Terjadi kesalahan saat memulihkan proyek. Silakan coba lagi.",
+    "restoreSessionFailed": "Gagal memulihkan sesi. Silakan coba lagi.",
+    "restoreSessionError": "Terjadi kesalahan saat memulihkan sesi. Silakan coba lagi.",
+    "forkSessionError": "Sesi ini tidak dapat di-fork. Silakan coba lagi."
+  },
+  "version": {
+    "updateAvailable": "Pembaruan tersedia",
+    "restartRequired": "Pembaruan terpasang — mulai ulang server untuk menerapkan"
+  },
+  "search": {
+    "modeProjects": "Proyek",
+    "modeConversations": "Percakapan",
+    "conversationsPlaceholder": "Cari dalam percakapan...",
+    "searching": "Mencari...",
+    "sessionTitles": "Sesi",
+    "conversationContents": "Isi percakapan",
+    "noResults": "Tidak ada hasil",
+    "tryDifferentQuery": "Coba kueri pencarian lain",
+    "matches_one": "{{count}} kecocokan",
+    "matches_other": "{{count}} kecocokan",
+    "projectsScanned_one": "{{count}} proyek dipindai",
+    "projectsScanned_other": "{{count}} proyek dipindai"
+  },
+  "recent": {
+    "title": "Percakapan terbaru",
+    "emptyTitle": "Belum ada percakapan",
+    "emptyDescription": "Percakapan yang paling baru diperbarui akan muncul di sini.",
+    "loadFailed": "Gagal memuat percakapan terbaru",
+    "loadMore": "Muat percakapan yang lebih lama",
+    "loadingMore": "Memuat lainnya..."
+  },
+  "deleteConfirmation": {
+    "deleteProject": "Hapus Proyek",
+    "deleteSession": "Hapus Sesi",
+    "confirmDelete": "Apa yang ingin dilakukan dengan",
+    "sessionCount_one": "Proyek ini berisi {{count}} percakapan.",
+    "sessionCount_other": "Proyek ini berisi {{count}} percakapan.",
+    "removeFromSidebar": "Hapus hanya dari sidebar",
+    "archiveProject": "Arsipkan proyek",
+    "archiveSession": "Arsipkan sesi",
+    "archiveSessionNotice": "Pengarsipan menyembunyikan sesi dari daftar aktif tanpa menghapus riwayatnya.",
+    "archivedSessionNotice": "Sesi ini sudah diarsipkan. Sesi dapat tetap disembunyikan atau dihapus permanen.",
+    "deleteSessionPermanently": "Hapus permanen",
+    "deleteAllData": "Hapus semua data secara permanen",
+    "allConversationsDeleted": "Proyek akan dihapus dari sidebar. File, memori, dan data sesi tetap dipertahankan.",
+    "cannotUndo": "Proyek dapat ditambahkan kembali nanti."
+  }
+}

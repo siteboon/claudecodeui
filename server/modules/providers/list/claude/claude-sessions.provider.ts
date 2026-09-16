@@ -6,6 +6,7 @@ import readline from 'node:readline';
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import type {
   AnyRecord,
+  CompactionInfo,
   FetchHistoryOptions,
   FetchHistoryResult,
   NormalizedMessage,
@@ -19,12 +20,27 @@ import {
   generateMessageId,
   readObjectRecord,
   sliceTailPage,
+  stripAnsiSequences,
   truncateSubagentActivity,
 } from '@/shared/utils.js';
 import { sessionsDb } from '@/modules/database/index.js';
 import { summarizeClaudeTokenUsage } from '@/modules/providers/services/provider-token-usage.service.js';
 
 const PROVIDER = 'claude';
+
+/** Tokens the way the CLI writes them: 725k rather than 724,871. */
+const formatTokenCount = (tokens: number): string => {
+  if (tokens >= 1_000_000) {
+    return `${(tokens / 1_000_000).toFixed(1)}M`;
+  }
+  return tokens >= 1_000 ? `${Math.round(tokens / 1_000)}k` : `${tokens}`;
+};
+
+/** A duration the way the CLI writes one: `2m 22s`. */
+const formatDuration = (milliseconds: number): string => {
+  const seconds = Math.round(milliseconds / 1_000);
+  return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+};
 
 /**
  * Upper bound on how much of a subagent's timeline is sent to the client. A
@@ -638,14 +654,6 @@ function buildLocalCommandDisplayText(payload: ClaudeLocalCommandPayload): strin
   return commandArgs ? `${baseCommand} ${commandArgs}` : baseCommand;
 }
 
-/**
- * Claude local-command stdout may contain ANSI styling codes because it was
- * captured from the terminal. The web chat should receive readable plain text.
- */
-function stripAnsiFormatting(text: string): string {
-  return text.replace(/\u001B\[[0-9;?]*[ -/]*[@-~]/g, '');
-}
-
 export class ClaudeSessionsProvider implements IProviderSessions {
   /**
    * Normalizes one Claude JSONL entry or live SDK stream event into the shared
@@ -690,6 +698,67 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     const messages: NormalizedMessage[] = [];
     const ts = raw.timestamp || new Date().toISOString();
     const baseId = raw.uuid || generateMessageId('claude');
+
+    // A compaction is the most expensive thing a long session does without
+    // being asked, and neither record that describes it survives the branches
+    // below: `system` events normalize to nothing. Both become one ordinary
+    // assistant row, so a client that knows nothing of `compact` still reads
+    // the sentence, while one that does can draw it as a row of its own.
+    if (raw.type === 'system' && (raw.subtype === 'compact_boundary' || raw.subtype === 'status')) {
+      const compactionRow = (content: string, compact: CompactionInfo): NormalizedMessage[] => [
+        createNormalizedMessage({
+          id: `${baseId}_compact`,
+          sessionId,
+          timestamp: ts,
+          provider: PROVIDER,
+          kind: 'text',
+          role: 'assistant',
+          content,
+          compact,
+        }),
+      ];
+
+      if (raw.subtype === 'compact_boundary') {
+        // `compact_metadata` live, `compactMetadata` on disk.
+        const metadata = readObjectRecord(raw.compact_metadata ?? raw.compactMetadata) ?? {};
+        const trigger = metadata.trigger === 'manual' ? 'manual' : 'auto';
+        const preTokens = Number(metadata.pre_tokens ?? metadata.preTokens) || 0;
+        const postTokens = Number(metadata.post_tokens ?? metadata.postTokens) || 0;
+        const durationMs = Number(metadata.duration_ms ?? metadata.durationMs) || 0;
+        const said = ['Compacted', trigger];
+        if (preTokens) {
+          said.push(postTokens
+            ? `${formatTokenCount(preTokens)} → ${formatTokenCount(postTokens)} tokens`
+            : `${formatTokenCount(preTokens)} tokens`);
+        }
+        if (durationMs) {
+          said.push(formatDuration(durationMs));
+        }
+
+        return compactionRow(said.join(' · '), {
+          phase: 'done',
+          trigger,
+          preTokens,
+          postTokens,
+          durationMs,
+        });
+      }
+
+      // A status message reports several things, and compaction is the only one
+      // with anything to say: every other turn sends `requesting` or nothing.
+      if (raw.status === 'compacting') {
+        return compactionRow('Compacting conversation…', { phase: 'running' });
+      }
+      if (raw.compact_result === 'failed') {
+        const error = typeof raw.compact_error === 'string' ? raw.compact_error : null;
+        return compactionRow(`Compaction failed${error ? `: ${error}` : ''}`, {
+          phase: 'failed',
+          error,
+        });
+      }
+
+      return [];
+    }
 
     if (raw.message?.role === 'user' && raw.message?.content && raw.isMeta !== true) {
       if (Array.isArray(raw.message.content)) {
@@ -840,7 +909,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
          */
         const localCommandStdout = extractTaggedContent(text, 'local-command-stdout');
         if (localCommandStdout !== null) {
-          const stdoutText = stripAnsiFormatting(localCommandStdout).trim();
+          const stdoutText = stripAnsiSequences(localCommandStdout).trim();
           if (stdoutText) {
             messages.push(createNormalizedMessage({
               id: baseId,
