@@ -88,6 +88,12 @@ const project: Project = {
 const wrapper = ({ children }: { children: React.ReactNode }) =>
   React.createElement(ThemeProvider, null, children);
 
+/**
+ * Mounts the hook inside a real ThemeProvider against a detached container.
+ *
+ * @returns The `renderHook` result, whose `current` is the theme context, so a
+ * test can flip the theme the way the UI's toggle does.
+ */
 const renderShellTerminal = () => {
   const container = document.createElement('div');
   document.body.appendChild(container);

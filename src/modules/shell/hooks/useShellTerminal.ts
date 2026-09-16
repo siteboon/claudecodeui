@@ -92,6 +92,12 @@ const LIGHT_TERMINAL_THEME: ITheme = {
   extendedAnsi: EXTENDED_ANSI,
 };
 
+/**
+ * Picks the xterm palette that matches the app's current light/dark theme.
+ *
+ * @param isDarkMode - Whether the app is in dark mode, from `useTheme`.
+ * @returns The palette to hand to the terminal, as `ITheme`.
+ */
 const getTerminalTheme = (isDarkMode: boolean): ITheme =>
   isDarkMode ? DARK_TERMINAL_THEME : LIGHT_TERMINAL_THEME;
 
