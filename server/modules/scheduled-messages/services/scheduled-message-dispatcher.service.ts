@@ -1,6 +1,6 @@
 import { scheduledMessagesDb, sessionDraftsDb } from '@/modules/database/index.js';
 import type { QueuedSessionMessageRecord, ScheduledMessageRow } from '@/modules/database/index.js';
-import { chatRunRegistry, runDetachedChatTurn } from '@/modules/websocket/index.js';
+import { chatRunRegistry, onRunSettled, runDetachedChatTurn } from '@/modules/websocket/index.js';
 import type { ProviderRuntimeGateway } from '@/modules/websocket/index.js';
 
 /**
@@ -9,10 +9,17 @@ import type { ProviderRuntimeGateway } from '@/modules/websocket/index.js';
  * A minute is the granularity the composer offers, and a claim is indexed on
  * `(status, scheduled_for)`, so the poll is one cheap query. Anything finer
  * would buy precision nobody asked for.
+ *
+ * Queued messages do not wait for this: they are also dispatched the moment
+ * the run that blocked them settles (see `unsubscribeRunSettled` below). The
+ * poll remains their safety net for the cases no run-settled event covers —
+ * a message queued while nothing was running, or one left behind by a server
+ * restart.
  */
 const POLL_INTERVAL_MS = 30_000;
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+let unsubscribeRunSettled: (() => void) | null = null;
 let dispatchInFlight = false;
 
 type StoredQueuedMessage = {
@@ -191,11 +198,28 @@ export function initializeScheduledMessageDispatcher(runtime: ProviderRuntimeGat
   // Never keep the process alive just to poll for scheduled messages.
   pollTimer.unref?.();
 
+  // A message queued during a turn is sent as soon as that turn ends. Without
+  // this the only sender is the poll above, so the user watches an idle
+  // session for up to POLL_INTERVAL_MS before their queued turn starts — the
+  // frontend deliberately does not send it ("the VPS dispatcher owns sending",
+  // useChatComposerState.ts). `dispatchQueuedMessages` re-checks `isProcessing`
+  // and claims transactionally, so racing with the poll is harmless.
+  unsubscribeRunSettled = onRunSettled(() => {
+    void dispatchQueuedMessages(runtime).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('[ScheduledMessages] Run-settled dispatch failed', { error: message });
+    });
+  });
+
   // Catch up on anything that came due while the server was not running.
   poll();
 }
 
 export function closeScheduledMessageDispatcher(): void {
+  if (unsubscribeRunSettled) {
+    unsubscribeRunSettled();
+    unsubscribeRunSettled = null;
+  }
   if (pollTimer) {
     clearInterval(pollTimer);
     pollTimer = null;
