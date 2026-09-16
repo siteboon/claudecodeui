@@ -5,6 +5,7 @@ import {
   appendImagesInputTag,
   normalizeAttachmentDescriptors
 } from '@/shared/image-attachments.js';
+import { resolveCursorAgentCommand } from '@/shared/cursor-cli-path.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
 import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell } from '@/shared/utils.js';
 
@@ -156,7 +157,7 @@ async function spawnCursor(command, options = {}, ws, context) {
         console.log('Retrying Cursor CLI with --trust after workspace trust prompt');
       }
 
-      const cursorProcess = spawnFunction('cursor-agent', args, {
+      const cursorProcess = spawnFunction(resolveCursorAgentCommand(), args, {
         cwd: workingDir,
         stdio: ['pipe', 'pipe', 'pipe'],
         env: { ...process.env } // Inherit all environment variables

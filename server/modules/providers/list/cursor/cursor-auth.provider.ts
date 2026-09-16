@@ -1,5 +1,6 @@
 import spawn from 'cross-spawn';
 
+import { resolveCursorAgentCommand } from '@/shared/cursor-cli-path.js';
 import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { ProviderAuthStatus } from '@/shared/types.js';
 
@@ -16,7 +17,7 @@ export class CursorProviderAuth implements IProviderAuth {
    */
   private checkInstalled(): boolean {
     try {
-      spawn.sync('cursor-agent', ['--version'], { stdio: 'ignore', timeout: 5000 });
+      spawn.sync(resolveCursorAgentCommand(), ['--version'], { stdio: 'ignore', timeout: 5000 });
       return true;
     } catch {
       return false;
@@ -74,7 +75,7 @@ export class CursorProviderAuth implements IProviderAuth {
       }, 5000);
 
       try {
-        childProcess = spawn('cursor-agent', ['status']);
+        childProcess = spawn(resolveCursorAgentCommand(), ['status']);
       } catch {
         clearTimeout(timeout);
         processCompleted = true;

@@ -5,6 +5,7 @@ import path from 'node:path';
 import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
+import { resolveCursorAgentCommand } from '@/shared/cursor-cli-path.js';
 import { parseIncomingJsonObject } from '@/shared/utils.js';
 
 type ShellIncomingMessage = {
@@ -195,9 +196,9 @@ function buildShellCommand(
 
   if (provider === 'cursor') {
     if (resumeSessionId) {
-      return `cursor-agent --resume="${resumeSessionId}"`;
+      return `${resolveCursorAgentCommand()} --resume="${resumeSessionId}"`;
     }
-    return 'cursor-agent';
+    return resolveCursorAgentCommand();
   }
 
   if (provider === 'codex') {
