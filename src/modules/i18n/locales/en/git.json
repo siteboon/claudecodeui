@@ -2,6 +2,12 @@
   "panel": {
     "selectProject": "Select a project to view source control"
   },
+  "repository": {
+    "label": "Repository",
+    "root": "project root",
+    "search": "Search repositories...",
+    "noMatches": "No matching repositories"
+  },
   "tabs": {
     "changes": "Changes",
     "history": "Commits",
