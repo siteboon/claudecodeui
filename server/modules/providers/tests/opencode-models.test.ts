@@ -239,10 +239,10 @@ test('OpenCode composes the provider prefix into session model ids', async () =>
   // so point it at a throwaway file rather than the developer's real one.
   const tempSessionsDirectory = await mkdtemp(path.join(os.tmpdir(), 'opencode-session-model-'));
   const previousDatabasePath = process.env.DATABASE_PATH;
-  closeConnection();
-  process.env.DATABASE_PATH = path.join(tempSessionsDirectory, 'auth.db');
-  await initializeDatabase();
   try {
+    closeConnection();
+    process.env.DATABASE_PATH = path.join(tempSessionsDirectory, 'auth.db');
+    await initializeDatabase();
     // OpenCode stores the provider and model id in separate fields of the
     // session row ({"id":"z-ai/glm-5.3-flash","providerID":"openrouter"}), but
     // the CLI's `--model` flag only resolves the composed
