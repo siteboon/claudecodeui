@@ -982,6 +982,12 @@ export type FileOpenHandler = (filePath: string, diffInfo?: FileDiffInfo) => voi
 /** Which tab the git panel is showing (changes, compare, history, branches or worktrees), driving both the tab bar and which data its controller loads. */
 export type GitPanelView = 'changes' | 'compare' | 'history' | 'branches' | 'worktrees';
 
+/** Repository a git API call targets: the project (DB id) plus, for a repository nested below the project root, that repository's root relative to the project; omitted or `''` means the project root. */
+export type GitTarget = { projectId: string; repo?: string };
+
+/** One repository found under a project root by the repositories endpoint; `path` is relative to the project root and `''` for the root itself. */
+export type GitRepositorySummary = { path: string; name: string };
+
 /** Single-letter git status of a changed file (M, A, D, R or U), used to pick its label and badge styling; the Changes tab groups only M/A/D/U, while R (renamed) appears in the Compare tab. */
 export type FileStatusCode = 'M' | 'A' | 'D' | 'R' | 'U';
 

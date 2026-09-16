@@ -19,7 +19,7 @@ export function useCommitsSource(projectId: string | undefined, enabled: boolean
   return useApiSource<CommitResult, CommitsResponse>({
     enabled: enabled && !!projectId,
     deps: [projectId],
-    fetcher: (signal) => api.git.commits(projectId!, { limit: COMMIT_RESULT_LIMIT }, { signal }),
+    fetcher: (signal) => api.git.commits({ projectId: projectId! }, { limit: COMMIT_RESULT_LIMIT }, { signal }),
     parse: (data) => {
       if (!data.commits) return [];
       return data.commits.map<CommitResult>((c) => ({
