@@ -544,6 +544,68 @@ function extractCumulativeTokenBudget(sdkMessage) {
 const DEFERRED_WORK_TOOLS = new Set(['Monitor', 'ScheduleWakeup', 'CronCreate', 'TaskCreate']);
 
 /**
+ * Whether a task-list update is worth a row of its own.
+ *
+ * Any change to a non-empty list is: work being armed, and equally work
+ * finishing while more is still outstanding — the row says what is running now,
+ * so `2 tasks → 1 task` has to replace it or the reader is left with a count
+ * that is no longer true. An empty list is the end of the wait, reported
+ * separately.
+ */
+function shouldAnnounceBackgroundTasks(previousTasks, nextTasks) {
+  if (!nextTasks.length) {
+    return false;
+  }
+  const key = (tasks) => tasks.map((task) => task?.id ?? '').join(',');
+  return key(previousTasks) !== key(nextTasks);
+}
+
+/**
+ * Whether this turn's process should be held open for work that outlives it.
+ *
+ * `pendingFromThisTurn` is what this turn armed; `outstandingTasks` is what the
+ * CLI still lists, which survives a turn boundary. Either holds the process, so
+ * a turn resumed mid-wait does not release it under work an earlier turn armed.
+ * The ceiling still bounds the hold, so nothing is held indefinitely.
+ */
+function shouldHoldForBackgroundWork(pendingFromThisTurn, outstandingTasks) {
+  return Boolean(pendingFromThisTurn) || outstandingTasks.length > 0;
+}
+
+/** A duration the way the CLI writes one: `2m 22s`. */
+function formatWaitDuration(milliseconds) {
+  const seconds = Math.max(0, Math.round(milliseconds / 1000));
+  return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
+
+/** `2 background tasks (deploy watch, log tail)`, or the singular of it. */
+function describeBackgroundTasks(tasks) {
+  const described = tasks
+    .map((task) => (typeof task?.description === 'string' ? task.description.trim() : ''))
+    .filter(Boolean);
+  const counted = `${tasks.length} background task${tasks.length === 1 ? '' : 's'}`;
+  return described.length ? `${counted} (${described.join(', ')})` : counted;
+}
+
+/**
+ * One row saying what the session is waiting for.
+ *
+ * Everything it says is in `content`, so a client that knows nothing of
+ * `backgroundWait` still reads the sentence; the field beside it is only how a
+ * client that does draws the row.
+ */
+function backgroundWaitRow(sessionId, content, backgroundWait) {
+  return createNormalizedMessage({
+    sessionId,
+    provider: 'claude',
+    kind: 'text',
+    role: 'assistant',
+    content,
+    backgroundWait,
+  });
+}
+
+/**
  * Detects tool calls that keep working after the turn's `result` arrives.
  *
  * Only turns that start background work need their CLI process held open; every
@@ -727,6 +789,14 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // True while the process is being held open for background work, so a later
   // `result` can be recognised as that work reporting back.
   let heldForBackgroundWork = false;
+  // The CLI's own list of outstanding work, which it re-sends whenever the list
+  // changes. It is authoritative in a way the tool calls are not: it survives a
+  // turn boundary, so a turn resumed mid-wait can see that work armed by an
+  // earlier turn is still running rather than releasing the process under it.
+  let backgroundTasks = [];
+  // When the current hold began, so the row that ends it can say nothing came
+  // back — and so a run that was never held says nothing at all.
+  let holdStartedAt = 0;
   // Set once a turn publishes a budget read from an assistant message, so the
   // turn-ending `result` is only mined for usage when nothing better arrived.
   let assistantBudgetSent = false;
@@ -745,6 +815,16 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     }
     idleReleaseTimer = setTimeout(() => {
       idleReleaseTimer = null;
+      // The hold ran out with nothing reported. Going quiet here is the whole
+      // complaint: the follow-up turn simply never comes.
+      if (holdStartedAt) {
+        ws.send(backgroundWaitRow(
+          capturedSessionId || sessionId || null,
+          `Stopped waiting for background work after ${formatWaitDuration(Date.now() - holdStartedAt)}`,
+          { phase: 'expired', tasks: backgroundTasks }
+        ));
+        holdStartedAt = 0;
+      }
       releasePromptStream();
     }, BG_WAIT_CEILING_MS);
     // Never let the hold keep the server process alive on its own.
@@ -972,6 +1052,36 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         backgroundWorkPending = true;
       }
 
+      // The CLI's own accounting of outstanding work. A list that empties after
+      // being full is the work reporting in — the one way a wait ends well.
+      if (message?.type === 'system' && message.subtype === 'background_tasks_changed') {
+        const previousTasks = backgroundTasks;
+        backgroundTasks = (Array.isArray(message.tasks) ? message.tasks : []).map((task) => ({
+          id: typeof task?.task_id === 'string' ? task.task_id : undefined,
+          type: typeof task?.task_type === 'string' ? task.task_type : undefined,
+          description: typeof task?.description === 'string' ? task.description : undefined,
+        }));
+        const sid = capturedSessionId || sessionId || null;
+
+        if (previousTasks.length && !backgroundTasks.length && holdStartedAt) {
+          ws.send(backgroundWaitRow(
+            sid,
+            `Background work reported in after ${formatWaitDuration(Date.now() - holdStartedAt)}`,
+            { phase: 'reported' }
+          ));
+          holdStartedAt = 0;
+        } else if (shouldAnnounceBackgroundTasks(previousTasks, backgroundTasks)) {
+          // Nothing said what was armed except the tool call that armed it,
+          // which scrolls away and says nothing about what is still outstanding
+          // once several are running -- or once one of several has finished.
+          ws.send(backgroundWaitRow(
+            sid,
+            `Running ${describeBackgroundTasks(backgroundTasks)}`,
+            { phase: 'started', tasks: backgroundTasks }
+          ));
+        }
+      }
+
       if (message.type === 'result') {
         // The turn is done as far as the client is concerned.
         const abortPending = sessionKey() ? abortedSessionIds.has(sessionKey()) : false;
@@ -995,17 +1105,36 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
             sessionName: sessionSummary
           });
         }
-        if (backgroundWorkPending) {
+        if (shouldHoldForBackgroundWork(backgroundWorkPending, backgroundTasks)) {
           // Work started during this turn is still running. Hold the process
           // open so it can finish and report back in a follow-up turn; the
-          // ceiling is only a backstop for work that never reports.
+          // ceiling is only a backstop for work that never reports. The CLI's
+          // list holds it open too, so a turn resumed mid-wait does not release
+          // the process under work an earlier turn armed.
           backgroundWorkPending = false;
           heldForBackgroundWork = true;
           scheduleRelease();
+          // And say so. Until this row the UI showed a finished turn and
+          // nothing else, which reads exactly like a session that stopped.
+          holdStartedAt = Date.now();
+          const waiting = backgroundTasks.length
+            ? describeBackgroundTasks(backgroundTasks)
+            : 'background work';
+          ws.send(backgroundWaitRow(
+            capturedSessionId || sessionId || null,
+            `Holding the session open for ${waiting} · up to ${formatWaitDuration(BG_WAIT_CEILING_MS)}`,
+            {
+              phase: 'holding',
+              tasks: backgroundTasks,
+              ceilingMs: BG_WAIT_CEILING_MS,
+              until: new Date(Date.now() + BG_WAIT_CEILING_MS).toISOString(),
+            }
+          ));
         } else {
           // Either nothing was backgrounded, or the background work just
           // reported in — let the CLI exit now, as it always has.
           heldForBackgroundWork = false;
+          holdStartedAt = 0;
           releasePromptStream();
         }
       } else if (idleReleaseTimer) {
@@ -1205,6 +1334,12 @@ export const claudeRuntime = {
 
 // Export public API
 export {
+  // Exported for the tests, which assert the wait sentences and the hold rule
+  // directly.
+  describeBackgroundTasks,
+  formatWaitDuration,
+  shouldAnnounceBackgroundTasks,
+  shouldHoldForBackgroundWork,
   queryClaudeSDK,
   abortClaudeSDKSession,
   isClaudeSDKSessionActive,

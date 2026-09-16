@@ -161,6 +161,32 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
             </div>
           )}
         </div>
+      ) : message.backgroundWait ? (
+        /* What a held session is waiting for, and what became of the wait */
+        <div className="w-full">
+          <div className="flex items-center gap-2 py-0.5">
+            <span
+              className={`inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${
+                message.backgroundWait.phase === 'holding'
+                  || message.backgroundWait.phase === 'started'
+                  ? 'animate-pulse bg-blue-400 dark:bg-blue-500'
+                  : message.backgroundWait.phase === 'expired'
+                    ? 'bg-amber-400 dark:bg-amber-500'
+                    : 'bg-green-400 dark:bg-green-500'
+              }`}
+            />
+            <span className="text-xs text-gray-500 dark:text-gray-400">{message.content}</span>
+          </div>
+          {message.backgroundWait.tasks && message.backgroundWait.tasks.length > 1 && (
+            <ul className="ml-3.5 mt-0.5 list-disc pl-3 text-xs text-gray-500 dark:text-gray-400">
+              {message.backgroundWait.tasks.map((task, taskIndex) => (
+                <li key={task.id || `${taskIndex}`}>
+                  {task.description || task.type || t('chat:misc.backgroundTask', 'background task')}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       ) : message.isTaskNotification ? (
         /* Compact task notification on the left */
         <div className="w-full">
