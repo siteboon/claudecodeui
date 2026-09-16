@@ -1,0 +1,785 @@
+{
+  "title": "Pengaturan",
+  "tabs": {
+    "account": "Akun",
+    "permissions": "Izin",
+    "mcpServers": "Server MCP",
+    "skills": "Skills",
+    "appearance": "Tampilan"
+  },
+  "account": {
+    "title": "Akun",
+    "language": "Bahasa",
+    "languageLabel": "Bahasa Tampilan",
+    "languageDescription": "Pilih bahasa yang digunakan pada antarmuka",
+    "username": "Nama Pengguna",
+    "email": "Email",
+    "profile": "Profil",
+    "changePassword": "Ubah Kata Sandi"
+  },
+  "mcp": {
+    "title": "Server MCP",
+    "addServer": "Tambah Server",
+    "editServer": "Edit Server",
+    "deleteServer": "Hapus Server",
+    "serverName": "Nama Server",
+    "serverType": "Jenis Server",
+    "config": "Konfigurasi",
+    "testConnection": "Uji Koneksi",
+    "status": "Status",
+    "connected": "Terhubung",
+    "disconnected": "Terputus",
+    "scope": {
+      "label": "Cakupan",
+      "user": "Pengguna",
+      "project": "Proyek"
+    }
+  },
+  "appearance": {
+    "title": "Tampilan",
+    "theme": "Tema",
+    "codeEditor": "Editor Kode",
+    "editorTheme": "Tema Editor",
+    "wordWrap": "Bungkus Teks",
+    "showMinimap": "Tampilkan Minimap",
+    "lineNumbers": "Nomor Baris",
+    "fontSize": "Ukuran Font"
+  },
+  "actions": {
+    "saveChanges": "Simpan Perubahan",
+    "resetToDefaults": "Reset ke Default",
+    "cancelChanges": "Batalkan Perubahan"
+  },
+  "voiceSettings": {
+    "title": "Suara",
+    "description": "Input speech-to-text dan fitur bacakan melalui backend audio yang kompatibel dengan OpenAI.",
+    "enable": "Aktifkan suara",
+    "enableDescription": "Tampilkan tombol mikrofon dan tombol bacakan pada pesan.",
+    "backendTitle": "Backend",
+    "backendDescription": "Arahkan ke OpenAI, Groq, atau server lokal (LocalAI, Speaches, Kokoro-FastAPI). Kosongkan untuk menggunakan default server.",
+    "baseUrl": "URL Dasar",
+    "apiKey": "Kunci API",
+    "sttModel": "Model speech-to-text",
+    "ttsModel": "Model text-to-speech",
+    "voice": "Suara",
+    "format": "Format audio",
+    "note": "URL dasar kustom dipanggil langsung oleh browser dan harus mengizinkan permintaan CORS browser. Kosongkan untuk menggunakan backend yang dikonfigurasi di server."
+  },
+  "quickSettings": {
+    "title": "Pengaturan Cepat",
+    "sections": {
+      "appearance": "Tampilan",
+      "toolDisplay": "Tampilan Tool",
+      "inputSettings": "Pengaturan Input"
+    },
+    "darkMode": "Mode Gelap",
+    "showRawParameters": "Tampilkan parameter mentah",
+    "showThinking": "Tampilkan proses berpikir",
+    "sendByCtrlEnter": "Kirim dengan Ctrl+Enter",
+    "voiceEnabled": "Suara (mikrofon + bacakan)",
+    "sendByCtrlEnterDescription": "Jika diaktifkan, Ctrl+Enter akan mengirim pesan, bukan Enter saja. Berguna bagi pengguna IME untuk mencegah pengiriman tidak disengaja.",
+    "dragHandle": {
+      "dragging": "Menyeret handle",
+      "closePanel": "Tutup panel pengaturan",
+      "openPanel": "Buka panel pengaturan",
+      "draggingStatus": "Menyeret...",
+      "toggleAndMove": "Klik untuk membuka/menutup, seret untuk memindahkan"
+    }
+  },
+  "terminalShortcuts": {
+    "title": "Pintasan Terminal",
+    "sectionKeys": "Tombol",
+    "sectionNavigation": "Navigasi",
+    "escape": "Escape",
+    "tab": "Tab",
+    "shiftTab": "Shift+Tab",
+    "arrowUp": "Panah Atas",
+    "arrowDown": "Panah Bawah",
+    "scrollDown": "Gulir ke Bawah",
+    "handle": {
+      "closePanel": "Tutup panel pintasan",
+      "openPanel": "Buka panel pintasan"
+    }
+  },
+  "mainTabs": {
+    "label": "Pengaturan",
+    "agents": "Agen",
+    "appearance": "Tampilan",
+    "git": "Git",
+    "apiTokens": "API & Token",
+    "voice": "Suara",
+    "tasks": "Tugas",
+    "browser": "Browser",
+    "notifications": "Notifikasi",
+    "plugins": "Plugin",
+    "about": "Tentang"
+  },
+  "notifications": {
+    "title": "Notifikasi",
+    "description": "Atur jenis notifikasi yang diterima.",
+    "webPush": {
+      "title": "Notifikasi browser ini",
+      "enable": "Aktifkan notifikasi",
+      "disable": "Nonaktifkan notifikasi",
+      "enabled": "Notifikasi aktif untuk browser ini",
+      "loading": "Memperbarui...",
+      "unsupported": "Notifikasi push tidak didukung di browser ini.",
+      "denied": "Notifikasi push diblokir. Izinkan melalui pengaturan browser."
+    },
+    "desktop": {
+      "title": "Notifikasi aplikasi desktop ini",
+      "enable": "Aktifkan notifikasi",
+      "disable": "Nonaktifkan notifikasi",
+      "enabled": "Notifikasi aktif untuk aplikasi desktop ini",
+      "unsupported": "Notifikasi desktop tidak didukung di sistem ini."
+    },
+    "sound": {
+      "title": "Suara",
+      "description": "Putar nada singkat saat proses chat selesai atau memerlukan persetujuan tool.",
+      "enabled": "Aktif",
+      "test": "Uji suara"
+    },
+    "events": {
+      "title": "Jenis Event",
+      "actionRequired": "Tindakan diperlukan",
+      "stop": "Proses dihentikan",
+      "error": "Proses gagal"
+    }
+  },
+  "appearanceSettings": {
+    "darkMode": {
+      "label": "Mode Gelap",
+      "description": "Beralih antara tema terang dan gelap"
+    },
+    "projectSorting": {
+      "label": "Urutan Proyek",
+      "description": "Cara proyek diurutkan di sidebar",
+      "alphabetical": "Alfabetis",
+      "recentActivity": "Aktivitas Terbaru"
+    },
+    "codeEditor": {
+      "title": "Editor Kode",
+      "theme": {
+        "label": "Tema Editor",
+        "description": "Tema default untuk editor kode"
+      },
+      "wordWrap": {
+        "label": "Bungkus Teks",
+        "description": "Aktifkan pembungkusan teks secara default di editor"
+      },
+      "showMinimap": {
+        "label": "Tampilkan Minimap",
+        "description": "Tampilkan minimap agar navigasi di tampilan diff lebih mudah"
+      },
+      "lineNumbers": {
+        "label": "Tampilkan Nomor Baris",
+        "description": "Tampilkan nomor baris di editor"
+      },
+      "fontSize": {
+        "label": "Ukuran Font",
+        "description": "Ukuran font editor dalam piksel"
+      }
+    }
+  },
+  "mcpForm": {
+    "title": {
+      "add": "Tambah Server MCP",
+      "edit": "Edit Server MCP"
+    },
+    "importMode": {
+      "form": "Input Form",
+      "json": "Impor JSON"
+    },
+    "scope": {
+      "label": "Cakupan",
+      "userGlobal": "Pengguna (Global)",
+      "projectLocal": "Proyek (Lokal)",
+      "userDescription": "Cakupan pengguna: Tersedia di semua proyek pada mesin ini",
+      "projectDescription": "Cakupan lokal: Hanya tersedia di proyek yang dipilih",
+      "cannotChange": "Cakupan tidak dapat diubah saat mengedit server yang sudah ada"
+    },
+    "fields": {
+      "serverName": "Nama Server",
+      "transportType": "Jenis Transport",
+      "command": "Perintah",
+      "arguments": "Argumen (satu per baris)",
+      "jsonConfig": "Konfigurasi JSON",
+      "url": "URL",
+      "envVars": "Variabel Environment (KEY=value, satu per baris)",
+      "headers": "Header (KEY=value, satu per baris)",
+      "selectProject": "Pilih proyek..."
+    },
+    "placeholders": {
+      "serverName": "my-server"
+    },
+    "validation": {
+      "missingType": "Kolom wajib tidak ada: type",
+      "stdioRequiresCommand": "jenis stdio memerlukan kolom command",
+      "httpRequiresUrl": "jenis {{type}} memerlukan kolom url",
+      "invalidJson": "Format JSON tidak valid",
+      "jsonHelp": "Tempel konfigurasi server MCP dalam format JSON. Contoh format:",
+      "jsonExampleStdio": "• stdio: {\"type\":\"stdio\",\"command\":\"npx\",\"args\":[\"@upstash/context7-mcp\"]}",
+      "jsonExampleHttp": "• http/sse: {\"type\":\"http\",\"url\":\"https://api.example.com/mcp\"}"
+    },
+    "configDetails": "Detail Konfigurasi (dari {{configFile}})",
+    "projectPath": "Path: {{path}}",
+    "actions": {
+      "cancel": "Batal",
+      "saving": "Menyimpan...",
+      "addServer": "Tambah Server",
+      "updateServer": "Perbarui Server"
+    },
+    "scopes": {
+      "userGlobal": "Pengguna (Global)",
+      "userAllProviders": "Pengguna (Semua Provider)",
+      "local": "Claude Lokal",
+      "project": "Proyek",
+      "projectAllProviders": "Proyek (Semua Provider)",
+      "userGlobalDesc": "Tersedia di semua proyek pada mesin ini",
+      "userAllProvidersDesc": "Menulis ke konfigurasi pengguna setiap provider dan tersedia di semua proyek pada mesin ini",
+      "localDesc": "Disimpan di pengaturan pengguna Claude untuk proyek yang dipilih",
+      "projectDesc": "Disimpan di workspace proyek yang dipilih",
+      "projectAllProvidersDesc": "Menulis ke workspace proyek yang dipilih untuk setiap provider"
+    },
+    "unsupportedTransport": "Tambah Server MCP hanya mendukung stdio dan http pada semua provider, bukan {{transport}}.",
+    "addToProvider": "{{action}} ke {{provider}}",
+    "workingDirectory": "Direktori Kerja",
+    "envVarNames": "Nama Variabel Environment",
+    "bearerTokenEnvVar": "Variabel Environment Bearer Token"
+  },
+  "saveStatus": {
+    "success": "Pengaturan berhasil disimpan!",
+    "error": "Gagal menyimpan pengaturan",
+    "saving": "Menyimpan..."
+  },
+  "footerActions": {
+    "save": "Simpan Pengaturan",
+    "cancel": "Batal"
+  },
+  "git": {
+    "title": "Konfigurasi Git",
+    "description": "Konfigurasikan identitas Git untuk commit. Pengaturan ini akan diterapkan secara global melalui git config --global",
+    "name": {
+      "label": "Nama Git",
+      "help": "Nama untuk commit Git"
+    },
+    "email": {
+      "label": "Email Git",
+      "help": "Email untuk commit Git"
+    },
+    "actions": {
+      "save": "Simpan Konfigurasi",
+      "saving": "Menyimpan..."
+    },
+    "status": {
+      "success": "Berhasil disimpan"
+    }
+  },
+  "apiKeys": {
+    "title": "Kunci API",
+    "description": "Buat kunci API untuk mengakses API eksternal dari aplikasi lain.",
+    "newKey": {
+      "alertTitle": "⚠️ Simpan Kunci API",
+      "alertMessage": "Ini satu-satunya saat kunci ini ditampilkan. Simpan dengan aman.",
+      "iveSavedIt": "Sudah saya simpan"
+    },
+    "form": {
+      "placeholder": "Nama Kunci API (mis., Server Produksi)",
+      "createButton": "Buat",
+      "cancelButton": "Batal"
+    },
+    "newButton": "Kunci API Baru",
+    "empty": "Belum ada kunci API.",
+    "list": {
+      "created": "Dibuat:",
+      "lastUsed": "Terakhir digunakan:"
+    },
+    "confirmDelete": "Yakin ingin menghapus kunci API ini?",
+    "status": {
+      "active": "Aktif",
+      "inactive": "Tidak Aktif"
+    },
+    "github": {
+      "title": "Token GitHub",
+      "description": "Tambahkan GitHub Personal Access Token untuk clone repositori privat melalui API eksternal.",
+      "descriptionAlt": "Tambahkan GitHub Personal Access Token untuk clone repositori privat. Token juga dapat dikirim langsung dalam permintaan API tanpa disimpan.",
+      "addButton": "Tambah Token",
+      "form": {
+        "namePlaceholder": "Nama Token (mis., Repo Pribadi)",
+        "tokenPlaceholder": "GitHub Personal Access Token (ghp_...)",
+        "descriptionPlaceholder": "Deskripsi (opsional)",
+        "addButton": "Tambah Token",
+        "cancelButton": "Batal",
+        "howToCreate": "Cara membuat GitHub Personal Access Token →"
+      },
+      "empty": "Belum ada token GitHub.",
+      "added": "Ditambahkan:",
+      "confirmDelete": "Yakin ingin menghapus token GitHub ini?"
+    },
+    "apiDocsLink": "Dokumentasi API",
+    "documentation": {
+      "title": "Dokumentasi API Eksternal",
+      "description": "Pelajari cara menggunakan API eksternal untuk memicu sesi Claude/Cursor dari aplikasi.",
+      "viewLink": "Lihat Dokumentasi API →"
+    },
+    "loading": "Memuat...",
+    "version": {
+      "updateAvailable": "Pembaruan tersedia: v{{version}}"
+    }
+  },
+  "tasks": {
+    "checking": "Memeriksa instalasi TaskMaster...",
+    "notInstalled": {
+      "title": "TaskMaster AI CLI Belum Terpasang",
+      "description": "TaskMaster CLI diperlukan untuk menggunakan fitur manajemen tugas. Instal untuk memulai:",
+      "installCommand": "npm install -g task-master-ai",
+      "viewOnGitHub": "Lihat di GitHub",
+      "afterInstallation": "Setelah instalasi:",
+      "steps": {
+        "restart": "Mulai ulang aplikasi ini",
+        "autoAvailable": "Fitur TaskMaster akan otomatis tersedia",
+        "initCommand": "Gunakan task-master init di direktori proyek"
+      }
+    },
+    "settings": {
+      "enableLabel": "Aktifkan Integrasi TaskMaster",
+      "enableDescription": "Tampilkan tugas, banner, dan indikator sidebar TaskMaster di seluruh antarmuka"
+    }
+  },
+  "agents": {
+    "authStatus": {
+      "checking": "Memeriksa...",
+      "connected": "Terhubung",
+      "notConnected": "Tidak terhubung",
+      "disconnected": "Terputus",
+      "checkingAuth": "Memeriksa status autentikasi...",
+      "loggedInAs": "Masuk sebagai {{email}}",
+      "authenticatedUser": "pengguna terautentikasi"
+    },
+    "account": {
+      "claude": {
+        "description": "Asisten AI Anthropic Claude"
+      },
+      "cursor": {
+        "description": "Editor kode bertenaga AI Cursor"
+      },
+      "codex": {
+        "description": "Asisten AI OpenAI Codex"
+      },
+      "opencode": {
+        "description": "Asisten CLI OpenCode"
+      }
+    },
+    "connectionStatus": "Status Koneksi",
+    "login": {
+      "title": "Masuk",
+      "reAuthenticate": "Autentikasi ulang",
+      "description": "Masuk ke akun {{agent}} untuk mengaktifkan fitur AI",
+      "reAuthDescription": "Masuk dengan akun lain atau perbarui kredensial",
+      "button": "Masuk",
+      "reLoginButton": "Masuk kembali"
+    },
+    "error": "Kesalahan: {{error}}"
+  },
+  "permissions": {
+    "title": "Pengaturan Izin",
+    "skipPermissions": {
+      "label": "Lewati prompt izin (gunakan dengan hati-hati)",
+      "claudeDescription": "Setara dengan flag --dangerously-skip-permissions",
+      "cursorDescription": "Setara dengan flag -f di Cursor CLI"
+    },
+    "allowedTools": {
+      "title": "Tool yang Diizinkan",
+      "description": "Tool yang otomatis diizinkan tanpa meminta persetujuan",
+      "placeholder": "mis., \"Bash(git log:*)\" atau \"Write\"",
+      "quickAdd": "Tambahkan tool umum dengan cepat:",
+      "empty": "Belum ada tool yang diizinkan"
+    },
+    "blockedTools": {
+      "title": "Tool yang Diblokir",
+      "description": "Tool yang otomatis diblokir tanpa meminta persetujuan",
+      "placeholder": "mis., \"Bash(rm:*)\"",
+      "empty": "Belum ada tool yang diblokir"
+    },
+    "allowedCommands": {
+      "title": "Perintah Shell yang Diizinkan",
+      "description": "Perintah shell yang otomatis diizinkan tanpa meminta persetujuan",
+      "placeholder": "mis., \"Shell(ls)\" atau \"Shell(git status)\"",
+      "quickAdd": "Tambahkan perintah umum dengan cepat:",
+      "empty": "Belum ada perintah yang diizinkan"
+    },
+    "blockedCommands": {
+      "title": "Perintah Shell yang Diblokir",
+      "description": "Perintah shell yang otomatis diblokir",
+      "placeholder": "mis., \"Shell(rm -rf)\" atau \"Shell(sudo)\"",
+      "empty": "Belum ada perintah yang diblokir"
+    },
+    "toolExamples": {
+      "title": "Contoh Pola Tool:",
+      "bashGitLog": "- Izinkan semua perintah git log",
+      "bashGitDiff": "- Izinkan semua perintah git diff",
+      "write": "- Izinkan semua penggunaan tool Write",
+      "bashRm": "- Blokir semua perintah rm (berbahaya)"
+    },
+    "shellExamples": {
+      "title": "Contoh Perintah Shell:",
+      "ls": "- Izinkan perintah ls",
+      "gitStatus": "- Izinkan git status",
+      "npmInstall": "- Izinkan npm install",
+      "rmRf": "- Blokir penghapusan rekursif"
+    },
+    "codex": {
+      "permissionMode": "Mode Izin",
+      "description": "Mengatur cara Codex menangani modifikasi file dan eksekusi perintah",
+      "modes": {
+        "default": {
+          "title": "Default",
+          "description": "Menjalankan perintah di dalam sandbox workspace. Codex menentukan kapan persetujuan diperlukan; permintaan tidak dapat disetujui dalam integrasi non-interaktif ini."
+        },
+        "acceptEdits": {
+          "title": "Terima Edit",
+          "description": "Semua perintah berjalan otomatis di dalam workspace. Mode otomatis penuh dengan eksekusi dalam sandbox."
+        },
+        "bypassPermissions": {
+          "title": "Lewati Izin",
+          "description": "Akses penuh ke sistem tanpa pembatasan. Semua perintah berjalan otomatis dengan akses penuh ke disk dan jaringan. Gunakan dengan hati-hati."
+        }
+      },
+      "technicalDetails": "Detail teknis",
+      "technicalInfo": {
+        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. Menjalankan perintah di dalam sandbox workspace. Codex menentukan kapan persetujuan diperlukan; permintaan tidak dapat disetujui dalam integrasi non-interaktif ini.",
+        "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. Semua perintah dieksekusi otomatis di dalam direktori proyek.",
+        "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. Akses penuh ke sistem, gunakan hanya di environment tepercaya.",
+        "overrideNote": "Pengaturan ini dapat ditimpa per sesi menggunakan tombol mode di antarmuka chat."
+      }
+    },
+    "actions": {
+      "add": "Tambah"
+    }
+  },
+  "mcpServers": {
+    "title": "Server MCP",
+    "description": {
+      "claude": "Server Model Context Protocol menyediakan tool dan sumber data tambahan untuk Claude",
+      "cursor": "Server Model Context Protocol menyediakan tool dan sumber data tambahan untuk Cursor",
+      "codex": "Server Model Context Protocol menyediakan tool dan sumber data tambahan untuk Codex",
+      "opencode": "Server Model Context Protocol menyediakan tool dan sumber data tambahan untuk OpenCode"
+    },
+    "addButton": "Tambah Server MCP",
+    "empty": "Belum ada server MCP yang dikonfigurasi",
+    "serverType": "Jenis",
+    "scope": {
+      "local": "lokal",
+      "user": "pengguna"
+    },
+    "config": {
+      "command": "Perintah",
+      "url": "URL",
+      "args": "Argumen",
+      "environment": "Environment"
+    },
+    "tools": {
+      "title": "Tool",
+      "count": "({{count}}):",
+      "more": "+{{count}} lainnya"
+    },
+    "actions": {
+      "edit": "Edit server",
+      "delete": "Hapus server"
+    },
+    "managed": {
+      "badge": "Dikelola",
+      "hint": "Dikelola oleh CloudCLI."
+    },
+    "help": {
+      "title": "Tentang MCP Codex",
+      "description": "Codex mendukung server MCP berbasis stdio. Tambahkan server untuk memperluas kemampuan Codex dengan tool dan resource tambahan."
+    }
+  },
+  "pluginSettings": {
+    "title": "Plugin",
+    "description": "Perluas antarmuka dengan plugin kustom. Instal dari Git atau letakkan folder di ~/.claude-code-ui/plugins/",
+    "installPlaceholder": "https://github.com/user/my-plugin",
+    "installButton": "Instal",
+    "installing": "Menginstal…",
+    "securityWarning": "Hanya instal plugin yang kode sumbernya sudah ditinjau atau berasal dari pembuat yang dipercaya.",
+    "scanningPlugins": "Memindai plugin…",
+    "noPluginsInstalled": "Belum ada plugin terinstal",
+    "pullLatest": "Pull versi terbaru dari Git",
+    "noGitRemote": "Tidak ada remote Git — pembaruan tidak tersedia",
+    "uninstallPlugin": "Uninstal plugin",
+    "confirmUninstall": "Klik lagi untuk mengonfirmasi",
+    "confirmUninstallMessage": "Hapus {{name}}? Tindakan ini tidak dapat dibatalkan.",
+    "cancel": "Batal",
+    "remove": "Hapus",
+    "updateFailed": "Pembaruan gagal",
+    "installFailed": "Instalasi gagal",
+    "uninstallFailed": "Uninstal gagal",
+    "toggleFailed": "Gagal mengubah status",
+    "starterPluginLabel": "Plugin Starter",
+    "starter": "Starter",
+    "docs": "Dokumentasi",
+    "sections": {
+      "officialTitle": "Plugin Resmi",
+      "officialDescription": "Dikelola oleh tim CloudCLI dan siap langsung diinstal.",
+      "unofficialTitle": "Plugin Lainnya",
+      "unofficialDescription": "Plugin dan integrasi tidak resmi dari pengguna lain. Tinjau kode sumber sebelum menginstal."
+    },
+    "starterPlugin": {
+      "name": "Project Stats",
+      "badge": "starter",
+      "description": "Jumlah file, baris kode, rincian jenis file, dan aktivitas terbaru proyek.",
+      "install": "Instal"
+    },
+    "terminalPlugin": {
+      "name": "Terminal",
+      "badge": "resmi",
+      "description": "Terminal terintegrasi dengan akses shell penuh langsung di dalam antarmuka.",
+      "install": "Instal"
+    },
+    "scheduledPromptPlugin": {
+      "name": "Scheduled Prompts",
+      "badge": "tidak resmi",
+      "description": "Jadwalkan prompt workspace, tinjau riwayat proses, dan kelola tugas lokal berulang.",
+      "install": "Instal"
+    },
+    "claudeWatchPlugin": {
+      "name": "Claude Watch",
+      "badge": "tidak resmi",
+      "description": "Pantau sesi Claude Code yang berjalan lama untuk mendeteksi hang dan menyediakan kontrol proses.",
+      "install": "Instal"
+    },
+    "prismCloudCLI": {
+      "name": "PRISM CloudCLI",
+      "badge": "tidak resmi",
+      "description": "Intelijen sesi untuk Claude Code di dalam CloudCLI. Lihat penyebab penggunaan token tinggi tanpa meninggalkan browser.",
+      "install": "Instal"
+    },
+    "sessionManagerPlugin": {
+      "name": "Sessions",
+      "badge": "tidak resmi",
+      "description": "Lihat, kelola, dan hentikan sesi Claude Code yang aktif.",
+      "install": "Instal"
+    },
+    "tokenCostCalculatorPlugin": {
+      "name": "Token Cost Calculator",
+      "badge": "tidak resmi",
+      "description": "Hitung biaya API dari harga model dan penggunaan token, dengan dukungan preset harga model.",
+      "install": "Instal"
+    },
+    "taskQueuePlugin": {
+      "name": "Task Queue",
+      "badge": "tidak resmi",
+      "description": "Dasbor antrean tugas untuk melihat, memfilter, dan menjalankan tugas agen.",
+      "install": "Instal"
+    },
+    "githubIssuesBoardPlugin": {
+      "name": "GitHub Issues Board",
+      "badge": "tidak resmi",
+      "description": "Board Kanban untuk GitHub Issues dengan sinkronisasi dua arah TaskMaster dan instalasi otomatis skill CLI /github-task",
+      "install": "Instal"
+    },
+    "claudeUsagePlugin": {
+      "name": "Claude Usage",
+      "badge": "tidak resmi",
+      "description": "Pantau batas paket Claude Code secara langsung dan jelajahi riwayat token serta biaya 30 hari.",
+      "install": "Instal"
+    },
+    "codexUsagePlugin": {
+      "name": "Codex Usage",
+      "badge": "tidak resmi",
+      "description": "Pantau batas paket Codex secara langsung, waktu reset, dan aktivitas token akun selama 30 hari.",
+      "install": "Instal"
+    },
+    "morePlugins": "Lainnya",
+    "enable": "Aktifkan",
+    "disable": "Nonaktifkan",
+    "installAriaLabel": "URL repositori Git plugin",
+    "tab": "tab",
+    "runningStatus": "berjalan"
+  },
+  "skillsPage": {
+    "description": "Kelola skill {{provider}} dari file lokal, folder lengkap, dan lokasi yang terkait proyek.",
+    "searchPlaceholder": "Cari skill...",
+    "searchAriaLabel": "Cari skill",
+    "clearSearch": "Hapus pencarian skill",
+    "addSkill": "Tambah Skill",
+    "refresh": "Segarkan",
+    "scanningProjectSkills": "Memindai skill proyek...",
+    "addDialogTitle": "Tambah Skill {{provider}}",
+    "addDialogDescription": "Unggah file SKILL.md atau folder skill lengkap.",
+    "closeDialog": "Tutup dialog tambah skill",
+    "savedSuccessfully": "Skill berhasil disimpan.",
+    "footerHint": "Unggahan folder mempertahankan nama folder yang dipilih; file mandiri menggunakan `name` dalam `SKILL.md`.",
+    "installWithCount_one": "Instal {{count}} Skill",
+    "installWithCount_other": "Instal {{count}} Skill",
+    "installPlain": "Instal Skill",
+    "loading": "Memuat skill {{provider}}…",
+    "emptyTitle": "Belum ada skill yang ditemukan",
+    "emptyDescription": "Tambahkan skill global di atas atau buat folder skill khusus proyek di workspace.",
+    "noMatchTitle": "Tidak ada skill yang cocok",
+    "noMatchDescription": "Coba perintah, nama, cakupan, proyek, atau path sumber lain.",
+    "count_one": "{{count}} skill",
+    "count_other": "{{count}} skill",
+    "noDescription": "Tidak ada deskripsi pada front matter skill.",
+    "pluginBadge": "Plugin: {{name}}",
+    "projectBadge": "Proyek: {{name}}",
+    "source": "Sumber",
+    "upload": {
+      "dropTitle": "Letakkan folder skill atau SKILL.md",
+      "dropHint": "Folder dapat berisi script, referensi, dan aset.",
+      "chooseFiles": "Pilih File",
+      "chooseFolder": "Pilih Folder",
+      "readyToInstall": "Siap diinstal",
+      "filesCount_one": "{{count}} file",
+      "filesCount_other": "{{count}} file",
+      "markdownFile": "File Markdown",
+      "removeFile": "Hapus {{name}}",
+      "hideInstallLocation": "Sembunyikan lokasi instalasi",
+      "whereToInstall": "Akan diinstal di mana?"
+    },
+    "errors": {
+      "tooManyFiles": "Folder skill dapat berisi maksimal {{max}} file.",
+      "tooLarge": "Total ukuran folder skill yang dipilih harus kurang dari 30 MB.",
+      "noSkillMd": "Folder yang dipilih tidak berisi file SKILL.md.",
+      "couldNotReadSkillMd": "Tidak dapat membaca SKILL.md dari {{folder}}.",
+      "readFailed": "Gagal membaca folder skill",
+      "dropMarkdown": "Letakkan satu atau beberapa file Markdown atau folder yang berisi SKILL.md.",
+      "addFirst": "Tambahkan satu atau beberapa file Markdown terlebih dahulu.",
+      "importFailed": "Gagal mengimpor skill"
+    },
+    "scopes": {
+      "user": "Pengguna",
+      "plugin": "Plugin",
+      "repo": "Repo",
+      "project": "Proyek",
+      "admin": "Admin",
+      "system": "Sistem"
+    }
+  },
+  "browserUse": {
+    "title": "Browser",
+    "subtitle": "Pantau sesi browser yang dibuka oleh agen AI.",
+    "openSettings": "Buka pengaturan Browser",
+    "refreshSessions": "Segarkan sesi browser",
+    "runtimeDisabled": "Nonaktif",
+    "runtimeReady": "Siap",
+    "runtimeInstalling": "Menginstal",
+    "runtimeSetupRequired": "Perlu penyiapan",
+    "loadFailed": "Gagal memuat Browser",
+    "actionFailed": "Tindakan Browser gagal",
+    "requestFailed": "Permintaan gagal ({{status}})",
+    "never": "Tidak Pernah",
+    "unknown": "Tidak Diketahui",
+    "justNow": "Baru saja",
+    "secondsAgo": "{{n}} dtk lalu",
+    "minutesAgo": "{{n}} mnt lalu",
+    "hoursAgo": "{{n}} jam lalu",
+    "daysAgo": "{{n}} hari lalu",
+    "noPageLoaded": "Belum ada halaman dimuat",
+    "waitingAction": "Menunggu",
+    "emptyTitleEnabled": "Belum ada sesi browser",
+    "emptyTitleDisabled": "Browser dinonaktifkan",
+    "emptyDescEnabled": "Sesi browser agen akan muncul di sini saat tugas AI menggunakan Browser.",
+    "emptyDescDisabled": "Aktifkan Browser di pengaturan agar agen dapat membuka sesi browser yang dipantau.",
+    "runtimeSetupTitle": "Penyiapan runtime diperlukan",
+    "installing": "Menginstal...",
+    "installRuntime": "Instal Runtime",
+    "promptLabel": "Prompt",
+    "prompt1": "Gunakan Browser untuk memeriksa alur checkout dan laporkan status UI yang bermasalah.",
+    "prompt2": "Buka <url> dengan Browser, berinteraksi dengan halaman, lalu rangkum perubahan setelah setiap langkah.",
+    "screenshotAlt": "Screenshot sesi browser",
+    "waitingScreenshot": "Menunggu screenshot",
+    "waitingScreenshotHint": "Snapshot browser agen berikutnya akan ditampilkan di sini.",
+    "activeCount": "{{n}} aktif",
+    "totalCount": "total {{n}}",
+    "updated": "Diperbarui {{time}}",
+    "statusEmpty": "kosong",
+    "fullScreen": "Layar penuh",
+    "stopSession": "Hentikan sesi",
+    "deleteSession": "Hapus sesi",
+    "sessions": "Sesi",
+    "noSessions": "Tidak ada sesi browser agen.",
+    "selected": "Dipilih",
+    "statusLabel": "Status",
+    "none": "Tidak Ada",
+    "lastAction": "Tindakan terakhir",
+    "profileLabel": "Profil",
+    "temporaryProfile": "Sementara",
+    "stop": "Hentikan",
+    "delete": "Hapus",
+    "sessionFallback": "Sesi browser",
+    "close": "Tutup",
+    "statusReadySession": "siap",
+    "statusStoppedSession": "dihentikan",
+    "statusUnavailableSession": "tidak tersedia",
+    "installFailed": "Gagal menginstal runtime browser"
+  },
+  "browserUseSettings": {
+    "sectionTitle": "Browser",
+    "sectionDescription": "Izinkan agen membuat sesi browser Playwright terproteksi yang dapat dipantau dari tab Browser.",
+    "enableLabel": "Aktifkan Browser",
+    "enableDescription": "Mendaftarkan Browser untuk agen yang didukung. Agen dapat membuat sesi browser; sesi dapat dipantau, dihentikan, dan dihapus.",
+    "enableAriaLabel": "Aktifkan Browser",
+    "playwrightLabel": "Playwright",
+    "chromiumLabel": "Chromium",
+    "statusPrefix": "Status",
+    "checking": "memeriksa...",
+    "installed": "terinstal",
+    "missing": "tidak ada",
+    "ready": "siap",
+    "setupRequired": "perlu penyiapan",
+    "disabled": "nonaktif",
+    "runtimeRequiredTitle": "Runtime Browser diperlukan",
+    "runtimeRequiredFallback": "Instal runtime browser sebelum agen dapat membuat sesi Browser.",
+    "installing": "Menginstal...",
+    "installRuntime": "Instal Runtime",
+    "loadSettingsFailed": "Gagal memuat pengaturan Browser",
+    "loadStatusFailed": "Gagal memuat status Browser",
+    "saveFailed": "Gagal menyimpan pengaturan Browser",
+    "installFailed": "Gagal menginstal runtime browser"
+  },
+  "mcpServersAdd": {
+    "menuLabel": "Tambah Server MCP",
+    "globalButtonLabel": "Tambah Server MCP Global",
+    "providerButtonLabel": "Tambah Server MCP {{provider}}",
+    "globalAddDescription": "Tambah Server MCP Global menulis satu server stdio atau HTTP yang sama ke Claude, Cursor, Codex, dan OpenCode.",
+    "providerAddDescription": "{{button}} hanya mengubah {{provider}}.",
+    "globalModalDescription": "Menambahkan server MCP ini ke setiap provider: Claude, Cursor, Codex, dan OpenCode. Hanya transport stdio dan HTTP yang didukung karena konfigurasi yang sama harus berfungsi pada semua provider.",
+    "refreshingScopes": "Menyegarkan cakupan proyek...",
+    "loadingServers": "Memuat server MCP...",
+    "configCwd": "Cwd",
+    "configEnvVars": "Env Vars"
+  },
+  "mcpTeamCard": {
+    "title": "Konfigurasi MCP Tim",
+    "description": "Bagikan konfigurasi server MCP di seluruh tim. Semua anggota tetap tersinkron otomatis.",
+    "proLink": "Tersedia dengan CloudCLI Pro"
+  },
+  "mcpServersAddErrors": {
+    "loadFailedProvider": "Gagal memuat server MCP {{provider}}",
+    "deleteFailed": "Gagal menghapus server MCP",
+    "saveFailed": "Gagal menyimpan server MCP",
+    "saveGlobalFailed": "Gagal menyimpan server MCP ke semua provider",
+    "selectProjectRequired": "Pilih proyek untuk server MCP bercakupan proyek",
+    "globalScopeUnsupported": "Tambah Server MCP hanya mendukung cakupan pengguna atau proyek di semua provider.",
+    "globalAddFailed": "Gagal menambahkan server MCP ke semua provider. {{details}}",
+    "deleteConfirm": "Yakin ingin menghapus server MCP ini?",
+    "unknownError": "Kesalahan tidak diketahui"
+  },
+  "about": {
+    "tagline": "Antarmuka asisten coding AI open source",
+    "starOnGitHub": "Beri Bintang di GitHub",
+    "docs": "Dokumentasi",
+    "hostedTitle": "Coba CloudCLI Hosted",
+    "hostedDescription": "Kolaborasi tim, konfigurasi MCP bersama, sinkronisasi pengaturan antar-environment, dan infrastruktur terkelola.",
+    "learnMore": "Pelajari lebih lanjut",
+    "proFeaturesTitle": "Fitur CloudCLI Pro",
+    "syncSettingsTitle": "Sinkronkan Pengaturan",
+    "syncSettingsDescription": "Jaga preferensi, konfigurasi MCP, dan tema tetap sinkron di semua environment.",
+    "teamManagementTitle": "Manajemen Tim",
+    "teamManagementDescription": "Banyak pengguna, akses berbasis peran, dan proyek bersama untuk tim.",
+    "licensed": "Dilisensikan di bawah AGPL-3.0",
+    "proCta": "Tersedia dengan CloudCLI Pro"
+  }
+}
