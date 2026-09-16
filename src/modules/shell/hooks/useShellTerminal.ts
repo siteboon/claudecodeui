@@ -17,25 +17,6 @@ import { ensureXtermFocusStyles } from '@/modules/shell/utils/terminalStyles';
 
 const TERMINAL_RESIZE_DELAY_MS = 50;
 
-const EXTENDED_ANSI = [
-  '#000000',
-  '#800000',
-  '#008000',
-  '#808000',
-  '#000080',
-  '#800080',
-  '#008080',
-  '#c0c0c0',
-  '#808080',
-  '#ff0000',
-  '#00ff00',
-  '#ffff00',
-  '#0000ff',
-  '#ff00ff',
-  '#00ffff',
-  '#ffffff',
-];
-
 // Keep the runtime theme keys used by the previous JSX implementation.
 const DARK_TERMINAL_THEME: ITheme = {
   background: '#1e1e1e',
@@ -60,7 +41,6 @@ const DARK_TERMINAL_THEME: ITheme = {
   brightMagenta: '#d670d6',
   brightCyan: '#29b8db',
   brightWhite: '#ffffff',
-  extendedAnsi: EXTENDED_ANSI,
 };
 
 // Light counterpart of the palette above. The ANSI colours follow VS Code's
@@ -89,7 +69,6 @@ const LIGHT_TERMINAL_THEME: ITheme = {
   brightMagenta: '#bc05bc',
   brightCyan: '#0598bc',
   brightWhite: '#000000',
-  extendedAnsi: EXTENDED_ANSI,
 };
 
 /**
