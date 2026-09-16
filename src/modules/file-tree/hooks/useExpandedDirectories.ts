@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react';
 type UseExpandedDirectoriesResult = {
   expandedDirs: Set<string>;
   toggleDirectory: (path: string) => void;
+  collapseDirectory: (path: string) => void;
   expandDirectories: (paths: string[]) => void;
   collapseAll: () => void;
 };
@@ -20,6 +21,17 @@ export function useExpandedDirectories(): UseExpandedDirectoriesResult {
         next.add(path);
       }
 
+      return next;
+    });
+  }, []);
+
+  const collapseDirectory = useCallback((path: string) => {
+    setExpandedDirs((previous) => {
+      if (!previous.has(path)) {
+        return previous;
+      }
+      const next = new Set(previous);
+      next.delete(path);
       return next;
     });
   }, []);
@@ -43,6 +55,7 @@ export function useExpandedDirectories(): UseExpandedDirectoriesResult {
   return {
     expandedDirs,
     toggleDirectory,
+    collapseDirectory,
     expandDirectories,
     collapseAll,
   };

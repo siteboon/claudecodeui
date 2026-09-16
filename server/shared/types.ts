@@ -1056,6 +1056,13 @@ export type FileTreeNode = {
   permissionsRwx: string;
   isSymlink?: boolean;
   children?: FileTreeNode[];
+  /**
+   * `false` on a directory whose contents were not walked, either because the
+   * listing stopped at its depth limit or because the project was too large
+   * for one response. Clients fetch such a directory on demand through
+   * `listProjectFiles` with `path` set.
+   */
+  childrenLoaded?: boolean;
 };
 
 /**
@@ -1190,9 +1197,15 @@ export type FileTreeServices = {
     path: string;
     message: string;
   }>;
+  /**
+   * Lists the project tree. Without `path` the whole project is walked up to
+   * the depth limit; if that exceeds the entry cap only the top level is
+   * returned with directories marked `childrenLoaded: false`. With `path` one
+   * directory inside the project is listed `depth` levels deep (default 1).
+   */
   listProjectFiles(
     projectId: string,
-    options?: { respectGitignore: boolean },
+    options?: { respectGitignore?: boolean; path?: string; depth?: number },
   ): Promise<FileTreeNode[]>;
   createEntry(input: {
     projectId: string;

@@ -6,6 +6,7 @@ import { AlertTriangle, Check, X, Loader2, Folder, Upload } from 'lucide-react';
 import { cn } from '@/shared/utils';
 import { ICON_SIZE_CLASS, getFileIconData } from '@/modules/file-tree/utils/fileIcons';
 import { useExpandedDirectories } from '@/modules/file-tree/hooks/useExpandedDirectories';
+import { useExpandedDirectoryLoading } from '@/modules/file-tree/hooks/useExpandedDirectoryLoading';
 import { useFileTreeData } from '@/modules/file-tree/hooks/useFileTreeData';
 import { useFileTreeOperations } from '@/modules/file-tree/hooks/useFileTreeOperations';
 import { useFileTreeSearch } from '@/modules/file-tree/hooks/useFileTreeSearch';
@@ -48,9 +49,31 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
     }
   }, [toast]);
 
-  const { files, loading, error, refreshFiles } = useFileTreeData(selectedProject);
+  const { files, loading, error, refreshFiles, loadDirectory } = useFileTreeData(selectedProject);
   const { viewMode, changeViewMode } = useFileTreeViewMode();
-  const { expandedDirs, toggleDirectory, expandDirectories, collapseAll } = useExpandedDirectories();
+  const { expandedDirs, toggleDirectory, collapseDirectory, expandDirectories, collapseAll } =
+    useExpandedDirectories();
+
+  const handleDirectoryLoadFailed = useCallback(
+    (directoryPath: string, message: string) => {
+      collapseDirectory(directoryPath);
+      showToast(
+        t('fileTree.loadFolderFailed', 'Unable to load "{{folder}}": {{message}}', {
+          folder: directoryPath.split(/[\\/]/).pop(),
+          message,
+        }),
+        'error',
+      );
+    },
+    [collapseDirectory, showToast, t],
+  );
+
+  useExpandedDirectoryLoading({
+    files,
+    expandedDirs,
+    loadDirectory,
+    onLoadFailed: handleDirectoryLoadFailed,
+  });
   const { searchQuery, setSearchQuery, filteredFiles } = useFileTreeSearch({
     files,
     expandDirectories,
