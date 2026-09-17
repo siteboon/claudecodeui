@@ -151,6 +151,30 @@ const createOpenCodeDatabase = async (homeDir: string, workspacePath: string): P
       3,
       2,
     );
+    db.prepare(`
+      INSERT INTO session (
+        id, project_id, parent_id, slug, directory, title, version, time_created, time_updated,
+        time_archived, tokens_input, tokens_output, tokens_reasoning, tokens_cache_read,
+        tokens_cache_write
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      'open-child-session-1',
+      'project-1',
+      'open-session-1',
+      'open-child-session-1',
+      workspacePath,
+      'OpenCode child session',
+      '0.0.0',
+      1_700_000_002_000,
+      1_700_000_005_000,
+      null,
+      5,
+      10,
+      2,
+      1,
+      1,
+    );
 
     const userMessageData = JSON.stringify({
       role: 'user',
@@ -255,6 +279,9 @@ test('OpenCode session synchronizer indexes sqlite sessions without deletable tr
   try {
     await createOpenCodeDatabase(tempRoot, workspacePath);
     await withIsolatedDatabase(() => {
+      sessionsDb.createAppSession('app-child-session-1', 'opencode', workspacePath);
+      sessionsDb.assignProviderSessionId('app-child-session-1', 'open-child-session-1');
+
       const synchronizer = new OpenCodeSessionSynchronizer();
       const processed = synchronizer.synchronize();
 
@@ -265,6 +292,8 @@ test('OpenCode session synchronizer indexes sqlite sessions without deletable tr
         assert.equal(indexed?.project_path, workspacePath);
         assert.equal(indexed?.custom_name, 'OpenCode indexed title');
         assert.equal(indexed?.jsonl_path, null);
+        assert.equal(sessionsDb.getSessionById('app-child-session-1'), null);
+        assert.equal(sessionsDb.getSessionByProviderSessionId('open-child-session-1'), null);
       });
     });
   } finally {
@@ -290,6 +319,7 @@ test('OpenCode session synchronizer returns the app session id once provider map
         assert.equal(sessionId, 'app-session-1');
         assert.equal(sessionsDb.getAllSessions().length, 1);
         assert.equal(sessionsDb.getSessionById('app-session-1')?.provider_session_id, 'open-session-1');
+        assert.equal(sessionsDb.getSessionById('open-child-session-1'), null);
       });
     });
   } finally {
@@ -438,6 +468,7 @@ const seedOpenCodeSession = async (
       CREATE TABLE session (
         id TEXT PRIMARY KEY,
         project_id TEXT,
+        parent_id TEXT,
         directory TEXT,
         title TEXT,
         time_created INTEGER,

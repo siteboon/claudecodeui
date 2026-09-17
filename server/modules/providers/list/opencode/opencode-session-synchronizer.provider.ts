@@ -28,6 +28,10 @@ type SynchronizeRowsResult = {
   firstSessionId: string | null;
 };
 
+type OpenCodeChildSessionRow = {
+  id: string;
+};
+
 /**
  * Session indexer for OpenCode's SQLite-backed session store.
  */
@@ -38,7 +42,8 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
    * Scans OpenCode's shared opencode.db and upserts active sessions into DB.
    */
   async synchronize(since?: Date): Promise<number> {
-    const result = this.synchronizeRows(since);
+    // Full scans also reconcile child rows indexed by older CloudCLI versions.
+    const result = this.synchronizeRows(since, undefined, true);
     return result.processed;
   }
 
@@ -54,7 +59,11 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
     return result.firstSessionId;
   }
 
-  private synchronizeRows(since?: Date, limit?: number): SynchronizeRowsResult {
+  private synchronizeRows(
+    since?: Date,
+    limit?: number,
+    pruneChildSessions = false,
+  ): SynchronizeRowsResult {
     const dbPath = getOpenCodeDatabasePath();
     if (!fsSync.existsSync(dbPath)) {
       return { processed: 0, firstSessionId: null };
@@ -62,6 +71,10 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
 
     const db = new Database(dbPath, { readonly: true, fileMustExist: true });
     try {
+      if (pruneChildSessions) {
+        this.pruneChildSessions(db);
+      }
+
       const sinceMillis = since?.getTime() ?? null;
       const limitClause = limit ? 'LIMIT ?' : '';
       const params = limit ? [sinceMillis, sinceMillis, limit] : [sinceMillis, sinceMillis];
@@ -76,6 +89,7 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
         FROM session s
         LEFT JOIN project p ON p.id = s.project_id
         WHERE s.time_archived IS NULL
+          AND s.parent_id IS NULL
           AND (? IS NULL OR COALESCE(s.time_updated, s.time_created, 0) >= ?)
         ORDER BY COALESCE(s.time_updated, s.time_created, 0) DESC, s.id DESC
         ${limitClause}
@@ -102,6 +116,18 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
       return { processed: 0, firstSessionId: null };
     } finally {
       db.close();
+    }
+  }
+
+  private pruneChildSessions(db: Database.Database): void {
+    const childSessions = db.prepare(`
+      SELECT id
+      FROM session
+      WHERE parent_id IS NOT NULL
+    `).all() as OpenCodeChildSessionRow[];
+
+    for (const childSession of childSessions) {
+      sessionsDb.deleteSessionByProviderSessionId(childSession.id, this.provider);
     }
   }
 
