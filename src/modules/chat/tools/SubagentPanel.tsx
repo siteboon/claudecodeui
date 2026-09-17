@@ -122,6 +122,19 @@ export const SubagentPanel = memo(({
   const entries = activity ?? [];
   const status = subagent?.status ?? (toolResult ? 'completed' : 'running');
   const toolCount = entries.filter((entry) => entry.kind === 'tool').length;
+  // What the agent is doing right now. A running card that only pulses is
+  // indistinguishable from a stalled session — this is the piece that shows
+  // the run is moving, and it is the whole reason a header needs the live
+  // timeline rather than just the final count.
+  const currentToolName = (() => {
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+      const entry = entries[index];
+      if (entry?.kind === 'tool' && entry.toolName) {
+        return entry.toolName;
+      }
+    }
+    return '';
+  })();
   // Claude names its agent presets (Explore, Plan); Codex has none, so the
   // neutral label carries and the assigned nickname shows alongside it.
   const label = subagent?.type ?? String(parsedInput.subagent_type ?? '');
@@ -158,7 +171,23 @@ export const SubagentPanel = memo(({
           {status === 'running' ? (
             <>
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-purple-500 dark:bg-purple-400" />
-              running
+              {toolCount > 0 ? (
+                <>
+                  {/* Same wording as the completed branch, so the number the card
+                      settles on is visibly the one that was ticking. */}
+                  <span className="tabular-nums">{`${toolCount} ${toolCount === 1 ? 'tool' : 'tools'}`}</span>
+                  {currentToolName && (
+                    <>
+                      <span className="text-muted-foreground/40">·</span>
+                      <span className="max-w-32 truncate text-muted-foreground/70">{currentToolName}</span>
+                    </>
+                  )}
+                </>
+              ) : (
+                // Nothing has run yet: a count of zero would read as a finished
+                // agent that did nothing.
+                'running'
+              )}
             </>
           ) : status === 'failed' ? (
             <>
