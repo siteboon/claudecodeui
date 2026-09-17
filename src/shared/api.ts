@@ -203,10 +203,19 @@ export const api = {
     post('/api/projects/migrate-legacy-stars', { projectIds }),
   toggleProjectStar: (projectId: string) =>
     post(`/api/projects/${encodeURIComponent(projectId)}/toggle-star`),
+  // A clone is two requests: the details (GitHub token included) go in this
+  // POST body, and the returned `cloneId` is all the progress stream's URL
+  // carries — URLs land in access logs, proxy logs and browser history.
+  startProjectClone: (cloneRequest: {
+    path: string;
+    githubUrl: string;
+    githubTokenId: number | null;
+    newGithubToken: string | null;
+  }) => post('/api/projects/clone', cloneRequest),
   // EventSource cannot send an Authorization header, so the token rides along as
   // a query parameter on the streaming endpoints below.
-  cloneProjectProgressUrl: (params: Record<string, QueryValue>) =>
-    `/api/projects/clone-progress${query({ ...params, token: getStoredAuthToken() })}`,
+  cloneProjectProgressUrl: ({ cloneId }: { cloneId: string }) =>
+    `/api/projects/clone-progress${query({ cloneId, token: getStoredAuthToken() })}`,
   searchConversationsUrl: (searchQuery: string, limit = 50) =>
     `/api/providers/search/sessions${query({
       q: searchQuery,
