@@ -285,7 +285,7 @@ test('OpenCode session synchronizer indexes sqlite sessions without deletable tr
       const synchronizer = new OpenCodeSessionSynchronizer();
       const processed = synchronizer.synchronize();
 
-      return Promise.resolve(processed).then((count) => {
+      return Promise.resolve(processed).then(async (count) => {
         assert.equal(count, 1);
         const indexed = sessionsDb.getSessionById('open-session-1');
         assert.equal(indexed?.provider, 'opencode');
@@ -294,6 +294,14 @@ test('OpenCode session synchronizer indexes sqlite sessions without deletable tr
         assert.equal(indexed?.jsonl_path, null);
         assert.equal(sessionsDb.getSessionById('app-child-session-1'), null);
         assert.equal(sessionsDb.getSessionByProviderSessionId('open-child-session-1'), null);
+
+        sessionsDb.createAppSession('app-child-session-2', 'opencode', workspacePath);
+        sessionsDb.assignProviderSessionId('app-child-session-2', 'open-child-session-1');
+        await synchronizer.synchronize(new Date(1_700_000_004_500));
+        assert.equal(
+          sessionsDb.getSessionById('app-child-session-2')?.provider_session_id,
+          'open-child-session-1',
+        );
       });
     });
   } finally {

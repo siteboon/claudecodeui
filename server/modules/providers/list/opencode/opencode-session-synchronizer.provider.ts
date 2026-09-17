@@ -37,13 +37,14 @@ type OpenCodeChildSessionRow = {
  */
 export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer {
   private readonly provider = 'opencode' as const;
+  private childSessionsReconciled = false;
 
   /**
    * Scans OpenCode's shared opencode.db and upserts active sessions into DB.
    */
   async synchronize(since?: Date): Promise<number> {
-    // Full scans also reconcile child rows indexed by older CloudCLI versions.
-    const result = this.synchronizeRows(since, undefined, true);
+    // The first provider-wide scan also reconciles child rows indexed by older versions.
+    const result = this.synchronizeRows(since, undefined, !this.childSessionsReconciled);
     return result.processed;
   }
 
@@ -73,6 +74,7 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
     try {
       if (pruneChildSessions) {
         this.pruneChildSessions(db);
+        this.childSessionsReconciled = true;
       }
 
       const sinceMillis = since?.getTime() ?? null;
