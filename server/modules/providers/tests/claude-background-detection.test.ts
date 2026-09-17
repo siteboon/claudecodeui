@@ -63,13 +63,20 @@ test('messages without a tool_use block never hold', () => {
   assert.equal(startsBackgroundWork(null as unknown as object), false);
 });
 
-/**
- * T3: `Agent` and `Workflow` both outlive the turn that starts them, and
- * neither is detected today. These assertions record the defect rather than
- * the intent — the fix flips them to `true`, and this test is how that fix is
- * shown to work.
- */
-test('DEFECT (T3): Agent and Workflow are not recognised as background work', () => {
-  assert.equal(startsBackgroundWork(assistantWith(toolUse('Agent', { prompt: 'go' }))), false);
-  assert.equal(startsBackgroundWork(assistantWith(toolUse('Workflow', { script: '...' }))), false);
+test('a Workflow always holds: it is background by definition and can run for tens of minutes', () => {
+  assert.equal(startsBackgroundWork(assistantWith(toolUse('Workflow', { script: '...' }))), true);
+});
+
+test('an Agent holds unless it was explicitly asked to run in the foreground', () => {
+  // Opposite default to Bash: a subagent is backgrounded unless opted out, so
+  // an absent flag must hold rather than release.
+  assert.equal(startsBackgroundWork(assistantWith(toolUse('Agent', { prompt: 'go' }))), true);
+  assert.equal(startsBackgroundWork(assistantWith(toolUse('Agent', { prompt: 'go', run_in_background: true }))), true);
+  assert.equal(startsBackgroundWork(assistantWith(toolUse('Agent', { prompt: 'go', run_in_background: false }))), false);
+});
+
+test('Bash and Agent read the same flag with opposite defaults', () => {
+  const bare = (name: string) => startsBackgroundWork(assistantWith(toolUse(name, { x: 1 })));
+  assert.equal(bare('Bash'), false, 'a shell command is foreground unless asked otherwise');
+  assert.equal(bare('Agent'), true, 'a subagent is background unless asked otherwise');
 });

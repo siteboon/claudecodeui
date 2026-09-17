@@ -539,9 +539,11 @@ function extractCumulativeTokenBudget(sdkMessage) {
   };
 }
 
-// Tool calls that leave work running past the end of a turn. Bash only counts
-// when it is explicitly backgrounded; the rest defer or watch work by nature.
-const DEFERRED_WORK_TOOLS = new Set(['Monitor', 'ScheduleWakeup', 'CronCreate', 'TaskCreate']);
+// Tool calls that leave work running past the end of a turn. Bash and Agent are
+// decided by their input instead (see below); the rest defer, watch, or
+// orchestrate work by nature. `Workflow` always runs in the background and can
+// take tens of minutes.
+const DEFERRED_WORK_TOOLS = new Set(['Monitor', 'ScheduleWakeup', 'CronCreate', 'TaskCreate', 'Workflow']);
 
 /**
  * Detects tool calls that keep working after the turn's `result` arrives.
@@ -562,8 +564,15 @@ function startsBackgroundWork(sdkMessage) {
     if (block?.type !== 'tool_use') {
       return false;
     }
+    // Two tools carry the answer in their input rather than their name, and
+    // their defaults are opposites: a shell command runs in the foreground
+    // unless asked otherwise, a subagent runs in the background unless asked
+    // otherwise. Reading the name alone would get one of them wrong either way.
     if (block.name === 'Bash') {
       return block.input?.run_in_background === true;
+    }
+    if (block.name === 'Agent') {
+      return block.input?.run_in_background !== false;
     }
     return DEFERRED_WORK_TOOLS.has(block.name);
   });
