@@ -1,6 +1,35 @@
 # Upstream watch — siteboon/claudecodeui
 
-Last scanned: **2026-09-02**. Open PRs at scan time: **97**.
+Last scanned: **2026-09-17** (statuses below re-checked individually).
+Previous full scan: 2026-09-02, 97 open PRs at the time.
+
+## Re-check 2026-09-17
+
+Fork synced to `7704a905`. Of the 13 PRs this file tracks, only three are still
+open — the watch list was mostly stale.
+
+| PR | State | Why it mattered |
+|---|---|---|
+| **#1233** | **OPEN** (idle since 09-07) | *Keep one Claude process for a whole conversation* — still the blocker for **T2**, and still the biggest conflict risk in the set. Read before writing any code there. |
+| #1213 | OPEN | queue-operation remove records |
+| #1160 | OPEN | dropped permission requests |
+| #1192 | MERGED | i18n — already in our tree; it caused the `TokenUsageSummary` conflict we resolved |
+| #1239 | MERGED | scheduled-messages — already in our tree; it moved the dispatcher **T8 variant 3** would use |
+| #1102, #1125, #1140, #1141, #1143, #1158, #1167, #1218 | CLOSED | not merged, not coming |
+
+Two closures worth knowing:
+
+- **#1158** *resolve the subagent tool under both Task and Agent* — closed. Our
+  T3 fix is therefore not racing an upstream change in the same place, and the
+  tool really is named `Agent` (verified from a live transcript, not from this PR).
+- **#1218** *Log Claude run lifecycle transitions* — closed. That is exactly the
+  instrumentation that would have made the T3 measurement a one-liner instead of
+  two hours of watching a process from outside. Not coming; if we want it, we
+  write it.
+
+`claude-runtime.provider.js` grew 1217 → 1301 lines over this sync, but none of
+the change touched the hold mechanism. Anchors for T2 moved and are corrected in
+the tickets.
 
 Purpose: none of our work is claimed upstream, but several of our files are
 crowded. Re-run this before starting any item, and after any upstream merge.
