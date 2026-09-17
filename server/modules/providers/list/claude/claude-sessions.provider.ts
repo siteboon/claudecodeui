@@ -24,6 +24,7 @@ import {
   truncateSubagentActivity,
 } from '@/shared/utils.js';
 import { sessionsDb } from '@/modules/database/index.js';
+import { isClaudeSDKSessionActive } from '@/modules/providers/list/claude/claude-runtime.provider.js';
 import { summarizeClaudeTokenUsage } from '@/modules/providers/services/provider-token-usage.service.js';
 
 const PROVIDER = 'claude';
@@ -444,11 +445,15 @@ function dropSupersededPromptBranches(rows: AnyRecord[]): AnyRecord[] {
   return rows.filter((row) => typeof row.uuid !== 'string' || !abandoned.has(row.uuid));
 }
 
+/** Answers whether the CLI process behind a session is still running. */
+type SessionLivenessProbe = (sessionId: string) => boolean;
+
 async function getSessionMessages(
   sessionId: string,
   providerSessionId: string,
   limit: number | null,
   offset: number,
+  isSessionActive: SessionLivenessProbe,
 ): Promise<ClaudeHistoryMessagesResult> {
   try {
     // The DB row is keyed by the app-facing session id, while the JSONL rows
@@ -474,10 +479,11 @@ async function getSessionMessages(
     }
 
     // Read each spawned agent's own transcript once, then hang it off every
-    // row that references it.
+    // row that references it. Status is not part of this: the transcript
+    // cannot say whether the agent finished (see the loop below).
     const subagentsById = new Map<string, {
       activity: SubagentActivity[];
-      info: SubagentInfo;
+      info: Omit<SubagentInfo, 'status'>;
     }>();
     for (const agentId of agentIds) {
       const located = await findClaudeSubagentTranscript(projectDir, providerSessionId, agentId);
@@ -500,7 +506,6 @@ async function getSessionMessages(
           type: meta.agentType,
           description: meta.description,
           model: transcript.model,
-          status: 'completed',
           activityCount: transcript.activity.length,
         },
       });
@@ -514,6 +519,13 @@ async function getSessionMessages(
     const notificationsByToolUseId = collectTaskNotifications(messages);
     const foldedNotificationUuids = new Set<string>();
 
+    // A background agent runs inside the session's CLI process, so once that
+    // process is gone an agent that has not reported back never will. The
+    // runtime keys its process map by the app session id when the chat gateway
+    // starts a run and by the provider-native id when the agent API does, so
+    // both are asked.
+    const isSessionLive = isSessionActive(sessionId) || isSessionActive(providerSessionId);
+
     for (const message of messages) {
       const agentId = message.toolUseResult?.agentId;
       if (!agentId) {
@@ -523,6 +535,8 @@ async function getSessionMessages(
       const subagent = subagentsById.get(String(agentId));
       const toolUseId = readAgentToolUseId(message);
       const notification = toolUseId ? notificationsByToolUseId.get(toolUseId) : undefined;
+      const isAsyncLaunch = message.toolUseResult?.isAsync === true;
+
       // An async agent's launch row never tells you it finished — only the
       // later notification does, so a missing notification means the outcome is
       // still unknown.
@@ -536,27 +550,38 @@ async function getSessionMessages(
       // `completed` the moment it launched, collapsing its card and dropping
       // its spinner while it was still working.
       //
-      // The predicate is gated on `isAsync`, so a synchronous agent — whose
-      // answer arrives inline on its own tool result — is untouched.
-      const isAwaitingAsyncAgent = message.toolUseResult?.isAsync === true && !notification;
+      // "Unknown" only means "still outstanding" while the process the agent
+      // runs in is alive. Once it is gone — the run was stopped or crashed, or
+      // this transcript is a fork, which copies the parent's conversation rows
+      // but not its agent files or queue-operation records — nothing can still
+      // report, and reading that as `running` pinned a spinner on the card
+      // forever.
+      //
+      // A synchronous agent hands its answer back inline on its own tool
+      // result, so its status never depends on a notification or the process.
+      const status: SubagentInfo['status'] = notification
+        ? notification.status === 'completed' ? 'completed' : 'failed'
+        : isAsyncLaunch
+          ? isSessionLive ? 'running' : 'stopped'
+          : 'completed';
 
-      if (subagent) {
-        if (subagent.activity.length > 0) {
-          message.subagentTools = subagent.activity;
-        }
-        message.subagent = {
-          ...subagent.info,
-          description: subagent.info.description
-            ?? (typeof message.toolUseResult?.description === 'string' ? message.toolUseResult.description : undefined),
-          model: subagent.info.model
-            ?? (typeof message.toolUseResult?.resolvedModel === 'string' ? message.toolUseResult.resolvedModel : undefined),
-          status: isAwaitingAsyncAgent
-            ? 'running'
-            : notification && notification.status !== 'completed'
-              ? 'failed'
-              : 'completed',
-        };
+      if (subagent && subagent.activity.length > 0) {
+        message.subagentTools = subagent.activity;
       }
+      // The agent's own transcript names its type, model and timeline, but it
+      // is not what says whether the agent finished, and it can be missing —
+      // a fork copies only the parent's `.jsonl`. The card reads its status
+      // off `subagent`, so the launch row publishes one with or without it;
+      // otherwise a notification saying "completed" left the card `running`.
+      message.subagent = {
+        id: String(agentId),
+        ...subagent?.info,
+        description: subagent?.info.description
+          ?? (typeof message.toolUseResult?.description === 'string' ? message.toolUseResult.description : undefined),
+        model: subagent?.info.model
+          ?? (typeof message.toolUseResult?.resolvedModel === 'string' ? message.toolUseResult.resolvedModel : undefined),
+        status,
+      };
 
       if (notification) {
         replaceAgentToolResultContent(message, notification.result || notification.summary);
@@ -688,7 +713,21 @@ function buildLocalCommandDisplayText(payload: ClaudeLocalCommandPayload): strin
   return commandArgs ? `${baseCommand} ${commandArgs}` : baseCommand;
 }
 
+type ClaudeSessionsProviderOptions = {
+  /**
+   * Whether the CLI process behind a session is still up. Injected so history
+   * tests can pin what a stopped run reads as without driving a real SDK run.
+   */
+  isSessionActive?: SessionLivenessProbe;
+};
+
 export class ClaudeSessionsProvider implements IProviderSessions {
+  private readonly isSessionActive: SessionLivenessProbe;
+
+  constructor({ isSessionActive = isClaudeSDKSessionActive }: ClaudeSessionsProviderOptions = {}) {
+    this.isSessionActive = isSessionActive;
+  }
+
   /**
    * Normalizes one Claude JSONL entry or live SDK stream event into the shared
    * message shape consumed by REST and WebSocket clients.
@@ -821,7 +860,11 @@ export class ClaudeSessionsProvider implements IProviderSessions {
               toolId: part.tool_use_id,
               content: typeof part.content === 'string' ? part.content : JSON.stringify(part.content),
               isError: Boolean(part.is_error),
-              toolUseResult: raw.toolUseResult,
+              // `toolUseResult` on disk, `tool_use_result` on the live SDK
+              // stream. Reading only the transcript key meant a live agent
+              // launch reached the client with no `isAsync`, so the card could
+              // not tell the launch acknowledgement from an answer.
+              toolUseResult: raw.toolUseResult ?? raw.tool_use_result,
             }));
           } else if (part.type === 'text') {
             const text = part.text || '';
@@ -1138,7 +1181,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     try {
       // Load full history first so `total` reflects frontend-normalized messages,
       // not raw JSONL records.
-      result = await getSessionMessages(sessionId, providerSessionId, null, 0);
+      result = await getSessionMessages(sessionId, providerSessionId, null, 0, this.isSessionActive);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`[ClaudeProvider] Failed to load session ${sessionId}:`, message);

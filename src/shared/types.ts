@@ -285,7 +285,8 @@ export type SubagentInfo = {
   name?: string;
   type?: string;
   description?: string;
-  status: 'running' | 'completed' | 'failed';
+  /** `stopped` is a background agent whose session process ended before it reported: no outcome exists and none is coming. */
+  status: 'running' | 'completed' | 'failed' | 'stopped';
   model?: string;
   /** Total entries the agent recorded, which exceeds the received timeline when a long run was truncated for transport. */
   activityCount?: number;

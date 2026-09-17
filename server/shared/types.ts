@@ -400,7 +400,8 @@ export type SubagentActivity = {
  * that it is whatever the provider reported — Claude's task notification
  * carries one — and `completed` when the provider reported nothing. A failed
  * tool call *inside* the agent is not a failed agent, so it is never inferred
- * from the transcript.
+ * from the transcript. A background agent whose session process ended before
+ * it reported is `stopped`: no outcome exists and none is coming.
  */
 export type SubagentInfo = {
   /** Provider-native agent id — Claude `agentId`, Codex `agent_thread_id`. */
@@ -411,7 +412,7 @@ export type SubagentInfo = {
   type?: string;
   /** One-line task summary shown in the collapsed header. */
   description?: string;
-  status: 'running' | 'completed' | 'failed';
+  status: 'running' | 'completed' | 'failed' | 'stopped';
   /** Model the subagent ran on, when the provider records it. */
   model?: string;
   /**

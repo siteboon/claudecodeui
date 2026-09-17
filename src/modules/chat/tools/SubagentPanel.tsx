@@ -1,5 +1,5 @@
 import { memo, useMemo, useState } from 'react';
-import { Bot, Brain, ChevronRight, CircleAlert, CircleCheck, MessageSquareText } from 'lucide-react';
+import { Bot, Brain, ChevronRight, CircleAlert, CircleCheck, CircleDashed, MessageSquareText } from 'lucide-react';
 
 import type { DiffLine, Project, SubagentActivity, SubagentInfo, ToolResult } from '@/shared/types';
 import { cn } from '@/shared/utils';
@@ -65,6 +65,7 @@ const STATUS_STYLES: Record<SubagentInfo['status'], string> = {
   running: 'text-purple-600 dark:text-purple-300',
   completed: 'text-muted-foreground',
   failed: 'text-red-600 dark:text-red-400',
+  stopped: 'text-muted-foreground/70',
 };
 
 /** One prose or reasoning entry from the agent's own narration. */
@@ -174,6 +175,13 @@ export const SubagentPanel = memo(({
               <CircleAlert className="h-3 w-3" />
               failed
             </>
+          ) : status === 'stopped' ? (
+            // Neither a spinner nor a check mark: the agent never reported and
+            // the process it ran in is gone, so there is no outcome to draw.
+            <span title="The run ended before this agent reported back" className="flex items-center gap-1">
+              <CircleDashed className="h-3 w-3" />
+              no result
+            </span>
           ) : (
             <>
               <CircleCheck className="h-3 w-3" />

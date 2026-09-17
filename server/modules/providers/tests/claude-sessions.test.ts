@@ -371,7 +371,8 @@ test('Claude history keeps a background agent running until its outcome is repor
       const now = new Date().toISOString();
       sessionsDb.createSession(SESSION_ID, 'claude', tempRoot, 'Subagent session', now, now, parentPath);
 
-      const history = await new ClaudeSessionsProvider().fetchHistory(SESSION_ID, {
+      // The session's process is still up, so the agent can still report.
+      const history = await new ClaudeSessionsProvider({ isSessionActive: () => true }).fetchHistory(SESSION_ID, {
         providerSessionId: SESSION_ID,
       });
       const agentRow = history.messages.find(
@@ -390,6 +391,172 @@ test('Claude history keeps a background agent running until its outcome is repor
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
+});
+
+test('Claude history reports a background agent stopped once its session process is gone', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-stopped-agent-'));
+
+  try {
+    const parentPath = await writeClaudeSubagentSession(tempRoot);
+    await dropTaskNotification(parentPath);
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(SESSION_ID, 'claude', tempRoot, 'Subagent session', now, now, parentPath);
+
+      // A background agent runs inside the session's CLI process. With that
+      // process gone — the run was stopped, or crashed — an agent that never
+      // reported never will, and "still running" would pin a spinner on the
+      // card forever.
+      const history = await new ClaudeSessionsProvider({ isSessionActive: () => false }).fetchHistory(SESSION_ID, {
+        providerSessionId: SESSION_ID,
+      });
+      const agentRow = history.messages.find(
+        (message) => message.kind === 'tool_use' && message.toolId === AGENT_TOOL_USE_ID,
+      );
+
+      assert.equal(agentRow?.subagent?.status, 'stopped');
+      assert.equal(agentRow?.toolResult?.content, '', 'the launch acknowledgement must never show as a result');
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('Claude history asks after the session process by both the app and the provider session id', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-liveness-keys-'));
+  const appSessionId = 'app-session-1';
+
+  try {
+    const parentPath = await writeClaudeSubagentSession(tempRoot);
+    await dropTaskNotification(parentPath);
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      // The DB row carries the app-facing id; the transcript rows carry the
+      // provider-native one. The runtime keys its process map by whichever
+      // id started the run — the app id from the chat gateway, the provider
+      // id from the agent API — so a probe that knows only one of them must
+      // still find the run.
+      sessionsDb.createSession(appSessionId, 'claude', tempRoot, 'Subagent session', now, now, parentPath);
+
+      for (const liveId of [appSessionId, SESSION_ID]) {
+        const history = await new ClaudeSessionsProvider({
+          isSessionActive: (sessionId) => sessionId === liveId,
+        }).fetchHistory(appSessionId, { providerSessionId: SESSION_ID });
+        const agentRow = history.messages.find(
+          (message) => message.kind === 'tool_use' && message.toolId === AGENT_TOOL_USE_ID,
+        );
+
+        assert.equal(agentRow?.subagent?.status, 'running', `a run keyed by ${liveId} must read as live`);
+      }
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+/** Removes the agent's own transcript and sidecar, leaving only the parent's rows. */
+async function dropSubagentTranscript(projectDirectory: string): Promise<void> {
+  await rm(path.join(projectDirectory, SESSION_ID, 'subagents'), { recursive: true, force: true });
+}
+
+for (const reported of ['completed', 'failed'] as const) {
+  test(`Claude history settles a ${reported} background agent from its notification when its transcript is missing`, { concurrency: false }, async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-transcriptless-agent-'));
+
+    try {
+      const parentPath = await writeClaudeSubagentSession(tempRoot);
+      await useQueueOperationNotification(parentPath, 'remove');
+      await writeFile(
+        parentPath,
+        (await readFile(parentPath, 'utf8')).replace('<status>completed</status>', `<status>${reported}</status>`),
+        'utf8',
+      );
+      await dropSubagentTranscript(tempRoot);
+
+      await withIsolatedDatabase(async () => {
+        const now = new Date().toISOString();
+        sessionsDb.createSession(SESSION_ID, 'claude', tempRoot, 'Subagent session', now, now, parentPath);
+
+        // The notification is the only record of the outcome, and it is
+        // enough: the agent's own transcript names its timeline, not whether
+        // it finished. Folding the answer onto the card while leaving the
+        // status unset read as `running` on a card whose result said "done".
+        const history = await new ClaudeSessionsProvider({ isSessionActive: () => false }).fetchHistory(SESSION_ID, {
+          providerSessionId: SESSION_ID,
+        });
+        const agentRow = history.messages.find(
+          (message) => message.kind === 'tool_use' && message.toolId === AGENT_TOOL_USE_ID,
+        );
+
+        assert.equal(agentRow?.toolResult?.content, 'The repo has two packages.');
+        assert.equal(agentRow?.subagent?.status, reported);
+        assert.equal(agentRow?.subagent?.id, AGENT_ID);
+        assert.equal(agentRow?.subagent?.description, 'Survey the repo');
+        assert.equal(agentRow?.subagent?.model, 'claude-opus-5');
+        assert.equal(agentRow?.subagentTools, undefined, 'there is no timeline to show without a transcript');
+      });
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+}
+
+test('Claude history reports a forked background agent stopped: no transcript, no notification, no process', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-forked-agent-'));
+
+  try {
+    // A fork copies the parent's `.jsonl` rows and nothing else — no
+    // `subagents/` directory and no queue-operation records — and the new
+    // session has no process of its own yet.
+    const parentPath = await writeClaudeSubagentSession(tempRoot);
+    await dropTaskNotification(parentPath);
+    await dropSubagentTranscript(tempRoot);
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(SESSION_ID, 'claude', tempRoot, 'Subagent session', now, now, parentPath);
+
+      const history = await new ClaudeSessionsProvider({ isSessionActive: () => false }).fetchHistory(SESSION_ID, {
+        providerSessionId: SESSION_ID,
+      });
+      const agentRow = history.messages.find(
+        (message) => message.kind === 'tool_use' && message.toolId === AGENT_TOOL_USE_ID,
+      );
+
+      // Without `subagent` the card falls back to "async launch, therefore
+      // running", which is the spinner that never went away.
+      assert.equal(agentRow?.subagent?.status, 'stopped');
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('a live SDK tool result keeps its launch metadata under the stream key', () => {
+  // The transcript spells it `toolUseResult`; the SDK stream spells it
+  // `tool_use_result`. Reading only the former sent every live agent launch to
+  // the client without `isAsync`, so the card could not tell the launch
+  // acknowledgement apart from an answer and settled the agent at launch.
+  const [normalized] = new ClaudeSessionsProvider().normalizeMessage({
+    type: 'user',
+    session_id: SESSION_ID,
+    parent_tool_use_id: null,
+    uuid: 'launch-ack-live',
+    message: {
+      role: 'user',
+      content: [{
+        type: 'tool_result',
+        tool_use_id: AGENT_TOOL_USE_ID,
+        content: 'Async agent launched successfully. agentId: internal bookkeeping',
+      }],
+    },
+    tool_use_result: { isAsync: true, status: 'async_launched', agentId: AGENT_ID },
+  }, SESSION_ID);
+
+  assert.equal(normalized?.kind, 'tool_result');
+  assert.equal((normalized?.toolUseResult as { isAsync?: boolean } | undefined)?.isAsync, true);
 });
 
 test('Claude history still settles a synchronous agent that stops mid tool call', { concurrency: false }, async () => {
