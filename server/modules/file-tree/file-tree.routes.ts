@@ -1,5 +1,9 @@
+import { randomUUID } from 'node:crypto';
+import os from 'node:os';
+
 import express from 'express';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
+import multer from 'multer';
 
 import type {
   FileTreeLogger,
@@ -16,6 +20,30 @@ type FileTreeUploadLimits = {
 type UploadedRequest = Request & {
   files?: Express.Multer.File[];
 };
+
+/**
+ * Builds the multer middleware that parses `files` uploads into temporary
+ * files for the File Tree upload route. Used by the File Tree module to wire
+ * the production router and by the route tests to exercise real multipart
+ * parsing. Browsers send multipart filenames as raw UTF-8 bytes, but
+ * multer/busboy decode them as latin1 by default, so `defParamCharset` is set
+ * to keep non-ASCII names intact in `file.originalname`.
+ */
+export function createFileTreeUploadMiddleware(limits: FileTreeUploadLimits): RequestHandler {
+  return multer({
+    storage: multer.diskStorage({
+      destination: os.tmpdir(),
+      filename: (_request, _file, callback) => {
+        callback(null, `cloudcli-file-upload-${randomUUID()}`);
+      },
+    }),
+    defParamCharset: 'utf8',
+    limits: {
+      fileSize: limits.maximumFileSizeMegabytes * 1024 * 1024,
+      files: limits.maximumFileCount,
+    },
+  }).array('files', limits.maximumFileCount);
+}
 
 function readBody(request: Request): Record<string, unknown> {
   return typeof request.body === 'object' && request.body !== null

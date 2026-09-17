@@ -1,12 +1,9 @@
-import { randomUUID } from 'node:crypto';
 import fs, { promises as fsPromises } from 'node:fs';
-import os from 'node:os';
 
 import mime from 'mime-types';
-import multer from 'multer';
 
 import { projectsDb } from '@/modules/database/index.js';
-import { createFileTreeRouter } from '@/modules/file-tree/file-tree.routes.js';
+import { createFileTreeRouter, createFileTreeUploadMiddleware } from '@/modules/file-tree/file-tree.routes.js';
 import { createFileTreeService } from '@/modules/file-tree/file-tree.service.js';
 import type {
   FileTreeFileSystem,
@@ -16,9 +13,10 @@ import type {
 } from '@/shared/types.js';
 import { WORKSPACES_ROOT, validateWorkspacePath } from '@/shared/utils.js';
 
-const MAXIMUM_UPLOAD_SIZE_MEGABYTES = 200;
-const MAXIMUM_UPLOAD_SIZE_BYTES = MAXIMUM_UPLOAD_SIZE_MEGABYTES * 1024 * 1024;
-const MAXIMUM_UPLOAD_FILE_COUNT = 20;
+const UPLOAD_LIMITS = {
+  maximumFileSizeMegabytes: 200,
+  maximumFileCount: 20,
+};
 
 function readFileSystemConcurrency(): number {
   const configuredConcurrency = Number.parseInt(process.env.FS_CONCURRENCY ?? '', 10);
@@ -88,32 +86,13 @@ const fileTreeServices = createFileTreeService({
   logger: fileTreeLogger,
 });
 
-const fileUploadMiddleware = multer({
-  storage: multer.diskStorage({
-    destination: os.tmpdir(),
-    filename: (_request, _file, callback) => {
-      callback(null, `cloudcli-file-upload-${randomUUID()}`);
-    },
-  }),
-  // Decode multipart filenames as UTF-8 so non-ASCII names survive intact
-  // (multer/busboy default to latin1).
-  defParamCharset: 'utf8',
-  limits: {
-    fileSize: MAXIMUM_UPLOAD_SIZE_BYTES,
-    files: MAXIMUM_UPLOAD_FILE_COUNT,
-  },
-}).array('files', MAXIMUM_UPLOAD_FILE_COUNT);
-
 /**
  * File Tree router used by the server entrypoint to mount the authenticated
  * browsing, editing, file-management, and upload API under `/api/file-tree`.
  */
 export const fileTreeRoutes = createFileTreeRouter(
   fileTreeServices,
-  fileUploadMiddleware,
-  {
-    maximumFileSizeMegabytes: MAXIMUM_UPLOAD_SIZE_MEGABYTES,
-    maximumFileCount: MAXIMUM_UPLOAD_FILE_COUNT,
-  },
+  createFileTreeUploadMiddleware(UPLOAD_LIMITS),
+  UPLOAD_LIMITS,
   fileTreeLogger,
 );

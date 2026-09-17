@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import fs from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
 import test from 'node:test';
 
 import express, { type RequestHandler } from 'express';
 
-import { createFileTreeRouter } from '@/modules/file-tree/file-tree.routes.js';
+import { createFileTreeRouter, createFileTreeUploadMiddleware } from '@/modules/file-tree/file-tree.routes.js';
 import type { FileTreeServices } from '@/shared/types.js';
 
 function createFakeServices(overrides: Partial<FileTreeServices> = {}): FileTreeServices {
@@ -30,16 +31,19 @@ function createFakeServices(overrides: Partial<FileTreeServices> = {}): FileTree
 
 const passUploadRequest: RequestHandler = (_request, _response, next) => next();
 
+const uploadLimits = { maximumFileSizeMegabytes: 200, maximumFileCount: 20 };
+
 async function withFileTreeServer(
   services: FileTreeServices,
   run: (baseUrl: string) => Promise<void>,
+  uploadMiddleware: RequestHandler = passUploadRequest,
 ): Promise<void> {
   const app = express();
   app.use(express.json());
   app.use('/api/file-tree', createFileTreeRouter(
     services,
-    passUploadRequest,
-    { maximumFileSizeMegabytes: 200, maximumFileCount: 20 },
+    uploadMiddleware,
+    uploadLimits,
     { error: () => undefined },
   ));
 
@@ -154,4 +158,46 @@ test('create route rejects invalid entry types without calling the service', asy
   });
 
   assert.equal(createCalled, false);
+});
+
+test('upload route keeps non-ASCII original filenames intact through the real multipart parser', async () => {
+  const originalName = '개인정보 처리방침 안내서.txt';
+  const inputs: Parameters<FileTreeServices['storeUploadedFiles']>[0][] = [];
+  const services = createFakeServices({
+    storeUploadedFiles: async (input) => {
+      inputs.push(input);
+      await Promise.all(input.files.map((file) => fs.rm(file.temporaryPath, { force: true })));
+      return {
+        success: true,
+        files: input.files.map((file) => ({
+          name: file.originalName,
+          path: `${input.targetPath}/${file.originalName}`,
+          size: file.size,
+          mimeType: file.mimeType,
+        })),
+        uploadedCount: input.files.length,
+        requestedFileCount: input.requestedFileCount,
+        targetPath: input.targetPath,
+        message: 'ok',
+      };
+    },
+  });
+
+  await withFileTreeServer(services, async (baseUrl) => {
+    const form = new FormData();
+    form.append('targetPath', 'docs');
+    form.append('files', new Blob(['hello'], { type: 'text/plain' }), originalName);
+
+    const response = await fetch(`${baseUrl}/api/file-tree/projects/project-1/files/upload`, {
+      method: 'POST',
+      body: form,
+    });
+
+    assert.equal(response.status, 200);
+  }, createFileTreeUploadMiddleware(uploadLimits));
+
+  assert.equal(inputs.length, 1);
+  assert.equal(inputs[0].files.length, 1);
+  assert.equal(inputs[0].files[0].originalName, originalName);
+  assert.equal(inputs[0].targetPath, 'docs');
 });

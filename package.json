@@ -182,7 +182,7 @@
     "lucide-react": "^0.515.0",
     "mermaid": "^11.16.1",
     "mime-types": "^3.0.1",
-    "multer": "^2.0.1",
+    "multer": "^2.4.0",
     "node-fetch": "^2.7.0",
     "node-pty": "^1.2.0-beta.12",
     "react": "^18.2.0",
