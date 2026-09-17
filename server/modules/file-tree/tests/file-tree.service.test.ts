@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import { createFileTreeService } from '@/modules/file-tree/file-tree.service.js';
 import type {
@@ -15,6 +16,8 @@ import type {
   FileTreeStats,
 } from '@/shared/types.js';
 import { AppError, resolveReadOnlyRootPath, validateWorkspacePath } from '@/shared/utils.js';
+
+const testDirectory = path.dirname(fileURLToPath(import.meta.url));
 
 function createDirectoryEntry(name: string, directory: boolean): FileTreeDirectoryEntry {
   return {
@@ -467,9 +470,35 @@ test('the temp directory can be browsed and read, but never written to', async (
       (error: unknown) => (error as AppError).code === 'INVALID_WORKSPACE_PATH',
     );
     await assert.rejects(
+      service.createEntry({
+        projectId: 'project-1',
+        parentPath: path.join(temporaryDirectory, 'tasks'),
+        type: 'file',
+        name: 'planted.txt',
+      }),
+      (error: unknown) => (error as AppError).code === 'PATH_OUTSIDE_PROJECT',
+    );
+    await assert.rejects(
+      service.renameEntry({ projectId: 'project-1', oldPath: outputPath, newName: 'renamed.output' }),
+      (error: unknown) => (error as AppError).code === 'PATH_OUTSIDE_PROJECT',
+    );
+    const uploadedTemporaryPath = path.join(projectRoot, 'upload.tmp');
+    await fsPromises.writeFile(uploadedTemporaryPath, 'upload', 'utf8');
+    await assert.rejects(
+      service.storeUploadedFiles({
+        projectId: 'project-1',
+        targetPath: path.join(temporaryDirectory, 'tasks'),
+        relativePaths: [],
+        requestedFileCount: 1,
+        files: [{ originalName: 'upload.txt', temporaryPath: uploadedTemporaryPath, size: 6, mimeType: 'text/plain' }],
+      }),
+      (error: unknown) => (error as AppError).code === 'PATH_OUTSIDE_PROJECT',
+    );
+    await assert.rejects(
       service.deleteEntry({ projectId: 'project-1', targetPath: outputPath }),
       (error: unknown) => (error as AppError).code === 'PATH_OUTSIDE_PROJECT',
     );
+    assert.deepEqual(await fsPromises.readdir(path.join(temporaryDirectory, 'tasks')), ['agent.output']);
     assert.equal(await fsPromises.readFile(outputPath, 'utf8'), 'what the agent found');
   } finally {
     await fsPromises.rm(temporaryDirectory, { recursive: true, force: true });
@@ -480,9 +509,14 @@ test('the temp directory can be browsed and read, but never written to', async (
 test('reading through a symlink out of the temp directory is still refused', async () => {
   const temporaryDirectory = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'file-tree-tmp-'));
   const projectRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'file-tree-project-'));
-  const outsideDirectory = await fsPromises.mkdtemp(path.join(os.homedir(), 'file-tree-outside-'));
+  // The link target has to sit under no read-only root. Beside this file is
+  // deterministic; a directory under `$HOME` lands under `/tmp` whenever a
+  // test run isolates its home there, and the Claude projects directory is a
+  // read-only root too.
+  const outsideDirectory = await fsPromises.mkdtemp(path.join(testDirectory, 'file-tree-outside-'));
 
   try {
+    assert.equal(await resolveReadOnlyRootPath(outsideDirectory), null);
     await fsPromises.writeFile(path.join(outsideDirectory, 'secret.txt'), 'secret', 'utf8');
     await fsPromises.symlink(outsideDirectory, path.join(temporaryDirectory, 'escape'));
 

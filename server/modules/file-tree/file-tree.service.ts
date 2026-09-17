@@ -315,9 +315,11 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
   /**
    * Resolves a directory the browser may list.
    *
-   * The system temp directory is browsable but never writable, so it is checked
-   * before the workspace policy rejects it. `createWorkspaceFolder` deliberately
-   * does not do this, which is what keeps the directory read-only.
+   * The read-only roots (the system temp directory and the Claude projects
+   * directory, see `READ_ONLY_ROOTS` in shared/utils) are browsable but never
+   * writable, so they are checked before the workspace policy rejects them.
+   * `createWorkspaceFolder` deliberately does not do this, which is what keeps
+   * them read-only.
    */
   async function resolveBrowsablePath(targetPath: string): Promise<string> {
     const readOnlyPath = await dependencies.workspace.resolveReadOnlyRootPath(targetPath);
@@ -337,8 +339,9 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
    * Resolves a path the viewer is allowed to read.
    *
    * A file reference in a transcript is normally inside the project, but a
-   * background agent's output file and a background command's log live in the
-   * system temp directory and the transcript quotes those paths verbatim. Those
+   * background command's log lives in the system temp directory and a
+   * background agent's output file is a link from there into the Claude
+   * projects directory, and the transcript quotes those paths verbatim. Those
    * resolve through the read-only root policy instead of the project root; the
    * writing endpoints keep using `resolvePathInsideProject` alone, so nothing
    * outside the project can be changed.

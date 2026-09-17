@@ -155,7 +155,8 @@ export const FORBIDDEN_WORKSPACE_PATHS = [
 ];
 
 /**
- * Roots that may be read from but never written to or registered as a project.
+ * Roots the file browser and viewer may read from even though they are outside
+ * every project.
  *
  * Claude writes a background agent's output file and a background command's log
  * under the system temp directory, and a transcript quotes those paths
@@ -163,38 +164,71 @@ export const FORBIDDEN_WORKSPACE_PATHS = [
  * them. `/tmp` is listed literally as well as via `os.tmpdir()` because the two
  * differ on macOS, where the temp directory is under `/var/folders`.
  *
- * These stay out of `validateWorkspacePath`, which is the write policy, so
- * nothing can be created here and none of it can become a workspace root.
+ * A background agent's `.output` file is only a symlink to the agent's
+ * transcript, `~/.claude/projects/<project>/<session>/subagents/agent-<id>.jsonl`.
+ * Symlinks are resolved before the root comparison, so following it needs the
+ * Claude projects directory to be a root as well. Those are the user's own
+ * transcripts, which the sessions API already serves; the directory is located
+ * the same way the session watcher and synchronizer locate it.
+ *
+ * Being a read-only root grants reads only: the file-tree write paths resolve
+ * against the project root alone, so nothing under these can be changed
+ * through the file API. Whether one may become a workspace is decided
+ * separately by `validateWorkspacePath` — the temp directories are on
+ * `FORBIDDEN_WORKSPACE_PATHS`; the Claude projects directory is not, it is
+ * simply wherever `WORKSPACES_ROOT` puts it.
  */
-const READ_ONLY_ROOTS = [...new Set(['/tmp', os.tmpdir()])];
+const READ_ONLY_ROOTS = [...new Set([
+  '/tmp',
+  os.tmpdir(),
+  path.join(os.homedir(), '.claude', 'projects'),
+])];
 
 /**
- * Resolves a path that is readable because it lives under a read-only root,
- * or `null` when it does not.
+ * Resolves `targetPath` when it lives under one of `roots`, or `null` when it
+ * does not.
  *
- * Symlinks are resolved before the comparison, so a link planted in the temp
- * directory cannot be used to read somewhere else through it.
+ * Symlinks are resolved before the comparison, so a link planted under a root
+ * cannot be used to read somewhere else through it. Each root is resolved on
+ * its own, so one that does not exist on this machine — `/tmp` on Windows — is
+ * skipped and the roots after it are still checked.
  */
-export async function resolveReadOnlyRootPath(targetPath: string): Promise<string | null> {
+export async function resolvePathUnderRoots(targetPath: string, roots: string[]): Promise<string | null> {
   const normalizedTarget = normalizeProjectPath(targetPath);
   if (!normalizedTarget || !path.isAbsolute(normalizedTarget)) {
     return null;
   }
 
+  let resolvedPath: string;
   try {
-    const resolvedPath = normalizeProjectPath(await realpath(path.resolve(normalizedTarget)));
-
-    for (const root of READ_ONLY_ROOTS) {
-      const resolvedRoot = normalizeProjectPath(await realpath(root));
-      if (resolvedPath === resolvedRoot || resolvedPath.startsWith(`${resolvedRoot}${path.sep}`)) {
-        return resolvedPath;
-      }
-    }
+    resolvedPath = normalizeProjectPath(await realpath(path.resolve(normalizedTarget)));
   } catch {
     // A path that cannot be resolved is not readable through here either.
+    return null;
+  }
+
+  for (const root of roots) {
+    let resolvedRoot: string;
+    try {
+      resolvedRoot = normalizeProjectPath(await realpath(root));
+    } catch {
+      continue;
+    }
+
+    if (resolvedPath === resolvedRoot || resolvedPath.startsWith(`${resolvedRoot}${path.sep}`)) {
+      return resolvedPath;
+    }
   }
 
   return null;
+}
+
+/**
+ * Resolves a path that is readable because it lives under a read-only root,
+ * or `null` when it does not.
+ */
+export function resolveReadOnlyRootPath(targetPath: string): Promise<string | null> {
+  return resolvePathUnderRoots(targetPath, READ_ONLY_ROOTS);
 }
 
 function stripWindowsLongPathPrefix(inputPath: string): string {

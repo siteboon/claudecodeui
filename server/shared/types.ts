@@ -1131,8 +1131,9 @@ export type FileTreeWorkspaceGateway = {
   validatePath(candidatePath: string): Promise<WorkspacePathValidationResult>;
   /**
    * Resolves a path readable outside the workspace root — the system temp
-   * directory — or `null` when it is not one. Read-only: the write policy is
-   * `validatePath` and it does not consult this.
+   * directory and the Claude projects directory — or `null` when it is not
+   * one. Read-only: the write policy is `validatePath` and it does not consult
+   * this.
    */
   resolveReadOnlyRootPath(candidatePath: string): Promise<string | null>;
 };
