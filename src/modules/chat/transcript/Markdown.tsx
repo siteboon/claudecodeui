@@ -8,6 +8,7 @@ import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/pris
 import { useTranslation } from 'react-i18next';
 
 import { MermaidDiagram } from '@/modules/code-editor';
+import { MarkdownImage } from '@/modules/chat/transcript/MarkdownImage';
 import { normalizeInlineCodeFences } from '@/modules/chat/utils/chatFormatting';
 import { copyTextToClipboard } from '@/shared/utils';
 import { SyntaxHighlighter } from '@/shared/syntaxHighlighter';
@@ -26,6 +27,14 @@ type MarkdownProps = {
 // everything else is treated as a workspace file reference.
 const isExternalHref = (href?: string): boolean =>
   !!href && (/^(https?:|mailto:|tel:|data:)/i.test(href) || href.startsWith('#'));
+
+// Read the trailing `:line` / `:line:col` suffix so the editor can reveal it.
+// Both this and stripLineSuffix are anchored at the end, so callers pass an
+// already-trimmed reference.
+const lineFromRef = (value: string): number | null => {
+  const match = value.match(/:(\d+)(?::\d+)?$/);
+  return match ? Number(match[1]) : null;
+};
 
 // Strip a trailing `:line` / `:line:col` suffix (e.g. `src/foo.ts:130`).
 const stripLineSuffix = (value: string): string => value.replace(/:\d+(?::\d+)?$/, '');
@@ -195,6 +204,9 @@ if (!document.getElementById(SYNTAX_THEME_STYLE_ELEMENT_ID)) {
 
 const markdownComponents = {
   code: CodeBlock,
+  // Workspace image paths are fetched through the authenticated files route;
+  // a bare <img src> would resolve against the web origin and 404.
+  img: MarkdownImage,
   // Fenced/indented code arrives as <pre><code>. Re-render the child CodeBlock
   // with `forceBlock` so it always gets the block treatment (react-markdown v9+
   // no longer passes an `inline` flag), and skip the outer <pre> so Tailwind
@@ -266,7 +278,7 @@ function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 
     [breaks, hasMath],
   );
   const rehypePlugins = useMemo(() => (hasMath ? [rehypeKatex] : EMPTY_PLUGINS), [hasMath]);
-  const { openFileInEditor } = usePaletteOps();
+  const { openFileInEditor, openDirectory } = usePaletteOps();
 
   const components = useMemo(
     () => ({
@@ -284,7 +296,16 @@ function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 
               className="cursor-pointer text-blue-600 hover:underline dark:text-blue-400"
               onClick={(event) => {
                 event.preventDefault();
-                openFileInEditor(stripLineSuffix(fileRef));
+                // Normalized once for every branch below: the href arrives
+                // trimmed from the parser, but the link-text fallback keeps a
+                // trailing space (``[`src/foo.ts:12` ]()``), and that space
+                // defeats the `$`-anchored suffix strip.
+                const reference = fileRef.trim();
+                if (reference.endsWith('/')) {
+                  openDirectory(reference);
+                  return;
+                }
+                openFileInEditor(stripLineSuffix(reference), lineFromRef(reference));
               }}
             >
               {linkChildren}
@@ -304,7 +325,7 @@ function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 
         );
       },
     }),
-    [openFileInEditor],
+    [openFileInEditor, openDirectory],
   );
 
   return (

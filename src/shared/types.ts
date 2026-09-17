@@ -264,6 +264,22 @@ export type SubagentActivity = {
 };
 
 /** Identity and lifecycle of one spawned subagent as the backend reports it; present on the tool call that spawned the agent and used to draw its container header. */
+/**
+ * A compaction, as the transcript records it.
+ *
+ * `running` is the status the CLI sends when it starts compacting, `done` the
+ * boundary it sends when it has, `failed` a compaction that did not finish.
+ * The token counts and duration only come with a boundary.
+ */
+export type CompactionInfo = {
+  phase: 'running' | 'done' | 'failed';
+  trigger?: 'manual' | 'auto';
+  preTokens?: number;
+  postTokens?: number;
+  durationMs?: number;
+  error?: string | null;
+};
+
 export type SubagentInfo = {
   id: string;
   name?: string;
@@ -309,6 +325,10 @@ export type ChatMessage = {
   isLocalCommand?: boolean;
   isLocalCommandStdout?: boolean;
   isCompactSummary?: boolean;
+  /** Set on the row that stands in for a compaction, so it is drawn as one. */
+  compact?: CompactionInfo;
+  /** The summary that compaction produced, folded into the row above rather than left loose. */
+  compactSummary?: string;
   isSubagentContainer?: boolean;
   /** The agent this row spawned, when it spawned one. Its presence is what makes a row a subagent container. */
   subagent?: SubagentInfo;
@@ -453,6 +473,8 @@ export type NormalizedMessage = {
   isLocalCommand?: boolean;
   isLocalCommandStdout?: boolean;
   isCompactSummary?: boolean;
+  /** Set by the provider on the row that stands in for a compaction. */
+  compact?: CompactionInfo;
   images?: Array<{ path?: string; data?: string; name?: string }>;
   files?: Array<{ path?: string; name?: string; mimeType?: string; size?: number }>;
   toolName?: string;
@@ -707,7 +729,15 @@ export type CodeEditorFile = {
   // URLs for reading and saving content.
   projectId?: string;
   diffInfo?: CodeEditorDiffInfo | null;
+  // 1-based line to reveal when the file opens (from a `path:line` reference).
+  line?: number | null;
   [key: string]: unknown;
+};
+
+/** One request to reveal a line in the editor. The code editor builds a new object per opened file so the surface can tell a fresh request apart from a re-render, and jump only once per request. */
+export type CodeEditorGotoTarget = {
+  // 1-based, clamped to the document by the editor surface.
+  line: number;
 };
 
 /** The category of browser-renderable media a file maps to, used by the code editor to decide whether to show an inline image, PDF, video or audio preview instead of a text buffer. */
@@ -730,6 +760,12 @@ export type FileTreeUploadProgressState = {
 
 /** Which density the file tree renders its rows at (simple, compact or detailed), chosen in the file tree header and persisted in local storage. */
 export type FileTreeViewMode = 'simple' | 'compact' | 'detailed';
+
+/** One request to reveal a directory in the file tree, coming from a `path/` reference in a chat message. The workspace builds a new object per click so the tree re-reveals a folder the user collapsed again in the meantime. */
+export type DirectoryRevealRequest = {
+  // As written in the message: relative to the project root, or absolute.
+  path: string;
+};
 
 /** One file or directory entry in a project's file listing, with directories carrying their loaded `children`; used across the file tree for rendering, searching and filtering. */
 export type FileTreeNode = {
@@ -1267,7 +1303,7 @@ export type SidebarProjectListProps = SessionRowActions & {
   selectedSession: ProjectSession | null;
   isLoading: boolean;
   loadingProgress: LoadingProgress | null;
-  expandedProjects: Set<string>;
+  isProjectExpanded: (projectId: string) => boolean;
   initialSessionsLoaded: Set<string>;
   currentTime: Date;
   deletingProjects: Set<string>;
@@ -1276,11 +1312,10 @@ export type SidebarProjectListProps = SessionRowActions & {
   getProjectSessions: (project: Project) => SessionWithProvider[];
   onLoadMoreSessions: (projectId: string) => void;
   loadingMoreProjects: Set<string>;
-  forceExpanded?: boolean;
-  isProjectStarred: (projectName: string) => boolean;
-  onToggleProject: (projectName: string) => void;
+  isProjectStarred: (projectId: string) => boolean;
+  onToggleProject: (projectId: string) => void;
   onProjectSelect: (project: Project) => void;
-  onToggleStarProject: (projectName: string) => void;
+  onToggleStarProject: (projectId: string) => void;
   onStartEditingProject: (project: Project) => void;
   onCancelEditingProject: () => void;
   onSaveProjectName: (projectId: string, nextName: string) => void;

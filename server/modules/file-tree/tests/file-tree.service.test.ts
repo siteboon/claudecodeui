@@ -343,6 +343,26 @@ test('readTextFile rejects traversal before invoking the filesystem adapter', as
   assert.deepEqual(readPaths, []);
 });
 
+test('readTextFile reports a directory as a client error, not a 500', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const fileSystem = createFakeFileSystem({
+    readTextFile: async () => {
+      const error = new Error('EISDIR: illegal operation on a directory, read');
+      (error as NodeJS.ErrnoException).code = 'EISDIR';
+      throw error;
+    },
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
+
+  await assert.rejects(
+    service.readTextFile('project-1', 'decisions'),
+    (error: unknown) => error instanceof AppError
+      && error.code === 'EISDIR'
+      && error.statusCode === 400
+      && error.message === 'Path is a directory, not a file',
+  );
+});
+
 test('createEntry performs filesystem mutation only through the injected adapter', async () => {
   const projectRoot = path.resolve('file-tree-test-project');
   const targetPath = path.join(projectRoot, 'notes.txt');

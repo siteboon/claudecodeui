@@ -11,8 +11,9 @@ import { useFileTreeOperations } from '@/modules/file-tree/hooks/useFileTreeOper
 import { useFileTreeSearch } from '@/modules/file-tree/hooks/useFileTreeSearch';
 import { useFileTreeViewMode } from '@/modules/file-tree/hooks/useFileTreeViewMode';
 import { useFileTreeUpload } from '@/modules/file-tree/hooks/useFileTreeUpload';
-import type { FileTreeImageSelection, FileTreeNode,Project } from '@/shared/types';
+import type { DirectoryRevealRequest, FileTreeImageSelection, FileTreeNode,Project } from '@/shared/types';
 import { formatFileSize, formatRelativeTime, isImageFile } from '@/modules/file-tree/utils/fileTreeUtils';
+import { directoryRevealPaths } from '@/modules/file-tree/utils/revealDirectory';
 import { ScrollArea, Input } from '@/shared/ui';
 import FileTreeBody from '@/modules/file-tree/FileTreeBody';
 import FileTreeDetailedColumns from '@/modules/file-tree/FileTreeDetailedColumns';
@@ -25,10 +26,13 @@ import ImageViewer from '@/modules/file-tree/ImageViewer';
 type FileTreeProps = {
   selectedProject: Project | null;
   onFileOpen?: (filePath: string) => void;
+  // Directory to reveal (from an in-chat `path/` reference): its ancestors are
+  // expanded so the folder is visible without hunting through the tree.
+  revealDirectory?: DirectoryRevealRequest | null;
 };
 
 /** Exported through the file-tree barrel; the project-workspace module renders it as the Files sidebar tab. */
-export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps) {
+export default function FileTree({ selectedProject, onFileOpen, revealDirectory }: FileTreeProps) {
   const { t } = useTranslation();
   const [selectedImage, setSelectedImage] = useState<FileTreeImageSelection | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -55,6 +59,26 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
     files,
     expandDirectories,
   });
+
+  // The reveal request already served, so a later tree refresh does not fold
+  // the folders open again over a collapse the user has since made.
+  const revealedRef = useRef<DirectoryRevealRequest | null>(null);
+
+  // Expand every ancestor between the project root and the requested folder.
+  // A request that arrives before the tree finds nothing to expand and is
+  // retried when `files` lands.
+  useEffect(() => {
+    const projectRoot = selectedProject?.path || selectedProject?.fullPath;
+    if (!revealDirectory || !projectRoot || revealedRef.current === revealDirectory) {
+      return;
+    }
+    const paths = directoryRevealPaths(files, projectRoot, revealDirectory.path);
+    if (paths.length === 0) {
+      return;
+    }
+    revealedRef.current = revealDirectory;
+    expandDirectories(paths);
+  }, [revealDirectory, selectedProject?.path, selectedProject?.fullPath, expandDirectories, files]);
 
   // File operations
   const operations = useFileTreeOperations({
