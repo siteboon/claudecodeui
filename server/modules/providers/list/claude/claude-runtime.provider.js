@@ -325,10 +325,7 @@ function mapCliOptionsToSDK(options = {}) {
   let allowedTools = [...(settings.allowedTools || [])];
 
   if (permissionMode === 'plan') {
-    // Both names for the subagent tool: Claude Code renamed Task -> Agent, and
-    // an allowlist that misses the current name does not fail loudly — planning
-    // just starts asking permission for something it was meant to allow.
-    const planModeTools = ['Read', 'Task', 'Agent', 'exit_plan_mode', 'TodoRead', 'TodoWrite', 'WebFetch', 'WebSearch'];
+    const planModeTools = ['Read', ...SUBAGENT_TOOL_NAMES, 'exit_plan_mode', 'TodoRead', 'TodoWrite', 'WebFetch', 'WebSearch'];
     for (const tool of planModeTools) {
       if (!allowedTools.includes(tool)) {
         allowedTools.push(tool);
@@ -687,6 +684,15 @@ function extractCumulativeTokenBudget(sdkMessage) {
   };
 }
 
+// Every name the subagent-spawning tool has been known by. Claude Code renamed
+// it Task -> Agent; `Agent` is what arrives now and `Task` is what pre-rename
+// transcripts still hold, and those are read forever. Kept as one list because
+// a name-keyed decision that misses a name fails silently — nothing throws,
+// nothing logs, the rule just stops applying. The frontend keeps the same list
+// in src/modules/chat/tools/toolAliases.ts; the two build roots cannot share a
+// module, so they share a name instead.
+const SUBAGENT_TOOL_NAMES = new Set(['Agent', 'Task']);
+
 // Tool calls that leave work running past the end of a turn. Bash and Agent are
 // decided by their input instead (see below); the rest defer, watch, or
 // orchestrate work by nature. `Workflow` always runs in the background and can
@@ -719,7 +725,7 @@ function startsBackgroundWork(sdkMessage) {
     if (block.name === 'Bash') {
       return block.input?.run_in_background === true;
     }
-    if (block.name === 'Agent') {
+    if (SUBAGENT_TOOL_NAMES.has(block.name)) {
       return block.input?.run_in_background !== false;
     }
     return DEFERRED_WORK_TOOLS.has(block.name);
@@ -1367,6 +1373,7 @@ export {
   // thing in this file to pin down — and it had no coverage at all.
   startsBackgroundWork,
   DEFERRED_WORK_TOOLS,
+  SUBAGENT_TOOL_NAMES,
   createHoldTimers,
   // Exported for tests. Abort-on-a-held-run and supersede both live in this
   // registry rather than in the SDK, so they can be pinned down without

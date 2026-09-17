@@ -5,6 +5,7 @@
 
 import type { ChatMessage,NormalizedMessage,SubagentActivity } from '@/shared/types';
 import { formatUsageLimitText } from '@/modules/chat/utils/chatFormatting';
+import { isSubagentToolName } from '@/modules/chat/tools/toolAliases';
 
 function formatToolResultContent(content: unknown): string {
   // JSON.stringify(undefined) returns undefined, not a string. A tool_result
@@ -380,9 +381,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
         // metadata to it. Both providers normalize to that, so no provider or
         // tool-name special-casing is needed here; the name check only covers
         // a live spawn whose metadata has not been indexed yet.
-        const isSubagentContainer = Boolean(msg.subagent)
-          || msg.toolName === 'Task'
-          || msg.toolName === 'Agent';
+        const isSubagentContainer = Boolean(msg.subagent) || isSubagentToolName(msg.toolName);
 
         const toolResult = tr
           ? {

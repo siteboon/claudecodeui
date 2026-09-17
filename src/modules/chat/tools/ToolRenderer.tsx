@@ -16,6 +16,7 @@ import { PlanDisplay } from '@/modules/chat/tools/PlanDisplay';
 import { ToolStatusBadge } from '@/modules/chat/tools/ToolStatusBadge';
 import { DiffStatsBadge } from '@/modules/chat/tools/DiffStatsBadge';
 import { parseToolPayload, summarizeDiff } from '@/modules/chat/utils/messageTransforms';
+import { isSubagentToolName } from '@/modules/chat/tools/toolAliases';
 
 type ToolRendererProps = {
   toolName: string;
@@ -38,11 +39,7 @@ function getToolCategory(toolName: string): string {
   if (toolName === 'Bash') return 'bash';
   if (['TodoWrite', 'TodoRead'].includes(toolName)) return 'todo';
   if (['TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet'].includes(toolName)) return 'task';
-  // Claude Code renamed the subagent tool Task -> Agent, and a name-keyed
-  // decision that misses the new name fails silently: nothing throws, the row
-  // just quietly loses its colour. Both names stay until the old one is gone
-  // from every transcript on disk.
-  if (toolName === 'Task' || toolName === 'Agent') return 'agent';
+  if (isSubagentToolName(toolName)) return 'agent';
   if (toolName === 'exit_plan_mode' || toolName === 'ExitPlanMode') return 'plan';
   if (toolName === 'AskUserQuestion') return 'question';
   return 'default';
