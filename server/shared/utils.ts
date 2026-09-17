@@ -296,10 +296,14 @@ export function normalizeProjectPath(inputPath: string): string {
  * for root paths (e.g. "/" or "C:\\") that already end in a separator, where
  * naively appending another separator before comparing would never match.
  */
-function isPathWithinRoot(root: string, target: string): boolean {
-  const relative = path.relative(root, target);
-  const isParentTraversal = relative === '..' || relative.startsWith(`..${path.sep}`);
-  return relative === '' || (!isParentTraversal && !path.isAbsolute(relative));
+export function isPathWithinRoot(
+  root: string,
+  target: string,
+  pathApi: path.PlatformPath = path,
+): boolean {
+  const relative = pathApi.relative(root, target);
+  const isParentTraversal = relative === '..' || relative.startsWith(`..${pathApi.sep}`);
+  return relative === '' || (!isParentTraversal && !pathApi.isAbsolute(relative));
 }
 
 /**
