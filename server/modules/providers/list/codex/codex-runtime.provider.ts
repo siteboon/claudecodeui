@@ -34,6 +34,10 @@ type ActiveCodexSession = {
 
 const activeCodexSessions = new Map<string, ActiveCodexSession>();
 
+// Codex CLI requires non-whitespace stdin even when --image arguments are
+// present, so attachment-only turns need a small text instruction.
+const CODEX_IMAGE_ONLY_PROMPT = 'Please analyze the attached image(s).';
+
 /**
  * Item types whose in-flight updates are worth showing. These are the ones a
  * user waits on — a shell command's output, an MCP call, and the running plan.
@@ -341,8 +345,12 @@ async function queryCodex(
     // Execute with streaming. Turns with image attachments send structured
     // input items so Codex reads the images from their local asset paths.
     const promptWithFiles = appendFilesInputTag(command, files);
-    const turnInput = normalizeImageDescriptors(images).length > 0
-      ? buildCodexInputItems(promptWithFiles, images, workingDirectory)
+    const normalizedImages = normalizeImageDescriptors(images);
+    const promptWithImageFallback = !promptWithFiles.trim() && normalizedImages.length > 0
+      ? CODEX_IMAGE_ONLY_PROMPT
+      : promptWithFiles;
+    const turnInput = normalizedImages.length > 0
+      ? buildCodexInputItems(promptWithImageFallback, normalizedImages, workingDirectory)
       : promptWithFiles;
     const streamedTurn = await thread.runStreamed(turnInput, {
       signal: abortController.signal
