@@ -7,7 +7,7 @@ import type {
   ProviderModelOption,
   ProviderModelsDefinition,
 } from '@/shared/types.js';
-import { buildDefaultProviderCurrentActiveModel } from '@/shared/utils.js';
+import { buildDefaultProviderCurrentActiveModel, stripAnsiSequences } from '@/shared/utils.js';
 
 /**
  * Ultracode is not one of the SDK's reasoning-effort levels. Selecting it runs the turn at
@@ -179,13 +179,6 @@ type ClaudeInitEvent = {
   };
 };
 
-const ANSI_PATTERN = new RegExp(
-  '[\\u001B\\u009B][[\\]()#;?]*(?:'
-  + '(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]'
-  + '|(?:[\\dA-PR-TZcf-ntqry=><~]))',
-  'g',
-);
-
 /**
  * Claude Code stamps locally-synthesized rows (API-error placeholders and the
  * like) with `model: "<synthetic>"`. Angle-bracketed values are placeholders,
@@ -214,8 +207,6 @@ export const extractClaudeEventModel = (event: ClaudeInitEvent, sessionId: strin
   return messageModel && !isPlaceholderModel(messageModel) ? messageModel : null;
 };
 
-const stripAnsi = (value: string): string => value.replace(ANSI_PATTERN, '');
-
 const extractTaggedContent = (content: string, tagName: string): string | null => {
   const escapedTagName = tagName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const match = new RegExp(`<${escapedTagName}>([\\s\\S]*?)<\\/${escapedTagName}>`).exec(content);
@@ -225,7 +216,7 @@ const extractTaggedContent = (content: string, tagName: string): string | null =
 const extractClaudeModelFromTextContent = (content: string): string | null => {
   const localCommandStdout = extractTaggedContent(content, 'local-command-stdout');
   if (localCommandStdout !== null) {
-    const cleanedStdout = stripAnsi(localCommandStdout).replace(/\s+/g, ' ').trim();
+    const cleanedStdout = stripAnsiSequences(localCommandStdout).replace(/\s+/g, ' ').trim();
     const changedModel = /(?:set|changed|switched)\s+model\s+to\s+(.+?)\.?$/i.exec(cleanedStdout);
     const stdoutModel = changedModel?.[1]?.trim();
     // A placeholder stdout hit must not shadow a real <model> tag further down.
