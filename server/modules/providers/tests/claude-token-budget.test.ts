@@ -102,3 +102,72 @@ test('the cumulative reader ignores anything that is not a result', () => {
     null,
   );
 });
+
+/**
+ * The window the bar divides by used to come from one global env var, shared by
+ * every session whatever model it ran. Set for a 1M model it overstates a 200k
+ * one five times over, so a session close to auto-compact reads as a quarter
+ * full. The SDK reports the real window per model on every `result`.
+ */
+
+test('a result frame yields the window the SDK reported, not the env default', () => {
+  const budget = extractCumulativeTokenBudget({
+    type: 'result',
+    usage: { input_tokens: 1000, output_tokens: 500 },
+    modelUsage: {
+      'claude-opus-5': { inputTokens: 1000, outputTokens: 500, contextWindow: 200000 },
+    },
+  });
+
+  assert.equal(budget?.total, 200000);
+  assert.equal(budget?.used, 1500);
+});
+
+test('the conversation model wins when a subagent ran on another one', () => {
+  const budget = extractCumulativeTokenBudget({
+    type: 'result',
+    usage: { input_tokens: 90000, output_tokens: 1000 },
+    modelUsage: {
+      // The subagent barely used anything; its window must not become the bar's.
+      'claude-haiku-4-5': { inputTokens: 200, outputTokens: 50, contextWindow: 200000 },
+      'claude-opus-5-1m': { inputTokens: 90000, outputTokens: 1000, contextWindow: 1000000 },
+    },
+  });
+
+  assert.equal(budget?.total, 1000000);
+});
+
+test('a frame without a reported window still produces a budget', () => {
+  const budget = extractCumulativeTokenBudget({
+    type: 'result',
+    usage: { input_tokens: 10, output_tokens: 5 },
+    modelUsage: { 'claude-opus-5': { inputTokens: 10, outputTokens: 5 } },
+  });
+
+  assert.ok(budget);
+  assert.ok((budget?.total ?? 0) > 0, 'falls back rather than dividing by zero');
+});
+
+test('an assistant budget uses the window last reported for the session', () => {
+  const assistantMessage = {
+    type: 'assistant',
+    message: { usage: { input_tokens: 400, output_tokens: 100 } },
+  };
+
+  assert.equal(extractTokenBudget(assistantMessage, 1000000)?.total, 1000000);
+  assert.equal(extractTokenBudget(assistantMessage, 200000)?.total, 200000);
+  // Nothing known yet — the first turn of a session falls back until its result.
+  assert.ok((extractTokenBudget(assistantMessage)?.total ?? 0) > 0);
+});
+
+test('a nonsensical reported window is ignored rather than trusted', () => {
+  const assistantMessage = {
+    type: 'assistant',
+    message: { usage: { input_tokens: 400, output_tokens: 100 } },
+  };
+
+  for (const bad of [0, -1, Number.NaN]) {
+    const budget = extractTokenBudget(assistantMessage, bad);
+    assert.ok((budget?.total ?? 0) > 0, `window ${bad} should fall back`);
+  }
+});
