@@ -546,6 +546,69 @@ const STALE_THRESHOLD_MS = 30_000;
 
 const MAX_REALTIME_MESSAGES = 500;
 
+/**
+ * Ceiling that protection may not exceed. A container is only spared while its
+ * children still need it, but "still needs it" is decided from what is in the
+ * buffer — an agent that never reports a result would otherwise be spared
+ * forever and the buffer would grow without bound.
+ */
+const MAX_REALTIME_MESSAGES_HARD = MAX_REALTIME_MESSAGES * 2;
+
+/**
+ * Trims the realtime buffer without orphaning live subagent rows.
+ *
+ * A plain FIFO has no notion of the container/child relationship, and the two
+ * move in opposite directions: the `tool_use` that spawned an agent is the
+ * oldest row of the group, while the agent's own rows keep arriving and are the
+ * newest. So the container is evicted first, and every row still streaming in
+ * for it lands with no container to attach to — collected, then dropped. The
+ * agent's card stays empty for the rest of the session, and nothing can recover
+ * it: subagent rows live only in this buffer, never in the persisted transcript.
+ *
+ * A container is spared while some row in the window still names it as parent
+ * and no result has arrived for it yet. Everything else evicts oldest-first as
+ * before.
+ */
+export function evictRealtimeOverflow(messages: NormalizedMessage[]): NormalizedMessage[] {
+  if (messages.length <= MAX_REALTIME_MESSAGES) {
+    return messages;
+  }
+
+  const referencedParents = new Set<string>();
+  const resolvedToolIds = new Set<string>();
+  for (const message of messages) {
+    if (message.parentToolUseId) {
+      referencedParents.add(message.parentToolUseId);
+    }
+    if (message.kind === 'tool_result' && message.toolId) {
+      resolvedToolIds.add(message.toolId);
+    }
+  }
+
+  const isLiveContainer = (message: NormalizedMessage) =>
+    message.kind === 'tool_use'
+    && Boolean(message.toolId)
+    && referencedParents.has(message.toolId as string)
+    && !resolvedToolIds.has(message.toolId as string);
+
+  let toDrop = messages.length - MAX_REALTIME_MESSAGES;
+  const kept: NormalizedMessage[] = [];
+  for (const message of messages) {
+    if (toDrop > 0 && !isLiveContainer(message)) {
+      toDrop -= 1;
+      continue;
+    }
+    kept.push(message);
+  }
+
+  // The fallback the protection needs: past the hard ceiling, a container that
+  // has outstayed its welcome is evicted like anything else. Losing one card's
+  // contents beats growing the buffer until the tab dies.
+  return kept.length > MAX_REALTIME_MESSAGES_HARD
+    ? kept.slice(-MAX_REALTIME_MESSAGES_HARD)
+    : kept;
+}
+
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
 export function useSessionStore() {
@@ -772,11 +835,7 @@ export function useSessionStore() {
       msg.sessionId === sessionId
         ? msg
         : { ...msg, sessionId };
-    let updated = [...slot.realtimeMessages, normalizedMessage];
-    if (updated.length > MAX_REALTIME_MESSAGES) {
-      updated = updated.slice(-MAX_REALTIME_MESSAGES);
-    }
-    slot.realtimeMessages = updated;
+    slot.realtimeMessages = evictRealtimeOverflow([...slot.realtimeMessages, normalizedMessage]);
     recomputeMergedIfNeeded(slot);
     notify(sessionId);
   }, [getSlot, notify]);
