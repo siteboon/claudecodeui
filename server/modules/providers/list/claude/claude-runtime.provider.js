@@ -1207,6 +1207,11 @@ export const claudeRuntime = {
 export {
   queryClaudeSDK,
   abortClaudeSDKSession,
+  // Exported for tests. It is a pure predicate over one SDK message and it
+  // decides whether a turn's CLI process is held open, so it is the cheapest
+  // thing in this file to pin down — and it had no coverage at all.
+  startsBackgroundWork,
+  DEFERRED_WORK_TOOLS,
   isClaudeSDKSessionActive,
   getActiveClaudeSDKSessions,
   resolveToolApproval,
