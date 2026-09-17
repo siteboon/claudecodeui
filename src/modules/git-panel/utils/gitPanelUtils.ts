@@ -2,10 +2,10 @@ import { FILE_STATUS_GROUPS } from '@/shared/constants';
 import type { FileStatusCode, GitStatusResponse } from '@/shared/types';
 
 const FILE_STATUS_LABELS: Record<FileStatusCode, string> = {
-  M: 'Modified',
-  A: 'Added',
-  D: 'Deleted',
-  U: 'Untracked',
+  M: 'git:status.modified',
+  A: 'git:status.added',
+  D: 'git:status.deleted',
+  U: 'git:status.untracked',
 };
 
 const FILE_STATUS_BADGE_CLASSES: Record<FileStatusCode, string> = {
@@ -31,7 +31,7 @@ export function hasChangedFiles(gitStatus: GitStatusResponse | null): boolean {
   return getChangedFileCount(gitStatus) > 0;
 }
 
-export function getStatusLabel(status: FileStatusCode): string {
+export function getStatusLabelKey(status: FileStatusCode): string {
   return FILE_STATUS_LABELS[status] || status;
 }
 

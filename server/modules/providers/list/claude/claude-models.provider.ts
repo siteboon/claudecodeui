@@ -7,7 +7,7 @@ import type {
   ProviderModelOption,
   ProviderModelsDefinition,
 } from '@/shared/types.js';
-import { buildDefaultProviderCurrentActiveModel } from '@/shared/utils.js';
+import { buildDefaultProviderCurrentActiveModel, stripAnsiSequences } from '@/shared/utils.js';
 
 /**
  * Ultracode is not one of the SDK's reasoning-effort levels. Selecting it runs the turn at
@@ -179,14 +179,15 @@ type ClaudeInitEvent = {
   };
 };
 
-const ANSI_PATTERN = new RegExp(
-  '[\\u001B\\u009B][[\\]()#;?]*(?:'
-  + '(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]'
-  + '|(?:[\\dA-PR-TZcf-ntqry=><~]))',
-  'g',
-);
+/**
+ * Claude Code stamps locally-synthesized rows (API-error placeholders and the
+ * like) with `model: "<synthetic>"`. Angle-bracketed values are placeholders,
+ * never real model ids, and must not be surfaced as the session's model.
+ */
+const isPlaceholderModel = (model: string): boolean => model.startsWith('<') && model.endsWith('>');
 
-const extractClaudeEventModel = (event: ClaudeInitEvent, sessionId: string): string | null => {
+/** Exported for tests. */
+export const extractClaudeEventModel = (event: ClaudeInitEvent, sessionId: string): string | null => {
   const eventSessionId = event.sessionId ?? event.session_id;
   if (eventSessionId && eventSessionId !== sessionId) {
     return null;
@@ -198,15 +199,13 @@ const extractClaudeEventModel = (event: ClaudeInitEvent, sessionId: string): str
   }
 
   const directModel = event.model?.trim();
-  if (directModel) {
+  if (directModel && !isPlaceholderModel(directModel)) {
     return directModel;
   }
 
   const messageModel = event.message?.model?.trim();
-  return messageModel || null;
+  return messageModel && !isPlaceholderModel(messageModel) ? messageModel : null;
 };
-
-const stripAnsi = (value: string): string => value.replace(ANSI_PATTERN, '');
 
 const extractTaggedContent = (content: string, tagName: string): string | null => {
   const escapedTagName = tagName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -217,15 +216,17 @@ const extractTaggedContent = (content: string, tagName: string): string | null =
 const extractClaudeModelFromTextContent = (content: string): string | null => {
   const localCommandStdout = extractTaggedContent(content, 'local-command-stdout');
   if (localCommandStdout !== null) {
-    const cleanedStdout = stripAnsi(localCommandStdout).replace(/\s+/g, ' ').trim();
+    const cleanedStdout = stripAnsiSequences(localCommandStdout).replace(/\s+/g, ' ').trim();
     const changedModel = /(?:set|changed|switched)\s+model\s+to\s+(.+?)\.?$/i.exec(cleanedStdout);
-    if (changedModel?.[1]?.trim()) {
-      return changedModel[1].trim();
+    const stdoutModel = changedModel?.[1]?.trim();
+    // A placeholder stdout hit must not shadow a real <model> tag further down.
+    if (stdoutModel && !isPlaceholderModel(stdoutModel)) {
+      return stdoutModel;
     }
   }
 
   const modelTag = extractTaggedContent(content, 'model')?.trim();
-  return modelTag || null;
+  return modelTag && !isPlaceholderModel(modelTag) ? modelTag : null;
 };
 
 const extractClaudeModelFromMessageContent = (content: unknown): string | null => {
@@ -242,6 +243,8 @@ const extractClaudeModelFromMessageContent = (content: unknown): string | null =
       continue;
     }
 
+    // extractClaudeModelFromTextContent rejects placeholders, so a placeholder
+    // part yields null here and a later part can still supply the real model.
     const model = extractClaudeModelFromTextContent(part.text);
     if (model) {
       return model;

@@ -388,7 +388,7 @@
       "modes": {
         "default": {
           "title": "Standard",
-          "description": "Nur vertrauenswürdige Befehle (ls, cat, grep, git status usw.) werden automatisch ausgeführt. Andere Befehle werden übersprungen. Kann in den Arbeitsbereich schreiben."
+          "description": "Führt Befehle in der Workspace-Sandbox aus. Codex entscheidet, wann eine Genehmigung nötig ist; Anfragen können in dieser nicht interaktiven Integration nicht genehmigt werden."
         },
         "acceptEdits": {
           "title": "Bearbeitungen akzeptieren",
@@ -401,7 +401,7 @@
       },
       "technicalDetails": "Technische Details",
       "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=untrusted. Vertrauenswürdige Befehle: cat, cd, grep, head, ls, pwd, tail, git status/log/diff/show, find (ohne -exec) usw.",
+        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. Führt Befehle in der Workspace-Sandbox aus. Codex entscheidet, wann eine Genehmigung nötig ist; Anfragen können in dieser nicht interaktiven Integration nicht genehmigt werden.",
         "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. Alle Befehle werden automatisch innerhalb des Projektverzeichnisses ausgeführt.",
         "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. Vollständiger Systemzugriff, nur in vertrauenswürdigen Umgebungen verwenden.",
         "overrideNote": "Du kannst dies pro Sitzung über die Modusschaltfläche in der Chat-Oberfläche überschreiben."

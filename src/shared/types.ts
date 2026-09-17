@@ -264,6 +264,22 @@ export type SubagentActivity = {
 };
 
 /** Identity and lifecycle of one spawned subagent as the backend reports it; present on the tool call that spawned the agent and used to draw its container header. */
+/**
+ * A compaction, as the transcript records it.
+ *
+ * `running` is the status the CLI sends when it starts compacting, `done` the
+ * boundary it sends when it has, `failed` a compaction that did not finish.
+ * The token counts and duration only come with a boundary.
+ */
+export type CompactionInfo = {
+  phase: 'running' | 'done' | 'failed';
+  trigger?: 'manual' | 'auto';
+  preTokens?: number;
+  postTokens?: number;
+  durationMs?: number;
+  error?: string | null;
+};
+
 export type SubagentInfo = {
   id: string;
   name?: string;
@@ -309,6 +325,10 @@ export type ChatMessage = {
   isLocalCommand?: boolean;
   isLocalCommandStdout?: boolean;
   isCompactSummary?: boolean;
+  /** Set on the row that stands in for a compaction, so it is drawn as one. */
+  compact?: CompactionInfo;
+  /** The summary that compaction produced, folded into the row above rather than left loose. */
+  compactSummary?: string;
   isSubagentContainer?: boolean;
   /** The agent this row spawned, when it spawned one. Its presence is what makes a row a subagent container. */
   subagent?: SubagentInfo;
@@ -453,6 +473,8 @@ export type NormalizedMessage = {
   isLocalCommand?: boolean;
   isLocalCommandStdout?: boolean;
   isCompactSummary?: boolean;
+  /** Set by the provider on the row that stands in for a compaction. */
+  compact?: CompactionInfo;
   images?: Array<{ path?: string; data?: string; name?: string }>;
   files?: Array<{ path?: string; name?: string; mimeType?: string; size?: number }>;
   toolName?: string;
@@ -1230,15 +1252,38 @@ export type MobileTerminalSelectionManager = {
 //----------------- SIDEBAR ------------
 
 /** The complete project-list state and callback bundle the sidebar assembles once and threads down through its project list, project rows and session rows. */
-export type SidebarProjectListProps = {
+/**
+ * What a session row needs to draw its state and act on the session, named once
+ * so the two lists that render a row — Projects and Conversations — cannot fall
+ * out of step, and so a call site passes one prop instead of nine.
+ *
+ * SidebarProjectListProps composes it rather than restating it; it was already
+ * carrying every member.
+ */
+export type SessionRowActions = {
+  /** The rename currently open anywhere in the sidebar, or null. */
+  activeRename: ActiveSidebarRename | null;
+  /** Sessions with a run in flight: they show a spinner and hide destructive actions. */
+  activeSessions: ReadonlySet<string>;
+  /** Sessions waiting on the user, which show the amber dot. */
+  attentionSessionIds: ReadonlySet<string>;
+  onRenameDraftChange: (draft: string) => void;
+  onStartEditingSession: (projectId: string, sessionId: string, initialName: string) => void;
+  onCancelEditingSession: () => void;
+  onSaveEditingSession: (projectId: string, sessionId: string, summary: string, provider: LLMProvider) => void;
+  onDeleteSession: (sessionId: string, sessionTitle: string) => void;
+  /** Branches a session into an independent one. Rows hide it for providers that cannot. */
+  onForkSession?: (session: SessionWithProvider) => void;
+};
+
+export type SidebarProjectListProps = SessionRowActions & {
   projects: Project[];
   filteredProjects: Project[];
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   isLoading: boolean;
   loadingProgress: LoadingProgress | null;
-  expandedProjects: Set<string>;
-  activeRename: ActiveSidebarRename | null;
+  isProjectExpanded: (projectId: string) => boolean;
   initialSessionsLoaded: Set<string>;
   currentTime: Date;
   deletingProjects: Set<string>;
@@ -1247,26 +1292,16 @@ export type SidebarProjectListProps = {
   getProjectSessions: (project: Project) => SessionWithProvider[];
   onLoadMoreSessions: (projectId: string) => void;
   loadingMoreProjects: Set<string>;
-  activeSessions: ReadonlySet<string>;
-  attentionSessionIds: ReadonlySet<string>;
-  forceExpanded?: boolean;
-  isProjectStarred: (projectName: string) => boolean;
-  onRenameDraftChange: (draft: string) => void;
-  onToggleProject: (projectName: string) => void;
+  isProjectStarred: (projectId: string) => boolean;
+  onToggleProject: (projectId: string) => void;
   onProjectSelect: (project: Project) => void;
-  onToggleStarProject: (projectName: string) => void;
+  onToggleStarProject: (projectId: string) => void;
   onStartEditingProject: (project: Project) => void;
   onCancelEditingProject: () => void;
   onSaveProjectName: (projectId: string, nextName: string) => void;
   onDeleteProject: (project: Project) => void;
   onSessionSelect: (session: SessionWithProvider, projectName: string) => void;
-  onDeleteSession: (sessionId: string, sessionTitle: string) => void;
-  /** Branches a session into an independent one. Rows hide it for providers that cannot. */
-  onForkSession?: (session: SessionWithProvider) => void;
   onNewSession: (project: Project) => void;
-  onStartEditingSession: (projectId: string, sessionId: string, initialName: string) => void;
-  onCancelEditingSession: () => void;
-  onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => void;
   t: TFunction;
 };
 

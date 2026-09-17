@@ -389,7 +389,7 @@
       "modes": {
         "default": {
           "title": "預設",
-          "description": "只有受信任的指令（ls、cat、grep、git status 等）會自動執行。其他指令將被略過。可以寫入工作區。"
+          "description": "在工作區沙箱內執行指令。Codex 決定何時需要核准；此非互動式整合無法核准請求。"
         },
         "acceptEdits": {
           "title": "接受編輯",
@@ -402,7 +402,7 @@
       },
       "technicalDetails": "技術詳情",
       "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=untrusted。受信任的指令：cat、cd、grep、head、ls、pwd、tail、git status/log/diff/show、find（不帶 -exec）等。",
+        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. 在工作區沙箱內執行指令。Codex 決定何時需要核准；此非互動式整合無法核准請求。",
         "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never。所有指令在專案目錄內自動執行。",
         "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never。完全系統存取權限，僅在可信環境中使用。",
         "overrideNote": "您可以使用聊天介面中的模式按鈕按工作階段覆蓋此設定。"

@@ -133,10 +133,26 @@
   "priorities": {
     "high": "High",
     "medium": "Medium",
-    "low": "Low"
+    "low": "Low",
+    "highTitle": "High Priority",
+    "mediumTitle": "Medium Priority",
+    "lowTitle": "Low Priority"
   },
   "noMatchingTasks": {
     "title": "No tasks match your filters",
     "description": "Try adjusting your search or filter criteria."
+  },
+  "banner": {
+    "initialize": "Initialize",
+    "hideDetails": "Hide details",
+    "whatIsTaskmaster": "What is TaskMaster?",
+    "detailAiPowered": "- AI-powered task management with dependencies and subtasks.",
+    "detailPrdDriven": "- PRD-driven task generation for faster project bootstrapping.",
+    "detailKanbanList": "- Kanban and list views for day-to-day execution.",
+    "startTask": "Start Task",
+    "viewTaskDetails": "View task details",
+    "viewAllTasks": "View all tasks",
+    "allComplete": "All tasks complete",
+    "noPending": "No pending tasks"
   }
 }

@@ -21,6 +21,8 @@ import enChat from '@/modules/i18n/locales/en/chat.json';
 import enCodeEditor from '@/modules/i18n/locales/en/codeEditor.json';
 // oxlint-disable-next-line importx/order
 import enTasks from '@/modules/i18n/locales/en/tasks.json';
+// oxlint-disable-next-line importx/order
+import enGit from '@/modules/i18n/locales/en/git.json';
 
 import frCommon from '@/modules/i18n/locales/fr/common.json';
 import frSettings from '@/modules/i18n/locales/fr/settings.json';
@@ -99,6 +101,17 @@ import itCodeEditor from '@/modules/i18n/locales/it/codeEditor.json';
 // oxlint-disable-next-line importx/order
 import itTasks from '@/modules/i18n/locales/it/tasks.json';
 
+import idCommon from '@/modules/i18n/locales/id/common.json';
+import idSettings from '@/modules/i18n/locales/id/settings.json';
+import idAuth from '@/modules/i18n/locales/id/auth.json';
+import idSidebar from '@/modules/i18n/locales/id/sidebar.json';
+import idChat from '@/modules/i18n/locales/id/chat.json';
+import idCodeEditor from '@/modules/i18n/locales/id/codeEditor.json';
+// oxlint-disable-next-line importx/order
+import idTasks from '@/modules/i18n/locales/id/tasks.json';
+// oxlint-disable-next-line importx/order
+import idGit from '@/modules/i18n/locales/id/git.json';
+
 import zhTWCommon from '@/modules/i18n/locales/zh-TW/common.json';
 import zhTWSettings from '@/modules/i18n/locales/zh-TW/settings.json';
 import zhTWAuth from '@/modules/i18n/locales/zh-TW/auth.json';
@@ -142,6 +155,7 @@ i18n
         chat: enChat,
         codeEditor: enCodeEditor,
         tasks: enTasks,
+git: enGit,
       },
       fr: {
         common: frCommon,
@@ -224,6 +238,16 @@ i18n
         codeEditor: itCodeEditor,
         tasks: itTasks,
       },
+      id: {
+        common: idCommon,
+        settings: idSettings,
+        auth: idAuth,
+        sidebar: idSidebar,
+        chat: idChat,
+        codeEditor: idCodeEditor,
+        tasks: idTasks,
+        git: idGit,
+      },
       'zh-TW': {
         common: zhTWCommon,
         settings: zhTWSettings,
@@ -245,7 +269,7 @@ i18n
     debug: false,
 
     // Namespaces - load only what's needed
-    ns: ['common', 'settings', 'auth', 'sidebar', 'chat', 'codeEditor', 'tasks'],
+    ns: ['common', 'settings', 'auth', 'sidebar', 'chat', 'codeEditor', 'tasks', 'git'],
     defaultNS: 'common',
 
     // Key separator for nested keys (default: '.')
