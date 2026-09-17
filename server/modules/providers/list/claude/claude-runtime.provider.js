@@ -65,10 +65,81 @@ const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEO
 //
 // The hold normally ends long before this: a turn with nothing outstanding closes
 // stdin immediately, background work releases it as soon as it reports back, and a
-// new turn supersedes the previous hold. This ceiling only catches background work
-// that never reports at all, so an abandoned session cannot leak a CLI process
-// forever. The timer resets on every message, so it measures silence, not total time.
+// new turn supersedes the previous hold. This only catches background work that
+// never reports at all, so an abandoned session cannot leak a CLI process forever.
 const BG_WAIT_CEILING_MS = 30 * 60 * 1000;
+
+// The hold is bounded by two independent timers, because one cannot express both
+// limits. The idle timer is pushed back by every frame that arrives, so it asks
+// "has anything happened lately?"; on its own it means a chatty job holds the
+// process for as long as it keeps talking, with no upper bound at all. The total
+// timer is armed once, when the hold starts, and is never pushed back, so it asks
+// "how long has this been held?". Whichever expires first releases the hold.
+//
+// They are deliberately far apart. Silence is weak evidence — a build or a large
+// download can legitimately say nothing for a long time — so the idle limit stays
+// generous, and the total limit is what actually stops an abandoned session from
+// pinning a CLI process indefinitely.
+const BG_IDLE_RELEASE_MS = BG_WAIT_CEILING_MS;
+const BG_TOTAL_HOLD_MS = 2 * 60 * 60 * 1000;
+
+/**
+ * The pair of timers that bound a held run, as a unit so the rule "whichever
+ * expires first wins" lives in one place rather than in a closure inside the
+ * run loop.
+ *
+ * @param {Object} options
+ * @param {Function} options.onRelease - Called once, by whichever timer expires first.
+ * @param {number} [options.idleMs] - Silence allowed since the last frame.
+ * @param {number} [options.totalMs] - Total time allowed since the hold started.
+ * @returns {{ schedule: Function, clear: Function, release: Function, isArmed: Function }}
+ */
+function createHoldTimers({ onRelease, idleMs = BG_IDLE_RELEASE_MS, totalMs = BG_TOTAL_HOLD_MS }) {
+  let idleTimer = null;
+  let totalTimer = null;
+
+  const clear = () => {
+    if (idleTimer) {
+      clearTimeout(idleTimer);
+      idleTimer = null;
+    }
+    if (totalTimer) {
+      clearTimeout(totalTimer);
+      totalTimer = null;
+    }
+  };
+
+  // Both timers land here, so a release is idempotent and neither can fire
+  // after the other has already torn the hold down.
+  const release = () => {
+    clear();
+    onRelease();
+  };
+
+  const schedule = () => {
+    if (idleTimer) {
+      clearTimeout(idleTimer);
+    }
+    idleTimer = setTimeout(release, idleMs);
+    // Never let the hold keep the server process alive on its own.
+    idleTimer.unref?.();
+
+    // Armed once and deliberately not re-armed: pushing it back on activity
+    // would collapse it into a second idle timer and restore the unbounded
+    // window this pair exists to close.
+    if (!totalTimer) {
+      totalTimer = setTimeout(release, totalMs);
+      totalTimer.unref?.();
+    }
+  };
+
+  // Whether a hold is currently counting down. Not the same as
+  // `heldForBackgroundWork`, which stays set after a timer has fired on its own
+  // — asking the timers avoids re-arming a hold over an already-closed stream.
+  const isArmed = () => idleTimer !== null || totalTimer !== null;
+
+  return { schedule, clear, release, isArmed };
+}
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
@@ -726,7 +797,8 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // Closes the held stdin stream so the CLI can wind down. Replaced once the
   // stream exists; the finally block calls it no matter how the run ends.
   let releasePromptStream = () => {};
-  let idleReleaseTimer = null;
+  // Assigned below, once releasePromptStream is known to the closure.
+  let holdTimers = null;
   // The client is told the turn is over as soon as `result` lands, even though
   // the process lingers, so the UI never waits out the idle hold.
   let turnCompleteSent = false;
@@ -746,19 +818,15 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     getSession(sessionKey())?.releaseInput?.();
   }
 
-  // Arms (or re-arms) the idle countdown that eventually closes stdin.
-  const scheduleRelease = () => {
-    if (idleReleaseTimer) {
-      clearTimeout(idleReleaseTimer);
-      idleReleaseTimer = null;
-    }
-    idleReleaseTimer = setTimeout(() => {
-      idleReleaseTimer = null;
-      releasePromptStream();
-    }, BG_WAIT_CEILING_MS);
-    // Never let the hold keep the server process alive on its own.
-    idleReleaseTimer.unref?.();
-  };
+  // `releasePromptStream` is reassigned once the held stream exists, so the
+  // callback has to read it at fire time rather than capture it now.
+  holdTimers = createHoldTimers({ onRelease: () => releasePromptStream() });
+
+  // Arms the countdowns that eventually close stdin. Called when the hold starts
+  // and again on every frame that arrives while it is held.
+  const scheduleRelease = () => holdTimers.schedule();
+  const releaseHeldStream = () => holdTimers.release();
+  const clearReleaseTimers = () => holdTimers.clear();
 
   // Hoisted above the try so the catch's cleanup can tell whether this run
   // still owns the activeSessions entry (or was superseded by a newer run).
@@ -1015,9 +1083,9 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
           // Either nothing was backgrounded, or the background work just
           // reported in — let the CLI exit now, as it always has.
           heldForBackgroundWork = false;
-          releasePromptStream();
+          releaseHeldStream();
         }
-      } else if (idleReleaseTimer) {
+      } else if (holdTimers.isArmed()) {
         // Background activity after the turn — push the countdown back out.
         scheduleRelease();
       }
@@ -1098,10 +1166,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   } finally {
     // Always close stdin — otherwise an aborted or failed run leaves the CLI
     // process (and its MCP servers) alive until the server exits.
-    if (idleReleaseTimer) {
-      clearTimeout(idleReleaseTimer);
-      idleReleaseTimer = null;
-    }
+    clearReleaseTimers();
     releasePromptStream();
   }
 }
@@ -1221,6 +1286,7 @@ export {
   // thing in this file to pin down — and it had no coverage at all.
   startsBackgroundWork,
   DEFERRED_WORK_TOOLS,
+  createHoldTimers,
   // Exported for tests. Abort-on-a-held-run and supersede both live in this
   // registry rather than in the SDK, so they can be pinned down without
   // faking `query()` — but only if a run can be registered from outside.
