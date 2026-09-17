@@ -1212,6 +1212,10 @@ export {
   // thing in this file to pin down — and it had no coverage at all.
   startsBackgroundWork,
   DEFERRED_WORK_TOOLS,
+  // Exported for tests. Abort-on-a-held-run and supersede both live in this
+  // registry rather than in the SDK, so they can be pinned down without
+  // faking `query()` — but only if a run can be registered from outside.
+  addSession,
   isClaudeSDKSessionActive,
   getActiveClaudeSDKSessions,
   resolveToolApproval,
