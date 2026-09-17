@@ -123,6 +123,7 @@
   "search": {
     "modeProjects": "Projeler",
     "modeConversations": "Konuşmalar",
+    "modeMore": "Daha fazla",
     "conversationsPlaceholder": "Konuşmalarda ara...",
     "searching": "Aranıyor...",
     "sessionTitles": "Oturum başlıkları",

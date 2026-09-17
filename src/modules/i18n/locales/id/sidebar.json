@@ -123,6 +123,7 @@
   "search": {
     "modeProjects": "Proyek",
     "modeConversations": "Percakapan",
+    "modeMore": "Lainnya",
     "conversationsPlaceholder": "Cari dalam percakapan...",
     "searching": "Mencari...",
     "sessionTitles": "Sesi",
