@@ -5,7 +5,7 @@ import { useTheme } from '@/shared/context/ThemeContext';
 import { api } from '@/shared/api';
 import { usePlugins } from '@/modules/plugins/context/PluginsContext';
 import { usePluginHostApi } from '@/modules/plugins/hooks/usePluginHostApi';
-import { createPluginApi } from '@/modules/plugins/utils/pluginHostRequest';
+import { createPluginApi, type PluginContext } from '@/modules/plugins/utils/pluginHostRequest';
 import type { Project, ProjectSession } from '@/shared/types';
 
 type PluginTabContentProps = {
@@ -16,15 +16,6 @@ type PluginTabContentProps = {
   onStartNewSession: (project: Project) => void;
   /** Navigates to an existing session on the plugin's behalf. */
   onOpenSession: (sessionId: string) => void;
-};
-
-type PluginContext = {
-  theme: 'dark' | 'light';
-  // Plugin contract historically used `name` for the project identifier; we
-  // keep that key and populate it from the DB `projectId` so external plugins
-  // continue to receive a stable opaque id.
-  project: { name: string; path: string } | null;
-  session: { id: string; title: string } | null;
 };
 
 function buildContext(

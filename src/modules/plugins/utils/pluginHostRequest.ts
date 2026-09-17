@@ -17,11 +17,19 @@ export type PluginHostApi = {
   fetch: (path: string, init?: PluginHostFetchInit) => Promise<Response>;
   /** Navigation intents — these have no HTTP equivalent in the host. */
   startNewSession: (projectId: string) => void;
+  /**
+   * `projectId` is reserved: the host navigates by session id alone and does
+   * not check that the session belongs to that project. Pass it for forward
+   * compatibility, but do not read it as a validated pairing.
+   */
   openSession: (projectId: string, sessionId: string) => void;
 };
 
 export type PluginContext = {
   theme: 'dark' | 'light';
+  // The plugin contract historically used `name` for the project identifier; the
+  // key stays, populated from the DB `projectId`, so external plugins keep
+  // receiving a stable opaque id.
   project: { name: string; path: string } | null;
   session: { id: string; title: string } | null;
 };
@@ -106,6 +114,31 @@ export function buildPluginHostRequestInit(init?: PluginHostFetchInit): PluginHo
     headers,
     ...(init?.signal ? { signal: init.signal } : {}),
   };
+}
+
+/** A body on these is a protocol error, so `Response` refuses to carry one. */
+const NULL_BODY_STATUSES = new Set([101, 204, 205, 304]);
+
+/**
+ * Headers the host consumes itself and a plugin must never observe.
+ *
+ * `authenticatedFetch` stores a rotated token and reacts to an auth error before
+ * it resolves, so by the time a response reaches the plugin these carry nothing
+ * the host still needs — only a bearer token the plugin could pocket.
+ */
+const HOST_CREDENTIAL_HEADERS = ['X-Refreshed-Token', 'X-Auth-Error'];
+
+/** Copies a response without the host's credential headers; status and body pass through. */
+export function withoutHostCredentialHeaders(response: Response): Response {
+  const headers = new Headers(response.headers);
+  for (const name of HOST_CREDENTIAL_HEADERS) headers.delete(name);
+
+  const body = NULL_BODY_STATUSES.has(response.status) ? null : response.body;
+  return new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 /**

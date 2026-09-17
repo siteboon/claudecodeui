@@ -5,6 +5,7 @@ import type { Project } from '@/shared/types';
 import {
   buildPluginHostRequestInit,
   normalizePluginHostPath,
+  withoutHostCredentialHeaders,
   type PluginHostApi,
 } from '@/modules/plugins/utils/pluginHostRequest';
 
@@ -20,8 +21,9 @@ type PluginHostApiOptions = {
  *
  * Without it, a plugin that needs host data has to read the JWT out of
  * `localStorage['auth-token']` — which the plugin documentation simultaneously
- * demonstrates and forbids. Here the host performs the request itself, so the
- * plugin never sees a credential.
+ * demonstrates and forbids. Here the host performs the request itself, and the
+ * response is stripped of the host's own credential headers on the way back, so
+ * the plugin never sees a credential in either direction.
  */
 export function usePluginHostApi({ onStartNewSession, onOpenSession }: PluginHostApiOptions): PluginHostApi {
   return useMemo<PluginHostApi>(() => ({
@@ -30,7 +32,9 @@ export function usePluginHostApi({ onStartNewSession, onOpenSession }: PluginHos
       if (!safePath) {
         throw new Error(`Blocked plugin host request: only GET requests under /api/ are allowed (got "${String(path)}")`);
       }
-      return authenticatedFetch(safePath, buildPluginHostRequestInit(init));
+      return withoutHostCredentialHeaders(
+        await authenticatedFetch(safePath, buildPluginHostRequestInit(init)),
+      );
     },
 
     startNewSession(projectId) {

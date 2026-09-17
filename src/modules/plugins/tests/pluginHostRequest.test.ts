@@ -8,6 +8,7 @@ import {
   buildPluginHostRequestInit,
   createPluginApi,
   normalizePluginHostPath,
+  withoutHostCredentialHeaders,
 } from '@/modules/plugins/utils/pluginHostRequest';
 
 test('the host request is always a GET, whatever the plugin asked for', () => {
@@ -60,6 +61,40 @@ test('an Authorization header supplied by the plugin is ignored', () => {
   });
 
   assert.deepEqual(init.headers, { Accept: 'application/json' });
+});
+
+test('a rotated token never reaches the plugin through the response headers', async () => {
+  const original = new Response(JSON.stringify({ projects: ['a'] }), {
+    status: 200,
+    statusText: 'OK',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Refreshed-Token': 'forged',
+      'X-Auth-Error': 'session-expired',
+    },
+  });
+
+  const stripped = withoutHostCredentialHeaders(original);
+
+  assert.equal(stripped.headers.get('X-Refreshed-Token'), null);
+  assert.equal(stripped.headers.get('X-Auth-Error'), null);
+
+  // Everything the plugin legitimately needs survives.
+  assert.equal(stripped.status, 200);
+  assert.equal(stripped.statusText, 'OK');
+  assert.equal(stripped.headers.get('Content-Type'), 'application/json');
+  assert.deepEqual(await stripped.json(), { projects: ['a'] });
+});
+
+test('a bodiless response survives the header strip', () => {
+  // 204 and friends must not be handed a body, even an empty one.
+  const stripped = withoutHostCredentialHeaders(
+    new Response(null, { status: 204, headers: { 'X-Refreshed-Token': 'forged' } }),
+  );
+
+  assert.equal(stripped.status, 204);
+  assert.equal(stripped.body, null);
+  assert.equal(stripped.headers.get('X-Refreshed-Token'), null);
 });
 
 test('the api object keeps its existing shape for plugins that ignore host', async () => {
