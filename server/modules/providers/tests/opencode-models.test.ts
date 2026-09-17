@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+import Database from 'better-sqlite3';
+
+import { closeConnection, initializeDatabase } from '@/modules/database/index.js';
 import { OpenCodeProviderModels } from '@/modules/providers/list/opencode/opencode-models.provider.js';
 
 /**
@@ -31,7 +34,7 @@ const buildVerboseCliOutput = (
  * fixture passed in via `runModelsCli`.
  */
 const withOpenCodeHome = async (
-  runTest: (adapter: OpenCodeProviderModels) => Promise<void>,
+  runTest: (adapter: OpenCodeProviderModels, homeDir: string) => Promise<void>,
   runModelsCli: () => Promise<string | null>,
 ): Promise<void> => {
   const homeDir = await mkdtemp(path.join(os.tmpdir(), 'opencode-catalog-'));
@@ -39,7 +42,7 @@ const withOpenCodeHome = async (
 
   (os as any).homedir = () => homeDir;
   try {
-    await runTest(new OpenCodeProviderModels({ runModelsCli }));
+    await runTest(new OpenCodeProviderModels({ runModelsCli }), homeDir);
   } finally {
     (os as any).homedir = originalHomedir;
     await rm(homeDir, { recursive: true, force: true });
@@ -147,4 +150,103 @@ test('OpenCode catalog is empty when the CLI cannot answer', async () => {
   await withOpenCodeHome(async (adapter) => {
     assert.deepEqual(await adapter.getSupportedModels(), { OPTIONS: [], DEFAULT: '' });
   }, async () => 'not a catalog at all');
+});
+
+const writeOpenCodeSessionDatabase = async (homeDir: string, rows: Array<Record<string, unknown>>) => {
+  const dbPath = path.join(homeDir, '.local', 'share', 'opencode', 'opencode.db');
+  await mkdir(path.dirname(dbPath), { recursive: true });
+  const db = new Database(dbPath);
+  try {
+    db.exec(`
+      CREATE TABLE session (
+        id text PRIMARY KEY,
+        model text,
+        agent text,
+        directory text,
+        time_created integer NOT NULL,
+        time_updated integer NOT NULL
+      );
+    `);
+    const insert = db.prepare(
+      'INSERT INTO session (id, model, agent, directory, time_created, time_updated) VALUES (?, ?, ?, ?, ?, ?)',
+    );
+    for (const [index, row] of rows.entries()) {
+      insert.run(
+        row.id,
+        row.model,
+        row.agent ?? null,
+        row.directory ?? '/tmp/project',
+        row.timeCreated ?? 1700000000000,
+        row.timeUpdated ?? 1700000001000 + index,
+      );
+    }
+  } finally {
+    db.close();
+  }
+};
+
+test('OpenCode composes the provider prefix into session model ids', async () => {
+  // The lookup translates the app session id through the sessions database,
+  // so point it at a throwaway file rather than the developer's real one.
+  const tempSessionsDirectory = await mkdtemp(path.join(os.tmpdir(), 'opencode-session-model-'));
+  const previousDatabasePath = process.env.DATABASE_PATH;
+  try {
+    closeConnection();
+    process.env.DATABASE_PATH = path.join(tempSessionsDirectory, 'auth.db');
+    await initializeDatabase();
+    // OpenCode stores the provider and model id in separate fields of the
+    // session row ({"id":"z-ai/glm-5.3-flash","providerID":"openrouter"}), but
+    // the CLI's `--model` flag only resolves the composed
+    // `<providerID>/<modelID>` form. Resuming such a session without the prefix
+    // fails with an unknown-model server error, which hits OpenRouter users
+    // hardest because their model ids carry a slash themselves.
+    await withOpenCodeHome(
+      async (adapter, homeDir) => {
+        await writeOpenCodeSessionDatabase(homeDir, [
+          {
+            id: 'ses_openrouter',
+            model: JSON.stringify({
+              id: 'z-ai/glm-5.3-flash',
+              providerID: 'openrouter',
+              variant: 'default',
+            }),
+          },
+          {
+            id: 'ses_qualified',
+            // An id that already carries the provider prefix must survive as-is.
+            model: JSON.stringify({
+              id: 'openrouter/z-ai/glm-5.3-flash',
+              providerID: 'openrouter',
+            }),
+          },
+          {
+            id: 'ses_plain_string',
+            model: 'opencode/gpt-5.6-terra',
+          },
+        ]);
+        assert.equal(
+          (await adapter.getCurrentActiveModel('ses_openrouter')).model,
+          'openrouter/z-ai/glm-5.3-flash',
+        );
+        assert.equal(
+          (await adapter.getCurrentActiveModel('ses_qualified')).model,
+          'openrouter/z-ai/glm-5.3-flash',
+        );
+        assert.equal(
+          (await adapter.getCurrentActiveModel('ses_plain_string')).model,
+          'opencode/gpt-5.6-terra',
+        );
+      },
+      // The current model comes from the session row, so the CLI is never asked.
+      async () => null,
+    );
+  } finally {
+    closeConnection();
+    if (previousDatabasePath === undefined) {
+      delete process.env.DATABASE_PATH;
+    } else {
+      process.env.DATABASE_PATH = previousDatabasePath;
+    }
+    await rm(tempSessionsDirectory, { recursive: true, force: true });
+  }
 });
