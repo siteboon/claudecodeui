@@ -36,6 +36,7 @@ import {
   notifyRunStopped,
   notifyUserIfEnabled
 } from '@/modules/notifications/index.js';
+import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import { createCompleteMessage, createNormalizedMessage } from '@/shared/utils.js';
 
 const activeSessions = new Map();
@@ -342,6 +343,9 @@ function addSession(sessionId, queryInstance, writer = null, releaseInput = null
     // Re-registered mid-run once the provider session id lands; keep the closer.
     releaseInput: releaseInput || carried?.releaseInput || null
   });
+  // The history reader reports a background agent as running or stopped by
+  // whether this entry exists, and the cached history does not see this map.
+  sessionHistoryCache.invalidate(sessionId);
 }
 
 /**
@@ -350,6 +354,9 @@ function addSession(sessionId, queryInstance, writer = null, releaseInput = null
  */
 function removeSession(sessionId) {
   activeSessions.delete(sessionId);
+  // See addSession: a page cached while the process was up still says
+  // `running` for any agent that never reported back.
+  sessionHistoryCache.invalidate(sessionId);
 }
 
 /**
