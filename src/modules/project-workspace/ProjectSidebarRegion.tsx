@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useProjectSidebarState } from '@/modules/project-workspace/context/ProjectsStateContext';
 import { Sidebar } from '@/modules/sidebar';
+import { useUiPreferences } from '@/shared/context/UiPreferencesContext';
 import {
   SIDEBAR_WIDTH_KEYBOARD_STEP,
   SIDEBAR_WIDTH_MAX,
@@ -24,6 +25,10 @@ function ProjectSidebarRegion({
   const { t } = useTranslation('common');
   const { sidebarOpen, setSidebarOpen, sidebarSharedProps } = useProjectSidebarState();
   const { width: sidebarWidth, setWidth: setSidebarWidth, resetWidth: resetSidebarWidth } = useSidebarWidth();
+  // Hide sidebar leaves a 48px icon rail behind, which sizes itself — the stored
+  // width and the drag handle only apply while the full sidebar is on screen.
+  const { sidebarVisible } = useUiPreferences();
+  const isSidebarResizable = !isMobile && sidebarVisible;
   // Drag origin; null while no resize is in progress.
   const resizeOriginRef = useRef<{ pointerX: number; width: number } | null>(null);
   const resizeFrameRef = useRef<number | null>(null);
@@ -91,18 +96,18 @@ function ProjectSidebarRegion({
     }
   }, [resetSidebarWidth, setSidebarWidth, sidebarWidth]);
 
-  // Going mobile mid-drag unmounts the separator, so the pointerup that would have
-  // ended the drag never arrives: the body stays unselectable, and the live origin
-  // would make a plain hover resize the sidebar once the desktop layout returns.
+  // Going mobile or collapsing mid-drag unmounts the separator, so the pointerup
+  // that would have ended the drag never arrives: the body stays unselectable, and
+  // the live origin would make a plain hover resize the sidebar once it is back.
   useEffect(() => {
-    if (!isMobile) return;
+    if (isSidebarResizable) return;
     resizeOriginRef.current = null;
     if (resizeFrameRef.current !== null) {
       window.cancelAnimationFrame(resizeFrameRef.current);
       resizeFrameRef.current = null;
     }
     document.body.style.userSelect = '';
-  }, [isMobile]);
+  }, [isSidebarResizable]);
 
   // A drag interrupted by an unmount must not leave the page unselectable.
   useEffect(() => () => {
@@ -112,24 +117,29 @@ function ProjectSidebarRegion({
 
   if (!isMobile) {
     return (
-      <div className="relative h-full flex-shrink-0 border-r border-border/50" style={{ width: sidebarWidth }}>
+      <div
+        className="relative h-full flex-shrink-0 border-r border-border/50"
+        style={isSidebarResizable ? { width: sidebarWidth } : undefined}
+      >
         <Sidebar {...sidebarSharedProps} />
-        <div
-          role="separator"
-          aria-orientation="vertical"
-          aria-label={t('versionUpdate.ariaLabels.resizeSidebar')}
-          aria-valuenow={sidebarWidth}
-          aria-valuemin={SIDEBAR_WIDTH_MIN}
-          aria-valuemax={SIDEBAR_WIDTH_MAX}
-          tabIndex={0}
-          className="absolute inset-y-0 -right-0.5 z-10 w-1 cursor-col-resize hover:bg-primary/40 focus-visible:bg-primary/60 focus-visible:outline-none"
-          onPointerDown={handleResizeStart}
-          onPointerMove={handleResizeMove}
-          onPointerUp={handleResizeEnd}
-          onPointerCancel={handleResizeEnd}
-          onDoubleClick={resetSidebarWidth}
-          onKeyDown={handleResizeKeyDown}
-        />
+        {isSidebarResizable && (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={t('versionUpdate.ariaLabels.resizeSidebar')}
+            aria-valuenow={sidebarWidth}
+            aria-valuemin={SIDEBAR_WIDTH_MIN}
+            aria-valuemax={SIDEBAR_WIDTH_MAX}
+            tabIndex={0}
+            className="absolute inset-y-0 -right-0.5 z-10 w-1 cursor-col-resize hover:bg-primary/40 focus-visible:bg-primary/60 focus-visible:outline-none"
+            onPointerDown={handleResizeStart}
+            onPointerMove={handleResizeMove}
+            onPointerUp={handleResizeEnd}
+            onPointerCancel={handleResizeEnd}
+            onDoubleClick={resetSidebarWidth}
+            onKeyDown={handleResizeKeyDown}
+          />
+        )}
       </div>
     );
   }
