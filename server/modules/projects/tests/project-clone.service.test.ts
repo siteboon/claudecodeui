@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import test from 'node:test';
+import { pathToFileURL } from 'node:url';
+import { promisify } from 'node:util';
 
 import { startCloneProject } from '@/modules/projects/services/project-clone.service.js';
 import { AppError } from '@/shared/utils.js';
@@ -182,14 +187,98 @@ test('startCloneProject completes and emits complete payload when git exits succ
   assert.equal((resolvedCompletePayload.project.projectId as string) || '', 'project-1');
 });
 
+type SpawnCall = { cloneUrl: string; clonePath: string; environment: NodeJS.ProcessEnv };
+
+/**
+ * Runs a clone against a mock git process and captures exactly what would be
+ * handed to `spawn`: the URL and path (the only variable argv elements) and
+ * the environment. The token has to reach git through the environment alone.
+ */
+async function captureSpawnCall(input: {
+  githubTokenId?: number;
+  newGithubToken?: string;
+  storedToken?: string;
+}): Promise<SpawnCall> {
+  const gitProcess = createMockGitProcess();
+  let spawnCall: SpawnCall | null = null;
+
+  const operation = await startCloneProject(
+    {
+      workspacePath: '/workspace/root',
+      githubUrl: 'https://github.com/example/repo.git',
+      githubTokenId: input.githubTokenId,
+      newGithubToken: input.newGithubToken,
+      userId: 1,
+    },
+    {
+      onProgress: () => undefined,
+      onComplete: () => undefined,
+    },
+    buildDependencies({
+      getGithubTokenById: async () => ({ github_token: input.storedToken ?? 'unused' }),
+      spawnGitClone: (cloneUrl, clonePath, environment) => {
+        spawnCall = { cloneUrl, clonePath, environment };
+        return gitProcess as any;
+      },
+    }),
+  );
+
+  gitProcess.emit('close', 0);
+  await operation.waitForCompletion;
+
+  assert.notEqual(spawnCall, null, 'git was never spawned');
+  return spawnCall as unknown as SpawnCall;
+}
+
+for (const [label, input, token] of [
+  ['a stored token', { githubTokenId: 7, storedToken: 'ghp_storedsecret1234567890' }, 'ghp_storedsecret1234567890'],
+  // Characters `url.username=` would have percent-encoded, so a check for the
+  // raw token alone could not have caught the URL channel.
+  ['a new token', { newGithubToken: 'ghp_new:secret@with/odd-chars' }, 'ghp_new:secret@with/odd-chars'],
+] as const) {
+  test(`startCloneProject hands git ${label} through the credential helper, never the clone URL`, async () => {
+    const { cloneUrl, clonePath, environment } = await captureSpawnCall(input);
+
+    // The URL git receives is the one the user typed: no username, no password,
+    // nothing encoded — so neither argv, stderr nor `.git/config` can carry it.
+    assert.equal(cloneUrl, 'https://github.com/example/repo.git');
+    assert.equal(clonePath, path.join('/workspace/root', 'repo'));
+
+    assert.equal(environment.CLOUDCLI_GITHUB_TOKEN, token);
+    assert.equal(environment.GIT_CONFIG_COUNT, '2');
+    assert.equal(environment.GIT_CONFIG_KEY_0, 'credential.helper');
+    assert.equal(environment.GIT_CONFIG_VALUE_0, '');
+    assert.equal(environment.GIT_CONFIG_KEY_1, 'credential.helper');
+    assert.match(environment.GIT_CONFIG_VALUE_1 ?? '', /\$CLOUDCLI_GITHUB_TOKEN/);
+    assert.equal(environment.GIT_TERMINAL_PROMPT, '0');
+
+    // The helper's command line is itself a process argv, so the token must be
+    // read from the variable rather than pasted into the helper text.
+    for (const [name, value] of Object.entries(environment)) {
+      if (name === 'CLOUDCLI_GITHUB_TOKEN') {
+        continue;
+      }
+      assert.ok(!(value ?? '').includes(token), `token leaked into ${name}`);
+    }
+  });
+}
+
+test('startCloneProject leaves the credential helper unset when no token was given', async () => {
+  const { cloneUrl, environment } = await captureSpawnCall({});
+
+  assert.equal(cloneUrl, 'https://github.com/example/repo.git');
+  assert.equal(environment.GIT_TERMINAL_PROMPT, '0');
+  assert.equal(environment.GIT_CONFIG_COUNT, undefined);
+  assert.equal(environment.CLOUDCLI_GITHUB_TOKEN, undefined);
+});
+
 /**
  * `git clone --progress` writes every byte of its progress to stderr — stdout
- * stays empty — so these tests drive stderr, the pipe that actually carries
- * both the progress the user watches and the URL that leaks the token.
+ * stays empty — so these tests drive stderr, the pipe that carries the progress
+ * the user watches and the reason a clone failed.
  */
 async function runCloneWithStderr(
   chunks: string[],
-  token: string,
   exitCode: number | null,
 ): Promise<{ progressMessages: string[]; failure: AppError | null }> {
   const gitProcess = createMockGitProcess();
@@ -199,7 +288,7 @@ async function runCloneWithStderr(
     {
       workspacePath: '/workspace/root',
       githubUrl: 'https://github.com/example/repo.git',
-      newGithubToken: token,
+      newGithubToken: 'ghp_supersecrettoken1234567890abcd',
       userId: 1,
     },
     {
@@ -230,65 +319,61 @@ async function runCloneWithStderr(
   return { progressMessages, failure };
 }
 
-test('startCloneProject keeps the github token out of the clone progress stream', async () => {
-  const token = 'ghp_supersecrettoken1234567890abcd';
-  const { progressMessages, failure } = await runCloneWithStderr(
-    [`fatal: could not read Password for 'https://${token}@github.com': terminal prompts disabled\n`],
-    token,
-    128,
+test('startCloneProject forwards each stderr chunk to onProgress as it arrives', async () => {
+  const gitProcess = createMockGitProcess();
+  const progressMessages: string[] = [];
+
+  const operation = await startCloneProject(
+    {
+      workspacePath: '/workspace/root',
+      githubUrl: 'https://github.com/example/repo.git',
+      newGithubToken: 'ghp_supersecrettoken1234567890abcd',
+      userId: 1,
+    },
+    {
+      onProgress: (message) => {
+        progressMessages.push(message);
+      },
+      onComplete: () => undefined,
+    },
+    buildDependencies({ spawnGitClone: () => gitProcess as any }),
   );
 
-  const streamed = progressMessages.join('\n');
-  assert.ok(!streamed.includes(token), `token leaked into the progress stream: ${streamed}`);
-  assert.ok(streamed.includes('***@github.com'), `token was not redacted: ${streamed}`);
-  assert.ok(!(failure?.message ?? '').includes(token), 'token leaked into the failure message');
+  assert.deepEqual(progressMessages, ["Cloning into 'repo'..."]);
+
+  // Each chunk has to surface on its own event before the next one is written
+  // and long before the process exits: the progress UI is fed by these events,
+  // so anything buffered until close would leave the user staring at nothing.
+  const chunks = [
+    'remote: Enumerating objects: 20, done.\n',
+    'Receiving objects:  45% (9/20)\r',
+    'Receiving objects: 100% (20/20), done.\n',
+  ];
+  for (const [index, chunk] of chunks.entries()) {
+    gitProcess.stderr.write(chunk);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(
+      progressMessages,
+      ["Cloning into 'repo'...", ...chunks.slice(0, index + 1).map((line) => line.trim())],
+      `chunk ${index + 1} did not arrive on its own event`,
+    );
+  }
+
+  gitProcess.stderr.end();
+  gitProcess.emit('close', 0);
+  await operation.waitForCompletion;
+
+  assert.deepEqual(progressMessages, [
+    "Cloning into 'repo'...",
+    'remote: Enumerating objects: 20, done.',
+    'Receiving objects:  45% (9/20)',
+    'Receiving objects: 100% (20/20), done.',
+  ]);
 });
 
-test('startCloneProject redacts a github token split across stderr chunks', async () => {
-  const token = 'ghp_supersecrettoken1234567890abcd';
-  const { progressMessages } = await runCloneWithStderr(
-    [`fatal: could not read Password for 'https://ghp_supersecret`, `token1234567890abcd@github.com'\n`],
-    token,
-    128,
-  );
-
-  const streamed = progressMessages.join('');
-  assert.ok(!streamed.includes(token), `token leaked across the chunk boundary: ${streamed}`);
-  assert.ok(streamed.includes('***@github.com'), `split token was not redacted: ${streamed}`);
-});
-
-test('startCloneProject still streams clone progress while a token is being redacted', async () => {
-  const token = 'ghp_supersecrettoken1234567890abcd';
-  const { progressMessages } = await runCloneWithStderr(
-    [
-      "Cloning into 'repo'...\n",
-      'remote: Enumerating objects: 13, done.\n',
-      'Receiving objects:  53% (7/13)\r',
-      'Receiving objects: 100% (13/13), done.\n',
-    ],
-    token,
-    0,
-  );
-
-  // Redaction must not swallow, delay or reorder the progress the user watches:
-  // every line has to arrive, and each on its own event rather than as one
-  // lump once the stream closes.
-  const streamed = progressMessages.join('\n');
-  assert.ok(streamed.includes("Cloning into 'repo'..."), streamed);
-  assert.ok(streamed.includes('remote: Enumerating objects: 13, done.'), streamed);
-  assert.ok(streamed.includes('Receiving objects:  53% (7/13)'), streamed);
-  assert.ok(streamed.includes('Receiving objects: 100% (13/13), done.'), streamed);
-  assert.ok(
-    progressMessages.filter((message) => message.startsWith('Receiving objects')).length >= 2,
-    `progress arrived in one lump instead of per chunk: ${JSON.stringify(progressMessages)}`,
-  );
-});
-
-test('startCloneProject reports the git failure reason from redacted stderr', async () => {
-  const token = 'ghp_supersecrettoken1234567890abcd';
+test('startCloneProject reports the git failure reason from stderr', async () => {
   const { failure } = await runCloneWithStderr(
-    [`remote: Repository not found.\nfatal: repository 'https://${token}@github.com/example/repo.git/' not found\n`],
-    token,
+    ["remote: Repository not found.\nfatal: repository 'https://github.com/example/repo.git/' not found\n"],
     128,
   );
 
@@ -296,29 +381,80 @@ test('startCloneProject reports the git failure reason from redacted stderr', as
   assert.equal(failure?.message, 'Repository not found. Please check the URL and ensure you have access.');
 });
 
-test('startCloneProject falls back to the redacted stderr text for an unrecognised failure', async () => {
-  const token = 'ghp_supersecrettoken1234567890abcd';
+test('startCloneProject falls back to the last stderr text for an unrecognised failure', async () => {
   const { failure } = await runCloneWithStderr(
-    [`fatal: unable to access 'https://${token}@github.com/example/repo.git/': SSL error\n`],
-    token,
+    ["fatal: unable to access 'https://github.com/example/repo.git/': SSL error\n"],
     128,
   );
 
-  assert.ok(!(failure?.message ?? '').includes(token), `token leaked into the failure message: ${failure?.message}`);
-  assert.ok((failure?.message ?? '').includes('SSL error'), failure?.message);
+  assert.equal(failure?.code, 'GIT_CLONE_FAILED');
+  assert.equal(failure?.message, "fatal: unable to access 'https://github.com/example/repo.git/': SSL error");
 });
 
-test('startCloneProject never emits a token fragment left over when stderr stops mid-credential', async () => {
-  const token = 'ghp_supersecrettoken1234567890abcd';
-  const { progressMessages } = await runCloneWithStderr(
-    // No trailing newline: the stream dies part-way through the credential, so
-    // the redactor is still holding a prefix of it when the pipe closes.
-    [`fatal: could not read Password for 'https://ghp_supersecrettoken`],
-    token,
-    128,
-  );
+const execFileAsync = promisify(execFile);
 
-  const streamed = progressMessages.join('');
-  assert.ok(!streamed.includes('ghp_supersecrettoken'), `token fragment leaked on flush: ${streamed}`);
-  assert.ok(streamed.includes("fatal: could not read Password for 'https://"), streamed);
+/**
+ * Real git, real clone: proves the credential-helper environment is something
+ * git accepts, and that the resulting repository records a credential-free
+ * remote. The `file://` transport never asks the helper for anything, so a
+ * placeholder token stands in for the real one.
+ */
+test('startCloneProject clones a real repository with the credential helper in git environment', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'project-clone-service-'));
+  try {
+    const seedPath = path.join(root, 'seed');
+    const originPath = path.join(root, 'origin.git');
+    const workspacePath = path.join(root, 'workspace');
+    await execFileAsync('git', ['init', '-q', seedPath]);
+    await execFileAsync('git', [
+      '-C', seedPath,
+      '-c', 'user.email=clone@example.test',
+      '-c', 'user.name=Clone Test',
+      'commit', '-q', '--allow-empty', '-m', 'initial',
+    ]);
+    await execFileAsync('git', ['clone', '-q', '--bare', seedPath, originPath]);
+
+    const originUrl = pathToFileURL(originPath).href;
+    const token = 'ghp_placeholder-file-transport-never-asks';
+    const progressMessages: string[] = [];
+    let completeMessage = '';
+
+    const operation = await startCloneProject(
+      {
+        workspacePath,
+        githubUrl: originUrl,
+        newGithubToken: token,
+        userId: 1,
+      },
+      {
+        onProgress: (message) => {
+          progressMessages.push(message);
+        },
+        onComplete: ({ message }) => {
+          completeMessage = message;
+        },
+      },
+      {
+        validatePath: async () => ({ valid: true, resolvedPath: workspacePath }),
+        registerProject: async (projectPath, customName) => ({
+          project: { path: projectPath, name: customName },
+        }),
+      },
+    );
+    await operation.waitForCompletion;
+
+    assert.equal(completeMessage, 'Repository cloned successfully');
+    // The first message is synthesised by the service; everything after it
+    // came off git's own stderr, which is what the progress UI relies on.
+    assert.ok(
+      progressMessages.length >= 2,
+      `no progress arrived from git: ${JSON.stringify(progressMessages)}`,
+    );
+
+    const cloneConfig = await readFile(path.join(workspacePath, 'origin', '.git', 'config'), 'utf8');
+    assert.match(cloneConfig, new RegExp(`url = ${originUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+    assert.ok(!cloneConfig.includes(token), `token written to .git/config: ${cloneConfig}`);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

@@ -44,7 +44,11 @@ type CloneProjectDependencies = {
     tokenId: number,
     userId: number,
   ) => Promise<{ github_token: string } | null>;
-  spawnGitClone: (cloneUrl: string, clonePath: string) => GitCloneProcess;
+  spawnGitClone: (
+    cloneUrl: string,
+    clonePath: string,
+    environment: NodeJS.ProcessEnv,
+  ) => GitCloneProcess;
   registerProject: (projectPath: string, customName: string) => Promise<{ project: Record<string, unknown> }>;
   logError: (message: string, error: unknown) => void;
 };
@@ -68,73 +72,29 @@ async function defaultPathExists(targetPath: string): Promise<boolean> {
 }
 
 /**
- * Length of the longest suffix of `text` that is also a proper prefix of
- * `token` — the only part of a chunk a later chunk could still complete into
- * the whole credential.
- *
- * The search is bounded by the token's length, never the stream's, so the cost
- * per chunk stays flat no matter how much output `git` produces.
+ * Builds the environment the clone runs in. The token never goes into the
+ * clone URL: git echoes that URL on stderr (which is the SSE progress stream),
+ * it sits in the process argv (readable through /proc) and it is written to the
+ * cloned repo's `.git/config` as the remote. Instead env-only config points git
+ * at a credential helper that reads the token from its own environment, so no
+ * channel git exposes carries it. The empty first helper entry clears any
+ * helper configured on the machine so a credential stored there cannot shadow
+ * the one the user selected.
  */
-function trailingTokenPrefixLength(text: string, token: string): number {
-  const longestCandidate = Math.min(token.length - 1, text.length);
-  for (let length = longestCandidate; length > 0; length -= 1) {
-    if (text.endsWith(token.slice(0, length))) {
-      return length;
-    }
+function buildGitCloneEnvironment(githubToken: string | null): NodeJS.ProcessEnv {
+  if (!githubToken) {
+    return { ...process.env, GIT_TERMINAL_PROMPT: '0' };
   }
-
-  return 0;
-}
-
-/**
- * Redacts a credential from a stream that arrives in arbitrary slices.
- *
- * `git clone --progress` writes every byte of its progress to stderr, and on a
- * failed authentication that stderr carries the clone URL verbatim — token and
- * all — straight into the SSE progress stream. The pipe hands over whatever
- * sized chunks it likes, so the token can straddle two `data` events and a
- * plain per-chunk replace would let both halves through.
- *
- * `push` therefore holds back only the trailing characters that could still
- * grow into the token, and releases everything else immediately, so progress
- * keeps streaming at git's pace instead of arriving in one lump at the end.
- * Over a whole stream the emitted text is the input with every occurrence of
- * the token replaced by `***` — nothing is dropped, so a consumer that
- * concatenates the events cannot reassemble the credential either.
- */
-function createTokenRedactor(token: string | null): {
-  push: (chunk: string) => string;
-  flush: () => string;
-} {
-  if (!token) {
-    return { push: (chunk: string): string => chunk, flush: (): string => '' };
-  }
-
-  let heldBack = '';
 
   return {
-    push(chunk: string): string {
-      const pending = (heldBack + chunk).split(token).join('***');
-      const holdLength = trailingTokenPrefixLength(pending, token);
-      if (holdLength === 0) {
-        heldBack = '';
-        return pending;
-      }
-
-      heldBack = pending.slice(pending.length - holdLength);
-      return pending.slice(0, pending.length - holdLength);
-    },
-    /**
-     * Closes the stream. Whatever is still held back is, by construction, a
-     * proper prefix of the token, so it is reported as a redaction rather than
-     * shown: git ends its output with a newline, which holds nothing back, so a
-     * non-empty remainder here means the stream really did stop mid-credential.
-     */
-    flush(): string {
-      const hadRemainder = heldBack.length > 0;
-      heldBack = '';
-      return hadRemainder ? '***' : '';
-    },
+    ...process.env,
+    GIT_CONFIG_COUNT: '2',
+    GIT_CONFIG_KEY_0: 'credential.helper',
+    GIT_CONFIG_VALUE_0: '',
+    GIT_CONFIG_KEY_1: 'credential.helper',
+    GIT_CONFIG_VALUE_1: '!f() { echo username=x-access-token; echo "password=$CLOUDCLI_GITHUB_TOKEN"; }; f',
+    CLOUDCLI_GITHUB_TOKEN: githubToken,
+    GIT_TERMINAL_PROMPT: '0',
   };
 }
 
@@ -184,13 +144,14 @@ const defaultDependencies: CloneProjectDependencies = {
       | null;
     return tokenRow;
   },
-  spawnGitClone: (cloneUrl: string, clonePath: string): GitCloneProcess =>
+  spawnGitClone: (
+    cloneUrl: string,
+    clonePath: string,
+    environment: NodeJS.ProcessEnv,
+  ): GitCloneProcess =>
     spawn('git', ['clone', '--progress', '--', cloneUrl, clonePath], {
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        GIT_TERMINAL_PROMPT: '0',
-      },
+      env: environment,
     }) as unknown as GitCloneProcess,
   registerProject: async (
     projectPath: string,
@@ -208,8 +169,9 @@ const defaultDependencies: CloneProjectDependencies = {
 export async function startCloneProject(
   input: CloneProjectInput,
   handlers: CloneProjectEventHandlers,
-  dependencies: CloneProjectDependencies = defaultDependencies,
+  dependencyOverrides: Partial<CloneProjectDependencies> = {},
 ): Promise<CloneProjectOperation> {
+  const dependencies = { ...defaultDependencies, ...dependencyOverrides };
   const normalizedWorkspacePath = input.workspacePath.trim();
   const normalizedGithubUrl = input.githubUrl.trim();
 
@@ -283,59 +245,27 @@ export async function startCloneProject(
     );
   }
 
-  let cloneUrl = normalizedGithubUrl;
-  if (githubToken) {
-    try {
-      const url = new URL(normalizedGithubUrl);
-      url.username = githubToken;
-      url.password = '';
-      cloneUrl = url.toString();
-    } catch {
-      // SSH URLs cannot be represented by URL constructor and are used as-is.
-    }
-  }
-
   handlers.onProgress(`Cloning into '${repoName}'...`);
-  const gitProcess = dependencies.spawnGitClone(cloneUrl, clonePath);
+  const gitProcess = dependencies.spawnGitClone(
+    normalizedGithubUrl,
+    clonePath,
+    buildGitCloneEnvironment(githubToken),
+  );
   let lastError = '';
 
-  // The clone URL carries the token, so everything git prints is suspect. Both
-  // pipes get their own redactor because each buffers its own partial token.
-  const stdoutRedactor = createTokenRedactor(githubToken);
-  const stderrRedactor = createTokenRedactor(githubToken);
-
+  // `git clone --progress` writes every byte of its progress to stderr. Git
+  // was handed a credential-free URL, so each chunk is forwarded as it arrives.
   gitProcess.stdout?.on('data', (data: Buffer | string) => {
-    const message = stdoutRedactor.push(data.toString()).trim();
+    const message = data.toString().trim();
     if (message) {
       handlers.onProgress(message);
     }
   });
 
   gitProcess.stderr?.on('data', (data: Buffer | string) => {
-    const message = stderrRedactor.push(data.toString()).trim();
+    const message = data.toString().trim();
     if (message) {
-      // Only a non-empty piece may replace `lastError`: a chunk can now redact
-      // down to nothing, and blanking the last real error would lose the reason
-      // the clone failed. The stream carries the failure too, so `lastError` is
-      // redacted text and needs no second pass before it is shown.
       lastError = message;
-      handlers.onProgress(message);
-    }
-  });
-
-  // A redactor still holding a partial token when its pipe ends reports the
-  // redaction, and only to the progress stream — a credential fragment is never
-  // the reason a clone failed.
-  gitProcess.stdout?.on('end', () => {
-    const message = stdoutRedactor.flush();
-    if (message) {
-      handlers.onProgress(message);
-    }
-  });
-
-  gitProcess.stderr?.on('end', () => {
-    const message = stderrRedactor.flush();
-    if (message) {
       handlers.onProgress(message);
     }
   });
