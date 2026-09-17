@@ -59,6 +59,9 @@ export default function CodeEditor({
   const {
     content,
     setContent,
+    unsavedChangesBlockedReload,
+    reload,
+    reloadDiscardingChanges,
     loading,
     saving,
     saveSuccess,
@@ -259,6 +262,7 @@ export default function CodeEditor({
             onToggleMarkdownPreview={() => setMarkdownPreview((previous) => !previous)}
             onOpenHtmlPreview={openHtmlPreview}
             onOpenSettings={() => paletteOps.openSettings('appearance')}
+            onReload={reload}
             onDownload={handleDownload}
             onSave={handleSave}
             onToggleFullscreen={() => setIsFullscreen((previous) => !previous)}
@@ -271,6 +275,7 @@ export default function CodeEditor({
               previewMarkdown: t('actions.previewMarkdown'),
               previewHtml: t('actions.previewHtml', 'Open HTML preview in new tab'),
               settings: t('toolbar.settings'),
+              reload: t('actions.reload', 'Reload from disk'),
               download: t('actions.download'),
               save: t('actions.save'),
               saving: t('actions.saving'),
@@ -280,6 +285,19 @@ export default function CodeEditor({
               close: t('actions.close'),
             }}
           />
+
+          {unsavedChangesBlockedReload && (
+            <div className="flex items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300">
+              <span>{t('reload.blockedByUnsavedChanges', 'Not reloaded: this file has unsaved changes.')}</span>
+              <button
+                type="button"
+                onClick={reloadDiscardingChanges}
+                className="shrink-0 rounded px-1.5 py-0.5 font-medium underline underline-offset-2 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+              >
+                {t('reload.discardChanges', 'Discard them and reload')}
+              </button>
+            </div>
+          )}
 
           {saveError && (
             <div className="border-b border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">

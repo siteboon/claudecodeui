@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Code2, Copy, Download, Eye, Maximize2, Minimize2, Save, Settings as SettingsIcon, X } from 'lucide-react';
+import { Check, Code2, Copy, Download, Eye, Maximize2, Minimize2, RotateCw, Save, Settings as SettingsIcon, X } from 'lucide-react';
 
 import { copyTextToClipboard } from '@/shared/utils';
 import type { CodeEditorFile } from '@/shared/types';
@@ -16,6 +16,7 @@ type CodeEditorHeaderProps = {
   onToggleMarkdownPreview: () => void;
   onOpenHtmlPreview: () => void;
   onOpenSettings: () => void;
+  onReload: () => void;
   onDownload: () => void;
   onSave: () => void;
   onToggleFullscreen: () => void;
@@ -28,6 +29,7 @@ type CodeEditorHeaderProps = {
     previewMarkdown: string;
     previewHtml: string;
     settings: string;
+    reload: string;
     download: string;
     save: string;
     saving: string;
@@ -51,6 +53,7 @@ export default function CodeEditorHeader({
   onToggleMarkdownPreview,
   onOpenHtmlPreview,
   onOpenSettings,
+  onReload,
   onDownload,
   onSave,
   onToggleFullscreen,
@@ -146,6 +149,16 @@ export default function CodeEditorHeader({
           title={labels.settings}
         >
           <SettingsIcon className="h-4 w-4" />
+        </button>
+
+        <button
+          type="button"
+          onClick={onReload}
+          className="flex items-center justify-center rounded-md p-1.5 text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
+          title={labels.reload}
+          aria-label={labels.reload}
+        >
+          <RotateCw className="h-4 w-4" />
         </button>
 
         <button
