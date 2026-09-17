@@ -325,7 +325,10 @@ function mapCliOptionsToSDK(options = {}) {
   let allowedTools = [...(settings.allowedTools || [])];
 
   if (permissionMode === 'plan') {
-    const planModeTools = ['Read', 'Task', 'exit_plan_mode', 'TodoRead', 'TodoWrite', 'WebFetch', 'WebSearch'];
+    // Both names for the subagent tool: Claude Code renamed Task -> Agent, and
+    // an allowlist that misses the current name does not fail loudly — planning
+    // just starts asking permission for something it was meant to allow.
+    const planModeTools = ['Read', 'Task', 'Agent', 'exit_plan_mode', 'TodoRead', 'TodoWrite', 'WebFetch', 'WebSearch'];
     for (const tool of planModeTools) {
       if (!allowedTools.includes(tool)) {
         allowedTools.push(tool);
