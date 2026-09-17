@@ -9,7 +9,7 @@ import { useTheme } from '@/shared/context/ThemeContext';
 import { useCodeEditorDocument } from '@/modules/code-editor/hooks/useCodeEditorDocument';
 import { useCodeEditorSettings } from '@/modules/code-editor/hooks/useCodeEditorSettings';
 import { useEditorKeyboardShortcuts } from '@/modules/code-editor/hooks/useEditorKeyboardShortcuts';
-import type { CodeEditorFile } from '@/shared/types';
+import type { CodeEditorFile, CodeEditorGotoTarget } from '@/shared/types';
 import { createMinimapExtension, createScrollToFirstChunkExtension, getLanguageExtensions } from '@/modules/code-editor/utils/editorExtensions';
 import { getEditorStyles } from '@/modules/code-editor/utils/editorStyles';
 import { createEditorToolbarPanelExtension } from '@/modules/code-editor/utils/editorToolbarPanel';
@@ -72,6 +72,14 @@ export default function CodeEditor({
     file,
     projectPath,
   });
+
+  // Keyed on the file object rather than on the line number: `useEditorSidebar`
+  // builds a new one per open, so clicking the same `path:line` reference again
+  // jumps again, while editing the open file never re-triggers the jump.
+  const gotoTarget = useMemo<CodeEditorGotoTarget | null>(
+    () => (file.line ? { line: file.line } : null),
+    [file],
+  );
 
   const isMarkdownFile = useMemo(() => {
     const extension = file.name.split('.').pop()?.toLowerCase();
@@ -297,6 +305,7 @@ export default function CodeEditor({
               fontSize={fontSize}
               showLineNumbers={showLineNumbers}
               extensions={extensions}
+              gotoTarget={gotoTarget}
             />
           </div>
 
