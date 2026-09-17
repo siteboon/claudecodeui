@@ -348,6 +348,8 @@
     "choiceSavedDefault": "Your choice becomes the default model for new chats.",
     "tokensUsed_one": "{{count}} token used",
     "tokensUsed_other": "{{count}} tokens used",
+    "compacted": "Compacted",
+    "compactionSummary": "full summary",
     "expandImage": "Expand {{name}}",
     "tokensLabel_one": "token",
     "tokensLabel_other": "tokens",
