@@ -389,3 +389,69 @@ test('createEntry performs filesystem mutation only through the injected adapter
   assert.equal(result.path, targetPath);
   assert.deepEqual(writtenFiles, [{ filePath: targetPath, content: '' }]);
 });
+
+test('storeUploadedFiles accepts the project root itself as the target directory', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const copiedFiles: Array<{ source: string; destination: string }> = [];
+  const fileSystem = createFakeFileSystem({
+    access: async () => undefined,
+    copyFile: async (source, destination) => {
+      copiedFiles.push({ source, destination });
+    },
+    unlink: async () => undefined,
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
+
+  // A drop onto a root-level file targets its parent, which the client sends
+  // as the root's absolute path; a trailing separator must not change that.
+  for (const targetPath of [projectRoot, projectRoot + path.sep]) {
+    copiedFiles.length = 0;
+
+    const result = await service.storeUploadedFiles({
+      projectId: 'project-1',
+      targetPath,
+      relativePaths: [],
+      requestedFileCount: 1,
+      files: [{ originalName: 'notes.txt', temporaryPath: '/tmp/upload-notes', size: 3, mimeType: 'text/plain' }],
+    });
+
+    assert.equal(result.targetPath, projectRoot);
+    assert.equal(result.uploadedCount, 1);
+    assert.deepEqual(copiedFiles, [
+      { source: '/tmp/upload-notes', destination: path.join(projectRoot, 'notes.txt') },
+    ]);
+  }
+});
+
+test('storeUploadedFiles still rejects a target directory outside the project root', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const copiedFiles: string[] = [];
+  const removedTemporaryFiles: string[] = [];
+  const fileSystem = createFakeFileSystem({
+    access: async () => undefined,
+    copyFile: async (_source, destination) => {
+      copiedFiles.push(destination);
+    },
+    unlink: async (filePath) => {
+      removedTemporaryFiles.push(filePath);
+    },
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
+
+  for (const targetPath of [path.dirname(projectRoot), `${projectRoot}-sibling`, '..']) {
+    await assert.rejects(
+      service.storeUploadedFiles({
+        projectId: 'project-1',
+        targetPath,
+        relativePaths: [],
+        requestedFileCount: 1,
+        files: [{ originalName: 'notes.txt', temporaryPath: '/tmp/upload-notes', size: 3, mimeType: 'text/plain' }],
+      }),
+      (error: unknown) => error instanceof AppError
+        && error.code === 'PATH_OUTSIDE_PROJECT'
+        && error.statusCode === 403,
+    );
+  }
+  assert.deepEqual(copiedFiles, []);
+  assert.deepEqual(removedTemporaryFiles, ['/tmp/upload-notes', '/tmp/upload-notes', '/tmp/upload-notes']);
+});

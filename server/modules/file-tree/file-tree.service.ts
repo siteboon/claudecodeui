@@ -88,10 +88,18 @@ function validateFilename(name: string): void {
   }
 }
 
-function resolvePathInsideProject(projectRoot: string, targetPath: string): string {
-  const resolvedPath = path.isAbsolute(targetPath)
+function resolveAgainstProjectRoot(projectRoot: string, targetPath: string): string {
+  return path.isAbsolute(targetPath)
     ? path.resolve(targetPath)
     : path.resolve(projectRoot, targetPath);
+}
+
+/**
+ * Resolves an entry the caller reads, writes, renames or deletes. The project
+ * root itself is rejected on purpose: no entry operation may target the root.
+ */
+function resolvePathInsideProject(projectRoot: string, targetPath: string): string {
+  const resolvedPath = resolveAgainstProjectRoot(projectRoot, targetPath);
   const normalizedProjectRoot = path.resolve(projectRoot) + path.sep;
 
   if (!resolvedPath.startsWith(normalizedProjectRoot)) {
@@ -99,6 +107,18 @@ function resolvePathInsideProject(projectRoot: string, targetPath: string): stri
   }
 
   return resolvedPath;
+}
+
+/**
+ * Resolves a directory that receives new entries, where the project root is a
+ * legitimate answer: a drop onto a root-level file targets that file's parent,
+ * which is the root, and an omitted target means the root too.
+ */
+function resolveDirectoryInsideProject(projectRoot: string, targetPath: string): string {
+  const resolvedPath = resolveAgainstProjectRoot(projectRoot, targetPath);
+  return resolvedPath === path.resolve(projectRoot)
+    ? resolvedPath
+    : resolvePathInsideProject(projectRoot, resolvedPath);
 }
 
 function expandWorkspacePath(workspaceRoot: string, inputPath: string): string {
@@ -609,11 +629,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
 
       try {
         const projectRoot = await resolveProjectRoot(input.projectId);
-        const resolvedTargetDirectory = !input.targetPath
-          || input.targetPath === '.'
-          || input.targetPath === './'
-          ? path.resolve(projectRoot)
-          : resolvePathInsideProject(projectRoot, input.targetPath);
+        const resolvedTargetDirectory = resolveDirectoryInsideProject(projectRoot, input.targetPath);
 
         try {
           await fileSystem.access(resolvedTargetDirectory);
