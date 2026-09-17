@@ -60,12 +60,25 @@ test('extracts through the tool result wrapper', () => {
   assert.equal(extractToolResultImages(payload).length, 1);
 });
 
-test('ignores plain text and short non-image payloads', () => {
+test('ignores plain text and payloads that are not declared as images', () => {
   assert.deepEqual(extractToolResultImages('{"ok": true}'), []);
   assert.deepEqual(extractToolResultImages([{ type: 'text', text: 'hello' }]), []);
-  // Too short to be a real image payload — likely a false-shape object.
-  assert.deepEqual(extractToolResultImages([{ type: 'base64', media_type: 'image/png', data: 'abc' }]), []);
+  // A base64 PDF claims a real payload but no image media type, so it stays
+  // in the text pass instead of vanishing into a broken <img>.
+  const pdfData = 'JVBERi0xLjQKJcOkw7zDtsOfCjIgMCBvYmoK7/2LAD'.repeat(3);
+  assert.deepEqual(extractToolResultImages([{ type: 'base64', media_type: 'application/pdf', data: pdfData }]), []);
+  // An image-shaped record with no declared media type is the same trap.
+  assert.deepEqual(extractToolResultImages([{ type: 'image', data: base64Data }]), []);
   assert.equal(hasToolResultImages('plain output'), false);
+});
+
+test('extracts a small valid image — the 64-char floor must not gate real payloads', () => {
+  // The canonical 1×1 transparent GIF ships ~54 base64 characters, well under
+  // any size floor one might be tempted to impose.
+  const oneByOneGif = 'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  assert.deepEqual(extractToolResultImages([{ type: 'base64', media_type: 'image/gif', data: oneByOneGif }]), [
+    { mediaType: 'image/gif', data: oneByOneGif },
+  ]);
 });
 
 test('default config keeps text and drops image base64', () => {
@@ -91,6 +104,14 @@ test('default config still shows plain output verbatim', () => {
   const config = getToolConfig('SomeUnknownTool').result!;
   const props = config.getContentProps!({ content: '命令输出正常文本' });
   assert.equal(props.content, '命令输出正常文本');
+});
+
+test('default config keeps structured arrays that carry no text block', () => {
+  // Dropping image blocks must not swallow everything else that lacks a
+  // `text` field — [{status:"ok"}] still has to render something.
+  const config = getToolConfig('SomeUnknownTool').result!;
+  const props = config.getContentProps!({ content: [{ status: 'ok' }] });
+  assert.equal(props.content, JSON.stringify([{ status: 'ok' }], null, 2));
 });
 
 test('withoutImageBlocks removes image blocks and keeps the rest', () => {

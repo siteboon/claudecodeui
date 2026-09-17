@@ -240,3 +240,53 @@ test('a content-block array keeps image blocks whole while capping text', () => 
   assert.equal(parsed[1].source.data, base64, 'the image payload must not be cut mid-base64');
   assert.match(parsed[0].text, /… \d+ more characters$/, 'oversized text still caps');
 });
+
+test('image-shaped blocks without a real image payload are still capped', () => {
+  // Without validation any {type:'image'} record (or a base64 PDF) would
+  // escape the cap and hold its oversized junk in the transcript for the life
+  // of the session; only a declared image media type plus real base64 buys
+  // the exemption.
+  const junk = 'x'.repeat(120_000);
+  const blocks = [
+    { type: 'text', text: 'screenshot failed' },
+    { type: 'image', source: { type: 'base64', data: junk } },
+    { type: 'base64', media_type: 'application/pdf', data: junk },
+  ];
+  const [unified] = prepareTranscriptMessages([
+    message({
+      kind: 'tool_use',
+      toolName: 'mcp__playwright__browser_take_screenshot',
+      toolId: 's2',
+      toolInput: {},
+      toolResult: { content: JSON.stringify(blocks) },
+    }),
+  ]);
+
+  const content = String(unified.toolResult?.content);
+  assert.ok(content.length < junk.length, 'the oversized fakes must not survive whole');
+  assert.match(content, /… \d+ more characters$/, 'the whole string falls back to plain truncation');
+});
+
+test('whitespace before the array still routes through the block-aware cap', () => {
+  // JSON.parse accepts leading whitespace, so the block probe must not
+  // bounce " \n[…]" to plain truncation and cut the image mid-base64.
+  const base64 = 'iVBORw0KGgo'.padEnd(60_000, 'A');
+  const longText = 't'.repeat(100_000);
+  const blocks = [
+    { type: 'text', text: longText },
+    { type: 'image', source: { type: 'base64', media_type: 'image/png', data: base64 } },
+  ];
+  const [unified] = prepareTranscriptMessages([
+    message({
+      kind: 'tool_use',
+      toolName: 'mcp__playwright__browser_take_screenshot',
+      toolId: 's3',
+      toolInput: {},
+      toolResult: { content: ` \n${JSON.stringify(blocks)}` },
+    }),
+  ]);
+
+  const parsed = JSON.parse(String(unified.toolResult?.content));
+  assert.equal(parsed[1].source.data, base64, 'the image survives whole despite the leading whitespace');
+  assert.match(parsed[0].text, /… \d+ more characters$/, 'oversized text still caps');
+});

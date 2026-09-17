@@ -18,7 +18,13 @@ export type ToolResultImage = {
 const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
 
 const isBase64Data = (value: unknown): value is string =>
-  typeof value === 'string' && value.length > 64 && BASE64_PATTERN.test(value);
+  typeof value === 'string' && value.length > 0 && BASE64_PATTERN.test(value);
+
+// Only a media type the browser can paint into an <img> may claim a block as
+// an image; a base64 PDF under an `image` type stays in the text pass instead
+// of vanishing into a broken thumbnail.
+const isImageMediaType = (value: unknown): value is string =>
+  typeof value === 'string' && value.toLowerCase().startsWith('image/');
 
 const isImageBlock = (block: any): block is ToolResultImage => {
   if (!block || typeof block !== 'object') {
@@ -27,19 +33,19 @@ const isImageBlock = (block: any): block is ToolResultImage => {
 
   // Anthropic content block: { type: 'image', source: { type: 'base64', media_type, data } }
   if (block.type === 'image' && block.source?.type === 'base64'
-    && typeof block.source.media_type === 'string' && isBase64Data(block.source.data)) {
+    && isImageMediaType(block.source.media_type) && isBase64Data(block.source.data)) {
     return true;
   }
 
   // Bare base64 source: { type: 'base64', media_type, data }
   if (block.type === 'base64'
-    && typeof block.media_type === 'string' && isBase64Data(block.data)) {
+    && isImageMediaType(block.media_type) && isBase64Data(block.data)) {
     return true;
   }
 
   // MCP content block: { type: 'image', data, mimeType }
   if (block.type === 'image'
-    && typeof block.mimeType === 'string' && isBase64Data(block.data)) {
+    && isImageMediaType(block.mimeType) && isBase64Data(block.data)) {
     return true;
   }
 

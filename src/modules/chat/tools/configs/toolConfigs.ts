@@ -786,7 +786,11 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
           }
         } else if (Array.isArray(content)) {
           const textParts = collectText(content);
-          content = textParts.length > 0 ? textParts.join('\n') : '';
+          content = textParts.length > 0
+            ? textParts.join('\n')
+            : content.length > 0
+              ? JSON.stringify(content, null, 2)
+              : '';
         } else if (typeof content === 'object' && content !== null) {
           content = JSON.stringify(content, null, 2);
         }
