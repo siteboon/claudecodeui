@@ -119,6 +119,11 @@
     "updateAvailable": "アップデートあり",
     "restartRequired": "更新が適用されていません。サーバーを再起動してください"
   },
+  "search": {
+    "modeProjects": "プロジェクト",
+    "modeConversations": "会話",
+    "modeMore": "その他"
+  },
   "deleteConfirmation": {
     "deleteProject": "プロジェクトを除去",
     "deleteSession": "セッションを削除",

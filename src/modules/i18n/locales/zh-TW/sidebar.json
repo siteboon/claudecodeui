@@ -122,6 +122,7 @@
   "search": {
     "modeProjects": "專案",
     "modeConversations": "對話",
+    "modeMore": "更多",
     "conversationsPlaceholder": "搜尋對話內容...",
     "searching": "搜尋中...",
     "sessionTitles": "工作階段標題",
