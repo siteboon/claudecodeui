@@ -250,7 +250,9 @@ export function useChatComposerState({
   // Composition is tracked on `window` in the capture phase rather than on the textarea, so a
   // composition that starts in one field and ends after focus moves still closes cleanly.
   const isComposingRef = useRef(false);
-  const lastCompositionEndAtRef = useRef(0);
+  // Not 0: `performance.now()` counts from the page's time origin, so `now - 0` sits inside
+  // the window for the page's first 30ms and would swallow an Enter no composition preceded.
+  const lastCompositionEndAtRef = useRef(Number.NEGATIVE_INFINITY);
 
   useEffect(() => {
     const onStart = () => {
