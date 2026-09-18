@@ -1,14 +1,15 @@
-import fsSync, { promises as fs } from 'node:fs';
+import fsSync from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 
 import { spawn } from 'cross-spawn';
 import { rgPath } from '@vscode/ripgrep';
 
+import { stripAnsiSequences } from '@/shared/utils.js';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 
 type AnyRecord = Record<string, any>;
-type SearchableProvider = 'claude' | 'codex' | 'gemini';
+type SearchableProvider = 'claude' | 'codex';
 
 type SearchSnippetHighlight = {
   start: number;
@@ -38,6 +39,15 @@ type ProjectConversationResult = {
   sessions: SessionConversationResult[];
 };
 
+type SessionTitleSearchResult = {
+  sessionId: string;
+  provider: string;
+  projectId: string | null;
+  projectDisplayName: string;
+  sessionTitle: string;
+  lastActivity: string | null;
+};
+
 export type SessionConversationSearchProgressUpdate = {
   projectResult: ProjectConversationResult | null;
   totalMatches: number;
@@ -49,6 +59,7 @@ type SearchSessionConversationsInput = {
   query: string;
   limit: number;
   signal?: AbortSignal;
+  onTitleResults?: (results: SessionTitleSearchResult[]) => void;
   onProgress?: (update: SessionConversationSearchProgressUpdate) => void;
 };
 
@@ -82,7 +93,7 @@ type ProjectBucket = {
   sessions: SearchableSessionRow[];
 };
 
-const SUPPORTED_PROVIDERS = new Set<SearchableProvider>(['claude', 'codex', 'gemini']);
+const SUPPORTED_PROVIDERS = new Set<SearchableProvider>(['claude', 'codex']);
 const MAX_MATCHES_PER_SESSION = 2;
 const RIPGREP_FILE_CHUNK_SIZE = 40;
 const RIPGREP_CHUNK_CONCURRENCY = 6;
@@ -154,6 +165,67 @@ function toSummaryText(customName: string | null, fallback: string | null | unde
   }
 
   return trimmedFallback.length > 50 ? `${trimmedFallback.slice(0, 50)}...` : trimmedFallback;
+}
+
+/**
+ * Finds visible sessions whose displayed title contains the query. Title
+ * matches are resolved from the database before transcript scanning so the UI
+ * can always present them first, including sessions without a transcript yet.
+ */
+function findSessionTitleResults(
+  sessions: SessionRepositoryRow[],
+  query: string,
+  limit: number,
+): SessionTitleSearchResult[] {
+  const normalizedQuery = query.toLocaleLowerCase().replace(/\s+/g, ' ');
+  const projectCache = new Map<string, ReturnType<typeof projectsDb.getProjectPath>>();
+
+  return sessions
+    .flatMap((session) => {
+      const sessionTitle = toSummaryText(session.custom_name, session.session_id, session.session_id);
+      const normalizedTitle = sessionTitle.toLocaleLowerCase().replace(/\s+/g, ' ');
+      const matchIndex = normalizedTitle.indexOf(normalizedQuery);
+      if (matchIndex === -1) {
+        return [];
+      }
+
+      const projectPath = typeof session.project_path === 'string' && session.project_path.trim()
+        ? session.project_path.trim()
+        : null;
+      const projectKey = projectPath ?? UNKNOWN_PROJECT_KEY;
+      if (!projectCache.has(projectKey)) {
+        projectCache.set(
+          projectKey,
+          projectPath ? projectsDb.getProjectPath(projectPath) : null,
+        );
+      }
+
+      const project = projectCache.get(projectKey) ?? null;
+      if (project?.isArchived) {
+        return [];
+      }
+
+      return [{
+        sessionId: session.session_id,
+        provider: session.provider,
+        projectId: project?.project_id ?? null,
+        projectDisplayName: projectPath
+          ? (project?.custom_project_name?.trim() || path.basename(projectPath) || projectPath)
+          : 'Unknown Project',
+        sessionTitle,
+        lastActivity: session.updated_at || session.created_at || null,
+        matchIndex,
+      }];
+    })
+    .sort((left, right) => {
+      if (left.matchIndex !== right.matchIndex) {
+        return left.matchIndex - right.matchIndex;
+      }
+
+      return new Date(right.lastActivity ?? 0).getTime() - new Date(left.lastActivity ?? 0).getTime();
+    })
+    .slice(0, limit)
+    .map(({ matchIndex: _matchIndex, ...result }) => result);
 }
 
 function isInternalContent(content: string): boolean {
@@ -338,10 +410,6 @@ function buildClaudeLocalCommandDisplayText(payload: ClaudeLocalCommandPayload):
   return commandArgs ? `${baseCommand} ${commandArgs}` : baseCommand;
 }
 
-function stripAnsiFormatting(text: string): string {
-  return text.replace(/\u001B\[[0-9;?]*[ -/]*[@-~]/g, '');
-}
-
 type ClaudeSearchableMessage = {
   text: string;
   role: 'user' | 'assistant';
@@ -385,7 +453,7 @@ function extractClaudeSearchableMessage(entry: AnyRecord): ClaudeSearchableMessa
 
     const localCommandStdout = extractTaggedContent(content, 'local-command-stdout');
     if (localCommandStdout !== null) {
-      const stdoutText = stripAnsiFormatting(localCommandStdout).trim();
+      const stdoutText = stripAnsiSequences(localCommandStdout).trim();
       return stdoutText
         ? {
             text: stdoutText,
@@ -452,21 +520,6 @@ function extractCodexText(content: unknown): string {
       return '';
     })
     .filter(Boolean)
-    .join(' ');
-}
-
-function extractGeminiText(content: unknown): string {
-  if (typeof content === 'string') {
-    return content;
-  }
-
-  if (!Array.isArray(content)) {
-    return '';
-  }
-
-  return content
-    .filter((part: AnyRecord) => typeof part?.text === 'string')
-    .map((part: AnyRecord) => String(part.text))
     .join(' ');
 }
 
@@ -802,11 +855,18 @@ async function parseClaudeSessionMatches(
       ? matchedSessionsForFile
       : [session];
 
-    const targetSessionIds = new Set(targetSessions.map((candidate) => candidate.session_id));
+    // Transcript lines are tagged with the provider session id (e.g. Claude's own
+    // conversation UUID), which is not necessarily the app-facing `session_id`.
+    // Match and attribute by the provider id, but map results back to the
+    // internal `session_id` the rest of the app uses to identify sessions.
+    const providerToInternalId = new Map<string, string>();
     const customNameBySessionId = new Map<string, string | null>();
     for (const candidate of targetSessions) {
-      customNameBySessionId.set(candidate.session_id, candidate.custom_name ?? null);
+      const providerId = candidate.provider_session_id || candidate.session_id;
+      providerToInternalId.set(providerId, candidate.session_id);
+      customNameBySessionId.set(providerId, candidate.custom_name ?? null);
     }
+    const targetSessionIds = new Set(providerToInternalId.keys());
 
     type ClaudeSessionSearchState = {
       matches: SessionConversationMatch[];
@@ -927,8 +987,9 @@ async function parseClaudeSessionMatches(
         continue;
       }
 
-      fileResults.set(sessionId, {
-        sessionId,
+      const internalSessionId = providerToInternalId.get(sessionId) ?? sessionId;
+      fileResults.set(internalSessionId, {
+        sessionId: internalSessionId,
         provider: 'claude',
         sessionSummary: toSummaryText(
           customNameBySessionId.get(sessionId) ?? null,
@@ -1065,81 +1126,6 @@ async function parseCodexSessionMatches(
   };
 }
 
-async function parseGeminiSessionMatches(
-  session: SearchableSessionRow,
-  runtime: SearchRuntime,
-): Promise<SessionConversationResult | null> {
-  let data: string;
-  try {
-    data = await fs.readFile(session.jsonl_path, 'utf8');
-  } catch {
-    return null;
-  }
-
-  let parsed: AnyRecord;
-  try {
-    parsed = JSON.parse(data) as AnyRecord;
-  } catch {
-    return null;
-  }
-
-  const sourceMessages = Array.isArray(parsed.messages) ? parsed.messages as AnyRecord[] : [];
-  if (sourceMessages.length === 0) {
-    return null;
-  }
-
-  const matches: SessionConversationMatch[] = [];
-  let firstUserText: string | null = null;
-
-  for (const msg of sourceMessages) {
-    if (runtime.totalMatches >= runtime.limit || runtime.isAborted()) {
-      break;
-    }
-
-    const role = msg.type === 'user'
-      ? 'user'
-      : (msg.type === 'gemini' || msg.type === 'assistant')
-        ? 'assistant'
-        : null;
-    if (!role) {
-      continue;
-    }
-
-    const text = extractGeminiText(msg.content);
-    if (!text) {
-      continue;
-    }
-
-    if (role === 'user' && !firstUserText) {
-      firstUserText = text;
-    }
-
-    if (!runtime.matchesQuery(text)) {
-      continue;
-    }
-
-    const { snippet, highlights } = runtime.buildSnippet(text);
-    addSessionMatch(runtime, matches, {
-      role,
-      snippet,
-      highlights,
-      timestamp: msg.timestamp ? String(msg.timestamp) : null,
-      provider: 'gemini',
-    });
-  }
-
-  if (matches.length === 0) {
-    return null;
-  }
-
-  return {
-    sessionId: session.session_id,
-    provider: 'gemini',
-    sessionSummary: toSummaryText(session.custom_name, firstUserText, 'Gemini Session'),
-    matches,
-  };
-}
-
 async function parseSessionMatches(
   session: SearchableSessionRow,
   runtime: SearchRuntime,
@@ -1150,31 +1136,45 @@ async function parseSessionMatches(
   if (session.provider === 'codex') {
     return parseCodexSessionMatches(session, runtime);
   }
-  return parseGeminiSessionMatches(session, runtime);
+  return null;
 }
 
+/**
+ * Searches session titles and provider transcripts for the provider search
+ * service and its route-level integration tests.
+ */
 export async function searchConversations(
   query: string,
   limit = 50,
   onProjectResult: ((update: SessionConversationSearchProgressUpdate) => void) | null = null,
   signal: AbortSignal | null = null,
-): Promise<{ results: ProjectConversationResult[]; totalMatches: number; query: string }> {
+  onTitleResults: ((results: SessionTitleSearchResult[]) => void) | null = null,
+): Promise<{
+  results: ProjectConversationResult[];
+  titleResults: SessionTitleSearchResult[];
+  totalMatches: number;
+  query: string;
+}> {
   const safeQuery = typeof query === 'string' ? query.trim() : '';
   const safeLimit = Math.max(1, Math.min(Number.isFinite(limit) ? limit : 50, 200));
   const words = safeQuery.toLowerCase().split(/\s+/).filter((word) => word.length > 0);
 
   if (words.length === 0) {
-    return { results: [], totalMatches: 0, query: safeQuery };
+    return { results: [], titleResults: [], totalMatches: 0, query: safeQuery };
   }
 
   const isAborted = () => signal?.aborted === true;
   if (isAborted()) {
-    return { results: [], totalMatches: 0, query: safeQuery };
+    return { results: [], titleResults: [], totalMatches: 0, query: safeQuery };
   }
 
-  const searchableSessions = normalizeSearchableSessions(sessionsDb.getAllSessions());
+  const activeSessions = sessionsDb.getAllSessions();
+  const titleResults = findSessionTitleResults(activeSessions, safeQuery, safeLimit);
+  onTitleResults?.(titleResults);
+
+  const searchableSessions = normalizeSearchableSessions(activeSessions);
   if (searchableSessions.length === 0) {
-    return { results: [], totalMatches: 0, query: safeQuery };
+    return { results: [], titleResults, totalMatches: 0, query: safeQuery };
   }
 
   const sessionsByPathKey = new Map<string, SearchableSessionRow[]>();
@@ -1205,7 +1205,7 @@ export async function searchConversations(
     signal ?? undefined,
   );
   if (isAborted() || matchedFileKeys.size === 0) {
-    return { results: [], totalMatches: 0, query: safeQuery };
+    return { results: [], titleResults, totalMatches: 0, query: safeQuery };
   }
 
   const matchedSessionKeys = new Set<string>();
@@ -1289,6 +1289,7 @@ export async function searchConversations(
 
   return {
     results,
+    titleResults,
     totalMatches: runtime.totalMatches,
     query: safeQuery,
   };
@@ -1311,6 +1312,7 @@ export const sessionConversationsSearchService = {
       input.limit,
       input.onProgress ?? null,
       input.signal ?? null,
+      input.onTitleResults ?? null,
     );
   },
 };

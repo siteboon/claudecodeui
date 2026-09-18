@@ -1,23 +1,26 @@
 import { createRequire } from 'node:module';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+// cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
+import spawn from 'cross-spawn';
+
 import { appConfigDb } from '@/modules/database/index.js';
 import { providerMcpService } from '@/modules/providers/index.js';
-import { getModuleDir } from '@/utils/runtime-paths.js';
+import { getModuleDirectory } from '@/shared/utils.js';
+
+import { getBrowserUseRuntime } from './browser-use-runtime.js';
 
 const require = createRequire(import.meta.url);
-const __dirname = getModuleDir(import.meta.url);
-const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
+const __dirname = getModuleDirectory(import.meta.url);
 const MAX_SESSIONS_PER_OWNER = Number.parseInt(process.env.CLOUDCLI_BROWSER_USE_MAX_SESSIONS_PER_OWNER || '3', 10);
 const SESSION_TTL_MS = Number.parseInt(process.env.CLOUDCLI_BROWSER_USE_SESSION_TTL_MS || String(30 * 60 * 1000), 10);
 const BROWSER_USE_SETTINGS_KEY = 'browser_use_settings';
 const BROWSER_USE_MCP_TOKEN_KEY = 'browser_use_mcp_token';
 
-type BrowserUseRuntime = 'cloud' | 'local';
+type BrowserUseRuntime = ReturnType<typeof getBrowserUseRuntime>;
 type BrowserUseSessionStatus = 'ready' | 'stopped' | 'unavailable';
 
 type BrowserUseSession = {
@@ -83,10 +86,6 @@ const MCP_SERVER_NAME = 'cloudcli-browser';
 const LEGACY_MCP_SERVER_NAMES = ['cloudcli-browser-use'];
 const RUNTIME_READINESS_CACHE_TTL_MS = 30_000;
 
-function getRuntime(): BrowserUseRuntime {
-  return IS_PLATFORM ? 'cloud' : 'local';
-}
-
 function readSettings(): BrowserUseSettings {
   try {
     const raw = appConfigDb.get(BROWSER_USE_SETTINGS_KEY);
@@ -148,8 +147,7 @@ function getPlaywright(): any | null {
 }
 
 function getMcpCommand(): { command: string; args: string[] } {
-  const serverDir = path.resolve(__dirname, '..', '..');
-  const mcpScriptPath = path.join(serverDir, 'browser-use-mcp.js');
+  const mcpScriptPath = path.join(__dirname, 'browser-use-mcp.js');
   if (fs.existsSync(mcpScriptPath)) {
     return {
       command: process.execPath,
@@ -270,8 +268,10 @@ function runCommand(command: string, args: string[]): Promise<void> {
     }, INSTALL_COMMAND_TIMEOUT_MS);
     timer.unref?.();
 
-    child.stdout.on('data', (chunk) => output.push(String(chunk)));
-    child.stderr.on('data', (chunk) => output.push(String(chunk)));
+    // stdio config above guarantees the pipes exist; cross-spawn's types
+    // just don't narrow them the way node's spawn overloads do.
+    child.stdout?.on('data', (chunk) => output.push(String(chunk)));
+    child.stderr?.on('data', (chunk) => output.push(String(chunk)));
     child.on('error', (error) => finish(() => reject(error)));
     child.on('close', (code) => finish(() => {
       if (code === 0) {
@@ -443,7 +443,7 @@ export const browserUseService = {
 
     return {
       enabled: settings.enabled,
-      runtime: getRuntime(),
+      runtime: getBrowserUseRuntime(),
       available,
       playwrightInstalled: readiness.playwrightInstalled,
       chromiumInstalled: readiness.chromiumInstalled,
@@ -512,7 +512,7 @@ export const browserUseService = {
       id: randomUUID(),
       ownerId: AGENT_OWNER_ID,
       createdBy: 'agent',
-      runtime: getRuntime(),
+      runtime: getBrowserUseRuntime(),
       status: 'unavailable',
       url: null,
       title: null,

@@ -3,50 +3,169 @@ import { readFile } from 'node:fs/promises';
 import { sessionsDb } from '@/modules/database/index.js';
 import type { IProviderModels } from '@/shared/interfaces.js';
 import type {
-  ProviderChangeActiveModelInput,
   ProviderCurrentActiveModel,
+  ProviderModelOption,
   ProviderModelsDefinition,
-  ProviderSessionActiveModelChange,
 } from '@/shared/types.js';
-import {
-  buildDefaultProviderCurrentActiveModel,
-  writeProviderSessionActiveModelChange,
-} from '@/shared/utils.js';
+import { buildDefaultProviderCurrentActiveModel, stripAnsiSequences } from '@/shared/utils.js';
 
-export const CLAUDE_FALLBACK_MODELS: ProviderModelsDefinition = {
+/**
+ * Ultracode is not one of the SDK's reasoning-effort levels. Selecting it runs the turn at
+ * `xhigh` effort with standing dynamic-workflow orchestration, which the Claude runtime
+ * translates into the session-scoped `ultracode` setting. It is therefore only offered on
+ * models this catalog already marks as xhigh-capable.
+ */
+export const CLAUDE_ULTRACODE_EFFORT = 'ultracode';
+
+const ULTRACODE_EFFORT_OPTION = {
+  value: CLAUDE_ULTRACODE_EFFORT,
+  description: 'Highest effort plus standing workflow orchestration.',
+};
+
+export const CLAUDE_PREDEFINED_MODELS: ProviderModelsDefinition = {
   OPTIONS: [
     {
       value: 'default',
       label: 'Default (recommended)',
-      description: 'Use the default model (currently Opus 4.8 (1M context)) · $5/$25 per Mtok',
+      description: 'Use the recommended model for your Claude account and deployment.',
+      effort: {
+        default: 'high',
+        values: [
+          { value: 'low' },
+          { value: 'medium' },
+          { value: 'high' },
+          { value: 'max' },
+        ],
+      },
+    },
+    {
+      value: 'best',
+      label: 'Best available',
+      description: 'Use Fable 5 when available, otherwise the latest Opus model.',
+      effort: {
+        default: 'high',
+        values: [
+          { value: 'low' },
+          { value: 'medium' },
+          { value: 'high' },
+          { value: 'xhigh' },
+          { value: 'max' },
+          ULTRACODE_EFFORT_OPTION,
+        ],
+      },
     },
     {
       value: 'fable',
-      label: 'Fable',
-      description: 'Fable 5 · Most capable for your hardest and longest-running tasks · Uses your limits ~2× faster than Opus',
+      label: 'Fable 5',
+      description: 'Most capable Claude model for the hardest, longest-running tasks.',
+      effort: {
+        default: 'high',
+        values: [
+          { value: 'low' },
+          { value: 'medium' },
+          { value: 'high' },
+          { value: 'xhigh' },
+          { value: 'max' },
+          ULTRACODE_EFFORT_OPTION,
+        ],
+      },
     },
     {
-      value: "sonnet",
-      label: "Sonnet",
-      description: "Sonnet 4.6 · Best for everyday tasks · $3/$15 per Mtok",
+      value: 'sonnet',
+      label: 'Sonnet',
+      description: 'Latest Sonnet model for everyday coding tasks.',
+      effort: {
+        default: 'high',
+        values: [
+          { value: 'low' },
+          { value: 'medium' },
+          { value: 'high' },
+          { value: 'xhigh' },
+          { value: 'max' },
+          ULTRACODE_EFFORT_OPTION,
+        ],
+      },
     },
     {
       value: 'sonnet[1m]',
       label: 'Sonnet (1M context)',
-      description: 'Sonnet 4.6 for long sessions · $3/$15 per Mtok',
+      description: 'Latest Sonnet model with a 1M context window.',
+      effort: {
+        default: 'high',
+        values: [
+          { value: 'low' },
+          { value: 'medium' },
+          { value: 'high' },
+          { value: 'xhigh' },
+          { value: 'max' },
+          ULTRACODE_EFFORT_OPTION,
+        ],
+      },
+    },
+    {
+      value: 'opus',
+      label: 'Opus',
+      description: 'Latest Opus model for complex reasoning and coding tasks.',
+      effort: {
+        default: 'high',
+        values: [
+          { value: 'low' },
+          { value: 'medium' },
+          { value: 'high' },
+          { value: 'xhigh' },
+          { value: 'max' },
+          ULTRACODE_EFFORT_OPTION,
+        ],
+      },
     },
     {
       value: 'opus[1m]',
-      label: 'Opus 4.8 (1M context)',
-      description: 'Opus 4.8 with 1M context · Most capable for complex work · $5/$25 per Mtok',
+      label: 'Opus (1M context)',
+      description: 'Latest Opus model with a 1M context window.',
+      effort: {
+        default: 'high',
+        values: [
+          { value: 'low' },
+          { value: 'medium' },
+          { value: 'high' },
+          { value: 'xhigh' },
+          { value: 'max' },
+          ULTRACODE_EFFORT_OPTION,
+        ],
+      },
     },
     {
       value: 'haiku',
       label: 'Haiku',
-      description: 'Haiku 4.5 · Fastest for quick answers · $1/$5 per Mtok',
+      description: 'Fast and efficient Claude model for simple tasks.',
+    },
+    {
+      value: 'opusplan',
+      label: 'Opus Plan',
+      description: 'Use Opus while planning, then switch to Sonnet for execution.',
+      effort: {
+        default: 'high',
+        values: [
+          { value: 'low' },
+          { value: 'medium' },
+          { value: 'high' },
+          { value: 'xhigh' },
+          { value: 'max' },
+          ULTRACODE_EFFORT_OPTION,
+        ],
+      },
     },
   ],
   DEFAULT: 'default',
+};
+
+export const findClaudeModelOption = (model: string | undefined | null): ProviderModelOption | null => {
+  const normalizedModel = typeof model === 'string' ? model.trim() : '';
+  if (!normalizedModel) {
+    return null;
+  }
+
+  return CLAUDE_PREDEFINED_MODELS.OPTIONS.find((option) => option.value === normalizedModel) ?? null;
 };
 type ClaudeInitEvent = {
   sessionId?: string;
@@ -60,14 +179,15 @@ type ClaudeInitEvent = {
   };
 };
 
-const ANSI_PATTERN = new RegExp(
-  '[\\u001B\\u009B][[\\]()#;?]*(?:'
-  + '(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]'
-  + '|(?:[\\dA-PR-TZcf-ntqry=><~]))',
-  'g',
-);
+/**
+ * Claude Code stamps locally-synthesized rows (API-error placeholders and the
+ * like) with `model: "<synthetic>"`. Angle-bracketed values are placeholders,
+ * never real model ids, and must not be surfaced as the session's model.
+ */
+const isPlaceholderModel = (model: string): boolean => model.startsWith('<') && model.endsWith('>');
 
-const extractClaudeEventModel = (event: ClaudeInitEvent, sessionId: string): string | null => {
+/** Exported for tests. */
+export const extractClaudeEventModel = (event: ClaudeInitEvent, sessionId: string): string | null => {
   const eventSessionId = event.sessionId ?? event.session_id;
   if (eventSessionId && eventSessionId !== sessionId) {
     return null;
@@ -79,15 +199,13 @@ const extractClaudeEventModel = (event: ClaudeInitEvent, sessionId: string): str
   }
 
   const directModel = event.model?.trim();
-  if (directModel) {
+  if (directModel && !isPlaceholderModel(directModel)) {
     return directModel;
   }
 
   const messageModel = event.message?.model?.trim();
-  return messageModel || null;
+  return messageModel && !isPlaceholderModel(messageModel) ? messageModel : null;
 };
-
-const stripAnsi = (value: string): string => value.replace(ANSI_PATTERN, '');
 
 const extractTaggedContent = (content: string, tagName: string): string | null => {
   const escapedTagName = tagName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -98,15 +216,17 @@ const extractTaggedContent = (content: string, tagName: string): string | null =
 const extractClaudeModelFromTextContent = (content: string): string | null => {
   const localCommandStdout = extractTaggedContent(content, 'local-command-stdout');
   if (localCommandStdout !== null) {
-    const cleanedStdout = stripAnsi(localCommandStdout).replace(/\s+/g, ' ').trim();
+    const cleanedStdout = stripAnsiSequences(localCommandStdout).replace(/\s+/g, ' ').trim();
     const changedModel = /(?:set|changed|switched)\s+model\s+to\s+(.+?)\.?$/i.exec(cleanedStdout);
-    if (changedModel?.[1]?.trim()) {
-      return changedModel[1].trim();
+    const stdoutModel = changedModel?.[1]?.trim();
+    // A placeholder stdout hit must not shadow a real <model> tag further down.
+    if (stdoutModel && !isPlaceholderModel(stdoutModel)) {
+      return stdoutModel;
     }
   }
 
   const modelTag = extractTaggedContent(content, 'model')?.trim();
-  return modelTag || null;
+  return modelTag && !isPlaceholderModel(modelTag) ? modelTag : null;
 };
 
 const extractClaudeModelFromMessageContent = (content: unknown): string | null => {
@@ -123,6 +243,8 @@ const extractClaudeModelFromMessageContent = (content: unknown): string | null =
       continue;
     }
 
+    // extractClaudeModelFromTextContent rejects placeholders, so a placeholder
+    // part yields null here and a later part can still supply the real model.
     const model = extractClaudeModelFromTextContent(part.text);
     if (model) {
       return model;
@@ -170,7 +292,7 @@ export class ClaudeProviderModels implements IProviderModels {
     // const supportedModels = await queryInstance.supportedModels();
     // queryInstance.close();
     // return buildClaudeModelsDefinition(supportedModels);
-    return CLAUDE_FALLBACK_MODELS;
+    return CLAUDE_PREDEFINED_MODELS;
   }
 
   async getCurrentActiveModel(sessionId?: string): Promise<ProviderCurrentActiveModel> {
@@ -191,11 +313,5 @@ export class ClaudeProviderModels implements IProviderModels {
     }
 
     return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
-  }
-
-  async changeActiveModel(
-    input: ProviderChangeActiveModelInput,
-  ): Promise<ProviderSessionActiveModelChange> {
-    return writeProviderSessionActiveModelChange('claude', input);
   }
 }

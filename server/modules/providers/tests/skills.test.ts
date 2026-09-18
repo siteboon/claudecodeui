@@ -69,7 +69,8 @@ const writeClaudePluginCommand = async (
 
 /**
  * This test covers Claude user/project skill folders plus plugin discovery from
- * installed plugin command files and fallback plugin skill files.
+ * installed plugin command files and plugin skill files, including a plugin that
+ * ships both.
  */
 test('providerSkillsService lists claude user, project, and enabled plugin skills', { concurrency: false }, async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-claude-'));
@@ -144,11 +145,19 @@ test('providerSkillsService lists claude user, project, and enabled plugin skill
     );
     await writeSkill(
       path.join(commandPluginInstallPath, 'skills'),
-      'ignored-command-plugin-skill-dir',
-      'ignored-command-plugin-skill',
-      'Command plugin fallback skill should be ignored',
+      'command-plugin-skill-dir',
+      'command-plugin-skill',
+      'Skill shipped beside plugin commands',
     );
     await writeClaudePluginManifest(skillPluginInstallPath, 'ExampleSkills');
+    // A commands folder holding nothing this reader takes must not hide the
+    // skills beside it: plugins do ship commands in other agents' formats.
+    await fs.mkdir(path.join(skillPluginInstallPath, 'commands'), { recursive: true });
+    await fs.writeFile(
+      path.join(skillPluginInstallPath, 'commands', 'other-agent.toml'),
+      'description = "Command for another agent"\n',
+      'utf8',
+    );
     await writeSkill(
       path.join(skillPluginInstallPath, 'skills'),
       'claude-plugin-dir',
@@ -280,7 +289,14 @@ test('providerSkillsService lists claude user, project, and enabled plugin skill
     assert.equal(pluginCommand?.command, '/Notion:insert-row');
     assert.equal(pluginCommand?.description, 'Insert a Notion database row');
     assert.match(pluginCommand?.sourcePath ?? '', /commands[\\/]insert-row\.md$/);
-    assert.equal(byName.has('ignored-command-plugin-skill'), false);
+    // A plugin that ships commands keeps its skills: the CLI offers both, so
+    // the menu lists both rather than letting the commands folder hide them.
+    const commandPluginSkill = byName.get('command-plugin-skill');
+    assert.equal(commandPluginSkill?.scope, 'plugin');
+    assert.equal(commandPluginSkill?.pluginName, 'Notion');
+    assert.equal(commandPluginSkill?.pluginId, 'notion@notion-marketplace');
+    assert.equal(commandPluginSkill?.command, '/Notion:command-plugin-skill');
+    assert.equal(commandPluginSkill?.description, 'Skill shipped beside plugin commands');
 
     const pluginSkill = byName.get('claude-plugin');
     assert.equal(pluginSkill?.scope, 'plugin');
@@ -319,8 +335,8 @@ test('providerSkillsService lists claude user, project, and enabled plugin skill
 });
 
 /**
- * This test covers Codex repository/user/system skill folders and verifies that
- * repository lookup includes cwd, parent, and git root skill locations.
+ * This test covers Codex repository/user/system skill folders, including both
+ * supported user roots, and verifies repository lookup across cwd, parent, and git root.
  */
 test('providerSkillsService lists codex repository, user, and system skills', { concurrency: false }, async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-codex-'));
@@ -356,6 +372,12 @@ test('providerSkillsService lists codex repository, user, and system skills', { 
       'Codex user skill',
     );
     await writeSkill(
+      path.join(tempRoot, '.codex', 'skills'),
+      'codex-home-user-dir',
+      'codex-home-user',
+      'Codex home user skill',
+    );
+    await writeSkill(
       path.join(tempRoot, '.codex', 'skills', '.system'),
       'codex-system-dir',
       'codex-system',
@@ -369,6 +391,7 @@ test('providerSkillsService lists codex repository, user, and system skills', { 
     assert.equal(byName.get('codex-parent')?.scope, 'repo');
     assert.equal(byName.get('codex-root')?.scope, 'repo');
     assert.equal(byName.get('codex-user')?.scope, 'user');
+    assert.equal(byName.get('codex-home-user')?.scope, 'user');
     assert.equal(byName.get('codex-system')?.scope, 'system');
     assert.equal(byName.get('codex-root')?.command, '$codex-root');
   } finally {
@@ -444,10 +467,10 @@ test('providerSkillsService lists opencode project and user compatibility skills
 });
 
 /**
- * This test covers Gemini and Cursor skill directory rules, including shared
+ * This test covers Cursor skill directory rules, including shared
  * `.agents/skills` project support.
  */
-test('providerSkillsService lists gemini and cursor skills from their configured directories', { concurrency: false }, async () => {
+test('providerSkillsService lists cursor skills from its configured directories', { concurrency: false }, async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-gc-'));
   const workspacePath = path.join(tempRoot, 'workspace');
   await fs.mkdir(workspacePath, { recursive: true });
@@ -455,22 +478,10 @@ test('providerSkillsService lists gemini and cursor skills from their configured
   const restoreHomeDir = patchHomeDir(tempRoot);
   try {
     await writeSkill(
-      path.join(tempRoot, '.gemini', 'skills'),
-      'gemini-user-dir',
-      'gemini-user',
-      'Gemini user skill',
-    );
-    await writeSkill(
       path.join(tempRoot, '.agents', 'skills'),
       'agents-user-dir',
       'agents-user',
       'Agents user skill',
-    );
-    await writeSkill(
-      path.join(workspacePath, '.gemini', 'skills'),
-      'gemini-project-dir',
-      'gemini-project',
-      'Gemini project skill',
     );
     await writeSkill(
       path.join(workspacePath, '.agents', 'skills'),
@@ -491,14 +502,6 @@ test('providerSkillsService lists gemini and cursor skills from their configured
       'Cursor user skill',
     );
 
-    const geminiSkills = await providerSkillsService.listProviderSkills('gemini', { workspacePath });
-    const geminiByName = new Map(geminiSkills.map((skill) => [skill.name, skill]));
-    assert.equal(geminiByName.get('gemini-user')?.scope, 'user');
-    assert.equal(geminiByName.get('agents-user')?.scope, 'user');
-    assert.equal(geminiByName.get('gemini-project')?.scope, 'project');
-    assert.equal(geminiByName.get('agents-project')?.scope, 'project');
-    assert.equal(geminiByName.get('gemini-project')?.command, '/gemini-project');
-
     const cursorSkills = await providerSkillsService.listProviderSkills('cursor', { workspacePath });
     const cursorByName = new Map(cursorSkills.map((skill) => [skill.name, skill]));
     assert.equal(cursorByName.get('agents-project')?.scope, 'project');
@@ -515,7 +518,7 @@ test('providerSkillsService lists gemini and cursor skills from their configured
  * This test covers managed global skill creation for providers that own a
  * writable user skill directory.
  */
-test('providerSkillsService adds global skills for claude, codex, gemini, and cursor', { concurrency: false }, async () => {
+test('providerSkillsService adds global skills for claude, codex, and cursor', { concurrency: false }, async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-create-'));
   const restoreHomeDir = patchHomeDir(tempRoot);
 
@@ -618,22 +621,6 @@ test('providerSkillsService adds global skills for claude, codex, gemini, and cu
     );
     await assert.rejects(fs.stat(pendingBatchSkillPath), { code: 'ENOENT' });
 
-    const createdGeminiSkills = await providerSkillsService.addProviderSkills('gemini', {
-      entries: [
-        {
-          directoryName: 'gemini-global-dir',
-          content: '---\nname: gemini-global\ndescription: Gemini global skill\n---\n\nGemini body.\n',
-        },
-      ],
-    });
-    const createdGeminiSkill = createdGeminiSkills[0];
-    assert.ok(createdGeminiSkill);
-    assert.equal(createdGeminiSkill.command, '/gemini-global');
-    assert.equal(
-      createdGeminiSkill.sourcePath.endsWith(path.join('.gemini', 'skills', 'gemini-global-dir', 'SKILL.md')),
-      true,
-    );
-
     const createdCursorSkills = await providerSkillsService.addProviderSkills('cursor', {
       entries: [
         {
@@ -655,9 +642,6 @@ test('providerSkillsService adds global skills for claude, codex, gemini, and cu
 
     const listedCodexSkills = await providerSkillsService.listProviderSkills('codex');
     assert.equal(listedCodexSkills.some((skill) => skill.name === 'replacement'), true);
-
-    const listedGeminiSkills = await providerSkillsService.listProviderSkills('gemini');
-    assert.equal(listedGeminiSkills.some((skill) => skill.name === 'gemini-global'), true);
 
     const listedCursorSkills = await providerSkillsService.listProviderSkills('cursor');
     assert.equal(listedCursorSkills.some((skill) => skill.name === 'cursor-global'), true);

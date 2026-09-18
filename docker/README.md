@@ -1,9 +1,9 @@
 <!-- Docker Hub short description (100 chars max): -->
-<!-- Sandbox templates for running AI coding agents with a web & mobile IDE (Claude Code, Codex, Gemini) -->
+<!-- Sandbox templates for running AI coding agents with a web & mobile IDE (Claude Code, Codex) -->
 
 # Sandboxed coding agents with a web & mobile IDE (CloudCLI)
 
-[Docker Sandbox](https://docs.docker.com/ai/sandboxes/) templates that add [CloudCLI](https://cloudcli.ai) on top of Claude Code, Codex, and Gemini CLI. You get a full web and mobile IDE accessible from any browser on any device.
+[Docker Sandbox](https://docs.docker.com/ai/sandboxes/) templates that add [CloudCLI](https://cloudcli.ai) on top of Claude Code and Codex. You get a full web and mobile IDE accessible from any browser on any device.
 
 ## Get started
 
@@ -42,10 +42,6 @@ Store the matching API key and pass `--agent`:
 # OpenAI Codex
 sbx secret set -g openai
 npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project --agent codex
-
-# Gemini CLI
-sbx secret set -g google
-npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project --agent gemini
 ```
 
 ### Available templates
@@ -54,7 +50,6 @@ npx @cloudcli-ai/cloudcli@latest sandbox ~/my-project --agent gemini
 |-------|----------|
 | **Claude Code** (default) | `docker.io/cloudcliai/sandbox:claude-code` |
 | OpenAI Codex | `docker.io/cloudcliai/sandbox:codex` |
-| Gemini CLI | `docker.io/cloudcliai/sandbox:gemini` |
 
 These are used with `--template` when running `sbx` directly (see [Advanced usage](#advanced-usage)).
 

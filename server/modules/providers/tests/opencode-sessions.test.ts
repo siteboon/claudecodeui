@@ -9,6 +9,7 @@ import Database from 'better-sqlite3';
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import { OpenCodeSessionSynchronizer } from '@/modules/providers/list/opencode/opencode-session-synchronizer.provider.js';
 import { OpenCodeSessionsProvider } from '@/modules/providers/list/opencode/opencode-sessions.provider.js';
+import { appendImagesInputTag } from '@/shared/image-attachments.js';
 
 const patchHomeDir = (nextHomeDir: string) => {
   const original = os.homedir;
@@ -150,6 +151,30 @@ const createOpenCodeDatabase = async (homeDir: string, workspacePath: string): P
       3,
       2,
     );
+    db.prepare(`
+      INSERT INTO session (
+        id, project_id, parent_id, slug, directory, title, version, time_created, time_updated,
+        time_archived, tokens_input, tokens_output, tokens_reasoning, tokens_cache_read,
+        tokens_cache_write
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      'open-child-session-1',
+      'project-1',
+      'open-session-1',
+      'open-child-session-1',
+      workspacePath,
+      'OpenCode child session',
+      '0.0.0',
+      1_700_000_002_000,
+      1_700_000_005_000,
+      null,
+      5,
+      10,
+      2,
+      1,
+      1,
+    );
 
     const userMessageData = JSON.stringify({
       role: 'user',
@@ -254,16 +279,29 @@ test('OpenCode session synchronizer indexes sqlite sessions without deletable tr
   try {
     await createOpenCodeDatabase(tempRoot, workspacePath);
     await withIsolatedDatabase(() => {
+      sessionsDb.createAppSession('app-child-session-1', 'opencode', workspacePath);
+      sessionsDb.assignProviderSessionId('app-child-session-1', 'open-child-session-1');
+
       const synchronizer = new OpenCodeSessionSynchronizer();
       const processed = synchronizer.synchronize();
 
-      return Promise.resolve(processed).then((count) => {
+      return Promise.resolve(processed).then(async (count) => {
         assert.equal(count, 1);
         const indexed = sessionsDb.getSessionById('open-session-1');
         assert.equal(indexed?.provider, 'opencode');
         assert.equal(indexed?.project_path, workspacePath);
         assert.equal(indexed?.custom_name, 'OpenCode indexed title');
         assert.equal(indexed?.jsonl_path, null);
+        assert.equal(sessionsDb.getSessionById('app-child-session-1'), null);
+        assert.equal(sessionsDb.getSessionByProviderSessionId('open-child-session-1'), null);
+
+        sessionsDb.createAppSession('app-child-session-2', 'opencode', workspacePath);
+        sessionsDb.assignProviderSessionId('app-child-session-2', 'open-child-session-1');
+        await synchronizer.synchronize(new Date(1_700_000_004_500));
+        assert.equal(
+          sessionsDb.getSessionById('app-child-session-2')?.provider_session_id,
+          'open-child-session-1',
+        );
       });
     });
   } finally {
@@ -289,6 +327,7 @@ test('OpenCode session synchronizer returns the app session id once provider map
         assert.equal(sessionId, 'app-session-1');
         assert.equal(sessionsDb.getAllSessions().length, 1);
         assert.equal(sessionsDb.getSessionById('app-session-1')?.provider_session_id, 'open-session-1');
+        assert.equal(sessionsDb.getSessionById('open-child-session-1'), null);
       });
     });
   } finally {
@@ -315,6 +354,41 @@ test('OpenCode session synchronizer adopts the pending app session before watche
         assert.equal(sessionsDb.getSessionById('app-session-race')?.provider_session_id, 'open-session-1');
       });
     });
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('OpenCode sessions provider strips <images_input> from user turns and exposes attachments', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'opencode-session-images-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tempRoot);
+
+  try {
+    await createOpenCodeDatabase(tempRoot, workspacePath);
+
+    // Rewrite the user text part with the tagged prompt the runtime sends.
+    const taggedPrompt = appendImagesInputTag('Look at this screenshot.', [
+      { path: 'C:/Users/x/.cloudcli/assets/shot.png' },
+    ]);
+    const db = new Database(path.join(tempRoot, '.local', 'share', 'opencode', 'opencode.db'));
+    try {
+      db.prepare('UPDATE part SET data = ? WHERE id = ?').run(
+        JSON.stringify({ type: 'text', text: taggedPrompt }),
+        'part-user-text',
+      );
+    } finally {
+      db.close();
+    }
+
+    const provider = new OpenCodeSessionsProvider();
+    const history = await provider.fetchHistory('open-session-1');
+    const userMessage = history.messages.find((message) => message.kind === 'text' && message.role === 'user');
+
+    assert.equal(userMessage?.content, 'Look at this screenshot.');
+    assert.deepEqual(userMessage?.images, [{ path: 'C:/Users/x/.cloudcli/assets/shot.png' }]);
   } finally {
     restoreHomeDir();
     await rm(tempRoot, { recursive: true, force: true });
@@ -376,6 +450,110 @@ test('OpenCode sessions provider reads sqlite history and token usage', { concur
     assert.equal(paged.messages.length, 2);
     assert.equal(paged.hasMore, true);
     assert.equal(paged.messages[0]?.content, 'The provider is wired.');
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+/**
+ * Seeds a single OpenCode session with a controllable stored title and first
+ * user message. Uses a minimal schema (only the columns the synchronizer reads)
+ * with a plain-text user part so the derived name is unambiguous.
+ */
+const seedOpenCodeSession = async (
+  homeDir: string,
+  workspacePath: string,
+  options: { sessionId: string; title: string | null; firstUserText: string },
+): Promise<void> => {
+  const dataDir = path.join(homeDir, '.local', 'share', 'opencode');
+  await mkdir(dataDir, { recursive: true });
+
+  const db = new Database(path.join(dataDir, 'opencode.db'));
+  try {
+    db.exec(`
+      CREATE TABLE project (id TEXT PRIMARY KEY, worktree TEXT);
+      CREATE TABLE session (
+        id TEXT PRIMARY KEY,
+        project_id TEXT,
+        parent_id TEXT,
+        directory TEXT,
+        title TEXT,
+        time_created INTEGER,
+        time_updated INTEGER,
+        time_archived INTEGER
+      );
+      CREATE TABLE message (id TEXT PRIMARY KEY, session_id TEXT, time_created INTEGER, data TEXT);
+      CREATE TABLE part (id TEXT PRIMARY KEY, message_id TEXT, session_id TEXT, time_created INTEGER, data TEXT);
+    `);
+
+    db.prepare('INSERT INTO project (id, worktree) VALUES (?, ?)').run('project-1', workspacePath);
+    db.prepare(`
+      INSERT INTO session (id, project_id, directory, title, time_created, time_updated, time_archived)
+      VALUES (?, ?, ?, ?, ?, ?, NULL)
+    `).run(options.sessionId, 'project-1', workspacePath, options.title, 1_700_000_000_000, 1_700_000_001_000);
+    db.prepare('INSERT INTO message (id, session_id, time_created, data) VALUES (?, ?, ?, ?)')
+      .run('message-user', options.sessionId, 1_700_000_001_000, JSON.stringify({ role: 'user' }));
+    db.prepare('INSERT INTO part (id, message_id, session_id, time_created, data) VALUES (?, ?, ?, ?, ?)')
+      .run(
+        'part-user',
+        'message-user',
+        options.sessionId,
+        1_700_000_001_000,
+        // OpenCode persists the prompt as a JSON string literal inside the text
+        // field, so double-encode it here to exercise the unwrap on read.
+        JSON.stringify({ type: 'text', text: JSON.stringify(options.firstUserText) }),
+      );
+  } finally {
+    db.close();
+  }
+};
+
+test('OpenCode synchronizer preserves the title assigned when CloudCLI creates a session', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'opencode-session-sync-app-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tempRoot);
+
+  try {
+    // Both provider-owned values differ from the CloudCLI title so either one
+    // leaking through would change the assertion below.
+    await seedOpenCodeSession(tempRoot, workspacePath, {
+      sessionId: 'oc-app-1',
+      title: 'OpenCode generated title',
+      firstUserText: 'OpenCode first user prompt',
+    });
+    await withIsolatedDatabase(async () => {
+      sessionsDb.createAppSession('app-1', 'opencode', workspacePath, 'Fix the checkout crash');
+      sessionsDb.assignProviderSessionId('app-1', 'oc-app-1');
+
+      await new OpenCodeSessionSynchronizer().synchronize();
+
+      assert.equal(sessionsDb.getSessionById('app-1')?.custom_name, 'Fix the checkout crash');
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('OpenCode synchronizer keeps the stored title for indexed sessions', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'opencode-session-sync-indexed-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tempRoot);
+
+  try {
+    await seedOpenCodeSession(tempRoot, workspacePath, {
+      sessionId: 'oc-indexed-1',
+      title: 'OpenCode generated title',
+      firstUserText: 'This prompt should be ignored',
+    });
+    await withIsolatedDatabase(async () => {
+      await new OpenCodeSessionSynchronizer().synchronize();
+
+      assert.equal(sessionsDb.getSessionById('oc-indexed-1')?.custom_name, 'OpenCode generated title');
+    });
   } finally {
     restoreHomeDir();
     await rm(tempRoot, { recursive: true, force: true });

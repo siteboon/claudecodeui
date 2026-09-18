@@ -14,6 +14,7 @@ import {
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
+import { fileURLToPath } from 'node:url';
 
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 
@@ -22,16 +23,24 @@ import type {
   AnyRecord,
   ApiSuccessShape,
   AppErrorOptions,
-  LLMProvider,
   NormalizedMessage,
-  ProviderChangeActiveModelInput,
   ProviderCurrentActiveModel,
   ProviderModelsDefinition,
-  ProviderSessionActiveModelChange,
   ProviderSkillSource,
+  SubagentActivity,
   WorkspacePathValidationResult,
 } from '@/shared/types.js';
 
+//----------------- ENVIRONMENT UTILITIES ------------
+/**
+ * Indicates whether the backend is running in hosted Platform mode rather than
+ * self-hosted OSS mode. The server bootstrap, Agent, Auth, and Browser Use
+ * modules use this shared flag to keep environment-dependent behavior aligned.
+ * Environment variables must be loaded before this module is evaluated.
+ */
+export const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
+
+// ---------------------------
 //----------------- NORMALIZED MESSAGE HELPER INPUT TYPES ------------
 /**
  * Input payload accepted by `createNormalizedMessage`.
@@ -384,6 +393,45 @@ export function createCompleteMessage(opts: {
 }
 
 // ---------------------------
+//----------------- SUBAGENT TIMELINE UTILITIES ------------
+/**
+ * Longest tool output kept on one subagent activity.
+ *
+ * A subagent's timeline is nested inside a collapsed panel, so it is a preview
+ * of what the agent did, never the primary place its output is read. Sending
+ * every child command's full output made the history payload of an
+ * agent-heavy session grow by megabytes for content almost nobody expands.
+ */
+const MAX_SUBAGENT_ACTIVITY_CONTENT = 4000;
+
+function truncateForPreview(value: string | undefined): string | undefined {
+  if (typeof value !== 'string' || value.length <= MAX_SUBAGENT_ACTIVITY_CONTENT) {
+    return value;
+  }
+  const omitted = value.length - MAX_SUBAGENT_ACTIVITY_CONTENT;
+  return `${value.slice(0, MAX_SUBAGENT_ACTIVITY_CONTENT)}\n… ${omitted} more characters`;
+}
+
+/**
+ * Trims one subagent activity down to what its nested preview can show.
+ *
+ * Used by both provider session adapters so a Claude agent's timeline and a
+ * Codex agent's timeline cost the same to transport.
+ */
+export function truncateSubagentActivity(activity: SubagentActivity): SubagentActivity {
+  const truncatedContent = truncateForPreview(activity.content);
+  const truncatedResult = activity.toolResult
+    ? { ...activity.toolResult, content: truncateForPreview(activity.toolResult.content) }
+    : activity.toolResult;
+
+  if (truncatedContent === activity.content && truncatedResult === activity.toolResult) {
+    return activity;
+  }
+
+  return { ...activity, content: truncatedContent, toolResult: truncatedResult };
+}
+
+// ---------------------------
 //----------------- CONVERSATION HISTORY PAGINATION UTILITIES ------------
 /**
  * Slices one page from the END of a chronologically ordered message list.
@@ -512,213 +560,6 @@ export function buildDefaultProviderCurrentActiveModel(
 ): ProviderCurrentActiveModel {
   return {
     model: models.DEFAULT,
-  };
-}
-
-// ---------------------------
-//----------------- PROVIDER SESSION MODEL CHANGE UTILITIES ------------
-type ProviderSessionActiveModelChangeCacheEntry = ProviderSessionActiveModelChange & {
-  updatedAt: string;
-};
-
-type ProviderSessionActiveModelChangeCacheFile = {
-  version: number;
-  entries: Record<string, ProviderSessionActiveModelChangeCacheEntry>;
-};
-
-const PROVIDER_SESSION_ACTIVE_MODEL_CHANGE_CACHE_VERSION = 1;
-
-/**
- * Resolves the backend-owned cache file used for session-scoped resume model
- * overrides.
- *
- * The file lives under `~/.cloudcli` because these overrides are an application
- * concern rather than a provider-native config file. Providers, routes, and
- * runtime command launchers should all use this helper instead of re-creating
- * the path so the storage location stays consistent.
- */
-export function getProviderSessionActiveModelChangesPath(): string {
-  return path.join(os.homedir(), '.cloudcli', 'provider-session-active-model-changes.json');
-}
-
-const buildProviderSessionActiveModelChangeKey = (
-  provider: LLMProvider,
-  sessionId: string,
-): string => `${provider}:${sessionId}`;
-
-const isProviderSessionActiveModelChangeCacheEntry = (
-  value: unknown,
-): value is ProviderSessionActiveModelChangeCacheEntry => {
-  const record = readObjectRecord(value);
-  return Boolean(
-    record
-    && typeof record.provider === 'string'
-    && typeof record.sessionId === 'string'
-    && typeof record.supported === 'boolean'
-    && typeof record.changed === 'boolean'
-    && (typeof record.model === 'string' || record.model === null)
-    && typeof record.updatedAt === 'string',
-  );
-};
-
-const readProviderSessionActiveModelChangeCacheFile = async (
-  filePath: string,
-): Promise<ProviderSessionActiveModelChangeCacheFile> => {
-  try {
-    const raw = await readFile(filePath, 'utf8');
-    const parsed = readObjectRecord(JSON.parse(raw));
-    if (
-      !parsed
-      || parsed.version !== PROVIDER_SESSION_ACTIVE_MODEL_CHANGE_CACHE_VERSION
-      || !readObjectRecord(parsed.entries)
-    ) {
-      return {
-        version: PROVIDER_SESSION_ACTIVE_MODEL_CHANGE_CACHE_VERSION,
-        entries: {},
-      };
-    }
-
-    const entries = Object.fromEntries(
-      Object.entries(parsed.entries).filter((entry): entry is [string, ProviderSessionActiveModelChangeCacheEntry] =>
-        isProviderSessionActiveModelChangeCacheEntry(entry[1]),
-      ),
-    );
-
-    return {
-      version: PROVIDER_SESSION_ACTIVE_MODEL_CHANGE_CACHE_VERSION,
-      entries,
-    };
-  } catch {
-    return {
-      version: PROVIDER_SESSION_ACTIVE_MODEL_CHANGE_CACHE_VERSION,
-      entries: {},
-    };
-  }
-};
-
-const writeProviderSessionActiveModelChangeCacheFile = async (
-  filePath: string,
-  payload: ProviderSessionActiveModelChangeCacheFile,
-): Promise<void> => {
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
-};
-
-const buildUnsupportedProviderSessionActiveModelChange = (
-  provider: LLMProvider,
-  sessionId: string,
-): ProviderSessionActiveModelChange => ({
-  provider,
-  sessionId,
-  supported: false,
-  changed: false,
-  model: null,
-});
-
-/**
- * Reads the persisted session model-change state for one provider session.
- *
- * Runtime resume paths use this to decide whether they should inject a
- * provider-specific model argument/thread option for the next resumed turn.
- * Missing cache entries are normalized to `{ changed: false }` so callers can
- * treat absence as "use the ordinary model selection flow".
- */
-export async function readProviderSessionActiveModelChange(
-  provider: LLMProvider,
-  sessionId: string,
-  options: {
-    filePath?: string;
-    supported?: boolean;
-  } = {},
-): Promise<ProviderSessionActiveModelChange> {
-  const normalizedSessionId = sessionId.trim();
-  if (!normalizedSessionId) {
-    return buildUnsupportedProviderSessionActiveModelChange(provider, normalizedSessionId);
-  }
-
-  const supported = options.supported ?? true;
-  if (!supported) {
-    return buildUnsupportedProviderSessionActiveModelChange(provider, normalizedSessionId);
-  }
-
-  const filePath = options.filePath ?? getProviderSessionActiveModelChangesPath();
-  const cacheFile = await readProviderSessionActiveModelChangeCacheFile(filePath);
-  const cacheEntry = cacheFile.entries[
-    buildProviderSessionActiveModelChangeKey(provider, normalizedSessionId)
-  ];
-
-  if (!cacheEntry || !cacheEntry.changed || !cacheEntry.model?.trim()) {
-    return {
-      provider,
-      sessionId: normalizedSessionId,
-      supported: true,
-      changed: false,
-      model: null,
-    };
-  }
-
-  return {
-    provider,
-    sessionId: normalizedSessionId,
-    supported: true,
-    changed: true,
-    model: cacheEntry.model.trim(),
-  };
-}
-
-/**
- * Persists a session model-change request for one provider.
- *
- * Provider adapters call this when the frontend explicitly selects a different
- * model for an existing session. The stored `changed: true` flag is the single
- * source of truth used later by resume paths to decide whether they should add
- * a provider-native model override on the next invocation.
- */
-export async function writeProviderSessionActiveModelChange(
-  provider: LLMProvider,
-  input: ProviderChangeActiveModelInput,
-  options: {
-    filePath?: string;
-    supported?: boolean;
-  } = {},
-): Promise<ProviderSessionActiveModelChange> {
-  const normalizedSessionId = input.sessionId.trim();
-  const normalizedModel = input.model.trim();
-  const supported = options.supported ?? true;
-
-  if (!supported) {
-    return buildUnsupportedProviderSessionActiveModelChange(provider, normalizedSessionId);
-  }
-
-  if (!normalizedSessionId || !normalizedModel) {
-    return {
-      provider,
-      sessionId: normalizedSessionId,
-      supported: true,
-      changed: false,
-      model: null,
-    };
-  }
-
-  const filePath = options.filePath ?? getProviderSessionActiveModelChangesPath();
-  const cacheFile = await readProviderSessionActiveModelChangeCacheFile(filePath);
-  cacheFile.entries[buildProviderSessionActiveModelChangeKey(provider, normalizedSessionId)] = {
-    provider,
-    sessionId: normalizedSessionId,
-    supported: true,
-    changed: true,
-    model: normalizedModel,
-    updatedAt: new Date().toISOString(),
-  };
-
-  await writeProviderSessionActiveModelChangeCacheFile(filePath, cacheFile);
-
-  return {
-    provider,
-    sessionId: normalizedSessionId,
-    supported: true,
-    changed: true,
-    model: normalizedModel,
   };
 }
 
@@ -910,7 +751,7 @@ export async function findProviderSkillMarkdownFiles(
     }
 
     for (const entry of entries) {
-      if (entry.isDirectory()) {
+      if (entry.isDirectory() || entry.isSymbolicLink()) {
         await collectRecursive(path.join(dirPath, entry.name));
       }
     }
@@ -925,7 +766,7 @@ export async function findProviderSkillMarkdownFiles(
     const entries = await readdir(rootDir, { withFileTypes: true });
 
     for (const entry of entries) {
-      if (!entry.isDirectory()) {
+      if (!entry.isDirectory() && !entry.isSymbolicLink()) {
         continue;
       }
 
@@ -1064,6 +905,30 @@ export function readJsonRecord(value: unknown): AnyRecord | null {
  */
 export function getOpenCodeDatabasePath(): string {
   return path.join(os.homedir(), '.local', 'share', 'opencode', 'opencode.db');
+}
+
+/**
+ * Decodes an OpenCode text payload that was persisted as a JSON string literal.
+ *
+ * OpenCode can store the first user prompt (and other text parts) as `"hello"`
+ * instead of `hello`. Used by both the OpenCode session reader (transcript
+ * history) and the OpenCode synchronizer (session titling) so a session name or
+ * message body never surfaces with surrounding quote characters. Only fully
+ * quoted, valid JSON string literals are unwrapped; ordinary prose that merely
+ * happens to start/end with a quote is returned untouched.
+ */
+export function unwrapJsonStringLiteral(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('"') || !trimmed.endsWith('"')) {
+    return value;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    return typeof parsed === 'string' ? parsed : value;
+  } catch {
+    return value;
+  }
 }
 
 // ---------------------------
@@ -1239,3 +1104,127 @@ export async function extractFirstValidJsonlData<T>(
   return null;
 }
 
+// ---------------------------
+//----------------- CLI PROMPT ARGUMENT UTILITIES ------------
+/**
+ * Makes a prompt safe to pass as one CLI argument to `.cmd`-shimmed tools on
+ * Windows (cursor-agent and opencode installed via npm-style shims).
+ *
+ * cmd.exe cannot carry newlines inside an argument: everything after the
+ * first newline is silently dropped before the target CLI ever sees it, which
+ * truncates multi-line prompts and any appended `<images_input>` block.
+ * Collapsing newline runs to single spaces loses formatting but never loses
+ * content, so runtimes should call this on win32 right before spawning.
+ *
+ * Used by the cursor and opencode spawn runtimes.
+ */
+export function flattenPromptForWindowsShell(prompt: string): string {
+  if (process.platform !== 'win32' || typeof prompt !== 'string') {
+    return prompt;
+  }
+  return prompt.replace(/\s*\r?\n\s*/g, ' ').trim();
+}
+
+// ---------------------------
+//----------------- TERMINAL OUTPUT UTILITIES ------------
+/**
+ * Matches the escape sequences a CLI emits when it believes it is writing to a
+ * terminal, in the three shapes those tools actually produce:
+ * - OSC (`ESC ]` … terminated by BEL or ST), used for titles and hyperlinks.
+ * - CSI (`ESC [`, or the 8-bit `\u009B` introducer that stands in for both
+ *   bytes), used for SGR colors and cursor control.
+ * - any other ECMA-48 escape sequence: `ESC`, optional intermediate bytes
+ *   (`0x20`-`0x2F`), one final byte (`0x30`-`0x7E`), such as `ESC ( B`.
+ *
+ * OSC and CSI are listed first so their terminators are consumed by the
+ * specific alternative rather than by the generic one.
+ */
+const ANSI_ESCAPE_SEQUENCE_REGEX =
+  /\u001B\][^\u0007\u001B]*(?:\u0007|\u001B\\)|(?:\u001B\[|\u009B)[0-?]*[ -/]*[@-~]|\u001B[ -/]*[0-~]/g;
+
+/**
+ * Removes ANSI escape sequences from text captured off a CLI's stdout or
+ * stderr. Provider runtimes, session readers, and the shell WebSocket share
+ * this because every one of them forwards captured process output to a web
+ * client that renders plain text: left in, the escapes show up verbatim
+ * (`[93m[1m!`) instead of as styling.
+ *
+ * The result can be empty when the input was styling only, so callers that
+ * forward the text should re-check for emptiness after cleaning.
+ */
+export function stripAnsiSequences(value: string): string {
+  return value.replace(ANSI_ESCAPE_SEQUENCE_REGEX, '');
+}
+
+const ANSI_TERMINAL_STYLES = {
+  reset: '\x1b[0m',
+  bright: '\x1b[1m',
+  dim: '\x1b[2m',
+  cyan: '\x1b[36m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+} as const;
+
+/**
+ * Applies the small, consistent ANSI style vocabulary used by backend
+ * terminal output. The CLI and server bootstrap share these formatters so
+ * status, warning, and startup messages use one implementation. Callers
+ * should pass complete display strings and write the returned value directly
+ * to stdout or stderr; the reset suffix prevents styling subsequent output.
+ */
+export const terminalTextStyles = {
+  info: (text: string): string =>
+    `${ANSI_TERMINAL_STYLES.cyan}${text}${ANSI_TERMINAL_STYLES.reset}`,
+  ok: (text: string): string =>
+    `${ANSI_TERMINAL_STYLES.green}${text}${ANSI_TERMINAL_STYLES.reset}`,
+  warn: (text: string): string =>
+    `${ANSI_TERMINAL_STYLES.yellow}${text}${ANSI_TERMINAL_STYLES.reset}`,
+  error: (text: string): string =>
+    `${ANSI_TERMINAL_STYLES.yellow}${text}${ANSI_TERMINAL_STYLES.reset}`,
+  tip: (text: string): string =>
+    `${ANSI_TERMINAL_STYLES.blue}${text}${ANSI_TERMINAL_STYLES.reset}`,
+  bright: (text: string): string =>
+    `${ANSI_TERMINAL_STYLES.bright}${text}${ANSI_TERMINAL_STYLES.reset}`,
+  dim: (text: string): string =>
+    `${ANSI_TERMINAL_STYLES.dim}${text}${ANSI_TERMINAL_STYLES.reset}`,
+};
+
+// ---------------------------
+//----------------- RUNTIME PATH RESOLUTION UTILITIES ------------
+/**
+ * Resolves the directory containing an ES module from `import.meta.url`.
+ * Backend entrypoints and feature composition roots use this instead of
+ * recreating CommonJS `__dirname` logic.
+ */
+export function getModuleDirectory(importMetaUrl: string): string {
+  return path.dirname(fileURLToPath(importMetaUrl));
+}
+
+/**
+ * Walks upward to the nearest `server` directory in either source or compiled
+ * output. Callers use this stable anchor for server-relative resources.
+ */
+export function findServerRoot(startDirectory: string): string {
+  let currentDirectory = startDirectory;
+  while (path.basename(currentDirectory) !== 'server') {
+    const parentDirectory = path.dirname(currentDirectory);
+    if (parentDirectory === currentDirectory) {
+      throw new Error(`Could not resolve the backend server root from "${startDirectory}".`);
+    }
+    currentDirectory = parentDirectory;
+  }
+  return currentDirectory;
+}
+
+/**
+ * Resolves the application root from a source or `dist-server/server` path so
+ * package-level resources work identically before and after compilation.
+ */
+export function findApplicationRoot(startDirectory: string): string {
+  const serverRoot = findServerRoot(startDirectory);
+  const parentDirectory = path.dirname(serverRoot);
+  return path.basename(parentDirectory) === 'dist-server'
+    ? path.dirname(parentDirectory)
+    : parentDirectory;
+}

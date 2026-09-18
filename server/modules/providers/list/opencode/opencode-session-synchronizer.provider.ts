@@ -11,6 +11,7 @@ import {
   normalizeSessionName,
   readJsonRecord,
   readOptionalString,
+  unwrapJsonStringLiteral,
 } from '@/shared/utils.js';
 
 type OpenCodeSessionRow = {
@@ -27,17 +28,23 @@ type SynchronizeRowsResult = {
   firstSessionId: string | null;
 };
 
+type OpenCodeChildSessionRow = {
+  id: string;
+};
+
 /**
  * Session indexer for OpenCode's SQLite-backed session store.
  */
 export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer {
   private readonly provider = 'opencode' as const;
+  private childSessionsReconciled = false;
 
   /**
    * Scans OpenCode's shared opencode.db and upserts active sessions into DB.
    */
   async synchronize(since?: Date): Promise<number> {
-    const result = this.synchronizeRows(since);
+    // The first provider-wide scan also reconciles child rows indexed by older versions.
+    const result = this.synchronizeRows(since, undefined, !this.childSessionsReconciled);
     return result.processed;
   }
 
@@ -53,7 +60,11 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
     return result.firstSessionId;
   }
 
-  private synchronizeRows(since?: Date, limit?: number): SynchronizeRowsResult {
+  private synchronizeRows(
+    since?: Date,
+    limit?: number,
+    pruneChildSessions = false,
+  ): SynchronizeRowsResult {
     const dbPath = getOpenCodeDatabasePath();
     if (!fsSync.existsSync(dbPath)) {
       return { processed: 0, firstSessionId: null };
@@ -61,6 +72,11 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
 
     const db = new Database(dbPath, { readonly: true, fileMustExist: true });
     try {
+      if (pruneChildSessions) {
+        this.pruneChildSessions(db);
+        this.childSessionsReconciled = true;
+      }
+
       const sinceMillis = since?.getTime() ?? null;
       const limitClause = limit ? 'LIMIT ?' : '';
       const params = limit ? [sinceMillis, sinceMillis, limit] : [sinceMillis, sinceMillis];
@@ -75,6 +91,7 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
         FROM session s
         LEFT JOIN project p ON p.id = s.project_id
         WHERE s.time_archived IS NULL
+          AND s.parent_id IS NULL
           AND (? IS NULL OR COALESCE(s.time_updated, s.time_created, 0) >= ?)
         ORDER BY COALESCE(s.time_updated, s.time_created, 0) DESC, s.id DESC
         ${limitClause}
@@ -104,6 +121,18 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
     }
   }
 
+  private pruneChildSessions(db: Database.Database): void {
+    const childSessions = db.prepare(`
+      SELECT id
+      FROM session
+      WHERE parent_id IS NOT NULL
+    `).all() as OpenCodeChildSessionRow[];
+
+    for (const childSession of childSessions) {
+      sessionsDb.deleteSessionByProviderSessionId(childSession.id, this.provider);
+    }
+  }
+
   private upsertSession(db: Database.Database, row: OpenCodeSessionRow): string | null {
     const sessionId = readOptionalString(row.id);
     const projectPath = readOptionalString(row.directory) ?? readOptionalString(row.worktree);
@@ -128,9 +157,13 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
     const existingSession = sessionsDb.getSessionByProviderSessionId(sessionId)
       ?? sessionsDb.getSessionById(sessionId);
     const existingName = existingSession?.custom_name;
-    const nextName = existingName && existingName !== fallbackTitle
-      ? existingName
-      : readOptionalString(row.title) ?? this.readFirstUserText(db, sessionId);
+
+    let nextName: string | undefined;
+    if (existingName && existingName !== fallbackTitle) {
+      nextName = existingName;
+    } else {
+      nextName = readOptionalString(row.title) ?? this.readFirstUserText(db, sessionId);
+    }
 
     // OpenCode stores every session in one shared sqlite database, so jsonl_path
     // must stay null to avoid deleting opencode.db when one app session is removed.
@@ -163,7 +196,10 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
       `).get(sessionId) as { data: string | null } | undefined;
 
       const data = readJsonRecord(row?.data);
-      return readOptionalString(data?.text);
+      const text = readOptionalString(data?.text);
+      // OpenCode persists the first prompt as a JSON string literal (e.g.
+      // `"hello"`), so decode it to avoid titling the session with quotes.
+      return text === undefined ? undefined : unwrapJsonStringLiteral(text);
     } catch {
       return undefined;
     }

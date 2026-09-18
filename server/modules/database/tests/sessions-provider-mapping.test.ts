@@ -45,7 +45,7 @@ test('disk-discovered sessions are keyed by the provider id for both columns', a
 
 test('app sessions get the provider id assigned without creating a duplicate row', async () => {
   await withIsolatedDatabase(() => {
-    sessionsDb.createAppSession('app-id-1', 'claude', '/workspace/demo');
+    sessionsDb.createAppSession('app-id-1', 'claude', '/workspace/demo', 'Initial CloudCLI message');
     sessionsDb.assignProviderSessionId('app-id-1', 'provider-xyz');
 
     // A later synchronizer pass that discovers the transcript on disk must
@@ -66,6 +66,7 @@ test('app sessions get the provider id assigned without creating a duplicate row
     const row = sessionsDb.getSessionById('app-id-1');
     assert.equal(row?.provider_session_id, 'provider-xyz');
     assert.equal(row?.jsonl_path, '/fake/path/provider-xyz.jsonl');
+    assert.equal(row?.custom_name, 'Initial CloudCLI message');
   });
 });
 
@@ -100,9 +101,9 @@ test('assignProviderSessionId merges a watcher-created duplicate into the app ro
 
 test('legacy provider-keyed rows stay resolvable through both lookups', async () => {
   await withIsolatedDatabase(() => {
-    sessionsDb.createSession('legacy-1', 'gemini', '/workspace/demo');
+    sessionsDb.createSession('legacy-1', 'opencode', '/workspace/demo');
 
-    assert.equal(sessionsDb.getSessionById('legacy-1')?.provider, 'gemini');
+    assert.equal(sessionsDb.getSessionById('legacy-1')?.provider, 'opencode');
     assert.equal(sessionsDb.getSessionByProviderSessionId('legacy-1')?.session_id, 'legacy-1');
   });
 });
