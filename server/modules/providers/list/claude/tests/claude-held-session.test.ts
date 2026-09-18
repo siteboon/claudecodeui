@@ -294,3 +294,109 @@ test('recurring work suspends the countdown for good', (t) => {
   t.mock.timers.tick(60_000);
   assert.equal(session.closed, false, 'the flag is sticky for the life of the process');
 });
+
+/**
+ * A process driven frame by frame, so a test can make one arrive while no turn
+ * is running - a background job reporting in minutes after the turn that
+ * launched it, which is what a held session exists for.
+ */
+function fakeDrivenQuery() {
+  const queued: unknown[] = [];
+  let wake: (() => void) | null = null;
+  let done = false;
+
+  const instance = (async function* () {
+    while (!done) {
+      while (queued.length > 0) {
+        yield queued.shift();
+      }
+      if (done) {
+        return;
+      }
+      await new Promise<void>((resolve) => {
+        wake = resolve;
+      });
+      wake = null;
+    }
+  })() as AsyncGenerator<unknown> & {
+    setModel: (model?: string) => Promise<void>;
+    setPermissionMode: (mode: string) => Promise<void>;
+  };
+
+  instance.setModel = async () => {};
+  instance.setPermissionMode = async () => {};
+
+  return {
+    instance,
+    /** Pushes frames into the stream and lets the pump read them. */
+    emit(...messages: unknown[]) {
+      queued.push(...messages);
+      wake?.();
+      // Two turns of the microtask queue: one to wake the generator, one for
+      // the pump to hand what it read to its listener.
+      return new Promise<void>((resolve) => setImmediate(resolve));
+    },
+    stop() {
+      done = true;
+      wake?.();
+    },
+  };
+}
+
+test('work that reports in between turns reaches the handler the last turn left', async () => {
+  const session = new HeldClaudeSession({ sessionKey: 'session-background', fingerprint: fingerprint() });
+  const query = fakeDrivenQuery();
+  session.start(query.instance, () => {});
+
+  const turn: unknown[] = [];
+  const running = session.runTurn({ promptMessages: [{ text: 'run the workflow' }], onMessage: (m) => turn.push(m) });
+  await query.emit({ type: 'assistant', text: 'launched' }, { type: 'result', subtype: 'success' });
+  await running;
+
+  const afterwards: unknown[] = [];
+  session.setBetweenTurnsHandler((message) => afterwards.push(message));
+
+  // The frame that used to be dropped: the turn is over, the work is not.
+  const progress = { type: 'system', subtype: 'task_progress', task_id: 'w1' };
+  await query.emit(progress);
+  assert.deepEqual(afterwards, [progress]);
+
+  // A turn that starts again takes priority over the standing handler.
+  const second: unknown[] = [];
+  const secondTurn = session.runTurn({ promptMessages: [{ text: 'and again' }], onMessage: (m) => second.push(m) });
+  await query.emit({ type: 'assistant', text: 'answer' }, { type: 'result', subtype: 'success' });
+  await secondTurn;
+
+  assert.equal(second.length, 2);
+  assert.equal(afterwards.length, 1, 'a running turn is served by the turn, not by the handler');
+
+  query.stop();
+  session.close();
+  assert.equal(session.betweenTurns, null, 'a closed session has nobody left to deliver to');
+});
+
+test('a between-turns delivery that throws does not end the stream', async () => {
+  const session = new HeldClaudeSession({ sessionKey: 'session-background-throws', fingerprint: fingerprint() });
+  const query = fakeDrivenQuery();
+  session.start(query.instance, () => {});
+
+  const first = session.runTurn({ promptMessages: [{ text: 'one' }], onMessage: () => {} });
+  await query.emit({ type: 'result', subtype: 'success' });
+  await first;
+
+  session.setBetweenTurnsHandler(() => {
+    throw new Error('socket is gone');
+  });
+  await query.emit({ type: 'system', subtype: 'task_progress' });
+
+  // The socket it was addressed to may be long gone; the process must not be.
+  const second: unknown[] = [];
+  const secondTurn = session.runTurn({ promptMessages: [{ text: 'two' }], onMessage: (m) => second.push(m) });
+  await query.emit({ type: 'assistant', text: 'answer' }, { type: 'result', subtype: 'success' });
+  await secondTurn;
+
+  assert.equal(second.length, 2, 'the process still serves turns');
+
+  query.stop();
+  session.close();
+});

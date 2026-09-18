@@ -280,6 +280,25 @@ export type CompactionInfo = {
   error?: string | null;
 };
 
+/**
+ * What a background run has done so far, as it reports while it runs.
+ *
+ * Live only: none of it is written to the transcript, so after a reload a run
+ * still in progress shows as running with no numbers against it.
+ */
+export type TaskProgress = {
+  /** The run's own id, which is also how updates about it are addressed. */
+  taskId?: string;
+  /** Tool calls it has made so far. */
+  toolUses?: number;
+  /** The tool it reached for most recently. */
+  lastToolName?: string;
+  /** Wall clock since it started, in milliseconds. */
+  durationMs?: number;
+  /** One line about what it is doing, when it publishes one. */
+  summary?: string;
+};
+
 export type SubagentInfo = {
   id: string;
   name?: string;
@@ -347,6 +366,8 @@ export type ChatMessage = {
   memoryCitations?: MemoryCitation[];
   /** Lifecycle the provider reported for this tool call, when it reports one; otherwise the status is inferred from whether a result has arrived. */
   toolStatus?: string;
+  /** What the background work this call launched has done so far, while it runs. */
+  toolProgress?: TaskProgress;
   [key: string]: unknown;
 };
 
@@ -520,6 +541,8 @@ export type NormalizedMessage = {
   subagentTools?: SubagentActivity[];
   /** Identity and lifecycle of that subagent. */
   subagent?: SubagentInfo;
+  /** How far along the background run this row reports on is. */
+  taskProgress?: TaskProgress;
   /** Stored memory this reply drew on, when the provider reports it. */
   memoryCitations?: MemoryCitation[];
   isFinal?: boolean;
@@ -544,7 +567,8 @@ type MessageKind =
   | 'permission_cancelled'
   | 'session_created'
   | 'history_truncated'
-  | 'task_notification';
+  | 'task_notification'
+  | 'task_progress';
 
 // ---------------------------
 

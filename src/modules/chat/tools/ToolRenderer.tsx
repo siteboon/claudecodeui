@@ -1,6 +1,6 @@
 import React, { memo, useMemo, useCallback } from 'react';
 
-import type { DiffLine, Project,ToolStatus } from '@/shared/types';
+import type { DiffLine, Project,TaskProgress,ToolStatus } from '@/shared/types';
 import { formatToolDisplayName, getToolConfig } from '@/modules/chat/tools/configs/toolConfigs';
 import { OneLineDisplay } from '@/modules/chat/tools/OneLineDisplay';
 import { BashCommandDisplay } from '@/modules/chat/tools/BashCommandDisplay';
@@ -31,6 +31,8 @@ type ToolRendererProps = {
   rawToolInput?: string;
   /** Lifecycle the provider reported, when it reports one. Overrides the result-based inference. */
   toolStatus?: string;
+  /** What the background work this call launched has done so far, while it runs. */
+  toolProgress?: TaskProgress;
 };
 
 function getToolCategory(toolName: string): string {
@@ -52,6 +54,33 @@ const CLAUDE_DENIAL_MESSAGES = [
   'permission request timed out',
   'permission request cancelled',
 ];
+
+/**
+ * One line of what a background run has done, for the header of the card that
+ * launched it: `17 tools · Bash · 4m`.
+ *
+ * Every part is optional because the run reports what it has; a frame that only
+ * changes the status carries no counters at all, and an empty string means the
+ * header stays as it was rather than showing a shell with nothing in it.
+ */
+function summarizeTaskProgress(progress?: TaskProgress): string {
+  if (!progress) {
+    return '';
+  }
+
+  const parts: string[] = [];
+  if (typeof progress.toolUses === 'number' && progress.toolUses > 0) {
+    parts.push(`${progress.toolUses} ${progress.toolUses === 1 ? 'tool' : 'tools'}`);
+  }
+  if (progress.lastToolName) {
+    parts.push(progress.lastToolName);
+  }
+  if (typeof progress.durationMs === 'number' && progress.durationMs >= 60_000) {
+    parts.push(`${Math.round(progress.durationMs / 60_000)}m`);
+  }
+
+  return parts.join(' · ');
+}
 
 function deriveToolStatus(toolResult: any, reportedStatus?: string): ToolStatus {
   // Codex reports a command's lifecycle directly, so a row can show as running
@@ -88,6 +117,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
   showRawParameters = false,
   rawToolInput,
   toolStatus: reportedStatus,
+  toolProgress,
 }) => {
   const config = getToolConfig(toolName);
   const displayConfig: any = mode === 'input' ? config.input : config.result;
@@ -309,13 +339,20 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
     const statusBadge = toolStatus && toolStatus !== 'completed'
       ? <ToolStatusBadge status={toolStatus} />
       : null;
+    // What the run has done so far, beside its badge: a card for work that
+    // takes twenty minutes is otherwise indistinguishable from one that is done.
+    const progressLabel = toolStatus === 'running' ? summarizeTaskProgress(toolProgress) : '';
+    const progressBadge = progressLabel
+      ? <span className="text-[11px] tabular-nums text-muted-foreground">{progressLabel}</span>
+      : null;
     const statsBadge = diffStats ? <DiffStatsBadge stats={diffStats} /> : null;
     // The header is sticky while the section is open, so the counts stay
     // visible over a long diff rather than scrolling away with it.
-    const badgeElement = statusBadge || statsBadge
+    const badgeElement = statusBadge || statsBadge || progressBadge
       ? (
         <span className="inline-flex items-center gap-1.5">
           {statsBadge}
+          {progressBadge}
           {statusBadge}
         </span>
       )

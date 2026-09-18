@@ -3,7 +3,7 @@
  * Converts NormalizedMessage[] from the session store into ChatMessage[] for the UI.
  */
 
-import type { ChatMessage,NormalizedMessage,SubagentActivity } from '@/shared/types';
+import type { ChatMessage,NormalizedMessage,SubagentActivity,TaskProgress } from '@/shared/types';
 import { formatUsageLimitText } from '@/modules/chat/utils/chatFormatting';
 import { isSubagentToolName } from '@/modules/chat/tools/toolAliases';
 
@@ -30,6 +30,8 @@ type CachedMessageProjection = {
   toolResultSource: ToolResultSource;
   /** A live subagent container also depends on the newest row folded into its timeline. */
   subagentActivitySource: NormalizedMessage | null;
+  /** A card with background work also depends on that run's newest lifecycle row. */
+  taskProgressSource: NormalizedMessage | null;
   messages: ChatMessage[];
 };
 
@@ -201,6 +203,13 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
   const liveSubagentToolsById = new Map<string, SubagentActivity>();
   /** Newest folded row per container, so its cached projection knows to rebuild. */
   const lastSubagentSourceByParent = new Map<string, NormalizedMessage>();
+  /**
+   * What each background run has reported about itself, merged: a status-only
+   * update must not wipe the counters an earlier progress frame carried.
+   */
+  const taskProgressByToolId = new Map<string, TaskProgress>();
+  /** Newest lifecycle row per card, so its cached projection knows to rebuild. */
+  const lastTaskRowByToolId = new Map<string, NormalizedMessage>();
   for (const msg of messages) {
     if (msg.parentToolUseId) {
       const parentId = msg.parentToolUseId;
@@ -262,6 +271,16 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
       toolUseIds.add(msg.toolId);
     }
 
+    // A background run reports on the card that launched it, not as a row of
+    // its own — the card is the only place its progress means anything.
+    if (msg.kind === 'task_progress' && msg.toolId) {
+      taskProgressByToolId.set(msg.toolId, {
+        ...taskProgressByToolId.get(msg.toolId),
+        ...msg.taskProgress,
+      });
+      lastTaskRowByToolId.set(msg.toolId, msg);
+    }
+
     if (msg.kind === 'tool_result' && msg.toolId) {
       toolResultMap.set(msg.toolId, msg);
     }
@@ -288,6 +307,9 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
     const subagentActivitySource = msg.kind === 'tool_use' && msg.toolId
       ? lastSubagentSourceByParent.get(msg.toolId) ?? null
       : null;
+    const taskProgressSource = msg.kind === 'tool_use' && msg.toolId
+      ? lastTaskRowByToolId.get(msg.toolId) ?? null
+      : null;
     const cachedProjection = projectionCache.get(msg);
 
     // A tool-use projection must be rebuilt when a matching result arrives,
@@ -296,6 +318,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
     if (
       cachedProjection?.toolResultSource === toolResultSource
       && cachedProjection.subagentActivitySource === subagentActivitySource
+      && cachedProjection.taskProgressSource === taskProgressSource
     ) {
       converted.push(...cachedProjection.messages);
       continue;
@@ -414,7 +437,12 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           toolInput: typeof msg.toolInput === 'string' ? msg.toolInput : JSON.stringify(msg.toolInput ?? '', null, 2),
           toolId: msg.toolId,
           toolResult,
-          toolStatus: typeof msg.status === 'string' ? msg.status : undefined,
+          // A background launch answers "is there a result yet" with yes in the
+          // same second it starts, so the run's own report — while it has one —
+          // is the only honest source for this card's badge.
+          toolStatus: taskProgressSource?.status
+            ?? (typeof msg.status === 'string' ? msg.status : undefined),
+          toolProgress: msg.toolId ? taskProgressByToolId.get(msg.toolId) : undefined,
           isSubagentContainer,
           subagent: msg.subagent,
           subagentActivity,
@@ -453,6 +481,10 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
             timestamp: msg.timestamp,
             ...sharedMetadata,
           });
+        break;
+
+      // Folded onto the card that launched the run, in the pass above.
+      case 'task_progress':
         break;
 
       case 'task_notification':
@@ -527,6 +559,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
     projectionCache.set(msg, {
       toolResultSource,
       subagentActivitySource,
+      taskProgressSource,
       // One source record can produce zero, one, or two UI messages (task
       // notifications with a result produce two), so cache the whole slice.
       messages: converted.slice(convertedStart),

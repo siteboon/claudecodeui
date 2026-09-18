@@ -84,6 +84,8 @@ export class HeldClaudeSession {
     this.release = () => {};
     /** The turn being served right now, or null between turns. */
     this.turn = null;
+    /** Where messages go while no turn is being served. */
+    this.betweenTurns = null;
     /** Messages waiting to go into stdin. */
     this.queue = [];
     /** Resolves the generator's pending `await` when something is queued. */
@@ -265,17 +267,32 @@ export class HeldClaudeSession {
   }
 
   /**
-   * Reads the query for as long as it lives, handing every message to the turn
-   * that is currently being served.
+   * Reads the query for as long as it lives, handing every message to whoever
+   * is listening: the turn being served, or - between turns - the handler the
+   * last turn left behind for the work it started.
    *
-   * The loop outlives the individual turn - that is the whole point - so a
-   * message arriving between turns (background work reporting in) has no one to
-   * go to and is dropped rather than sent to a stale socket.
+   * The loop outlives the individual turn, which is the whole point, and a
+   * background job reports in long after the turn that launched it ended. Those
+   * messages used to be dropped here for want of a destination, so a `Workflow`
+   * running for twenty minutes showed nothing at all: the card went to
+   * `completed` on its launch acknowledgement and never moved again.
    */
   async consume() {
     try {
       for await (const message of this.instance) {
-        this.turn?.onMessage(message);
+        if (this.turn) {
+          this.turn.onMessage(message);
+          continue;
+        }
+
+        try {
+          this.betweenTurns?.(message);
+        } catch (error) {
+          // The socket this was addressed to may be long gone. That is a
+          // message lost, not a process lost - throwing here would end the
+          // loop and take the CLI down with it.
+          console.warn('[HeldClaudeSession] Between-turns delivery failed:', error);
+        }
       }
     } catch (error) {
       this.turn?.onError(error);
@@ -359,6 +376,20 @@ export class HeldClaudeSession {
   }
 
   /**
+   * Leaves someone to receive what arrives after the turn ends.
+   *
+   * Set by a turn that armed a hold - it is that turn's own message handler, so
+   * background work reports into the same client as the work that started it.
+   * Every later turn replaces it, which is how delivery follows the current
+   * socket instead of the one the first turn happened to arrive on.
+   *
+   * @param {((message: Object) => void)|null} handler - Receives between-turn messages
+   */
+  setBetweenTurnsHandler(handler) {
+    this.betweenTurns = typeof handler === 'function' ? handler : null;
+  }
+
+  /**
    * Marks whether the last turn left background work running.
    *
    * @param {boolean} outstanding - True while work from a turn is still going
@@ -407,6 +438,7 @@ export class HeldClaudeSession {
 
     this.closed = true;
     this.clearIdle();
+    this.betweenTurns = null;
     heldSessions.delete(this.sessionKey);
     // Wakes the prompt stream so it can end, which closes stdin.
     this.wake?.();

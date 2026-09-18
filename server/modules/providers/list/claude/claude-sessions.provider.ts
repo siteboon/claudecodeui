@@ -12,6 +12,7 @@ import type {
   NormalizedMessage,
   SubagentActivity,
   SubagentInfo,
+  TaskProgress,
 } from '@/shared/types.js';
 import { parseFilesInputTag } from '@/shared/image-attachments.js';
 import { prepareTranscriptMessages } from '@/shared/message-unification.js';
@@ -56,6 +57,8 @@ type ClaudeToolResult = {
   subagentTools?: SubagentActivity[];
   subagent?: SubagentInfo;
   toolUseResult?: unknown;
+  /** Lifecycle of the background work this result launched, when it launched any. */
+  taskStatus?: string;
 };
 
 type ClaudeHistoryResult =
@@ -289,6 +292,136 @@ function collectTaskNotifications(messages: AnyRecord[]): Map<string, ClaudeTask
   }
 
   return notifications;
+}
+
+/**
+ * Which tool call each live background run belongs to.
+ *
+ * `task_updated` names only the run, while the card that has to change is
+ * addressed by `tool_use_id` — the two are introduced to each other once, by
+ * `task_started`, and never again. Bounded because a long-lived process serves
+ * many runs and nothing ever reports that one can be forgotten.
+ */
+const taskToolUseIds = new Map<string, string>();
+const MAX_REMEMBERED_TASKS = 500;
+
+function rememberTaskToolUseId(taskId: string, toolUseId: string): void {
+  if (taskToolUseIds.size >= MAX_REMEMBERED_TASKS) {
+    const oldest = taskToolUseIds.keys().next().value;
+    if (oldest !== undefined) {
+      taskToolUseIds.delete(oldest);
+    }
+  }
+  taskToolUseIds.set(taskId, toolUseId);
+}
+
+/**
+ * Translates a background run's lifecycle into the status vocabulary tool cards
+ * already understand (the one Codex reports for its commands).
+ *
+ * `stopped` is deliberate — the user killed the run — so it is not an error;
+ * it reads as finished, and the summary folded onto the card says by whom.
+ */
+function mapTaskStatusToToolStatus(taskStatus: string): string | undefined {
+  switch (taskStatus) {
+    case 'running':
+    case 'pending':
+      return 'in_progress';
+    case 'failed':
+    case 'killed':
+      return 'failed';
+    case 'completed':
+    case 'stopped':
+      return 'completed';
+    default:
+      return undefined;
+  }
+}
+
+/** The `system` frames a background run reports its own lifecycle on. */
+const TASK_LIFECYCLE_SUBTYPES = new Set([
+  'task_started',
+  'task_progress',
+  'task_updated',
+  'task_notification',
+]);
+
+/**
+ * Turns one lifecycle frame into an update addressed to the card that started
+ * the run.
+ *
+ * The outcome is deliberately *not* emitted as a `task_notification`: the same
+ * outcome also arrives as a `<task-notification>` turn, which is what the
+ * transcript keeps and what the client already renders. This row only moves the
+ * card, so a finished run settles without being announced twice.
+ */
+function buildTaskLifecycleRow(
+  raw: AnyRecord,
+  sessionId: string | null,
+  ts: string,
+  baseId: string,
+): NormalizedMessage | null {
+  // Ambient housekeeping: the SDK asks consumers to keep these out of the
+  // transcript entirely.
+  if (raw.skip_transcript === true) {
+    return null;
+  }
+
+  const subtype = String(raw.subtype);
+  const taskId = typeof raw.task_id === 'string' ? raw.task_id : '';
+  const namedToolUseId = typeof raw.tool_use_id === 'string' ? raw.tool_use_id : '';
+  if (taskId && namedToolUseId) {
+    rememberTaskToolUseId(taskId, namedToolUseId);
+  }
+
+  // `task_updated` names only the run, so it is deliverable only once
+  // `task_started` has said which card the run belongs to.
+  const toolUseId = namedToolUseId || (taskId ? taskToolUseIds.get(taskId) ?? '' : '');
+  if (!toolUseId) {
+    return null;
+  }
+
+  const patch = readObjectRecord(raw.patch) ?? {};
+  const usage = readObjectRecord(raw.usage) ?? {};
+  const reportedStatus = subtype === 'task_updated'
+    ? String(patch.status ?? '')
+    : subtype === 'task_notification'
+      ? String(raw.status ?? '')
+      : 'running';
+
+  const progress: TaskProgress = {};
+  if (taskId) {
+    progress.taskId = taskId;
+  }
+  const toolUses = Number(usage.tool_uses);
+  if (Number.isFinite(toolUses) && toolUses > 0) {
+    progress.toolUses = toolUses;
+  }
+  const durationMs = Number(usage.duration_ms);
+  if (Number.isFinite(durationMs) && durationMs > 0) {
+    progress.durationMs = durationMs;
+  }
+  if (typeof raw.last_tool_name === 'string' && raw.last_tool_name) {
+    progress.lastToolName = raw.last_tool_name;
+  }
+  // `workflow_name` is the script's own `meta.name`; on the frames that carry
+  // neither, the description is what the run was asked to do.
+  const said = [raw.workflow_name, raw.summary, raw.description]
+    .find((value) => typeof value === 'string' && value.trim());
+  if (typeof said === 'string') {
+    progress.summary = said.trim();
+  }
+
+  return createNormalizedMessage({
+    id: `${baseId}_task_${subtype}`,
+    sessionId,
+    timestamp: ts,
+    provider: PROVIDER,
+    kind: 'task_progress',
+    toolId: toolUseId,
+    status: mapTaskStatusToToolStatus(reportedStatus),
+    taskProgress: progress,
+  });
 }
 
 /** Reads the `tool_use_id` off the tool-result row that launched an agent. */
@@ -526,13 +659,18 @@ async function getSessionMessages(
 
     for (const message of messages) {
       const agentId = message.toolUseResult?.agentId;
-      if (!agentId) {
+      const toolUseId = readAgentToolUseId(message);
+      const notification = toolUseId ? notificationsByToolUseId.get(toolUseId) : undefined;
+      // A `Workflow` launches background work the same way an async agent does
+      // — same `status: 'async_launched'`, same later notification — but it has
+      // no `agentId`, so this loop used to skip it. Its result then stayed a
+      // loose line in the conversation, below a card still reading "launched".
+      const isBackgroundLaunch = message.toolUseResult?.status === 'async_launched';
+      if (!agentId && !notification && !isBackgroundLaunch) {
         continue;
       }
 
-      const subagent = subagentsById.get(String(agentId));
-      const toolUseId = readAgentToolUseId(message);
-      const notification = toolUseId ? notificationsByToolUseId.get(toolUseId) : undefined;
+      const subagent = agentId ? subagentsById.get(String(agentId)) : undefined;
       // An async agent's launch row never tells you it finished — only the
       // later notification does. When that notification is missing (a live run,
       // or one compacted out of the transcript), the agent's own transcript is
@@ -557,6 +695,14 @@ async function getSessionMessages(
               ? 'failed'
               : 'completed',
         };
+      }
+
+      // The transcript records a background launch and, later, its notification
+      // — nothing in between. So "no notification yet" is the only evidence a
+      // run is still going, and the only thing that stops the card from
+      // reading `completed` from the second it was created, on every reload.
+      if (isBackgroundLaunch && !agentId) {
+        message.taskStatus = notification ? notification.status : 'running';
       }
 
       if (notification) {
@@ -760,6 +906,14 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     // below: `system` events normalize to nothing. Both become one ordinary
     // assistant row, so a client that knows nothing of `compact` still reads
     // the sentence, while one that does can draw it as a row of its own.
+    // Everything a background run says about itself while it runs. It says it
+    // on frames this function used to drop wholesale, which is why a `Workflow`
+    // could work for twenty minutes without the card it came from ever moving.
+    if (raw.type === 'system' && TASK_LIFECYCLE_SUBTYPES.has(String(raw.subtype))) {
+      const row = buildTaskLifecycleRow(raw, sessionId, ts, baseId);
+      return row ? [row] : [];
+    }
+
     if (raw.type === 'system' && (raw.subtype === 'compact_boundary' || raw.subtype === 'status')) {
       const compactionRow = (content: string, compact: CompactionInfo): NormalizedMessage[] => [
         createNormalizedMessage({
@@ -1182,6 +1336,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
               subagentTools: raw.subagentTools,
               subagent: raw.subagent,
               toolUseResult: raw.toolUseResult,
+              taskStatus: typeof raw.taskStatus === 'string' ? raw.taskStatus : undefined,
             });
           }
         }
@@ -1225,6 +1380,13 @@ export class ClaudeSessionsProvider implements IProviderSessions {
         };
         msg.subagentTools = toolResult.subagentTools;
         msg.subagent = toolResult.subagent;
+        // The card's own badge is derived from "is there a result yet", which a
+        // background launch answers `yes` immediately and wrongly. A reported
+        // status overrides that derivation, so say it whenever the run's real
+        // lifecycle is known.
+        if (toolResult.taskStatus) {
+          msg.status = mapTaskStatusToToolStatus(toolResult.taskStatus);
+        }
       }
     }
 

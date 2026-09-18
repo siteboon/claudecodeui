@@ -569,6 +569,66 @@ const MAX_REALTIME_MESSAGES_HARD = MAX_REALTIME_MESSAGES * 2;
  * and no result has arrived for it yet. Everything else evicts oldest-first as
  * before.
  */
+/** The newest row a background run has published about itself, if any. */
+function findTaskProgress(
+  messages: NormalizedMessage[],
+  toolId: string,
+): NormalizedMessage | undefined {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index];
+    if (message.kind === 'task_progress' && message.toolId === toolId) {
+      return message;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Drops the row a background run's newest report replaces.
+ *
+ * A run reports every few seconds for as long as it runs, and only its last
+ * word means anything. Kept as separate rows, a twenty-minute run would push
+ * the turn it belongs to out of the realtime window within minutes.
+ */
+export function supersedeTaskProgress(
+  messages: NormalizedMessage[],
+  incoming: NormalizedMessage,
+): NormalizedMessage[] {
+  if (incoming.kind !== 'task_progress' || !incoming.toolId) {
+    return messages;
+  }
+  return messages.filter(
+    (message) => !(message.kind === 'task_progress' && message.toolId === incoming.toolId),
+  );
+}
+
+/**
+ * Carries forward what the row being replaced knew.
+ *
+ * A frame that only changes the status carries no counters, and the row it
+ * replaces is the only place they were - so without this the header would go
+ * blank the moment the run changed state.
+ */
+export function mergeTaskProgress(
+  messages: NormalizedMessage[],
+  incoming: NormalizedMessage,
+): NormalizedMessage {
+  if (incoming.kind !== 'task_progress' || !incoming.toolId) {
+    return incoming;
+  }
+
+  const previous = findTaskProgress(messages, incoming.toolId);
+  if (!previous) {
+    return incoming;
+  }
+
+  return {
+    ...incoming,
+    taskProgress: { ...previous.taskProgress, ...incoming.taskProgress },
+    status: incoming.status ?? previous.status,
+  };
+}
+
 export function evictRealtimeOverflow(messages: NormalizedMessage[]): NormalizedMessage[] {
   if (messages.length <= MAX_REALTIME_MESSAGES) {
     return messages;
@@ -835,7 +895,10 @@ export function useSessionStore() {
       msg.sessionId === sessionId
         ? msg
         : { ...msg, sessionId };
-    slot.realtimeMessages = evictRealtimeOverflow([...slot.realtimeMessages, normalizedMessage]);
+    slot.realtimeMessages = evictRealtimeOverflow([
+      ...supersedeTaskProgress(slot.realtimeMessages, normalizedMessage),
+      mergeTaskProgress(slot.realtimeMessages, normalizedMessage),
+    ]);
     recomputeMergedIfNeeded(slot);
     notify(sessionId);
   }, [getSlot, notify]);

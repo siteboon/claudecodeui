@@ -190,7 +190,8 @@ export type MessageKind =
   | 'permission_cancelled'
   | 'session_created'
   | 'history_truncated'
-  | 'task_notification';
+  | 'task_notification'
+  | 'task_progress';
 
 /**
  * Event kinds added by the chat gateway layer on top of provider message kinds.
@@ -350,12 +351,34 @@ export type NormalizedMessage = {
   subagentTools?: SubagentActivity[];
   /** Identity and lifecycle of the subagent this `tool_use` spawned. */
   subagent?: SubagentInfo;
+  /** How far along the background run this row reports on is. */
+  taskProgress?: TaskProgress;
   /** Stored memory the reply drew on, when the provider reports it. */
   memoryCitations?: MemoryCitation[];
   toolUseResult?: unknown;
   sequence?: number;
   rowid?: number;
   [key: string]: unknown;
+};
+
+/**
+ * What a background run has done so far, as it reports while it runs.
+ *
+ * Live only. None of it is written to the transcript, so a reload shows a run
+ * in progress with no numbers against it — the run's lifecycle survives (it is
+ * read back from the launch row and its notification), the counters do not.
+ */
+export type TaskProgress = {
+  /** The run's own id, which is also how updates about it are addressed. */
+  taskId?: string;
+  /** Tool calls it has made so far. */
+  toolUses?: number;
+  /** The tool it reached for most recently. */
+  lastToolName?: string;
+  /** Wall clock since it started, in milliseconds. */
+  durationMs?: number;
+  /** One line about what it is doing, when it publishes one. */
+  summary?: string;
 };
 
 /**

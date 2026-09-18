@@ -1046,3 +1046,220 @@ test('synchronizeFile skips non-jsonl files', { concurrency: false }, async () =
     assert.equal(result, null);
   });
 });
+
+const WORKFLOW_TOOL_USE_ID = 'toolu_workflow_launch';
+
+/**
+ * Writes a session whose turn launched a background `Workflow`.
+ *
+ * A workflow launch looks like an async agent's — same `async_launched`, same
+ * later `<task-notification>` — except it has no `agentId` and names itself in
+ * `taskType` / `workflowName` instead.
+ */
+async function writeClaudeWorkflowSession(
+  tempRoot: string,
+  sessionId: string,
+  options: { notified: boolean },
+): Promise<string> {
+  const transcriptPath = path.join(tempRoot, `${sessionId}.jsonl`);
+  const rows: Record<string, unknown>[] = [
+    {
+      type: 'user', uuid: 'w1', parentUuid: null, sessionId,
+      timestamp: '2026-09-18T16:38:00.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: 'run the workflow' }] },
+    },
+    {
+      type: 'assistant', uuid: 'w2', parentUuid: 'w1', sessionId,
+      timestamp: '2026-09-18T16:38:30.000Z',
+      message: {
+        role: 'assistant',
+        model: 'claude-opus-5',
+        content: [{
+          type: 'tool_use',
+          id: WORKFLOW_TOOL_USE_ID,
+          name: 'Workflow',
+          input: { script: "export const meta = { name: 'check-seed' }" },
+        }],
+      },
+    },
+    {
+      type: 'user', uuid: 'w3', parentUuid: 'w2', sessionId,
+      timestamp: '2026-09-18T16:38:38.000Z',
+      toolUseResult: {
+        status: 'async_launched',
+        taskId: 'w9njgonls',
+        taskType: 'local_workflow',
+        workflowName: 'check-seed',
+      },
+      message: {
+        role: 'user',
+        content: [{
+          type: 'tool_result',
+          tool_use_id: WORKFLOW_TOOL_USE_ID,
+          content: 'Workflow launched in background. Task ID: w9njgonls',
+        }],
+      },
+    },
+  ];
+
+  if (options.notified) {
+    rows.push({
+      type: 'user', uuid: 'w4', parentUuid: 'w3', sessionId,
+      origin: { kind: 'task-notification' },
+      timestamp: '2026-09-18T16:44:32.000Z',
+      message: {
+        role: 'user',
+        content: `<task-notification>\n<task-id>w9njgonls</task-id>\n<tool-use-id>${WORKFLOW_TOOL_USE_ID}</tool-use-id>\n<status>completed</status>\n<summary>Dynamic workflow "check-seed" completed</summary>\n<result>every slice checks out</result>\n</task-notification>`,
+      },
+    });
+  }
+
+  await writeFile(transcriptPath, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+  return transcriptPath;
+}
+
+test('a workflow notification lands on the card that launched it', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-workflow-done-'));
+  const sessionId = 'claude-workflow-done-session';
+
+  try {
+    const transcriptPath = await writeClaudeWorkflowSession(tempRoot, sessionId, { notified: true });
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(sessionId, 'claude', tempRoot, 'Workflow', now, now, transcriptPath);
+
+      const history = await new ClaudeSessionsProvider().fetchHistory(sessionId, {
+        providerSessionId: sessionId,
+      });
+      const workflowRow = history.messages.find(
+        (message) => message.kind === 'tool_use' && message.toolId === WORKFLOW_TOOL_USE_ID,
+      );
+
+      // A workflow carries no `agentId`, which used to be the gate for folding:
+      // its answer stayed a loose line below a card still reading "launched".
+      assert.equal(workflowRow?.toolResult?.content, 'every slice checks out');
+      assert.equal(workflowRow?.status, 'completed');
+
+      const stray = history.messages.find(
+        (message) => typeof message.content === 'string' && message.content.includes('<task-notification>'),
+      );
+      assert.equal(stray, undefined, 'the folded notification must not also render on its own');
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('a workflow with no notification yet still reads as running', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-workflow-running-'));
+  const sessionId = 'claude-workflow-running-session';
+
+  try {
+    const transcriptPath = await writeClaudeWorkflowSession(tempRoot, sessionId, { notified: false });
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(sessionId, 'claude', tempRoot, 'Workflow', now, now, transcriptPath);
+
+      const history = await new ClaudeSessionsProvider().fetchHistory(sessionId, {
+        providerSessionId: sessionId,
+      });
+      const workflowRow = history.messages.find(
+        (message) => message.kind === 'tool_use' && message.toolId === WORKFLOW_TOOL_USE_ID,
+      );
+
+      // The launch acknowledgement arrives in the same second as the launch, so
+      // without this the card reads `completed` for the whole run — and again
+      // after every reload, since no progress frame is ever written to disk.
+      assert.equal(workflowRow?.status, 'in_progress');
+      assert.equal(
+        String(workflowRow?.toolResult?.content ?? '').startsWith('Workflow launched in background'),
+        true,
+        'while it runs, the launch line is all there is to show',
+      );
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('a running workflow reports its progress onto the card that launched it', { concurrency: false }, async () => {
+  const provider = new ClaudeSessionsProvider();
+  const sessionId = 'live-workflow-session';
+
+  const [started] = provider.normalizeMessage({
+    type: 'system',
+    subtype: 'task_started',
+    task_id: 'w9njgonls',
+    tool_use_id: WORKFLOW_TOOL_USE_ID,
+    task_type: 'local_workflow',
+    workflow_name: 'check-seed',
+    description: 'Check the seed against the official curriculum',
+    uuid: 'frame-1',
+    session_id: sessionId,
+  }, sessionId);
+
+  assert.equal(started?.kind, 'task_progress');
+  assert.equal(started?.toolId, WORKFLOW_TOOL_USE_ID);
+  assert.equal(started?.status, 'in_progress');
+  assert.equal(started?.taskProgress?.summary, 'check-seed');
+
+  const [progress] = provider.normalizeMessage({
+    type: 'system',
+    subtype: 'task_progress',
+    task_id: 'w9njgonls',
+    tool_use_id: WORKFLOW_TOOL_USE_ID,
+    description: 'Check the seed against the official curriculum',
+    usage: { total_tokens: 120_000, tool_uses: 17, duration_ms: 240_000 },
+    last_tool_name: 'Bash',
+    uuid: 'frame-2',
+    session_id: sessionId,
+  }, sessionId);
+
+  assert.equal(progress?.taskProgress?.toolUses, 17);
+  assert.equal(progress?.taskProgress?.lastToolName, 'Bash');
+  assert.equal(progress?.taskProgress?.durationMs, 240_000);
+
+  // `task_updated` names only the run. It is deliverable because `task_started`
+  // already said which card that run belongs to.
+  const [updated] = provider.normalizeMessage({
+    type: 'system',
+    subtype: 'task_updated',
+    task_id: 'w9njgonls',
+    patch: { status: 'failed', error: 'agent terminated early' },
+    uuid: 'frame-3',
+    session_id: sessionId,
+  }, sessionId);
+
+  assert.equal(updated?.toolId, WORKFLOW_TOOL_USE_ID);
+  assert.equal(updated?.status, 'failed');
+});
+
+test('an ambient task stays out of the transcript', { concurrency: false }, async () => {
+  const produced = new ClaudeSessionsProvider().normalizeMessage({
+    type: 'system',
+    subtype: 'task_started',
+    task_id: 'housekeeping-1',
+    tool_use_id: 'toolu_housekeeping',
+    skip_transcript: true,
+    description: 'ambient',
+    uuid: 'frame-4',
+    session_id: 'live-workflow-session',
+  }, 'live-workflow-session');
+
+  assert.deepEqual(produced, []);
+});
+
+test('an update for a run nobody introduced is dropped rather than guessed at', { concurrency: false }, async () => {
+  const produced = new ClaudeSessionsProvider().normalizeMessage({
+    type: 'system',
+    subtype: 'task_updated',
+    task_id: 'never-announced',
+    patch: { status: 'running' },
+    uuid: 'frame-5',
+    session_id: 'live-workflow-session',
+  }, 'live-workflow-session');
+
+  assert.deepEqual(produced, []);
+});

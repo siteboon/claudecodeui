@@ -1836,6 +1836,10 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
           // Suspends the held session's own idle countdown: the conversation
           // is about to look quiet while the work it started keeps running.
           heldSession?.setOutstandingWork(true);
+          // And leaves this turn's handler behind to receive what that work
+          // reports. Without it the held stream has nowhere to put anything
+          // arriving after this `result`, which is all of it.
+          heldSession?.setBetweenTurnsHandler(handleTurnMessage);
           logRunLifecycle('hold_armed', {
             sessionKey: sessionKey(),
             providerSessionId: capturedSessionId || null,
@@ -1852,6 +1856,9 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
           // — one that has not fired in two hours is not coming back.
           heldForBackgroundWork = true;
           holdArmedAt = holdArmedAt || Date.now();
+          // A tick between turns has to reach this turn's client too, and this
+          // turn's writer is the newest one there is.
+          heldSession?.setBetweenTurnsHandler(handleTurnMessage);
           clearReleaseTimers();
           scheduleRelease();
         } else {
@@ -1859,6 +1866,10 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
           // reported in — let the CLI exit now, as it always has.
           heldForBackgroundWork = false;
           heldSession?.setOutstandingWork(false);
+          // Nothing is outstanding, so nothing is expected between turns; a
+          // handler left armed here would answer into a socket this run is
+          // about to stop owning.
+          heldSession?.setBetweenTurnsHandler(null);
           releaseHeldStream('work_reported_back');
         }
       } else if (holdTimers.isArmed()) {

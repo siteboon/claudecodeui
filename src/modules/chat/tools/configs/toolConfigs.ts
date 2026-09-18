@@ -50,6 +50,28 @@ const DESCRIPTIVE_INPUT_KEYS = [
   'prompt', 'description', 'name', 'selector', 'text', 'skill', 'id',
 ] as const;
 
+/**
+ * Names the workflow a `Workflow` call runs.
+ *
+ * Every script opens with a literal `export const meta = { name: … }`, which is
+ * also the name the SDK reports later as `workflow_name` — but that arrives on
+ * a live frame the transcript never keeps, while the script is on the card from
+ * the first second and after every reload. So the name is read from the script.
+ */
+function describeWorkflow(input: any): string {
+  // A saved workflow is selected by name and carries no script at all.
+  if (typeof input?.name === 'string' && input.name.trim()) {
+    return `Workflow: ${input.name.trim()}`;
+  }
+
+  const script = typeof input?.script === 'string' ? input.script : '';
+  // Only inside the `meta` block: a script body is full of other `name:` keys.
+  const meta = /\bmeta\s*=\s*\{([\s\S]*?)\}/.exec(script)?.[1] ?? '';
+  const name = /\bname\s*:\s*['"`]([^'"`]+)['"`]/.exec(meta)?.[1]?.trim();
+
+  return name ? `Workflow: ${name}` : 'Workflow script';
+}
+
 /** Builds a one-line summary of an unmapped tool's input. */
 function summarizeToolInput(input: unknown): string {
   if (typeof input === 'string') {
@@ -260,7 +282,7 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
   Workflow: {
     input: {
       type: 'collapsible',
-      title: 'Workflow script',
+      title: (input) => describeWorkflow(input),
       defaultOpen: false,
       contentType: 'text',
       getContentProps: (input) => ({
