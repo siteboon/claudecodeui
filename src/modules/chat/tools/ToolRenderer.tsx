@@ -11,11 +11,13 @@ import { FileListContent } from '@/modules/chat/tools/ContentRenderers/FileListC
 import { TodoListContent } from '@/modules/chat/tools/ContentRenderers/TodoListContent';
 import { TaskListContent } from '@/modules/chat/tools/ContentRenderers/TaskListContent';
 import { TextContent } from '@/modules/chat/tools/ContentRenderers/TextContent';
+import { ToolResultImages } from '@/modules/chat/tools/ContentRenderers/ToolResultImages';
 import { QuestionAnswerContent } from '@/modules/chat/tools/ContentRenderers/QuestionAnswerContent';
 import { PlanDisplay } from '@/modules/chat/tools/PlanDisplay';
 import { ToolStatusBadge } from '@/modules/chat/tools/ToolStatusBadge';
 import { DiffStatsBadge } from '@/modules/chat/tools/DiffStatsBadge';
 import { parseToolPayload, summarizeDiff } from '@/modules/chat/utils/messageTransforms';
+import { extractToolResultImages } from '@/modules/chat/utils/toolResultImages';
 
 type ToolRendererProps = {
   toolName: string;
@@ -213,6 +215,10 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
       onFileOpen
     }) || {};
 
+    // A tool result can carry image blocks next to its text; they render as
+    // thumbnails under the text instead of as base64 noise.
+    const resultImages = mode === 'result' ? extractToolResultImages(toolResult) : [];
+
     let contentComponent: React.ReactNode = null;
 
     switch (displayConfig.contentType) {
@@ -268,10 +274,15 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
 
       case 'text':
         contentComponent = (
-          <TextContent
-            content={contentProps.content || ''}
-            format={contentProps.format || 'plain'}
-          />
+          <>
+            {contentProps.content && (
+              <TextContent
+                content={contentProps.content}
+                format={contentProps.format || 'plain'}
+              />
+            )}
+            {resultImages.length > 0 && <ToolResultImages images={resultImages} />}
+          </>
         );
         break;
 
