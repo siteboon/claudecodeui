@@ -128,10 +128,23 @@ const LIVE_AGENT_STATUS: Record<WorkflowAgentProgress['state'], WorkflowAgentRow
  * The journal (from the last history load) is what survives a reload and the
  * only source once the run is over; the live stream is fresher while the run
  * is going and the only source for an agent's current tool, spend and queued
- * slots. So the live state wins while the workflow runs and the journal's
- * status wins once it has settled — at which point a slot the stream still
- * had running or queued is one the run ended under, not one still going.
+ * slots. So a journal status that has settled wins — the journal was read
+ * after the fact — and an unsettled one defers to the live state, which is
+ * newer. Once the workflow itself is over, a slot either source still has
+ * running or queued is one the run ended under, not one still going.
  */
+function settleAgentStatus(
+  journalStatus: WorkflowAgentInfo['status'],
+  liveState: WorkflowAgentProgress['state'] | undefined,
+  isWorkflowRunning: boolean,
+): WorkflowAgentRow['status'] {
+  if (journalStatus !== 'running') {
+    return journalStatus;
+  }
+  const status = liveState ? LIVE_AGENT_STATUS[liveState] : journalStatus;
+  return isWorkflowRunning || status === 'completed' || status === 'failed' ? status : 'stopped';
+}
+
 function mergeWorkflowAgents(
   journalAgents: WorkflowAgentInfo[],
   liveAgents: WorkflowAgentProgress[] | undefined,
@@ -152,8 +165,8 @@ function mergeWorkflowAgents(
       key: agent.id,
       agentId: agent.id,
       label: agent.label ?? live?.label,
-      phase: agent.phase,
-      status: isWorkflowRunning && state ? LIVE_AGENT_STATUS[state] : agent.status,
+      phase: agent.phase ?? live?.phase,
+      status: settleAgentStatus(agent.status, state, isWorkflowRunning),
     };
   });
 
@@ -199,7 +212,8 @@ type WorkflowAgentTimelineProps = {
 const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFileOpen, createDiff, selectedProject }: WorkflowAgentTimelineProps) => {
   const { t } = useTranslation();
   // What the last read returned — the timeline, or why there is none — and
-  // null until the first read lands.
+  // null until the first read lands. A later read that fails keeps the last
+  // timeline: what the agent had done does not stop being true.
   const [loaded, setLoaded] = useState<{ activity: WorkflowAgentActivity } | { error: string } | null>(null);
 
   useEffect(() => {
@@ -207,6 +221,7 @@ const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFi
     let nextRead: ReturnType<typeof setTimeout> | undefined;
 
     const read = async () => {
+      let settled = false;
       try {
         const payload = await readApiJson<{ data: WorkflowAgentActivity }>(
           await api.workflowAgentActivity(sessionId, runId, agentId),
@@ -216,14 +231,20 @@ const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFi
         }
         setLoaded({ activity: payload.data });
         // The transcript's own status can settle the agent before the card
-        // hears of it; either word ends the polling.
-        if (isRunning && payload.data.agent.status === 'running') {
-          nextRead = setTimeout(read, AGENT_TIMELINE_POLL_MS);
-        }
+        // hears of it.
+        settled = payload.data.agent.status !== 'running';
       } catch (error) {
-        if (!cancelled) {
-          setLoaded({ error: error instanceof Error ? error.message : String(error) });
+        if (cancelled) {
+          return;
         }
+        // The transcript is written a moment after the agent's start is
+        // reported, so the first read of a fresh agent can miss it.
+        setLoaded((previous) => previous && 'activity' in previous
+          ? previous
+          : { error: error instanceof Error ? error.message : String(error) });
+      }
+      if (isRunning && !settled) {
+        nextRead = setTimeout(read, AGENT_TIMELINE_POLL_MS);
       }
     };
     void read();
@@ -401,7 +422,11 @@ export const WorkflowPanel = memo(({ toolInput, toolResult, workflow, taskStatus
   // `agents`, and — for a workflow — its task-level description is that
   // agent's label too.
   const currentAgent = findCurrentWorkflowAgent(taskStatus?.agents);
-  const currentAgentLabel = currentAgent ? describeWorkflowAgent(currentAgent) : taskStatus?.description;
+  // Before the stream has listed any agent, the task's description is the
+  // step the CLI says it is on; once it has, no running agent means none.
+  const currentAgentLabel = currentAgent
+    ? describeWorkflowAgent(currentAgent)
+    : taskStatus?.agents ? undefined : taskStatus?.description;
 
   // The folded notification is the result; a live launch still holds the
   // acknowledgement until history reloads, and that is never worth showing.
@@ -497,8 +522,6 @@ export const WorkflowPanel = memo(({ toolInput, toolResult, workflow, taskStatus
           )}
 
           {taskStatus?.usage && (
-            // The task-level `lastToolName` of a workflow is the current
-            // agent's label, not a tool, so it is never drawn as one here.
             <div className="text-[11px] text-muted-foreground/70">
               {t('workflow.usage', '{{toolUses}} tool uses · {{elapsed}}', {
                 toolUses: taskStatus.usage.toolUses,

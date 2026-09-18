@@ -578,7 +578,6 @@ export type NormalizedMessage = {
   workflowName?: string;
   description?: string;
   usage?: TaskUsage;
-  lastToolName?: string;
   outputFile?: string;
   /** A workflow's `progress` only: where each agent the run spawned stands. */
   agents?: WorkflowAgentProgress[];
@@ -626,7 +625,6 @@ export type LiveTaskStatus = {
   description?: string;
   summary?: string;
   usage?: TaskUsage;
-  lastToolName?: string;
   /** A workflow's only: where each agent the run spawned stands, from its latest progress event. */
   agents?: WorkflowAgentProgress[];
 };
@@ -640,6 +638,8 @@ export type LiveTaskStatus = {
 export type WorkflowAgentProgress = {
   index: number;
   label?: string;
+  /** The title of the script phase the agent runs under, when it has one. */
+  phase?: string;
   agentId?: string;
   model?: string;
   state: 'queued' | 'running' | 'done' | 'failed';

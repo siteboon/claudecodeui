@@ -158,7 +158,6 @@ test('folds the live task events of a background launch onto the tool row that l
     toolUseId: 'toolu_workflow_1',
     summary: 'Verify 3/6',
     usage: { totalTokens: 1_000, toolUses: 12, durationMs: 65_000 },
-    lastToolName: 'Read',
   });
 
   const running = normalizedToChatMessages([workflowCall, started, progress]);
@@ -171,7 +170,6 @@ test('folds the live task events of a background launch onto the tool row that l
     description: 'Audit the frontend',
     summary: 'Verify 3/6',
     usage: { totalTokens: 1_000, toolUses: 12, durationMs: 65_000 },
-    lastToolName: 'Read',
   });
 
   // A newer event must rebuild the row's cached projection, or the card keeps

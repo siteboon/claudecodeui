@@ -225,7 +225,6 @@ function foldTaskStatus(
     description: msg.description ?? previous?.description,
     summary: msg.summary ?? previous?.summary,
     usage: msg.usage ?? previous?.usage,
-    lastToolName: msg.lastToolName ?? previous?.lastToolName,
     ...(agents ? { agents } : {}),
   });
   lastTaskSourceByToolUseId.set(toolUseId, msg);

@@ -52,7 +52,9 @@ const formatDuration = (milliseconds: number): string => {
  * Upper bound on how much of a subagent's timeline is sent to the client. A
  * long-running agent can record hundreds of tool calls, and the transcript only
  * ever shows them behind a collapsed header, so shipping the whole history on
- * every load costs far more than it shows.
+ * every load costs far more than it shows. The newest steps are the ones
+ * kept: a running agent's timeline is polled for what it is doing now, and
+ * the card says how many earlier ones were left out.
  */
 const MAX_TRANSMITTED_SUBAGENT_ACTIVITIES = 200;
 
@@ -612,7 +614,7 @@ async function getSessionMessages(
 
       subagentsById.set(agentId, {
         activity: transcript.activity
-          .slice(0, MAX_TRANSMITTED_SUBAGENT_ACTIVITIES)
+          .slice(-MAX_TRANSMITTED_SUBAGENT_ACTIVITIES)
           .map(truncateSubagentActivity),
         info: {
           id: agentId,
@@ -894,7 +896,7 @@ function buildLocalCommandDisplayText(payload: ClaudeLocalCommandPayload): strin
 /** The `task_status` fields of a normalized message, minus the envelope. */
 type ClaudeTaskStatusEvent = Pick<
   NormalizedMessage,
-  'event' | 'taskId' | 'toolUseId' | 'taskType' | 'workflowName' | 'description' | 'status' | 'summary' | 'usage' | 'lastToolName' | 'outputFile' | 'agents'
+  'event' | 'taskId' | 'toolUseId' | 'taskType' | 'workflowName' | 'description' | 'status' | 'summary' | 'usage' | 'outputFile' | 'agents'
 >;
 
 const readOptionalString = (value: unknown): string | undefined =>
@@ -958,6 +960,7 @@ function readWorkflowAgentsProgress(value: unknown): WorkflowAgentProgress[] | u
     agents.push({
       index,
       label: readOptionalString(entry.label),
+      phase: readOptionalString(entry.phaseTitle),
       agentId,
       model: readOptionalString(entry.model),
       state: readWorkflowAgentState(entry.state, agentId),
@@ -1004,22 +1007,19 @@ function readTaskStatusEvent(raw: AnyRecord): ClaudeTaskStatusEvent | null {
         workflowName: readOptionalString(raw.workflow_name),
         description: readOptionalString(raw.description),
       };
-    case 'task_progress': {
-      // A workflow's progress reports on each agent it spawned, and its
-      // task-level `last_tool_name` is the current agent's label rather than a
-      // tool — so it is not forwarded as one; the client reads the current
-      // agent from `agents` instead.
-      const agents = readWorkflowAgentsProgress(raw.workflow_progress);
+    case 'task_progress':
+      // A workflow's progress reports on each agent it spawned. Its
+      // task-level `last_tool_name` is the current agent's label rather than
+      // a tool — and nothing draws a task's, so it is not forwarded; the
+      // client reads the current agent from `agents`.
       return {
         ...shared,
         event: 'progress',
         description: readOptionalString(raw.description),
         summary: readOptionalString(raw.summary),
         usage: readTaskUsage(raw.usage),
-        lastToolName: agents ? undefined : readOptionalString(raw.last_tool_name),
-        agents,
+        agents: readWorkflowAgentsProgress(raw.workflow_progress),
       };
-    }
     case 'task_updated': {
       const patched = readOptionalString(readObjectRecord(raw.patch)?.status);
       return {
@@ -1573,7 +1573,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
         status,
       },
       activity: transcript.activity
-        .slice(0, MAX_TRANSMITTED_SUBAGENT_ACTIVITIES)
+        .slice(-MAX_TRANSMITTED_SUBAGENT_ACTIVITIES)
         .map(truncateSubagentActivity),
       activityCount: transcript.activity.length,
     };

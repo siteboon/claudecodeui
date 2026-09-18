@@ -1028,6 +1028,45 @@ test('Claude history folds a backgrounded Bash command\'s notification onto its 
   }
 });
 
+test('a long workflow agent timeline keeps its newest steps within the transport cap', { concurrency: false }, async () => {
+  // The timeline is polled while the agent runs for what it is doing now; a
+  // cap that kept the first 200 steps would freeze it there, and the card's
+  // "N earlier steps are not included" would be the wrong way round.
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-workflow-agent-long-'));
+
+  try {
+    const parentPath = await writeClaudeWorkflowSession(tempRoot, { notification: 'none', journal: true });
+    const runDir = path.join(tempRoot, WORKFLOW_SESSION_ID, 'subagents', 'workflows', WORKFLOW_RUN_ID);
+    const agentId = 'ab89f2cde612a51b1';
+    const rows = [
+      { isSidechain: true, agentId, type: 'user', uuid: 'wa-u1', timestamp: '2026-08-21T10:40:00.000Z', message: { role: 'user', content: 'Synthesize the audits.' } },
+      ...Array.from({ length: 205 }, (_, index) => ({
+        isSidechain: true,
+        agentId,
+        type: 'assistant',
+        uuid: `wa-a${index + 1}`,
+        timestamp: new Date(Date.parse('2026-08-21T10:40:05.000Z') + index * 1_000).toISOString(),
+        message: { role: 'assistant', model: 'claude-opus-4-1', content: [{ type: 'thinking', thinking: `step ${index + 1}` }] },
+      })),
+    ];
+    await writeFile(path.join(runDir, `agent-${agentId}.jsonl`), `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(WORKFLOW_SESSION_ID, 'claude', tempRoot, 'Workflow session', now, now, parentPath);
+
+      const live = await new ClaudeSessionsProvider({ getLiveRunStartTime: () => Date.parse('2026-08-21T10:30:00.000Z') })
+        .readWorkflowAgentActivity(WORKFLOW_SESSION_ID, WORKFLOW_RUN_ID, agentId);
+      assert.equal(live?.activityCount, 205);
+      assert.equal(live?.activity.length, 200);
+      assert.equal(live?.activity[0]?.content, 'step 6');
+      assert.equal(live?.activity.at(-1)?.content, 'step 205');
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('a workflow agent the journal has not settled is running only while the run that spawned it is', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-workflow-agent-activity-'));
 
@@ -1105,13 +1144,11 @@ test('the live stream\'s background-task events normalize to task_status', () =>
     tool_use_id: WORKFLOW_TOOL_USE_ID,
     description: 'Parallel frontend architecture audit',
     usage: { total_tokens: 12_345, tool_uses: 12, duration_ms: 65_000 },
-    last_tool_name: 'Read',
     summary: 'Verify 3/6',
   });
   assert.equal(progress?.kind, 'task_status');
   assert.equal(progress?.event, 'progress');
   assert.deepEqual(progress?.usage, { totalTokens: 12_345, toolUses: 12, durationMs: 65_000 });
-  assert.equal(progress?.lastToolName, 'Read');
   assert.equal(progress?.summary, 'Verify 3/6');
 
   // `task_updated` names no tool call — the client has to remember the task
@@ -1150,8 +1187,9 @@ test('a workflow\'s progress event reports where each of its agents stands', () 
   // Verified against a real query (SDK 0.3.165 / CLI 2.1.274): a workflow's
   // `task_progress` carries an undocumented `workflow_progress` with one entry
   // per agent the script spawned, and its task-level `last_tool_name` is the
-  // current agent's label, not a tool. Read as a tool, the card's usage line
-  // said "32 tool uses · 3m 30s · You are the analysis step of…".
+  // current agent's label, not a tool — on every batch, with or without the
+  // agent list. Read as a tool, the card's usage line said
+  // "32 tool uses · 3m 30s · You are the analysis step of…".
   const provider = new ClaudeSessionsProvider();
   const [progress] = provider.normalizeMessage({
     type: 'system',
@@ -1169,6 +1207,8 @@ test('a workflow\'s progress event reports where each of its agents stands', () 
         type: 'workflow_agent',
         index: 0,
         label: 'audit:chat',
+        phaseIndex: 0,
+        phaseTitle: 'Audit',
         agentId: 'aa1e064cf8bd159d6',
         model: 'claude-opus-4-1',
         state: 'done',
@@ -1182,6 +1222,8 @@ test('a workflow\'s progress event reports where each of its agents stands', () 
         type: 'workflow_agent',
         index: 1,
         label: 'audit:sidebar',
+        phaseIndex: 0,
+        phaseTitle: 'Audit',
         agentId: 'a9cfe29aa8f2afcbf',
         state: 'progress',
         startedAt: 1_700_000_120_000,
@@ -1202,11 +1244,12 @@ test('a workflow\'s progress event reports where each of its agents stands', () 
   assert.equal(progress?.kind, 'task_status');
   assert.equal(progress?.event, 'progress');
   assert.deepEqual(progress?.usage, { totalTokens: 12_345, toolUses: 32, durationMs: 210_000 });
-  assert.equal(progress?.lastToolName, undefined, 'the current agent\'s label must not pass as a tool name');
+  assert.equal('lastToolName' in (progress ?? {}), false, 'the current agent\'s label must not pass as a tool name');
   assert.deepEqual(progress?.agents, [
     {
       index: 0,
       label: 'audit:chat',
+      phase: 'Audit',
       agentId: 'aa1e064cf8bd159d6',
       model: 'claude-opus-4-1',
       state: 'done',
@@ -1222,6 +1265,7 @@ test('a workflow\'s progress event reports where each of its agents stands', () 
     {
       index: 1,
       label: 'audit:sidebar',
+      phase: 'Audit',
       agentId: 'a9cfe29aa8f2afcbf',
       model: undefined,
       state: 'running',
@@ -1237,6 +1281,7 @@ test('a workflow\'s progress event reports where each of its agents stands', () 
     {
       index: 2,
       label: 'synthesize',
+      phase: undefined,
       agentId: undefined,
       model: undefined,
       state: 'queued',
@@ -1252,6 +1297,7 @@ test('a workflow\'s progress event reports where each of its agents stands', () 
     {
       index: 3,
       label: 'audit:files',
+      phase: undefined,
       agentId: 'ab89f2cde612a51b1',
       model: undefined,
       state: 'running',
@@ -1267,6 +1313,7 @@ test('a workflow\'s progress event reports where each of its agents stands', () 
     {
       index: 4,
       label: 'audit:terminal',
+      phase: undefined,
       agentId: 'ac89f2cde612a51b2',
       model: undefined,
       state: 'failed',
@@ -1281,7 +1328,23 @@ test('a workflow\'s progress event reports where each of its agents stands', () 
     },
   ]);
 
-  // An agent's own progress names a real tool and carries no agent list.
+  // A throttled batch — agents mid-step only — comes without the agent list
+  // but still names the current agent as the tool.
+  const [throttled] = provider.normalizeMessage({
+    type: 'system',
+    subtype: 'task_progress',
+    session_id: WORKFLOW_SESSION_ID,
+    uuid: 'evt-workflow-progress-throttled',
+    task_id: WORKFLOW_TASK_ID,
+    tool_use_id: WORKFLOW_TOOL_USE_ID,
+    description: 'Audit: audit:sidebar',
+    usage: { total_tokens: 12_400, tool_uses: 33, duration_ms: 212_000 },
+    last_tool_name: 'audit:sidebar',
+  }, WORKFLOW_SESSION_ID);
+  assert.equal('lastToolName' in (throttled ?? {}), false);
+  assert.equal(throttled?.agents, undefined);
+
+  // An agent's own progress carries no agent list.
   const [agentProgress] = provider.normalizeMessage({
     type: 'system',
     subtype: 'task_progress',
@@ -1293,7 +1356,6 @@ test('a workflow\'s progress event reports where each of its agents stands', () 
     usage: { total_tokens: 1, tool_uses: 3, duration_ms: 1 },
     last_tool_name: 'Read',
   }, WORKFLOW_SESSION_ID);
-  assert.equal(agentProgress?.lastToolName, 'Read');
   assert.equal(agentProgress?.agents, undefined);
 });
 

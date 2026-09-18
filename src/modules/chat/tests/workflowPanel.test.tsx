@@ -263,7 +263,7 @@ describe('the agents of a workflow card', () => {
     // their description and no agent list.
     renderPanel({
       toolResult: LAUNCH_ACK,
-      taskStatus: { status: 'running', description: 'audit:chat', lastToolName: 'audit:chat', usage: { totalTokens: 1, toolUses: 2, durationMs: 5_000 } },
+      taskStatus: { status: 'running', description: 'audit:chat', usage: { totalTokens: 1, toolUses: 2, durationMs: 5_000 } },
     });
     openCard();
 
@@ -272,7 +272,8 @@ describe('the agents of a workflow card', () => {
 
   it('lets the journal settle the agents once the run is over, whatever the stream last said', () => {
     // The stream's last word had audit:sidebar running and a slot queued; the
-    // journal knows audit:sidebar failed, and the queued slot never started.
+    // journal knows audit:sidebar failed. Its own unsettled `running` for
+    // synthesize is stale: the run is over, so that agent has no result.
     renderPanel({
       toolResult: { content: '{"audits":[]}', isError: false },
       workflow: completedWorkflow,
@@ -284,11 +285,103 @@ describe('the agents of a workflow card', () => {
     expect(rows.map((row) => row.textContent)).toEqual([
       'audit:chat· AuditdoneThree large hooks carry most of the module.',
       'audit:sidebar· Auditfailed',
-      'synthesize· Synthesizerunning',
+      'synthesize· Synthesizeno result',
     ]);
     expect(rows[1]?.querySelector('.text-red-600')?.textContent).toBe('audit:sidebar');
     expect(screen.getByText('2 of 3 agents finished · 1 failed')).toBeTruthy();
     expect(screen.getByText('40 tool uses · 5m 0s')).toBeTruthy();
+  });
+
+  it('lets a live completion settle an agent the stale journal still has running', () => {
+    // The run finished, the stream said so for its one agent, and history has
+    // not been re-read yet: the journal's `running` is the older word.
+    renderPanel({
+      toolResult: { content: '{"audits":[]}', isError: false },
+      workflow: {
+        ...completedWorkflow,
+        status: 'running',
+        agents: [{ id: 'aa1e064cf8bd159d6', label: 'audit:chat', phase: 'Audit', status: 'running' }],
+        agentCounts: { total: 1, completed: 0, failed: 0, running: 1, stopped: 0 },
+      },
+      taskStatus: { status: 'completed', agents: [liveAgents[0]] },
+    });
+    openCard();
+
+    expect(agentRows().map((row) => row.textContent)).toEqual([
+      'audit:chat· AuditdoneThree large hooks carry most of the module.',
+    ]);
+    expect(screen.getByText('1 of 1 agents finished')).toBeTruthy();
+    expect(document.querySelectorAll('.animate-pulse')).toHaveLength(0);
+  });
+
+  it('shows an agent\'s phase from the stream when the journal has none for it', () => {
+    // The stream names the phase on every entry; a journal row read before
+    // the agent's phase was written has no word on it.
+    renderPanel({
+      toolResult: LAUNCH_ACK,
+      workflow: {
+        ...completedWorkflow,
+        status: 'running',
+        agents: [{ id: 'a9cfe29aa8f2afcbf', label: 'audit:sidebar', status: 'running' }],
+        agentCounts: { total: 1, completed: 0, failed: 0, running: 1, stopped: 0 },
+      },
+      taskStatus: { status: 'running', agents: [{ ...liveAgents[1], phase: 'Audit' }] },
+    });
+    openCard();
+
+    expect(agentRows().map((row) => row.textContent)).toEqual([
+      'audit:sidebar· AuditrunningGrep: useSidebar4k tokens12 tool calls',
+    ]);
+  });
+
+  it('names no current agent once the stream has listed agents and none of them is running', () => {
+    // Between agents the task's description is the last one's label, not a
+    // step still going.
+    renderPanel({
+      toolResult: LAUNCH_ACK,
+      taskStatus: {
+        status: 'running',
+        description: 'Audit: audit:chat',
+        agents: [liveAgents[0], { index: 1, state: 'queued' }],
+        usage: { totalTokens: 1, toolUses: 20, durationMs: 60_000 },
+      },
+    });
+    openCard();
+
+    expect(screen.getByText('20 tool uses · 1m 0s')).toBeTruthy();
+    expect(screen.queryByText(/current:/)).toBeNull();
+  });
+
+  it('keeps re-reading a running agent\'s timeline through a failed read, and keeps the last one it got', async () => {
+    // The CLI reports an agent's start a moment before its transcript exists,
+    // so the first read of a fresh agent can be a 404; a later read can fail
+    // on a blip. Neither is the end of the agent.
+    vi.useFakeTimers();
+    renderPanel({ toolResult: LAUNCH_ACK, taskStatus: { status: 'running', agents: liveAgents } }, 'session-1');
+    openCard();
+    fireEvent.click(screen.getByRole('button', { name: /audit:sidebar/ }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.getByText('Steps unavailable: Workflow agent "a9cfe29aa8f2afcbf" was not found.')).toBeTruthy();
+
+    // The transcript appears: the next read finds it.
+    agentActivityByAgentId.set('a9cfe29aa8f2afcbf', {
+      agent: { id: 'a9cfe29aa8f2afcbf', label: 'audit:sidebar', status: 'running' },
+      activity: [{ kind: 'thinking', content: 'Two hooks to compare.' }],
+      activityCount: 1,
+    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    expect(workflowAgentActivity).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('Two hooks to compare.')).toBeTruthy();
+
+    // A blip on the read after that changes nothing on screen, and the
+    // polling goes on.
+    agentActivityByAgentId.delete('a9cfe29aa8f2afcbf');
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    expect(workflowAgentActivity).toHaveBeenCalledTimes(3);
+    expect(screen.getByText('Two hooks to compare.')).toBeTruthy();
+    expect(screen.queryByText(/Steps unavailable/)).toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    expect(workflowAgentActivity).toHaveBeenCalledTimes(4);
   });
 
   it('opens an agent\'s timeline from its transcript and stops re-reading it once the agent is done', async () => {
