@@ -1,17 +1,20 @@
 import { memo, useMemo, useState } from 'react';
 import { Bot, Brain, ChevronRight, CircleAlert, CircleCheck, CircleDashed, MessageSquareText } from 'lucide-react';
 
-import type { DiffLine, Project, SubagentActivity, SubagentInfo, ToolResult } from '@/shared/types';
+import type { DiffLine, LiveTaskStatus, Project, SubagentActivity, SubagentInfo, ToolResult } from '@/shared/types';
 import { cn } from '@/shared/utils';
 import { ToolRenderer } from '@/modules/chat/tools/ToolRenderer';
 import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
 import { MarkdownContent } from '@/modules/chat/tools/ContentRenderers/MarkdownContent';
+import { resolveBackgroundTaskStatus } from '@/modules/chat/utils/backgroundTasks';
 
 type SubagentPanelProps = {
   /** Raw tool input of the call that spawned the agent, used for the prompt. */
   toolInput: unknown;
   toolResult?: ToolResult | null;
   subagent?: SubagentInfo;
+  /** The latest live word on a background agent, from the run's task events. */
+  taskStatus?: LiveTaskStatus;
   activity?: SubagentActivity[];
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
@@ -102,6 +105,7 @@ export const SubagentPanel = memo(({
   toolInput,
   toolResult,
   subagent,
+  taskStatus,
   activity,
   onFileOpen,
   createDiff,
@@ -125,12 +129,14 @@ export const SubagentPanel = memo(({
   // real answer arrives later as a task notification — so its arrival says
   // nothing about whether the agent finished. Treating it as an outcome marked
   // every background agent `completed` a second after it launched, which is
-  // where the spinner went. Until the server reports one on `subagent`, an
-  // async launch is still outstanding.
+  // where the spinner went. Until the server reports one on `subagent` or the
+  // live stream's task events say otherwise, an async launch is still
+  // outstanding.
   const isAsyncAgentLaunch = Boolean(
     (toolResult?.toolUseResult as { isAsync?: boolean } | undefined)?.isAsync,
   );
-  const status = subagent?.status ?? (toolResult && !isAsyncAgentLaunch ? 'completed' : 'running');
+  const status = resolveBackgroundTaskStatus(subagent?.status, taskStatus?.status)
+    ?? (toolResult && !isAsyncAgentLaunch ? 'completed' : 'running');
   const toolCount = entries.filter((entry) => entry.kind === 'tool').length;
   // Claude names its agent presets (Explore, Plan); Codex has none, so the
   // neutral label carries and the assigned nickname shows alongside it.

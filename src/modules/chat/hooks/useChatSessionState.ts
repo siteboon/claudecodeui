@@ -148,11 +148,11 @@ function chatMessageToNormalized(
   if (msg.isThinking) {
     return { ...base, kind: 'thinking', content: msg.content || '' } as NormalizedMessage;
   }
-  if ((msg as any).isTaskNotification) {
+  if (msg.isTaskNotification) {
     return {
       ...base,
       kind: 'task_notification',
-      status: (msg as any).taskStatus || 'completed',
+      status: msg.taskNotificationStatus || 'completed',
       summary: msg.content || '',
     } as NormalizedMessage;
   }

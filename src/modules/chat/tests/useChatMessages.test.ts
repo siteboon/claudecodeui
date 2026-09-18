@@ -130,3 +130,74 @@ test('preserves both UI objects produced by an unchanged task notification', () 
   assert.equal(updated[0]?.isTaskNotification, true);
   assert.equal(updated[1]?.content, 'Detailed result');
 });
+
+test('folds the live task events of a background launch onto the tool row that launched it', () => {
+  // The four `system` task subtypes the SDK emits for a running workflow,
+  // normalized to `task_status` by the server. `updated` names only the task
+  // id, so the row has to be found through the start event that paired it
+  // with its tool call.
+  const workflowCall = message('workflow-call', {
+    kind: 'tool_use',
+    toolId: 'toolu_workflow_1',
+    toolName: 'Workflow',
+    toolInput: { script: "export const meta = { name: 'audit' }", description: 'Audit the frontend' },
+  });
+  const started = message('task-started', {
+    kind: 'task_status',
+    event: 'started',
+    taskId: 'wxkj4kcvd',
+    toolUseId: 'toolu_workflow_1',
+    taskType: 'local_workflow',
+    workflowName: 'audit',
+    description: 'Audit the frontend',
+  });
+  const progress = message('task-progress', {
+    kind: 'task_status',
+    event: 'progress',
+    taskId: 'wxkj4kcvd',
+    toolUseId: 'toolu_workflow_1',
+    summary: 'Verify 3/6',
+    usage: { totalTokens: 1_000, toolUses: 12, durationMs: 65_000 },
+    lastToolName: 'Read',
+  });
+
+  const running = normalizedToChatMessages([workflowCall, started, progress]);
+  assert.equal(running.length, 1, 'task events are folded, never rendered on their own');
+  assert.deepEqual(running[0]?.taskStatus, {
+    status: 'running',
+    taskType: 'local_workflow',
+    workflowName: 'audit',
+    description: 'Audit the frontend',
+    summary: 'Verify 3/6',
+    usage: { totalTokens: 1_000, toolUses: 12, durationMs: 65_000 },
+    lastToolName: 'Read',
+  });
+
+  // A newer event must rebuild the row's cached projection, or the card keeps
+  // drawing the state it had when the row was first converted.
+  const stopped = message('task-updated', {
+    kind: 'task_status',
+    event: 'updated',
+    taskId: 'wxkj4kcvd',
+    status: 'stopped',
+  });
+  const afterStop = normalizedToChatMessages([workflowCall, started, progress, stopped]);
+  assert.notStrictEqual(afterStop[0], running[0]);
+  assert.equal(afterStop[0]?.taskStatus?.status, 'stopped');
+  assert.equal(afterStop[0]?.taskStatus?.summary, 'Verify 3/6', 'what earlier events said is kept');
+
+  const finished = message('task-notification-live', {
+    kind: 'task_status',
+    event: 'notification',
+    taskId: 'wxkj4kcvd',
+    toolUseId: 'toolu_workflow_1',
+    status: 'completed',
+    summary: 'Dynamic workflow "audit" completed',
+  });
+  const afterFinish = normalizedToChatMessages([workflowCall, started, progress, finished]);
+  assert.equal(afterFinish[0]?.taskStatus?.status, 'completed');
+  assert.equal(afterFinish[0]?.taskStatus?.summary, 'Dynamic workflow "audit" completed');
+
+  // Unchanged events leave the row's identity alone, like any other source.
+  assert.strictEqual(normalizedToChatMessages([workflowCall, started, progress, finished])[0], afterFinish[0]);
+});

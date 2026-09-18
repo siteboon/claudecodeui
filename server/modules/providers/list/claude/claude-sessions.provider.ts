@@ -12,6 +12,9 @@ import type {
   NormalizedMessage,
   SubagentActivity,
   SubagentInfo,
+  TaskUsage,
+  WorkflowAgentInfo,
+  WorkflowInfo,
 } from '@/shared/types.js';
 import { parseFilesInputTag } from '@/shared/image-attachments.js';
 import { prepareTranscriptMessages, truncateNestedOutput } from '@/shared/message-unification.js';
@@ -56,6 +59,7 @@ type ClaudeToolResult = {
   isError: boolean;
   subagentTools?: SubagentActivity[];
   subagent?: SubagentInfo;
+  workflow?: WorkflowInfo;
   toolUseResult?: unknown;
 };
 
@@ -224,6 +228,101 @@ async function findClaudeSubagentTranscript(
   return null;
 }
 
+/**
+ * Reads which agents a workflow run spawned and how far each got.
+ *
+ * The run appends one record per event to `<transcriptDir>/journal.jsonl`:
+ * `started` names the agent (and the label and phase the script gave it, when
+ * it gave any), `result` and `failed` settle it. The journal is what the
+ * workflow itself resumes from, so it is the only record of an agent that is
+ * still running — its transcript file is written, but nothing in it says the
+ * agent is not done. A missing directory or journal means the run left no
+ * record here (a fork copies only the parent's transcript), which reads as no
+ * agents rather than an error.
+ */
+async function readWorkflowJournal(transcriptDir: string): Promise<WorkflowAgentInfo[]> {
+  const agentsById = new Map<string, WorkflowAgentInfo>();
+
+  let journal: string;
+  try {
+    journal = await fsp.readFile(path.join(transcriptDir, 'journal.jsonl'), 'utf8');
+  } catch {
+    return [];
+  }
+
+  for (const line of journal.split('\n')) {
+    if (!line.trim()) {
+      continue;
+    }
+
+    let entry: AnyRecord;
+    try {
+      entry = JSON.parse(line) as AnyRecord;
+    } catch {
+      // The workflow appends while this reads, so the last line can be partial.
+      continue;
+    }
+
+    const agentId = typeof entry.agentId === 'string' ? entry.agentId : '';
+    if (!agentId) {
+      continue;
+    }
+
+    if (entry.type === 'started') {
+      agentsById.set(agentId, {
+        id: agentId,
+        label: typeof entry.label === 'string' ? entry.label : undefined,
+        phase: typeof entry.phase === 'string' ? entry.phase : undefined,
+        status: 'running',
+      });
+      continue;
+    }
+
+    const agent = agentsById.get(agentId);
+    if (!agent) {
+      continue;
+    }
+    if (entry.type === 'result') {
+      agent.status = 'completed';
+    } else if (entry.type === 'failed') {
+      agent.status = 'failed';
+    }
+  }
+
+  return [...agentsById.values()];
+}
+
+/**
+ * Which kind of background work a tool-result row launched, read off the
+ * structured `toolUseResult` the CLI stores beside it.
+ *
+ * All three answer the same way — a launch acknowledgement now, a
+ * `<task-notification>` later — but each is recognised by its own key: an
+ * `Agent` by the `agentId` of the transcript it writes, a `Workflow` by the
+ * `async_launched` status it shares with an agent launch (it has no agent of
+ * its own), and a backgrounded `Bash` by the `backgroundTaskId` the shell
+ * reports. A synchronous `Agent` also carries `agentId` and is included here
+ * because its card is built the same way; only `isAsync` says it launched.
+ */
+type ClaudeBackgroundLaunch = 'agent' | 'workflow' | 'bash';
+
+function readBackgroundLaunch(toolUseResult: unknown): ClaudeBackgroundLaunch | null {
+  const result = readObjectRecord(toolUseResult);
+  if (!result) {
+    return null;
+  }
+  if (result.agentId) {
+    return 'agent';
+  }
+  if (result.status === 'async_launched') {
+    return 'workflow';
+  }
+  if (typeof result.backgroundTaskId === 'string' && result.backgroundTaskId) {
+    return 'bash';
+  }
+  return null;
+}
+
 type ClaudeTaskNotification = {
   /**
    * `uuid` of the transcript row the notification came from, so it can be
@@ -315,8 +414,8 @@ function collectTaskNotifications(messages: AnyRecord[]): Map<string, ClaudeTask
   return notifications;
 }
 
-/** Reads the `tool_use_id` off the tool-result row that launched an agent. */
-function readAgentToolUseId(message: AnyRecord): string | null {
+/** Reads the `tool_use_id` off the tool-result row that launched background work. */
+function readLaunchToolUseId(message: AnyRecord): string | null {
   const content = message.message?.content;
   if (!Array.isArray(content)) {
     return null;
@@ -331,8 +430,8 @@ function readAgentToolUseId(message: AnyRecord): string | null {
   return null;
 }
 
-/** Swaps an agent launch acknowledgement for the agent's actual answer. */
-function replaceAgentToolResultContent(message: AnyRecord, replacement: string): void {
+/** Swaps a launch acknowledgement for the work's actual answer. */
+function replaceLaunchToolResultContent(message: AnyRecord, replacement: string): void {
   const content = message.message?.content;
   if (!Array.isArray(content)) {
     return;
@@ -511,11 +610,31 @@ async function getSessionMessages(
       });
     }
 
-    // An async agent's launch result is internal bookkeeping ("Async agent
-    // launched successfully…"); its real answer arrives later as a separate
-    // `<task-notification>` turn. Folding the notification back onto the tool
-    // call that started the agent keeps one card per agent instead of a card,
-    // an unrelated status line, and a stray markdown reply.
+    // Read each workflow run's journal once, keyed by the directory the launch
+    // row names. The journal is the only thing that says which of a run's
+    // agents are still going — see `readWorkflowJournal`.
+    const workflowAgentsByDir = new Map<string, WorkflowAgentInfo[]>();
+    for (const message of messages) {
+      const transcriptDir = message.toolUseResult?.transcriptDir;
+      if (
+        readBackgroundLaunch(message.toolUseResult) === 'workflow'
+        && typeof transcriptDir === 'string'
+        && transcriptDir
+        && !workflowAgentsByDir.has(transcriptDir)
+      ) {
+        workflowAgentsByDir.set(transcriptDir, await readWorkflowJournal(transcriptDir));
+      }
+    }
+
+    // A background launch's tool result is internal bookkeeping ("Async agent
+    // launched successfully…", "Workflow launched in background. Task ID: …",
+    // "Command running in background with ID: …"); its real answer arrives
+    // later as a separate `<task-notification>` turn. Folding the notification
+    // back onto the tool call that started the work keeps one card per launch
+    // instead of a card, an unrelated status line, and a stray markdown reply.
+    // Reading only rows with an `agentId` left a workflow's card on its launch
+    // acknowledgement forever, with its report rendering as a raw user bubble
+    // further down or, for a queue-operation record, nowhere at all.
     const notificationsByToolUseId = collectTaskNotifications(messages);
     const foldedNotificationUuids = new Set<string>();
 
@@ -531,18 +650,19 @@ async function getSessionMessages(
       liveRunStartedAt !== null && Date.parse(String(message.timestamp ?? '')) >= liveRunStartedAt;
 
     for (const message of messages) {
-      const agentId = message.toolUseResult?.agentId;
-      if (!agentId) {
+      const launch = readBackgroundLaunch(message.toolUseResult);
+      if (!launch) {
         continue;
       }
 
-      const subagent = subagentsById.get(String(agentId));
-      const toolUseId = readAgentToolUseId(message);
+      const toolUseId = readLaunchToolUseId(message);
       const notification = toolUseId ? notificationsByToolUseId.get(toolUseId) : undefined;
-      const isAsyncLaunch = message.toolUseResult?.isAsync === true;
+      // A workflow and a backgrounded shell command have no foreground form;
+      // only an agent can hand its answer back inline.
+      const isAsyncLaunch = launch !== 'agent' || message.toolUseResult?.isAsync === true;
 
-      // An async agent's launch row never tells you it finished — only the
-      // later notification does, so a missing notification means the outcome is
+      // An async launch row never tells you it finished — only the later
+      // notification does, so a missing notification means the outcome is
       // still unknown.
       //
       // The agent's own transcript cannot stand in for that. A background agent
@@ -563,41 +683,72 @@ async function getSessionMessages(
       //
       // A synchronous agent hands its answer back inline on its own tool
       // result, so its status never depends on a notification or the process.
-      const status: SubagentInfo['status'] = notification
-        ? notification.status === 'completed' ? 'completed' : 'failed'
-        : isAsyncLaunch
-          ? launchedByLiveRun(message) ? 'running' : 'stopped'
-          : 'completed';
+      const unreportedStatus = isAsyncLaunch
+        ? launchedByLiveRun(message) ? 'running' : 'stopped'
+        : 'completed';
 
-      if (subagent && subagent.activity.length > 0) {
-        message.subagentTools = subagent.activity;
+      if (launch === 'agent') {
+        const agentId = String(message.toolUseResult.agentId);
+        const subagent = subagentsById.get(agentId);
+        const status: SubagentInfo['status'] = notification
+          ? notification.status === 'completed' ? 'completed' : 'failed'
+          : unreportedStatus;
+
+        if (subagent && subagent.activity.length > 0) {
+          message.subagentTools = subagent.activity;
+        }
+        // The agent's own transcript names its type, model and timeline, but
+        // it is not what says whether the agent finished, and it can be
+        // missing — a fork copies only the parent's `.jsonl`. The card reads
+        // its status off `subagent`, so the launch row publishes one with or
+        // without it; otherwise a notification saying "completed" left the
+        // card `running`.
+        message.subagent = {
+          id: agentId,
+          ...subagent?.info,
+          description: subagent?.info.description
+            ?? (typeof message.toolUseResult?.description === 'string' ? message.toolUseResult.description : undefined),
+          model: subagent?.info.model
+            ?? (typeof message.toolUseResult?.resolvedModel === 'string' ? message.toolUseResult.resolvedModel : undefined),
+          status,
+        };
+      } else if (launch === 'workflow') {
+        // The notification's own word is kept here, `stopped` included: a
+        // workflow the user stopped is not one that failed.
+        const status: WorkflowInfo['status'] = notification
+          ? notification.status === 'completed' || notification.status === 'stopped' ? notification.status : 'failed'
+          : unreportedStatus;
+        const agents = workflowAgentsByDir.get(String(message.toolUseResult.transcriptDir ?? '')) ?? [];
+        const countWith = (agentStatus: WorkflowAgentInfo['status']) =>
+          agents.filter((agent) => agent.status === agentStatus).length;
+
+        message.workflow = {
+          runId: String(message.toolUseResult.runId ?? ''),
+          name: String(message.toolUseResult.workflowName ?? ''),
+          description: typeof message.toolUseResult.summary === 'string' ? message.toolUseResult.summary : undefined,
+          status,
+          agents,
+          agentCounts: {
+            total: agents.length,
+            completed: countWith('completed'),
+            failed: countWith('failed'),
+            running: countWith('running'),
+          },
+          scriptPath: typeof message.toolUseResult.scriptPath === 'string' ? message.toolUseResult.scriptPath : undefined,
+        };
       }
-      // The agent's own transcript names its type, model and timeline, but it
-      // is not what says whether the agent finished, and it can be missing —
-      // a fork copies only the parent's `.jsonl`. The card reads its status
-      // off `subagent`, so the launch row publishes one with or without it;
-      // otherwise a notification saying "completed" left the card `running`.
-      message.subagent = {
-        id: String(agentId),
-        ...subagent?.info,
-        description: subagent?.info.description
-          ?? (typeof message.toolUseResult?.description === 'string' ? message.toolUseResult.description : undefined),
-        model: subagent?.info.model
-          ?? (typeof message.toolUseResult?.resolvedModel === 'string' ? message.toolUseResult.resolvedModel : undefined),
-        status,
-      };
 
       if (notification) {
-        replaceAgentToolResultContent(message, notification.result || notification.summary);
+        replaceLaunchToolResultContent(message, notification.result || notification.summary);
         if (notification.sourceUuid) {
           // A queue-operation record has no `uuid`; adding its empty string
           // here would match — and drop — every other row that lacks one.
           foldedNotificationUuids.add(notification.sourceUuid);
         }
-      } else if (message.toolUseResult?.isAsync === true) {
+      } else if (isAsyncLaunch) {
         // Without a notification there is no answer to show, and the launch
         // acknowledgement is internal bookkeeping the user must never read.
-        replaceAgentToolResultContent(message, '');
+        replaceLaunchToolResultContent(message, '');
       }
     }
 
@@ -717,6 +868,89 @@ function buildLocalCommandDisplayText(payload: ClaudeLocalCommandPayload): strin
   return commandArgs ? `${baseCommand} ${commandArgs}` : baseCommand;
 }
 
+/** The `task_status` fields of a normalized message, minus the envelope. */
+type ClaudeTaskStatusEvent = Pick<
+  NormalizedMessage,
+  'event' | 'taskId' | 'toolUseId' | 'taskType' | 'workflowName' | 'description' | 'status' | 'summary' | 'usage' | 'lastToolName' | 'outputFile'
+>;
+
+const readOptionalString = (value: unknown): string | undefined =>
+  typeof value === 'string' && value ? value : undefined;
+
+/** The CLI's `{total_tokens, tool_uses, duration_ms}` in the app's spelling. */
+function readTaskUsage(value: unknown): TaskUsage | undefined {
+  const usage = readObjectRecord(value);
+  if (!usage) {
+    return undefined;
+  }
+  return {
+    totalTokens: Number(usage.total_tokens) || 0,
+    toolUses: Number(usage.tool_uses) || 0,
+    durationMs: Number(usage.duration_ms) || 0,
+  };
+}
+
+/**
+ * Maps one of the SDK's four background-task `system` events onto the
+ * `task_status` fields, or returns null for any other `system` subtype.
+ *
+ * `task_started` and `task_progress` name the tool call that launched the
+ * task; `task_updated` carries only the task id and a patch of what changed,
+ * so the client has to remember the id from the start event. The patch's
+ * `killed` is spelled `stopped` here, the word the task notification and the
+ * history reader already use for a task that ended without an outcome.
+ */
+function readTaskStatusEvent(raw: AnyRecord): ClaudeTaskStatusEvent | null {
+  const taskId = readOptionalString(raw.task_id);
+  if (!taskId) {
+    return null;
+  }
+
+  const shared = {
+    taskId,
+    toolUseId: readOptionalString(raw.tool_use_id),
+  };
+
+  switch (raw.subtype) {
+    case 'task_started':
+      return {
+        ...shared,
+        event: 'started',
+        taskType: readOptionalString(raw.task_type),
+        workflowName: readOptionalString(raw.workflow_name),
+        description: readOptionalString(raw.description),
+      };
+    case 'task_progress':
+      return {
+        ...shared,
+        event: 'progress',
+        description: readOptionalString(raw.description),
+        summary: readOptionalString(raw.summary),
+        usage: readTaskUsage(raw.usage),
+        lastToolName: readOptionalString(raw.last_tool_name),
+      };
+    case 'task_updated': {
+      const patched = readOptionalString(readObjectRecord(raw.patch)?.status);
+      return {
+        ...shared,
+        event: 'updated',
+        status: patched === 'killed' ? 'stopped' : patched,
+      };
+    }
+    case 'task_notification':
+      return {
+        ...shared,
+        event: 'notification',
+        status: readOptionalString(raw.status),
+        summary: readOptionalString(raw.summary),
+        usage: readTaskUsage(raw.usage),
+        outputFile: readOptionalString(raw.output_file),
+      };
+    default:
+      return null;
+  }
+}
+
 type ClaudeSessionsProviderOptions = {
   /**
    * When the CLI run behind a session started, or null when none is up.
@@ -776,6 +1010,25 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     const messages: NormalizedMessage[] = [];
     const ts = raw.timestamp || new Date().toISOString();
     const baseId = raw.uuid || generateMessageId('claude');
+
+    // The live stream reports on background work — a launched workflow, agent
+    // or shell command — through four `system` subtypes that the transcript
+    // never records. They normalize to one `task_status` kind so the client
+    // can keep a workflow's card current while it runs; before this they fell
+    // through every branch below and were dropped.
+    if (raw.type === 'system') {
+      const taskStatus = readTaskStatusEvent(raw);
+      if (taskStatus) {
+        return [createNormalizedMessage({
+          id: baseId,
+          sessionId,
+          timestamp: ts,
+          provider: PROVIDER,
+          kind: 'task_status',
+          ...taskStatus,
+        })];
+      }
+    }
 
     // A compaction is the most expensive thing a long session does without
     // being asked, and neither record that describes it survives the branches
@@ -1208,6 +1461,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
               isError: Boolean(part.is_error),
               subagentTools: raw.subagentTools,
               subagent: raw.subagent,
+              workflow: raw.workflow,
               toolUseResult: raw.toolUseResult,
             });
           }
@@ -1236,6 +1490,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
         };
         msg.subagentTools = toolResult.subagentTools;
         msg.subagent = toolResult.subagent;
+        msg.workflow = toolResult.workflow;
       }
     }
 

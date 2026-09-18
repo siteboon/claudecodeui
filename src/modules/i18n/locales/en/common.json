@@ -349,5 +349,30 @@
     "closeLoginModal": "Close login modal",
     "pluginLoadFailed": "Plugin failed to load: {{error}}"
   },
+  "workflow": {
+    "title": "Workflow",
+    "status": {
+      "running": "running",
+      "completed": "done",
+      "failed": "failed",
+      "stopped": "no result"
+    },
+    "stoppedHint": "The run ended before this workflow reported back",
+    "phases": "Phases",
+    "agents": "Agents",
+    "agentsFinished": "{{finished}} of {{total}} agents finished",
+    "agentsFailed": "{{count}} failed",
+    "agentStatus": {
+      "running": "running",
+      "completed": "done",
+      "failed": "failed"
+    },
+    "usage": "{{toolUses}} tool uses · {{elapsed}}",
+    "result": "Result",
+    "script": "Script",
+    "backgroundTasks": "Background tasks",
+    "backgroundAgent": "Agent",
+    "backgroundCommand": "Command"
+  },
   "cancel": "Cancel"
 }

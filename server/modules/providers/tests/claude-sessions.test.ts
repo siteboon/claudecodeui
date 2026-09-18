@@ -615,6 +615,393 @@ test('a live SDK tool result caps the strings inside its structured output', () 
   assert.match(forwarded?.originalFile ?? '', /… 10000 more characters$/);
 });
 
+const WORKFLOW_SESSION_ID = 'claude-workflow-session';
+const WORKFLOW_TOOL_USE_ID = 'toolu_workflow_1';
+const WORKFLOW_RUN_ID = 'wf_16fbf852-274';
+const WORKFLOW_TASK_ID = 'wxkj4kcvd';
+const WORKFLOW_SCRIPT = [
+  'export const meta = {',
+  "  name: 'frontend-architecture-audit',",
+  "  description: 'Evidence-based audit of the frontend',",
+  "  phases: [{ title: 'Audit', detail: 'parallel deep-dives per module cluster' }],",
+  '}',
+].join('\n');
+
+/**
+ * The `<task-notification>` a finished workflow reports through, as the
+ * harness writes it — the real one in session 4820c6b8 carries a JSON
+ * `<result>` and names the tool call that launched the run.
+ */
+const workflowNotificationText = (status: string) => [
+  '<task-notification>',
+  `<task-id>${WORKFLOW_TASK_ID}</task-id>`,
+  `<tool-use-id>${WORKFLOW_TOOL_USE_ID}</tool-use-id>`,
+  `<output-file>/tmp/claude-1000/tasks/${WORKFLOW_TASK_ID}.output</output-file>`,
+  `<status>${status}</status>`,
+  '<summary>Dynamic workflow "Evidence-based audit of the frontend" completed</summary>',
+  '<result>{"audits":[{"area":"src/modules/chat","summary":"three large hooks"}]}</result>',
+  '</task-notification>',
+].join('\n');
+
+type WorkflowSessionOptions = {
+  /** How the completion report is recorded, or `none` for a run still out. */
+  notification: 'user' | 'remove' | 'enqueue' | 'none';
+  /** Whether the run left a journal behind; a fork copies none. */
+  journal: boolean;
+};
+
+/**
+ * Writes the rows a `Workflow` launch leaves in a session transcript, copied
+ * from session 4820c6b8-b23b-468f-b462-74162ecf0f24 (lines 107, 108 and 294),
+ * plus the run's journal under `<session>/subagents/workflows/<runId>/`.
+ *
+ * The journal records three agents: one finished, one failed, one still
+ * going — the shape a run has partway through its second phase.
+ */
+async function writeClaudeWorkflowSession(
+  projectDirectory: string,
+  { notification, journal }: WorkflowSessionOptions,
+): Promise<string> {
+  const parentPath = path.join(projectDirectory, `${WORKFLOW_SESSION_ID}.jsonl`);
+  const transcriptDir = path.join(projectDirectory, WORKFLOW_SESSION_ID, 'subagents', 'workflows', WORKFLOW_RUN_ID);
+  const scriptPath = path.join(projectDirectory, WORKFLOW_SESSION_ID, 'workflows', 'scripts', `frontend-architecture-audit-${WORKFLOW_RUN_ID}.js`);
+
+  const parentLines: Record<string, unknown>[] = [
+    {
+      type: 'assistant',
+      uuid: 'assistant-wf-1',
+      sessionId: WORKFLOW_SESSION_ID,
+      timestamp: '2026-08-21T10:32:10.000Z',
+      message: {
+        role: 'assistant',
+        content: [{
+          type: 'tool_use',
+          id: WORKFLOW_TOOL_USE_ID,
+          name: 'Workflow',
+          input: { script: WORKFLOW_SCRIPT, description: 'Parallel frontend architecture audit' },
+        }],
+      },
+    },
+    {
+      type: 'user',
+      uuid: 'workflow-ack-1',
+      sessionId: WORKFLOW_SESSION_ID,
+      timestamp: '2026-08-21T10:32:15.657Z',
+      message: {
+        role: 'user',
+        content: [{
+          type: 'tool_result',
+          tool_use_id: WORKFLOW_TOOL_USE_ID,
+          content: `Workflow launched in background. Task ID: ${WORKFLOW_TASK_ID}\nSummary: Evidence-based audit of the frontend\nTranscript dir: ${transcriptDir}\nScript file: ${scriptPath}`,
+        }],
+      },
+      toolUseResult: {
+        status: 'async_launched',
+        taskId: WORKFLOW_TASK_ID,
+        taskType: 'local_workflow',
+        workflowName: 'frontend-architecture-audit',
+        runId: WORKFLOW_RUN_ID,
+        summary: 'Evidence-based audit of the frontend',
+        transcriptDir,
+        scriptPath,
+      },
+    },
+  ];
+
+  if (notification === 'user') {
+    parentLines.push({
+      type: 'user',
+      uuid: 'workflow-notification-1',
+      sessionId: WORKFLOW_SESSION_ID,
+      timestamp: '2026-08-21T11:27:00.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: workflowNotificationText('completed') }] },
+    });
+  } else if (notification !== 'none') {
+    parentLines.push({
+      type: 'queue-operation',
+      operation: notification,
+      timestamp: '2026-08-21T11:27:00.000Z',
+      sessionId: WORKFLOW_SESSION_ID,
+      content: workflowNotificationText('completed'),
+    });
+  }
+
+  await writeFile(parentPath, `${parentLines.map((line) => JSON.stringify(line)).join('\n')}\n`, 'utf8');
+
+  if (journal) {
+    await mkdir(transcriptDir, { recursive: true });
+    const journalLines = [
+      { type: 'launched' },
+      { type: 'started', key: 'v2:one', agentId: 'aa1e064cf8bd159d6', label: 'audit:chat', phase: 'Audit' },
+      { type: 'started', key: 'v2:two', agentId: 'a9cfe29aa8f2afcbf', label: 'audit:sidebar', phase: 'Audit' },
+      { type: 'result', key: 'v2:one', agentId: 'aa1e064cf8bd159d6', result: { area: 'chat' } },
+      { type: 'failed', key: 'v2:two', agentId: 'a9cfe29aa8f2afcbf' },
+      { type: 'started', key: 'v2:three', agentId: 'ab89f2cde612a51b1', label: 'synthesize', phase: 'Synthesize' },
+    ];
+    await writeFile(
+      path.join(transcriptDir, 'journal.jsonl'),
+      `${journalLines.map((line) => JSON.stringify(line)).join('\n')}\n`,
+      'utf8',
+    );
+  }
+
+  return parentPath;
+}
+
+for (const notification of ['user', 'remove', 'enqueue'] as const) {
+  test(`Claude history folds a workflow's ${notification} notification onto the call that launched it`, { concurrency: false }, async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-workflow-notification-'));
+
+    try {
+      const parentPath = await writeClaudeWorkflowSession(tempRoot, { notification, journal: true });
+
+      await withIsolatedDatabase(async () => {
+        const now = new Date().toISOString();
+        sessionsDb.createSession(WORKFLOW_SESSION_ID, 'claude', tempRoot, 'Workflow session', now, now, parentPath);
+
+        // The run is over, so no process is up — and that must not matter:
+        // the notification is the outcome.
+        const history = await new ClaudeSessionsProvider({ getLiveRunStartTime: () => null }).fetchHistory(WORKFLOW_SESSION_ID, {
+          providerSessionId: WORKFLOW_SESSION_ID,
+        });
+        const workflowRow = history.messages.find(
+          (message) => message.kind === 'tool_use' && message.toolId === WORKFLOW_TOOL_USE_ID,
+        );
+
+        // A Workflow launch has no `agentId`, so the fold used to skip it: the
+        // card kept "Workflow launched in background. Task ID: …" as its result
+        // for good while the report rendered as a raw user bubble — or, for a
+        // queue-operation record, nowhere.
+        assert.equal(
+          workflowRow?.toolResult?.content,
+          '{"audits":[{"area":"src/modules/chat","summary":"three large hooks"}]}',
+        );
+        assert.equal(workflowRow?.workflow?.status, 'completed');
+        assert.equal(workflowRow?.workflow?.name, 'frontend-architecture-audit');
+        assert.equal(workflowRow?.workflow?.runId, WORKFLOW_RUN_ID);
+        assert.equal(workflowRow?.workflow?.description, 'Evidence-based audit of the frontend');
+        assert.match(workflowRow?.workflow?.scriptPath ?? '', /frontend-architecture-audit-wf_16fbf852-274\.js$/);
+
+        const strayNotification = history.messages.find(
+          (message) => typeof message.content === 'string' && message.content.includes('<task-notification>'),
+        );
+        assert.equal(strayNotification, undefined, 'the folded notification must not also render on its own');
+      });
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+}
+
+test('Claude history reads a workflow\'s agents and their progress from its journal', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-workflow-journal-'));
+
+  try {
+    const parentPath = await writeClaudeWorkflowSession(tempRoot, { notification: 'none', journal: true });
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(WORKFLOW_SESSION_ID, 'claude', tempRoot, 'Workflow session', now, now, parentPath);
+
+      // The run that launched the workflow is still up, so it is still going.
+      const liveRunStartedAt = Date.parse('2026-08-21T10:30:00.000Z');
+      const history = await new ClaudeSessionsProvider({ getLiveRunStartTime: () => liveRunStartedAt }).fetchHistory(WORKFLOW_SESSION_ID, {
+        providerSessionId: WORKFLOW_SESSION_ID,
+      });
+      const workflowRow = history.messages.find(
+        (message) => message.kind === 'tool_use' && message.toolId === WORKFLOW_TOOL_USE_ID,
+      );
+
+      assert.equal(workflowRow?.workflow?.status, 'running');
+      assert.equal(workflowRow?.toolResult?.content, '', 'the launch acknowledgement must never show as a result');
+      // An agent with a `started` record and no `result` or `failed` is the
+      // one still working; the journal is the only place that says so.
+      assert.deepEqual(workflowRow?.workflow?.agents, [
+        { id: 'aa1e064cf8bd159d6', label: 'audit:chat', phase: 'Audit', status: 'completed' },
+        { id: 'a9cfe29aa8f2afcbf', label: 'audit:sidebar', phase: 'Audit', status: 'failed' },
+        { id: 'ab89f2cde612a51b1', label: 'synthesize', phase: 'Synthesize', status: 'running' },
+      ]);
+      assert.deepEqual(workflowRow?.workflow?.agentCounts, { total: 3, completed: 1, failed: 1, running: 1 });
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('Claude history reports a workflow stopped, with no agents, when its run and journal are both gone', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-workflow-forked-'));
+
+  try {
+    // A fork copies the parent's `.jsonl` rows and nothing else: no
+    // `subagents/workflows/` directory, no queue-operation records, and no
+    // process of its own.
+    const parentPath = await writeClaudeWorkflowSession(tempRoot, { notification: 'none', journal: false });
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(WORKFLOW_SESSION_ID, 'claude', tempRoot, 'Workflow session', now, now, parentPath);
+
+      const history = await new ClaudeSessionsProvider({ getLiveRunStartTime: () => null }).fetchHistory(WORKFLOW_SESSION_ID, {
+        providerSessionId: WORKFLOW_SESSION_ID,
+      });
+      const workflowRow = history.messages.find(
+        (message) => message.kind === 'tool_use' && message.toolId === WORKFLOW_TOOL_USE_ID,
+      );
+
+      assert.equal(workflowRow?.workflow?.status, 'stopped');
+      assert.deepEqual(workflowRow?.workflow?.agents, []);
+      assert.deepEqual(workflowRow?.workflow?.agentCounts, { total: 0, completed: 0, failed: 0, running: 0 });
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('Claude history folds a backgrounded Bash command\'s notification onto its call', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-background-bash-'));
+  const sessionId = 'claude-bash-session';
+  const toolUseId = 'toolu_bash_bg_1';
+
+  try {
+    // Copied from session 30ee5a44 (lines 167 and 234): the shell's own
+    // acknowledgement, and the report the harness later queues for it. A
+    // shell report carries no `<result>`, only its summary.
+    const rows = [
+      {
+        type: 'assistant',
+        uuid: 'assistant-bash-1',
+        sessionId,
+        timestamp: '2026-08-21T10:00:00.000Z',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'tool_use', id: toolUseId, name: 'Bash', input: { command: 'npm run dev', run_in_background: true } }],
+        },
+      },
+      {
+        type: 'user',
+        uuid: 'bash-ack-1',
+        sessionId,
+        timestamp: '2026-08-21T10:00:01.000Z',
+        message: {
+          role: 'user',
+          content: [{
+            type: 'tool_result',
+            tool_use_id: toolUseId,
+            content: 'Command running in background with ID: b5xsbzu5k. Output is being written to: /tmp/tasks/b5xsbzu5k.output. You will be notified when it completes.',
+          }],
+        },
+        toolUseResult: { stdout: '', stderr: '', interrupted: false, isImage: false, noOutputExpected: false, backgroundTaskId: 'b5xsbzu5k' },
+      },
+      {
+        type: 'queue-operation',
+        operation: 'enqueue',
+        timestamp: '2026-08-21T10:05:00.000Z',
+        sessionId,
+        content: [
+          '<task-notification>',
+          '<task-id>b5xsbzu5k</task-id>',
+          `<tool-use-id>${toolUseId}</tool-use-id>`,
+          '<output-file>/tmp/tasks/b5xsbzu5k.output</output-file>',
+          '<status>completed</status>',
+          '<summary>Background command "Start the dev server" completed (exit code 0)</summary>',
+          '</task-notification>',
+        ].join('\n'),
+      },
+    ];
+    const transcriptPath = path.join(tempRoot, `${sessionId}.jsonl`);
+    await writeFile(transcriptPath, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(sessionId, 'claude', tempRoot, 'Bash session', now, now, transcriptPath);
+
+      const history = await new ClaudeSessionsProvider({ getLiveRunStartTime: () => null }).fetchHistory(sessionId, {
+        providerSessionId: sessionId,
+      });
+      const bashRow = history.messages.find(
+        (message) => message.kind === 'tool_use' && message.toolId === toolUseId,
+      );
+
+      assert.equal(bashRow?.toolResult?.content, 'Background command "Start the dev server" completed (exit code 0)');
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('the live stream\'s background-task events normalize to task_status', () => {
+  // Verified against a real query: the SDK reports on a launched workflow,
+  // agent or shell command through four `system` subtypes the transcript
+  // never records. They used to fall through every branch of the normalizer
+  // and vanish, so a running workflow's card could not move off its launch
+  // acknowledgement until the whole run had finished and history reloaded.
+  const provider = new ClaudeSessionsProvider();
+  const normalize = (raw: Record<string, unknown>) =>
+    provider.normalizeMessage({ type: 'system', session_id: WORKFLOW_SESSION_ID, uuid: `evt-${String(raw.subtype)}`, ...raw }, WORKFLOW_SESSION_ID);
+
+  const [started] = normalize({
+    subtype: 'task_started',
+    task_id: WORKFLOW_TASK_ID,
+    tool_use_id: WORKFLOW_TOOL_USE_ID,
+    description: 'Parallel frontend architecture audit',
+    task_type: 'local_workflow',
+    workflow_name: 'frontend-architecture-audit',
+  });
+  assert.equal(started?.kind, 'task_status');
+  assert.equal(started?.event, 'started');
+  assert.equal(started?.taskId, WORKFLOW_TASK_ID);
+  assert.equal(started?.toolUseId, WORKFLOW_TOOL_USE_ID);
+  assert.equal(started?.taskType, 'local_workflow');
+  assert.equal(started?.workflowName, 'frontend-architecture-audit');
+  assert.equal(started?.description, 'Parallel frontend architecture audit');
+
+  const [progress] = normalize({
+    subtype: 'task_progress',
+    task_id: WORKFLOW_TASK_ID,
+    tool_use_id: WORKFLOW_TOOL_USE_ID,
+    description: 'Parallel frontend architecture audit',
+    usage: { total_tokens: 12_345, tool_uses: 12, duration_ms: 65_000 },
+    last_tool_name: 'Read',
+    summary: 'Verify 3/6',
+  });
+  assert.equal(progress?.kind, 'task_status');
+  assert.equal(progress?.event, 'progress');
+  assert.deepEqual(progress?.usage, { totalTokens: 12_345, toolUses: 12, durationMs: 65_000 });
+  assert.equal(progress?.lastToolName, 'Read');
+  assert.equal(progress?.summary, 'Verify 3/6');
+
+  // `task_updated` names no tool call — the client has to remember the task
+  // id from the start event — and spells a stop `killed`.
+  const [updated] = normalize({
+    subtype: 'task_updated',
+    task_id: WORKFLOW_TASK_ID,
+    patch: { status: 'killed', end_time: 1_700_000_000_000 },
+  });
+  assert.equal(updated?.kind, 'task_status');
+  assert.equal(updated?.event, 'updated');
+  assert.equal(updated?.taskId, WORKFLOW_TASK_ID);
+  assert.equal(updated?.toolUseId, undefined);
+  assert.equal(updated?.status, 'stopped');
+
+  const [notification] = normalize({
+    subtype: 'task_notification',
+    task_id: WORKFLOW_TASK_ID,
+    tool_use_id: WORKFLOW_TOOL_USE_ID,
+    status: 'completed',
+    summary: 'Dynamic workflow "Evidence-based audit of the frontend" completed',
+    output_file: `/tmp/claude-1000/tasks/${WORKFLOW_TASK_ID}.output`,
+  });
+  assert.equal(notification?.kind, 'task_status');
+  assert.equal(notification?.event, 'notification');
+  assert.equal(notification?.status, 'completed');
+  assert.equal(notification?.summary, 'Dynamic workflow "Evidence-based audit of the frontend" completed');
+  assert.equal(notification?.outputFile, `/tmp/claude-1000/tasks/${WORKFLOW_TASK_ID}.output`);
+
+  // Every other `system` subtype still normalizes to nothing.
+  assert.deepEqual(normalize({ subtype: 'hook_started', task_id: 'irrelevant' }), []);
+  assert.deepEqual(normalize({ subtype: 'init' }), []);
+});
+
 test('Claude history still settles a synchronous agent that stops mid tool call', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-sync-agent-'));
 

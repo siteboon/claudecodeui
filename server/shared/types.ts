@@ -190,7 +190,8 @@ export type MessageKind =
   | 'permission_cancelled'
   | 'session_created'
   | 'history_truncated'
-  | 'task_notification';
+  | 'task_notification'
+  | 'task_status';
 
 /**
  * Event kinds added by the chat gateway layer on top of provider message kinds.
@@ -346,12 +347,72 @@ export type NormalizedMessage = {
   subagentTools?: SubagentActivity[];
   /** Identity and lifecycle of the subagent this `tool_use` spawned. */
   subagent?: SubagentInfo;
+  /** The workflow run this `tool_use` launched, read from its journal on disk. */
+  workflow?: WorkflowInfo;
   /** Stored memory the reply drew on, when the provider reports it. */
   memoryCitations?: MemoryCitation[];
   toolUseResult?: unknown;
   sequence?: number;
   rowid?: number;
+  /**
+   * `task_status` fields: one lifecycle event of a background task the live
+   * run is tracking. `taskId` is the provider's task handle; `toolUseId` names
+   * the call that launched it and is absent on `updated`, which the SDK keys by
+   * task id alone. `status` and `summary` above carry the event's own.
+   */
+  event?: 'started' | 'progress' | 'updated' | 'notification';
+  taskId?: string;
+  toolUseId?: string;
+  taskType?: string;
+  workflowName?: string;
+  description?: string;
+  usage?: TaskUsage;
+  lastToolName?: string;
+  outputFile?: string;
   [key: string]: unknown;
+};
+
+/**
+ * What a background task has spent so far, as the CLI reports it on
+ * `task_progress` and `task_notification`.
+ */
+export type TaskUsage = {
+  totalTokens: number;
+  toolUses: number;
+  durationMs: number;
+};
+
+/**
+ * One agent a workflow run spawned, as its journal records it.
+ *
+ * `label` and `phase` are whatever the script passed when it spawned the
+ * agent; older scripts passed neither. An agent with a `started` record and no
+ * `result` or `failed` one is still running as far as the journal knows.
+ */
+export type WorkflowAgentInfo = {
+  id: string;
+  label?: string;
+  phase?: string;
+  status: 'running' | 'completed' | 'failed';
+};
+
+/**
+ * A `Workflow` tool call's run, attached to the `tool_use` that launched it.
+ *
+ * `status` follows the same rule as a background agent's: the task
+ * notification's word when one exists, else `running` only while the process
+ * that launched it is still up, else `stopped`. The agent list and counts come
+ * from `<transcriptDir>/journal.jsonl`; both are empty when the run left no
+ * journal behind (a fork copies only the parent's transcript).
+ */
+export type WorkflowInfo = {
+  runId: string;
+  name: string;
+  description?: string;
+  status: 'running' | 'completed' | 'failed' | 'stopped';
+  agents: WorkflowAgentInfo[];
+  agentCounts: { total: number; completed: number; failed: number; running: number };
+  scriptPath?: string;
 };
 
 /**

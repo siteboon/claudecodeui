@@ -280,13 +280,16 @@ export type CompactionInfo = {
   error?: string | null;
 };
 
+/** Where a background task — a spawned agent, a workflow run or a backgrounded command — stands: `stopped` is one whose session process ended before it reported, so no outcome exists and none is coming. */
+export type BackgroundTaskStatus = 'running' | 'completed' | 'failed' | 'stopped';
+
 export type SubagentInfo = {
   id: string;
   name?: string;
   type?: string;
   description?: string;
   /** `stopped` is a background agent whose session process ended before it reported: no outcome exists and none is coming. */
-  status: 'running' | 'completed' | 'failed' | 'stopped';
+  status: BackgroundTaskStatus;
   model?: string;
   /** Total entries the agent recorded, which exceeds the received timeline when a long run was truncated for transport. */
   activityCount?: number;
@@ -335,6 +338,13 @@ export type ChatMessage = {
   subagent?: SubagentInfo;
   /** What that agent did, in order. Empty while the agent is still starting up. */
   subagentActivity?: SubagentActivity[];
+  /** The workflow run this row launched, as the backend read it on the last history load. */
+  workflow?: WorkflowInfo;
+  /** The latest live word on the background task this row launched, while the run is in flight. */
+  taskStatus?: LiveTaskStatus;
+  /** Set on the row that stands for a background task's completion report, with the status it reported. */
+  isTaskNotification?: boolean;
+  taskNotificationStatus?: string;
   /** Stored memory this reply drew on, shown as a footnote beneath it. */
   memoryCitations?: MemoryCitation[];
   /** Lifecycle the provider reported for this tool call, when it reports one; otherwise the status is inferred from whether a result has arrived. */
@@ -500,12 +510,71 @@ export type NormalizedMessage = {
   subagentTools?: SubagentActivity[];
   /** Identity and lifecycle of that subagent. */
   subagent?: SubagentInfo;
+  /** The workflow run a `Workflow` call launched, attached by the backend from the run's journal. */
+  workflow?: WorkflowInfo;
   /** Stored memory this reply drew on, when the provider reports it. */
   memoryCitations?: MemoryCitation[];
   isFinal?: boolean;
   // Cursor-specific ordering
   sequence?: number;
   rowid?: number;
+  /**
+   * `task_status` fields: one live lifecycle event of a background task.
+   * `toolUseId` names the call that launched it and is absent on `updated`,
+   * which is keyed by `taskId` alone; `status` and `summary` above carry the
+   * event's own.
+   */
+  event?: 'started' | 'progress' | 'updated' | 'notification';
+  taskId?: string;
+  toolUseId?: string;
+  taskType?: string;
+  workflowName?: string;
+  description?: string;
+  usage?: TaskUsage;
+  lastToolName?: string;
+  outputFile?: string;
+};
+
+/** What a background task has spent so far — tokens, tool calls and wall time — as the CLI reports it while the task runs and when it ends. */
+export type TaskUsage = {
+  totalTokens: number;
+  toolUses: number;
+  durationMs: number;
+};
+
+/** One agent a workflow run spawned, as its journal records it: the label and phase the script gave it (older scripts gave neither) and whether it has finished. */
+export type WorkflowAgentInfo = {
+  id: string;
+  label?: string;
+  phase?: string;
+  status: 'running' | 'completed' | 'failed';
+};
+
+/** A `Workflow` call's run as the backend read it from disk; `stopped` is a run whose session process ended before it reported, and an empty agent list is a run that left no journal behind. */
+export type WorkflowInfo = {
+  runId: string;
+  name: string;
+  description?: string;
+  status: BackgroundTaskStatus;
+  agents: WorkflowAgentInfo[];
+  agentCounts: { total: number; completed: number; failed: number; running: number };
+  scriptPath?: string;
+};
+
+/**
+ * The latest live word on a background task, folded from the session's
+ * `task_status` events onto the tool call that launched it. It is what a card
+ * reads while the run is in flight; on a history reload the backend's
+ * `subagent` or `workflow` carries the settled outcome instead.
+ */
+export type LiveTaskStatus = {
+  status: BackgroundTaskStatus;
+  taskType?: string;
+  workflowName?: string;
+  description?: string;
+  summary?: string;
+  usage?: TaskUsage;
+  lastToolName?: string;
 };
 
 /** Discriminator on NormalizedMessage naming which kind of transcript event it carries — plain text, tool use or result, thinking, stream delta or end, error, completion, status, permission request/resolution/cancellation, session creation, interactive prompt, or task notification. */
@@ -524,7 +593,8 @@ type MessageKind =
   | 'permission_cancelled'
   | 'session_created'
   | 'history_truncated'
-  | 'task_notification';
+  | 'task_notification'
+  | 'task_status';
 
 // ---------------------------
 

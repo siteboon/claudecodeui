@@ -4,16 +4,17 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import { SubagentPanel } from '@/modules/chat/tools/SubagentPanel';
 import { createCachedDiffCalculator } from '@/modules/chat/utils/messageTransforms';
-import type { SubagentInfo, ToolResult } from '@/shared/types';
+import type { LiveTaskStatus, SubagentInfo, ToolResult } from '@/shared/types';
 
 const createDiff = createCachedDiffCalculator();
 
-const render = (toolResult: ToolResult | null, subagent?: SubagentInfo) =>
+const render = (toolResult: ToolResult | null, subagent?: SubagentInfo, taskStatus?: LiveTaskStatus) =>
   renderToStaticMarkup(
     React.createElement(SubagentPanel, {
       toolInput: JSON.stringify({ subagent_type: 'Explore', description: 'Survey the repo' }, null, 2),
       toolResult,
       subagent,
+      taskStatus,
       createDiff,
     }),
   );
@@ -81,5 +82,21 @@ describe('a background agent card at the moment it launches', () => {
     expect(markup).not.toContain('running');
     expect(markup).not.toContain('done');
     expect(markup).not.toContain('lucide-circle-check');
+  });
+
+  it('settles from the live stream\'s task events before history reloads', () => {
+    // Mid-run there is no `subagent` yet — that comes from the history reader
+    // — but the SDK reports on the task as it goes, and its notification is
+    // the outcome the card was waiting for.
+    const launch: ToolResult = {
+      content: 'Async agent launched successfully. agentId: internal bookkeeping',
+      isError: false,
+      toolUseResult: { isAsync: true, status: 'async_launched', agentId: 'a1' },
+    };
+
+    expect(render(launch, undefined, { status: 'running', usage: { totalTokens: 1, toolUses: 3, durationMs: 1 } })).toContain('running');
+    expect(render(launch, undefined, { status: 'completed', summary: 'Agent "Survey the repo" finished' })).toContain('done');
+    expect(render(launch, undefined, { status: 'failed' })).toContain('failed');
+    expect(render(launch, undefined, { status: 'stopped' })).toContain('no result');
   });
 });

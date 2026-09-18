@@ -3,7 +3,7 @@
  * Converts NormalizedMessage[] from the session store into ChatMessage[] for the UI.
  */
 
-import type { ChatMessage,NormalizedMessage,SubagentActivity } from '@/shared/types';
+import type { ChatMessage, LiveTaskStatus, NormalizedMessage, SubagentActivity } from '@/shared/types';
 import { formatUsageLimitText } from '@/modules/chat/utils/chatFormatting';
 
 function formatToolResultContent(content: unknown): string {
@@ -25,6 +25,8 @@ type CachedMessageProjection = {
   toolResultSource: ToolResultSource;
   /** A live subagent container also depends on the newest row folded into its timeline. */
   subagentActivitySource: NormalizedMessage | null;
+  /** A background launch also depends on the newest `task_status` event folded onto it. */
+  taskStatusSource: NormalizedMessage | null;
   messages: ChatMessage[];
 };
 
@@ -182,6 +184,48 @@ function appendCompactionRow(
   return true;
 }
 
+/**
+ * Merges one live `task_status` event into the task map.
+ *
+ * Events arrive in order, so each one overwrites what it knows and keeps the
+ * rest: a `progress` event carries usage but not the workflow name the
+ * `started` event announced. `updated` names only the task id, so the id is
+ * remembered from the first event that paired it with its tool call; an event
+ * that cannot be tied to a call — an ambient task — has no card and is dropped.
+ */
+function foldTaskStatus(
+  msg: NormalizedMessage,
+  liveTasksByToolUseId: Map<string, LiveTaskStatus>,
+  toolUseIdByTaskId: Map<string, string>,
+  lastTaskSourceByToolUseId: Map<string, NormalizedMessage>,
+): void {
+  if (msg.taskId && msg.toolUseId) {
+    toolUseIdByTaskId.set(msg.taskId, msg.toolUseId);
+  }
+  const toolUseId = msg.toolUseId ?? (msg.taskId ? toolUseIdByTaskId.get(msg.taskId) : undefined);
+  if (!toolUseId) {
+    return;
+  }
+
+  const previous = liveTasksByToolUseId.get(toolUseId);
+  const settled = msg.status === 'completed' || msg.status === 'failed' || msg.status === 'stopped'
+    ? msg.status
+    : null;
+  liveTasksByToolUseId.set(toolUseId, {
+    // A settled status is final. Short of one, `started` and `progress` mean
+    // the task is running, while an `updated` patch that does not change the
+    // status (an end time, say) leaves it where it was.
+    status: settled ?? (msg.event === 'started' || msg.event === 'progress' ? 'running' : previous?.status ?? 'running'),
+    taskType: msg.taskType ?? previous?.taskType,
+    workflowName: msg.workflowName ?? previous?.workflowName,
+    description: msg.description ?? previous?.description,
+    summary: msg.summary ?? previous?.summary,
+    usage: msg.usage ?? previous?.usage,
+    lastToolName: msg.lastToolName ?? previous?.lastToolName,
+  });
+  lastTaskSourceByToolUseId.set(toolUseId, msg);
+}
+
 export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMessage[] {
   const converted: ChatMessage[] = [];
 
@@ -196,7 +240,21 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
   const liveSubagentToolsById = new Map<string, SubagentActivity>();
   /** Newest folded row per container, so its cached projection knows to rebuild. */
   const lastSubagentSourceByParent = new Map<string, NormalizedMessage>();
+  // The latest live word on each background task, keyed by the tool call that
+  // launched it. Built here, beside the subagent fold, because both answer the
+  // same question — what has this call's work done since it launched — from
+  // rows the store keeps at top level.
+  const liveTasksByToolUseId = new Map<string, LiveTaskStatus>();
+  /** `task_updated` names only the task; the start event says which call that is. */
+  const toolUseIdByTaskId = new Map<string, string>();
+  /** Newest event folded per launch, so its cached projection knows to rebuild. */
+  const lastTaskSourceByToolUseId = new Map<string, NormalizedMessage>();
   for (const msg of messages) {
+    if (msg.kind === 'task_status') {
+      foldTaskStatus(msg, liveTasksByToolUseId, toolUseIdByTaskId, lastTaskSourceByToolUseId);
+      continue;
+    }
+
     if (msg.parentToolUseId) {
       const parentId = msg.parentToolUseId;
       let activity = liveSubagentActivity.get(parentId);
@@ -283,14 +341,19 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
     const subagentActivitySource = msg.kind === 'tool_use' && msg.toolId
       ? lastSubagentSourceByParent.get(msg.toolId) ?? null
       : null;
+    const taskStatusSource = msg.kind === 'tool_use' && msg.toolId
+      ? lastTaskSourceByToolUseId.get(msg.toolId) ?? null
+      : null;
     const cachedProjection = projectionCache.get(msg);
 
     // A tool-use projection must be rebuilt when a matching result arrives,
     // even though the original tool-use record itself is unchanged. The same
-    // holds for a subagent container when its live timeline grows.
+    // holds for a subagent container when its live timeline grows, and for a
+    // background launch when a newer task event lands on it.
     if (
       cachedProjection?.toolResultSource === toolResultSource
       && cachedProjection.subagentActivitySource === subagentActivitySource
+      && cachedProjection.taskStatusSource === taskStatusSource
     ) {
       converted.push(...cachedProjection.messages);
       continue;
@@ -334,7 +397,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
               content: taskNotif.summary,
               timestamp: msg.timestamp,
               isTaskNotification: true,
-              taskStatus: taskNotif.status,
+              taskNotificationStatus: taskNotif.status,
               ...sharedMetadata,
             });
             // Render the agent's result as a normal assistant message so its
@@ -411,6 +474,8 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           isSubagentContainer,
           subagent: msg.subagent,
           subagentActivity,
+          workflow: msg.workflow,
+          taskStatus: msg.toolId ? liveTasksByToolUseId.get(msg.toolId) : undefined,
           memoryCitations: msg.memoryCitations,
           ...sharedMetadata,
         });
@@ -444,7 +509,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           content: msg.summary || 'Background task update',
           timestamp: msg.timestamp,
           isTaskNotification: true,
-          taskStatus: msg.status || 'completed',
+          taskNotificationStatus: msg.status || 'completed',
           ...sharedMetadata,
         });
         break;
@@ -471,6 +536,10 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
       case 'permission_cancelled':
       case 'session_created':
         // Skip — these are handled by useChatRealtimeHandlers
+        break;
+
+      // Folded onto the launching tool call in the first pass.
+      case 'task_status':
         break;
 
       // tool_result is handled via attachment to tool_use above
@@ -510,6 +579,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
     projectionCache.set(msg, {
       toolResultSource,
       subagentActivitySource,
+      taskStatusSource,
       // One source record can produce zero, one, or two UI messages (task
       // notifications with a result produce two), so cache the whole slice.
       messages: converted.slice(convertedStart),
