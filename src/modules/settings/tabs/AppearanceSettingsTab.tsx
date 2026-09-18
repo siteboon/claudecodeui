@@ -1,6 +1,10 @@
 import { useTranslation } from 'react-i18next';
 
 import { DarkModeToggle } from '@/shared/ui';
+import {
+  useSetUiPreference,
+  useUiPreferences,
+} from '@/shared/context/UiPreferencesContext';
 import type { CodeEditorSettingsState, ProjectSortOrder } from '@/shared/types';
 import { LanguageSelector } from '@/modules/i18n';
 import SettingsCard from '@/modules/settings/SettingsCard';
@@ -29,6 +33,8 @@ export default function AppearanceSettingsTab({
   onCodeEditorFontSizeChange,
 }: AppearanceSettingsTabProps) {
   const { t } = useTranslation('settings');
+  const { backOpensSessionList } = useUiPreferences();
+  const setPreference = useSetUiPreference();
 
   return (
     <div className="space-y-8">
@@ -121,6 +127,21 @@ export default function AppearanceSettingsTab({
               <option value="18">18px</option>
               <option value="20">20px</option>
             </select>
+          </SettingsRow>
+        </SettingsCard>
+      </SettingsSection>
+
+      <SettingsSection title={t('appearanceSettings.mobileNavigation.title')}>
+        <SettingsCard>
+          <SettingsRow
+            label={t('appearanceSettings.mobileNavigation.backOpensSessionList.label')}
+            description={t('appearanceSettings.mobileNavigation.backOpensSessionList.description')}
+          >
+            <SettingsToggle
+              checked={backOpensSessionList}
+              onChange={(value) => setPreference('backOpensSessionList', value)}
+              ariaLabel={t('appearanceSettings.mobileNavigation.backOpensSessionList.label')}
+            />
           </SettingsRow>
         </SettingsCard>
       </SettingsSection>

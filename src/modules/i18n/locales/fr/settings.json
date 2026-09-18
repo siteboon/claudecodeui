@@ -153,6 +153,13 @@
         "label": "Taille de police",
         "description": "Taille de police de l'éditeur en pixels"
       }
+    },
+    "mobileNavigation": {
+      "title": "Navigation mobile",
+      "backOpensSessionList": {
+        "label": "Retour ouvre la liste des sessions",
+        "description": "Sur les écrans de taille téléphone, Retour ouvre la liste des sessions au lieu de quitter la page lorsque la liste est fermée. Si la liste est déjà ouverte, Retour navigue normalement. Juste après le chargement, Retour reste inchangé jusqu'à ce que vous interagissiez avec la page."
+      }
     }
   },
   "mcpForm": {
