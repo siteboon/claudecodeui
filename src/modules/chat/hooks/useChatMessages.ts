@@ -7,7 +7,9 @@ import type { ChatMessage,NormalizedMessage,SubagentActivity } from '@/shared/ty
 import { formatUsageLimitText } from '@/modules/chat/utils/chatFormatting';
 
 function formatToolResultContent(content: unknown): string {
-  const text = typeof content === 'string' ? content : JSON.stringify(content);
+  // JSON.stringify(undefined) returns undefined (not a string), so a
+  // tool_result row without a content payload would crash the `.trim()` below.
+  const text = typeof content === 'string' ? content : (JSON.stringify(content) ?? '');
   const toolUseErrorMatch = /^<tool_use_error>([\s\S]*)<\/tool_use_error>$/.exec(text.trim());
   return toolUseErrorMatch ? toolUseErrorMatch[1] : text;
 }

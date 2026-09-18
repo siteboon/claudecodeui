@@ -54,12 +54,29 @@ const PROVIDER_NAMES: Record<SkillsProvider, string> = {
   codex: 'Codex',
   cursor: 'Cursor',
   opencode: 'OpenCode',
+  pi: 'Pi',
 };
 
 const PROVIDER_SKILL_PATHS: Record<Exclude<SkillsProvider, 'opencode'>, string> = {
   claude: '~/.claude/skills/<skill-name>/SKILL.md',
   codex: '~/.agents/skills/<skill-name>/SKILL.md',
   cursor: '~/.cursor/skills/<skill-name>/SKILL.md',
+  pi: '~/.pi/agent/skills/<skill-name>/SKILL.md',
+};
+
+/**
+ * Whether the backend accepts managed skill installs for a provider.
+ *
+ * Pi only discovers skills from disk (its own folder, settings-configured
+ * folders and the workspace's `.pi/skills`), so its page stays read-only: the
+ * backend rejects writes until pi exposes a writable skill home.
+ */
+const PROVIDER_SUPPORTS_SKILL_WRITES: Record<SkillsProvider, boolean> = {
+  claude: true,
+  codex: true,
+  cursor: true,
+  opencode: false,
+  pi: false,
 };
 
 const SCOPE_BADGE_CLASSES: Record<SkillsScope, string> = {
@@ -207,6 +224,7 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
 
   const providerName = PROVIDER_NAMES[selectedProvider];
   const providerPath = selectedProvider === 'opencode' ? null : PROVIDER_SKILL_PATHS[selectedProvider];
+  const supportsSkillWrites = PROVIDER_SUPPORTS_SKILL_WRITES[selectedProvider];
 
   useEffect(() => {
     setQueuedFiles([]);
@@ -507,7 +525,9 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
         <div className="min-w-0 space-y-1">
           <h3 className="text-lg font-medium text-foreground">{t('tabs.skills', { defaultValue: 'Skills' })}</h3>
           <p className="text-sm text-muted-foreground">
-            {t('skillsPage.description', { provider: providerName })}
+            {supportsSkillWrites
+              ? t('skillsPage.description', { provider: providerName })
+              : t('skillsPage.readOnlyDescription', { provider: providerName })}
           </p>
         </div>
       </div>
@@ -535,15 +555,17 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
               </button>
             )}
           </div>
-          <Button
-            type="button"
-            size="sm"
-            className="w-full sm:w-auto"
-            onClick={() => handleAddDialogOpenChange(true)}
-          >
-            <Plus className="h-4 w-4" />
-            {t('skillsPage.addSkill')}
-          </Button>
+          {supportsSkillWrites && (
+            <Button
+              type="button"
+              size="sm"
+              className="w-full sm:w-auto"
+              onClick={() => handleAddDialogOpenChange(true)}
+            >
+              <Plus className="h-4 w-4" />
+              {t('skillsPage.addSkill')}
+            </Button>
+          )}
           <Button
             onClick={() => void refreshSkills({ force: true })}
             variant="outline"
@@ -670,8 +692,15 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
             </div>
             <div className="mt-4 text-sm font-medium text-foreground">{t('skillsPage.emptyTitle')}</div>
             <div className="mt-1 text-sm text-muted-foreground">
-              {t('skillsPage.emptyDescription')}
+              {supportsSkillWrites
+                ? t('skillsPage.emptyDescription')
+                : t('skillsPage.emptyReadOnlyDescription', { provider: providerName })}
             </div>
+            {!supportsSkillWrites && providerPath && (
+              <code className="mx-auto mt-3 block max-w-md whitespace-normal break-all rounded-md border border-border/60 bg-muted/20 px-2 py-1 text-xs text-foreground">
+                {providerPath}
+              </code>
+            )}
           </div>
         )}
 

@@ -932,6 +932,20 @@ export function unwrapJsonStringLiteral(value: string): string {
 }
 
 // ---------------------------
+//----------------- PI SESSION STORAGE UTILITIES ------------
+/**
+ * Resolves the Pi session directory.
+ *
+ * Pi writes one JSONL transcript per session under `~/.pi/agent/sessions`
+ * (grouped per project directory). Watchers and synchronizers should treat this
+ * path as read-only input and never store it as the deletable transcript path
+ * of an individual app session row.
+ */
+export function getPiSessionDir(): string {
+  return path.join(os.homedir(), '.pi', 'agent', 'sessions');
+}
+
+// ---------------------------
 //----------------- SAFE DIRECTORY NAME UTILITIES ------------
 /**
  * Validates that a user or provider supplied identifier can safely be treated

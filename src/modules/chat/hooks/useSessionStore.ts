@@ -120,9 +120,10 @@ async function requestSessionHistoryPage(
 }
 
 /**
- * Compute merged messages: server + realtime, deduped by id and adjacent
- * assistant echo (same trimmed text), so finalized stream rows do not stack
- * on top of the persisted copy before realtime is cleared.
+ * Compute merged messages: server + realtime, deduped by id and by
+ * same-turn assistant echo (same kind, same trimmed text — adjacency not
+ * required), so finalized stream rows do not stack on top of the persisted
+ * copy before realtime is cleared.
  */
 function readMessageTime(m: NormalizedMessage): number | null {
   const time = Date.parse(m.timestamp);
@@ -225,10 +226,22 @@ function findServerTurnRangeByOrdinal(
   return { start, end };
 }
 
-function isAssistantTextEchoedInSameTurnOnServer(
+type AssistantEchoKind = 'text' | 'thinking';
+
+/**
+ * Whether a live row's content already exists in the persisted transcript as a
+ * row of the same kind inside the same user turn.
+ *
+ * Live event-stream rows and persisted transcript rows derive their message ids
+ * from different sources, so `serverIds.has(id)` never matches them — text and
+ * thinking alike are matched by content echo instead. Thinking rows carry no
+ * role on either side, so only text keeps the assistant gate.
+ */
+function isAssistantEchoedInSameTurnOnServer(
   message: NormalizedMessage,
   serverMessages: NormalizedMessage[],
   realtimeMessages: NormalizedMessage[],
+  kind: AssistantEchoKind = 'text',
 ): boolean {
   const assistantText = (message.content || '').trim();
   if (!assistantText) {
@@ -244,46 +257,141 @@ function isAssistantTextEchoedInSameTurnOnServer(
   return serverMessages
     .slice(turnRange.start + 1, turnRange.end)
     .some((serverMessage) =>
-      serverMessage.kind === 'text'
-      && serverMessage.role === 'assistant'
+      serverMessage.kind === kind
+      && (kind !== 'text' || serverMessage.role === 'assistant')
       && (serverMessage.content || '').trim() === assistantText,
     );
 }
 
 /**
- * After `finalizeStreaming`, the client holds a synthetic assistant `text` row
- * while the sessions API soon returns the same reply with a different id.
- * Those sit back-to-back in merged order and look like duplicate bubbles until
- * A persisted-tail refresh reconciles realtime. Collapse same-text assistant rows and
- * stream_placeholder → text when content matches.
+ * The rows this dedupe compares, keyed by (kind, trimmed content).
+ *
+ * Thinking rows carry no role on either side, so only text keeps the
+ * assistant gate. Empty content never dedupes.
  */
-function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedMessage[] {
+function assistantEchoScopeKey(message: NormalizedMessage): string | null {
+  const content = (message.content || '').trim();
+  if (content.length === 0) {
+    return null;
+  }
+  if (message.kind === 'thinking') {
+    return `thinking\n${content}`;
+  }
+  if (message.kind === 'text' && message.role === 'assistant') {
+    return `text\n${content}`;
+  }
+  return null;
+}
+
+/**
+ * Upgrade a trailing stream delta to its finalized text row.
+ *
+ * A `stream_delta` directly followed by its identical finalized text is
+ * replaced by the text row — the delta was only its live preview. This never
+ * removes content, so it is safe on rows from any single source.
+ */
+function finalizeStreamDeltaUpgrades(rows: NormalizedMessage[]): NormalizedMessage[] {
   const out: NormalizedMessage[] = [];
-  for (const m of merged) {
+  for (const m of rows) {
     const prev = out[out.length - 1];
-    if (prev) {
-      if (prev.kind === 'stream_delta' && m.kind === 'text' && m.role === 'assistant') {
-        const ps = (prev.content || '').trim();
-        const ms = (m.content || '').trim();
-        if (ps.length > 0 && ps === ms) {
-          out[out.length - 1] = m;
-          continue;
-        }
+    if (
+      prev
+      && prev.kind === 'stream_delta'
+      && m.kind === 'text'
+      && m.role === 'assistant'
+      && (prev.content || '').trim().length > 0
+      && (prev.content || '').trim() === (m.content || '').trim()
+    ) {
+      out[out.length - 1] = m;
+    } else {
+      out.push(m);
+    }
+  }
+  return out;
+}
+
+/**
+ * Drop realtime rows the persisted transcript already owns in the same turn.
+ *
+ * After `finalizeStreaming`, the client holds a synthetic assistant `text`
+ * row while the sessions API soon returns the same reply with a different id,
+ * and live event-stream rows never share a message id with their persisted
+ * twins either — text and thinking alike are matched by content echo. The refresh
+ * that pulls the persisted copy back normally prunes the live one
+ * (`pruneRealtimeSupersededByServer`), but that prune locates the owning turn
+ * by walking chronology, and live rows (stamped when the client received them)
+ * and persisted rows (stamped when the provider wrote them) can interleave
+ * enough to mislocate the turn. When it misses, both copies survive into the
+ * merged view — and they are not adjacent: the timestamp sort weaves each copy
+ * in between the other side's sibling rows (server text, live thinking, live
+ * text, server thinking). The comparison is therefore scoped by turn and,
+ * inside a turn, order-independent — however far before or after its twin a
+ * row sorts.
+ *
+ * Only realtime twins are removed — never a server row, and never a realtime
+ * row without a persisted counterpart. Repeated identical output from one
+ * authoritative source (the model genuinely emitting the same block twice in
+ * one turn) is preserved, so history never loses real content. Rows are only
+ * ever removed, never reordered; a `stream_delta` directly followed by its
+ * identical finalized text is still upgraded to the text row.
+ */
+function dropRealtimeEchoesOfServerRows(
+  merged: NormalizedMessage[],
+  serverIds: ReadonlySet<string>,
+): NormalizedMessage[] {
+  const out: NormalizedMessage[] = [];
+  let turnRows: NormalizedMessage[] = [];
+
+  const flushTurn = (): void => {
+    if (turnRows.length === 0) {
+      return;
+    }
+    // (kind, trimmed content) keys the persisted rows own in this turn.
+    const serverKeys = new Set<string>();
+    for (const row of turnRows) {
+      if (!serverIds.has(row.id)) {
+        continue;
       }
-      if (
-        prev.kind === 'text'
-        && m.kind === 'text'
-        && prev.role === 'assistant'
-        && m.role === 'assistant'
-      ) {
-        const ms = (m.content || '').trim();
-        if (ms.length > 0 && ms === (prev.content || '').trim()) {
-          continue;
-        }
+      const key = assistantEchoScopeKey(row);
+      if (key !== null) {
+        serverKeys.add(key);
       }
     }
-    out.push(m);
+
+    for (const row of turnRows) {
+      const echoKey = assistantEchoScopeKey(row);
+      // Only the realtime twin of an already-persisted row is dropped.
+      if (echoKey !== null && !serverIds.has(row.id) && serverKeys.has(echoKey)) {
+        continue;
+      }
+
+      const prev = out[out.length - 1];
+      if (
+        prev
+        && prev.kind === 'stream_delta'
+        && row.kind === 'text'
+        && row.role === 'assistant'
+        && (prev.content || '').trim().length > 0
+        && (prev.content || '').trim() === (row.content || '').trim()
+      ) {
+        out[out.length - 1] = row;
+      } else {
+        out.push(row);
+      }
+    }
+
+    turnRows = [];
+  };
+
+  for (const m of merged) {
+    if ((m.kind === 'text' && m.role === 'user') || m.kind === 'tool_use') {
+      flushTurn();
+      out.push(m);
+      continue;
+    }
+    turnRows.push(m);
   }
+  flushTurn();
   return out;
 }
 
@@ -310,14 +418,24 @@ function pruneRealtimeSupersededByServer(
     }
 
     if (message.kind === 'stream_delta' || message.id === `__streaming_${message.sessionId}`) {
-      if (isAssistantTextEchoedInSameTurnOnServer(message, serverMessages, realtimeMessages)) {
+      if (isAssistantEchoedInSameTurnOnServer(message, serverMessages, realtimeMessages)) {
         return false;
       }
       return true;
     }
 
     if (message.kind === 'text' && message.role === 'assistant') {
-      if (isAssistantTextEchoedInSameTurnOnServer(message, serverMessages, realtimeMessages)) {
+      if (isAssistantEchoedInSameTurnOnServer(message, serverMessages, realtimeMessages)) {
+        return false;
+      }
+      return true;
+    }
+
+    // Live event-stream rows and persisted transcript rows never share a
+    // message id, so thinking is matched by content echo too (same as text);
+    // without this a persisted-tail refresh left every reasoning block doubled.
+    if (message.kind === 'thinking') {
+      if (isAssistantEchoedInSameTurnOnServer(message, serverMessages, realtimeMessages, 'thinking')) {
         return false;
       }
       return true;
@@ -339,10 +457,12 @@ function pruneRealtimeSupersededByServer(
 
 function computeMerged(server: NormalizedMessage[], realtime: NormalizedMessage[]): NormalizedMessage[] {
   if (realtime.length === 0) {
-    return dedupeAdjacentAssistantEchoes(server);
+    // Persisted rows only: repeated output within one turn is authoritative
+    // content, so nothing is deduped by content in a single-source view.
+    return finalizeStreamDeltaUpgrades(server);
   }
   if (server.length === 0) {
-    return dedupeAdjacentAssistantEchoes(realtime);
+    return finalizeStreamDeltaUpgrades(realtime);
   }
 
   const serverIds = new Set(server.map((message) => message.id));
@@ -355,7 +475,7 @@ function computeMerged(server: NormalizedMessage[], realtime: NormalizedMessage[
   });
 
   if (extra.length === 0) {
-    return dedupeAdjacentAssistantEchoes(server);
+    return finalizeStreamDeltaUpgrades(server);
   }
 
   // Interleave by timestamp so live rows stay with their turn instead of
@@ -366,10 +486,11 @@ function computeMerged(server: NormalizedMessage[], realtime: NormalizedMessage[
     (newest, message) => Math.max(newest, readMessageTime(message) ?? 0),
     0,
   );
-  return dedupeAdjacentAssistantEchoes(
+  return dropRealtimeEchoesOfServerRows(
     [...server, ...extra].sort(
       (a, b) => readSortTime(a, newestServerTime) - readSortTime(b, newestServerTime),
     ),
+    serverIds,
   );
 }
 

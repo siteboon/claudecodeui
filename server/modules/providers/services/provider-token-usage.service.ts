@@ -393,6 +393,22 @@ export function createProviderTokenUsageService(
         };
       }
 
+      // Pi already carries cumulative usage in its live runtime events, and
+      // reading historical usage back is the sessions API's job (it parses the
+      // JSONL transcripts), so this endpoint answers with an explicit
+      // unsupported result the same way Cursor does.
+      if (session.provider === 'pi') {
+        return {
+          used: 0,
+          total: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          breakdown: { input: 0, output: 0 },
+          unsupported: true,
+          message: 'Token usage tracking not available for Pi sessions',
+        };
+      }
+
       if (session.provider === 'opencode') {
         const databasePath = dependencies.getOpenCodeDatabasePath();
         if (!dependencies.fileExists(databasePath)) {

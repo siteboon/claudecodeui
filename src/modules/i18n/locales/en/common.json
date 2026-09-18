@@ -347,6 +347,7 @@
     "unknownProvider": "Unknown",
     "browseFolders": "Browse folders",
     "closeLoginModal": "Close login modal",
+    "piSetupHint": "Pi has no login command: credentials come from environment variables or ~/.pi/agent/models.json. The pi CLI below is for setup and verification.",
     "pluginLoadFailed": "Plugin failed to load: {{error}}"
   },
   "cancel": "Cancel"

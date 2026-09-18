@@ -287,6 +287,7 @@ const parseProvider = (value: unknown): LLMProvider => {
     || normalized === 'codex'
     || normalized === 'cursor'
     || normalized === 'opencode'
+    || normalized === 'pi'
   ) {
     return normalized;
   }

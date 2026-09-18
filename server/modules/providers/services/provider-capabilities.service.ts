@@ -104,6 +104,21 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsMessageEditing: false,
     supportsSessionForking: false,
   },
+  pi: {
+    provider: 'pi',
+    // pi has no permission system, fork, or MCP support, so only the default
+    // mode is offered; image attachments and abort (SIGTERM) are supported.
+    permissionModes: ['default'],
+    defaultPermissionMode: 'default',
+    supportsImages: true,
+    supportsFiles: false,
+    supportsAbort: true,
+    supportsPermissionRequests: false,
+    supportsTokenUsage: false,
+    supportsEffort: false,
+    supportsMessageEditing: false,
+    supportsSessionForking: false,
+  },
 };
 
 /**
