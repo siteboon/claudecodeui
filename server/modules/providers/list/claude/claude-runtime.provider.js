@@ -945,6 +945,38 @@ const SUBAGENT_TOOL_NAMES = new Set(['Agent', 'Task']);
 // take tens of minutes.
 const DEFERRED_WORK_TOOLS = new Set(['Monitor', 'ScheduleWakeup', 'CronCreate', 'TaskCreate', 'Workflow']);
 
+// Work that repeats by design rather than finishing. A recurring cron and an
+// armed Monitor both go quiet between ticks, so silence never means they are
+// done — and the usual "nothing has happened lately, let the process go" rule
+// is exactly wrong for them. `/loop 10m` died this way: one tick, then the
+// process was released and the in-process cron went with it.
+const RECURRING_WORK_TOOLS = new Set(['Monitor']);
+
+/**
+ * Detects tool calls that will keep firing until something stops them.
+ *
+ * @param {Object} sdkMessage - SDK stream message
+ * @returns {boolean} True when the message arms work that repeats
+ */
+function startsRecurringWork(sdkMessage) {
+  const content = sdkMessage?.message?.content;
+  if (!Array.isArray(content)) {
+    return false;
+  }
+
+  return content.some((block) => {
+    if (block?.type !== 'tool_use') {
+      return false;
+    }
+    if (block.name === 'CronCreate') {
+      // A one-shot schedule is ordinary background work; only a repeating one
+      // has no ending to wait for.
+      return block.input?.recurring === true;
+    }
+    return RECURRING_WORK_TOOLS.has(block.name);
+  });
+}
+
 /**
  * Detects tool calls that keep working after the turn's `result` arrives.
  *
@@ -1197,7 +1229,16 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         });
         holdArmedAt = null;
       }
-      releasePromptStream();
+      // A held process is closed through the session that owns it: its prompt
+      // stream belongs to the session and `releasePromptStream` is a no-op for
+      // it. Calling only the latter here let the hold's limits expire without
+      // releasing anything, leaving the held session's own idle timer as the
+      // only thing deciding when a process goes.
+      if (heldSession) {
+        heldSession.close();
+      } else {
+        releasePromptStream();
+      }
     }
   });
 
@@ -1235,6 +1276,12 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   };
   // The process serving this conversation, when it is being kept alive.
   let heldSession = null;
+  // The writer to answer on. These options can outlive the turn that built
+  // them: a held process serves later turns, and each of those arrives on its
+  // own writer. Closing over `ws` would send this turn's permission prompt to
+  // the socket of whoever started the conversation — the laptop you left
+  // behind when you picked up your phone.
+  const currentWriter = () => heldSession?.writer || ws;
   // Whether this turn already claimed that process (see `reserve`).
   let heldTurnReserved = false;
 
@@ -1334,7 +1381,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       }
 
       const requestId = createRequestId();
-      ws.send(createNormalizedMessage({ kind: 'permission_request', requestId, toolName, input, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+      currentWriter().send(createNormalizedMessage({ kind: 'permission_request', requestId, toolName, input, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
       emitNotification(createNotificationEvent({
         provider: 'claude',
         sessionId: sessionId || capturedSessionId || null,
@@ -1358,7 +1405,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
           _receivedAt: new Date(),
         },
         onCancel: (reason) => {
-          ws.send(createNormalizedMessage({ kind: 'permission_cancelled', requestId, reason, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+          currentWriter().send(createNormalizedMessage({ kind: 'permission_cancelled', requestId, reason, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
         }
       });
       if (!decision) {
@@ -1412,11 +1459,12 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       effort: sdkOptions.effort || '',
       model: sdkOptions.model || '',
       permissionMode: sdkOptions.permissionMode || 'default',
-      writer: ws,
     };
 
     const reusable = keepSessionAlive ? getHeldSession(sessionKey()) : null;
     if (reusable && reusable.matches(fingerprint)) {
+      // This turn answers on its own writer, whichever device asked for it.
+      reusable.adopt(ws);
       // Claimed before anything is applied. `applyTurn` sets the model and the
       // permission mode on the live process and writes the tool list into the
       // options the running turn reads from, so a turn that did all that and
@@ -1447,6 +1495,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     } else {
       if (keepSessionAlive && sessionKey()) {
         heldSession = new HeldClaudeSession({ sessionKey: sessionKey(), fingerprint });
+        heldSession.adopt(ws);
       }
 
       // A held session feeds the process itself, turn by turn; a one-shot run
@@ -1557,6 +1606,12 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
       }
 
+      if (startsRecurringWork(message)) {
+        // Sticky for the life of the process: a cron armed on turn one is
+        // still armed on turn twenty, and nothing in a later turn says so.
+        heldSession?.setRecurring();
+      }
+
       if (startsBackgroundWork(message)) {
         backgroundWorkPending = true;
       }
@@ -1591,6 +1646,9 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
           backgroundWorkPending = false;
           heldForBackgroundWork = true;
           holdArmedAt = Date.now();
+          // Suspends the held session's own idle countdown: the conversation
+          // is about to look quiet while the work it started keeps running.
+          heldSession?.setOutstandingWork(true);
           logRunLifecycle('hold_armed', {
             sessionKey: sessionKey(),
             providerSessionId: capturedSessionId || null,
@@ -1602,6 +1660,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
           // Either nothing was backgrounded, or the background work just
           // reported in — let the CLI exit now, as it always has.
           heldForBackgroundWork = false;
+          heldSession?.setOutstandingWork(false);
           releaseHeldStream('work_reported_back');
         }
       } else if (holdTimers.isArmed()) {
@@ -1862,7 +1921,9 @@ export {
   // decides whether a turn's CLI process is held open, so it is the cheapest
   // thing in this file to pin down — and it had no coverage at all.
   startsBackgroundWork,
+  startsRecurringWork,
   DEFERRED_WORK_TOOLS,
+  RECURRING_WORK_TOOLS,
   SUBAGENT_TOOL_NAMES,
   createHoldTimers,
   // Exported for tests. Abort-on-a-held-run and supersede both live in this

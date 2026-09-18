@@ -81,7 +81,16 @@ test('a turn is only handed to a process started with what it needs', () => {
     'other tool policy',
   );
   assert.equal(session.matches(fingerprint({ effort: 'xhigh' })), false, 'other effort');
-  assert.equal(session.matches(fingerprint({ writer: { name: 'other' } })), false, 'other writer');
+  // Deliberately divergent from the PR this module came from, which refused a
+  // turn arriving on a different writer. The run registry builds a new writer
+  // per run, so that rule matched nothing and no process was ever reused. The
+  // writer is adopted per turn instead — which is also what lets one process
+  // serve a conversation carried from a laptop to a phone and back.
+  assert.equal(
+    session.matches(fingerprint({ writer: { name: 'other' } })),
+    true,
+    'a different writer is adopted, not refused',
+  );
 
   // Model and permission mode are set on the live process, so they do not
   // force a new one.
@@ -232,4 +241,56 @@ test('the model is only pushed to the process when it actually changed', async (
   assert.deepEqual(models, ['sonnet']);
 
   session.close();
+});
+
+test('the adopted writer is the one a later turn answers on', () => {
+  const laptop = { name: 'laptop' };
+  const phone = { name: 'phone' };
+  const session = new HeldClaudeSession({ sessionKey: 'session-adopt', fingerprint: fingerprint() });
+
+  session.adopt(laptop);
+  assert.equal(session.writer, laptop);
+
+  // The conversation moves to another device mid-run; the held process stays.
+  session.adopt(phone);
+  assert.equal(session.writer, phone, 'a permission prompt must reach whoever asked for this turn');
+});
+
+test('outstanding work suspends the idle countdown, and finishing restarts it', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const session = new HeldClaudeSession({
+    sessionKey: 'session-outstanding',
+    fingerprint: fingerprint(),
+    idleMs: 1000,
+  });
+  session.start(fakeQuery(session, []), () => {});
+
+  session.setOutstandingWork(true);
+  t.mock.timers.tick(5000);
+  assert.equal(session.closed, false, 'a quiet background job must not be cut off');
+
+  session.setOutstandingWork(false);
+  t.mock.timers.tick(1001);
+  assert.equal(session.closed, true, 'once nothing is left to wait for, quiet means idle');
+});
+
+test('recurring work suspends the countdown for good', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const session = new HeldClaudeSession({
+    sessionKey: 'session-recurring',
+    fingerprint: fingerprint(),
+    idleMs: 1000,
+  });
+  session.start(fakeQuery(session, []), () => {});
+
+  session.setRecurring();
+  // A cron that ticks every ten minutes leaves far longer gaps than this.
+  t.mock.timers.tick(60_000);
+  assert.equal(session.closed, false, 'silence between ticks is not an ending');
+
+  // Even a turn reporting no outstanding work must not undo it: the cron is
+  // still armed, and nothing in a later turn says so.
+  session.setOutstandingWork(false);
+  t.mock.timers.tick(60_000);
+  assert.equal(session.closed, false, 'the flag is sticky for the life of the process');
 });

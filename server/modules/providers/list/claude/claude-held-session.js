@@ -38,8 +38,16 @@ export function stableJson(value) {
 /** Held sessions by session key. */
 const heldSessions = new Map();
 
-/** How long a session may sit idle before its process is let go. */
-const DEFAULT_IDLE_MS = 10 * 60 * 1000;
+/**
+ * How long a session may sit idle before its process is let go.
+ *
+ * Generous on purpose. The only job of this limit is to stop an abandoned
+ * conversation pinning a process forever; it is not a resource policy, and
+ * every minute shaved off it is a minute in which a quiet background job can
+ * be cut off for no reason. Work that is still outstanding suspends it
+ * entirely — see `setOutstandingWork` and `setRecurring`.
+ */
+const DEFAULT_IDLE_MS = 2 * 60 * 60 * 1000;
 
 export class HeldClaudeSession {
   /**
@@ -52,6 +60,19 @@ export class HeldClaudeSession {
     this.sessionKey = sessionKey;
     this.fingerprint = fingerprint;
     this.idleMs = idleMs;
+    // The writer of the turn currently being served. A held process outlives
+    // the turn that started it, and every turn arrives on its own writer — a
+    // reconnect, another window, the same conversation opened on a phone.
+    // Whatever was built around the first turn's writer has to read this
+    // instead, or it answers into a socket nobody is listening on.
+    this.writer = null;
+    // Background work from the last turn that has not reported back yet.
+    this.outstandingWork = false;
+    // Work that repeats by design: a recurring cron, an armed Monitor. It has
+    // no natural end, so there is no moment at which going quiet means it is
+    // finished — the conversation simply looks idle between ticks. Sticky for
+    // the life of the session, and cleared only when the process goes.
+    this.recurring = false;
 
     /** The SDK query, once started. */
     this.instance = null;
@@ -215,10 +236,12 @@ export class HeldClaudeSession {
       // turn under a policy that is no longer the user's, a changed one gets
       // its own process.
       && this.fingerprint.tools === fingerprint.tools
-      // The permission callback and the hooks were built around the writer of
-      // the first turn. A reconnect brings a new one, and rather than reaching
-      // through the old socket, that turn gets its own process.
-      && this.fingerprint.writer === fingerprint.writer;
+      // The writer is deliberately not compared. It is new on every turn here
+      // — the run registry builds one per run — so comparing it would fail
+      // every time and no process would ever be reused. The turn's writer is
+      // adopted instead, which is also what lets one process serve a
+      // conversation its user moves between devices.
+      ;
   }
 
   /**
@@ -326,9 +349,49 @@ export class HeldClaudeSession {
     }
   }
 
-  /** Lets the process go once the conversation has gone quiet. */
+  /**
+   * Points this session at the writer of the turn about to run.
+   *
+   * @param {Object} writer - Writer for the current turn
+   */
+  adopt(writer) {
+    this.writer = writer || null;
+  }
+
+  /**
+   * Marks whether the last turn left background work running.
+   *
+   * @param {boolean} outstanding - True while work from a turn is still going
+   */
+  setOutstandingWork(outstanding) {
+    this.outstandingWork = Boolean(outstanding);
+    if (!this.outstandingWork) {
+      // The clock only starts once there is nothing left to wait for.
+      this.scheduleIdle();
+    } else {
+      this.clearIdle();
+    }
+  }
+
+  /** Marks this conversation as running work that repeats by design. */
+  setRecurring() {
+    this.recurring = true;
+    this.clearIdle();
+  }
+
+  /**
+   * Lets the process go once the conversation has gone quiet.
+   *
+   * Quiet is only evidence of an ending when nothing is still running. A build
+   * says nothing for ten minutes; a cron says nothing between ticks; neither is
+   * finished. So outstanding or recurring work suspends the countdown rather
+   * than racing it.
+   */
   scheduleIdle() {
     this.clearIdle();
+    if (this.outstandingWork || this.recurring) {
+      return;
+    }
     this.idleTimer = setTimeout(() => {
       this.idleTimer = null;
       this.close();

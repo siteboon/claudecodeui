@@ -80,7 +80,12 @@ const createEmptyClaudePermissions = (): ClaudePermissionsState => ({
   allowedTools: [],
   disallowedTools: [],
   skipPermissions: false,
-  keepSessionAlive: false,
+  // On by default. Holding one process per conversation is how the CLI has
+  // always worked in a terminal; a process per message was this app's own
+  // choice, and the two ways it lost work — the next message killing the
+  // previous turn's background job, and a second device killing the first —
+  // both came from it.
+  keepSessionAlive: true,
 });
 
 const createEmptyCursorPermissions = (): CursorPermissionsState => ({
@@ -158,7 +163,9 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
         allowedTools: savedClaudeSettings.allowedTools || [],
         disallowedTools: savedClaudeSettings.disallowedTools || [],
         skipPermissions: Boolean(savedClaudeSettings.skipPermissions),
-        keepSessionAlive: Boolean(savedClaudeSettings.keepSessionAlive),
+        // Absent in settings saved before this existed, which must read as the
+        // new default rather than as an explicit "off".
+        keepSessionAlive: savedClaudeSettings.keepSessionAlive ?? true,
       });
       setProjectSortOrder(readUserPreference<ProjectSortOrder>('projectSortOrder', 'name') === 'date' ? 'date' : 'name');
 
