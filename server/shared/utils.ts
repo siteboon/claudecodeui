@@ -175,12 +175,33 @@ function shouldUseWindowsPathNormalization(inputPath: string): boolean {
 }
 
 /**
+ * Uppercases the drive letter so `a:\work` and `A:\work` share one DB key.
+ *
+ * Windows resolves both spellings to the same directory, but project paths are
+ * stored and compared as raw strings. Without this, creating a project for
+ * `a:\work` while `A:\work` is already registered silently produces a second,
+ * empty project instead of opening the existing one.
+ *
+ * Only the drive letter changes. The rest of the path keeps its case because
+ * POSIX filesystems distinguish `/Home` from `/home`, and UNC paths
+ * (`\\server\share`) have no drive letter to fold.
+ */
+function uppercaseWindowsDriveLetter(inputPath: string): string {
+  if (!/^[a-z]:/.test(inputPath)) {
+    return inputPath;
+  }
+
+  return `${inputPath[0].toUpperCase()}${inputPath.slice(1)}`;
+}
+
+/**
  * Canonicalizes project/workspace paths for stable DB keys and comparisons.
  *
  * Normalization rules:
  * - trim whitespace
  * - strip Windows long-path prefixes (`\\?\` and `\\?\UNC\`)
  * - normalize path separators and dot segments
+ * - uppercase Windows drive letters (`a:\work` and `A:\work` are one path)
  * - trim trailing separators except for filesystem roots
  */
 export function normalizeProjectPath(inputPath: string): string {
@@ -196,7 +217,7 @@ export function normalizeProjectPath(inputPath: string): string {
   const withoutLongPrefix = stripWindowsLongPathPrefix(trimmed);
   const useWindowsPathRules = shouldUseWindowsPathNormalization(withoutLongPrefix);
   const normalized = useWindowsPathRules
-    ? path.win32.normalize(withoutLongPrefix)
+    ? uppercaseWindowsDriveLetter(path.win32.normalize(withoutLongPrefix))
     : path.posix.normalize(withoutLongPrefix);
 
   if (!normalized) {
@@ -283,8 +304,14 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
     }
 
     const resolvedWorkspaceRoot = normalizeProjectPath(await realpath(WORKSPACES_ROOT));
+    // A drive root already ends in the separator ("A:\"), and `/` does too.
+    // Appending another one gives "A:\\", which nothing starts with - every
+    // path under such a root would be rejected as outside it.
+    const workspaceRootPrefix = resolvedWorkspaceRoot.endsWith(path.sep)
+      ? resolvedWorkspaceRoot
+      : `${resolvedWorkspaceRoot}${path.sep}`;
     if (
-      !resolvedPath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)
+      !resolvedPath.startsWith(workspaceRootPrefix)
       && resolvedPath !== resolvedWorkspaceRoot
     ) {
       return {
@@ -301,7 +328,7 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
         const resolvedSymlinkPath = path.resolve(path.dirname(absolutePath), symlinkTarget);
         const realSymlinkPath = await realpath(resolvedSymlinkPath);
         if (
-          !realSymlinkPath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)
+          !realSymlinkPath.startsWith(workspaceRootPrefix)
           && realSymlinkPath !== resolvedWorkspaceRoot
         ) {
           return {
