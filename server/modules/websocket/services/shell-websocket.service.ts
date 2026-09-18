@@ -5,7 +5,7 @@ import path from 'node:path';
 import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
-import { parseIncomingJsonObject } from '@/shared/utils.js';
+import { parseIncomingJsonObject, stripAnsiSequences } from '@/shared/utils.js';
 
 type ShellIncomingMessage = {
   type?: string;
@@ -19,6 +19,7 @@ type ShellIncomingMessage = {
   initialCommand?: string;
   isPlainShell?: boolean;
   forceRestart?: boolean;
+  bypassPermissions?: boolean;
 };
 
 type PtySessionEntry = {
@@ -33,16 +34,74 @@ type PtySessionEntry = {
 const ptySessionsMap = new Map<string, PtySessionEntry>();
 const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
 const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
+const TRAILING_URL_PUNCTUATION_REGEX = /[)\]}>.,;:!?]+$/;
+
+function normalizeDetectedUrl(url: string): string | null {
+  const cleanedUrl = url.trim().replace(TRAILING_URL_PUNCTUATION_REGEX, '');
+  if (!cleanedUrl) {
+    return null;
+  }
+
+  try {
+    const parsedUrl = new URL(cleanedUrl);
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      return null;
+    }
+    return parsedUrl.toString();
+  } catch {
+    return null;
+  }
+}
+
+function extractUrlsFromText(value: string): string[] {
+  const directMatches = value.match(/https?:\/\/[^\s<>"'`\\\x1b\x07]+/gi) ?? [];
+
+  // Terminal width can split a URL across lines, so valid URL characters on
+  // immediately following lines are joined before the URL is validated.
+  const wrappedMatches: string[] = [];
+  const urlContinuationPattern = /^[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+$/;
+  const lines = value.split(/\r?\n/);
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex].trim();
+    const startMatch = line.match(/https?:\/\/[^\s<>"'`\\\x1b\x07]+/i);
+    if (!startMatch) {
+      continue;
+    }
+
+    let combinedUrl = startMatch[0];
+    let continuationIndex = lineIndex + 1;
+    while (continuationIndex < lines.length) {
+      const continuation = lines[continuationIndex].trim();
+      if (!continuation || !urlContinuationPattern.test(continuation)) {
+        break;
+      }
+      combinedUrl += continuation;
+      continuationIndex += 1;
+    }
+
+    wrappedMatches.push(combinedUrl);
+  }
+
+  return Array.from(new Set([...directMatches, ...wrappedMatches]));
+}
+
+function shouldAutoOpenUrlFromOutput(value: string): boolean {
+  const normalizedOutput = value.toLowerCase();
+  return (
+    normalizedOutput.includes("browser didn't open") ||
+    normalizedOutput.includes('open this url') ||
+    normalizedOutput.includes('continue in your browser') ||
+    normalizedOutput.includes('press enter to open') ||
+    normalizedOutput.includes('open_url:')
+  );
+}
 
 type ShellWebSocketDependencies = {
   resolveProviderSessionId: (
     sessionId: string,
     provider: string,
   ) => string | null | undefined;
-  stripAnsiSequences: (content: string) => string;
-  normalizeDetectedUrl: (url: string) => string | null;
-  extractUrlsFromText: (content: string) => string[];
-  shouldAutoOpenUrlFromOutput: (content: string) => boolean;
+  spawnPty?: typeof pty.spawn;
 };
 
 /**
@@ -154,21 +213,23 @@ function buildShellCommand(
   }
 
   if (provider === 'kiro') {
-    // The Shell tab drives the interactive `kiro-cli chat` REPL (the binary is
-    // `kiro-cli`, not `kiro`); the ACP/`--trust-all-tools` invocation is for
-    // the headless chat gateway only. Resume targets a specific conversation.
-    if (resumeSessionId) {
-      return `kiro-cli chat --resume-id "${resumeSessionId}"`;
-    }
-    return initialCommand || 'kiro-cli chat';
+    return resumeSessionId
+      ? `kiro-cli chat --resume-id "${resumeSessionId}"`
+      : initialCommand || 'kiro-cli chat';
   }
 
-  const command = initialCommand || 'claude';
+  // Launching with the flag is what unlocks "bypass permissions" in the CLI's
+  // shift+tab permission-mode cycle; it cannot be enabled from inside a
+  // session started without it.
+  const bypassFlag = readBoolean(message.bypassPermissions)
+    ? ' --dangerously-skip-permissions'
+    : '';
+  const command = initialCommand || `claude${bypassFlag}`;
   if (resumeSessionId) {
     if (os.platform() === 'win32') {
-      return `claude --resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { claude }`;
+      return `claude --resume "${resumeSessionId}"${bypassFlag}; if ($LASTEXITCODE -ne 0) { claude${bypassFlag} }`;
     }
-    return `claude --resume "${resumeSessionId}" || claude`;
+    return `claude --resume "${resumeSessionId}"${bypassFlag} || claude${bypassFlag}`;
   }
   return command;
 }
@@ -230,7 +291,8 @@ function prioritizeUserNpmGlobalBin(env: NodeJS.ProcessEnv): { key: string; valu
 }
 
 /**
- * Handles websocket connections used by the standalone shell terminal UI.
+ * Used by this module's websocket gateway to connect the standalone Shell UI
+ * to a retained PTY while keeping process lifecycle ownership on the server.
  */
 export function handleShellConnection(
   ws: WebSocket,
@@ -294,6 +356,7 @@ export function handleShellConnection(
           shellProcess = existingSession.pty;
           if (existingSession.timeoutId) {
             clearTimeout(existingSession.timeoutId);
+            existingSession.timeoutId = null;
           }
 
           ws.send(
@@ -344,7 +407,7 @@ export function handleShellConnection(
         const termRows = readNumber(data.rows, 24);
         const prioritizedPath = prioritizeUserNpmGlobalBin(process.env);
 
-        shellProcess = pty.spawn(shell, shellArgs, {
+        shellProcess = (dependencies.spawnPty ?? pty.spawn)(shell, shellArgs, {
           name: 'xterm-256color',
           cols: termCols,
           rows: termRows,
@@ -386,7 +449,7 @@ export function handleShellConnection(
 
           if (session.ws && session.ws.readyState === WebSocket.OPEN) {
             let outputData = chunk;
-            const cleanChunk = dependencies.stripAnsiSequences(chunk);
+            const cleanChunk = stripAnsiSequences(chunk);
             urlDetectionBuffer = `${urlDetectionBuffer}${cleanChunk}`.slice(-SHELL_URL_PARSE_BUFFER_LIMIT);
 
             outputData = outputData.replace(
@@ -395,7 +458,7 @@ export function handleShellConnection(
             );
 
             const emitAuthUrl = (detectedUrl: string, autoOpen = false) => {
-              const normalizedUrl = dependencies.normalizeDetectedUrl(detectedUrl);
+              const normalizedUrl = normalizeDetectedUrl(detectedUrl);
               if (!normalizedUrl) {
                 return;
               }
@@ -413,8 +476,8 @@ export function handleShellConnection(
               }
             };
 
-            const normalizedDetectedUrls = dependencies.extractUrlsFromText(urlDetectionBuffer)
-              .map((url) => dependencies.normalizeDetectedUrl(url))
+            const normalizedDetectedUrls = extractUrlsFromText(urlDetectionBuffer)
+              .map((url) => normalizeDetectedUrl(url))
               .filter((url): url is string => Boolean(url));
 
             const dedupedDetectedUrls = Array.from(new Set(normalizedDetectedUrls)).filter(
@@ -425,7 +488,7 @@ export function handleShellConnection(
             dedupedDetectedUrls.forEach((url) => emitAuthUrl(url, false));
 
             if (
-              dependencies.shouldAutoOpenUrlFromOutput(cleanChunk) &&
+              shouldAutoOpenUrlFromOutput(cleanChunk) &&
               dedupedDetectedUrls.length > 0
             ) {
               const bestUrl = dedupedDetectedUrls.reduce((longest, current) =>
@@ -481,9 +544,9 @@ export function handleShellConnection(
                 ? 'Codex'
                 : provider === 'opencode'
                     ? 'OpenCode'
-                    : provider === 'kiro'
-                      ? 'Kiro'
-                  : 'Claude';
+                  : provider === 'kiro'
+                    ? 'Kiro'
+                    : 'Claude';
           welcomeMsg = hasSession && resumeSessionId
             ? `\x1b[36mResuming ${providerName} session ${resumeSessionId} in: ${projectPath}\x1b[0m\r\n`
             : `\x1b[36mStarting new ${providerName} session in: ${projectPath}\x1b[0m\r\n`;
@@ -534,9 +597,20 @@ export function handleShellConnection(
       return;
     }
 
+    // Mobile networks can deliver an old socket's close after its replacement
+    // has attached. Only the socket that currently owns the PTY may detach it.
+    if (session.ws !== ws) {
+      return;
+    }
+
     session.ws = null;
+    if (session.timeoutId) {
+      clearTimeout(session.timeoutId);
+    }
     session.timeoutId = setTimeout(() => {
-      if (ptySessionsMap.get(ptySessionKey as string) !== session) {
+      // A reconnect may win just as this timer becomes runnable. Re-check the
+      // active socket so a queued cleanup can never kill a reattached PTY.
+      if (ptySessionsMap.get(ptySessionKey as string) !== session || session.ws !== null) {
         return;
       }
 

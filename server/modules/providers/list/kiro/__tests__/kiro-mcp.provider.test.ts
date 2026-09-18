@@ -97,7 +97,7 @@ describe('KiroMcpProvider', () => {
 
     const provider = new KiroMcpProvider();
     await provider.upsertServer({
-      name: 'broken',
+      name: ' broken ',
       scope: 'user',
       transport: 'stdio',
       command: 'new-bin', // user is updating the binary path

@@ -93,7 +93,8 @@ async function readKiroJsonl(filePath: string): Promise<KiroJsonlEntry[]> {
       continue;
     }
     try {
-      entries.push(JSON.parse(line) as KiroJsonlEntry);
+      const entry = readObjectRecord(JSON.parse(line));
+      if (entry) entries.push(entry as KiroJsonlEntry);
     } catch {
       // Skip malformed lines defensively — Kiro's writer is line-buffered and a
       // crashed turn can leave a partial trailing line.
@@ -162,10 +163,11 @@ export class KiroSessionsProvider implements IProviderSessions {
 
         if (part.kind === 'toolUse') {
           const data = readObjectRecord(part.data) ?? {};
-          const toolUseId = typeof data.toolUseId === 'string' ? data.toolUseId : `${baseId}_tool_${partIndex}`;
+          const toolUseId = typeof data.toolUseId === 'string' && data.toolUseId.trim()
+            ? data.toolUseId : `${baseId}_tool_${partIndex}`;
           const toolName = typeof data.name === 'string' ? data.name : 'Unknown';
           messages.push(createNormalizedMessage({
-            id: toolUseId,
+            id: `${baseId}_tool_${partIndex}`,
             sessionId,
             timestamp: ts,
             provider: PROVIDER,
@@ -218,7 +220,7 @@ export class KiroSessionsProvider implements IProviderSessions {
 
   /**
    * Normalizes either a Kiro JSONL history entry or a transformed live ACP
-   * `session/update` notification (forwarded by `server/kiro-cli.js`).
+   * `session/update` notification (forwarded by the Kiro runtime).
    */
   normalizeMessage(rawMessage: unknown, sessionId: string | null): NormalizedMessage[] {
     const raw = readObjectRecord(rawMessage);
@@ -231,7 +233,7 @@ export class KiroSessionsProvider implements IProviderSessions {
     }
 
     // Live ACP `session/update` notifications are pre-normalized by the runtime
-    // module (`server/kiro-cli.js`). Anything that reaches this method without
+    // module. Anything that reaches this method without
     // the `{kind, data}` JSONL shape is treated as already-normalized.
     if (typeof raw.kind === 'string' && typeof raw.provider === 'string') {
       return [raw as NormalizedMessage];

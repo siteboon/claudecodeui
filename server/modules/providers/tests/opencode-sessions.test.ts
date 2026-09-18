@@ -151,6 +151,30 @@ const createOpenCodeDatabase = async (homeDir: string, workspacePath: string): P
       3,
       2,
     );
+    db.prepare(`
+      INSERT INTO session (
+        id, project_id, parent_id, slug, directory, title, version, time_created, time_updated,
+        time_archived, tokens_input, tokens_output, tokens_reasoning, tokens_cache_read,
+        tokens_cache_write
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      'open-child-session-1',
+      'project-1',
+      'open-session-1',
+      'open-child-session-1',
+      workspacePath,
+      'OpenCode child session',
+      '0.0.0',
+      1_700_000_002_000,
+      1_700_000_005_000,
+      null,
+      5,
+      10,
+      2,
+      1,
+      1,
+    );
 
     const userMessageData = JSON.stringify({
       role: 'user',
@@ -255,16 +279,29 @@ test('OpenCode session synchronizer indexes sqlite sessions without deletable tr
   try {
     await createOpenCodeDatabase(tempRoot, workspacePath);
     await withIsolatedDatabase(() => {
+      sessionsDb.createAppSession('app-child-session-1', 'opencode', workspacePath);
+      sessionsDb.assignProviderSessionId('app-child-session-1', 'open-child-session-1');
+
       const synchronizer = new OpenCodeSessionSynchronizer();
       const processed = synchronizer.synchronize();
 
-      return Promise.resolve(processed).then((count) => {
+      return Promise.resolve(processed).then(async (count) => {
         assert.equal(count, 1);
         const indexed = sessionsDb.getSessionById('open-session-1');
         assert.equal(indexed?.provider, 'opencode');
         assert.equal(indexed?.project_path, workspacePath);
         assert.equal(indexed?.custom_name, 'OpenCode indexed title');
         assert.equal(indexed?.jsonl_path, null);
+        assert.equal(sessionsDb.getSessionById('app-child-session-1'), null);
+        assert.equal(sessionsDb.getSessionByProviderSessionId('open-child-session-1'), null);
+
+        sessionsDb.createAppSession('app-child-session-2', 'opencode', workspacePath);
+        sessionsDb.assignProviderSessionId('app-child-session-2', 'open-child-session-1');
+        await synchronizer.synchronize(new Date(1_700_000_004_500));
+        assert.equal(
+          sessionsDb.getSessionById('app-child-session-2')?.provider_session_id,
+          'open-child-session-1',
+        );
       });
     });
   } finally {
@@ -290,6 +327,7 @@ test('OpenCode session synchronizer returns the app session id once provider map
         assert.equal(sessionId, 'app-session-1');
         assert.equal(sessionsDb.getAllSessions().length, 1);
         assert.equal(sessionsDb.getSessionById('app-session-1')?.provider_session_id, 'open-session-1');
+        assert.equal(sessionsDb.getSessionById('open-child-session-1'), null);
       });
     });
   } finally {
@@ -438,6 +476,7 @@ const seedOpenCodeSession = async (
       CREATE TABLE session (
         id TEXT PRIMARY KEY,
         project_id TEXT,
+        parent_id TEXT,
         directory TEXT,
         title TEXT,
         time_created INTEGER,
@@ -470,22 +509,22 @@ const seedOpenCodeSession = async (
   }
 };
 
-test('OpenCode synchronizer titles app-created sessions from the first user message', { concurrency: false }, async () => {
+test('OpenCode synchronizer preserves the title assigned when CloudCLI creates a session', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'opencode-session-sync-app-'));
   const workspacePath = path.join(tempRoot, 'workspace');
   await mkdir(workspacePath, { recursive: true });
   const restoreHomeDir = patchHomeDir(tempRoot);
 
   try {
-    // Stored title differs from the first message so we can prove the first
-    // message wins for sessions started from cloudcli.
+    // Both provider-owned values differ from the CloudCLI title so either one
+    // leaking through would change the assertion below.
     await seedOpenCodeSession(tempRoot, workspacePath, {
       sessionId: 'oc-app-1',
       title: 'OpenCode generated title',
-      firstUserText: 'Fix the checkout crash',
+      firstUserText: 'OpenCode first user prompt',
     });
     await withIsolatedDatabase(async () => {
-      sessionsDb.createAppSession('app-1', 'opencode', workspacePath);
+      sessionsDb.createAppSession('app-1', 'opencode', workspacePath, 'Fix the checkout crash');
       sessionsDb.assignProviderSessionId('app-1', 'oc-app-1');
 
       await new OpenCodeSessionSynchronizer().synchronize();

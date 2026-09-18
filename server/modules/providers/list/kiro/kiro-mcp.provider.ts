@@ -37,6 +37,17 @@ export class KiroMcpProvider extends McpProvider {
       ? path.join(os.homedir(), SETTINGS_DIR, 'mcp.json')
       : path.join(workspacePath, SETTINGS_DIR, 'mcp.json');
     const config = await readJsonConfig(filePath);
+    // Carry provider-specific flags into the same write as the edited server.
+    // The base class has already normalized server names and validated scope.
+    const previousServers = readObjectRecord(config.mcpServers) ?? {};
+    for (const [name, rawServer] of Object.entries(servers)) {
+      const previous = readObjectRecord(previousServers[name]);
+      const server = readObjectRecord(rawServer);
+      if (!previous || !server) continue;
+      for (const key of ['disabled', 'autoApprove']) {
+        if (previous[key] !== undefined) server[key] = previous[key];
+      }
+    }
     config.mcpServers = servers;
     await writeJsonConfig(filePath, config);
   }
@@ -111,53 +122,4 @@ export class KiroMcpProvider extends McpProvider {
     return null;
   }
 
-  /**
-   * Override the base `upsertServer` to preserve Kiro-specific fields that the
-   * provider-neutral `UpsertProviderMcpServerInput` does not carry: `disabled`
-   * (per-server enabled/disabled toggle) and `autoApprove` (whitelist of tool
-   * names the user has pre-trusted). Without this override, every UI edit
-   * silently re-enables disabled servers and wipes auto-approve lists.
-   *
-   * Strategy: read the existing entry BEFORE `super.upsertServer` rewrites the
-   * file, then re-apply the preserved Kiro-only keys with a follow-up write.
-   */
-  async upsertServer(input: UpsertProviderMcpServerInput): Promise<ProviderMcpServer> {
-    const scope = input.scope ?? 'project';
-    const workspacePath = scope === 'user'
-      ? os.homedir()
-      : (input.workspacePath ?? '');
-    const filePath = scope === 'user'
-      ? path.join(os.homedir(), SETTINGS_DIR, 'mcp.json')
-      : path.join(workspacePath, SETTINGS_DIR, 'mcp.json');
-
-    // Capture Kiro-only fields BEFORE the base class wipes them on rewrite.
-    const preWriteConfig = await readJsonConfig(filePath);
-    const preWriteServers = readObjectRecord(preWriteConfig.mcpServers) ?? {};
-    const preWriteEntry = readObjectRecord(preWriteServers[input.name]);
-    const preservedDisabled = preWriteEntry
-      ? (preWriteEntry as Record<string, unknown>).disabled
-      : undefined;
-    const preservedAutoApprove = preWriteEntry
-      ? (preWriteEntry as Record<string, unknown>).autoApprove
-      : undefined;
-
-    const result = await super.upsertServer(input);
-
-    if (preservedDisabled !== undefined || preservedAutoApprove !== undefined) {
-      const config = await readJsonConfig(filePath);
-      const servers = readObjectRecord(config.mcpServers) ?? {};
-      const updated = readObjectRecord(servers[input.name]) ?? {};
-      if (preservedDisabled !== undefined) {
-        updated.disabled = preservedDisabled;
-      }
-      if (preservedAutoApprove !== undefined) {
-        updated.autoApprove = preservedAutoApprove;
-      }
-      servers[input.name] = updated;
-      config.mcpServers = servers;
-      await writeJsonConfig(filePath, config);
-    }
-
-    return result;
-  }
 }

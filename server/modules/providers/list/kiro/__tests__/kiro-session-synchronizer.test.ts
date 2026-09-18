@@ -12,7 +12,7 @@
  */
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -57,6 +57,36 @@ after(async () => {
 });
 
 describe('KiroSessionSynchronizer', () => {
+  it('indexes an app-created session in place and loads fixture history through the app id', async () => {
+    const { closeConnection, initializeDatabase, sessionsDb } = await import('@/modules/database/index.js');
+    const { KiroSessionSynchronizer } = await import('../kiro-session-synchronizer.provider.js');
+    const { KiroSessionsProvider } = await import('../kiro-sessions.provider.js');
+    closeConnection();
+    await initializeDatabase();
+    try {
+      sessionsDb.createAppSession('app-session', 'kiro', '/tmp', 'User title');
+      sessionsDb.assignProviderSessionId('app-session', 'native-session');
+      const jsonlPath = path.join(tempHome, '.kiro', 'sessions', 'cli', 'native-session.jsonl');
+      await writeFile(jsonlPath, await readFile(new URL('./fixtures/sample-session.jsonl', import.meta.url), 'utf8'));
+      await writeFile(jsonlPath.replace(/jsonl$/, 'json'), JSON.stringify({
+        session_id: 'native-session', cwd: '/tmp', title: 'CLI title',
+      }));
+      assert.equal(await new KiroSessionSynchronizer().synchronizeFile(jsonlPath), 'app-session');
+      assert.equal(sessionsDb.getSessionById('app-session')?.custom_name, 'User title');
+      assert.equal(sessionsDb.getSessionById('native-session'), null);
+      const provider = new KiroSessionsProvider();
+      const history = await provider.fetchHistory('app-session');
+      assert.equal(history.messages.length, 4);
+      assert.equal(history.messages[1].toolResult?.isError, false);
+      assert.ok(String(history.messages[1].toolResult?.content).includes('/tmp/file'));
+      assert.ok(history.messages.every((message) => message.sessionId === 'app-session'));
+      assert.deepEqual((await provider.fetchHistory('app-session', { limit: 0 })).messages, []);
+      assert.equal((await provider.fetchHistory('app-session', { limit: 1 })).hasMore, true);
+    } finally {
+      closeConnection();
+    }
+  });
+
   it('preserves a user-set custom_name across re-synchronization (regression)', async () => {
     // Lazy-import so the env overrides above are in effect when modules
     // capture homedir() / DATABASE_PATH.

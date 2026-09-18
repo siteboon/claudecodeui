@@ -8,13 +8,29 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import { KiroSessionsProvider } from '@/modules/providers/list/kiro/kiro-sessions.provider.js';
 
 const PROVIDER = 'kiro';
+const readFixture = (name: string): unknown[] => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8')
+  .split('\n').filter(Boolean).map((line) => JSON.parse(line));
+const sampleSession = readFixture('sample-session.jsonl');
+const errorSession = readFixture('error-result.jsonl');
 
 describe('KiroSessionsProvider.normalizeMessage', () => {
   const provider = new KiroSessionsProvider();
+
+  it('normalizes captured session fixtures with linked tool results', () => {
+    const messages = sampleSession.flatMap((entry) => provider.normalizeMessage(entry, 'fixture-session'));
+    assert.deepEqual(messages.map((message) => message.kind), ['text', 'tool_use', 'tool_result', 'text']);
+    assert.equal(messages[1].toolId, messages[2].toolId);
+    assert.equal(messages[2].isError, false);
+    assert.equal(messages[3].content, 'The /tmp directory contains a single file.');
+    const failed = errorSession.flatMap((entry) => provider.normalizeMessage(entry, 'error-session'));
+    assert.equal(failed[2].isError, true);
+    assert.equal(failed[2].content, 'command exited 1');
+  });
 
   it('normalizes a Prompt entry to a single user text message', () => {
     const entry = {
@@ -238,5 +254,21 @@ describe('KiroSessionsProvider.normalizeMessage', () => {
     const ids = messages.map((m) => m.id);
     assert.equal(messages.length, 2);
     assert.equal(new Set(ids).size, 2, `tool_result ids must differ even when toolUseId collides; got: ${ids.join(', ')}`);
+  });
+
+  it('keeps render ids unique when tool ids repeat or are empty', () => {
+    const messages = provider.normalizeMessage({
+      kind: 'AssistantMessage',
+      data: {
+        message_id: 'repeated-tools',
+        content: ['shared', 'shared', '', ''].map((toolUseId) => ({
+          kind: 'toolUse', data: { toolUseId, name: 'fs_read' },
+        })),
+      },
+    }, 'session-1');
+    assert.equal(new Set(messages.map((message) => message.id)).size, 4);
+    assert.equal(messages[0].toolId, 'shared');
+    assert.ok(messages[2].toolId);
+    assert.notEqual(messages[2].toolId, messages[3].toolId);
   });
 });

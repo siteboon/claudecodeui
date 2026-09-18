@@ -69,7 +69,8 @@ const writeClaudePluginCommand = async (
 
 /**
  * This test covers Claude user/project skill folders plus plugin discovery from
- * installed plugin command files and fallback plugin skill files.
+ * installed plugin command files and plugin skill files, including a plugin that
+ * ships both.
  */
 test('providerSkillsService lists claude user, project, and enabled plugin skills', { concurrency: false }, async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-claude-'));
@@ -144,11 +145,19 @@ test('providerSkillsService lists claude user, project, and enabled plugin skill
     );
     await writeSkill(
       path.join(commandPluginInstallPath, 'skills'),
-      'ignored-command-plugin-skill-dir',
-      'ignored-command-plugin-skill',
-      'Command plugin fallback skill should be ignored',
+      'command-plugin-skill-dir',
+      'command-plugin-skill',
+      'Skill shipped beside plugin commands',
     );
     await writeClaudePluginManifest(skillPluginInstallPath, 'ExampleSkills');
+    // A commands folder holding nothing this reader takes must not hide the
+    // skills beside it: plugins do ship commands in other agents' formats.
+    await fs.mkdir(path.join(skillPluginInstallPath, 'commands'), { recursive: true });
+    await fs.writeFile(
+      path.join(skillPluginInstallPath, 'commands', 'other-agent.toml'),
+      'description = "Command for another agent"\n',
+      'utf8',
+    );
     await writeSkill(
       path.join(skillPluginInstallPath, 'skills'),
       'claude-plugin-dir',
@@ -280,7 +289,14 @@ test('providerSkillsService lists claude user, project, and enabled plugin skill
     assert.equal(pluginCommand?.command, '/Notion:insert-row');
     assert.equal(pluginCommand?.description, 'Insert a Notion database row');
     assert.match(pluginCommand?.sourcePath ?? '', /commands[\\/]insert-row\.md$/);
-    assert.equal(byName.has('ignored-command-plugin-skill'), false);
+    // A plugin that ships commands keeps its skills: the CLI offers both, so
+    // the menu lists both rather than letting the commands folder hide them.
+    const commandPluginSkill = byName.get('command-plugin-skill');
+    assert.equal(commandPluginSkill?.scope, 'plugin');
+    assert.equal(commandPluginSkill?.pluginName, 'Notion');
+    assert.equal(commandPluginSkill?.pluginId, 'notion@notion-marketplace');
+    assert.equal(commandPluginSkill?.command, '/Notion:command-plugin-skill');
+    assert.equal(commandPluginSkill?.description, 'Skill shipped beside plugin commands');
 
     const pluginSkill = byName.get('claude-plugin');
     assert.equal(pluginSkill?.scope, 'plugin');
@@ -319,8 +335,8 @@ test('providerSkillsService lists claude user, project, and enabled plugin skill
 });
 
 /**
- * This test covers Codex repository/user/system skill folders and verifies that
- * repository lookup includes cwd, parent, and git root skill locations.
+ * This test covers Codex repository/user/system skill folders, including both
+ * supported user roots, and verifies repository lookup across cwd, parent, and git root.
  */
 test('providerSkillsService lists codex repository, user, and system skills', { concurrency: false }, async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-skills-codex-'));
@@ -356,6 +372,12 @@ test('providerSkillsService lists codex repository, user, and system skills', { 
       'Codex user skill',
     );
     await writeSkill(
+      path.join(tempRoot, '.codex', 'skills'),
+      'codex-home-user-dir',
+      'codex-home-user',
+      'Codex home user skill',
+    );
+    await writeSkill(
       path.join(tempRoot, '.codex', 'skills', '.system'),
       'codex-system-dir',
       'codex-system',
@@ -369,6 +391,7 @@ test('providerSkillsService lists codex repository, user, and system skills', { 
     assert.equal(byName.get('codex-parent')?.scope, 'repo');
     assert.equal(byName.get('codex-root')?.scope, 'repo');
     assert.equal(byName.get('codex-user')?.scope, 'user');
+    assert.equal(byName.get('codex-home-user')?.scope, 'user');
     assert.equal(byName.get('codex-system')?.scope, 'system');
     assert.equal(byName.get('codex-root')?.command, '$codex-root');
   } finally {
@@ -663,6 +686,24 @@ test('providerSkillsService adds global skills for claude, codex, and cursor', {
  * OpenCode reuses other providers' skill folders, so it should not accept
  * direct skill writes through the managed provider endpoint.
  */
+test('providerSkillsService manages Kiro skills in its user directory', { concurrency: false }, async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-kiro-skills-'));
+  const restoreHomeDir = patchHomeDir(tempRoot);
+  try {
+    const created = await providerSkillsService.addProviderSkills('kiro', {
+      entries: [{ directoryName: 'kiro-skill', content: '---\nname: kiro-skill\n---\n\nKiro instructions.\n' }],
+    });
+    assert.equal(created[0].command, '/kiro-skill');
+    assert.equal(created[0].sourcePath, path.join(tempRoot, '.kiro', 'skills', 'kiro-skill', 'SKILL.md'));
+    const listed = await providerSkillsService.listProviderSkills('kiro', { workspacePath: tempRoot });
+    assert.ok(listed.some((skill) => skill.name === 'kiro-skill'));
+    assert.equal((await providerSkillsService.removeProviderSkill('kiro', { directoryName: 'kiro-skill' })).removed, true);
+  } finally {
+    restoreHomeDir();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('providerSkillsService rejects managed skill creation for opencode', { concurrency: false }, async () => {
   await assert.rejects(
     providerSkillsService.addProviderSkills('opencode', {

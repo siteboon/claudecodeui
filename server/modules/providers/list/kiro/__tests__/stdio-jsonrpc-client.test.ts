@@ -30,14 +30,14 @@ function makeFakeChild(): {
   const stdout = new PassThrough();
   const stderr = new PassThrough();
   const stdinWrites: string[] = [];
-  const stdin = {
+  const stdin = Object.assign(new EventEmitter(), {
     write(chunk: string, callback?: (err?: Error | null) => void): boolean {
       stdinWrites.push(chunk);
       callback?.(null);
       return true;
     },
     end(): void {},
-  };
+  });
 
   const ee = new EventEmitter();
   const fake = Object.assign(ee, {
@@ -58,6 +58,37 @@ function makeFakeChild(): {
 }
 
 describe('StdioJsonRpcClient', () => {
+  it('keeps peer requests separate from pending client request ids', async () => {
+    const fake = makeFakeChild();
+    const client = new StdioJsonRpcClient(fake.child);
+    const response = client.request('initialize');
+    const { id } = JSON.parse(fake.stdinWrites[0]);
+    fake.emitStdout(`${JSON.stringify({ jsonrpc: '2.0', id, method: 'fs/read_text_file' })}\n`);
+    const unsupported = JSON.parse(fake.stdinWrites[1]);
+    assert.equal(unsupported.error.code, -32601);
+    fake.emitStdout(`${JSON.stringify({ jsonrpc: '2.0', id, result: 'initialized' })}\n`);
+    assert.equal(await response, 'initialized');
+  });
+
+  it('allows long-running prompts to opt out of the handshake timeout', async () => {
+    const fake = makeFakeChild();
+    const client = new StdioJsonRpcClient(fake.child, { requestTimeoutMs: 5 });
+    const response = client.request('session/prompt', {}, { timeoutMs: 0 });
+    const { id } = JSON.parse(fake.stdinWrites[0]);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    fake.emitStdout(`${JSON.stringify({ jsonrpc: '2.0', id, result: 'done' })}\n`);
+    assert.equal(await response, 'done');
+  });
+
+  it('rejects pending requests when stdin emits a broken pipe error', async () => {
+    const fake = makeFakeChild();
+    const client = new StdioJsonRpcClient(fake.child);
+    const response = client.request('initialize');
+    fake.child.stdin.emit('error', new Error('broken pipe'));
+    await assert.rejects(response, /broken pipe/);
+    assert.equal(client.isClosed(), true);
+  });
+
   it('correlates request id to response result', async () => {
     const fake = makeFakeChild();
     const client = new StdioJsonRpcClient(fake.child);

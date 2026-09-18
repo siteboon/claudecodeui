@@ -1,4 +1,4 @@
-﻿# Providers Module Guide
+# Providers Module Guide
 
 This file documents the current provider contract in `server/modules/providers`.
 Keep it current whenever provider wiring, skill discovery, or session sync
@@ -7,8 +7,10 @@ without guessing which files need to move.
 
 ## Current Provider Shape
 
-Every provider wrapper exposes five facets:
+Every provider wrapper exposes seven facets:
 
+- `runtime`
+- `models`
 - `auth`
 - `mcp`
 - `skills`
@@ -17,6 +19,8 @@ Every provider wrapper exposes five facets:
 
 These correspond to the shared interfaces in `server/shared/interfaces.ts`:
 
+- `IProviderRuntime`
+- `IProviderModels`
 - `IProviderAuth`
 - `IProviderMcp`
 - `IProviderSkills`
@@ -25,11 +29,15 @@ These correspond to the shared interfaces in `server/shared/interfaces.ts`:
 
 The services that consume them are:
 
+- `providerModelsService`
 - `providerAuthService`
 - `providerMcpService`
 - `providerSkillsService`
 - `sessionsService`
 - `sessionSynchronizerService`
+
+Live execution is consumed through `providerRuntimeService`, which resolves the
+provider-owned runtime through the same `providerRegistry` as every other facet.
 
 Current provider ids in this repo are:
 
@@ -37,6 +45,7 @@ Current provider ids in this repo are:
 - `codex`
 - `cursor`
 - `opencode`
+- `kiro`
 
 Those ids are mirrored in backend unions and frontend provider constants. If
 adding a new provider, update every place that hardcodes this list.
@@ -48,19 +57,30 @@ Each provider lives under its own folder in `server/modules/providers/list/`:
 ```text
 server/modules/providers/list/<provider>/
   <provider>.provider.ts
+  <provider>-runtime.provider.js
   <provider>-auth.provider.ts
+  <provider>-models.provider.ts
   <provider>-mcp.provider.ts
   <provider>-skills.provider.ts
   <provider>-sessions.provider.ts
   <provider>-session-synchronizer.provider.ts
 ```
 
-The existing provider folders are `claude`, `codex`, `cursor`, and `opencode`.
+The existing provider folders are `claude`, `codex`, `cursor`, `opencode`, and `kiro`.
+
+Each provider wrapper owns its SDK/CLI runtime alongside its auth, model, and
+session facets. Runtime adapters receive registry-backed model and session
+lookups from `providerRuntimeService` at execution time instead of importing
+those services themselves. This keeps `providerRegistry` as the only provider
+mapping without creating a circular dependency. Application-level consumers
+import the service from `server/modules/providers/index.ts`.
 
 ## What Each Facet Does
 
 | Facet | Responsibility | Base / Service |
 | --- | --- | --- |
+| `runtime` | Run and abort live SDK/CLI sessions | `IProviderRuntime` -> `providerRuntimeService` |
+| `models` | Resolve supported and active models | `IProviderModels` -> `providerModelsService` |
 | `auth` | Report install/auth state for the provider runtime | `IProviderAuth` -> `providerAuthService` |
 | `mcp` | Read, list, write, and remove provider-native MCP config | `McpProvider` -> `providerMcpService` |
 | `skills` | Discover provider-native skill markdown files | `SkillsProvider` -> `providerSkillsService` |
@@ -77,20 +97,22 @@ The existing provider folders are `claude`, `codex`, `cursor`, and `opencode`.
 1. Add the provider id everywhere it is part of the contract.
 
 - Update `server/shared/types.ts` `LLMProvider`.
-- Update `src/types/app.ts` `LLMProvider` if the frontend should know about it.
+- Update `src/shared/types.ts` `LLMProvider` if the frontend should know about it.
 - Update `server/modules/providers/provider.routes.ts`.
-- Update `server/routes/agent.js` if the provider is launchable from the agent runtime.
-- Update `server/index.js` if the provider needs runtime boot or shutdown wiring.
+- Update `server/modules/agent/agent.routes.ts` if the provider is launchable from the agent runtime.
+- Update `server/index.ts` if the provider needs runtime boot or shutdown wiring.
 - Update the `PROVIDER_ORDER` list in `public/api-docs.html` if the provider should appear in the public API docs.
-- Update `src/components/chat/hooks/useChatProviderState.ts` and
-  `src/components/chat/view/subcomponents/ProviderSelectionEmptyState.tsx` if
+- Update `src/modules/chat/hooks/useChatProviderState.ts` and
+  `src/modules/chat/transcript/ProviderSelectionEmptyState.tsx` if
   the provider should be selectable in chat.
-- Update `src/components/provider-auth/view/ProviderLoginModal.tsx` if the
+- Update `src/modules/provider-auth/ProviderLoginModal.tsx` if the
   provider has a login/setup flow.
 
 2. Create the wrapper class.
 
 - Add `server/modules/providers/list/<provider>/<provider>.provider.ts`.
+- Add `server/modules/providers/list/<provider>/<provider>-runtime.provider.js`
+  when the provider supports live SDK/CLI execution.
 - Extend `AbstractProvider`.
 - Expose readonly `auth`, `mcp`, `skills`, `sessions`, and `sessionSynchronizer`.
 - Call `super('<provider>')`.
@@ -198,35 +220,70 @@ Current session sync roots are:
 
 If the provider can run live chat sessions, update the runtime entrypoints too:
 
-- `server/routes/agent.js`
-- `server/index.js`
+- `server/modules/providers/list/<provider>/<provider>-runtime.provider.js`
+- `server/modules/providers/list/<provider>/<provider>.provider.ts`
+- `server/modules/agent/agent.routes.ts`
+- `server/index.ts`
 
 If the provider is visible in the UI, update:
 
 - provider model fallback files under `server/modules/providers/list/<provider>/`
-- `src/components/chat/hooks/useChatProviderState.ts`
-- `src/components/chat/view/subcomponents/ProviderSelectionEmptyState.tsx`
-- `src/components/provider-auth/view/ProviderLoginModal.tsx`
-- `src/components/mcp/constants.ts`
+- `src/modules/chat/hooks/useChatProviderState.ts`
+- `src/modules/chat/transcript/ProviderSelectionEmptyState.tsx`
+- `src/modules/provider-auth/ProviderLoginModal.tsx`
+- `src/shared/constants.ts`
+
+## Kiro ACP Runtime
+
+Kiro adds `kiro` through the same seven facets. Its runtime lives in
+`list/kiro/kiro-runtime.provider.js` and uses `kiro-cli acp --trust-all-tools`
+with JSON-RPC over stdio. New runs call `session/new`; resumed runs resolve the
+app session id to the provider-native id before `session/load`. App model
+selections use `--model` for new sessions and `session/set_model` after loading.
+
+The process remains keyed by the app id for cancellation throughout startup
+and execution. Only real native ids reach the session writer. History replay
+from `session/load` is suppressed; live text uses `stream_delta` / `stream_end`
+and each non-aborted run emits one terminal `complete`. Prompt requests have
+no handshake timeout; cancellation shuts down the child with a bounded grace
+period.
+
+Kiro reads ACP transcripts and metadata from `~/.kiro/sessions/cli/*.{jsonl,json}`.
+MCP config is stored in `~/.kiro/settings/mcp.json` and
+`<workspace>/.kiro/settings/mcp.json`; edits preserve `disabled` and `autoApprove`.
+Skills are discovered under user/project `.kiro/skills` and `.agents/skills`;
+managed user skills are written to `~/.kiro/skills`. Auth probes use asynchronous
+`kiro-cli --version` and `kiro-cli whoami`, with the legacy AWS SSO token file as
+an optional hint only.
+
+The initial integration supports trusted tools and cancellation. Image/file
+attachments, interactive approvals, effort controls, token usage, message
+editing, and session forking are not exposed by its capability matrix.
 
 ## Minimal Wrapper Template
 
 ```ts
 import { AbstractProvider } from '@/modules/providers/shared/base/abstract.provider.js';
 import { <Provider>ProviderAuth } from './<provider>-auth.provider.js';
+import { <Provider>ProviderModels } from './<provider>-models.provider.js';
 import { <Provider>McpProvider } from './<provider>-mcp.provider.js';
+import { <provider>Runtime } from './<provider>-runtime.provider.js';
 import { <Provider>SkillsProvider } from './<provider>-skills.provider.js';
 import { <Provider>SessionsProvider } from './<provider>-sessions.provider.js';
 import { <Provider>SessionSynchronizer } from './<provider>-session-synchronizer.provider.js';
 import type {
   IProviderAuth,
   IProviderMcp,
+  IProviderModels,
+  IProviderRuntime,
   IProviderSessionSynchronizer,
   IProviderSessions,
   IProviderSkills,
 } from '@/shared/interfaces.js';
 
 export class <Provider>Provider extends AbstractProvider {
+  readonly runtime: IProviderRuntime = <provider>Runtime;
+  readonly models: IProviderModels = new <Provider>ProviderModels();
   readonly auth: IProviderAuth = new <Provider>ProviderAuth();
   readonly mcp: IProviderMcp = new <Provider>McpProvider();
   readonly skills: IProviderSkills = new <Provider>SkillsProvider();
@@ -290,15 +347,17 @@ Add a new provider "<provider>" using the current provider module architecture.
 
 Requirements:
 1) Create:
-   - server/modules/providers/list/<provider>/<provider>.provider.ts
+    - server/modules/providers/list/<provider>/<provider>.provider.ts
+    - server/modules/providers/list/<provider>/<provider>-runtime.provider.js
    - server/modules/providers/list/<provider>/<provider>-auth.provider.ts
+   - server/modules/providers/list/<provider>/<provider>-models.provider.ts
    - server/modules/providers/list/<provider>/<provider>-mcp.provider.ts
    - server/modules/providers/list/<provider>/<provider>-skills.provider.ts
    - server/modules/providers/list/<provider>/<provider>-sessions.provider.ts
    - server/modules/providers/list/<provider>/<provider>-session-synchronizer.provider.ts
 2) Register in:
-   - server/modules/providers/provider.registry.ts
-   - server/modules/providers/provider.routes.ts
+    - server/modules/providers/provider.registry.ts
+    - server/modules/providers/provider.routes.ts
    - server/shared/types.ts LLMProvider
    - src/types/app.ts LLMProvider
 3) Mirror the nearest existing provider implementation for file naming, style,
@@ -334,9 +393,10 @@ alongside the implementation.
 
 - Adding provider files but forgetting `provider.registry.ts` or
   `provider.routes.ts`.
-- Updating backend provider ids but not `src/types/app.ts` or the frontend
+- Adding a live runtime without exposing it from the provider wrapper.
+- Updating backend provider ids but not `src/shared/types.ts` or the frontend
   provider constants.
-- Omitting `skills` or `sessionSynchronizer` from the wrapper.
+- Omitting `runtime`, `skills`, or `sessionSynchronizer` from the wrapper.
 - Returning duplicate normalized message ids for split content.
 - Treating `limit === 0` as unbounded history.
 - Building file paths from raw session ids without validation.

@@ -1,13 +1,10 @@
 import type { IProviderModels } from '@/shared/interfaces.js';
 import type {
-  ProviderChangeActiveModelInput,
   ProviderCurrentActiveModel,
   ProviderModelsDefinition,
-  ProviderSessionActiveModelChange,
 } from '@/shared/types.js';
 import {
   buildDefaultProviderCurrentActiveModel,
-  writeProviderSessionActiveModelChange,
 } from '@/shared/utils.js';
 
 /**
@@ -36,16 +33,8 @@ export class KiroProviderModels implements IProviderModels {
   }
 
   async getCurrentActiveModel(): Promise<ProviderCurrentActiveModel> {
-    // Kiro resolves the effective model at spawn time via the `--model` CLI
-    // flag (ACP ignores model on `session/prompt`). There is no persisted
-    // per-session model on disk to read back, so fall back to the catalog
-    // default.
+    // The shared model service persists app selections. For CLI-created
+    // sessions without a recorded selection, use the catalog default.
     return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
-  }
-
-  async changeActiveModel(
-    input: ProviderChangeActiveModelInput,
-  ): Promise<ProviderSessionActiveModelChange> {
-    return writeProviderSessionActiveModelChange('kiro', input);
   }
 }

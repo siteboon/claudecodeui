@@ -1,0 +1,142 @@
+{
+  "notConfigured": {
+    "title": "TaskMaster AI가 설정되지 않았습니다",
+    "description": "TaskMaster는 AI 기반 지원으로 복잡한 프로젝트를 관리하기 쉬운 작업 단위로 나눠줍니다",
+    "whatIsTitle": "🎯 TaskMaster란?",
+    "features": {
+      "aiPowered": "AI 기반 작업 관리: 복잡한 프로젝트를 관리하기 쉬운 하위 작업으로 분할",
+      "prdTemplates": "PRD 템플릿: 제품 요구사항 문서(PRD)로부터 작업 생성",
+      "dependencyTracking": "의존성 추적: 작업 간 관계와 실행 순서 파악",
+      "progressVisualization": "진행 상황 시각화: 칸반 보드와 상세한 작업 분석",
+      "cliIntegration": "CLI 연동: 고급 워크플로우를 위한 taskmaster 명령어 사용"
+    },
+    "initializeButton": "TaskMaster AI 초기화"
+  },
+  "gettingStarted": {
+    "title": "TaskMaster 시작하기",
+    "subtitle": "TaskMaster가 초기화되었습니다! 다음 단계를 안내합니다:",
+    "steps": {
+      "createPRD": {
+        "title": "제품 요구사항 문서(PRD) 작성",
+        "description": "프로젝트 아이디어를 정리하고 무엇을 만들고 싶은지 설명하는 PRD를 작성하세요.",
+        "addButton": "PRD 추가",
+        "existingPRDs": "기존 PRD:"
+      },
+      "generateTasks": {
+        "title": "PRD로부터 작업 생성",
+        "description": "PRD가 준비되면 AI 어시스턴트에게 이를 분석해달라고 요청하세요. TaskMaster가 구현 세부사항과 함께 관리하기 쉬운 작업으로 자동 분할합니다."
+      },
+      "analyzeTasks": {
+        "title": "작업 분석 및 확장",
+        "description": "AI 어시스턴트에게 작업의 복잡도를 분석하고, 더 쉽게 구현할 수 있도록 상세한 하위 작업으로 확장해달라고 요청하세요."
+      },
+      "startBuilding": {
+        "title": "개발 시작",
+        "description": "AI 어시스턴트에게 작업을 시작하고, 상태를 업데이트하고, 프로젝트가 진행됨에 따라 새 작업을 추가해달라고 요청하세요."
+      }
+    },
+    "tip": "💡 팁: PRD로 시작하면 TaskMaster의 AI 기반 작업 생성 기능을 최대한 활용할 수 있습니다"
+  },
+  "setupModal": {
+    "title": "TaskMaster 설정",
+    "subtitle": "{{projectName}}용 대화형 CLI",
+    "willStart": "TaskMaster 초기화가 자동으로 시작됩니다",
+    "completed": "TaskMaster 설정이 완료되었습니다! 이제 이 창을 닫아도 됩니다.",
+    "closeButton": "닫기",
+    "closeContinueButton": "닫고 계속하기"
+  },
+  "helpGuide": {
+    "title": "TaskMaster 시작하기",
+    "subtitle": "생산적인 작업 관리를 위한 가이드",
+    "examples": {
+      "parsePRD": "💬 예시:\n\"Claude Task Master로 새 프로젝트를 초기화했어요. .taskmaster/docs/prd.txt에 PRD가 있는데, 이를 분석해서 초기 작업을 설정하는 걸 도와줄 수 있나요?\"",
+      "expandTask": "💬 예시:\n\"작업 5가 복잡해 보이는데, 하위 작업으로 나눠줄 수 있나요?\"",
+      "addTask": "💬 예시:\n\"Cloudinary를 사용한 사용자 프로필 이미지 업로드 기능을 구현하는 새 작업을 추가해주세요. 가장 좋은 방법을 조사해주세요.\""
+    },
+    "moreExamples": "더 많은 예시와 사용 패턴 보기 →",
+    "proTips": {
+      "title": "💡 유용한 팁",
+      "search": "검색창을 사용해 특정 작업을 빠르게 찾으세요",
+      "views": "보기 전환 버튼으로 칸반, 목록, 그리드 보기를 전환하세요",
+      "filters": "필터를 사용해 특정 상태나 우선순위의 작업에 집중하세요",
+      "details": "작업을 클릭하면 상세 정보를 확인하고 하위 작업을 관리할 수 있습니다"
+    },
+    "learnMore": {
+      "title": "📚 더 알아보기",
+      "description": "TaskMaster AI는 개발자를 위한 고급 작업 관리 시스템입니다. 문서와 예시를 확인하고 프로젝트에 기여해보세요.",
+      "githubButton": "GitHub에서 보기"
+    }
+  },
+  "search": {
+    "placeholder": "작업 검색..."
+  },
+  "filters": {
+    "button": "필터",
+    "status": "상태",
+    "priority": "우선순위",
+    "sortBy": "정렬 기준",
+    "allStatuses": "모든 상태",
+    "allPriorities": "모든 우선순위",
+    "showing": "{{total}}개 중 {{filtered}}개 표시",
+    "clearFilters": "필터 초기화"
+  },
+  "sort": {
+    "id": "ID",
+    "status": "상태",
+    "priority": "우선순위",
+    "idAsc": "ID (오름차순)",
+    "idDesc": "ID (내림차순)",
+    "titleAsc": "제목 (A-Z)",
+    "titleDesc": "제목 (Z-A)",
+    "statusAsc": "상태 (대기 우선)",
+    "statusDesc": "상태 (완료 우선)",
+    "priorityAsc": "우선순위 (높은 순)",
+    "priorityDesc": "우선순위 (낮은 순)"
+  },
+  "views": {
+    "kanban": "칸반 보기",
+    "list": "목록 보기",
+    "grid": "그리드 보기"
+  },
+  "kanban": {
+    "pending": "📋 대기 중",
+    "inProgress": "🚀 진행 중",
+    "done": "✅ 완료",
+    "blocked": "🚫 차단됨",
+    "deferred": "⏳ 보류",
+    "cancelled": "❌ 취소됨",
+    "noTasksYet": "아직 작업이 없습니다",
+    "tasksWillAppear": "작업이 여기에 표시됩니다",
+    "moveTasksHere": "시작하면 작업을 여기로 옮기세요",
+    "completedTasksHere": "완료된 작업이 여기에 표시됩니다",
+    "statusTasksHere": "이 상태의 작업이 여기에 표시됩니다"
+  },
+  "buttons": {
+    "help": "TaskMaster 시작 가이드",
+    "prds": "PRD",
+    "addPRD": "PRD 추가",
+    "addTask": "작업 추가",
+    "createNewPRD": "새 PRD 생성",
+    "prdsAvailable": "PRD {{count}}개 사용 가능"
+  },
+  "prd": {
+    "modified": "수정됨: {{date}}"
+  },
+  "statuses": {
+    "pending": "대기 중",
+    "in-progress": "진행 중",
+    "done": "완료",
+    "blocked": "차단됨",
+    "deferred": "보류",
+    "cancelled": "취소됨"
+  },
+  "priorities": {
+    "high": "높음",
+    "medium": "중간",
+    "low": "낮음"
+  },
+  "noMatchingTasks": {
+    "title": "필터와 일치하는 작업이 없습니다",
+    "description": "검색어나 필터 조건을 조정해보세요."
+  }
+}

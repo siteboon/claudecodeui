@@ -5,8 +5,10 @@ import { KiroMcpProvider } from '@/modules/providers/list/kiro/kiro-mcp.provider
 import { KiroSessionSynchronizer } from '@/modules/providers/list/kiro/kiro-session-synchronizer.provider.js';
 import { KiroSessionsProvider } from '@/modules/providers/list/kiro/kiro-sessions.provider.js';
 import { KiroSkillsProvider } from '@/modules/providers/list/kiro/kiro-skills.provider.js';
+import { kiroRuntime } from '@/modules/providers/list/kiro/kiro-runtime.provider.js';
 import type {
   IProviderAuth,
+  IProviderRuntime,
   IProviderModels,
   IProviderSessionSynchronizer,
   IProviderSessions,
@@ -14,6 +16,7 @@ import type {
 } from '@/shared/interfaces.js';
 
 export class KiroProvider extends AbstractProvider {
+  readonly runtime: IProviderRuntime = kiroRuntime;
   readonly models: IProviderModels = new KiroProviderModels();
   readonly mcp = new KiroMcpProvider();
   readonly auth: IProviderAuth = new KiroProviderAuth();

@@ -63,12 +63,17 @@ export class StdioJsonRpcClient {
     }
     this.child.on('close', this.handleClose);
     this.child.on('error', (error) => this.handleClose(null, null, error));
+    this.child.stdin.on('error', (error) => this.handleClose(null, null, error));
   }
 
   /**
    * Sends a JSON-RPC request and resolves with the typed result.
    */
-  request<TResult = unknown>(method: string, params?: unknown): Promise<TResult> {
+  request<TResult = unknown>(
+    method: string,
+    params?: unknown,
+    options: { timeoutMs?: number } = {},
+  ): Promise<TResult> {
     if (this.closed) {
       return Promise.reject(new Error(`JSON-RPC client is closed (request: ${method})`));
     }
@@ -78,10 +83,11 @@ export class StdioJsonRpcClient {
     const frame = JSON.stringify({ jsonrpc: '2.0', id, method, params });
 
     return new Promise<TResult>((resolve, reject) => {
-      const timer = setTimeout(() => {
+      const timeoutMs = options.timeoutMs ?? this.options.requestTimeoutMs;
+      const timer = timeoutMs > 0 ? setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error(`JSON-RPC request '${method}' timed out after ${this.options.requestTimeoutMs}ms`));
-      }, this.options.requestTimeoutMs);
+        reject(new Error(`JSON-RPC request '${method}' timed out after ${timeoutMs}ms`));
+      }, timeoutMs) : undefined;
 
       this.pending.set(id, {
         resolve: (value) => {
@@ -198,6 +204,17 @@ export class StdioJsonRpcClient {
   private dispatchFrame(frame: Record<string, unknown>): void {
     const id = typeof frame.id === 'number' ? frame.id : null;
     const method = typeof frame.method === 'string' ? frame.method : null;
+
+    // Request ids are local to each peer. An agent request can share an id
+    // with one of our pending requests, but must never resolve that request.
+    if (method && frame.id !== undefined) {
+      this.child.stdin.write(`${JSON.stringify({
+        jsonrpc: '2.0',
+        id: frame.id,
+        error: { code: -32601, message: `Unsupported client method: ${method}` },
+      })}\n`);
+      return;
+    }
 
     if (id !== null && this.pending.has(id)) {
       const pending = this.pending.get(id)!;

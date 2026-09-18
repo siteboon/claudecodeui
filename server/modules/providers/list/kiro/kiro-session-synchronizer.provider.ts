@@ -80,7 +80,7 @@ export class KiroSessionSynchronizer implements IProviderSessionSynchronizer {
     // session has a non-default name, re-pass that name so the COALESCE
     // is a no-op; only adopt the sidecar title when no name has been set
     // (or when the placeholder is still the default "Untitled" string).
-    const existing = sessionsDb.getSessionById(parsed.sessionId);
+    const existing = sessionsDb.getSessionByProviderSessionId(parsed.sessionId);
     let nameToPersist = parsed.sessionName;
     if (existing?.custom_name && existing.custom_name !== UNTITLED) {
       nameToPersist = existing.custom_name;
