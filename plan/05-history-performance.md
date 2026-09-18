@@ -31,11 +31,12 @@ session with many large agent transcripts is exactly the case that motivates
 the cache and also the one that would blow memory if it is unbounded (see `02`).
 
 **The cache fixes parse cost, not payload weight.** The same session normalizes
-to **5,490 KB** of JSON, dominated by `tool_use` rows carrying their whole
-`toolInput` — a `Workflow` script is tens of KB, and nobody reads one while
-scrolling. Served from a perfect cache, those megabytes still reach the client.
-Trimming what a history row carries is separate work, tracked in
-`plan/local/T23`.
+to **5,490 KB** of JSON, and results are what fill it: `toolUseResult` is 2,413
+KB (44%) and result `content` another 1,422 KB (26%), against 1,120 KB of
+`toolInput`. Served from a perfect cache, those megabytes still reach the
+client. Trimming what a history row carries is separate work, measured and
+planned in `plan/local/T23` — where the lever is that all 2,413 KB of
+`toolUseResult` exist for two fields the client actually reads.
 
 ## Verification
 
