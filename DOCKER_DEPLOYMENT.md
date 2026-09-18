@@ -2,7 +2,10 @@
 
 **Version:** 1.37.2  
 **Date:** 2026-08-26  
-**Status:** Production Ready
+**Status:** Historical guide — use [FCC_SETUP.md](FCC_SETUP.md) for current setup.
+
+The checked-in Compose file is authoritative. The older template below has not
+been kept in sync with the runtime image; do not copy it for a new deployment.
 
 ---
 

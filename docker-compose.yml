@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   cloudcli:
     build:
@@ -7,27 +5,20 @@ services:
       dockerfile: Dockerfile
     container_name: cloudcli
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3001:3001"
     environment:
       NODE_ENV: production
-      PORT: 3001
-      CORS_ORIGIN: http://localhost:3001
+      SERVER_PORT: 3001
+      HOST: 0.0.0.0
+      DATABASE_PATH: /var/lib/cloudcli/database.db
     volumes:
-      - cloudcli_data:/root/.cloudcli
+      - cloudcli_data:/var/lib/cloudcli
+      - cloudcli_home:/home/nodejs
+      - cloudcli_projects:/workspace
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 5s
-    networks:
-      - cloudcli_network
+    # Inherit the image's Node-based /health probe.
 
 volumes:
   cloudcli_data:
-    driver: local
-
-networks:
-  cloudcli_network:
-    driver: bridge
+  cloudcli_home:
+  cloudcli_projects:
