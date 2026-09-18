@@ -21,7 +21,7 @@ NC='\033[0m' # No Color
 CONTAINER_NAME="cloudcli-server"
 IMAGE_NAME="cloudcli"
 IMAGE_TAG="latest"
-PORT="3001"
+HOST_PORT="8082"\nCONTAINER_PORT="3001"
 DATABASE_DIR="/var/lib/cloudcli"
 
 # Functions
@@ -173,12 +173,12 @@ check_health() {
     sleep 3
 
     for i in {1..10}; do
-        if curl -fsS http://localhost:$PORT/health > /dev/null 2>&1; then
+        if curl -fsS http://localhost:$HOST_PORT/health > /dev/null 2>&1; then
             print_success "Server is healthy"
 
             # Get health status from /health endpoint
             local status
-            status=$(curl -fsS http://localhost:$PORT/health | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+            status=$(curl -fsS http://localhost:$HOST_PORT/health | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
             print_info "Status: $status"
 
             return 0
@@ -268,7 +268,7 @@ full_deployment() {
     check_health || { print_error "Health check failed"; return 1; }
 
     print_header "Deployment Complete ✓"
-    print_success "CloudCLI Server is running on http://localhost:$PORT"
+    print_success "CloudCLI Server is running on http://localhost:$HOST_PORT"
     print_info "View logs: docker logs -f $CONTAINER_NAME"
     print_info "Stop server: docker stop $CONTAINER_NAME"
 }
