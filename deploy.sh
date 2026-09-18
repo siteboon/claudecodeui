@@ -7,6 +7,9 @@
 
 set -e
 
+# Resolve all build/config paths relative to this script, not the caller's cwd.
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -88,12 +91,11 @@ check_env_file() {
 # Sets up /var/lib/cloudcli directory with 755 permissions via sudo
 # Ensures nodejs user (UID 1001) can write database.db file
 prepare_database_dir() {
-    if [ ! -d "$DATABASE_DIR" ]; then
-        print_info "Creating database directory: $DATABASE_DIR"
-        sudo mkdir -p "$DATABASE_DIR"
-        sudo chmod 755 "$DATABASE_DIR"
-        # Set ownership to nodejs user (UID 1001) for container write access
-        sudo chown 1001:1001 "$DATABASE_DIR"
+    print_info "Preparing database directory: $DATABASE_DIR"
+    if [ "$(id -u)" -eq 0 ]; then
+        install -d -m 755 -o 1001 -g 1001 "$DATABASE_DIR"
+    else
+        sudo install -d -m 755 -o 1001 -g 1001 "$DATABASE_DIR"
     fi
     print_success "Database directory ready: $DATABASE_DIR"
 }
@@ -135,7 +137,12 @@ run_container() {
         -p 127.0.0.1:$PORT:$PORT \
         -e NODE_ENV=production \
         -v $DATABASE_DIR:/var/lib/cloudcli \
+        -v cloudcli-home:/home/nodejs \
+        -v cloudcli-projects:/workspace \
         --env-file .env.production \
+        -e SERVER_PORT=$PORT \
+        -e HOST=0.0.0.0 \
+        -e DATABASE_PATH=/var/lib/cloudcli/database.db \
         $IMAGE_NAME:$IMAGE_TAG
 
     if [ $? -eq 0 ]; then

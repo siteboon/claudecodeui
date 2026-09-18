@@ -1,5 +1,9 @@
 # CloudCLI FCC Server - Deployment Guide
 
+> For this fork, use [FCC_SETUP.md](FCC_SETUP.md) and the checked-in Compose file.
+> The older examples below predate the deployment repair; in particular, building
+> requires dev dependencies, and `/root/.cloudcli` is not the runtime user's home.
+
 ## Quick Start
 
 ### Production Build

@@ -1,50 +1,40 @@
-# Build stage
-FROM node:22-alpine AS builder
+FROM node:22-bookworm-slim AS builder
 WORKDIR /app
 
-# Copy package files
+# Compile native SQLite/PTY modules if no prebuilt binary is available.
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git \
+    && rm -rf /var/lib/apt/lists/*
+ENV HUSKY=0 ELECTRON_SKIP_BINARY_DOWNLOAD=1
 COPY package*.json ./
-
-# Install dependencies
-RUN npm ci --omit=dev
-
-# Copy source code
+# npm ci runs postinstall before the remaining source is copied.
+COPY scripts/fix-node-pty.js ./scripts/fix-node-pty.js
+RUN npm ci --include=dev
 COPY . .
+RUN npm run build \
+    && npm prune --omit=dev --ignore-scripts
 
-# Build application
-RUN npm run build
-
-# Runtime stage
-FROM node:22-alpine
+FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      dumb-init git openssh-client ca-certificates ripgrep \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 1001 nodejs \
+    && useradd --uid 1001 --gid nodejs --create-home --shell /bin/bash nodejs \
+    && mkdir -p /var/lib/cloudcli /workspace \
+    && chown nodejs:nodejs /var/lib/cloudcli /workspace
 
-# Install dumb-init for proper signal handling
-RUN apk add --no-cache dumb-init
-
-# Copy package files
+ENV NODE_ENV=production SERVER_PORT=3001 HOST=0.0.0.0 \
+    DATABASE_PATH=/var/lib/cloudcli/database.db
 COPY package*.json ./
-
-# Install production dependencies only
-RUN npm ci --omit=dev
-
-# Copy built application from builder
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/dist-server ./dist-server
-
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/public ./public
 
 USER nodejs
-
-# Expose port
 EXPOSE 3001
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3001', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
-
-# Use dumb-init to handle signals properly
-ENTRYPOINT ["/sbin/dumb-init", "--"]
-
-# Start the application
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD node -e "const r=require('http').get('http://127.0.0.1:'+(process.env.SERVER_PORT||3001)+'/health',s=>{s.resume();process.exit(s.statusCode===200?0:1)});r.on('error',()=>process.exit(1));r.setTimeout(5000,()=>{r.destroy();process.exit(1)});"
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 CMD ["npm", "run", "server"]
