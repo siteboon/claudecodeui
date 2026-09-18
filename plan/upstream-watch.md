@@ -1,7 +1,40 @@
 # Upstream watch — siteboon/claudecodeui
 
-Last scanned: **2026-09-17** (statuses below re-checked individually).
+Last scanned: **2026-09-18** (merged-since-sync scan; open-PR statuses last re-checked 2026-09-17).
 Previous full scan: 2026-09-02, 97 open PRs at the time.
+
+## Merged since our sync — 2026-09-18
+
+First run of the `upstream-watch` skill (**T9**), which answers the other half of
+this file: not who is editing my files, but what they have already shipped that
+we lack.
+
+Sync point `7704a905` (2026-09-17). Upstream `main` is `3ed3be5a`, **three
+commits ahead**. No new release — both sides are on 1.37.3.
+
+| PR | What | Files | Verdict |
+|---|---|---|---|
+| **#1291** | *hold the CLI open for backgrounded agents and workflows* | `claude-runtime.provider.js`, new `tests/claude-background-work.test.ts` | **Redundant — and a conflict.** This is **T3**, fixed upstream, with the same reasoning we used: `Agent` gets its own arm because `DEFERRED_WORK_TOOLS` would also match foreground agents, `Workflow` goes in the set because it has no foreground mode. Our branch already ships this. |
+| #1256 | in-chat file references land where they point | `Markdown.tsx`, code editor, file tree, palette | Adjacent. Touches `Markdown.tsx`, which our branch also touched. |
+| #1164 | close settings modal with escape and backdrop click | `Settings.tsx`, `ActionMenu.tsx`, two modals | Adjacent to **T5** by subject only (Escape routing), not by file. |
+
+Files **both** sides changed since the sync point — the conflict list for the
+next rebase:
+
+```
+server/modules/providers/list/claude/claude-runtime.provider.js
+src/modules/chat/transcript/Markdown.tsx
+src/modules/mcp/McpServerFormModal.tsx
+src/modules/provider-auth/ProviderLoginModal.tsx
+src/shared/types.ts
+```
+
+**#1291 is the one to plan for.** Two independent fixes for the same defect in
+the same function, plus a test file each (`claude-background-work.test.ts`
+upstream, `claude-background-detection.test.ts` here). The rebase needs a
+decision on whose `startsBackgroundWork` survives, not a mechanical merge.
+
+Re-run with the `upstream-watch` skill.
 
 ## Re-check 2026-09-17
 
