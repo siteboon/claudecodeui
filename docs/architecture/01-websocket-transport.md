@@ -182,7 +182,7 @@ throws is answered with `INTERNAL_ERROR`.**
 
 | `type` | Payload | What the server does |
 | --- | --- | --- |
-| `chat.send` | `sessionId`, `content`, `options` | Resolves the session row, registers the run, dispatches to the provider runtime (`:146-158`) |
+| `chat.send` | `sessionId`, `content`, `options` | Resolves the session row, registers the run, dispatches to the provider runtime (`:146-158`). On a session whose previous turn left background work running, the new turn's CLI process supersedes the one that work runs under, so the work is stopped or finishes unheard; the composer asks the user before sending such a turn |
 | `chat.edit-send` | as above plus `anchorId` | Announces `history_truncated`, rewinds or resumes the provider transcript at the anchor, then dispatches (`:314-408`) |
 | `chat.abort` | `sessionId` | Aborts the runtime and emits the terminal `complete` on its behalf (`:415-438`) |
 | `chat.stop-task` | `sessionId`, `taskId` | Stops one background task (agent, workflow or backgrounded command) through the provider runtime; the runtime reports the stop on the session's stream |

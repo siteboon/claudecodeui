@@ -1,3 +1,5 @@
+import type { TFunction } from 'i18next';
+
 import type { BackgroundTaskStatus, BackgroundTaskSummary, ChatMessage, WorkflowAgentProgress } from '@/shared/types';
 
 /**
@@ -127,4 +129,27 @@ export function describeWorkflowAgent(agent: Pick<WorkflowAgentProgress, 'index'
     return promptHead.length > 80 ? `${promptHead.slice(0, 79)}…` : promptHead;
   }
   return agent.agentId ?? `#${agent.index + 1}`;
+}
+
+/**
+ * The tasks a session runs for itself. A workflow agent's own backgrounded
+ * commands are listed too (so they can be stopped), but they are that agent's
+ * business; the session's work is the workflow. Only when nothing but nested
+ * tasks remain are they what is running.
+ */
+export function ownBackgroundTasks(allTasks: BackgroundTaskSummary[]): BackgroundTaskSummary[] {
+  const own = allTasks.filter((task) => !task.nested);
+  return own.length > 0 ? own : allTasks;
+}
+
+/** One background task by kind and name: "Workflow audit", "Agent Survey the repo", "Command npm test". */
+export function describeBackgroundTask(task: BackgroundTaskSummary, t: TFunction): string {
+  switch (task.taskType) {
+    case 'local_workflow':
+      return t('claudeStatus.backgroundTask.workflow', { name: task.workflowName ?? task.description, defaultValue: 'Workflow {{name}}' });
+    case 'local_bash':
+      return t('claudeStatus.backgroundTask.command', { description: task.description, defaultValue: 'Command {{description}}' });
+    default:
+      return t('claudeStatus.backgroundTask.agent', { description: task.description, defaultValue: 'Agent {{description}}' });
+  }
 }

@@ -4,6 +4,7 @@ import type { TFunction } from 'i18next';
 
 import { Shimmer } from '@/shared/ui';
 import type { BackgroundTaskSummary, SessionActivity } from '@/shared/types';
+import { describeBackgroundTask, ownBackgroundTasks } from '@/modules/chat/utils/backgroundTasks';
 
 type ActivityIndicatorProps = {
   activity: SessionActivity | null;
@@ -24,23 +25,10 @@ const EXIT_ANIMATION_MS = 220;
 
 /** What the background work is: the one task by kind and name, or how many when there are several. */
 function describeBackgroundTasks(allTasks: BackgroundTaskSummary[], t: TFunction): string {
-  // A workflow agent's own backgrounded commands are listed too (so they can be
-  // stopped), but they are that agent's business; the session's work is the
-  // workflow. Only when nothing but nested tasks remain are they what is running.
-  const own = allTasks.filter((task) => !task.nested);
-  const tasks = own.length > 0 ? own : allTasks;
-  if (tasks.length !== 1) {
-    return t('claudeStatus.backgroundTask.count', { count: tasks.length, defaultValue: '{{count}} tasks' });
-  }
-  const [task] = tasks;
-  switch (task.taskType) {
-    case 'local_workflow':
-      return t('claudeStatus.backgroundTask.workflow', { name: task.workflowName ?? task.description, defaultValue: 'Workflow {{name}}' });
-    case 'local_bash':
-      return t('claudeStatus.backgroundTask.command', { description: task.description, defaultValue: 'Command {{description}}' });
-    default:
-      return t('claudeStatus.backgroundTask.agent', { description: task.description, defaultValue: 'Agent {{description}}' });
-  }
+  const tasks = ownBackgroundTasks(allTasks);
+  return tasks.length === 1
+    ? describeBackgroundTask(tasks[0], t)
+    : t('claudeStatus.backgroundTask.count', { count: tasks.length, defaultValue: '{{count}} tasks' });
 }
 
 /**
