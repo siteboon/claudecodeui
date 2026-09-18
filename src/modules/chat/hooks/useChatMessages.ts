@@ -314,6 +314,10 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
       // transcript row when the user edits or forks from it.
       transcriptAnchorId: msg.transcriptAnchorId,
       compact: msg.compact,
+      // Present only on the row a turn's recorded duration belongs to; every
+      // other row leaves it undefined and is timed by its neighbours instead.
+      durationMs: msg.durationMs,
+      durationApiMs: msg.durationApiMs,
     };
 
     if (appendCompactionRow(msg, converted, sharedMetadata, {

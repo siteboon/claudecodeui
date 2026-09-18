@@ -338,6 +338,10 @@ export type NormalizedMessage = {
   status?: string;
   summary?: string;
   tokenBudget?: unknown;
+  /** Wall clock of the turn this row opens, in milliseconds, when it was recorded. */
+  durationMs?: number;
+  /** The part of that turn spent waiting on the API. */
+  durationApiMs?: number;
   /**
    * Timeline of everything a subagent did, attached to the `tool_use` that
    * spawned it. Present for Claude `Agent`/`Task` calls and Codex

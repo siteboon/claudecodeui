@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { GitBranchIcon, PencilIcon } from 'lucide-react';
 
 import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider,DiffLine,Project } from '@/shared/types';
+import { formatTurnDuration } from '@/modules/chat/utils/turnDurations';
 import { formatUsageLimitText, stripProposedPlanEnvelope } from '@/modules/chat/utils/chatFormatting';
 import { ToolRenderer, ToolErrorDisplay, SubagentPanel, shouldHideToolResult } from '@/modules/chat/tools';
 import { LLMProviderLogo } from '@/shared/ui';
@@ -38,6 +39,11 @@ type MessageComponentProps = {
    * Absent when the provider cannot copy a transcript prefix.
    */
   onForkFromMessage?: (message: ChatMessage) => void;
+  /**
+   * How long the turn this row opens took. Set only on the row that opens one,
+   * and only once the turn has ended.
+   */
+  turnDurationMs?: number;
 };
 
 const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'Edit', 'Write', 'ApplyPatch']);
@@ -46,7 +52,7 @@ const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'Edit', 'Write', 'ApplyPatch']);
  * Rendered by chat's ChatMessagesPane and ToolGroupContainer to draw one
  * transcript entry — user turn, assistant turn, or a tool call and its result.
  */
-const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, showRawParameters, showThinking, selectedProject, provider, onEditMessage, onForkFromMessage }: MessageComponentProps) => {
+const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, showRawParameters, showThinking, selectedProject, provider, onEditMessage, onForkFromMessage, turnDurationMs }: MessageComponentProps) => {
   const { t } = useTranslation('chat');
   const isGrouped = prevMessage && prevMessage.type === message.type &&
     ((prevMessage.type === 'assistant') ||
@@ -83,7 +89,14 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
     !message.isThinking;
 
 
-  const formattedTime = useMemo(() => new Date(message.timestamp).toLocaleTimeString(), [message.timestamp]);
+  // Hour and minute only. The seconds were on every row and answered a question
+  // nobody asks of a transcript; the full stamp is one hover away.
+  const formattedTime = useMemo(
+    () => new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    [message.timestamp],
+  );
+  const fullTimestamp = useMemo(() => new Date(message.timestamp).toLocaleString(), [message.timestamp]);
+  const turnDuration = typeof turnDurationMs === 'number' ? formatTurnDuration(turnDurationMs) : '';
   const shouldHideThinkingMessage = Boolean(message.isThinking && !showThinking);
 
   if (shouldHideThinkingMessage) {
@@ -162,13 +175,13 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                   {shouldShowUserCopyControl && (
                     <MessageCopyControl content={userCopyContent} messageType="user" />
                   )}
-                  <span>{formattedTime}</span>
+                  <span title={fullTimestamp}>{formattedTime}</span>
                 </div>
               </div>
             ) : (
               /* Attachment-only turn: no text bubble, but the timestamp still shows */
               <div className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
-                <span>{formattedTime}</span>
+                <span title={fullTimestamp}>{formattedTime}</span>
               </div>
             )}
           </div>
@@ -411,7 +424,12 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                 {shouldShowAssistantCopyControl && (
                   <MessageSpeakControl content={assistantCopyContent} />
                 )}
-                {!isGrouped && <span>{formattedTime}</span>}
+                {!isGrouped && <span title={fullTimestamp}>{formattedTime}</span>}
+                {turnDuration && (
+                  <span title={t('message.turnDurationTitle', { duration: turnDuration })}>
+                    · {turnDuration}
+                  </span>
+                )}
               </div>
             )}
           </div>

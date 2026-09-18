@@ -265,7 +265,8 @@
   },
   "message": {
     "editAndResend": "Edit and resend",
-    "forkFromHere": "Fork from here"
+    "forkFromHere": "Fork from here",
+    "turnDurationTitle": "This turn took {{duration}}"
   },
   "export": {
     "trigger": "Export conversation",

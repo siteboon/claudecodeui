@@ -19,6 +19,10 @@ export type {
   SessionDraftRecord,
 } from '@/modules/database/repositories/session-drafts.db.js';
 export { sessionsDb } from '@/modules/database/repositories/sessions.db.js';
+// turnDurationsDb: used by the Claude provider to record how long a finished
+// turn took, and to read it back when the transcript is loaded.
+export { turnDurationsDb } from '@/modules/database/repositories/turn-durations.db.js';
+export type { TurnDuration } from '@/modules/database/repositories/turn-durations.db.js';
 export { userDb } from '@/modules/database/repositories/users.js';
 // userPreferencesDb: used by the User module to persist the settings that used to live in browser localStorage.
 export { userPreferencesDb } from '@/modules/database/repositories/user-preferences.db.js';

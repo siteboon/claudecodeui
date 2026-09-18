@@ -327,6 +327,10 @@ export type ChatMessage = {
   isCompactSummary?: boolean;
   /** Set on the row that stands in for a compaction, so it is drawn as one. */
   compact?: CompactionInfo;
+  /** Wall clock of the turn this row opens, in milliseconds, when the provider recorded one. */
+  durationMs?: number;
+  /** The part of that turn spent waiting on the API. */
+  durationApiMs?: number;
   /** The summary that compaction produced, folded into the row above rather than left loose. */
   compactSummary?: string;
   /**
@@ -499,6 +503,10 @@ export type NormalizedMessage = {
   tokenBudget?: unknown;
   /** Account-level subscription quota, carried by the `rate_limit` status event. */
   rateLimit?: unknown;
+  /** Wall clock of the turn this row opens, in milliseconds, as the provider measured it. */
+  durationMs?: number;
+  /** The part of that turn spent waiting on the API. */
+  durationApiMs?: number;
   requestId?: string;
   input?: unknown;
   context?: unknown;

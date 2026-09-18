@@ -23,7 +23,7 @@ import {
   stripAnsiSequences,
   truncateSubagentActivity,
 } from '@/shared/utils.js';
-import { sessionsDb } from '@/modules/database/index.js';
+import { sessionsDb, turnDurationsDb } from '@/modules/database/index.js';
 import { summarizeClaudeTokenUsage } from '@/modules/providers/services/provider-token-usage.service.js';
 
 const PROVIDER = 'claude';
@@ -1162,9 +1162,25 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       }
     }
 
+    // Turn durations are annotations on rows the transcript already has: the
+    // provider writes no `result` record, so how long a turn took is only known
+    // from what the run recorded on its way out.
+    const turnDurations = turnDurationsDb.listForSession(providerSessionId);
+
     const normalized: NormalizedMessage[] = [];
     for (const raw of rawMessages) {
-      normalized.push(...this.normalizeMessage(raw, sessionId));
+      const produced = this.normalizeMessage(raw, sessionId);
+      const duration = typeof raw.uuid === 'string' ? turnDurations.get(raw.uuid) : undefined;
+      if (duration) {
+        // On the reply itself, which is where the transcript prints the time —
+        // a tool call from the same row has no timestamp to sit beside.
+        const anchor = produced.find((message) => message.kind === 'text' && message.role === 'assistant');
+        if (anchor) {
+          anchor.durationMs = duration.durationMs;
+          anchor.durationApiMs = duration.durationApiMs ?? undefined;
+        }
+      }
+      normalized.push(...produced);
     }
 
     for (const msg of normalized) {

@@ -19,6 +19,7 @@ import path from 'path';
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
 
+import { turnDurationsDb } from '@/modules/database/index.js';
 import {
   appendFilesInputTag,
   buildClaudeUserContent,
@@ -1334,6 +1335,9 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // Set once a turn publishes a budget read from an assistant message, so the
   // turn-ending `result` is only mined for usage when nothing better arrived.
   let assistantBudgetSent = false;
+  // The transcript row this turn's duration is recorded against, captured as
+  // the turn streams.
+  let turnAnchorUuid = null;
 
   // Whether this conversation keeps one process across its turns instead of
   // starting a fresh one per message.
@@ -1767,7 +1771,34 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         backgroundWorkPending = true;
       }
 
+      // The transcript row the turn's duration will be shown on: the turn's
+      // first assistant message with something to say. It has to be picked up
+      // while the turn streams, because `result` carries the duration but names
+      // no row — its own uuid is never written to the transcript, and the
+      // transcript keeps no record for it at all.
+      if (!turnAnchorUuid && message.type === 'assistant' && typeof message.uuid === 'string') {
+        const blocks = Array.isArray(message.message?.content) ? message.message.content : [];
+        if (blocks.some((block) => block?.type === 'text' && String(block.text || '').trim())) {
+          turnAnchorUuid = message.uuid;
+        }
+      }
+
       if (message.type === 'result') {
+        // Exact, and only available here: the alternative is guessing from the
+        // timestamps either side of the turn, which stop at the last message
+        // rather than at the end of the run.
+        const durationSessionId = capturedSessionId || providerSessionId || sessionId || null;
+        const durationMs = Number(message.duration_ms);
+        if (turnAnchorUuid && durationSessionId && Number.isFinite(durationMs) && durationMs > 0) {
+          turnDurationsDb.record(durationSessionId, turnAnchorUuid, {
+            durationMs,
+            durationApiMs: Number(message.duration_api_ms),
+          });
+        }
+        // A held process serves several turns from this same loop, so the
+        // anchor has to be given up here or turn two would annotate turn one.
+        turnAnchorUuid = null;
+
         // The turn is done as far as the client is concerned.
         const abortPending = sessionKey() ? abortedSessionIds.has(sessionKey()) : false;
         if (!turnCompleteSent && !abortPending) {

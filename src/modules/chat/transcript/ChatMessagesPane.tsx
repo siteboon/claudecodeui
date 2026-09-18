@@ -10,6 +10,7 @@ import type { ChatMessage,
   ProviderModelsDefinition } from '@/shared/types';
 import { getIntrinsicMessageKey } from '@/modules/chat/utils/messageKeys';
 import { groupConsecutiveTools, isToolGroupItem } from '@/modules/chat/utils/toolGrouping';
+import { computeTurnDurations } from '@/modules/chat/utils/turnDurations';
 import { useLazyRowObserver } from '@/modules/chat/hooks/useLazyRowObserver';
 import LazyMessageRow from '@/modules/chat/transcript/LazyMessageRow';
 import MessageComponent from '@/modules/chat/transcript/MessageComponent';
@@ -131,6 +132,15 @@ function ChatMessagesPane({
   const groupedVisibleMessages = useMemo(
     () => groupConsecutiveTools(visibleMessages, Boolean(showThinking)),
     [visibleMessages, showThinking],
+  );
+
+  // Over the whole transcript rather than the visible window: a turn whose
+  // prompt has scrolled out of the window is still the turn its reply belongs
+  // to, and measuring from the top of the window would time it from the wrong
+  // place.
+  const turnDurations = useMemo(
+    () => computeTurnDurations(chatMessages, isProcessing),
+    [chatMessages, isProcessing],
   );
 
   // Stable, deterministic keys for the messages rendered this pass.
@@ -313,6 +323,7 @@ function ChatMessagesPane({
                   <MessageComponent
                     message={item}
                     prevMessage={messagePrevMessage}
+                    turnDurationMs={turnDurations.get(item)}
                     createDiff={createDiff}
                     onFileOpen={onFileOpen}
                     onShowSettings={onShowSettings}

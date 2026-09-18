@@ -214,6 +214,32 @@ CREATE TABLE IF NOT EXISTS user_preferences (
  * not been sent yet and therefore has no session. Storing this server-side is
  * what lets a message typed on a laptop be finished on a phone.
  */
+/**
+ * How long a finished turn took, keyed by the transcript row it is shown on.
+ *
+ * The provider's own transcript has no `result` record, so the SDK's
+ * `duration_ms` — the only exact measure of a turn, and the only one that
+ * counts the time between the last message and the run actually finishing —
+ * is lost the moment the run ends unless it is written down here. The
+ * transcript stays the source of truth for the conversation; this table only
+ * annotates it, and a row that goes missing costs a timestamp estimate, not a
+ * message.
+ *
+ * `anchor_uuid` is the uuid of the turn's first assistant row, which is where
+ * the duration is rendered and which the transcript and the live stream agree
+ * on (verified on claude 2.1.272).
+ */
+export const TURN_DURATIONS_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS turn_durations (
+    provider_session_id TEXT NOT NULL,
+    anchor_uuid TEXT NOT NULL,
+    duration_ms INTEGER NOT NULL,
+    duration_api_ms INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (provider_session_id, anchor_uuid)
+);
+`;
+
 export const SESSION_DRAFTS_TABLE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS session_drafts (
     user_id INTEGER NOT NULL,
