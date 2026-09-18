@@ -497,6 +497,8 @@ export type NormalizedMessage = {
   tokens?: number;
   canInterrupt?: boolean;
   tokenBudget?: unknown;
+  /** Account-level subscription quota, carried by the `rate_limit` status event. */
+  rateLimit?: unknown;
   requestId?: string;
   input?: unknown;
   context?: unknown;
@@ -553,6 +555,35 @@ export type ModelCommandData = {
   defaultModel?: string;
 };
 
+/** One of the account's quota windows, as the Claude SDK's `rate_limit_event` reports it. `utilization` is a fraction of the window (0..1), and `resetsAt` is epoch seconds. */
+export type RateLimitWindow = {
+  type: string;
+  utilization: number;
+  resetsAt: number | null;
+};
+
+/**
+ * The account's subscription quota: how much of the five-hour and weekly
+ * allowances is spent, plus the state of extra credits.
+ *
+ * Not to be confused with the token budget rendered beside it, which is how
+ * full one session's context window is. This one is per account, so it is the
+ * same number in every session and outlives switching between them.
+ */
+export type RateLimitInfo = {
+  status: 'allowed' | 'allowed_warning' | 'rejected' | string;
+  /** The window the account is being limited by right now, when the SDK names one. */
+  activeWindow: string | null;
+  resetsAt: number | null;
+  windows: RateLimitWindow[];
+  overage: {
+    status: string | null;
+    resetsAt: number | null;
+    disabledReason: string | null;
+    inUse: boolean;
+  };
+};
+
 /** Result payload of the chat `/cost` slash command, carrying the session's token usage totals and input/output breakdown for the command modal's usage view. */
 export type CostCommandData = {
   tokenUsage?: {
@@ -565,6 +596,8 @@ export type CostCommandData = {
   };
   provider?: string;
   model?: string;
+  /** Merged in by the client from the live quota store; the command itself is per session and knows nothing about the account. */
+  rateLimit?: RateLimitInfo | null;
 };
 
 /** Result payload of the chat `/status` slash command, carrying server version, uptime, provider/model and process telemetry for the command modal's status view. */

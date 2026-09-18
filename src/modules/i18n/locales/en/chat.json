@@ -357,6 +357,11 @@
     "tokensLabel_one": "token",
     "tokensLabel_other": "tokens",
     "escClosesModal": "Esc closes the modal.",
-    "close": "Close"
+    "close": "Close",
+    "accountQuota": "Account quota",
+    "showAccountQuota": "Show account quota",
+    "quotaOverage": "running on extra credits",
+    "quotaOverageShort": "extra",
+    "quotaRejected": "limit reached"
   }
 }

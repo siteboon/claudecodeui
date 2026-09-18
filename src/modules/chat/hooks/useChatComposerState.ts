@@ -28,6 +28,7 @@ import {
 import { escapeRegExp } from '@/modules/chat/utils/chatFormatting';
 import { useFileMentions } from '@/modules/chat/hooks/useFileMentions';
 import { useInputHistory } from '@/modules/chat/hooks/useInputHistory';
+import { getAccountRateLimit } from '@/modules/chat/hooks/useAccountRateLimit';
 import { useSlashCommands } from '@/modules/chat/hooks/useSlashCommands';
 
 type UseChatComposerStateArgs = {
@@ -288,9 +289,13 @@ export function useChatComposerState({
           break;
 
         case 'cost': {
+          // `/cost` runs on the server and knows only this session's tokens.
+          // The account quota is client-side state fed by the live stream, so
+          // it is merged in here rather than sent to the server to be echoed
+          // straight back.
           setCommandModalPayload({
             kind: 'cost',
-            data: (data || {}) as CostCommandData,
+            data: { ...(data || {}), rateLimit: getAccountRateLimit() } as CostCommandData,
           });
           break;
         }

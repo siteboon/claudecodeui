@@ -954,6 +954,77 @@ function extractCumulativeTokenBudget(sdkMessage) {
   };
 }
 
+/**
+ * @typedef {Object} RateLimitWindow
+ * @property {string} type - `five_hour`, `seven_day`, `seven_day_opus`, ...
+ * @property {number} utilization - Fraction of the window spent, 0..1
+ * @property {number|null} resetsAt - Epoch seconds when the window rolls over
+ */
+
+/**
+ * Reads the account's subscription quota out of a `rate_limit_event` frame.
+ *
+ * A different number from the token budget sitting next to it in the composer,
+ * and the two are easy to confuse: the budget is how full *this session's*
+ * context window is, the quota is how much of the *account's* five-hour and
+ * weekly allowance is gone. Nothing consumed this event before, so it fell into
+ * the unknown branch and was dropped.
+ *
+ * `unifiedWindows` is what gets displayed: it carries every window at once,
+ * while the flat `rateLimitType` names only the active one. It is absent from
+ * the SDK's published `SDKRateLimitInfo` but present on the wire (verified on
+ * claude 2.1.272), so the flat pair stays as the fallback. `utilization` is a
+ * fraction, not a percent — the display multiplies.
+ *
+ * @param {Object} sdkMessage - SDK stream message
+ * @returns {{status: string, activeWindow: string|null, resetsAt: number|null, windows: RateLimitWindow[], overage: Object}|null}
+ */
+function extractRateLimit(sdkMessage) {
+  if (!sdkMessage || typeof sdkMessage !== 'object' || sdkMessage.type !== 'rate_limit_event') {
+    return null;
+  }
+
+  const info = sdkMessage.rate_limit_info;
+  if (!info || typeof info !== 'object') {
+    return null;
+  }
+
+  const readEpoch = (value) => (Number.isFinite(Number(value)) ? Number(value) : null);
+  const unified = info.unifiedWindows && typeof info.unifiedWindows === 'object'
+    ? info.unifiedWindows
+    : null;
+  const windows = unified
+    ? Object.entries(unified)
+      .filter(([, window]) => window && typeof window === 'object')
+      .map(([type, window]) => ({
+        type,
+        utilization: readNumber(window.utilization),
+        resetsAt: readEpoch(window.resetsAt),
+      }))
+    : [];
+
+  if (windows.length === 0 && info.rateLimitType) {
+    windows.push({
+      type: String(info.rateLimitType),
+      utilization: readNumber(info.utilization),
+      resetsAt: readEpoch(info.resetsAt),
+    });
+  }
+
+  return {
+    status: typeof info.status === 'string' ? info.status : 'allowed',
+    activeWindow: info.rateLimitType ? String(info.rateLimitType) : null,
+    resetsAt: readEpoch(info.resetsAt),
+    windows,
+    overage: {
+      status: typeof info.overageStatus === 'string' ? info.overageStatus : null,
+      resetsAt: readEpoch(info.overageResetsAt),
+      disabledReason: typeof info.overageDisabledReason === 'string' ? info.overageDisabledReason : null,
+      inUse: info.isUsingOverage === true,
+    },
+  };
+}
+
 // Every name the subagent-spawning tool has been known by. Claude Code renamed
 // it Task -> Agent; `Agent` is what arrives now and `Task` is what pre-rename
 // transcripts still hold, and those are read forever. Kept as one list because
@@ -1669,6 +1740,15 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
       }
 
+      // Account quota, not session context. It is emitted only when it changes
+      // — the first one arrives ahead of `system init`, before a single token
+      // is spent — so the client keeps the last value rather than expecting one
+      // per turn.
+      const rateLimitData = extractRateLimit(message);
+      if (rateLimitData) {
+        ws.send(createNormalizedMessage({ kind: 'status', text: 'rate_limit', rateLimit: rateLimitData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+      }
+
       if (startsRecurringWork(message)) {
         // Sticky: a cron armed on turn one is still armed on turn twenty, and
         // nothing in a later turn says so.
@@ -2026,5 +2106,6 @@ export {
   reconnectSessionWriter,
   extractTokenBudget,
   extractCumulativeTokenBudget,
+  extractRateLimit,
   readReportedContextWindow
 };

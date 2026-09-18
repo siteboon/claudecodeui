@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 
-import type { ServerEvent,MarkSessionIdle,MarkSessionProcessing,PendingPermissionRequest,ProjectSession,LLMProvider,NormalizedMessage } from '@/shared/types';
+import type { ServerEvent,MarkSessionIdle,MarkSessionProcessing,PendingPermissionRequest,ProjectSession,LLMProvider,NormalizedMessage,RateLimitInfo } from '@/shared/types';
+import { setAccountRateLimit } from '@/modules/chat/hooks/useAccountRateLimit';
 import { showCompletionTitleIndicator } from '@/modules/chat/utils/pageTitleNotification';
 import { playChatCompletionSound, playNotificationSound } from '@/shared/utils';
 import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
@@ -341,7 +342,13 @@ export function useChatRealtimeHandlers({
         }
 
         case 'status': {
-          if (msg.text === 'token_budget' && msg.tokenBudget) {
+          // Quota is per account, so — unlike the token budget right below —
+          // it is adopted whichever session reported it: every session shares
+          // the same allowance, and gating on the viewed session would just
+          // mean the number goes stale whenever another one is running.
+          if (msg.text === 'rate_limit' && msg.rateLimit) {
+            setAccountRateLimit(msg.rateLimit as RateLimitInfo);
+          } else if (msg.text === 'token_budget' && msg.tokenBudget) {
             // The counter shows the viewed session's context; budgets from
             // other concurrently running sessions must not overwrite it.
             if (sid === activeViewSessionId) {

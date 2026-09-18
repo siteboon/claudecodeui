@@ -26,6 +26,13 @@ import type {
   ProviderModelsDefinition,CommandModalPayload,CostCommandData,HelpCommandData,ModelCommandData,StatusCommandData
 } from '@/shared/types';
 import ModelLibraryPanel from '@/modules/chat/modals/ModelLibraryPanel';
+import {
+  formatResetsIn,
+  rateLimitPercent,
+  rateLimitTone,
+  rateLimitWindowLabel,
+  sortRateLimitWindows,
+} from '@/modules/chat/utils/rateLimit';
 
 type CommandResultModalProps = {
   payload: CommandModalPayload | null;
@@ -419,6 +426,17 @@ function ModelsContent({
 }
 
 function CostContent({ data }: { data: CostCommandData }) {
+  // Account quota, merged in by the client: the same allowance behind every
+  // session, as opposed to the per-session token rows below it.
+  const quota = data.rateLimit ?? null;
+  const quotaWindows = quota ? sortRateLimitWindows(quota.windows) : [];
+  const quotaStatus = quota?.status;
+  const quotaRejected = quotaStatus === 'rejected';
+  const quotaOverageInUse = quota?.overage?.inUse === true;
+  const quotaOverageBlocked = quota?.overage?.status === 'rejected';
+  const quotaOverageLabel = quota?.overage?.disabledReason === 'out_of_credits'
+    ? 'Out of credits'
+    : 'Unavailable';
   const used = Number(data.tokenUsage?.used ?? 0);
   const total = Number(data.tokenUsage?.total ?? 0);
   const model = data.model || 'Unknown';
@@ -479,6 +497,62 @@ function CostContent({ data }: { data: CostCommandData }) {
           );
         })}
       </div>
+
+      {quotaWindows.length > 0 && (
+        <div className="overflow-hidden rounded-2xl border border-border/70 bg-background/75">
+          <div className="flex items-center justify-between gap-4 border-b border-border/60 bg-muted/20 px-4 py-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              Account quota
+            </p>
+            {quotaRejected && (
+              <span className="rounded bg-red-500/15 px-2 py-0.5 text-[11px] font-semibold text-red-500">
+                Limit reached
+              </span>
+            )}
+          </div>
+          {quotaWindows.map((window) => {
+            const percent = rateLimitPercent(window.utilization);
+            const resets = formatResetsIn(window.resetsAt);
+
+            return (
+              <div
+                key={window.type}
+                className="flex items-center justify-between gap-4 border-b border-border/60 px-4 py-3 last:border-b-0"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
+                    <Gauge className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {rateLimitWindowLabel(window.type)}
+                    </p>
+                    {resets && <p className="text-xs text-muted-foreground">Resets {resets}</p>}
+                  </div>
+                </div>
+                <span className={`shrink-0 font-mono text-sm font-semibold ${rateLimitTone(percent, quotaStatus)}`}>
+                  {percent}%
+                </span>
+              </div>
+            );
+          })}
+          {/* Overage only earns a row when it is doing something: in use, or
+              refused while the windows above are full. */}
+          {(quotaOverageInUse || quotaOverageBlocked) && (
+            <div className="flex items-center justify-between gap-4 border-t border-border/60 px-4 py-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-amber-500/25 bg-amber-500/10 text-amber-500">
+                  <Coins className="h-4 w-4" />
+                </span>
+                <span className="truncate text-sm font-medium text-foreground">Extra credits</span>
+              </div>
+              <span className="shrink-0 text-sm font-semibold text-muted-foreground">
+                {quotaOverageInUse ? 'In use' : quotaOverageLabel}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
         <div className="grid gap-3 sm:grid-cols-2">
