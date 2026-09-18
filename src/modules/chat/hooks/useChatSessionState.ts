@@ -699,8 +699,12 @@ export function useChatSessionState({
     if (!selectedSession || !selectedProject) {
       // A freshly created session can be mid-run before the router has a
       // canonical selectedSession (the URL effect synthesizes one on the
-      // next render). Keep the active view intact instead of wiping it.
-      if (currentSessionId && processingSessionsRef.current?.has(currentSessionId)) {
+      // next render). Keep the active view intact instead of wiping it — but
+      // only for a response in flight: a session whose turn has ended with
+      // background work still running has a canonical id, so a missing
+      // selection there is a real navigation away.
+      const activity = currentSessionId ? processingSessionsRef.current?.get(currentSessionId) : undefined;
+      if (activity && !activity.background) {
         return;
       }
 

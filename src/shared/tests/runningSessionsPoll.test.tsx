@@ -54,3 +54,35 @@ test('the poll carries each task through whole, nested flag included', async () 
   assert.equal(activity?.background, true);
   assert.deepEqual(activity?.tasks?.map((task) => [task.taskId, task.nested ?? false]), [['w1', false], ['b1', true]]);
 });
+
+test('one task entry in a shape the client does not read hides only itself', async () => {
+  // A newer server may list a task kind this client never learned; the
+  // session's other work must still show.
+  runningSessions.mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      data: {
+        sessions: [{
+          sessionId: 'held-session',
+          provider: 'claude',
+          startedAt: 1_700_000_000_000,
+          lastSeq: 0,
+          background: true,
+          canInterrupt: false,
+          tasks: [
+            { taskId: 'w1', toolUseId: 'toolu_wf', taskType: 'local_workflow', description: 'one agent that waits', startedAt: 1_700_000_000_000 },
+            { taskId: 'x1', toolUseId: 'toolu_x', taskType: 'remote_agent', description: 'Unreadable', startedAt: 'yesterday' },
+          ],
+        }],
+      },
+    }),
+  });
+
+  const { SessionProtectionProvider, useProcessingSessions } = await import('@/shared/context/SessionProtectionContext');
+  const wrapper = ({ children }: { children: React.ReactNode }) =>
+    React.createElement(SessionProtectionProvider, null, children);
+  const { result } = renderHook(() => useProcessingSessions(), { wrapper });
+
+  await waitFor(() => assert.ok(result.current.get('held-session')));
+  assert.deepEqual(result.current.get('held-session')?.tasks?.map((task) => task.taskId), ['w1']);
+});

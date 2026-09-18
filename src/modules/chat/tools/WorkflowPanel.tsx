@@ -26,6 +26,7 @@ import {
   formatTaskDuration,
   resolveBackgroundTaskStatus,
 } from '@/modules/chat/utils/backgroundTasks';
+import { parseWorkflowMeta } from '@/modules/chat/utils/workflowScriptMeta';
 
 type WorkflowPanelProps = {
   /** Raw tool input of the `Workflow` call: the script (or its path) and a one-line description. */
@@ -63,24 +64,6 @@ type WorkflowAgentRow = Omit<WorkflowAgentProgress, 'state'> & {
 /** How often an open, running agent's timeline is re-read from its transcript. */
 const AGENT_TIMELINE_POLL_MS = 3_000;
 
-type WorkflowScriptMeta = {
-  name?: string;
-  description?: string;
-  phases: Array<{ title: string; detail?: string }>;
-};
-
-/**
- * A JS string literal in any of the three quotes: the quote in the first
- * group, the body in the second. Two of these in one pattern need the second
- * to refer back to its own quote, hence the renumbered copy.
- */
-const STRING_LITERAL = "(['\"`])((?:\\\\.|(?!\\1).)*)\\1";
-const SECOND_STRING_LITERAL = STRING_LITERAL.replace(/\\1/g, '\\3');
-const META_NAME = new RegExp(`\\bname:\\s*${STRING_LITERAL}`);
-const META_DESCRIPTION = new RegExp(`\\bdescription:\\s*${STRING_LITERAL}`);
-const META_PHASES = /\bphases:\s*\[([\s\S]*?)\]/;
-const PHASE_ENTRY = new RegExp(`\\{\\s*title:\\s*${STRING_LITERAL}(?:\\s*,\\s*detail:\\s*${SECOND_STRING_LITERAL})?`, 'g');
-
 /** The text of a launch acknowledgement, which is never the run's result. */
 const LAUNCH_ACK_PREFIX = 'Workflow launched in background';
 
@@ -93,36 +76,6 @@ function parseToolInput(toolInput: unknown): Record<string, unknown> {
   } catch {
     return {};
   }
-}
-
-/**
- * Reads the `export const meta = { name, description, phases }` header a
- * workflow script opens with.
- *
- * The script is JavaScript, not JSON, so this reads the three fields with
- * regular expressions rather than evaluating anything: enough for the shapes
- * scripts actually use (string literals, an array of `{ title, detail }`), and
- * a script that writes them some other way simply shows no phases.
- */
-function parseWorkflowMeta(script: string): WorkflowScriptMeta {
-  const metaStart = script.indexOf('export const meta');
-  if (metaStart === -1) {
-    return { phases: [] };
-  }
-  // Only the header: a `name:` further down the script belongs to something else.
-  const header = script.slice(metaStart, script.indexOf('\n}', metaStart) + 1 || undefined);
-
-  const phases: WorkflowScriptMeta['phases'] = [];
-  const phasesSource = META_PHASES.exec(header)?.[1] ?? '';
-  for (const match of phasesSource.matchAll(PHASE_ENTRY)) {
-    phases.push({ title: match[2], detail: match[4] });
-  }
-
-  return {
-    name: META_NAME.exec(header)?.[2],
-    description: META_DESCRIPTION.exec(header)?.[2],
-    phases,
-  };
 }
 
 /** Tokens the way the CLI writes them: 725k rather than 724,871. */

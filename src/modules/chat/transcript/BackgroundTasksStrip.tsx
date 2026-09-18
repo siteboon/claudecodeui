@@ -10,6 +10,7 @@ import {
   readBackgroundTaskId,
 } from '@/modules/chat/utils/backgroundTasks';
 import { parseToolPayload } from '@/modules/chat/utils/messageTransforms';
+import { parseWorkflowMeta } from '@/modules/chat/utils/workflowScriptMeta';
 
 type BackgroundTasksStripProps = {
   /** The whole session, not the visible window: a task launched pages ago is still running. */
@@ -32,8 +33,15 @@ function readLaunchDescription(message: ChatMessage): string {
     return message.workflow.description;
   }
   const input = parseToolPayload(message.toolInput);
-  const description = input && typeof input === 'object' ? (input as { description?: unknown }).description : undefined;
-  return typeof description === 'string' ? description : '';
+  const { description, script } = input && typeof input === 'object'
+    ? (input as { description?: unknown; script?: unknown })
+    : { description: undefined, script: undefined };
+  if (typeof description === 'string' && description) {
+    return description;
+  }
+  // The CLI sets a workflow's description in the script's `meta` header, not
+  // in the tool input, and reports it back as the run's first summary.
+  return typeof script === 'string' ? parseWorkflowMeta(script).description ?? '' : '';
 }
 
 /** What one running task's chip says: its kind, its name, and how far it has got. */

@@ -211,6 +211,28 @@ describe('the background tasks strip', () => {
     ]);
   });
 
+  it('knows the launch\'s description from the script\'s meta header when the input has none', () => {
+    // The CLI does not pass a workflow's description as tool input; it is in
+    // the script's `export const meta`, and the run's first summary restates it.
+    render(
+      <BackgroundTasksStrip
+        sessionId="session-1"
+        sendMessage={() => {}}
+        onReveal={() => {}}
+        messages={[
+          toolRow({
+            toolName: 'Workflow',
+            toolId: 'toolu_workflow_1',
+            toolInput: JSON.stringify({ script: "export const meta = {\n  name: 'audit',\n  description: 'Evidence-based audit of the frontend',\n}\nreturn 1" }),
+            taskStatus: { status: 'running', workflowName: 'audit', summary: 'Evidence-based audit of the frontend' },
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByRole('button').textContent).toBe('Workflowaudit');
+  });
+
   it('stops a task over the websocket from its chip, by the id its events or acknowledgement named', () => {
     const sendMessage = vi.fn();
     render(
