@@ -20,11 +20,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 1001 nodejs \
     && useradd --uid 1001 --gid nodejs --create-home --shell /bin/bash nodejs \
-    && mkdir -p /var/lib/cloudcli /workspace \
-    && chown nodejs:nodejs /var/lib/cloudcli /workspace
+    && mkdir -p /workspace/cloudcli \
+    && chown -R nodejs:nodejs /workspace
 
 ENV NODE_ENV=production SERVER_PORT=3001 HOST=0.0.0.0 \
-    DATABASE_PATH=/var/lib/cloudcli/database.db
+    DATABASE_PATH=/workspace/cloudcli/database.db
 COPY package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
