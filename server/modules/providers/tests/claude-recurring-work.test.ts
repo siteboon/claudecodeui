@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  decideHoldAfterResult,
   RECURRING_WORK_TOOLS,
   startsRecurringWork,
   stopsRecurringWork,
@@ -72,4 +73,42 @@ test('nothing else stands it down', () => {
   }
   assert.equal(stopsRecurringWork(assistantWith({ type: 'text', text: 'stop the loop' })), false);
   assert.equal(stopsRecurringWork(undefined as unknown as object), false);
+});
+
+/**
+ * The decision T8 turns on. `/loop 10m` fired once and went quiet: the tick's
+ * `result` was read as the background work reporting in, the process was let
+ * go, and the in-process cron went with it. One automatic tick out of roughly
+ * six hundred expected.
+ */
+
+test('a turn that started background work arms the hold', () => {
+  assert.equal(decideHoldAfterResult({ backgroundWorkPending: true, recurring: false }), 'arm');
+});
+
+test('an ordinary turn with nothing outstanding releases the process', () => {
+  assert.equal(decideHoldAfterResult({ backgroundWorkPending: false, recurring: false }), 'release');
+});
+
+test('a tick of a recurring job re-arms instead of releasing', () => {
+  // The tick itself calls no background tool, so `backgroundWorkPending` is
+  // false — which is exactly why the old code let the process go here.
+  assert.equal(decideHoldAfterResult({ backgroundWorkPending: false, recurring: true }), 'rearm');
+});
+
+test('arming wins when a turn both ticks and starts new work', () => {
+  // Re-arming would restart the countdown; arming records the new work as
+  // outstanding, which is the stronger claim of the two.
+  assert.equal(decideHoldAfterResult({ backgroundWorkPending: true, recurring: true }), 'arm');
+});
+
+test('the decision never releases while anything is still going', () => {
+  for (const backgroundWorkPending of [true, false]) {
+    for (const recurring of [true, false]) {
+      const decision = decideHoldAfterResult({ backgroundWorkPending, recurring });
+      if (backgroundWorkPending || recurring) {
+        assert.notEqual(decision, 'release', `${backgroundWorkPending}/${recurring} must not release`);
+      }
+    }
+  }
 });

@@ -1002,6 +1002,31 @@ function startsRecurringWork(sdkMessage) {
 }
 
 /**
+ * What a turn's `result` should do with the process that served it.
+ *
+ * Three cases, and the middle one is the whole of T8. Work that repeats has no
+ * `result` meaning "done" — each tick is one of a series — so reading the tick
+ * as the work reporting back is what released the process on the very message
+ * that proved the job alive.
+ *
+ * @param {Object} state
+ * @param {boolean} state.backgroundWorkPending - This turn started work that outlives it
+ * @param {boolean} state.recurring - The conversation runs work that repeats
+ * @returns {'arm'|'rearm'|'release'} What to do with the hold
+ */
+function decideHoldAfterResult({ backgroundWorkPending, recurring }) {
+  if (backgroundWorkPending) {
+    return 'arm';
+  }
+  // Checked after, not before: a turn that both ticks a cron and starts new
+  // work is arming for the new work, and `arm` is the stronger of the two.
+  if (recurring) {
+    return 'rearm';
+  }
+  return 'release';
+}
+
+/**
  * Detects tool calls that stop work which repeats.
  *
  * @param {Object} sdkMessage - SDK stream message
@@ -1685,7 +1710,12 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
             sessionName: sessionSummary
           });
         }
-        if (backgroundWorkPending) {
+        const holdDecision = decideHoldAfterResult({
+          backgroundWorkPending,
+          recurring: recurringSessions.has(sessionKey())
+        });
+
+        if (holdDecision === 'arm') {
           // Work started during this turn is still running. Hold the process
           // open so it can finish and report back in a follow-up turn; the
           // ceiling is only a backstop for work that never reports.
@@ -1702,7 +1732,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
             totalMs: BG_TOTAL_HOLD_MS
           });
           scheduleRelease();
-        } else if (recurringSessions.has(sessionKey())) {
+        } else if (holdDecision === 'rearm') {
           // A tick is not a finish. Work that repeats has no `result` that
           // means "done", so releasing on this one is what killed `/loop 10m`
           // after its first tick: the process went, and the in-process cron
@@ -1980,6 +2010,7 @@ export {
   startsBackgroundWork,
   startsRecurringWork,
   stopsRecurringWork,
+  decideHoldAfterResult,
   DEFERRED_WORK_TOOLS,
   RECURRING_WORK_TOOLS,
   SUBAGENT_TOOL_NAMES,
