@@ -17,7 +17,7 @@ import {
 } from '@/modules/providers/index.js';
 import { createWebSocketServer } from '@/modules/websocket/index.js';
 
-import { getConnectableHost } from '../shared/networkHosts.js';
+import { getBindableHost, getConnectableHost } from '../shared/networkHosts.js';
 
 import { createGitModule } from './modules/git/index.js';
 import {
@@ -291,12 +291,25 @@ function getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
 }
 
-async function writeLocalServerMarker() {
+// The address the desktop app is told to open. `DISPLAY_HOST` says `localhost`
+// for anything loopback, which is friendlier to read and wrong to connect to:
+// `localhost` and `127.0.0.1` are separate browser origins, so a window that
+// switches between them loses its `localStorage` - the stored login with it -
+// and on Windows `localhost` resolves to `::1` first, where an IPv4-bound
+// server is not listening. The marker names what is actually being served,
+// address family included: a server on `::1` is not reachable over IPv4.
+//
+// Which family that is cannot be read off `HOST`: `listen(port, 'localhost')`
+// lets the resolver pick, and on Windows it picks `::1`. Deriving the marker
+// from the configured name would then advertise `127.0.0.1` for a server that
+// is only on IPv6, and the window would probe an address nothing answers on.
+// So the caller passes what `server.address()` reports once the socket is up.
+async function writeLocalServerMarker(boundHost?: string) {
     const marker = {
         pid: process.pid,
         host: HOST,
         port: Number.parseInt(String(SERVER_PORT), 10),
-        url: `http://${DISPLAY_HOST}:${SERVER_PORT}`,
+        url: `http://${getBindableHost(boundHost || HOST)}:${SERVER_PORT}`,
         installMode,
         appRoot: APP_ROOT,
         updatedAt: new Date().toISOString(),
@@ -349,7 +362,11 @@ async function startServer() {
    
         server.listen(SERVER_PORT, HOST, async () => {
             const appInstallPath = APP_ROOT;
-            await writeLocalServerMarker().catch((error) => {
+            // What the socket actually bound to, which is the only thing that
+            // says whether this server can be reached over IPv4 or IPv6.
+            const bound = server.address();
+            const boundHost = bound && typeof bound === 'object' ? bound.address : undefined;
+            await writeLocalServerMarker(boundHost).catch((error) => {
                 console.warn('[WARN] Could not write local server marker:', error.message);
             });
 
