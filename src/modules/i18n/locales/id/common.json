@@ -272,9 +272,14 @@
     "unexpectedResponse": "Endpoint pembaruan mengembalikan respons yang tidak terduga (HTTP {{status}}). Perbarui secara manual dengan perintah di bawah.",
     "connectionInterrupted": "Koneksi ke server terputus — kemungkinan server sedang dimulai ulang untuk menerapkan pembaruan.",
     "unknownError": "Kesalahan tidak diketahui",
-    "refreshNow": "Menyegarkan jendela sekarang...",
-    "refreshIn_one": "Jendela akan disegarkan dalam {{count}} detik. Jika pembaruan tidak diterapkan, MULAI ULANG environment.",
-    "refreshIn_other": "Jendela akan disegarkan dalam {{count}} detik. Jika pembaruan tidak diterapkan, MULAI ULANG environment."
+    "reloadPanel": {
+      "title": "Memperbarui environment…",
+      "reloadingIn": "Memuat ulang dalam",
+      "reloadingNow": "Memuat ulang sekarang…",
+      "body": "Pembaruan sedang diterapkan. Saat hitung mundur berakhir, jendela ini akan memuat ulang dirinya secara otomatis, melewati cache, sehingga versi baru terpasang.",
+      "reloadNow": "Muat ulang sekarang",
+      "hint": "Jika versi baru tidak muncul setelah muat ulang, mulai ulang environment."
+    }
   },
   "commandPalette": {
     "title": "Palet perintah",

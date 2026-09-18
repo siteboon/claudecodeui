@@ -272,9 +272,14 @@
     "unexpectedResponse": "The update endpoint returned an unexpected response (HTTP {{status}}). Update manually with the command below.",
     "connectionInterrupted": "Connection to the server was interrupted — it is likely restarting to apply the update.",
     "unknownError": "Unknown error",
-    "refreshNow": "Refreshing the window now...",
-    "refreshIn_one": "This will refresh the window in {{count}} second. If the update doesn't apply, RESTART the environment.",
-    "refreshIn_other": "This will refresh the window in {{count}} seconds. If the update doesn't apply, RESTART the environment."
+    "reloadPanel": {
+      "title": "Updating the environment…",
+      "reloadingIn": "Reloading in",
+      "reloadingNow": "Reloading now…",
+      "body": "The update is being applied. When the countdown ends, this window will reload itself automatically, bypassing the cache, so the new version is picked up.",
+      "reloadNow": "Reload now",
+      "hint": "If the new version does not appear after the reload, restart the environment."
+    }
   },
   "commandPalette": {
     "title": "Command palette",
