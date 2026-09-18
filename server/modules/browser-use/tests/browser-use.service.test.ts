@@ -221,7 +221,7 @@ test('browser monitor list starts empty without agent sessions', async () => {
   assert.deepEqual(sessions, []);
 });
 
-test('installRuntime installs and resolves Playwright from the CloudCLI runtime directory', async () => {
+test('installRuntime recovers from directory setup failures and resolves Playwright from the runtime directory', async () => {
   const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cloudcli-browser-install-'));
   const runtimeDir = path.join(rootDir, 'runtime');
   const cwd = path.join(rootDir, 'cwd');
@@ -236,6 +236,12 @@ test('installRuntime installs and resolves Playwright from the CloudCLI runtime 
   process.chdir(cwd);
 
   try {
+    fs.writeFileSync(runtimeDir, 'not a directory', 'utf8');
+    const failedInstall = await browserUseService.installRuntime();
+    assert.equal(failedInstall.success, false);
+    assert.match(failedInstall.message, /EEXIST|ENOTDIR/);
+    fs.unlinkSync(runtimeDir);
+
     const result = await browserUseService.installRuntime();
     const commands = readJsonLines(fakeNpm.logPath);
     const require = createRequire(path.join(runtimeDir, 'package.json'));

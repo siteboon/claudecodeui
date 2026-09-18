@@ -331,10 +331,10 @@ async function installRuntime(): Promise<{ success: boolean; message: string }> 
   }
 
   const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-  const runtimeDir = ensureRuntimeInstallDir();
-  runtimeProbeCache = null;
   installPromise = (async () => {
     try {
+      const runtimeDir = ensureRuntimeInstallDir();
+      runtimeProbeCache = null;
       lastInstallMessage = 'Installing Playwright package...';
       await runCommand(
         npmCommand,
