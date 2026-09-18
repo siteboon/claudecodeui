@@ -162,6 +162,13 @@ export type BackgroundTaskSummary = {
   workflowName?: string;
   /** When the task started (epoch ms). The activity indicator counts from the earliest. */
   startedAt: number;
+  /**
+   * The task was launched by a subagent or workflow agent, not by the
+   * session's own turn: its `toolUseId` names a call in that agent's
+   * transcript, so no card in this session's transcript matches it. Listed so
+   * it can still be stopped; not counted as the session's own work.
+   */
+  nested?: boolean;
 };
 
 /** What a busy session is doing, as shown by the activity indicator: producing a response, or only running background tasks. */

@@ -23,7 +23,12 @@ const DEFAULT_ACTION_WORDS = ['Thinking', 'Processing', 'Analyzing', 'Working', 
 const EXIT_ANIMATION_MS = 220;
 
 /** What the background work is: the one task by kind and name, or how many when there are several. */
-function describeBackgroundTasks(tasks: BackgroundTaskSummary[], t: TFunction): string {
+function describeBackgroundTasks(allTasks: BackgroundTaskSummary[], t: TFunction): string {
+  // A workflow agent's own backgrounded commands are listed too (so they can be
+  // stopped), but they are that agent's business; the session's work is the
+  // workflow. Only when nothing but nested tasks remain are they what is running.
+  const own = allTasks.filter((task) => !task.nested);
+  const tasks = own.length > 0 ? own : allTasks;
   if (tasks.length !== 1) {
     return t('claudeStatus.backgroundTask.count', { count: tasks.length, defaultValue: '{{count}} tasks' });
   }

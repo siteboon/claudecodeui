@@ -399,6 +399,13 @@ export type BackgroundTaskSummary = {
   description: string;
   workflowName?: string;
   startedAt: number;
+  /**
+   * The task was launched by a subagent or workflow agent, not by the
+   * session's own turn: its `toolUseId` names a call in that agent's
+   * transcript, so no card in this session's transcript matches it. Listed so
+   * it can still be stopped; not counted as the session's own work.
+   */
+  nested?: boolean;
 };
 
 /**

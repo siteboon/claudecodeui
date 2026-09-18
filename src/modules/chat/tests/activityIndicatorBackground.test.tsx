@@ -62,6 +62,15 @@ test('an agent and a command are named by what they were asked to do; several ta
     <ActivityIndicator activity={backgroundActivity([task(), task({ taskId: 'b5xsbzu5k', toolUseId: 'toolu_bash_1', taskType: 'local_bash' })])} />,
   );
   assert.match(several.container.textContent ?? '', /2 tasks/);
+  several.unmount();
+
+  // A workflow agent's own backgrounded command is listed (it can be stopped)
+  // but it is the agent's business, not a second task of the session's.
+  const nested = render(
+    <ActivityIndicator activity={backgroundActivity([task(), task({ taskId: 'b5xsbzu5k', toolUseId: 'toolu_bash_1', taskType: 'local_bash', nested: true })])} />,
+  );
+  assert.match(nested.container.textContent ?? '', /Workflow frontend-architecture-audit/);
+  assert.doesNotMatch(nested.container.textContent ?? '', /2 tasks/);
 });
 
 test('a response in flight still shows the Stop button and the primary dot', () => {

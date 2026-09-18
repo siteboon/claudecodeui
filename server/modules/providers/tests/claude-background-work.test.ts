@@ -96,6 +96,12 @@ const updated = (taskId: string, patch: Record<string, unknown>) => ({
 test('a task_started with a tool_use_id adds the task under its session', () => {
   const tracker = createBackgroundWorkTracker();
   const before = Date.now();
+  // The session's own turn issued the call, so the task is its own work.
+  tracker.apply('s1', {
+    type: 'assistant',
+    parent_tool_use_id: null,
+    message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_t1', name: 'Workflow', input: {} }] },
+  });
   tracker.apply('s1', started('t1', { task_type: 'local_workflow', workflow_name: 'spec' }));
 
   const [entry] = tracker.list();
@@ -113,6 +119,30 @@ test('a task_started with a tool_use_id adds the task under its session', () => 
   assert.ok(startedAt >= before && startedAt <= Date.now());
   assert.equal(tracker.hasOutstanding('s1'), true);
   assert.equal(tracker.has('s1', 't1'), true);
+});
+
+test('a task started for a call the session itself made is its own; one from inside an agent is nested', () => {
+  // Verified on a real run: a workflow agent that backgrounds `sleep 60` puts
+  // a `task_started` on the parent's stream, with a tool_use_id from the
+  // agent's transcript. The parent transcript has no card for it, and the
+  // pill would otherwise read "3 tasks" for one workflow.
+  const tracker = createBackgroundWorkTracker();
+  tracker.apply('s1', {
+    type: 'assistant',
+    parent_tool_use_id: null,
+    message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_t1', name: 'Workflow', input: {} }] },
+  });
+  tracker.apply('s1', started('t1', { task_type: 'local_workflow', workflow_name: 'spec' }));
+  tracker.apply('s1', started('t2', { task_type: 'local_bash', description: 'Sleep for 60 seconds' }));
+
+  const [entry] = tracker.list();
+  assert.deepEqual(entry.tasks.map((task) => [task.taskId, task.nested ?? false]), [['t1', false], ['t2', true]]);
+  assert.equal(tracker.has('s1', 't2'), true, 'a nested task can still be stopped');
+
+  // The set of own calls dies with the session, like the tasks.
+  tracker.clear('s1');
+  tracker.apply('s1', started('t1', { task_type: 'local_workflow' }));
+  assert.equal(tracker.list()[0].tasks[0].nested, true);
 });
 
 test('a task_started without a tool_use_id is not tracked', () => {

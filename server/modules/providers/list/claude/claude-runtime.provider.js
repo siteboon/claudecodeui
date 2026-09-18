@@ -638,6 +638,14 @@ const TERMINAL_TASK_STATUSES = new Set(['completed', 'failed', 'killed']);
 export function createBackgroundWorkTracker() {
   /** @type {Map<string, Map<string, import('@/shared/types.js').BackgroundTaskSummary>>} */
   const sessions = new Map();
+  /**
+   * Tool-use ids the session's own turns issued. A task started for a call an
+   * agent made inside its own transcript — a workflow agent's backgrounded
+   * command, say — reaches this stream too, and nothing in the parent
+   * transcript could show it; it is kept for stopping but flagged `nested`.
+   * @type {Map<string, Set<string>>}
+   */
+  const ownToolUseIds = new Map();
 
   const remove = (sessionKey, taskId) => {
     const tasks = sessions.get(sessionKey);
@@ -652,6 +660,22 @@ export function createBackgroundWorkTracker() {
 
   return {
     apply(sessionKey, message) {
+      if (message?.type === 'assistant' && !message.parent_tool_use_id) {
+        const content = message.message?.content;
+        if (Array.isArray(content)) {
+          for (const block of content) {
+            if (block?.type === 'tool_use' && typeof block.id === 'string') {
+              let ids = ownToolUseIds.get(sessionKey);
+              if (!ids) {
+                ids = new Set();
+                ownToolUseIds.set(sessionKey, ids);
+              }
+              ids.add(block.id);
+            }
+          }
+        }
+        return;
+      }
       if (message?.type !== 'system' || typeof message.task_id !== 'string') {
         return;
       }
@@ -669,6 +693,9 @@ export function createBackgroundWorkTracker() {
           };
           if (typeof message.workflow_name === 'string') {
             task.workflowName = message.workflow_name;
+          }
+          if (!ownToolUseIds.get(sessionKey)?.has(message.tool_use_id)) {
+            task.nested = true;
           }
           let tasks = sessions.get(sessionKey);
           if (!tasks) {
@@ -700,6 +727,7 @@ export function createBackgroundWorkTracker() {
 
     clear(sessionKey) {
       sessions.delete(sessionKey);
+      ownToolUseIds.delete(sessionKey);
     },
 
     list() {
