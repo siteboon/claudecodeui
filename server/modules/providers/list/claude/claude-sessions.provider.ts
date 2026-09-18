@@ -325,11 +325,14 @@ function readBackgroundLaunch(toolUseResult: unknown): ClaudeBackgroundLaunch | 
 
 type ClaudeTaskNotification = {
   /**
-   * `uuid` of the transcript row the notification came from, so it can be
-   * dropped once folded. Empty for a queue-operation record: those carry no
-   * `uuid` and never render on their own, so there is nothing to drop.
+   * `uuid`s of every transcript row that notified for this call, so all of
+   * them can be dropped once the latest one is folded. A task that resumes or
+   * is first reported as stopped and later as completed notifies more than
+   * once, and every earlier row is superseded bookkeeping. Queue-operation
+   * records carry no `uuid` and never render on their own, so they add
+   * nothing here.
    */
-  sourceUuid: string;
+  sourceUuids: string[];
   toolUseId: string;
   status: string;
   summary: string;
@@ -400,9 +403,14 @@ function collectTaskNotifications(messages: AnyRecord[]): Map<string, ClaudeTask
         continue;
       }
 
-      // A resumed agent notifies more than once; the last word wins.
+      // A resumed agent notifies more than once; the last word wins, and the
+      // rows that carried the earlier words go with it.
+      const sourceUuids = notifications.get(toolUseId)?.sourceUuids ?? [];
+      if (typeof message.uuid === 'string' && message.uuid) {
+        sourceUuids.push(message.uuid);
+      }
       notifications.set(toolUseId, {
-        sourceUuid: String(message.uuid ?? ''),
+        sourceUuids,
         toolUseId,
         status: readTaggedValue(text, 'status') || 'completed',
         summary: readTaggedValue(text, 'summary'),
@@ -740,10 +748,8 @@ async function getSessionMessages(
 
       if (notification) {
         replaceLaunchToolResultContent(message, notification.result || notification.summary);
-        if (notification.sourceUuid) {
-          // A queue-operation record has no `uuid`; adding its empty string
-          // here would match — and drop — every other row that lacks one.
-          foldedNotificationUuids.add(notification.sourceUuid);
+        for (const sourceUuid of notification.sourceUuids) {
+          foldedNotificationUuids.add(sourceUuid);
         }
       } else if (isAsyncLaunch) {
         // Without a notification there is no answer to show, and the launch

@@ -350,6 +350,59 @@ test('Claude history keeps rows that have no uuid when a queue-operation notific
   }
 });
 
+test('Claude history drops every notification row of a task that reported more than once', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-renotified-agent-'));
+
+  try {
+    const parentPath = await writeClaudeSubagentSession(tempRoot);
+    // A resumed session first reports the task as stopped ("no completion
+    // record was found"), then the task finishes and reports again. The last
+    // word is what the card shows; the earlier row is superseded bookkeeping
+    // and must not linger as a bubble of its own.
+    const lines = (await readFile(parentPath, 'utf8')).split('\n').filter(Boolean);
+    const [notificationLine] = lines.filter((line) => line.includes('task-notification'));
+    const completed = JSON.parse(notificationLine) as Record<string, any>;
+    const stopped = {
+      ...completed,
+      uuid: 'notification-0',
+      timestamp: '2026-08-21T10:04:00.000Z',
+      message: {
+        role: 'user',
+        content: [{
+          type: 'text',
+          text: completed.message.content[0].text
+            .replace('<status>completed</status>', '<status>stopped</status>')
+            .replace(/<result>[\s\S]*<\/result>/, '')
+            .replace(/<summary>[^<]*<\/summary>/, '<summary>No completion record was found for this agent</summary>'),
+        }],
+      },
+    };
+    const rewritten = lines.flatMap((line) => (line === notificationLine ? [JSON.stringify(stopped), line] : [line]));
+    await writeFile(parentPath, `${rewritten.join('\n')}\n`, 'utf8');
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(SESSION_ID, 'claude', tempRoot, 'Subagent session', now, now, parentPath);
+
+      const history = await new ClaudeSessionsProvider().fetchHistory(SESSION_ID, {
+        providerSessionId: SESSION_ID,
+      });
+      const agentRow = history.messages.find(
+        (message) => message.kind === 'tool_use' && message.toolId === AGENT_TOOL_USE_ID,
+      );
+
+      assert.equal(agentRow?.subagent?.status, 'completed');
+      assert.equal(agentRow?.toolResult?.content, 'The repo has two packages.');
+      assert.ok(
+        !history.messages.some((message) => (message.content ?? '').includes('<task-notification>')),
+        'no notification row may render on its own once the task is folded',
+      );
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 /** Strips the `<task-notification>` turn so the agent has no reported outcome. */
 async function dropTaskNotification(parentPath: string): Promise<void> {
   const raw = await readFile(parentPath, 'utf8');
