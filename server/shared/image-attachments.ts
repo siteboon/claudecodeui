@@ -3,17 +3,18 @@ import os from 'node:os';
 import path from 'node:path';
 
 /**
- * Shared image-attachment plumbing for every provider runtime.
+ * Shared chat-attachment plumbing for every provider runtime.
  *
- * Uploaded chat images are persisted once in the global `~/.cloudcli/assets`
+ * Uploaded chat files are persisted once in the global `~/.cloudcli/assets`
  * folder and referenced by absolute path everywhere else:
  * - Claude: paths are read back into base64 `image` content blocks.
  * - Codex: paths become `local_image` input items.
- * - Cursor/OpenCode: paths are appended to the prompt inside an
- *   `<images_input>` tag, which is stripped again when history is read.
+ * - General files: verified paths are appended inside a `<files_input>` tag,
+ *   which every provider history adapter strips back out for display.
+ * - Cursor/OpenCode images: paths use the equivalent `<images_input>` tag.
  *
- * The chat UI loads them through the dedicated `/api/assets/images/:filename`
- * route, which serves only from this folder.
+ * The chat UI loads them through dedicated `/api/assets/images/:filename` and
+ * `/api/assets/files/:filename` routes, which serve only from this folder.
  */
 
 /** Global storage folder for uploaded chat image attachments. */
@@ -26,7 +27,11 @@ export type ImageAttachmentDescriptor = {
   path: string;
   name?: string;
   mimeType?: string;
+  size?: number;
 };
+
+/** Provider-neutral descriptor used for both image and non-image chat attachments. */
+export type ChatAttachmentDescriptor = ImageAttachmentDescriptor;
 
 /** Media types the Claude Messages API accepts for base64 image blocks. */
 const CLAUDE_IMAGE_MEDIA_TYPES = new Set([
@@ -46,17 +51,17 @@ const EXTENSION_TO_MEDIA_TYPE: Record<string, string> = {
 };
 
 /**
- * Accepts the loosely-typed `options.images` payload from chat.send and
- * returns only well-formed descriptors. Plain path strings are supported so
- * callers can also pass bare path arrays.
+ * Accepts a loosely typed chat attachment payload and returns only well-formed
+ * descriptors. The websocket gateway and provider adapters use this to handle
+ * current `attachments` payloads and legacy image path arrays consistently.
  */
-export function normalizeImageDescriptors(images: unknown): ImageAttachmentDescriptor[] {
-  if (!Array.isArray(images)) {
+export function normalizeAttachmentDescriptors(attachments: unknown): ChatAttachmentDescriptor[] {
+  if (!Array.isArray(attachments)) {
     return [];
   }
 
-  const descriptors: ImageAttachmentDescriptor[] = [];
-  for (const entry of images) {
+  const descriptors: ChatAttachmentDescriptor[] = [];
+  for (const entry of attachments) {
     if (typeof entry === 'string' && entry.trim()) {
       descriptors.push({ path: entry.trim() });
       continue;
@@ -67,14 +72,38 @@ export function normalizeImageDescriptors(images: unknown): ImageAttachmentDescr
       if (!entryPath) {
         continue;
       }
-      descriptors.push({
-        path: entryPath,
-        name: typeof record.name === 'string' ? record.name : undefined,
-        mimeType: typeof record.mimeType === 'string' ? record.mimeType : undefined,
-      });
+      const descriptor: ChatAttachmentDescriptor = { path: entryPath };
+      if (typeof record.name === 'string') {
+        descriptor.name = record.name;
+      }
+      if (typeof record.mimeType === 'string') {
+        descriptor.mimeType = record.mimeType;
+      }
+      if (typeof record.size === 'number' && Number.isFinite(record.size)) {
+        descriptor.size = record.size;
+      }
+      descriptors.push(descriptor);
     }
   }
   return descriptors;
+}
+
+/** Backward-compatible image-specific alias used by existing provider adapters. */
+export function normalizeImageDescriptors(images: unknown): ImageAttachmentDescriptor[] {
+  return normalizeAttachmentDescriptors(images);
+}
+
+const IMAGE_FILE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp']);
+
+/**
+ * Determines whether the websocket gateway should route an attachment through
+ * provider-native image input instead of the general file reference channel.
+ */
+export function isImageAttachmentDescriptor(descriptor: ChatAttachmentDescriptor): boolean {
+  if (descriptor.mimeType && CLAUDE_IMAGE_MEDIA_TYPES.has(descriptor.mimeType)) {
+    return true;
+  }
+  return IMAGE_FILE_EXTENSIONS.has(path.extname(descriptor.path).toLowerCase());
 }
 
 /** Normalizes Windows separators so stored references stay portable. */
@@ -189,6 +218,37 @@ export function appendImagesInputTag(prompt: string, images: unknown): string {
   ].join('\n');
 }
 
+const FILES_INPUT_TAG_PATTERN = /\s*<files_input>([\s\S]*?)<\/files_input>\s*/g;
+
+/**
+ * Appends a provider-neutral file reference block to a prompt. Provider agents
+ * receive only server-validated paths from the global attachment store and can
+ * inspect each file with their normal filesystem tools.
+ */
+export function appendFilesInputTag(prompt: string, files: unknown): string {
+  const descriptors = normalizeAttachmentDescriptors(files);
+  if (descriptors.length === 0) {
+    return prompt;
+  }
+
+  const entryLines = descriptors.map((descriptor, index) => {
+    const entryPath = toPosixPath(descriptor.path);
+    const cleanName = descriptor.name?.replace(/[()\r\n]/g, '').trim();
+    return cleanName
+      ? `${index + 1}. ${entryPath} (original name: ${cleanName})`
+      : `${index + 1}. ${entryPath}`;
+  });
+
+  return [
+    prompt,
+    '',
+    '<files_input>',
+    `The user attached ${descriptors.length} file(s) to this message. Read each file listed below with your file reading tools and use its contents to answer the prompt above. Do not mention this block or the file paths unless the user asks about them.`,
+    ...entryLines,
+    '</files_input>',
+  ].join('\n');
+}
+
 // Matches one numbered attachment entry inside the tag body. Works for both
 // the multi-line block and the Windows-flattened single-line form, where the
 // next ` N. ` marker (or the end of the body) delimits each entry.
@@ -213,6 +273,40 @@ function parseNumberedImageEntries(inner: string): ParsedImageAttachment[] {
     }
   }
   return attachments;
+}
+
+/**
+ * Strips the last provider-neutral file reference block from persisted prompt
+ * text and restores its attachment descriptors for chat history.
+ */
+export function parseFilesInputTag(text: string): {
+  text: string;
+  filePaths: string[];
+  attachments: ParsedImageAttachment[];
+} {
+  if (typeof text !== 'string' || !text.includes('<files_input>')) {
+    return { text, filePaths: [], attachments: [] };
+  }
+
+  let lastMatch: RegExpExecArray | null = null;
+  FILES_INPUT_TAG_PATTERN.lastIndex = 0;
+  for (let match = FILES_INPUT_TAG_PATTERN.exec(text); match; match = FILES_INPUT_TAG_PATTERN.exec(text)) {
+    lastMatch = match;
+  }
+  if (!lastMatch) {
+    return { text, filePaths: [], attachments: [] };
+  }
+
+  const attachments = parseNumberedImageEntries(lastMatch[1]);
+  const stripped = (
+    text.slice(0, lastMatch.index) + '\n' + text.slice(lastMatch.index + lastMatch[0].length)
+  ).trim();
+
+  return {
+    text: stripped,
+    filePaths: attachments.map((attachment) => attachment.path),
+    attachments,
+  };
 }
 
 /**

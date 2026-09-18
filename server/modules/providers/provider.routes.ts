@@ -4,14 +4,15 @@ import { providerAuthService } from '@/modules/providers/services/provider-auth.
 import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
 import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
 import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
+import { providerTokenUsageService } from '@/modules/providers/services/provider-token-usage.service.js';
 import { providerSkillsService } from '@/modules/providers/services/skills.service.js';
 import { sessionConversationsSearchService } from '@/modules/providers/services/session-conversations-search.service.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 import type {
+  CustomProviderModelInput,
   LLMProvider,
   McpScope,
   McpTransport,
-  ProviderChangeActiveModelInput,
   ProviderSkillCreateFile,
   ProviderSkillCreateInput,
   UpsertProviderMcpServerInput,
@@ -296,6 +297,28 @@ const parseProvider = (value: unknown): LLMProvider => {
   });
 };
 
+/** Both fields are optional: an empty body forks the whole conversation. */
+const parseSessionForkPayload = (payload: unknown): { upToAnchorId?: string; title?: string } => {
+  if (payload === undefined || payload === null) {
+    return {};
+  }
+  if (typeof payload !== 'object') {
+    throw new AppError('Request body must be an object.', {
+      code: 'INVALID_REQUEST_BODY',
+      statusCode: 400,
+    });
+  }
+
+  const body = payload as Record<string, unknown>;
+  const upToAnchorId = typeof body.upToAnchorId === 'string' ? body.upToAnchorId.trim() : '';
+  const title = typeof body.title === 'string' ? body.title.trim() : '';
+
+  return {
+    ...(upToAnchorId ? { upToAnchorId } : {}),
+    ...(title ? { title } : {}),
+  };
+};
+
 const parseSessionRenameSummary = (payload: unknown): string => {
   if (!payload || typeof payload !== 'object') {
     throw new AppError('Request body must be an object.', {
@@ -352,7 +375,30 @@ const parseSessionSearchLimit = (value: unknown): number => {
   return Math.max(1, Math.min(parsed, 100));
 };
 
-const parseChangeActiveModelPayload = (payload: unknown): ProviderChangeActiveModelInput => {
+const parseBoundedIntegerQuery = <T extends number | null>(
+  value: unknown,
+  name: string,
+  fallback: T,
+  minimum: number,
+  maximum = Number.MAX_SAFE_INTEGER,
+): number | T => {
+  const raw = readOptionalQueryString(value);
+  if (raw === undefined) {
+    return fallback;
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < minimum || parsed > maximum) {
+    throw new AppError(`${name} must be an integer between ${minimum} and ${maximum}.`, {
+      code: 'INVALID_QUERY_PARAMETER',
+      statusCode: 400,
+    });
+  }
+
+  return parsed;
+};
+
+const parseSessionModelPayload = (payload: unknown): string => {
   if (!payload || typeof payload !== 'object') {
     throw new AppError('Request body must be an object.', {
       code: 'INVALID_REQUEST_BODY',
@@ -369,10 +415,93 @@ const parseChangeActiveModelPayload = (payload: unknown): ProviderChangeActiveMo
     });
   }
 
-  return {
-    sessionId: '',
-    model,
-  };
+  return model;
+};
+
+const parseSessionEffortPayload = (payload: unknown): string => {
+  if (!payload || typeof payload !== 'object') {
+    throw new AppError('Request body must be an object.', {
+      code: 'INVALID_REQUEST_BODY',
+      statusCode: 400,
+    });
+  }
+
+  const body = payload as Record<string, unknown>;
+  const effort = readOptionalQueryString(body.effort);
+  if (!effort) {
+    throw new AppError('effort is required.', {
+      code: 'EFFORT_REQUIRED',
+      statusCode: 400,
+    });
+  }
+
+  if (effort.length > 32) {
+    throw new AppError('effort must be 32 characters or fewer.', {
+      code: 'INVALID_EFFORT',
+      statusCode: 400,
+    });
+  }
+
+  return effort;
+};
+
+const parseModelRecordId = (value: unknown): number => {
+  const rawRecordId = readPathParam(value, 'recordId').trim();
+  if (!/^\d+$/.test(rawRecordId)) {
+    throw new AppError('recordId must be a positive integer.', {
+      code: 'INVALID_MODEL_RECORD_ID',
+      statusCode: 400,
+    });
+  }
+
+  const recordId = Number.parseInt(rawRecordId, 10);
+  if (!Number.isSafeInteger(recordId) || recordId < 1) {
+    throw new AppError('recordId must be a positive integer.', {
+      code: 'INVALID_MODEL_RECORD_ID',
+      statusCode: 400,
+    });
+  }
+
+  return recordId;
+};
+
+const parseCustomProviderModelPayload = (payload: unknown): CustomProviderModelInput => {
+  if (!payload || typeof payload !== 'object') {
+    throw new AppError('Request body must be an object.', {
+      code: 'INVALID_REQUEST_BODY',
+      statusCode: 400,
+    });
+  }
+
+  const body = payload as Record<string, unknown>;
+  const model = readOptionalQueryString(body.model);
+  const id = readOptionalQueryString(body.id);
+  if (!model) {
+    throw new AppError('model is required.', {
+      code: 'MODEL_NAME_REQUIRED',
+      statusCode: 400,
+    });
+  }
+  if (!id) {
+    throw new AppError('id is required.', {
+      code: 'MODEL_ID_REQUIRED',
+      statusCode: 400,
+    });
+  }
+  if (model.length > 80) {
+    throw new AppError('model must be 80 characters or fewer.', {
+      code: 'MODEL_NAME_TOO_LONG',
+      statusCode: 400,
+    });
+  }
+  if (id.length > 200 || /\s/.test(id)) {
+    throw new AppError('id must be 200 characters or fewer and cannot contain whitespace.', {
+      code: 'INVALID_MODEL_ID',
+      statusCode: 400,
+    });
+  }
+
+  return { model, id };
 };
 
 router.get(
@@ -388,9 +517,58 @@ router.get(
   '/:provider/models',
   asyncHandler(async (req: Request, res: Response) => {
     const provider = parseProvider(req.params.provider);
-    const bypassCache = parseOptionalBooleanQuery(req.query.bypassCache, 'bypassCache') ?? false;
-    const result = await providerModelsService.getProviderModels(provider, { bypassCache });
-    res.json(createApiSuccessResponse({ provider, models: result.models, cache: result.cache }));
+    const models = await providerModelsService.getProviderModels(provider);
+    res.json(createApiSuccessResponse({ provider, models }));
+  }),
+);
+
+router.post(
+  '/:provider/models',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const input = parseCustomProviderModelPayload(req.body);
+    const result = await providerModelsService.createCustomModel(provider, input);
+    res.status(201).json(createApiSuccessResponse({ provider, ...result }));
+  }),
+);
+
+router.patch(
+  '/:provider/models/:recordId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const recordId = parseModelRecordId(req.params.recordId);
+    const input = parseCustomProviderModelPayload(req.body);
+    const result = await providerModelsService.updateCustomModel(provider, recordId, input);
+    res.json(createApiSuccessResponse({ provider, ...result }));
+  }),
+);
+
+router.delete(
+  '/:provider/models/:recordId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const recordId = parseModelRecordId(req.params.recordId);
+    const result = await providerModelsService.deleteCustomModel(provider, recordId);
+    res.json(createApiSuccessResponse({ provider, ...result }));
+  }),
+);
+
+/**
+ * Reports which model one session is using. `requestedModel` lets the client
+ * pass the default it would otherwise send, so a session that has not been
+ * sent on yet resolves to that instead of the catalog default.
+ */
+router.get(
+  '/:provider/sessions/:sessionId/active-model',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const sessionId = parseSessionId(req.params.sessionId);
+    const requestedModel = readOptionalQueryString(req.query.requestedModel);
+    const result = await providerModelsService.resolveSessionModel(provider, {
+      sessionId,
+      requestedModel,
+    });
+    res.json(createApiSuccessResponse(result));
   }),
 );
 
@@ -399,12 +577,29 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const provider = parseProvider(req.params.provider);
     const sessionId = parseSessionId(req.params.sessionId);
-    const payload = parseChangeActiveModelPayload(req.body);
-    const result = await providerModelsService.changeActiveModel(provider, {
-      ...payload,
-      sessionId,
-    });
-    res.json(createApiSuccessResponse(result));
+    const model = parseSessionModelPayload(req.body);
+    const stored = providerModelsService.setSessionModel(provider, sessionId, model);
+    // A session row only exists once the gateway has allocated one. Report the
+    // selection back either way so the client can hold it until the first send.
+    res.json(createApiSuccessResponse(
+      stored ?? { provider, sessionId, model, effort: null, source: 'session' as const },
+    ));
+  }),
+);
+
+/** Records the reasoning-effort choice for one app session. */
+router.post(
+  '/:provider/sessions/:sessionId/active-effort',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const sessionId = parseSessionId(req.params.sessionId);
+    const effort = parseSessionEffortPayload(req.body);
+    const stored = providerModelsService.setSessionEffort(provider, sessionId, effort);
+    // Mirror active-model behavior for a composer that picked an effort just
+    // before the session gateway created its row.
+    res.json(createApiSuccessResponse(
+      stored ?? { provider, sessionId, effort, source: 'session' as const },
+    ));
   }),
 );
 
@@ -535,7 +730,8 @@ router.post(
     const body = (req.body ?? {}) as Record<string, unknown>;
     const provider = parseProvider(body.provider);
     const projectPath = typeof body.projectPath === 'string' ? body.projectPath : '';
-    const result = sessionsService.createAppSession(provider, projectPath);
+    const initialMessage = typeof body.initialMessage === 'string' ? body.initialMessage : '';
+    const result = sessionsService.createAppSession(provider, projectPath, initialMessage);
     res.status(201).json(createApiSuccessResponse(result));
   }),
 );
@@ -549,10 +745,49 @@ router.get(
 );
 
 router.get(
+  '/sessions/recent',
+  asyncHandler(async (req: Request, res: Response) => {
+    const limit = parseBoundedIntegerQuery(req.query.limit, 'limit', 40, 1, 100);
+    const offset = parseBoundedIntegerQuery(req.query.offset, 'offset', 0, 0);
+    const page = sessionsService.listRecentSessions(limit, offset);
+    res.json(createApiSuccessResponse(page));
+  }),
+);
+
+router.get(
   '/sessions/archived',
   asyncHandler(async (_req: Request, res: Response) => {
     const sessions = sessionsService.listArchivedSessions();
     res.json(createApiSuccessResponse({ sessions }));
+  }),
+);
+
+router.get(
+  '/sessions/:sessionId/provider-id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const providerSessionId = sessionsService.getProviderSessionId(sessionId);
+    res.json(createApiSuccessResponse({ sessionId: providerSessionId }));
+  }),
+);
+
+router.get(
+  '/sessions/:sessionId/token-usage',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const result = await providerTokenUsageService.getSessionTokenUsage(sessionId);
+    res.json(createApiSuccessResponse(result));
+  }),
+);
+
+// Must stay registered after the static and session-specific routes so their
+// literals never match the generic `:sessionId` parameter.
+router.get(
+  '/sessions/:sessionId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const result = sessionsService.getSessionDetailsById(sessionId);
+    res.json(createApiSuccessResponse(result));
   }),
 );
 
@@ -579,6 +814,15 @@ router.post(
   }),
 );
 
+router.post(
+  '/sessions/:sessionId/fork',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const result = await sessionsService.forkSessionById(sessionId, parseSessionForkPayload(req.body));
+    res.status(201).json(createApiSuccessResponse(result));
+  }),
+);
+
 router.put(
   '/sessions/:sessionId',
   asyncHandler(async (req: Request, res: Response) => {
@@ -593,32 +837,8 @@ router.get(
   '/sessions/:sessionId/messages',
   asyncHandler(async (req: Request, res: Response) => {
     const sessionId = parseSessionId(req.params.sessionId);
-    const limitRaw = readOptionalQueryString(req.query.limit);
-    const offsetRaw = readOptionalQueryString(req.query.offset);
-
-    let limit: number | null = null;
-    if (limitRaw !== undefined) {
-      const parsedLimit = Number.parseInt(limitRaw, 10);
-      if (Number.isNaN(parsedLimit) || parsedLimit < 0) {
-        throw new AppError('limit must be a non-negative integer.', {
-          code: 'INVALID_QUERY_PARAMETER',
-          statusCode: 400,
-        });
-      }
-      limit = parsedLimit;
-    }
-
-    let offset = 0;
-    if (offsetRaw !== undefined) {
-      const parsedOffset = Number.parseInt(offsetRaw, 10);
-      if (Number.isNaN(parsedOffset) || parsedOffset < 0) {
-        throw new AppError('offset must be a non-negative integer.', {
-          code: 'INVALID_QUERY_PARAMETER',
-          statusCode: 400,
-        });
-      }
-      offset = parsedOffset;
-    }
+    const limit = parseBoundedIntegerQuery(req.query.limit, 'limit', null, 0);
+    const offset = parseBoundedIntegerQuery(req.query.offset, 'offset', 0, 0);
 
     const result = await sessionsService.fetchHistory(sessionId, {
       limit,
@@ -651,6 +871,11 @@ router.get('/search/sessions', asyncHandler(async (req: Request, res: Response) 
       query,
       limit,
       signal: abortController.signal,
+      onTitleResults: (titleResults) => {
+        if (!closed) {
+          res.write(`event: title-results\ndata: ${JSON.stringify({ titleResults })}\n\n`);
+        }
+      },
       onProgress: ({ projectResult, totalMatches, scannedProjects, totalProjects }) => {
         if (closed) {
           return;

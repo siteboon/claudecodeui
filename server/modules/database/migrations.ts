@@ -5,8 +5,13 @@ import {
   LAST_SCANNED_AT_SQL,
   NOTIFICATION_CHANNEL_ENDPOINTS_TABLE_SCHEMA_SQL,
   PROJECTS_TABLE_SCHEMA_SQL,
+  PROVIDER_MODELS_TABLE_SCHEMA_SQL,
   PUSH_SUBSCRIPTIONS_TABLE_SCHEMA_SQL,
+  SESSION_DRAFTS_TABLE_SCHEMA_SQL,
+  SUPERSEDED_PROVIDER_SESSIONS_TABLE_SCHEMA_SQL,
+  SCHEDULED_MESSAGES_TABLE_SCHEMA_SQL,
   SESSIONS_TABLE_SCHEMA_SQL,
+  USER_PREFERENCES_TABLE_SCHEMA_SQL,
   USER_NOTIFICATION_PREFERENCES_TABLE_SCHEMA_SQL,
   VAPID_KEYS_TABLE_SCHEMA_SQL,
 } from '@/modules/database/schema.js';
@@ -402,6 +407,56 @@ const addProviderSessionIdMapping = (db: Database): void => {
   `);
 };
 
+/**
+ * Adds the `forked_from_session_id` column recording where a branched session
+ * came from.
+ *
+ * Nothing is backfilled: a session that predates forking was not forked.
+ */
+/**
+ * Adds the transcript path to the superseded-session record.
+ *
+ * Only rows written before this column existed lack it, and there is nothing
+ * to backfill from — the session stopped pointing at that file when the row
+ * was created — so they keep a NULL and the delete path skips them.
+ */
+const addSupersededTranscriptPathColumn = (db: Database): void => {
+  const columnNames = getTableInfo(db, 'superseded_provider_sessions').map((column) => column.name);
+  addColumnToTableIfNotExists(db, 'superseded_provider_sessions', columnNames, 'jsonl_path', 'TEXT');
+};
+
+const addForkedFromSessionIdColumn = (db: Database): void => {
+  const columnNames = getTableInfo(db, 'sessions').map((column) => column.name);
+  addColumnToTableIfNotExists(db, 'sessions', columnNames, 'forked_from_session_id', 'TEXT');
+};
+
+/**
+ * Adds the `model` column that records which model each session runs with.
+ *
+ * Left NULL for pre-existing rows on purpose: the model resolver falls back to
+ * the provider-native lookup for sessions the app has never sent on, so a
+ * backfilled guess would only mask the real value.
+ */
+const addSessionModelColumn = (db: Database): void => {
+  const sessionsTableInfo = getTableInfo(db, 'sessions');
+  const columnNames = sessionsTableInfo.map((column) => column.name);
+
+  addColumnToTableIfNotExists(db, 'sessions', columnNames, 'model', 'TEXT');
+};
+
+/**
+ * Adds the `effort` column that records a session's reasoning-effort choice.
+ *
+ * Existing rows stay NULL so clients can continue falling back to their
+ * per-provider preference until the user selects an effort or sends a turn.
+ */
+const addSessionEffortColumn = (db: Database): void => {
+  const sessionsTableInfo = getTableInfo(db, 'sessions');
+  const columnNames = sessionsTableInfo.map((column) => column.name);
+
+  addColumnToTableIfNotExists(db, 'sessions', columnNames, 'effort', 'TEXT');
+};
+
 const ensureProjectsForSessionPaths = (db: Database): void => {
   if (!tableExists(db, 'sessions')) {
     return;
@@ -444,6 +499,15 @@ export const runMigrations = (db: Database) => {
     db.exec(NOTIFICATION_CHANNEL_ENDPOINTS_TABLE_SCHEMA_SQL);
     db.exec('CREATE INDEX IF NOT EXISTS idx_notification_channel_endpoints_user_channel ON notification_channel_endpoints(user_id, channel)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_notification_channel_endpoints_enabled ON notification_channel_endpoints(enabled)');
+    db.exec(PROVIDER_MODELS_TABLE_SCHEMA_SQL);
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_provider_models_provider_order
+      ON provider_models(provider, sort_order, id)
+    `);
+    db.exec(USER_PREFERENCES_TABLE_SCHEMA_SQL);
+    db.exec(SESSION_DRAFTS_TABLE_SCHEMA_SQL);
+    db.exec(SUPERSEDED_PROVIDER_SESSIONS_TABLE_SCHEMA_SQL);
+    addSupersededTranscriptPathColumn(db);
 
     db.exec(PROJECTS_TABLE_SCHEMA_SQL);
     rebuildProjectsTableWithPrimaryKeySchema(db);
@@ -452,11 +516,19 @@ export const runMigrations = (db: Database) => {
     rebuildSessionsTableWithProjectSchema(db);
     migrateLegacySessionNames(db);
     addProviderSessionIdMapping(db);
+    addSessionModelColumn(db);
+    addSessionEffortColumn(db);
+    addForkedFromSessionIdColumn(db);
     ensureProjectsForSessionPaths(db);
+    db.exec(SCHEDULED_MESSAGES_TABLE_SCHEMA_SQL);
 
     db.exec('CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_provider_session_id ON sessions(provider_session_id)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_project_path ON sessions(project_path)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_forked_from ON sessions(forked_from_session_id)');
+    // The due-message poll runs on a timer; without this it table-scans.
+    db.exec('CREATE INDEX IF NOT EXISTS idx_scheduled_messages_due ON scheduled_messages(status, scheduled_for)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_scheduled_messages_session ON scheduled_messages(session_id)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_is_archived ON sessions(isArchived)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_projects_is_starred ON projects(isStarred)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_projects_is_archived ON projects(isArchived)');

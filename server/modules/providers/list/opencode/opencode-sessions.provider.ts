@@ -2,7 +2,7 @@ import fsSync from 'node:fs';
 
 import Database from 'better-sqlite3';
 
-import { parseImagesInputTag } from '@/shared/image-attachments.js';
+import { parseFilesInputTag, parseImagesInputTag } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
 import {
@@ -404,10 +404,17 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
         const rawContent = extractText(partData);
         // User prompts sent with attachments carry an <images_input> path
         // list; strip it for display and surface the paths as images.
-        const { text: content, attachments } = messageRole === 'user'
+        const parsedImages = messageRole === 'user'
           ? parseImagesInputTag(rawContent)
           : { text: rawContent, attachments: [] };
-        if (content.trim() || attachments.length > 0) {
+        const parsedFiles = messageRole === 'user'
+          ? parseFilesInputTag(parsedImages.text)
+          : { text: rawContent, attachments: [] };
+        if (
+          parsedFiles.text.trim()
+          || parsedImages.attachments.length > 0
+          || parsedFiles.attachments.length > 0
+        ) {
           normalized.push(createNormalizedMessage({
             id: baseId,
             sessionId,
@@ -415,8 +422,9 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
             provider: PROVIDER,
             kind: 'text',
             role: messageRole === 'user' ? 'user' : 'assistant',
-            content,
-            images: attachments.length > 0 ? attachments : undefined,
+            content: parsedFiles.text,
+            images: parsedImages.attachments.length > 0 ? parsedImages.attachments : undefined,
+            files: parsedFiles.attachments.length > 0 ? parsedFiles.attachments : undefined,
           }));
         }
         continue;
