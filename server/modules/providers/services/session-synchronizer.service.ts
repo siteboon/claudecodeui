@@ -3,6 +3,7 @@ import { access } from 'node:fs/promises';
 
 import { scanStateDb, sessionsDb } from '@/modules/database/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
+import type { SessionSynchronizeOptions } from '@/shared/interfaces.js';
 import type { LLMProvider } from '@/shared/types.js';
 
 type SessionSynchronizeResult = {
@@ -76,7 +77,7 @@ let inFlightSynchronization: Promise<SessionSynchronizeResult> | null = null;
 /**
  * Runs all provider synchronizers and updates scan_state.last_scanned_at.
  */
-async function runSessionSynchronization(): Promise<SessionSynchronizeResult> {
+async function runSessionSynchronization(options: SessionSynchronizeOptions = {}): Promise<SessionSynchronizeResult> {
   const lastScanAt = scanStateDb.getLastScannedAt();
   const scanBoundary = new Date();
   const processedByProvider: Record<LLMProvider, number> = {
@@ -90,7 +91,7 @@ async function runSessionSynchronization(): Promise<SessionSynchronizeResult> {
   const results = await Promise.allSettled(
     providerRegistry.listProviders().map(async (provider) => ({
       provider: provider.id,
-      processed: await provider.sessionSynchronizer.synchronize(lastScanAt ?? undefined),
+      processed: await provider.sessionSynchronizer.synchronize(lastScanAt ?? undefined, options),
     }))
   );
 
@@ -131,12 +132,12 @@ export const sessionSynchronizerService = {
    * Scans every provider for new or changed sessions, coalescing concurrent
    * callers onto a single scan.
    */
-  async synchronizeSessions(): Promise<SessionSynchronizeResult> {
+  async synchronizeSessions(options: SessionSynchronizeOptions = {}): Promise<SessionSynchronizeResult> {
     if (inFlightSynchronization) {
       return inFlightSynchronization;
     }
 
-    inFlightSynchronization = runSessionSynchronization().finally(() => {
+    inFlightSynchronization = runSessionSynchronization(options).finally(() => {
       inFlightSynchronization = null;
     });
 
