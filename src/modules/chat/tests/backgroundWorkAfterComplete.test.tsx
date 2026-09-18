@@ -147,7 +147,8 @@ test('tasks the history load left running count too, described by their launch',
   }));
   dispatch(event({
     kind: 'tool_result', toolId: 'toolu_agent_1', content: '',
-    toolUseResult: { isAsync: true, status: 'async_launched', agentId: 'a1', taskId: 'agent-task-1' },
+    // The real acknowledgement: no `taskId`, the agent's id is the task's.
+    toolUseResult: { isAsync: true, status: 'async_launched', agentId: 'a1' },
   }));
   dispatch(event({
     kind: 'tool_use', toolId: 'toolu_workflow_1', toolName: 'Workflow', toolInput: { script: '' },
@@ -159,14 +160,14 @@ test('tasks the history load left running count too, described by their launch',
   }));
   dispatch(event({
     kind: 'tool_use', toolId: 'toolu_agent_2', toolName: 'Agent', toolInput: { description: 'Unnamed', prompt: '…' },
-    subagent: { id: 'a2', description: 'Unnamed', status: 'running' },
+    subagent: { id: '', description: 'Unnamed', status: 'running' },
   }));
   dispatch(event({ kind: 'complete', success: true }));
 
   assert.deepEqual(log, [{
     sessionId: 'viewed-session',
     tasks: [
-      { taskId: 'agent-task-1', toolUseId: 'toolu_agent_1', taskType: 'local_agent', description: 'Survey the repo', startedAt: Date.parse('2026-08-21T10:32:10.000Z') },
+      { taskId: 'a1', toolUseId: 'toolu_agent_1', taskType: 'local_agent', description: 'Survey the repo', startedAt: Date.parse('2026-08-21T10:32:10.000Z') },
       { taskId: 'wxkj4kcvd', toolUseId: 'toolu_workflow_1', taskType: 'local_workflow', description: '', workflowName: 'audit', startedAt: Date.parse('2026-08-21T10:32:10.000Z') },
     ],
   }]);
@@ -179,4 +180,18 @@ test('a task ending during a turn in flight is left to the turn\'s complete', ()
   dispatch(event({ kind: 'task_status', event: 'notification', taskId: 'wxkj4kcvd', toolUseId: 'toolu_workflow_1', status: 'completed', summary: 'done' }));
 
   assert.deepEqual(log, [], 'the session is processing, not background-only');
+});
+
+test('a refused stop request does not idle the session it was sent on', () => {
+  // The ✕ on a chip whose task just settled answers NO_SUCH_TASK; a response
+  // may be streaming on that session, and it must keep its spinner.
+  const { dispatch, log } = renderHandlers();
+
+  dispatch(event({ kind: 'protocol_error', code: 'NO_SUCH_TASK', error: 'Session has no such task' }));
+  dispatch(event({ kind: 'protocol_error', code: 'TASK_ID_REQUIRED', error: 'chat.stop-task requires a taskId' }));
+  assert.deepEqual(log, []);
+
+  // Any other rejection still means the send never became a run.
+  dispatch(event({ kind: 'protocol_error', code: 'SESSION_NOT_FOUND', error: 'gone' }));
+  assert.deepEqual(log, [{ sessionId: 'viewed-session', idle: true }]);
 });

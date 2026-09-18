@@ -41,8 +41,11 @@ export function readBackgroundTaskId(message: ChatMessage): string | undefined {
   if (message.taskStatus?.taskId) {
     return message.taskStatus.taskId;
   }
-  const acknowledgement = message.toolResult?.toolUseResult as { taskId?: unknown; backgroundTaskId?: unknown } | undefined;
-  const acknowledged = acknowledgement?.taskId ?? acknowledgement?.backgroundTaskId;
+  // A workflow's acknowledgement names its task; a backgrounded command's
+  // names it `backgroundTaskId`; a background agent's carries only `agentId`,
+  // which is the same id the SDK's task events use for it.
+  const acknowledgement = message.toolResult?.toolUseResult as { taskId?: unknown; backgroundTaskId?: unknown; agentId?: unknown } | undefined;
+  const acknowledged = acknowledgement?.taskId ?? acknowledgement?.backgroundTaskId ?? acknowledgement?.agentId;
   return typeof acknowledged === 'string' && acknowledged ? acknowledged : undefined;
 }
 

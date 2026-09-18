@@ -226,12 +226,13 @@ describe('the background tasks strip', () => {
             taskStatus: { status: 'running', taskId: 'wxkj4kcvd', workflowName: 'audit' },
           }),
           // Named only by the launch acknowledgement: the page loaded after
-          // the start event went by.
+          // the start event went by. A real async agent's acknowledgement
+          // carries no `taskId` — its `agentId` is the task's id.
           toolRow({
             toolName: 'Agent',
             toolId: 'toolu_agent_1',
             subagent: { id: 'a1', description: 'Survey the repo', status: 'running' },
-            toolResult: { content: '', isError: false, toolUseResult: { isAsync: true, status: 'async_launched', agentId: 'a1', taskId: 'agent-task-1' } },
+            toolResult: { content: '', isError: false, toolUseResult: { isAsync: true, status: 'async_launched', agentId: 'a1' } },
           }),
           // A backgrounded command's acknowledgement spells it differently.
           toolRow({
@@ -244,7 +245,7 @@ describe('the background tasks strip', () => {
           toolRow({
             toolName: 'Agent',
             toolId: 'toolu_agent_2',
-            subagent: { id: 'a2', description: 'Unnamed', status: 'running' },
+            subagent: { id: '', description: 'Unnamed', status: 'running' },
           }),
         ]}
       />,
@@ -256,7 +257,7 @@ describe('the background tasks strip', () => {
 
     expect(sendMessage.mock.calls.map(([frame]) => frame)).toEqual([
       { type: 'chat.stop-task', sessionId: 'session-1', taskId: 'wxkj4kcvd' },
-      { type: 'chat.stop-task', sessionId: 'session-1', taskId: 'agent-task-1' },
+      { type: 'chat.stop-task', sessionId: 'session-1', taskId: 'a1' },
       { type: 'chat.stop-task', sessionId: 'session-1', taskId: 'b5xsbzu5k' },
     ]);
   });
