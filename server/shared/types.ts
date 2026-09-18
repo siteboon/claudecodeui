@@ -599,6 +599,15 @@ export type ProviderRuntimeContext = {
   getProviderModels(): Promise<ProviderModelsDefinition>;
   normalizeMessage(raw: unknown, sessionId: string | null): NormalizedMessage[];
   isProviderInstalled(): Promise<boolean>;
+  /**
+   * Builds the SDK query for a run. Production leaves this unset and the
+   * runtime uses the SDK's own; tests supply a scripted stream so the hold
+   * and background-work paths can be driven without a CLI process.
+   */
+  createQuery?: (input: { prompt: AsyncIterable<unknown>; options: AnyRecord }) => AsyncIterable<unknown> & {
+    interrupt(): Promise<void>;
+    stopTask?(taskId: string): Promise<void>;
+  };
 };
 
 export type ProviderRunFunction = (

@@ -894,6 +894,12 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // Set when a turn starts background work, cleared when the next `result`
   // arrives — only turns with work still outstanding hold their process open.
   let backgroundWorkPending = false;
+  // Set when the stream reports a task starting during this turn. Task events
+  // are the exact word on what is still running, so when the turn produced
+  // any, the tracker decides the hold; `startsBackgroundWork` is the fallback
+  // for tools that emit none (Monitor, ScheduleWakeup, CronCreate, TaskCreate)
+  // and for an SDK that does not report tasks at all.
+  let sawTaskEventThisTurn = false;
   // True while the process is being held open for background work, so a later
   // `result` can be recognised as that work reporting back.
   let heldForBackgroundWork = false;
@@ -1059,10 +1065,13 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       return { behavior: 'deny', message: decision.message ?? 'User denied tool use' };
     };
 
+    // The SDK's own `query`, unless the caller supplies one (tests script the
+    // stream to drive the hold logic below without a CLI process).
+    const createQuery = context.createQuery ?? query;
     let heldPrompt = createHeldPromptStream(promptMessages);
     releasePromptStream = heldPrompt.release;
     try {
-      queryInstance = query({
+      queryInstance = createQuery({
         prompt: heldPrompt.stream,
         options: sdkOptions
       });
@@ -1075,7 +1084,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       heldPrompt.release();
       heldPrompt = createHeldPromptStream(promptMessages);
       releasePromptStream = heldPrompt.release;
-      queryInstance = query({
+      queryInstance = createQuery({
         prompt: heldPrompt.stream,
         options: sdkOptions
       });
@@ -1141,11 +1150,32 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       if (startsBackgroundWork(message)) {
         backgroundWorkPending = true;
       }
+      if (message.type === 'system' && message.subtype === 'task_started') {
+        sawTaskEventThisTurn = true;
+      }
       backgroundWork.apply(sessionKey(), message);
+
+      // A task the user stopped gets no follow-up turn from the CLI — only its
+      // `stopped` notification — so when that was the last outstanding task
+      // nothing will ever push the `result` the release below waits for, and
+      // the process would sit until the idle ceiling. Release it here. A
+      // completed task is different: the CLI relays its result in a turn of
+      // its own, which closing stdin now would cut short.
+      if (
+        heldForBackgroundWork
+        && message.type === 'system'
+        && message.subtype === 'task_notification'
+        && message.status === 'stopped'
+        && !backgroundWork.hasOutstanding(sessionKey())
+      ) {
+        heldForBackgroundWork = false;
+        releasePromptStream();
+      }
 
       if (message.type === 'result') {
         // The turn is done as far as the client is concerned.
         const abortPending = sessionKey() ? abortedSessionIds.has(sessionKey()) : false;
+        const stillOutstanding = backgroundWork.hasOutstanding(sessionKey());
         if (!turnCompleteSent && !abortPending) {
           turnCompleteSent = true;
           ws.send(createCompleteMessage({ provider: 'claude', sessionId: capturedSessionId || sessionId || null, exitCode: 0 }));
@@ -1156,9 +1186,10 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
             sessionName: sessionSummary,
             stopReason: 'completed'
           });
-        } else if (heldForBackgroundWork && !abortPending) {
+        } else if (heldForBackgroundWork && !abortPending && !stillOutstanding) {
           // A result after the turn already reported complete means the work we
-          // held the process open for has finished and pushed a follow-up turn.
+          // held the process open for has finished and pushed a follow-up turn
+          // — the last of it, when nothing else is still running.
           notifyBackgroundWorkCompleted({
             userId: ws?.userId || null,
             provider: 'claude',
@@ -1176,8 +1207,16 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         // follow-up turn the CLI pushes for it, not the settling event
         // itself: closing stdin at that moment would cut the turn that
         // relays the task's result.
-        if (backgroundWorkPending || backgroundWork.hasOutstanding(sessionKey())) {
-          backgroundWorkPending = false;
+        //
+        // When the turn reported its tasks, the tracker is the whole truth: an
+        // Agent call without `run_in_background` is scored as background by
+        // `startsBackgroundWork`, but the CLI runs it in the foreground and
+        // it has settled before this `result` — holding for it kept a process
+        // alive for the full ceiling with nothing outstanding.
+        const holdForTurn = sawTaskEventThisTurn ? stillOutstanding : backgroundWorkPending || stillOutstanding;
+        backgroundWorkPending = false;
+        sawTaskEventThisTurn = false;
+        if (holdForTurn) {
           heldForBackgroundWork = true;
           scheduleRelease();
         } else {

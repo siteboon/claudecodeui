@@ -185,11 +185,13 @@ throws is answered with `INTERNAL_ERROR`.**
 | `chat.send` | `sessionId`, `content`, `options` | Resolves the session row, registers the run, dispatches to the provider runtime (`:146-158`) |
 | `chat.edit-send` | as above plus `anchorId` | Announces `history_truncated`, rewinds or resumes the provider transcript at the anchor, then dispatches (`:314-408`) |
 | `chat.abort` | `sessionId` | Aborts the runtime and emits the terminal `complete` on its behalf (`:415-438`) |
-| `chat.subscribe` | `sessions: [{ sessionId, lastSeq }]` | Acks with `chat_subscribed`, attaches this socket to a running run, replays what was missed (`:448-504`) |
+| `chat.stop-task` | `sessionId`, `taskId` | Stops one background task (agent, workflow or backgrounded command) through the provider runtime; the runtime reports the stop on the session's stream |
+| `chat.subscribe` | `sessions: [{ sessionId, lastSeq }]` | Acks with `chat_subscribed`, attaches this socket to a running run — or to a completed one whose session still has background work — and replays what was missed for running runs (`:448-504`) |
 | `chat.permission-response` | `requestId`, `allow`, `updatedInput?`, `message?`, `rememberEntry?` | Resolves one pending tool approval (`:511-522`) |
 
-All five are built in exactly two client files: the composer builds sends, aborts and
-permission answers (`useChatComposerState.ts:825-837`, `:1121-1124`, `:1149-1156`), and
+All six are built in exactly three client files: the composer builds sends, aborts and
+permission answers (`useChatComposerState.ts:825-837`, `:1121-1124`, `:1149-1156`),
+`chat.stop-task` is built by the background-tasks strip's ✕ (`BackgroundTasksStrip.tsx`), and
 `chat.subscribe` is built in `useChatSessionState.ts:668-674` and
 `ChatInterface.tsx:267-273`.
 
@@ -237,6 +239,8 @@ Every code that exists, with the line that emits it:
 | `ANCHOR_LOOKUP_FAILED` | `:351` | Reading the transcript threw |
 | `EDIT_REWIND_FAILED` | `:400` | The rewind itself failed; the run is ended too |
 | `NO_ACTIVE_RUN` | `:428` | `chat.abort` for a session with nothing running |
+| `TASK_ID_REQUIRED` | | `chat.stop-task` without a task id |
+| `NO_SUCH_TASK` | | `chat.stop-task` for a task the runtime is not tracking (already settled, or never this session's) |
 | `UNKNOWN_MESSAGE_TYPE` | `:620` | Unrecognised `type` |
 | `INTERNAL_ERROR` | `:626` | Anything thrown out of a handler |
 
