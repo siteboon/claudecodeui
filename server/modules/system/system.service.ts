@@ -32,7 +32,15 @@ export function createSystemUpdateService(dependencies: SystemUpdateDependencies
       const updateCommand = dependencies.isPlatform
         ? 'npm run update:platform'
         : dependencies.installMode === 'git'
-          ? 'git checkout main && git pull && npm install'
+          // --include=dev is required because NODE_ENV=production (set by the
+          // systemd unit) makes npm default to omit=dev, which drops vite and
+          // husky. husky's "prepare" lifecycle script then fails with exit 127
+          // ("husky: not found"), which fails the whole install — and without
+          // vite the subsequent build can't run either. The trailing build
+          // step is required too: git pull only updates the source tree, but
+          // the server runs the compiled dist-server/dist output, so skipping
+          // this step leaves the old build running after a "successful" update.
+          ? 'git checkout main && git pull && npm install --include=dev && npm run build'
           : 'npm install -g @cloudcli-ai/cloudcli@latest';
       const workingDirectory = dependencies.isPlatform || dependencies.installMode === 'git'
         ? dependencies.appRoot
