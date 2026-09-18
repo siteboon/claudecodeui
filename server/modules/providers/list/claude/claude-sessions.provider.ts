@@ -14,7 +14,7 @@ import type {
   SubagentInfo,
 } from '@/shared/types.js';
 import { parseFilesInputTag } from '@/shared/image-attachments.js';
-import { prepareTranscriptMessages } from '@/shared/message-unification.js';
+import { prepareTranscriptMessages, truncateNestedOutput } from '@/shared/message-unification.js';
 import {
   createNormalizedMessage,
   generateMessageId,
@@ -24,7 +24,7 @@ import {
   truncateSubagentActivity,
 } from '@/shared/utils.js';
 import { sessionsDb } from '@/modules/database/index.js';
-import { isClaudeSDKSessionActive } from '@/modules/providers/list/claude/claude-runtime.provider.js';
+import { getClaudeSDKSessionStartTime } from '@/modules/providers/list/claude/claude-runtime.provider.js';
 import { summarizeClaudeTokenUsage } from '@/modules/providers/services/provider-token-usage.service.js';
 
 const PROVIDER = 'claude';
@@ -445,15 +445,15 @@ function dropSupersededPromptBranches(rows: AnyRecord[]): AnyRecord[] {
   return rows.filter((row) => typeof row.uuid !== 'string' || !abandoned.has(row.uuid));
 }
 
-/** Answers whether the CLI process behind a session is still running. */
-type SessionLivenessProbe = (sessionId: string) => boolean;
+/** When the CLI run behind a session started (epoch ms), or null when none is up. */
+type LiveRunStartTimeProbe = (sessionId: string) => number | null;
 
 async function getSessionMessages(
   sessionId: string,
   providerSessionId: string,
   limit: number | null,
   offset: number,
-  isSessionActive: SessionLivenessProbe,
+  getLiveRunStartTime: LiveRunStartTimeProbe,
 ): Promise<ClaudeHistoryMessagesResult> {
   try {
     // The DB row is keyed by the app-facing session id, while the JSONL rows
@@ -519,12 +519,16 @@ async function getSessionMessages(
     const notificationsByToolUseId = collectTaskNotifications(messages);
     const foldedNotificationUuids = new Set<string>();
 
-    // A background agent runs inside the session's CLI process, so once that
-    // process is gone an agent that has not reported back never will. The
+    // A background agent runs inside the CLI process that launched it, so once
+    // that process is gone an agent that has not reported back never will. A
+    // later run of the same session is a new process, so a launch row older
+    // than the live run belongs to a process that has already exited. The
     // runtime keys its process map by the app session id when the chat gateway
     // starts a run and by the provider-native id when the agent API does, so
     // both are asked.
-    const isSessionLive = isSessionActive(sessionId) || isSessionActive(providerSessionId);
+    const liveRunStartedAt = getLiveRunStartTime(sessionId) ?? getLiveRunStartTime(providerSessionId);
+    const launchedByLiveRun = (message: AnyRecord): boolean =>
+      liveRunStartedAt !== null && Date.parse(String(message.timestamp ?? '')) >= liveRunStartedAt;
 
     for (const message of messages) {
       const agentId = message.toolUseResult?.agentId;
@@ -562,7 +566,7 @@ async function getSessionMessages(
       const status: SubagentInfo['status'] = notification
         ? notification.status === 'completed' ? 'completed' : 'failed'
         : isAsyncLaunch
-          ? isSessionLive ? 'running' : 'stopped'
+          ? launchedByLiveRun(message) ? 'running' : 'stopped'
           : 'completed';
 
       if (subagent && subagent.activity.length > 0) {
@@ -715,17 +719,18 @@ function buildLocalCommandDisplayText(payload: ClaudeLocalCommandPayload): strin
 
 type ClaudeSessionsProviderOptions = {
   /**
-   * Whether the CLI process behind a session is still up. Injected so history
-   * tests can pin what a stopped run reads as without driving a real SDK run.
+   * When the CLI run behind a session started, or null when none is up.
+   * Injected so history tests can pin what a stopped run reads as without
+   * driving a real SDK run.
    */
-  isSessionActive?: SessionLivenessProbe;
+  getLiveRunStartTime?: LiveRunStartTimeProbe;
 };
 
 export class ClaudeSessionsProvider implements IProviderSessions {
-  private readonly isSessionActive: SessionLivenessProbe;
+  private readonly getLiveRunStartTime: LiveRunStartTimeProbe;
 
-  constructor({ isSessionActive = isClaudeSDKSessionActive }: ClaudeSessionsProviderOptions = {}) {
-    this.isSessionActive = isSessionActive;
+  constructor({ getLiveRunStartTime = getClaudeSDKSessionStartTime }: ClaudeSessionsProviderOptions = {}) {
+    this.getLiveRunStartTime = getLiveRunStartTime;
   }
 
   /**
@@ -863,8 +868,11 @@ export class ClaudeSessionsProvider implements IProviderSessions {
               // `toolUseResult` on disk, `tool_use_result` on the live SDK
               // stream. Reading only the transcript key meant a live agent
               // launch reached the client with no `isAsync`, so the card could
-              // not tell the launch acknowledgement from an answer.
-              toolUseResult: raw.toolUseResult ?? raw.tool_use_result,
+              // not tell the launch acknowledgement from an answer. The stream
+              // value is the tool's whole structured output — an Edit carries
+              // the file it edited — so it gets the same per-string cap the
+              // transcript path applies before anything is sent or buffered.
+              toolUseResult: truncateNestedOutput(raw.toolUseResult ?? raw.tool_use_result),
             }));
           } else if (part.type === 'text') {
             const text = part.text || '';
@@ -1181,7 +1189,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     try {
       // Load full history first so `total` reflects frontend-normalized messages,
       // not raw JSONL records.
-      result = await getSessionMessages(sessionId, providerSessionId, null, 0, this.isSessionActive);
+      result = await getSessionMessages(sessionId, providerSessionId, null, 0, this.getLiveRunStartTime);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`[ClaudeProvider] Failed to load session ${sessionId}:`, message);

@@ -1169,7 +1169,22 @@ async function abortClaudeSDKSession(sessionId) {
  */
 function isClaudeSDKSessionActive(sessionId) {
   const session = getSession(sessionId);
-  return session && session.status === 'active';
+  return Boolean(session && session.status === 'active');
+}
+
+/**
+ * When the run behind a session started, or null when no run is up.
+ *
+ * The history reader uses this to tell a background agent launched by the
+ * live process (still able to report back) from one launched by an earlier
+ * process that has since exited (never will): a launch row older than the
+ * live run cannot belong to it.
+ * @param {string} sessionId - Session identifier
+ * @returns {number|null} Epoch milliseconds the live run started, or null
+ */
+function getClaudeSDKSessionStartTime(sessionId) {
+  const session = getSession(sessionId);
+  return session && session.status === 'active' ? session.startTime : null;
 }
 
 /**
@@ -1231,6 +1246,7 @@ export {
   queryClaudeSDK,
   abortClaudeSDKSession,
   isClaudeSDKSessionActive,
+  getClaudeSDKSessionStartTime,
   getActiveClaudeSDKSessions,
   resolveToolApproval,
   getPendingApprovalsForSession,

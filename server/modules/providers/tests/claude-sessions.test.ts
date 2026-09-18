@@ -371,8 +371,9 @@ test('Claude history keeps a background agent running until its outcome is repor
       const now = new Date().toISOString();
       sessionsDb.createSession(SESSION_ID, 'claude', tempRoot, 'Subagent session', now, now, parentPath);
 
-      // The session's process is still up, so the agent can still report.
-      const history = await new ClaudeSessionsProvider({ isSessionActive: () => true }).fetchHistory(SESSION_ID, {
+      // The run that launched the agent is still up, so it can still report.
+      const liveRunStartedAt = Date.parse('2026-08-21T09:59:00.000Z');
+      const history = await new ClaudeSessionsProvider({ getLiveRunStartTime: () => liveRunStartedAt }).fetchHistory(SESSION_ID, {
         providerSessionId: SESSION_ID,
       });
       const agentRow = history.messages.find(
@@ -408,7 +409,7 @@ test('Claude history reports a background agent stopped once its session process
       // process gone — the run was stopped, or crashed — an agent that never
       // reported never will, and "still running" would pin a spinner on the
       // card forever.
-      const history = await new ClaudeSessionsProvider({ isSessionActive: () => false }).fetchHistory(SESSION_ID, {
+      const history = await new ClaudeSessionsProvider({ getLiveRunStartTime: () => null }).fetchHistory(SESSION_ID, {
         providerSessionId: SESSION_ID,
       });
       const agentRow = history.messages.find(
@@ -417,6 +418,37 @@ test('Claude history reports a background agent stopped once its session process
 
       assert.equal(agentRow?.subagent?.status, 'stopped');
       assert.equal(agentRow?.toolResult?.content, '', 'the launch acknowledgement must never show as a result');
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('Claude history reports a background agent stopped when a later run of the session is live', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-orphaned-agent-'));
+
+  try {
+    const parentPath = await writeClaudeSubagentSession(tempRoot);
+    await dropTaskNotification(parentPath);
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(SESSION_ID, 'claude', tempRoot, 'Subagent session', now, now, parentPath);
+
+      // Each turn of a session is its own CLI process. The agent was launched
+      // at 10:00:01 by a process that has since exited; the run up now started
+      // an hour later and cannot deliver that agent's report. Reading it as
+      // `running` made an orphaned card flicker back to a spinner on every
+      // later turn.
+      const laterRunStartedAt = Date.parse('2026-08-21T11:00:00.000Z');
+      const history = await new ClaudeSessionsProvider({ getLiveRunStartTime: () => laterRunStartedAt }).fetchHistory(SESSION_ID, {
+        providerSessionId: SESSION_ID,
+      });
+      const agentRow = history.messages.find(
+        (message) => message.kind === 'tool_use' && message.toolId === AGENT_TOOL_USE_ID,
+      );
+
+      assert.equal(agentRow?.subagent?.status, 'stopped');
     });
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
@@ -442,7 +474,7 @@ test('Claude history asks after the session process by both the app and the prov
 
       for (const liveId of [appSessionId, SESSION_ID]) {
         const history = await new ClaudeSessionsProvider({
-          isSessionActive: (sessionId) => sessionId === liveId,
+          getLiveRunStartTime: (sessionId) => (sessionId === liveId ? Date.parse('2026-08-21T09:59:00.000Z') : null),
         }).fetchHistory(appSessionId, { providerSessionId: SESSION_ID });
         const agentRow = history.messages.find(
           (message) => message.kind === 'tool_use' && message.toolId === AGENT_TOOL_USE_ID,
@@ -483,7 +515,7 @@ for (const reported of ['completed', 'failed'] as const) {
         // enough: the agent's own transcript names its timeline, not whether
         // it finished. Folding the answer onto the card while leaving the
         // status unset read as `running` on a card whose result said "done".
-        const history = await new ClaudeSessionsProvider({ isSessionActive: () => false }).fetchHistory(SESSION_ID, {
+        const history = await new ClaudeSessionsProvider({ getLiveRunStartTime: () => null }).fetchHistory(SESSION_ID, {
           providerSessionId: SESSION_ID,
         });
         const agentRow = history.messages.find(
@@ -518,7 +550,7 @@ test('Claude history reports a forked background agent stopped: no transcript, n
       const now = new Date().toISOString();
       sessionsDb.createSession(SESSION_ID, 'claude', tempRoot, 'Subagent session', now, now, parentPath);
 
-      const history = await new ClaudeSessionsProvider({ isSessionActive: () => false }).fetchHistory(SESSION_ID, {
+      const history = await new ClaudeSessionsProvider({ getLiveRunStartTime: () => null }).fetchHistory(SESSION_ID, {
         providerSessionId: SESSION_ID,
       });
       const agentRow = history.messages.find(
@@ -557,6 +589,30 @@ test('a live SDK tool result keeps its launch metadata under the stream key', ()
 
   assert.equal(normalized?.kind, 'tool_result');
   assert.equal((normalized?.toolUseResult as { isAsync?: boolean } | undefined)?.isAsync, true);
+});
+
+test('a live SDK tool result caps the strings inside its structured output', () => {
+  // The stream's `tool_use_result` is the tool's whole structured output — an
+  // Edit's carries the entire file it edited — and it is sent to every client
+  // and kept in the run's replay buffer. The transcript path caps each nested
+  // string at the same limit before it leaves the server; the live path must
+  // not be the one place that forwards it whole.
+  const [normalized] = new ClaudeSessionsProvider().normalizeMessage({
+    type: 'user',
+    session_id: SESSION_ID,
+    parent_tool_use_id: null,
+    uuid: 'edit-result-live',
+    message: {
+      role: 'user',
+      content: [{ type: 'tool_result', tool_use_id: 'toolu_edit', content: 'The file has been updated.' }],
+    },
+    tool_use_result: { filePath: '/repo/big.ts', originalFile: 'x'.repeat(50_000) },
+  }, SESSION_ID);
+
+  const forwarded = normalized?.toolUseResult as { filePath?: string; originalFile?: string } | undefined;
+  assert.equal(forwarded?.filePath, '/repo/big.ts');
+  assert.ok(forwarded?.originalFile && forwarded.originalFile.length < 50_000, 'the file body must be capped');
+  assert.match(forwarded?.originalFile ?? '', /… 10000 more characters$/);
 });
 
 test('Claude history still settles a synchronous agent that stops mid tool call', { concurrency: false }, async () => {
