@@ -22,6 +22,7 @@ some of these files are crowded.
 | `05-history-performance.md` | `fetchHistory` re-parsing everything on every page. **Promoted** — it is the server half of `07`. |
 | `06-terminal-fidelity.md` | Shell-tab scroll instability, reattach corruption, and the inherited `CLAUDE_CODE_CHILD_SESSION` marker that stops transcripts being written. |
 | `07-session-switch.md` | Switching chats blanks the pane and refetches, despite the store already caching per session. |
+| `08-background-work-ownership.md` | What owns a piece of background work, and for how long. The question under `01`. |
 
 ## Status legend
 
@@ -37,7 +38,15 @@ some of these files are crowded.
 02 survivability ─────────┘
 
 05 history perf ──→ 07 fast session switch        06 terminal fidelity (independent)
+
+08 background work ownership ──→ 01 (subsumes its registry half)
+                             └─→ local/T21, local/T22
 ```
+
+`08` came out of six "the session is stuck" reports, of which four turned out to
+be a healthy backend the interface could not show. It is design rather than a
+patch, and `plan/local/T24` — a read-only diagnostic over the same data — needs
+no schema and can ship before any of it.
 
 `06` and `07` came out of a 2026-09-05 review of what actually hurts in daily
 use. They are cheap, they are unclaimed upstream, and `06`'s first item is a
