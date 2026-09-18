@@ -113,13 +113,11 @@ function writeSettings(settings: BrowserUseSettings): BrowserUseSettings {
 }
 
 function getOrCreateMcpToken(): string {
-  const existing = appConfigDb.get(BROWSER_USE_MCP_TOKEN_KEY);
-  if (existing) {
-    return existing;
-  }
-  const token = randomBytes(32).toString('hex');
-  appConfigDb.set(BROWSER_USE_MCP_TOKEN_KEY, token);
-  return token;
+  // Must not mint a replacement on a failed read: the token authenticates the
+  // already-registered MCP server entry, which a silent rotation would break.
+  return appConfigDb.getOrCreateSecret(BROWSER_USE_MCP_TOKEN_KEY, () =>
+    randomBytes(32).toString('hex')
+  );
 }
 
 function getSetupMessage(settings: BrowserUseSettings, readiness: RuntimeReadiness): string {
