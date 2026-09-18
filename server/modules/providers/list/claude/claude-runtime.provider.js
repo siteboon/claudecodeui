@@ -110,17 +110,19 @@ function createHoldTimers({ onRelease, idleMs = BG_IDLE_RELEASE_MS, totalMs = BG
   };
 
   // Both timers land here, so a release is idempotent and neither can fire
-  // after the other has already torn the hold down.
-  const release = () => {
+  // after the other has already torn the hold down. The reason is passed on
+  // because "the hold ended" and "the hold ended because nothing happened for
+  // half an hour" are different facts when reading a log after the event.
+  const release = (reason = 'explicit') => {
     clear();
-    onRelease();
+    onRelease(reason);
   };
 
   const schedule = () => {
     if (idleTimer) {
       clearTimeout(idleTimer);
     }
-    idleTimer = setTimeout(release, idleMs);
+    idleTimer = setTimeout(() => release('idle_timeout'), idleMs);
     // Never let the hold keep the server process alive on its own.
     idleTimer.unref?.();
 
@@ -128,7 +130,7 @@ function createHoldTimers({ onRelease, idleMs = BG_IDLE_RELEASE_MS, totalMs = BG
     // would collapse it into a second idle timer and restore the unbounded
     // window this pair exists to close.
     if (!totalTimer) {
-      totalTimer = setTimeout(release, totalMs);
+      totalTimer = setTimeout(() => release('total_ceiling'), totalMs);
       totalTimer.unref?.();
     }
   };
@@ -1144,6 +1146,10 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   let releasePromptStream = () => {};
   // Assigned below, once releasePromptStream is known to the closure.
   let holdTimers = null;
+  // When the hold started, so a release can say how long it lasted. The two
+  // limits are far apart, and which one fired is the whole question when a
+  // background job turns out to have been cut off.
+  let holdArmedAt = null;
   // The client is told the turn is over as soon as `result` lands, even though
   // the process lingers, so the UI never waits out the idle hold.
   let turnCompleteSent = false;
@@ -1165,12 +1171,28 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
 
   // `releasePromptStream` is reassigned once the held stream exists, so the
   // callback has to read it at fire time rather than capture it now.
-  holdTimers = createHoldTimers({ onRelease: () => releasePromptStream() });
+  holdTimers = createHoldTimers({
+    onRelease: (reason) => {
+      // Every run closes its stdin here, held or not. Only a run that was
+      // actually held has something to report, and logging the rest would bury
+      // the records that matter under one per ordinary turn.
+      if (holdArmedAt) {
+        logRunLifecycle('hold_released', {
+          sessionKey: sessionKey(),
+          providerSessionId: capturedSessionId || null,
+          reason,
+          heldForMs: Date.now() - holdArmedAt
+        });
+        holdArmedAt = null;
+      }
+      releasePromptStream();
+    }
+  });
 
   // Arms the countdowns that eventually close stdin. Called when the hold starts
   // and again on every frame that arrives while it is held.
   const scheduleRelease = () => holdTimers.schedule();
-  const releaseHeldStream = () => holdTimers.release();
+  const releaseHeldStream = (reason) => holdTimers.release(reason);
   const clearReleaseTimers = () => holdTimers.clear();
 
   // Hoisted above the try so the catch's cleanup can tell whether this run
@@ -1474,12 +1496,19 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
           // ceiling is only a backstop for work that never reports.
           backgroundWorkPending = false;
           heldForBackgroundWork = true;
+          holdArmedAt = Date.now();
+          logRunLifecycle('hold_armed', {
+            sessionKey: sessionKey(),
+            providerSessionId: capturedSessionId || null,
+            idleMs: BG_IDLE_RELEASE_MS,
+            totalMs: BG_TOTAL_HOLD_MS
+          });
           scheduleRelease();
         } else {
           // Either nothing was backgrounded, or the background work just
           // reported in — let the CLI exit now, as it always has.
           heldForBackgroundWork = false;
-          releaseHeldStream();
+          releaseHeldStream('work_reported_back');
         }
       } else if (holdTimers.isArmed()) {
         // Background activity after the turn — push the countdown back out.

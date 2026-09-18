@@ -13,8 +13,8 @@ import { createHoldTimers } from '@/modules/providers/list/claude/claude-runtime
 
 const setup = (t: TestContext, idleMs: number, totalMs: number) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
-  const released: number[] = [];
-  const timers = createHoldTimers({ onRelease: () => released.push(released.length), idleMs, totalMs });
+  const released: string[] = [];
+  const timers = createHoldTimers({ onRelease: (reason: string) => released.push(reason), idleMs, totalMs });
   return { timers, released };
 };
 
@@ -95,4 +95,30 @@ test('an explicit release runs the callback and disarms', (t) => {
   assert.equal(timers.isArmed(), false);
   t.mock.timers.tick(10_000);
   assert.equal(released.length, 1);
+});
+
+// Which limit ended a hold is the whole question when a background job turns
+// out to have been cut off, so the release says which one fired.
+test('a release names the limit that ended the hold', (t) => {
+  const idle = setup(t, 1000, 5000);
+  idle.timers.schedule();
+  t.mock.timers.tick(1001);
+  assert.deepEqual(idle.released, ['idle_timeout']);
+});
+
+test('the total ceiling names itself, even under constant activity', (t) => {
+  const { timers, released } = setup(t, 1000, 3000);
+  timers.schedule();
+  for (let i = 0; i < 10; i += 1) {
+    t.mock.timers.tick(400);
+    timers.schedule();
+  }
+  assert.deepEqual(released, ['total_ceiling']);
+});
+
+test('an explicit release carries the caller\'s reason', (t) => {
+  const { timers, released } = setup(t, 1000, 5000);
+  timers.schedule();
+  timers.release('work_reported_back');
+  assert.deepEqual(released, ['work_reported_back']);
 });
