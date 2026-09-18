@@ -165,6 +165,7 @@ test('folds the live task events of a background launch onto the tool row that l
   assert.equal(running.length, 1, 'task events are folded, never rendered on their own');
   assert.deepEqual(running[0]?.taskStatus, {
     status: 'running',
+    taskId: 'wxkj4kcvd',
     taskType: 'local_workflow',
     workflowName: 'audit',
     description: 'Audit the frontend',

@@ -373,7 +373,8 @@
     "script": "Script",
     "backgroundTasks": "Background tasks",
     "backgroundAgent": "Agent",
-    "backgroundCommand": "Command"
+    "backgroundCommand": "Command",
+    "stopTask": "Stop"
   },
   "cancel": "Cancel"
 }

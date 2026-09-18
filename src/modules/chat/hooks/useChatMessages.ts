@@ -216,6 +216,7 @@ function foldTaskStatus(
     // the task is running, while an `updated` patch that does not change the
     // status (an end time, say) leaves it where it was.
     status: settled ?? (msg.event === 'started' || msg.event === 'progress' ? 'running' : previous?.status ?? 'running'),
+    taskId: msg.taskId ?? previous?.taskId,
     taskType: msg.taskType ?? previous?.taskType,
     workflowName: msg.workflowName ?? previous?.workflowName,
     description: msg.description ?? previous?.description,

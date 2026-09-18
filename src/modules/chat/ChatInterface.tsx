@@ -76,6 +76,8 @@ function ChatInterface({
   const {
     markSessionProcessing: onSessionProcessing,
     markSessionIdle: onSessionIdle,
+    markSessionBackground: onSessionBackground,
+    getSessionActivity,
   } = useSessionProtectionActions();
 
   const sessionStore = useSessionStore();
@@ -290,6 +292,8 @@ function ChatInterface({
     statusCheckSentAtRef,
     onSessionProcessing,
     onSessionIdle,
+    onSessionBackground,
+    getSessionActivity,
     onWebSocketReconnect: handleWebSocketReconnect,
     requestLatestMessages,
     sessionStore,
@@ -461,6 +465,7 @@ function ChatInterface({
             visibleMessages={visibleMessages}
             loadEarlierMessages={loadEarlierMessages}
             revealMessage={revealMessage}
+            sendMessage={sendMessage}
             loadAllMessages={loadAllMessages}
             allMessagesLoaded={allMessagesLoaded}
             isLoadingAllMessages={isLoadingAllMessages}

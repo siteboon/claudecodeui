@@ -20,6 +20,8 @@ describe('the background tasks strip', () => {
   it('lists a running workflow and a running agent with what each has got to', () => {
     render(
       <BackgroundTasksStrip
+        sessionId="session-1"
+        sendMessage={() => {}}
         onReveal={() => {}}
         messages={[
           toolRow({ toolName: 'Read', toolId: 'toolu_read', toolInput: '{}' }),
@@ -54,6 +56,8 @@ describe('the background tasks strip', () => {
   it('renders nothing when no task is running', () => {
     const { container } = render(
       <BackgroundTasksStrip
+        sessionId="session-1"
+        sendMessage={() => {}}
         onReveal={() => {}}
         messages={[
           toolRow({ toolName: 'Read', toolId: 'toolu_read', toolInput: '{}' }),
@@ -74,6 +78,8 @@ describe('the background tasks strip', () => {
     // backend read the journal and knows the run is still going.
     render(
       <BackgroundTasksStrip
+        sessionId="session-1"
+        sendMessage={() => {}}
         onReveal={() => {}}
         messages={[
           toolRow({
@@ -108,10 +114,120 @@ describe('the background tasks strip', () => {
       taskStatus: { status: 'running', workflowName: 'frontend-architecture-audit' },
     });
 
-    render(<BackgroundTasksStrip onReveal={onReveal} messages={[row]} />);
+    render(<BackgroundTasksStrip sessionId="session-1" sendMessage={() => {}} onReveal={onReveal} messages={[row]} />);
 
     fireEvent.click(screen.getByRole('button'));
     expect(onReveal).toHaveBeenCalledWith(row);
+  });
+
+  it('clips a long progress summary inside the chip and keeps the whole text in the title', () => {
+    // The progress span was `flex-shrink-0`: a summary of a few dozen words
+    // ran out of the chip's background and across the transcript.
+    const summary = 'Phase 2 of 6: three agents in sequence review the composer, the transcript and the sidebar for overflow';
+    render(
+      <BackgroundTasksStrip
+        sessionId="session-1"
+        sendMessage={() => {}}
+        onReveal={() => {}}
+        messages={[toolRow({
+          toolName: 'Workflow',
+          toolId: 'toolu_workflow_1',
+          toolInput: JSON.stringify({ description: 'Audit the frontend', script: '' }),
+          taskStatus: { status: 'running', workflowName: 'frontend-architecture-audit', summary },
+        })]}
+      />,
+    );
+
+    const chip = screen.getByRole('button');
+    const progress = chip.lastElementChild as HTMLElement;
+    expect(progress.textContent).toBe(`· ${summary}`);
+    expect(progress.className).toContain('truncate');
+    expect(progress.className).toContain('min-w-0');
+    expect(progress.className).not.toContain('flex-shrink-0');
+    expect(chip.title).toBe(`Workflow · frontend-architecture-audit · ${summary}`);
+    expect(chip.parentElement?.className).toContain('max-w-full');
+  });
+
+  it('does not repeat the launch\'s description as progress', () => {
+    // A workflow's first progress report carries its own description as the
+    // summary, which the card already shows in its header and the chip in
+    // its name; as progress it is only noise, and long.
+    render(
+      <BackgroundTasksStrip
+        sessionId="session-1"
+        sendMessage={() => {}}
+        onReveal={() => {}}
+        messages={[
+          toolRow({
+            toolName: 'Workflow',
+            toolId: 'toolu_workflow_1',
+            toolInput: JSON.stringify({ description: 'Evidence-based audit of the frontend', script: '' }),
+            taskStatus: { status: 'running', workflowName: 'audit', summary: 'Evidence-based audit of the frontend' },
+          }),
+          toolRow({
+            toolName: 'Agent',
+            toolId: 'toolu_agent_1',
+            isSubagentContainer: true,
+            taskStatus: { status: 'running', description: 'Survey the repo', summary: 'Survey the repo' },
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getAllByRole('button').map((chip) => chip.textContent)).toEqual([
+      'Workflowaudit',
+      'AgentSurvey the repo',
+    ]);
+  });
+
+  it('stops a task over the websocket from its chip, by the id its events or acknowledgement named', () => {
+    const sendMessage = vi.fn();
+    render(
+      <BackgroundTasksStrip
+        sessionId="session-1"
+        sendMessage={sendMessage}
+        onReveal={() => {}}
+        messages={[
+          // Named by the live start event.
+          toolRow({
+            toolName: 'Workflow',
+            toolId: 'toolu_workflow_1',
+            taskStatus: { status: 'running', taskId: 'wxkj4kcvd', workflowName: 'audit' },
+          }),
+          // Named only by the launch acknowledgement: the page loaded after
+          // the start event went by.
+          toolRow({
+            toolName: 'Agent',
+            toolId: 'toolu_agent_1',
+            subagent: { id: 'a1', description: 'Survey the repo', status: 'running' },
+            toolResult: { content: '', isError: false, toolUseResult: { isAsync: true, status: 'async_launched', agentId: 'a1', taskId: 'agent-task-1' } },
+          }),
+          // A backgrounded command's acknowledgement spells it differently.
+          toolRow({
+            toolName: 'Bash',
+            toolId: 'toolu_bash_1',
+            taskStatus: { status: 'running', description: 'npm test' },
+            toolResult: { content: '', isError: false, toolUseResult: { backgroundTaskId: 'b5xsbzu5k' } },
+          }),
+          // Nothing has named this one, so nothing can stop it.
+          toolRow({
+            toolName: 'Agent',
+            toolId: 'toolu_agent_2',
+            subagent: { id: 'a2', description: 'Unnamed', status: 'running' },
+          }),
+        ]}
+      />,
+    );
+
+    const stops = screen.getAllByRole('button', { name: 'Stop' });
+    expect(stops).toHaveLength(3);
+    stops.forEach((stop) => fireEvent.click(stop));
+
+    expect(sendMessage.mock.calls.map(([frame]) => frame)).toEqual([
+      { type: 'chat.stop-task', sessionId: 'session-1', taskId: 'wxkj4kcvd' },
+      { type: 'chat.stop-task', sessionId: 'session-1', taskId: 'agent-task-1' },
+      { type: 'chat.stop-task', sessionId: 'session-1', taskId: 'b5xsbzu5k' },
+    ]);
   });
 });
 

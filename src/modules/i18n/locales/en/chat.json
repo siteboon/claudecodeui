@@ -247,6 +247,13 @@
       "startingNow": "Starting now"
     },
     "stop": "Stop",
+    "backgroundWork": "Background work",
+    "backgroundTask": {
+      "workflow": "Workflow {{name}}",
+      "agent": "Agent {{description}}",
+      "command": "Command {{description}}",
+      "count": "{{count}} tasks"
+    },
     "controls": {
       "stopGeneration": "Stop Generation",
       "pressEscToStop": "Press Esc anytime to stop"

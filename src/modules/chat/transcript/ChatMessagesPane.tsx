@@ -58,6 +58,8 @@ type ChatMessagesPaneProps = {
   visibleMessages: ChatMessage[];
   loadEarlierMessages: () => void;
   revealMessage: (message: ChatMessage) => void;
+  /** The chat websocket's send, which the background-tasks strip stops a task over. */
+  sendMessage: (message: unknown) => void;
   loadAllMessages: () => void;
   allMessagesLoaded: boolean;
   isLoadingAllMessages: boolean;
@@ -113,6 +115,7 @@ function ChatMessagesPane({
   visibleMessages,
   loadEarlierMessages,
   revealMessage,
+  sendMessage,
   loadAllMessages,
   allMessagesLoaded,
   isLoadingAllMessages,
@@ -181,7 +184,12 @@ function ChatMessagesPane({
         <div className="pointer-events-none sticky right-4 top-3 z-10 mb-2 flex items-start justify-between gap-2 sm:px-4">
           {/* Running background work stays in view while the transcript scrolls under it. */}
           <div className="pointer-events-auto min-w-0 pl-4 sm:pl-0">
-            <BackgroundTasksStrip messages={chatMessages} onReveal={revealMessage} />
+            <BackgroundTasksStrip
+              messages={chatMessages}
+              sessionId={selectedSession?.id || currentSessionId}
+              sendMessage={sendMessage}
+              onReveal={revealMessage}
+            />
           </div>
           <div className="pointer-events-auto">
             <ChatExportMenu

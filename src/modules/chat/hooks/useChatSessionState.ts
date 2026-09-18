@@ -322,9 +322,10 @@ export function useChatSessionState({
   // The activity indicator always reflects the latest status of the session
   // being viewed — never stale local UI state from the last time it was
   // open. Session ids are concrete before any send, so no pending
-  // placeholder entry exists anymore.
+  // placeholder entry exists anymore. Background-only work shows in the
+  // indicator but is not a response in flight: the composer can send.
   const sessionActivity = (activeSessionId && processingSessions?.get(activeSessionId)) || null;
-  const isProcessing = sessionActivity !== null;
+  const isProcessing = sessionActivity !== null && !sessionActivity.background;
   const canAbortSession = isProcessing && sessionActivity.canInterrupt;
 
   // Ref mirror so effects can read the latest map without re-running on

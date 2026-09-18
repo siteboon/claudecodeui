@@ -147,7 +147,24 @@ export type InstallMode = 'git' | 'npm';
 
 //----------------- SESSION PROCESSING STATE ------------
 
-/** What a session that is currently producing a response is doing, as shown by the activity indicator. */
+/**
+ * One background task — a spawned agent, a workflow run or a backgrounded
+ * command — that a session still has running after its turn ended. Listed by
+ * the running-sessions poll and derived from the transcript between polls;
+ * `taskId` is what `chat.stop-task` addresses.
+ */
+export type BackgroundTaskSummary = {
+  taskId: string;
+  toolUseId: string;
+  /** The SDK's kind: `local_agent`, `local_workflow` or `local_bash`. */
+  taskType: string;
+  description: string;
+  workflowName?: string;
+  /** When the task started (epoch ms). The activity indicator counts from the earliest. */
+  startedAt: number;
+};
+
+/** What a busy session is doing, as shown by the activity indicator: producing a response, or only running background tasks. */
 export type SessionActivity = {
   /** Provider-supplied status line; null renders the default activity label. */
   statusText: string | null;
@@ -155,11 +172,20 @@ export type SessionActivity = {
   /**
    * When this request was first marked as processing (client clock). Drives
    * the elapsed-time display and the stale `chat_subscribed` idle-ack guard.
+   * For background-only work it is the earliest task's start.
    */
   startedAt: number;
+  /**
+   * Set when no response is being produced and only background tasks keep
+   * the session busy. The composer stays usable: the CLI accepts a new turn
+   * while they run.
+   */
+  background?: boolean;
+  /** The background tasks the session still has running, with or without a response in flight. */
+  tasks?: BackgroundTaskSummary[];
 };
 
-/** Every session currently producing a response, keyed by session id. Read it to tell whether a session is busy. */
+/** Every busy session, keyed by session id. Read it to tell whether a session is busy; check `background` to tell how. */
 export type SessionActivityMap = ReadonlyMap<string, SessionActivity>;
 
 /** Marks a session as producing a response; call it as soon as a send is dispatched so the UI reacts immediately. */
@@ -168,18 +194,27 @@ export type MarkSessionProcessing = (
   activity?: { statusText?: string | null; canInterrupt?: boolean },
 ) => void;
 
-/** Marks a session as finished; `ifStartedBefore` lets a late acknowledgement clear only a stale run. */
+/** Marks a session's response as finished; `ifStartedBefore` lets a late acknowledgement clear only a stale run. Leaves background-only work alone, which it says nothing about. */
 export type MarkSessionIdle = (
   sessionId?: string | null,
   opts?: { ifStartedBefore?: number },
 ) => void;
+
+/** Records the background tasks a session still has once its turn ended; an empty list marks it idle. */
+export type MarkSessionBackground = (
+  sessionId: string,
+  tasks: BackgroundTaskSummary[],
+) => void;
+
+/** Reads one session's current activity without subscribing to the map, for logic that runs on a websocket frame. */
+export type GetSessionActivity = (sessionId: string) => SessionActivity | undefined;
 
 /** Replaces the whole processing map with the server's view, used by the periodic running-sessions poll. */
 export type SyncProcessingSessions = (
   sessions: readonly SessionActivitySnapshot[],
 ) => void;
 
-/** Reports whether one session is currently producing a response. */
+/** Reports whether one session is currently producing a response; false for one that only has background tasks running. */
 export type IsSessionProcessing = (sessionId?: string | null) => boolean;
 
 /** One running session as reported by the server, before it is folded into the client-side activity map. */
@@ -188,6 +223,9 @@ export type SessionActivitySnapshot = {
   statusText?: string | null;
   canInterrupt?: boolean;
   startedAt?: number;
+  /** True when the server lists the session for its background tasks alone, with no chat run. */
+  background?: boolean;
+  tasks?: BackgroundTaskSummary[];
 };
 
 // ---------------------------
@@ -544,16 +582,6 @@ export type TaskUsage = {
   durationMs: number;
 };
 
-/** One background task — a spawned agent, a workflow run or a backgrounded command — a session still has outstanding, as the running-sessions poll reports it; `taskId` is what `chat.stop-task` names and `toolUseId` pairs the task with the card that launched it. */
-export type BackgroundTaskSummary = {
-  taskId: string;
-  toolUseId: string;
-  taskType: string;
-  description: string;
-  workflowName?: string;
-  startedAt: number;
-};
-
 /** One agent a workflow run spawned, as its journal records it: the label and phase the script gave it (older scripts gave neither) and whether it has finished. */
 export type WorkflowAgentInfo = {
   id: string;
@@ -582,6 +610,8 @@ export type WorkflowInfo = {
  */
 export type LiveTaskStatus = {
   status: BackgroundTaskStatus;
+  /** The id the events name the task by, which is what stopping it addresses. */
+  taskId?: string;
   taskType?: string;
   workflowName?: string;
   description?: string;
@@ -1361,8 +1391,10 @@ export type MobileTerminalSelectionManager = {
 export type SessionRowActions = {
   /** The rename currently open anywhere in the sidebar, or null. */
   activeRename: ActiveSidebarRename | null;
-  /** Sessions with a run in flight: they show a spinner and hide destructive actions. */
+  /** Sessions with a run in flight or background work: they count as running; the former also show a spinner and hide destructive actions. */
   activeSessions: ReadonlySet<string>;
+  /** The subset of `activeSessions` that only has background tasks running, which show the purple dot instead of the spinner. */
+  backgroundSessionIds: ReadonlySet<string>;
   /** Sessions waiting on the user, which show the amber dot. */
   attentionSessionIds: ReadonlySet<string>;
   onRenameDraftChange: (draft: string) => void;
