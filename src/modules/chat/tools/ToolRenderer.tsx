@@ -17,6 +17,7 @@ import { ToolStatusBadge } from '@/modules/chat/tools/ToolStatusBadge';
 import { DiffStatsBadge } from '@/modules/chat/tools/DiffStatsBadge';
 import { parseToolPayload, summarizeDiff } from '@/modules/chat/utils/messageTransforms';
 import { isSubagentToolName } from '@/modules/chat/tools/toolAliases';
+import { formatTurnDuration } from '@/modules/chat/utils/turnDurations';
 
 type ToolRendererProps = {
   toolName: string;
@@ -56,27 +57,44 @@ const CLAUDE_DENIAL_MESSAGES = [
 ];
 
 /**
- * One line of what a background run has done, for the header of the card that
- * launched it: `17 tools · Bash · 4m`.
+ * One line of what a background run is doing or has done, for the header of the
+ * card that launched it: `seeding the database · 17 tools · Bash · 4m 12s`.
+ *
+ * The run's own sentence leads, because it is the only part that says what the
+ * work *is* rather than how much of it there has been. It was collected all
+ * along and never rendered.
  *
  * Every part is optional because the run reports what it has; a frame that only
  * changes the status carries no counters at all, and an empty string means the
  * header stays as it was rather than showing a shell with nothing in it.
+ *
+ * Exported for tests: it is a pure formatter, and the states worth pinning
+ * (nothing yet, a first tick at four seconds, a finished tally) are all
+ * arguments to it.
  */
-function summarizeTaskProgress(progress?: TaskProgress): string {
+export function summarizeTaskProgress(progress?: TaskProgress): string {
   if (!progress) {
     return '';
   }
 
   const parts: string[] = [];
+  if (progress.summary) {
+    parts.push(progress.summary);
+  }
   if (typeof progress.toolUses === 'number' && progress.toolUses > 0) {
     parts.push(`${progress.toolUses} ${progress.toolUses === 1 ? 'tool' : 'tools'}`);
   }
   if (progress.lastToolName) {
     parts.push(progress.lastToolName);
   }
-  if (typeof progress.durationMs === 'number' && progress.durationMs >= 60_000) {
-    parts.push(`${Math.round(progress.durationMs / 60_000)}m`);
+  // Every duration the run reports, not only those past a minute. The old floor
+  // left the card silent for the first sixty seconds — exactly when a reader is
+  // asking whether anything started at all — and then jumped straight to `1m`.
+  const duration = typeof progress.durationMs === 'number'
+    ? formatTurnDuration(progress.durationMs)
+    : '';
+  if (duration) {
+    parts.push(duration);
   }
 
   return parts.join(' · ');
@@ -339,9 +357,11 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
     const statusBadge = toolStatus && toolStatus !== 'completed'
       ? <ToolStatusBadge status={toolStatus} />
       : null;
-    // What the run has done so far, beside its badge: a card for work that
-    // takes twenty minutes is otherwise indistinguishable from one that is done.
-    const progressLabel = toolStatus === 'running' ? summarizeTaskProgress(toolProgress) : '';
+    // What the run is doing, beside its badge: a card for work that takes twenty
+    // minutes is otherwise indistinguishable from one that is done. Kept after
+    // the run ends too — `43 tools · 12m` is what the card is worth reading for
+    // the next day, and it used to be dropped the moment the work finished.
+    const progressLabel = summarizeTaskProgress(toolProgress);
     const progressBadge = progressLabel
       ? <span className="text-[11px] tabular-nums text-muted-foreground">{progressLabel}</span>
       : null;
