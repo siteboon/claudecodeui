@@ -1,275 +1,213 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
 import test from 'node:test';
 
-import {
-  createProviderModelsService,
-  PROVIDER_MODELS_CACHE_TTL_MS,
-} from '@/modules/providers/services/provider-models.service.js';
+import { createProviderModelsService } from '@/modules/providers/services/provider-models.service.js';
 import type {
+  CustomProviderModelInput,
+  CustomProviderModelRecord,
   LLMProvider,
   ProviderCurrentActiveModel,
   ProviderModelsDefinition,
 } from '@/shared/types.js';
+import { AppError } from '@/shared/utils.js';
 
 const createModels = (value: string): ProviderModelsDefinition => ({
   OPTIONS: [{ value, label: value }],
   DEFAULT: value,
 });
 
-const createCurrentActiveModel = (model: string): ProviderCurrentActiveModel => ({
-  model,
-});
+const createCurrentActiveModel = (model: string): ProviderCurrentActiveModel => ({ model });
 
 /** In-memory stand-in for the `sessions` table rows the service reads and writes. */
-const createSessionStore = (rows: Record<string, string | null> = {}) => {
-  const sessions = new Map(Object.entries(rows));
+const createSessionStore = (
+  rows: Record<string, string | null> = {},
+  efforts: Record<string, string | null> = {},
+) => {
+  const sessions = new Map(Object.entries(rows).map(([sessionId, model]) => [
+    sessionId,
+    { model, effort: efforts[sessionId] ?? null },
+  ]));
   return {
     sessions,
     getSessionById: (sessionId: string) =>
-      (sessions.has(sessionId) ? { model: sessions.get(sessionId) ?? null } : null),
+      sessions.get(sessionId) ?? null,
     setSessionModel: (sessionId: string, model: string) => {
-      sessions.set(sessionId, model);
+      const session = sessions.get(sessionId);
+      if (session) {
+        session.model = model;
+      }
+    },
+    setSessionEffort: (sessionId: string, effort: string) => {
+      const session = sessions.get(sessionId);
+      if (session) {
+        session.effort = effort;
+      }
     },
   };
 };
 
-const createEphemeralCachePath = (): string => path.join(
-  os.tmpdir(),
-  `provider-model-cache-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
-);
+const createCatalogStore = () => {
+  const rows = new Map<LLMProvider, CustomProviderModelRecord[]>();
+  let nextRecordId = 1;
+  const readRows = (provider: LLMProvider) => rows.get(provider) ?? [];
 
-test('provider models service delegates to the resolved provider model adapter', async () => {
-  const calls: LLMProvider[] = [];
-  const service = createProviderModelsService({
-    cachePath: createEphemeralCachePath(),
-    resolveProvider: (provider) => {
-      calls.push(provider);
-      return {
-        models: {
-          getSupportedModels: async () => createModels(`${provider}-models`),
-          getCurrentActiveModel: async () => createCurrentActiveModel(`${provider}-active`),
-        },
-      };
+  return {
+    rows,
+    listCustomProviderModels(provider: LLMProvider) {
+      return [...readRows(provider)];
     },
-  });
-
-  const models = await service.getProviderModels('codex', { bypassCache: true });
-
-  assert.deepEqual(calls, ['codex']);
-  assert.equal(models.models.DEFAULT, 'codex-models');
-  assert.equal(models.cache.source, 'fresh');
-});
-
-test('provider models service returns each provider adapter result without rewriting it', async () => {
-  const expectedModels: ProviderModelsDefinition = {
-    OPTIONS: [
-      { value: 'cursor-a', label: 'Cursor A' },
-      { value: 'cursor-b', label: 'Cursor B' },
-    ],
-    DEFAULT: 'cursor-b',
+    getCustomProviderModel(provider: LLMProvider, recordId: number) {
+      return readRows(provider).find((record) => record.recordId === recordId) ?? null;
+    },
+    findCustomProviderModelByModelId(provider: LLMProvider, modelId: string) {
+      return readRows(provider).find((record) => record.modelId === modelId) ?? null;
+    },
+    createCustomProviderModel(provider: LLMProvider, input: CustomProviderModelInput) {
+      const record: CustomProviderModelRecord = {
+        recordId: nextRecordId++,
+        provider,
+        modelId: input.id,
+        model: input.model,
+        sortOrder: readRows(provider).length,
+      };
+      rows.set(provider, [...readRows(provider), record]);
+      return record;
+    },
+    updateCustomProviderModel(
+      provider: LLMProvider,
+      recordId: number,
+      input: CustomProviderModelInput,
+    ) {
+      const existing = readRows(provider).find((record) => record.recordId === recordId);
+      if (!existing) {
+        return null;
+      }
+      const updated = { ...existing, modelId: input.id, model: input.model };
+      rows.set(provider, readRows(provider).map((record) => (
+        record.recordId === recordId ? updated : record
+      )));
+      return updated;
+    },
+    deleteCustomProviderModel(provider: LLMProvider, recordId: number, _fallbackModelId: string) {
+      const existing = readRows(provider).find((record) => record.recordId === recordId);
+      if (!existing) {
+        return null;
+      }
+      rows.set(provider, readRows(provider).filter((record) => record.recordId !== recordId));
+      return existing;
+    },
   };
+};
 
+const createTestService = (options: {
+  catalog?: ReturnType<typeof createCatalogStore>;
+  sessions?: ReturnType<typeof createSessionStore>;
+  activeModel?: (provider: LLMProvider, sessionId?: string) => string;
+  onCatalogRead?: (provider: LLMProvider) => void;
+} = {}) => {
+  const catalog = options.catalog ?? createCatalogStore();
+  const sessions = options.sessions ?? createSessionStore();
   const service = createProviderModelsService({
-    cachePath: createEphemeralCachePath(),
-    resolveProvider: () => ({
-      models: {
-        getSupportedModels: async () => expectedModels,
-        getCurrentActiveModel: async () => createCurrentActiveModel('cursor-active'),
-      },
-    }),
-  });
-
-  const models = await service.getProviderModels('cursor', { bypassCache: true });
-
-  assert.deepEqual(models.models, expectedModels);
-});
-
-test('provider models are cached for the three-day ttl', async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'provider-model-cache-ttl-'));
-  let currentTime = 1_000;
-  let loadCount = 0;
-
-  try {
-    const service = createProviderModelsService({
-      cachePath: path.join(tempRoot, 'models-cache.json'),
-      now: () => currentTime,
-      resolveProvider: (provider) => ({
-        models: {
-          getSupportedModels: async () => {
-            loadCount += 1;
-            return createModels(`${provider}-${loadCount}`);
-          },
-          getCurrentActiveModel: async () => createCurrentActiveModel(`${provider}-active`),
-        },
-      }),
-    });
-
-    const first = await service.getProviderModels('codex');
-    const cached = await service.getProviderModels('codex');
-    assert.equal(loadCount, 1);
-    assert.equal(cached.models.DEFAULT, first.models.DEFAULT);
-    assert.equal(cached.cache.source, 'memory');
-
-    currentTime += PROVIDER_MODELS_CACHE_TTL_MS - 1;
-    await service.getProviderModels('codex');
-    assert.equal(loadCount, 1);
-
-    currentTime += 2;
-    const refreshed = await service.getProviderModels('codex');
-    assert.equal(loadCount, 2);
-    assert.equal(refreshed.models.DEFAULT, 'codex-2');
-  } finally {
-    await rm(tempRoot, { recursive: true, force: true });
-  }
-});
-
-test('claude provider models are always loaded directly from the provider', async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'provider-model-cache-claude-direct-'));
-  let loadCount = 0;
-
-  try {
-    const service = createProviderModelsService({
-      cachePath: path.join(tempRoot, 'models-cache.json'),
-      resolveProvider: (provider) => ({
-        models: {
-          getSupportedModels: async () => {
-            loadCount += 1;
-            return createModels(`${provider}-${loadCount}`);
-          },
-          getCurrentActiveModel: async () => createCurrentActiveModel(`${provider}-active`),
-        },
-      }),
-    });
-
-    const first = await service.getProviderModels('claude');
-    const second = await service.getProviderModels('claude');
-
-    assert.equal(loadCount, 2);
-    assert.equal(first.models.DEFAULT, 'claude-1');
-    assert.equal(second.models.DEFAULT, 'claude-2');
-    assert.equal(second.cache.source, 'fresh');
-  } finally {
-    await rm(tempRoot, { recursive: true, force: true });
-  }
-});
-
-test('provider model cache is persisted across service instances', async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'provider-model-cache-file-'));
-  const cachePath = path.join(tempRoot, 'models-cache.json');
-
-  try {
-    const writer = createProviderModelsService({
-      cachePath,
-      resolveProvider: () => ({
-        models: {
-          getSupportedModels: async () => createModels('cursor-cached'),
-          getCurrentActiveModel: async () => createCurrentActiveModel('cursor-active'),
-        },
-      }),
-    });
-    await writer.getProviderModels('cursor');
-
-    const reader = createProviderModelsService({
-      cachePath,
-      resolveProvider: () => ({
-        models: {
-          getSupportedModels: async () => {
-            throw new Error('loader should not be called for persisted cache hits');
-          },
-          getCurrentActiveModel: async () => createCurrentActiveModel('cursor-active'),
-        },
-      }),
-    });
-    const models = await reader.getProviderModels('cursor');
-    assert.equal(models.models.DEFAULT, 'cursor-cached');
-    assert.equal(models.cache.source, 'disk');
-  } finally {
-    await rm(tempRoot, { recursive: true, force: true });
-  }
-});
-
-test('concurrent provider model requests share one load operation', async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'provider-model-cache-pending-'));
-  let loadCount = 0;
-
-  try {
-    const service = createProviderModelsService({
-      cachePath: path.join(tempRoot, 'models-cache.json'),
-      resolveProvider: () => ({
-        models: {
-          getSupportedModels: async () => {
-            loadCount += 1;
-            await new Promise((resolve) => setTimeout(resolve, 20));
-            return createModels('claude-cached');
-          },
-          getCurrentActiveModel: async () => createCurrentActiveModel('claude-active'),
-        },
-      }),
-    });
-
-    const [first, second] = await Promise.all([
-      service.getProviderModels('claude'),
-      service.getProviderModels('claude'),
-    ]);
-
-    assert.equal(loadCount, 1);
-    assert.equal(first.models.DEFAULT, 'claude-cached');
-    assert.equal(second.models.DEFAULT, 'claude-cached');
-  } finally {
-    await rm(tempRoot, { recursive: true, force: true });
-  }
-});
-
-test('bypassCache forces a fresh provider fetch and updates cache metadata', async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'provider-model-cache-refresh-'));
-  let currentTime = 1_000;
-  let loadCount = 0;
-
-  try {
-    const service = createProviderModelsService({
-      cachePath: path.join(tempRoot, 'models-cache.json'),
-      now: () => currentTime,
-      resolveProvider: (provider) => ({
-        models: {
-          getSupportedModels: async () => {
-            loadCount += 1;
-            return createModels(`${provider}-${loadCount}`);
-          },
-          getCurrentActiveModel: async () => createCurrentActiveModel(`${provider}-active-${loadCount}`),
-        },
-      }),
-    });
-
-    const first = await service.getProviderModels('claude');
-    currentTime += 50;
-    const refreshed = await service.getProviderModels('claude', { bypassCache: true });
-
-    assert.equal(first.models.DEFAULT, 'claude-1');
-    assert.equal(refreshed.models.DEFAULT, 'claude-2');
-    assert.equal(refreshed.cache.source, 'fresh');
-    assert.notEqual(refreshed.cache.updatedAt, first.cache.updatedAt);
-    assert.equal(loadCount, 2);
-  } finally {
-    await rm(tempRoot, { recursive: true, force: true });
-  }
-});
-
-test('resolveSessionModel asks the provider adapter for the session it was given', async () => {
-  const calls: Array<{ provider: LLMProvider; sessionId?: string }> = [];
-  const service = createProviderModelsService({
-    sessions: createSessionStore({ 'session-123': null }),
+    catalog,
+    sessions,
     resolveProvider: (provider) => ({
       models: {
-        getSupportedModels: async () => createModels(`${provider}-models`),
-        getCurrentActiveModel: async (sessionId) => {
-          calls.push({ provider, sessionId });
-          return createCurrentActiveModel(`${provider}-${sessionId}`);
+        getSupportedModels: async () => {
+          options.onCatalogRead?.(provider);
+          return createModels(`${provider}-default`);
         },
+        getCurrentActiveModel: async (sessionId) => createCurrentActiveModel(
+          options.activeModel?.(provider, sessionId) ?? `${provider}-default`,
+        ),
       },
     }),
+  });
+
+  return { service, catalog, sessions };
+};
+
+test('provider catalogs merge source-controlled defaults with custom persistence rows', async () => {
+  const calls: LLMProvider[] = [];
+  const { service, catalog } = createTestService({ onCatalogRead: (provider) => calls.push(provider) });
+
+  const models = await service.getProviderModels('codex');
+
+  assert.deepEqual(calls, ['codex']);
+  assert.equal(models.DEFAULT, 'codex-default');
+  assert.deepEqual(models.OPTIONS[0], {
+    value: 'codex-default',
+    label: 'codex-default',
+    isCustom: false,
+  });
+  assert.deepEqual(catalog.rows.get('codex'), undefined);
+});
+
+test('custom models can be created, edited, and deleted', async () => {
+  const { service } = createTestService();
+  const created = await service.createCustomModel('claude', {
+    model: 'My Claude',
+    id: 'claude-my-model',
+  });
+  const recordId = created.model.recordId as number;
+
+  assert.equal(created.model.isCustom, true);
+  assert.equal(created.models.OPTIONS.at(-1)?.value, 'claude-my-model');
+
+  const updated = await service.updateCustomModel('claude', recordId, {
+    model: 'My Better Claude',
+    id: 'claude-my-model-v2',
+  });
+  assert.equal(updated.model.label, 'My Better Claude');
+  assert.equal(updated.model.value, 'claude-my-model-v2');
+
+  const removed = await service.deleteCustomModel('claude', recordId);
+  assert.equal(removed.model.value, 'claude-my-model-v2');
+  assert.equal(removed.models.OPTIONS.some((option) => option.recordId === recordId), false);
+});
+
+test('duplicate model ids are rejected within one provider', async () => {
+  const { service } = createTestService();
+  await service.createCustomModel('cursor', { model: 'First', id: 'custom-id' });
+
+  await assert.rejects(
+    () => service.createCustomModel('cursor', { model: 'Second', id: 'custom-id' }),
+    (error) => error instanceof AppError
+      && error.code === 'MODEL_ID_ALREADY_EXISTS'
+      && error.statusCode === 409,
+  );
+
+  await assert.rejects(
+    () => service.createCustomModel('cursor', {
+      model: 'Duplicate built-in',
+      id: 'cursor-default',
+    }),
+    (error) => error instanceof AppError
+      && error.code === 'MODEL_ID_ALREADY_EXISTS'
+      && error.statusCode === 409,
+  );
+});
+
+test('predefined models have no database record or mutation target', async () => {
+  const { service, catalog } = createTestService();
+  const models = await service.getProviderModels('opencode');
+  assert.equal(models.OPTIONS[0]?.recordId, undefined);
+  assert.equal(models.OPTIONS[0]?.isCustom, false);
+  assert.deepEqual(catalog.rows.get('opencode'), undefined);
+
+  await assert.rejects(
+    () => service.updateCustomModel('opencode', 999, { model: 'Changed', id: 'changed' }),
+    (error) => error instanceof AppError && error.code === 'MODEL_NOT_FOUND',
+  );
+});
+
+test('resolveSessionModel asks the provider adapter for the requested session', async () => {
+  const calls: Array<{ provider: LLMProvider; sessionId?: string }> = [];
+  const { service } = createTestService({
+    sessions: createSessionStore({ 'session-123': null }),
+    activeModel: (provider, sessionId) => {
+      calls.push({ provider, sessionId });
+      return `${provider}-${sessionId}`;
+    },
   });
 
   const resolved = await service.resolveSessionModel('opencode', { sessionId: 'session-123' });
@@ -277,17 +215,10 @@ test('resolveSessionModel asks the provider adapter for the session it was given
   assert.deepEqual(calls, [{ provider: 'opencode', sessionId: 'session-123' }]);
   assert.equal(resolved.model, 'opencode-session-123');
 });
-test('setSessionModel records the model on the session row', async () => {
+
+test('setSessionModel records the model on the session row', () => {
   const sessions = createSessionStore({ 'session-1': null });
-  const service = createProviderModelsService({
-    sessions,
-    resolveProvider: (provider) => ({
-      models: {
-        getSupportedModels: async () => createModels(`${provider}-models`),
-        getCurrentActiveModel: async () => createCurrentActiveModel(`${provider}-active`),
-      },
-    }),
-  });
+  const { service } = createTestService({ sessions });
 
   const stored = service.setSessionModel('claude', 'session-1', 'opus');
 
@@ -295,36 +226,47 @@ test('resolveSessionModel asks the provider adapter for the session it was given
     provider: 'claude',
     sessionId: 'session-1',
     model: 'opus',
+    effort: null,
     source: 'session',
   });
-  assert.equal(sessions.sessions.get('session-1'), 'opus');
+  assert.equal(sessions.sessions.get('session-1')?.model, 'opus');
 });
 
-test('setSessionModel ignores sessions that have no row yet', async () => {
+test('setSessionModel ignores sessions that have no row yet', () => {
   const sessions = createSessionStore();
-  const service = createProviderModelsService({
-    sessions,
-    resolveProvider: (provider) => ({
-      models: {
-        getSupportedModels: async () => createModels(`${provider}-models`),
-        getCurrentActiveModel: async () => createCurrentActiveModel(`${provider}-active`),
-      },
-    }),
-  });
+  const { service } = createTestService({ sessions });
 
   assert.equal(service.setSessionModel('claude', 'missing-session', 'opus'), null);
   assert.equal(sessions.sessions.size, 0);
 });
 
-test('resolveSessionModel prefers the recorded session model over everything else', async () => {
-  const service = createProviderModelsService({
-    sessions: createSessionStore({ 'session-1': 'haiku' }),
-    resolveProvider: (provider) => ({
-      models: {
-        getSupportedModels: async () => createModels(`${provider}-models`),
-        getCurrentActiveModel: async () => createCurrentActiveModel('provider-reported'),
-      },
-    }),
+test('setSessionEffort records an explicit effort on the session row', () => {
+  const sessions = createSessionStore({ 'session-1': 'gpt-5.6-sol' });
+  const { service } = createTestService({ sessions });
+
+  const stored = service.setSessionEffort('codex', 'session-1', 'ultra');
+
+  assert.deepEqual(stored, {
+    provider: 'codex',
+    sessionId: 'session-1',
+    effort: 'ultra',
+    source: 'session',
+  });
+  assert.equal(sessions.sessions.get('session-1')?.effort, 'ultra');
+});
+
+test('setSessionEffort ignores sessions that have no row yet', () => {
+  const sessions = createSessionStore();
+  const { service } = createTestService({ sessions });
+
+  assert.equal(service.setSessionEffort('codex', 'missing-session', 'high'), null);
+  assert.equal(sessions.sessions.size, 0);
+});
+
+test('resolveSessionModel prefers the recorded session model', async () => {
+  const { service } = createTestService({
+    sessions: createSessionStore({ 'session-1': 'haiku' }, { 'session-1': 'high' }),
+    activeModel: () => 'provider-reported',
   });
 
   const resolved = await service.resolveSessionModel('claude', {
@@ -333,18 +275,14 @@ test('resolveSessionModel prefers the recorded session model over everything els
   });
 
   assert.equal(resolved.model, 'haiku');
+  assert.equal(resolved.effort, 'high');
   assert.equal(resolved.source, 'session');
 });
 
-test('resolveSessionModel falls back to provider session state for sessions the app never recorded', async () => {
-  const service = createProviderModelsService({
+test('resolveSessionModel uses provider session state for unrecorded external sessions', async () => {
+  const { service } = createTestService({
     sessions: createSessionStore({ 'session-1': null }),
-    resolveProvider: (provider) => ({
-      models: {
-        getSupportedModels: async () => createModels(`${provider}-models`),
-        getCurrentActiveModel: async () => createCurrentActiveModel('provider-reported'),
-      },
-    }),
+    activeModel: () => 'provider-reported',
   });
 
   const resolved = await service.resolveSessionModel('opencode', {
@@ -356,16 +294,9 @@ test('resolveSessionModel falls back to provider session state for sessions the 
   assert.equal(resolved.source, 'provider');
 });
 
-test('resolveSessionModel uses the requested model when the provider only reports its catalog default', async () => {
-  const service = createProviderModelsService({
-    cachePath: createEphemeralCachePath(),
+test('resolveSessionModel uses the requested model when provider reports the catalog default', async () => {
+  const { service } = createTestService({
     sessions: createSessionStore({ 'session-1': null }),
-    resolveProvider: () => ({
-      models: {
-        getSupportedModels: async () => createModels('default'),
-        getCurrentActiveModel: async () => createCurrentActiveModel('default'),
-      },
-    }),
   });
 
   const resolved = await service.resolveSessionModel('claude', {
@@ -377,16 +308,8 @@ test('resolveSessionModel uses the requested model when the provider only report
   assert.equal(resolved.source, 'session');
 });
 
-test('resolveSessionModel answers with the requested model for a chat that has no session yet', async () => {
-  const service = createProviderModelsService({
-    sessions: createSessionStore(),
-    resolveProvider: (provider) => ({
-      models: {
-        getSupportedModels: async () => createModels(`${provider}-models`),
-        getCurrentActiveModel: async () => createCurrentActiveModel('provider-reported'),
-      },
-    }),
-  });
+test('resolveSessionModel returns a requested model before a session exists', async () => {
+  const { service } = createTestService();
 
   const resolved = await service.resolveSessionModel('codex', { requestedModel: 'gpt-5.5' });
 
@@ -395,52 +318,32 @@ test('resolveSessionModel answers with the requested model for a chat that has n
   assert.equal(resolved.source, 'session');
 });
 
-test('resolveSessionModel falls back to the catalog default with nothing else to go on', async () => {
-  const service = createProviderModelsService({
-    cachePath: createEphemeralCachePath(),
-    sessions: createSessionStore(),
-    resolveProvider: (provider) => ({
-      models: {
-        getSupportedModels: async () => createModels(`${provider}-models`),
-        getCurrentActiveModel: async () => createCurrentActiveModel('provider-reported'),
-      },
-    }),
-  });
+test('resolveSessionModel falls back to the provider adapter default', async () => {
+  const { service } = createTestService();
 
   const resolved = await service.resolveSessionModel('codex');
 
-  assert.equal(resolved.model, 'codex-models');
+  assert.equal(resolved.model, 'codex-default');
   assert.equal(resolved.source, 'default');
 });
 
 test('resolveResumeModel prefers the recorded session model over the requested one', async () => {
-  const service = createProviderModelsService({
+  const { service } = createTestService({
     sessions: createSessionStore({ 'session-456': 'composer-2' }),
-    resolveProvider: (provider) => ({
-      models: {
-        getSupportedModels: async () => createModels(`${provider}-models`),
-        getCurrentActiveModel: async () => createCurrentActiveModel(`${provider}-active`),
-      },
-    }),
   });
 
   const model = await service.resolveResumeModel('cursor', 'session-456', 'composer-2-fast');
   assert.equal(model, 'composer-2');
 });
 
-test('resolveResumeModel never lets provider session state override the requested model', async () => {
+test('resolveResumeModel never consults provider-global state', async () => {
   let providerLookups = 0;
-  const service = createProviderModelsService({
+  const { service } = createTestService({
     sessions: createSessionStore({ 'session-456': null }),
-    resolveProvider: (provider) => ({
-      models: {
-        getSupportedModels: async () => createModels(`${provider}-models`),
-        getCurrentActiveModel: async () => {
-          providerLookups += 1;
-          return createCurrentActiveModel('global-config-model');
-        },
-      },
-    }),
+    activeModel: () => {
+      providerLookups += 1;
+      return 'global-config-model';
+    },
   });
 
   const model = await service.resolveResumeModel('codex', 'session-456', 'gpt-5.5');

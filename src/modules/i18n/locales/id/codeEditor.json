@@ -1,0 +1,43 @@
+{
+  "toolbar": {
+    "changes": "perubahan",
+    "previousChange": "Perubahan sebelumnya",
+    "nextChange": "Perubahan berikutnya",
+    "hideDiff": "Sembunyikan penyorotan diff",
+    "showDiff": "Tampilkan penyorotan diff",
+    "settings": "Pengaturan Editor",
+    "collapse": "Ciutkan editor",
+    "expand": "Perluas editor ke lebar penuh"
+  },
+  "loading": "Memuat {{fileName}}...",
+  "header": {
+    "showingChanges": "Menampilkan perubahan"
+  },
+  "actions": {
+    "copyPath": "Salin path file",
+    "pathCopied": "Path file disalin",
+    "download": "Unduh file",
+    "save": "Simpan",
+    "saving": "Menyimpan...",
+    "saved": "Tersimpan!",
+    "exitFullscreen": "Keluar dari layar penuh",
+    "fullscreen": "Layar Penuh",
+    "close": "Tutup",
+    "previewMarkdown": "Pratinjau Markdown",
+    "editMarkdown": "Edit Markdown"
+  },
+  "footer": {
+    "lines": "Baris:",
+    "characters": "Karakter:",
+    "shortcuts": "Tekan Ctrl+S untuk menyimpan • Esc untuk menutup"
+  },
+  "binaryFile": {
+    "title": "File Biner",
+    "message": "File \"{{fileName}}\" tidak dapat ditampilkan di editor teks karena merupakan file biner."
+  },
+  "filePreview": {
+    "loading": "Memuat pratinjau...",
+    "error": "File ini tidak dapat ditampilkan.",
+    "openInNewTab": "Buka di tab baru"
+  }
+}

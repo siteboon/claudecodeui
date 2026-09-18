@@ -27,9 +27,20 @@ import type {
   ProviderCurrentActiveModel,
   ProviderModelsDefinition,
   ProviderSkillSource,
+  SubagentActivity,
   WorkspacePathValidationResult,
 } from '@/shared/types.js';
 
+//----------------- ENVIRONMENT UTILITIES ------------
+/**
+ * Indicates whether the backend is running in hosted Platform mode rather than
+ * self-hosted OSS mode. The server bootstrap, Agent, Auth, and Browser Use
+ * modules use this shared flag to keep environment-dependent behavior aligned.
+ * Environment variables must be loaded before this module is evaluated.
+ */
+export const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
+
+// ---------------------------
 //----------------- NORMALIZED MESSAGE HELPER INPUT TYPES ------------
 /**
  * Input payload accepted by `createNormalizedMessage`.
@@ -379,6 +390,45 @@ export function createCompleteMessage(opts: {
     success: exitCode === 0 && !aborted,
     aborted,
   });
+}
+
+// ---------------------------
+//----------------- SUBAGENT TIMELINE UTILITIES ------------
+/**
+ * Longest tool output kept on one subagent activity.
+ *
+ * A subagent's timeline is nested inside a collapsed panel, so it is a preview
+ * of what the agent did, never the primary place its output is read. Sending
+ * every child command's full output made the history payload of an
+ * agent-heavy session grow by megabytes for content almost nobody expands.
+ */
+const MAX_SUBAGENT_ACTIVITY_CONTENT = 4000;
+
+function truncateForPreview(value: string | undefined): string | undefined {
+  if (typeof value !== 'string' || value.length <= MAX_SUBAGENT_ACTIVITY_CONTENT) {
+    return value;
+  }
+  const omitted = value.length - MAX_SUBAGENT_ACTIVITY_CONTENT;
+  return `${value.slice(0, MAX_SUBAGENT_ACTIVITY_CONTENT)}\n… ${omitted} more characters`;
+}
+
+/**
+ * Trims one subagent activity down to what its nested preview can show.
+ *
+ * Used by both provider session adapters so a Claude agent's timeline and a
+ * Codex agent's timeline cost the same to transport.
+ */
+export function truncateSubagentActivity(activity: SubagentActivity): SubagentActivity {
+  const truncatedContent = truncateForPreview(activity.content);
+  const truncatedResult = activity.toolResult
+    ? { ...activity.toolResult, content: truncateForPreview(activity.toolResult.content) }
+    : activity.toolResult;
+
+  if (truncatedContent === activity.content && truncatedResult === activity.toolResult) {
+    return activity;
+  }
+
+  return { ...activity, content: truncatedContent, toolResult: truncatedResult };
 }
 
 // ---------------------------
@@ -1077,6 +1127,35 @@ export function flattenPromptForWindowsShell(prompt: string): string {
 
 // ---------------------------
 //----------------- TERMINAL OUTPUT UTILITIES ------------
+/**
+ * Matches the escape sequences a CLI emits when it believes it is writing to a
+ * terminal, in the three shapes those tools actually produce:
+ * - OSC (`ESC ]` … terminated by BEL or ST), used for titles and hyperlinks.
+ * - CSI (`ESC [`, or the 8-bit `\u009B` introducer that stands in for both
+ *   bytes), used for SGR colors and cursor control.
+ * - any other ECMA-48 escape sequence: `ESC`, optional intermediate bytes
+ *   (`0x20`-`0x2F`), one final byte (`0x30`-`0x7E`), such as `ESC ( B`.
+ *
+ * OSC and CSI are listed first so their terminators are consumed by the
+ * specific alternative rather than by the generic one.
+ */
+const ANSI_ESCAPE_SEQUENCE_REGEX =
+  /\u001B\][^\u0007\u001B]*(?:\u0007|\u001B\\)|(?:\u001B\[|\u009B)[0-?]*[ -/]*[@-~]|\u001B[ -/]*[0-~]/g;
+
+/**
+ * Removes ANSI escape sequences from text captured off a CLI's stdout or
+ * stderr. Provider runtimes, session readers, and the shell WebSocket share
+ * this because every one of them forwards captured process output to a web
+ * client that renders plain text: left in, the escapes show up verbatim
+ * (`[93m[1m!`) instead of as styling.
+ *
+ * The result can be empty when the input was styling only, so callers that
+ * forward the text should re-check for emptiness after cleaning.
+ */
+export function stripAnsiSequences(value: string): string {
+  return value.replace(ANSI_ESCAPE_SEQUENCE_REGEX, '');
+}
+
 const ANSI_TERMINAL_STYLES = {
   reset: '\x1b[0m',
   bright: '\x1b[1m',

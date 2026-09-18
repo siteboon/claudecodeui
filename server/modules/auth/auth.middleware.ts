@@ -1,9 +1,9 @@
 // @ts-nocheck -- JWT request augmentation is narrowed by Auth route contracts.
 import jwt from 'jsonwebtoken';
 
-import { userDb, appConfigDb } from '../database/index.js';
+import { IS_PLATFORM } from '@/shared/utils.js';
 
-const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
+import { userDb, appConfigDb } from '../database/index.js';
 
 export const AUTH_TOKEN_GENERATION_KEY = 'auth_token_generation';
 

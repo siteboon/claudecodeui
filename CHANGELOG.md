@@ -3,6 +3,57 @@
 All notable changes to CloudCLI UI will be documented in this file.
 
 
+## [1.37.3](https://github.com/siteboon/claudecodeui/compare/v1.37.2...v1.37.3) (2026-09-08)
+
+### New Features
+
+* **chat:** recall sent messages with arrow keys in the composer ([#1238](https://github.com/siteboon/claudecodeui/issues/1238)) ([8f9a2e4](https://github.com/siteboon/claudecodeui/commit/8f9a2e43859821e9c41e4d90b8d16707f47927de))
+* **chat:** unify provider workflows and improve transcript performance ([#1206](https://github.com/siteboon/claudecodeui/issues/1206)) ([99ea052](https://github.com/siteboon/claudecodeui/commit/99ea05259554c166fccab9e20dcf902f435fa54d))
+* **codex:** expose GPT-6 Astra model ([#1289](https://github.com/siteboon/claudecodeui/issues/1289)) ([4e1190c](https://github.com/siteboon/claudecodeui/commit/4e1190ccec899aebeac898409e5cbd32e0cde647))
+* **i18n:** connect remaining hardcoded UI strings to translations ([#1192](https://github.com/siteboon/claudecodeui/issues/1192)) ([5af0990](https://github.com/siteboon/claudecodeui/commit/5af0990386953e00b71c72d326e25b874d30a800))
+* **sidebar:** draw a Conversations row the way a Projects row is drawn ([#1157](https://github.com/siteboon/claudecodeui/issues/1157)) ([7015ffc](https://github.com/siteboon/claudecodeui/commit/7015ffc8447b2de228f3d942585d29f4a9aeb955)), closes [#1206](https://github.com/siteboon/claudecodeui/issues/1206)
+
+### Bug Fixes
+
+* **agent:** read the model catalog's own shape, not a wrapper ([#1159](https://github.com/siteboon/claudecodeui/issues/1159)) ([25ddd76](https://github.com/siteboon/claudecodeui/commit/25ddd76820b5147a46d5b08d53f5d1f31e14d35a))
+* **chat:** keep an option label containing ", " as one answer ([#1249](https://github.com/siteboon/claudecodeui/issues/1249)) ([61af329](https://github.com/siteboon/claudecodeui/commit/61af3295441581ecc7be70579af95fc046931a68))
+* **claude:** ignore <synthetic> model placeholder when resolving session model ([#1207](https://github.com/siteboon/claudecodeui/issues/1207)) ([7b52e3c](https://github.com/siteboon/claudecodeui/commit/7b52e3ce1c8f0069f3f501bf56ad73b55f9bc7da))
+* **editor:** syntax highlighting for .mts, .cts, .mjs and .cjs ([#1223](https://github.com/siteboon/claudecodeui/issues/1223)) ([aa2755b](https://github.com/siteboon/claudecodeui/commit/aa2755b852965b27e764f42120062966f9916502))
+* **i18n:** add missing delete-dialog archive keys to all locales ([#1162](https://github.com/siteboon/claudecodeui/issues/1162)) ([1c61dc3](https://github.com/siteboon/claudecodeui/commit/1c61dc302ed556b5455255e6e1726eb2ab12e853))
+* npm release it and README ([d27062e](https://github.com/siteboon/claudecodeui/commit/d27062ed2927d048195b88fa5bf54dc520bba49c))
+* npm release-it and README ([125a293](https://github.com/siteboon/claudecodeui/commit/125a293f2a9315e1e60cc8805fa4d007fee7f7d7))
+* **opencode:** list OpenCode Go models with reasoning variants ([#1265](https://github.com/siteboon/claudecodeui/issues/1265)) ([b7320c9](https://github.com/siteboon/claudecodeui/commit/b7320c91d197ef64d505312797cd5f7b21f5d705)), closes [#840](https://github.com/siteboon/claudecodeui/issues/840)
+* **release:** expose npm publish failures ([#1271](https://github.com/siteboon/claudecodeui/issues/1271)) ([46973fc](https://github.com/siteboon/claudecodeui/commit/46973fc962e63ed31983689e50fe75f921745cda))
+* **scheduled-messages:** interrupt a busy run instead of failing to send ([#1239](https://github.com/siteboon/claudecodeui/issues/1239)) ([c1be241](https://github.com/siteboon/claudecodeui/commit/c1be241bc41586478f3d15f4dc6a5a6399d40aa1))
+* **sessions:** keep an archived session archived across a rescan ([#1220](https://github.com/siteboon/claudecodeui/issues/1220)) ([bfe7c49](https://github.com/siteboon/claudecodeui/commit/bfe7c495792b21f027f057f555c39e2edb24d095))
+* **skills:** a plugin that ships commands keeps its skills too ([#1274](https://github.com/siteboon/claudecodeui/issues/1274)) ([b6083e0](https://github.com/siteboon/claudecodeui/commit/b6083e0bc84ea5d8063191a057c52b0f4b0088c9)), closes [#1273](https://github.com/siteboon/claudecodeui/issues/1273)
+
+## [1.37.2](https://github.com/siteboon/claudecodeui/compare/v1.37.1...v1.37.2) (2026-08-18)
+
+### Bug Fixes
+
+* improve chat view and resolve bandwidth issue ([#1153](https://github.com/siteboon/claudecodeui/issues/1153)) ([0a2ad34](https://github.com/siteboon/claudecodeui/commit/0a2ad34365b7f01dcd01b87fe3f856844c0dc531))
+* introduce fallback for update build failures ([0d51774](https://github.com/siteboon/claudecodeui/commit/0d5177491215c1c2a53ad23a30f7deec8de2e1af))
+
+## [1.37.1](https://github.com/siteboon/claudecodeui/compare/v1.37.0...v1.37.1) (2026-08-13)
+
+### New Features
+
+* add provider session ID copy actions ([#1040](https://github.com/siteboon/claudecodeui/issues/1040)) ([428b105](https://github.com/siteboon/claudecodeui/commit/428b1052be3bb28611d2ef3fcd29cec5a9ca1397))
+* **i18n:** add complete Spanish (es) translation ([#1090](https://github.com/siteboon/claudecodeui/issues/1090)) ([5fa87dd](https://github.com/siteboon/claudecodeui/commit/5fa87ddaf7c1c06c33c34f48a462743aa3877edf))
+* **i18n:** complete Korean (ko) translation ([#997](https://github.com/siteboon/claudecodeui/issues/997)) ([59472c0](https://github.com/siteboon/claudecodeui/commit/59472c075eb2f28a48df9d9eff659ad823d31bd2))
+* **plugins:** recommend Codex Usage plugin ([#1114](https://github.com/siteboon/claudecodeui/issues/1114)) ([ca92373](https://github.com/siteboon/claudecodeui/commit/ca92373dfead92f7f777093e72e9a118a97ff97a))
+* **sidebar:** add recent conversation feed ([#1041](https://github.com/siteboon/claudecodeui/issues/1041)) ([015e892](https://github.com/siteboon/claudecodeui/commit/015e892c75e29b1771399691dbca3c8b466fa0b1))
+
+### Bug Fixes
+
+* **claude:** remove dead CLAUDE_CODE_STREAM_CLOSE_TIMEOUT workaround ([#1115](https://github.com/siteboon/claudecodeui/issues/1115)) ([ef3f798](https://github.com/siteboon/claudecodeui/commit/ef3f7980db15c89761c3a1aad8b608fff33789ad))
+* don't recurse into system directories when building file trees ([#1074](https://github.com/siteboon/claudecodeui/issues/1074)) ([753a8c0](https://github.com/siteboon/claudecodeui/commit/753a8c0422685bafd4e878c44726f727357a3fb5))
+* resolve @/ path aliases so the server test suite can load ([#1084](https://github.com/siteboon/claudecodeui/issues/1084)) ([74d3f8f](https://github.com/siteboon/claudecodeui/commit/74d3f8ffff6f315d2f2ceb240512aeb2d8b40464))
+* **search:** match Claude transcripts by provider_session_id ([#1078](https://github.com/siteboon/claudecodeui/issues/1078)) ([9507694](https://github.com/siteboon/claudecodeui/commit/95076941533dc14f04d83917e1e7c04229e664c1))
+* tolerate client clock skew before treating an auth token as expired ([#1085](https://github.com/siteboon/claudecodeui/issues/1085)) ([f0dca2d](https://github.com/siteboon/claudecodeui/commit/f0dca2d5e79c225f599e697bf9b55e839b152b78))
+* update stale Sonnet 4.6 labels to Sonnet 5 in the Claude model picker ([#1036](https://github.com/siteboon/claudecodeui/issues/1036)) ([c2408f0](https://github.com/siteboon/claudecodeui/commit/c2408f0fc331fb267fdc9def954e55f71d019302))
+
 ## [1.37.0](https://github.com/siteboon/claudecodeui/compare/v1.36.3...v1.37.0) (2026-07-29)
 
 ### New Features

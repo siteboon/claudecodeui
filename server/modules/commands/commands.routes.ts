@@ -63,14 +63,15 @@ const resolveCommandModel = async (modelsService, provider, context) => {
 
 const executeModelsCommand = async (args, context, modelsService) => {
   const currentProvider = readModelProvider(context?.provider);
-  const result = await modelsService.getProviderModels(currentProvider);
-  const catalog = result.models;
+  const catalog = await modelsService.getProviderModels(currentProvider);
   const currentModel = await resolveCommandModel(modelsService, currentProvider, context);
   const availableModels = catalog.OPTIONS.map((option) => option.value);
   const availableOptions = catalog.OPTIONS.map((option) => ({
     value: option.value,
     label: option.label,
     description: option.description,
+    recordId: option.recordId,
+    isCustom: option.isCustom,
   }));
 
   return {
@@ -88,7 +89,6 @@ const executeModelsCommand = async (args, context, modelsService) => {
       availableModels,
       availableOptions,
       defaultModel: catalog.DEFAULT,
-      cache: result.cache,
       message: `Current model: ${currentModel}`,
     },
   };

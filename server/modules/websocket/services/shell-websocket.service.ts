@@ -5,7 +5,7 @@ import path from 'node:path';
 import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
-import { parseIncomingJsonObject } from '@/shared/utils.js';
+import { parseIncomingJsonObject, stripAnsiSequences } from '@/shared/utils.js';
 
 type ShellIncomingMessage = {
   type?: string;
@@ -19,6 +19,7 @@ type ShellIncomingMessage = {
   initialCommand?: string;
   isPlainShell?: boolean;
   forceRestart?: boolean;
+  bypassPermissions?: boolean;
 };
 
 type PtySessionEntry = {
@@ -33,12 +34,7 @@ type PtySessionEntry = {
 const ptySessionsMap = new Map<string, PtySessionEntry>();
 const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
 const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
-const ANSI_ESCAPE_SEQUENCE_REGEX = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1B\\))/g;
 const TRAILING_URL_PUNCTUATION_REGEX = /[)\]}>.,;:!?]+$/;
-
-function stripAnsiSequences(value: string): string {
-  return value.replace(ANSI_ESCAPE_SEQUENCE_REGEX, '');
-}
 
 function normalizeDetectedUrl(url: string): string | null {
   const cleanedUrl = url.trim().replace(TRAILING_URL_PUNCTUATION_REGEX, '');
@@ -216,12 +212,18 @@ function buildShellCommand(
     return initialCommand || 'opencode';
   }
 
-  const command = initialCommand || 'claude';
+  // Launching with the flag is what unlocks "bypass permissions" in the CLI's
+  // shift+tab permission-mode cycle; it cannot be enabled from inside a
+  // session started without it.
+  const bypassFlag = readBoolean(message.bypassPermissions)
+    ? ' --dangerously-skip-permissions'
+    : '';
+  const command = initialCommand || `claude${bypassFlag}`;
   if (resumeSessionId) {
     if (os.platform() === 'win32') {
-      return `claude --resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { claude }`;
+      return `claude --resume "${resumeSessionId}"${bypassFlag}; if ($LASTEXITCODE -ne 0) { claude${bypassFlag} }`;
     }
-    return `claude --resume "${resumeSessionId}" || claude`;
+    return `claude --resume "${resumeSessionId}"${bypassFlag} || claude${bypassFlag}`;
   }
   return command;
 }
