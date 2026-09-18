@@ -51,6 +51,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     setProjectSortOrder,
     codeEditorSettings,
     updateCodeEditorSetting,
+    chatDisplaySettings,
+    updateChatDisplaySetting,
     claudePermissions,
     setClaudePermissions,
     notificationPreferences,
@@ -173,6 +175,9 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
                 <AppearanceSettingsTab
                   projectSortOrder={projectSortOrder}
                   onProjectSortOrderChange={setProjectSortOrder}
+                  chatDisplaySettings={chatDisplaySettings}
+                  onChatWidthChange={(value) => updateChatDisplaySetting('width', value)}
+                  onChatFontSizeChange={(value) => updateChatDisplaySetting('fontSize', value)}
                   codeEditorSettings={codeEditorSettings}
                   onCodeEditorWordWrapChange={(value) => updateCodeEditorSetting('wordWrap', value)}
                   onCodeEditorShowMinimapChange={(value) => updateCodeEditorSetting('showMinimap', value)}

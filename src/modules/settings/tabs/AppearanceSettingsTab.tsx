@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 
 import { DarkModeToggle } from '@/shared/ui';
-import type { CodeEditorSettingsState, ProjectSortOrder } from '@/shared/types';
+import type { ChatDisplaySettingsState, ChatPaneWidth, CodeEditorSettingsState, ProjectSortOrder } from '@/shared/types';
 import { LanguageSelector } from '@/modules/i18n';
 import SettingsCard from '@/modules/settings/SettingsCard';
 import SettingsRow from '@/modules/settings/SettingsRow';
@@ -11,6 +11,9 @@ import SettingsToggle from '@/modules/settings/SettingsToggle';
 type AppearanceSettingsTabProps = {
   projectSortOrder: ProjectSortOrder;
   onProjectSortOrderChange: (value: ProjectSortOrder) => void;
+  chatDisplaySettings: ChatDisplaySettingsState;
+  onChatWidthChange: (value: ChatPaneWidth) => void;
+  onChatFontSizeChange: (value: string) => void;
   codeEditorSettings: CodeEditorSettingsState;
   onCodeEditorWordWrapChange: (value: boolean) => void;
   onCodeEditorShowMinimapChange: (value: boolean) => void;
@@ -22,6 +25,9 @@ type AppearanceSettingsTabProps = {
 export default function AppearanceSettingsTab({
   projectSortOrder,
   onProjectSortOrderChange,
+  chatDisplaySettings,
+  onChatWidthChange,
+  onChatFontSizeChange,
   codeEditorSettings,
   onCodeEditorWordWrapChange,
   onCodeEditorShowMinimapChange,
@@ -62,6 +68,44 @@ export default function AppearanceSettingsTab({
             >
               <option value="name">{t('appearanceSettings.projectSorting.alphabetical')}</option>
               <option value="date">{t('appearanceSettings.projectSorting.recentActivity')}</option>
+            </select>
+          </SettingsRow>
+        </SettingsCard>
+      </SettingsSection>
+
+      <SettingsSection title={t('appearanceSettings.chat.title')}>
+        <SettingsCard divided>
+          <SettingsRow
+            label={t('appearanceSettings.chat.width.label')}
+            description={t('appearanceSettings.chat.width.description')}
+          >
+            <select
+              value={chatDisplaySettings.width}
+              onChange={(event) => onChatWidthChange(event.target.value as ChatPaneWidth)}
+              className="w-full touch-manipulation rounded-lg border border-input bg-card p-2.5 text-sm text-foreground focus:border-primary focus:ring-1 focus:ring-primary sm:w-36"
+            >
+              <option value="narrow">{t('appearanceSettings.chat.width.narrow')}</option>
+              <option value="normal">{t('appearanceSettings.chat.width.normal')}</option>
+              <option value="wide">{t('appearanceSettings.chat.width.wide')}</option>
+            </select>
+          </SettingsRow>
+
+          <SettingsRow
+            label={t('appearanceSettings.chat.fontSize.label')}
+            description={t('appearanceSettings.chat.fontSize.description')}
+          >
+            <select
+              value={chatDisplaySettings.fontSize}
+              onChange={(event) => onChatFontSizeChange(event.target.value)}
+              className="w-full touch-manipulation rounded-lg border border-input bg-card p-2.5 text-sm text-foreground focus:border-primary focus:ring-1 focus:ring-primary sm:w-28"
+            >
+              <option value="12">12px</option>
+              <option value="13">13px</option>
+              <option value="14">14px</option>
+              <option value="15">15px</option>
+              <option value="16">16px</option>
+              <option value="18">18px</option>
+              <option value="20">20px</option>
             </select>
           </SettingsRow>
         </SettingsCard>

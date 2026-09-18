@@ -588,6 +588,41 @@
     clip-path: inset(-8px -8px 0 -8px);
   }
 
+  /*
+   * The transcript's text size, as a ratio the reader chooses in settings.
+   *
+   * It cannot be done by setting a font-size on the column: every size in the
+   * pane comes from a Tailwind utility in `rem`, which resolves against the
+   * document root and ignores any ancestor. So the handful of utilities the
+   * transcript actually uses are re-declared here, multiplied through
+   * `--chat-font-scale`, which defaults to 1 — the transcript exactly as it
+   * was. A utility added later simply will not scale until it is listed here.
+   */
+  .chat-transcript {
+    font-size: calc(1rem * var(--chat-font-scale, 1));
+  }
+
+  .chat-transcript .prose-sm,
+  .chat-transcript .text-sm {
+    font-size: calc(0.875rem * var(--chat-font-scale, 1));
+  }
+
+  .chat-transcript .text-xs {
+    font-size: calc(0.75rem * var(--chat-font-scale, 1));
+  }
+
+  .chat-transcript .text-base {
+    font-size: calc(1rem * var(--chat-font-scale, 1));
+  }
+
+  .chat-transcript .text-\[11px\] {
+    font-size: calc(11px * var(--chat-font-scale, 1));
+  }
+
+  .chat-transcript .text-\[10px\] {
+    font-size: calc(10px * var(--chat-font-scale, 1));
+  }
+
   .chat-message {
     contain: layout style paint;
     content-visibility: auto;

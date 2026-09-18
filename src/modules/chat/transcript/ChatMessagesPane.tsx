@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { memo, useCallback, useMemo } from 'react';
-import type { Dispatch, RefObject, SetStateAction } from 'react';
+import type { CSSProperties, Dispatch, RefObject, SetStateAction } from 'react';
 
 import type { ChatMessage,
   Project,
@@ -11,6 +11,7 @@ import type { ChatMessage,
 import { getIntrinsicMessageKey } from '@/modules/chat/utils/messageKeys';
 import { groupConsecutiveTools, isToolGroupItem } from '@/modules/chat/utils/toolGrouping';
 import { computeTurnDurations } from '@/modules/chat/utils/turnDurations';
+import { useChatDisplaySettings } from '@/modules/chat/hooks/useChatDisplaySettings';
 import { useLazyRowObserver } from '@/modules/chat/hooks/useLazyRowObserver';
 import LazyMessageRow from '@/modules/chat/transcript/LazyMessageRow';
 import MessageComponent from '@/modules/chat/transcript/MessageComponent';
@@ -129,6 +130,7 @@ function ChatMessagesPane({
 }: ChatMessagesPaneProps) {
   const { t } = useTranslation('chat');
   const lazyRows = useLazyRowObserver(scrollContainerRef);
+  const { widthClass, fontScale } = useChatDisplaySettings();
   const groupedVisibleMessages = useMemo(
     () => groupConsecutiveTools(visibleMessages, Boolean(showThinking)),
     [visibleMessages, showThinking],
@@ -198,7 +200,14 @@ function ChatMessagesPane({
           </div>
         </div>
       )}
-      <div className="mx-auto w-full max-w-[54.25rem] space-y-3 px-4 sm:space-y-4">
+      {/* The column the transcript reads in: its width is a setting, and
+          `--chat-font-scale` is what the scoped rules in index.css multiply the
+          pane's text sizes by. Both live on this inner element rather than on
+          the scroll container, so nothing here changes how scrolling measures. */}
+      <div
+        className={`chat-transcript mx-auto w-full ${widthClass} space-y-3 px-4 sm:space-y-4`}
+        style={{ '--chat-font-scale': fontScale } as CSSProperties}
+      >
       {(isLoadingSessionMessages || isProcessing) && chatMessages.length === 0 ? (
         <div className="mt-8 text-center text-gray-500 dark:text-gray-400">
           <div className="flex items-center justify-center space-x-2">

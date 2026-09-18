@@ -26,6 +26,7 @@ export type UserPreferences = {
   codexPermissions: unknown;
   opencodePermissions: unknown;
   codeEditorSettings: unknown;
+  chatDisplaySettings: unknown;
   uiPreferences: unknown;
   selectedProvider: string;
 };
@@ -65,6 +66,9 @@ const LEGACY_STORAGE_KEYS: Record<UserPreferenceKey, string> = {
   // Unused: the four code-editor settings never shared one key, so they are
   // read by readLegacyCodeEditorSettings instead.
   codeEditorSettings: '',
+  // Unused: the chat display settings are new, so there is no local value to
+  // carry forward — they start from CHAT_DISPLAY_DEFAULTS.
+  chatDisplaySettings: '',
   uiPreferences: 'uiPreferences',
   selectedProvider: 'selected-provider',
 };

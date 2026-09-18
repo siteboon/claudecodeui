@@ -7,12 +7,13 @@ import {
   readCodeEditorSettings,
   writeCodeEditorSettings,
 } from '@/shared/codeEditorSettings';
+import { readChatDisplaySettings, writeChatDisplaySettings } from '@/shared/chatDisplaySettings';
 import {
   readUserPreference,
   writeUserPreferences,
 } from '@/shared/userSettings';
 import { useProviderAuthStatus } from '@/modules/provider-auth';
-import type { AgentProvider, ClaudePermissionsState, CodeEditorSettingsState, CodexPermissionMode, CursorPermissionsState, NotificationPreferencesState, ProjectSortOrder, SettingsMainTab } from '@/shared/types';
+import type { AgentProvider, ChatDisplaySettingsState, ClaudePermissionsState, CodeEditorSettingsState, CodexPermissionMode, CursorPermissionsState, NotificationPreferencesState, ProjectSortOrder, SettingsMainTab } from '@/shared/types';
 
 const DEFAULT_CURSOR_PERMISSIONS: CursorPermissionsState = {
   allowedCommands: [],
@@ -136,6 +137,9 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
   const [codeEditorSettings, setCodeEditorSettings] = useState<CodeEditorSettingsState>(() => (
     readCodeEditorSettings()
   ));
+  const [chatDisplaySettings, setChatDisplaySettings] = useState<ChatDisplaySettingsState>(
+    readChatDisplaySettings,
+  );
 
   const [claudePermissions, setClaudePermissions] = useState<ClaudePermissionsState>(() => (
     createEmptyClaudePermissions()
@@ -294,6 +298,16 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     [],
   );
 
+  /** Same shape, same reason: merged from storage so two edits in one React batch cannot overwrite each other. */
+  const updateChatDisplaySetting = useCallback(
+    <K extends keyof ChatDisplaySettingsState>(key: K, value: ChatDisplaySettingsState[K]) => {
+      const next = { ...readChatDisplaySettings(), [key]: value };
+      setChatDisplaySettings(next);
+      writeChatDisplaySettings(next);
+    },
+    [],
+  );
+
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -372,6 +386,8 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     setProjectSortOrder,
     codeEditorSettings,
     updateCodeEditorSetting,
+    chatDisplaySettings,
+    updateChatDisplaySetting,
     claudePermissions,
     setClaudePermissions,
     cursorPermissions,

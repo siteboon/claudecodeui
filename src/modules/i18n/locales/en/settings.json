@@ -179,6 +179,20 @@
         "label": "Font Size",
         "description": "Editor font size in pixels"
       }
+    },
+    "chat": {
+      "title": "Chat",
+      "width": {
+        "label": "Message width",
+        "description": "How wide the transcript column is allowed to grow.",
+        "narrow": "Narrow",
+        "normal": "Normal",
+        "wide": "Wide"
+      },
+      "fontSize": {
+        "label": "Font size",
+        "description": "Text size in the transcript, including tool cards and code."
+      }
     }
   },
   "mcpForm": {

@@ -1276,6 +1276,16 @@ export type CursorPermissionsState = {
   skipPermissions: boolean;
 };
 
+/** How wide the chat transcript's column is allowed to grow. */
+export type ChatPaneWidth = 'narrow' | 'normal' | 'wide';
+
+/** The chat transcript's display preferences (column width and text size), stored together as one server-backed `chatDisplaySettings` preference. */
+export type ChatDisplaySettingsState = {
+  width: ChatPaneWidth;
+  /** Kept a string because the settings dialog binds it to a select; the pane turns it into a ratio. */
+  fontSize: string;
+};
+
 /** The code editor display preferences shown in the appearance tab (word wrap, minimap, line numbers and font size), stored together as one server-backed `codeEditorSettings` preference. */
 export type CodeEditorSettingsState = {
   wordWrap: boolean;

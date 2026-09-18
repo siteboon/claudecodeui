@@ -202,6 +202,46 @@ export const CODE_EDITOR_DEFAULTS = {
 
 // ---------------------------
 
+//----------------- CHAT DISPLAY SETTINGS ------------
+
+/**
+ * Values applied when a chat display setting has never been written.
+ *
+ * `normal` is the width the transcript has always had, and `14` the size its
+ * body text renders at, so an install that never opens the settings dialog
+ * looks exactly as it did.
+ */
+export const CHAT_DISPLAY_DEFAULTS = {
+  width: 'normal',
+  fontSize: '14',
+} as const;
+
+/**
+ * The column widths offered, as literal Tailwind classes so the scanner sees
+ * them.
+ *
+ * Presets rather than a free number: `normal` is ~90 characters a line, which
+ * is where prose stops being comfortable, and `wide` stops well short of a
+ * 27-inch monitor for the same reason. A slider would let someone pick a line
+ * length no one can read.
+ */
+export const CHAT_WIDTH_CLASSES = {
+  narrow: 'max-w-[44rem]',
+  normal: 'max-w-[54.25rem]',
+  wide: 'max-w-[68rem]',
+} as const;
+
+/**
+ * The size the transcript's body text renders at today. The chosen size is
+ * applied as a ratio against this, so every text in the pane — bubbles, tool
+ * cards, code — moves together instead of only the parts that happen to
+ * inherit.
+ */
+export const CHAT_BASE_FONT_SIZE = 14;
+
+
+// ---------------------------
+
 //----------------- PROVIDER TOOL SETTINGS STORAGE ------------
 
 /**
