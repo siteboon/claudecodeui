@@ -338,9 +338,12 @@ export function installPluginFromGit(url) {
 
       // Run npm install if package.json exists.
       // --ignore-scripts prevents postinstall hooks from executing arbitrary code.
+      // --include=dev is required: the server runs with NODE_ENV=production,
+      // which makes npm omit devDependencies by default — and plugins need
+      // them (typescript, vite, etc.) for the `npm run build` below.
       const packageJsonPath = path.join(tempDir, 'package.json');
       if (fs.existsSync(packageJsonPath)) {
-        const npmProcess = spawn('npm', ['install', '--ignore-scripts'], {
+        const npmProcess = spawn('npm', ['install', '--ignore-scripts', '--include=dev'], {
           cwd: tempDir,
           stdio: ['ignore', 'pipe', 'pipe'],
         });
@@ -404,10 +407,12 @@ export function updatePluginFromGit(name) {
         return reject(new Error(`Invalid manifest after update: ${validation.error}`));
       }
 
-      // Re-run npm install if package.json exists
+      // Re-run npm install if package.json exists.
+      // --include=dev: see installPluginFromGit — NODE_ENV=production makes
+      // npm omit devDependencies, breaking the build step below.
       const packageJsonPath = path.join(pluginDir, 'package.json');
       if (fs.existsSync(packageJsonPath)) {
-        const npmProcess = spawn('npm', ['install', '--ignore-scripts'], {
+        const npmProcess = spawn('npm', ['install', '--ignore-scripts', '--include=dev'], {
           cwd: pluginDir,
           stdio: ['ignore', 'pipe', 'pipe'],
         });
