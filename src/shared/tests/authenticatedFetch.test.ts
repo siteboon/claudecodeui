@@ -170,6 +170,62 @@ test('an auth error on the response ends the session', async () => {
   assert.equal(localStorage.getItem('auth-token'), null);
 });
 
+test('a request that carried no token does not end the session', async () => {
+  // The server answers an unauthenticated request with the same X-Auth-Error
+  // it uses to reject a bad token. Acting on that signed the user out over a
+  // call that never claimed to be signed in - one going out before the token
+  // was in place was enough to throw a live session away.
+  let expiries = 0;
+  const onExpired = () => {
+    expiries += 1;
+  };
+  window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, onExpired);
+  respondWith({ 'X-Auth-Error': 'invalid' });
+
+  await (await loadFetch(false))('/api/projects');
+
+  window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, onExpired);
+  assert.equal(expiries, 0, 'nothing was rejected, so nothing may be cleared');
+});
+
+test('a stored token that was never sent does not end the session', async () => {
+  // Platform mode authenticates by other means and omits the header, so the
+  // token sitting in storage says nothing about this request.
+  localStorage.setItem('auth-token', liveToken());
+  let expiries = 0;
+  const onExpired = () => {
+    expiries += 1;
+  };
+  window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, onExpired);
+  respondWith({ 'X-Auth-Error': 'invalid' });
+
+  await (await loadFetch(true))('/api/projects');
+
+  window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, onExpired);
+  assert.equal(expiries, 0, 'the header was never sent, so it was never refused');
+  assert.notEqual(localStorage.getItem('auth-token'), null);
+});
+
+test('a caller that sends its own authorization keeps the stored token', async () => {
+  // The rejection belongs to whatever credential the caller supplied.
+  const stored = liveToken();
+  localStorage.setItem('auth-token', stored);
+  let expiries = 0;
+  const onExpired = () => {
+    expiries += 1;
+  };
+  window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, onExpired);
+  respondWith({ 'X-Auth-Error': 'invalid' });
+
+  await (await loadFetch(false))('/api/voice/transcribe', {
+    headers: { Authorization: 'Bearer someone-elses-key' },
+  });
+
+  window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, onExpired);
+  assert.equal(expiries, 0);
+  assert.equal(localStorage.getItem('auth-token'), stored);
+});
+
 test('an ordinary response leaves the stored token alone', async () => {
   const token = liveToken();
   localStorage.setItem('auth-token', token);
