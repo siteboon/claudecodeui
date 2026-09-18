@@ -3,9 +3,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: cloudcli
+    container_name: cloudcli-server
     ports:
-      - "127.0.0.1:3001:3001"
+      - "8082:3001"
     environment:
       NODE_ENV: production
       SERVER_PORT: 3001
@@ -16,7 +16,6 @@ services:
       - cloudcli_home:/home/nodejs
       - cloudcli_projects:/workspace
     restart: unless-stopped
-    # Inherit the image's Node-based /health probe.
 
 volumes:
   cloudcli_data:
