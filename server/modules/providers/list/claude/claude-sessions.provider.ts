@@ -352,7 +352,12 @@ async function readTranscriptRows(jsonlPath: string, providerSessionId: string):
 
 /** True for a row the user typed, as opposed to a tool result or an injected note. */
 function isUserPromptRow(row: AnyRecord): boolean {
-  if (row.type !== 'user' || row.isMeta === true || row.isCompactSummary === true) {
+  if (
+    row.type !== 'user'
+    || row.isMeta === true
+    || row.isCompactSummary === true
+    || isInjectedUserTurn(row)
+  ) {
     return false;
   }
 
@@ -577,12 +582,10 @@ async function getSessionMessages(
  *   (`<local-command-stdout>...`) should be remapped into normal chat messages
  *   instead of being discarded as internal content
  *
- * Skill bodies belong in the first group. When a skill is invoked, Claude
- * injects the entire SKILL.md as a synthetic user turn. Persisted transcripts
- * tag it `isMeta: true`, but the live SDK stream does not, so without a
- * content-level check the same payload renders as a huge user bubble during the
- * run and then vanishes on reload. The skill is already represented by the
- * `Skill` tool call, so it is never user-visible content.
+ * Skill bodies belong in the first group, but `isInjectedUserTurn` is what
+ * matches them now. The skill prefix below is kept only as a fallback for
+ * transcripts written before the markers existed; the other three banners have
+ * no marker of their own and this list is the only thing that hides them.
  */
 const INTERNAL_CONTENT_PREFIXES = [
   '<system-reminder>',
@@ -593,6 +596,33 @@ const INTERNAL_CONTENT_PREFIXES = [
 
 function isInternalContent(content: string): boolean {
   return INTERNAL_CONTENT_PREFIXES.some((prefix) => content.startsWith(prefix));
+}
+
+/**
+ * True for a user turn Claude injected on its own behalf rather than one the
+ * user sent — today, the skill body loaded by a `Skill` call.
+ *
+ * Invoking a skill injects the whole SKILL.md as a synthetic user turn. The
+ * skill is already represented by its `Skill` tool card, so the body is never
+ * user-visible content; left in, it renders as a bubble thousands of characters
+ * long.
+ *
+ * This used to be guessed from the text, by matching the prefix
+ * `Base directory for this skill:`. That line is only emitted for skills that
+ * have a base directory: `workflow-authoring` opens with
+ * `# Workflow authoring reference` and `artifact-diagramming` with
+ * `Draw as the engineer…`, so both slipped through and rendered in full.
+ *
+ * Every injected turn does carry a marker, under a different name per path:
+ * the live SDK stream sets `isSynthetic` (verified on `claude` 2.1.272 — the
+ * skill body arrives with it, the `tool_result` frame right before it does
+ * not), and persisted transcripts tag the row `sourceToolUseID` +
+ * `turnCompanion` next to `isMeta`. Match on those instead of on prose.
+ */
+function isInjectedUserTurn(raw: AnyRecord): boolean {
+  return raw.isSynthetic === true
+    || raw.turnCompanion === true
+    || typeof raw.sourceToolUseID === 'string';
 }
 
 /**
@@ -794,6 +824,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
             const parsedFiles = parseFilesInputTag(text);
             if (
               (parsedFiles.text || parsedFiles.attachments.length > 0)
+              && !isInjectedUserTurn(raw)
               && !isInternalContent(parsedFiles.text)
             ) {
               messages.push(createNormalizedMessage({
@@ -821,7 +852,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
             .map((part: AnyRecord) => part.text)
             .filter(Boolean)
             .join('\n');
-          if (textParts && !isInternalContent(textParts)) {
+          if (textParts && !isInjectedUserTurn(raw) && !isInternalContent(textParts)) {
             messages.push(createNormalizedMessage({
               id: `${baseId}_text`,
               sessionId,
@@ -928,6 +959,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
         const parsedFiles = parseFilesInputTag(text);
         if (
           (parsedFiles.text || parsedFiles.attachments.length > 0)
+          && !isInjectedUserTurn(raw)
           && !isInternalContent(parsedFiles.text)
         ) {
           messages.push(createNormalizedMessage({
