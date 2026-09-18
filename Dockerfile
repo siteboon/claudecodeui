@@ -32,7 +32,6 @@ COPY --from=builder /app/dist-server ./dist-server
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/public ./public
 
-USER nodejs
 EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD node -e "const r=require('http').get('http://127.0.0.1:'+(process.env.SERVER_PORT||3001)+'/health',s=>{s.resume();process.exit(s.statusCode===200?0:1)});r.on('error',()=>process.exit(1));r.setTimeout(5000,()=>{r.destroy();process.exit(1)});"
