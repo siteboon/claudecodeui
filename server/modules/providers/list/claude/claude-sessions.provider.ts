@@ -13,7 +13,9 @@ import type {
   SubagentActivity,
   SubagentInfo,
   TaskUsage,
+  WorkflowAgentActivity,
   WorkflowAgentInfo,
+  WorkflowAgentProgress,
   WorkflowInfo,
 } from '@/shared/types.js';
 import { parseFilesInputTag } from '@/shared/image-attachments.js';
@@ -84,6 +86,8 @@ type ClaudeHistoryMessagesResult =
 type ClaudeSubagentTranscript = {
   activity: SubagentActivity[];
   model?: string;
+  /** When the agent's first row was written: the moment it was spawned. */
+  startedAt?: string;
 };
 
 /**
@@ -113,6 +117,9 @@ async function readClaudeSubagentTranscript(filePath: string): Promise<ClaudeSub
       try {
         const entry = JSON.parse(line) as AnyRecord;
         const timestamp = typeof entry.timestamp === 'string' ? entry.timestamp : undefined;
+        if (timestamp && !transcript.startedAt) {
+          transcript.startedAt = timestamp;
+        }
 
         if (entry.message?.role === 'assistant' && Array.isArray(entry.message?.content)) {
           if (typeof entry.message.model === 'string') {
@@ -887,7 +894,7 @@ function buildLocalCommandDisplayText(payload: ClaudeLocalCommandPayload): strin
 /** The `task_status` fields of a normalized message, minus the envelope. */
 type ClaudeTaskStatusEvent = Pick<
   NormalizedMessage,
-  'event' | 'taskId' | 'toolUseId' | 'taskType' | 'workflowName' | 'description' | 'status' | 'summary' | 'usage' | 'lastToolName' | 'outputFile'
+  'event' | 'taskId' | 'toolUseId' | 'taskType' | 'workflowName' | 'description' | 'status' | 'summary' | 'usage' | 'lastToolName' | 'outputFile' | 'agents'
 >;
 
 const readOptionalString = (value: unknown): string | undefined =>
@@ -904,6 +911,67 @@ function readTaskUsage(value: unknown): TaskUsage | undefined {
     toolUses: Number(usage.tool_uses) || 0,
     durationMs: Number(usage.duration_ms) || 0,
   };
+}
+
+const readOptionalNumber = (value: unknown): number | undefined =>
+  typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
+/**
+ * The SDK's word on one workflow agent, in the app's spelling.
+ *
+ * The SDK reports `start` for an agent the script has queued as well as one
+ * that is running; only an `agentId` — the transcript the agent writes — tells
+ * the two apart. `progress` is a running agent that has reported, `done` one
+ * that finished, and anything else (`error`, `failed`) one that did not.
+ */
+function readWorkflowAgentState(state: unknown, agentId: string | undefined): WorkflowAgentProgress['state'] {
+  switch (state) {
+    case 'start':
+      return agentId ? 'running' : 'queued';
+    case 'progress':
+      return 'running';
+    case 'done':
+      return 'done';
+    default:
+      return 'failed';
+  }
+}
+
+/**
+ * The per-agent progress a workflow's `task_progress` carries in its
+ * undocumented `workflow_progress`, or undefined when the event has none (an
+ * agent's or shell command's progress, or a workflow that has not spawned).
+ */
+function readWorkflowAgentsProgress(value: unknown): WorkflowAgentProgress[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const agents: WorkflowAgentProgress[] = [];
+  for (const raw of value) {
+    const entry = readObjectRecord(raw);
+    const index = readOptionalNumber(entry?.index);
+    if (!entry || entry.type !== 'workflow_agent' || index === undefined) {
+      continue;
+    }
+    const agentId = readOptionalString(entry.agentId);
+    agents.push({
+      index,
+      label: readOptionalString(entry.label),
+      agentId,
+      model: readOptionalString(entry.model),
+      state: readWorkflowAgentState(entry.state, agentId),
+      startedAt: readOptionalNumber(entry.startedAt),
+      lastToolName: readOptionalString(entry.lastToolName),
+      lastToolSummary: readOptionalString(entry.lastToolSummary),
+      promptPreview: readOptionalString(entry.promptPreview),
+      tokens: readOptionalNumber(entry.tokens),
+      toolCalls: readOptionalNumber(entry.toolCalls),
+      durationMs: readOptionalNumber(entry.durationMs),
+      resultPreview: readOptionalString(entry.resultPreview),
+    });
+  }
+  return agents;
 }
 
 /**
@@ -936,15 +1004,22 @@ function readTaskStatusEvent(raw: AnyRecord): ClaudeTaskStatusEvent | null {
         workflowName: readOptionalString(raw.workflow_name),
         description: readOptionalString(raw.description),
       };
-    case 'task_progress':
+    case 'task_progress': {
+      // A workflow's progress reports on each agent it spawned, and its
+      // task-level `last_tool_name` is the current agent's label rather than a
+      // tool — so it is not forwarded as one; the client reads the current
+      // agent from `agents` instead.
+      const agents = readWorkflowAgentsProgress(raw.workflow_progress);
       return {
         ...shared,
         event: 'progress',
         description: readOptionalString(raw.description),
         summary: readOptionalString(raw.summary),
         usage: readTaskUsage(raw.usage),
-        lastToolName: readOptionalString(raw.last_tool_name),
+        lastToolName: agents ? undefined : readOptionalString(raw.last_tool_name),
+        agents,
       };
+    }
     case 'task_updated': {
       const patched = readOptionalString(readObjectRecord(raw.patch)?.status);
       return {
@@ -1441,6 +1516,67 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     }
 
     return { found: true, resumeThroughId: null };
+  }
+
+  /**
+   * Reads one workflow agent's timeline from the transcript the run wrote for
+   * it, under `<projectDir>/<providerSessionId>/subagents/workflows/<runId>/`
+   * — the only place it exists, since the SDK never streams a workflow agent's
+   * rows to the parent session.
+   *
+   * The journal beside it settles the agent when it has; short of that the
+   * agent is running only while the process that spawned it is — the same
+   * rule history applies to a launch row, keyed here on the agent's first row
+   * rather than the launch's.
+   */
+  async readWorkflowAgentActivity(
+    sessionId: string,
+    runId: string,
+    agentId: string,
+  ): Promise<WorkflowAgentActivity | null> {
+    const session = sessionsDb.getSessionById(sessionId);
+    const jsonlPath = session?.jsonl_path;
+    const providerSessionId = session?.provider_session_id;
+    if (!jsonlPath || !providerSessionId) {
+      return null;
+    }
+
+    const transcriptDir = path.join(path.dirname(jsonlPath), providerSessionId, 'subagents', 'workflows', runId);
+    const transcriptPath = path.join(transcriptDir, `agent-${agentId}.jsonl`);
+    try {
+      await fsp.access(transcriptPath);
+    } catch {
+      return null;
+    }
+
+    const [transcript, journalAgents] = await Promise.all([
+      readClaudeSubagentTranscript(transcriptPath),
+      readWorkflowJournal(transcriptDir),
+    ]);
+    const journalAgent = journalAgents.find((agent) => agent.id === agentId);
+
+    let status: WorkflowAgentActivity['agent']['status'];
+    if (journalAgent && journalAgent.status !== 'running') {
+      status = journalAgent.status;
+    } else {
+      const liveRunStartedAt = this.getLiveRunStartTime(sessionId) ?? this.getLiveRunStartTime(providerSessionId);
+      status = liveRunStartedAt !== null && Date.parse(transcript.startedAt ?? '') >= liveRunStartedAt
+        ? 'running'
+        : 'stopped';
+    }
+
+    return {
+      agent: {
+        id: agentId,
+        label: journalAgent?.label,
+        model: transcript.model,
+        status,
+      },
+      activity: transcript.activity
+        .slice(0, MAX_TRANSMITTED_SUBAGENT_ACTIVITIES)
+        .map(truncateSubagentActivity),
+      activityCount: transcript.activity.length,
+    };
   }
 
   /**

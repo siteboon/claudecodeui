@@ -244,6 +244,9 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                   toolResult={message.toolResult}
                   workflow={message.workflow}
                   taskStatus={message.taskStatus}
+                  onFileOpen={onFileOpen}
+                  createDiff={createDiff}
+                  selectedProject={selectedProject}
                 />
               </div>
             ) : message.isSubagentContainer ? (

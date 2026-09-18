@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,7 +12,7 @@ import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/datab
 import providerRouter from '@/modules/providers/provider.routes.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import type { IProvider } from '@/shared/interfaces.js';
-import type { BackgroundTaskSummary } from '@/shared/types.js';
+import type { BackgroundTaskSummary, WorkflowAgentActivity } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
 
 async function withProviderServer(
@@ -282,4 +282,95 @@ test('the running-sessions route reports a session held open for background work
   } finally {
     providerRegistry.listProviders = realListProviders;
   }
+});
+
+const WORKFLOW_SESSION_ID = 'claude-workflow-routes-session';
+const WORKFLOW_RUN_ID = 'wf_16fbf852-274';
+const FINISHED_AGENT_ID = 'aa1e064cf8bd159d6';
+const UNREPORTED_AGENT_ID = 'ab89f2cde612a51b1';
+
+/**
+ * Writes a workflow run's directory the way a real run leaves it under the
+ * session's transcript directory: one `agent-<id>.jsonl` per agent, in the
+ * row shape an Agent subagent's transcript has, and the journal beside them.
+ */
+async function writeWorkflowRun(projectDirectory: string): Promise<string> {
+  const sessionPath = path.join(projectDirectory, `${WORKFLOW_SESSION_ID}.jsonl`);
+  await mkdir(projectDirectory, { recursive: true });
+  await writeFile(sessionPath, `${JSON.stringify({ type: 'user', uuid: 'u1', sessionId: WORKFLOW_SESSION_ID, timestamp: '2026-08-21T10:32:10.000Z', message: { role: 'user', content: 'audit the frontend' } })}\n`, 'utf8');
+
+  const runDir = path.join(projectDirectory, WORKFLOW_SESSION_ID, 'subagents', 'workflows', WORKFLOW_RUN_ID);
+  await mkdir(runDir, { recursive: true });
+
+  const agentRows = (agentId: string) => [
+    { parentUuid: null, isSidechain: true, agentId, type: 'user', uuid: `${agentId}-u1`, timestamp: '2026-08-21T10:32:20.000Z', message: { role: 'user', content: 'You are the analysis step of a code-quality audit.' } },
+    { parentUuid: `${agentId}-u1`, isSidechain: true, agentId, type: 'assistant', uuid: `${agentId}-a1`, timestamp: '2026-08-21T10:32:25.000Z', message: { role: 'assistant', model: 'claude-opus-4-1', content: [{ type: 'tool_use', id: `toolu_${agentId}_1`, name: 'Grep', input: { pattern: 'useSidebar' } }] } },
+    { parentUuid: `${agentId}-a1`, isSidechain: true, agentId, type: 'user', uuid: `${agentId}-u2`, timestamp: '2026-08-21T10:32:26.000Z', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: `toolu_${agentId}_1`, content: 'src/modules/sidebar/useSidebar.ts' }] } },
+    { parentUuid: `${agentId}-u2`, isSidechain: true, agentId, type: 'assistant', uuid: `${agentId}-a2`, timestamp: '2026-08-21T10:32:40.000Z', message: { role: 'assistant', model: 'claude-opus-4-1', content: [{ type: 'text', text: 'One hook owns the sidebar.' }] } },
+  ];
+  for (const agentId of [FINISHED_AGENT_ID, UNREPORTED_AGENT_ID]) {
+    await writeFile(path.join(runDir, `agent-${agentId}.jsonl`), `${agentRows(agentId).map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+    await writeFile(path.join(runDir, `agent-${agentId}.meta.json`), JSON.stringify({ agentType: 'workflow-subagent', spawnDepth: 1 }), 'utf8');
+  }
+  const journal = [
+    { type: 'started', key: 'v2:one', agentId: FINISHED_AGENT_ID, label: 'audit:sidebar', phase: 'Audit' },
+    { type: 'started', key: 'v2:two', agentId: UNREPORTED_AGENT_ID, label: 'synthesize', phase: 'Synthesize' },
+    { type: 'result', key: 'v2:one', agentId: FINISHED_AGENT_ID, result: { area: 'sidebar' } },
+  ];
+  await writeFile(path.join(runDir, 'journal.jsonl'), `${journal.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+
+  return sessionPath;
+}
+
+test('the workflow agent route reads an agent\'s timeline and status from its run directory', async () => {
+  await withProviderServer(async (baseUrl, workspacePath) => {
+    const sessionPath = await writeWorkflowRun(workspacePath);
+    const now = new Date().toISOString();
+    sessionsDb.createSession(WORKFLOW_SESSION_ID, 'claude', workspacePath, 'Workflow session', now, now, sessionPath);
+
+    const agentUrl = (runId: string, agentId: string) =>
+      `${baseUrl}/api/providers/sessions/${WORKFLOW_SESSION_ID}/workflows/${runId}/agents/${agentId}`;
+
+    // The SDK streams none of an agent's rows to the parent, so its transcript
+    // is the only record of what it did — read on demand, capped like an
+    // Agent card's, and settled by the journal beside it.
+    const finishedResponse = await fetch(agentUrl(WORKFLOW_RUN_ID, FINISHED_AGENT_ID));
+    const finished = (await finishedResponse.json() as { data: WorkflowAgentActivity }).data;
+    assert.equal(finishedResponse.status, 200);
+    assert.deepEqual(finished.agent, { id: FINISHED_AGENT_ID, label: 'audit:sidebar', model: 'claude-opus-4-1', status: 'completed' });
+    assert.equal(finished.activityCount, 2);
+    assert.deepEqual(finished.activity.map((entry) => entry.kind), ['tool', 'text']);
+    assert.equal(finished.activity[0]?.toolName, 'Grep');
+    assert.deepEqual(finished.activity[0]?.toolInput, { pattern: 'useSidebar' });
+    assert.deepEqual(finished.activity[0]?.toolResult, { content: 'src/modules/sidebar/useSidebar.ts', isError: false });
+    assert.equal(finished.activity[1]?.content, 'One hook owns the sidebar.');
+
+    // A `started` with no `result` or `failed`, and no live run of the session
+    // to still be working in: nothing can report for it any more.
+    const unreportedResponse = await fetch(agentUrl(WORKFLOW_RUN_ID, UNREPORTED_AGENT_ID));
+    const unreported = (await unreportedResponse.json() as { data: WorkflowAgentActivity }).data;
+    assert.equal(unreportedResponse.status, 200);
+    assert.equal(unreported.agent.status, 'stopped');
+    assert.equal(unreported.agent.label, 'synthesize');
+
+    // Both ids name a file under the session directory, so neither may carry
+    // anything but the harness's own shapes — not even a well-formed
+    // directory that happens to exist.
+    for (const [runId, agentId, code] of [
+      [`${WORKFLOW_RUN_ID}%2F..`, FINISHED_AGENT_ID, 'INVALID_WORKFLOW_RUN_ID'],
+      ['subagents', FINISHED_AGENT_ID, 'INVALID_WORKFLOW_RUN_ID'],
+      [WORKFLOW_RUN_ID, '..%2Fjournal', 'INVALID_WORKFLOW_AGENT_ID'],
+      [WORKFLOW_RUN_ID, 'aa1e064cf8bd159d', 'INVALID_WORKFLOW_AGENT_ID'],
+    ] as const) {
+      const response = await fetch(agentUrl(runId, agentId));
+      const payload = await response.json() as { error: { code: string } };
+      assert.equal(response.status, 400, `${runId}/${agentId}`);
+      assert.equal(payload.error.code, code);
+    }
+
+    const missingResponse = await fetch(agentUrl(WORKFLOW_RUN_ID, 'a0000000000000000'));
+    const missing = await missingResponse.json() as { error: { code: string } };
+    assert.equal(missingResponse.status, 404);
+    assert.equal(missing.error.code, 'WORKFLOW_AGENT_NOT_FOUND');
+  });
 });

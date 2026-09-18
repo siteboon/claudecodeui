@@ -211,6 +211,9 @@ function foldTaskStatus(
   const settled = msg.status === 'completed' || msg.status === 'failed' || msg.status === 'stopped'
     ? msg.status
     : null;
+  // A workflow's first progress events report on no agents yet; an empty list
+  // must not wipe the last one that named them.
+  const agents = msg.agents?.length ? msg.agents : previous?.agents;
   liveTasksByToolUseId.set(toolUseId, {
     // A settled status is final. Short of one, `started` and `progress` mean
     // the task is running, while an `updated` patch that does not change the
@@ -223,6 +226,7 @@ function foldTaskStatus(
     summary: msg.summary ?? previous?.summary,
     usage: msg.usage ?? previous?.usage,
     lastToolName: msg.lastToolName ?? previous?.lastToolName,
+    ...(agents ? { agents } : {}),
   });
   lastTaskSourceByToolUseId.set(toolUseId, msg);
 }

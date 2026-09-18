@@ -247,6 +247,10 @@ export const api = {
     post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/fork`, body),
   renameSession: (sessionId: string, summary: string) =>
     put(`/api/providers/sessions/${sessionId}`, { summary }),
+  // What one agent of a workflow run did, read from its transcript on demand
+  // when its row in the workflow card is opened.
+  workflowAgentActivity: (sessionId: string, runId: string, agentId: string) =>
+    get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/workflows/${encodeURIComponent(runId)}/agents/${encodeURIComponent(agentId)}`),
 
   // Scheduled messages: send a message to a session at a future time.
   scheduledMessages: {

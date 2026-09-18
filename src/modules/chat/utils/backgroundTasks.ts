@@ -1,4 +1,4 @@
-import type { BackgroundTaskStatus, BackgroundTaskSummary, ChatMessage } from '@/shared/types';
+import type { BackgroundTaskStatus, BackgroundTaskSummary, ChatMessage, WorkflowAgentProgress } from '@/shared/types';
 
 /**
  * Settles one background task's status from its two sources.
@@ -94,4 +94,34 @@ export function collectRunningBackgroundTasks(messages: ChatMessage[]): Backgrou
 export function formatTaskDuration(durationMs: number): string {
   const seconds = Math.round(durationMs / 1_000);
   return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
+
+/**
+ * The agent a running workflow is on: the running one it spawned last, by
+ * the SDK's start time. Undefined between agents and before the first.
+ */
+export function findCurrentWorkflowAgent(agents: WorkflowAgentProgress[] | undefined): WorkflowAgentProgress | undefined {
+  let current: WorkflowAgentProgress | undefined;
+  for (const agent of agents ?? []) {
+    if (agent.state === 'running' && (!current || (agent.startedAt ?? 0) >= (current.startedAt ?? 0))) {
+      current = agent;
+    }
+  }
+  return current;
+}
+
+/**
+ * What to call a workflow agent: the label the script gave it, else the head
+ * of its prompt, else its id — and for a queued slot with none of those, its
+ * place in the run.
+ */
+export function describeWorkflowAgent(agent: Pick<WorkflowAgentProgress, 'index' | 'label' | 'agentId' | 'promptPreview'>): string {
+  if (agent.label) {
+    return agent.label;
+  }
+  const promptHead = agent.promptPreview?.split('\n', 1)[0]?.trim();
+  if (promptHead) {
+    return promptHead.length > 80 ? `${promptHead.slice(0, 79)}…` : promptHead;
+  }
+  return agent.agentId ?? `#${agent.index + 1}`;
 }

@@ -580,6 +580,8 @@ export type NormalizedMessage = {
   usage?: TaskUsage;
   lastToolName?: string;
   outputFile?: string;
+  /** A workflow's `progress` only: where each agent the run spawned stands. */
+  agents?: WorkflowAgentProgress[];
 };
 
 /** What a background task has spent so far — tokens, tool calls and wall time — as the CLI reports it while the task runs and when it ends. */
@@ -625,6 +627,30 @@ export type LiveTaskStatus = {
   summary?: string;
   usage?: TaskUsage;
   lastToolName?: string;
+  /** A workflow's only: where each agent the run spawned stands, from its latest progress event. */
+  agents?: WorkflowAgentProgress[];
+};
+
+/**
+ * Where one agent of a running workflow stands, as the SDK reports it on the
+ * run's progress events. An entry with no `agentId` is a slot the script has
+ * queued but not yet started, identified by `index` alone; `lastToolName` and
+ * `lastToolSummary` are the agent's own latest tool call.
+ */
+export type WorkflowAgentProgress = {
+  index: number;
+  label?: string;
+  agentId?: string;
+  model?: string;
+  state: 'queued' | 'running' | 'done' | 'failed';
+  startedAt?: number;
+  lastToolName?: string;
+  lastToolSummary?: string;
+  promptPreview?: string;
+  tokens?: number;
+  toolCalls?: number;
+  durationMs?: number;
+  resultPreview?: string;
 };
 
 /** Discriminator on NormalizedMessage naming which kind of transcript event it carries — plain text, tool use or result, thinking, stream delta or end, error, completion, status, permission request/resolution/cancellation, session creation, interactive prompt, or task notification. */

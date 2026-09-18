@@ -1,12 +1,33 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import '@/modules/i18n';
-import { WorkflowPanel } from '@/modules/chat/tools/WorkflowPanel';
+import { TranscriptSessionContext } from '@/modules/chat/context/TranscriptSessionContext';
 import MessageComponent from '@/modules/chat/transcript/MessageComponent';
 import { UiPreferencesProvider } from '@/shared/context/UiPreferencesContext';
-import type { LiveTaskStatus, ToolResult, WorkflowInfo } from '@/shared/types';
+import type { LiveTaskStatus, SubagentActivity, ToolResult, WorkflowAgentProgress, WorkflowInfo } from '@/shared/types';
+
+// What the agent-activity route answers with, keyed by agent id; a missing
+// key answers the way the server does for an agent that left no transcript.
+const { agentActivityByAgentId, workflowAgentActivity } = vi.hoisted(() => {
+  const agentActivityByAgentId = new Map<string, { agent: { id: string; label?: string; status: string }; activity: SubagentActivity[]; activityCount: number }>();
+  const workflowAgentActivity = vi.fn(async (_sessionId: string, _runId: string, agentId: string) => {
+    const payload = agentActivityByAgentId.get(agentId);
+    return payload
+      ? { ok: true, status: 200, json: async () => ({ success: true, data: payload }) }
+      : { ok: false, status: 404, json: async () => ({ success: false, error: { code: 'WORKFLOW_AGENT_NOT_FOUND', message: `Workflow agent "${agentId}" was not found.` } }) };
+  });
+  return { agentActivityByAgentId, workflowAgentActivity };
+});
+// Only the endpoint is stubbed; `readApiJson` stays real so a 404 turns into
+// the same error the card sees in the app.
+vi.mock('@/shared/api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  api: { workflowAgentActivity },
+}));
+
+const { WorkflowPanel } = await import('@/modules/chat/tools/WorkflowPanel');
 
 // The script header the real launch in session 4820c6b8 carried.
 const SCRIPT = [
@@ -42,15 +63,42 @@ const completedWorkflow: WorkflowInfo = {
   scriptPath: '/home/user/.claude/projects/p/s/workflows/scripts/frontend-architecture-audit-wf_16fbf852-274.js',
 };
 
-const renderPanel = (props: { toolResult?: ToolResult | null; workflow?: WorkflowInfo; taskStatus?: LiveTaskStatus }) =>
+const renderPanel = (
+  props: { toolResult?: ToolResult | null; workflow?: WorkflowInfo; taskStatus?: LiveTaskStatus },
+  // The session the transcript belongs to, as ChatInterface provides it; a
+  // bare render has none, like an exported document.
+  sessionId: string | null = null,
+) =>
   render(
-    <WorkflowPanel
-      toolInput={JSON.stringify({ script: SCRIPT, description: 'Parallel frontend architecture audit' }, null, 2)}
-      toolResult={props.toolResult}
-      workflow={props.workflow}
-      taskStatus={props.taskStatus}
-    />,
+    <TranscriptSessionContext.Provider value={{ sessionId }}>
+      <WorkflowPanel
+        toolInput={JSON.stringify({ script: SCRIPT, description: 'Parallel frontend architecture audit' }, null, 2)}
+        toolResult={props.toolResult}
+        workflow={props.workflow}
+        taskStatus={props.taskStatus}
+        createDiff={() => []}
+      />
+    </TranscriptSessionContext.Provider>,
   );
+
+/** Opens the card. */
+const openCard = () => fireEvent.click(screen.getByRole('button', { expanded: false }));
+
+/** The rows of the card's agent list, as text. */
+const agentRows = () => [...(screen.getByText('Agents').parentElement?.parentElement?.querySelectorAll('li') ?? [])];
+
+/** The stream's word on the three agents partway through the run: one done, one working, one queued. */
+const liveAgents: WorkflowAgentProgress[] = [
+  { index: 0, label: 'audit:chat', agentId: 'aa1e064cf8bd159d6', state: 'done', startedAt: 1_700_000_000_000, tokens: 8_000, toolCalls: 20, resultPreview: 'Three large hooks carry most of the module.' },
+  { index: 1, label: 'audit:sidebar', agentId: 'a9cfe29aa8f2afcbf', state: 'running', startedAt: 1_700_000_120_000, lastToolName: 'Grep', lastToolSummary: 'useSidebar', tokens: 4_000, toolCalls: 12 },
+  { index: 2, state: 'queued', promptPreview: 'You are the synthesis step of a code-quality audit.\nMerge the audits.' },
+];
+
+afterEach(() => {
+  agentActivityByAgentId.clear();
+  workflowAgentActivity.mockClear();
+  vi.useRealTimers();
+});
 
 describe('a workflow card', () => {
   it('reads as running, named from the script, with only the launch acknowledgement in hand', () => {
@@ -177,6 +225,143 @@ describe('a workflow card', () => {
 
     expect(screen.getByText('no result')).toBeTruthy();
     expect(screen.queryByText('Verify 3/6')).toBeNull();
+  });
+});
+
+describe('the agents of a workflow card', () => {
+  it('lists what each agent is doing, from the live stream over the journal, while the run is going', () => {
+    // The journal (last history load) still has audit:chat running and knows
+    // nothing of the queued slot; the stream is fresher on both.
+    renderPanel({
+      toolResult: LAUNCH_ACK,
+      workflow: {
+        ...completedWorkflow,
+        status: 'running',
+        agents: [
+          { id: 'aa1e064cf8bd159d6', label: 'audit:chat', phase: 'Audit', status: 'running' },
+          { id: 'a9cfe29aa8f2afcbf', label: 'audit:sidebar', phase: 'Audit', status: 'running' },
+        ],
+      },
+      taskStatus: { status: 'running', agents: liveAgents, usage: { totalTokens: 12_345, toolUses: 32, durationMs: 210_000 } },
+    });
+    openCard();
+
+    expect(agentRows().map((row) => row.textContent)).toEqual([
+      'audit:chat· AuditdoneThree large hooks carry most of the module.',
+      'audit:sidebar· AuditrunningGrep: useSidebar4k tokens12 tool calls',
+      // Not yet started: named from its prompt, since it has no id or label.
+      'You are the synthesis step of a code-quality audit.queued',
+    ]);
+    expect(screen.getByText('1 of 3 agents finished')).toBeTruthy();
+    // Where the run is, not "· audit:sidebar" as if it were a tool name.
+    expect(screen.getByText('32 tool uses · 3m 30s · current: audit:sidebar')).toBeTruthy();
+    expect(document.querySelectorAll('.animate-pulse')).toHaveLength(2);
+  });
+
+  it('names the current agent from the task description when the stream has not listed agents yet', () => {
+    // The first progress events of a run carry the current agent's label in
+    // their description and no agent list.
+    renderPanel({
+      toolResult: LAUNCH_ACK,
+      taskStatus: { status: 'running', description: 'audit:chat', lastToolName: 'audit:chat', usage: { totalTokens: 1, toolUses: 2, durationMs: 5_000 } },
+    });
+    openCard();
+
+    expect(screen.getByText('2 tool uses · 5s · current: audit:chat')).toBeTruthy();
+  });
+
+  it('lets the journal settle the agents once the run is over, whatever the stream last said', () => {
+    // The stream's last word had audit:sidebar running and a slot queued; the
+    // journal knows audit:sidebar failed, and the queued slot never started.
+    renderPanel({
+      toolResult: { content: '{"audits":[]}', isError: false },
+      workflow: completedWorkflow,
+      taskStatus: { status: 'completed', agents: liveAgents, usage: { totalTokens: 1, toolUses: 40, durationMs: 300_000 } },
+    });
+    openCard();
+
+    const rows = agentRows();
+    expect(rows.map((row) => row.textContent)).toEqual([
+      'audit:chat· AuditdoneThree large hooks carry most of the module.',
+      'audit:sidebar· Auditfailed',
+      'synthesize· Synthesizerunning',
+    ]);
+    expect(rows[1]?.querySelector('.text-red-600')?.textContent).toBe('audit:sidebar');
+    expect(screen.getByText('2 of 3 agents finished · 1 failed')).toBeTruthy();
+    expect(screen.getByText('40 tool uses · 5m 0s')).toBeTruthy();
+  });
+
+  it('opens an agent\'s timeline from its transcript and stops re-reading it once the agent is done', async () => {
+    vi.useFakeTimers();
+    agentActivityByAgentId.set('a9cfe29aa8f2afcbf', {
+      agent: { id: 'a9cfe29aa8f2afcbf', label: 'audit:sidebar', status: 'running' },
+      activity: [
+        { kind: 'thinking', content: 'Two hooks to compare.' },
+        { kind: 'tool', toolId: 'toolu_wa_1', toolName: 'Grep', toolInput: { pattern: 'useSidebar' }, toolResult: { content: 'src/modules/sidebar/useSidebar.ts', isError: false } },
+      ],
+      activityCount: 27,
+    });
+    const running: LiveTaskStatus = { status: 'running', agents: liveAgents };
+    const { rerender } = render(
+      <TranscriptSessionContext.Provider value={{ sessionId: 'session-1' }}>
+        <WorkflowPanel toolInput="{}" toolResult={LAUNCH_ACK} taskStatus={running} createDiff={() => []} />
+      </TranscriptSessionContext.Provider>,
+    );
+    openCard();
+
+    // Nothing is fetched until a row is opened.
+    expect(workflowAgentActivity).not.toHaveBeenCalled();
+    const sidebarRow = screen.getByRole('button', { name: /audit:sidebar/ });
+    expect(sidebarRow.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(sidebarRow);
+    expect(sidebarRow.getAttribute('aria-expanded')).toBe('true');
+    // Addressed by the session the transcript belongs to and the run id the
+    // launch acknowledgement carries — never a path.
+    expect(workflowAgentActivity).toHaveBeenCalledWith('session-1', 'wf_16fbf852-274', 'a9cfe29aa8f2afcbf');
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.getByText('Two hooks to compare.')).toBeTruthy();
+    expect(screen.getByText('useSidebar')).toBeTruthy();
+    // The backend capped the timeline; the card says so like an agent card.
+    expect(screen.getByText('25 earlier steps are not included')).toBeTruthy();
+
+    // Re-read every three seconds while the agent runs…
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    expect(workflowAgentActivity).toHaveBeenCalledTimes(2);
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    expect(workflowAgentActivity).toHaveBeenCalledTimes(3);
+
+    // …once more when it settles, and then no more.
+    rerender(
+      <TranscriptSessionContext.Provider value={{ sessionId: 'session-1' }}>
+        <WorkflowPanel
+          toolInput="{}"
+          toolResult={LAUNCH_ACK}
+          taskStatus={{ status: 'running', agents: liveAgents.map((agent) => (agent.index === 1 ? { ...agent, state: 'done' as const } : agent)) }}
+          createDiff={() => []}
+        />
+      </TranscriptSessionContext.Provider>,
+    );
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(workflowAgentActivity).toHaveBeenCalledTimes(4);
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(workflowAgentActivity).toHaveBeenCalledTimes(4);
+  });
+
+  it('says so in one line when an agent left no transcript', async () => {
+    renderPanel({ toolResult: LAUNCH_ACK, taskStatus: { status: 'running', agents: liveAgents } }, 'session-1');
+    openCard();
+
+    fireEvent.click(screen.getByRole('button', { name: /audit:chat/ }));
+    await waitFor(() => expect(screen.getByText('Steps unavailable: Workflow agent "aa1e064cf8bd159d6" was not found.')).toBeTruthy());
+  });
+
+  it('cannot open an agent outside a session, where there is nothing to fetch from', () => {
+    renderPanel({ toolResult: LAUNCH_ACK, taskStatus: { status: 'running', agents: liveAgents } });
+    openCard();
+
+    expect(screen.queryByRole('button', { name: /audit:chat/ })).toBeNull();
+    expect(screen.getByText('audit:chat')).toBeTruthy();
   });
 });
 

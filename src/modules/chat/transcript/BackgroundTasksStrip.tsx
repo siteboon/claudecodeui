@@ -3,7 +3,12 @@ import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 
 import type { ChatMessage } from '@/shared/types';
-import { listRunningBackgroundLaunches, readBackgroundTaskId } from '@/modules/chat/utils/backgroundTasks';
+import {
+  describeWorkflowAgent,
+  findCurrentWorkflowAgent,
+  listRunningBackgroundLaunches,
+  readBackgroundTaskId,
+} from '@/modules/chat/utils/backgroundTasks';
 import { parseToolPayload } from '@/modules/chat/utils/messageTransforms';
 
 type BackgroundTasksStripProps = {
@@ -32,7 +37,7 @@ function readLaunchDescription(message: ChatMessage): string {
 }
 
 /** What one running task's chip says: its kind, its name, and how far it has got. */
-function describeTask(message: ChatMessage, t: (key: string, defaultValue: string) => string) {
+function describeTask(message: ChatMessage, t: (key: string, defaultValue: string, options?: Record<string, unknown>) => string) {
   const live = message.taskStatus;
   const name = message.toolName === 'Workflow'
     ? message.workflow?.name || live?.workflowName || ''
@@ -43,14 +48,25 @@ function describeTask(message: ChatMessage, t: (key: string, defaultValue: strin
       ? t('workflow.backgroundCommand', 'Command')
       : t('workflow.backgroundAgent', 'Agent');
 
-  // A workflow reports its phase and step ("Verify 3/6"); an agent only what
-  // it has spent. The history-loaded agent counts stand in for a workflow
-  // the live stream has not described yet. A summary that restates the
-  // launch's description — a workflow's progress opens with it — says
-  // nothing the chip's name does not, and it is long.
+  // A workflow reports on each agent it spawned — "2/6 agents · audit:sidebar"
+  // says how many have finished and the one it is on. Short of that, its own
+  // summary, unless it merely restates the launch's description (a workflow's
+  // progress opens with it) or the chip's name — that says nothing new and it
+  // is long. An agent reports only what it has spent. The history-loaded agent
+  // counts stand in for a workflow the live stream has not described yet.
+  let agentsProgress = '';
+  if (live?.agents?.length) {
+    const finished = live.agents.filter((agent) => agent.state === 'done' || agent.state === 'failed').length;
+    const current = findCurrentWorkflowAgent(live.agents);
+    agentsProgress = t('workflow.agentsProgress', '{{finished}}/{{total}} agents', { finished, total: live.agents.length });
+    if (current) {
+      agentsProgress += ` · ${describeWorkflowAgent(current)}`;
+    }
+  }
   const description = readLaunchDescription(message);
   const summary = live?.summary && live.summary !== description && live.summary !== name ? live.summary : '';
-  const progress = summary
+  const progress = agentsProgress
+    || summary
     || (live?.usage ? `${live.usage.toolUses} ${live.usage.toolUses === 1 ? 'tool' : 'tools'}` : '')
     || (message.workflow && message.workflow.agentCounts.total > 0
       ? `${message.workflow.agentCounts.completed + message.workflow.agentCounts.failed}/${message.workflow.agentCounts.total}`

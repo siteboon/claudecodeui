@@ -18,6 +18,7 @@ import type {
   ProviderRuntimePermissionGateway,
   ProviderRuntimeWriter,
   UpsertProviderMcpServerInput,
+  WorkflowAgentActivity,
 } from '@/shared/types.js';
 
 //----------------- PROVIDER CONTRACT INTERFACES ------------
@@ -230,6 +231,20 @@ export interface IProviderSessions {
    * gateway branches on.
    */
   rewindSession?(sessionId: string, keepThroughId: string | null): Promise<void>;
+
+  /**
+   * Reads what one agent of a workflow run did, from the transcript the run
+   * wrote for it, with the status its journal gives it. Returns `null` when the
+   * run left no transcript for that agent.
+   *
+   * Implemented only by providers whose runtime spawns workflow agents; its
+   * absence is what makes an agent's timeline unavailable in the card.
+   */
+  readWorkflowAgentActivity?(
+    sessionId: string,
+    runId: string,
+    agentId: string,
+  ): Promise<WorkflowAgentActivity | null>;
 }
 
 // ---------------------------

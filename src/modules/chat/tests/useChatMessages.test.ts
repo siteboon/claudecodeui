@@ -203,6 +203,49 @@ test('folds the live task events of a background launch onto the tool row that l
   assert.strictEqual(normalizedToChatMessages([workflowCall, started, progress, finished])[0], afterFinish[0]);
 });
 
+test('keeps the last agent list a workflow\'s progress named through events that name none', () => {
+  // A run's progress events report on its agents only once it has spawned
+  // some, and later ones can carry an empty list; the card must keep drawing
+  // the last list it was given rather than blanking between events.
+  //
+  // A fresh row per scenario: the projection cache keys a launch row on the
+  // newest event folded onto it, which both scenarios below end on.
+  const workflowCall = () => message('workflow-call', {
+    kind: 'tool_use',
+    toolId: 'toolu_workflow_1',
+    toolName: 'Workflow',
+    toolInput: { script: "export const meta = { name: 'audit' }" },
+  });
+  const agents = [
+    { index: 0, label: 'audit:chat', agentId: 'aa1e064cf8bd159d6', state: 'done' as const },
+    { index: 1, label: 'audit:sidebar', agentId: 'a9cfe29aa8f2afcbf', state: 'running' as const, lastToolName: 'Grep' },
+  ];
+  const withAgents = message('task-progress-1', {
+    kind: 'task_status',
+    event: 'progress',
+    taskId: 'wxkj4kcvd',
+    toolUseId: 'toolu_workflow_1',
+    usage: { totalTokens: 1_000, toolUses: 12, durationMs: 65_000 },
+    agents,
+  });
+  const withoutAgents = message('task-progress-2', {
+    kind: 'task_status',
+    event: 'progress',
+    taskId: 'wxkj4kcvd',
+    toolUseId: 'toolu_workflow_1',
+    usage: { totalTokens: 1_200, toolUses: 14, durationMs: 70_000 },
+    agents: [],
+  });
+
+  // Before any event names agents, the row carries none at all.
+  const [early] = normalizedToChatMessages([workflowCall(), withoutAgents]);
+  assert.equal('agents' in (early?.taskStatus ?? {}), false);
+
+  const [row] = normalizedToChatMessages([workflowCall(), withAgents, withoutAgents]);
+  assert.deepEqual(row?.taskStatus?.agents, agents);
+  assert.equal(row?.taskStatus?.usage?.toolUses, 14, 'the rest of the newer event still lands');
+});
+
 test('an updated event finds a call launched before this page loaded through its acknowledgement', () => {
   // After a reload mid-run the `started` event that pairs task and call is
   // gone; the launch acknowledgement in history names the task, and a

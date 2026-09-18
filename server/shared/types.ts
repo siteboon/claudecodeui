@@ -369,6 +369,8 @@ export type NormalizedMessage = {
   usage?: TaskUsage;
   lastToolName?: string;
   outputFile?: string;
+  /** A workflow's `progress` only: where each agent the run spawned stands. */
+  agents?: WorkflowAgentProgress[];
   [key: string]: unknown;
 };
 
@@ -406,6 +408,51 @@ export type BackgroundTaskSummary = {
    * it can still be stopped; not counted as the session's own work.
    */
   nested?: boolean;
+};
+
+/**
+ * Where one agent of a running workflow stands, as the SDK reports it on the
+ * run's `task_progress` events.
+ *
+ * An entry the script has queued but not yet started has no `agentId` and is
+ * identified by `index` alone; once the agent runs, `agentId` names the
+ * transcript it writes. `lastToolName` and `lastToolSummary` are the agent's
+ * own latest tool call — unlike the event's task-level `last_tool_name`, which
+ * for a workflow is the current agent's label.
+ */
+export type WorkflowAgentProgress = {
+  index: number;
+  label?: string;
+  agentId?: string;
+  model?: string;
+  state: 'queued' | 'running' | 'done' | 'failed';
+  startedAt?: number;
+  lastToolName?: string;
+  lastToolSummary?: string;
+  promptPreview?: string;
+  tokens?: number;
+  toolCalls?: number;
+  durationMs?: number;
+  resultPreview?: string;
+};
+
+/**
+ * One workflow agent's recorded timeline, read from its transcript on demand
+ * when the card is opened — the SDK never streams an agent's own rows to the
+ * parent session, so this is the only way to see what it did.
+ *
+ * `activityCount` is the full length of the timeline; `activity` is capped
+ * for transport like a subagent's `subagentTools`.
+ */
+export type WorkflowAgentActivity = {
+  agent: {
+    id: string;
+    label?: string;
+    model?: string;
+    status: 'running' | 'completed' | 'failed' | 'stopped';
+  };
+  activity: SubagentActivity[];
+  activityCount: number;
 };
 
 /**

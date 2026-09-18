@@ -53,6 +53,37 @@ describe('the background tasks strip', () => {
     ]);
   });
 
+  it('says how many of a workflow\'s agents have finished and which one it is on', () => {
+    // Once the stream reports on the run's agents, that beats its summary —
+    // which only restates the workflow's description.
+    render(
+      <BackgroundTasksStrip
+        onReveal={() => {}}
+        sessionId="session-1"
+        sendMessage={() => {}}
+        messages={[
+          toolRow({
+            toolName: 'Workflow',
+            toolId: 'toolu_workflow_1',
+            taskStatus: {
+              status: 'running',
+              workflowName: 'frontend-architecture-audit',
+              summary: 'Evidence-based audit of the frontend',
+              agents: [
+                { index: 0, label: 'audit:chat', agentId: 'aa1e064cf8bd159d6', state: 'done', startedAt: 1 },
+                { index: 1, label: 'audit:sidebar', agentId: 'a9cfe29aa8f2afcbf', state: 'running', startedAt: 2 },
+                { index: 2, label: 'audit:files', agentId: 'ab89f2cde612a51b1', state: 'failed', startedAt: 3 },
+                { index: 3, label: 'synthesize', state: 'queued' },
+              ],
+            },
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByRole('button').textContent).toBe('Workflowfrontend-architecture-audit· 2/4 agents · audit:sidebar');
+  });
+
   it('renders nothing when no task is running', () => {
     const { container } = render(
       <BackgroundTasksStrip

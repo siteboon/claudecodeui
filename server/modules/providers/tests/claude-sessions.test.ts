@@ -1028,6 +1028,51 @@ test('Claude history folds a backgrounded Bash command\'s notification onto its 
   }
 });
 
+test('a workflow agent the journal has not settled is running only while the run that spawned it is', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-workflow-agent-activity-'));
+
+  try {
+    const parentPath = await writeClaudeWorkflowSession(tempRoot, { notification: 'none', journal: true });
+    // The synthesize step's transcript: the journal says `started` and nothing
+    // more, so only the process tells whether it is still working.
+    const runDir = path.join(tempRoot, WORKFLOW_SESSION_ID, 'subagents', 'workflows', WORKFLOW_RUN_ID);
+    const agentId = 'ab89f2cde612a51b1';
+    const rows = [
+      { isSidechain: true, agentId, type: 'user', uuid: 'wa-u1', timestamp: '2026-08-21T10:40:00.000Z', message: { role: 'user', content: 'Synthesize the audits.' } },
+      { isSidechain: true, agentId, type: 'assistant', uuid: 'wa-a1', timestamp: '2026-08-21T10:40:05.000Z', message: { role: 'assistant', model: 'claude-opus-4-1', content: [{ type: 'thinking', thinking: 'Two audits to merge.' }, { type: 'tool_use', id: 'toolu_wa_1', name: 'Read', input: { file_path: '/repo/audits.json' } }] } },
+    ];
+    await writeFile(path.join(runDir, `agent-${agentId}.jsonl`), `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(WORKFLOW_SESSION_ID, 'claude', tempRoot, 'Workflow session', now, now, parentPath);
+
+      // The run that spawned the agent is still up: it started before the
+      // agent's first row was written.
+      const live = await new ClaudeSessionsProvider({ getLiveRunStartTime: () => Date.parse('2026-08-21T10:30:00.000Z') })
+        .readWorkflowAgentActivity(WORKFLOW_SESSION_ID, WORKFLOW_RUN_ID, agentId);
+      assert.deepEqual(live?.agent, { id: agentId, label: 'synthesize', model: 'claude-opus-4-1', status: 'running' });
+      assert.equal(live?.activityCount, 2);
+      assert.deepEqual(live?.activity.map((entry) => entry.kind), ['thinking', 'tool']);
+      assert.equal(live?.activity[0]?.content, 'Two audits to merge.');
+      assert.equal(live?.activity[1]?.toolName, 'Read');
+
+      // A later run of the session is a new process; the agent's own is gone.
+      const orphaned = await new ClaudeSessionsProvider({ getLiveRunStartTime: () => Date.parse('2026-08-21T11:00:00.000Z') })
+        .readWorkflowAgentActivity(WORKFLOW_SESSION_ID, WORKFLOW_RUN_ID, agentId);
+      assert.equal(orphaned?.agent.status, 'stopped');
+
+      // No transcript for this agent: nothing to show, which the route turns
+      // into a 404 rather than an empty timeline.
+      const missing = await new ClaudeSessionsProvider({ getLiveRunStartTime: () => null })
+        .readWorkflowAgentActivity(WORKFLOW_SESSION_ID, WORKFLOW_RUN_ID, 'aa1e064cf8bd159d6');
+      assert.equal(missing, null);
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('the live stream\'s background-task events normalize to task_status', () => {
   // Verified against a real query: the SDK reports on a launched workflow,
   // agent or shell command through four `system` subtypes the transcript
@@ -1099,6 +1144,157 @@ test('the live stream\'s background-task events normalize to task_status', () =>
   // Every other `system` subtype still normalizes to nothing.
   assert.deepEqual(normalize({ subtype: 'hook_started', task_id: 'irrelevant' }), []);
   assert.deepEqual(normalize({ subtype: 'init' }), []);
+});
+
+test('a workflow\'s progress event reports where each of its agents stands', () => {
+  // Verified against a real query (SDK 0.3.165 / CLI 2.1.274): a workflow's
+  // `task_progress` carries an undocumented `workflow_progress` with one entry
+  // per agent the script spawned, and its task-level `last_tool_name` is the
+  // current agent's label, not a tool. Read as a tool, the card's usage line
+  // said "32 tool uses · 3m 30s · You are the analysis step of…".
+  const provider = new ClaudeSessionsProvider();
+  const [progress] = provider.normalizeMessage({
+    type: 'system',
+    subtype: 'task_progress',
+    session_id: WORKFLOW_SESSION_ID,
+    uuid: 'evt-workflow-progress',
+    task_id: WORKFLOW_TASK_ID,
+    tool_use_id: WORKFLOW_TOOL_USE_ID,
+    description: 'audit:sidebar',
+    summary: 'Evidence-based audit of the frontend',
+    usage: { total_tokens: 12_345, tool_uses: 32, duration_ms: 210_000 },
+    last_tool_name: 'audit:sidebar',
+    workflow_progress: [
+      {
+        type: 'workflow_agent',
+        index: 0,
+        label: 'audit:chat',
+        agentId: 'aa1e064cf8bd159d6',
+        model: 'claude-opus-4-1',
+        state: 'done',
+        startedAt: 1_700_000_000_000,
+        tokens: 8_000,
+        toolCalls: 20,
+        durationMs: 120_000,
+        resultPreview: 'Three large hooks carry most of the module.',
+      },
+      {
+        type: 'workflow_agent',
+        index: 1,
+        label: 'audit:sidebar',
+        agentId: 'a9cfe29aa8f2afcbf',
+        state: 'progress',
+        startedAt: 1_700_000_120_000,
+        lastToolName: 'Grep',
+        lastToolSummary: 'useSidebar',
+        promptPreview: 'You are the analysis step of a code-quality audit',
+        lastProgressAt: 1_700_000_200_000,
+        tokens: 4_000,
+        toolCalls: 12,
+      },
+      // Started but not yet spawned: no transcript, so no id.
+      { type: 'workflow_agent', index: 2, label: 'synthesize', state: 'start', queuedAt: 1_700_000_200_000 },
+      { type: 'workflow_agent', index: 3, label: 'audit:files', agentId: 'ab89f2cde612a51b1', state: 'start', startedAt: 1_700_000_201_000 },
+      { type: 'workflow_agent', index: 4, label: 'audit:terminal', agentId: 'ac89f2cde612a51b2', state: 'error', attempt: 2 },
+    ],
+  }, WORKFLOW_SESSION_ID);
+
+  assert.equal(progress?.kind, 'task_status');
+  assert.equal(progress?.event, 'progress');
+  assert.deepEqual(progress?.usage, { totalTokens: 12_345, toolUses: 32, durationMs: 210_000 });
+  assert.equal(progress?.lastToolName, undefined, 'the current agent\'s label must not pass as a tool name');
+  assert.deepEqual(progress?.agents, [
+    {
+      index: 0,
+      label: 'audit:chat',
+      agentId: 'aa1e064cf8bd159d6',
+      model: 'claude-opus-4-1',
+      state: 'done',
+      startedAt: 1_700_000_000_000,
+      lastToolName: undefined,
+      lastToolSummary: undefined,
+      promptPreview: undefined,
+      tokens: 8_000,
+      toolCalls: 20,
+      durationMs: 120_000,
+      resultPreview: 'Three large hooks carry most of the module.',
+    },
+    {
+      index: 1,
+      label: 'audit:sidebar',
+      agentId: 'a9cfe29aa8f2afcbf',
+      model: undefined,
+      state: 'running',
+      startedAt: 1_700_000_120_000,
+      lastToolName: 'Grep',
+      lastToolSummary: 'useSidebar',
+      promptPreview: 'You are the analysis step of a code-quality audit',
+      tokens: 4_000,
+      toolCalls: 12,
+      durationMs: undefined,
+      resultPreview: undefined,
+    },
+    {
+      index: 2,
+      label: 'synthesize',
+      agentId: undefined,
+      model: undefined,
+      state: 'queued',
+      startedAt: undefined,
+      lastToolName: undefined,
+      lastToolSummary: undefined,
+      promptPreview: undefined,
+      tokens: undefined,
+      toolCalls: undefined,
+      durationMs: undefined,
+      resultPreview: undefined,
+    },
+    {
+      index: 3,
+      label: 'audit:files',
+      agentId: 'ab89f2cde612a51b1',
+      model: undefined,
+      state: 'running',
+      startedAt: 1_700_000_201_000,
+      lastToolName: undefined,
+      lastToolSummary: undefined,
+      promptPreview: undefined,
+      tokens: undefined,
+      toolCalls: undefined,
+      durationMs: undefined,
+      resultPreview: undefined,
+    },
+    {
+      index: 4,
+      label: 'audit:terminal',
+      agentId: 'ac89f2cde612a51b2',
+      model: undefined,
+      state: 'failed',
+      startedAt: undefined,
+      lastToolName: undefined,
+      lastToolSummary: undefined,
+      promptPreview: undefined,
+      tokens: undefined,
+      toolCalls: undefined,
+      durationMs: undefined,
+      resultPreview: undefined,
+    },
+  ]);
+
+  // An agent's own progress names a real tool and carries no agent list.
+  const [agentProgress] = provider.normalizeMessage({
+    type: 'system',
+    subtype: 'task_progress',
+    session_id: WORKFLOW_SESSION_ID,
+    uuid: 'evt-agent-progress',
+    task_id: 'agent-task-1',
+    tool_use_id: 'toolu_agent_1',
+    description: 'Survey the repo',
+    usage: { total_tokens: 1, tool_uses: 3, duration_ms: 1 },
+    last_tool_name: 'Read',
+  }, WORKFLOW_SESSION_ID);
+  assert.equal(agentProgress?.lastToolName, 'Read');
+  assert.equal(agentProgress?.agents, undefined);
 });
 
 test('Claude history still settles a synchronous agent that stops mid tool call', { concurrency: false }, async () => {

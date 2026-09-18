@@ -12,6 +12,7 @@ import type {
   FetchHistoryResult,
   LLMProvider,
   NormalizedMessage,
+  WorkflowAgentActivity,
 } from '@/shared/types.js';
 import { AppError, sliceTailPage } from '@/shared/utils.js';
 
@@ -528,6 +529,34 @@ export const sessionsService = {
         sessionId,
       })),
     };
+  },
+
+  /**
+   * Reads what one agent of a workflow run did, for the card that opened it.
+   *
+   * Not found covers both a provider that spawns no workflow agents and a run
+   * that left no transcript for this agent: either way there is nothing to
+   * show, and the card says so in one line.
+   */
+  async readWorkflowAgentActivity(sessionId: string, runId: string, agentId: string): Promise<WorkflowAgentActivity> {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session) {
+      throw new AppError(`Session "${sessionId}" was not found.`, {
+        code: 'SESSION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    const sessions = providerRegistry.resolveProvider(session.provider as LLMProvider).sessions;
+    const activity = await sessions.readWorkflowAgentActivity?.(sessionId, runId, agentId);
+    if (!activity) {
+      throw new AppError(`Workflow agent "${agentId}" was not found.`, {
+        code: 'WORKFLOW_AGENT_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    return activity;
   },
 
   /**

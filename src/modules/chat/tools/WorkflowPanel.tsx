@@ -1,13 +1,31 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronRight, CircleAlert, CircleCheck, CircleDashed, Workflow } from 'lucide-react';
 
-import type { BackgroundTaskStatus, LiveTaskStatus, ToolResult, WorkflowAgentInfo, WorkflowInfo } from '@/shared/types';
+import type {
+  BackgroundTaskStatus,
+  DiffLine,
+  LiveTaskStatus,
+  Project,
+  SubagentActivity,
+  ToolResult,
+  WorkflowAgentInfo,
+  WorkflowAgentProgress,
+  WorkflowInfo,
+} from '@/shared/types';
+import { api, readApiJson } from '@/shared/api';
 import { cn } from '@/shared/utils';
 import { MarkdownContent } from '@/modules/chat/tools/ContentRenderers/MarkdownContent';
+import { SubagentTimeline } from '@/modules/chat/tools/SubagentTimeline';
 import { ToolErrorDisplay } from '@/modules/chat/tools/ToolErrorDisplay';
 import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
-import { formatTaskDuration, resolveBackgroundTaskStatus } from '@/modules/chat/utils/backgroundTasks';
+import { useTranscriptSessionId } from '@/modules/chat/context/TranscriptSessionContext';
+import {
+  describeWorkflowAgent,
+  findCurrentWorkflowAgent,
+  formatTaskDuration,
+  resolveBackgroundTaskStatus,
+} from '@/modules/chat/utils/backgroundTasks';
 
 type WorkflowPanelProps = {
   /** Raw tool input of the `Workflow` call: the script (or its path) and a one-line description. */
@@ -17,7 +35,33 @@ type WorkflowPanelProps = {
   workflow?: WorkflowInfo;
   /** The latest live word on the run, while it is in flight. */
   taskStatus?: LiveTaskStatus;
+  onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
+  createDiff: (oldStr: string, newStr: string) => DiffLine[];
+  selectedProject?: Project | null;
 };
+
+/** What the agent-activity route answers with. */
+type WorkflowAgentActivity = {
+  agent: { id: string; label?: string; model?: string; status: BackgroundTaskStatus };
+  activity: SubagentActivity[];
+  activityCount: number;
+};
+
+/**
+ * One agent of the run as the card lists it: what the journal recorded on the
+ * last history load and what the live stream has said since, folded together.
+ * `queued` is a slot the script has declared but not started, which only the
+ * live stream knows about; it has no id yet.
+ */
+type WorkflowAgentRow = Omit<WorkflowAgentProgress, 'state'> & {
+  /** The agent's id, or the queued slot's index: what the list keys on. */
+  key: string;
+  phase?: string;
+  status: BackgroundTaskStatus | 'queued';
+};
+
+/** How often an open, running agent's timeline is re-read from its transcript. */
+const AGENT_TIMELINE_POLL_MS = 3_000;
 
 type WorkflowScriptMeta = {
   name?: string;
@@ -81,6 +125,14 @@ function parseWorkflowMeta(script: string): WorkflowScriptMeta {
   };
 }
 
+/** Tokens the way the CLI writes them: 725k rather than 724,871. */
+function formatTokenCount(tokens: number): string {
+  if (tokens >= 1_000_000) {
+    return `${(tokens / 1_000_000).toFixed(1)}M`;
+  }
+  return tokens >= 1_000 ? `${Math.round(tokens / 1_000)}k` : `${tokens}`;
+}
+
 /** Pretty-prints a JSON result so it reads as a document rather than one line. */
 function formatResultText(text: string): string {
   const trimmed = text.trim();
@@ -101,22 +153,256 @@ const STATUS_STYLES: Record<BackgroundTaskStatus, string> = {
   stopped: 'text-muted-foreground/70',
 };
 
-const AGENT_STATUS_STYLES: Record<WorkflowAgentInfo['status'], string> = {
+const AGENT_STATUS_STYLES: Record<WorkflowAgentRow['status'], string> = {
+  queued: 'border border-muted-foreground/50',
   running: 'bg-purple-500 dark:bg-purple-400 animate-pulse',
   completed: 'bg-green-500 dark:bg-green-400',
   failed: 'bg-red-500 dark:bg-red-400',
   stopped: 'bg-muted-foreground/40',
 };
 
+/** The live stream's word on an agent, in the card's statuses. */
+const LIVE_AGENT_STATUS: Record<WorkflowAgentProgress['state'], WorkflowAgentRow['status']> = {
+  queued: 'queued',
+  running: 'running',
+  done: 'completed',
+  failed: 'failed',
+};
+
+/**
+ * Folds the run's agents from its two sources into one list.
+ *
+ * The journal (from the last history load) is what survives a reload and the
+ * only source once the run is over; the live stream is fresher while the run
+ * is going and the only source for an agent's current tool, spend and queued
+ * slots. So the live state wins while the workflow runs and the journal's
+ * status wins once it has settled — at which point a slot the stream still
+ * had running or queued is one the run ended under, not one still going.
+ */
+function mergeWorkflowAgents(
+  journalAgents: WorkflowAgentInfo[],
+  liveAgents: WorkflowAgentProgress[] | undefined,
+  isWorkflowRunning: boolean,
+): WorkflowAgentRow[] {
+  const liveById = new Map<string, WorkflowAgentProgress>();
+  for (const agent of liveAgents ?? []) {
+    if (agent.agentId) {
+      liveById.set(agent.agentId, agent);
+    }
+  }
+
+  const rows: WorkflowAgentRow[] = journalAgents.map((agent, index) => {
+    const live = liveById.get(agent.id);
+    const { state, ...liveFields } = live ?? { index, state: undefined };
+    return {
+      ...liveFields,
+      key: agent.id,
+      agentId: agent.id,
+      label: agent.label ?? live?.label,
+      phase: agent.phase,
+      status: isWorkflowRunning && state ? LIVE_AGENT_STATUS[state] : agent.status,
+    };
+  });
+
+  const journalIds = new Set(journalAgents.map((agent) => agent.id));
+  for (const { state, ...live } of liveAgents ?? []) {
+    if (live.agentId && journalIds.has(live.agentId)) {
+      continue;
+    }
+    const liveStatus = LIVE_AGENT_STATUS[state];
+    if (!isWorkflowRunning && liveStatus === 'queued') {
+      // Never started, and now never will: nothing to list.
+      continue;
+    }
+    rows.push({
+      ...live,
+      key: live.agentId ?? `slot-${live.index}`,
+      status: isWorkflowRunning || liveStatus === 'completed' || liveStatus === 'failed' ? liveStatus : 'stopped',
+    });
+  }
+
+  return rows;
+}
+
+type WorkflowAgentTimelineProps = {
+  sessionId: string;
+  runId: string;
+  agentId: string;
+  /** Whether the card still lists the agent as running, which is what keeps the timeline re-reading. */
+  isRunning: boolean;
+  onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
+  createDiff: (oldStr: string, newStr: string) => DiffLine[];
+  selectedProject?: Project | null;
+};
+
+/**
+ * One agent's timeline, read from its transcript when its row is opened.
+ *
+ * The SDK streams nothing of a workflow agent's own work to the parent
+ * session, so this is fetched rather than folded from the store — and
+ * re-read every few seconds while the agent runs, since the transcript is
+ * the only place its progress lands.
+ */
+const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFileOpen, createDiff, selectedProject }: WorkflowAgentTimelineProps) => {
+  const { t } = useTranslation();
+  // What the last read returned — the timeline, or why there is none — and
+  // null until the first read lands.
+  const [loaded, setLoaded] = useState<{ activity: WorkflowAgentActivity } | { error: string } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let nextRead: ReturnType<typeof setTimeout> | undefined;
+
+    const read = async () => {
+      try {
+        const payload = await readApiJson<{ data: WorkflowAgentActivity }>(
+          await api.workflowAgentActivity(sessionId, runId, agentId),
+        );
+        if (cancelled) {
+          return;
+        }
+        setLoaded({ activity: payload.data });
+        // The transcript's own status can settle the agent before the card
+        // hears of it; either word ends the polling.
+        if (isRunning && payload.data.agent.status === 'running') {
+          nextRead = setTimeout(read, AGENT_TIMELINE_POLL_MS);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setLoaded({ error: error instanceof Error ? error.message : String(error) });
+        }
+      }
+    };
+    void read();
+
+    return () => {
+      cancelled = true;
+      clearTimeout(nextRead);
+    };
+  }, [sessionId, runId, agentId, isRunning]);
+
+  if (!loaded) {
+    return <div className="text-[11px] text-muted-foreground/60">{t('workflow.agentTimelineLoading', 'Reading the agent\'s steps…')}</div>;
+  }
+  if ('error' in loaded) {
+    return (
+      <div className="text-[11px] text-muted-foreground/60">
+        {t('workflow.agentTimelineUnavailable', 'Steps unavailable: {{reason}}', { reason: loaded.error })}
+      </div>
+    );
+  }
+  if (loaded.activity.activity.length === 0) {
+    return <div className="text-[11px] text-muted-foreground/60">{t('workflow.agentTimelineEmpty', 'Nothing recorded yet')}</div>;
+  }
+  return (
+    <SubagentTimeline
+      activity={loaded.activity.activity}
+      activityCount={loaded.activity.activityCount}
+      onFileOpen={onFileOpen}
+      createDiff={createDiff}
+      selectedProject={selectedProject}
+    />
+  );
+});
+WorkflowAgentTimeline.displayName = 'WorkflowAgentTimeline';
+
+type WorkflowAgentRowProps = {
+  agent: WorkflowAgentRow;
+  /** Where the agent's transcript can be fetched from; absent outside a session. */
+  timelineAddress: { sessionId: string; runId: string } | null;
+  onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
+  createDiff: (oldStr: string, newStr: string) => DiffLine[];
+  selectedProject?: Project | null;
+};
+
+/**
+ * One agent of the run: its name, phase and status, what it is on while it
+ * runs and what it came back with when done — and, opened on demand, its
+ * timeline.
+ */
+const WorkflowAgentRowView = memo(({ agent, timelineAddress, onFileOpen, createDiff, selectedProject }: WorkflowAgentRowProps) => {
+  const { t } = useTranslation();
+  // Opened on demand: the timeline is a fetch and, for a long run, a few
+  // hundred tool renderers.
+  const [isOpen, setIsOpen] = useState(false);
+  // A queued slot has no transcript yet, and outside a session there is
+  // nothing to fetch one from.
+  const canOpen = Boolean(timelineAddress && agent.agentId);
+
+  const summary = (
+    <>
+      <span className={cn('h-1.5 w-1.5 flex-shrink-0 rounded-full', AGENT_STATUS_STYLES[agent.status])} />
+      <span className={cn('min-w-0 truncate', agent.status === 'failed' ? 'text-red-600 dark:text-red-400' : 'text-foreground')}>
+        {describeWorkflowAgent(agent)}
+      </span>
+      {agent.phase && <span className="flex-shrink-0 text-muted-foreground/70">· {agent.phase}</span>}
+      <span className="ml-auto flex-shrink-0 text-[11px] text-muted-foreground/70">
+        {t(`workflow.agentStatus.${agent.status}`, agent.status)}
+      </span>
+    </>
+  );
+
+  return (
+    <li>
+      {canOpen ? (
+        <button
+          type="button"
+          aria-expanded={isOpen}
+          onClick={() => setIsOpen((previous) => !previous)}
+          className="flex w-full items-center gap-1.5 text-left hover:text-foreground"
+        >
+          <ChevronRight className={cn('h-3 w-3 flex-shrink-0 transition-transform duration-150', isOpen && 'rotate-90')} />
+          {summary}
+        </button>
+      ) : (
+        <div className="flex items-center gap-1.5 pl-[18px]">{summary}</div>
+      )}
+
+      {agent.status === 'running' && (agent.lastToolName || agent.tokens !== undefined || agent.toolCalls !== undefined) && (
+        <div className="flex flex-wrap gap-x-2 pl-[30px] text-[11px] text-muted-foreground/70">
+          {agent.lastToolName && (
+            <span className="min-w-0 truncate">
+              {agent.lastToolName}
+              {agent.lastToolSummary && `: ${agent.lastToolSummary}`}
+            </span>
+          )}
+          {agent.tokens !== undefined && <span className="flex-shrink-0">{t('workflow.agentTokens', '{{tokens}} tokens', { tokens: formatTokenCount(agent.tokens) })}</span>}
+          {agent.toolCalls !== undefined && <span className="flex-shrink-0">{t('workflow.agentToolCalls', '{{count}} tool calls', { count: agent.toolCalls })}</span>}
+        </div>
+      )}
+
+      {agent.status === 'completed' && agent.resultPreview && (
+        <div className="line-clamp-2 whitespace-pre-wrap break-words pl-[30px] text-[11px] text-muted-foreground/70">{agent.resultPreview}</div>
+      )}
+
+      {isOpen && timelineAddress && agent.agentId && (
+        <div className="mt-1 space-y-2 pl-[30px]">
+          <WorkflowAgentTimeline
+            sessionId={timelineAddress.sessionId}
+            runId={timelineAddress.runId}
+            agentId={agent.agentId}
+            isRunning={agent.status === 'running'}
+            onFileOpen={onFileOpen}
+            createDiff={createDiff}
+            selectedProject={selectedProject}
+          />
+        </div>
+      )}
+    </li>
+  );
+});
+WorkflowAgentRowView.displayName = 'WorkflowAgentRowView';
+
 /**
  * Rendered by chat's MessageComponent for a `Workflow` tool call: the run's
  * name and status in the header, and — opened on demand — its phases, the
- * agents it spawned, live usage, its result and the script it ran.
+ * agents it spawned with what each is doing, live usage, its result and the
+ * script it ran.
  *
  * Shaped like SubagentPanel: the launch is a summary of work, and the
  * detail is only wanted on demand, so the body stays unmounted until opened.
  */
-export const WorkflowPanel = memo(({ toolInput, toolResult, workflow, taskStatus }: WorkflowPanelProps) => {
+export const WorkflowPanel = memo(({ toolInput, toolResult, workflow, taskStatus, onFileOpen, createDiff, selectedProject }: WorkflowPanelProps) => {
   const { t } = useTranslation();
   const isExporting = useIsExportingTranscript();
   // Collapsed by default, like an agent card; the header carries the status.
@@ -143,9 +429,26 @@ export const WorkflowPanel = memo(({ toolInput, toolResult, workflow, taskStatus
   const liveSummary = taskStatus?.summary && taskStatus.summary !== description ? taskStatus.summary : undefined;
   const scriptPath = workflow?.scriptPath ?? (typeof parsedInput.scriptPath === 'string' ? parsedInput.scriptPath : '');
 
-  const agents = workflow?.agents ?? [];
-  const counts = workflow?.agentCounts;
-  const finishedCount = counts ? counts.completed + counts.failed : 0;
+  const agents = useMemo(
+    () => mergeWorkflowAgents(workflow?.agents ?? [], taskStatus?.agents, status === 'running'),
+    [workflow?.agents, taskStatus?.agents, status],
+  );
+  const finishedCount = agents.filter((agent) => agent.status === 'completed' || agent.status === 'failed').length;
+  const failedCount = agents.filter((agent) => agent.status === 'failed').length;
+  // An agent's transcript is fetched by session and run; the run id is on the
+  // journal read or, before history reloads, the launch acknowledgement.
+  const sessionId = useTranscriptSessionId();
+  const runId = workflow?.runId
+    || String((toolResult?.toolUseResult as { runId?: unknown } | undefined)?.runId ?? '');
+  const timelineAddress = useMemo(
+    () => (sessionId && runId ? { sessionId, runId } : null),
+    [sessionId, runId],
+  );
+  // The agent the run is on, for the usage line: the stream names it in
+  // `agents`, and — for a workflow — its task-level description is that
+  // agent's label too.
+  const currentAgent = findCurrentWorkflowAgent(taskStatus?.agents);
+  const currentAgentLabel = currentAgent ? describeWorkflowAgent(currentAgent) : taskStatus?.description;
 
   // The folded notification is the result; a live launch still holds the
   // acknowledgement until history reloads, and that is never worth showing.
@@ -216,37 +519,39 @@ export const WorkflowPanel = memo(({ toolInput, toolResult, workflow, taskStatus
             </div>
           )}
 
-          {counts && counts.total > 0 && (
+          {agents.length > 0 && (
             <div className="rounded border border-border/40 bg-muted/40 p-2 text-muted-foreground">
               <div className="mb-1 flex items-baseline justify-between gap-2 text-[10px] uppercase tracking-wide text-muted-foreground/60">
                 <span>{t('workflow.agents', 'Agents')}</span>
                 <span className="normal-case tracking-normal">
-                  {t('workflow.agentsFinished', '{{finished}} of {{total}} agents finished', { finished: finishedCount, total: counts.total })}
-                  {counts.failed > 0 && ` · ${t('workflow.agentsFailed', '{{count}} failed', { count: counts.failed })}`}
+                  {t('workflow.agentsFinished', '{{finished}} of {{total}} agents finished', { finished: finishedCount, total: agents.length })}
+                  {failedCount > 0 && ` · ${t('workflow.agentsFailed', '{{count}} failed', { count: failedCount })}`}
                 </span>
               </div>
               <ul className="space-y-0.5">
                 {agents.map((agent) => (
-                  <li key={agent.id} className="flex items-center gap-1.5">
-                    <span className={cn('h-1.5 w-1.5 flex-shrink-0 rounded-full', AGENT_STATUS_STYLES[agent.status])} />
-                    <span className="min-w-0 truncate text-foreground">{agent.label || agent.id}</span>
-                    {agent.phase && <span className="flex-shrink-0 text-muted-foreground/70">· {agent.phase}</span>}
-                    <span className="ml-auto flex-shrink-0 text-[11px] text-muted-foreground/70">
-                      {t(`workflow.agentStatus.${agent.status}`, agent.status)}
-                    </span>
-                  </li>
+                  <WorkflowAgentRowView
+                    key={agent.key}
+                    agent={agent}
+                    timelineAddress={timelineAddress}
+                    onFileOpen={onFileOpen}
+                    createDiff={createDiff}
+                    selectedProject={selectedProject}
+                  />
                 ))}
               </ul>
             </div>
           )}
 
           {taskStatus?.usage && (
+            // The task-level `lastToolName` of a workflow is the current
+            // agent's label, not a tool, so it is never drawn as one here.
             <div className="text-[11px] text-muted-foreground/70">
               {t('workflow.usage', '{{toolUses}} tool uses · {{elapsed}}', {
                 toolUses: taskStatus.usage.toolUses,
                 elapsed: formatTaskDuration(taskStatus.usage.durationMs),
               })}
-              {taskStatus.lastToolName && ` · ${taskStatus.lastToolName}`}
+              {status === 'running' && currentAgentLabel && ` · ${t('workflow.currentAgent', 'current: {{label}}', { label: currentAgentLabel })}`}
             </div>
           )}
 
