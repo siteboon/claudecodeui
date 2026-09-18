@@ -25,6 +25,7 @@ type ProjectMainState = Pick<
   | 'newSessionTrigger'
   | 'registerOptimisticSession'
   | 'handleProjectSelect'
+  | 'handleNewSession'
   | 'refreshProjectsSilently'
 >;
 
@@ -96,11 +97,13 @@ export function ProjectsStateProvider({
       newSessionTrigger: state.newSessionTrigger,
       registerOptimisticSession: state.registerOptimisticSession,
       handleProjectSelect: state.handleProjectSelect,
+      handleNewSession: state.handleNewSession,
       refreshProjectsSilently: state.refreshProjectsSilently,
     }),
     [
       state.activeTab,
       state.externalMessageUpdate,
+      state.handleNewSession,
       state.handleProjectSelect,
       state.isLoadingProjects,
       state.newSessionTrigger,
