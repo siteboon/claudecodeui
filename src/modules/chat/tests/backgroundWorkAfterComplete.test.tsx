@@ -22,6 +22,7 @@ const renderHandlers = () => {
   let listener: ((event: ServerEvent) => void) | null = null;
   const stored: NormalizedMessage[] = [];
   const log: ActivityLog = [];
+  const syncs: string[] = [];
   // The activity map as the provider would hold it, so the handler's read of
   // "is this session background-only" sees its own earlier report.
   const activityBySession = new Map<string, SessionActivity>();
@@ -57,7 +58,7 @@ const renderHandlers = () => {
       log.push({ sessionId, tasks });
     },
     getSessionActivity: (sessionId) => activityBySession.get(sessionId),
-    requestLatestMessages: async () => {},
+    requestLatestMessages: async (sessionId) => { syncs.push(sessionId); },
     sessionStore: {
       appendRealtime: (_sessionId: string, msg: NormalizedMessage) => { stored.push(msg); },
       getMessages: () => stored,
@@ -67,7 +68,7 @@ const renderHandlers = () => {
   }));
 
   const dispatch = (event: ServerEvent) => listener?.(event);
-  return { dispatch, log };
+  return { dispatch, log, syncs };
 };
 
 const event = (fields: Record<string, unknown>): ServerEvent => ({
@@ -104,17 +105,21 @@ test('a turn that ends with a task still running leaves the session as backgroun
 });
 
 test('the task\'s notification then marks the background-only session idle', () => {
-  const { dispatch, log } = renderHandlers();
+  const { dispatch, log, syncs } = renderHandlers();
 
   workflowLaunch().forEach(dispatch);
   dispatch(event({ kind: 'complete', success: true }));
   // Progress while the work runs changes nothing about the set.
   dispatch(event({ kind: 'task_status', event: 'progress', taskId: 'wxkj4kcvd', toolUseId: 'toolu_workflow_1', summary: 'Verify 3/6' }));
   assert.equal(log.length, 1);
+  const syncsBefore = syncs.length;
 
   dispatch(event({ kind: 'task_status', event: 'notification', taskId: 'wxkj4kcvd', toolUseId: 'toolu_workflow_1', status: 'completed', summary: 'done' }));
 
   assert.deepEqual(log[1], { sessionId: 'viewed-session', tasks: [] });
+  // The notification says only that the task settled; its result reaches the
+  // card through the history reader, so the viewed session syncs at once.
+  assert.deepEqual(syncs.slice(syncsBefore), ['viewed-session']);
 });
 
 test('a turn that ends with nothing running, or is aborted, leaves the session idle', () => {

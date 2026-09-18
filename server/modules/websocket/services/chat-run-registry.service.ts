@@ -59,12 +59,26 @@ const MAX_BUFFERED_EVENTS_PER_RUN = 5000;
  */
 const runs = new Map<string, ChatRun>();
 
+/**
+ * Answers whether a completed run must stay registered a while longer. Set by
+ * the composition root to the provider runtimes' background-work check: a
+ * session whose turn ended but whose agents, workflows or commands are still
+ * running keeps sending live events through this run's writer, and a tab that
+ * subscribes meanwhile needs the run to attach to.
+ */
+let retainCompletedRun: (appSessionId: string) => boolean = () => false;
+
 function evictRunLater(appSessionId: string): void {
   const timer = setTimeout(() => {
     const run = runs.get(appSessionId);
-    if (run && run.status === 'completed') {
-      runs.delete(appSessionId);
+    if (!run || run.status !== 'completed') {
+      return;
     }
+    if (retainCompletedRun(appSessionId)) {
+      evictRunLater(appSessionId);
+      return;
+    }
+    runs.delete(appSessionId);
   }, COMPLETED_RUN_RETENTION_MS);
 
   // Never keep the process alive just to evict a buffered run.
@@ -160,6 +174,11 @@ function recordProviderSessionId(run: ChatRun, providerSessionId: string): void 
  * regardless of which provider runtime produced them.
  */
 export const chatRunRegistry = {
+  /** Installs the check that keeps a completed run registered while its session still has background work. */
+  setRetentionGuard(guard: (appSessionId: string) => boolean): void {
+    retainCompletedRun = guard;
+  },
+
   /**
    * Starts tracking a run and returns it, or `null` when a run is already in
    * progress for the session (callers must reject the duplicate send).

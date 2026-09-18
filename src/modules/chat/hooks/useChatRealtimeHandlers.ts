@@ -375,6 +375,14 @@ export function useChatRealtimeHandlers({
           ) {
             reportRemainingBackgroundWork(sid);
           }
+          // The notification carries only a summary; the task's actual result
+          // is folded onto its card by the history reader, so a card that
+          // just settled live shows it only after a sync — the same sync a
+          // turn's `complete` triggers. Without it the result waited for a
+          // manual reload.
+          if (sid && sid === activeViewSessionId && msg.event === 'notification') {
+            void requestLatestMessages(sid, isActiveRef.current);
+          }
           break;
         }
 
