@@ -106,11 +106,7 @@ export const SubagentPanel = memo(({
   createDiff,
   selectedProject,
 }: SubagentPanelProps) => {
-  // Collapsed by default: an agent is a summary of work, and its detail is
-  // only wanted on demand.
   const isExporting = useIsExportingTranscript();
-  const [isOpen, setIsOpen] = useState(false);
-  const showTimeline = isOpen || isExporting;
   // Raised by the "show more" step so a long run can be inspected in full
   // without paying for it up front.
   const [renderLimit, setRenderLimit] = useState(INITIALLY_RENDERED_ACTIVITIES);
@@ -121,6 +117,12 @@ export const SubagentPanel = memo(({
 
   const entries = activity ?? [];
   const status = subagent?.status ?? (toolResult ? 'completed' : 'running');
+  // Open while the agent works, closed once it is done: a running agent is the
+  // part of the transcript you are waiting on, and a finished one is a summary
+  // whose detail is wanted on demand. Only the initial state is derived — once
+  // a reader opens or closes the card, it stays where they put it.
+  const [isOpen, setIsOpen] = useState(status === 'running');
+  const showTimeline = isOpen || isExporting;
   const toolCount = entries.filter((entry) => entry.kind === 'tool').length;
   // What the agent is doing right now. A running card that only pulses is
   // indistinguishable from a stalled session — this is the piece that shows
@@ -226,7 +228,12 @@ export const SubagentPanel = memo(({
                   <ToolRenderer
                     key={entry.toolId ?? `activity-${index}`}
                     toolName={entry.toolName || 'UnknownTool'}
-                    toolInput={entry.toolInput}
+                    // A tool config reads fields straight off the input, so an
+                    // entry that arrived without one throws inside the renderer
+                    // and takes the chat pane down with it. Harmless while the
+                    // timeline was only mounted on demand; not once a running
+                    // agent opens itself.
+                    toolInput={entry.toolInput ?? {}}
                     toolResult={entry.toolResult}
                     toolId={entry.toolId}
                     mode="input"
