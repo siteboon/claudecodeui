@@ -317,6 +317,13 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
 
     if (msg.kind === 'tool_result' && msg.toolId) {
       toolResultMap.set(msg.toolId, msg);
+      // A launch acknowledgement names its task, so an `updated` event for a
+      // task launched before this page loaded — which carries no tool-use id
+      // and follows no `started` event here — still finds its call.
+      const launchedTaskId = (msg.toolUseResult as { taskId?: unknown } | undefined)?.taskId;
+      if (typeof launchedTaskId === 'string' && launchedTaskId) {
+        toolUseIdByTaskId.set(launchedTaskId, msg.toolId);
+      }
     }
   }
 
@@ -447,7 +454,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           ? {
               content: formatToolResultContent(tr.content),
               isError: Boolean(tr.isError),
-              toolUseResult: (tr as any).toolUseResult,
+              toolUseResult: tr.toolUseResult,
             }
           : null;
 

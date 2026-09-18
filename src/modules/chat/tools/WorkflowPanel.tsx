@@ -5,6 +5,7 @@ import { ChevronRight, CircleAlert, CircleCheck, CircleDashed, Workflow } from '
 import type { BackgroundTaskStatus, LiveTaskStatus, ToolResult, WorkflowAgentInfo, WorkflowInfo } from '@/shared/types';
 import { cn } from '@/shared/utils';
 import { MarkdownContent } from '@/modules/chat/tools/ContentRenderers/MarkdownContent';
+import { ToolErrorDisplay } from '@/modules/chat/tools/ToolErrorDisplay';
 import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
 import { formatTaskDuration, resolveBackgroundTaskStatus } from '@/modules/chat/utils/backgroundTasks';
 
@@ -81,8 +82,7 @@ function parseWorkflowMeta(script: string): WorkflowScriptMeta {
 }
 
 /** Pretty-prints a JSON result so it reads as a document rather than one line. */
-function formatResultText(content: unknown): string {
-  const text = typeof content === 'string' ? content : content == null ? '' : JSON.stringify(content);
+function formatResultText(text: string): string {
   const trimmed = text.trim();
   if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
     try {
@@ -105,6 +105,7 @@ const AGENT_STATUS_STYLES: Record<WorkflowAgentInfo['status'], string> = {
   running: 'bg-purple-500 dark:bg-purple-400 animate-pulse',
   completed: 'bg-green-500 dark:bg-green-400',
   failed: 'bg-red-500 dark:bg-red-400',
+  stopped: 'bg-muted-foreground/40',
 };
 
 /**
@@ -128,10 +129,18 @@ export const WorkflowPanel = memo(({ toolInput, toolResult, workflow, taskStatus
 
   // A workflow only ever runs in the background, so until something reports
   // on it — the backend from the journal and notification, the live stream
-  // from its task events — it is still going.
-  const status = resolveBackgroundTaskStatus(workflow?.status, taskStatus?.status) ?? 'running';
+  // from its task events — it is still going. Unless the tool refused the
+  // call outright (a script that does not parse): that result is an error
+  // and nothing was ever launched.
+  const status = toolResult?.isError
+    ? 'failed'
+    : resolveBackgroundTaskStatus(workflow?.status, taskStatus?.status) ?? 'running';
   const name = workflow?.name || taskStatus?.workflowName || meta.name || '';
   const description = workflow?.description || meta.description || String(parsedInput.description ?? '');
+  // A progress summary restating the description ("one agent that waits…")
+  // says nothing the header does not; only a real phase or count earns the
+  // badge over the plain word.
+  const liveSummary = taskStatus?.summary && taskStatus.summary !== description ? taskStatus.summary : undefined;
   const scriptPath = workflow?.scriptPath ?? (typeof parsedInput.scriptPath === 'string' ? parsedInput.scriptPath : '');
 
   const agents = workflow?.agents ?? [];
@@ -168,7 +177,7 @@ export const WorkflowPanel = memo(({ toolInput, toolResult, workflow, taskStatus
           {status === 'running' ? (
             <>
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-purple-500 dark:bg-purple-400" />
-              {taskStatus?.summary || t('workflow.status.running', 'running')}
+              {liveSummary || t('workflow.status.running', 'running')}
             </>
           ) : status === 'failed' ? (
             <>
@@ -241,7 +250,10 @@ export const WorkflowPanel = memo(({ toolInput, toolResult, workflow, taskStatus
             </div>
           )}
 
-          {resultText && (
+          {toolResult?.isError ? (
+            // The tool's refusal is the whole story of this call.
+            <ToolErrorDisplay label={t('chat:messageTypes.error', 'Error')} content={content} />
+          ) : resultText && (
             <details open className="rounded border border-border/40 bg-muted/30 p-2">
               <summary className="cursor-pointer text-[10px] uppercase tracking-wide text-muted-foreground/60">
                 {t('workflow.result', 'Result')}

@@ -726,7 +726,13 @@ async function getSessionMessages(
         const status: WorkflowInfo['status'] = notification
           ? notification.status === 'completed' || notification.status === 'stopped' ? notification.status : 'failed'
           : unreportedStatus;
-        const agents = workflowAgentsByDir.get(String(message.toolUseResult.transcriptDir ?? '')) ?? [];
+        // The journal marks an agent `started` and later `result`/`failed`.
+        // Once the run itself has settled, a `started` with no second record
+        // is not still going: the run was stopped under it, or a resume re-ran
+        // the step under a new id. Drawing those as running put a pulsing dot
+        // on a finished card.
+        const agents = (workflowAgentsByDir.get(String(message.toolUseResult.transcriptDir ?? '')) ?? [])
+          .map((agent) => (status !== 'running' && agent.status === 'running' ? { ...agent, status: 'stopped' as const } : agent));
         const countWith = (agentStatus: WorkflowAgentInfo['status']) =>
           agents.filter((agent) => agent.status === agentStatus).length;
 
@@ -741,6 +747,7 @@ async function getSessionMessages(
             completed: countWith('completed'),
             failed: countWith('failed'),
             running: countWith('running'),
+            stopped: countWith('stopped'),
           },
           scriptPath: typeof message.toolUseResult.scriptPath === 'string' ? message.toolUseResult.scriptPath : undefined,
         };
@@ -751,9 +758,12 @@ async function getSessionMessages(
         for (const sourceUuid of notification.sourceUuids) {
           foldedNotificationUuids.add(sourceUuid);
         }
-      } else if (isAsyncLaunch) {
-        // Without a notification there is no answer to show, and the launch
-        // acknowledgement is internal bookkeeping the user must never read.
+      } else if (isAsyncLaunch && launch !== 'bash') {
+        // Without a notification there is no answer to show, and an agent's
+        // or workflow's launch acknowledgement is internal bookkeeping the
+        // user must never read. A backgrounded command's acknowledgement is
+        // different: it names the output file, which is the only handle on
+        // the command's output until it reports, so it stays.
         replaceLaunchToolResultContent(message, '');
       }
     }

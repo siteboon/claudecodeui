@@ -874,7 +874,41 @@ test('Claude history reads a workflow\'s agents and their progress from its jour
         { id: 'a9cfe29aa8f2afcbf', label: 'audit:sidebar', phase: 'Audit', status: 'failed' },
         { id: 'ab89f2cde612a51b1', label: 'synthesize', phase: 'Synthesize', status: 'running' },
       ]);
-      assert.deepEqual(workflowRow?.workflow?.agentCounts, { total: 3, completed: 1, failed: 1, running: 1 });
+      assert.deepEqual(workflowRow?.workflow?.agentCounts, { total: 3, completed: 1, failed: 1, running: 1, stopped: 0 });
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('Claude history does not keep a journal agent running once the workflow itself has settled', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-workflow-orphan-agent-'));
+
+  try {
+    // The journal has a `started` with no `result` or `failed` for the
+    // synthesize step, but the run has reported completed — a resume re-ran
+    // that step under a new id, or the run was stopped under it. Either way
+    // nothing is still going, and a pulsing dot on a finished card said
+    // otherwise.
+    const parentPath = await writeClaudeWorkflowSession(tempRoot, { notification: 'user', journal: true });
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(WORKFLOW_SESSION_ID, 'claude', tempRoot, 'Workflow session', now, now, parentPath);
+
+      const history = await new ClaudeSessionsProvider({ getLiveRunStartTime: () => null }).fetchHistory(WORKFLOW_SESSION_ID, {
+        providerSessionId: WORKFLOW_SESSION_ID,
+      });
+      const workflowRow = history.messages.find(
+        (message) => message.kind === 'tool_use' && message.toolId === WORKFLOW_TOOL_USE_ID,
+      );
+
+      assert.equal(workflowRow?.workflow?.status, 'completed');
+      assert.deepEqual(
+        workflowRow?.workflow?.agents.map((agent) => agent.status),
+        ['completed', 'failed', 'stopped'],
+      );
+      assert.deepEqual(workflowRow?.workflow?.agentCounts, { total: 3, completed: 1, failed: 1, running: 0, stopped: 1 });
     });
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
@@ -903,7 +937,7 @@ test('Claude history reports a workflow stopped, with no agents, when its run an
 
       assert.equal(workflowRow?.workflow?.status, 'stopped');
       assert.deepEqual(workflowRow?.workflow?.agents, []);
-      assert.deepEqual(workflowRow?.workflow?.agentCounts, { total: 0, completed: 0, failed: 0, running: 0 });
+      assert.deepEqual(workflowRow?.workflow?.agentCounts, { total: 0, completed: 0, failed: 0, running: 0, stopped: 0 });
     });
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
@@ -976,6 +1010,18 @@ test('Claude history folds a backgrounded Bash command\'s notification onto its 
       );
 
       assert.equal(bashRow?.toolResult?.content, 'Background command "Start the dev server" completed (exit code 0)');
+
+      // Without the report, the shell's acknowledgement stays: unlike an
+      // agent's or a workflow's, it names the output file, which is the only
+      // handle on the command's output until it reports.
+      await writeFile(transcriptPath, `${rows.slice(0, 2).map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+      const unreported = await new ClaudeSessionsProvider({ getLiveRunStartTime: () => null }).fetchHistory(sessionId, {
+        providerSessionId: sessionId,
+      });
+      const unreportedRow = unreported.messages.find(
+        (message) => message.kind === 'tool_use' && message.toolId === toolUseId,
+      );
+      assert.match(unreportedRow?.toolResult?.content ?? '', /Output is being written to: \/tmp\/tasks\/b5xsbzu5k\.output/);
     });
   } finally {
     await rm(tempRoot, { recursive: true, force: true });

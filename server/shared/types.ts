@@ -393,7 +393,8 @@ export type WorkflowAgentInfo = {
   id: string;
   label?: string;
   phase?: string;
-  status: 'running' | 'completed' | 'failed';
+  /** `stopped` is an agent the journal never settled although the run itself has — abandoned by a stop or a resume that re-ran the step. */
+  status: 'running' | 'completed' | 'failed' | 'stopped';
 };
 
 /**
@@ -411,7 +412,7 @@ export type WorkflowInfo = {
   description?: string;
   status: 'running' | 'completed' | 'failed' | 'stopped';
   agents: WorkflowAgentInfo[];
-  agentCounts: { total: number; completed: number; failed: number; running: number };
+  agentCounts: { total: number; completed: number; failed: number; running: number; stopped: number };
   scriptPath?: string;
 };
 

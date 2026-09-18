@@ -28,11 +28,7 @@ export function resolveBackgroundTaskStatus(
  * that launched nothing.
  */
 export function readBackgroundTaskStatus(message: ChatMessage): BackgroundTaskStatus | undefined {
-  const serverStatus = message.workflow?.status ?? message.subagent?.status;
-  if (!serverStatus && !message.taskStatus) {
-    return undefined;
-  }
-  return resolveBackgroundTaskStatus(serverStatus, message.taskStatus?.status);
+  return resolveBackgroundTaskStatus(message.workflow?.status ?? message.subagent?.status, message.taskStatus?.status);
 }
 
 /** `1m 5s`, the way the CLI prints a task's elapsed time. */

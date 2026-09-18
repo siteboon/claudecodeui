@@ -7,6 +7,12 @@ import { readBackgroundTaskStatus } from '@/modules/chat/utils/backgroundTasks';
 type BackgroundTasksStripProps = {
   /** The whole session, not the visible window: a task launched pages ago is still running. */
   messages: ChatMessage[];
+  /**
+   * Brings a row into view. Owned by the pane's session state because the
+   * row may sit outside the visible window or in an unmounted lazy row, so
+   * it takes more than an element lookup to reach it.
+   */
+  onReveal: (message: ChatMessage) => void;
 };
 
 /** What one running task's chip says: its kind, its name, and how far it has got. */
@@ -39,7 +45,7 @@ function describeTask(message: ChatMessage, t: (key: string, defaultValue: strin
  * scrolling to its card when clicked. Renders nothing while nothing runs,
  * which is most of the time.
  */
-export const BackgroundTasksStrip = memo(({ messages }: BackgroundTasksStripProps) => {
+export const BackgroundTasksStrip = memo(({ messages, onReveal }: BackgroundTasksStripProps) => {
   const { t } = useTranslation();
   const running = messages.filter(
     (message) => message.isToolUse && message.toolId && readBackgroundTaskStatus(message) === 'running',
@@ -61,7 +67,7 @@ export const BackgroundTasksStrip = memo(({ messages }: BackgroundTasksStripProp
           <button
             key={message.toolId}
             type="button"
-            onClick={() => document.getElementById(`tool-result-${message.toolId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+            onClick={() => onReveal(message)}
             className="flex max-w-xs items-center gap-1.5 rounded px-1.5 py-0.5 hover:bg-muted hover:text-foreground"
           >
             <span className="h-1.5 w-1.5 flex-shrink-0 animate-pulse rounded-full bg-purple-500 dark:bg-purple-400" />

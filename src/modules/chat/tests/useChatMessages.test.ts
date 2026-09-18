@@ -201,3 +201,31 @@ test('folds the live task events of a background launch onto the tool row that l
   // Unchanged events leave the row's identity alone, like any other source.
   assert.strictEqual(normalizedToChatMessages([workflowCall, started, progress, finished])[0], afterFinish[0]);
 });
+
+test('an updated event finds a call launched before this page loaded through its acknowledgement', () => {
+  // After a reload mid-run the `started` event that pairs task and call is
+  // gone; the launch acknowledgement in history names the task, and a
+  // `task_updated` — the only event that says a task was killed — names
+  // nothing else.
+  const workflowCall = message('workflow-call', {
+    kind: 'tool_use',
+    toolId: 'toolu_workflow_1',
+    toolName: 'Workflow',
+    toolInput: { script: "export const meta = { name: 'audit' }" },
+  });
+  const launchAck = message('workflow-ack', {
+    kind: 'tool_result',
+    toolId: 'toolu_workflow_1',
+    content: 'Workflow launched in background. Task ID: wxkj4kcvd',
+    toolUseResult: { status: 'async_launched', taskId: 'wxkj4kcvd', taskType: 'local_workflow', workflowName: 'audit' },
+  });
+  const killed = message('task-updated', {
+    kind: 'task_status',
+    event: 'updated',
+    taskId: 'wxkj4kcvd',
+    status: 'stopped',
+  });
+
+  const [row] = normalizedToChatMessages([workflowCall, launchAck, killed]);
+  assert.equal(row?.taskStatus?.status, 'stopped');
+});

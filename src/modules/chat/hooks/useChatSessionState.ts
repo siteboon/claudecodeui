@@ -78,6 +78,17 @@ function findRenderedMessageElement(
 /** Stable empty list so `chatMessages` keeps its identity while no session is selected. */
 const NO_MESSAGES: NormalizedMessage[] = [];
 
+/**
+ * The visible-window size that shows the row at `index` of `total` rows, with
+ * a page of context above it; the current size when the row already shows.
+ * The window is a tail slice, so a row is visible when at most `count` rows
+ * follow it, itself included.
+ */
+export function visibleCountToReveal(total: number, index: number, current: number): number {
+  const needed = total - index;
+  return needed <= current ? current : needed + SESSION_MESSAGES_PAGE_SIZE;
+}
+
 type UseChatSessionStateArgs = {
   isActive: boolean;
   selectedProject: Project | null;
@@ -1098,6 +1109,30 @@ export function useChatSessionState({
     setVisibleMessageCount((prev) => prev + 100);
   }, []);
 
+  // Brings one row into view even when it is outside the visible window or
+  // sits in a lazy row that has not mounted: widen the window to include it,
+  // then scroll to the row's wrapper, which is in the DOM as soon as the row
+  // is inside the window, mounted or not.
+  const revealMessage = useCallback((message: ChatMessage) => {
+    const index = chatMessages.indexOf(message);
+    if (index >= 0) {
+      setVisibleMessageCount((prev) => visibleCountToReveal(chatMessages.length, index, prev));
+    }
+
+    const attempt = (remaining: number) => {
+      const container = scrollContainerRef.current;
+      const element = container ? findRenderedMessageElement(container, message.timestamp, true) : null;
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      if (remaining > 0) {
+        requestAnimationFrame(() => attempt(remaining - 1));
+      }
+    };
+    requestAnimationFrame(() => attempt(10));
+  }, [chatMessages]);
+
   return {
     chatMessages,
     addMessage,
@@ -1117,6 +1152,7 @@ export function useChatSessionState({
     visibleMessageCount,
     visibleMessages,
     loadEarlierMessages,
+    revealMessage,
     loadAllMessages,
     loadFullTranscript,
     allMessagesLoaded,

@@ -38,7 +38,7 @@ const completedWorkflow: WorkflowInfo = {
     { id: 'a9cfe29aa8f2afcbf', label: 'audit:sidebar', phase: 'Audit', status: 'failed' },
     { id: 'ab89f2cde612a51b1', label: 'synthesize', phase: 'Synthesize', status: 'running' },
   ],
-  agentCounts: { total: 3, completed: 1, failed: 1, running: 1 },
+  agentCounts: { total: 3, completed: 1, failed: 1, running: 1, stopped: 0 },
   scriptPath: '/home/user/.claude/projects/p/s/workflows/scripts/frontend-architecture-audit-wf_16fbf852-274.js',
 };
 
@@ -79,6 +79,38 @@ describe('a workflow card', () => {
     expect(screen.getByText('12 tool uses · 1m 5s')).toBeTruthy();
   });
 
+  it('shows a call the tool refused as failed, with the refusal', () => {
+    // Real shape (session 4820c6b8, toolu_013kMvJMNEzFoDJrzW8vWZHE): the
+    // script did not parse, so nothing was launched and no journal, no
+    // notification and no task event will ever arrive to settle the card.
+    renderPanel({
+      toolResult: {
+        content: '<tool_use_error>Invalid workflow script: Script parse error: Unexpected token (152:27)</tool_use_error>',
+        isError: true,
+        toolUseResult: 'Error: Invalid workflow script: Script parse error: Unexpected token (152:27)',
+      },
+    });
+
+    expect(screen.getByText('failed')).toBeTruthy();
+    expect(screen.queryByText('running')).toBeNull();
+    expect(document.querySelector('.animate-pulse')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { expanded: false }));
+    expect(screen.getByText(/Invalid workflow script/)).toBeTruthy();
+  });
+
+  it('keeps the plain running word when the live summary only restates the description', () => {
+    // The SDK's first progress events carry the workflow's description as
+    // their summary; the header already says that.
+    renderPanel({
+      toolResult: LAUNCH_ACK,
+      taskStatus: { status: 'running', workflowName: 'frontend-architecture-audit', summary: 'Evidence-based audit of the frontend' },
+    });
+
+    expect(screen.getByText('running')).toBeTruthy();
+    expect(screen.getAllByText('Evidence-based audit of the frontend')).toHaveLength(1);
+  });
+
   it('draws a completed run: check mark, agents, phases and the pretty-printed result', () => {
     renderPanel({
       toolResult: { content: '{"audits":[{"area":"src/modules/chat"}]}', isError: false },
@@ -112,7 +144,7 @@ describe('a workflow card', () => {
   it('shows a run whose process ended before it reported as having no result', () => {
     renderPanel({
       toolResult: { content: '', isError: false },
-      workflow: { ...completedWorkflow, status: 'stopped', agents: [], agentCounts: { total: 0, completed: 0, failed: 0, running: 0 } },
+      workflow: { ...completedWorkflow, status: 'stopped', agents: [], agentCounts: { total: 0, completed: 0, failed: 0, running: 0, stopped: 0 } },
     });
 
     expect(screen.getByText('no result')).toBeTruthy();

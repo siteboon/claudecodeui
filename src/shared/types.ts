@@ -492,6 +492,8 @@ export type NormalizedMessage = {
   toolInput?: unknown;
   toolId?: string;
   toolResult?: { content: string; isError: boolean; toolUseResult?: unknown } | null;
+  /** A `tool_result` row's structured output — a launch acknowledgement's task id and metadata, a search's file list. */
+  toolUseResult?: unknown;
   isError?: boolean;
   text?: string;
   tokens?: number;
@@ -547,7 +549,8 @@ export type WorkflowAgentInfo = {
   id: string;
   label?: string;
   phase?: string;
-  status: 'running' | 'completed' | 'failed';
+  /** `stopped` is an agent the journal never settled although the run itself has — abandoned by a stop or a resume that re-ran the step. */
+  status: 'running' | 'completed' | 'failed' | 'stopped';
 };
 
 /** A `Workflow` call's run as the backend read it from disk; `stopped` is a run whose session process ended before it reported, and an empty agent list is a run that left no journal behind. */
@@ -557,7 +560,7 @@ export type WorkflowInfo = {
   description?: string;
   status: BackgroundTaskStatus;
   agents: WorkflowAgentInfo[];
-  agentCounts: { total: number; completed: number; failed: number; running: number };
+  agentCounts: { total: number; completed: number; failed: number; running: number; stopped: number };
   scriptPath?: string;
 };
 

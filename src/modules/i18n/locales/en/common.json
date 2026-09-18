@@ -365,7 +365,8 @@
     "agentStatus": {
       "running": "running",
       "completed": "done",
-      "failed": "failed"
+      "failed": "failed",
+      "stopped": "no result"
     },
     "usage": "{{toolUses}} tool uses · {{elapsed}}",
     "result": "Result",

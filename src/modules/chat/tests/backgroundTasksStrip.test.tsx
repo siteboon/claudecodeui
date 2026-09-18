@@ -4,6 +4,8 @@ import { fireEvent, render, screen } from '@testing-library/react';
 
 import '@/modules/i18n';
 import { BackgroundTasksStrip } from '@/modules/chat/transcript/BackgroundTasksStrip';
+import { visibleCountToReveal } from '@/modules/chat/hooks/useChatSessionState';
+import { SESSION_MESSAGES_PAGE_SIZE } from '@/modules/chat/utils/sessionMessagePagination';
 import type { ChatMessage } from '@/shared/types';
 
 const toolRow = (overrides: Partial<ChatMessage>): ChatMessage => ({
@@ -18,6 +20,7 @@ describe('the background tasks strip', () => {
   it('lists a running workflow and a running agent with what each has got to', () => {
     render(
       <BackgroundTasksStrip
+        onReveal={() => {}}
         messages={[
           toolRow({ toolName: 'Read', toolId: 'toolu_read', toolInput: '{}' }),
           toolRow({
@@ -51,12 +54,13 @@ describe('the background tasks strip', () => {
   it('renders nothing when no task is running', () => {
     const { container } = render(
       <BackgroundTasksStrip
+        onReveal={() => {}}
         messages={[
           toolRow({ toolName: 'Read', toolId: 'toolu_read', toolInput: '{}' }),
           toolRow({
             toolName: 'Workflow',
             toolId: 'toolu_workflow_2',
-            workflow: { runId: 'wf_1', name: 'review-p1', status: 'completed', agents: [], agentCounts: { total: 0, completed: 0, failed: 0, running: 0 } },
+            workflow: { runId: 'wf_1', name: 'review-p1', status: 'completed', agents: [], agentCounts: { total: 0, completed: 0, failed: 0, running: 0, stopped: 0 } },
           }),
         ]}
       />,
@@ -70,6 +74,7 @@ describe('the background tasks strip', () => {
     // backend read the journal and knows the run is still going.
     render(
       <BackgroundTasksStrip
+        onReveal={() => {}}
         messages={[
           toolRow({
             toolName: 'Workflow',
@@ -82,7 +87,7 @@ describe('the background tasks strip', () => {
                 { id: 'a1', status: 'completed' },
                 { id: 'a2', status: 'running' },
               ],
-              agentCounts: { total: 2, completed: 1, failed: 0, running: 1 },
+              agentCounts: { total: 2, completed: 1, failed: 0, running: 1, stopped: 0 },
             },
           }),
         ]}
@@ -92,26 +97,32 @@ describe('the background tasks strip', () => {
     expect(screen.getByRole('button').textContent).toBe('Workflowfrontend-architecture-audit· 1/2');
   });
 
-  it('scrolls to the task\'s card when its chip is clicked', () => {
-    const card = document.createElement('div');
-    card.id = 'tool-result-toolu_workflow_1';
-    card.scrollIntoView = vi.fn();
-    document.body.appendChild(card);
+  it('asks the pane to reveal the task\'s row when its chip is clicked', () => {
+    // The row may be outside the visible window or in an unmounted lazy row,
+    // so the strip cannot reach it with an element lookup of its own; the
+    // pane's session state widens the window and scrolls the row's wrapper.
+    const onReveal = vi.fn();
+    const row = toolRow({
+      toolName: 'Workflow',
+      toolId: 'toolu_workflow_1',
+      taskStatus: { status: 'running', workflowName: 'frontend-architecture-audit' },
+    });
 
-    render(
-      <BackgroundTasksStrip
-        messages={[
-          toolRow({
-            toolName: 'Workflow',
-            toolId: 'toolu_workflow_1',
-            taskStatus: { status: 'running', workflowName: 'frontend-architecture-audit' },
-          }),
-        ]}
-      />,
-    );
+    render(<BackgroundTasksStrip onReveal={onReveal} messages={[row]} />);
 
     fireEvent.click(screen.getByRole('button'));
-    expect(card.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' });
-    card.remove();
+    expect(onReveal).toHaveBeenCalledWith(row);
+  });
+});
+
+describe('visibleCountToReveal', () => {
+  it('keeps the window when the row is already inside it', () => {
+    // 942 rows, window of 100: row 900 has 42 rows after it, itself included.
+    expect(visibleCountToReveal(942, 900, 100)).toBe(100);
+  });
+
+  it('widens the window to the row plus a page of context when it is not', () => {
+    // Row 106 of 942 needs 836 rows shown; a page more gives it some context above.
+    expect(visibleCountToReveal(942, 106, 100)).toBe(836 + SESSION_MESSAGES_PAGE_SIZE);
   });
 });
