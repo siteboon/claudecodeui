@@ -350,6 +350,31 @@ async function readTranscriptRows(jsonlPath: string, providerSessionId: string):
   return rows;
 }
 
+/**
+ * True for a `<task-notification>` turn — an async agent reporting on its own
+ * run, not something the user typed.
+ *
+ * A resumed agent notifies more than once about the same run, so two
+ * notifications routinely land under one parent. Counting them as prompts made
+ * the fork heuristic below read that as an edit and hide the live branch: every
+ * row written after the first notification, which can be days of conversation,
+ * vanished from the transcript the app shows while staying in the file.
+ */
+function isTaskNotificationRow(row: AnyRecord): boolean {
+  if (row.origin?.kind === 'task-notification') {
+    return true;
+  }
+
+  const content = row.message?.content;
+  const texts: string[] = typeof content === 'string'
+    ? [content]
+    : Array.isArray(content)
+      ? content.filter((part: AnyRecord) => part?.type === 'text').map((part: AnyRecord) => String(part.text ?? ''))
+      : [];
+
+  return texts.some((text) => text.trimStart().startsWith('<task-notification>'));
+}
+
 /** True for a row the user typed, as opposed to a tool result or an injected note. */
 function isUserPromptRow(row: AnyRecord): boolean {
   if (
@@ -357,6 +382,7 @@ function isUserPromptRow(row: AnyRecord): boolean {
     || row.isMeta === true
     || row.isCompactSummary === true
     || isInjectedUserTurn(row)
+    || isTaskNotificationRow(row)
   ) {
     return false;
   }

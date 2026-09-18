@@ -442,6 +442,71 @@ test('an edited prompt replaces the one it superseded instead of stacking on it'
   }
 });
 
+test('a repeated task notification is not mistaken for an edit', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-task-notification-'));
+  const sessionId = 'claude-task-notification-session';
+
+  try {
+    const transcriptPath = path.join(tempRoot, `${sessionId}.jsonl`);
+    // A resumed background agent notifies twice about the same run, so both
+    // notifications parent onto the turn that launched it. The conversation
+    // continued under the first one; treating the second as an edit would hide
+    // everything the user said and read after it.
+    const rows = [
+      {
+        type: 'user', uuid: 'n1', parentUuid: null, sessionId,
+        timestamp: '2026-08-23T10:00:00.000Z',
+        message: { role: 'user', content: [{ type: 'text', text: 'launch the agent' }] },
+      },
+      {
+        type: 'assistant', uuid: 'na1', parentUuid: 'n1', sessionId,
+        timestamp: '2026-08-23T10:00:01.000Z',
+        message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'agent started' }] },
+      },
+      {
+        type: 'user', uuid: 'nt1', parentUuid: 'na1', sessionId,
+        origin: { kind: 'task-notification' },
+        timestamp: '2026-08-23T10:01:00.000Z',
+        message: { role: 'user', content: '<task-notification>\n<task-id>t1</task-id>\n<status>stopped</status>\n</task-notification>' },
+      },
+      {
+        type: 'user', uuid: 'n2', parentUuid: 'nt1', sessionId,
+        timestamp: '2026-08-23T10:02:00.000Z',
+        message: { role: 'user', content: [{ type: 'text', text: 'prompt after the notification' }] },
+      },
+      {
+        type: 'assistant', uuid: 'na2', parentUuid: 'n2', sessionId,
+        timestamp: '2026-08-23T10:02:01.000Z',
+        message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'answer after the notification' }] },
+      },
+      // The same agent reports again, onto the same parent as the first
+      // notification and after the branch below it has grown.
+      {
+        type: 'user', uuid: 'nt2', parentUuid: 'na1', sessionId,
+        origin: { kind: 'task-notification' },
+        timestamp: '2026-08-23T10:03:00.000Z',
+        message: { role: 'user', content: '<task-notification>\n<task-id>t1</task-id>\n<status>completed</status>\n</task-notification>' },
+      },
+    ];
+    await writeFile(transcriptPath, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(sessionId, 'claude', tempRoot, 'Task notification', now, now, transcriptPath);
+
+      const history = await new ClaudeSessionsProvider().fetchHistory(sessionId, {
+        providerSessionId: sessionId,
+      });
+      const texts = history.messages.map((message) => message.content);
+
+      assert.equal(texts.includes('prompt after the notification'), true);
+      assert.equal(texts.includes('answer after the notification'), true);
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('parallel tool calls are not mistaken for an edit', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-parallel-tools-'));
   const sessionId = 'claude-parallel-session';
