@@ -75,6 +75,10 @@ export type ProviderModelOption = {
   value: string;
   label: string;
   description?: string;
+  /** Stable SQLite row id used only by model-management actions. */
+  recordId?: number;
+  /** True for user-created rows; false for immutable CloudCLI defaults. */
+  isCustom?: boolean;
   effort?: {
     default?: string;
     values: {
@@ -93,28 +97,31 @@ export type ProviderModelsDefinition = {
 };
 
 /**
- * Cache metadata returned alongside one provider model catalog.
+ * One persisted custom-model row in the provider model library.
  *
- * `updatedAt` is when the current cached snapshot was last refreshed from the
- * provider itself. `expiresAt` is the backend cache expiry timestamp, and
- * `source` tells callers whether the current response came from in-memory cache,
- * persisted disk cache, or a fresh provider fetch.
+ * Provider modules use this shape at the database boundary. Predefined models
+ * never use this type because they remain source-controlled in provider
+ * adapters. `modelId` is sent to the provider runtime, while `model` is the
+ * user-supplied display name shown in pickers.
  */
-export type ProviderModelsCacheInfo = {
-  updatedAt: string;
-  expiresAt: string;
-  source: 'memory' | 'disk' | 'fresh';
+export type CustomProviderModelRecord = {
+  recordId: number;
+  provider: LLMProvider;
+  modelId: string;
+  model: string;
+  sortOrder: number;
 };
 
 /**
- * Full provider model lookup result returned by the backend service layer.
+ * User-editable values accepted when creating or changing a custom model.
  *
- * Use this shape when a caller needs both the selectable model catalog and the
- * cache metadata that explains how current the catalog is.
+ * `id` must be the exact provider-facing model identifier and cannot contain
+ * whitespace. `model` is a concise display name. The provider is supplied by
+ * the route path so a row can never be moved across providers accidentally.
  */
-export type ProviderModelsResult = {
-  models: ProviderModelsDefinition;
-  cache: ProviderModelsCacheInfo;
+export type CustomProviderModelInput = {
+  id: string;
+  model: string;
 };
 
 // ---------------------------
@@ -147,7 +154,8 @@ export type ProviderCurrentActiveModel = {
 export type ProviderSessionModelSource = 'session' | 'provider' | 'default';
 
 /**
- * The model one session runs with, plus where that answer came from.
+ * The model one session runs with, its persisted reasoning effort when one has
+ * been recorded, and where the model answer came from.
  *
  * Returned by `providerModelsService.resolveSessionModel` and used by the
  * `/models`, `/cost` and `/status` commands, the active-model route, and the
@@ -157,6 +165,8 @@ export type ProviderSessionModel = {
   provider: LLMProvider;
   sessionId: string | null;
   model: string;
+  /** NULL means this session has not recorded an effort choice yet. */
+  effort: string | null;
   source: ProviderSessionModelSource;
 };
 
@@ -176,9 +186,10 @@ export type MessageKind =
   | 'complete'
   | 'status'
   | 'permission_request'
+  | 'permission_resolved'
   | 'permission_cancelled'
   | 'session_created'
-  | 'interactive_prompt'
+  | 'history_truncated'
   | 'task_notification';
 
 /**
@@ -205,14 +216,75 @@ export type GatewayEventKind =
  */
 export type ServerEventKind = MessageKind | GatewayEventKind;
 
+/** The owning project as it appears inside a `session_upserted` delta. */
+export type SessionUpsertedProject = {
+  projectId: string;
+  path: string;
+  fullPath: string;
+  displayName: string;
+  isStarred: boolean;
+};
+
+/**
+ * The `session_upserted` sidebar delta, built only by
+ * `modules/websocket/services/session-upsert-broadcast.service.ts`.
+ *
+ * Typed rather than assembled as an untyped object literal because the payload
+ * used to be built in two places and silently drifted apart: one copy set
+ * `providerSessionId` and the other did not, and nothing could detect it.
+ *
+ * `providerSessionId` is how a client recognises that a row it is currently
+ * showing has been merged into its canonical app-session row, so it is always
+ * present — `null` only while the provider has not reported an id yet.
+ */
+export type SessionUpsertedEvent = {
+  kind: 'session_upserted';
+  sessionId: string;
+  providerSessionId: string | null;
+  provider: LLMProvider;
+  session: {
+    id: string;
+    summary: string;
+    messageCount: number;
+    lastActivity: string;
+  };
+  project: SessionUpsertedProject | null;
+  timestamp: string;
+};
+
 /**
  * Provider-neutral message envelope used in REST responses and realtime channels.
  *
  * Every provider-specific message must be converted into this shape before being
  * emitted outside provider-specific modules.
  */
+/**
+ * A compaction, as the transcript records it.
+ *
+ * `running` is the status the CLI sends when it starts compacting, `done` the
+ * boundary it sends when it has, `failed` a compaction that did not finish.
+ * The token counts and duration only come with a boundary.
+ */
+export type CompactionInfo = {
+  phase: 'running' | 'done' | 'failed';
+  /** Whether the user asked for it or the context window did. */
+  trigger?: 'manual' | 'auto';
+  /** Tokens the conversation held before and after, when the boundary reports them. */
+  preTokens?: number;
+  postTokens?: number;
+  durationMs?: number;
+  error?: string | null;
+};
+
 export type NormalizedMessage = {
   id: string;
+  /**
+   * The provider's own identifier for the transcript row this message came
+   * from, when the provider has stable per-row identity (today: Claude's
+   * `uuid`). It is what "edit this message" and "fork from here" address, so it
+   * has to survive a reload — never a value this app synthesized.
+   */
+  transcriptAnchorId?: string;
   sessionId: string;
   timestamp: string;
   provider: LLMProvider;
@@ -241,6 +313,8 @@ export type NormalizedMessage = {
   isLocalCommand?: boolean;
   isLocalCommandStdout?: boolean;
   isCompactSummary?: boolean;
+  /** Set on the row that stands in for a compaction, so the UI can draw it as one. */
+  compact?: CompactionInfo;
   images?: unknown;
   /** Non-image files attached to a user turn after provider history normalization. */
   files?: unknown;
@@ -264,11 +338,88 @@ export type NormalizedMessage = {
   status?: string;
   summary?: string;
   tokenBudget?: unknown;
-  subagentTools?: unknown;
+  /**
+   * Timeline of everything a subagent did, attached to the `tool_use` that
+   * spawned it. Present for Claude `Agent`/`Task` calls and Codex
+   * `spawn_agent` calls; absent for every other tool.
+   */
+  subagentTools?: SubagentActivity[];
+  /** Identity and lifecycle of the subagent this `tool_use` spawned. */
+  subagent?: SubagentInfo;
+  /** Stored memory the reply drew on, when the provider reports it. */
+  memoryCitations?: MemoryCitation[];
   toolUseResult?: unknown;
   sequence?: number;
   rowid?: number;
   [key: string]: unknown;
+};
+
+/**
+ * One stored memory an assistant reply drew on.
+ *
+ * Codex appends these to a reply that used its memory files, naming the file
+ * and line range it read plus a short note on what it took from there. The
+ * transcript shows them as a footnote so a memory-derived claim is traceable
+ * rather than arriving as an unattributed assertion.
+ */
+export type MemoryCitation = {
+  /** File and line range that was read, e.g. `MEMORY.md:137-142`. */
+  source: string;
+  /** What the reply took from that range, when the provider states it. */
+  note?: string;
+};
+
+/**
+ * One entry in a subagent's recorded timeline.
+ *
+ * Providers store a subagent's work in a separate transcript (Claude:
+ * `<session>/subagents/agent-<id>.jsonl`; Codex: a sibling rollout keyed by
+ * `agent_thread_id`). Both are flattened into this shape so the transcript can
+ * replay a subagent's run with the same renderers the main thread uses.
+ *
+ * `kind` decides which fields matter: `tool` uses the tool fields, `text` and
+ * `thinking` use `content`. Consumers must not assume tool fields exist on the
+ * text kinds.
+ */
+export type SubagentActivity = {
+  kind: 'tool' | 'text' | 'thinking';
+  timestamp?: string;
+  /** Tool-call identity; only set when `kind` is `tool`. */
+  toolId?: string;
+  toolName?: string;
+  toolInput?: unknown;
+  toolResult?: { content?: string; isError?: boolean } | null;
+  /** Message body; only set when `kind` is `text` or `thinking`. */
+  content?: string;
+};
+
+/**
+ * Identity and lifecycle of one spawned subagent, normalized across providers.
+ *
+ * `status` is `running` until the call that spawned the agent resolves. After
+ * that it is whatever the provider reported — Claude's task notification
+ * carries one — and `completed` when the provider reported nothing. A failed
+ * tool call *inside* the agent is not a failed agent, so it is never inferred
+ * from the transcript.
+ */
+export type SubagentInfo = {
+  /** Provider-native agent id — Claude `agentId`, Codex `agent_thread_id`. */
+  id: string;
+  /** Human-facing label: Claude's agent type, or Codex's assigned nickname. */
+  name?: string;
+  /** Agent type/preset when the provider records one (Claude `agentType`). */
+  type?: string;
+  /** One-line task summary shown in the collapsed header. */
+  description?: string;
+  status: 'running' | 'completed' | 'failed';
+  /** Model the subagent ran on, when the provider records it. */
+  model?: string;
+  /**
+   * How many activities the agent actually recorded. It exceeds
+   * `subagentTools.length` when a long run was truncated for transport, which
+   * lets the UI say so instead of silently showing a partial timeline.
+   */
+  activityCount?: number;
 };
 
 /**
@@ -944,7 +1095,9 @@ export type FileTreeFileSystem = {
   access(candidatePath: string): Promise<void>;
   stat(candidatePath: string): Promise<FileTreeStats>;
   lstat(candidatePath: string): Promise<FileTreeStats>;
-  readdir(directoryPath: string): Promise<FileTreeDirectoryEntry[]>;
+  // Streamed rather than returned as an array so a directory with millions of
+  // children is abandoned at the entry limit instead of being materialized.
+  openDirectory(directoryPath: string): AsyncIterable<FileTreeDirectoryEntry>;
   realpath(candidatePath: string): Promise<string>;
   readTextFile(filePath: string): Promise<string>;
   writeTextFile(filePath: string, content: string): Promise<void>;
@@ -1170,7 +1323,6 @@ export type CliOutput = {
  * path-keyed fakes, so service tests never inspect or modify the real machine.
  */
 export type CliFileSystem = {
-  readTextFile(filePath: string): string;
   pathExists(filePath: string): boolean;
   getFileStats(filePath: string): { size: number; modifiedAt: Date };
 };

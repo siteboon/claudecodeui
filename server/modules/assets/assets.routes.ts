@@ -8,7 +8,7 @@ import {
   isAllowedImageMimeType,
   openStoredAttachmentAsset,
 } from '@/modules/assets/services/image-assets.service.js';
-import { FLAT_MULTIPART_FIELD_NESTING_DEPTH } from '@/shared/multipart-upload-limits.js';
+import { FLAT_MULTIPART_FIELD_NESTING_DEPTH } from '@/shared/utils.js';
 
 const router = express.Router();
 

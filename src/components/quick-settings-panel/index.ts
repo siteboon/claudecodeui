@@ -1,1 +1,0 @@
-export { default as QuickSettingsPanel } from './view/QuickSettingsPanelView';

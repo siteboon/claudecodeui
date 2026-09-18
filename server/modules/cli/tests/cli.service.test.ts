@@ -26,9 +26,6 @@ function createHarness() {
     },
     environment,
     fileSystem: {
-      readTextFile: () => {
-        throw new Error('missing');
-      },
       pathExists: () => false,
       getFileStats: () => ({ size: 0, modifiedAt: new Date(0) }),
     },

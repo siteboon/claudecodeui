@@ -70,7 +70,7 @@ test('live events are remapped to the app session id and sequenced', async () =>
 });
 
 test('session_created is swallowed and persisted as the provider-id mapping', async () => {
-  await withIsolatedDatabase(() => {
+  await withIsolatedDatabase(async () => {
     sessionsDb.createAppSession('app-run-2', 'cursor', '/workspace/demo');
     const connection = new FakeConnection();
     connectedClients.add(connection as never);
@@ -89,6 +89,10 @@ test('session_created is swallowed and persisted as the provider-id mapping', as
       sessionId: 'cursor-native-7',
       newSessionId: 'cursor-native-7',
     });
+
+    // The upsert is broadcast without blocking the run: resolving the owning
+    // project's display name is async, so let that settle before asserting.
+    await new Promise((resolve) => { setTimeout(resolve, 0); });
 
     // The provider-native event itself is never forwarded...
     const sessionUpserts = connection.frames.filter((frame) => frame.kind === 'session_upserted');
@@ -222,7 +226,7 @@ test('replayEvents returns only events after the requested seq', async () => {
   });
 });
 
-test('attachConnection reroutes the live stream to a new socket', async () => {
+test('attachConnection adds a socket without cutting off the ones already watching', async () => {
   await withIsolatedDatabase(() => {
     sessionsDb.createAppSession('app-run-5', 'opencode', '/workspace/demo');
     const firstConnection = new FakeConnection();
@@ -237,12 +241,39 @@ test('attachConnection reroutes the live stream to a new socket', async () => {
 
     run.writer.send({ kind: 'stream_delta', provider: 'opencode', sessionId: 'o', content: 'before' });
 
+    // A second tab on the same session subscribes mid-run.
     const secondConnection = new FakeConnection();
     assert.equal(chatRunRegistry.attachConnection('app-run-5', secondConnection), true);
     run.writer.send({ kind: 'stream_delta', provider: 'opencode', sessionId: 'o', content: 'after' });
 
-    assert.deepEqual(firstConnection.frames.map((frame) => frame.content), ['before']);
+    assert.deepEqual(firstConnection.frames.map((frame) => frame.content), ['before', 'after']);
     assert.deepEqual(secondConnection.frames.map((frame) => frame.content), ['after']);
+  });
+});
+
+test('a refreshed tab stops receiving once its old socket is closed', async () => {
+  await withIsolatedDatabase(() => {
+    sessionsDb.createAppSession('app-run-5b', 'opencode', '/workspace/demo');
+    const staleConnection = new FakeConnection();
+    const run = chatRunRegistry.startRun({
+      appSessionId: 'app-run-5b',
+      provider: 'opencode',
+      providerSessionId: null,
+      connection: staleConnection,
+      userId: null,
+    });
+    assert.ok(run);
+
+    // The page reloads: the original socket closes and the fresh one subscribes.
+    staleConnection.readyState = 3;
+    const reloadedConnection = new FakeConnection();
+    assert.equal(chatRunRegistry.attachConnection('app-run-5b', reloadedConnection), true);
+
+    run.writer.send({ kind: 'stream_delta', provider: 'opencode', sessionId: 'o', content: 'after' });
+    run.writer.send({ kind: 'stream_delta', provider: 'opencode', sessionId: 'o', content: 'later' });
+
+    assert.deepEqual(staleConnection.frames, []);
+    assert.deepEqual(reloadedConnection.frames.map((frame) => frame.content), ['after', 'later']);
   });
 });
 

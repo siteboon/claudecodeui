@@ -122,6 +122,15 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
       return null;
     }
 
+    // A thread a session was edited off is left on disk on purpose, but it is
+    // nobody's conversation any more. Re-indexing it would add a sidebar entry
+    // for the version the user edited away from — and for a session that was
+    // itself discovered from disk, whose app id is its original thread id, it
+    // would hand the row back to that thread.
+    if (sessionsDb.isProviderSessionSuperseded(parsed.sessionId, this.provider)) {
+      return null;
+    }
+
     // App-created sessions are keyed by an app id, so disk-discovered provider
     // ids must be resolved through the provider-id mapping first.
     const existingSession = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)
@@ -134,23 +143,7 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
       };
     }
 
-    // Sessions started by sending a message from cloudcli carry a distinct
-    // app-allocated session_id mapped to the provider id. For these we title the
-    // conversation from the first user message the user typed, instead of the
-    // generic "Untitled Codex Session" placeholder. Sessions discovered purely
-    // by indexing (session_id === provider_session_id) keep the existing
-    // thread_name/last-agent-message setup below.
-    const isAppCreated =
-      existingSession != null &&
-      existingSession.provider_session_id != null &&
-      existingSession.session_id !== existingSession.provider_session_id;
-
-    let sessionName = isAppCreated
-      ? await this.extractFirstUserMessageFromStart(filePath)
-      : undefined;
-    if (!sessionName) {
-      sessionName = nameMap.get(parsed.sessionId);
-    }
+    let sessionName = nameMap.get(parsed.sessionId);
     if (!sessionName) {
       sessionName = await this.extractLastAgentMessageFromEnd(filePath);
     }
@@ -178,49 +171,6 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
 
     const source = payload.source;
     return typeof source === 'object' && source !== null && 'subagent' in source;
-  }
-
-  /**
-   * Returns the first user message text in a Codex transcript, used to title
-   * app-created sessions from the prompt the user sent from cloudcli.
-   *
-   * Reads the `event_msg`/`user_message` payload rather than the raw
-   * `response_item` user turn so injected `<environment_context>` boilerplate is
-   * never mistaken for the user's prompt.
-   */
-  private async extractFirstUserMessageFromStart(filePath: string): Promise<string | undefined> {
-    try {
-      const content = await readFile(filePath, 'utf8');
-      const lines = content.split(/\r?\n/);
-
-      for (const rawLine of lines) {
-        const line = rawLine.trim();
-        if (!line) {
-          continue;
-        }
-
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(line);
-        } catch {
-          continue;
-        }
-
-        const data = parsed as Record<string, unknown>;
-        const eventType = typeof data.type === 'string' ? data.type : undefined;
-        const payload = data.payload as Record<string, unknown> | undefined;
-        const payloadType = typeof payload?.type === 'string' ? payload.type : undefined;
-        const message = typeof payload?.message === 'string' ? payload.message : undefined;
-
-        if (eventType === 'event_msg' && payloadType === 'user_message' && message?.trim()) {
-          return message;
-        }
-      }
-    } catch {
-      // Ignore missing/unreadable files so sync can continue.
-    }
-
-    return undefined;
   }
 
   private async extractLastAgentMessageFromEnd(filePath: string): Promise<string | undefined> {

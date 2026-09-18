@@ -1,6 +1,6 @@
 import multer from 'multer';
 
-import { FLAT_MULTIPART_FIELD_NESTING_DEPTH } from '@/shared/multipart-upload-limits.js';
+import { FLAT_MULTIPART_FIELD_NESTING_DEPTH } from '@/shared/utils.js';
 
 import { createVoiceRouter } from './voice.routes.js';
 import { createVoiceService } from './voice.service.js';

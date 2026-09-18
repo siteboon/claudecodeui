@@ -1,14 +1,14 @@
-import { randomUUID } from 'node:crypto';
 import fs, { promises as fsPromises } from 'node:fs';
-import os from 'node:os';
 
 import mime from 'mime-types';
-import multer from 'multer';
 
 import { projectsDb } from '@/modules/database/index.js';
 import { createFileTreeRouter } from '@/modules/file-tree/file-tree.routes.js';
 import { createFileTreeService } from '@/modules/file-tree/file-tree.service.js';
-import { FLAT_MULTIPART_FIELD_NESTING_DEPTH } from '@/shared/multipart-upload-limits.js';
+import {
+  fileTreeUploadLimits,
+  fileTreeUploadMiddleware,
+} from '@/modules/file-tree/file-tree-upload.middleware.js';
 import type {
   FileTreeFileSystem,
   FileTreeLogger,
@@ -16,10 +16,6 @@ import type {
   FileTreeWorkspaceGateway,
 } from '@/shared/types.js';
 import { WORKSPACES_ROOT, validateWorkspacePath } from '@/shared/utils.js';
-
-const MAXIMUM_UPLOAD_SIZE_MEGABYTES = 200;
-const MAXIMUM_UPLOAD_SIZE_BYTES = MAXIMUM_UPLOAD_SIZE_MEGABYTES * 1024 * 1024;
-const MAXIMUM_UPLOAD_FILE_COUNT = 20;
 
 function readFileSystemConcurrency(): number {
   const configuredConcurrency = Number.parseInt(process.env.FS_CONCURRENCY ?? '', 10);
@@ -37,7 +33,11 @@ const fileTreeFileSystem: FileTreeFileSystem = {
   access: (candidatePath) => fsPromises.access(candidatePath),
   stat: (candidatePath) => fsPromises.stat(candidatePath),
   lstat: (candidatePath) => fsPromises.lstat(candidatePath),
-  readdir: (directoryPath) => fsPromises.readdir(directoryPath, { withFileTypes: true }),
+  // `opendir` streams entries in batches and the handle is closed by the
+  // iterator protocol, including when the caller stops early at the entry cap.
+  openDirectory: async function* (directoryPath) {
+    yield* await fsPromises.opendir(directoryPath);
+  },
   realpath: (candidatePath) => fsPromises.realpath(candidatePath),
   readTextFile: (filePath) => fsPromises.readFile(filePath, 'utf8'),
   writeTextFile: (filePath, content) => fsPromises.writeFile(filePath, content, 'utf8'),
@@ -85,30 +85,13 @@ const fileTreeServices = createFileTreeService({
   logger: fileTreeLogger,
 });
 
-const fileUploadMiddleware = multer({
-  storage: multer.diskStorage({
-    destination: os.tmpdir(),
-    filename: (_request, _file, callback) => {
-      callback(null, `cloudcli-file-upload-${randomUUID()}`);
-    },
-  }),
-  limits: {
-    fieldNestingDepth: FLAT_MULTIPART_FIELD_NESTING_DEPTH,
-    fileSize: MAXIMUM_UPLOAD_SIZE_BYTES,
-    files: MAXIMUM_UPLOAD_FILE_COUNT,
-  },
-}).array('files', MAXIMUM_UPLOAD_FILE_COUNT);
-
 /**
  * File Tree router used by the server entrypoint to mount the authenticated
  * browsing, editing, file-management, and upload API under `/api/file-tree`.
  */
 export const fileTreeRoutes = createFileTreeRouter(
   fileTreeServices,
-  fileUploadMiddleware,
-  {
-    maximumFileSizeMegabytes: MAXIMUM_UPLOAD_SIZE_MEGABYTES,
-    maximumFileCount: MAXIMUM_UPLOAD_FILE_COUNT,
-  },
+  fileTreeUploadMiddleware,
+  fileTreeUploadLimits,
   fileTreeLogger,
 );

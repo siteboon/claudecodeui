@@ -9,6 +9,8 @@ lerna-debug.log*
 # Build outputs
 dist/
 dist-server/
+dist-server.next/
+dist-server.old/
 dist-ssr/
 build/
 out/
@@ -133,13 +135,7 @@ tasks.json
 tasks/ 
 
 # Translations
-!src/i18n/locales/en/tasks.json
-!src/i18n/locales/fr/tasks.json
-!src/i18n/locales/ja/tasks.json
-!src/i18n/locales/ru/tasks.json
-!src/i18n/locales/de/tasks.json
-!src/i18n/locales/tr/tasks.json
-!src/i18n/locales/it/tasks.json
+!src/i18n/locales/*/tasks.json
 
 # Git worktrees
 .worktrees/

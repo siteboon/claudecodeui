@@ -978,8 +978,8 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
         });
       }
 
-      const codexModels = (await providerModelsService.getProviderModels('codex')).models;
-      const opencodeModels = (await providerModelsService.getProviderModels('opencode')).models;
+      const codexModels = await providerModelsService.getProviderModels('codex');
+      const opencodeModels = await providerModelsService.getProviderModels('opencode');
 
       // Start the appropriate session
       if (provider === 'claude') {
