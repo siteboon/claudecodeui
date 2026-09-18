@@ -32,6 +32,8 @@ type SidebarProjectItemProps = {
   onRenameDraftChange: (name: string) => void;
   onToggleProject: (projectId: string) => void;
   onProjectSelect: (project: Project) => void;
+  /** Opens the project the way a click on its row means it: with its most recent session. */
+  onProjectOpen: (project: Project) => void;
   onToggleStarProject: (projectId: string) => void;
   onStartEditingProject: (project: Project) => void;
   onCancelEditingProject: () => void;
@@ -76,6 +78,7 @@ function SidebarProjectItem({
   onRenameDraftChange,
   onToggleProject,
   onProjectSelect,
+  onProjectOpen,
   onToggleStarProject,
   onStartEditingProject,
   onCancelEditingProject,
@@ -135,7 +138,7 @@ function SidebarProjectItem({
 
   const selectAndToggleProject = () => {
     if (selectedProject?.projectId !== project.projectId) {
-      onProjectSelect(project);
+      onProjectOpen(project);
     }
 
     toggleProject();

@@ -8,6 +8,7 @@ import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationProj
 import {
   filterProjects,
   getAllSessions,
+  getLatestOpenableSession,
   sortProjects,
 } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import {
@@ -902,6 +903,33 @@ export function useSidebarController({
     [onProjectSelect, setCurrentProject],
   );
 
+  /**
+   * What clicking a project row does: open the project *and* its most recent
+   * session.
+   *
+   * Selecting the project alone left the pane on a blank new session, so a
+   * project with twenty conversations in it opened onto nothing and the only
+   * way back to the last one was to expand the folder and find it. A new
+   * session is still one click away — it is the first button inside the
+   * expanded folder — while the conversation you were last in is what a
+   * project row now means.
+   *
+   * Deliberately separate from `handleProjectSelect`: the search-result path
+   * selects a project on its way to a specific session, and opening the newest
+   * one first would flash the wrong transcript.
+   */
+  const openProjectLatestSession = useCallback(
+    (project: Project) => {
+      handleProjectSelect(project);
+
+      const latest = getLatestOpenableSession(project);
+      if (latest) {
+        handleSessionClick(latest, project.projectId);
+      }
+    },
+    [handleProjectSelect, handleSessionClick],
+  );
+
   const openArchivedSession = useCallback((session: ArchivedSessionListItem) => {
     const activeProject = session.projectId
       ? projects.find((candidate) => candidate.projectId === session.projectId)
@@ -1106,6 +1134,7 @@ export function useSidebarController({
     requestProjectDelete,
     confirmDeleteProject,
     handleProjectSelect,
+    openProjectLatestSession,
     openArchivedSession,
     restoreArchivedProject,
     restoreArchivedSession,

@@ -31,6 +31,7 @@ export default function SidebarProjectList({
   onRenameDraftChange,
   onToggleProject,
   onProjectSelect,
+  onProjectOpen,
   onToggleStarProject,
   onStartEditingProject,
   onCancelEditingProject,
@@ -103,6 +104,7 @@ export default function SidebarProjectList({
                 onRenameDraftChange={onRenameDraftChange}
                 onToggleProject={onToggleProject}
                 onProjectSelect={onProjectSelect}
+                onProjectOpen={onProjectOpen}
                 onToggleStarProject={onToggleStarProject}
                 onStartEditingProject={onStartEditingProject}
                 onCancelEditingProject={onCancelEditingProject}

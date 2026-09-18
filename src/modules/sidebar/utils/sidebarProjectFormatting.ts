@@ -106,6 +106,17 @@ export const getAllSessions = (project: Project): SessionWithProvider[] => {
   return sessions;
 };
 
+/**
+ * The session a click on a project row should land on: the project's most
+ * recent one, skipping archived rows.
+ *
+ * `getAllSessions` already sorts newest-first, so "latest" is the first one
+ * still in the list. Archived sessions have their own view and are not
+ * somewhere to land by accident.
+ */
+export const getLatestOpenableSession = (project: Project): SessionWithProvider | null =>
+  getAllSessions(project).find((session) => !session.isArchived) ?? null;
+
 const getProjectLastActivity = (project: Project): Date => {
   const sessions = getAllSessions(project);
   if (sessions.length === 0) {

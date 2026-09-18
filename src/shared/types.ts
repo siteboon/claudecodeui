@@ -1373,6 +1373,8 @@ export type SidebarProjectListProps = SessionRowActions & {
   isProjectStarred: (projectId: string) => boolean;
   onToggleProject: (projectId: string) => void;
   onProjectSelect: (project: Project) => void;
+  /** Opens the project the way a click on its row means it: with its most recent session, rather than a blank one. */
+  onProjectOpen: (project: Project) => void;
   onToggleStarProject: (projectId: string) => void;
   onStartEditingProject: (project: Project) => void;
   onCancelEditingProject: () => void;
