@@ -10,6 +10,9 @@ import express, { type NextFunction, type Request, type Response } from 'express
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import providerRouter from '@/modules/providers/provider.routes.js';
+import { providerRegistry } from '@/modules/providers/provider.registry.js';
+import type { IProvider } from '@/shared/interfaces.js';
+import type { BackgroundTaskSummary } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
 
 async function withProviderServer(
@@ -241,4 +244,42 @@ test('model routes expose immutable defaults and full custom model CRUD', async 
       false,
     );
   });
+});
+
+test('the running-sessions route reports a session held open for background work', async () => {
+  // The client polls this route to keep every tab's activity map in step, so
+  // a session whose turn ended but whose agent is still running has to be in
+  // the payload — flagged as background work, with the tasks to show and stop.
+  const tasks: BackgroundTaskSummary[] = [{
+    taskId: 'a73dc7a6442f7c415',
+    toolUseId: 'toolu_013sUz4iWcNjN6BskVkHUCAr',
+    taskType: 'local_agent',
+    description: 'Investigate the flaky test',
+    startedAt: 1_700_000_000_000,
+  }];
+  const realListProviders = providerRegistry.listProviders;
+  providerRegistry.listProviders = () => [{
+    id: 'claude',
+    runtime: { listBackgroundWork: () => [{ sessionId: 'held-session', tasks }] },
+  } as unknown as IProvider];
+
+  try {
+    await withProviderServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/providers/sessions/running`);
+      const payload = await response.json() as { data: { sessions: unknown[] } };
+
+      assert.equal(response.status, 200);
+      assert.deepEqual(payload.data.sessions, [{
+        sessionId: 'held-session',
+        provider: 'claude',
+        startedAt: 1_700_000_000_000,
+        lastSeq: 0,
+        background: true,
+        canInterrupt: false,
+        tasks,
+      }]);
+    });
+  } finally {
+    providerRegistry.listProviders = realListProviders;
+  }
 });

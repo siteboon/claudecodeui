@@ -1,5 +1,6 @@
 import type {
   AnyRecord,
+  BackgroundTaskSummary,
   FetchHistoryOptions,
   FetchHistoryResult,
   LLMProvider,
@@ -36,6 +37,19 @@ export interface IProviderRuntime {
   ): Promise<unknown>;
   abort(sessionId: string): boolean | Promise<boolean>;
   permissions?: ProviderRuntimePermissionGateway;
+  /**
+   * Sessions with background tasks still outstanding, whether or not their
+   * turn has ended. Only a runtime that keeps its process open past a turn for
+   * such work has anything to report; the others leave this undefined and the
+   * running-sessions list falls back to chat runs alone.
+   */
+  listBackgroundWork?(): Array<{ sessionId: string; tasks: BackgroundTaskSummary[] }>;
+  /**
+   * Stops one outstanding background task. Resolves false when the session has
+   * no live process or that process is not tracking the task — it already
+   * settled, or the id was never one of its own.
+   */
+  stopBackgroundTask?(sessionId: string, taskId: string): Promise<boolean>;
 }
 
 /**

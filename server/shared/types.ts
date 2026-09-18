@@ -383,6 +383,25 @@ export type TaskUsage = {
 };
 
 /**
+ * One background task a live session still has outstanding — a spawned
+ * agent, a workflow run or a backgrounded command — as the runtime tracks it
+ * from the stream's `task_started` until the event that settles it.
+ *
+ * `taskId` is the handle a stop request names; `toolUseId` is the call that
+ * launched it, which is how the client pairs the task with its card.
+ * `startedAt` is the server clock at `task_started`, so a session whose turn
+ * has ended can still report how long its work has been going.
+ */
+export type BackgroundTaskSummary = {
+  taskId: string;
+  toolUseId: string;
+  taskType: string;
+  description: string;
+  workflowName?: string;
+  startedAt: number;
+};
+
+/**
  * One agent a workflow run spawned, as its journal records it.
  *
  * `label` and `phase` are whatever the script passed when it spawned the

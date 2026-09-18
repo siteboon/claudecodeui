@@ -544,6 +544,16 @@ export type TaskUsage = {
   durationMs: number;
 };
 
+/** One background task — a spawned agent, a workflow run or a backgrounded command — a session still has outstanding, as the running-sessions poll reports it; `taskId` is what `chat.stop-task` names and `toolUseId` pairs the task with the card that launched it. */
+export type BackgroundTaskSummary = {
+  taskId: string;
+  toolUseId: string;
+  taskType: string;
+  description: string;
+  workflowName?: string;
+  startedAt: number;
+};
+
 /** One agent a workflow run spawned, as its journal records it: the label and phase the script gave it (older scripts gave neither) and whether it has finished. */
 export type WorkflowAgentInfo = {
   id: string;
