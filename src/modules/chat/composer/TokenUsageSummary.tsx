@@ -77,16 +77,25 @@ function TokenUsageSummary({ usage, onClick }: TokenUsageSummaryProps) {
       <span className="grid h-5 w-5 place-items-center rounded-md bg-primary/10 text-primary">
         <ActivityIcon className="h-3.5 w-3.5" />
       </span>
-      <span className="font-medium text-foreground">{formatTokenCount(usedTokens)}</span>
       {hasContextWindow ? (
         <>
-          <span className="text-muted-foreground/70">/{formatTokenCount(contextWindow)}</span>
-          <span className={`hidden font-medium sm:inline ${percentTone}`}>{percentUsed}%</span>
+          {/* Phone width keeps the percent and drops `used/total`: the percent is
+              both the shortest form and the one that answers "how close to full",
+              while the pair is the widest thing in the footer and what pushed the
+              right-hand group onto a second row. */}
+          <span className="hidden font-medium text-foreground sm:inline">{formatTokenCount(usedTokens)}</span>
+          <span className="hidden text-muted-foreground/70 sm:inline">/{formatTokenCount(contextWindow)}</span>
+          <span className={`font-medium ${percentTone}`}>{percentUsed}%</span>
         </>
       ) : (
-        <span className="hidden text-muted-foreground/70 sm:inline">
-          {t('chat:misc.tokensLabel', { count: usedTokens })}
-        </span>
+        /* No window reported means no percent to fall back on, so the raw count
+           stays on every width. */
+        <>
+          <span className="font-medium text-foreground">{formatTokenCount(usedTokens)}</span>
+          <span className="hidden text-muted-foreground/70 sm:inline">
+            {t('chat:misc.tokensLabel', { count: usedTokens })}
+          </span>
+        </>
       )}
     </button>
   );
