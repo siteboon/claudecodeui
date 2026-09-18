@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   RECURRING_WORK_TOOLS,
   startsRecurringWork,
+  stopsRecurringWork,
 } from '@/modules/providers/list/claude/claude-runtime.provider.js';
 
 /**
@@ -57,4 +58,18 @@ test('messages with no tool call never mark a conversation as repeating', () => 
   assert.equal(startsRecurringWork(assistantWith({ type: 'text', text: 'hi' })), false);
   assert.equal(startsRecurringWork(undefined as unknown as object), false);
   assert.equal(startsRecurringWork(null as unknown as object), false);
+});
+
+test('CronDelete stands the repeating job down', () => {
+  assert.equal(stopsRecurringWork(assistantWith(toolUse('CronDelete', { jobId: '72500182' }))), true);
+});
+
+test('nothing else stands it down', () => {
+  // Left sticky on purpose: the mark has to outlive the turn that made it, or
+  // the tick an hour later finds a conversation that looks ordinary again.
+  for (const name of ['CronCreate', 'CronList', 'Monitor', 'Bash', 'TaskUpdate']) {
+    assert.equal(stopsRecurringWork(assistantWith(toolUse(name))), false, `${name} must not clear it`);
+  }
+  assert.equal(stopsRecurringWork(assistantWith({ type: 'text', text: 'stop the loop' })), false);
+  assert.equal(stopsRecurringWork(undefined as unknown as object), false);
 });

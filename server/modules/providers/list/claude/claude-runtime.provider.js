@@ -749,6 +749,30 @@ function readNumber(value) {
 const reportedContextWindows = new Map();
 const MAX_REMEMBERED_CONTEXT_WINDOWS = 200;
 
+// Conversations known to have work that repeats. Kept here rather than in the
+// run's closure because the turn that arms a cron and the tick that fires an
+// hour later are different runs, and the second one has no way to know what the
+// first did. Bounded the same way, and least-recently-used.
+const recurringSessions = new Map();
+const MAX_REMEMBERED_RECURRING = 200;
+
+function rememberRecurring(key) {
+  if (!key) {
+    return;
+  }
+  recurringSessions.delete(key);
+  recurringSessions.set(key, true);
+  while (recurringSessions.size > MAX_REMEMBERED_RECURRING) {
+    recurringSessions.delete(recurringSessions.keys().next().value);
+  }
+}
+
+function forgetRecurring(key) {
+  if (key) {
+    recurringSessions.delete(key);
+  }
+}
+
 function rememberContextWindow(key, window) {
   if (!key || !(window > 0)) {
     return;
@@ -975,6 +999,20 @@ function startsRecurringWork(sdkMessage) {
     }
     return RECURRING_WORK_TOOLS.has(block.name);
   });
+}
+
+/**
+ * Detects tool calls that stop work which repeats.
+ *
+ * @param {Object} sdkMessage - SDK stream message
+ * @returns {boolean} True when the message stands down a repeating job
+ */
+function stopsRecurringWork(sdkMessage) {
+  const content = sdkMessage?.message?.content;
+  if (!Array.isArray(content)) {
+    return false;
+  }
+  return content.some((block) => block?.type === 'tool_use' && block.name === 'CronDelete');
 }
 
 /**
@@ -1607,9 +1645,17 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       }
 
       if (startsRecurringWork(message)) {
-        // Sticky for the life of the process: a cron armed on turn one is
-        // still armed on turn twenty, and nothing in a later turn says so.
+        // Sticky: a cron armed on turn one is still armed on turn twenty, and
+        // nothing in a later turn says so.
         heldSession?.setRecurring();
+        rememberRecurring(sessionKey());
+      }
+
+      if (stopsRecurringWork(message)) {
+        // Without this the flag outlives the job it describes and the process
+        // is pinned for nothing. Coarse on purpose: deleting one of two crons
+        // clears the mark, and the next tick of the survivor sets it again.
+        forgetRecurring(sessionKey());
       }
 
       if (startsBackgroundWork(message)) {
@@ -1655,6 +1701,17 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
             idleMs: BG_IDLE_RELEASE_MS,
             totalMs: BG_TOTAL_HOLD_MS
           });
+          scheduleRelease();
+        } else if (recurringSessions.has(sessionKey())) {
+          // A tick is not a finish. Work that repeats has no `result` that
+          // means "done", so releasing on this one is what killed `/loop 10m`
+          // after its first tick: the process went, and the in-process cron
+          // with it. Re-arming from here also makes the ceiling measure time
+          // since the last tick, which is the right question to ask of a cron
+          // — one that has not fired in two hours is not coming back.
+          heldForBackgroundWork = true;
+          holdArmedAt = holdArmedAt || Date.now();
+          clearReleaseTimers();
           scheduleRelease();
         } else {
           // Either nothing was backgrounded, or the background work just
@@ -1922,6 +1979,7 @@ export {
   // thing in this file to pin down — and it had no coverage at all.
   startsBackgroundWork,
   startsRecurringWork,
+  stopsRecurringWork,
   DEFERRED_WORK_TOOLS,
   RECURRING_WORK_TOOLS,
   SUBAGENT_TOOL_NAMES,
