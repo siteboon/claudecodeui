@@ -349,5 +349,45 @@
     "closeLoginModal": "Close login modal",
     "pluginLoadFailed": "Plugin failed to load: {{error}}"
   },
+  "workflow": {
+    "title": "Workflow",
+    "status": {
+      "running": "running",
+      "completed": "done",
+      "failed": "failed",
+      "stopped": "no result"
+    },
+    "stoppedHint": "The run ended before this workflow reported back",
+    "phases": "Phases",
+    "agents": "Agents",
+    "agentsFinished_one": "{{finished}} of {{count}} agent finished",
+    "agentsFinished_other": "{{finished}} of {{count}} agents finished",
+    "agentsFailed": "{{count}} failed",
+    "agentsProgress_one": "{{finished}}/{{count}} agent",
+    "agentsProgress_other": "{{finished}}/{{count}} agents",
+    "agentStatus": {
+      "queued": "queued",
+      "running": "running",
+      "completed": "done",
+      "failed": "failed",
+      "stopped": "no result"
+    },
+    "agentTokens": "{{tokens}} tokens",
+    "agentToolCalls_one": "{{count}} tool call",
+    "agentToolCalls_other": "{{count}} tool calls",
+    "agentTimelineLoading": "Reading the agent's steps…",
+    "agentTimelineEmpty": "Nothing recorded yet",
+    "agentTimelineUnavailable": "Steps unavailable: {{reason}}",
+    "usage": "{{toolUses}} tool uses · {{elapsed}}",
+    "currentAgent": "current: {{label}}",
+    "result": "Result",
+    "script": "Script",
+    "backgroundTasks": "Background tasks",
+    "backgroundAgent": "Agent",
+    "backgroundCommand": "Command",
+    "stopTask": "Stop",
+    "taskRowNotLoaded": "Launched earlier in this conversation; click to load it",
+    "taskOfAgent": "Launched by one of this session's agents"
+  },
   "cancel": "Cancel"
 }

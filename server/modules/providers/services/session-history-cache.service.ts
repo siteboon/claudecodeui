@@ -16,8 +16,14 @@ import type { FetchHistoryResult } from '@/shared/types.js';
  * request against the transcript file's identity (path + mtime + size), so
  * only the first read after the file changes pays the parse. Anything that
  * rewrites history (a new turn, an edit, a rewind, a fork) touches the file
- * and invalidates naturally; no explicit invalidation hooks exist or are
- * needed.
+ * and invalidates naturally.
+ *
+ * One thing the file cannot tell: whether the CLI process behind the session
+ * is still running. Claude's history reader answers a background agent's
+ * status from that, so a session's entry is also dropped explicitly when its
+ * process starts or ends (`invalidate`) — otherwise a page read while the
+ * process was up would keep reporting `running` after it had gone, until the
+ * next row happened to land in the file.
  *
  * Only history readers that read `jsonl_path` itself may use this cache —
  * callers pass `transcriptPath: null` for providers whose messages live
@@ -132,6 +138,11 @@ export function createSessionHistoryCache(
       } finally {
         pendingLoads.delete(sessionId);
       }
+    },
+
+    /** Forgets a session's entry so the next read re-parses its transcript. */
+    invalidate(sessionId: string): void {
+      entries.delete(sessionId);
     },
   };
 }
