@@ -409,6 +409,10 @@
     },
     "actions": {
       "add": "Hinzufügen"
+    },
+    "keepSessionAlive": {
+      "label": "Prozess für das ganze Gespräch offen halten",
+      "description": "Schnellere Antworten: Die CLI startet einmal je Gespräch statt einmal je Nachricht. Kostet einen Prozess je offenem Gespräch; bei Wechsel von Projekt oder Reasoning-Stufe startet sie trotzdem neu."
     }
   },
   "mcpServers": {
