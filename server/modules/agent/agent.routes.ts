@@ -402,13 +402,15 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
         console.log('🔄 Cloning repository:', githubUrl);
         console.log('📁 Destination:', cloneDir);
 
-        // Execute git clone
+        // Execute git clone. The host was validated above; the helper is
+        // still scoped to github.com over https so the token can answer no
+        // other challenge (a redirect, say).
         const gitEnvironment = githubToken ? {
           ...process.env,
           GIT_CONFIG_COUNT: '2',
           GIT_CONFIG_KEY_0: 'credential.helper',
           GIT_CONFIG_VALUE_0: '',
-          GIT_CONFIG_KEY_1: 'credential.helper',
+          GIT_CONFIG_KEY_1: 'credential.https://github.com.helper',
           GIT_CONFIG_VALUE_1: '!f() { echo username=x-access-token; echo "password=$CLOUDCLI_GITHUB_TOKEN"; }; f',
           CLOUDCLI_GITHUB_TOKEN: githubToken,
           GIT_TERMINAL_PROMPT: '0'

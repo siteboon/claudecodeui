@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
@@ -308,7 +310,7 @@ for (const [label, input, token] of [
     assert.equal(environment.GIT_CONFIG_COUNT, '2');
     assert.equal(environment.GIT_CONFIG_KEY_0, 'credential.helper');
     assert.equal(environment.GIT_CONFIG_VALUE_0, '');
-    assert.equal(environment.GIT_CONFIG_KEY_1, 'credential.helper');
+    assert.equal(environment.GIT_CONFIG_KEY_1, 'credential.https://github.com.helper');
     assert.match(environment.GIT_CONFIG_VALUE_1 ?? '', /\$CLOUDCLI_GITHUB_TOKEN/);
     assert.equal(environment.GIT_TERMINAL_PROMPT, '0');
 
@@ -518,3 +520,40 @@ test('startCloneProject clones a real repository with the credential helper in g
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('startCloneProject offers the GitHub token to no host but github.com', async () => {
+  // The helper used to answer every credential challenge: a clone from any
+  // host the user typed — over plain http too — received the GitHub token.
+  // Real git against a local server that challenges for Basic auth.
+  const root = await mkdtemp(path.join(os.tmpdir(), 'project-clone-scope-'));
+  const authorizations: Array<string | null> = [];
+  const server = http.createServer((request, response) => {
+    authorizations.push(request.headers.authorization ?? null);
+    response.writeHead(401, { 'WWW-Authenticate': 'Basic realm="probe"' });
+    response.end('auth required');
+  });
+  await new Promise<void>((resolve) => { server.listen(0, '127.0.0.1', resolve); });
+  const { port } = server.address() as AddressInfo;
+  const token = 'ghp_supersecrettoken1234567890abcd';
+
+  try {
+    let failure = '';
+    const operation = await startCloneProject(
+      { workspacePath: root, githubUrl: `http://127.0.0.1:${port}/example/repo.git`, newGithubToken: token, userId: 1 },
+      { onProgress: () => undefined, onComplete: () => undefined },
+      { validatePath: async () => ({ valid: true, resolvedPath: root }) },
+    );
+    await operation.waitForCompletion.catch((error: unknown) => { failure = error instanceof Error ? error.message : String(error); });
+
+    assert.ok(authorizations.length >= 1, 'git never reached the server');
+    assert.ok(
+      authorizations.every((authorization) => authorization === null),
+      `the token was offered to a foreign host: ${JSON.stringify(authorizations)}`,
+    );
+    assert.match(failure, /Authentication failed/);
+  } finally {
+    server.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+

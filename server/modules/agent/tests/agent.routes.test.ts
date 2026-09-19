@@ -39,7 +39,9 @@ function createDependencies(
     // is all the tests above this file's registration tests need.
     runs: {
       startRun: ((input: { connection: { send(data: string): void } | null }) => ({
-        writer: { send: (data: unknown) => input.connection?.send(JSON.stringify(data)), getSessionId: () => null },
+        // The gateway writer's shape: a runtime that feature-detects it (codex)
+        // hands it objects to serialize, as the real one expects.
+        writer: { isWebSocketWriter: true, send: (data: unknown) => input.connection?.send(JSON.stringify(data)), getSessionId: () => null },
         events: [],
       })) as unknown as AgentDependencies['runs']['startRun'],
       completeRunIfCurrent: () => undefined,
@@ -169,7 +171,7 @@ test('GitHub cloning keeps credentials out of arguments and remote URL', async (
   assert.equal(cloneEnvironment?.CLOUDCLI_GITHUB_TOKEN, token);
   assert.equal(cloneEnvironment?.GIT_CONFIG_KEY_0, 'credential.helper');
   assert.equal(cloneEnvironment?.GIT_CONFIG_VALUE_0, '');
-  assert.equal(cloneEnvironment?.GIT_CONFIG_KEY_1, 'credential.helper');
+  assert.equal(cloneEnvironment?.GIT_CONFIG_KEY_1, 'credential.https://github.com.helper');
 });
 
 test('Agent route reuses a matching checkout without cloning or deleting it', async () => {
