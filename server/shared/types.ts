@@ -1185,6 +1185,11 @@ export type FileTreeServices = {
   createWorkspaceFolder(folderPath: string): Promise<{ success: true; path: string }>;
   readTextFile(projectId: string, filePath: string): Promise<{ content: string; path: string }>;
   openFile(projectId: string, filePath: string): Promise<{ contentType: string; stream: Readable }>;
+  resolveDownloadTarget(projectId: string, filePath: string): Promise<{
+    path: string;
+    name: string;
+    size: number;
+  }>;
   saveTextFile(projectId: string, filePath: string, content: string): Promise<{
     success: true;
     path: string;
@@ -1227,6 +1232,22 @@ export type FileTreeServices = {
     targetPath: string;
     message: string;
   }>;
+};
+
+/**
+ * The file a download ticket authorizes, carried from the Auth module to the
+ * File Tree download route.
+ *
+ * The Auth module mints these claims inside a short-lived capability token and
+ * `authenticateDownloadToken` attaches the verified pair to the request. The
+ * download route reads the file path only from here, never from the query
+ * string, so a request cannot point the response at another file. Both fields
+ * are the values that were signed: `projectId` identifies the project whose
+ * root confines the path, and `path` is relative to that root.
+ */
+export type DownloadClaim = {
+  projectId: string;
+  path: string;
 };
 
 // ---------------------------

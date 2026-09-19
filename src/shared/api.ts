@@ -149,6 +149,14 @@ export const sessionMessagesUrl = (
 const fileContentPath = (projectId: string, filePath: string) =>
   `/api/file-tree/projects/${projectId}/files/content${query({ path: filePath })}`;
 
+/**
+ * Native download URL for one file. The 60-second capability token minted by
+ * `requestDownloadTicket` is the entire credential: the browser navigates to
+ * this URL on its own and carries no Authorization header.
+ */
+export const fileDownloadUrl = (token: string) =>
+  `/api/download/file${query({ t: token })}`;
+
 const pluginAssetPath = (pluginName: string, assetFile: string) =>
   `/api/plugins/${encodeURIComponent(pluginName)}/assets/${encodeURIComponent(assetFile)}`;
 
@@ -255,6 +263,10 @@ export const api = {
   // media call sites fetch a blob through here instead of using a bare `src`.
   readFileBlob: (projectId: string, filePath: string, options: ApiRequestOptions = {}) =>
     get(fileContentPath(projectId, filePath), options),
+  // Mints a short-lived, single-file token so the browser can download the file
+  // natively; the response also carries the server's own name and size for it.
+  requestDownloadTicket: (projectId: string, filePath: string) =>
+    post(`/api/file-tree/projects/${projectId}/files/download-ticket`, { path: filePath }),
   saveFile: (projectId: string, filePath: string, content: string) =>
     put(`/api/file-tree/projects/${projectId}/file`, { filePath, content }),
   getFiles: (projectId: string, options: ApiRequestOptions = {}) =>
