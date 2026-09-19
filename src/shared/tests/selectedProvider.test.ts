@@ -24,8 +24,8 @@ test('an unset provider falls back to claude', () => {
 });
 
 test('a stored provider is read back', () => {
-  writeSelectedProvider('codex');
-  assert.equal(readSelectedProvider(), 'codex');
+  writeSelectedProvider('antigravity');
+  assert.equal(readSelectedProvider(), 'antigravity');
 });
 
 test('a value that is not a known provider falls back instead of being trusted', () => {
