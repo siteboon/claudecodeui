@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { api, readApiJson } from '@/shared/api';
+import { triggerBlobDownload } from '@/shared/download';
 import type { CodeEditorFile } from '@/shared/types';
 import { isBinaryFile } from '@/modules/code-editor/utils/binaryFile';
 import { getPreviewKind } from '@/modules/code-editor/utils/previewableFile';
@@ -133,18 +134,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
   }, [content, filePath, fileProjectId, previewKind, fileName]);
 
   const handleDownload = useCallback(() => {
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-
-    anchor.href = url;
-    anchor.download = file.name;
-
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-
-    URL.revokeObjectURL(url);
+    triggerBlobDownload(new Blob([content], { type: 'text/plain' }), file.name);
   }, [content, file.name]);
 
   return {

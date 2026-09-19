@@ -7,6 +7,7 @@
  * machine-readable views of the same messages.
  */
 
+import { triggerBlobDownload } from '@/shared/download';
 import type { ChatMessage, DiffLine, LLMProvider, Project } from '@/shared/types';
 import { buildTranscriptHtml } from '@/modules/chat/export/buildTranscriptHtml';
 import { buildTranscriptMarkdown } from '@/modules/chat/export/buildTranscriptMarkdown';
@@ -50,17 +51,6 @@ export function toExportFileStem(sessionTitle: string, exportedAt: Date): string
     .toLowerCase();
 
   return slug ? `${slug}-${date}` : `conversation-${date}`;
-}
-
-function downloadBlob(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
 }
 
 /** Builds the file's text without downloading it, so it can be asserted on. */
@@ -111,5 +101,5 @@ export async function downloadTranscriptExport(
   const content = await buildTranscriptExport(format, input, exportedAt);
   const filename = `${toExportFileStem(input.sessionTitle, exportedAt)}.${EXTENSIONS[format]}`;
 
-  downloadBlob(new Blob([content], { type: MIME_TYPES[format] }), filename);
+  triggerBlobDownload(new Blob([content], { type: MIME_TYPES[format] }), filename);
 }

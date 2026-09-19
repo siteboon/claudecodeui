@@ -59,6 +59,16 @@ const authenticateToken = async (req, res, next) => {
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
 
+    // Scoped capability tokens (see generateDownloadToken) are never session
+    // credentials, no matter which transport they arrive on.
+    if (decoded.scope) {
+      res.setHeader('X-Auth-Error', 'invalid-token');
+      return res.status(401).json({
+        error: 'Invalid token',
+        code: 'AUTH_TOKEN_INVALID',
+      });
+    }
+
     // Verify user still exists and is active
     const user = userDb.getUserById(decoded.userId);
     if (!user) {
@@ -114,6 +124,60 @@ const generateToken = (user) => {
   );
 };
 
+const DOWNLOAD_TOKEN_SCOPE = 'file-download';
+
+// Short-lived, single-file capability token. It travels in the download URL so
+// the browser can stream the file natively, and it is deliberately useless for
+// anything else: one file, one minute, rejected by every session code path.
+const generateDownloadToken = (user, { projectId, path: filePath }) => {
+  return jwt.sign(
+    {
+      userId: user.id,
+      username: user.username,
+      scope: DOWNLOAD_TOKEN_SCOPE,
+      projectId,
+      path: filePath,
+    },
+    JWT_SECRET,
+    { expiresIn: '60s' }
+  );
+};
+
+// Authenticates a native browser download from `?t=` alone. The browser cannot
+// set an Authorization header on a plain navigation, so the capability token is
+// the whole credential.
+const authenticateDownloadToken = (req, res, next) => {
+  const token = typeof req.query.t === 'string' ? req.query.t : null;
+  const rejectRequest = () => res.status(401).json({
+    error: 'Invalid download token',
+    code: 'DOWNLOAD_TOKEN_INVALID',
+  });
+
+  if (!token) {
+    return rejectRequest();
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (decoded.scope !== DOWNLOAD_TOKEN_SCOPE) {
+      return rejectRequest();
+    }
+
+    // Platform mode has a single database user and no per-request session, but
+    // the claim itself still has to be verified: it carries the file path.
+    const user = IS_PLATFORM ? userDb.getFirstUser() : userDb.getUserById(decoded.userId);
+    if (!user) {
+      return rejectRequest();
+    }
+
+    req.user = user;
+    req.downloadClaim = { projectId: decoded.projectId, path: decoded.path };
+    next();
+  } catch {
+    return rejectRequest();
+  }
+};
+
 // WebSocket authentication function
 const authenticateWebSocket = (token) => {
   // Platform mode: bypass token validation, return first user
@@ -137,6 +201,10 @@ const authenticateWebSocket = (token) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
+    // Scoped capability tokens are not session credentials.
+    if (decoded.scope) {
+      return null;
+    }
     // Verify user actually exists in database (matches REST authenticateToken behavior)
     const user = userDb.getUserById(decoded.userId);
     if (!user) {
@@ -158,6 +226,8 @@ export {
   validateApiKey,
   authenticateToken,
   generateToken,
+  generateDownloadToken,
+  authenticateDownloadToken,
   authenticateWebSocket,
   JWT_SECRET
 };
