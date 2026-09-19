@@ -108,3 +108,26 @@ test('a poll that still lists only background work does not demote a send made m
 
   assert.equal(result.current.isSessionProcessing('session-1'), true);
 });
+
+test('a poll that changes what it says about a listed task is not dropped as a repeat', () => {
+  // The first poll can list a task before the server knows it is nested, or
+  // with a start it later corrects; the same id is not the same word.
+  const { result } = renderHook(() => useSessionProtection());
+  const startedAt = Date.now() - 120_000;
+  const first = task({ startedAt });
+
+  act(() => {
+    result.current.syncProcessingSessions([
+      { sessionId: 'session-1', startedAt, canInterrupt: false, background: true, tasks: [first] },
+    ]);
+  });
+  act(() => {
+    result.current.syncProcessingSessions([
+      { sessionId: 'session-1', startedAt, canInterrupt: false, background: true, tasks: [{ ...first, nested: true, description: 'Audit the whole frontend' }] },
+    ]);
+  });
+
+  const listed = result.current.getSessionActivity('session-1')?.tasks?.[0];
+  assert.equal(listed?.nested, true);
+  assert.equal(listed?.description, 'Audit the whole frontend');
+});

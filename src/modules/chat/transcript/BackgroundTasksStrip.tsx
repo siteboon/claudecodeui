@@ -2,19 +2,27 @@ import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 
-import type { ChatMessage } from '@/shared/types';
+import type { BackgroundTaskSummary, ChatMessage } from '@/shared/types';
 import {
   describeWorkflowAgent,
   findCurrentWorkflowAgent,
   listRunningBackgroundLaunches,
+  ownBackgroundTasks,
   readBackgroundTaskId,
 } from '@/modules/chat/utils/backgroundTasks';
 import { parseToolPayload } from '@/modules/chat/utils/messageTransforms';
 import { parseWorkflowMeta } from '@/modules/chat/utils/workflowScriptMeta';
 
 type BackgroundTasksStripProps = {
-  /** The whole session, not the visible window: a task launched pages ago is still running. */
+  /** Every loaded row of the session, not the visible window: a task launched pages ago is still running. */
   messages: ChatMessage[];
+  /**
+   * The session's running tasks as the activity map has them — from the
+   * running-sessions poll after a reload, or the rows themselves once the
+   * turn ended. A task whose launch row is on a page not loaded yet has no
+   * row to draw from and is listed from here, so it can still be stopped.
+   */
+  tasks?: BackgroundTaskSummary[];
   /** The session the tasks belong to, which `chat.stop-task` names; null before one exists. */
   sessionId: string | null;
   /** The chat websocket's send, for stopping a task. */
@@ -25,6 +33,8 @@ type BackgroundTasksStripProps = {
    * it takes more than an element lookup to reach it.
    */
   onReveal: (message: ChatMessage) => void;
+  /** Loads the rest of the transcript, for a task whose launch row is not loaded yet. */
+  onLoadAll: () => void;
 };
 
 /** The one-line description the launch was given, as the card reads it. */
@@ -89,11 +99,15 @@ function describeTask(message: ChatMessage, t: (key: string, defaultValue: strin
  * scrolling to its card when clicked and stoppable from its ✕. Renders
  * nothing while nothing runs, which is most of the time.
  */
-export const BackgroundTasksStrip = memo(({ messages, sessionId, sendMessage, onReveal }: BackgroundTasksStripProps) => {
+export const BackgroundTasksStrip = memo(({ messages, tasks, sessionId, sendMessage, onReveal, onLoadAll }: BackgroundTasksStripProps) => {
   const { t } = useTranslation();
   const running = listRunningBackgroundLaunches(messages);
+  // A loaded row is the word on its task — settled or not — so only a task
+  // with no row at all is drawn from the map.
+  const loadedToolIds = new Set(messages.map((message) => message.toolId));
+  const unloaded = ownBackgroundTasks(tasks ?? []).filter((task) => !loadedToolIds.has(task.toolUseId));
 
-  if (running.length === 0) {
+  if (running.length === 0 && unloaded.length === 0) {
     return null;
   }
 
@@ -124,6 +138,39 @@ export const BackgroundTasksStrip = memo(({ messages, sessionId, sendMessage, on
               <button
                 type="button"
                 onClick={() => sendMessage({ type: 'chat.stop-task', sessionId, taskId })}
+                aria-label={t('workflow.stopTask', 'Stop')}
+                title={t('workflow.stopTask', 'Stop')}
+                className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-muted-foreground/60 hover:bg-muted hover:text-destructive"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </span>
+        );
+      })}
+      {unloaded.map((task) => {
+        const kind = task.taskType === 'local_workflow'
+          ? t('workflow.title', 'Workflow')
+          : task.taskType === 'local_bash'
+            ? t('workflow.backgroundCommand', 'Command')
+            : t('workflow.backgroundAgent', 'Agent');
+        const name = task.workflowName ?? task.description;
+        return (
+          <span key={task.taskId} className="flex min-w-0 max-w-full items-center">
+            <button
+              type="button"
+              onClick={onLoadAll}
+              title={`${[kind, name].filter(Boolean).join(' · ')} · ${t('workflow.taskRowNotLoaded', 'Launched earlier in this conversation; click to load it')}`}
+              className="flex min-w-0 max-w-xs items-center gap-1.5 rounded px-1.5 py-0.5 hover:bg-muted hover:text-foreground"
+            >
+              <span className="h-1.5 w-1.5 flex-shrink-0 animate-pulse rounded-full bg-purple-500 dark:bg-purple-400" />
+              <span className="flex-shrink-0 font-medium text-foreground">{kind}</span>
+              {name && <span className="min-w-0 truncate">{name}</span>}
+            </button>
+            {sessionId && (
+              <button
+                type="button"
+                onClick={() => sendMessage({ type: 'chat.stop-task', sessionId, taskId: task.taskId })}
                 aria-label={t('workflow.stopTask', 'Stop')}
                 title={t('workflow.stopTask', 'Stop')}
                 className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-muted-foreground/60 hover:bg-muted hover:text-destructive"

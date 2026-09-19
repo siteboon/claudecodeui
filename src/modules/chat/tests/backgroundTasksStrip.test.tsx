@@ -23,6 +23,7 @@ describe('the background tasks strip', () => {
         sessionId="session-1"
         sendMessage={() => {}}
         onReveal={() => {}}
+        onLoadAll={() => {}}
         messages={[
           toolRow({ toolName: 'Read', toolId: 'toolu_read', toolInput: '{}' }),
           toolRow({
@@ -59,6 +60,7 @@ describe('the background tasks strip', () => {
     render(
       <BackgroundTasksStrip
         onReveal={() => {}}
+        onLoadAll={() => {}}
         sessionId="session-1"
         sendMessage={() => {}}
         messages={[
@@ -90,6 +92,7 @@ describe('the background tasks strip', () => {
         sessionId="session-1"
         sendMessage={() => {}}
         onReveal={() => {}}
+        onLoadAll={() => {}}
         messages={[
           toolRow({ toolName: 'Read', toolId: 'toolu_read', toolInput: '{}' }),
           toolRow({
@@ -112,6 +115,7 @@ describe('the background tasks strip', () => {
         sessionId="session-1"
         sendMessage={() => {}}
         onReveal={() => {}}
+        onLoadAll={() => {}}
         messages={[
           toolRow({
             toolName: 'Workflow',
@@ -145,7 +149,7 @@ describe('the background tasks strip', () => {
       taskStatus: { status: 'running', workflowName: 'frontend-architecture-audit' },
     });
 
-    render(<BackgroundTasksStrip sessionId="session-1" sendMessage={() => {}} onReveal={onReveal} messages={[row]} />);
+    render(<BackgroundTasksStrip sessionId="session-1" sendMessage={() => {}} onReveal={onReveal} onLoadAll={() => {}} messages={[row]} />);
 
     fireEvent.click(screen.getByRole('button'));
     expect(onReveal).toHaveBeenCalledWith(row);
@@ -160,6 +164,7 @@ describe('the background tasks strip', () => {
         sessionId="session-1"
         sendMessage={() => {}}
         onReveal={() => {}}
+        onLoadAll={() => {}}
         messages={[toolRow({
           toolName: 'Workflow',
           toolId: 'toolu_workflow_1',
@@ -188,6 +193,7 @@ describe('the background tasks strip', () => {
         sessionId="session-1"
         sendMessage={() => {}}
         onReveal={() => {}}
+        onLoadAll={() => {}}
         messages={[
           toolRow({
             toolName: 'Workflow',
@@ -219,6 +225,7 @@ describe('the background tasks strip', () => {
         sessionId="session-1"
         sendMessage={() => {}}
         onReveal={() => {}}
+        onLoadAll={() => {}}
         messages={[
           toolRow({
             toolName: 'Workflow',
@@ -240,6 +247,7 @@ describe('the background tasks strip', () => {
         sessionId="session-1"
         sendMessage={sendMessage}
         onReveal={() => {}}
+        onLoadAll={() => {}}
         messages={[
           // Named by the live start event.
           toolRow({
@@ -282,6 +290,60 @@ describe('the background tasks strip', () => {
       { type: 'chat.stop-task', sessionId: 'session-1', taskId: 'a1' },
       { type: 'chat.stop-task', sessionId: 'session-1', taskId: 'b5xsbzu5k' },
     ]);
+  });
+});
+
+describe('the background tasks strip, for a task whose launch row is not loaded', () => {
+  const tasks = [
+    { taskId: 'wxkj4kcvd', toolUseId: 'toolu_workflow_1', taskType: 'local_workflow', description: 'Audit the frontend', workflowName: 'audit', startedAt: 1 },
+    // Launched by one of the workflow's agents: its business, not the session's.
+    { taskId: 'b5xsbzu5k', toolUseId: 'toolu_inner', taskType: 'local_bash', description: 'Sleep for 60 seconds', startedAt: 2, nested: true },
+  ];
+
+  it('lists it from the activity map, loads the transcript on click, and can stop it', () => {
+    // A reload of a long session loads its last page; a workflow launched
+    // pages earlier has no row here, but the running-sessions poll knows it.
+    const sendMessage = vi.fn();
+    const onLoadAll = vi.fn();
+    render(
+      <BackgroundTasksStrip
+        sessionId="session-1"
+        sendMessage={sendMessage}
+        onReveal={() => {}}
+        onLoadAll={onLoadAll}
+        messages={[toolRow({ toolName: 'Read', toolId: 'toolu_read', toolInput: '{}' })]}
+        tasks={tasks}
+      />,
+    );
+
+    const chips = screen.getAllByRole('button');
+    expect(chips.map((chip) => chip.textContent)).toEqual(['Workflowaudit', '']);
+    expect(chips[0]?.title).toBe('Workflow · audit · Launched earlier in this conversation; click to load it');
+    fireEvent.click(chips[0]!);
+    expect(onLoadAll).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    expect(sendMessage).toHaveBeenCalledWith({ type: 'chat.stop-task', sessionId: 'session-1', taskId: 'wxkj4kcvd' });
+  });
+
+  it('defers to the loaded row once the transcript has it, settled or not', () => {
+    // The row is the word on its task: a settled one must not come back as
+    // a chip from a poll that has not caught up.
+    const { container } = render(
+      <BackgroundTasksStrip
+        sessionId="session-1"
+        sendMessage={() => {}}
+        onReveal={() => {}}
+        onLoadAll={() => {}}
+        messages={[toolRow({
+          toolName: 'Workflow',
+          toolId: 'toolu_workflow_1',
+          taskStatus: { status: 'completed', taskId: 'wxkj4kcvd', workflowName: 'audit' },
+        })]}
+        tasks={tasks}
+      />,
+    );
+
+    expect(container.innerHTML).toBe('');
   });
 });
 

@@ -1126,7 +1126,12 @@ export function useChatSessionState({
 
     const attempt = (remaining: number) => {
       const container = scrollContainerRef.current;
-      const element = container ? findRenderedMessageElement(container, message.timestamp, true) : null;
+      // The widened window commits after this frame, so the row can be absent
+      // on the first attempts; only the last one may settle for the nearest
+      // row (a hit collapsed inside a tool group carries the group's
+      // timestamp), or the first attempt scrolls to an unrelated row and the
+      // retries never run.
+      const element = container ? findRenderedMessageElement(container, message.timestamp, remaining === 0) : null;
       if (element) {
         element.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;

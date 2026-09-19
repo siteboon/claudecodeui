@@ -166,6 +166,24 @@ const defaultDependencies: CloneProjectDependencies = {
   },
 };
 
+/**
+ * Whether a clone URL embeds a credential: any password, or a username on an
+ * http(s) URL. An SSH URL's `git@` is a login name, not a secret.
+ */
+function carriesCredentials(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    // scp-like `git@github.com:org/repo.git` and bare paths have no userinfo.
+    return false;
+  }
+  if (parsed.password) {
+    return true;
+  }
+  return Boolean(parsed.username) && (parsed.protocol === 'http:' || parsed.protocol === 'https:');
+}
+
 export async function startCloneProject(
   input: CloneProjectInput,
   handlers: CloneProjectEventHandlers,
@@ -192,6 +210,15 @@ export async function startCloneProject(
   if (normalizedGithubUrl.startsWith('-')) {
     throw new AppError('Invalid githubUrl', {
       code: 'INVALID_GITHUB_URL',
+      statusCode: 400,
+    });
+  }
+
+  if (carriesCredentials(normalizedGithubUrl)) {
+    // The token field is the only way in: a credential in the URL would ride
+    // git's argv, its stderr and the clone's `.git/config`.
+    throw new AppError('Put the token in the token field, not in the URL', {
+      code: 'GITHUB_URL_CARRIES_CREDENTIALS',
       statusCode: 400,
     });
   }

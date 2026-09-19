@@ -206,3 +206,41 @@ test('GET /clone-progress rejects an expired id with 404', async () => {
     },
   );
 });
+
+test('GET /clone-progress cancels a clone whose client left before the git process existed', async () => {
+  // The close listener could only cancel an operation it already had; a
+  // client gone during validation left git cloning for nobody, under an id
+  // no reconnect could reach.
+  let releaseStart: () => void = () => undefined;
+  const started = new Promise<void>((resolve) => { releaseStart = resolve; });
+  let cancelled = 0;
+  let resolveRun: () => void = () => undefined;
+  const runFinished = new Promise<void>((resolve) => { resolveRun = resolve; });
+  const slowRunner: CloneRunner = async () => {
+    await started;
+    return {
+      waitForCompletion: new Promise<void>((resolve) => { setTimeout(resolve, 20); }).then(() => resolveRun()),
+      cancel: () => { cancelled += 1; },
+    };
+  };
+
+  await withProjectsServer({ startCloneProject: slowRunner }, async (baseUrl) => {
+    const { body } = await postClone(baseUrl, 1);
+    const controller = new AbortController();
+    const request = fetch(
+      `${baseUrl}/api/projects/clone-progress?cloneId=${encodeURIComponent(body.cloneId ?? '')}`,
+      { headers: { 'x-user-id': '1' }, signal: controller.signal },
+    );
+    // Headers are flushed before the runner is awaited; drop the client
+    // while the runner is still "validating".
+    await new Promise((resolve) => { setTimeout(resolve, 50); });
+    controller.abort();
+    await request.catch(() => undefined);
+    await new Promise((resolve) => { setTimeout(resolve, 50); });
+    assert.equal(cancelled, 0, 'nothing to cancel yet');
+
+    releaseStart();
+    await runFinished;
+    assert.equal(cancelled, 1, 'the operation is cancelled as soon as it exists');
+  });
+});

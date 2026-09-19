@@ -136,3 +136,32 @@ test('a completed run stays registered while its session still has background wo
     mock.timers.reset();
   }
 });
+
+test('a retained run\'s eviction timer cannot evict the session\'s next run early', async () => {
+  // Run one completes with work outstanding and is re-armed at five minutes;
+  // run two takes the slot and completes with two minutes of retention to
+  // go. Run one's timer firing on the slot alone would evict run two.
+  mock.timers.enable({ apis: ['setTimeout'] });
+  try {
+    await withIsolatedDatabase(async () => {
+      let working = true;
+      chatRunRegistry.setRetentionGuard((sessionId) => sessionId === SESSION_ID && working);
+      const first = startAndCompleteRun(createFakeSocket());
+      mock.timers.tick(FIVE_MINUTES);
+      assert.equal(chatRunRegistry.getRun(SESSION_ID), first);
+
+      working = false;
+      mock.timers.tick(FIVE_MINUTES - 2 * 60 * 1000);
+      const second = startAndCompleteRun(createFakeSocket());
+      assert.equal(chatRunRegistry.getRun(SESSION_ID), second);
+
+      // Run one's re-armed timer fires now; run two's has two minutes left.
+      mock.timers.tick(2 * 60 * 1000);
+      assert.equal(chatRunRegistry.getRun(SESSION_ID), second, 'run two keeps its own retention window');
+      mock.timers.tick(FIVE_MINUTES);
+      assert.equal(chatRunRegistry.getRun(SESSION_ID), undefined);
+    });
+  } finally {
+    mock.timers.reset();
+  }
+});

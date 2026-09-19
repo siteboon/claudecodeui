@@ -115,6 +115,45 @@ test('startCloneProject rejects github URL values that begin with option prefixe
   );
 });
 
+for (const [label, githubUrl] of [
+  ['a token as the user', 'https://ghp_supersecrettoken1234567890abcd@github.com/example/repo.git'],
+  ['a user and password', 'https://user:ghp_supersecrettoken1234567890abcd@github.com/example/repo.git'],
+  ['a password on an ssh URL', 'ssh://git:secret@github.com/example/repo.git'],
+] as const) {
+  test(`startCloneProject rejects a github URL carrying ${label} before git sees it`, async () => {
+    // A credential in the URL would ride git's argv, its stderr and the
+    // clone's `.git/config` — every channel the token field keeps it out of.
+    let spawned = 0;
+    await assert.rejects(
+      async () =>
+        startCloneProject(
+          { workspacePath: '/workspace/root', githubUrl, userId: 1 },
+          { onProgress: () => undefined, onComplete: () => undefined },
+          buildDependencies({ spawnGitClone: () => { spawned += 1; throw new Error('must not spawn'); } }),
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.code, 'GITHUB_URL_CARRIES_CREDENTIALS');
+        assert.ok(!error.message.includes('ghp_supersecrettoken'), 'the error must not echo the credential');
+        return true;
+      },
+    );
+    assert.equal(spawned, 0);
+  });
+}
+
+test('startCloneProject accepts the ssh login name that is not a credential', async () => {
+  // `git@` on an SSH URL is the login every SSH clone uses, not a secret.
+  const gitProcess = createMockGitProcess();
+  const operation = await startCloneProject(
+    { workspacePath: '/workspace/root', githubUrl: 'ssh://git@github.com/example/repo.git', userId: 1 },
+    { onProgress: () => undefined, onComplete: () => undefined },
+    buildDependencies({ spawnGitClone: () => gitProcess as never }),
+  );
+  gitProcess.emit('close', 0);
+  await operation.waitForCompletion;
+});
+
 test('startCloneProject rejects when selected github token does not exist', async () => {
   await assert.rejects(
     async () =>

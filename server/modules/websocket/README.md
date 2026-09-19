@@ -108,7 +108,7 @@ When a chat socket connects:
 
 1. Add socket to `connectedClients`.
 2. Parse each incoming message with `parseIncomingJsonObject`.
-3. Dispatch by `data.type` (four message types, none provider-specific).
+3. Dispatch by `data.type` (six message types, none provider-specific).
 4. On close, remove socket from `connectedClients`.
 
 ### Session identity model
@@ -130,6 +130,7 @@ flowchart TD
   B -->|ok| D{data.type}
 
   D -->|chat.send| E[resolve session row -> startRun -> providerRuntimeService.run]
+  D -->|chat.edit-send| E2[history_truncated -> rewind or resume at the anchor -> same as chat.send]
   D -->|chat.abort| F[providerRuntimeService.abort + synthetic complete]
   D -->|chat.stop-task| F2[providerRuntimeService.stopBackgroundTask]
   D -->|chat.subscribe| G[chat_subscribed ack + attach socket + replay events seq > lastSeq]

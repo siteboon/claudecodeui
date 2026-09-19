@@ -2,7 +2,8 @@ import { useTranslation } from 'react-i18next';
 import { memo, useCallback, useMemo } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 
-import type { ChatMessage,
+import type { BackgroundTaskSummary,
+  ChatMessage,
   Project,
   ProjectSession,
   LLMProvider,
@@ -58,6 +59,8 @@ type ChatMessagesPaneProps = {
   visibleMessages: ChatMessage[];
   loadEarlierMessages: () => void;
   revealMessage: (message: ChatMessage) => void;
+  /** The session's running background tasks from the activity map, for the strip to list ones whose rows are not loaded. */
+  backgroundTasks?: BackgroundTaskSummary[];
   /** The chat websocket's send, which the background-tasks strip stops a task over. */
   sendMessage: (message: unknown) => void;
   loadAllMessages: () => void;
@@ -115,6 +118,7 @@ function ChatMessagesPane({
   visibleMessages,
   loadEarlierMessages,
   revealMessage,
+  backgroundTasks,
   sendMessage,
   loadAllMessages,
   allMessagesLoaded,
@@ -186,9 +190,11 @@ function ChatMessagesPane({
           <div className="pointer-events-auto min-w-0 pl-4 sm:pl-0">
             <BackgroundTasksStrip
               messages={chatMessages}
+              tasks={backgroundTasks}
               sessionId={selectedSession?.id || currentSessionId}
               sendMessage={sendMessage}
               onReveal={revealMessage}
+              onLoadAll={loadAllMessages}
             />
           </div>
           <div className="pointer-events-auto">

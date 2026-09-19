@@ -97,8 +97,15 @@ export function createProjectCloneRouter(dependencies: ProjectCloneRouterDepende
         res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`);
       };
 
+      // The client can go away while the clone is still validating its
+      // input and preparing the directory — before there is an operation to
+      // cancel. Remember that it did, so the git process is cancelled the
+      // moment it exists rather than left cloning for nobody: the id was
+      // claimed above, so no reconnect can ever reach this run.
       let cloneOperation: Awaited<ReturnType<typeof startCloneProject>> | null = null;
+      let clientGone = false;
       const closeListener = () => {
+        clientGone = true;
         cloneOperation?.cancel();
       };
       req.on('close', closeListener);
@@ -115,6 +122,9 @@ export function createProjectCloneRouter(dependencies: ProjectCloneRouterDepende
             },
           },
         );
+        if (clientGone) {
+          cloneOperation.cancel();
+        }
 
         await cloneOperation.waitForCompletion;
       } catch (error) {

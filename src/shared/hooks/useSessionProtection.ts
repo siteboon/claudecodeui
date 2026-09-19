@@ -7,9 +7,16 @@ import type { BackgroundTaskSummary, GetSessionActivity, IsSessionProcessing, Ma
 
 const LOCAL_ACTIVITY_GRACE_MS = 10_000;
 
-/** The tasks as an identity, so two lists naming the same tasks compare equal. */
+/**
+ * The tasks as an identity, so two lists that say the same about the same
+ * tasks compare equal — every field the pill, the strip and the composer
+ * read, not the ids alone, or a poll that learns a task is nested or corrects
+ * its start would be dropped as a repeat.
+ */
 const backgroundTasksKey = (tasks: readonly BackgroundTaskSummary[] | undefined): string =>
-  (tasks ?? []).map((task) => task.taskId).join('\u0000');
+  (tasks ?? [])
+    .map((task) => [task.taskId, task.toolUseId, task.taskType, task.description, task.workflowName ?? '', task.startedAt, task.nested ? 1 : 0].join('\u0001'))
+    .join('\u0000');
 
 const sessionActivitiesMatch = (left: SessionActivity, right: SessionActivity): boolean =>
   left.statusText === right.statusText

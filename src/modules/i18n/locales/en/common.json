@@ -360,7 +360,8 @@
     "stoppedHint": "The run ended before this workflow reported back",
     "phases": "Phases",
     "agents": "Agents",
-    "agentsFinished": "{{finished}} of {{total}} agents finished",
+    "agentsFinished_one": "{{finished}} of {{count}} agent finished",
+    "agentsFinished_other": "{{finished}} of {{count}} agents finished",
     "agentsFailed": "{{count}} failed",
     "agentsProgress": "{{finished}}/{{total}} agents",
     "agentStatus": {
@@ -371,7 +372,8 @@
       "stopped": "no result"
     },
     "agentTokens": "{{tokens}} tokens",
-    "agentToolCalls": "{{count}} tool calls",
+    "agentToolCalls_one": "{{count}} tool call",
+    "agentToolCalls_other": "{{count}} tool calls",
     "agentTimelineLoading": "Reading the agent's steps…",
     "agentTimelineEmpty": "Nothing recorded yet",
     "agentTimelineUnavailable": "Steps unavailable: {{reason}}",
@@ -382,7 +384,8 @@
     "backgroundTasks": "Background tasks",
     "backgroundAgent": "Agent",
     "backgroundCommand": "Command",
-    "stopTask": "Stop"
+    "stopTask": "Stop",
+    "taskRowNotLoaded": "Launched earlier in this conversation; click to load it"
   },
   "cancel": "Cancel"
 }

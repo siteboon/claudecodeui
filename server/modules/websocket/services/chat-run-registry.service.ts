@@ -68,17 +68,22 @@ const runs = new Map<string, ChatRun>();
  */
 let retainCompletedRun: (appSessionId: string) => boolean = () => false;
 
-function evictRunLater(appSessionId: string): void {
+/**
+ * Schedules one run's eviction. The timer is bound to the run it was armed
+ * for: a later run can take the session's slot while this one's retention —
+ * re-armed for as long as the guard holds — is still pending, and firing on
+ * the slot alone would evict that newer run early.
+ */
+function evictRunLater(run: ChatRun): void {
   const timer = setTimeout(() => {
-    const run = runs.get(appSessionId);
-    if (!run || run.status !== 'completed') {
+    if (runs.get(run.appSessionId) !== run || run.status !== 'completed') {
       return;
     }
-    if (retainCompletedRun(appSessionId)) {
-      evictRunLater(appSessionId);
+    if (retainCompletedRun(run.appSessionId)) {
+      evictRunLater(run);
       return;
     }
-    runs.delete(appSessionId);
+    runs.delete(run.appSessionId);
   }, COMPLETED_RUN_RETENTION_MS);
 
   // Never keep the process alive just to evict a buffered run.
@@ -118,7 +123,7 @@ function decorateAndRecordEvent(run: ChatRun, message: NormalizedMessage): Norma
     outbound.actualSessionId = run.appSessionId;
     run.status = 'completed';
     run.completedAt = Date.now();
-    evictRunLater(run.appSessionId);
+    evictRunLater(run);
   }
 
   run.events.push(outbound);

@@ -310,7 +310,7 @@ describe('the agents of a workflow card', () => {
     expect(agentRows().map((row) => row.textContent)).toEqual([
       'audit:chat· AuditdoneThree large hooks carry most of the module.',
     ]);
-    expect(screen.getByText('1 of 1 agents finished')).toBeTruthy();
+    expect(screen.getByText('1 of 1 agent finished')).toBeTruthy();
     expect(document.querySelectorAll('.animate-pulse')).toHaveLength(0);
   });
 
@@ -332,6 +332,17 @@ describe('the agents of a workflow card', () => {
     expect(agentRows().map((row) => row.textContent)).toEqual([
       'audit:sidebar· AuditrunningGrep: useSidebar4k tokens12 tool calls',
     ]);
+  });
+
+  it('counts one tool call and one agent in the singular', () => {
+    renderPanel({
+      toolResult: LAUNCH_ACK,
+      taskStatus: { status: 'running', agents: [{ ...liveAgents[1], toolCalls: 1 }] },
+    });
+    openCard();
+
+    expect(screen.getByText('1 tool call')).toBeTruthy();
+    expect(screen.getByText('0 of 1 agent finished')).toBeTruthy();
   });
 
   it('names no current agent once the stream has listed agents and none of them is running', () => {

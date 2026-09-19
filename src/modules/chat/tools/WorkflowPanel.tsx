@@ -341,7 +341,7 @@ const WorkflowAgentRowView = memo(({ agent, timelineAddress, onFileOpen, createD
             </span>
           )}
           {agent.tokens !== undefined && <span className="flex-shrink-0">{t('workflow.agentTokens', '{{tokens}} tokens', { tokens: formatTokenCount(agent.tokens) })}</span>}
-          {agent.toolCalls !== undefined && <span className="flex-shrink-0">{t('workflow.agentToolCalls', '{{count}} tool calls', { count: agent.toolCalls })}</span>}
+          {agent.toolCalls !== undefined && <span className="flex-shrink-0">{t('workflow.agentToolCalls', { count: agent.toolCalls, defaultValue_one: '{{count}} tool call', defaultValue_other: '{{count}} tool calls' })}</span>}
         </div>
       )}
 
@@ -502,7 +502,7 @@ export const WorkflowPanel = memo(({ toolInput, toolResult, workflow, taskStatus
               <div className="mb-1 flex items-baseline justify-between gap-2 text-[10px] uppercase tracking-wide text-muted-foreground/60">
                 <span>{t('workflow.agents', 'Agents')}</span>
                 <span className="normal-case tracking-normal">
-                  {t('workflow.agentsFinished', '{{finished}} of {{total}} agents finished', { finished: finishedCount, total: agents.length })}
+                  {t('workflow.agentsFinished', { finished: finishedCount, count: agents.length, defaultValue_one: '{{finished}} of {{count}} agent finished', defaultValue_other: '{{finished}} of {{count}} agents finished' })}
                   {failedCount > 0 && ` · ${t('workflow.agentsFailed', '{{count}} failed', { count: failedCount })}`}
                 </span>
               </div>
