@@ -176,7 +176,7 @@ frame with no `kind` at all (`:96-98`), which is how the Task Master frames pass
 
 ## The chat protocol going up
 
-**RULE: six `type` values, dispatched by one switch (`chat-websocket.service.ts:603-622`).
+**RULE: six `type` values, dispatched by one switch (`chat-websocket.service.ts:676-698`).
 Anything else is answered with `protocol_error` / `UNKNOWN_MESSAGE_TYPE`; anything that
 throws is answered with `INTERNAL_ERROR`.**
 

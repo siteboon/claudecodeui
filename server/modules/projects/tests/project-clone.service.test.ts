@@ -142,6 +142,27 @@ for (const [label, githubUrl] of [
   });
 }
 
+test('startCloneProject rejects an http(s) URL the parser cannot read before git carries it', async () => {
+  // 'https://token@github.com:notaport/x' is no URL to the parser, so the
+  // credential check could not see the token — and git would have had it on
+  // its command line until curl refused the port.
+  let spawned = 0;
+  await assert.rejects(
+    async () =>
+      startCloneProject(
+        { workspacePath: '/workspace/root', githubUrl: 'https://ghp_supersecrettoken1234567890abcd@github.com:notaport/example/repo.git', userId: 1 },
+        { onProgress: () => undefined, onComplete: () => undefined },
+        buildDependencies({ spawnGitClone: () => { spawned += 1; throw new Error('must not spawn'); } }),
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'INVALID_GITHUB_URL');
+      return true;
+    },
+  );
+  assert.equal(spawned, 0);
+});
+
 test('startCloneProject accepts the ssh login name that is not a credential', async () => {
   // `git@` on an SSH URL is the login every SSH clone uses, not a secret.
   const gitProcess = createMockGitProcess();

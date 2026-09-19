@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { X } from 'lucide-react';
 
 import type { BackgroundTaskSummary, ChatMessage } from '@/shared/types';
@@ -9,6 +10,7 @@ import {
   listRunningBackgroundLaunches,
   ownBackgroundTasks,
   readBackgroundTaskId,
+  readBackgroundTaskStatus,
 } from '@/modules/chat/utils/backgroundTasks';
 import { parseToolPayload } from '@/modules/chat/utils/messageTransforms';
 import { parseWorkflowMeta } from '@/modules/chat/utils/workflowScriptMeta';
@@ -55,7 +57,7 @@ function readLaunchDescription(message: ChatMessage): string {
 }
 
 /** What one running task's chip says: its kind, its name, and how far it has got. */
-function describeTask(message: ChatMessage, t: (key: string, defaultValue: string, options?: Record<string, unknown>) => string) {
+function describeTask(message: ChatMessage, t: TFunction) {
   const live = message.taskStatus;
   const name = message.toolName === 'Workflow'
     ? message.workflow?.name || live?.workflowName || ''
@@ -76,7 +78,7 @@ function describeTask(message: ChatMessage, t: (key: string, defaultValue: strin
   if (live?.agents?.length) {
     const finished = live.agents.filter((agent) => agent.state === 'done' || agent.state === 'failed').length;
     const current = findCurrentWorkflowAgent(live.agents);
-    agentsProgress = t('workflow.agentsProgress', '{{finished}}/{{total}} agents', { finished, total: live.agents.length });
+    agentsProgress = t('workflow.agentsProgress', { finished, count: live.agents.length, defaultValue_one: '{{finished}}/{{count}} agent', defaultValue_other: '{{finished}}/{{count}} agents' });
     if (current) {
       agentsProgress += ` · ${describeWorkflowAgent(current)}`;
     }
@@ -102,12 +104,16 @@ function describeTask(message: ChatMessage, t: (key: string, defaultValue: strin
 export const BackgroundTasksStrip = memo(({ messages, tasks, sessionId, sendMessage, onReveal, onLoadAll }: BackgroundTasksStripProps) => {
   const { t } = useTranslation();
   const running = listRunningBackgroundLaunches(messages);
-  // A loaded row is the word on its task — settled or not — so only a task
-  // with no row at all is drawn from the map.
-  const loadedToolIds = new Set(messages.map((message) => message.toolId));
-  const unloaded = ownBackgroundTasks(tasks ?? []).filter((task) => !loadedToolIds.has(task.toolUseId));
+  // A loaded row that has a word on its task — settled or not — is the word;
+  // a task whose row is not loaded, or is loaded without one (a backgrounded
+  // command's launch row from history says nothing until the poll does), is
+  // drawn from the map.
+  const settledToolIds = new Set(
+    messages.filter((message) => readBackgroundTaskStatus(message) !== undefined).map((message) => message.toolId),
+  );
+  const fromMap = ownBackgroundTasks(tasks ?? []).filter((task) => !settledToolIds.has(task.toolUseId));
 
-  if (running.length === 0 && unloaded.length === 0) {
+  if (running.length === 0 && fromMap.length === 0) {
     return null;
   }
 
@@ -148,25 +154,41 @@ export const BackgroundTasksStrip = memo(({ messages, tasks, sessionId, sendMess
           </span>
         );
       })}
-      {unloaded.map((task) => {
+      {fromMap.map((task) => {
         const kind = task.taskType === 'local_workflow'
           ? t('workflow.title', 'Workflow')
           : task.taskType === 'local_bash'
             ? t('workflow.backgroundCommand', 'Command')
             : t('workflow.backgroundAgent', 'Agent');
         const name = task.workflowName ?? task.description;
+        const label = (
+          <>
+            <span className="h-1.5 w-1.5 flex-shrink-0 animate-pulse rounded-full bg-purple-500 dark:bg-purple-400" />
+            <span className="flex-shrink-0 font-medium text-foreground">{kind}</span>
+            {name && <span className="min-w-0 truncate">{name}</span>}
+          </>
+        );
         return (
           <span key={task.taskId} className="flex min-w-0 max-w-full items-center">
-            <button
-              type="button"
-              onClick={onLoadAll}
-              title={`${[kind, name].filter(Boolean).join(' · ')} · ${t('workflow.taskRowNotLoaded', 'Launched earlier in this conversation; click to load it')}`}
-              className="flex min-w-0 max-w-xs items-center gap-1.5 rounded px-1.5 py-0.5 hover:bg-muted hover:text-foreground"
-            >
-              <span className="h-1.5 w-1.5 flex-shrink-0 animate-pulse rounded-full bg-purple-500 dark:bg-purple-400" />
-              <span className="flex-shrink-0 font-medium text-foreground">{kind}</span>
-              {name && <span className="min-w-0 truncate">{name}</span>}
-            </button>
+            {task.nested ? (
+              // Launched by one of the session's agents: its row is in that
+              // agent's transcript, so no page of this one will ever hold it.
+              <span
+                title={`${[kind, name].filter(Boolean).join(' · ')} · ${t('workflow.taskOfAgent', 'Launched by one of this session\'s agents')}`}
+                className="flex min-w-0 max-w-xs items-center gap-1.5 rounded px-1.5 py-0.5"
+              >
+                {label}
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={onLoadAll}
+                title={`${[kind, name].filter(Boolean).join(' · ')} · ${t('workflow.taskRowNotLoaded', 'Launched earlier in this conversation; click to load it')}`}
+                className="flex min-w-0 max-w-xs items-center gap-1.5 rounded px-1.5 py-0.5 hover:bg-muted hover:text-foreground"
+              >
+                {label}
+              </button>
+            )}
             {sessionId && (
               <button
                 type="button"

@@ -363,7 +363,8 @@
     "agentsFinished_one": "{{finished}} of {{count}} agent finished",
     "agentsFinished_other": "{{finished}} of {{count}} agents finished",
     "agentsFailed": "{{count}} failed",
-    "agentsProgress": "{{finished}}/{{total}} agents",
+    "agentsProgress_one": "{{finished}}/{{count}} agent",
+    "agentsProgress_other": "{{finished}}/{{count}} agents",
     "agentStatus": {
       "queued": "queued",
       "running": "running",
@@ -385,7 +386,8 @@
     "backgroundAgent": "Agent",
     "backgroundCommand": "Command",
     "stopTask": "Stop",
-    "taskRowNotLoaded": "Launched earlier in this conversation; click to load it"
+    "taskRowNotLoaded": "Launched earlier in this conversation; click to load it",
+    "taskOfAgent": "Launched by one of this session's agents"
   },
   "cancel": "Cancel"
 }

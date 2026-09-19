@@ -175,13 +175,23 @@ function carriesCredentials(url: string): boolean {
   try {
     parsed = new URL(url);
   } catch {
-    // scp-like `git@github.com:org/repo.git` and bare paths have no userinfo.
+    // scp-like `git@github.com:org/repo.git` and bare paths are not URLs;
+    // an scp-like user is an SSH login, which is not a credential.
     return false;
   }
   if (parsed.password) {
     return true;
   }
   return Boolean(parsed.username) && (parsed.protocol === 'http:' || parsed.protocol === 'https:');
+}
+
+function isParsableUrl(url: string): boolean {
+  try {
+    new URL(url);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function startCloneProject(
@@ -208,6 +218,16 @@ export async function startCloneProject(
   }
 
   if (normalizedGithubUrl.startsWith('-')) {
+    throw new AppError('Invalid githubUrl', {
+      code: 'INVALID_GITHUB_URL',
+      statusCode: 400,
+    });
+  }
+
+  // An http(s) string the URL parser rejects (a bad port, a space in the
+  // host) is one curl rejects too — but only after git has carried it, and
+  // any credential in it, on its command line.
+  if (/^https?:/i.test(normalizedGithubUrl) && !isParsableUrl(normalizedGithubUrl)) {
     throw new AppError('Invalid githubUrl', {
       code: 'INVALID_GITHUB_URL',
       statusCode: 400,

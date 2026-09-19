@@ -347,6 +347,77 @@ describe('the background tasks strip, for a task whose launch row is not loaded'
   });
 });
 
+describe('the background tasks strip, for tasks only the activity map has a word on', () => {
+  it('lists a backgrounded command whose loaded launch row has no status of its own', () => {
+    // A backgrounded command's row from history says nothing about its task
+    // until a live event does; the poll knows it is running, and the ✕ is
+    // the only way to stop it.
+    const sendMessage = vi.fn();
+    render(
+      <BackgroundTasksStrip
+        sessionId="session-1"
+        sendMessage={sendMessage}
+        onReveal={() => {}}
+        onLoadAll={() => {}}
+        messages={[toolRow({
+          toolName: 'Bash',
+          toolId: 'toolu_bash_1',
+          toolInput: JSON.stringify({ command: 'npm test', run_in_background: true }),
+          toolResult: { content: '', isError: false, toolUseResult: { backgroundTaskId: 'b5xsbzu5k' } },
+        })]}
+        tasks={[{ taskId: 'b5xsbzu5k', toolUseId: 'toolu_bash_1', taskType: 'local_bash', description: 'npm test', startedAt: 1 }]}
+      />,
+    );
+
+    expect(screen.getAllByRole('button').map((chip) => chip.textContent)).toEqual(['Commandnpm test', '']);
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    expect(sendMessage).toHaveBeenCalledWith({ type: 'chat.stop-task', sessionId: 'session-1', taskId: 'b5xsbzu5k' });
+  });
+
+  it('draws a task one of the session\'s agents launched without offering to load a row it has none of', () => {
+    const onLoadAll = vi.fn();
+    render(
+      <BackgroundTasksStrip
+        sessionId="session-1"
+        sendMessage={() => {}}
+        onReveal={() => {}}
+        onLoadAll={onLoadAll}
+        messages={[toolRow({
+          toolName: 'Workflow',
+          toolId: 'toolu_workflow_1',
+          taskStatus: { status: 'completed', taskId: 'wxkj4kcvd', workflowName: 'audit' },
+        })]}
+        tasks={[{ taskId: 'b5xsbzu5k', toolUseId: 'toolu_inner', taskType: 'local_bash', description: 'Sleep for 60 seconds', startedAt: 2, nested: true }]}
+      />,
+    );
+
+    // The chip is a plain label with the Stop beside it: nothing to click into.
+    expect(screen.getAllByRole('button').map((chip) => chip.getAttribute('aria-label'))).toEqual(['Stop']);
+    const chip = screen.getByTitle(/Launched by one of this session's agents/);
+    expect(chip.textContent).toBe('CommandSleep for 60 seconds');
+    fireEvent.click(chip);
+    expect(onLoadAll).not.toHaveBeenCalled();
+  });
+
+  it('counts one agent in the singular', () => {
+    render(
+      <BackgroundTasksStrip
+        sessionId="session-1"
+        sendMessage={() => {}}
+        onReveal={() => {}}
+        onLoadAll={() => {}}
+        messages={[toolRow({
+          toolName: 'Workflow',
+          toolId: 'toolu_workflow_1',
+          taskStatus: { status: 'running', workflowName: 'audit', agents: [{ index: 0, label: 'only', agentId: 'a1', state: 'running' }] },
+        })]}
+      />,
+    );
+
+    expect(screen.getByRole('button').textContent).toBe('Workflowaudit· 0/1 agent · only');
+  });
+});
+
 describe('visibleCountToReveal', () => {
   it('keeps the window when the row is already inside it', () => {
     // 942 rows, window of 100: row 900 has 42 rows after it, itself included.
