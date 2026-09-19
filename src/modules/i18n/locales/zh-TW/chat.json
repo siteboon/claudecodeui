@@ -12,6 +12,7 @@
     "copyAsText": "複製為純文字"
   },
   "messageTypes": {
+    "kiro": "Kiro",
     "user": "U",
     "error": "錯誤",
     "tool": "工具",
@@ -159,6 +160,7 @@
       "google": "由 Google 提供"
     },
     "readyPrompt": {
+      "kiro": "已準備好使用 Kiro 和 {{model}}。在下方輸入您的訊息。",
       "claude": "準備好使用 {{model}} 的 Claude。請在下方開始輸入您的訊息。",
       "cursor": "準備好使用 {{model}} 的 Cursor。請在下方開始輸入您的訊息。",
       "codex": "準備好使用 {{model}} 的 Codex。請在下方開始輸入您的訊息。",

@@ -12,6 +12,7 @@
     "copyAsText": "Salin sebagai teks"
   },
   "messageTypes": {
+    "kiro": "Kiro",
     "user": "P",
     "error": "Kesalahan",
     "tool": "Tool",
@@ -162,6 +163,7 @@
       "google": "oleh Google"
     },
     "readyPrompt": {
+      "kiro": "Siap menggunakan Kiro dengan {{model}}. Mulai ketik pesan di bawah.",
       "claude": "Siap menggunakan Claude dengan {{model}}. Mulai ketik pesan di bawah.",
       "cursor": "Siap menggunakan Cursor dengan {{model}}. Mulai ketik pesan di bawah.",
       "codex": "Siap menggunakan Codex dengan {{model}}. Mulai ketik pesan di bawah.",

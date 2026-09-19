@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import * as fs from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 
 import express from 'express';
@@ -78,6 +81,14 @@ test('models command returns models only for the active provider using injected 
   assert.deepEqual(Object.keys(data.available as object), ['codex']);
 });
 
+test('models command preserves the Kiro provider and selected model', async () => {
+  const result = await executeCommand('/models', { provider: 'kiro', model: 'auto' });
+  const data = result.data as { current: { provider: string; model: string }; available: object };
+  assert.equal(data.current.provider, 'kiro');
+  assert.equal(data.current.model, 'auto');
+  assert.deepEqual(Object.keys(data.available), ['kiro']);
+});
+
 test('models command falls back to claude for unsupported providers', async () => {
   const result = await executeCommand('/models', { provider: 'unknown-provider' });
   const data = result.data as { current: { provider: string } };
@@ -111,4 +122,52 @@ test('cost and status commands report the same resolved model as /models', async
 
   assert.equal((cost.data as { model: string }).model, 'haiku');
   assert.equal((status.data as { model: string }).model, 'haiku');
+});
+
+test('custom commands reject symlink escapes and read the validated canonical target', {
+  skip: process.platform === 'win32',
+}, async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'command-path-'));
+  const commandRoot = path.join(tempRoot, '.claude', 'commands');
+  await fs.mkdir(commandRoot, { recursive: true });
+  const target = path.join(commandRoot, 'allowed.md');
+  const outside = path.join(tempRoot, 'outside.md');
+  const allowedLink = path.join(commandRoot, 'allowed-link.md');
+  const escapeLink = path.join(commandRoot, 'escape.md');
+  await fs.writeFile(target, 'Allowed command');
+  await fs.writeFile(outside, 'Private data');
+  await fs.symlink(target, allowedLink);
+  await fs.symlink(outside, escapeLink);
+  const reads: unknown[] = [];
+  const router = createCommandsRouter({
+    fileSystem: {
+      ...fs,
+      readFile: async (...args: Parameters<typeof fs.readFile>) => {
+        reads.push(args[0]);
+        return fs.readFile(...args);
+      },
+    } as typeof fs,
+    homeDirectory: () => tempRoot,
+    appRoot: tempRoot,
+    models: createModelsService() as never,
+    runtime: process,
+  });
+  const server = express().use(express.json()).use(router).listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  try {
+    const address = server.address() as AddressInfo;
+    for (const [commandPath, status] of [[escapeLink, 403], [allowedLink, 200]] as const) {
+      const response = await fetch(`http://127.0.0.1:${address.port}/execute`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ commandName: '/custom', commandPath, context: { projectPath: tempRoot } }),
+      });
+      assert.equal(response.status, status);
+      await response.text();
+    }
+    assert.deepEqual(reads, [await fs.realpath(target)]);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
 });

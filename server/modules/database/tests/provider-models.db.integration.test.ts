@@ -12,6 +12,7 @@ import {
   sessionsDb,
 } from '@/modules/database/index.js';
 import { runMigrations } from '@/modules/database/migrations.js';
+import { PROVIDER_MODELS_TABLE_SCHEMA_SQL } from '@/modules/database/schema.js';
 
 test('provider model repository stores custom rows only and maintains session references', async () => {
   const previousDatabasePath = process.env.DATABASE_PATH;
@@ -120,6 +121,40 @@ test('migrations create the provider model index on an install that lacks it', a
     } else {
       process.env.DATABASE_PATH = previousDatabasePath;
     }
+    await rm(tempDirectory, { recursive: true, force: true });
+  }
+});
+
+test('upgrading the provider model constraint preserves rows, indexes, and the id sequence', async () => {
+  const previousDatabasePath = process.env.DATABASE_PATH;
+  const tempDirectory = await mkdtemp(path.join(os.tmpdir(), 'provider-model-kiro-'));
+  closeConnection();
+  process.env.DATABASE_PATH = path.join(tempDirectory, 'auth.db');
+  await writeFile(process.env.DATABASE_PATH, '');
+  await initializeDatabase();
+  try {
+    const db = getConnection();
+    db.exec('DROP TABLE provider_models');
+    db.exec(PROVIDER_MODELS_TABLE_SCHEMA_SQL.replace(", 'kiro'", ''));
+    db.exec(`
+      INSERT INTO provider_models (id, provider, model_id, model_name, sort_order, created_at, updated_at)
+      VALUES (7, 'codex', 'custom-codex', 'My model', 3, '2026-01-01', '2026-02-01'),
+             (12, 'claude', 'deleted', 'Deleted model', 0, '2026-01-01', '2026-01-01');
+      DELETE FROM provider_models WHERE id = 12;
+    `);
+    const before = db.prepare('SELECT * FROM provider_models').all();
+    runMigrations(db);
+    runMigrations(db); // Re-running the migration must be harmless.
+    assert.deepEqual(db.prepare('SELECT * FROM provider_models').all(), before);
+    const custom = providerModelsDb.createCustomProviderModel('kiro', { id: 'kiro-custom', model: 'Kiro custom' });
+    assert.ok(custom.recordId > 12);
+    assert.equal(providerModelsDb.getCustomProviderModel('kiro', custom.recordId)?.modelId, 'kiro-custom');
+    const index = db.prepare('PRAGMA index_info(idx_provider_models_provider_order)').all() as Array<{ name: string }>;
+    assert.deepEqual(index.map((column) => column.name), ['provider', 'sort_order', 'id']);
+  } finally {
+    closeConnection();
+    if (previousDatabasePath === undefined) delete process.env.DATABASE_PATH;
+    else process.env.DATABASE_PATH = previousDatabasePath;
     await rm(tempDirectory, { recursive: true, force: true });
   }
 });
