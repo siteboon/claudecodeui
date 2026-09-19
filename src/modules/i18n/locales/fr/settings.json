@@ -123,7 +123,22 @@
   "appearanceSettings": {
     "darkMode": {
       "label": "Mode sombre",
-      "description": "Basculer entre les thèmes clair et sombre"
+      "description": "Basculer entre les thèmes clair et sombre",
+      "themeControlled": "Ce thème impose son apparence claire ou sombre"
+    },
+    "colorTheme": {
+      "label": "Thème de couleurs",
+      "description": "La palette utilisée dans toute l'application",
+      "remove": "Supprimer le thème",
+      "importFailed": "Ce thème n'a pas pu être importé.",
+      "import": {
+        "label": "Importer un thème VS Code",
+        "description": "Transforme un fichier *-color-theme.json ou une extension .vsix en palette",
+        "button": "Importer un thème",
+        "urlLabel": "Ou colle l'URL d'une extension",
+        "urlPlaceholder": "https://marketplace.visualstudio.com/items?itemName=…",
+        "urlButton": "Récupérer"
+      }
     },
     "projectSorting": {
       "label": "Tri des projets",
