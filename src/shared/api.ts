@@ -386,6 +386,14 @@ export const api = {
       post(`/api/providers/${provider}/sessions/${encodeURIComponent(sessionId)}/active-effort`, {
         effort,
       }),
+    // Auto read-aloud is a property of the conversation, not of the provider
+    // running it, so these two are not provider-scoped.
+    sessionAutoSpeak: (sessionId: string) =>
+      get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/auto-speak`),
+    setSessionAutoSpeak: (sessionId: string, autoSpeak: boolean) =>
+      post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/auto-speak`, {
+        autoSpeak,
+      }),
 
     mcpServers: (
       provider: string,

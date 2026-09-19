@@ -5,6 +5,7 @@ import type { ServerEvent,MarkSessionIdle,MarkSessionProcessing,PendingPermissio
 import { showCompletionTitleIndicator } from '@/modules/chat/utils/pageTitleNotification';
 import { playChatCompletionSound, playNotificationSound } from '@/shared/utils';
 import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
+import { speakCompletedTurn } from '@/modules/chat/utils/autoSpeakTurn';
 
 const isActionablePermissionRequest = (request: { toolName?: unknown } | null | undefined): boolean => {
   return request?.toolName !== 'ExitPlanMode' && request?.toolName !== 'exit_plan_mode';
@@ -254,6 +255,21 @@ export function useChatRealtimeHandlers({
           if (sid === activeViewSessionId) {
             pendingPermissionRequestsRef.current = [];
             setPendingPermissionRequests([]);
+          }
+
+          // Before the abort and failure branches on purpose: a turn this client
+          // declines to speak still has to be recorded, or the watcher's refresh
+          // reads out the half-finished reply the user just stopped.
+          if (sid) {
+            speakCompletedTurn({
+              sessionId: sid,
+              provider,
+              sessionStore,
+              visible: !msg.aborted
+                && msg.success !== false
+                && sid === activeViewSessionId
+                && isActiveRef.current,
+            });
           }
 
           if (msg.aborted) {

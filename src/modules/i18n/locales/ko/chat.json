@@ -102,7 +102,9 @@
     "transcribing": "받아쓰는 중…",
     "speak": "소리 내어 읽기",
     "stopSpeaking": "중지",
-    "loading": "로딩 중…"
+    "loading": "로딩 중…",
+    "autoSpeakOn": "자동 읽기 켜짐",
+    "autoSpeakOff": "자동 읽기 꺼짐"
   },
   "input": {
     "placeholder": "/를 입력하여 명령어, @를 입력하여 파일, 또는 {{provider}}에게 무엇이든 물어보세요...",

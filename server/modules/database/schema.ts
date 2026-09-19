@@ -138,6 +138,10 @@ CREATE TABLE IF NOT EXISTS sessions (
     -- restores its exact runtime configuration instead of provider defaults.
     model TEXT,
     effort TEXT,
+    -- Read every assistant turn of this session aloud as it completes. Scoped to
+    -- the session rather than the user because listening suits some
+    -- conversations and not others, and it is deleted with the session.
+    auto_speak BOOLEAN DEFAULT 0,
     -- The app session this one was branched from, NULL for sessions created
     -- normally. Informational only: a fork is a fully independent provider
     -- session, and deleting the source does not affect it.

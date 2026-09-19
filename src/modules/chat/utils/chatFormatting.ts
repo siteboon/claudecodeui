@@ -1,3 +1,34 @@
+import type { ChatMessage, LLMProvider } from '@/shared/types';
+
+/**
+ * The assistant text a transcript row shows, which is also exactly what the
+ * read-aloud controls speak.
+ *
+ * Shared by MessageComponent (the copy and speak buttons) and the auto
+ * read-aloud trigger. Auto read-aloud has to produce the *same* string as the
+ * button: the voice player caches and reports playback state per text, so a
+ * different string would both miss the cache and leave the message's own speak
+ * button showing idle while its audio played.
+ */
+export function assistantMessageText(message: ChatMessage, provider: LLMProvider | string | undefined): string {
+  return message.isToolUse
+    ? String(message.displayText || message.content || '')
+    : formattedMessageText(message, provider);
+}
+
+/**
+ * One message's body text with provider-specific transport artifacts removed.
+ *
+ * Used directly by MessageComponent to render a turn, and by
+ * assistantMessageText for everything that is not a tool call.
+ */
+export function formattedMessageText(message: ChatMessage, provider: LLMProvider | string | undefined): string {
+  const content = formatUsageLimitText(String(message.content || ''));
+  return provider === 'codex' && message.type === 'assistant' && !message.isThinking
+    ? stripProposedPlanEnvelope(content)
+    : content;
+}
+
 export function normalizeInlineCodeFences(text: string) {
   if (!text || typeof text !== 'string') return text;
   try {

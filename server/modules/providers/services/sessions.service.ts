@@ -298,6 +298,9 @@ export const sessionsService = {
       // differently from the conversation it was branched from.
       model: source.model,
       effort: source.effort,
+      // A fork continues the same conversation, so it keeps reading aloud if
+      // the source did. Otherwise forking silently turns the feature off.
+      autoSpeak: source.auto_speak === 1,
     });
 
     await broadcastSessionUpserted(forkSessionId);
@@ -659,5 +662,30 @@ export const sessionsService = {
 
     sessionsDb.updateSessionCustomName(sessionId, summary);
     return { sessionId, summary };
+  },
+
+  /**
+   * Whether one session reads assistant turns aloud as they complete.
+   *
+   * Answers false for a session id the gateway has not allocated a row for yet,
+   * because the feature is opt-in: a brand-new chat has never been turned on.
+   */
+  getSessionAutoSpeak(sessionId: string): { sessionId: string; autoSpeak: boolean } {
+    return { sessionId, autoSpeak: sessionsDb.getSessionAutoSpeak(sessionId) };
+  },
+
+  /**
+   * Records whether one session reads assistant turns aloud.
+   *
+   * A row that does not exist yet is not an error: the composer can be toggled
+   * before the first send allocates the session, and the choice is echoed back
+   * so the UI keeps it. `persisted` tells the caller which of the two happened.
+   */
+  setSessionAutoSpeak(
+    sessionId: string,
+    autoSpeak: boolean,
+  ): { sessionId: string; autoSpeak: boolean; persisted: boolean } {
+    const persisted = sessionsDb.setSessionAutoSpeak(sessionId, autoSpeak);
+    return { sessionId, autoSpeak, persisted };
   },
 };
