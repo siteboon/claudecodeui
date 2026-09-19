@@ -60,6 +60,42 @@ function turn(turnId: string, prompts: string[]): TranscriptRow[] {
   ];
 }
 
+/**
+ * The same turn in the rollout format Codex 0.14x+ writes: no
+ * `event_msg/user_message` row at all — the prompt is an
+ * `event_msg/item_completed` whose item is a `UserMessage` with typed content
+ * parts. Real rollouts were the source of this shape.
+ */
+function turnCompleted(turnId: string, prompts: string[]): TranscriptRow[] {
+  return [
+    { type: 'event_msg', payload: { type: 'task_started', turn_id: turnId } },
+    { type: 'turn_context', payload: { turn_id: turnId, cwd: '/tmp' } },
+    ...prompts.map((message) => ({
+      type: 'event_msg',
+      payload: {
+        type: 'item_completed',
+        thread_id: 'thread-1',
+        turn_id: turnId,
+        item: {
+          type: 'UserMessage',
+          id: `umsg-${turnId}-${message.slice(0, 4)}`,
+          content: [{ type: 'text', text: message, text_elements: [] }],
+        },
+      },
+    })),
+    {
+      type: 'event_msg',
+      payload: {
+        type: 'item_completed',
+        thread_id: 'thread-1',
+        turn_id: turnId,
+        item: { type: 'AgentMessage', id: `amsg-${turnId}`, content: [{ type: 'text', text: `answer to ${prompts[0]}` }] },
+      },
+    },
+    { type: 'event_msg', payload: { type: 'task_complete', turn_id: turnId } },
+  ];
+}
+
 async function writeRollout(
   homeDir: string,
   threadId: string,
@@ -123,6 +159,117 @@ test('every Codex prompt is anchored to the turn that contains it', { concurrenc
     assert.equal(
       history.messages.some((message) => message.role !== 'user' && message.transcriptAnchorId),
       false,
+    );
+  });
+});
+
+/**
+ * The same contract in the rollout format current Codex writes, where prompts
+ * arrive as completed `UserMessage` items instead of `user_message` rows.
+ * Without this half the reader the new-format transcript shows no user bubbles
+ * at all and every message loses its edit/fork anchor.
+ */
+const THREE_TURNS_COMPLETED = [
+  ...turnCompleted('turn-a', ['first prompt']),
+  ...turnCompleted('turn-b', ['second prompt']),
+  ...turnCompleted('turn-c', ['third prompt']),
+];
+
+test('every new-format Codex prompt is anchored to the turn that contains it', { concurrency: false }, async () => {
+  await withIndexedSession(THREE_TURNS_COMPLETED, async ({ sessionId }) => {
+    const history = await new CodexSessionsProvider().fetchHistory(sessionId);
+    const prompts = history.messages.filter((message) => message.role === 'user');
+
+    assert.deepEqual(
+      prompts.map((message) => [message.content, message.transcriptAnchorId]),
+      [
+        ['first prompt', 'turn-a'],
+        ['second prompt', 'turn-b'],
+        ['third prompt', 'turn-c'],
+      ],
+    );
+    assert.equal(
+      history.messages.some((message) => message.role !== 'user' && message.transcriptAnchorId),
+      false,
+    );
+  });
+});
+
+test('only the first prompt of a new-format turn is anchored', { concurrency: false }, async () => {
+  await withIndexedSession(turnCompleted('turn-a', ['first prompt', 'queued follow-up']), async ({ sessionId }) => {
+    const history = await new CodexSessionsProvider().fetchHistory(sessionId);
+    const prompts = history.messages.filter((message) => message.role === 'user');
+
+    assert.deepEqual(
+      prompts.map((message) => [message.content, message.transcriptAnchorId]),
+      [
+        ['first prompt', 'turn-a'],
+        ['queued follow-up', undefined],
+      ],
+    );
+  });
+});
+
+test('a rolled-back new-format turn keeps its rows but loses its anchor', { concurrency: false }, async () => {
+  const rows = [
+    ...turnCompleted('turn-a', ['first prompt']),
+    ...turnCompleted('turn-b', ['abandoned prompt']),
+    { type: 'event_msg', payload: { type: 'thread_rolled_back', num_turns: 1 } },
+    ...turnCompleted('turn-c', ['replacement prompt']),
+  ];
+
+  await withIndexedSession(rows, async ({ sessionId }) => {
+    const provider = new CodexSessionsProvider();
+    const history = await provider.fetchHistory(sessionId);
+    const prompts = history.messages.filter((message) => message.role === 'user');
+
+    assert.deepEqual(
+      prompts.map((message) => [message.content, message.transcriptAnchorId]),
+      [
+        ['first prompt', 'turn-a'],
+        ['abandoned prompt', undefined],
+        ['replacement prompt', 'turn-c'],
+      ],
+    );
+
+    assert.deepEqual(
+      await provider.resolveEditAnchor(sessionId, 'turn-b'),
+      { found: false, resumeThroughId: null },
+    );
+  });
+});
+
+test('both prompt styles in one turn share the one anchor', { concurrency: false }, async () => {
+  // Real rollouts never mix the styles (a census found the two formats never
+  // coexist in one file), but both readers share the per-turn first-anchor
+  // set, so even a hypothetical mix cannot put two anchors on one turn — a
+  // second anchor would fork away the first prompt it stands inside.
+  const rows = [
+    { type: 'event_msg', payload: { type: 'task_started', turn_id: 'turn-a' } },
+    { type: 'turn_context', payload: { turn_id: 'turn-a', cwd: '/tmp' } },
+    { type: 'event_msg', payload: { type: 'user_message', message: 'legacy prompt' } },
+    {
+      type: 'event_msg',
+      payload: {
+        type: 'item_completed',
+        thread_id: 'thread-1',
+        turn_id: 'turn-a',
+        item: { type: 'UserMessage', id: 'umsg-a', content: [{ type: 'text', text: 'new-format prompt' }] },
+      },
+    },
+    { type: 'event_msg', payload: { type: 'task_complete', turn_id: 'turn-a' } },
+  ];
+
+  await withIndexedSession(rows, async ({ sessionId }) => {
+    const history = await new CodexSessionsProvider().fetchHistory(sessionId);
+    const prompts = history.messages.filter((message) => message.role === 'user');
+
+    assert.deepEqual(
+      prompts.map((message) => [message.content, message.transcriptAnchorId]),
+      [
+        ['legacy prompt', 'turn-a'],
+        ['new-format prompt', undefined],
+      ],
     );
   });
 });

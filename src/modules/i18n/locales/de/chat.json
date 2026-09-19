@@ -214,7 +214,7 @@
   },
   "message": {
     "editAndResend": "Bearbeiten und erneut senden",
-    "forkFromHere": "Ab hier verzweigen"
+    "forkFromHere": "Ab hier verzweigen (ohne diese Nachricht)"
   },
   "composer": {
     "editing": {

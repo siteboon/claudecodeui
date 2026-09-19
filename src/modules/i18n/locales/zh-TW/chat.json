@@ -250,7 +250,7 @@
   },
   "message": {
     "editAndResend": "編輯並重新傳送",
-    "forkFromHere": "從此處分支"
+    "forkFromHere": "從此處分支（不含此訊息）"
   },
   "composer": {
     "editing": {

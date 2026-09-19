@@ -214,7 +214,7 @@
   },
   "message": {
     "editAndResend": "Modifica e reinvia",
-    "forkFromHere": "Dirama da qui"
+    "forkFromHere": "Dirama da qui (senza questo messaggio)"
   },
   "composer": {
     "editing": {

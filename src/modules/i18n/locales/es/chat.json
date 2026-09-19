@@ -248,7 +248,7 @@
   },
   "message": {
     "editAndResend": "Editar y reenviar",
-    "forkFromHere": "Bifurcar desde aquí"
+    "forkFromHere": "Bifurcar desde aquí (sin este mensaje)"
   },
   "export": {
     "trigger": "Exportar conversación",
