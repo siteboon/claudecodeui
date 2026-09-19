@@ -26,7 +26,7 @@ type ShellInputMessage = {
   data: string;
 };
 
-type ShellOutgoingMessage = ShellInitMessage | ShellResizeMessage | ShellInputMessage;
+type ShellOutgoingMessage = ShellInitMessage | ShellResizeMessage | ShellInputMessage | { type: 'terminate' };
 
 type ShellIncomingMessage =
   | { type: 'output'; data: string }

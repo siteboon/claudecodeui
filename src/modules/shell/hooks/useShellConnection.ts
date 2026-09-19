@@ -35,6 +35,7 @@ type UseShellConnectionResult = {
   closeSocket: () => void;
   connectToShell: (options?: { forceRestart?: boolean }) => void;
   disconnectFromShell: (options?: { suppressAutoConnect?: boolean }) => void;
+  terminateShell: () => void;
 };
 
 export function useShellConnection({
@@ -113,8 +114,16 @@ export function useShellConnection({
         terminalRef.current?.write(`\r\n\x1b[31m${detail}\x1b[0m\r\n`);
         return;
       }
+
+      if (message.type === 'terminated') {
+        // Only the process-exit acknowledgement means the thread lock is free.
+        closeSocket();
+        setIsConnected(false);
+        setIsConnecting(false);
+        connectingRef.current = false;
+      }
     },
-    [handleProcessCompletion, onOutputRef, terminalRef],
+    [closeSocket, handleProcessCompletion, onOutputRef, terminalRef],
   );
 
   const connectWebSocket = useCallback(
@@ -236,6 +245,12 @@ export function useShellConnection({
     forceRestartOnInitRef.current = false;
   }, [clearTerminalScreen, closeSocket]);
 
+  // Shell's explicit End terminal action; ordinary disconnects remain resumable.
+  const terminateShell = useCallback(() => {
+    suppressAutoConnectRef.current = true;
+    sendSocketMessage(wsRef.current, { type: 'terminate' });
+  }, [wsRef]);
+
   useEffect(() => {
     if (
       !autoConnect ||
@@ -256,5 +271,6 @@ export function useShellConnection({
     closeSocket,
     connectToShell,
     disconnectFromShell,
+    terminateShell,
   };
 }

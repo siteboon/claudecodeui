@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, rmdirSync } from 'node:fs';
+import { setTimeout as delay } from 'node:timers/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
 import { WebSocket } from 'ws';
+import nodePty from 'node-pty';
 
 import { handleShellConnection } from '@/modules/websocket/services/shell-websocket.service.js';
 
@@ -47,6 +51,96 @@ function createFakePty() {
     },
   };
 }
+
+test('ending a real PTY releases a writer lock, while disconnect preserves it', {
+  skip: os.platform() !== 'linux' || spawnSync('flock', ['--version']).status !== 0,
+  timeout: 10000,
+}, async () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'cloudcli-terminal-lock-'));
+  const lock = path.join(directory, 'writer.lock');
+  const socket = createFakeSocket();
+  let terminal: ReturnType<typeof nodePty.spawn> | undefined;
+  const dependencies = {
+    resolveProviderSessionId: () => 'lock-test-thread',
+    spawnPty: (() => {
+      // --no-fork mirrors exec codex: the process owning the PTY holds the lock.
+      terminal = nodePty.spawn('flock', ['--no-fork', lock, 'sleep', '60'], {});
+      return terminal;
+    }) as typeof nodePty.spawn,
+  };
+  const init = JSON.stringify({ type: 'init', projectPath: directory,
+    sessionId: directory.split(path.sep).pop(), hasSession: true, provider: 'codex' });
+  const isLocked = () => spawnSync('flock', ['-n', lock, 'true']).status === 1;
+  try {
+    handleShellConnection(socket as never, dependencies);
+    socket.emit('message', init);
+    for (let i = 0; i < 100 && !isLocked(); i++) await delay(20);
+    assert.equal(isLocked(), true);
+    socket.emit('close');
+    assert.equal(isLocked(), true);
+    const replacement = createFakeSocket();
+    handleShellConnection(replacement as never, dependencies);
+    replacement.emit('message', init);
+    replacement.emit('message', JSON.stringify({ type: 'terminate' }));
+    for (let i = 0; i < 100 && !replacement.frames.some((frame) => JSON.parse(frame).type === 'terminated'); i++) await delay(20);
+    assert.equal(replacement.frames.some((frame) => JSON.parse(frame).type === 'terminated'), true);
+    assert.equal(isLocked(), false);
+  } finally {
+    try { terminal?.kill(); } catch { /* Already exited. */ }
+    rmSync(lock, { force: true });
+    // The directory contains only the test's lock file.
+    rmdirSync(directory);
+  }
+});
+
+test('ending a Codex terminal stops its writer without a fallback conversation', () => {
+  const terminal = createFakePty();
+  const socket = createFakeSocket();
+  let command = '';
+  handleShellConnection(socket as never, {
+    resolveProviderSessionId: () => 'test-codex-thread',
+    spawnPty: ((_shell: string, args: string[]) => {
+      command = args.join(' ');
+      return terminal as never;
+    }) as never,
+  });
+  socket.emit('message', JSON.stringify({
+    type: 'init', projectPath: process.cwd(), sessionId: 'terminate-codex',
+    hasSession: true, provider: 'codex',
+  }));
+  assert.match(command, /codex resume "test-codex-thread"/);
+  assert.doesNotMatch(command, /\|\||LASTEXITCODE/);
+  if (os.platform() !== 'win32') assert.match(command, /exec codex resume/);
+  socket.emit('message', JSON.stringify({ type: 'terminate' }));
+  assert.equal(terminal.killed, true);
+  assert.equal(socket.frames.some((frame) => JSON.parse(frame).type === 'terminated'), false);
+  terminal.emitExit();
+  assert.equal(socket.frames.some((frame) => JSON.parse(frame).type === 'terminated'), true);
+  socket.emit('close');
+});
+
+test('disconnect preserves a terminal but only its current socket may terminate it', () => {
+  const terminal = createFakePty();
+  const dependencies = {
+    resolveProviderSessionId: () => 'test-thread',
+    spawnPty: () => terminal as never,
+  };
+  const init = JSON.stringify({ type: 'init', projectPath: process.cwd(),
+    sessionId: 'terminate-owner', hasSession: true, provider: 'codex' });
+  const first = createFakeSocket();
+  handleShellConnection(first as never, dependencies);
+  first.emit('message', init);
+  first.emit('close');
+  assert.equal(terminal.killed, false);
+  const replacement = createFakeSocket();
+  handleShellConnection(replacement as never, dependencies);
+  replacement.emit('message', init);
+  first.emit('message', JSON.stringify({ type: 'terminate' }));
+  assert.equal(terminal.killed, false);
+  replacement.emit('message', JSON.stringify({ type: 'terminate' }));
+  assert.equal(terminal.killed, true);
+  terminal.emitExit();
+});
 
 test('a stale socket close cannot detach the socket that replaced it', () => {
   const pty = createFakePty();
