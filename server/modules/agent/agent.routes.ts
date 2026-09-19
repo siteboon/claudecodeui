@@ -18,6 +18,14 @@ type AgentRouterDependencies = {
   githubTokens: { getActiveGithubToken(userId: number): string | null };
   projects: { createProjectPath(projectPath: string, customName: string | null): unknown };
   models: typeof import('../providers/index.js').providerModelsService;
+  /** The session gateway: an API run gets an app session row like a chat send, so the UI can list, open and subscribe to it. */
+  sessions: {
+    getSessionById(sessionId: string): { session_id: string; provider_session_id: string | null } | null;
+    getSessionByProviderSessionId(providerSessionId: string): { session_id: string; provider_session_id: string | null } | null;
+    createAppSession(provider: string, projectPath: string, initialMessage: string): { sessionId: string };
+  };
+  /** The live-run registry the chat socket uses; registering here is what puts an API run on the running-sessions list. */
+  runs: Pick<typeof import('../websocket/index.js').chatRunRegistry, 'startRun' | 'completeRunIfCurrent'>;
   queryClaude: ProviderRunFunction;
   queryCursor: ProviderRunFunction;
   queryCodex: ProviderRunFunction;
@@ -40,6 +48,8 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
   const githubTokensDb = dependencies.githubTokens;
   const projectsDb = dependencies.projects;
   const providerModelsService = dependencies.models;
+  const sessionGateway = dependencies.sessions;
+  const runRegistry = dependencies.runs;
   const queryClaudeSDK = dependencies.queryClaude;
   const spawnCursor = dependencies.queryCursor;
   const queryCodex = dependencies.queryCodex;
@@ -474,14 +484,22 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
   }
 
   /**
-   * SSE Stream Writer - Adapts SDK/CLI output to Server-Sent Events
+   * SSE Stream Writer - the HTTP response as one audience of a registered run.
+   *
+   * The provider runtime no longer writes here directly: it writes to the
+   * run's gateway writer, which remaps, sequences and buffers every event
+   * and forwards it — as a JSON string, the way it reaches a websocket — to
+   * each connection watching the run, this one included. The route's own
+   * events (status, session-id, GitHub results, done) are objects.
    */
   class SSEStreamWriter {
-    constructor(res, userId = null) {
+    constructor(res) {
       this.res = res;
-      this.sessionId = null;
-      this.userId = userId;
-      this.isSSEStreamWriter = true;  // Marker for transport detection
+    }
+
+    /** What the gateway writer checks before forwarding: open until the response has ended. */
+    get readyState() {
+      return this.res.writableEnded ? 3 : 1;
     }
 
     send(data) {
@@ -489,8 +507,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
         return;
       }
 
-      // Format as SSE - providers send raw objects, we stringify
-      this.res.write(`data: ${JSON.stringify(data)}\n\n`);
+      this.res.write(`data: ${typeof data === 'string' ? data : JSON.stringify(data)}\n\n`);
     }
 
     end() {
@@ -499,56 +516,35 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
         this.res.end();
       }
     }
-
-    setSessionId(sessionId) {
-      this.sessionId = sessionId;
-      this.send({ type: 'session-id', sessionId });
-    }
-
-    getSessionId() {
-      return this.sessionId;
-    }
   }
 
   /**
-   * Non-streaming response collector
+   * Non-streaming response collector - the same audience role, kept in
+   * memory until the run ends.
    */
   class ResponseCollector {
-    constructor(userId = null) {
+    constructor() {
       this.messages = [];
-      this.sessionId = null;
-      this.userId = userId;
     }
 
-    send(data) {
-      // Store ALL messages for now - we'll filter when returning
-      this.messages.push(data);
+    readyState = 1;
 
-      // Extract sessionId if present
+    send(data) {
+      // The run's events arrive as JSON strings; the route's own as objects.
+      // Stored as objects either way so the filters below read one shape.
+      let record = data;
       if (typeof data === 'string') {
         try {
-          const parsed = JSON.parse(data);
-          if (parsed.sessionId) {
-            this.sessionId = parsed.sessionId;
-          }
+          record = JSON.parse(data);
         } catch (e) {
-          // Not JSON, ignore
+          // Not JSON, keep as is
         }
-      } else if (data && data.sessionId) {
-        this.sessionId = data.sessionId;
       }
+      this.messages.push(record);
     }
 
     end() {
       // Do nothing - we'll collect all messages
-    }
-
-    setSessionId(sessionId) {
-      this.sessionId = sessionId;
-    }
-
-    getSessionId() {
-      return this.sessionId;
     }
 
     getMessages() {
@@ -669,6 +665,11 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
    *                          Default: true
    *                          - true: Returns text/event-stream with incremental updates
    *                          - false: Returns complete JSON response after completion
+   *
+   * @param {string} sessionId - (Optional) Continue an existing session: the id an earlier
+   *                             response reported as `sessionId` / in its `session-id` event.
+   *                             A session already mid-run is refused (409); an unknown id, 404.
+   *                             Omitted: a new session is created for the run.
    *
    * @param {string} model - (Optional) Model identifier for providers.
    *
@@ -807,11 +808,20 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
    * RESPONSE FORMATS
    * ================================================================================================
    *
+   * Every run is registered with the chat run registry like a message sent
+   * from the UI: it is on GET /api/providers/sessions/running while it goes,
+   * a tab that opens the session subscribes to it live, and its events
+   * reach this response the way they reach a tab — `sessionId` is the app
+   * session id, each event carries a `seq`, and the provider's own
+   * `session_created` is folded into the session row instead of forwarded.
+   *
    * Streaming Response (stream=true):
    *   Content-Type: text/event-stream
    *   Events:
    *     - { type: "status", message: "...", projectPath: "..." }
-   *     - { type: "claude-response", data: {...} }
+   *     - { type: "session-id", sessionId: "..." }   // the app session id, usable as `sessionId` later
+   *     - { kind: "text" | "tool_use" | ... , sessionId, seq, ... }   // the provider's normalized events
+   *     - { kind: "complete", ... }
    *     - { type: "github-branch", branch: { name: "...", url: "..." } }
    *     - { type: "github-pr", pullRequest: { number: 42, url: "..." } }
    *     - { type: "github-error", error: "..." }
@@ -842,7 +852,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
    *   }
    *
    * Error Response:
-   *   HTTP Status: 400, 401, 500
+   *   HTTP Status: 400, 401, 404 (unknown sessionId), 409 (session already mid-run), 500
    *   Content-Type: application/json
    *   { success: false, error: "Error description" }
    *
@@ -906,9 +916,23 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       return res.status(400).json({ error: 'createBranch and createPR require either githubUrl or projectPath with a GitHub remote' });
     }
 
+    // A run continues a session the caller names, by its app id or — for a
+    // caller that stored what an earlier response called `sessionId` — the
+    // provider-native one, which the row is also keyed by once indexed.
+    let sessionRow = null;
+    if (sessionId) {
+      sessionRow = sessionGateway.getSessionById(sessionId) ?? sessionGateway.getSessionByProviderSessionId(sessionId);
+      if (!sessionRow) {
+        return res.status(404).json({ error: `Session "${sessionId}" was not found` });
+      }
+    }
+
     let finalProjectPath = null;
     let clonedProjectCreated = false;
     let writer = null;
+    // The run as the chat socket registers one: on the running-sessions
+    // list, subscribable from any tab, and completed on every exit path.
+    let run = null;
 
     try {
       // Determine the final project path
@@ -950,33 +974,47 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
         console.log('Project registered:', registrationResult.project);
       }
 
-      // Set up writer based on streaming mode
+      // A brand-new run gets its app session row first, as a chat send does:
+      // the id is stable for the conversation, the sidebar can list it, and
+      // the provider-native id is mapped onto it when the runtime announces it.
+      const appSessionId = sessionRow
+        ? sessionRow.session_id
+        : sessionGateway.createAppSession(provider, finalProjectPath, message.trim()).sessionId;
+
+      // Registered before any header goes out, so a session already mid-run
+      // is refused with a plain 409 rather than an empty stream. The HTTP
+      // response is the run's first audience; a tab that opens the session
+      // subscribes as another, and replays what it missed.
+      const audience = stream ? new SSEStreamWriter(res) : new ResponseCollector();
+      run = runRegistry.startRun({
+        appSessionId,
+        provider,
+        providerSessionId: sessionRow?.provider_session_id ?? null,
+        connection: audience,
+        userId: req.user.id,
+      });
+      if (!run) {
+        return res.status(409).json({ error: `Session "${appSessionId}" already has a run in progress` });
+      }
+      writer = audience;
+
       if (stream) {
         // Set up SSE headers for streaming
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
         res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
-
-        writer = new SSEStreamWriter(res, req.user.id);
-
-        // Send initial status
-        writer.send({
-          type: 'status',
-          message: githubUrl ? 'Repository cloned and session started' : 'Session started',
-          projectPath: finalProjectPath
-        });
-      } else {
-        // Non-streaming mode: collect messages
-        writer = new ResponseCollector(req.user.id);
-
-        // Collect initial status message
-        writer.send({
-          type: 'status',
-          message: githubUrl ? 'Repository cloned and session started' : 'Session started',
-          projectPath: finalProjectPath
-        });
       }
+
+      // The route's own opening events. `session-id` is the app session id:
+      // what the UI opens the conversation under, and what a later request
+      // passes back as `sessionId` to continue it.
+      writer.send({
+        type: 'status',
+        message: githubUrl ? 'Repository cloned and session started' : 'Session started',
+        projectPath: finalProjectPath
+      });
+      writer.send({ type: 'session-id', sessionId: appSessionId });
 
       const codexModels = await providerModelsService.getProviderModels('codex');
       const opencodeModels = await providerModelsService.getProviderModels('opencode');
@@ -988,11 +1026,11 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
         await queryClaudeSDK(message.trim(), {
           projectPath: finalProjectPath,
           cwd: finalProjectPath,
-          sessionId: sessionId || null,
+          sessionId: appSessionId,
           model: model,
           effort,
           permissionMode: 'bypassPermissions' // Bypass all permissions for API calls
-        }, writer);
+        }, run.writer);
 
       } else if (provider === 'cursor') {
         console.log('🖱️ Starting Cursor CLI session');
@@ -1000,32 +1038,32 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
         await spawnCursor(message.trim(), {
           projectPath: finalProjectPath,
           cwd: finalProjectPath,
-          sessionId: sessionId || null,
+          sessionId: appSessionId,
           model: model || undefined,
           skipPermissions: true // Bypass permissions for Cursor
-        }, writer);
+        }, run.writer);
       } else if (provider === 'codex') {
         console.log('🤖 Starting Codex SDK session');
 
         await queryCodex(message.trim(), {
           projectPath: finalProjectPath,
           cwd: finalProjectPath,
-          sessionId: sessionId || null,
+          sessionId: appSessionId,
           model: model || codexModels.DEFAULT,
           effort,
           permissionMode: 'bypassPermissions'
-        }, writer);
+        }, run.writer);
       } else if (provider === 'opencode') {
         console.log('Starting OpenCode CLI session');
 
         await spawnOpenCode(message.trim(), {
           projectPath: finalProjectPath,
           cwd: finalProjectPath,
-          sessionId: sessionId || null,
+          sessionId: appSessionId,
           model: model || opencodeModels.DEFAULT,
           effort,
           permissionMode: 'bypassPermissions' // Agent runs are non-interactive, like the other providers above
-        }, writer);
+        }, run.writer);
       }
 
       // Handle GitHub branch and PR creation after successful agent completion
@@ -1220,7 +1258,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
 
         const response = {
           success: true,
-          sessionId: writer.getSessionId(),
+          sessionId: appSessionId,
           messages: assistantMessages,
           tokens: tokenSummary,
           projectPath: finalProjectPath
@@ -1240,7 +1278,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       // Clean up if requested
       if (cleanup && githubUrl && clonedProjectCreated) {
         // Only cleanup if we cloned a repo (not for existing project paths)
-        const sessionIdForCleanup = writer.getSessionId();
+        const sessionIdForCleanup = run.writer.getSessionId();
         setTimeout(() => {
           cleanupProject(finalProjectPath, sessionIdForCleanup);
         }, 5000);
@@ -1251,7 +1289,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
 
       // Clean up on error
       if (finalProjectPath && cleanup && githubUrl && clonedProjectCreated) {
-        const sessionIdForCleanup = writer ? writer.getSessionId() : null;
+        const sessionIdForCleanup = run ? run.writer.getSessionId() : null;
         cleanupProject(finalProjectPath, sessionIdForCleanup);
       }
 
@@ -1263,7 +1301,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           res.setHeader('Cache-Control', 'no-cache');
           res.setHeader('Connection', 'keep-alive');
           res.setHeader('X-Accel-Buffering', 'no');
-          writer = new SSEStreamWriter(res, req.user.id);
+          writer = new SSEStreamWriter(res);
         }
 
         if (!res.writableEnded) {
@@ -1279,6 +1317,14 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           success: false,
           error: error.message
         });
+      }
+    } finally {
+      // Safety net, as for a chat send: a runtime that threw or resolved
+      // without its terminal `complete` would leave the session listed as
+      // running in every tab. Scoped to this run, so a run the session
+      // started meanwhile is left alone.
+      if (run) {
+        runRegistry.completeRunIfCurrent(run, { exitCode: 1 });
       }
     }
   });

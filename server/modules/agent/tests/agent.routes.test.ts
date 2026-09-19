@@ -30,6 +30,19 @@ function createDependencies(
     githubTokens: { getActiveGithubToken: () => null },
     projects: { createProjectPath: () => ({ outcome: 'created' }) },
     models: {} as AgentDependencies['models'],
+    sessions: {
+      getSessionById: () => null,
+      getSessionByProviderSessionId: () => null,
+      createAppSession: () => ({ sessionId: 'app-session-1' }),
+    },
+    // A registry stand-in: the runtime writes straight to the audience, which
+    // is all the tests above this file's registration tests need.
+    runs: {
+      startRun: ((input: { connection: { send(data: string): void } | null }) => ({
+        writer: { send: (data: unknown) => input.connection?.send(JSON.stringify(data)), getSessionId: () => null },
+      })) as unknown as AgentDependencies['runs']['startRun'],
+      completeRunIfCurrent: () => undefined,
+    },
     queryClaude: unexpectedProviderCall as AgentDependencies['queryClaude'],
     queryCursor: unexpectedProviderCall as AgentDependencies['queryCursor'],
     queryCodex: unexpectedProviderCall as AgentDependencies['queryCodex'],
