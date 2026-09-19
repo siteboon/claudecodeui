@@ -570,7 +570,6 @@ export type ProviderRuntimeWriter = {
   setSessionId?(sessionId: string): void;
   userId?: string | number | null;
   isWebSocketWriter?: boolean;
-  isSSEStreamWriter?: boolean;
 };
 
 export type ProviderPermissionDecision = {

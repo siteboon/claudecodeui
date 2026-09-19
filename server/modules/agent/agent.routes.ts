@@ -7,6 +7,14 @@ import type { ProviderRunFunction } from '@/shared/types.js';
 
 import { normalizeProjectPath } from '../../shared/utils.js';
 
+/** What the route reads off a session row it continues: the row, not the request, says which provider and project a session belongs to. */
+type AgentSessionRow = {
+  session_id: string;
+  provider: string;
+  provider_session_id: string | null;
+  project_path: string | null;
+};
+
 type AgentRouterDependencies = {
   fileSystem: typeof import('node:fs/promises');
   crypto: typeof import('node:crypto');
@@ -20,12 +28,12 @@ type AgentRouterDependencies = {
   models: typeof import('../providers/index.js').providerModelsService;
   /** The session gateway: an API run gets an app session row like a chat send, so the UI can list, open and subscribe to it. */
   sessions: {
-    getSessionById(sessionId: string): { session_id: string; provider_session_id: string | null } | null;
-    getSessionByProviderSessionId(providerSessionId: string): { session_id: string; provider_session_id: string | null } | null;
+    getSessionById(sessionId: string): AgentSessionRow | null;
+    getSessionByProviderSessionId(providerSessionId: string): AgentSessionRow | null;
     createAppSession(provider: string, projectPath: string, initialMessage: string): { sessionId: string };
   };
   /** The live-run registry the chat socket uses; registering here is what puts an API run on the running-sessions list. */
-  runs: Pick<typeof import('../websocket/index.js').chatRunRegistry, 'startRun' | 'completeRunIfCurrent'>;
+  runs: Pick<typeof import('../websocket/index.js').chatRunRegistry, 'startRun' | 'completeRunIfCurrent' | 'isProcessing'>;
   queryClaude: ProviderRunFunction;
   queryCursor: ProviderRunFunction;
   queryCodex: ProviderRunFunction;
@@ -552,76 +560,36 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
     }
 
     /**
-     * Get filtered assistant messages only
+     * The assistant's replies, as the normalized `text` events the run
+     * produced. (Earlier versions filtered a `claude-response` shape no
+     * runtime has emitted since the providers were unified, so this was
+     * always empty.)
      */
     getAssistantMessages() {
-      const assistantMessages = [];
-
-      for (const msg of this.messages) {
-        // Skip initial status message
-        if (msg && msg.type === 'status') {
-          continue;
-        }
-
-        // Handle JSON strings
-        if (typeof msg === 'string') {
-          try {
-            const parsed = JSON.parse(msg);
-            // Only include claude-response messages with assistant type
-            if (parsed.type === 'claude-response' && parsed.data && parsed.data.type === 'assistant') {
-              assistantMessages.push(parsed.data);
-            }
-          } catch (e) {
-            // Not JSON, skip
-          }
-        }
-      }
-
-      return assistantMessages;
+      return this.messages.filter((msg) => msg && msg.kind === 'text' && msg.role === 'assistant');
     }
 
     /**
-     * Calculate total tokens from all messages
+     * The run's token usage, from the last context-window report the
+     * runtime streamed (`status` / `token_budget`, which the Claude and Codex
+     * runtimes emit per assistant message); zeros for a runtime that
+     * reports none.
      */
     getTotalTokens() {
-      let totalInput = 0;
-      let totalOutput = 0;
-      let totalCacheRead = 0;
-      let totalCacheCreation = 0;
-
+      let budget = null;
       for (const msg of this.messages) {
-        let data = msg;
-
-        // Parse if string
-        if (typeof msg === 'string') {
-          try {
-            data = JSON.parse(msg);
-          } catch (e) {
-            continue;
-          }
-        }
-
-        // Extract usage from claude-response messages
-        if (data && data.type === 'claude-response' && data.data) {
-          const msgData = data.data;
-          if (msgData.message && msgData.message.usage) {
-            const usage = msgData.message.usage;
-            totalInput += usage.input_tokens || 0;
-            totalOutput += usage.output_tokens || 0;
-            totalCacheRead += usage.cache_read_input_tokens || 0;
-            totalCacheCreation += usage.cache_creation_input_tokens || 0;
-          }
+        if (msg && msg.kind === 'status' && msg.text === 'token_budget' && msg.tokenBudget) {
+          budget = msg.tokenBudget;
         }
       }
-
-      const inputTokens = totalInput + totalCacheRead + totalCacheCreation;
-
+      const inputTokens = budget?.inputTokens ?? 0;
+      const outputTokens = budget?.outputTokens ?? 0;
       return {
         inputTokens,
-        outputTokens: totalOutput,
-        cacheReadTokens: totalCacheRead,
-        cacheCreationTokens: totalCacheCreation,
-        totalTokens: inputTokens + totalOutput
+        outputTokens,
+        cacheReadTokens: budget?.cacheReadTokens ?? 0,
+        cacheCreationTokens: budget?.cacheCreationTokens ?? 0,
+        totalTokens: inputTokens + outputTokens
       };
     }
   }
@@ -822,6 +790,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
    *     - { type: "session-id", sessionId: "..." }   // the app session id, usable as `sessionId` later
    *     - { kind: "text" | "tool_use" | ... , sessionId, seq, ... }   // the provider's normalized events
    *     - { kind: "complete", ... }
+   *     - { type: "status", message: "Run aborted", aborted: true }   // only when a tab aborted the run; no branch/PR follows
    *     - { type: "github-branch", branch: { name: "...", url: "..." } }
    *     - { type: "github-pr", pullRequest: { number: 42, url: "..." } }
    *     - { type: "github-error", error: "..." }
@@ -830,9 +799,10 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
    * Non-Streaming Response (stream=false):
    *   Content-Type: application/json
    *   {
-   *     success: true,
-   *     sessionId: "session-123",
-   *     messages: [...],        // Assistant messages only (filtered)
+   *     success: true,          // false, with aborted: true, when a tab aborted the run
+   *     sessionId: "session-123",          // the app session id; pass it back as `sessionId` to continue
+   *     providerSessionId: "native-id",    // the provider's own id, for tooling that drives the CLI directly
+   *     messages: [...],        // The assistant's replies: the run's normalized `text` events
    *     tokens: {
    *       inputTokens: 150,
    *       outputTokens: 50,
@@ -884,7 +854,15 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
    *   }
    */
   router.post('/', validateExternalApiKey, async (req, res) => {
-    const { githubUrl, projectPath, message, provider = 'claude', model, githubToken, branchName, sessionId } = req.body;
+    const { githubUrl, projectPath, message, model, githubToken, branchName } = req.body;
+    // Transport input is typed here, before anything binds it to a query:
+    // the lookup below runs outside the try, where a throw would be an
+    // unhandled rejection.
+    if (req.body.sessionId !== undefined && req.body.sessionId !== null && typeof req.body.sessionId !== 'string') {
+      return res.status(400).json({ error: 'sessionId must be a string' });
+    }
+    const sessionId = typeof req.body.sessionId === 'string' && req.body.sessionId.trim() ? req.body.sessionId.trim() : null;
+    const requestedProvider = req.body.provider === undefined || req.body.provider === null ? null : req.body.provider;
     const effort = typeof req.body.effort === 'string' && req.body.effort.trim()
       ? req.body.effort.trim()
       : undefined;
@@ -906,7 +884,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       return res.status(400).json({ error: 'message is required' });
     }
 
-    if (!['claude', 'cursor', 'codex', 'opencode'].includes(provider)) {
+    if (requestedProvider !== null && !['claude', 'cursor', 'codex', 'opencode'].includes(requestedProvider)) {
       return res.status(400).json({ error: 'provider must be "claude", "cursor", "codex", or "opencode"' });
     }
 
@@ -918,14 +896,25 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
 
     // A run continues a session the caller names, by its app id or — for a
     // caller that stored what an earlier response called `sessionId` — the
-    // provider-native one, which the row is also keyed by once indexed.
+    // provider-native one, which the row is also keyed by once indexed. The
+    // row, not the request, says which provider the session belongs to, as
+    // it does for a chat send; a request that names another is refused.
     let sessionRow = null;
     if (sessionId) {
       sessionRow = sessionGateway.getSessionById(sessionId) ?? sessionGateway.getSessionByProviderSessionId(sessionId);
       if (!sessionRow) {
         return res.status(404).json({ error: `Session "${sessionId}" was not found` });
       }
+      if (requestedProvider !== null && requestedProvider !== sessionRow.provider) {
+        return res.status(400).json({ error: `Session "${sessionRow.session_id}" belongs to provider "${sessionRow.provider}"` });
+      }
+      // Refused before any side effect — a clone per retry would pile up
+      // under external-projects. startRun below still has the last word.
+      if (runRegistry.isProcessing(sessionRow.session_id)) {
+        return res.status(409).json({ error: `Session "${sessionRow.session_id}" already has a run in progress` });
+      }
     }
+    const provider = sessionRow?.provider ?? requestedProvider ?? 'claude';
 
     let finalProjectPath = null;
     let clonedProjectCreated = false;
@@ -966,6 +955,12 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
 
       finalProjectPath = normalizeProjectPath(finalProjectPath);
 
+      // A continued session runs where it lives, as a chat send does; a
+      // request that resolved to another directory is not that session.
+      if (sessionRow && sessionRow.project_path && normalizeProjectPath(sessionRow.project_path) !== finalProjectPath) {
+        throw new Error(`Session "${sessionRow.session_id}" belongs to project ${sessionRow.project_path}, not ${finalProjectPath}`);
+      }
+
       // Register project path in DB (or reuse existing active registration)
       const registrationResult = projectsDb.createProjectPath(finalProjectPath, null);
       if (registrationResult.outcome === 'active_conflict') {
@@ -994,6 +989,9 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
         userId: req.user.id,
       });
       if (!run) {
+        if (cleanup && githubUrl && clonedProjectCreated) {
+          cleanupProject(finalProjectPath, null);
+        }
         return res.status(409).json({ error: `Session "${appSessionId}" already has a run in progress` });
       }
       writer = audience;
@@ -1066,11 +1064,19 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
         }, run.writer);
       }
 
+      // A tab can now abort the run (`chat.abort`), on which the runtime
+      // returns as it does on completion. What the interrupted agent left
+      // behind is not a result to branch or open a PR from.
+      const aborted = run.events.some((event) => event.kind === 'complete' && event.aborted === true);
+      if (aborted) {
+        writer.send({ type: 'status', message: 'Run aborted', aborted: true });
+      }
+
       // Handle GitHub branch and PR creation after successful agent completion
       let branchInfo = null;
       let prInfo = null;
 
-      if (createBranch || createPR) {
+      if (!aborted && (createBranch || createPR)) {
         try {
           console.log('🔄 Starting GitHub branch/PR creation workflow...');
 
@@ -1257,8 +1263,12 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
         const tokenSummary = writer.getTotalTokens();
 
         const response = {
-          success: true,
+          success: !aborted,
+          ...(aborted ? { aborted: true } : {}),
           sessionId: appSessionId,
+          // The provider-native id, for a caller that drives the CLI itself
+          // (`claude --resume`); `sessionId` is what this API and the UI use.
+          providerSessionId: run.writer.getSessionId(),
           messages: assistantMessages,
           tokens: tokenSummary,
           projectPath: finalProjectPath

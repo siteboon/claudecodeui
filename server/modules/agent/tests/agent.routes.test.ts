@@ -40,8 +40,10 @@ function createDependencies(
     runs: {
       startRun: ((input: { connection: { send(data: string): void } | null }) => ({
         writer: { send: (data: unknown) => input.connection?.send(JSON.stringify(data)), getSessionId: () => null },
+        events: [],
       })) as unknown as AgentDependencies['runs']['startRun'],
       completeRunIfCurrent: () => undefined,
+      isProcessing: () => false,
     },
     queryClaude: unexpectedProviderCall as AgentDependencies['queryClaude'],
     queryCursor: unexpectedProviderCall as AgentDependencies['queryCursor'],

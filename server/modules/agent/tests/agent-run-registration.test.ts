@@ -226,3 +226,123 @@ test('a runtime that throws leaves no run behind', async () => {
     });
   });
 });
+
+test('a sessionId that is not a string is refused, not bound to a query', async () => {
+  // The lookup runs before the handler's try: a throw there is an unhandled
+  // rejection, and better-sqlite3 throws on binding an object.
+  await withIsolatedDatabase(async () => {
+    const runtime = createHeldRuntime();
+    await withAgentServer(createDependencies(runtime.queryClaude), async (baseUrl) => {
+      const response = await post(baseUrl, { projectPath: '/home/test/project', message: 'Run', sessionId: { $ne: null }, stream: false });
+      assert.equal(response.status, 400);
+      assert.equal(runtime.seen.length, 0);
+    });
+  });
+});
+
+test('a continued session runs under its own provider and project, as a chat send does', async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createAppSession('app-codex', 'codex', '/home/test/project', 'Codex one');
+    const claudeCalls: unknown[] = [];
+    const codexCalls: unknown[] = [];
+    const dependencies = createDependencies(async (_command, options, writer) => {
+      claudeCalls.push(options);
+      writer.send(createNormalizedMessage({ kind: 'complete', provider: 'claude', sessionId: null, exitCode: 0 }));
+    });
+    dependencies.queryCodex = async (_command, options, writer) => {
+      codexCalls.push(options);
+      writer.send(createNormalizedMessage({ kind: 'complete', provider: 'codex', sessionId: null, exitCode: 0 }));
+    };
+    await withAgentServer(dependencies, async (baseUrl) => {
+      // No provider named: the row's, not the default.
+      const continued = await post(baseUrl, { projectPath: '/home/test/project', message: 'More', sessionId: 'app-codex', stream: false });
+      assert.equal(continued.status, 200);
+      assert.deepEqual([claudeCalls.length, codexCalls.length], [0, 1]);
+
+      // Another provider named: refused, not re-homed.
+      const mismatched = await post(baseUrl, { projectPath: '/home/test/project', message: 'More', sessionId: 'app-codex', provider: 'claude', stream: false });
+      assert.equal(mismatched.status, 400);
+      assert.equal(claudeCalls.length, 0);
+
+      // Another directory named: not that session.
+      const elsewhere = await post(baseUrl, { projectPath: '/home/test/other', message: 'More', sessionId: 'app-codex', stream: false });
+      assert.equal(elsewhere.status, 500);
+      assert.match((await elsewhere.json() as { error: string }).error, /belongs to project/);
+      assert.equal(codexCalls.length, 1);
+    });
+  });
+});
+
+test('a busy session is refused before anything is cloned', async () => {
+  await withIsolatedDatabase(async () => {
+    const runtime = createHeldRuntime();
+    const dependencies = createDependencies(runtime.queryClaude);
+    let clones = 0;
+    dependencies.spawnProcess = (() => { clones += 1; throw new Error('no clone expected'); }) as unknown as AgentDependencies['spawnProcess'];
+    await withAgentServer(dependencies, async (baseUrl) => {
+      const first = post(baseUrl, { projectPath: '/home/test/project', message: 'Run it' });
+      for (let i = 0; i < 50 && runtime.seen.length === 0; i += 1) {
+        await new Promise((resolve) => { setTimeout(resolve, 20); });
+      }
+      const [running] = chatRunRegistry.listRunningRuns();
+      assert.ok(running);
+
+      const retry = await post(baseUrl, { githubUrl: 'https://github.com/owner/repo.git', projectPath: '/home/test/project', message: 'Again', sessionId: running.sessionId, stream: false });
+      assert.equal(retry.status, 409);
+      assert.equal(clones, 0, 'the refusal comes before the clone step');
+
+      runtime.release();
+      await first;
+    });
+  });
+});
+
+test('a run a tab aborted ends without branching or opening a PR, and says so', async () => {
+  await withIsolatedDatabase(async () => {
+    const runtime = createHeldRuntime();
+    let gitCalls = 0;
+    const dependencies = createDependencies(async (command, options, writer) => {
+      await runtime.queryClaude(command, options, writer);
+    });
+    dependencies.spawnProcess = (() => { gitCalls += 1; throw new Error('git should not run after an abort'); }) as unknown as AgentDependencies['spawnProcess'];
+    await withAgentServer(dependencies, async (baseUrl) => {
+      const responsePromise = post(baseUrl, { projectPath: '/home/test/project', message: 'Run it', createBranch: true, stream: false });
+      for (let i = 0; i < 50 && runtime.seen.length === 0; i += 1) {
+        await new Promise((resolve) => { setTimeout(resolve, 20); });
+      }
+      const [running] = chatRunRegistry.listRunningRuns();
+      assert.ok(running);
+      // What chat.abort does: the run completes as aborted; the runtime then returns.
+      chatRunRegistry.completeRun(running.sessionId, { exitCode: 1, aborted: true });
+      runtime.release();
+
+      const response = await responsePromise;
+      const body = await response.json() as { success: boolean; aborted?: boolean; branch?: unknown };
+      assert.equal(body.success, false);
+      assert.equal(body.aborted, true);
+      assert.equal(body.branch, undefined);
+      assert.equal(gitCalls, 0);
+    });
+  });
+});
+
+test('a non-streaming run answers with the assistant\'s replies, its token usage and the provider id', async () => {
+  await withIsolatedDatabase(async () => {
+    const dependencies = createDependencies(async (_command, _options, writer) => {
+      writer.send(createNormalizedMessage({ kind: 'session_created', provider: 'claude', sessionId: 'native-7', newSessionId: 'native-7' }));
+      writer.send(createNormalizedMessage({ kind: 'text', provider: 'claude', sessionId: 'native-7', role: 'assistant', content: 'pong' }));
+      writer.send(createNormalizedMessage({
+        kind: 'status', text: 'token_budget', provider: 'claude', sessionId: 'native-7',
+        tokenBudget: { used: 130, total: 160_000, inputTokens: 100, outputTokens: 30, cacheReadTokens: 60, cacheCreationTokens: 10, cacheTokens: 70, breakdown: { input: 100, output: 30 } },
+      }));
+      writer.send(createNormalizedMessage({ kind: 'complete', provider: 'claude', sessionId: 'native-7', exitCode: 0 }));
+    });
+    await withAgentServer(dependencies, async (baseUrl) => {
+      const response = await post(baseUrl, { projectPath: '/home/test/project', message: 'ping', stream: false });
+      const body = await response.json() as { providerSessionId: string; messages: Array<{ content: string }>; tokens: Record<string, number> };
+      assert.equal(body.providerSessionId, 'native-7');
+      assert.deepEqual(body.messages.map((message) => message.content), ['pong']);
+      assert.deepEqual(body.tokens, { inputTokens: 100, outputTokens: 30, cacheReadTokens: 60, cacheCreationTokens: 10, totalTokens: 130 });
+    });
+  });
+});
