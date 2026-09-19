@@ -251,11 +251,9 @@ export default function FileTree({ selectedProject, onFileOpen, revealDirectory 
                 if (e.key === 'Enter') operations.handleConfirmCreate();
                 if (e.key === 'Escape') operations.handleCancelCreate();
               }}
-              onBlur={() => {
-                setTimeout(() => {
-                  if (operations.isCreating) operations.handleConfirmCreate();
-                }, 100);
-              }}
+              // Deferred so an Escape that lands first wins; the hook drops the
+              // call if Enter already submitted or the input is gone.
+              onBlur={() => setTimeout(operations.handleConfirmCreate, 100)}
               className="h-6 flex-1 text-sm"
               disabled={operationLoading}
             />

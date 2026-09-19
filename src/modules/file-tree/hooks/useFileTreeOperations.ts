@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import JSZip from 'jszip';
 
@@ -80,6 +80,14 @@ export function useFileTreeOperations({
   const [newItemName, setNewItemName] = useState('');
   const [operationLoading, setOperationLoading] = useState(false);
 
+  // The inline inputs commit on Enter and again, 100 ms later, on blur, so a
+  // confirm can arrive while the previous one is still in flight or after it
+  // already dismissed the input. Both are tracked in refs rather than state
+  // because the deferred blur call runs from a closure that may predate the
+  // commit it is duplicating.
+  const openEditorRef = useRef<'create' | 'rename' | null>(null);
+  const confirmInFlightRef = useRef(false);
+
   // Validation
   const validateFilename = useCallback((name: string): string | null => {
     if (!name || !name.trim()) {
@@ -99,17 +107,23 @@ export function useFileTreeOperations({
 
   // Rename operations
   const handleStartRename = useCallback((item: FileTreeNode) => {
+    openEditorRef.current = 'rename';
     setRenamingItem(item);
     setRenameValue(item.name);
     setIsCreating(false);
   }, []);
 
   const handleCancelRename = useCallback(() => {
+    // Only release the ref for this editor: the context menu can open the
+    // other one while this request is still in flight, and closing it here
+    // would leave that editor unable to submit.
+    if (openEditorRef.current === 'rename') openEditorRef.current = null;
     setRenamingItem(null);
     setRenameValue('');
   }, []);
 
   const handleConfirmRename = useCallback(async () => {
+    if (openEditorRef.current !== 'rename' || confirmInFlightRef.current) return;
     if (!renamingItem || !selectedProject) return;
 
     const error = validateFilename(renameValue);
@@ -123,6 +137,7 @@ export function useFileTreeOperations({
       return;
     }
 
+    confirmInFlightRef.current = true;
     setOperationLoading(true);
     try {
       const response = await api.renameFile(selectedProject.projectId, {
@@ -141,6 +156,7 @@ export function useFileTreeOperations({
     } catch (err) {
       showToast((err as Error).message, 'error');
     } finally {
+      confirmInFlightRef.current = false;
       setOperationLoading(false);
     }
   }, [renamingItem, renameValue, selectedProject, validateFilename, showToast, t, onRefresh, handleCancelRename]);
@@ -187,6 +203,7 @@ export function useFileTreeOperations({
 
   // Create operations
   const handleStartCreate = useCallback((parentPath: string, type: 'file' | 'directory') => {
+    openEditorRef.current = 'create';
     setNewItemParent(parentPath || '');
     setNewItemType(type);
     setNewItemName(type === 'file' ? 'untitled.txt' : 'new-folder');
@@ -195,12 +212,14 @@ export function useFileTreeOperations({
   }, []);
 
   const handleCancelCreate = useCallback(() => {
+    if (openEditorRef.current === 'create') openEditorRef.current = null;
     setIsCreating(false);
     setNewItemParent('');
     setNewItemName('');
   }, []);
 
   const handleConfirmCreate = useCallback(async () => {
+    if (openEditorRef.current !== 'create' || confirmInFlightRef.current) return;
     if (!selectedProject) return;
 
     const error = validateFilename(newItemName);
@@ -209,6 +228,7 @@ export function useFileTreeOperations({
       return;
     }
 
+    confirmInFlightRef.current = true;
     setOperationLoading(true);
     try {
       const response = await api.createFile(selectedProject.projectId, {
@@ -233,6 +253,7 @@ export function useFileTreeOperations({
     } catch (err) {
       showToast((err as Error).message, 'error');
     } finally {
+      confirmInFlightRef.current = false;
       setOperationLoading(false);
     }
   }, [selectedProject, newItemParent, newItemType, newItemName, validateFilename, showToast, t, onRefresh, handleCancelCreate]);

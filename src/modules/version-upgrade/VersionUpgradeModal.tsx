@@ -18,6 +18,22 @@ type VersionUpgradeModalProps = {
 
 const RELOAD_COUNTDOWN_START = 120;
 
+// Force a hard reload (bypass cache) so stale assets from the previous
+// version aren't served after the environment updates.
+const hardReload = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('_hardReload', Date.now().toString());
+    window.location.replace(url.toString());
+};
+
+// "2:00", "1:59", … "0:00" — a ticking clock reads as live where a rounded
+// "2 minutes" looked frozen.
+const formatCountdown = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainder = seconds % 60;
+    return `${minutes}:${remainder.toString().padStart(2, '0')}`;
+};
+
 /** This module's only public export: rendered by the sidebar module's modal layer to show release notes and run the app upgrade. */
 export function VersionUpgradeModal({
     isOpen,
@@ -44,11 +60,7 @@ export function VersionUpgradeModal({
         }
 
         if (reloadCountdown <= 0) {
-            // Force a hard reload (bypass cache) so stale assets from the
-            // previous version aren't served after the environment updates.
-            const url = new URL(window.location.href);
-            url.searchParams.set('_hardReload', Date.now().toString());
-            window.location.replace(url.toString());
+            hardReload();
             return;
         }
 
@@ -214,10 +226,39 @@ export function VersionUpgradeModal({
                             <pre className="whitespace-pre-wrap font-mono text-xs text-green-400">{updateOutput}</pre>
                         </div>
                         {IS_PLATFORM && reloadCountdown !== null && (
-                            <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-200">
-                                {reloadCountdown === 0
-                                    ? t('versionUpdate.refreshNow')
-                                    : t('versionUpdate.refreshIn', { count: reloadCountdown })}
+                            <div className="space-y-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-200">
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className="font-medium text-blue-900 dark:text-blue-100">{t('versionUpdate.reloadPanel.title')}</span>
+                                    {reloadCountdown === 0 ? (
+                                        // The reload is in flight; on the platform the page can hang on this
+                                        // frame for a few seconds while the server comes back.
+                                        <span className="shrink-0 font-medium text-blue-900 dark:text-blue-100">{t('versionUpdate.reloadPanel.reloadingNow')}</span>
+                                    ) : (
+                                        <span className="shrink-0">
+                                            {t('versionUpdate.reloadPanel.reloadingIn')}{' '}
+                                            <span className="font-mono tabular-nums text-blue-900 dark:text-blue-100">{formatCountdown(reloadCountdown)}</span>
+                                        </span>
+                                    )}
+                                </div>
+                                {/* Drains over the countdown; the one-second linear transition bridges each tick so it reads as continuous. */}
+                                <div className="h-1 overflow-hidden rounded-full bg-blue-200 dark:bg-blue-900/60">
+                                    <div
+                                        className="h-full rounded-full bg-blue-600 transition-[width] duration-1000 ease-linear dark:bg-blue-400"
+                                        style={{ width: `${(reloadCountdown / RELOAD_COUNTDOWN_START) * 100}%` }}
+                                    />
+                                </div>
+                                <p>{t('versionUpdate.reloadPanel.body')}</p>
+                                <div className="flex items-center justify-between gap-3">
+                                    <p className="text-blue-600/80 dark:text-blue-300/80">{t('versionUpdate.reloadPanel.hint')}</p>
+                                    {reloadCountdown > 0 && (
+                                        <button
+                                            onClick={hardReload}
+                                            className="shrink-0 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700"
+                                        >
+                                            {t('versionUpdate.reloadPanel.reloadNow')}
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         )}
                         {updateError && (

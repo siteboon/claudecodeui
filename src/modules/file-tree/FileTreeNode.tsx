@@ -145,11 +145,9 @@ export default function FileTreeNode({
             if (e.key === 'Enter') handleConfirmRename();
             if (e.key === 'Escape') handleCancelRename();
           }}
-          onBlur={() => {
-            setTimeout(() => {
-              handleConfirmRename();
-            }, 100);
-          }}
+          // Deferred so an Escape that lands first wins; the hook drops the
+          // call if Enter already submitted or the input is gone.
+          onBlur={() => setTimeout(handleConfirmRename, 100)}
           className="h-6 flex-1 text-sm"
           disabled={operationLoading}
         />
