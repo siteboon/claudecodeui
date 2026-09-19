@@ -10,6 +10,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import providerRouter from '@/modules/providers/provider.routes.js';
+import { recordRunLifecycleEvent } from '@/modules/providers/services/run-lifecycle-log.service.js';
 import { AppError } from '@/shared/utils.js';
 
 async function withProviderServer(
@@ -240,5 +241,64 @@ test('model routes expose immutable defaults and full custom model CRUD', async 
       deletePayload.data.models.OPTIONS.some((option) => option.recordId === customRecordId),
       false,
     );
+  });
+});
+
+test('the diagnostics route answers for a session the server knows nothing about', async () => {
+  await withProviderServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/providers/sessions/unknown-session/diagnostics`);
+    const payload = await response.json() as {
+      data: {
+        sessionId: string;
+        run: unknown;
+        heldProcess: unknown;
+        keepSessionAlive: unknown;
+        lifecycle: unknown[];
+      };
+    };
+
+    // "Nothing of this session is in this process" is the answer, not an error:
+    // the caller cannot tell a finished session from a mistyped id, and either
+    // way an error would send them back to reading logs on the host.
+    assert.equal(response.status, 200);
+    assert.equal(payload.data.sessionId, 'unknown-session');
+    assert.equal(payload.data.run, null);
+    assert.equal(payload.data.heldProcess, null);
+    assert.equal(payload.data.keepSessionAlive, null);
+    assert.deepEqual(payload.data.lifecycle, []);
+  });
+});
+
+test('the diagnostics route returns the trace rather than the session details', async () => {
+  await withProviderServer(async (baseUrl) => {
+    recordRunLifecycleEvent('traced-session', 'run_start', {
+      sessionKey: 'traced-session',
+      keepSessionAlive: true,
+    });
+
+    // The generic `/sessions/:sessionId` route would match this path's first
+    // segment; it stays registered after the specific ones so it cannot.
+    const response = await fetch(`${baseUrl}/api/providers/sessions/traced-session/diagnostics`);
+    const payload = await response.json() as {
+      data: { keepSessionAlive: boolean; lifecycle: Array<{ event: string; timestamp: number }> };
+    };
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.data.keepSessionAlive, true);
+    assert.equal(payload.data.lifecycle.length, 1);
+    assert.equal(payload.data.lifecycle[0].event, 'run_start');
+    assert.ok(payload.data.lifecycle[0].timestamp > 0);
+  });
+});
+
+test('the diagnostics route rejects a session id that could not be one', async () => {
+  await withProviderServer(async (baseUrl) => {
+    const response = await fetch(
+      `${baseUrl}/api/providers/sessions/${encodeURIComponent('../../etc')}/diagnostics`,
+    );
+    const payload = await response.json() as { error: { code: string } };
+
+    assert.equal(response.status, 400);
+    assert.equal(payload.error.code, 'INVALID_SESSION_ID');
   });
 });

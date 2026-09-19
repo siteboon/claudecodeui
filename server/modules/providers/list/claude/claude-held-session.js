@@ -73,6 +73,22 @@ export class HeldClaudeSession {
     // finished — the conversation simply looks idle between ticks. Sticky for
     // the life of the session, and cleared only when the process goes.
     this.recurring = false;
+    // When the post-turn hold was armed for this session, and the two limits
+    // it was armed with. Kept here rather than in the run that armed it
+    // because the run's closure is unreachable from outside, and "why is this
+    // process still up, and for how much longer?" is asked from a browser.
+    this.holdArmedAt = null;
+    // When the total-hold countdown currently running was started. Usually the
+    // same as `holdArmedAt`, and not for recurring work: a tick re-arms both
+    // timers, so the deadline moves while "how long has this been held" must
+    // not. Two fields because one cannot answer both questions.
+    this.holdCountdownStartedAt = null;
+    this.holdIdleMs = null;
+    this.holdTotalMs = null;
+    // When this process last said anything at all. The idle limit is measured
+    // against activity, so without this the time left on it is unknowable
+    // from outside; it is also the cheapest answer to "has it gone quiet?".
+    this.lastMessageAt = null;
 
     /** The SDK query, once started. */
     this.instance = null;
@@ -280,6 +296,7 @@ export class HeldClaudeSession {
   async consume() {
     try {
       for await (const message of this.instance) {
+        this.lastMessageAt = Date.now();
         if (this.turn) {
           this.turn.onMessage(message);
           continue;
@@ -402,6 +419,34 @@ export class HeldClaudeSession {
     } else {
       this.clearIdle();
     }
+  }
+
+  /**
+   * Records that the process is being held open past the end of a turn.
+   *
+   * The arming time is kept from the first call and not pushed back by later
+   * ones, mirroring the run's own bookkeeping: recurring work re-arms the hold
+   * on every tick, and resetting the clock there would make a session that has
+   * been held for two hours report that it was just armed.
+   *
+   * @param {Object} limits
+   * @param {number} limits.idleMs - Silence allowed since the last frame
+   * @param {number} limits.totalMs - Total time allowed since the hold started
+   */
+  markHoldArmed({ idleMs, totalMs }) {
+    const now = Date.now();
+    this.holdArmedAt = this.holdArmedAt || now;
+    this.holdCountdownStartedAt = now;
+    this.holdIdleMs = idleMs;
+    this.holdTotalMs = totalMs;
+  }
+
+  /** Records that the hold ended, however it ended. */
+  clearHold() {
+    this.holdArmedAt = null;
+    this.holdCountdownStartedAt = null;
+    this.holdIdleMs = null;
+    this.holdTotalMs = null;
   }
 
   /** Marks this conversation as running work that repeats by design. */

@@ -7,6 +7,7 @@ import { providerModelsService } from '@/modules/providers/services/provider-mod
 import { providerTokenUsageService } from '@/modules/providers/services/provider-token-usage.service.js';
 import { providerSkillsService } from '@/modules/providers/services/skills.service.js';
 import { sessionConversationsSearchService } from '@/modules/providers/services/session-conversations-search.service.js';
+import { sessionDiagnosticsService } from '@/modules/providers/services/session-diagnostics.service.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 import type {
   CustomProviderModelInput,
@@ -768,6 +769,19 @@ router.get(
     const sessionId = parseSessionId(req.params.sessionId);
     const providerSessionId = sessionsService.getProviderSessionId(sessionId);
     res.json(createApiSuccessResponse({ sessionId: providerSessionId }));
+  }),
+);
+
+/**
+ * Live answer to "what is this session doing right now?" — the running turn,
+ * the process held for it, what it is waiting on, and the trace of how it got
+ * there. Read-only and assembled from memory, so it is safe to poll.
+ */
+router.get(
+  '/sessions/:sessionId/diagnostics',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    res.json(createApiSuccessResponse(sessionDiagnosticsService.getSessionDiagnostics(sessionId)));
   }),
 );
 

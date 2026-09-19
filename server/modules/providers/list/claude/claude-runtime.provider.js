@@ -35,6 +35,7 @@ import {
   CLAUDE_PREDEFINED_MODELS,
   CLAUDE_ULTRACODE_EFFORT
 } from '@/modules/providers/list/claude/claude-models.provider.js';
+import { recordRunLifecycleEvent } from '@/modules/providers/services/run-lifecycle-log.service.js';
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
 import {
   createNotificationEvent,
@@ -678,13 +679,23 @@ function getAllSessions() {
  * therefore report when a run started, which session it belonged to, who owned
  * it, and how and why it ended.
  *
+ * Every record goes to two places: the service log, and a bounded in-memory
+ * trace keyed by session that the diagnostics endpoint reads back. The second
+ * is keyed off `fields.sessionKey`, so a record emitted without one is logged
+ * but not remembered.
+ *
  * @param {string} event - Lifecycle transition: run_start, session_created,
- *   abort_requested or run_end.
+ *   hold_armed, hold_released, abort_requested or run_end.
  * @param {Object} fields - Event payload; serialized as JSON so log processors
- *   can parse it without a format-specific reader.
+ *   can parse it without a format-specific reader. Include `sessionKey`.
  */
 function logRunLifecycle(event, fields) {
   console.log(`[Claude SDK] lifecycle ${event}`, JSON.stringify(fields));
+  // The same record, kept in memory under its session so the diagnostics
+  // endpoint can answer "what happened to this session?" without anyone
+  // reading the service log on the host. Deliberately after the log line: a
+  // failure to remember must never cost the record that does reach disk.
+  recordRunLifecycleEvent(fields?.sessionKey, event, fields);
 }
 
 /**
@@ -1358,6 +1369,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       // Every run closes its stdin here, held or not. Only a run that was
       // actually held has something to report, and logging the rest would bury
       // the records that matter under one per ordinary turn.
+      heldSession?.clearHold();
       if (holdArmedAt) {
         logRunLifecycle('hold_released', {
           sessionKey: sessionKey(),
@@ -1409,7 +1421,12 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       resumed: Boolean(providerSessionId),
       userId: ws?.userId || null,
       model: sdkOptions?.model || null,
-      permissionMode: sdkOptions?.permissionMode || null
+      permissionMode: sdkOptions?.permissionMode || null,
+      // Recorded nowhere else. It lives in the browser's localStorage and
+      // arrives per turn, yet it decides whether the process — and with it any
+      // background work — survives the end of this turn. Reading a hold that
+      // was never armed is impossible without knowing this was off.
+      keepSessionAlive
     });
   };
   // The process serving this conversation, when it is being kept alive.
@@ -1840,6 +1857,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
           // reports. Without it the held stream has nowhere to put anything
           // arriving after this `result`, which is all of it.
           heldSession?.setBetweenTurnsHandler(handleTurnMessage);
+          heldSession?.markHoldArmed({ idleMs: BG_IDLE_RELEASE_MS, totalMs: BG_TOTAL_HOLD_MS });
           logRunLifecycle('hold_armed', {
             sessionKey: sessionKey(),
             providerSessionId: capturedSessionId || null,
@@ -1856,6 +1874,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
           // — one that has not fired in two hours is not coming back.
           heldForBackgroundWork = true;
           holdArmedAt = holdArmedAt || Date.now();
+          heldSession?.markHoldArmed({ idleMs: BG_IDLE_RELEASE_MS, totalMs: BG_TOTAL_HOLD_MS });
           // A tick between turns has to reach this turn's client too, and this
           // turn's writer is the newest one there is.
           heldSession?.setBetweenTurnsHandler(handleTurnMessage);
@@ -1870,6 +1889,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
           // handler left armed here would answer into a socket this run is
           // about to stop owning.
           heldSession?.setBetweenTurnsHandler(null);
+          heldSession?.clearHold();
           releaseHeldStream('work_reported_back');
         }
       } else if (holdTimers.isArmed()) {
