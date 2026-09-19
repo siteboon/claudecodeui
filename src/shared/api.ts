@@ -5,6 +5,7 @@ import {
 } from '@/shared/authToken';
 import { IS_PLATFORM } from '@/shared/utils';
 import { readVoiceConfig, voiceConfigHeaders } from '@/shared/voiceConfig';
+import type { GitTarget } from '@/shared/types';
 
 // Headers are a plain record rather than the full `HeadersInit` union so the
 // defaults below can be merged with a caller's headers by spreading.
@@ -56,6 +57,9 @@ type QueryValue = string | number | boolean | null | undefined;
 
 // Serializes a query object into `?a=1&b=2` (or an empty string). Empty and
 // `false` values are dropped so optional flags can be passed unconditionally.
+// `repo` is dropped for the project root so single-repository requests are unchanged.
+const gitTargetParams = ({ projectId, repo }: GitTarget) => ({ project: projectId, repo: repo || undefined });
+
 const query = (params: Record<string, QueryValue>): string => {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -282,52 +286,56 @@ export const api = {
 
   createFolder: (folderPath: string) => post('/api/file-tree/create-folder', { path: folderPath }),
 
-  // Git endpoints. The `project` param carries the DB projectId post-migration.
+  // Git endpoints. `target` carries the DB projectId (as `project`) and, for a
+  // repository nested below the project root, its root-relative path (`repo`).
   git: {
-    status: (projectId: string, options: ApiRequestOptions = {}) =>
-      get(`/api/git/status${query({ project: projectId })}`, options),
-    diff: (projectId: string, filePath: string, options: ApiRequestOptions = {}) =>
-      get(`/api/git/diff${query({ project: projectId, file: filePath })}`, options),
-    commitDiff: (projectId: string, commit: string) =>
-      get(`/api/git/commit-diff${query({ project: projectId, commit })}`),
-    fileWithDiff: (projectId: string, filePath: string) =>
-      get(`/api/git/file-with-diff${query({ project: projectId, file: filePath })}`),
-    branches: (projectId: string, options: ApiRequestOptions = {}) =>
-      get(`/api/git/branches${query({ project: projectId })}`, options),
-    remoteStatus: (projectId: string) =>
-      get(`/api/git/remote-status${query({ project: projectId })}`),
+    // Repositories found under the project root the panel can switch between.
+    repositories: (projectId: string, options: ApiRequestOptions = {}) =>
+      get(`/api/git/repositories${query({ project: projectId })}`, options),
+    status: (target: GitTarget, options: ApiRequestOptions = {}) =>
+      get(`/api/git/status${query(gitTargetParams(target))}`, options),
+    diff: (target: GitTarget, filePath: string, options: ApiRequestOptions = {}) =>
+      get(`/api/git/diff${query({ ...gitTargetParams(target), file: filePath })}`, options),
+    commitDiff: (target: GitTarget, commit: string) =>
+      get(`/api/git/commit-diff${query({ ...gitTargetParams(target), commit })}`),
+    fileWithDiff: (target: GitTarget, filePath: string) =>
+      get(`/api/git/file-with-diff${query({ ...gitTargetParams(target), file: filePath })}`),
+    branches: (target: GitTarget, options: ApiRequestOptions = {}) =>
+      get(`/api/git/branches${query(gitTargetParams(target))}`, options),
+    remoteStatus: (target: GitTarget) =>
+      get(`/api/git/remote-status${query(gitTargetParams(target))}`),
     commits: (
-      projectId: string,
+      target: GitTarget,
       { limit }: { limit?: number } = {},
       options: ApiRequestOptions = {},
-    ) => get(`/api/git/commits${query({ project: projectId, limit })}`, options),
-    checkout: (projectId: string, branch: string) =>
-      post('/api/git/checkout', { project: projectId, branch }),
-    createBranch: (projectId: string, branch: string) =>
-      post('/api/git/create-branch', { project: projectId, branch }),
-    deleteBranch: (projectId: string, branch: string, force = false) =>
-      post('/api/git/delete-branch', { project: projectId, branch, force }),
-    fetch: (projectId: string) => post('/api/git/fetch', { project: projectId }),
-    pull: (projectId: string) => post('/api/git/pull', { project: projectId }),
-    push: (projectId: string) => post('/api/git/push', { project: projectId }),
-    publish: (projectId: string, branch: string) =>
-      post('/api/git/publish', { project: projectId, branch }),
-    discard: (projectId: string, file: string) =>
-      post('/api/git/discard', { project: projectId, file }),
-    deleteUntracked: (projectId: string, file: string) =>
-      post('/api/git/delete-untracked', { project: projectId, file }),
-    stage: (projectId: string, files: string[]) =>
-      post('/api/git/stage', { project: projectId, files }),
-    unstage: (projectId: string, files: string[]) =>
-      post('/api/git/unstage', { project: projectId, files }),
-    commit: (projectId: string, message: string, files: string[]) =>
-      post('/api/git/commit', { project: projectId, message, files }),
-    initialCommit: (projectId: string) => post('/api/git/initial-commit', { project: projectId }),
-    init: (projectId: string) => post('/api/git/init', { project: projectId }),
-    revertLocalCommit: (projectId: string) =>
-      post('/api/git/revert-local-commit', { project: projectId }),
-    generateCommitMessage: (projectId: string, files: string[], provider: string) =>
-      post('/api/git/generate-commit-message', { project: projectId, files, provider }),
+    ) => get(`/api/git/commits${query({ ...gitTargetParams(target), limit })}`, options),
+    checkout: (target: GitTarget, branch: string) =>
+      post('/api/git/checkout', { ...gitTargetParams(target), branch }),
+    createBranch: (target: GitTarget, branch: string) =>
+      post('/api/git/create-branch', { ...gitTargetParams(target), branch }),
+    deleteBranch: (target: GitTarget, branch: string, force = false) =>
+      post('/api/git/delete-branch', { ...gitTargetParams(target), branch, force }),
+    fetch: (target: GitTarget) => post('/api/git/fetch', gitTargetParams(target)),
+    pull: (target: GitTarget) => post('/api/git/pull', gitTargetParams(target)),
+    push: (target: GitTarget) => post('/api/git/push', gitTargetParams(target)),
+    publish: (target: GitTarget, branch: string) =>
+      post('/api/git/publish', { ...gitTargetParams(target), branch }),
+    discard: (target: GitTarget, file: string) =>
+      post('/api/git/discard', { ...gitTargetParams(target), file }),
+    deleteUntracked: (target: GitTarget, file: string) =>
+      post('/api/git/delete-untracked', { ...gitTargetParams(target), file }),
+    stage: (target: GitTarget, files: string[]) =>
+      post('/api/git/stage', { ...gitTargetParams(target), files }),
+    unstage: (target: GitTarget, files: string[]) =>
+      post('/api/git/unstage', { ...gitTargetParams(target), files }),
+    commit: (target: GitTarget, message: string, files: string[]) =>
+      post('/api/git/commit', { ...gitTargetParams(target), message, files }),
+    initialCommit: (target: GitTarget) => post('/api/git/initial-commit', gitTargetParams(target)),
+    init: (target: GitTarget) => post('/api/git/init', gitTargetParams(target)),
+    revertLocalCommit: (target: GitTarget) =>
+      post('/api/git/revert-local-commit', gitTargetParams(target)),
+    generateCommitMessage: (target: GitTarget, files: string[], provider: string) =>
+      post('/api/git/generate-commit-message', { ...gitTargetParams(target), files, provider }),
   },
 
   worktrees: {
