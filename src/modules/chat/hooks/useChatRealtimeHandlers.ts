@@ -4,6 +4,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { ServerEvent,MarkSessionIdle,MarkSessionProcessing,PendingPermissionRequest,ProjectSession,LLMProvider,NormalizedMessage } from '@/shared/types';
 import { showCompletionTitleIndicator } from '@/modules/chat/utils/pageTitleNotification';
 import { playChatCompletionSound, playNotificationSound } from '@/shared/utils';
+import { recordServerClockSample, serverNowIso } from '@/shared/serverClock';
 import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
 
 const isActionablePermissionRequest = (request: { toolName?: unknown } | null | undefined): boolean => {
@@ -128,6 +129,17 @@ export function useChatRealtimeHandlers({
           // pending tool-permission prompts for the run.
           if (!sid) return;
 
+          // The ack carries the server's own clock, and the instant the
+          // subscribe it answers was sent is already recorded for stale-ack
+          // guarding. That is every term the offset estimate needs, so the
+          // browser/server skew is measured here with nothing added to the
+          // wire. A subscribe with no recorded send instant is skipped.
+          recordServerClockSample(
+            msg.timestamp as string | number | null | undefined,
+            statusCheckSentAtRef.current.get(sid),
+            Date.now(),
+          );
+
           if (msg.isProcessing) {
             onSessionProcessing?.(sid);
           } else {
@@ -163,7 +175,7 @@ export function useChatRealtimeHandlers({
             sessionStore.appendRealtime(sid, {
               id: `protocol_error_${Date.now()}`,
               sessionId: sid,
-              timestamp: new Date().toISOString(),
+              timestamp: serverNowIso(),
               provider,
               kind: 'error',
               content: String(msg.error || 'Request failed'),
