@@ -9,7 +9,12 @@ import type {
   FileTreeServices,
   FileTreeUploadedFile,
 } from '@/shared/types.js';
-import { AppError, FORBIDDEN_WORKSPACE_PATHS, normalizeProjectPath } from '@/shared/utils.js';
+import {
+  AppError,
+  FORBIDDEN_WORKSPACE_PATHS,
+  normalizeProjectPath,
+  realpathThroughMissingSegments,
+} from '@/shared/utils.js';
 
 const HARD_EXCLUDED_DIRECTORY_NAMES = new Set([
   'node_modules', '.git', '.svn', '.hg',
@@ -95,30 +100,42 @@ function resolveAgainstProjectRoot(projectRoot: string, targetPath: string): str
 }
 
 /**
- * Resolves an entry the caller reads, writes, renames or deletes. The project
- * root itself is rejected on purpose: no entry operation may target the root.
+ * Whether `candidatePath` lies outside `projectRoot`: a hop to the parent or,
+ * on Windows, another drive or share. Judged with `path.relative` rather than
+ * a separator-suffixed prefix, so a project at a drive root (`C:\`) still
+ * contains its own children. The root itself is not outside; callers decide
+ * whether the root is acceptable. Both arguments must already be absolute.
+ *
+ * Kept as a returned `||` chain over the `path.relative` result: that is the
+ * shape CodeQL recognises as a path-injection barrier for the paths its
+ * callers go on to open.
  */
-function resolvePathInsideProject(projectRoot: string, targetPath: string): string {
-  const resolvedPath = resolveAgainstProjectRoot(projectRoot, targetPath);
-  const normalizedProjectRoot = path.resolve(projectRoot) + path.sep;
+function leavesProjectRoot(projectRoot: string, candidatePath: string): boolean {
+  const relativePath = path.relative(projectRoot, candidatePath);
+  return relativePath === '..'
+    || relativePath.startsWith(`..${path.sep}`)
+    || path.isAbsolute(relativePath);
+}
 
-  if (!resolvedPath.startsWith(normalizedProjectRoot)) {
+/**
+ * Resolves an entry by its spelling alone: the path must sit under the project
+ * root, and the root itself is rejected on purpose — no entry operation may
+ * target the root. Where the path really leads once symlinks are followed is
+ * the service's concern (`assertRealPathInsideProject`); this check runs first,
+ * so a traversal attempt never reaches the filesystem at all.
+ */
+function resolveSpelledPathInsideProject(projectRoot: string, targetPath: string): string {
+  const normalizedProjectRoot = path.resolve(projectRoot);
+  const resolvedPath = resolveAgainstProjectRoot(normalizedProjectRoot, targetPath);
+
+  if (
+    path.relative(normalizedProjectRoot, resolvedPath) === ''
+    || leavesProjectRoot(normalizedProjectRoot, resolvedPath)
+  ) {
     throw createFileTreeError('Path must be under project root', 403, 'PATH_OUTSIDE_PROJECT');
   }
 
   return resolvedPath;
-}
-
-/**
- * Resolves a directory that receives new entries, where the project root is a
- * legitimate answer: a drop onto a root-level file targets that file's parent,
- * which is the root, and an omitted target means the root too.
- */
-function resolveDirectoryInsideProject(projectRoot: string, targetPath: string): string {
-  const resolvedPath = resolveAgainstProjectRoot(projectRoot, targetPath);
-  return resolvedPath === path.resolve(projectRoot)
-    ? resolvedPath
-    : resolvePathInsideProject(projectRoot, resolvedPath);
 }
 
 function expandWorkspacePath(workspaceRoot: string, inputPath: string): string {
@@ -206,6 +223,83 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       throw createFileTreeError('Project not found', 404, 'PROJECT_NOT_FOUND');
     }
     return projectRoot;
+  }
+
+  /**
+   * Refuses `resolvedPath` unless it still lies inside the project once every
+   * existing symlink along it — and along the project root — is followed.
+   * Spelling alone is not enough: a link inside the project (a cloned
+   * repository can carry one) would otherwise carry a read, write or upload
+   * out of it. A path that does not exist yet is judged by where it would be
+   * created.
+   *
+   * The check is not atomic with the operation that follows it. A link swapped
+   * in between needs write access to the project, which is the server's own
+   * — the guard is against planted content, not against a racer.
+   */
+  async function assertRealPathInsideProject(projectRoot: string, resolvedPath: string): Promise<void> {
+    let realProjectRoot: string;
+    let realPath: string;
+    try {
+      [realProjectRoot, realPath] = await Promise.all([
+        realpathThroughMissingSegments(path.resolve(projectRoot), fileSystem),
+        realpathThroughMissingSegments(resolvedPath, fileSystem),
+      ]);
+    } catch (error) {
+      // A symlink loop, a file used as a directory, or a filesystem root that
+      // is itself gone (an unplugged drive) names nothing the tree could show;
+      // a dangling link is already refused with an error of its own.
+      mapFileSystemError(error, {
+        ELOOP: { message: 'File or directory not found', statusCode: 404 },
+        ENOENT: { message: 'File or directory not found', statusCode: 404 },
+        ENOTDIR: { message: 'File or directory not found', statusCode: 404 },
+      });
+    }
+
+    if (leavesProjectRoot(realProjectRoot, realPath)) {
+      throw createFileTreeError(
+        'Path resolves outside the project root through a symbolic link',
+        403,
+        'PATH_OUTSIDE_PROJECT',
+      );
+    }
+  }
+
+  /**
+   * Resolves an entry the caller reads, writes or creates: the spelled path
+   * must sit inside the project, and so must the place it really leads to.
+   * The spelled path is what comes back — it is the one the tree shows.
+   */
+  async function resolvePathInsideProject(projectRoot: string, targetPath: string): Promise<string> {
+    const resolvedPath = resolveSpelledPathInsideProject(projectRoot, targetPath);
+    await assertRealPathInsideProject(projectRoot, resolvedPath);
+    return resolvedPath;
+  }
+
+  /**
+   * Resolves an entry the caller removes or renames. Those act on the name
+   * itself — `rm`, `unlink` and `rename` never follow a link in the final
+   * position — so only the directory holding the entry must really lie inside
+   * the project. A link that points out of the project, or nowhere at all,
+   * therefore stays removable, which is how a user gets rid of one a cloned
+   * repository brought in.
+   */
+  async function resolveEntryByNameInsideProject(projectRoot: string, targetPath: string): Promise<string> {
+    const resolvedPath = resolveSpelledPathInsideProject(projectRoot, targetPath);
+    await assertRealPathInsideProject(projectRoot, path.dirname(resolvedPath));
+    return resolvedPath;
+  }
+
+  /**
+   * Resolves a directory that receives new entries, where the project root is
+   * a legitimate answer: a drop onto a root-level file targets that file's
+   * parent, which is the root, and an omitted target means the root too.
+   */
+  async function resolveDirectoryInsideProject(projectRoot: string, targetPath: string): Promise<string> {
+    const resolvedPath = resolveAgainstProjectRoot(projectRoot, targetPath);
+    return path.relative(path.resolve(projectRoot), resolvedPath) === ''
+      ? resolvedPath
+      : resolvePathInsideProject(projectRoot, resolvedPath);
   }
 
   /**
@@ -429,7 +523,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
 
     async readTextFile(projectId, filePath) {
       const projectRoot = await resolveProjectRoot(projectId);
-      const resolvedPath = resolvePathInsideProject(projectRoot, filePath);
+      const resolvedPath = await resolvePathInsideProject(projectRoot, filePath);
       try {
         const content = await fileSystem.readTextFile(resolvedPath);
         return { content, path: resolvedPath };
@@ -444,7 +538,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
 
     async openFile(projectId, filePath) {
       const projectRoot = await resolveProjectRoot(projectId);
-      const resolvedPath = resolvePathInsideProject(projectRoot, filePath);
+      const resolvedPath = await resolvePathInsideProject(projectRoot, filePath);
       try {
         await fileSystem.access(resolvedPath);
       } catch {
@@ -459,7 +553,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
 
     async saveTextFile(projectId, filePath, content) {
       const projectRoot = await resolveProjectRoot(projectId);
-      const resolvedPath = resolvePathInsideProject(projectRoot, filePath);
+      const resolvedPath = await resolvePathInsideProject(projectRoot, filePath);
       try {
         await fileSystem.writeTextFile(resolvedPath, content);
       } catch (error) {
@@ -501,7 +595,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       const targetPath = input.parentPath
         ? path.join(input.parentPath, input.name)
         : input.name;
-      const resolvedPath = resolvePathInsideProject(projectRoot, targetPath);
+      const resolvedPath = await resolvePathInsideProject(projectRoot, targetPath);
 
       try {
         await fileSystem.access(resolvedPath);
@@ -545,16 +639,19 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
     async renameEntry(input) {
       validateFilename(input.newName);
       const projectRoot = await resolveProjectRoot(input.projectId);
-      const resolvedOldPath = resolvePathInsideProject(projectRoot, input.oldPath);
+      const resolvedOldPath = await resolveEntryByNameInsideProject(projectRoot, input.oldPath);
 
+      // The entry itself must exist, whatever a link there points at.
       try {
-        await fileSystem.access(resolvedOldPath);
+        await fileSystem.lstat(resolvedOldPath);
       } catch {
         throw createFileTreeError('File or directory not found', 404, 'FILE_TREE_ENTRY_NOT_FOUND');
       }
 
+      // The new name shares the old entry's directory, already known to lie
+      // inside the project; its spelling still has to.
       const resolvedNewPath = path.join(path.dirname(resolvedOldPath), input.newName);
-      resolvePathInsideProject(projectRoot, resolvedNewPath);
+      resolveSpelledPathInsideProject(projectRoot, resolvedNewPath);
       try {
         await fileSystem.access(resolvedNewPath);
         throw createFileTreeError(
@@ -587,16 +684,14 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
 
     async deleteEntry(input) {
       const projectRoot = await resolveProjectRoot(input.projectId);
-      const resolvedPath = resolvePathInsideProject(projectRoot, input.targetPath);
+      const resolvedPath = await resolveEntryByNameInsideProject(projectRoot, input.targetPath);
+      // The entry itself decides how it is removed: a link is unlinked, never
+      // descended, whatever it points at — or whether that still exists.
       let stats;
       try {
-        stats = await fileSystem.stat(resolvedPath);
+        stats = await fileSystem.lstat(resolvedPath);
       } catch {
         throw createFileTreeError('File or directory not found', 404, 'FILE_TREE_ENTRY_NOT_FOUND');
-      }
-
-      if (resolvedPath === path.resolve(projectRoot)) {
-        throw createFileTreeError('Cannot delete project root directory', 403, 'PROJECT_ROOT_DELETE_FORBIDDEN');
       }
 
       try {
@@ -629,7 +724,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
 
       try {
         const projectRoot = await resolveProjectRoot(input.projectId);
-        const resolvedTargetDirectory = resolveDirectoryInsideProject(projectRoot, input.targetPath);
+        const resolvedTargetDirectory = await resolveDirectoryInsideProject(projectRoot, input.targetPath);
 
         try {
           await fileSystem.access(resolvedTargetDirectory);
@@ -641,10 +736,13 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
         for (let fileIndex = 0; fileIndex < input.files.length; fileIndex += 1) {
           const file = input.files[fileIndex];
           const fileName = input.relativePaths[fileIndex] || file.originalName;
-          const destinationPath = path.join(resolvedTargetDirectory, fileName);
 
+          let destinationPath: string;
           try {
-            resolvePathInsideProject(projectRoot, destinationPath);
+            destinationPath = await resolvePathInsideProject(
+              projectRoot,
+              path.join(resolvedTargetDirectory, fileName),
+            );
           } catch (error) {
             if (error instanceof AppError && error.statusCode === 403) {
               await cleanupTemporaryFiles([file]);

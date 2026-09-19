@@ -68,6 +68,50 @@ function createFakeFileSystem(
   };
 }
 
+function createErrnoError(code: string, candidatePath: string): NodeJS.ErrnoException {
+  return Object.assign(new Error(`${code}: ${candidatePath}`), { code });
+}
+
+function isOrBeneath(candidatePath: string, ancestorPath: string): boolean {
+  return candidatePath === ancestorPath || candidatePath.startsWith(ancestorPath + path.sep);
+}
+
+/**
+ * Path-keyed stand-ins for the two calls the containment check makes. `links`
+ * map a spelled path — and everything beneath it — to where it really leads,
+ * the deepest link along a path winning as it does on a real filesystem;
+ * `missing` paths do not exist yet, so the resolver walks up to their nearest
+ * existing ancestor; `dangling` paths are symlinks whose target is gone: they
+ * cannot be resolved, yet they are there. Everything else resolves to itself.
+ */
+function createRealPathFakes(options: {
+  links?: Record<string, string>;
+  missing?: string[];
+  dangling?: string[];
+} = {}): Pick<FileTreeFileSystem, 'realpath' | 'lstat'> {
+  const isMissing = (candidatePath: string) =>
+    [...options.missing ?? [], ...options.dangling ?? []]
+      .some((missingPath) => isOrBeneath(candidatePath, missingPath));
+  const links = Object.entries(options.links ?? {})
+    .sort(([leftPath], [rightPath]) => rightPath.length - leftPath.length);
+
+  return {
+    realpath: async (candidatePath) => {
+      if (isMissing(candidatePath)) {
+        throw createErrnoError('ENOENT', candidatePath);
+      }
+      const link = links.find(([linkPath]) => isOrBeneath(candidatePath, linkPath));
+      return link ? link[1] + candidatePath.slice(link[0].length) : candidatePath;
+    },
+    lstat: async (candidatePath) => {
+      if (options.dangling?.includes(candidatePath)) {
+        return createStats(false, 0o777);
+      }
+      throw createErrnoError('ENOENT', candidatePath);
+    },
+  };
+}
+
 function createDependencies(
   fileSystem: FileTreeFileSystem,
   projectRoot: string,
@@ -346,6 +390,7 @@ test('readTextFile rejects traversal before invoking the filesystem adapter', as
 test('readTextFile reports a directory as a client error, not a 500', async () => {
   const projectRoot = path.resolve('file-tree-test-project');
   const fileSystem = createFakeFileSystem({
+    ...createRealPathFakes(),
     readTextFile: async () => {
       const error = new Error('EISDIR: illegal operation on a directory, read');
       (error as NodeJS.ErrnoException).code = 'EISDIR';
@@ -368,6 +413,7 @@ test('createEntry performs filesystem mutation only through the injected adapter
   const targetPath = path.join(projectRoot, 'notes.txt');
   const writtenFiles: Array<{ filePath: string; content: string }> = [];
   const fileSystem = createFakeFileSystem({
+    ...createRealPathFakes({ missing: [targetPath] }),
     access: async (candidatePath) => {
       if (candidatePath === targetPath) {
         throw Object.assign(new Error('missing'), { code: 'ENOENT' });
@@ -394,6 +440,7 @@ test('storeUploadedFiles accepts the project root itself as the target directory
   const projectRoot = path.resolve('file-tree-test-project');
   const copiedFiles: Array<{ source: string; destination: string }> = [];
   const fileSystem = createFakeFileSystem({
+    ...createRealPathFakes({ missing: [path.join(projectRoot, 'notes.txt')] }),
     access: async () => undefined,
     copyFile: async (source, destination) => {
       copiedFiles.push({ source, destination });
@@ -454,4 +501,283 @@ test('storeUploadedFiles still rejects a target directory outside the project ro
   }
   assert.deepEqual(copiedFiles, []);
   assert.deepEqual(removedTemporaryFiles, ['/tmp/upload-notes', '/tmp/upload-notes', '/tmp/upload-notes']);
+});
+
+test('a project at the filesystem root still contains its own children', async () => {
+  // A transcript recorded from `/` (or `C:\` on Windows) registers a project
+  // there; a separator-suffixed prefix check put every child outside it.
+  const projectRoot = path.parse(path.resolve('file-tree-test-project')).root;
+  const readPaths: string[] = [];
+  const fileSystem = createFakeFileSystem({
+    ...createRealPathFakes(),
+    readTextFile: async (filePath) => {
+      readPaths.push(filePath);
+      return 'root-level note';
+    },
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
+
+  const result = await service.readTextFile('project-1', 'notes.txt');
+
+  assert.equal(result.path, path.join(projectRoot, 'notes.txt'));
+  assert.deepEqual(readPaths, [path.join(projectRoot, 'notes.txt')]);
+});
+
+test('entry operations refuse a symlink that leads out of the project', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const outsideDirectory = path.resolve('file-tree-test-outside');
+  const fileSystem = createFakeFileSystem({
+    ...createRealPathFakes({
+      links: {
+        [path.join(projectRoot, 'link')]: outsideDirectory,
+        [path.join(projectRoot, 'secret-link')]: path.join(outsideDirectory, 'secret.txt'),
+      },
+    }),
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
+
+  // No other adapter call is expected: the containment check runs first.
+  const operations: Array<[string, () => Promise<unknown>]> = [
+    ['read through a linked directory', () => service.readTextFile('project-1', 'link/secret.txt')],
+    ['read a linked file', () => service.readTextFile('project-1', 'secret-link')],
+    ['open a linked file', () => service.openFile('project-1', 'secret-link')],
+    ['save a linked file', () => service.saveTextFile('project-1', 'secret-link', 'overwritten')],
+    ['create under a linked directory', () => service.createEntry({
+      projectId: 'project-1', parentPath: 'link', type: 'file', name: 'planted.txt',
+    })],
+    ['delete through a linked directory', () => service.deleteEntry({
+      projectId: 'project-1', targetPath: 'link/secret.txt',
+    })],
+    ['rename through a linked directory', () => service.renameEntry({
+      projectId: 'project-1', oldPath: 'link/secret.txt', newName: 'renamed.txt',
+    })],
+  ];
+  for (const [label, operation] of operations) {
+    await assert.rejects(
+      operation,
+      (error: unknown) => error instanceof AppError
+        && error.code === 'PATH_OUTSIDE_PROJECT'
+        && error.statusCode === 403,
+      label,
+    );
+  }
+});
+
+test('a dangling symlink is refused before anything is written through it', async () => {
+  // Writing through a link whose target is missing would create that target —
+  // wherever the link points — so the resolver must not treat it as a path
+  // that merely does not exist yet.
+  const projectRoot = path.resolve('file-tree-test-project');
+  const danglingPath = path.join(projectRoot, 'notes.txt');
+  const fileSystem = createFakeFileSystem(createRealPathFakes({ dangling: [danglingPath] }));
+  const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
+
+  const isRefusal = (error: unknown) => error instanceof AppError
+    && error.code === 'SYMLINK_TARGET_MISSING'
+    && error.statusCode === 403;
+  await assert.rejects(service.saveTextFile('project-1', 'notes.txt', 'planted'), isRefusal);
+  await assert.rejects(
+    service.createEntry({ projectId: 'project-1', parentPath: projectRoot, type: 'file', name: 'notes.txt' }),
+    isRefusal,
+  );
+});
+
+test('a symlink that stays inside the project, and a project root that is one, are accepted', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const realProjectRoot = path.resolve('file-tree-test-project-real');
+  const readPaths: string[] = [];
+  const fileSystem = createFakeFileSystem({
+    ...createRealPathFakes({
+      links: {
+        [projectRoot]: realProjectRoot,
+        [path.join(projectRoot, 'internal')]: path.join(realProjectRoot, 'lib'),
+      },
+    }),
+    readTextFile: async (filePath) => {
+      readPaths.push(filePath);
+      return 'inner';
+    },
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
+
+  const result = await service.readTextFile('project-1', 'internal/inner.txt');
+
+  // The spelled path comes back and reaches the adapter: it is the path the
+  // tree shows, not where it really lives.
+  assert.equal(result.path, path.join(projectRoot, 'internal', 'inner.txt'));
+  assert.deepEqual(readPaths, [path.join(projectRoot, 'internal', 'inner.txt')]);
+});
+
+test('delete and rename act on an escaping link by name, so a planted one can be removed', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const linkPath = path.join(projectRoot, 'link');
+  const danglingPath = path.join(projectRoot, 'dangling');
+  const unlinkedPaths: string[] = [];
+  const renames: Array<[string, string]> = [];
+  const fileSystem = createFakeFileSystem({
+    ...createRealPathFakes({
+      links: { [linkPath]: path.resolve('file-tree-test-outside') },
+      dangling: [danglingPath],
+    }),
+    // The links themselves are there; the renamed-to names are not.
+    lstat: async (candidatePath) => {
+      if (candidatePath === linkPath || candidatePath === danglingPath) {
+        return createStats(false, 0o777);
+      }
+      throw createErrnoError('ENOENT', candidatePath);
+    },
+    access: async (candidatePath) => {
+      throw createErrnoError('ENOENT', candidatePath);
+    },
+    unlink: async (filePath) => {
+      unlinkedPaths.push(filePath);
+    },
+    rename: async (oldPath, newPath) => {
+      renames.push([oldPath, newPath]);
+    },
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
+
+  await service.deleteEntry({ projectId: 'project-1', targetPath: 'link' });
+  await service.deleteEntry({ projectId: 'project-1', targetPath: 'dangling' });
+  await service.renameEntry({ projectId: 'project-1', oldPath: 'link', newName: 'link-renamed' });
+  await service.renameEntry({ projectId: 'project-1', oldPath: 'dangling', newName: 'dangling-renamed' });
+
+  // Unlinked as the links they are, never descended into.
+  assert.deepEqual(unlinkedPaths, [linkPath, danglingPath]);
+  assert.deepEqual(renames, [
+    [linkPath, path.join(projectRoot, 'link-renamed')],
+    [danglingPath, path.join(projectRoot, 'dangling-renamed')],
+  ]);
+});
+
+test('delete and rename refuse the project root itself before touching the filesystem', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const service = createFileTreeService(createDependencies(createFakeFileSystem(), projectRoot));
+
+  const isRefusal = (error: unknown) => error instanceof AppError
+    && error.code === 'PATH_OUTSIDE_PROJECT'
+    && error.statusCode === 403;
+  for (const targetPath of ['', '.', projectRoot, projectRoot + path.sep, 'sub/..']) {
+    await assert.rejects(service.deleteEntry({ projectId: 'project-1', targetPath }), isRefusal, targetPath);
+    await assert.rejects(
+      service.renameEntry({ projectId: 'project-1', oldPath: targetPath, newName: 'renamed' }),
+      isRefusal,
+      targetPath,
+    );
+  }
+});
+
+test('storeUploadedFiles refuses a target directory that leads out of the project', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const copiedFiles: string[] = [];
+  const removedTemporaryFiles: string[] = [];
+  const fileSystem = createFakeFileSystem({
+    ...createRealPathFakes({ links: { [path.join(projectRoot, 'link')]: path.resolve('file-tree-test-outside') } }),
+    copyFile: async (_source, destination) => {
+      copiedFiles.push(destination);
+    },
+    unlink: async (filePath) => {
+      removedTemporaryFiles.push(filePath);
+    },
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
+
+  await assert.rejects(
+    service.storeUploadedFiles({
+      projectId: 'project-1',
+      targetPath: 'link',
+      relativePaths: [],
+      requestedFileCount: 1,
+      files: [{ originalName: 'notes.txt', temporaryPath: '/tmp/upload-notes', size: 3, mimeType: 'text/plain' }],
+    }),
+    (error: unknown) => error instanceof AppError
+      && error.code === 'PATH_OUTSIDE_PROJECT'
+      && error.statusCode === 403,
+  );
+  assert.deepEqual(copiedFiles, []);
+  assert.deepEqual(removedTemporaryFiles, ['/tmp/upload-notes']);
+});
+
+test('storeUploadedFiles skips a file whose destination leads out of the project', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const outsideDirectory = path.resolve('file-tree-test-outside');
+  const copiedFiles: string[] = [];
+  const removedTemporaryFiles: string[] = [];
+  const fileSystem = createFakeFileSystem({
+    ...createRealPathFakes({
+      links: {
+        [path.join(projectRoot, 'link')]: outsideDirectory,
+        [path.join(projectRoot, 'secret-link')]: path.join(outsideDirectory, 'secret.txt'),
+      },
+      // A folder upload's nested directories do not exist yet on either side.
+      missing: [path.join(projectRoot, 'link', 'deep')],
+      dangling: [path.join(projectRoot, 'dangling')],
+    }),
+    access: async () => undefined,
+    copyFile: async (_source, destination) => {
+      copiedFiles.push(destination);
+    },
+    unlink: async (filePath) => {
+      removedTemporaryFiles.push(filePath);
+    },
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
+
+  // A refused destination is skipped, not fatal, exactly as a traversal in a
+  // relative path is today: the response reports fewer files than requested.
+  for (const [relativePath, originalName] of [
+    ['link/deep/planted.txt', 'planted.txt'],
+    ['secret-link', 'secret-link'],
+    ['dangling', 'dangling'],
+  ]) {
+    removedTemporaryFiles.length = 0;
+
+    const result = await service.storeUploadedFiles({
+      projectId: 'project-1',
+      targetPath: projectRoot,
+      relativePaths: [relativePath],
+      requestedFileCount: 1,
+      files: [{ originalName, temporaryPath: '/tmp/upload-notes', size: 3, mimeType: 'text/plain' }],
+    });
+
+    assert.equal(result.uploadedCount, 0, relativePath);
+    assert.equal(result.requestedFileCount, 1);
+    assert.deepEqual(removedTemporaryFiles, ['/tmp/upload-notes'], relativePath);
+  }
+  assert.deepEqual(copiedFiles, []);
+});
+
+test('a symlink loop, a file used as a directory or a vanished root is reported as not found, not a 500', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const isNotFound = (error: unknown) => error instanceof AppError
+    && error.statusCode === 404
+    && error.message === 'File or directory not found';
+
+  for (const code of ['ELOOP', 'ENOTDIR']) {
+    const fileSystem = createFakeFileSystem({
+      realpath: async (candidatePath) => {
+        if (candidatePath === projectRoot) return candidatePath;
+        throw createErrnoError(code, candidatePath);
+      },
+    });
+    const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
+
+    await assert.rejects(service.readTextFile('project-1', 'loop/notes.txt'), isNotFound, code);
+  }
+
+  // Nothing along the path exists, up to and including the filesystem root
+  // (an unplugged drive on Windows): the walk ends there and the operation
+  // reads as a missing entry.
+  const fileSystem = createFakeFileSystem({
+    realpath: async (candidatePath) => {
+      throw createErrnoError('ENOENT', candidatePath);
+    },
+    lstat: async (candidatePath) => {
+      throw createErrnoError('ENOENT', candidatePath);
+    },
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
+
+  await assert.rejects(service.readTextFile('project-1', 'notes.txt'), isNotFound, 'ENOENT');
 });

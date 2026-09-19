@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, realpath, rm, symlink } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, realpath, rm, symlink } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -50,12 +50,14 @@ test('a listed system directory outside the workspace root is still rejected as 
       error: 'Cannot use system-critical directories as workspace locations',
     });
     // A listed directory the process cannot even look into is still named as
-    // one, not reported as a permission error.
+    // one, not reported as a permission error — however deep the request goes.
     if (process.getuid?.() !== 0) {
-      assert.deepEqual(await validateWorkspacePathWithin(workspacesRoot, '/root/cloudcli-does-not-exist'), {
-        valid: false,
-        error: 'Cannot create workspace in system directory: /root',
-      });
+      for (const requestedPath of ['/root/cloudcli-does-not-exist', '/root/cloudcli-does-not-exist/either']) {
+        assert.deepEqual(await validateWorkspacePathWithin(workspacesRoot, requestedPath), {
+          valid: false,
+          error: 'Cannot create workspace in system directory: /root',
+        });
+      }
     }
     // /var/tmp stays exempt: a sibling there is outside the root, not a system directory.
     assert.deepEqual(await validateWorkspacePathWithin(workspacesRoot, `${workspacesRoot}-sibling`), {
@@ -76,17 +78,80 @@ test('a symlink outside the root is judged by where it resolves, not by its spel
     await mkdir(outsideDirectory);
     const systemLink = path.join(outsideDirectory, 'system-link');
     await symlink('/usr', systemLink, 'dir');
+    const escapeLink = path.join(workspacesRoot, 'escape');
+    await symlink(outsideDirectory, escapeLink, 'dir');
 
-    // Spelled under the exempt /var/tmp, but it resolves into /usr.
-    assert.deepEqual(
-      await validateWorkspacePathWithin(workspacesRoot, path.join(systemLink, 'cloudcli-does-not-exist')),
-      {
+    // Spelled under the exempt /var/tmp, but it resolves into /usr — and the
+    // verdict does not depend on how many segments below the link are still
+    // to be created, which is what a `mkdir -p` consumer would then do.
+    for (const requestedPath of [
+      path.join(systemLink, 'cloudcli-does-not-exist'),
+      path.join(systemLink, 'cloudcli-does-not-exist', 'nested'),
+    ]) {
+      assert.deepEqual(await validateWorkspacePathWithin(workspacesRoot, requestedPath), {
         valid: false,
         error: 'Cannot create workspace in system directory: /usr',
-      },
-    );
+      });
+    }
+    // Spelled inside the root, but a link leads out of it.
+    for (const requestedPath of [path.join(escapeLink, 'a'), path.join(escapeLink, 'a', 'b')]) {
+      assert.deepEqual(await validateWorkspacePathWithin(workspacesRoot, requestedPath), {
+        valid: false,
+        error: `Workspace path must be within the allowed workspace root: ${workspacesRoot}`,
+      });
+    }
   } finally {
     await rm(exemptParent, { recursive: true, force: true });
+  }
+});
+
+test('a workspace root that is itself a symlink accepts a nested path that does not exist yet', posixOnly, async () => {
+  const exemptParent = await mkdtemp(path.join('/var/tmp', 'workspace-path-'));
+  try {
+    const realWorkspacesRoot = path.join(exemptParent, 'workspace');
+    const workspacesRoot = path.join(exemptParent, 'workspace-link');
+    await mkdir(realWorkspacesRoot);
+    await symlink(realWorkspacesRoot, workspacesRoot, 'dir');
+
+    // Answered with the real path, the way an existing entry would be.
+    assert.deepEqual(await validateWorkspacePathWithin(workspacesRoot, path.join(workspacesRoot, 'a', 'b')), {
+      valid: true,
+      resolvedPath: path.join(realWorkspacesRoot, 'a', 'b'),
+    });
+  } finally {
+    await rm(exemptParent, { recursive: true, force: true });
+  }
+});
+
+test('a dangling symlink is refused rather than treated as a path to create', posixOnly, async () => {
+  const workspacesRoot = await mkdtemp(path.join('/var/tmp', 'workspace-path-'));
+  try {
+    const danglingLink = path.join(workspacesRoot, 'dangling');
+    await symlink(path.join(workspacesRoot, 'gone'), danglingLink, 'dir');
+
+    const result = await validateWorkspacePathWithin(workspacesRoot, path.join(danglingLink, 'project'));
+    assert.equal(result.valid, false);
+    assert.match(result.error ?? '', /^Path validation failed: Symbolic link target does not exist/);
+  } finally {
+    await rm(workspacesRoot, { recursive: true, force: true });
+  }
+});
+
+test('a path inside the root the process cannot reach fails validation instead of the mkdir after it', posixOnly, async () => {
+  const workspacesRoot = await mkdtemp(path.join('/var/tmp', 'workspace-path-'));
+  const lockedDirectory = path.join(workspacesRoot, 'locked');
+  try {
+    await mkdir(lockedDirectory);
+    await chmod(lockedDirectory, 0o000);
+
+    if (process.getuid?.() !== 0) {
+      const result = await validateWorkspacePathWithin(workspacesRoot, path.join(lockedDirectory, 'project'));
+      assert.equal(result.valid, false);
+      assert.match(result.error ?? '', /^Path validation failed: EACCES/);
+    }
+  } finally {
+    await chmod(lockedDirectory, 0o755);
+    await rm(workspacesRoot, { recursive: true, force: true });
   }
 });
 

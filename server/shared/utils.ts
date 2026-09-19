@@ -6,7 +6,6 @@ import {
   mkdir,
   readFile,
   readdir,
-  readlink,
   realpath,
   stat,
   writeFile,
@@ -260,6 +259,74 @@ function describeForbiddenWorkspacePath(resolvedPath: string, resolvedWorkspaceR
 }
 
 /**
+ * The two filesystem calls `realpathThroughMissingSegments` needs. Node's
+ * `fs/promises` satisfies it directly; the File Tree service passes its
+ * injected adapter, which never lets a service touch Node's filesystem itself.
+ * Only `lstat`'s success or failure is consulted, never its result.
+ */
+type RealPathResolver = {
+  realpath(candidatePath: string): Promise<string>;
+  lstat(candidatePath: string): Promise<unknown>;
+};
+
+/**
+ * Resolves `absolutePath` to where it lands once every symlink along it is
+ * followed — including a path that does not exist yet. The deepest existing
+ * ancestor goes through `realpath` and the segments below it are appended
+ * unchanged, so a symlink any number of levels above the missing tail cannot
+ * hide where a later `mkdir -p`, write or copy will end up. An ancestor the
+ * process may not look into (`EACCES`, or `EPERM` as Windows reports it)
+ * counts as missing: `/root/x/y` resolves through `/root` for a non-root
+ * server, and the operation itself fails on the same ancestor later.
+ *
+ * A dangling symlink also answers `realpath` with `ENOENT`, yet a write
+ * through it would create its target — outside the checked tree if that is
+ * where it points. Such a link is refused rather than walked past.
+ *
+ * Any other failure (`ELOOP`, `ENOTDIR`, …) propagates to the caller.
+ * Consumers: `validateWorkspacePathWithin` below (project creation and
+ * cloning) and the File Tree service's containment checks.
+ */
+export async function realpathThroughMissingSegments(
+  absolutePath: string,
+  fileSystem: RealPathResolver,
+): Promise<string> {
+  const missingSegments: string[] = [];
+  let existingPath = absolutePath;
+  for (;;) {
+    try {
+      return path.join(await fileSystem.realpath(existingPath), ...missingSegments);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT' && await existsWithoutFollowing(existingPath, fileSystem)) {
+        throw new AppError(`Symbolic link target does not exist: ${existingPath}`, {
+          code: 'SYMLINK_TARGET_MISSING',
+          statusCode: 403,
+        });
+      }
+      const parentPath = path.dirname(existingPath);
+      if ((code !== 'ENOENT' && code !== 'EACCES' && code !== 'EPERM') || parentPath === existingPath) {
+        throw error;
+      }
+      missingSegments.unshift(path.basename(existingPath));
+      existingPath = parentPath;
+    }
+  }
+}
+
+async function existsWithoutFollowing(candidatePath: string, fileSystem: RealPathResolver): Promise<boolean> {
+  try {
+    await fileSystem.lstat(candidatePath);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw error;
+    }
+    return false;
+  }
+}
+
+/**
  * Validates that a user-supplied workspace path is safe to use under the
  * configured `WORKSPACES_ROOT`.
  *
@@ -293,30 +360,13 @@ export async function validateWorkspacePathWithin(
 
     const absolutePath = path.resolve(normalizedRequestedPath);
 
-    let resolvedPath = normalizeProjectPath(absolutePath);
-    try {
-      await access(absolutePath);
-      resolvedPath = normalizeProjectPath(await realpath(absolutePath));
-    } catch (error) {
-      const fileError = error as NodeJS.ErrnoException;
-      // A path that does not exist yet, or one the process may not look into
-      // (`/root/x` for a non-root server), is judged by where its parent
-      // resolves — the listed-directory verdict below still applies to it.
-      if (fileError.code !== 'ENOENT' && fileError.code !== 'EACCES') {
-        throw fileError;
-      }
-
-      const parentPath = path.dirname(absolutePath);
-      try {
-        const parentRealPath = await realpath(parentPath);
-        resolvedPath = normalizeProjectPath(path.join(parentRealPath, path.basename(absolutePath)));
-      } catch (parentError) {
-        const parentFileError = parentError as NodeJS.ErrnoException;
-        if (parentFileError.code !== 'ENOENT') {
-          throw parentFileError;
-        }
-      }
-    }
+    // Judged by where the path lands, not by its spelling: a path that does
+    // not exist yet, or one the process may not look into (`/root/x` for a
+    // non-root server), resolves through its deepest existing ancestor, so a
+    // symlink anywhere above it cannot launder a listed or outside directory.
+    const resolvedPath = normalizeProjectPath(
+      await realpathThroughMissingSegments(absolutePath, { realpath, lstat }),
+    );
 
     const resolvedWorkspaceRoot = normalizeProjectPath(await realpath(workspacesRoot));
     const forbiddenError = describeForbiddenWorkspacePath(resolvedPath, resolvedWorkspaceRoot);
@@ -330,24 +380,14 @@ export async function validateWorkspacePathWithin(
       };
     }
 
+    // A path inside the root that the process still cannot reach (an ancestor
+    // it may not search) is refused here, as a validation failure, rather than
+    // by the `mkdir` that would otherwise fail on it later.
     try {
       await access(absolutePath);
-      const pathStats = await lstat(absolutePath);
-      if (pathStats.isSymbolicLink()) {
-        const symlinkTarget = await readlink(absolutePath);
-        const resolvedSymlinkPath = path.resolve(path.dirname(absolutePath), symlinkTarget);
-        const realSymlinkPath = await realpath(resolvedSymlinkPath);
-        if (!isPathWithin(realSymlinkPath, resolvedWorkspaceRoot)) {
-          return {
-            valid: false,
-            error: 'Symlink target is outside the allowed workspace root',
-          };
-        }
-      }
     } catch (error) {
-      const fileError = error as NodeJS.ErrnoException;
-      if (fileError.code !== 'ENOENT') {
-        throw fileError;
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
       }
     }
 
