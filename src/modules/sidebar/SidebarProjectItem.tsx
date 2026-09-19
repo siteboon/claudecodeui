@@ -143,7 +143,7 @@ function SidebarProjectItem({
 
   return (
     <div className={cn('md:space-y-1', isDeleting && 'opacity-50 pointer-events-none')}>
-      <div className="sticky top-0 z-10 md:group group">
+      <div className="sticky top-0 z-10 bg-background md:group group">
         {isCompact && (
         <div className="bg-background">
           <div
