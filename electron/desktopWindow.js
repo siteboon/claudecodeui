@@ -4,6 +4,17 @@ import { ViewHost } from './viewHost.js';
 
 const TITLEBAR_HEIGHT = 44;
 const AUTH_TOKEN_STORAGE_KEY = 'auth-token';
+
+/**
+ * Optional name for this instance, taken from `CLOUDCLI_INSTANCE_NAME`.
+ *
+ * Several windows can run side by side, each with its own `--user-data-dir`
+ * (the single-instance lock is keyed on that path). They otherwise all carry
+ * the same title, which makes them indistinguishable in the taskbar and in
+ * Alt+Tab. The name goes in FRONT of the title because that is the end
+ * Windows keeps when it truncates. Unset: titles are unchanged.
+ */
+const INSTANCE_NAME = (process.env.CLOUDCLI_INSTANCE_NAME || '').trim();
 function isAllowedPermissionOrigin(sourceUrl, controlPlaneUrl) {
   try {
     const source = new URL(sourceUrl);
@@ -184,6 +195,16 @@ export class DesktopWindowManager {
     this.settingsWindow.close();
   }
 
+  /**
+   * Window title, prefixed with `INSTANCE_NAME` when one is set.
+   * `suffix` is the active target ("Local CloudCLI", an environment name, …);
+   * without it the plain app title is used, as on the launcher.
+   */
+  getWindowTitle(suffix) {
+    const base = suffix ? `${this.appName} - ${suffix}` : this.appName;
+    return INSTANCE_NAME ? `${INSTANCE_NAME} - ${base}` : base;
+  }
+
   async showTarget(target, { trackTab = true } = {}) {
     if (!this.mainWindow) return;
     if (trackTab) {
@@ -191,7 +212,7 @@ export class DesktopWindowManager {
     }
     this.actions.setActiveTarget(target);
     this.buildAppMenu();
-    this.mainWindow.setTitle(`${this.appName} - ${target.name}`);
+    this.mainWindow.setTitle(this.getWindowTitle(target.name));
     const finalUrl = await this.showContentTarget(target);
     this.emitDesktopState();
     return finalUrl;
@@ -204,7 +225,7 @@ export class DesktopWindowManager {
     this.actions.setActiveTarget(target);
     this.detachActiveContentView();
     this.buildAppMenu();
-    this.mainWindow.setTitle(this.appName);
+    this.mainWindow.setTitle(this.getWindowTitle());
     this.mainWindow.webContents.focus();
     if (!this.launcherLoaded) {
       await this.mainWindow.loadFile(this.getLauncherPath());
@@ -715,7 +736,7 @@ export class DesktopWindowManager {
       minHeight: 720,
       show: false,
       backgroundColor: '#0f172a',
-      title: this.appName,
+      title: this.getWindowTitle(),
       icon: this.getWindowIconPath(),
       titleBarStyle: 'hidden',
       ...(process.platform === 'darwin'
@@ -738,6 +759,16 @@ export class DesktopWindowManager {
     this.mainWindow.once('ready-to-show', () => {
       this.mainWindow?.show();
     });
+
+    // A loaded document's <title> replaces whatever setTitle() put there -
+    // on the launcher that is "CloudCLI Desktop", which would drop the
+    // instance name again. Keep the document title, but re-apply the prefix.
+    if (INSTANCE_NAME) {
+      this.mainWindow.on('page-title-updated', (event, title) => {
+        event.preventDefault();
+        this.mainWindow?.setTitle(`${INSTANCE_NAME} - ${title}`);
+      });
+    }
 
     this.mainWindow.webContents.setWindowOpenHandler(({ url }) => {
       void this.openExternalUrl(url).catch((error) => this.actions.showError('Could not open external link', error));
