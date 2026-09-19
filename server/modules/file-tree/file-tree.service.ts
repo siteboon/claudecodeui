@@ -38,6 +38,11 @@ const COMMON_WORKSPACE_DIRECTORY_NAMES = [
 // server heap before the browser has a chance to switch to a narrower project.
 const MAXIMUM_FILE_TREE_ENTRIES = 10_000;
 
+// Nesting levels below the project root that a full listing descends into.
+// Directories at the boundary come back with `childrenLoaded: false` so the
+// client can list them on demand.
+const MAXIMUM_FILE_TREE_DEPTH = 10;
+
 type FileTreeEntryFilter = (entryPath: string, isDirectory: boolean) => boolean;
 
 function includeEntryByHardExclusions(entryPath: string, isDirectory: boolean): boolean {
@@ -99,6 +104,18 @@ function resolvePathInsideProject(projectRoot: string, targetPath: string): stri
   }
 
   return resolvedPath;
+}
+
+// Like resolvePathInsideProject, but the project root itself is a valid
+// directory to list.
+function resolveDirectoryInsideProject(projectRoot: string, targetPath: string): string {
+  const resolvedRoot = path.resolve(projectRoot);
+  const resolvedPath = path.isAbsolute(targetPath)
+    ? path.resolve(targetPath)
+    : path.resolve(projectRoot, targetPath);
+  return resolvedPath === resolvedRoot
+    ? resolvedRoot
+    : resolvePathInsideProject(projectRoot, targetPath);
 }
 
 function expandWorkspacePath(workspaceRoot: string, inputPath: string): string {
@@ -291,14 +308,18 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       // that make traversal from a broad root (e.g. "/") pathologically slow.
       const isForbiddenSystemDir = FORBIDDEN_WORKSPACE_PATHS.includes(normalizeProjectPath(itemPath));
 
-      if (entry.isDirectory() && currentDepth < maximumDepth && !isForbiddenSystemDir) {
-        item.children = await buildFileTree(
-          itemPath,
-          maximumDepth,
-          currentDepth + 1,
-          includeEntry,
-          remainingEntries,
-        );
+      if (entry.isDirectory() && !isForbiddenSystemDir) {
+        if (currentDepth < maximumDepth) {
+          item.children = await buildFileTree(
+            itemPath,
+            maximumDepth,
+            currentDepth + 1,
+            includeEntry,
+            remainingEntries,
+          );
+        } else {
+          item.childrenLoaded = false;
+        }
       }
 
       return item;
@@ -472,7 +493,34 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
         }
       }
 
-      return buildFileTree(projectRoot, 10, 0, includeEntry);
+      if (options?.path) {
+        const directoryPath = resolveDirectoryInsideProject(projectRoot, options.path);
+        let stats;
+        try {
+          stats = await fileSystem.stat(directoryPath);
+        } catch {
+          throw createFileTreeError('Directory not found', 404, 'DIRECTORY_NOT_FOUND');
+        }
+        if (!stats.isDirectory()) {
+          throw createFileTreeError('Path is not a directory', 400, 'NOT_A_DIRECTORY');
+        }
+
+        // `depth` counts levels of entries, so 1 is the directory's own listing.
+        const levels = Math.min(Math.max(options.depth ?? 1, 1), MAXIMUM_FILE_TREE_DEPTH + 1);
+        return buildFileTree(directoryPath, levels - 1, 0, includeEntry);
+      }
+
+      try {
+        return await buildFileTree(projectRoot, MAXIMUM_FILE_TREE_DEPTH, 0, includeEntry);
+      } catch (error) {
+        if (!(error instanceof AppError && error.code === 'FILE_TREE_TOO_LARGE')) {
+          throw error;
+        }
+        // Too big to ship in one response: return the top level and let the
+        // client list each directory as it is opened. A single directory that
+        // exceeds the cap on its own still fails here.
+        return buildFileTree(projectRoot, 0, 0, includeEntry);
+      }
     },
 
     async createEntry(input) {
