@@ -105,6 +105,7 @@ function decorateAndRecordEvent(run: ChatRun, message: NormalizedMessage): Norma
     run.status = 'completed';
     run.completedAt = Date.now();
     evictRunLater(run.appSessionId);
+    notifyRunSettled(run.appSessionId);
   }
 
   run.events.push(outbound);
@@ -113,6 +114,36 @@ function decorateAndRecordEvent(run: ChatRun, message: NormalizedMessage): Norma
   }
 
   return outbound;
+}
+
+/**
+ * Fired when a run reaches its terminal `complete` and the session goes idle.
+ *
+ * The queued-message dispatcher subscribes so a message the user queued during
+ * a turn is sent as soon as that turn ends, instead of waiting for the next
+ * poll. Listeners run on a microtask so a throwing subscriber cannot break the
+ * event that settled the run.
+ */
+const settledListeners = new Set<(appSessionId: string) => void>();
+
+export function onRunSettled(listener: (appSessionId: string) => void): () => void {
+  settledListeners.add(listener);
+  return () => {
+    settledListeners.delete(listener);
+  };
+}
+
+function notifyRunSettled(appSessionId: string): void {
+  for (const listener of settledListeners) {
+    queueMicrotask(() => {
+      try {
+        listener(appSessionId);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error('[ChatRunRegistry] run-settled listener failed', { error: message });
+      }
+    });
+  }
 }
 
 /**
