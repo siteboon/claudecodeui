@@ -8,17 +8,29 @@ import {
 
 test('parseAntigravityModelsStdout converts agy model lines to model options', () => {
   const models = parseAntigravityModelsStdout(`
-Gemini 3.5 Flash (Medium)
-Claude Sonnet 4.6 (Thinking)
+gemini-3.8-flash-medium\tGemini 3.8 Flash (Medium)
+claude-sonnet-4-6\tClaude Sonnet 4.6 (Thinking)
 
-GPT-OSS 120B (Medium)
+legacy-model
 `);
 
-  assert.equal(models.DEFAULT, 'Gemini 3.5 Flash (Medium)');
-  assert.deepEqual(models.OPTIONS.map((option) => option.value), [
-    'Gemini 3.5 Flash (Medium)',
-    'Claude Sonnet 4.6 (Thinking)',
-    'GPT-OSS 120B (Medium)',
+  assert.equal(models.DEFAULT, 'gemini-3.8-flash-medium');
+  assert.deepEqual(models.OPTIONS, [
+    {
+      value: 'gemini-3.8-flash-medium',
+      label: 'Gemini 3.8 Flash (Medium)',
+      description: 'Antigravity CLI model',
+    },
+    {
+      value: 'claude-sonnet-4-6',
+      label: 'Claude Sonnet 4.6 (Thinking)',
+      description: 'Antigravity CLI model',
+    },
+    {
+      value: 'legacy-model',
+      label: 'legacy-model',
+      description: 'Antigravity CLI model',
+    },
   ]);
 });
 

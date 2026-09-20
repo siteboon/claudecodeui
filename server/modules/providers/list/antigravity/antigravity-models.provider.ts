@@ -12,47 +12,47 @@ import {
 export const ANTIGRAVITY_FALLBACK_MODELS: ProviderModelsDefinition = {
   OPTIONS: [
     {
-      value: 'Gemini 3.5 Flash (Medium)',
-      label: 'Gemini 3.5 Flash (Medium)',
+      value: 'gemini-3.8-flash-medium',
+      label: 'Gemini 3.8 Flash (Medium)',
       description: 'Antigravity CLI model',
     },
     {
-      value: 'Gemini 3.5 Flash (High)',
-      label: 'Gemini 3.5 Flash (High)',
+      value: 'gemini-3.8-flash-high',
+      label: 'Gemini 3.8 Flash (High)',
       description: 'Antigravity CLI model',
     },
     {
-      value: 'Gemini 3.5 Flash (Low)',
-      label: 'Gemini 3.5 Flash (Low)',
+      value: 'gemini-3.8-flash-low',
+      label: 'Gemini 3.8 Flash (Low)',
       description: 'Antigravity CLI model',
     },
     {
-      value: 'Gemini 3.1 Pro (High)',
+      value: 'gemini-3.1-pro-high',
       label: 'Gemini 3.1 Pro (High)',
       description: 'Antigravity CLI model',
     },
     {
-      value: 'Gemini 3.1 Pro (Low)',
+      value: 'gemini-3.1-pro-low',
       label: 'Gemini 3.1 Pro (Low)',
       description: 'Antigravity CLI model',
     },
     {
-      value: 'Claude Sonnet 4.6 (Thinking)',
+      value: 'claude-sonnet-4-6',
       label: 'Claude Sonnet 4.6 (Thinking)',
       description: 'Antigravity CLI model',
     },
     {
-      value: 'Claude Opus 4.6 (Thinking)',
+      value: 'claude-opus-4-6-thinking',
       label: 'Claude Opus 4.6 (Thinking)',
       description: 'Antigravity CLI model',
     },
     {
-      value: 'GPT-OSS 120B (Medium)',
+      value: 'gpt-oss-120b-medium',
       label: 'GPT-OSS 120B (Medium)',
       description: 'Antigravity CLI model',
     },
   ],
-  DEFAULT: 'Gemini 3.5 Flash (Medium)',
+  DEFAULT: 'gemini-3.8-flash-medium',
 };
 
 const MODELS_TIMEOUT_MS = 20_000;
@@ -63,11 +63,14 @@ export const parseAntigravityModelsStdout = (stdout: string): ProviderModelsDefi
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
-    .map((line) => ({
-      value: line,
-      label: line,
-      description: 'Antigravity CLI model',
-    }));
+    .map((line) => {
+      const [modelId, displayName] = line.split('\t', 2);
+      return {
+        value: modelId,
+        label: displayName?.trim() || modelId,
+        description: 'Antigravity CLI model',
+      };
+    });
 
   if (models.length === 0) {
     return ANTIGRAVITY_FALLBACK_MODELS;
