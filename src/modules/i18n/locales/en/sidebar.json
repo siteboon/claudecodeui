@@ -62,6 +62,7 @@
   "actions": {
     "refresh": "Refresh",
     "settings": "Settings",
+    "dailyReport": "Daily Report",
     "collapseAll": "Collapse All",
     "expandAll": "Expand All",
     "cancel": "Cancel",

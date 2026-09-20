@@ -1,0 +1,43 @@
+{
+  "title": "Daily Report",
+  "close": "Close Daily Report",
+  "loading": "Loading today's report...",
+  "generating": "Generating today's report...",
+  "notGenerated": "Use an LLM to summarize today's work, current progress, and next steps.",
+  "todayInTimezone": "Today · {{timezone}}",
+  "coverage": "{{date}} · {{projects}} projects · {{sessions}} conversations · as of {{time}} ({{timezone}})",
+  "projects": "projects",
+  "sessions": "conversations",
+  "asOf": "as of",
+  "reportLanguage": "Report language",
+  "summary": "Today's summary",
+  "summaryProvider": "Summary provider",
+  "providerNote": "Claude runs in an isolated, no-tools session.",
+  "generate": "Generate report",
+  "refresh": "Update report",
+  "copy": "Copy",
+  "copied": "Copied",
+  "showMore": "Show {{count}} more",
+  "source": "{{provider}} source {{index}}",
+  "fields": {
+    "task": "Work done",
+    "currentProgress": "Current progress",
+    "nextStep": "Next step"
+  },
+  "status": {
+    "completed": "Completed",
+    "progress": "In progress",
+    "needs_attention": "Needs attention"
+  },
+  "warnings": {
+    "partial": "Some activity could not be included.",
+    "candidate_limit_reached": "The conversation limit was reached; this report is partial.",
+    "message_limit_reached": "A conversation exceeded the message limit; this report is partial.",
+    "missing_message_timestamps": "Some messages lacked a trustworthy timestamp and were excluded.",
+    "partial_history": "A provider returned partial history.",
+    "source_unreadable": "Some conversations could not be read.",
+    "summary_unavailable": "AI summarization was unavailable; showing an activity summary.",
+    "summary_invalid": "The AI response failed evidence validation; showing an activity summary.",
+    "summary_timeout": "AI summarization timed out; showing an activity summary."
+  }
+}

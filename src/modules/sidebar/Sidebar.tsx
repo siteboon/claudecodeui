@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useDeviceSettings } from '@/shared/hooks/useDeviceSettings';
@@ -12,6 +12,7 @@ import type { LLMProvider, LoadingProgress, MCPServerStatus, Project, ProjectSes
 import SidebarCollapsed from '@/modules/sidebar/SidebarCollapsed';
 import SidebarContent from '@/modules/sidebar/SidebarContent';
 import SidebarModals from '@/modules/sidebar/SidebarModals';
+import { DailyReportDialog } from '@/modules/daily-report';
 
 type SidebarProps = {
   projects: Project[];
@@ -77,6 +78,8 @@ function Sidebar({
   // Only membership is rendered here, so subscribing to the full activity map
   // would re-render the whole tree on every provider status frame.
   const activeSessions = useBusySessionIdSet();
+  // The global report dialog is independent of project/session selection and preserves chat state.
+  const [showDailyReport, setShowDailyReport] = useState(false);
 
   const {
     isSidebarCollapsed,
@@ -224,6 +227,7 @@ function Sidebar({
 
   return (
     <>
+        <DailyReportDialog open={showDailyReport} onOpenChange={setShowDailyReport} />
         <SidebarModals
           projects={projects}
         showSettings={showSettings}
@@ -249,6 +253,7 @@ function Sidebar({
         <SidebarCollapsed
           onExpand={handleExpandSidebar}
           onShowSettings={onShowSettings}
+          onShowDailyReport={() => setShowDailyReport(true)}
           updateAvailable={updateAvailable}
           restartRequired={restartRequired}
           onShowVersionModal={() => setShowVersionModal(true)}
@@ -335,6 +340,7 @@ function Sidebar({
             currentVersion={currentVersion}
             onShowVersionModal={() => setShowVersionModal(true)}
             onShowSettings={onShowSettings}
+            onShowDailyReport={() => setShowDailyReport(true)}
             projectListProps={projectListProps}
             t={t}
           />

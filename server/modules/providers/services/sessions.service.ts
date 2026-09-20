@@ -7,6 +7,7 @@ import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/i
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import type {
+  DailyReportSessionCandidate,
   FetchHistoryOptions,
   FetchHistoryResult,
   LLMProvider,
@@ -122,6 +123,28 @@ export const sessionsService = {
    */
   listProviderIds(): LLMProvider[] {
     return providerRegistry.listProviders().map((provider) => provider.id);
+  },
+
+  /**
+   * Supplies Daily Report with app-facing session identities and project labels.
+   * History remains behind fetchHistory so callers never inspect provider files.
+   */
+  listDailyReportSessions(): DailyReportSessionCandidate[] {
+    return sessionsDb.getAllSessionsIncludingArchived().map((session) => {
+      const project = session.project_path
+        ? projectsDb.getProjectPath(session.project_path)
+        : null;
+      return {
+        sessionId: session.session_id,
+        provider: session.provider as LLMProvider,
+        projectId: project?.project_id ?? null,
+        projectName: project?.custom_project_name?.trim()
+          || (session.project_path ? path.basename(session.project_path) : 'Other sessions'),
+        sessionTitle: session.custom_name?.trim() || 'Untitled session',
+        createdAt: session.created_at || null,
+        updatedAt: session.updated_at || null,
+      };
+    });
   },
 
   /**

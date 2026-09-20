@@ -1,0 +1,43 @@
+{
+  "title": "今日日报",
+  "close": "关闭今日日报",
+  "loading": "正在读取今日日报……",
+  "generating": "正在生成今日日报……",
+  "notGenerated": "使用 LLM 汇总今天做过的事情、当前进度和下一步计划。",
+  "todayInTimezone": "今天 · {{timezone}}",
+  "coverage": "{{date}} · {{projects}} 个项目 · {{sessions}} 个会话 · 截至 {{time}}（{{timezone}}）",
+  "projects": "个项目",
+  "sessions": "个会话",
+  "asOf": "截至",
+  "reportLanguage": "报告语言",
+  "summary": "今日总结",
+  "summaryProvider": "总结模型",
+  "providerNote": "Claude 将在无工具、隔离且不保存会话的环境中运行。",
+  "generate": "生成日报",
+  "refresh": "更新日报",
+  "copy": "复制",
+  "copied": "已复制",
+  "showMore": "展开其余 {{count}} 项",
+  "source": "{{provider}} 来源 {{index}}",
+  "fields": {
+    "task": "做的事情",
+    "currentProgress": "当前进度",
+    "nextStep": "下一步计划"
+  },
+  "status": {
+    "completed": "已完成",
+    "progress": "有进展",
+    "needs_attention": "待处理"
+  },
+  "warnings": {
+    "partial": "部分活动未能纳入本次报告。",
+    "candidate_limit_reached": "会话数量达到上限，本次报告不完整。",
+    "message_limit_reached": "部分会话超过消息上限，本次报告不完整。",
+    "missing_message_timestamps": "部分消息缺少可信时间，已排除。",
+    "partial_history": "部分 Provider 仅返回了有限历史。",
+    "source_unreadable": "部分会话暂时无法读取。",
+    "summary_unavailable": "AI 总结不可用，当前显示活动摘要。",
+    "summary_invalid": "AI 返回内容未通过证据校验，当前显示活动摘要。",
+    "summary_timeout": "AI 总结超时，当前显示活动摘要。"
+  }
+}

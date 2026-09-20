@@ -544,6 +544,19 @@ export const api = {
   system: {
     update: () => post('/api/system/update'),
   },
+
+  dailyReports: {
+    today: (timezone: string, locale: string, summaryProvider = 'claude') =>
+      get(`/api/daily-reports/today${query({ timezone, locale, summaryProvider })}`),
+    generate: (input: {
+      date: string;
+      timezone: string;
+      locale: string;
+      summaryProvider: string;
+      model?: string;
+      refresh?: boolean;
+    }, options: ApiRequestOptions = {}) => post('/api/daily-reports/generate', input, options),
+  },
 };
 
 // ---------------------------

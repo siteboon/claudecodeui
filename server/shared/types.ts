@@ -287,6 +287,8 @@ export type NormalizedMessage = {
   transcriptAnchorId?: string;
   sessionId: string;
   timestamp: string;
+  /** False when normalization had to synthesize the time instead of reading provider evidence. */
+  timestampTrusted?: boolean;
   provider: LLMProvider;
   kind: MessageKind;
   /**
@@ -502,6 +504,107 @@ export type FetchHistoryResult = {
   offset: number;
   limit: number | null;
   tokenUsage?: unknown;
+};
+
+// ---------------------------
+//----------------- DAILY REPORT TYPES ------------
+/** One indexed conversation eligible for Daily Report history collection. */
+export type DailyReportSessionCandidate = {
+  sessionId: string;
+  provider: LLMProvider;
+  projectId: string | null;
+  projectName: string;
+  sessionTitle: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+/** Stable warning codes returned by Daily Report for client-side translation. */
+export type DailyReportWarning =
+  | 'candidate_limit_reached'
+  | 'message_limit_reached'
+  | 'missing_message_timestamps'
+  | 'partial_history'
+  | 'source_unreadable'
+  | 'summary_unavailable'
+  | 'summary_invalid'
+  | 'summary_timeout';
+
+/** A traceable conversation reference backing one Daily Report conclusion. */
+export type DailyReportSource = {
+  provider: LLMProvider;
+  sessionId: string;
+  messageAnchor?: string;
+  evidenceId: string;
+};
+
+/** One evidence-backed work item produced by Daily Report. */
+export type DailyReportItem = {
+  id: string;
+  projectId: string | null;
+  projectName: string;
+  task: string;
+  progress: string;
+  nextStep: string;
+  status: 'completed' | 'progress' | 'needs_attention';
+  sources: DailyReportSource[];
+};
+
+/** API representation of an LLM-generated report, or an empty report when no activity exists. */
+export type DailyReport = {
+  id: string;
+  date: string;
+  timezone: string;
+  locale: string;
+  generatedAt: string;
+  snapshotAt: string;
+  mode: 'ai' | 'activity';
+  coverage: {
+    projectCount: number;
+    sessionCount: number;
+    partial: boolean;
+    warnings: DailyReportWarning[];
+  };
+  highlights: string[];
+  items: DailyReportItem[];
+};
+
+/** Validated service input for creating a Daily Report snapshot. */
+export type DailyReportGenerateInput = {
+  date: string;
+  timezone: string;
+  locale: string;
+  summaryProvider?: LLMProvider;
+  model?: string;
+  refresh?: boolean;
+  scopeId: string;
+};
+
+/** Sanitized, timestamped message evidence passed to the isolated summarizer. */
+export type DailyReportEvidence = {
+  evidenceId: string;
+  provider: LLMProvider;
+  sessionId: string;
+  projectId: string | null;
+  projectName: string;
+  sessionTitle: string;
+  messageAnchor?: string;
+  timestamp: string;
+  kind: 'user' | 'assistant' | 'tool';
+  text: string;
+  isError: boolean;
+};
+
+/** Internal collection result shared by Daily Report collection, summary, and cache orchestration. */
+export type DailyReportCollection = {
+  evidence: DailyReportEvidence[];
+  activityFingerprint: string;
+  candidateCount: number;
+  readableSourceCount: number;
+  projectCount: number;
+  sessionCount: number;
+  partial: boolean;
+  warnings: DailyReportWarning[];
 };
 
 // ---------------------------

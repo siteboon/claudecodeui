@@ -51,6 +51,7 @@ import browserUseRoutes from './modules/browser-use/browser-use.routes.js';
 import { assetsRoutes } from './modules/assets/index.js';
 import { fileTreeRoutes } from './modules/file-tree/index.js';
 import { worktreesRoutes } from './modules/worktrees/index.js';
+import { dailyReportRoutes } from './modules/daily-report/index.js';
 import browserUseMcpRoutes from './modules/browser-use/browser-use-mcp.routes.js';
 import { browserUseService } from './modules/browser-use/browser-use.service.js';
 import { initializeDatabase, sessionsDb } from './modules/database/index.js';
@@ -193,6 +194,7 @@ app.use('/api/browser-use', authenticateToken, browserUseRoutes);
 // Unified provider MCP routes (protected)
 app.use('/api/providers', authenticateToken, providerRoutes);
 app.use('/api/scheduled-messages', authenticateToken, scheduledMessagesRoutes);
+app.use('/api/daily-reports', authenticateToken, dailyReportRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);

@@ -1,4 +1,4 @@
-import { Settings, Sparkles, PanelLeftOpen, Bug, AlertTriangle } from 'lucide-react';
+import { Settings, Sparkles, PanelLeftOpen, Bug, AlertTriangle, FileText } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 const DISCORD_INVITE_URL = 'https://discord.gg/buxwujPNRE';
@@ -15,6 +15,7 @@ function DiscordIcon({ className }: { className?: string }) {
 type SidebarCollapsedProps = {
   onExpand: () => void;
   onShowSettings: () => void;
+  onShowDailyReport: () => void;
   updateAvailable: boolean;
   restartRequired: boolean;
   onShowVersionModal: () => void;
@@ -25,6 +26,7 @@ type SidebarCollapsedProps = {
 export default function SidebarCollapsed({
   onExpand,
   onShowSettings,
+  onShowDailyReport,
   updateAvailable,
   restartRequired,
   onShowVersionModal,
@@ -45,6 +47,15 @@ export default function SidebarCollapsed({
       <div className="nav-divider my-1 w-6" />
 
       {/* Settings */}
+      <button
+        onClick={onShowDailyReport}
+        className="group flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-accent/80"
+        aria-label={t('actions.dailyReport')}
+        title={t('actions.dailyReport')}
+      >
+        <FileText className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground" />
+      </button>
+
       <button
         onClick={onShowSettings}
         className="group flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-accent/80"

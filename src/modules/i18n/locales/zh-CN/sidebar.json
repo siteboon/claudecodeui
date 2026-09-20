@@ -62,6 +62,7 @@
   "actions": {
     "refresh": "刷新",
     "settings": "设置",
+    "dailyReport": "今日日报",
     "collapseAll": "全部折叠",
     "expandAll": "全部展开",
     "cancel": "取消",

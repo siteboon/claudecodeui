@@ -351,6 +351,7 @@ export function createNormalizedMessage(fields: NormalizedMessageInput): Normali
     id: fields.id || generateMessageId(fields.kind),
     sessionId: fields.sessionId || '',
     timestamp: fields.timestamp || new Date().toISOString(),
+    timestampTrusted: Boolean(fields.timestamp),
     provider: fields.provider,
   };
 }

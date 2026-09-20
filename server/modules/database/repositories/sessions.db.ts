@@ -536,6 +536,25 @@ export const sessionsDb = {
   },
 
   /**
+   * Returns active and archived session rows for evidence collection.
+   * Daily Report is the sole consumer because archived conversations remain
+   * valid work evidence even though normal navigation lists hide them.
+   */
+  getAllSessionsIncludingArchived(): SessionRow[] {
+    const db = getConnection();
+    const rows = db
+      .prepare(
+        `SELECT ${SESSION_ROW_COLUMNS}
+         FROM sessions
+         ORDER BY julianday(COALESCE(updated_at, created_at)) DESC,
+                  session_id DESC`
+      )
+      .all() as SessionRow[];
+
+    return normalizeSessionRows(rows);
+  },
+
+  /**
    * Returns one globally ordered page of visible conversations.
    *
    * Pagination happens after archived sessions and sessions belonging to an

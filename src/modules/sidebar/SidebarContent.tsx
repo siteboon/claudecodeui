@@ -125,6 +125,7 @@ type SidebarContentProps = {
   currentVersion: string;
   onShowVersionModal: () => void;
   onShowSettings: () => void;
+  onShowDailyReport: () => void;
   projectListProps: SidebarProjectListProps;
   t: TFunction;
 };
@@ -172,6 +173,7 @@ export default function SidebarContent({
   currentVersion,
   onShowVersionModal,
   onShowSettings,
+  onShowDailyReport,
   projectListProps,
   t,
 }: SidebarContentProps) {
@@ -694,6 +696,7 @@ export default function SidebarContent({
           currentVersion={currentVersion}
           onShowVersionModal={onShowVersionModal}
           onShowSettings={onShowSettings}
+          onShowDailyReport={onShowDailyReport}
           t={t}
         />
       )}

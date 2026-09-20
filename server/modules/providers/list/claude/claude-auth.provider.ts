@@ -16,9 +16,42 @@ type ClaudeCredentialsStatus = {
   error?: string;
 };
 
+const CLAUDE_CONNECTION_ENV_KEYS = [
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_AUTH_TOKEN',
+  'ANTHROPIC_BASE_URL',
+  'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+  'ANTHROPIC_DEFAULT_OPUS_MODEL',
+  'ANTHROPIC_DEFAULT_SONNET_MODEL',
+  'API_TIMEOUT_MS',
+  'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC',
+  'CLAUDE_CODE_OAUTH_TOKEN',
+] as const;
+
 const hasErrorCode = (error: unknown, code: string): boolean => (
   error instanceof Error && 'code' in error && error.code === code
 );
+
+/** Used by Claude authentication and Daily Report to read the local CLI's model and connection settings. */
+export async function loadClaudeLocalConfiguration(): Promise<{
+  environment: Record<string, string>;
+  model?: string;
+}> {
+  try {
+    const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+    const content = await readFile(settingsPath, 'utf8');
+    const settings = readObjectRecord(JSON.parse(content));
+    const settingsEnv = readObjectRecord(settings?.env) ?? {};
+    const environment = Object.fromEntries(CLAUDE_CONNECTION_ENV_KEYS.flatMap((key) => {
+      const value = readOptionalString(settingsEnv[key]);
+      return value ? [[key, value]] : [];
+    }));
+    const model = readOptionalString(settings?.model);
+    return { environment, ...(model ? { model } : {}) };
+  } catch {
+    return { environment: {} };
+  }
+}
 
 export class ClaudeProviderAuth implements IProviderAuth {
   /**
@@ -66,20 +99,6 @@ export class ClaudeProviderAuth implements IProviderAuth {
   }
 
   /**
-   * Reads Claude settings env values that the CLI can use even when the server process env is empty.
-   */
-  private async loadSettingsEnv(): Promise<Record<string, unknown>> {
-    try {
-      const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
-      const content = await readFile(settingsPath, 'utf8');
-      const settings = readObjectRecord(JSON.parse(content));
-      return readObjectRecord(settings?.env) ?? {};
-    } catch {
-      return {};
-    }
-  }
-
-  /**
    * Checks Claude credentials in the same priority order used by Claude Code.
    */
   private async checkCredentials(): Promise<ClaudeCredentialsStatus> {
@@ -93,7 +112,7 @@ export class ClaudeProviderAuth implements IProviderAuth {
       return { authenticated: true, email: 'API Key Auth', method: 'api_key' };
     }
 
-    const settingsEnv = await this.loadSettingsEnv();
+    const settingsEnv = (await loadClaudeLocalConfiguration()).environment;
     if (readOptionalString(settingsEnv.ANTHROPIC_API_KEY)) {
       return { authenticated: true, email: 'API Key Auth', method: 'api_key' };
     }

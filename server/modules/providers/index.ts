@@ -12,3 +12,6 @@ export { sessionsService } from './services/sessions.service.js';
 
 export { initializeSessionsWatcher } from './services/sessions-watcher.service.js';
 export { closeSessionsWatcher } from './services/sessions-watcher.service.js';
+
+// loadClaudeLocalConfiguration: used by Daily Report to run against the user's configured Claude endpoint and model.
+export { loadClaudeLocalConfiguration } from './list/claude/claude-auth.provider.js';

@@ -118,6 +118,54 @@ export type Project = {
   [key: string]: unknown;
 };
 
+// ---------------------------
+//----------------- DAILY REPORT ------------
+/** A traceable session reference attached to one Daily Report item. */
+export type DailyReportSource = {
+  provider: LLMProvider;
+  sessionId: string;
+  messageAnchor?: string;
+  evidenceId: string;
+};
+
+/** One evidence-backed work item displayed in the Daily Report dialog. */
+export type DailyReportItem = {
+  id: string;
+  projectId: string | null;
+  projectName: string;
+  task: string;
+  progress: string;
+  nextStep: string;
+  status: 'completed' | 'progress' | 'needs_attention';
+  sources: DailyReportSource[];
+};
+
+/** Generated Daily Report payload returned by the backend. */
+export type DailyReport = {
+  id: string;
+  date: string;
+  timezone: string;
+  locale: string;
+  generatedAt: string;
+  snapshotAt: string;
+  mode: 'ai' | 'activity';
+  coverage: {
+    projectCount: number;
+    sessionCount: number;
+    partial: boolean;
+    warnings: string[];
+  };
+  highlights: string[];
+  items: DailyReportItem[];
+};
+
+/** Cache status returned when opening Daily Report without triggering generation. */
+export type DailyReportStatus = {
+  status: 'ready' | 'not_generated';
+  report: DailyReport | null;
+  summaryProviders: Array<{ provider: 'claude'; isolated: true }>;
+};
+
 /** Progress payload streamed while the backend enumerates projects, used to drive the sidebar loading bar. */
 export type LoadingProgress = {
   kind?: 'loading_progress';

@@ -19,6 +19,7 @@ import enAuth from '@/modules/i18n/locales/en/auth.json';
 import enSidebar from '@/modules/i18n/locales/en/sidebar.json';
 import enChat from '@/modules/i18n/locales/en/chat.json';
 import enCodeEditor from '@/modules/i18n/locales/en/codeEditor.json';
+import enDailyReport from '@/modules/i18n/locales/en/dailyReport.json';
 // oxlint-disable-next-line importx/order
 import enTasks from '@/modules/i18n/locales/en/tasks.json';
 // oxlint-disable-next-line importx/order
@@ -57,6 +58,7 @@ import zhAuth from '@/modules/i18n/locales/zh-CN/auth.json';
 import zhSidebar from '@/modules/i18n/locales/zh-CN/sidebar.json';
 import zhChat from '@/modules/i18n/locales/zh-CN/chat.json';
 import zhCodeEditor from '@/modules/i18n/locales/zh-CN/codeEditor.json';
+import zhDailyReport from '@/modules/i18n/locales/zh-CN/dailyReport.json';
 import zhTasks from '@/modules/i18n/locales/zh-CN/tasks.json';
 import jaCommon from '@/modules/i18n/locales/ja/common.json';
 import jaSettings from '@/modules/i18n/locales/ja/settings.json';
@@ -154,6 +156,7 @@ i18n
         sidebar: enSidebar,
         chat: enChat,
         codeEditor: enCodeEditor,
+        dailyReport: enDailyReport,
         tasks: enTasks,
 git: enGit,
       },
@@ -191,6 +194,7 @@ git: enGit,
         sidebar: zhSidebar,
         chat: zhChat,
         codeEditor: zhCodeEditor,
+        dailyReport: zhDailyReport,
         tasks: zhTasks,
       },
       ja: {
@@ -269,7 +273,7 @@ git: enGit,
     debug: false,
 
     // Namespaces - load only what's needed
-    ns: ['common', 'settings', 'auth', 'sidebar', 'chat', 'codeEditor', 'tasks', 'git'],
+    ns: ['common', 'settings', 'auth', 'sidebar', 'chat', 'codeEditor', 'tasks', 'git', 'dailyReport'],
     defaultNS: 'common',
 
     // Key separator for nested keys (default: '.')
