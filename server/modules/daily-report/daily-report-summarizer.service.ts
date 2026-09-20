@@ -1,10 +1,11 @@
 import os from 'node:os';
 
 import { query, type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { Codex } from '@openai/codex-sdk';
 
 import { loadClaudeLocalConfiguration } from '@/modules/providers/index.js';
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
-import type { DailyReportEvidence, DailyReportItem } from '@/shared/types.js';
+import type { DailyReportEvidence, DailyReportItem, DailyReportSummaryProvider } from '@/shared/types.js';
 
 const SUMMARY_TIMEOUT_MS = 180_000;
 const MAX_SUMMARY_EVIDENCE = 48;
@@ -17,9 +18,16 @@ type SummaryResult = {
 
 type ClaudeQuery = ReturnType<typeof query>;
 type QueryFactory = (input: { prompt: string; options: Options }) => ClaudeQuery;
+type CodexRunner = (
+  prompt: string,
+  schema: typeof OUTPUT_SCHEMA,
+  signal: AbortSignal,
+  model?: string,
+) => Promise<unknown>;
 
 type SummarizerDependencies = {
-  runQuery: QueryFactory;
+  runClaudeQuery: QueryFactory;
+  runCodex: CodexRunner;
   loadConfiguration(): Promise<{ environment: Record<string, string>; model?: string }>;
 };
 
@@ -60,7 +68,6 @@ const OUTPUT_SCHEMA = {
             type: 'array',
             minItems: 1,
             maxItems: 12,
-            uniqueItems: true,
             items: { type: 'string' },
           },
         },
@@ -202,25 +209,58 @@ function buildPrompt(evidence: DailyReportEvidence[], locale: string): string {
   ].join('\n');
 }
 
+async function runCodexSummary(
+  prompt: string,
+  schema: typeof OUTPUT_SCHEMA,
+  signal: AbortSignal,
+  model?: string,
+): Promise<unknown> {
+  // With no constructor overrides, the SDK inherits ~/.codex/config.toml and ~/.codex/auth.json.
+  const codex = new Codex();
+  const thread = codex.startThread({
+    workingDirectory: os.tmpdir(),
+    skipGitRepoCheck: true,
+    sandboxMode: 'read-only',
+    approvalPolicy: 'never',
+    networkAccessEnabled: false,
+    webSearchMode: 'disabled',
+    ...(model ? { model } : {}),
+  });
+  const turn = await thread.run(prompt, { outputSchema: schema, signal });
+  return JSON.parse(turn.finalResponse);
+}
+
 /** Creates the isolated Claude summarizer used by Daily Report and its safety tests. */
 export function createDailyReportSummarizer(
   dependencyOverrides: Partial<SummarizerDependencies> = {},
 ) {
   const dependencies: SummarizerDependencies = {
-    runQuery: query,
+    runClaudeQuery: query,
+    runCodex: runCodexSummary,
     loadConfiguration: loadClaudeLocalConfiguration,
     ...dependencyOverrides,
   };
   return {
-    async summarize(evidence: DailyReportEvidence[], locale: string, model?: string): Promise<SummaryResult> {
+    async summarize(
+      evidence: DailyReportEvidence[],
+      locale: string,
+      provider: DailyReportSummaryProvider,
+      model?: string,
+    ): Promise<SummaryResult> {
       const abortController = new AbortController();
       const timer = setTimeout(() => abortController.abort(), SUMMARY_TIMEOUT_MS);
       let queryInstance: ClaudeQuery | null = null;
       try {
+        const prompt = buildPrompt(evidence, locale);
+        if (provider === 'codex') {
+          const output = await dependencies.runCodex(prompt, OUTPUT_SCHEMA, abortController.signal, model);
+          return validateSummary(output, evidence);
+        }
+
         const localConfiguration = await dependencies.loadConfiguration();
         const claudeExecutablePath = resolveClaudeCodeExecutablePath();
-        queryInstance = dependencies.runQuery({
-          prompt: buildPrompt(evidence, locale),
+        queryInstance = dependencies.runClaudeQuery({
+          prompt,
           options: {
             abortController,
             cwd: os.tmpdir(),

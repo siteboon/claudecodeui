@@ -83,3 +83,22 @@ test('POST rejects a date that is not today before calling the service', async (
   });
   assert.equal(called, false);
 });
+
+test('POST accepts Codex as the summary provider', async () => {
+  let received: DailyReportGenerateInput | undefined;
+  await withServer({
+    getCached: () => null,
+    generate: async (input) => {
+      received = input;
+      return {} as DailyReport;
+    },
+  }, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/daily-reports/generate`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ date: today('UTC'), timezone: 'UTC', locale: 'en', summaryProvider: 'codex' }),
+    });
+    assert.equal(response.status, 200);
+  });
+  assert.equal(received?.summaryProvider, 'codex');
+});

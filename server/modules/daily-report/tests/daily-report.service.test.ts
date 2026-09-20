@@ -40,7 +40,8 @@ test('concurrent generation coalesces and unchanged activity reuses the report',
   let summaries = 0;
   const service = createDailyReportService({
     collect: async () => COLLECTION,
-    summarize: async () => {
+    summarize: async (_evidence, _locale, provider) => {
+      assert.equal(provider, 'claude');
       summaries += 1;
       await new Promise((resolve) => setTimeout(resolve, 5));
       return { highlights: ['完成日报功能。'], items: [] };
@@ -70,4 +71,19 @@ test('summary failure is surfaced instead of returning a conversation activity l
       && error.code === 'DAILY_REPORT_SUMMARY_INVALID'
       && error.statusCode === 503,
   );
+});
+
+test('selected Codex provider is passed to the summarizer and recorded in the report', async () => {
+  const service = createDailyReportService({
+    collect: async () => COLLECTION,
+    summarize: async (_evidence, _locale, provider) => {
+      assert.equal(provider, 'codex');
+      return { highlights: ['Codex summary'], items: [] };
+    },
+    listAccessibleSessionIds: () => new Set(['s1']),
+    now: () => new Date('2026-09-20T10:00:00.000Z'),
+  });
+
+  const report = await service.generate({ ...INPUT, summaryProvider: 'codex' });
+  assert.equal(report.summaryProvider, 'codex');
 });

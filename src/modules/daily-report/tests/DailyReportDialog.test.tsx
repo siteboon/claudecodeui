@@ -15,6 +15,7 @@ const report: DailyReport = {
   locale: 'en',
   generatedAt: '2026-09-20T10:00:01.000Z',
   snapshotAt: '2026-09-20T10:00:00.000Z',
+  summaryProvider: 'claude',
   mode: 'ai',
   coverage: { projectCount: 1, sessionCount: 9, partial: false, warnings: [] },
   highlights: ['Implemented the report.', 'Verified the result.'],
@@ -31,8 +32,8 @@ const report: DailyReport = {
 };
 
 vi.mock('@/modules/daily-report/hooks/useDailyReport', () => ({
-  useDailyReport: (_open: boolean, locale: string) => ({
-    report: { ...report, locale },
+  useDailyReport: (_open: boolean, locale: string, summaryProvider: 'claude' | 'codex') => ({
+    report: { ...report, locale, summaryProvider },
     isLoading: false,
     isGenerating: false,
     error: null,
@@ -88,4 +89,18 @@ test('offers common report languages and renders summary highlights as a list', 
   assert.equal(language.options.length, 10);
   assert.ok(screen.getByText('Implemented the report.').closest('li'));
   assert.ok(screen.getByText('Verified the result.').closest('li'));
+});
+
+test('allows selecting Codex and remembers the provider', () => {
+  window.localStorage.clear();
+  render(
+    <I18nextProvider i18n={i18n}>
+      <MemoryRouter>
+        <DailyReportDialog open onOpenChange={() => undefined} />
+      </MemoryRouter>
+    </I18nextProvider>,
+  );
+
+  fireEvent.change(screen.getByLabelText('Summary provider'), { target: { value: 'codex' } });
+  assert.equal(window.localStorage.getItem('cloudcli.dailyReport.summaryProvider'), 'codex');
 });

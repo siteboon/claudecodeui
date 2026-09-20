@@ -12,7 +12,7 @@
   "reportLanguage": "Report language",
   "summary": "Today's summary",
   "summaryProvider": "Summary provider",
-  "providerNote": "Claude runs in an isolated, no-tools session.",
+  "providerNote": "Uses existing local configuration",
   "generate": "Generate report",
   "refresh": "Update report",
   "copy": "Copy",

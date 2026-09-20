@@ -38,7 +38,7 @@ test('isolated summarizer disables tools, settings, plugins, and persistence', a
       environment: { ANTHROPIC_AUTH_TOKEN: 'test-token' },
       model: 'local-model',
     }),
-    runQuery: ((input: { prompt: string; options: Record<string, unknown> }) => {
+    runClaudeQuery: ((input: { prompt: string; options: Record<string, unknown> }) => {
       capturedOptions = input.options;
       return fakeQuery({
         highlights: ['Work completed.'],
@@ -53,7 +53,7 @@ test('isolated summarizer disables tools, settings, plugins, and persistence', a
     }) as never,
   });
 
-  const result = await summarizer.summarize([EVIDENCE], 'en');
+  const result = await summarizer.summarize([EVIDENCE], 'en', 'claude');
   assert.deepEqual(capturedOptions?.tools, []);
   assert.deepEqual(capturedOptions?.allowedTools, []);
   assert.deepEqual(capturedOptions?.mcpServers, {});
@@ -74,7 +74,7 @@ test('isolated summarizer disables tools, settings, plugins, and persistence', a
 test('summarizer rejects invented evidence ids', async () => {
   const summarizer = createDailyReportSummarizer({
     loadConfiguration: async () => ({ environment: {} }),
-    runQuery: (() => fakeQuery({
+    runClaudeQuery: (() => fakeQuery({
       highlights: ['Invented result.'],
       items: [{
         task: 'Fake',
@@ -87,7 +87,32 @@ test('summarizer rejects invented evidence ids', async () => {
   });
 
   await assert.rejects(
-    () => summarizer.summarize([EVIDENCE], 'en'),
+    () => summarizer.summarize([EVIDENCE], 'en', 'claude'),
     (error: unknown) => error instanceof DailyReportSummaryError && error.reason === 'invalid',
   );
+});
+
+test('Codex summarizer uses local defaults and validates structured output', async () => {
+  let capturedModel: string | undefined = 'not-called';
+  const summarizer = createDailyReportSummarizer({
+    runCodex: async (_prompt, _schema, signal, model) => {
+      assert.equal(signal.aborted, false);
+      capturedModel = model;
+      return {
+        highlights: ['Work completed.'],
+        items: [{
+          task: 'Implement report',
+          progress: 'Tests passed.',
+          nextStep: 'None (completed)',
+          status: 'completed',
+          evidenceIds: ['evidence-1'],
+        }],
+      };
+    },
+  });
+
+  const result = await summarizer.summarize([EVIDENCE], 'en', 'codex');
+  assert.equal(capturedModel, undefined);
+  assert.equal(result.items[0].task, 'Implement report');
+  assert.deepEqual(result.highlights, ['Work completed.']);
 });

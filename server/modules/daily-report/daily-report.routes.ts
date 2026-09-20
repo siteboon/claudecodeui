@@ -1,6 +1,6 @@
 import { Router, type Request } from 'express';
 
-import type { DailyReportGenerateInput, LLMProvider } from '@/shared/types.js';
+import type { DailyReportGenerateInput, DailyReportSummaryProvider } from '@/shared/types.js';
 import { AppError, asyncHandler, createApiSuccessResponse } from '@/shared/utils.js';
 
 import { dateInTimezone } from './daily-report-collector.service.js';
@@ -37,8 +37,8 @@ function parseInput(request: AuthenticatedRequest, includeBody: boolean): DailyR
   }
   const locale = parseString(source.locale || 'en', 'locale', 20);
   const rawProvider = source.summaryProvider || 'claude';
-  if (rawProvider !== 'claude') {
-    throw new AppError('Only Claude supports isolated Daily Report summarization.', {
+  if (rawProvider !== 'claude' && rawProvider !== 'codex') {
+    throw new AppError('Daily Report summaryProvider must be claude or codex.', {
       code: 'SUMMARY_PROVIDER_UNSUPPORTED',
       statusCode: 400,
     });
@@ -48,7 +48,7 @@ function parseInput(request: AuthenticatedRequest, includeBody: boolean): DailyR
     date,
     timezone,
     locale,
-    summaryProvider: rawProvider as LLMProvider,
+    summaryProvider: rawProvider as DailyReportSummaryProvider,
     ...(model ? { model } : {}),
     refresh: includeBody && source.refresh === true,
     scopeId: String(request.user?.id ?? 'local'),
@@ -64,7 +64,10 @@ export function createDailyReportRouter(service: DailyReportRouteService = daily
     response.json(createApiSuccessResponse({
       status: report ? 'ready' : 'not_generated',
       report,
-      summaryProviders: [{ provider: 'claude', isolated: true }],
+      summaryProviders: [
+        { provider: 'claude', isolated: true },
+        { provider: 'codex', isolated: true },
+      ],
     }));
   }));
   router.post('/generate', asyncHandler(async (request, response) => {

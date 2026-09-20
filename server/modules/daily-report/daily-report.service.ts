@@ -29,7 +29,7 @@ type DailyReportServiceDependencies = {
 
 const defaultDependencies: DailyReportServiceDependencies = {
   collect: (date, timezone, snapshotAt) => dailyReportCollector.collect(date, timezone, snapshotAt),
-  summarize: (evidence, locale, model) => dailyReportSummarizer.summarize(evidence, locale, model),
+  summarize: (evidence, locale, provider, model) => dailyReportSummarizer.summarize(evidence, locale, provider, model),
   listAccessibleSessionIds: () => new Set(sessionsService.listDailyReportSessions().map((session) => session.sessionId)),
   now: () => new Date(),
 };
@@ -95,7 +95,12 @@ export function createDailyReportService(
 
     if (collection.evidence.length > 0) {
       try {
-        const summary = await dependencies.summarize(collection.evidence, input.locale, input.model);
+        const summary = await dependencies.summarize(
+          collection.evidence,
+          input.locale,
+          input.summaryProvider || 'claude',
+          input.model,
+        );
         mode = 'ai';
         highlights = summary.highlights;
         items = summary.items;
@@ -117,6 +122,7 @@ export function createDailyReportService(
       locale: input.locale,
       generatedAt: dependencies.now().toISOString(),
       snapshotAt: snapshotAt.toISOString(),
+      summaryProvider: input.summaryProvider || 'claude',
       mode,
       coverage: {
         projectCount: collection.projectCount,

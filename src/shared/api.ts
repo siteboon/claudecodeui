@@ -546,13 +546,13 @@ export const api = {
   },
 
   dailyReports: {
-    today: (timezone: string, locale: string, summaryProvider = 'claude') =>
+    today: (timezone: string, locale: string, summaryProvider: 'claude' | 'codex' = 'claude') =>
       get(`/api/daily-reports/today${query({ timezone, locale, summaryProvider })}`),
     generate: (input: {
       date: string;
       timezone: string;
       locale: string;
-      summaryProvider: string;
+      summaryProvider: 'claude' | 'codex';
       model?: string;
       refresh?: boolean;
     }, options: ApiRequestOptions = {}) => post('/api/daily-reports/generate', input, options),

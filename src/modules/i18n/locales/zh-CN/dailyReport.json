@@ -12,7 +12,7 @@
   "reportLanguage": "报告语言",
   "summary": "今日总结",
   "summaryProvider": "总结模型",
-  "providerNote": "Claude 将在无工具、隔离且不保存会话的环境中运行。",
+  "providerNote": "使用本机已有配置",
   "generate": "生成日报",
   "refresh": "更新日报",
   "copy": "复制",

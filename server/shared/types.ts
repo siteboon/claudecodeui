@@ -558,6 +558,7 @@ export type DailyReport = {
   locale: string;
   generatedAt: string;
   snapshotAt: string;
+  summaryProvider: DailyReportSummaryProvider;
   mode: 'ai' | 'activity';
   coverage: {
     projectCount: number;
@@ -569,12 +570,15 @@ export type DailyReport = {
   items: DailyReportItem[];
 };
 
+/** Providers that can generate Daily Report summaries from their existing local CLI configuration. */
+export type DailyReportSummaryProvider = Extract<LLMProvider, 'claude' | 'codex'>;
+
 /** Validated service input for creating a Daily Report snapshot. */
 export type DailyReportGenerateInput = {
   date: string;
   timezone: string;
   locale: string;
-  summaryProvider?: LLMProvider;
+  summaryProvider?: DailyReportSummaryProvider;
   model?: string;
   refresh?: boolean;
   scopeId: string;

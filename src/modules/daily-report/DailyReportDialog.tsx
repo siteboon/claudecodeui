@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
 import { useDailyReport } from '@/modules/daily-report/hooks/useDailyReport';
-import type { DailyReport } from '@/shared/types';
+import type { DailyReport, DailyReportSummaryProvider } from '@/shared/types';
 import { Button, Dialog, DialogContent, DialogTitle } from '@/shared/ui';
 import { copyTextToClipboard } from '@/shared/utils';
 
@@ -15,6 +15,7 @@ type DailyReportDialogProps = {
 
 const INITIAL_ITEM_LIMIT = 8;
 const REPORT_LANGUAGE_STORAGE_KEY = 'cloudcli.dailyReport.locale';
+const SUMMARY_PROVIDER_STORAGE_KEY = 'cloudcli.dailyReport.summaryProvider';
 const REPORT_LANGUAGES = [
   { value: 'zh-CN', label: '简体中文' },
   { value: 'zh-TW', label: '繁體中文' },
@@ -33,6 +34,10 @@ function initialReportLocale(language: string): ReportLocale {
   const stored = window.localStorage.getItem(REPORT_LANGUAGE_STORAGE_KEY);
   if (REPORT_LANGUAGES.some(({ value }) => value === stored)) return stored as ReportLocale;
   return language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en';
+}
+
+function initialSummaryProvider(): DailyReportSummaryProvider {
+  return window.localStorage.getItem(SUMMARY_PROVIDER_STORAGE_KEY) === 'codex' ? 'codex' : 'claude';
 }
 
 function reportMarkdown(report: DailyReport, labels: Record<string, string>): string {
@@ -62,18 +67,21 @@ export function DailyReportDialog({ open, onOpenChange }: DailyReportDialogProps
   const [reportLocale, setReportLocale] = useState<ReportLocale>(() => (
     initialReportLocale(i18n.resolvedLanguage || i18n.language || 'en')
   ));
+  // The selected provider chooses which already-configured local CLI performs summarization.
+  const [summaryProvider, setSummaryProvider] = useState<DailyReportSummaryProvider>(initialSummaryProvider);
   const { t } = useTranslation('dailyReport', { lng: reportLocale });
   const navigate = useNavigate();
   const { report, isLoading, isGenerating, error, timezone, generate } = useDailyReport(
     open,
     reportLocale,
+    summaryProvider,
   );
   // Expansion is user-controlled so the default report stays scannable at eight items.
   const [expanded, setExpanded] = useState(false);
   // Copy feedback is transient and announced through the button label.
   const [copied, setCopied] = useState(false);
 
-  const displayedReport = report?.locale === reportLocale ? report : null;
+  const displayedReport = report?.locale === reportLocale && report.summaryProvider === summaryProvider ? report : null;
   const visibleItems = expanded ? displayedReport?.items || [] : displayedReport?.items.slice(0, INITIAL_ITEM_LIMIT) || [];
   const hiddenCount = Math.max(0, (displayedReport?.items.length || 0) - INITIAL_ITEM_LIMIT);
   const copyReport = async () => {
@@ -142,6 +150,27 @@ export function DailyReportDialog({ open, onOpenChange }: DailyReportDialogProps
         </header>
 
         <main className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+          <div className="mb-4 flex items-center gap-2">
+            <label className="text-xs text-muted-foreground" htmlFor="daily-report-provider">
+              {t('summaryProvider')}
+            </label>
+            <select
+              id="daily-report-provider"
+              className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
+              value={summaryProvider}
+              onChange={(event) => {
+                const provider = event.target.value as DailyReportSummaryProvider;
+                window.localStorage.setItem(SUMMARY_PROVIDER_STORAGE_KEY, provider);
+                setExpanded(false);
+                setSummaryProvider(provider);
+              }}
+              disabled={isGenerating}
+            >
+              <option value="claude">Claude</option>
+              <option value="codex">Codex</option>
+            </select>
+            <span className="text-xs text-muted-foreground">{t('providerNote')}</span>
+          </div>
           <div className="sr-only" aria-live="polite">
             {isLoading ? t('loading') : isGenerating ? t('generating') : ''}
           </div>
@@ -154,18 +183,6 @@ export function DailyReportDialog({ open, onOpenChange }: DailyReportDialogProps
           {!isLoading && !displayedReport && !isGenerating && (
             <div className="mx-auto flex min-h-48 max-w-md flex-col items-center justify-center text-center">
               <p className="text-sm text-muted-foreground">{t('notGenerated')}</p>
-              <label className="mt-4 text-xs text-muted-foreground" htmlFor="daily-report-provider">
-                {t('summaryProvider')}
-              </label>
-              <select
-                id="daily-report-provider"
-                className="mt-1 h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
-                defaultValue="claude"
-                onChange={() => localStorage.setItem('cloudcli.dailyReport.summaryProvider', 'claude')}
-              >
-                <option value="claude">Claude</option>
-              </select>
-              <p className="mt-2 text-xs text-muted-foreground">{t('providerNote')}</p>
             </div>
           )}
           {error && (

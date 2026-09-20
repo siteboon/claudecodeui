@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { api, readApiJson } from '@/shared/api';
-import type { DailyReport, DailyReportStatus } from '@/shared/types';
+import type { DailyReport, DailyReportStatus, DailyReportSummaryProvider } from '@/shared/types';
 
 type ApiEnvelope<T> = { success: true; data: T };
 
@@ -17,7 +17,7 @@ function localDate(timezone: string): string {
 }
 
 /** Used by DailyReportDialog to load cache on open and generate only after an explicit action. */
-export function useDailyReport(open: boolean, locale: string) {
+export function useDailyReport(open: boolean, locale: string, summaryProvider: DailyReportSummaryProvider) {
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   // The cached/generated report is retained across closing so reopening is instant.
   const [report, setReport] = useState<DailyReport | null>(null);
@@ -34,7 +34,7 @@ export function useDailyReport(open: boolean, locale: string) {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await api.dailyReports.today(timezone, locale, 'claude');
+      const response = await api.dailyReports.today(timezone, locale, summaryProvider);
       const payload = await readApiJson<ApiEnvelope<DailyReportStatus>>(response);
       setReport(payload.data.report);
     } catch (caught) {
@@ -42,7 +42,7 @@ export function useDailyReport(open: boolean, locale: string) {
     } finally {
       setIsLoading(false);
     }
-  }, [locale, timezone]);
+  }, [locale, summaryProvider, timezone]);
 
   useEffect(() => {
     // Defer the request one task so opening the Dialog can paint before cache I/O updates state.
@@ -64,7 +64,7 @@ export function useDailyReport(open: boolean, locale: string) {
         date: localDate(timezone),
         timezone,
         locale,
-        summaryProvider: 'claude',
+        summaryProvider,
         refresh,
       }, { signal: controller.signal });
       const payload = await readApiJson<ApiEnvelope<DailyReport>>(response);
@@ -79,7 +79,7 @@ export function useDailyReport(open: boolean, locale: string) {
         setIsGenerating(false);
       }
     }
-  }, [locale, timezone]);
+  }, [locale, summaryProvider, timezone]);
 
   return { report, isLoading, isGenerating, error, timezone, generate };
 }

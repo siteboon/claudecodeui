@@ -148,6 +148,7 @@ export type DailyReport = {
   locale: string;
   generatedAt: string;
   snapshotAt: string;
+  summaryProvider: DailyReportSummaryProvider;
   mode: 'ai' | 'activity';
   coverage: {
     projectCount: number;
@@ -159,11 +160,14 @@ export type DailyReport = {
   items: DailyReportItem[];
 };
 
+/** Locally configured providers available for generating Daily Report summaries. */
+export type DailyReportSummaryProvider = Extract<LLMProvider, 'claude' | 'codex'>;
+
 /** Cache status returned when opening Daily Report without triggering generation. */
 export type DailyReportStatus = {
   status: 'ready' | 'not_generated';
   report: DailyReport | null;
-  summaryProviders: Array<{ provider: 'claude'; isolated: true }>;
+  summaryProviders: Array<{ provider: DailyReportSummaryProvider; isolated: true }>;
 };
 
 /** Progress payload streamed while the backend enumerates projects, used to drive the sidebar loading bar. */
