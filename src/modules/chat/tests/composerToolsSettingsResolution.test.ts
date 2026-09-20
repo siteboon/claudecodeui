@@ -139,6 +139,38 @@ test('skipPermissions follows the sending provider, not Claude', async () => {
   assert.equal(opencodeOptions.skipPermissions, false);
 });
 
+/**
+ * `keepSessionAlive` decides whether background work survives the next
+ * message, and the server reads an absent field as an explicit "off". Every
+ * blob written before the setting existed lacks the key, so the default has to
+ * be applied to the field on the way out — the preference object is present,
+ * which means the lookup's fallback never runs.
+ */
+test('a Claude blob saved before the setting existed still sends it as on', async () => {
+  writeUserPreference('claudePermissions', {
+    allowedTools: ['claude-tool'],
+    disallowedTools: [],
+    skipPermissions: false,
+  });
+
+  const options = await submit('claude');
+
+  assert.equal(options.toolsSettings?.keepSessionAlive, true);
+});
+
+test('a Claude blob that switched the setting off is sent as off', async () => {
+  writeUserPreference('claudePermissions', {
+    allowedTools: [],
+    disallowedTools: [],
+    skipPermissions: false,
+    keepSessionAlive: false,
+  });
+
+  const options = await submit('claude');
+
+  assert.equal(options.toolsSettings?.keepSessionAlive, false);
+});
+
 test('a provider with nothing stored sends empty tool settings, not Claude settings', async () => {
   writeUserPreference('claudePermissions', {
     allowedTools: ['claude-tool'],

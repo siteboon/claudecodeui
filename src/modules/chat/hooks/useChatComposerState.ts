@@ -588,14 +588,32 @@ export function useChatComposerState({
   // queued message keeps the provider settings it was composed under even if
   // it is later dispatched outside this composer (app-level auto-send).
   const buildSendOptions = useCallback((currentInput: string): QueuedSendOptions => {
-    const getToolsSettings = () => readUserPreference(
-      PROVIDER_PERMISSION_PREFERENCE_KEYS[provider],
-      {
-        allowedTools: [],
-        disallowedTools: [],
-        skipPermissions: false,
-      },
-    );
+    // The stored blob's shape differs per provider (Claude keeps `allowedTools`,
+    // Cursor `allowedCommands`), so it is passed through as-is and only the one
+    // field defaulted here is typed.
+    type StoredProviderPermissions = Record<string, unknown> & { keepSessionAlive?: boolean };
+
+    const getToolsSettings = (): StoredProviderPermissions => {
+      const stored = readUserPreference<StoredProviderPermissions>(
+        PROVIDER_PERMISSION_PREFERENCE_KEYS[provider],
+        {
+          allowedTools: [],
+          disallowedTools: [],
+          skipPermissions: false,
+        },
+      );
+      // Only Claude's runtime reads this, so only Claude's settings carry it.
+      if (provider !== 'claude') {
+        return stored;
+      }
+      // Defaulted on the field rather than on the fallback above: a blob saved
+      // before this setting existed is present but lacks the key, so the
+      // fallback never runs, and the server reads the absent field as an
+      // explicit "off" - which stops background work surviving the next
+      // message. Same default as the settings dialog, which is what the
+      // checkbox shows the user.
+      return { ...stored, keepSessionAlive: stored.keepSessionAlive ?? true };
+    };
 
     const toolsSettings = getToolsSettings();
 
