@@ -116,6 +116,12 @@ export function DailyReportDialog({ open, onOpenChange }: DailyReportDialogProps
     setExpanded(false);
     setPreferredSummaryProvider(provider);
   };
+  const selectReportLocale = (locale: ReportLocale) => {
+    window.localStorage.setItem(REPORT_LANGUAGE_STORAGE_KEY, locale);
+    setExpanded(false);
+    setReportLocale(locale);
+  };
+  const selectedLanguage = REPORT_LANGUAGES.find(({ value }) => value === reportLocale) ?? REPORT_LANGUAGES[2];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -137,23 +143,20 @@ export function DailyReportDialog({ open, onOpenChange }: DailyReportDialogProps
             </p>
           </div>
           <div className="ml-3 flex shrink-0 items-center gap-2">
-            <label className="sr-only" htmlFor="daily-report-language">{t('reportLanguage')}</label>
-            <select
-              id="daily-report-language"
-              className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
-              value={reportLocale}
-              onChange={(event) => {
-                const locale = event.target.value as ReportLocale;
-                window.localStorage.setItem(REPORT_LANGUAGE_STORAGE_KEY, locale);
-                setExpanded(false);
-                setReportLocale(locale);
-              }}
+            <ActionMenu
+              label={selectedLanguage.label}
+              ariaLabel={t('reportLanguage')}
+              align="right"
               disabled={isGenerating}
-            >
-              {REPORT_LANGUAGES.map(({ value, label }) => (
-                <option key={value} value={value}>{label}</option>
-              ))}
-            </select>
+              triggerClassName="h-8 min-w-[112px] justify-between gap-2 rounded-lg px-3 font-sans text-sm font-medium shadow-none"
+              menuClassName="mt-1 max-h-[min(70vh,360px)] min-w-[168px] overflow-y-auto rounded-lg font-sans"
+              items={REPORT_LANGUAGES.map(({ value, label }) => ({
+                key: value,
+                label,
+                icon: reportLocale === value ? Check : undefined,
+                onSelect: () => selectReportLocale(value),
+              }))}
+            />
             <button
               type="button"
               className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"

@@ -76,7 +76,8 @@ test('switches the report content and dialog labels to Simplified Chinese', () =
     </I18nextProvider>,
   );
 
-  fireEvent.change(screen.getByLabelText('Report language'), { target: { value: 'zh-CN' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Report language' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: '简体中文' }));
   assert.ok(screen.getByText(/做的事情: Task 1$/));
   assert.equal(window.localStorage.getItem('cloudcli.dailyReport.locale'), 'zh-CN');
 });
@@ -91,8 +92,8 @@ test('offers common report languages and renders summary highlights as a list', 
     </I18nextProvider>,
   );
 
-  const language = screen.getByLabelText('Report language') as HTMLSelectElement;
-  assert.equal(language.options.length, 10);
+  fireEvent.click(screen.getByRole('button', { name: 'Report language' }));
+  assert.equal(screen.getAllByRole('menuitem').length, 10);
   assert.ok(screen.getByText('Implemented the report.').closest('li'));
   assert.ok(screen.getByText('Verified the result.').closest('li'));
 });
