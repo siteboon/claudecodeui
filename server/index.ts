@@ -84,7 +84,11 @@ console.log('SERVER_PORT from env:', process.env.SERVER_PORT);
 const app = express();
 const server = http.createServer(app);
 const DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS = 30_000;
-const configuredShutdownDrainTimeoutMs = Number(process.env.CLOUDCLI_SHUTDOWN_DRAIN_TIMEOUT_MS);
+const configuredShutdownDrainTimeout = process.env.CLOUDCLI_SHUTDOWN_DRAIN_TIMEOUT_MS;
+const configuredShutdownDrainTimeoutMs = configuredShutdownDrainTimeout === undefined
+    || configuredShutdownDrainTimeout.trim() === ''
+    ? Number.NaN
+    : Number(configuredShutdownDrainTimeout);
 const shutdownDrainTimeoutMs = Number.isFinite(configuredShutdownDrainTimeoutMs)
     && configuredShutdownDrainTimeoutMs >= 0
     ? configuredShutdownDrainTimeoutMs
