@@ -59,23 +59,17 @@ const supersededInstances = new WeakSet();
 
 const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS, 10) || 55000;
 
-// How long background work is allowed to keep running after a turn ends. This drives
-// two halves of the same behaviour:
+// Held stdin is what lets the CLI keep working past a turn's `result`. The SDK
+// closes stdin as soon as a turn ends, and the CLI reads that EOF as "print
+// wind-down" — killing background shells after a short grace period. Holding it
+// open also lets the CLI push follow-up turns (background-task completions,
+// Monitor notifications, scheduled wake-ups).
 //
-//  1. Passed to the spawned CLI as CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS, which is how
-//     long it waits for still-running background *agents* before killing them.
-//  2. A backstop on how long we hold the SDK's stdin open after a turn's `result`.
-//     The SDK closes stdin as soon as a turn ends, and the CLI reads that EOF as
-//     "print wind-down" — killing background *shells* after a short grace period,
-//     which the ceiling above does not cover. Holding stdin open also lets the CLI
-//     push follow-up turns (background-task completions, Monitor notifications,
-//     scheduled wake-ups).
-//
-// The hold normally ends long before this: a turn with nothing outstanding closes
-// stdin immediately, background work releases it as soon as it reports back, and a
-// new turn supersedes the previous hold. This only catches background work that
-// never reports at all, so an abandoned session cannot leak a CLI process forever.
-const BG_WAIT_CEILING_MS = 30 * 60 * 1000;
+// The hold normally ends long before any limit below: a turn with nothing
+// outstanding closes stdin immediately, background work releases it as soon as it
+// reports back, and a new turn supersedes the previous hold. The limits only catch
+// background work that never reports at all, so an abandoned session cannot leak a
+// CLI process forever.
 
 // The hold is bounded by two independent timers, because one cannot express both
 // limits. The idle timer is pushed back by every frame that arrives, so it asks
@@ -88,8 +82,31 @@ const BG_WAIT_CEILING_MS = 30 * 60 * 1000;
 // download can legitimately say nothing for a long time — so the idle limit stays
 // generous, and the total limit is what actually stops an abandoned session from
 // pinning a CLI process indefinitely.
-const BG_IDLE_RELEASE_MS = BG_WAIT_CEILING_MS;
+const BG_IDLE_RELEASE_MS = 30 * 60 * 1000;
 const BG_TOTAL_HOLD_MS = 2 * 60 * 60 * 1000;
+
+// What the CLI child is told to wait for still-running background *agents* before
+// it kills them, as CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS. `0` means "wait
+// indefinitely", and that is the default on purpose.
+//
+// This used to be the same 30 minutes as BG_IDLE_RELEASE_MS, and that is what
+// silently ended every workflow running longer than half an hour. The ceiling is a
+// watchdog *inside* the child process; it never looks at stdin, so none of the hold
+// logic in this file could protect the work, and the only trace was one line on the
+// child's stderr. Nothing becomes unbounded by removing it: BG_TOTAL_HOLD_MS is the
+// backstop that the shared value was also serving, and when that one expires we
+// close the process ourselves and log that we did.
+const CLI_BG_WAIT_CEILING_MS_DEFAULT = 0;
+
+// Read per run rather than once at import, so a test can put the watchdog back at a
+// couple of seconds and reproduce the kill without waiting out a real ceiling.
+// Anything that is not a finite, non-negative number of milliseconds — unset, empty,
+// a word, a negative — falls back to "wait indefinitely" rather than to the value
+// that used to kill workflows.
+function cliBackgroundWaitCeilingMs() {
+  const parsed = Number.parseInt(process.env.CLOUDCLI_CLI_BG_WAIT_CEILING_MS ?? '', 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : CLI_BG_WAIT_CEILING_MS_DEFAULT;
+}
 
 /**
  * The pair of timers that bound a held run, as a unit so the rule "whichever
@@ -524,7 +541,9 @@ function mapCliOptionsToSDK(options = {}) {
 
   // Forward all host env vars (e.g. ANTHROPIC_BASE_URL) to the subprocess.
   // Since SDK 0.2.113, options.env replaces process.env instead of overlaying it.
-  sdkOptions.env = { ...process.env, CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: String(BG_WAIT_CEILING_MS) };
+  // Always set explicitly: spreading process.env would otherwise let a stray
+  // CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS in the host environment reinstate the kill.
+  sdkOptions.env = { ...process.env, CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: String(cliBackgroundWaitCeilingMs()) };
 
   // Resolve the executable eagerly on Windows because the SDK uses raw child_process.spawn,
   // which does not reliably follow npm's shell wrappers like cross-spawn does.
@@ -1282,6 +1301,11 @@ async function loadMcpConfig(cwd) {
  */
 async function queryClaudeSDK(command, options = {}, ws, context) {
   const { sessionId, sessionSummary } = options;
+  // The one seam that makes the hold logic drivable without a CLI process: a test
+  // hands in a scripted stream instead of `query()`, so a scenario that takes half
+  // an hour against the real child runs here in seconds. Ported from upstream
+  // #1291/#1347. Nothing in production passes it.
+  const createQuery = context?.createQuery ?? query;
   // Callers pass the stable app session id; the SDK only understands the
   // provider-native id recorded on the session row.
   const providerSessionId = context.resolveProviderSessionId(sessionId);
@@ -1660,7 +1684,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         : createHeldPromptStream(promptMessages);
       releasePromptStream = heldPrompt.release;
       try {
-        queryInstance = query({
+        queryInstance = createQuery({
           prompt: heldPrompt.stream,
           options: sdkOptions
         });
@@ -1676,7 +1700,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         heldSession = null;
         heldPrompt = createHeldPromptStream(promptMessages);
         releasePromptStream = heldPrompt.release;
-        queryInstance = query({
+        queryInstance = createQuery({
           prompt: heldPrompt.stream,
           options: sdkOptions
         });
