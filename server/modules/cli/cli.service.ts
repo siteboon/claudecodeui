@@ -8,7 +8,7 @@ import type {
   CliPackageMetadata,
   SandboxCommandService,
 } from '@/shared/types.js';
-import { terminalTextStyles } from '@/shared/utils.js';
+import { isUpdateCheckDisabled, terminalTextStyles } from '@/shared/utils.js';
 
 type CliServiceDependencies = {
   applicationRoot: string;
@@ -106,6 +106,8 @@ function showStatus(dependencies: CliServiceDependencies): void {
   output.log(`       DATABASE_PATH: ${terminalTextStyles.dim(environment.DATABASE_PATH || '(using default location)')}`);
   output.log(`       CLAUDE_CLI_PATH: ${terminalTextStyles.dim(environment.CLAUDE_CLI_PATH || 'claude (default)')}`);
   output.log(`       CONTEXT_WINDOW: ${terminalTextStyles.dim(environment.CONTEXT_WINDOW || '160000 (default)')}`);
+  output.log(`       CLOUDCLI_DISABLE_UPDATE_CHECK: ${terminalTextStyles.dim(environment.CLOUDCLI_DISABLE_UPDATE_CHECK || '(not set)')}`);
+  output.log(`       NO_UPDATE_NOTIFIER: ${terminalTextStyles.dim(environment.NO_UPDATE_NOTIFIER || '(not set)')}`);
   output.log(`\n${terminalTextStyles.info('[INFO]')} Claude Projects Folder:`);
   output.log(`       ${terminalTextStyles.dim(claudeProjectsPath)}`);
   output.log(`       Status: ${fileSystem.pathExists(claudeProjectsPath)
@@ -161,6 +163,8 @@ Environment Variables:
   DATABASE_PATH       Set custom database location
   CLAUDE_CLI_PATH     Set custom Claude CLI path
   CONTEXT_WINDOW      Set context window size (default: 160000)
+  CLOUDCLI_DISABLE_UPDATE_CHECK  Disable automatic update checks (true/1)
+  NO_UPDATE_NOTIFIER  Also disables update checks (any non-empty value)
 
 Documentation:
   ${dependencies.packageMetadata.homepage || 'https://github.com/siteboon/claudecodeui'}
@@ -230,7 +234,9 @@ export function createCliService(dependencies: CliServiceDependencies): CliAppli
 
       switch (parsedArguments.command) {
         case 'start':
-          void checkForUpdates(true);
+          // Explicit `cloudcli update` intentionally still checks; only the
+          // implicit start-up check honors the operator opt-out.
+          if (!isUpdateCheckDisabled(dependencies.environment)) void checkForUpdates(true);
           await dependencies.startServer();
           return 0;
         case 'sandbox':
