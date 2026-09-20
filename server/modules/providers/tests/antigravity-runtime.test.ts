@@ -84,11 +84,13 @@ test('Antigravity permission modes map to agy controls', () => {
 
 test('Antigravity streams stdout before exit and captures a new provider session id', async () => {
   const child = createFakeProcess();
+  let capturedCommand = '';
   let capturedArgs: string[] = [];
   let capturedCwd = '';
   let historyReadCount = 0;
   const runtime = createAntigravityRuntime({
-    spawnProcess: (_command, args, options) => {
+    spawnProcess: (command, args, options) => {
+      capturedCommand = command;
       capturedArgs = args;
       capturedCwd = options.cwd;
       queueMicrotask(() => {
@@ -141,8 +143,35 @@ test('Antigravity streams stdout before exit and captures a new provider session
   assert.equal(messages.some((message) => message.kind === 'session_created'), true);
   assert.equal(messages.filter((message) => message.kind === 'complete').length, 1);
   assert.deepEqual(capturedArgs.slice(-2), ['--print', 'Hi']);
+  assert.equal(capturedCommand, 'agy');
   assert.equal(capturedArgs.includes('--conversation'), false);
   assert.equal(capturedCwd, '/workspace');
+});
+
+test('Antigravity runtime uses the configured AGY executable', { concurrency: false }, async () => {
+  const previousPath = process.env.AGY_CLI_PATH;
+  const child = createFakeProcess();
+  let capturedCommand = '';
+  const runtime = createAntigravityRuntime({
+    spawnProcess: (command) => {
+      capturedCommand = command;
+      queueMicrotask(() => child.emit('close', 0, null));
+      return child as never;
+    },
+    readConversationDbFiles: async () => [],
+  });
+
+  try {
+    process.env.AGY_CLI_PATH = '  "/opt/agent wrappers/agy"  ';
+    await runtime.run('Hi', {}, createWriter().writer, createRuntimeContext());
+    assert.equal(capturedCommand, '/opt/agent wrappers/agy');
+  } finally {
+    if (previousPath === undefined) {
+      delete process.env.AGY_CLI_PATH;
+    } else {
+      process.env.AGY_CLI_PATH = previousPath;
+    }
+  }
 });
 
 test('Antigravity resumes with the provider-native conversation id', async () => {

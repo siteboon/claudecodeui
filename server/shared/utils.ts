@@ -1128,6 +1128,33 @@ export function flattenPromptForWindowsShell(prompt: string): string {
 
 // ---------------------------
 //----------------- PROVIDER CLI ENVIRONMENT UTILITIES ------------
+/**
+ * Resolves an operator-configured provider executable without invoking a
+ * shell. Antigravity auth, model discovery, and runtime adapters share this
+ * so every provider subprocess uses the same executable override. Matching
+ * outer quotes are removed to support values copied from shell-style env files.
+ */
+export function resolveConfiguredCliExecutable(
+  configuredPath: string | undefined,
+  defaultCommand: string,
+): string {
+  const trimmedPath = configuredPath?.trim();
+  if (!trimmedPath) {
+    return defaultCommand;
+  }
+
+  const quote = trimmedPath[0];
+  if (
+    trimmedPath.length >= 2
+    && (quote === '"' || quote === "'")
+    && trimmedPath.at(-1) === quote
+  ) {
+    return trimmedPath.slice(1, -1).trim() || defaultCommand;
+  }
+
+  return trimmedPath;
+}
+
 function readEnvValue(env: NodeJS.ProcessEnv, key: string): string | undefined {
   const resolvedKey = Object.keys(env).find((envKey) => envKey.toLowerCase() === key.toLowerCase());
   return resolvedKey ? env[resolvedKey] : undefined;

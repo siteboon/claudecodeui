@@ -16,6 +16,7 @@ import {
   createCompleteMessage,
   createNormalizedMessage,
   flattenPromptForWindowsShell,
+  resolveConfiguredCliExecutable,
 } from '@/shared/utils.js';
 
 type AntigravityProcess = ReturnType<typeof crossSpawn> & {
@@ -217,11 +218,15 @@ async function runAntigravity(
   args.push('--print', flattenPromptForWindowsShell(command.trim()));
 
   return new Promise((resolve, reject) => {
-    const antigravityProcess = dependencies.spawnProcess('agy', args, {
-      cwd: workingDirectory,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: buildProviderCliEnv(),
-    }) as AntigravityProcess;
+    const antigravityProcess = dependencies.spawnProcess(
+      resolveConfiguredCliExecutable(process.env.AGY_CLI_PATH, 'agy'),
+      args,
+      {
+        cwd: workingDirectory,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: buildProviderCliEnv(),
+      },
+    ) as AntigravityProcess;
     let stderrBuffer = '';
     let settled = false;
     let completeSent = false;

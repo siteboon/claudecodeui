@@ -34,7 +34,7 @@ process.exit(1);
   await chmod(commandPath, 0o755);
 }
 
-test('Antigravity auth finds agy in npm global prefix bin even when PATH omits it', { concurrency: false }, async () => {
+test('Antigravity auth uses AGY_CLI_PATH for installation and model probes', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'antigravity-auth-'));
   const binDir = path.join(tempRoot, 'bin');
   const pathKey = findEnvKey('PATH');
@@ -42,12 +42,14 @@ test('Antigravity auth finds agy in npm global prefix bin even when PATH omits i
   const previousPath = process.env[pathKey];
   const previousPathExt = process.env[pathExtKey];
   const previousNpmPrefix = process.env.npm_config_prefix;
+  const previousAgyCliPath = process.env.AGY_CLI_PATH;
 
   try {
     await mkdir(binDir);
     await createFakeAntigravityExecutable(binDir);
 
     process.env[pathKey] = '/usr/bin';
+    process.env.AGY_CLI_PATH = path.join(binDir, process.platform === 'win32' ? 'agy.cmd' : 'agy');
     process.env.npm_config_prefix = tempRoot;
     if (process.platform === 'win32') {
       process.env[pathExtKey] = previousPathExt?.toUpperCase().includes('.CMD')
@@ -77,6 +79,12 @@ test('Antigravity auth finds agy in npm global prefix bin even when PATH omits i
       delete process.env.npm_config_prefix;
     } else {
       process.env.npm_config_prefix = previousNpmPrefix;
+    }
+
+    if (previousAgyCliPath === undefined) {
+      delete process.env.AGY_CLI_PATH;
+    } else {
+      process.env.AGY_CLI_PATH = previousAgyCliPath;
     }
 
     await rm(tempRoot, { recursive: true, force: true });

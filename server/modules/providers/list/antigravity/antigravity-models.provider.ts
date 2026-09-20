@@ -5,6 +5,7 @@ import type {
 } from '@/shared/types.js';
 import {
   buildDefaultProviderCurrentActiveModel,
+  resolveConfiguredCliExecutable,
   runProviderCliCommand,
 } from '@/shared/utils.js';
 
@@ -86,9 +87,13 @@ export const parseAntigravityModelsStdout = (stdout: string): ProviderModelsDefi
 export class AntigravityProviderModels implements IProviderModels {
   /** Queries `agy models`, falling back to a stable catalog on probe failures. */
   async getSupportedModels(): Promise<ProviderModelsDefinition> {
-    const result = await runProviderCliCommand('agy', ['models'], {
-      timeoutMs: MODELS_TIMEOUT_MS,
-    });
+    const result = await runProviderCliCommand(
+      resolveConfiguredCliExecutable(process.env.AGY_CLI_PATH, 'agy'),
+      ['models'],
+      {
+        timeoutMs: MODELS_TIMEOUT_MS,
+      },
+    );
 
     if (result.error || result.exitCode !== 0) {
       return ANTIGRAVITY_FALLBACK_MODELS;
