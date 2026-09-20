@@ -108,7 +108,8 @@ test('allows selecting Codex and remembers the provider', () => {
     </I18nextProvider>,
   );
 
-  fireEvent.change(screen.getByLabelText('Summary provider'), { target: { value: 'codex' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Summary provider' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Codex' }));
   assert.equal(window.localStorage.getItem('cloudcli.dailyReport.summaryProvider'), 'codex');
 });
 
@@ -124,7 +125,7 @@ test('defaults to Codex when Claude is not configured', async () => {
   );
 
   await waitFor(() => {
-    assert.equal((screen.getByLabelText('Summary provider') as HTMLSelectElement).value, 'codex');
+    assert.match(screen.getByRole('button', { name: 'Summary provider' }).textContent ?? '', /Codex/);
   });
   assert.ok(screen.getByText('Claude is unavailable; using local Codex configuration'));
 });

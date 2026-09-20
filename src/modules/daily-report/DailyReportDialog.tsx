@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, Copy, ExternalLink, RefreshCw, X } from 'lucide-react';
+import { Check, ChevronDown, Copy, ExternalLink, RefreshCw, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
@@ -8,7 +8,7 @@ import {
   useDailyReportProviderAvailability,
 } from '@/modules/daily-report/hooks/useDailyReport';
 import type { DailyReport, DailyReportSummaryProvider } from '@/shared/types';
-import { Button, Dialog, DialogContent, DialogTitle } from '@/shared/ui';
+import { ActionMenu, Button, Dialog, DialogContent, DialogTitle } from '@/shared/ui';
 import { copyTextToClipboard } from '@/shared/utils';
 
 type DailyReportDialogProps = {
@@ -111,6 +111,11 @@ export function DailyReportDialog({ open, onOpenChange }: DailyReportDialogProps
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1_500);
   };
+  const selectSummaryProvider = (provider: DailyReportSummaryProvider) => {
+    window.localStorage.setItem(SUMMARY_PROVIDER_STORAGE_KEY, provider);
+    setExpanded(false);
+    setPreferredSummaryProvider(provider);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -162,28 +167,29 @@ export function DailyReportDialog({ open, onOpenChange }: DailyReportDialogProps
 
         <main className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
           <div className="mb-4 flex items-center gap-2">
-            <label className="text-xs text-muted-foreground" htmlFor="daily-report-provider">
+            <span className="text-xs text-muted-foreground">
               {t('summaryProvider')}
-            </label>
-            <select
-              id="daily-report-provider"
-              className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
-              value={summaryProvider}
-              onChange={(event) => {
-                const provider = event.target.value as DailyReportSummaryProvider;
-                window.localStorage.setItem(SUMMARY_PROVIDER_STORAGE_KEY, provider);
-                setExpanded(false);
-                setPreferredSummaryProvider(provider);
-              }}
+            </span>
+            <ActionMenu
+              label={summaryProvider === 'claude' ? 'Claude' : 'Codex'}
+              ariaLabel={t('summaryProvider')}
+              align="left"
               disabled={isGenerating || isCheckingProviders || !hasAvailableProvider}
-            >
-              <option value="claude" disabled={!availableProviders.includes('claude')}>
-                Claude{!isCheckingProviders && !availableProviders.includes('claude') ? ` — ${t('notConfigured')}` : ''}
-              </option>
-              <option value="codex" disabled={!availableProviders.includes('codex')}>
-                Codex{!isCheckingProviders && !availableProviders.includes('codex') ? ` — ${t('notConfigured')}` : ''}
-              </option>
-            </select>
+              triggerClassName="h-8 min-w-[104px] justify-between gap-2 rounded-lg px-3 font-sans text-sm font-medium shadow-none"
+              menuClassName="mt-1 min-w-[152px] rounded-lg font-sans"
+              items={([
+                { provider: 'claude', label: 'Claude' },
+                { provider: 'codex', label: 'Codex' },
+              ] as const).map(({ provider, label }) => ({
+                key: provider,
+                label: availableProviders.includes(provider)
+                  ? label
+                  : `${label} — ${t('notConfigured')}`,
+                icon: summaryProvider === provider ? Check : undefined,
+                disabled: !availableProviders.includes(provider),
+                onSelect: () => selectSummaryProvider(provider),
+              }))}
+            />
             <span className="text-xs text-muted-foreground">
               {!isCheckingProviders && summaryProvider === 'codex' && !availableProviders.includes('claude')
                 ? t('codexFallback')
