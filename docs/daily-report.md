@@ -6,6 +6,7 @@ Daily Report provides a global, evidence-linked summary of activity recorded tod
 
 - Claude, Codex, Cursor, and OpenCode are supported as history sources through the existing normalized session service.
 - Claude and Codex can generate summaries. Claude runs as an ephemeral Agent SDK query with built-in tools disabled, no MCP servers, no skills or settings sources, two structured-output protocol turns, and session persistence disabled. Codex runs in a temporary working directory with a read-only sandbox, approvals disabled, and web search disabled.
+- Claude is selected by default. If it is not installed and authenticated, Daily Report automatically selects an available Codex installation; if neither CLI is ready, generation is disabled with setup guidance.
 - If the selected provider is unavailable, times out, or returns invalid evidence references, generation fails clearly so a conversation list is never presented as an LLM summary.
 - Each summarizer reuses its CLI's existing local endpoint, credentials, and default model (`~/.claude/settings.json` or `~/.codex/config.toml` and `auth.json`); no duplicate Daily Report API configuration is required.
 - Each work item contains the work performed, current progress (including an explicit completed state), and the next step.

@@ -3,7 +3,10 @@ import { ChevronDown, Copy, ExternalLink, RefreshCw, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
-import { useDailyReport } from '@/modules/daily-report/hooks/useDailyReport';
+import {
+  useDailyReport,
+  useDailyReportProviderAvailability,
+} from '@/modules/daily-report/hooks/useDailyReport';
 import type { DailyReport, DailyReportSummaryProvider } from '@/shared/types';
 import { Button, Dialog, DialogContent, DialogTitle } from '@/shared/ui';
 import { copyTextToClipboard } from '@/shared/utils';
@@ -67,12 +70,20 @@ export function DailyReportDialog({ open, onOpenChange }: DailyReportDialogProps
   const [reportLocale, setReportLocale] = useState<ReportLocale>(() => (
     initialReportLocale(i18n.resolvedLanguage || i18n.language || 'en')
   ));
-  // The selected provider chooses which already-configured local CLI performs summarization.
-  const [summaryProvider, setSummaryProvider] = useState<DailyReportSummaryProvider>(initialSummaryProvider);
+  // The preferred provider preserves an explicit choice while availability determines any automatic fallback.
+  const [preferredSummaryProvider, setPreferredSummaryProvider] = useState<DailyReportSummaryProvider>(initialSummaryProvider);
   const { t } = useTranslation('dailyReport', { lng: reportLocale });
   const navigate = useNavigate();
+  const { availableProviders, isCheckingProviders } = useDailyReportProviderAvailability(open);
+  const hasAvailableProvider = availableProviders.length > 0;
+  const summaryProvider = availableProviders.includes(preferredSummaryProvider)
+    ? preferredSummaryProvider
+    : availableProviders.includes('claude') ? 'claude'
+      : availableProviders.includes('codex') ? 'codex'
+        : preferredSummaryProvider;
+  const selectedProviderAvailable = availableProviders.includes(summaryProvider);
   const { report, isLoading, isGenerating, error, timezone, generate } = useDailyReport(
-    open,
+    open && !isCheckingProviders && selectedProviderAvailable,
     reportLocale,
     summaryProvider,
   );
@@ -162,25 +173,38 @@ export function DailyReportDialog({ open, onOpenChange }: DailyReportDialogProps
                 const provider = event.target.value as DailyReportSummaryProvider;
                 window.localStorage.setItem(SUMMARY_PROVIDER_STORAGE_KEY, provider);
                 setExpanded(false);
-                setSummaryProvider(provider);
+                setPreferredSummaryProvider(provider);
               }}
-              disabled={isGenerating}
+              disabled={isGenerating || isCheckingProviders || !hasAvailableProvider}
             >
-              <option value="claude">Claude</option>
-              <option value="codex">Codex</option>
+              <option value="claude" disabled={!availableProviders.includes('claude')}>
+                Claude{!isCheckingProviders && !availableProviders.includes('claude') ? ` — ${t('notConfigured')}` : ''}
+              </option>
+              <option value="codex" disabled={!availableProviders.includes('codex')}>
+                Codex{!isCheckingProviders && !availableProviders.includes('codex') ? ` — ${t('notConfigured')}` : ''}
+              </option>
             </select>
-            <span className="text-xs text-muted-foreground">{t('providerNote')}</span>
+            <span className="text-xs text-muted-foreground">
+              {!isCheckingProviders && summaryProvider === 'codex' && !availableProviders.includes('claude')
+                ? t('codexFallback')
+                : t('providerNote')}
+            </span>
           </div>
           <div className="sr-only" aria-live="polite">
-            {isLoading ? t('loading') : isGenerating ? t('generating') : ''}
+            {isCheckingProviders || isLoading ? t('loading') : isGenerating ? t('generating') : ''}
           </div>
-          {(isLoading || isGenerating) && !displayedReport && (
+          {(isCheckingProviders || isLoading || isGenerating) && !displayedReport && (
             <div className="flex min-h-48 items-center justify-center text-sm text-muted-foreground">
               <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
               {isGenerating ? t('generating') : t('loading')}
             </div>
           )}
-          {!isLoading && !displayedReport && !isGenerating && (
+          {!isCheckingProviders && !hasAvailableProvider && !isGenerating && (
+            <div className="mx-auto flex min-h-48 max-w-md flex-col items-center justify-center text-center">
+              <p className="text-sm text-destructive" role="alert">{t('noProviderConfigured')}</p>
+            </div>
+          )}
+          {!isCheckingProviders && hasAvailableProvider && !isLoading && !displayedReport && !isGenerating && (
             <div className="mx-auto flex min-h-48 max-w-md flex-col items-center justify-center text-center">
               <p className="text-sm text-muted-foreground">{t('notGenerated')}</p>
             </div>
@@ -267,7 +291,7 @@ export function DailyReportDialog({ open, onOpenChange }: DailyReportDialogProps
               {copied ? t('copied') : t('copy')}
             </Button>
           )}
-          <Button size="sm" onClick={() => void generate(Boolean(displayedReport))} disabled={isLoading || isGenerating}>
+          <Button size="sm" onClick={() => void generate(Boolean(displayedReport))} disabled={isCheckingProviders || !hasAvailableProvider || isLoading || isGenerating}>
             {isGenerating && <RefreshCw className="h-4 w-4 animate-spin" />}
             {displayedReport ? t('refresh') : t('generate')}
           </Button>

@@ -4,6 +4,9 @@ import { api, readApiJson } from '@/shared/api';
 import type { DailyReport, DailyReportStatus, DailyReportSummaryProvider } from '@/shared/types';
 
 type ApiEnvelope<T> = { success: true; data: T };
+type ProviderAuthPayload = { installed: boolean; authenticated: boolean };
+
+const SUMMARY_PROVIDERS: DailyReportSummaryProvider[] = ['claude', 'codex'];
 
 function localDate(timezone: string): string {
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -82,4 +85,40 @@ export function useDailyReport(open: boolean, locale: string, summaryProvider: D
   }, [locale, summaryProvider, timezone]);
 
   return { report, isLoading, isGenerating, error, timezone, generate };
+}
+
+/** Used by DailyReportDialog to choose the first installed and authenticated local summary provider. */
+export function useDailyReportProviderAvailability(open: boolean) {
+  // Availability is unknown until both local CLI authentication checks finish.
+  const [availableProviders, setAvailableProviders] = useState<DailyReportSummaryProvider[] | null>(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    let active = true;
+
+    void Promise.all(SUMMARY_PROVIDERS.map(async (provider) => {
+      try {
+        const response = await api.providers.authStatus(provider);
+        const payload = await readApiJson<ApiEnvelope<ProviderAuthPayload>>(response);
+        return payload.data.installed && payload.data.authenticated ? provider : null;
+      } catch {
+        return null;
+      }
+    })).then((providers) => {
+      if (active) {
+        setAvailableProviders(providers.filter(
+          (provider): provider is DailyReportSummaryProvider => provider !== null,
+        ));
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [open]);
+
+  return {
+    availableProviders: availableProviders ?? [],
+    isCheckingProviders: availableProviders === null,
+  };
 }
