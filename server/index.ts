@@ -15,7 +15,7 @@ import {
     initializeSessionsWatcher,
     providerRuntimeService,
 } from '@/modules/providers/index.js';
-import { createWebSocketServer } from '@/modules/websocket/index.js';
+import { chatRunRegistry, createWebSocketServer } from '@/modules/websocket/index.js';
 
 import { getConnectableHost } from '../shared/networkHosts.js';
 
@@ -83,6 +83,12 @@ console.log('SERVER_PORT from env:', process.env.SERVER_PORT);
 
 const app = express();
 const server = http.createServer(app);
+const DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS = 30_000;
+const configuredShutdownDrainTimeoutMs = Number(process.env.CLOUDCLI_SHUTDOWN_DRAIN_TIMEOUT_MS);
+const shutdownDrainTimeoutMs = Number.isFinite(configuredShutdownDrainTimeoutMs)
+    && configuredShutdownDrainTimeoutMs >= 0
+    ? configuredShutdownDrainTimeoutMs
+    : DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS;
 const queryClaude = providerRuntimeService.getRunner('claude');
 const queryCursor = providerRuntimeService.getRunner('cursor');
 const queryCodex = providerRuntimeService.getRunner('codex');
@@ -375,29 +381,65 @@ async function startServer() {
             });
         });
 
-        await closeSessionsWatcher();
-        closeScheduledMessageDispatcher();
-        // Clean up plugin processes on shutdown
-        const shutdownRuntimeServices = async () => {
-            try {
-                await browserUseService.stopAllSessions();
-            } catch (err) {
-                console.error('[Browser] Error stopping sessions during shutdown:', getErrorMessage(err));
+        let shutdownPromise: Promise<void> | null = null;
+
+        // Stop new work, let active provider turns finish, then clean up the
+        // runtime services they may depend on. A timeout keeps shutdown bounded.
+        const shutdownRuntimeServices = (signal: NodeJS.Signals): Promise<void> => {
+            if (shutdownPromise) {
+                return shutdownPromise;
             }
-            try {
-                await stopAllPlugins();
-            } catch (err) {
-                console.error('[Plugins] Error stopping plugins during shutdown:', getErrorMessage(err));
-            }
-            try {
-                await removeLocalServerMarker();
-            } catch (err) {
-                console.error('[Local Server] Error removing server marker during shutdown:', getErrorMessage(err));
-            }
-            process.exit(0);
+
+            shutdownPromise = (async () => {
+                const activeRuns = chatRunRegistry.listRunningRuns();
+                console.log(
+                    `[Shutdown] ${signal} received; draining ${activeRuns.length} active chat run(s) `
+                    + `for up to ${shutdownDrainTimeoutMs}ms.`,
+                );
+
+                closeScheduledMessageDispatcher();
+                const drainPromise = chatRunRegistry.drain(shutdownDrainTimeoutMs);
+                server.close((error) => {
+                    if (error) {
+                        console.error('[Shutdown] Error closing HTTP server:', getErrorMessage(error));
+                    }
+                });
+
+                const drained = await drainPromise;
+                if (!drained) {
+                    const remainingRuns = chatRunRegistry.listRunningRuns();
+                    console.warn(
+                        `[Shutdown] Drain timeout expired with ${remainingRuns.length} active chat run(s).`,
+                    );
+                }
+
+                try {
+                    await closeSessionsWatcher();
+                } catch (err) {
+                    console.error('[Sessions] Error stopping watcher during shutdown:', getErrorMessage(err));
+                }
+                try {
+                    await browserUseService.stopAllSessions();
+                } catch (err) {
+                    console.error('[Browser] Error stopping sessions during shutdown:', getErrorMessage(err));
+                }
+                try {
+                    await stopAllPlugins();
+                } catch (err) {
+                    console.error('[Plugins] Error stopping plugins during shutdown:', getErrorMessage(err));
+                }
+                try {
+                    await removeLocalServerMarker();
+                } catch (err) {
+                    console.error('[Local Server] Error removing server marker during shutdown:', getErrorMessage(err));
+                }
+                process.exit(0);
+            })();
+
+            return shutdownPromise;
         };
-        process.on('SIGTERM', () => void shutdownRuntimeServices());
-        process.on('SIGINT', () => void shutdownRuntimeServices());
+        process.on('SIGTERM', () => void shutdownRuntimeServices('SIGTERM'));
+        process.on('SIGINT', () => void shutdownRuntimeServices('SIGINT'));
     } catch (error) {
         console.error('[ERROR] Failed to start server:', error);
         process.exit(1);

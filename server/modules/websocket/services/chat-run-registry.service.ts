@@ -35,6 +35,11 @@ type ChatRun = {
   completedAt: number | null;
 };
 
+type DrainWaiter = {
+  resolve: (drained: boolean) => void;
+  timer: ReturnType<typeof setTimeout>;
+};
+
 /**
  * How long a completed run stays available for replay. Covers the window
  * between a run finishing and the client refreshing history over REST (for
@@ -58,6 +63,24 @@ const MAX_BUFFERED_EVENTS_PER_RUN = 5000;
  * path all consult it instead of asking each provider runtime individually.
  */
 const runs = new Map<string, ChatRun>();
+let isDraining = false;
+const drainWaiters = new Set<DrainWaiter>();
+
+function hasRunningRuns(): boolean {
+  return Array.from(runs.values()).some((run) => run.status === 'running');
+}
+
+function resolveDrainWaitersIfIdle(): void {
+  if (hasRunningRuns()) {
+    return;
+  }
+
+  for (const waiter of drainWaiters) {
+    clearTimeout(waiter.timer);
+    waiter.resolve(true);
+  }
+  drainWaiters.clear();
+}
 
 function evictRunLater(appSessionId: string): void {
   const timer = setTimeout(() => {
@@ -112,6 +135,10 @@ function decorateAndRecordEvent(run: ChatRun, message: NormalizedMessage): Norma
     run.events.splice(0, run.events.length - MAX_BUFFERED_EVENTS_PER_RUN);
   }
 
+  if (message.kind === 'complete') {
+    resolveDrainWaitersIfIdle();
+  }
+
   return outbound;
 }
 
@@ -162,7 +189,8 @@ function recordProviderSessionId(run: ChatRun, providerSessionId: string): void 
 export const chatRunRegistry = {
   /**
    * Starts tracking a run and returns it, or `null` when a run is already in
-   * progress for the session (callers must reject the duplicate send).
+   * progress for the session or shutdown draining has begun (callers must
+   * reject the send).
    */
   startRun(input: {
     appSessionId: string;
@@ -177,6 +205,10 @@ export const chatRunRegistry = {
     connection: RealtimeClientConnection | null;
     userId: string | number | null;
   }): ChatRun | null {
+    if (isDraining) {
+      return null;
+    }
+
     const existing = runs.get(input.appSessionId);
     if (existing && existing.status === 'running') {
       return null;
@@ -215,6 +247,39 @@ export const chatRunRegistry = {
 
   isProcessing(appSessionId: string): boolean {
     return runs.get(appSessionId)?.status === 'running';
+  },
+
+  isDraining(): boolean {
+    return isDraining;
+  },
+
+  /**
+   * Permanently closes run admission for this process and waits until every
+   * active run reaches its terminal event. The boolean distinguishes a clean
+   * drain from the bounded timeout used by server shutdown.
+   */
+  drain(timeoutMs: number): Promise<boolean> {
+    isDraining = true;
+
+    if (!hasRunningRuns()) {
+      return Promise.resolve(true);
+    }
+
+    const boundedTimeoutMs = Math.max(0, timeoutMs);
+    if (boundedTimeoutMs === 0) {
+      return Promise.resolve(false);
+    }
+
+    return new Promise((resolve) => {
+      const waiter: DrainWaiter = {
+        resolve,
+        timer: setTimeout(() => {
+          drainWaiters.delete(waiter);
+          resolve(false);
+        }, boundedTimeoutMs),
+      };
+      drainWaiters.add(waiter);
+    });
   },
 
   listRunningRuns(): Array<{
@@ -306,5 +371,7 @@ export const chatRunRegistry = {
    */
   clearAll(): void {
     runs.clear();
+    isDraining = false;
+    resolveDrainWaitersIfIdle();
   },
 };
