@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/shared/api';
 import type { FileOpenHandler, GitApiErrorResponse, GitCommitSummary, GitDiffMap, GitOperationResponse, GitPanelView, GitRemoteStatus, GitStatusResponse, Project } from '@/shared/types';
 import { getAllChangedFiles } from '@/modules/git-panel/utils/gitPanelUtils';
-import { useSelectedProvider } from '@/modules/git-panel/hooks/useSelectedProvider';
+import { useSelectedProvider } from '@/shared/hooks/useSelectedProvider';
 
 const DEFAULT_BRANCH = 'main';
 // High enough for the commit graph to show meaningful branch structure.

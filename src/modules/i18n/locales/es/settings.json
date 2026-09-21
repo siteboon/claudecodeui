@@ -84,6 +84,27 @@
       "openPanel": "Abrir panel de ajustes",
       "draggingStatus": "Arrastrando...",
       "toggleAndMove": "Clic para alternar, arrastra para mover"
+    },
+    "tabs": {
+      "settings": "Ajustes",
+      "commands": "Comandos"
+    },
+    "pin": "Fijar el panel abierto",
+    "unpin": "Desfijar el panel",
+    "close": "Cerrar el panel",
+    "commands": {
+      "searchPlaceholder": "Buscar comandos…",
+      "noProject": "Selecciona un proyecto para ver sus comandos.",
+      "loading": "Cargando comandos…",
+      "empty": "No hay comandos disponibles para este proyecto.",
+      "noMatches": "Ningún comando coincide con tu búsqueda.",
+      "loadError": "No se pudieron cargar los comandos.",
+      "groups": {
+        "builtIn": "Integrados",
+        "custom": "Personalizados",
+        "skills": "Skills"
+      },
+      "insertTitle": "Insertar {{command}} en el chat"
     }
   },
   "terminalShortcuts": {

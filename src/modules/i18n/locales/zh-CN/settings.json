@@ -84,6 +84,27 @@
       "openPanel": "打开设置面板",
       "draggingStatus": "正在拖拽...",
       "toggleAndMove": "点击切换，拖拽移动"
+    },
+    "tabs": {
+      "settings": "设置",
+      "commands": "命令"
+    },
+    "pin": "固定面板",
+    "unpin": "取消固定面板",
+    "close": "关闭面板",
+    "commands": {
+      "searchPlaceholder": "搜索命令…",
+      "noProject": "选择一个项目以查看其命令。",
+      "loading": "正在加载命令…",
+      "empty": "此项目没有可用的命令。",
+      "noMatches": "没有与搜索匹配的命令。",
+      "loadError": "无法加载命令。",
+      "groups": {
+        "builtIn": "内置",
+        "custom": "自定义",
+        "skills": "技能"
+      },
+      "insertTitle": "将 {{command}} 插入聊天"
     }
   },
   "terminalShortcuts": {

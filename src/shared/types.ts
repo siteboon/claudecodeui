@@ -1293,6 +1293,8 @@ export type PreferenceToggleKey =
 /** The full set of quick settings booleans keyed by PreferenceToggleKey, held together so the panel can read every toggle from one object. */
 export type QuickSettingsPreferences = Record<PreferenceToggleKey, boolean>;
 
+/** Which content area the quick settings panel is showing: 'settings' (preference toggles) or 'commands' (slash-command list); persisted with the pin state and used by the tab bar and the panel view. */
+export type QuickSettingsTab = 'settings' | 'commands';
 
 /** Inline style for the quick settings drag handle, produced by the drag hook from the stored handle position and applied by the handle component. */
 export type QuickSettingsHandleStyle = CSSProperties;
