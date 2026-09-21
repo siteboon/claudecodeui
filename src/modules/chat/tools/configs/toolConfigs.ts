@@ -94,9 +94,8 @@ const UNIFIED_TOOL_LABELS: Record<string, string> = {
 };
 
 export function formatToolDisplayName(toolName: string): string {
-  const unifiedLabel = UNIFIED_TOOL_LABELS[toolName];
-  if (unifiedLabel) {
-    return unifiedLabel;
+  if (Object.prototype.hasOwnProperty.call(UNIFIED_TOOL_LABELS, toolName)) {
+    return UNIFIED_TOOL_LABELS[toolName];
   }
 
   const mcpMatch = /^mcp__([^_]+(?:_[^_]+)*)__(.+)$/.exec(toolName);
@@ -795,7 +794,9 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
  * Get configuration for a tool, with fallback to default
  */
 export function getToolConfig(toolName: string): ToolDisplayConfig {
-  return TOOL_CONFIGS[toolName] || TOOL_CONFIGS.Default;
+  return Object.prototype.hasOwnProperty.call(TOOL_CONFIGS, toolName)
+    ? TOOL_CONFIGS[toolName]
+    : TOOL_CONFIGS.Default;
 }
 
 /**
