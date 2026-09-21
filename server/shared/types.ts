@@ -928,12 +928,13 @@ export type WorkspacePathValidationResult = {
 };
 
 // ---------------------------
-//----------------- GIT WORKTREE MANAGEMENT ------------
+//----------------- GIT COMMAND EXECUTION AND WORKTREE MANAGEMENT ------------
 /**
  * Captured output of one completed `git` invocation.
  *
- * Returned by `GitCommandRunner` implementations so worktree services can read
- * both streams without caring about process plumbing.
+ * Returned by `GitCommandRunner` and `GitProcessRunner` implementations so the
+ * git and worktree services can read both streams without caring about
+ * process plumbing.
  */
 export type GitCommandResult = {
   stdout: string;
@@ -949,6 +950,20 @@ export type GitCommandResult = {
  * exit code.
  */
 export type GitCommandRunner = (args: string[], cwd: string) => Promise<GitCommandResult>;
+
+/**
+ * Executes `command args...` inside `options.cwd` and resolves with the captured output.
+ *
+ * This is the `spawnAsync` shape the Git routes module injects into its typed
+ * services (branch deletion, branch compare) so their tests can substitute a
+ * fake runner. Like `GitCommandRunner`, the promise must reject on a non-zero
+ * exit code, with `stderr` attached to the error when available.
+ */
+export type GitProcessRunner = (
+  command: string,
+  args: string[],
+  options: { cwd: string },
+) => Promise<GitCommandResult>;
 
 /**
  * One entry parsed from `git worktree list --porcelain`.
