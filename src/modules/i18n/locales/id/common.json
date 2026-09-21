@@ -276,6 +276,9 @@
     "refreshIn_one": "Jendela akan disegarkan dalam {{count}} detik. Jika pembaruan tidak diterapkan, MULAI ULANG environment.",
     "refreshIn_other": "Jendela akan disegarkan dalam {{count}} detik. Jika pembaruan tidak diterapkan, MULAI ULANG environment."
   },
+  "sidebar": {
+    "resizeHandle": "Ubah ukuran sidebar"
+  },
   "commandPalette": {
     "title": "Palet perintah",
     "pages": {

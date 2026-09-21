@@ -266,5 +266,8 @@
       "updateAvailable": "有可用更新",
       "closeSidebar": "關閉側邊欄"
     }
+  },
+  "sidebar": {
+    "resizeHandle": "調整側邊欄寬度"
   }
 }

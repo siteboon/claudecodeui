@@ -236,5 +236,8 @@
       "updateAvailable": "Update verfügbar",
       "closeSidebar": "Seitenleiste schließen"
     }
+  },
+  "sidebar": {
+    "resizeHandle": "Seitenleiste in der Größe ändern"
   }
 }

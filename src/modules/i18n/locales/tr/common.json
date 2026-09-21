@@ -266,5 +266,8 @@
       "updateAvailable": "Güncelleme mevcut",
       "closeSidebar": "Kenar çubuğunu kapat"
     }
+  },
+  "sidebar": {
+    "resizeHandle": "Kenar çubuğunu yeniden boyutlandır"
   }
 }

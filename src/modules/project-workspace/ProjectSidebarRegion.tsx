@@ -6,7 +6,10 @@ import type {
 import { useTranslation } from 'react-i18next';
 
 import { useProjectSidebarState } from '@/modules/project-workspace/context/ProjectsStateContext';
+import { useSidebarResize } from '@/modules/project-workspace/hooks/useSidebarResize';
+import SidebarResizeHandle from '@/modules/project-workspace/SidebarResizeHandle';
 import { Sidebar } from '@/modules/sidebar';
+import { useUiPreferences } from '@/shared/context/UiPreferencesContext';
 import type { ProjectWorkspaceShellProps } from '@/shared/types';
 
 /** Rendered by ProjectWorkspaceShell to host the sidebar module, docked on desktop and as a drawer on mobile. */
@@ -15,6 +18,15 @@ function ProjectSidebarRegion({
 }: Pick<ProjectWorkspaceShellProps, 'isMobile'>) {
   const { t } = useTranslation('common');
   const { sidebarOpen, setSidebarOpen, sidebarSharedProps } = useProjectSidebarState();
+  const { sidebarVisible } = useUiPreferences();
+  const {
+    sidebarWidth,
+    isResizing,
+    containerRef,
+    minWidth,
+    maxWidth,
+    handleProps,
+  } = useSidebarResize();
 
   const handleBackdropClick = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
@@ -28,9 +40,30 @@ function ProjectSidebarRegion({
   }, [setSidebarOpen]);
 
   if (!isMobile) {
+    // The collapsed icon rail sizes itself; only the expanded sidebar takes the
+    // user-chosen width and the resize handle.
+    if (!sidebarVisible) {
+      return (
+        <div className="h-full flex-shrink-0 border-r border-border/50">
+          <Sidebar {...sidebarSharedProps} />
+        </div>
+      );
+    }
+
     return (
-      <div className="h-full flex-shrink-0 border-r border-border/50">
+      <div
+        ref={containerRef}
+        style={{ width: sidebarWidth }}
+        className="relative h-full flex-shrink-0 border-r border-border/50"
+      >
         <Sidebar {...sidebarSharedProps} />
+        <SidebarResizeHandle
+          width={sidebarWidth}
+          minWidth={minWidth}
+          maxWidth={maxWidth}
+          isResizing={isResizing}
+          {...handleProps}
+        />
       </div>
     );
   }

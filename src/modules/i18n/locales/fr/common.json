@@ -266,5 +266,8 @@
       "updateAvailable": "Mise à jour disponible",
       "closeSidebar": "Masquer la barre latérale"
     }
+  },
+  "sidebar": {
+    "resizeHandle": "Redimensionner la barre latérale"
   }
 }

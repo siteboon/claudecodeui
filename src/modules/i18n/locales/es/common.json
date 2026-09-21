@@ -266,5 +266,8 @@
       "updateAvailable": "Actualización disponible",
       "closeSidebar": "Cerrar barra lateral"
     }
+  },
+  "sidebar": {
+    "resizeHandle": "Cambiar el tamaño de la barra lateral"
   }
 }

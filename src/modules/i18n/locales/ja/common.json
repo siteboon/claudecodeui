@@ -266,5 +266,8 @@
       "updateAvailable": "アップデートあり",
       "closeSidebar": "サイドバーを閉じる"
     }
+  },
+  "sidebar": {
+    "resizeHandle": "サイドバーのサイズを変更"
   }
 }
