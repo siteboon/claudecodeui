@@ -7,7 +7,7 @@ import { useUiPreferences, useSetUiPreference } from '@/shared/context/UiPrefere
 import { useSidebarController } from '@/modules/sidebar/hooks/useSidebarController';
 import { useTaskMaster, useTasksSettings } from '@/modules/task-master';
 import { usePaletteOps } from '@/modules/command-palette';
-import { useBusySessionIdSet } from '@/shared/context/SessionProtectionContext';
+import { useBackgroundSessionIdSet, useBusySessionIdSet } from '@/shared/context/SessionProtectionContext';
 import type { LLMProvider, LoadingProgress, MCPServerStatus, Project, ProjectSession, SidebarProjectListProps } from '@/shared/types';
 import SidebarCollapsed from '@/modules/sidebar/SidebarCollapsed';
 import SidebarContent from '@/modules/sidebar/SidebarContent';
@@ -77,6 +77,7 @@ function Sidebar({
   // Only membership is rendered here, so subscribing to the full activity map
   // would re-render the whole tree on every provider status frame.
   const activeSessions = useBusySessionIdSet();
+  const backgroundSessionIds = useBackgroundSessionIdSet();
 
   const {
     isSidebarCollapsed,
@@ -201,6 +202,7 @@ function Sidebar({
     getProjectSessions,
     loadingMoreProjects,
     activeSessions,
+    backgroundSessionIds,
     attentionSessionIds,
     isProjectStarred,
     onRenameDraftChange: updateRenameDraft,
