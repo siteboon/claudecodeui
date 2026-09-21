@@ -118,6 +118,17 @@ test('a tool with no config is previewed by what it operated on', () => {
   assert.equal(group.preview, 'npm test, /repo/a.ts');
 });
 
+test('an unknown provider tool named constructor groups with its input preview', () => {
+  const items = groupConsecutiveTools([
+    toolMessage('constructor', { command: 'npm test' }),
+    toolMessage('constructor', { file_path: '/repo/a.ts' }),
+  ]);
+
+  const [group] = items;
+  assert.ok(isToolGroupItem(group));
+  assert.equal(group.preview, 'npm test, /repo/a.ts');
+});
+
 test('the group carries the run\u2019s first timestamp, which is what the search jump matches on', () => {
   const items = groupConsecutiveTools([
     { ...toolMessage('Read', { file_path: '/a.ts' }), timestamp: '2024-01-01T10:00:00.000Z' },
