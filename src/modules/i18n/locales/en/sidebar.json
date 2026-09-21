@@ -50,7 +50,8 @@
     "cancel": "Cancel",
     "clearSearch": "Clear search",
     "openCommandPalette": "Open command palette",
-    "attentionRequiredIndicator": "Session needs attention"
+    "attentionRequiredIndicator": "Session needs attention",
+    "backgroundWorkIndicator": "Background work running"
   },
   "navigation": {
     "chat": "Chat",

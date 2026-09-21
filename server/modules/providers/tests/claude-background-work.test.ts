@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { startsBackgroundWork } from '@/modules/providers/list/claude/claude-runtime.provider.js';
+import {
+  createBackgroundWorkTracker,
+  startsBackgroundWork,
+} from '@/modules/providers/list/claude/claude-runtime.provider.js';
 
 // Only turns that start work outliving the turn hold their CLI process open. A
 // turn scored `false` here has its stdin released the moment `result` arrives,
@@ -68,4 +71,143 @@ test('a message carrying no tool calls does not', () => {
   assert.equal(startsBackgroundWork({ type: 'result', message: { content: 'done' } }), false);
   assert.equal(startsBackgroundWork({ type: 'assistant', message: { content: [] } }), false);
   assert.equal(startsBackgroundWork({}), false);
+});
+
+// Once the turn's `result` is out, the tracker below is the only record of
+// what the held process is still running: the running-sessions list reads it
+// and a stop request is refused unless it names one of its tasks. The event
+// shapes are the SDK's own, as a real query emits them.
+const started = (taskId: string, extra: Record<string, unknown> = {}) => ({
+  type: 'system',
+  subtype: 'task_started',
+  task_id: taskId,
+  tool_use_id: `toolu_${taskId}`,
+  description: `Task ${taskId}`,
+  task_type: 'local_agent',
+  ...extra,
+});
+const notified = (taskId: string, status: string) => ({
+  type: 'system', subtype: 'task_notification', task_id: taskId, tool_use_id: `toolu_${taskId}`, status, summary: '', output_file: '',
+});
+const updated = (taskId: string, patch: Record<string, unknown>) => ({
+  type: 'system', subtype: 'task_updated', task_id: taskId, patch,
+});
+
+test('a task_started with a tool_use_id adds the task under its session', () => {
+  const tracker = createBackgroundWorkTracker();
+  const before = Date.now();
+  // The session's own turn issued the call, so the task is its own work.
+  tracker.apply('s1', {
+    type: 'assistant',
+    parent_tool_use_id: null,
+    message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_t1', name: 'Workflow', input: {} }] },
+  });
+  tracker.apply('s1', started('t1', { task_type: 'local_workflow', workflow_name: 'spec' }));
+
+  const [entry] = tracker.list();
+  assert.equal(tracker.list().length, 1);
+  assert.equal(entry.sessionId, 's1');
+  assert.equal(entry.tasks.length, 1);
+  const { startedAt, ...task } = entry.tasks[0];
+  assert.deepEqual(task, {
+    taskId: 't1',
+    toolUseId: 'toolu_t1',
+    taskType: 'local_workflow',
+    description: 'Task t1',
+    workflowName: 'spec',
+  });
+  assert.ok(startedAt >= before && startedAt <= Date.now());
+  assert.equal(tracker.hasOutstanding('s1'), true);
+  assert.equal(tracker.has('s1', 't1'), true);
+});
+
+test('a task started for a call the session itself made is its own; one from inside an agent is nested', () => {
+  // Verified on a real run: a workflow agent that backgrounds `sleep 60` puts
+  // a `task_started` on the parent's stream, with a tool_use_id from the
+  // agent's transcript. The parent transcript has no card for it, and the
+  // pill would otherwise read "3 tasks" for one workflow.
+  const tracker = createBackgroundWorkTracker();
+  tracker.apply('s1', {
+    type: 'assistant',
+    parent_tool_use_id: null,
+    message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_t1', name: 'Workflow', input: {} }] },
+  });
+  tracker.apply('s1', started('t1', { task_type: 'local_workflow', workflow_name: 'spec' }));
+  tracker.apply('s1', started('t2', { task_type: 'local_bash', description: 'Sleep for 60 seconds' }));
+
+  const [entry] = tracker.list();
+  assert.deepEqual(entry.tasks.map((task) => [task.taskId, task.nested ?? false]), [['t1', false], ['t2', true]]);
+  assert.equal(tracker.has('s1', 't2'), true, 'a nested task can still be stopped');
+
+  // The set of own calls dies with the session, like the tasks.
+  tracker.clear('s1');
+  tracker.apply('s1', started('t1', { task_type: 'local_workflow' }));
+  assert.equal(tracker.list()[0].tasks[0].nested, true);
+});
+
+test('a task_started without a tool_use_id is not tracked', () => {
+  // Housekeeping tasks the CLI starts on its own have no launching call and
+  // nothing in the transcript to show them under.
+  const tracker = createBackgroundWorkTracker();
+  tracker.apply('s1', { type: 'system', subtype: 'task_started', task_id: 'ambient', description: 'x' });
+
+  assert.deepEqual(tracker.list(), []);
+  assert.equal(tracker.hasOutstanding('s1'), false);
+});
+
+test('a task_notification removes the task whatever its status', () => {
+  const tracker = createBackgroundWorkTracker();
+  tracker.apply('s1', started('t1'));
+  tracker.apply('s1', started('t2'));
+  tracker.apply('s1', notified('t1', 'completed'));
+
+  assert.equal(tracker.has('s1', 't1'), false);
+  assert.equal(tracker.has('s1', 't2'), true);
+  assert.equal(tracker.hasOutstanding('s1'), true);
+
+  tracker.apply('s1', notified('t2', 'stopped'));
+  assert.equal(tracker.hasOutstanding('s1'), false);
+  assert.deepEqual(tracker.list(), []);
+});
+
+test('a terminal task_updated removes the task', () => {
+  const tracker = createBackgroundWorkTracker();
+  for (const [taskId, status] of [['a', 'completed'], ['b', 'failed'], ['c', 'killed']]) {
+    tracker.apply('s1', started(taskId));
+    tracker.apply('s1', updated(taskId, { status, end_time: 1 }));
+    assert.equal(tracker.has('s1', taskId), false, `${status} settles the task`);
+  }
+  assert.equal(tracker.hasOutstanding('s1'), false);
+});
+
+test('a non-terminal task_updated keeps the task', () => {
+  const tracker = createBackgroundWorkTracker();
+  tracker.apply('s1', started('t1'));
+  tracker.apply('s1', updated('t1', { status: 'running' }));
+  tracker.apply('s1', updated('t1', { is_backgrounded: true }));
+  tracker.apply('s1', updated('t1', { status: 'paused' }));
+
+  assert.equal(tracker.has('s1', 't1'), true);
+  assert.equal(tracker.hasOutstanding('s1'), true);
+});
+
+test('clearing a session empties it and leaves the others alone', () => {
+  const tracker = createBackgroundWorkTracker();
+  tracker.apply('s1', started('t1'));
+  tracker.apply('s2', started('t2'));
+  tracker.clear('s1');
+
+  assert.equal(tracker.hasOutstanding('s1'), false);
+  assert.equal(tracker.has('s1', 't1'), false);
+  assert.deepEqual(tracker.list().map((entry) => entry.sessionId), ['s2']);
+});
+
+test('messages that are not task events leave the set untouched', () => {
+  const tracker = createBackgroundWorkTracker();
+  tracker.apply('s1', started('t1'));
+  tracker.apply('s1', { type: 'assistant', message: { content: [] } });
+  tracker.apply('s1', { type: 'system', subtype: 'task_progress', task_id: 't1', description: 'x', usage: {} });
+  tracker.apply('s1', { type: 'result', task_id: 't1' });
+
+  assert.equal(tracker.has('s1', 't1'), true);
 });
