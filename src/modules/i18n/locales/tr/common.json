@@ -264,7 +264,8 @@
       "showSidebar": "Kenar çubuğunu göster",
       "settings": "Ayarlar",
       "updateAvailable": "Güncelleme mevcut",
-      "closeSidebar": "Kenar çubuğunu kapat"
+      "closeSidebar": "Kenar çubuğunu kapat",
+      "resizeSidebar": "Kenar çubuğunu yeniden boyutlandır"
     }
   }
 }

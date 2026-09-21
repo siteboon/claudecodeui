@@ -123,6 +123,7 @@
   "search": {
     "modeProjects": "Projekte",
     "modeConversations": "Unterhaltungen",
+    "modeMore": "Mehr",
     "conversationsPlaceholder": "In Unterhaltungen suchen...",
     "searching": "Sucht...",
     "sessionTitles": "Sitzungstitel",
