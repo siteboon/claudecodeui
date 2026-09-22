@@ -152,8 +152,15 @@ export function useShellTerminal({
       return;
     }
 
-    terminalRef.current.clear();
-    terminalRef.current.write('\x1b[2J\x1b[H');
+    // Switching project or chat detaches without disposing this Terminal, so
+    // the next attach reuses it. `clear()` empties the buffer but keeps every
+    // mode the previous session left behind — alternate screen, the DECSTBM
+    // scroll region a statusline installs, origin/wrap mode and the current
+    // SGR attributes all survive it. The server then replays the PTY's
+    // buffered output into that stale state, and frames drawn with relative
+    // cursor moves land on the wrong rows. A full reset (RIS) is what puts the
+    // terminal back where a fresh attach expects it.
+    terminalRef.current.reset();
   }, [terminalRef]);
 
   const disposeTerminal = useCallback(() => {
