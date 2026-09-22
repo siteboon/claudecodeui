@@ -755,7 +755,12 @@ export function useSidebarController({
   // Keyed by projectId so the rename survives display-name mutations that arrive
   // while the input is open.
   const startEditingProject = useCallback((project: Project) => {
-    setActiveRename({ target: 'project', id: project.projectId, draft: project.displayName });
+    setActiveRename({
+      target: 'project',
+      id: project.projectId,
+      draft: project.displayName,
+      pathDraft: project.fullPath,
+    });
   }, []);
 
   const startEditingSession = useCallback(
@@ -769,6 +774,12 @@ export function useSidebarController({
     setActiveRename((previous) => (previous ? { ...previous, draft } : previous));
   }, []);
 
+  const updateRenamePathDraft = useCallback((pathDraft: string) => {
+    setActiveRename((previous) =>
+      previous?.target === 'project' ? { ...previous, pathDraft } : previous,
+    );
+  }, []);
+
   const cancelRename = useCallback(() => {
     setActiveRename(null);
   }, []);
@@ -776,8 +787,26 @@ export function useSidebarController({
   const saveProjectName = useCallback(
     // `projectId` is the DB primary key; the rename API resolves the path
     // through the `projects` table before writing the new display name.
-    async (projectId: string, nextName: string) => {
+    //
+    // The folder is saved first: it is the change that can legitimately fail
+    // (missing directory, path already taken), and applying the display name
+    // anyway would leave the row half-updated.
+    async (projectId: string, nextName: string, nextPath: string) => {
       try {
+        const trimmedPath = nextPath.trim();
+        if (trimmedPath.length > 0) {
+          const pathResponse = await api.updateProjectPath(projectId, trimmedPath);
+          if (!pathResponse.ok) {
+            const failure = (await pathResponse.json().catch(() => null)) as
+              | { error?: { message?: string; details?: string } }
+              | null;
+            alert(failure?.error?.details || failure?.error?.message || t('messages.updateProjectPathError'));
+            // The editor stays open so the rejected folder can be corrected
+            // instead of silently discarded.
+            return;
+          }
+        }
+
         const response = await api.renameProject(projectId, nextName);
         if (response.ok) {
           await paletteOps.refreshProjects();
@@ -786,11 +815,11 @@ export function useSidebarController({
         }
       } catch (error) {
         console.error('Error renaming project:', error);
-      } finally {
-        setActiveRename(null);
       }
+
+      setActiveRename(null);
     },
-    [paletteOps],
+    [paletteOps, t],
   );
 
   const showDeleteSessionConfirmation = useCallback(
@@ -1099,6 +1128,7 @@ export function useSidebarController({
     startEditingProject,
     startEditingSession,
     updateRenameDraft,
+    updateRenamePathDraft,
     cancelRename,
     saveProjectName,
     showDeleteSessionConfirmation,

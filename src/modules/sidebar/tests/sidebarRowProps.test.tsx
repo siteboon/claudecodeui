@@ -82,6 +82,7 @@ const listProps = (activeRename: ActiveSidebarRename | null): SidebarProjectList
   attentionSessionIds: NO_SESSION_IDS,
   isProjectStarred: () => false,
   onRenameDraftChange: noop,
+  onRenamePathDraftChange: noop,
   onToggleProject: noop,
   onProjectSelect: noop,
   onToggleStarProject: noop,
@@ -138,12 +139,12 @@ test('project expansion is resolved per project without dropping rows', () => {
 
 test('renaming a project changes props on that row only', () => {
   const { rerender } = render(
-    React.createElement(SidebarProjectList, listProps({ target: 'project', id: 'a', draft: 'N' })),
+    React.createElement(SidebarProjectList, listProps({ target: 'project', id: 'a', draft: 'N', pathDraft: '/tmp/a' })),
   );
   const [firstA, firstB] = recordedProjectRowProps;
 
   rerender(
-    React.createElement(SidebarProjectList, listProps({ target: 'project', id: 'a', draft: 'Ne' })),
+    React.createElement(SidebarProjectList, listProps({ target: 'project', id: 'a', draft: 'Ne', pathDraft: '/tmp/a' })),
   );
   const [, , secondA, secondB] = recordedProjectRowProps;
 
