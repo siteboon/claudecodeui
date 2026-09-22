@@ -1,7 +1,5 @@
-import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
-import readline from 'node:readline';
 
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import type {
@@ -23,6 +21,7 @@ import { prepareTranscriptMessages, truncateNestedOutput } from '@/shared/messag
 import {
   createNormalizedMessage,
   generateMessageId,
+  readJsonlLines,
   readObjectRecord,
   sliceTailPage,
   stripAnsiSequences,
@@ -105,13 +104,7 @@ async function readClaudeSubagentTranscript(filePath: string): Promise<ClaudeSub
   const toolsById = new Map<string, SubagentActivity>();
 
   try {
-    const fileStream = fs.createReadStream(filePath);
-    const rl = readline.createInterface({
-      input: fileStream,
-      crlfDelay: Infinity,
-    });
-
-    for await (const line of rl) {
+    for await (const line of readJsonlLines(filePath)) {
       if (!line.trim()) {
         continue;
       }
@@ -470,10 +463,8 @@ function replaceLaunchToolResultContent(message: AnyRecord, replacement: string)
  */
 async function readTranscriptRows(jsonlPath: string, providerSessionId: string): Promise<AnyRecord[]> {
   const rows: AnyRecord[] = [];
-  const fileStream = fs.createReadStream(jsonlPath);
-  const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
 
-  for await (const line of rl) {
+  for await (const line of readJsonlLines(jsonlPath)) {
     if (!line.trim()) {
       continue;
     }
