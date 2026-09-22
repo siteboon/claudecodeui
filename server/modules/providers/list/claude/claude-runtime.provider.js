@@ -36,6 +36,7 @@ import {
   notifyRunStopped,
   notifyUserIfEnabled
 } from '@/modules/notifications/index.js';
+import { rememberClaudeToolPermission } from '@/modules/providers/services/claude-permission-rules.service.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import { createCompleteMessage, createNormalizedMessage } from '@/shared/utils.js';
 
@@ -1052,12 +1053,22 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
 
       if (decision.allow) {
         if (decision.rememberEntry && typeof decision.rememberEntry === 'string') {
+          // Two writes, two lifetimes. The in-memory push covers the REST OF
+          // THIS TURN only: the already-constructed query read its permission
+          // rules when it started, so nothing written now reaches it — the
+          // matcher above is what honours the entry until the turn ends.
           if (!sdkOptions.allowedTools.includes(decision.rememberEntry)) {
             sdkOptions.allowedTools.push(decision.rememberEntry);
           }
           if (Array.isArray(sdkOptions.disallowedTools)) {
             sdkOptions.disallowedTools = sdkOptions.disallowedTools.filter(entry => entry !== decision.rememberEntry);
           }
+          // The settings file is what makes "always allow" mean always: every
+          // later turn, session and server restart reads it back through
+          // `settingSources`. Awaited so the next turn cannot start before the
+          // rule lands, and never allowed to reject — a failed write must not
+          // turn an approved tool call into a failed one.
+          await rememberClaudeToolPermission(sdkOptions.cwd, decision.rememberEntry);
         }
         return { behavior: 'allow', updatedInput: decision.updatedInput ?? input };
       }
