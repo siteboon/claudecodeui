@@ -308,7 +308,6 @@ export type SubagentActivity = {
   content?: string;
 };
 
-/** Identity and lifecycle of one spawned subagent as the backend reports it; present on the tool call that spawned the agent and used to draw its container header. */
 /**
  * A compaction, as the transcript records it.
  *
@@ -328,6 +327,7 @@ export type CompactionInfo = {
 /** Where a background task — a spawned agent, a workflow run or a backgrounded command — stands: `stopped` is one whose session process ended before it reported, so no outcome exists and none is coming. */
 export type BackgroundTaskStatus = 'running' | 'completed' | 'failed' | 'stopped';
 
+/** Identity and lifecycle of one spawned subagent as the backend reports it; present on the tool call that spawned the agent and used to draw its container header. */
 export type SubagentInfo = {
   id: string;
   name?: string;
