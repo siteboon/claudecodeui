@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { appendFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -216,6 +216,35 @@ async function withProviders(
   }
 }
 
+/**
+ * Runs `runTest` against a Claude CLI process registry containing exactly
+ * `records`, so the running-sessions tests never read the developer's real
+ * `~/.claude/sessions`.
+ */
+async function withClaudeCliRegistry(
+  records: Array<Record<string, unknown>>,
+  runTest: () => void | Promise<void>,
+): Promise<void> {
+  const homeDirectory = await mkdtemp(path.join(os.tmpdir(), 'claude-cli-registry-'));
+  await mkdir(path.join(homeDirectory, '.claude', 'sessions'), { recursive: true });
+  for (const record of records) {
+    await writeFile(
+      path.join(homeDirectory, '.claude', 'sessions', `${record.pid}.json`),
+      JSON.stringify(record),
+      'utf8',
+    );
+  }
+
+  const realHomedir = os.homedir;
+  (os as unknown as { homedir: () => string }).homedir = () => homeDirectory;
+  try {
+    await runTest();
+  } finally {
+    (os as unknown as { homedir: () => string }).homedir = realHomedir;
+    await rm(homeDirectory, { recursive: true, force: true });
+  }
+}
+
 const task = (taskId: string, startedAt: number): BackgroundTaskSummary => ({
   taskId,
   toolUseId: `toolu_${taskId}`,
@@ -237,10 +266,10 @@ test('running sessions list a session whose background work outlived its turn', 
     assert.equal(run.status, 'completed');
 
     const tasks = [task('late', 2_000), task('early', 1_000)];
-    await withProviders(
+    await withClaudeCliRegistry([], async () => await withProviders(
       { claude: { run: async () => undefined, abort: () => false, listBackgroundWork: () => [{ sessionId: 'held-session', tasks }] } },
-      () => {
-        assert.deepEqual(sessionsService.listRunningSessions(), [{
+      async () => {
+        assert.deepEqual(await sessionsService.listRunningSessions(), [{
           sessionId: 'held-session',
           provider: 'claude',
           startedAt: 1_000,
@@ -251,7 +280,7 @@ test('running sessions list a session whose background work outlived its turn', 
         }]);
         assert.ok(run.lastSeq > 0, 'the finished run still reports its sequence for replay');
       },
-    );
+    ));
   });
 });
 
@@ -265,14 +294,14 @@ test('running sessions carry their tasks on a chat run that is still going', { c
     assert.ok(run);
 
     const tasks = [task('agent', 5_000)];
-    await withProviders(
+    await withClaudeCliRegistry([], async () => await withProviders(
       {
         claude: { run: async () => undefined, abort: () => false, listBackgroundWork: () => [{ sessionId: 'busy-session', tasks }] },
         // A runtime without background work contributes chat runs alone.
         codex: { run: async () => undefined, abort: () => false },
       },
-      () => {
-        const sessions = sessionsService.listRunningSessions();
+      async () => {
+        const sessions = await sessionsService.listRunningSessions();
         assert.equal(sessions.length, 1, 'a session with a running chat run is listed once');
         assert.deepEqual(sessions[0], {
           sessionId: 'busy-session',
@@ -282,7 +311,7 @@ test('running sessions carry their tasks on a chat run that is still going', { c
           tasks,
         });
       },
-    );
+    ));
   });
 });
 
@@ -294,12 +323,106 @@ test('running sessions with no background work are the chat runs alone', { concu
     });
     assert.ok(run);
 
-    await withProviders(
+    await withClaudeCliRegistry([], async () => await withProviders(
       { codex: { run: async () => undefined, abort: () => false } },
-      () => {
-        assert.deepEqual(sessionsService.listRunningSessions(), [{
+      async () => {
+        assert.deepEqual(await sessionsService.listRunningSessions(), [{
           sessionId: 'plain-session', provider: 'codex', startedAt: run.startedAt, lastSeq: 0,
         }]);
+      },
+    ));
+  });
+});
+
+test('running sessions report a turn driven by the Claude CLI', { concurrency: false }, async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createAppSession('cli-session', 'claude', '/tmp/running-project');
+    sessionsDb.assignProviderSessionId('cli-session', 'claude-native-1');
+
+    // `process.pid` is the one pid guaranteed to be alive; omitting procStart
+    // keeps the fixture portable, since the start-time cross-check is Linux-only.
+    await withClaudeCliRegistry(
+      [{ pid: process.pid, sessionId: 'claude-native-1', status: 'busy', entrypoint: 'cli', startedAt: 4_000 }],
+      async () => await withProviders(
+        { claude: { run: async () => undefined, abort: () => false } },
+        async () => {
+          assert.deepEqual(await sessionsService.listRunningSessions(), [{
+            sessionId: 'cli-session',
+            provider: 'claude',
+            startedAt: 4_000,
+            lastSeq: 0,
+            canInterrupt: false,
+            statusText: 'Running in the Claude CLI',
+          }]);
+        },
+      ),
+    );
+  });
+});
+
+test('running sessions ignore registry files a crash left behind', { concurrency: false }, async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createAppSession('stale-session', 'claude', '/tmp/running-project');
+    sessionsDb.assignProviderSessionId('stale-session', 'claude-native-stale');
+
+    await withClaudeCliRegistry(
+      [
+        // The process is gone: signal 0 cannot find this pid.
+        { pid: 4_194_302, sessionId: 'claude-native-stale', status: 'busy', startedAt: 1_000 },
+        // Alive, but waiting for input rather than producing a response.
+        { pid: process.pid, sessionId: 'claude-native-idle', status: 'idle', startedAt: 2_000 },
+      ],
+      async () => await withProviders(
+        { claude: { run: async () => undefined, abort: () => false } },
+        async () => {
+          assert.deepEqual(await sessionsService.listRunningSessions(), []);
+        },
+      ),
+    );
+  });
+});
+
+test('a CLI turn does not duplicate a session already running a chat run', { concurrency: false }, async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createAppSession('both-session', 'claude', '/tmp/running-project');
+    sessionsDb.assignProviderSessionId('both-session', 'claude-native-both');
+    const run = chatRunRegistry.startRun({
+      appSessionId: 'both-session', provider: 'claude', providerSessionId: 'claude-native-both', connection: null, userId: null,
+    });
+    assert.ok(run);
+
+    await withClaudeCliRegistry(
+      [{ pid: process.pid, sessionId: 'claude-native-both', status: 'busy', startedAt: 3_000 }],
+      async () => await withProviders(
+        { claude: { run: async () => undefined, abort: () => false } },
+        async () => {
+          const sessions = await sessionsService.listRunningSessions();
+          assert.equal(sessions.length, 1, 'the chat run already covers this session');
+          assert.equal(sessions[0].canInterrupt, undefined, 'the interruptible chat run entry wins');
+        },
+      ),
+    );
+  });
+});
+
+test('an unreadable registry never fails the running-sessions poll', { concurrency: false }, async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createAppSession('safe-session', 'claude', '/tmp/running-project');
+    sessionsDb.assignProviderSessionId('safe-session', 'claude-native-safe');
+
+    await withClaudeCliRegistry(
+      [{ pid: process.pid, sessionId: 'claude-native-safe', status: 'busy', startedAt: 5_000 }],
+      async () => {
+        // A half-written file sits alongside the good one; it must be skipped
+        // rather than abort the whole poll.
+        await writeFile(path.join(os.homedir(), '.claude', 'sessions', 'broken.json'), '{"pid":', 'utf8');
+        await withProviders(
+          { claude: { run: async () => undefined, abort: () => false } },
+          async () => {
+            const sessions = await sessionsService.listRunningSessions();
+            assert.deepEqual(sessions.map((session) => session.sessionId), ['safe-session']);
+          },
+        );
       },
     );
   });
