@@ -153,6 +153,13 @@
         "label": "Dimensione carattere",
         "description": "Dimensione del carattere dell'editor in pixel"
       }
+    },
+    "mobileNavigation": {
+      "title": "Navigazione mobile",
+      "backOpensSessionList": {
+        "label": "Indietro apre l'elenco delle sessioni",
+        "description": "Su schermi di dimensioni telefono, Indietro apre l'elenco delle sessioni invece di lasciare la pagina quando l'elenco è chiuso. Se l'elenco è già aperto, Indietro naviga normalmente. Subito dopo il caricamento, Indietro resta invariato finché non si interagisce con la pagina."
+      }
     }
   },
   "mcpForm": {

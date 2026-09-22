@@ -179,6 +179,13 @@
         "label": "Font Size",
         "description": "Editor font size in pixels"
       }
+    },
+    "mobileNavigation": {
+      "title": "Mobile Navigation",
+      "backOpensSessionList": {
+        "label": "Back Opens Session List",
+        "description": "On phone-sized screens, Back opens the session list instead of navigating away when the list is closed. If the list is already open, Back navigates normally. Just after a page load, Back is unchanged until you interact with the page."
+      }
     }
   },
   "mcpForm": {
