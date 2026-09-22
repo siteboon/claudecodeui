@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
-import React from 'react';
-import { createRef } from 'react';
+import React, { createRef } from 'react';
 import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
