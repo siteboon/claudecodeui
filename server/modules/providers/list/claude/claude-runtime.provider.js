@@ -54,30 +54,47 @@ const abortedSessionIds = new Set();
 // entry, the abort flag, and all client-facing events belong to the new run.
 const supersededInstances = new WeakSet();
 
-// Fallback when CLAUDE_TOOL_APPROVAL_TIMEOUT_MS is unset or not a number. Kept at
-// the value the runtime has always used so existing deployments are unaffected.
+// Fallback when CLAUDE_TOOL_APPROVAL_TIMEOUT_MS is unset or malformed. Kept at the
+// value the runtime has always used so existing deployments are unaffected. It was
+// originally chosen (64ebbaf3) to stay under a 60s SDK control-request timeout that
+// no longer exists: the SDK now waits for a canUseTool answer indefinitely, which is
+// why 0 (no timer) is safe here and why the default could become 0 in the future.
 const DEFAULT_TOOL_APPROVAL_TIMEOUT_MS = 55000;
+
+// Longest delay Node's setTimeout accepts (2^31 - 1 ms, ~24.8 days). Anything
+// larger overflows, logs TimeoutOverflowWarning, and fires after 1 ms — which
+// would deny every prompt instantly, the opposite of what a huge value asks for.
+const MAX_TOOL_APPROVAL_TIMEOUT_MS = 2 ** 31 - 1;
+
+// Only plain (optionally signed) integers count as a configured value; exponent,
+// hex, or decimal notation would be silently truncated by parseInt ('1e6' -> 1ms).
+const INTEGER_PATTERN = /^\s*[+-]?\d+\s*$/;
 
 /**
  * Resolves how long a permission prompt (canUseTool) waits for the user before
  * the tool call is denied, from the raw CLAUDE_TOOL_APPROVAL_TIMEOUT_MS value:
  *
- * - unset, empty, or not a number -> DEFAULT_TOOL_APPROVAL_TIMEOUT_MS
- * - 0 or any negative number      -> 0, meaning wait indefinitely (no timer)
- * - a positive number             -> that many milliseconds
+ * - unset, empty, or not a plain integer -> DEFAULT_TOOL_APPROVAL_TIMEOUT_MS
+ * - 0 or any negative number             -> 0, meaning wait indefinitely (no timer)
+ * - a positive number                    -> that many milliseconds, capped at
+ *                                           MAX_TOOL_APPROVAL_TIMEOUT_MS
  *
  * Read per run rather than once at startup, like CLAUDE_CLI_PATH. Used by
- * queryClaudeSDK for every non-interactive prompt, and by the provider tests to
- * pin the mapping (`|| 55000` used to turn an explicit 0 back into the default).
+ * queryClaudeSDK for every non-interactive prompt, by waitForToolApproval as its
+ * default, and by the provider tests to pin the mapping (`|| 55000` used to turn
+ * an explicit 0 back into the default).
  * @param {string|undefined} rawValue - process.env.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS
  * @returns {number} timeout in milliseconds, 0 for no timeout
  */
 export function resolveToolApprovalTimeoutMs(rawValue) {
-  const parsed = parseInt(rawValue, 10);
-  if (Number.isNaN(parsed)) {
+  if (typeof rawValue !== 'string' || !INTEGER_PATTERN.test(rawValue)) {
     return DEFAULT_TOOL_APPROVAL_TIMEOUT_MS;
   }
-  return parsed > 0 ? parsed : 0;
+  const parsed = parseInt(rawValue, 10);
+  if (parsed <= 0) {
+    return 0;
+  }
+  return Math.min(parsed, MAX_TOOL_APPROVAL_TIMEOUT_MS);
 }
 
 // How long background work is allowed to keep running after a turn ends. This drives
@@ -148,7 +165,14 @@ function createRequestId() {
 }
 
 function waitForToolApproval(requestId, options = {}) {
-  const { timeoutMs = DEFAULT_TOOL_APPROVAL_TIMEOUT_MS, signal, onCancel, metadata } = options;
+  // Default to the env-configured value so a caller that omits timeoutMs still
+  // honours CLAUDE_TOOL_APPROVAL_TIMEOUT_MS (canUseTool passes it explicitly).
+  const {
+    timeoutMs = resolveToolApprovalTimeoutMs(process.env.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS),
+    signal,
+    onCancel,
+    metadata,
+  } = options;
 
   return new Promise(resolve => {
     let settled = false;

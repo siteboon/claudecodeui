@@ -23,15 +23,34 @@ import type { NormalizedMessage, ProviderRuntimeContext } from '@/shared/types.j
  */
 
 const DEFAULT_TIMEOUT_MS = 55000;
+/** Node's setTimeout ceiling (2^31 - 1 ms); larger delays overflow and fire after 1 ms. */
+const MAX_TIMER_MS = 2147483647;
 
 test('resolveToolApprovalTimeoutMs maps the env value onto a wait duration', () => {
   assert.equal(resolveToolApprovalTimeoutMs(undefined), DEFAULT_TIMEOUT_MS, 'unset keeps the historical default');
   assert.equal(resolveToolApprovalTimeoutMs(''), DEFAULT_TIMEOUT_MS, 'an empty .env line counts as unset');
   assert.equal(resolveToolApprovalTimeoutMs('abc'), DEFAULT_TIMEOUT_MS, 'garbage falls back to the default');
   assert.equal(resolveToolApprovalTimeoutMs('0'), 0, '0 disables the timeout instead of becoming the default');
+  assert.equal(resolveToolApprovalTimeoutMs('00'), 0, 'a zero with leading zeros is still zero');
   assert.equal(resolveToolApprovalTimeoutMs('-1'), 0, 'negative values disable the timeout too');
   assert.equal(resolveToolApprovalTimeoutMs('120000'), 120000, 'a positive value is used as-is');
+  assert.equal(resolveToolApprovalTimeoutMs('+5000'), 5000, 'an explicit plus sign is accepted');
   assert.equal(resolveToolApprovalTimeoutMs(' 5000 '), 5000, 'surrounding whitespace is tolerated');
+});
+
+test('resolveToolApprovalTimeoutMs clamps values beyond the setTimeout ceiling instead of overflowing', () => {
+  assert.equal(resolveToolApprovalTimeoutMs(String(MAX_TIMER_MS)), MAX_TIMER_MS, 'the ceiling itself is accepted');
+  assert.equal(resolveToolApprovalTimeoutMs('2592000000'), MAX_TIMER_MS, '30 days is clamped rather than firing after 1ms');
+  assert.equal(resolveToolApprovalTimeoutMs('31536000000'), MAX_TIMER_MS, 'a year is clamped rather than firing after 1ms');
+  assert.equal(resolveToolApprovalTimeoutMs('99999999999999999999'), MAX_TIMER_MS, 'values beyond Number precision still clamp');
+});
+
+test('resolveToolApprovalTimeoutMs rejects notations parseInt would silently truncate', () => {
+  assert.equal(resolveToolApprovalTimeoutMs('1e6'), DEFAULT_TIMEOUT_MS, 'exponent notation would become 1ms under parseInt');
+  assert.equal(resolveToolApprovalTimeoutMs('1.5'), DEFAULT_TIMEOUT_MS, 'decimals would become 1ms under parseInt');
+  assert.equal(resolveToolApprovalTimeoutMs('0x10'), DEFAULT_TIMEOUT_MS, 'hex would become 0 (wait forever) under parseInt');
+  assert.equal(resolveToolApprovalTimeoutMs('55000ms'), DEFAULT_TIMEOUT_MS, 'a unit suffix is not a plain integer');
+  assert.equal(resolveToolApprovalTimeoutMs('Infinity'), DEFAULT_TIMEOUT_MS, 'Infinity is not a plain integer');
 });
 
 type CanUseTool = (toolName: string, input: Record<string, unknown>, context: Record<string, unknown>) => Promise<Record<string, unknown>>;
