@@ -122,8 +122,15 @@ test('relocateProject moves the Claude transcript into the folder a resume reads
       `${SESSION_ID}.jsonl`,
     );
     assert.equal(sessionsDb.getSessionById(SESSION_ID)?.jsonl_path, expectedTranscriptPath);
-    assert.match(await readFile(expectedTranscriptPath, 'utf8'), /Chat|sessionId/);
     await assert.rejects(() => readFile(fixture.transcriptPath, 'utf8'));
+
+    // The synchronizer reads a session's project path out of the transcript, so
+    // a stale `cwd` would drag the session straight back to the old folder.
+    const relocatedTranscript = JSON.parse(
+      (await readFile(expectedTranscriptPath, 'utf8')).trim(),
+    ) as { sessionId: string; cwd: string };
+    assert.equal(relocatedTranscript.sessionId, SESSION_ID);
+    assert.equal(relocatedTranscript.cwd, fixture.newProjectPath);
   });
 });
 

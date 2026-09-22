@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { mkdir, rename, stat } from 'node:fs/promises';
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 
 import type { ClaudeTranscriptRelocation } from '@/shared/types.js';
 
@@ -21,19 +21,42 @@ function encodeClaudeProjectDirName(projectPath: string): string | null {
   return encoded.length > CLAUDE_PROJECT_DIR_MAX_LENGTH ? null : encoded;
 }
 
-async function moveTranscriptFile(sourcePath: string, targetPath: string): Promise<boolean> {
-  try {
-    await stat(targetPath);
-    // Something already occupies the destination; overwriting it would destroy
-    // a transcript that the new folder legitimately owns.
-    return false;
-  } catch {
-    // Expected: nothing there yet.
-  }
+/**
+ * Rewrites the `cwd` every transcript row records, which is where the session
+ * synchronizer reads a session's project path from. Left stale, the next
+ * synchronization pass would re-register the old folder as a project and drag
+ * the session back to it.
+ *
+ * Only rows that actually name the old folder are re-serialized; every other
+ * line is copied through byte for byte, so nothing else in the user's
+ * transcript is rewritten.
+ */
+function rewriteTranscriptCwd(content: string, oldProjectPath: string, newProjectPath: string): string {
+  return content
+    .split('\n')
+    .map((line) => {
+      if (!line.trim()) {
+        return line;
+      }
 
-  await mkdir(path.dirname(targetPath), { recursive: true });
-  await rename(sourcePath, targetPath);
-  return true;
+      let row: unknown;
+      try {
+        row = JSON.parse(line);
+      } catch {
+        return line;
+      }
+
+      if (
+        typeof row !== 'object'
+        || row === null
+        || (row as { cwd?: unknown }).cwd !== oldProjectPath
+      ) {
+        return line;
+      }
+
+      return JSON.stringify({ ...(row as Record<string, unknown>), cwd: newProjectPath });
+    })
+    .join('\n');
 }
 
 /**
@@ -49,8 +72,9 @@ async function moveTranscriptFile(sourcePath: string, targetPath: string): Promi
  * Every transcript is verified to sit in the folder the old project path
  * encodes to before it is touched, so a Claude release that changes the
  * encoding degrades to "leave the files where they are" instead of scattering
- * them. On failure the already-moved files are put back and the error is
- * rethrown, so the caller never writes rows for a half-finished move.
+ * them. Copies are written before any original is removed, and a failure
+ * removes the copies again, so the caller never writes rows for a half-finished
+ * move.
  */
 export async function relocateClaudeTranscripts(input: {
   sessions: ClaudeTranscriptRelocation[];
@@ -64,7 +88,7 @@ export async function relocateClaudeTranscripts(input: {
   }
 
   const moved: ClaudeTranscriptRelocation[] = [];
-  const undo: ClaudeTranscriptRelocation[] = [];
+  const sourcePaths: string[] = [];
 
   try {
     for (const session of input.sessions) {
@@ -82,23 +106,44 @@ export async function relocateClaudeTranscripts(input: {
         continue;
       }
 
-      if (await moveTranscriptFile(session.jsonlPath, targetPath)) {
-        moved.push({ sessionId: session.sessionId, jsonlPath: targetPath });
-        undo.push(session);
-      }
+      const content = await readFile(session.jsonlPath, 'utf8');
+      await mkdir(path.dirname(targetPath), { recursive: true });
+      // `wx` rather than an overwrite: anything already at the destination is a
+      // transcript the new folder legitimately owns.
+      await writeFile(
+        targetPath,
+        rewriteTranscriptCwd(content, input.oldProjectPath, input.newProjectPath),
+        { flag: 'wx' },
+      );
+
+      moved.push({ sessionId: session.sessionId, jsonlPath: targetPath });
+      sourcePaths.push(session.jsonlPath);
     }
   } catch (error) {
-    for (const [index, original] of undo.entries()) {
+    for (const relocation of moved) {
       try {
-        await rename(moved[index].jsonlPath, original.jsonlPath);
-      } catch (undoError) {
+        await unlink(relocation.jsonlPath);
+      } catch (cleanupError) {
         console.warn(
-          `[claude-transcript-relocation] Failed to restore ${original.jsonlPath}:`,
-          (undoError as Error).message,
+          `[claude-transcript-relocation] Failed to remove ${relocation.jsonlPath}:`,
+          (cleanupError as Error).message,
         );
       }
     }
     throw error;
+  }
+
+  // Only once every copy exists: a transcript that failed to copy must still be
+  // readable where the database says it is.
+  for (const sourcePath of sourcePaths) {
+    try {
+      await unlink(sourcePath);
+    } catch (error) {
+      console.warn(
+        `[claude-transcript-relocation] Failed to remove ${sourcePath}:`,
+        (error as Error).message,
+      );
+    }
   }
 
   return moved;
