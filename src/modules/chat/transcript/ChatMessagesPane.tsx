@@ -58,6 +58,8 @@ type ChatMessagesPaneProps = {
   visibleMessageCount: number;
   visibleMessages: ChatMessage[];
   loadEarlierMessages: () => void;
+  /** Fetches one more page of older history; the only route to it when the loaded page is too short to scroll. */
+  loadOlderMessagesPage: () => void;
   revealMessage: (message: ChatMessage) => void;
   /** The session's running background tasks from the activity map, for the strip to list ones whose rows are not loaded. */
   backgroundTasks?: BackgroundTaskSummary[];
@@ -117,6 +119,7 @@ function ChatMessagesPane({
   visibleMessageCount,
   visibleMessages,
   loadEarlierMessages,
+  loadOlderMessagesPage,
   revealMessage,
   backgroundTasks,
   sendMessage,
@@ -246,13 +249,31 @@ function ChatMessagesPane({
             </div>
           )}
 
-          {/* Indicator showing there are more messages to load (hide when all loaded) */}
+          {/* Indicator showing there are more messages to load (hide when all loaded).
+              The controls are real buttons rather than a "scroll up to load more" hint
+              because a page shorter than the pane cannot be scrolled at all, which used
+              to leave the rest of the history unreachable. */}
           {hasMoreMessages && !isLoadingMoreMessages && !allMessagesLoaded && (
             <div className="border-b border-gray-200 py-2 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
               {totalMessages > 0 && (
                 <span>
-                  {t('session.messages.showingOf', { shown: sessionMessagesCount, total: totalMessages })}{' '}
-                  <span className="text-xs">{t('session.messages.scrollToLoad')}</span>
+                  {t('session.messages.showingOf', { shown: sessionMessagesCount, total: totalMessages })}
+                  {' | '}
+                  <button
+                    type="button"
+                    className="text-blue-600 underline hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                    onClick={loadOlderMessagesPage}
+                  >
+                    {t('session.messages.loadEarlier')}
+                  </button>
+                  {' | '}
+                  <button
+                    type="button"
+                    className="text-blue-600 underline hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                    onClick={loadAllMessages}
+                  >
+                    {t('session.messages.loadAll')}
+                  </button>
                 </span>
               )}
             </div>
