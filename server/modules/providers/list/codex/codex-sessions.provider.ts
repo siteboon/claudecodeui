@@ -1,7 +1,6 @@
 import fsSync from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
-import readline from 'node:readline';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import { codexAppServer } from '@/modules/providers/list/codex/codex-app-server.client.js';
@@ -21,6 +20,7 @@ import {
   AppError,
   createNormalizedMessage,
   generateMessageId,
+  readLines,
   readObjectRecord,
   sliceTailPage,
   truncateSubagentActivity,
@@ -137,10 +137,7 @@ function createCodexTurnTracker() {
  */
 async function readCodexLiveTurnIds(filePath: string): Promise<string[]> {
   const turns = createCodexTurnTracker();
-  const stream = fsSync.createReadStream(filePath);
-  const lines = readline.createInterface({ input: stream, crlfDelay: Infinity });
-
-  for await (const line of lines) {
+  for await (const line of readLines(filePath)) {
     if (!line.trim()) {
       continue;
     }
@@ -986,9 +983,7 @@ async function readCodexSubagentTranscript(filePath: string): Promise<CodexSubag
     return transcript;
   }
 
-  const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
-
-  for await (const line of rl) {
+  for await (const line of readLines(fileStream)) {
     if (!line.trim()) {
       continue;
     }
@@ -1232,9 +1227,6 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
   /** Turns whose prompt already carries the anchor, so only the first does. */
   const anchoredTurnIds = new Set<string>();
 
-  const fileStream = fsSync.createReadStream(sessionFilePath);
-  const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
-
   /** Emits a tool_result row unless the call already produced one. */
   const pushToolResult = (callId: string, timestamp: string, output: string, isError: boolean) => {
     if (completedExecCalls.has(callId)) {
@@ -1244,7 +1236,7 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
     messages.push({ type: 'tool_result', timestamp, toolCallId: callId, output, isError });
   };
 
-  for await (const line of rl) {
+  for await (const line of readLines(sessionFilePath)) {
     if (!line.trim()) {
       continue;
     }

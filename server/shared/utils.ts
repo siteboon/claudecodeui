@@ -13,7 +13,8 @@ import {
 } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import readline from 'node:readline';
+import type { Readable } from 'node:stream';
+import { StringDecoder } from 'node:string_decoder';
 import { fileURLToPath } from 'node:url';
 
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
@@ -1107,6 +1108,60 @@ export async function readFileTimestamps(
 // ---------------------------
 //----------------- SESSION SYNCHRONIZER JSONL PARSING HELPERS ------------
 /**
+ * Streams a text file (or any readable stream) and yields its lines, split on
+ * `\n` only.
+ *
+ * `readline` is not safe for JSONL: from Node 24 it also ends a line at
+ * U+2028/U+2029, which `JSON.stringify` leaves unescaped inside strings, so a
+ * transcript row quoting pasted text is cut in two and neither half parses.
+ * Here a line ends only at `\n` (a trailing `\r` is dropped, so CRLF files
+ * work), the last line is yielded even without a newline, and bytes are
+ * decoded with a `StringDecoder` so a multi-byte character split across two
+ * chunks stays intact. Memory stays bounded by the longest line.
+ *
+ * A path is opened here and a missing or unreadable file throws from the
+ * `for await` loop, like `readline` did. Leaving the loop early (`break`,
+ * `return`, `throw`) destroys the stream, so callers need no extra cleanup and
+ * no file descriptor leaks.
+ *
+ * Used by the provider session synchronizers, the Claude/Codex transcript
+ * readers and conversation search, which all parse JSONL line by line.
+ */
+export async function* readLines(source: string | Readable): AsyncGenerator<string> {
+  const stream = typeof source === 'string' ? fs.createReadStream(source) : source;
+  const decoder = new StringDecoder('utf8');
+  let partialLine = '';
+
+  const withoutCarriageReturn = (line: string) => (line.endsWith('\r') ? line.slice(0, -1) : line);
+
+  try {
+    for await (const chunk of stream) {
+      const text = typeof chunk === 'string' ? chunk : decoder.write(chunk as Buffer);
+      let lineStart = 0;
+      let newlineIndex = text.indexOf('\n');
+
+      // Only the new chunk is searched, so a very long line is not rescanned.
+      while (newlineIndex !== -1) {
+        const line = partialLine + text.slice(lineStart, newlineIndex);
+        partialLine = '';
+        yield withoutCarriageReturn(line);
+        lineStart = newlineIndex + 1;
+        newlineIndex = text.indexOf('\n', lineStart);
+      }
+
+      partialLine += text.slice(lineStart);
+    }
+
+    partialLine += decoder.end();
+    if (partialLine) {
+      yield withoutCarriageReturn(partialLine);
+    }
+  } finally {
+    stream.destroy();
+  }
+}
+
+/**
  * Builds a first-seen key/value lookup map from a JSONL file.
  *
  * Use this for provider index files where session id -> display name metadata
@@ -1121,21 +1176,22 @@ export async function buildLookupMap(
   const lookup = new Map<string, string>();
 
   try {
-    const fileStream = fs.createReadStream(filePath);
-    const lineReader = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
-
-    for await (const line of lineReader) {
+    for await (const line of readLines(filePath)) {
       const trimmed = line.trim();
       if (!trimmed) {
         continue;
       }
 
-      const parsed = JSON.parse(trimmed) as Record<string, unknown>;
-      const key = parsed[keyField];
-      const value = parsed[valueField];
+      try {
+        const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+        const key = parsed[keyField];
+        const value = parsed[valueField];
 
-      if (typeof key === 'string' && typeof value === 'string' && !lookup.has(key)) {
-        lookup.set(key, value);
+        if (typeof key === 'string' && typeof value === 'string' && !lookup.has(key)) {
+          lookup.set(key, value);
+        }
+      } catch {
+        // A malformed row skips only that row, not the rest of the file.
       }
     }
   } catch {
@@ -1157,25 +1213,28 @@ export async function extractFirstValidJsonlData<T>(
   extractor: (parsedJson: unknown) => T | null | undefined
 ): Promise<T | null> {
   try {
-    const fileStream = fs.createReadStream(filePath);
-    const lineReader = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
-
-    for await (const line of lineReader) {
+    for await (const line of readLines(filePath)) {
       const trimmed = line.trim();
       if (!trimmed) {
         continue;
       }
 
-      const parsed = JSON.parse(trimmed);
-      const extracted = extractor(parsed);
+      let extracted: T | null | undefined;
+      try {
+        extracted = extractor(JSON.parse(trimmed));
+      } catch {
+        // Ignore a malformed row (e.g. one half-written by a crash) and keep
+        // looking: one bad line must not hide the whole session.
+        continue;
+      }
+
       if (extracted) {
-        lineReader.close();
-        fileStream.close();
+        // Returning ends the loop, which closes the file.
         return extracted;
       }
     }
   } catch {
-    // Ignore malformed or missing artifacts so full scans keep progressing.
+    // Ignore missing or unreadable artifacts so full scans keep progressing.
   }
 
   return null;

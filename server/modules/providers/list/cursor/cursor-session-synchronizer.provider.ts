@@ -1,8 +1,6 @@
-import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import readline from 'node:readline';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import {
@@ -10,6 +8,7 @@ import {
   findFilesRecursivelyCreatedAfter,
   normalizeSessionName,
   readFileTimestamps,
+  readLines,
 } from '@/shared/utils.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
 
@@ -101,15 +100,11 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
    */
   private async extractProjectPathFromWorkerLog(filePath: string): Promise<string | null> {
     try {
-      const fileStream = fs.createReadStream(filePath, { encoding: 'utf8' });
-      const lineReader = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
-
-      for await (const line of lineReader) {
+      for await (const line of readLines(filePath)) {
         const match = line.match(/workspacePath=(.*)$/);
         const projectPath = match?.[1]?.trim();
         if (projectPath) {
-          lineReader.close();
-          fileStream.close();
+          // Returning ends the loop, which closes the file.
           return projectPath;
         }
       }

@@ -1,11 +1,10 @@
 import fsSync from 'node:fs';
 import path from 'node:path';
-import readline from 'node:readline';
 
 import { spawn } from 'cross-spawn';
 import { rgPath } from '@vscode/ripgrep';
 
-import { stripAnsiSequences } from '@/shared/utils.js';
+import { readLines, stripAnsiSequences } from '@/shared/utils.js';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 
 type AnyRecord = Record<string, any>;
@@ -893,10 +892,7 @@ async function parseClaudeSessionMatches(
     let currentSessionId: string | null = null;
 
     try {
-      const fileStream = fsSync.createReadStream(session.jsonl_path);
-      const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
-
-      for await (const line of rl) {
+      for await (const line of readLines(session.jsonl_path)) {
         if (runtime.totalMatches >= runtime.limit || runtime.isAborted()) {
           break;
         }
@@ -1027,10 +1023,7 @@ async function parseCodexSessionMatches(
   const seenMessageFingerprints = new Set<string>();
 
   try {
-    const fileStream = fsSync.createReadStream(session.jsonl_path);
-    const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
-
-    for await (const line of rl) {
+    for await (const line of readLines(session.jsonl_path)) {
       if (runtime.totalMatches >= runtime.limit || runtime.isAborted()) {
         break;
       }

@@ -1756,6 +1756,61 @@ test('buildLookupMap skips rows with non-string key or value', async () => {
 });
 
 // ---------------------------------------------------------------------------
+// Transcripts with a malformed row or a raw U+2028 (issue #1002)
+// ---------------------------------------------------------------------------
+
+test('synchronizeFile indexes a transcript whose first row is malformed and history keeps U+2028 text', { concurrency: false }, async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-sync-u2028-'));
+  const restoreHomeDir = patchHomeDir(tmp);
+  const transcriptPath = path.join(tmp, 'u2028-session.jsonl');
+  // JSON.stringify leaves U+2028 unescaped, exactly as Claude writes pasted text.
+  const prompt = 'pasted\u2028text';
+
+  try {
+    await writeFile(
+      transcriptPath,
+      [
+        'not json',
+        JSON.stringify({
+          type: 'user',
+          message: { role: 'user', content: prompt },
+          uuid: 'msg-1',
+          parentUuid: null,
+          timestamp: '2026-07-10T00:00:00.000Z',
+          cwd: '/workspace/demo',
+          sessionId: 'u2028-session',
+        }),
+        JSON.stringify({
+          type: 'assistant',
+          message: { role: 'assistant', content: [{ type: 'text', text: 'ok' }] },
+          uuid: 'msg-2',
+          parentUuid: 'msg-1',
+          timestamp: '2026-07-10T00:00:01.000Z',
+          sessionId: 'u2028-session',
+        }),
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+
+    await withIsolatedDatabase(async () => {
+      const sessionId = await new ClaudeSessionSynchronizer().synchronizeFile(transcriptPath);
+      assert.ok(sessionId, 'one malformed row must not keep the session out of the index');
+      assert.equal(sessionsDb.getSessionById(sessionId!)?.jsonl_path, transcriptPath);
+
+      const history = await new ClaudeSessionsProvider().fetchHistory(sessionId!, {
+        providerSessionId: 'u2028-session',
+      });
+      const userRows = history.messages.filter((message) => message.role === 'user');
+      assert.deepEqual(userRows.map((message) => message.content), [prompt]);
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // extractSessionTitle — tested via synchronizeFile
 // ---------------------------------------------------------------------------
 
