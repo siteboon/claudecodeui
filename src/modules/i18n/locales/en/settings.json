@@ -371,6 +371,19 @@
       }
     },
     "connectionStatus": "Connection Status",
+    "subscriptionOverride": {
+      "title": "Your subscription login is not being used",
+      "description": "{{variable}} is set in {{source}}, so Claude Code bills every request to that key as pay-as-you-go API usage instead of using your subscription login.",
+      "descriptionWithEmail": "{{variable}} is set in {{source}}, so Claude Code bills every request to that key as pay-as-you-go API usage instead of using your subscription login ({{email}}).",
+      "source": {
+        "process_env": "the server environment",
+        "settings_file": "~/.claude/settings.json"
+      },
+      "fix": {
+        "process_env": "To use the subscription, unset {{variable}} where the server is started (.env, shell profile, service unit) and restart the server.",
+        "settings_file": "To use the subscription, remove {{variable}} from the \"env\" block of ~/.claude/settings.json."
+      }
+    },
     "login": {
       "title": "Login",
       "reAuthenticate": "Re-authenticate",
