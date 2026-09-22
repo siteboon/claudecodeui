@@ -16,6 +16,16 @@ const hasActionablePermissionRequests = (requests: Array<{ toolName?: unknown }>
   return Array.isArray(requests) && requests.some((request) => isActionablePermissionRequest(request));
 };
 
+/**
+ * Frame kinds that end the assistant message a session is streaming. Each one
+ * lays down a row of its own, so whatever was streaming before it is a
+ * finished message: without this boundary every reply in a turn keeps growing
+ * into the single row parked at `__streaming_<sessionId>`, and providers whose
+ * live stream mixes deltas with other kinds (OpenCode) or never emits
+ * `stream_end` at all (Cursor) show one merged bubble per turn.
+ */
+const MESSAGE_BOUNDARY_KINDS = new Set(['text', 'thinking', 'tool_use', 'tool_result']);
+
 type UseChatRealtimeHandlersArgs = {
   isActive: boolean;
   subscribe: (listener: (event: ServerEvent) => void) => () => void;
@@ -25,8 +35,19 @@ type UseChatRealtimeHandlersArgs = {
   setTokenBudget: (budget: Record<string, unknown> | null) => void;
   pendingPermissionRequests: PendingPermissionRequest[];
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
-  streamTimerRef: MutableRefObject<number | null>;
-  accumulatedStreamRef: MutableRefObject<string>;
+  /**
+   * Pending flush timer per session id. Keyed by session because the row each
+   * flush writes to is already per session: a single timer let a terminal
+   * frame on one session cancel another session's pending flush.
+   */
+  streamTimersRef: MutableRefObject<Map<string, number>>;
+  /**
+   * Text streamed so far for the message each session is currently writing,
+   * keyed by session id. An entry exists exactly while that session has an
+   * open streamed row. A single accumulator flushed a background session's
+   * text into whichever session started the timer.
+   */
+  accumulatedStreamsRef: MutableRefObject<Map<string, string>>;
   /**
    * Highest live `seq` observed per session. Essential for reconnect catch-up:
    * `chat.subscribe` sends this value as `lastSeq` so the server replays only
@@ -68,8 +89,8 @@ export function useChatRealtimeHandlers({
   setTokenBudget,
   pendingPermissionRequests,
   setPendingPermissionRequests,
-  streamTimerRef,
-  accumulatedStreamRef,
+  streamTimersRef,
+  accumulatedStreamsRef,
   lastSeqRef,
   statusCheckSentAtRef,
   onSessionProcessing,
@@ -105,6 +126,26 @@ export function useChatRealtimeHandlers({
     // from, so this reads the same answer they draw.
     const reportRemainingBackgroundWork = (sid: string) => {
       onSessionBackground?.(sid, collectRunningBackgroundTasks(normalizedToChatMessages(sessionStore.getMessages(sid))));
+    };
+
+    /**
+     * Ends the message a session is streaming. Closing has to go through
+     * `finalizeStreaming`: it re-ids the row away from `__streaming_<sid>`, so
+     * the next message's first delta starts a fresh row instead of replacing
+     * the one just finished.
+     */
+    const closeStreamedMessage = (streamSessionId: string) => {
+      const pendingFlush = streamTimersRef.current.get(streamSessionId);
+      if (pendingFlush) {
+        clearTimeout(pendingFlush);
+        streamTimersRef.current.delete(streamSessionId);
+      }
+      const streamedText = accumulatedStreamsRef.current.get(streamSessionId);
+      if (streamedText) {
+        sessionStore.updateStreaming(streamSessionId, streamedText, provider);
+      }
+      accumulatedStreamsRef.current.delete(streamSessionId);
+      sessionStore.finalizeStreaming(streamSessionId);
     };
 
     const handleEvent = (msg: ServerEvent) => {
@@ -208,36 +249,30 @@ export function useChatRealtimeHandlers({
       // --- Streaming: buffer for performance ---
       if (msg.kind === 'stream_delta') {
         const text = (msg.content as string) || '';
-        if (!text) return;
-        accumulatedStreamRef.current += text;
-        if (!streamTimerRef.current) {
-          streamTimerRef.current = window.setTimeout(() => {
-            streamTimerRef.current = null;
-            if (sid) {
-              sessionStore.updateStreaming(sid, accumulatedStreamRef.current, provider);
-            }
-          }, 100);
-        }
-        // Also route to store for non-active sessions
-        if (sid && sid !== activeViewSessionId) {
-          sessionStore.appendRealtime(sid, msg as unknown as NormalizedMessage);
+        if (!text || !sid) return;
+        // The buffered row `updateStreaming` writes is per session, so the
+        // buffer feeding it is too — and it covers background sessions as
+        // well, which is why the raw delta frames are not appended on top.
+        accumulatedStreamsRef.current.set(sid, (accumulatedStreamsRef.current.get(sid) ?? '') + text);
+        if (!streamTimersRef.current.has(sid)) {
+          streamTimersRef.current.set(sid, window.setTimeout(() => {
+            streamTimersRef.current.delete(sid);
+            sessionStore.updateStreaming(sid, accumulatedStreamsRef.current.get(sid) ?? '', provider);
+          }, 100));
         }
         return;
       }
 
       if (msg.kind === 'stream_end') {
-        if (streamTimerRef.current) {
-          clearTimeout(streamTimerRef.current);
-          streamTimerRef.current = null;
-        }
         if (sid) {
-          if (accumulatedStreamRef.current) {
-            sessionStore.updateStreaming(sid, accumulatedStreamRef.current, provider);
-          }
-          sessionStore.finalizeStreaming(sid);
+          closeStreamedMessage(sid);
         }
-        accumulatedStreamRef.current = '';
         return;
+      }
+
+      // --- Message boundary: the streamed row ends where a new row starts ---
+      if (sid && accumulatedStreamsRef.current.has(sid) && MESSAGE_BOUNDARY_KINDS.has(msg.kind)) {
+        closeStreamedMessage(sid);
       }
 
       // --- All other messages: route to store ---
@@ -255,16 +290,10 @@ export function useChatRealtimeHandlers({
       // --- UI side effects for specific kinds ---
       switch (msg.kind) {
         case 'complete': {
-          // Flush any remaining streaming state
-          if (streamTimerRef.current) {
-            clearTimeout(streamTimerRef.current);
-            streamTimerRef.current = null;
+          // Flush any remaining streaming state for the session that ended.
+          if (sid) {
+            closeStreamedMessage(sid);
           }
-          if (sid && accumulatedStreamRef.current) {
-            sessionStore.updateStreaming(sid, accumulatedStreamRef.current, provider);
-            sessionStore.finalizeStreaming(sid);
-          }
-          accumulatedStreamRef.current = '';
 
           // `complete` is the unified terminal event — every provider run ends
           // with exactly one, regardless of success, failure, or abort. The
@@ -407,8 +436,8 @@ export function useChatRealtimeHandlers({
     setTokenBudget,
     pendingPermissionRequests,
     setPendingPermissionRequests,
-    streamTimerRef,
-    accumulatedStreamRef,
+    streamTimersRef,
+    accumulatedStreamsRef,
     lastSeqRef,
     statusCheckSentAtRef,
     onSessionProcessing,
