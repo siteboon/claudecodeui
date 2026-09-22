@@ -59,6 +59,30 @@ export type AuthenticatedWebSocketRequest = IncomingMessage & {
 };
 
 // ---------------------------
+//----------------- PLUGIN IDENTITY TYPES ------------
+/**
+ * Authenticated user shape the plugins module signs into `x-plugin-user-*`
+ * headers for plugin servers (issue #744).
+ *
+ * The three identity fields are shared with `AuthenticatedWebSocketUser` (a
+ * `Pick` rather than a copy so there is one source of truth); the index
+ * signature is dropped so the HTTP `req.user` database row (`{ id, username }`)
+ * is assignable too. `userId` is canonical and `id` is the fallback alias,
+ * matching the payload the plugin receives.
+ */
+export type PluginIdentityUser = Pick<AuthenticatedWebSocketUser, 'id' | 'userId' | 'username'>;
+
+/**
+ * Lower-case `x-plugin-user-payload` / `-signature` / `-algorithm` headers the
+ * host attaches to proxied plugin HTTP requests and websocket upgrades.
+ *
+ * Empty (`{}`) when there is no authenticated user, so transports can spread
+ * it into an outgoing header set unconditionally. Never populated from
+ * client-supplied headers.
+ */
+export type PluginIdentityHeaders = Record<string, string>;
+
+// ---------------------------
 //----------------- PROVIDER MESSAGE MODEL ------------
 /**
  * Providers supported by the unified server runtime.

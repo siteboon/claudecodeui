@@ -3,7 +3,11 @@ import http from 'node:http';
 
 import express from 'express';
 
+import type { PluginIdentityUser } from '@/shared/types.js';
+
 import type { createPluginsService } from './plugins.service.js';
+
+type AuthenticatedRequest = express.Request & { user?: PluginIdentityUser };
 
 function wildcardPath(req: express.Request): string {
   return ((req.params as Record<string, string>)['0'] ?? '').trim();
@@ -11,6 +15,24 @@ function wildcardPath(req: express.Request): string {
 
 function routeParameter(value: string | string[]): string {
   return Array.isArray(value) ? value[0] ?? '' : value;
+}
+
+/**
+ * Query string to forward to the plugin. The session JWT may arrive as
+ * `?token=` (auth.middleware accepts it for SSE-style clients), and it must no
+ * more reach the plugin than the Authorization header does; every other
+ * parameter is passed through verbatim.
+ */
+function forwardedQuery(url: string): string {
+  const queryIndex = url.indexOf('?');
+  if (queryIndex === -1) return '';
+  const kept = url.slice(queryIndex + 1).split('&').filter((pair) => {
+    const rawKey = pair.split('=')[0] ?? '';
+    let key = rawKey;
+    try { key = decodeURIComponent(rawKey.replace(/\+/g, ' ')); } catch { /* keep raw key */ }
+    return key !== 'token';
+  });
+  return kept.length > 0 ? `?${kept.join('&')}` : '';
 }
 
 /** Creates plugin routes; transport streaming remains here while decisions live in the service. */
@@ -38,14 +60,20 @@ export function createPluginsRouter(service: ReturnType<typeof createPluginsServ
   router.post('/:name/update', respond((req) => service.update(routeParameter(req.params.name))));
   router.all('/:name/rpc/*', async (req, res, next) => {
     try {
-      const { port, secrets } = await service.prepareRpc(routeParameter(req.params.name));
+      const { port, secrets, identityHeaders } = await service.prepareRpc(
+        routeParameter(req.params.name),
+        (req as AuthenticatedRequest).user,
+      );
+      // Built from scratch on purpose: inbound x-plugin-user-* / x-plugin-secret-*
+      // headers from the client must never reach the plugin.
       const headers: Record<string, string> = {
         'content-type': String(req.headers['content-type'] ?? 'application/json'),
+        ...identityHeaders,
       };
       for (const [key, value] of Object.entries(secrets)) {
         headers[`x-plugin-secret-${key.toLowerCase()}`] = String(value);
       }
-      const query = req.url.includes('?') ? `?${req.url.split('?').slice(1).join('?')}` : '';
+      const query = forwardedQuery(req.url);
       const proxyRequest = http.request({
         hostname: '127.0.0.1', port, path: `/${wildcardPath(req)}${query}`, method: req.method, headers,
       }, (proxyResponse) => {

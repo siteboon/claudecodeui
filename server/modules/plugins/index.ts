@@ -1,5 +1,8 @@
 // pluginsRoutes: used by the server entrypoint to mount protected plugin-management endpoints.
 export { pluginsRoutes } from './plugins.module.js';
+// buildPluginIdentityHeaders: used by WebSocket setup in the server entrypoint so the
+// plugin websocket proxy forwards the same signed x-plugin-user-* headers as HTTP RPC.
+export { buildPluginIdentityHeaders } from './plugins.module.js';
 
 // startEnabledPluginServers: used by the server entrypoint to start enabled plugin subprocesses.
 export { startEnabledPluginServers } from './plugin-process.service.js';
