@@ -830,6 +830,46 @@ export type UpsertProviderMcpServerInput = {
   envHttpHeaders?: Record<string, string>;
 };
 
+/**
+ * Live connection state of one configured MCP server, as reported by the
+ * provider's own health check.
+ *
+ * `pending` is a project-scoped (`.mcp.json`) server the provider has not been
+ * told to trust yet, so it was never contacted. `unknown` means nothing could
+ * be observed — the provider offers no health check, or the probe itself
+ * failed — and must never be rendered as a failure.
+ */
+export type McpConnectionState = 'connected' | 'failed' | 'pending' | 'unknown';
+
+/**
+ * One server's entry in an MCP health-check report. `name` matches
+ * `ProviderMcpServer.name`, which is how callers join statuses onto the
+ * configured servers they already listed. `detail` carries the provider's own
+ * wording for a non-connected state (an OAuth rejection, a refused connection)
+ * and is omitted when the server is connected.
+ */
+export type ProviderMcpServerStatus = {
+  name: string;
+  state: McpConnectionState;
+  detail?: string;
+};
+
+/**
+ * Result of health-checking every MCP server one provider can see from a given
+ * workspace path.
+ *
+ * `supported` is false for providers that expose no health check at all; in
+ * that case `statuses` is empty and callers must show "unknown". `error` is set
+ * when the probe was supported but could not be completed, and is likewise not
+ * a statement about any individual server.
+ */
+export type ProviderMcpStatusReport = {
+  provider: LLMProvider;
+  supported: boolean;
+  statuses: ProviderMcpServerStatus[];
+  error?: string;
+};
+
 // ---------------------------
 //----------------- PROVIDER AUTH TYPES ------------
 /**
