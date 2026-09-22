@@ -1,8 +1,8 @@
-import { LogIn } from 'lucide-react';
+import { AlertTriangle, LogIn } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Badge, Button, LLMProviderLogo } from '@/shared/ui';
-import type { AgentProvider, ProviderAuthStatus } from '@/shared/types';
+import type { AgentProvider, ProviderAuthStatus, ProviderAuthSubscriptionOverride } from '@/shared/types';
 
 type AccountContentProps = {
   agent: AgentProvider;
@@ -55,6 +55,44 @@ const agentConfig: Record<AgentProvider, AgentVisualConfig> = {
     buttonClass: 'bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-950 dark:bg-zinc-700 dark:hover:bg-zinc-600',
   },
 };
+
+type SubscriptionOverrideNoticeProps = {
+  override: ProviderAuthSubscriptionOverride;
+};
+
+// Issue #568: Claude Code prefers ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN over
+// the `claude /login` subscription and says nothing about it, so a subscriber
+// who also has a key in the server env is billed pay-as-you-go without knowing.
+// The server only reports the override while a usable login is really being
+// bypassed, so this stays out of the way for key-only and login-only setups.
+function SubscriptionOverrideNotice({ override }: SubscriptionOverrideNoticeProps) {
+  const { t } = useTranslation('settings');
+  const source = t(`agents.subscriptionOverride.source.${override.source}`);
+  const description = override.subscriptionEmail
+    ? t('agents.subscriptionOverride.descriptionWithEmail', {
+      variable: override.variable,
+      source,
+      email: override.subscriptionEmail,
+    })
+    : t('agents.subscriptionOverride.description', { variable: override.variable, source });
+
+  return (
+    <div
+      role="alert"
+      data-testid="provider-auth-subscription-override"
+      className="rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-900/30"
+    >
+      <div className="flex items-start gap-2">
+        <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+        <div className="space-y-1 text-sm text-amber-900 dark:text-amber-100">
+          <div className="font-medium">{t('agents.subscriptionOverride.title')}</div>
+          <p>{description}</p>
+          <p>{t(`agents.subscriptionOverride.fix.${override.source}`, { variable: override.variable })}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /** Rendered by AgentCategoryContentSection for the "account" category to show sign-in state for one provider. */
 export default function AccountContent({ agent, authStatus, onLogin }: AccountContentProps) {
@@ -110,6 +148,10 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
               )}
             </div>
           </div>
+
+          {!authStatus.loading && authStatus.subscriptionOverride && (
+            <SubscriptionOverrideNotice override={authStatus.subscriptionOverride} />
+          )}
 
           {authStatus.method !== 'api_key' && (
             <div className="border-t border-border/50 pt-4">

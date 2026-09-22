@@ -833,6 +833,29 @@ export type UpsertProviderMcpServerInput = {
 // ---------------------------
 //----------------- PROVIDER AUTH TYPES ------------
 /**
+ * Records that an API-key style credential is taking precedence over a
+ * still-valid subscription login in `~/.claude/.credentials.json`.
+ *
+ * Claude Code always prefers `ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_API_KEY` over
+ * the OAuth login written by `claude /login`, so when both exist every request
+ * is billed to the key (pay-as-you-go) rather than the subscription — usually
+ * without the user realising it. The Claude auth provider fills this in so the
+ * settings UI can say which variable won and where it was found; the fix
+ * differs per source (unset the variable and restart the server for
+ * `process_env`, edit the `env` block of `~/.claude/settings.json` for
+ * `settings_file`). It is never set when the login in the credentials file is
+ * missing or expired, because then nothing is being bypassed.
+ */
+export type ProviderAuthSubscriptionOverride = {
+  /** The environment variable Claude Code is using instead of the login. */
+  variable: 'ANTHROPIC_API_KEY' | 'ANTHROPIC_AUTH_TOKEN';
+  /** Where that variable was found: the server process env or the settings.json env block. */
+  source: 'process_env' | 'settings_file';
+  /** Email recorded in the credentials file for the bypassed login, when known. */
+  subscriptionEmail: string | null;
+};
+
+/**
  * Authentication status result returned by provider health checks.
  *
  * This shape is consumed by settings/status endpoints to report installation and
@@ -845,6 +868,12 @@ export type ProviderAuthStatus = {
   email: string | null;
   method: string | null;
   error?: string;
+  /**
+   * Present only when `method` is `api_key` and a valid subscription login is
+   * being bypassed; see ProviderAuthSubscriptionOverride. Omitted otherwise so
+   * existing consumers that never look for it are unaffected.
+   */
+  subscriptionOverride?: ProviderAuthSubscriptionOverride;
 };
 
 // ---------------------------

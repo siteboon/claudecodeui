@@ -1267,13 +1267,21 @@ export type ProjectWorkspaceShellProps = RealtimeProps & {
 
 //----------------- PROVIDER AUTHENTICATION ------------
 
-/** Sign-in state of one LLM provider CLI - whether it is authenticated, the account email and method, plus in-flight loading and error state - polled by the provider-auth module and rendered by the settings and onboarding account views. */
+/** Reported by the server when an ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN is taking precedence over a still-valid `claude /login` subscription, so every request is billed pay-as-you-go to the key; says which variable won, where it was found (the fix differs: restart after unsetting a process env var, or edit the `env` block of ~/.claude/settings.json) and the bypassed account's email when the credentials file records one. Rendered as a warning by the settings account view. */
+export type ProviderAuthSubscriptionOverride = {
+  variable: 'ANTHROPIC_API_KEY' | 'ANTHROPIC_AUTH_TOKEN';
+  source: 'process_env' | 'settings_file';
+  subscriptionEmail: string | null;
+};
+
+/** Sign-in state of one LLM provider CLI - whether it is authenticated, the account email and method, plus in-flight loading and error state - polled by the provider-auth module and rendered by the settings and onboarding account views. `subscriptionOverride` is only present when an API key is bypassing a valid subscription login. */
 export type ProviderAuthStatus = {
   authenticated: boolean;
   email: string | null;
   method: string | null;
   error: string | null;
   loading: boolean;
+  subscriptionOverride?: ProviderAuthSubscriptionOverride;
 };
 
 /** The authentication state of every CLI provider at once, keyed by LLMProvider, so onboarding and settings can render each provider's connected, loading and error state from one object returned by useProviderAuthStatus. */
