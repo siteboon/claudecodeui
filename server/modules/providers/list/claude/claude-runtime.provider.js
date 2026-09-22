@@ -54,7 +54,31 @@ const abortedSessionIds = new Set();
 // entry, the abort flag, and all client-facing events belong to the new run.
 const supersededInstances = new WeakSet();
 
-const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS, 10) || 55000;
+// Fallback when CLAUDE_TOOL_APPROVAL_TIMEOUT_MS is unset or not a number. Kept at
+// the value the runtime has always used so existing deployments are unaffected.
+const DEFAULT_TOOL_APPROVAL_TIMEOUT_MS = 55000;
+
+/**
+ * Resolves how long a permission prompt (canUseTool) waits for the user before
+ * the tool call is denied, from the raw CLAUDE_TOOL_APPROVAL_TIMEOUT_MS value:
+ *
+ * - unset, empty, or not a number -> DEFAULT_TOOL_APPROVAL_TIMEOUT_MS
+ * - 0 or any negative number      -> 0, meaning wait indefinitely (no timer)
+ * - a positive number             -> that many milliseconds
+ *
+ * Read per run rather than once at startup, like CLAUDE_CLI_PATH. Used by
+ * queryClaudeSDK for every non-interactive prompt, and by the provider tests to
+ * pin the mapping (`|| 55000` used to turn an explicit 0 back into the default).
+ * @param {string|undefined} rawValue - process.env.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS
+ * @returns {number} timeout in milliseconds, 0 for no timeout
+ */
+export function resolveToolApprovalTimeoutMs(rawValue) {
+  const parsed = parseInt(rawValue, 10);
+  if (Number.isNaN(parsed)) {
+    return DEFAULT_TOOL_APPROVAL_TIMEOUT_MS;
+  }
+  return parsed > 0 ? parsed : 0;
+}
 
 // How long background work is allowed to keep running after a turn ends. This drives
 // two halves of the same behaviour:
@@ -124,7 +148,7 @@ function createRequestId() {
 }
 
 function waitForToolApproval(requestId, options = {}) {
-  const { timeoutMs = TOOL_APPROVAL_TIMEOUT_MS, signal, onCancel, metadata } = options;
+  const { timeoutMs = DEFAULT_TOOL_APPROVAL_TIMEOUT_MS, signal, onCancel, metadata } = options;
 
   return new Promise(resolve => {
     let settled = false;
@@ -978,6 +1002,10 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       }]
     };
 
+    // Interactive tools (AskUserQuestion, ExitPlanMode) always wait for the user;
+    // everything else waits for the configured timeout, where 0 also means forever.
+    const toolApprovalTimeoutMs = resolveToolApprovalTimeoutMs(process.env.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS);
+
     // Caveat: in 'auto' and 'bypassPermissions' modes the SDK resolves approval
     // at the permission-mode step and skips this callback, so interactive tools
     // (AskUserQuestion, ExitPlanMode) won't reach the UI — the classifier/bypass
@@ -1021,7 +1049,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       }));
 
       const decision = await waitForToolApproval(requestId, {
-        timeoutMs: requiresInteraction ? 0 : undefined,
+        timeoutMs: requiresInteraction ? 0 : toolApprovalTimeoutMs,
         signal: context?.signal,
         metadata: {
           // Keyed by the app session id so `chat.subscribe` can look pending

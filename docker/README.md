@@ -108,6 +108,7 @@ sbx exec -d my-project cloudcli start --port 3001
 | `SERVER_PORT` | `3001` | Web UI port |
 | `HOST` | `0.0.0.0` | Bind address (must be `0.0.0.0` for `sbx ports`) |
 | `DATABASE_PATH` | `~/.cloudcli/auth.db` | SQLite database location |
+| `CLAUDE_TOOL_APPROVAL_TIMEOUT_MS` | `55000` | How long a Claude tool permission prompt waits for an answer before the tool is denied (ms). `0` disables the timeout |
 
 ## Advanced usage
 
