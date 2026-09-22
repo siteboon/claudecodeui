@@ -151,6 +151,13 @@
       "label": "深色模式",
       "description": "切换浅色和深色主题"
     },
+    "theme": {
+      "label": "主题",
+      "description": "选择浅色或深色外观，或跟随操作系统设置",
+      "light": "浅色",
+      "dark": "深色",
+      "system": "跟随系统外观"
+    },
     "projectSorting": {
       "label": "项目排序",
       "description": "项目在侧边栏中的排列方式",

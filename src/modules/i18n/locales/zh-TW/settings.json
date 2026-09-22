@@ -126,6 +126,13 @@
       "label": "深色模式",
       "description": "切換淺色和深色佈景主題"
     },
+    "theme": {
+      "label": "佈景主題",
+      "description": "選擇淺色或深色外觀，或跟隨作業系統設定",
+      "light": "淺色",
+      "dark": "深色",
+      "system": "跟隨系統外觀"
+    },
     "projectSorting": {
       "label": "專案排序",
       "description": "專案在側邊欄中的排列方式",

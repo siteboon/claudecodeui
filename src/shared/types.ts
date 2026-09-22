@@ -1468,6 +1468,16 @@ export type SidebarProjectListProps = SessionRowActions & {
   t: TFunction;
 };
 
+/**
+ * The colour theme the user selected, persisted as the `theme` preference.
+ *
+ * `light` and `dark` pin the appearance; `system` follows the operating
+ * system's light/dark setting and keeps following it while the app is open.
+ * `system` is the default, and is also what an unrecognised stored value
+ * resolves to.
+ */
+export type ThemeMode = 'light' | 'dark' | 'system';
+
 /** The ordering applied to the project list, either alphabetically by name or by most recent activity, persisted alongside the user's appearance settings. */
 export type ProjectSortOrder = 'name' | 'date';
 

@@ -151,6 +151,13 @@
       "label": "Dark Mode",
       "description": "Toggle between light and dark themes"
     },
+    "theme": {
+      "label": "Theme",
+      "description": "Choose a light or dark appearance, or follow your operating system",
+      "light": "Light",
+      "dark": "Dark",
+      "system": "Follow the system appearance"
+    },
     "projectSorting": {
       "label": "Project Sorting",
       "description": "How projects are ordered in the sidebar",

@@ -151,6 +151,13 @@
       "label": "다크 모드",
       "description": "라이트/다크 테마 전환"
     },
+    "theme": {
+      "label": "테마",
+      "description": "밝은 테마나 어두운 테마를 선택하거나 운영체제 설정을 따릅니다",
+      "light": "밝게",
+      "dark": "어둡게",
+      "system": "시스템 설정 따르기"
+    },
     "projectSorting": {
       "label": "프로젝트 정렬",
       "description": "사이드바에서 프로젝트 정렬 방식",
