@@ -1,5 +1,5 @@
 import { FILE_STATUS_GROUPS } from '@/shared/constants';
-import type { FileStatusCode, GitStatusResponse } from '@/shared/types';
+import type { FileStatusCode, GitRepositorySummary, GitStatusResponse } from '@/shared/types';
 
 const FILE_STATUS_LABELS: Record<FileStatusCode, string> = {
   M: 'git:status.modified',
@@ -104,4 +104,24 @@ export function parseCommitFiles(showOutput: string): CommitFileSummary {
     totalInsertions: files.reduce((sum, f) => sum + f.insertions, 0),
     totalDeletions: files.reduce((sum, f) => sum + f.deletions, 0),
   };
+}
+
+// Which repository to show: the remembered one when it still exists, else the
+// project root when it is a repository, else the first nested repository.
+// Before the scan answers (empty list) the remembered choice is trusted so the
+// panel does not flash the root first.
+export function resolveRepositorySelection(
+  repositories: GitRepositorySummary[],
+  storedPath: string | null,
+): string {
+  if (repositories.length === 0) {
+    return storedPath ?? '';
+  }
+  if (storedPath !== null && repositories.some((repository) => repository.path === storedPath)) {
+    return storedPath;
+  }
+  if (repositories.some((repository) => repository.path === '')) {
+    return '';
+  }
+  return repositories[0]?.path ?? '';
 }

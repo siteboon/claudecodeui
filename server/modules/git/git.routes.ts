@@ -9,6 +9,7 @@ import { AppError } from '@/shared/utils.js';
 // cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
 import { parseGitLogWithStats, parseGitStatusOutput } from './git-parsing.service.js';
 import { deleteLocalBranch } from './git-branch.service.js';
+import { discoverRepositories } from './git-repository-discovery.service.js';
 
 type GitRouterDependencies = {
   fileSystem: typeof import('node:fs/promises');
@@ -135,6 +136,26 @@ async function getActualProjectPath(projectId) {
     throw new Error(`Unable to resolve project path for "${projectId}"`);
   }
   return validateProjectPath(projectPath);
+}
+
+/**
+ * Resolve the repository a request targets: the project root, or with `repo`
+ * (a path relative to the project root) a repository nested below it. The
+ * result must stay inside the project directory.
+ */
+async function getRepositoryPath(projectId, repo) {
+  const projectPath = await getActualProjectPath(projectId);
+  if (repo === undefined || repo === null || repo === '' || repo === '.') {
+    return projectPath;
+  }
+  if (typeof repo !== 'string' || repo.includes('\0')) {
+    throw new Error('Invalid repository path');
+  }
+  const resolved = path.resolve(projectPath, repo);
+  if (resolved !== projectPath && !resolved.startsWith(projectPath + path.sep)) {
+    throw new Error('Invalid repository path: must be inside the project');
+  }
+  return resolved;
 }
 
 // Helper function to strip git diff headers
@@ -329,7 +350,8 @@ async function resolveRepositoryFilePath(projectPath, filePath) {
 }
 
 // Get Git status for a project; parsing is isolated in git-parsing.service.ts.
-router.get('/status', async (req, res) => {
+// Repositories under the project root the panel can switch between.
+router.get('/repositories', async (req, res) => {
   const { project } = req.query;
 
   if (!project) {
@@ -338,6 +360,22 @@ router.get('/status', async (req, res) => {
 
   try {
     const projectPath = await getActualProjectPath(project);
+    res.json({ repositories: await discoverRepositories(projectPath, fs) });
+  } catch (error) {
+    console.error('Git repositories error:', error);
+    res.status(500).json({ error: 'Failed to list repositories', details: error.message });
+  }
+});
+
+router.get('/status', async (req, res) => {
+  const { project, repo } = req.query;
+
+  if (!project) {
+    return res.status(400).json({ error: 'Project id is required' });
+  }
+
+  try {
+    const projectPath = await getRepositoryPath(project, repo);
 
     // Validate git repository
     await validateGitRepository(projectPath);
@@ -375,14 +413,14 @@ router.get('/status', async (req, res) => {
 
 // Initialize a new git repository in the project directory
 router.post('/init', async (req, res) => {
-  const { project } = req.body;
+  const { project, repo } = req.body;
 
   if (!project) {
     return res.status(400).json({ error: 'Project id is required' });
   }
 
   try {
-    const projectPath = await getActualProjectPath(project);
+    const projectPath = await getRepositoryPath(project, repo);
 
     let isAlreadyRepository = false;
     try {
@@ -409,14 +447,14 @@ router.post('/init', async (req, res) => {
 
 // Get diff for a specific file
 router.get('/diff', async (req, res) => {
-  const { project, file } = req.query;
+  const { project, repo, file } = req.query;
   
   if (!project || !file) {
     return res.status(400).json({ error: 'Project id and file path are required' });
   }
 
   try {
-    const projectPath = await getActualProjectPath(project);
+    const projectPath = await getRepositoryPath(project, repo);
     
     // Validate git repository
     await validateGitRepository(projectPath);
@@ -492,14 +530,14 @@ router.get('/diff', async (req, res) => {
 
 // Get file content with diff information for CodeEditor
 router.get('/file-with-diff', async (req, res) => {
-  const { project, file } = req.query;
+  const { project, repo, file } = req.query;
 
   if (!project || !file) {
     return res.status(400).json({ error: 'Project id and file path are required' });
   }
 
   try {
-    const projectPath = await getActualProjectPath(project);
+    const projectPath = await getRepositoryPath(project, repo);
 
     // Validate git repository
     await validateGitRepository(projectPath);
@@ -572,14 +610,14 @@ router.get('/file-with-diff', async (req, res) => {
 
 // Create initial commit
 router.post('/initial-commit', async (req, res) => {
-  const { project } = req.body;
+  const { project, repo } = req.body;
 
   if (!project) {
     return res.status(400).json({ error: 'Project id is required' });
   }
 
   try {
-    const projectPath = await getActualProjectPath(project);
+    const projectPath = await getRepositoryPath(project, repo);
 
     // Validate git repository
     await validateGitRepository(projectPath);
@@ -616,14 +654,14 @@ router.post('/initial-commit', async (req, res) => {
 
 // Commit changes
 router.post('/commit', async (req, res) => {
-  const { project, message, files } = req.body;
+  const { project, repo, message, files } = req.body;
   
   if (!project || !message || !files || files.length === 0) {
     return res.status(400).json({ error: 'Project name, commit message, and files are required' });
   }
 
   try {
-    const projectPath = await getActualProjectPath(project);
+    const projectPath = await getRepositoryPath(project, repo);
     
     // Validate git repository
     await validateGitRepository(projectPath);
@@ -648,14 +686,14 @@ router.post('/commit', async (req, res) => {
 // Stage files (git add). Mirrors what the UI shows as the "Staged" section,
 // so the app's staging state and the real git index never drift apart.
 router.post('/stage', async (req, res) => {
-  const { project, files } = req.body;
+  const { project, repo, files } = req.body;
 
   if (!project || !Array.isArray(files) || files.length === 0) {
     return res.status(400).json({ error: 'Project id and files are required' });
   }
 
   try {
-    const projectPath = await getActualProjectPath(project);
+    const projectPath = await getRepositoryPath(project, repo);
     await validateGitRepository(projectPath);
     const repositoryRootPath = await getRepositoryRootPath(projectPath);
 
@@ -673,14 +711,14 @@ router.post('/stage', async (req, res) => {
 
 // Unstage files (remove from the index, keep the worktree changes)
 router.post('/unstage', async (req, res) => {
-  const { project, files } = req.body;
+  const { project, repo, files } = req.body;
 
   if (!project || !Array.isArray(files) || files.length === 0) {
     return res.status(400).json({ error: 'Project id and files are required' });
   }
 
   try {
-    const projectPath = await getActualProjectPath(project);
+    const projectPath = await getRepositoryPath(project, repo);
     await validateGitRepository(projectPath);
     const repositoryRootPath = await getRepositoryRootPath(projectPath);
     const hasCommits = await repositoryHasCommits(projectPath);
@@ -705,14 +743,14 @@ router.post('/unstage', async (req, res) => {
 
 // Revert latest local commit (keeps changes staged)
 router.post('/revert-local-commit', async (req, res) => {
-  const { project } = req.body;
+  const { project, repo } = req.body;
 
   if (!project) {
     return res.status(400).json({ error: 'Project id is required' });
   }
 
   try {
-    const projectPath = await getActualProjectPath(project);
+    const projectPath = await getRepositoryPath(project, repo);
     await validateGitRepository(projectPath);
 
     try {
@@ -752,14 +790,14 @@ router.post('/revert-local-commit', async (req, res) => {
 
 // Get list of branches
 router.get('/branches', async (req, res) => {
-  const { project } = req.query;
+  const { project, repo } = req.query;
   
   if (!project) {
     return res.status(400).json({ error: 'Project id is required' });
   }
 
   try {
-    const projectPath = await getActualProjectPath(project);
+    const projectPath = await getRepositoryPath(project, repo);
     
     // Validate git repository
     await validateGitRepository(projectPath);
@@ -796,14 +834,14 @@ router.get('/branches', async (req, res) => {
 
 // Checkout branch
 router.post('/checkout', async (req, res) => {
-  const { project, branch } = req.body;
+  const { project, repo, branch } = req.body;
   
   if (!project || !branch) {
     return res.status(400).json({ error: 'Project id and branch are required' });
   }
 
   try {
-    const projectPath = await getActualProjectPath(project);
+    const projectPath = await getRepositoryPath(project, repo);
     
     // Checkout the branch
     validateBranchName(branch);
@@ -818,14 +856,14 @@ router.post('/checkout', async (req, res) => {
 
 // Create new branch
 router.post('/create-branch', async (req, res) => {
-  const { project, branch } = req.body;
+  const { project, repo, branch } = req.body;
   
   if (!project || !branch) {
     return res.status(400).json({ error: 'Project id and branch name are required' });
   }
 
   try {
-    const projectPath = await getActualProjectPath(project);
+    const projectPath = await getRepositoryPath(project, repo);
     
     // Create and checkout new branch
     validateBranchName(branch);
@@ -840,7 +878,7 @@ router.post('/create-branch', async (req, res) => {
 
 // Delete a local branch
 router.post('/delete-branch', async (req, res) => {
-  const { project, branch, force = false } = req.body;
+  const { project, repo, branch, force = false } = req.body;
 
   if (!project || !branch) {
     return res.status(400).json({ error: 'Project id and branch name are required' });
@@ -851,7 +889,7 @@ router.post('/delete-branch', async (req, res) => {
   }
 
   try {
-    const projectPath = await getActualProjectPath(project);
+    const projectPath = await getRepositoryPath(project, repo);
     await validateGitRepository(projectPath);
     validateBranchName(branch);
     const stdout = await deleteLocalBranch({
@@ -876,14 +914,14 @@ const GIT_LOG_PRETTY_FORMAT = '%H%x1f%P%x1f%D%x1f%an%x1f%ae%x1f%ad%x1f%s';
 
 // Get recent commits (across all branches, in graph order)
 router.get('/commits', async (req, res) => {
-  const { project, limit = 10 } = req.query;
+  const { project, repo, limit = 10 } = req.query;
 
   if (!project) {
     return res.status(400).json({ error: 'Project id is required' });
   }
 
   try {
-    const projectPath = await getActualProjectPath(project);
+    const projectPath = await getRepositoryPath(project, repo);
     await validateGitRepository(projectPath);
     const parsedLimit = Number.parseInt(String(limit), 10);
     const safeLimit = Number.isFinite(parsedLimit) && parsedLimit > 0
@@ -919,14 +957,14 @@ router.get('/commits', async (req, res) => {
 
 // Get diff for a specific commit
 router.get('/commit-diff', async (req, res) => {
-  const { project, commit } = req.query;
+  const { project, repo, commit } = req.query;
   
   if (!project || !commit) {
     return res.status(400).json({ error: 'Project id and commit hash are required' });
   }
 
   try {
-    const projectPath = await getActualProjectPath(project);
+    const projectPath = await getRepositoryPath(project, repo);
 
     // Validate commit reference (defense-in-depth)
     validateCommitRef(commit);
@@ -951,7 +989,7 @@ router.get('/commit-diff', async (req, res) => {
 
 // Generate commit message based on staged changes using AI
 router.post('/generate-commit-message', async (req, res) => {
-  const { project, files, provider = 'claude' } = req.body;
+  const { project, repo, files, provider = 'claude' } = req.body;
 
   if (!project || !files || files.length === 0) {
     return res.status(400).json({ error: 'Project id and files are required' });
@@ -963,7 +1001,7 @@ router.post('/generate-commit-message', async (req, res) => {
   }
 
   try {
-    const projectPath = await getActualProjectPath(project);
+    const projectPath = await getRepositoryPath(project, repo);
     await validateGitRepository(projectPath);
     const repositoryRootPath = await getRepositoryRootPath(projectPath);
 
@@ -1156,14 +1194,14 @@ function cleanCommitMessage(text) {
 
 // Get remote status (ahead/behind commits with smart remote detection)
 router.get('/remote-status', async (req, res) => {
-  const { project } = req.query;
+  const { project, repo } = req.query;
   
   if (!project) {
     return res.status(400).json({ error: 'Project id is required' });
   }
 
   try {
-    const projectPath = await getActualProjectPath(project);
+    const projectPath = await getRepositoryPath(project, repo);
     await validateGitRepository(projectPath);
 
     const branch = await getCurrentBranchName(projectPath);
@@ -1234,14 +1272,14 @@ router.get('/remote-status', async (req, res) => {
 
 // Fetch from remote (using smart remote detection)
 router.post('/fetch', async (req, res) => {
-  const { project } = req.body;
+  const { project, repo } = req.body;
   
   if (!project) {
     return res.status(400).json({ error: 'Project id is required' });
   }
 
   try {
-    const projectPath = await getActualProjectPath(project);
+    const projectPath = await getRepositoryPath(project, repo);
     await validateGitRepository(projectPath);
 
     // Get current branch and its upstream remote
@@ -1275,14 +1313,14 @@ router.post('/fetch', async (req, res) => {
 
 // Pull from remote (fetch + merge using smart remote detection)
 router.post('/pull', async (req, res) => {
-  const { project } = req.body;
+  const { project, repo } = req.body;
   
   if (!project) {
     return res.status(400).json({ error: 'Project id is required' });
   }
 
   try {
-    const projectPath = await getActualProjectPath(project);
+    const projectPath = await getRepositoryPath(project, repo);
     await validateGitRepository(projectPath);
 
     // Get current branch and its upstream remote
@@ -1343,14 +1381,14 @@ router.post('/pull', async (req, res) => {
 
 // Push commits to remote repository
 router.post('/push', async (req, res) => {
-  const { project } = req.body;
+  const { project, repo } = req.body;
   
   if (!project) {
     return res.status(400).json({ error: 'Project id is required' });
   }
 
   try {
-    const projectPath = await getActualProjectPath(project);
+    const projectPath = await getRepositoryPath(project, repo);
     await validateGitRepository(projectPath);
 
     // Get current branch and its upstream remote
@@ -1414,14 +1452,14 @@ router.post('/push', async (req, res) => {
 
 // Publish branch to remote (set upstream and push)
 router.post('/publish', async (req, res) => {
-  const { project, branch } = req.body;
+  const { project, repo, branch } = req.body;
   
   if (!project || !branch) {
     return res.status(400).json({ error: 'Project id and branch are required' });
   }
 
   try {
-    const projectPath = await getActualProjectPath(project);
+    const projectPath = await getRepositoryPath(project, repo);
     await validateGitRepository(projectPath);
 
     // Validate branch name
@@ -1493,14 +1531,14 @@ router.post('/publish', async (req, res) => {
 
 // Discard changes for a specific file
 router.post('/discard', async (req, res) => {
-  const { project, file } = req.body;
+  const { project, repo, file } = req.body;
   
   if (!project || !file) {
     return res.status(400).json({ error: 'Project id and file path are required' });
   }
 
   try {
-    const projectPath = await getActualProjectPath(project);
+    const projectPath = await getRepositoryPath(project, repo);
     await validateGitRepository(projectPath);
     const {
       repositoryRootPath,
@@ -1547,14 +1585,14 @@ router.post('/discard', async (req, res) => {
 
 // Delete untracked file
 router.post('/delete-untracked', async (req, res) => {
-  const { project, file } = req.body;
+  const { project, repo, file } = req.body;
   
   if (!project || !file) {
     return res.status(400).json({ error: 'Project id and file path are required' });
   }
 
   try {
-    const projectPath = await getActualProjectPath(project);
+    const projectPath = await getRepositoryPath(project, repo);
     await validateGitRepository(projectPath);
     const {
       repositoryRootPath,
