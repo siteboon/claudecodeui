@@ -1114,6 +1114,23 @@ export function useChatSessionState({
     setVisibleMessageCount((prev) => prev + 100);
   }, []);
 
+  /**
+   * Fetches one more page of older history on demand, for the transcript
+   * header's control.
+   *
+   * `loadOlderMessages` is otherwise only reached from `handleScroll`, and a
+   * first page that is shorter than the pane leaves nothing to scroll: no
+   * `scroll` event, no scrollbar to drag, and nothing for Home/PageUp to move.
+   * Wheel and touch still reach it, but neither is available to a keyboard user
+   * and neither is discoverable, so the rest of the history needs a control
+   * that does not depend on a gesture.
+   */
+  const loadOlderMessagesPage = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    void loadOlderMessages(container);
+  }, [loadOlderMessages]);
+
   // Brings one row into view even when it is outside the visible window or
   // sits in a lazy row that has not mounted: widen the window to include it,
   // then scroll to the row's wrapper, which is in the DOM as soon as the row
@@ -1162,6 +1179,7 @@ export function useChatSessionState({
     visibleMessageCount,
     visibleMessages,
     loadEarlierMessages,
+    loadOlderMessagesPage,
     revealMessage,
     loadAllMessages,
     loadFullTranscript,
