@@ -427,10 +427,20 @@ export function useSlashCommands({
 
       if (event.key === 'Tab' || event.key === 'Enter') {
         event.preventDefault();
-        if (selectedCommandIndex >= 0) {
-          selectCommandFromKeyboard(filteredCommands[selectedCommandIndex]);
-        } else if (filteredCommands.length > 0) {
-          selectCommandFromKeyboard(filteredCommands[0]);
+        // Until the user arrows through the menu nothing is highlighted, so both
+        // keys act on the first match — the entry the menu renders at the top.
+        const targetCommand = filteredCommands[selectedCommandIndex >= 0 ? selectedCommandIndex : 0];
+        if (!targetCommand) {
+          return true;
+        }
+
+        // Tab is completion, not submission: it only writes "<name> " into the
+        // input and closes the menu, so an argument can still be typed before
+        // Enter runs the command. Enter keeps executing the highlighted entry.
+        if (event.key === 'Tab') {
+          insertCommandIntoInput(targetCommand);
+        } else {
+          selectCommandFromKeyboard(targetCommand);
         }
         return true;
       }
@@ -443,7 +453,14 @@ export function useSlashCommands({
 
       return false;
     },
-    [showCommandMenu, filteredCommands, resetCommandMenuState, selectCommandFromKeyboard, selectedCommandIndex],
+    [
+      showCommandMenu,
+      filteredCommands,
+      insertCommandIntoInput,
+      resetCommandMenuState,
+      selectCommandFromKeyboard,
+      selectedCommandIndex,
+    ],
   );
 
   useEffect(
