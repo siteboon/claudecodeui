@@ -100,7 +100,8 @@ export default function WorkspaceTitle({
                 readOnly={isSavingRename}
                 aria-busy={isSavingRename}
                 aria-label={t('mainContent.renameSessionLabel')}
-                maxLength={500}
+                // Blur cancels, so a touch keyboard needs a key that commits.
+                enterKeyHint="done"
                 className="w-full max-w-md rounded border border-border bg-background px-1.5 py-0.5 text-sm font-semibold leading-tight text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
               />
             ) : (

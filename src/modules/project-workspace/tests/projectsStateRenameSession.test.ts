@@ -132,6 +132,35 @@ test('a blank title is rejected before any request is made', async () => {
   assert.equal(result.current.selectedSession?.summary, 'Original title');
 });
 
+test('a rename leaves the one-shot search jump target behind', async () => {
+  // The chat re-reads `__searchTargetSnippet` off every new `selectedSession`
+  // identity, so carrying it over would scroll back to the matched message.
+  renameSessionResponse.mockResolvedValue({ ok: true, json: async () => ({}) });
+  projectsResponse.mockResolvedValue({ ok: true, json: async () => [buildProject()] });
+  const { result } = await renderProjectsState();
+  await waitFor(() => {
+    assert.equal(result.current.projects.length, 1);
+  });
+  act(() => {
+    result.current.handleSessionSelect({
+      ...session,
+      __projectId: 'project-1',
+      __searchTargetSnippet: 'matched text',
+      __searchTargetTimestamp: '2026-09-22T10:00:00.000Z',
+    });
+  });
+  assert.equal(result.current.selectedSession?.__searchTargetSnippet, 'matched text');
+
+  await act(async () => {
+    await result.current.renameSession('session-1', 'Renamed after search');
+  });
+
+  assert.equal(result.current.selectedSession?.summary, 'Renamed after search');
+  assert.equal('__searchTargetSnippet' in (result.current.selectedSession ?? {}), false);
+  assert.equal('__searchTargetTimestamp' in (result.current.selectedSession ?? {}), false);
+  assert.equal(result.current.selectedSession?.__provider, 'claude');
+});
+
 test('renaming a session other than the selected one leaves the selection untouched', async () => {
   renameSessionResponse.mockResolvedValue({ ok: true, json: async () => ({}) });
   const result = await renderWithSelectedSession();

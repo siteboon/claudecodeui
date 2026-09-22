@@ -113,6 +113,10 @@ export function useSessionTitleRename({
     // Keep the keystrokes from reaching the workspace's global shortcuts.
     event.stopPropagation();
     if (event.key === 'Enter') {
+      // An Enter that only confirms an IME candidate (ja/ko/zh) is not a save.
+      if (event.nativeEvent.isComposing) {
+        return;
+      }
       event.preventDefault();
       void saveDraft();
     } else if (event.key === 'Escape') {

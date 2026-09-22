@@ -114,6 +114,24 @@ test('Escape restores the title without calling the rename callback', () => {
   assert.equal(titleHeading().textContent, 'Original title');
 });
 
+test('Enter that only confirms an IME candidate does not save', async () => {
+  renderTitle();
+  fireEvent.doubleClick(titleHeading());
+
+  fireEvent.change(renameInput(), { target: { value: '日本語' } });
+  await act(async () => {
+    fireEvent.keyDown(renameInput(), { key: 'Enter', isComposing: true });
+  });
+
+  assert.equal(onRenameSession.mock.calls.length, 0);
+  assert.equal(renameInput().value, '日本語');
+
+  await act(async () => {
+    fireEvent.keyDown(renameInput(), { key: 'Enter' });
+  });
+  assert.deepEqual(onRenameSession.mock.calls, [['session-1', '日本語']]);
+});
+
 test('clicking away cancels the edit, as the sidebar rename does', () => {
   renderTitle();
   fireEvent.doubleClick(titleHeading());

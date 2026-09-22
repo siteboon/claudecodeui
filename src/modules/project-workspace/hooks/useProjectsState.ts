@@ -1146,7 +1146,8 @@ export function useProjectsState({
    * — the moment the backend confirms. The rename route only updates the DB; it
    * does not broadcast a `session_upserted`, so nothing else would refresh the
    * header. Patching in place rather than refetching also keeps every session
-   * page the sidebar has loaded past the first.
+   * page the sidebar has loaded past the first. The sidebar's Conversations
+   * list folds the new title in from `projects` itself.
    *
    * Resolves `false` when the backend refused the rename; transport errors
    * propagate so the caller can tell the two apart, as the sidebar does.
@@ -1175,11 +1176,17 @@ export function useProjectsState({
       return changed ? nextProjects : previousProjects;
     });
 
-    setSelectedSession((previousSession) => (
-      previousSession?.id === sessionIdToRename && previousSession.summary !== trimmed
-        ? { ...previousSession, summary: trimmed }
-        : previousSession
-    ));
+    setSelectedSession((previousSession) => {
+      if (previousSession?.id !== sessionIdToRename || previousSession.summary === trimmed) {
+        return previousSession;
+      }
+      // A session opened from a Conversations search hit carries the one-shot
+      // jump target the chat reads off every new `selectedSession` identity.
+      // Leave it behind, or the rename would scroll the transcript back to the
+      // matched message and flash the search highlight again.
+      const { __searchTargetSnippet: _snippet, __searchTargetTimestamp: _timestamp, ...session } = previousSession;
+      return { ...session, summary: trimmed };
+    });
 
     return true;
   }, []);
