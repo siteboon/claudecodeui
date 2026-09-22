@@ -300,6 +300,15 @@ export type NormalizedMessage = {
   role?: 'user' | 'assistant';
   content?: string;
   /**
+   * The model that produced this assistant message, as the provider reported
+   * it on the transcript row (today: Claude's `message.model`, e.g.
+   * `claude-opus-5`). Absent on user turns — no provider records which model a
+   * request went out with — and absent when the provider named a placeholder
+   * such as `<synthetic>`, so a locally-fabricated notice is never labelled
+   * with a model it did not run on.
+   */
+  model?: string;
+  /**
    * Optional display-oriented metadata used by providers that need to expose
    * richer transcript artifacts without introducing a brand-new message kind.
    *

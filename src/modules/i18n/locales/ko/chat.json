@@ -235,7 +235,8 @@
   },
   "message": {
     "editAndResend": "수정 후 다시 보내기",
-    "forkFromHere": "여기서 분기"
+    "forkFromHere": "여기서 분기",
+    "answeredBy": "{{model}}이(가) 응답함"
   },
   "composer": {
     "editing": {

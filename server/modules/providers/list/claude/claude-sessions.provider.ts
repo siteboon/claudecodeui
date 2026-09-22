@@ -23,6 +23,7 @@ import { prepareTranscriptMessages, truncateNestedOutput } from '@/shared/messag
 import {
   createNormalizedMessage,
   generateMessageId,
+  isPlaceholderProviderModel,
   readObjectRecord,
   sliceTailPage,
   stripAnsiSequences,
@@ -902,6 +903,20 @@ type ClaudeTaskStatusEvent = Pick<
 const readOptionalString = (value: unknown): string | undefined =>
   typeof value === 'string' && value ? value : undefined;
 
+/**
+ * The model an assistant row reports, or undefined when there is nothing
+ * honest to report.
+ *
+ * Rows Claude Code fabricated locally — a usage-limit notice, an API-error
+ * placeholder — are stamped `<synthetic>`; labelling one with a model would
+ * claim a request that never ran, so those are dropped here rather than
+ * guessed at further down.
+ */
+const readAssistantModel = (value: unknown): string | undefined => {
+  const model = readOptionalString(value)?.trim();
+  return model && !isPlaceholderProviderModel(model) ? model : undefined;
+};
+
 /** The CLI's `{total_tokens, tool_uses, duration_ms}` in the app's spelling. */
 function readTaskUsage(value: unknown): TaskUsage | undefined {
   const usage = readObjectRecord(value);
@@ -1415,6 +1430,13 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     }
 
     if (raw.message?.role === 'assistant' && raw.message?.content) {
+      // Which model actually answered. It rides on the assistant row itself in
+      // both the transcript and the live SDK stream, so history renders it
+      // retroactively with no migration. Only prose carries it: a tool call has
+      // no footer to show it in, and a locally-fabricated row (`<synthetic>`,
+      // e.g. the usage-limit notice) gets no label rather than a guessed one.
+      const answeredByModel = readAssistantModel(raw.message.model);
+
       if (Array.isArray(raw.message.content)) {
         let partIndex = 0;
         for (const part of raw.message.content) {
@@ -1427,6 +1449,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
               kind: 'text',
               role: 'assistant',
               content: part.text,
+              model: answeredByModel,
             }));
           } else if (part.type === 'tool_use') {
             messages.push(createNormalizedMessage({
@@ -1460,6 +1483,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
           kind: 'text',
           role: 'assistant',
           content: raw.message.content,
+          model: answeredByModel,
         }));
       }
       return messages;

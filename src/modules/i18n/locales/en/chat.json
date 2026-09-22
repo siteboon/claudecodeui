@@ -271,7 +271,8 @@
   },
   "message": {
     "editAndResend": "Edit and resend",
-    "forkFromHere": "Fork from here"
+    "forkFromHere": "Fork from here",
+    "answeredBy": "Answered by {{model}}"
   },
   "export": {
     "trigger": "Export conversation",

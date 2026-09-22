@@ -640,6 +640,22 @@ export function buildDefaultProviderCurrentActiveModel(
   };
 }
 
+/**
+ * True for a model name a provider fabricated rather than actually ran.
+ *
+ * Claude Code stamps locally-synthesized transcript rows (API-error notices,
+ * usage-limit messages) with `model: "<synthetic>"`. Angle-bracketed values are
+ * placeholders, never real model ids, so neither the active-model lookup nor
+ * the per-message model a reply is labelled with may adopt one.
+ *
+ * Used by the Claude models provider (which walks the transcript backwards for
+ * the session's model) and by the Claude sessions provider (which stamps each
+ * assistant message with the model that answered it).
+ */
+export function isPlaceholderProviderModel(model: string): boolean {
+  return model.startsWith('<') && model.endsWith('>');
+}
+
 // ---------------------------
 //----------------- WEBSOCKET PAYLOAD PARSING UTILITIES ------------
 /**
