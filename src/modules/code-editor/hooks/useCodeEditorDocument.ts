@@ -55,6 +55,10 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
   // different file has always replaced the buffer.
   const loadedDocumentKeyRef = useRef<string | null>(null);
   const documentKey = `${fileProjectId ?? ''}::${filePath}`;
+  // Identifies the newest load. `api.readFile` cannot be aborted, so a read that
+  // was superseded may still resolve; only the current one may touch the buffer,
+  // or an older file's text could land under the newer path and be saved there.
+  const latestLoadIdRef = useRef(0);
 
   const setContent = useCallback((nextContent: string) => {
     contentRef.current = nextContent;
@@ -90,6 +94,9 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
 
     setUnsavedChangesBlockedReload(false);
     loadedDocumentKeyRef.current = documentKey;
+    latestLoadIdRef.current += 1;
+    const loadId = latestLoadIdRef.current;
+    const isCurrentLoad = () => latestLoadIdRef.current === loadId;
 
     const loadFileContent = async () => {
       try {
@@ -131,8 +138,14 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
         }
 
         const data = await response.json();
+        if (!isCurrentLoad()) {
+          return;
+        }
         setLoadedContent(data.content);
       } catch (error) {
+        if (!isCurrentLoad()) {
+          return;
+        }
         const message = getErrorMessage(error);
         console.error('Error loading file:', error);
         // The placeholder replaces the buffer, so it becomes the baseline too:
@@ -140,7 +153,9 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
         // editor must not report the message it just wrote as unsaved work.
         setLoadedContent(`// Error loading file: ${message}\n// File: ${fileName}\n// Path: ${filePath}`);
       } finally {
-        setLoading(false);
+        if (isCurrentLoad()) {
+          setLoading(false);
+        }
       }
     };
 

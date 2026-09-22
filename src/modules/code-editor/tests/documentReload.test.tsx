@@ -49,6 +49,10 @@ const renderDocument = () => renderHook(
 );
 
 beforeEach(() => {
+  // `restoreMocks` in the vitest config does not clear the call history of these
+  // module-level mocks, and some tests count calls.
+  readFile.mockClear();
+  saveFile.mockClear();
   disk.content = 'first version';
   readFile.mockImplementation(async () => jsonResponse({ content: disk.content }));
   saveFile.mockImplementation(async (_projectId: string, _path: string, content: string) => {
@@ -131,6 +135,35 @@ test('saving leaves the buffer clean, so the next open reloads it', async () => 
   rerender({ file: openSameFile() });
 
   await waitFor(() => assert.equal(result.current.content, 'someone else edit'));
+});
+
+test('a superseded read does not overwrite the file opened after it', async () => {
+  // Each read waits until the test resolves it, so the older one can be made to
+  // answer last.
+  const pendingReads = new Map<string, (content: string) => void>();
+  readFile.mockImplementation((_projectId: string, path: string) => new Promise<Response>((resolve) => {
+    pendingReads.set(path, (content) => resolve(jsonResponse({ content })));
+  }));
+
+  const { result, rerender } = renderDocument();
+  await waitFor(() => assert.ok(pendingReads.has('src/app.ts')));
+
+  rerender({ file: { name: 'other.ts', path: 'src/other.ts', projectId: 'project-1' } });
+  await waitFor(() => assert.ok(pendingReads.has('src/other.ts')));
+
+  await act(async () => pendingReads.get('src/other.ts')?.('other content'));
+  await waitFor(() => assert.equal(result.current.content, 'other content'));
+  assert.equal(result.current.loading, false);
+
+  await act(async () => pendingReads.get('src/app.ts')?.('stale app content'));
+
+  assert.equal(result.current.content, 'other content');
+  assert.equal(result.current.loading, false);
+
+  await act(async () => {
+    await result.current.handleSave();
+  });
+  assert.deepEqual(saveFile.mock.calls[0], ['project-1', 'src/other.ts', 'other content']);
 });
 
 test('the header offers the reload', () => {
