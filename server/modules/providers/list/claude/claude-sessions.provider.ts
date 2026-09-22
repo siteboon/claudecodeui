@@ -505,12 +505,48 @@ function isUserPromptRow(row: AnyRecord): boolean {
 }
 
 /**
- * Drops the rows belonging to prompts that were replaced by an edit.
+ * Maps each row's uuid to the file position of the newest row in its subtree.
+ *
+ * The transcript is append-only and a child is always written after its
+ * parent, so one backward pass hands every row's position to its parent and
+ * each uuid ends up holding the position of the last line its branch grew.
+ */
+function indexNewestRowPerBranch(rows: AnyRecord[]): Map<string, number> {
+  const newestByUuid = new Map<string, number>();
+
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index];
+    if (typeof row.uuid !== 'string') {
+      continue;
+    }
+    const newest = newestByUuid.get(row.uuid) ?? index;
+    newestByUuid.set(row.uuid, newest);
+    if (typeof row.parentUuid === 'string' && (newestByUuid.get(row.parentUuid) ?? -1) < newest) {
+      newestByUuid.set(row.parentUuid, newest);
+    }
+  }
+
+  return newestByUuid;
+}
+
+/**
+ * Drops the rows belonging to prompts the next resume will not replay.
  *
  * When a message is edited, Claude resumes the conversation partway and appends
  * the replacement, so two prompts end up sharing one parent and the file holds
  * both the abandoned attempt and the live one. A flat read would show them
- * stacked, which reads as the app having sent the message twice.
+ * stacked, which reads as the app having sent the message twice. The same shape
+ * appears without an edit when a session is driven from Chat and from the
+ * native `claude` CLI at once: both writers branch off the row each of them saw
+ * last.
+ *
+ * Which sibling survives is decided by which branch the runtime will actually
+ * resume. `claude --resume` — and the Agent SDK's `resume`, which spawns that
+ * same CLI — replays the chain ending at the newest row in the file, so the
+ * branch that was *appended to* last wins rather than the one that was *started*
+ * last. For an edit the two rules agree, because nothing is ever added to the
+ * abandoned attempt again; for two live writers they do not, and going by the
+ * newest prompt would show a branch the model was never sent.
  *
  * Only sibling *prompts* are treated as a fork. Branch points made by parallel
  * tool calls are extremely common — one assistant turn writes several chained
@@ -531,15 +567,26 @@ function dropSupersededPromptBranches(rows: AnyRecord[]): AnyRecord[] {
     }
   }
 
+  const forks = [...promptSiblings.values()].filter((siblings) => siblings.length > 1);
+  if (forks.length === 0) {
+    return rows;
+  }
+
+  const newestByUuid = indexNewestRowPerBranch(rows);
+  const newestRowOf = (row: AnyRecord): number => (
+    typeof row.uuid === 'string' ? newestByUuid.get(row.uuid) ?? -1 : -1
+  );
+
   const supersededRoots = new Set<string>();
-  for (const siblings of promptSiblings.values()) {
-    if (siblings.length < 2) {
-      continue;
+  for (const siblings of forks) {
+    let live = siblings[0];
+    for (const row of siblings) {
+      if (newestRowOf(row) > newestRowOf(live)) {
+        live = row;
+      }
     }
-    // The transcript is append-only, so the last prompt written under a parent
-    // is the one that replaced the others.
-    for (const row of siblings.slice(0, -1)) {
-      if (typeof row.uuid === 'string') {
+    for (const row of siblings) {
+      if (row !== live && typeof row.uuid === 'string') {
         supersededRoots.add(row.uuid);
       }
     }
