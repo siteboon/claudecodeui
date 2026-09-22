@@ -105,16 +105,25 @@ test('rememberClaudeToolPermission leaves a malformed settings file untouched', 
  */
 test('a remembered approval from canUseTool lands in the project settings file', async () => {
   await withTempProject(async (projectDirectory) => {
+    type CanUseTool = (toolName: string, input: unknown, context: unknown) => Promise<unknown>;
+
     const sent: NormalizedMessage[] = [];
-    let canUseTool: ((toolName: string, input: unknown, context: unknown) => Promise<unknown>) | null = null;
-    let endStream: (() => void) | null = null;
+    // Promises rather than mutable locals: the run reaches `createQuery` a few
+    // ticks after `queryClaudeSDK` is called, so the test has to wait for the
+    // callback rather than read it back synchronously.
+    let captureCanUseTool!: (canUseTool: CanUseTool) => void;
+    const canUseToolReady = new Promise<CanUseTool>((resolve) => { captureCanUseTool = resolve; });
+    let endStream!: () => void;
+    const streamEnded = new Promise<void>((resolve) => { endStream = resolve; });
 
     const createQuery: NonNullable<ProviderRuntimeContext['createQuery']> = ({ prompt, options }) => {
-      canUseTool = (options as { canUseTool: typeof canUseTool }).canUseTool;
+      captureCanUseTool((options as { canUseTool: CanUseTool }).canUseTool);
       void (async () => { for await (const _message of prompt) { /* the CLI reads its stdin */ } })();
 
       const iterator = (async function* () {
-        await new Promise<void>((resolve) => { endStream = resolve; });
+        await streamEnded;
+        // The run exists only to build `canUseTool`; the SDK stream stays empty.
+        yield* [];
       })();
       return Object.assign(iterator, { interrupt: async () => {}, stopTask: async () => {} });
     };
@@ -136,11 +145,8 @@ test('a remembered approval from canUseTool lands in the project settings file',
       context,
     );
 
-    while (!canUseTool) {
-      await new Promise((resolve) => { setTimeout(resolve, 10); });
-    }
-
-    const approval = (canUseTool as NonNullable<typeof canUseTool>)(
+    const canUseTool = await canUseToolReady;
+    const approval = canUseTool(
       'Write',
       { file_path: path.join(projectDirectory, 'note.txt'), content: 'hi' },
       {},
@@ -164,7 +170,7 @@ test('a remembered approval from canUseTool lands in the project settings file',
     });
     assert.deepEqual(await readSettings(projectDirectory), { permissions: { allow: ['Write'] } });
 
-    endStream?.();
+    endStream();
     await done;
   });
 });
