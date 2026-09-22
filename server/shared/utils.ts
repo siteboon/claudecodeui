@@ -4,6 +4,7 @@ import {
   access,
   lstat,
   mkdir,
+  open,
   readFile,
   readdir,
   readlink,
@@ -11,6 +12,7 @@ import {
   stat,
   writeFile,
 } from 'node:fs/promises';
+import type { FileHandle } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
@@ -1179,6 +1181,101 @@ export async function extractFirstValidJsonlData<T>(
   }
 
   return null;
+}
+
+const LINE_FEED = 0x0a;
+
+/**
+ * Yields a file's `\n`-separated lines from EOF toward BOF, reading at most
+ * `chunkBytes` at a time.
+ *
+ * The lines are exactly the fields of `(await readFile(p, 'utf8')).split('\n')`
+ * in reverse order, including the empty final field that a trailing newline
+ * produces; an empty file yields nothing. A caller looking for the *last*
+ * record of some kind therefore meets it first and can stop, where the forward
+ * equivalent has to reach EOF to know it has the last one.
+ *
+ * Peak memory is one chunk plus the longest line, not the whole file. A chunk
+ * boundary almost always falls mid-line and may split a multi-byte character,
+ * so the bytes before a chunk's first newline are carried **undecoded** into
+ * the next (earlier) chunk, and a range is decoded only once it is known to be
+ * a whole line.
+ *
+ * Yields nothing for a missing or unreadable file, so callers can skip or fall
+ * back rather than handle an error. The handle is closed even when the consumer
+ * breaks out early — which is the case worth having an iterator for.
+ */
+export async function* readLinesBackwards(
+  filePath: string,
+  chunkBytes: number
+): AsyncGenerator<string> {
+  let handle: FileHandle | undefined;
+
+  try {
+    handle = await open(filePath, 'r');
+    const { size } = await handle.stat();
+    if (size === 0) {
+      return;
+    }
+
+    const step = Math.max(1, Math.floor(chunkBytes));
+    /** Bytes before the current block's first newline: an earlier line's tail. */
+    let carry = Buffer.alloc(0);
+    let end = size;
+
+    while (end > 0) {
+      const start = Math.max(0, end - step);
+      const chunk = Buffer.alloc(end - start);
+
+      // `read` may return short; keep asking until the range is covered.
+      let filled = 0;
+      while (filled < chunk.length) {
+        const { bytesRead } = await handle.read(
+          chunk,
+          filled,
+          chunk.length - filled,
+          start + filled
+        );
+        if (bytesRead === 0) {
+          break; // Truncated underneath us: work with what arrived.
+        }
+        filled += bytesRead;
+      }
+
+      const block = Buffer.concat([chunk.subarray(0, filled), carry]);
+      const firstBreak = block.indexOf(LINE_FEED);
+
+      // Everything before the first newline continues into the previous chunk —
+      // except at BOF, where nothing earlier exists and it is a whole line.
+      let lineStart: number;
+      if (start === 0) {
+        carry = Buffer.alloc(0);
+        lineStart = -1;
+      } else if (firstBreak === -1) {
+        carry = block; // No newline at all: the block is one long fragment.
+        end = start;
+        continue;
+      } else {
+        carry = block.subarray(0, firstBreak);
+        lineStart = firstBreak;
+      }
+
+      let lineEnd = block.length;
+      for (let index = block.length - 1; index > lineStart; index -= 1) {
+        if (block[index] === LINE_FEED) {
+          yield block.toString('utf8', index + 1, lineEnd);
+          lineEnd = index;
+        }
+      }
+      yield block.toString('utf8', lineStart + 1, lineEnd);
+
+      end = start;
+    }
+  } catch {
+    // Ignore missing/unreadable files so callers can fall back or skip.
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
 }
 
 // ---------------------------

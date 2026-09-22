@@ -1,6 +1,5 @@
 import os from 'node:os';
 import path from 'node:path';
-import { readFile } from 'node:fs/promises';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import {
@@ -9,6 +8,7 @@ import {
   findFilesRecursivelyCreatedAfter,
   normalizeSessionName,
   readFileTimestamps,
+  readLinesBackwards,
 } from '@/shared/utils.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
 
@@ -17,6 +17,16 @@ type ParsedSession = {
   projectPath: string;
   sessionName?: string;
 };
+
+/**
+ * Read granularity for the backwards title scan.
+ *
+ * 64 KiB is Node's default `highWaterMark` for file streams, i.e. the size it
+ * already treats as one efficient file read, so a smaller value only buys more
+ * syscalls and a larger one over-reads past an answer that is usually within a
+ * few hundred bytes of EOF.
+ */
+const TITLE_SCAN_CHUNK_BYTES = 64 * 1024;
 
 /**
  * Session indexer for Claude transcript artifacts.
@@ -161,10 +171,12 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
   /**
    * Returns the best available title for one session from its transcript.
    *
-   * Scans forward keeping the last match of each event type, then prefers
-   * `custom-title` (a manual `/rename`) over `ai-title` over `last-prompt`.
-   * Claude writes `custom-title` immediately before `ai-title`, so a reverse
-   * scan that returns its first hit would always lose the manual rename.
+   * Prefers `custom-title` (a manual `/rename`) over `ai-title` over
+   * `last-prompt`. Scanning backwards, the first hit of a type *is* its last
+   * occurrence in the file, so the priority is resolved without reading
+   * forward to EOF. Only `custom-title` may return early: nothing earlier in
+   * the file can outrank it. An `ai-title` cannot, because a `custom-title`
+   * may still lie before it — Claude writes the two adjacently, custom first.
    *
    * Returns undefined on a missing or unreadable file so sync can continue.
    */
@@ -173,15 +185,11 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     sessionId: string
   ): Promise<string | undefined> {
     try {
-      const content = await readFile(filePath, 'utf8');
-      const lines = content.split(/\r?\n/);
-
-      let foundCustomTitle: string | undefined;
       let foundAiTitle: string | undefined;
       let foundLastPrompt: string | undefined;
 
-      for (let index = 0; index < lines.length; index += 1) {
-        const line = lines[index]?.trim();
+      for await (const rawLine of readLinesBackwards(filePath, TITLE_SCAN_CHUNK_BYTES)) {
+        const line = rawLine.trim();
         if (!line) {
           continue;
         }
@@ -204,22 +212,22 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         if (eventType === 'custom-title') {
           const title = typeof data.customTitle === 'string' ? data.customTitle : undefined;
           if (title?.trim()) {
-            foundCustomTitle = title;
+            return title;
           }
         } else if (eventType === 'ai-title') {
           const title = typeof data.aiTitle === 'string' ? data.aiTitle : undefined;
-          if (title?.trim()) {
+          if (title?.trim() && foundAiTitle === undefined) {
             foundAiTitle = title;
           }
         } else if (eventType === 'last-prompt') {
           const prompt = typeof data.lastPrompt === 'string' ? data.lastPrompt : undefined;
-          if (prompt?.trim()) {
+          if (prompt?.trim() && foundLastPrompt === undefined) {
             foundLastPrompt = prompt;
           }
         }
       }
 
-      return foundCustomTitle || foundAiTitle || foundLastPrompt;
+      return foundAiTitle || foundLastPrompt;
     } catch {
       // Ignore missing/unreadable files so sync can continue.
     }
