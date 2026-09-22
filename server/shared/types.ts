@@ -927,6 +927,20 @@ export type WorkspacePathValidationResult = {
   error?: string;
 };
 
+/**
+ * One session's transcript file, as passed between the Projects module and the
+ * Claude transcript relocation helper when a project folder is repointed.
+ *
+ * On the way in, `jsonlPath` is where the transcript currently is; on the way
+ * out it is where it was moved to, so the caller can persist the new
+ * `sessions.jsonl_path`. Only sessions that actually own a file on disk belong
+ * in these lists.
+ */
+export type ClaudeTranscriptRelocation = {
+  sessionId: string;
+  jsonlPath: string;
+};
+
 // ---------------------------
 //----------------- GIT WORKTREE MANAGEMENT ------------
 /**
