@@ -3,10 +3,7 @@ import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promise
 import path from 'node:path';
 import test from 'node:test';
 
-import { closeConnection } from '@/modules/database/connection.js';
-import { initializeDatabase } from '@/modules/database/init-db.js';
-import { projectsDb } from '@/modules/database/repositories/projects.db.js';
-import { sessionsDb } from '@/modules/database/repositories/sessions.db.js';
+import { closeConnection, initializeDatabase, projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { relocateProject } from '@/modules/projects/services/project-relocate.service.js';
 import { WORKSPACES_ROOT } from '@/shared/utils.js';
 
