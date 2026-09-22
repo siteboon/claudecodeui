@@ -220,6 +220,18 @@ async function dispatchRun(
 ): Promise<{ started: boolean; error: string | null }> {
   const provider = session.provider as LLMProvider;
 
+  if (chatRunRegistry.isDraining()) {
+    if (ws) {
+      sendProtocolError(
+        ws,
+        'SERVER_DRAINING',
+        'The server is shutting down and cannot start a new run.',
+        sessionId,
+      );
+    }
+    return { started: false, error: 'The server is shutting down.' };
+  }
+
   const run = chatRunRegistry.startRun({
     appSessionId: sessionId,
     provider,
@@ -617,6 +629,10 @@ export async function runDetachedChatTurn(
   },
   dependencies: ChatWebSocketDependencies,
 ): Promise<{ started: boolean; error: string | null }> {
+  if (chatRunRegistry.isDraining()) {
+    return { started: false, error: 'The server is shutting down.' };
+  }
+
   const session = sessionsDb.getSessionById(input.sessionId);
   if (!session) {
     return { started: false, error: 'The session no longer exists.' };
