@@ -4,6 +4,9 @@ import path from 'path';
 // cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
 import spawn from 'cross-spawn';
 
+import { JWT_SECRET } from '@/modules/auth/index.js';
+
+import { derivePluginIdentityKey } from './plugin-identity.service.js';
 import { scanPlugins, getPluginsConfig, getPluginDir } from './plugin-registry.service.js';
 
 // Map<pluginName, { process, port }>
@@ -15,12 +18,16 @@ const startingPlugins = new Map();
  * Build the environment handed to a plugin server subprocess.
  *
  * Intentionally minimal: only non-secret essentials, never the host's full
- * environment. On Windows a handful of system variables are required for any
- * child to bootstrap (Node itself, and any Python or CLI a plugin shells out
- * to). Without APPDATA a `pip install --user` tool cannot locate its
- * site-packages and fails to import; SystemRoot, PATHEXT and TEMP are needed to
- * resolve system DLLs, executable extensions and a temp directory. None of
- * these carry secrets, so the ones that are set get passed straight through.
+ * environment. PLUGIN_IDENTITY_KEY is the plugin-scoped HMAC key (see
+ * docs/plugins/identity.md) that lets the plugin verify the signed
+ * x-plugin-user-* headers the host attaches to proxied requests; it is derived
+ * from JWT_SECRET, which itself is never shared. On Windows a handful of
+ * system variables are required for any child to bootstrap (Node itself, and
+ * any Python or CLI a plugin shells out to). Without APPDATA a
+ * `pip install --user` tool cannot locate its site-packages and fails to
+ * import; SystemRoot, PATHEXT and TEMP are needed to resolve system DLLs,
+ * executable extensions and a temp directory. None of these carry secrets, so
+ * the ones that are set get passed straight through.
  */
 function buildPluginEnv(name) {
   const env = {
@@ -28,6 +35,7 @@ function buildPluginEnv(name) {
     HOME: process.env.HOME,
     NODE_ENV: process.env.NODE_ENV || 'production',
     PLUGIN_NAME: name,
+    PLUGIN_IDENTITY_KEY: derivePluginIdentityKey(JWT_SECRET, name).toString('hex'),
   };
 
   if (process.platform === 'win32') {

@@ -1,3 +1,4 @@
+import type { PluginIdentityHeaders, PluginIdentityUser } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
 
 type PluginManifest = Record<string, unknown> & {
@@ -25,6 +26,8 @@ type PluginDependencies = {
   stopServer(pluginName: string): Promise<void>;
   getServerPort(pluginName: string): number | undefined;
   isServerRunning(pluginName: string): boolean;
+  // Signs the authenticated user for one plugin; returns {} when there is no user.
+  signIdentity(pluginName: string, user: PluginIdentityUser | undefined): PluginIdentityHeaders;
   joinPath(...parts: string[]): string;
   logError(message: string, error: unknown): void;
 };
@@ -121,7 +124,7 @@ export function createPluginsService(dependencies: PluginDependencies) {
       if (wasRunning) await startServerIfAvailable(plugin);
       return { success: true, plugin };
     },
-    async prepareRpc(pluginName: string) {
+    async prepareRpc(pluginName: string, user?: PluginIdentityUser) {
       validatePluginName(pluginName);
       let port = dependencies.getServerPort(pluginName);
       if (!port) {
@@ -135,7 +138,7 @@ export function createPluginsService(dependencies: PluginDependencies) {
         port = await dependencies.startServer(pluginName, pluginDirectory, plugin.server);
       }
       const secrets = dependencies.readConfig()[pluginName]?.secrets ?? {};
-      return { port, secrets };
+      return { port, secrets, identityHeaders: dependencies.signIdentity(pluginName, user) };
     },
     async uninstall(pluginName: string) {
       validatePluginName(pluginName);

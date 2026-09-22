@@ -13,7 +13,8 @@ type WebSocketServerDependencies = {
   verifyClient: Parameters<typeof verifyWebSocketClient>[1];
   chat: Parameters<typeof handleChatConnection>[2];
   shell: Parameters<typeof handleShellConnection>[1];
-  getPluginPort: Parameters<typeof handlePluginWsProxy>[2];
+  getPluginPort: Parameters<typeof handlePluginWsProxy>[3]['getPluginPort'];
+  buildPluginIdentityHeaders: Parameters<typeof handlePluginWsProxy>[3]['buildIdentityHeaders'];
 };
 
 /**
@@ -114,7 +115,10 @@ export function createWebSocketServer(
     }
 
     if (pathname.startsWith('/plugin-ws/')) {
-      handlePluginWsProxy(ws, pathname, dependencies.getPluginPort);
+      handlePluginWsProxy(ws, pathname, incomingRequest.user, {
+        getPluginPort: dependencies.getPluginPort,
+        buildIdentityHeaders: dependencies.buildPluginIdentityHeaders,
+      });
       return;
     }
 
