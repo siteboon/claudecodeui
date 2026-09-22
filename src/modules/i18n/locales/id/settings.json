@@ -494,6 +494,19 @@
     "help": {
       "title": "Tentang MCP Codex",
       "description": "Codex mendukung server MCP berbasis stdio. Tambahkan server untuk memperluas kemampuan Codex dengan tool dan resource tambahan."
+    },
+    "connection": {
+      "check": "Periksa status",
+      "checking": "Memeriksa…",
+      "checkHint": "Hubungi setiap server MCP yang dikonfigurasi dan laporkan apakah server merespons",
+      "checkFailed": "Tidak dapat memeriksa status server MCP. {{details}}",
+      "unsupported": "{{provider}} tidak melaporkan status koneksi MCP.",
+      "state": {
+        "connected": "Terhubung",
+        "failed": "Tidak terhubung",
+        "pending": "Menunggu persetujuan",
+        "unknown": "Tidak diketahui"
+      }
     }
   },
   "pluginSettings": {

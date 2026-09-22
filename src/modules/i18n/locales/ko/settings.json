@@ -477,6 +477,19 @@
     "help": {
       "title": "Codex MCP 정보",
       "description": "Codex는 stdio 기반 MCP 서버를 지원합니다. 추가 도구와 리소스로 Codex의 기능을 확장하는 서버를 추가할 수 있습니다."
+    },
+    "connection": {
+      "check": "상태 확인",
+      "checking": "확인 중…",
+      "checkHint": "구성된 각 MCP 서버에 연결해 응답 여부를 보고합니다",
+      "checkFailed": "MCP 서버 상태를 확인할 수 없습니다. {{details}}",
+      "unsupported": "{{provider}}은(는) MCP 연결 상태를 보고하지 않습니다.",
+      "state": {
+        "connected": "연결됨",
+        "failed": "연결 안 됨",
+        "pending": "승인 대기 중",
+        "unknown": "알 수 없음"
+      }
     }
   },
   "pluginSettings": {

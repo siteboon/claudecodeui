@@ -276,5 +276,27 @@
     "failed": "전송되지 않음 — {{reason}}",
     "cancel": "예약 취소",
     "dismiss": "실패 알림 닫기"
+  },
+  "misc": {
+    "fallbackCommands": {
+      "mcp": "MCP 서버와 연결 상태를 표시합니다."
+    },
+    "modalMeta": {
+      "mcpEyebrow": "연동",
+      "mcpTitle": "MCP 서버",
+      "mcpSubtitle": "구성된 Model Context Protocol 서버와 연결 상태입니다."
+    },
+    "mcpCommand": {
+      "empty": "{{provider}}에 구성된 MCP 서버가 없습니다.",
+      "statusUnsupported": "{{provider}}은(는) MCP 연결 상태를 보고하지 않습니다.",
+      "statusFailed": "MCP 서버 상태를 확인할 수 없습니다. {{details}}",
+      "authHint": "인증이 필요한 서버는 터미널에서 Claude CLI로 연결합니다. claude를 실행한 뒤 /mcp를 입력하세요.",
+      "state": {
+        "connected": "연결됨",
+        "failed": "연결 안 됨",
+        "pending": "승인 대기 중",
+        "unknown": "알 수 없음"
+      }
+    }
   }
 }

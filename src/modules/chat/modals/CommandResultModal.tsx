@@ -2,12 +2,17 @@ import { memo, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Activity,
+  AlertCircle,
   BadgeCheck,
+  CheckCircle2,
+  CircleDashed,
   CircleHelp,
   Coins,
   Cpu,
   Gauge,
+  HelpCircle,
   Package,
+  Plug,
   Plus,
   Search,
   Server,
@@ -21,9 +26,10 @@ import {
 import { Badge, Button, Dialog, DialogContent, DialogTitle, Input } from '@/shared/ui';
 import type {
   LLMProvider,
+  McpConnectionState,
   ProviderModelActions,
   ProviderModelOption,
-  ProviderModelsDefinition,CommandModalPayload,CostCommandData,HelpCommandData,ModelCommandData,StatusCommandData
+  ProviderModelsDefinition,CommandModalPayload,CostCommandData,HelpCommandData,McpCommandData,ModelCommandData,StatusCommandData
 } from '@/shared/types';
 import ModelLibraryPanel from '@/modules/chat/modals/ModelLibraryPanel';
 
@@ -61,6 +67,7 @@ const PROVIDER_LABELS: Record<string, string> = {
 
 const FALLBACK_COMMANDS: CommandEntry[] = [
   { name: '/models', descriptionKey: 'chat:misc.fallbackCommands.models' },
+  { name: '/mcp', descriptionKey: 'chat:misc.fallbackCommands.mcp' },
   { name: '/cost', descriptionKey: 'chat:misc.fallbackCommands.cost' },
   { name: '/status', descriptionKey: 'chat:misc.fallbackCommands.status' },
   { name: '/memory', descriptionKey: 'chat:misc.fallbackCommands.memory' },
@@ -534,6 +541,98 @@ function StatusContent({ data }: { data: StatusCommandData }) {
   );
 }
 
+// Icon and Tailwind tone per MCP connection state. `unknown` is neutral on
+// purpose: it means the server was never contacted, not that it is broken.
+const MCP_STATUS_PRESENTATION: Record<McpConnectionState, { icon: typeof Activity; className: string }> = {
+  connected: {
+    icon: CheckCircle2,
+    className: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300',
+  },
+  failed: {
+    icon: AlertCircle,
+    className: 'border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-300',
+  },
+  pending: {
+    icon: CircleDashed,
+    className: 'border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-300',
+  },
+  unknown: {
+    icon: HelpCircle,
+    className: 'border-border bg-muted/40 text-muted-foreground',
+  },
+};
+
+function McpContent({ data }: { data: McpCommandData }) {
+  const { t } = useTranslation();
+  const servers = Array.isArray(data.servers) ? data.servers : [];
+  const providerLabel = data.providerLabel || getProviderLabel(data.provider);
+
+  if (servers.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-border bg-muted/20 px-4 py-10 text-center text-sm text-muted-foreground">
+        {t('chat:misc.mcpCommand.empty', { provider: providerLabel })}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      {data.statusError ? (
+        <p className="shrink-0 rounded-2xl border border-border/70 bg-muted/20 px-3.5 py-2.5 text-xs text-muted-foreground">
+          {t('chat:misc.mcpCommand.statusFailed', { details: data.statusError })}
+        </p>
+      ) : !data.statusSupported ? (
+        <p className="shrink-0 rounded-2xl border border-border/70 bg-muted/20 px-3.5 py-2.5 text-xs text-muted-foreground">
+          {t('chat:misc.mcpCommand.statusUnsupported', { provider: providerLabel })}
+        </p>
+      ) : null}
+
+      <div className="scrollbar-thin -mr-1 min-h-0 flex-1 overflow-y-auto pr-1">
+        <div className="space-y-2">
+          {servers.map((server, index) => {
+            const state: McpConnectionState = server.status || 'unknown';
+            const { icon: StatusIcon, className } = MCP_STATUS_PRESENTATION[state];
+
+            return (
+              <div
+                key={`${server.scope || 'user'}-${server.name}`}
+                className="settings-content-enter rounded-2xl border border-border/70 bg-background/75 p-3 shadow-sm"
+                style={{ animationDelay: `${Math.min(index * 14, 180)}ms` }}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="break-all text-sm font-semibold text-foreground">{server.name}</span>
+                  {server.transport && (
+                    <Badge variant="outline" className="text-[10px]">{server.transport}</Badge>
+                  )}
+                  {server.scope && (
+                    <Badge variant="outline" className="text-[10px]">{server.scope}</Badge>
+                  )}
+                  <Badge variant="outline" className={`gap-1 text-[10px] ${className}`} data-mcp-status={state}>
+                    <StatusIcon className="h-3 w-3" />
+                    {t(`chat:misc.mcpCommand.state.${state}`)}
+                  </Badge>
+                </div>
+                {server.target && (
+                  <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">{server.target}</p>
+                )}
+                {server.statusDetail && (
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">{server.statusDetail}</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* The OAuth flow itself still belongs to the CLI, so say where to run it
+          rather than offering a button that cannot finish the handshake. */}
+      <p className="shrink-0 text-[11px] leading-4 text-muted-foreground">
+        {t('chat:misc.mcpCommand.authHint')}
+      </p>
+    </div>
+  );
+}
+
 /**
  * Rendered by chat's ChatInterface to present the result of a slash command
  * (help, model picker, cost or status) in a modal over the transcript.
@@ -577,6 +676,12 @@ function CommandResultModal({
       title: t('chat:misc.modalMeta.statusTitle'),
       subtitle: t('chat:misc.modalMeta.statusSubtitle'),
       icon: Activity,
+    },
+    mcp: {
+      eyebrow: t('chat:misc.modalMeta.mcpEyebrow'),
+      title: t('chat:misc.modalMeta.mcpTitle'),
+      subtitle: t('chat:misc.modalMeta.mcpSubtitle'),
+      icon: Plug,
     },
   } as const;
 
@@ -641,6 +746,7 @@ function CommandResultModal({
           )}
           {payload?.kind === 'cost' && <CostContent data={payload.data as CostCommandData} />}
           {payload?.kind === 'status' && <StatusContent data={payload.data as StatusCommandData} />}
+          {payload?.kind === 'mcp' && <McpContent data={payload.data as McpCommandData} />}
         </div>
 
         <div className="flex shrink-0 flex-col gap-3 border-t border-border/70 bg-muted/20 px-4 py-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6">

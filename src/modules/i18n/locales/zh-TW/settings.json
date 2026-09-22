@@ -444,6 +444,19 @@
     "help": {
       "title": "關於 Codex MCP",
       "description": "Codex 支援基於 stdio 的 MCP 伺服器。您可以新增伺服器，透過額外的工具和資源來擴充 Codex 的功能。"
+    },
+    "connection": {
+      "check": "檢查狀態",
+      "checking": "檢查中…",
+      "checkHint": "連線到每個已設定的 MCP 伺服器並回報是否有回應",
+      "checkFailed": "無法檢查 MCP 伺服器狀態。{{details}}",
+      "unsupported": "{{provider}} 不會回報 MCP 連線狀態。",
+      "state": {
+        "connected": "已連線",
+        "failed": "未連線",
+        "pending": "等待核准",
+        "unknown": "未知"
+      }
     }
   },
   "pluginSettings": {

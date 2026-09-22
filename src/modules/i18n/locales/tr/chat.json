@@ -255,5 +255,27 @@
     "failed": "Gönderilmedi — {{reason}}",
     "cancel": "Zamanlanmış mesajı iptal et",
     "dismiss": "Hata bildirimini kapat"
+  },
+  "misc": {
+    "fallbackCommands": {
+      "mcp": "MCP sunucularını ve bağlantı durumlarını listeler."
+    },
+    "modalMeta": {
+      "mcpEyebrow": "Entegrasyonlar",
+      "mcpTitle": "MCP Sunucuları",
+      "mcpSubtitle": "Yapılandırılmış Model Context Protocol sunucuları ve bağlantı durumları."
+    },
+    "mcpCommand": {
+      "empty": "{{provider}} için yapılandırılmış MCP sunucusu yok.",
+      "statusUnsupported": "{{provider}} MCP bağlantı durumunu bildirmiyor.",
+      "statusFailed": "MCP sunucu durumu denetlenemedi. {{details}}",
+      "authHint": "Kimlik doğrulaması gereken bir sunucu, terminalde Claude CLI ile bağlanır: claude çalıştırın, ardından /mcp yazın.",
+      "state": {
+        "connected": "Bağlı",
+        "failed": "Bağlı değil",
+        "pending": "Onay bekliyor",
+        "unknown": "Bilinmiyor"
+      }
+    }
   }
 }

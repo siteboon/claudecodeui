@@ -1,12 +1,28 @@
-import { Edit3, ExternalLink, Globe, Lock, Plus, Server, Terminal, Trash2, Users, Zap } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  CircleDashed,
+  Edit3,
+  ExternalLink,
+  Globe,
+  HelpCircle,
+  Lock,
+  Plus,
+  RefreshCw,
+  Server,
+  Terminal,
+  Trash2,
+  Users,
+  Zap,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import type { McpProject, McpProvider, McpScope, ProviderMcpServer } from '@/shared/types';
+import type { McpConnectionState, McpProject, McpProvider, McpScope, McpServerConnectionStatus, ProviderMcpServer } from '@/shared/types';
 import { IS_PLATFORM } from '@/shared/utils';
 import { ActionMenu, Badge, Button } from '@/shared/ui';
 import { MCP_GLOBAL_SUPPORTED_TRANSPORTS, MCP_PROVIDER_NAMES } from '@/shared/constants';
 import { useMcpServers } from '@/modules/mcp/hooks/useMcpServers';
-import { maskSecret } from '@/modules/mcp/utils/mcpFormatting';
+import { getMcpServerIdentity, maskSecret } from '@/modules/mcp/utils/mcpFormatting';
 import McpServerFormModal from '@/modules/mcp/McpServerFormModal';
 
 type McpServersProps = {
@@ -51,14 +67,43 @@ const getScopeLabel = (scope: McpScope): string => {
   return 'project';
 };
 
-const getServerKey = (server: ProviderMcpServer): string => (
-  `${server.provider}:${server.scope}:${server.workspacePath || 'global'}:${server.name}`
-);
+// Icon and Tailwind tone per connection state. `unknown` stays deliberately
+// neutral: it means the server was never contacted, not that it is broken.
+const MCP_STATUS_PRESENTATION: Record<McpConnectionState, { icon: typeof Server; className: string }> = {
+  connected: {
+    icon: CheckCircle2,
+    className: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+  },
+  failed: {
+    icon: AlertCircle,
+    className: 'border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300',
+  },
+  pending: {
+    icon: CircleDashed,
+    className: 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300',
+  },
+  unknown: {
+    icon: HelpCircle,
+    className: 'border-border bg-muted/40 text-muted-foreground',
+  },
+};
 
 // Servers prefixed with `cloudcli-` are written and removed automatically by a
 // CloudCLI feature toggle (e.g. the Browser tab), not added by the user. They are
 // shown read-only so users don't edit/delete them out of sync with the feature.
 const isManagedServer = (server: ProviderMcpServer): boolean => server.name.startsWith('cloudcli-');
+
+function McpStatusBadge({ state }: { state: McpConnectionState }) {
+  const { t } = useTranslation('settings');
+  const { icon: Icon, className } = MCP_STATUS_PRESENTATION[state];
+
+  return (
+    <Badge variant="outline" className={`gap-1 text-xs ${className}`} data-mcp-status={state}>
+      <Icon className="h-3 w-3" />
+      {t(`mcpServers.connection.state.${state}`)}
+    </Badge>
+  );
+}
 
 function ConfigLine({ label, children }: { label: string; children: string }) {
   if (!children) {
@@ -115,6 +160,10 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
     deleteError,
     saveStatus,
     serverForm,
+    serverStatuses,
+    isCheckingStatuses,
+    statusNotice,
+    checkStatuses,
     openForm,
     openGlobalForm,
     closeForm,
@@ -143,29 +192,42 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
             <p className="text-sm text-muted-foreground">{description}</p>
           </div>
         </div>
-        <ActionMenu
-          label={t('mcpServersAdd.menuLabel')}
-          icon={Plus}
-          className="w-full sm:w-auto"
-          triggerClassName={`w-full sm:w-auto ${MCP_PROVIDER_BUTTON_CLASSES[selectedProvider]}`}
-          items={[
-            {
-              key: 'global',
-              label: globalButtonLabel,
-              description: globalAddDescription,
-              icon: Globe,
-              onSelect: openGlobalForm,
-            },
-            {
-              key: 'provider',
-              label: providerButtonLabel,
-              description: providerAddDescription,
-              icon: Server,
-              onSelect: () => openForm(),
-            },
-          ]}
-        />
-
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void checkStatuses()}
+            disabled={isCheckingStatuses || servers.length === 0}
+            className="w-full sm:w-auto"
+            title={t('mcpServers.connection.checkHint')}
+          >
+            <RefreshCw className={`h-4 w-4 ${isCheckingStatuses ? 'animate-spin' : ''}`} />
+            {isCheckingStatuses ? t('mcpServers.connection.checking') : t('mcpServers.connection.check')}
+          </Button>
+          <ActionMenu
+            label={t('mcpServersAdd.menuLabel')}
+            icon={Plus}
+            className="w-full sm:w-auto"
+            triggerClassName={`w-full sm:w-auto ${MCP_PROVIDER_BUTTON_CLASSES[selectedProvider]}`}
+            items={[
+              {
+                key: 'global',
+                label: globalButtonLabel,
+                description: globalAddDescription,
+                icon: Globe,
+                onSelect: openGlobalForm,
+              },
+              {
+                key: 'provider',
+                label: providerButtonLabel,
+                description: providerAddDescription,
+                icon: Server,
+                onSelect: () => openForm(),
+              },
+            ]}
+          />
+        </div>
       </div>
 
       <div className="space-y-2">
@@ -178,6 +240,14 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
           )}
         </div>
       </div>
+
+      {statusNotice && (
+        <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+          {statusNotice.kind === 'unsupported'
+            ? t('mcpServers.connection.unsupported', { provider: providerName })
+            : t('mcpServers.connection.checkFailed', { details: statusNotice.message || '' })}
+        </div>
+      )}
 
       {(loadError || deleteError) && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-200">
@@ -192,9 +262,10 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
 
         {servers.map((server) => {
           const managed = isManagedServer(server);
+          const status: McpServerConnectionStatus | undefined = serverStatuses.get(getMcpServerIdentity(server));
 
           return (
-            <div key={getServerKey(server)} className="rounded-lg border border-border bg-card/50 p-4">
+            <div key={getMcpServerIdentity(server)} className="rounded-lg border border-border bg-card/50 p-4">
               <div className="flex items-start justify-between">
                 <div className="min-w-0 flex-1">
                   <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -213,6 +284,7 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
                             {server.projectDisplayName}
                           </Badge>
                         )}
+                        {status && <McpStatusBadge state={status.state} />}
                       </>
                     )}
                     {managed && (
@@ -237,6 +309,9 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
                         )}
                         {server.envVars && server.envVars.length > 0 && (
                           <ConfigLine label={t('mcpServersAdd.configEnvVars')}>{server.envVars.join(', ')}</ConfigLine>
+                        )}
+                        {status?.detail && (
+                          <p className="text-xs leading-5 text-muted-foreground">{status.detail}</p>
                         )}
                       </>
                     )}

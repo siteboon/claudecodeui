@@ -282,5 +282,27 @@
     "failed": "No enviado — {{reason}}",
     "cancel": "Cancelar mensaje programado",
     "dismiss": "Descartar el aviso de fallo"
+  },
+  "misc": {
+    "fallbackCommands": {
+      "mcp": "Muestra los servidores MCP y su estado de conexión."
+    },
+    "modalMeta": {
+      "mcpEyebrow": "Integraciones",
+      "mcpTitle": "Servidores MCP",
+      "mcpSubtitle": "Servidores Model Context Protocol configurados y su estado de conexión."
+    },
+    "mcpCommand": {
+      "empty": "No hay servidores MCP configurados para {{provider}}.",
+      "statusUnsupported": "{{provider}} no informa del estado de conexión MCP.",
+      "statusFailed": "No se pudo comprobar el estado de los servidores MCP. {{details}}",
+      "authHint": "Un servidor que requiere autenticación se conecta desde un terminal con la CLI de Claude: ejecuta claude y luego /mcp.",
+      "state": {
+        "connected": "Conectado",
+        "failed": "Sin conexión",
+        "pending": "Pendiente de aprobación",
+        "unknown": "Desconocido"
+      }
+    }
   }
 }
