@@ -147,7 +147,31 @@ export type InstallMode = 'git' | 'npm';
 
 //----------------- SESSION PROCESSING STATE ------------
 
-/** What a session that is currently producing a response is doing, as shown by the activity indicator. */
+/**
+ * One background task — a spawned agent, a workflow run or a backgrounded
+ * command — that a session still has running after its turn ended. Listed by
+ * the running-sessions poll and derived from the transcript between polls;
+ * `taskId` is what `chat.stop-task` addresses.
+ */
+export type BackgroundTaskSummary = {
+  taskId: string;
+  toolUseId: string;
+  /** The SDK's kind: `local_agent`, `local_workflow` or `local_bash`. */
+  taskType: string;
+  description: string;
+  workflowName?: string;
+  /** When the task started (epoch ms). The activity indicator counts from the earliest. */
+  startedAt: number;
+  /**
+   * The task was launched by a subagent or workflow agent, not by the
+   * session's own turn: its `toolUseId` names a call in that agent's
+   * transcript, so no card in this session's transcript matches it. Listed so
+   * it can still be stopped; not counted as the session's own work.
+   */
+  nested?: boolean;
+};
+
+/** What a busy session is doing, as shown by the activity indicator: producing a response, or only running background tasks. */
 export type SessionActivity = {
   /** Provider-supplied status line; null renders the default activity label. */
   statusText: string | null;
@@ -155,11 +179,20 @@ export type SessionActivity = {
   /**
    * When this request was first marked as processing (client clock). Drives
    * the elapsed-time display and the stale `chat_subscribed` idle-ack guard.
+   * For background-only work it is the earliest task's start.
    */
   startedAt: number;
+  /**
+   * Set when no response is being produced and only background tasks keep
+   * the session busy. The composer stays usable: the CLI accepts a new turn
+   * while they run.
+   */
+  background?: boolean;
+  /** The background tasks the session still has running, with or without a response in flight. */
+  tasks?: BackgroundTaskSummary[];
 };
 
-/** Every session currently producing a response, keyed by session id. Read it to tell whether a session is busy. */
+/** Every busy session, keyed by session id. Read it to tell whether a session is busy; check `background` to tell how. */
 export type SessionActivityMap = ReadonlyMap<string, SessionActivity>;
 
 /** Marks a session as producing a response; call it as soon as a send is dispatched so the UI reacts immediately. */
@@ -168,18 +201,27 @@ export type MarkSessionProcessing = (
   activity?: { statusText?: string | null; canInterrupt?: boolean },
 ) => void;
 
-/** Marks a session as finished; `ifStartedBefore` lets a late acknowledgement clear only a stale run. */
+/** Marks a session's response as finished; `ifStartedBefore` lets a late acknowledgement clear only a stale run. Leaves background-only work alone, which it says nothing about. */
 export type MarkSessionIdle = (
   sessionId?: string | null,
   opts?: { ifStartedBefore?: number },
 ) => void;
+
+/** Records the background tasks a session still has once its turn ended; an empty list marks it idle. */
+export type MarkSessionBackground = (
+  sessionId: string,
+  tasks: BackgroundTaskSummary[],
+) => void;
+
+/** Reads one session's current activity without subscribing to the map, for logic that runs on a websocket frame. */
+export type GetSessionActivity = (sessionId: string) => SessionActivity | undefined;
 
 /** Replaces the whole processing map with the server's view, used by the periodic running-sessions poll. */
 export type SyncProcessingSessions = (
   sessions: readonly SessionActivitySnapshot[],
 ) => void;
 
-/** Reports whether one session is currently producing a response. */
+/** Reports whether one session is currently producing a response; false for one that only has background tasks running. */
 export type IsSessionProcessing = (sessionId?: string | null) => boolean;
 
 /** One running session as reported by the server, before it is folded into the client-side activity map. */
@@ -188,6 +230,9 @@ export type SessionActivitySnapshot = {
   statusText?: string | null;
   canInterrupt?: boolean;
   startedAt?: number;
+  /** True when the server lists the session for its background tasks alone, with no chat run. */
+  background?: boolean;
+  tasks?: BackgroundTaskSummary[];
 };
 
 // ---------------------------
@@ -280,12 +325,16 @@ export type CompactionInfo = {
   error?: string | null;
 };
 
+/** Where a background task — a spawned agent, a workflow run or a backgrounded command — stands: `stopped` is one whose session process ended before it reported, so no outcome exists and none is coming. */
+export type BackgroundTaskStatus = 'running' | 'completed' | 'failed' | 'stopped';
+
 export type SubagentInfo = {
   id: string;
   name?: string;
   type?: string;
   description?: string;
-  status: 'running' | 'completed' | 'failed';
+  /** `stopped` is a background agent whose session process ended before it reported: no outcome exists and none is coming. */
+  status: BackgroundTaskStatus;
   model?: string;
   /** Total entries the agent recorded, which exceeds the received timeline when a long run was truncated for transport. */
   activityCount?: number;
@@ -334,6 +383,13 @@ export type ChatMessage = {
   subagent?: SubagentInfo;
   /** What that agent did, in order. Empty while the agent is still starting up. */
   subagentActivity?: SubagentActivity[];
+  /** The workflow run this row launched, as the backend read it on the last history load. */
+  workflow?: WorkflowInfo;
+  /** The latest live word on the background task this row launched, while the run is in flight. */
+  taskStatus?: LiveTaskStatus;
+  /** Set on the row that stands for a background task's completion report, with the status it reported. */
+  isTaskNotification?: boolean;
+  taskNotificationStatus?: string;
   /** Stored memory this reply drew on, shown as a footnote beneath it. */
   memoryCitations?: MemoryCitation[];
   /** Lifecycle the provider reported for this tool call, when it reports one; otherwise the status is inferred from whether a result has arrived. */
@@ -481,6 +537,8 @@ export type NormalizedMessage = {
   toolInput?: unknown;
   toolId?: string;
   toolResult?: { content: string; isError: boolean; toolUseResult?: unknown } | null;
+  /** A `tool_result` row's structured output — a launch acknowledgement's task id and metadata, a search's file list. */
+  toolUseResult?: unknown;
   isError?: boolean;
   text?: string;
   tokens?: number;
@@ -499,12 +557,100 @@ export type NormalizedMessage = {
   subagentTools?: SubagentActivity[];
   /** Identity and lifecycle of that subagent. */
   subagent?: SubagentInfo;
+  /** The workflow run a `Workflow` call launched, attached by the backend from the run's journal. */
+  workflow?: WorkflowInfo;
   /** Stored memory this reply drew on, when the provider reports it. */
   memoryCitations?: MemoryCitation[];
   isFinal?: boolean;
   // Cursor-specific ordering
   sequence?: number;
   rowid?: number;
+  /**
+   * `task_status` fields: one live lifecycle event of a background task.
+   * `toolUseId` names the call that launched it and is absent on `updated`,
+   * which is keyed by `taskId` alone; `status` and `summary` above carry the
+   * event's own.
+   */
+  event?: 'started' | 'progress' | 'updated' | 'notification';
+  taskId?: string;
+  toolUseId?: string;
+  taskType?: string;
+  workflowName?: string;
+  description?: string;
+  usage?: TaskUsage;
+  outputFile?: string;
+  /** A workflow's `progress` only: where each agent the run spawned stands. */
+  agents?: WorkflowAgentProgress[];
+};
+
+/** What a background task has spent so far — tokens, tool calls and wall time — as the CLI reports it while the task runs and when it ends. */
+export type TaskUsage = {
+  totalTokens: number;
+  toolUses: number;
+  durationMs: number;
+};
+
+/** One agent a workflow run spawned, as its journal records it: the label and phase the script gave it (older scripts gave neither) and whether it has finished. */
+export type WorkflowAgentInfo = {
+  id: string;
+  label?: string;
+  phase?: string;
+  /** `stopped` is an agent the journal never settled although the run itself has — abandoned by a stop or a resume that re-ran the step. */
+  status: 'running' | 'completed' | 'failed' | 'stopped';
+};
+
+/** A `Workflow` call's run as the backend read it from disk; `stopped` is a run whose session process ended before it reported, and an empty agent list is a run that left no journal behind. */
+export type WorkflowInfo = {
+  runId: string;
+  name: string;
+  description?: string;
+  status: BackgroundTaskStatus;
+  agents: WorkflowAgentInfo[];
+  agentCounts: { total: number; completed: number; failed: number; running: number; stopped: number };
+  scriptPath?: string;
+};
+
+/**
+ * The latest live word on a background task, folded from the session's
+ * `task_status` events onto the tool call that launched it. It is what a card
+ * reads while the run is in flight; on a history reload the backend's
+ * `subagent` or `workflow` carries the settled outcome instead.
+ */
+export type LiveTaskStatus = {
+  status: BackgroundTaskStatus;
+  /** The id the events name the task by, which is what stopping it addresses. */
+  taskId?: string;
+  taskType?: string;
+  workflowName?: string;
+  description?: string;
+  summary?: string;
+  usage?: TaskUsage;
+  /** A workflow's only: where each agent the run spawned stands, from its latest progress event. */
+  agents?: WorkflowAgentProgress[];
+};
+
+/**
+ * Where one agent of a running workflow stands, as the SDK reports it on the
+ * run's progress events. An entry with no `agentId` is a slot the script has
+ * queued but not yet started, identified by `index` alone; `lastToolName` and
+ * `lastToolSummary` are the agent's own latest tool call.
+ */
+export type WorkflowAgentProgress = {
+  index: number;
+  label?: string;
+  /** The title of the script phase the agent runs under, when it has one. */
+  phase?: string;
+  agentId?: string;
+  model?: string;
+  state: 'queued' | 'running' | 'done' | 'failed';
+  startedAt?: number;
+  lastToolName?: string;
+  lastToolSummary?: string;
+  promptPreview?: string;
+  tokens?: number;
+  toolCalls?: number;
+  durationMs?: number;
+  resultPreview?: string;
 };
 
 /** Discriminator on NormalizedMessage naming which kind of transcript event it carries — plain text, tool use or result, thinking, stream delta or end, error, completion, status, permission request/resolution/cancellation, session creation, interactive prompt, or task notification. */
@@ -523,7 +669,8 @@ type MessageKind =
   | 'permission_cancelled'
   | 'session_created'
   | 'history_truncated'
-  | 'task_notification';
+  | 'task_notification'
+  | 'task_status';
 
 // ---------------------------
 
@@ -1277,8 +1424,10 @@ export type MobileTerminalSelectionManager = {
 export type SessionRowActions = {
   /** The rename currently open anywhere in the sidebar, or null. */
   activeRename: ActiveSidebarRename | null;
-  /** Sessions with a run in flight: they show a spinner and hide destructive actions. */
+  /** Sessions with a run in flight or background work: they count as running; the former also show a spinner and hide destructive actions. */
   activeSessions: ReadonlySet<string>;
+  /** The subset of `activeSessions` that only has background tasks running, which show the purple dot instead of the spinner. */
+  backgroundSessionIds: ReadonlySet<string>;
   /** Sessions waiting on the user, which show the amber dot. */
   attentionSessionIds: ReadonlySet<string>;
   onRenameDraftChange: (draft: string) => void;

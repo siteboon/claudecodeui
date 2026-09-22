@@ -4,7 +4,7 @@ import { GitBranchIcon, PencilIcon } from 'lucide-react';
 
 import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider,DiffLine,Project } from '@/shared/types';
 import { formatUsageLimitText, stripProposedPlanEnvelope } from '@/modules/chat/utils/chatFormatting';
-import { ToolRenderer, ToolErrorDisplay, SubagentPanel, shouldHideToolResult } from '@/modules/chat/tools';
+import { ToolRenderer, ToolErrorDisplay, SubagentPanel, WorkflowPanel, shouldHideToolResult } from '@/modules/chat/tools';
 import { LLMProviderLogo } from '@/shared/ui';
 import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/modules/chat/transcript/Reasoning';
 import ChatMessageImages from '@/modules/chat/transcript/ChatMessageImages';
@@ -195,7 +195,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
         /* Compact task notification on the left */
         <div className="w-full">
           <div className="flex items-center gap-2 py-0.5">
-            <span className={`inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${message.taskStatus === 'completed' ? 'bg-green-400 dark:bg-green-500' : 'bg-amber-400 dark:bg-amber-500'}`} />
+            <span className={`inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${message.taskNotificationStatus === 'completed' ? 'bg-green-400 dark:bg-green-500' : 'bg-amber-400 dark:bg-amber-500'}`} />
             <span className="text-xs text-gray-500 dark:text-gray-400">{message.content}</span>
           </div>
         </div>
@@ -237,18 +237,35 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
 
           <div className="w-full">
 
-            {message.isSubagentContainer ? (
+            {message.isToolUse && message.toolName === 'Workflow' ? (
+              /* A workflow launch owns its whole card too. The anchor is what
+                 the background-tasks strip scrolls to. */
+              <div id={`tool-result-${message.toolId}`} className="scroll-mt-4">
+                <WorkflowPanel
+                  toolInput={message.toolInput}
+                  toolResult={message.toolResult}
+                  workflow={message.workflow}
+                  taskStatus={message.taskStatus}
+                  onFileOpen={onFileOpen}
+                  createDiff={createDiff}
+                  selectedProject={selectedProject}
+                />
+              </div>
+            ) : message.isSubagentContainer ? (
               /* A spawned agent owns its whole card — header, timeline and
                  result — so it never goes through the tool input/result pair. */
-              <SubagentPanel
-                toolInput={message.toolInput}
-                toolResult={message.toolResult}
-                subagent={message.subagent}
-                activity={message.subagentActivity}
-                onFileOpen={onFileOpen}
-                createDiff={createDiff}
-                selectedProject={selectedProject}
-              />
+              <div id={`tool-result-${message.toolId}`} className="scroll-mt-4">
+                <SubagentPanel
+                  toolInput={message.toolInput}
+                  toolResult={message.toolResult}
+                  subagent={message.subagent}
+                  taskStatus={message.taskStatus}
+                  activity={message.subagentActivity}
+                  onFileOpen={onFileOpen}
+                  createDiff={createDiff}
+                  selectedProject={selectedProject}
+                />
+              </div>
             ) : message.isToolUse ? (
               <>
                 <div className="flex flex-col">
@@ -260,19 +277,24 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                 </div>
 
                 {message.toolInput && (
-                  <ToolRenderer
-                    toolName={message.toolName || 'UnknownTool'}
-                    toolInput={message.toolInput}
-                    toolResult={message.toolResult}
-                    toolId={message.toolId}
-                    mode="input"
-                    onFileOpen={onFileOpen}
-                    createDiff={createDiff}
-                    selectedProject={selectedProject}
-                    showRawParameters={showRawParameters}
-                    rawToolInput={typeof message.toolInput === 'string' ? message.toolInput : undefined}
-                    toolStatus={message.toolStatus}
-                  />
+                  // Bash draws its output inside this row rather than in the
+                  // result section below, so for a backgrounded command this is
+                  // the row the background-tasks strip scrolls to.
+                  <div id={message.toolName === 'Bash' ? `tool-result-${message.toolId}` : undefined} className="scroll-mt-4">
+                    <ToolRenderer
+                      toolName={message.toolName || 'UnknownTool'}
+                      toolInput={message.toolInput}
+                      toolResult={message.toolResult}
+                      toolId={message.toolId}
+                      mode="input"
+                      onFileOpen={onFileOpen}
+                      createDiff={createDiff}
+                      selectedProject={selectedProject}
+                      showRawParameters={showRawParameters}
+                      rawToolInput={typeof message.toolInput === 'string' ? message.toolInput : undefined}
+                      toolStatus={message.toolStatus}
+                    />
+                  </div>
                 )}
 
                 {/* Tool Result Section — Bash renders its output inside the command row above. */}

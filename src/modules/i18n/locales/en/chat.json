@@ -249,6 +249,14 @@
       "startingNow": "Starting now"
     },
     "stop": "Stop",
+    "backgroundWork": "Background work",
+    "backgroundTask": {
+      "workflow": "Workflow {{name}}",
+      "agent": "Agent {{description}}",
+      "command": "Command {{description}}",
+      "count": "{{count}} tasks",
+      "sendAnyway": "This session still has background work running:\n{{work}}\n\nA new message starts a new turn, which stops that work; anything it has not reported yet is lost. Send anyway?"
+    },
     "controls": {
       "stopGeneration": "Stop Generation",
       "pressEscToStop": "Press Esc anytime to stop"
