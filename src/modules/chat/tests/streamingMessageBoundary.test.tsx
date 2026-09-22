@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 
-import { useRef } from 'react';
-
 import { act, renderHook } from '@testing-library/react';
+import { useRef } from 'react';
 import { afterEach, beforeEach, describe, it, vi } from 'vitest';
 
 import { useChatRealtimeHandlers } from '@/modules/chat/hooks/useChatRealtimeHandlers';
