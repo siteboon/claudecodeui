@@ -1,0 +1,174 @@
+import assert from 'node:assert/strict';
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import test from 'node:test';
+
+import { closeConnection } from '@/modules/database/connection.js';
+import { initializeDatabase } from '@/modules/database/init-db.js';
+import { projectsDb } from '@/modules/database/repositories/projects.db.js';
+import { sessionsDb } from '@/modules/database/repositories/sessions.db.js';
+import { relocateProject } from '@/modules/projects/services/project-relocate.service.js';
+import { WORKSPACES_ROOT } from '@/shared/utils.js';
+
+type RelocateFixture = {
+  workspaceRoot: string;
+  oldProjectPath: string;
+  newProjectPath: string;
+  claudeProjectsRoot: string;
+  transcriptPath: string;
+  projectId: string;
+};
+
+const SESSION_ID = '11111111-1111-4111-8111-111111111111';
+
+function encodeClaudeProjectDirName(projectPath: string): string {
+  return projectPath.replace(/[^a-zA-Z0-9]/g, '-');
+}
+
+async function withRelocateFixture(
+  runTest: (fixture: RelocateFixture) => Promise<void>,
+): Promise<void> {
+  const previousDatabasePath = process.env.DATABASE_PATH;
+  // Not the OS temp dir: this service runs the same `validateWorkspacePath`
+  // check a real request does, which refuses `/tmp` and anything outside the
+  // configured workspace root.
+  const workspaceRoot = await mkdtemp(path.join(WORKSPACES_ROOT, '.cloudcli-relocate-test-'));
+  const oldProjectPath = path.join(workspaceRoot, 'alpha');
+  const newProjectPath = path.join(workspaceRoot, 'beta');
+  const claudeProjectsRoot = path.join(workspaceRoot, 'claude-home', 'projects');
+  const transcriptPath = path.join(
+    claudeProjectsRoot,
+    encodeClaudeProjectDirName(oldProjectPath),
+    `${SESSION_ID}.jsonl`,
+  );
+
+  closeConnection();
+  process.env.DATABASE_PATH = path.join(workspaceRoot, 'auth.db');
+  await initializeDatabase();
+
+  await mkdir(oldProjectPath, { recursive: true });
+  await writeFile(path.join(oldProjectPath, 'README.md'), '# alpha\n');
+  await mkdir(path.dirname(transcriptPath), { recursive: true });
+  await writeFile(transcriptPath, `{"sessionId":"${SESSION_ID}","cwd":"${oldProjectPath}"}\n`);
+
+  const created = projectsDb.createProjectPath(oldProjectPath, 'alpha');
+  const projectId = created.project?.project_id ?? '';
+  sessionsDb.createSession(
+    SESSION_ID,
+    'claude',
+    oldProjectPath,
+    'Chat one about readme',
+    undefined,
+    undefined,
+    transcriptPath,
+  );
+
+  try {
+    await runTest({
+      workspaceRoot,
+      oldProjectPath,
+      newProjectPath,
+      claudeProjectsRoot,
+      transcriptPath,
+      projectId,
+    });
+  } finally {
+    closeConnection();
+    if (previousDatabasePath === undefined) {
+      delete process.env.DATABASE_PATH;
+    } else {
+      process.env.DATABASE_PATH = previousDatabasePath;
+    }
+    await rm(workspaceRoot, { recursive: true, force: true });
+  }
+}
+
+test('relocateProject moves the project row and its sessions to the renamed folder', async () => {
+  await withRelocateFixture(async (fixture) => {
+    // The folder is renamed outside the app, exactly as in issue #1165.
+    await rename(fixture.oldProjectPath, fixture.newProjectPath);
+
+    const result = await relocateProject(fixture.projectId, fixture.newProjectPath);
+
+    assert.equal(result.path, fixture.newProjectPath);
+    assert.equal(result.previousPath, fixture.oldProjectPath);
+    assert.equal(result.movedSessionCount, 1);
+
+    assert.equal(
+      projectsDb.getProjectPathById(fixture.projectId),
+      fixture.newProjectPath,
+      'the project row must follow the folder',
+    );
+    assert.equal(projectsDb.getProjectPath(fixture.oldProjectPath), null);
+    assert.equal(
+      sessionsDb.getSessionsByProjectPath(fixture.newProjectPath).length,
+      1,
+      'the session must stay attached to the project it belongs to',
+    );
+    assert.equal(sessionsDb.getSessionsByProjectPath(fixture.oldProjectPath).length, 0);
+  });
+});
+
+test('relocateProject moves the Claude transcript into the folder a resume reads from', async () => {
+  await withRelocateFixture(async (fixture) => {
+    await rename(fixture.oldProjectPath, fixture.newProjectPath);
+
+    const result = await relocateProject(fixture.projectId, fixture.newProjectPath);
+    assert.equal(result.movedTranscriptCount, 1);
+
+    const expectedTranscriptPath = path.join(
+      fixture.claudeProjectsRoot,
+      encodeClaudeProjectDirName(fixture.newProjectPath),
+      `${SESSION_ID}.jsonl`,
+    );
+    assert.equal(sessionsDb.getSessionById(SESSION_ID)?.jsonl_path, expectedTranscriptPath);
+    assert.match(await readFile(expectedTranscriptPath, 'utf8'), /Chat|sessionId/);
+    await assert.rejects(() => readFile(fixture.transcriptPath, 'utf8'));
+  });
+});
+
+test('relocateProject rejects a path that no longer exists', async () => {
+  await withRelocateFixture(async (fixture) => {
+    await assert.rejects(
+      () => relocateProject(fixture.projectId, fixture.newProjectPath),
+      /Project path not found/,
+    );
+
+    assert.equal(projectsDb.getProjectPathById(fixture.projectId), fixture.oldProjectPath);
+    assert.equal(sessionsDb.getSessionById(SESSION_ID)?.jsonl_path, fixture.transcriptPath);
+  });
+});
+
+test('relocateProject rejects a path another project already owns', async () => {
+  await withRelocateFixture(async (fixture) => {
+    await mkdir(fixture.newProjectPath, { recursive: true });
+    projectsDb.createProjectPath(fixture.newProjectPath, 'beta');
+
+    await assert.rejects(
+      () => relocateProject(fixture.projectId, fixture.newProjectPath),
+      /Another project already uses that path/,
+    );
+
+    assert.equal(projectsDb.getProjectPathById(fixture.projectId), fixture.oldProjectPath);
+  });
+});
+
+test('relocateProject is a no-op when the path is unchanged', async () => {
+  await withRelocateFixture(async (fixture) => {
+    const result = await relocateProject(fixture.projectId, fixture.oldProjectPath);
+
+    assert.equal(result.movedSessionCount, 0);
+    assert.equal(result.movedTranscriptCount, 0);
+    assert.equal(sessionsDb.getSessionById(SESSION_ID)?.jsonl_path, fixture.transcriptPath);
+  });
+});
+
+test('relocateProject rejects an unknown projectId', async () => {
+  await withRelocateFixture(async (fixture) => {
+    await mkdir(fixture.newProjectPath, { recursive: true });
+    await assert.rejects(
+      () => relocateProject('not-a-project', fixture.newProjectPath),
+      /Unknown projectId/,
+    );
+  });
+});

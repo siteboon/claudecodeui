@@ -10,5 +10,9 @@ export { providerModelsService } from './services/provider-models.service.js';
 // edited message's resume point, which only the providers module can read.
 export { sessionsService } from './services/sessions.service.js';
 
+// relocateClaudeTranscripts: used by Projects when a project folder is renamed,
+// so the Claude transcripts move into the folder the SDK resumes them from.
+export { relocateClaudeTranscripts } from './list/claude/claude-transcript-relocation.provider.js';
+
 export { initializeSessionsWatcher } from './services/sessions-watcher.service.js';
 export { closeSessionsWatcher } from './services/sessions-watcher.service.js';
