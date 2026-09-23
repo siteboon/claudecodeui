@@ -46,6 +46,13 @@ async function assertDirectoryExists(projectPath: string): Promise<void> {
  * `ON UPDATE CASCADE`), then the transcripts, then their new `jsonl_path`s. If
  * the transcripts cannot be moved, the rows are put back as they were read, so
  * the database keeps describing what is on disk.
+ *
+ * Known limitation: only providers with a `transcriptRelocation` facet (Claude
+ * today) have their artifacts moved or rewritten. Codex, Cursor and OpenCode
+ * record the cwd in their own artifacts, so while their rows move with the
+ * project, the next synchronization of such a session (once it is used again,
+ * or on a full scan) reads the old cwd back, re-creates the old folder as a
+ * project and moves the session there.
  */
 export async function relocateProject(
   projectId: string,

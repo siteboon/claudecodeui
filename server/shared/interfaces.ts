@@ -78,7 +78,9 @@ export interface IProvider {
   /**
    * Keeps transcripts resumable when a project folder is renamed or moved.
    * Present only for providers whose artifacts are laid out by project path;
-   * a provider without it keeps its artifacts where they are.
+   * a provider without it keeps its artifacts where they are. That includes
+   * the old cwd recorded in them (Codex, Cursor and OpenCode today), so the
+   * next synchronization of such a session moves it back to the old folder.
    */
   readonly transcriptRelocation?: IProviderTranscriptRelocation;
 }
