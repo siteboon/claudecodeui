@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
+import type { TFunction } from 'i18next';
 import React from 'react';
-import { test, vi } from 'vitest';
+import { beforeEach, test, vi } from 'vitest';
 
 import type { Project } from '@/shared/types';
 
@@ -20,7 +21,31 @@ vi.mock('@/modules/sidebar/hooks/useCompactSidebar', () => ({
   useCompactSidebar: () => false,
 }));
 
+const updateProjectPath = vi.fn();
+const renameProject = vi.fn();
+const refreshProjects = vi.fn();
+
+vi.mock('@/shared/api', () => ({
+  api: {
+    archivedProjects: () => Promise.resolve({ ok: true, json: async () => ({}) }),
+    getArchivedSessions: () => Promise.resolve({ ok: true, json: async () => ({}) }),
+    updateProjectPath: (...args: unknown[]) => updateProjectPath(...args),
+    renameProject: (...args: unknown[]) => renameProject(...args),
+  },
+}));
+
+vi.mock('@/modules/command-palette', () => ({
+  usePaletteOps: () => ({ refreshProjects }),
+}));
+
 const { default: SidebarProjectItem } = await import('@/modules/sidebar/SidebarProjectItem');
+const { useSidebarController } = await import('@/modules/sidebar/hooks/useSidebarController');
+
+beforeEach(() => {
+  updateProjectPath.mockReset().mockResolvedValue({ ok: true, json: async () => ({}) });
+  renameProject.mockReset().mockResolvedValue({ ok: true, json: async () => ({}) });
+  refreshProjects.mockReset();
+});
 
 const PROJECT = {
   projectId: 'a',
@@ -109,4 +134,53 @@ test('saving the editor hands the edited folder to the save callback', () => {
   fireEvent.keyDown(folderInput, { key: 'Enter' });
 
   assert.deepEqual(saved, [['a', 'alpha', '/workspace/beta']]);
+});
+
+// The controller is what turns a save into API calls: it decides whether the
+// folder has to be sent at all, and when the sidebar reloads afterwards.
+// Built once: effects key off `projects` and `activeSessions`, so fresh values
+// on every render would re-run them forever.
+const CONTROLLER_ARGS: Parameters<typeof useSidebarController>[0] = {
+  projects: [],
+  selectedProject: null,
+  selectedSession: null,
+  activeSessions: new Set<string>(),
+  isLoading: false,
+  isMobile: false,
+  t: t as unknown as TFunction,
+  onRefresh: noop,
+  onProjectSelect: noop,
+  onSessionSelect: noop,
+  setCurrentProject: noop,
+  setSidebarVisible: noop,
+  sidebarVisible: true,
+};
+
+const renderController = () => renderHook(() => useSidebarController(CONTROLLER_ARGS));
+
+test('a name-only save renames the project without touching its folder', async () => {
+  const { result } = renderController();
+
+  act(() => result.current.startEditingProject(PROJECT));
+  // The editor always holds the folder, so an untouched one comes back as-is.
+  await act(() => result.current.saveProjectName('a', 'alpha renamed', `${PROJECT.fullPath} `));
+
+  // The path endpoint validates the folder, which a project discovered outside
+  // the workspace root fails, so an unchanged folder must never reach it.
+  assert.equal(updateProjectPath.mock.calls.length, 0);
+  assert.deepEqual(renameProject.mock.calls, [['a', 'alpha renamed']]);
+  assert.equal(refreshProjects.mock.calls.length, 1);
+});
+
+test('a moved folder refreshes the sidebar even when the name then fails to save', async () => {
+  renameProject.mockResolvedValue({ ok: false, json: async () => ({}) });
+  const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+  const { result } = renderController();
+
+  act(() => result.current.startEditingProject(PROJECT));
+  await act(() => result.current.saveProjectName('a', 'alpha', '/workspace/beta'));
+  consoleError.mockRestore();
+
+  assert.deepEqual(updateProjectPath.mock.calls, [['a', '/workspace/beta']]);
+  assert.equal(refreshProjects.mock.calls.length, 1, 'the sidebar must show the new folder');
 });

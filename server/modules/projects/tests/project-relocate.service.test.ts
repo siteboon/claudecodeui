@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
@@ -164,6 +165,26 @@ test('relocateProject is a no-op when the path is unchanged', async () => {
     assert.equal(result.movedSessionCount, 0);
     assert.equal(result.movedTranscriptCount, 0);
     assert.equal(sessionsDb.getSessionById(SESSION_ID)?.jsonl_path, fixture.transcriptPath);
+  });
+});
+
+test('relocateProject leaves a project outside the workspace root alone when its path is unchanged', async () => {
+  await withRelocateFixture(async () => {
+    // Synchronizers register any CLI cwd, so a project can live where
+    // `validateWorkspacePath` would refuse to create one (the OS temp dir is a
+    // forbidden system directory, whatever WORKSPACES_ROOT is).
+    const outsidePath = await mkdtemp(path.join(os.tmpdir(), 'cloudcli-relocate-outside-'));
+    try {
+      const outsideProjectId = projectsDb.createProjectPath(outsidePath, 'outside').project?.project_id ?? '';
+
+      const result = await relocateProject(outsideProjectId, outsidePath);
+
+      assert.equal(result.path, outsidePath);
+      assert.equal(result.movedSessionCount, 0);
+      assert.equal(projectsDb.getProjectPathById(outsideProjectId), outsidePath);
+    } finally {
+      await rm(outsidePath, { recursive: true, force: true });
+    }
   });
 });
 

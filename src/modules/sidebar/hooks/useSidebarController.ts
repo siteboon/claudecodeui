@@ -119,6 +119,12 @@ export function useSidebarController({
   const starToggleSequenceByProjectRef = useRef<Map<string, number>>(new Map());
   const migrationStartedRef = useRef(false);
   const onRefreshRef = useRef(onRefresh);
+  // The folder the project pointed at when its editor opened. saveProjectName
+  // compares the folder draft against it so a name-only save never calls the
+  // path endpoint. A ref rather than a field on activeRename: reading that
+  // state would give saveProjectName a new identity on every keystroke and
+  // re-render every memoized project row.
+  const projectRenameOriginalPathRef = useRef<string | null>(null);
 
   const isSidebarCollapsed = !isMobile && !sidebarVisible;
   const activeSessionIds = activeSessions;
@@ -755,6 +761,7 @@ export function useSidebarController({
   // Keyed by projectId so the rename survives display-name mutations that arrive
   // while the input is open.
   const startEditingProject = useCallback((project: Project) => {
+    projectRenameOriginalPathRef.current = project.fullPath;
     setActiveRename({
       target: 'project',
       id: project.projectId,
@@ -792,9 +799,15 @@ export function useSidebarController({
     // (missing directory, path already taken), and applying the display name
     // anyway would leave the row half-updated.
     async (projectId: string, nextName: string, nextPath: string) => {
+      // Set by either save that goes through: a folder that moved has to show
+      // up in the sidebar even when the display name then fails to save.
+      let savedAnyChange = false;
       try {
         const trimmedPath = nextPath.trim();
-        if (trimmedPath.length > 0) {
+        // Only a folder the user actually edited is sent. The path endpoint
+        // validates the folder, which a project discovered outside the
+        // workspace root would fail even though it is not being moved.
+        if (trimmedPath.length > 0 && trimmedPath !== projectRenameOriginalPathRef.current) {
           const pathResponse = await api.updateProjectPath(projectId, trimmedPath);
           if (!pathResponse.ok) {
             const failure = (await pathResponse.json().catch(() => null)) as
@@ -805,11 +818,12 @@ export function useSidebarController({
             // instead of silently discarded.
             return;
           }
+          savedAnyChange = true;
         }
 
         const response = await api.renameProject(projectId, nextName);
         if (response.ok) {
-          await paletteOps.refreshProjects();
+          savedAnyChange = true;
         } else {
           console.error('Failed to rename project');
         }
@@ -817,6 +831,9 @@ export function useSidebarController({
         console.error('Error renaming project:', error);
       }
 
+      if (savedAnyChange) {
+        await paletteOps.refreshProjects();
+      }
       setActiveRename(null);
     },
     [paletteOps, t],
