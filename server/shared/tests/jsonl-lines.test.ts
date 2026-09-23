@@ -10,8 +10,8 @@ import { buildLookupMap, extractFirstValidJsonlData, readLines } from '@/shared/
 
 // Unicode line/paragraph separators and NEL: valid unescaped inside JSON
 // strings, and `readline` on Node 24 treats the first two as line breaks.
-const LINE_SEPARATOR = ' ';
-const PARAGRAPH_SEPARATOR = ' ';
+const LINE_SEPARATOR = '\u2028';
+const PARAGRAPH_SEPARATOR = '\u2029';
 const NEXT_LINE = '\u0085';
 
 async function collectLines(source: string | Readable): Promise<string[]> {
