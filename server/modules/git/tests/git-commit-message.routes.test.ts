@@ -122,3 +122,14 @@ test('explanatory text ahead of the commit message is dropped', async () => {
 
   assert.equal(message, 'feat(a): add line2');
 });
+
+test('a breaking-change commit message is kept', async () => {
+  const message = await generateCommitMessage({
+    queryClaude: async (_command, _options, writer) => {
+      writer.send(createNormalizedMessage({ kind: 'text', role: 'assistant', content: 'feat(api)!: drop the v1 endpoints\n\nBREAKING CHANGE: v1 clients must move to v2.', sessionId: 'native-1', provider: 'claude' }));
+      writer.send(createCompleteMessage({ provider: 'claude', sessionId: 'native-1', exitCode: 0 }));
+    },
+  }, 'claude');
+
+  assert.equal(message, 'feat(api)!: drop the v1 endpoints\n\nBREAKING CHANGE: v1 clients must move to v2.');
+});

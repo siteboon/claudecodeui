@@ -1122,7 +1122,7 @@ function cleanCommitMessage(text) {
 
   // Remove any explanatory text before the actual commit message
   // Look for conventional commit pattern and start from there
-  const conventionalCommitMatch = cleaned.match(/(feat|fix|docs|style|refactor|perf|test|build|ci|chore)(\(.+?\))?:.+/s);
+  const conventionalCommitMatch = cleaned.match(/(feat|fix|docs|style|refactor|perf|test|build|ci|chore)(\(.+?\))?!?:.+/s);
   if (!conventionalCommitMatch) {
     // Not a commit message. Claude reports its own failures as ordinary
     // assistant text ("Not logged in · Please run /login", usage limits, API
