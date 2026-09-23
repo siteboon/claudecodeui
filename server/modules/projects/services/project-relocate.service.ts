@@ -57,6 +57,23 @@ export async function relocateProject(
     });
   }
 
+  const previousPath = projectRow.project_path;
+  const unchangedResult: RelocateProjectResult = {
+    projectId,
+    path: previousPath,
+    previousPath,
+    movedSessionCount: 0,
+    movedTranscriptCount: 0,
+  };
+
+  // Compared before the path is validated: projects discovered from a CLI cwd
+  // are registered without that check, so the stored path can sit outside the
+  // workspace root or be non-canonical. Re-sending it must leave the project
+  // alone instead of failing or moving it to the resolved path.
+  if (normalizeProjectPath(requestedPath || '') === previousPath) {
+    return unchangedResult;
+  }
+
   const pathValidation = await validateWorkspacePath(normalizeProjectPath(requestedPath || ''));
   if (!pathValidation.valid || !pathValidation.resolvedPath) {
     throw new AppError('Invalid project path', {
@@ -66,16 +83,9 @@ export async function relocateProject(
     });
   }
 
-  const previousPath = projectRow.project_path;
   const nextPath = normalizeProjectPath(pathValidation.resolvedPath);
   if (nextPath === previousPath) {
-    return {
-      projectId,
-      path: nextPath,
-      previousPath,
-      movedSessionCount: 0,
-      movedTranscriptCount: 0,
-    };
+    return unchangedResult;
   }
 
   await assertDirectoryExists(nextPath);
