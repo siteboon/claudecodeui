@@ -270,8 +270,13 @@ export const api = {
     get(fileContentPath(projectId, filePath), options),
   saveFile: (projectId: string, filePath: string, content: string) =>
     put(`/api/file-tree/projects/${projectId}/file`, { filePath, content }),
-  getFiles: (projectId: string, options: ApiRequestOptions = {}) =>
-    get(`/api/file-tree/projects/${projectId}/files${query({ respectGitignore: true })}`, options),
+  // Without `directoryPath` the server returns the whole project (or just the
+  // top level when the project is too large); with it, one directory's entries.
+  getFiles: (projectId: string, options: ApiRequestOptions = {}, directoryPath?: string) =>
+    get(
+      `/api/file-tree/projects/${projectId}/files${query({ respectGitignore: true, path: directoryPath })}`,
+      options,
+    ),
 
   // File operations
   createFile: (

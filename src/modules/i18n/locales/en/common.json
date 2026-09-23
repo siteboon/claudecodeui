@@ -112,6 +112,8 @@
     "noFilesFound": "No files found",
     "checkProjectPath": "Check if the project path is accessible",
     "loadFailed": "Unable to load files",
+    "loadingFolder": "Loading folder...",
+    "loadFolderFailed": "Unable to load \"{{folder}}\": {{message}}",
     "noMatchesFound": "No matches found",
     "tryDifferentSearch": "Try a different search term or clear the search",
     "justNow": "just now",

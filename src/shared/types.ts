@@ -923,6 +923,8 @@ export type FileTreeNode = {
   modified?: string;
   permissionsRwx?: string;
   children?: FileTreeNode[];
+  /** `false` on a directory the server has not listed yet; the tree fetches it when the directory is opened. */
+  childrenLoaded?: boolean;
   [key: string]: unknown;
 };
 
