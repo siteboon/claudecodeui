@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '@/shared/api';
 import { PROVIDER_PERMISSION_PREFERENCE_KEYS } from '@/shared/constants';
 import { readUserPreference } from '@/shared/userSettings';
-import type { CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
+import type { CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SelectProviderModel,SlashCommand } from '@/shared/types';
 import { grantClaudeToolPermission } from '@/modules/chat/utils/chatPermissions';
 import {
   clearQueuedMessage,
@@ -63,6 +63,11 @@ type UseChatComposerStateArgs = {
   onSessionEstablished?: (sessionId: string, context: SessionEstablishedContext) => void;
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
+  /**
+   * Applies a model the way the composer's model picker does. `/model <id>`
+   * goes through it so later turns run with, and the picker shows, that model.
+   */
+  onSelectProviderModel?: SelectProviderModel;
   scrollToBottom: () => void;
   addMessage: (msg: ChatMessage) => void;
   setIsUserScrolledUp: (isScrolledUp: boolean) => void;
@@ -81,6 +86,13 @@ type CommandExecutionResult = {
   content?: string;
   hasBashCommands?: boolean;
   hasFileIncludes?: boolean;
+};
+
+/** Payload of the `/model <id>` built-in (see the Commands module). */
+type ModelSwitchCommandData = {
+  model?: string;
+  /** False for an id the provider catalog does not list, e.g. `claude-fable-5-1`. */
+  inCatalog?: boolean;
 };
 
 
@@ -187,6 +199,7 @@ export function useChatComposerState({
   onSessionEstablished,
   onFileOpen,
   onShowSettings,
+  onSelectProviderModel,
   scrollToBottom,
   addMessage,
   setIsUserScrolledUp,
@@ -370,11 +383,60 @@ export function useChatComposerState({
           onShowSettings?.();
           break;
 
+        case 'model': {
+          const { model: requestedModel, inCatalog } = (data || {}) as ModelSwitchCommandData;
+          if (!requestedModel || !onSelectProviderModel) {
+            break;
+          }
+
+          const sessionId = currentSessionId || selectedSession?.id || null;
+          // Without a session the id could only become the default for new
+          // chats, and the composer resets a default the catalog does not list.
+          if (!sessionId && !inCatalog) {
+            addMessage({
+              type: 'assistant',
+              content: t('misc.modelCommandNeedsSession', { model: requestedModel }),
+              timestamp: Date.now(),
+            });
+            break;
+          }
+
+          void onSelectProviderModel(provider, requestedModel, sessionId).then(
+            (selection) => {
+              addMessage({
+                type: 'assistant',
+                content: selection.scope === 'session'
+                  ? t('misc.modelCommandSession', { model: selection.model })
+                  : t('misc.modelCommandDefault', { model: selection.model }),
+                timestamp: Date.now(),
+              });
+            },
+            (error: unknown) => {
+              console.error('Error changing the model with /model:', error);
+              addMessage({
+                type: 'assistant',
+                content: t('misc.modelChangeFailed'),
+                timestamp: Date.now(),
+              });
+            },
+          );
+          break;
+        }
+
         default:
           console.warn('Unknown built-in command action:', action);
       }
     },
-    [onFileOpen, onShowSettings, addMessage],
+    [
+      onFileOpen,
+      onShowSettings,
+      addMessage,
+      currentSessionId,
+      selectedSession?.id,
+      onSelectProviderModel,
+      provider,
+      t,
+    ],
   );
 
   const closeCommandModal = useCallback(() => {
@@ -682,6 +744,55 @@ export function useChatComposerState({
         return;
       }
 
+      // Intercept slash commands only when "/" is the first input character.
+      // Also accept exact "help" as a convenience alias for users who expect CLI-style help.
+      const commandInput = currentInput.trimEnd();
+      const isHelpAlias = commandInput.trim().toLowerCase() === 'help';
+      let slashCommand: SlashCommand | undefined;
+      if (commandInput.startsWith('/') || isHelpAlias) {
+        const firstSpace = commandInput.indexOf(' ');
+        const commandName = isHelpAlias
+          ? '/help'
+          : firstSpace > 0 ? commandInput.slice(0, firstSpace) : commandInput;
+        const matchedCommand =
+          slashCommands.find((cmd: SlashCommand) => cmd.name === commandName) ||
+          (commandName === '/help'
+            ? ({
+                name: '/help',
+                description: 'Show help documentation for Claude Code',
+                namespace: 'builtin',
+                metadata: { type: 'builtin' },
+              } as SlashCommand)
+            : undefined);
+        if (matchedCommand && matchedCommand.type !== 'skill') {
+          slashCommand = matchedCommand;
+        }
+      }
+
+      const runSlashCommand = (command: SlashCommand) => {
+        executeCommand(command, isHelpAlias ? '/help' : commandInput);
+        recordSentMessage(currentInput);
+        setInput('');
+        inputValueRef.current = '';
+        setAttachedFiles([]);
+        setFileErrors(new Map());
+        resetCommandMenuState();
+        setIsTextareaExpanded(false);
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+        }
+      };
+
+      // Built-in commands only act on this client (a dialog, the settings, the
+      // session's model), so they run right away even while a turn is in
+      // flight. Queued, they would reach the provider CLI as a prompt: a
+      // `/model <id>` sent that way lasts only for that one CLI process, and
+      // the next turn is back on the composer's model (#1315).
+      if (slashCommand && (slashCommand.type === 'built-in' || slashCommand.namespace === 'builtin')) {
+        runSlashCommand(slashCommand);
+        return;
+      }
+
       // A turn is already in flight: stash this message instead of sending it.
       // Upload attached files now so the queued record contains durable image
       // descriptors that can be sent even if another session is open later.
@@ -756,39 +867,9 @@ export function useChatComposerState({
         return;
       }
 
-      // Intercept slash commands only when "/" is the first input character.
-      // Also accept exact "help" as a convenience alias for users who expect CLI-style help.
-      const commandInput = currentInput.trimEnd();
-      const isHelpAlias = commandInput.trim().toLowerCase() === 'help';
-      if (commandInput.startsWith('/') || isHelpAlias) {
-        const firstSpace = commandInput.indexOf(' ');
-        const commandName = isHelpAlias
-          ? '/help'
-          : firstSpace > 0 ? commandInput.slice(0, firstSpace) : commandInput;
-        const matchedCommand =
-          slashCommands.find((cmd: SlashCommand) => cmd.name === commandName) ||
-          (commandName === '/help'
-            ? ({
-                name: '/help',
-                description: 'Show help documentation for Claude Code',
-                namespace: 'builtin',
-                metadata: { type: 'builtin' },
-              } as SlashCommand)
-            : undefined);
-        if (matchedCommand && matchedCommand.type !== 'skill') {
-          executeCommand(matchedCommand, isHelpAlias ? '/help' : commandInput);
-          recordSentMessage(currentInput);
-          setInput('');
-          inputValueRef.current = '';
-          setAttachedFiles([]);
-          setFileErrors(new Map());
-          resetCommandMenuState();
-          setIsTextareaExpanded(false);
-          if (textareaRef.current) {
-            textareaRef.current.style.height = 'auto';
-          }
-          return;
-        }
+      if (slashCommand) {
+        runSlashCommand(slashCommand);
+        return;
       }
 
       const messageContent = currentInput;

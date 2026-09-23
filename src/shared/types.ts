@@ -46,6 +46,13 @@ export type ProviderModelActions = {
   remove(provider: LLMProvider, existing: ProviderModelOption): Promise<void>;
 };
 
+/** Applies a model choice the way the composer's model picker does: to the open session when there is one (`scope: 'session'`), otherwise as the default for new chats. Passed to the `/models` dialog and to the `/model <id>` command. */
+export type SelectProviderModel = (
+  provider: LLMProvider,
+  model: string,
+  sessionId?: string | null,
+) => Promise<{ scope: 'default' | 'session'; model: string }>;
+
 // ---------------------------
 
 //----------------- PROJECTS AND SESSIONS ------------

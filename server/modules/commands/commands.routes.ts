@@ -95,6 +95,35 @@ const executeModelsCommand = async (args, context, modelsService) => {
 };
 
 /**
+ * `/model <id>` switches the model the way picking it in the composer does.
+ *
+ * Handled here rather than passed to the provider: Claude Code answers
+ * "Set model to … for this session only", but that only lasts for the one CLI
+ * process, and every chat turn starts a new process with the composer's
+ * `--model`. The client applies the returned model to the session. `inCatalog`
+ * tells it whether the id can also become the default for new chats.
+ * Without an argument this shows the `/models` picker.
+ */
+const executeModelCommand = async (args, context, modelsService) => {
+  const requestedModel = typeof args?.[0] === "string" ? args[0].trim() : "";
+  if (!requestedModel) {
+    return executeModelsCommand(args, context, modelsService);
+  }
+
+  const provider = readModelProvider(context?.provider);
+  const catalog = await modelsService.getProviderModels(provider);
+  return {
+    type: "builtin",
+    action: "model",
+    data: {
+      provider,
+      model: requestedModel,
+      inCatalog: catalog.OPTIONS.some((option) => option.value === requestedModel),
+    },
+  };
+};
+
+/**
  * Recursively scan directory for command files (.md)
  * @param {string} dir - Directory to scan
  * @param {string} baseDir - Base directory for relative paths
@@ -171,6 +200,12 @@ const builtInCommands = [
   {
     name: "/help",
     description: "Show help documentation for Claude Code",
+    namespace: "builtin",
+    metadata: { type: "builtin" },
+  },
+  {
+    name: "/model",
+    description: "Switch the model for this session (/model <model-id>)",
     namespace: "builtin",
     metadata: { type: "builtin" },
   },
@@ -257,6 +292,8 @@ Custom commands can be created in:
       },
     };
   },
+
+  "/model": (args, context) => executeModelCommand(args, context, providerModelsService),
 
   "/models": (args, context) => executeModelsCommand(args, context, providerModelsService),
 

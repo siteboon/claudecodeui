@@ -321,6 +321,9 @@
     "closeModal": "Close command result modal",
     "noDescription": "No description available.",
     "modelChangeFailed": "Unable to change the model right now.",
+    "modelCommandSession": "This session now uses {{model}}.",
+    "modelCommandDefault": "New chats now use {{model}}.",
+    "modelCommandNeedsSession": "{{model}} is not in the model list, so it can only be applied to an open session. Send a message first, or add it under /models → Manage models.",
     "choiceSavedHint": "Your choice is saved for this session and becomes the default for new chats.",
     "docsSearchSubtitle": "Search built-ins, syntax patterns, and command usage without leaving the chat.",
     "enterModelInfo": "Enter both a model name and model ID.",
@@ -330,6 +333,7 @@
     "userDeniedTool": "User denied tool use",
     "showTokenUsage": "Show token usage",
     "fallbackCommands": {
+      "model": "Switch the model for this session: /model <model-id>.",
       "models": "Browse available models for the active provider.",
       "cost": "Review token usage for the active session.",
       "status": "Inspect runtime, version, provider, and environment status.",

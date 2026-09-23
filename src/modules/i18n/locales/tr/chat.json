@@ -255,5 +255,13 @@
     "failed": "Gönderilmedi — {{reason}}",
     "cancel": "Zamanlanmış mesajı iptal et",
     "dismiss": "Hata bildirimini kapat"
+  },
+  "misc": {
+    "modelCommandSession": "Bu oturum artık {{model}} kullanıyor.",
+    "modelCommandDefault": "Yeni sohbetler artık {{model}} kullanıyor.",
+    "modelCommandNeedsSession": "{{model}} model listesinde yok, bu yüzden yalnızca açık bir oturuma uygulanabilir. Önce bir mesaj gönder veya /models → Manage models üzerinden ekle.",
+    "fallbackCommands": {
+      "model": "Bu oturumun modelini değiştirin: /model <model-kimliği>."
+    }
   }
 }
