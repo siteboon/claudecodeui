@@ -58,6 +58,7 @@ const renderProviderState = async (initialSession: ProjectSession | null = null)
 
 beforeEach(() => {
   localStorage.clear();
+  sessionStorage.clear();
   resetUserPreferences();
   writeUserPreference('selectedProvider', 'codex');
 });
@@ -158,6 +159,78 @@ test('a mode picked before the first send is bound to the new session id', async
   rerender({ selectedSession: null });
   await waitFor(() => {
     assert.equal(result.current.permissionMode, 'default');
+  });
+});
+
+test('a pick made before the first send survives a reload of the tab', async () => {
+  writeUserPreference('codexPermissions', { permissionMode: 'bypassPermissions' });
+
+  const beforeReload = await renderProviderState();
+  await waitFor(() => {
+    assert.equal(beforeReload.result.current.permissionMode, 'bypassPermissions');
+  });
+  act(() => {
+    beforeReload.result.current.selectPermissionMode('default');
+  });
+  beforeReload.unmount();
+
+  // The draft comes back after a reload, so the safer mode picked for it must too.
+  const afterReload = await renderProviderState();
+  await waitFor(() => {
+    assert.equal(afterReload.result.current.permissionMode, 'default');
+  });
+
+  act(() => {
+    afterReload.result.current.bindNewChatPermissionMode('codex-reloaded');
+  });
+  assert.equal(localStorage.getItem('permissionMode-codex-reloaded'), 'default');
+});
+
+test('a pick left unsent in a new chat is dropped once another session is opened', async () => {
+  writeUserPreference('codexPermissions', { permissionMode: 'default' });
+
+  const { result, rerender } = await renderProviderState();
+  await waitFor(() => {
+    assert.equal(result.current.availablePermissionModes.includes('bypassPermissions'), true);
+  });
+  act(() => {
+    result.current.selectPermissionMode('bypassPermissions');
+  });
+
+  // The user leaves without sending and works in an existing session instead.
+  rerender({ selectedSession: codexSession('codex-other') });
+  await waitFor(() => {
+    assert.equal(result.current.permissionMode, 'default');
+  });
+  act(() => {
+    result.current.selectPermissionMode('acceptEdits');
+  });
+
+  rerender({ selectedSession: null });
+  await waitFor(() => {
+    assert.equal(result.current.permissionMode, 'default');
+  });
+});
+
+test('a fork keeps the permission mode chosen for the session it was forked from', async () => {
+  writeUserPreference('codexPermissions', { permissionMode: 'bypassPermissions' });
+  localStorage.setItem('permissionMode-codex-parent', 'default');
+
+  // What the chat and sidebar fork actions do once the server returns the fork's id.
+  const { inheritSessionPermissionMode } = await import('@/shared/utils');
+  inheritSessionPermissionMode('codex-parent', 'codex-fork');
+  inheritSessionPermissionMode('codex-unpinned-parent', 'codex-unpinned-fork');
+
+  const { result, rerender } = await renderProviderState(codexSession('codex-fork'));
+  await waitFor(() => {
+    assert.equal(result.current.permissionMode, 'default');
+  });
+
+  // A source without a choice of its own passes nothing on, so its fork follows Settings.
+  assert.equal(localStorage.getItem('permissionMode-codex-unpinned-fork'), null);
+  rerender({ selectedSession: codexSession('codex-unpinned-fork') });
+  await waitFor(() => {
+    assert.equal(result.current.permissionMode, 'bypassPermissions');
   });
 });
 

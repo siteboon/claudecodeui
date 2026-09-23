@@ -223,3 +223,22 @@ export const getPageTitle = (
   const displayName = selectedProject?.displayName?.trim();
   return displayName ? `${displayName} - ${DEFAULT_PAGE_TITLE}` : DEFAULT_PAGE_TITLE;
 };
+
+// ---------------------------
+
+//----------------- SESSION PERMISSION MODE ------------
+
+/**
+ * Gives a forked session the permission mode its source session was explicitly
+ * set to in the chat composer (localStorage `permissionMode-<sessionId>`, the key
+ * the composer resolves first). Call it right after a fork is created, before
+ * opening it, so the branch keeps the mode chosen for its conversation instead of
+ * falling back to the Settings default. Nothing is copied when the source has no
+ * choice of its own; the fork then follows Settings as its source did.
+ */
+export const inheritSessionPermissionMode = (sourceSessionId: string, forkedSessionId: string): void => {
+  const sourceMode = localStorage.getItem(`permissionMode-${sourceSessionId}`);
+  if (sourceMode) {
+    localStorage.setItem(`permissionMode-${forkedSessionId}`, sourceMode);
+  }
+};

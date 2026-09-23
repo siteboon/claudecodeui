@@ -3,6 +3,7 @@ import type { TFunction } from 'i18next';
 
 import { api } from '@/shared/api';
 import { subscribeToUserPreferences } from '@/shared/userSettings';
+import { inheritSessionPermissionMode } from '@/shared/utils';
 import { usePaletteOps } from '@/modules/command-palette';
 import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationProjectResult, ConversationSearchResults, LLMProvider, Project, ProjectSession, ProjectSortOrder, RecentConversationListItem, SearchProgress, ActiveSidebarRename, PendingSidebarDeletion, SessionTitleSearchResult, SessionWithProvider, SidebarSearchMode } from '@/shared/types';
 import {
@@ -1040,6 +1041,7 @@ export function useSidebarController({
           throw new Error(payload?.message || `HTTP ${response.status}`);
         }
 
+        inheritSessionPermissionMode(session.id, forkedSessionId);
         onSessionSelect({
           id: forkedSessionId,
           summary: payload.data.sessionName,

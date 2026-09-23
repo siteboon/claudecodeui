@@ -8,6 +8,7 @@ import PermissionContext from '@/modules/chat/context/PermissionContext';
 import { MarkdownWorkspaceContext } from '@/modules/chat/context/MarkdownWorkspaceContext';
 import { TranscriptSessionContext } from '@/modules/chat/context/TranscriptSessionContext';
 import { api } from '@/shared/api';
+import { inheritSessionPermissionMode } from '@/shared/utils';
 import type {
   ChatMessage,
   Project,
@@ -345,6 +346,7 @@ function ChatInterface({
       if (!response.ok || typeof forkedSessionId !== 'string') {
         throw new Error(payload?.message || `HTTP ${response.status}`);
       }
+      inheritSessionPermissionMode(sourceSessionId, forkedSessionId);
       onNavigateToSession?.(forkedSessionId);
     } catch (error) {
       console.error('Error forking session:', error);
