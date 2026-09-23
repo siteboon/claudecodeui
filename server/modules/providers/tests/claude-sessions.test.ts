@@ -1734,16 +1734,18 @@ test('an edit of a prompt sent right after a task notification replaces it', { c
   // Chat writes a prompt that follows a notification as the notification's
   // child. Editing it resumes through the assistant row above both, so the
   // replacement lands beside the notification instead of beside the prompt it
-  // replaces. Older CLI builds wrote the notification without `origin`.
+  // replaces. Older CLI builds wrote the notification without `origin`, and a
+  // task that reports twice leaves two notifications in a row above the prompt.
   const sessionId = 'claude-edit-after-note-session';
   const toolUseId = 'toolu_edit_bash_1';
   const summary = 'Background command "Run the tests" completed (exit code 0)';
-  const noteShapes: [string, Record<string, unknown>][] = [
-    ['marked with origin', { origin: { kind: 'task-notification' }, promptSource: 'system' }],
-    ['unmarked', {}],
+  const noteShapes: [string, Record<string, unknown>, string[]][] = [
+    ['marked with origin', { origin: { kind: 'task-notification' }, promptSource: 'system' }, ['n1']],
+    ['unmarked', {}, ['n1']],
+    ['written twice in a row', { origin: { kind: 'task-notification' }, promptSource: 'system' }, ['n0', 'n1']],
   ];
 
-  for (const [shape, markers] of noteShapes) {
+  for (const [shape, markers, noteIds] of noteShapes) {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-edit-after-note-'));
     try {
       const transcriptPath = path.join(tempRoot, `${sessionId}.jsonl`);
@@ -1765,14 +1767,14 @@ test('an edit of a prompt sent right after a task notification replaces it', { c
           toolUseResult: { stdout: '', stderr: '', interrupted: false, isImage: false, backgroundTaskId: 'bedit1' },
         },
         forkAnswer('a2', 'r1', 'the tests are running'),
-        forkPrompt('n1', 'a2', [
+        ...noteIds.map((noteId, index) => forkPrompt(noteId, index === 0 ? 'a2' : noteIds[index - 1], [
           '<task-notification>',
           '<task-id>bedit1</task-id>',
           `<tool-use-id>${toolUseId}</tool-use-id>`,
           '<status>completed</status>',
           `<summary>${summary}</summary>`,
           '</task-notification>',
-        ].join('\n'), markers),
+        ].join('\n'), markers)),
         forkPrompt('u2', 'n1', 'original second prompt'),
         forkAnswer('a3', 'u2', 'answer to be replaced'),
         forkPrompt('u2b', 'a2', 'edited second prompt'),
