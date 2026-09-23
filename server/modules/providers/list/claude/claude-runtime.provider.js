@@ -391,7 +391,7 @@ function cliReportsHookEvents(executablePath) {
         });
       } catch {
         // Node throws some spawn failures synchronously instead of reporting
-        // them to the callback (on Windows, anything that is not an .exe).
+        // them to the callback (on Windows, a .cmd or a script launcher).
         resolve(false);
       }
     });
