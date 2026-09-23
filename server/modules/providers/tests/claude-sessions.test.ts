@@ -496,6 +496,81 @@ test('Claude history folds a relaunched agent\'s report that names no launch ont
   }
 });
 
+test('Claude history leaves a report that names no launch alone when the task\'s latest launch already reported', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-reported-relaunch-'));
+  const sessionId = 'claude-reported-relaunch-session';
+  const agentId = 'a14ed4c6a9f61a8c8';
+  const notification = (toolUseId: string, result: string) => [
+    '<task-notification>',
+    `<task-id>${agentId}</task-id>`,
+    `<tool-use-id>${toolUseId}</tool-use-id>`,
+    '<status>completed</status>',
+    '<summary>Agent "Forum research" completed</summary>',
+    `<result>${result}</result>`,
+    '</task-notification>',
+  ].join('\n');
+  const launch = (toolUseId: string, parentUuid: string, timestamp: string) => [
+    {
+      type: 'assistant', uuid: `${toolUseId}-call`, parentUuid, sessionId, timestamp,
+      message: {
+        role: 'assistant', model: 'claude-opus-5',
+        content: [{ type: 'tool_use', id: toolUseId, name: 'Agent', input: { description: 'Forum research', prompt: 'go', run_in_background: true } }],
+      },
+    },
+    {
+      type: 'user', uuid: `${toolUseId}-ack`, parentUuid: `${toolUseId}-call`, sessionId, timestamp,
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUseId, content: 'Async agent launched successfully.' }] },
+      toolUseResult: { isAsync: true, status: 'async_launched', agentId, description: 'Forum research' },
+    },
+  ];
+
+  try {
+    // Launch A never reported; relaunch B did, under its own id. A later report
+    // naming no launch is not B's missing answer, and it is not A's either: it
+    // must not bring A's dead card back to life, so it renders on its own.
+    const rows = [
+      {
+        type: 'user', uuid: 'r-u1', parentUuid: null, sessionId, timestamp: '2026-09-20T10:00:00.000Z',
+        message: { role: 'user', content: [{ type: 'text', text: 'research the forum' }] },
+      },
+      ...launch('toolu_A', 'r-u1', '2026-09-20T10:00:01.000Z'),
+      ...launch('toolu_B', 'toolu_A-ack', '2026-09-20T10:30:00.000Z'),
+      {
+        type: 'user', uuid: 'r-n1', parentUuid: 'toolu_B-ack', sessionId, timestamp: '2026-09-20T10:40:00.000Z',
+        message: { role: 'user', content: [{ type: 'text', text: notification('toolu_B', 'relaunch pass') }] },
+      },
+      {
+        type: 'user', uuid: 'r-n2', parentUuid: 'r-n1', sessionId, timestamp: '2026-09-20T11:00:00.000Z',
+        message: { role: 'user', content: [{ type: 'text', text: notification('toolu_C', 'follow-up pass') }] },
+      },
+    ];
+    const transcriptPath = path.join(tempRoot, `${sessionId}.jsonl`);
+    await writeFile(transcriptPath, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(sessionId, 'claude', tempRoot, 'Reported relaunch', now, now, transcriptPath);
+
+      const history = await new ClaudeSessionsProvider({ getLiveRunStartTime: () => null }).fetchHistory(sessionId, {
+        providerSessionId: sessionId,
+      });
+      const card = (toolUseId: string) => history.messages.find(
+        (message) => message.kind === 'tool_use' && message.toolId === toolUseId,
+      );
+
+      assert.equal(card('toolu_A')?.subagent?.status, 'stopped');
+      assert.equal(card('toolu_B')?.subagent?.status, 'completed');
+      assert.equal(card('toolu_B')?.toolResult?.content, 'relaunch pass');
+      assert.ok(
+        history.messages.some((message) => (message.content ?? '').includes('toolu_C')),
+        'the unmatched report must keep rendering on its own',
+      );
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 /** Strips the `<task-notification>` turn so the agent has no reported outcome. */
 async function dropTaskNotification(parentPath: string): Promise<void> {
   const raw = await readFile(parentPath, 'utf8');

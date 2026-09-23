@@ -462,14 +462,15 @@ function collectTaskNotifications(messages: AnyRecord[]): Map<string, ClaudeTask
  * rendered the report as a raw bubble of its own.
  *
  * The notification goes to the latest background launch written before it
- * that carries the same task id and got no report of its own by tool-use id.
- * A launch that did is left alone: an agent resumed through `SendMessage`
- * reports under the `SendMessage` call's id, and its first report already
- * sits on its launch. So is a synchronous agent, whose answer is its own tool
- * result. Notifications that still find nothing — a task launched inside a
- * subagent names no launch row of this transcript — stay exactly as they
- * were. When several land on one launch, the last one written wins, as for
- * any task that reports more than once.
+ * that carries the same task id, and only when that launch got no report of
+ * its own by tool-use id. A launch that did is left alone, and the notification
+ * is not passed on to an older launch either: an agent resumed through
+ * `SendMessage` reports under the `SendMessage` call's id, and its first report
+ * already sits on its launch. A synchronous agent never takes one, since its
+ * answer is its own tool result. Notifications that still find nothing — a
+ * task launched inside a subagent names no launch row of this transcript —
+ * stay exactly as they were. When several land on one launch, the last one
+ * written wins, as for any task that reports more than once.
  */
 function foldNotificationsByTaskId(
   messages: AnyRecord[],
@@ -503,10 +504,9 @@ function foldNotificationsByTaskId(
         launch.isAsync
         && launch.position < notification.position
         && launch.taskId === notification.taskId
-        && !reportedToolUseIds.has(launch.toolUseId)
       ))
       .pop();
-    if (!target) {
+    if (!target || reportedToolUseIds.has(target.toolUseId)) {
       continue;
     }
 
