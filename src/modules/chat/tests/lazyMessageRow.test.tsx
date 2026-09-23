@@ -204,6 +204,24 @@ describe('LazyMessageRow', () => {
     expect(queryByTestId('row-content')).not.toBeNull();
   });
 
+  it('keeps the last measured height when the row has no box as it leaves', () => {
+    vi.stubGlobal('IntersectionObserver', StubIntersectionObserver);
+
+    render(<Harness initiallyNearViewport />);
+    const observer = StubIntersectionObserver.instances[0];
+    const wrapper = observer.observed[0] as HTMLElement;
+    modelRowLayout(wrapper, 123.5);
+
+    fireIntersection(observer, wrapper, false);
+    fireIntersection(observer, wrapper, true);
+    // The wrapper itself is not laid out (0x0) by the time the exit arrives.
+    wrapper.getBoundingClientRect = () => ({ width: 0, height: 0 }) as DOMRect;
+    fireIntersection(observer, wrapper, false);
+
+    // A 0x0 box says nothing about the row's height; 0px would collapse it.
+    expect(wrapper.style.height).toBe('123.5px');
+  });
+
   it('keeps every row mounted where IntersectionObserver does not exist', () => {
     const { queryByTestId } = render(<Harness initiallyNearViewport={false} />);
 
