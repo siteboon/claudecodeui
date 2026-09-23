@@ -119,6 +119,12 @@ export function useSidebarController({
   const starToggleSequenceByProjectRef = useRef<Map<string, number>>(new Map());
   const migrationStartedRef = useRef(false);
   const onRefreshRef = useRef(onRefresh);
+  // The folder the project pointed at when its editor opened. saveProjectName
+  // compares the folder draft against it so a name-only save never calls the
+  // path endpoint. A ref rather than a field on activeRename: reading that
+  // state would give saveProjectName a new identity on every keystroke and
+  // re-render every memoized project row.
+  const projectRenameOriginalPathRef = useRef<string | null>(null);
 
   const isSidebarCollapsed = !isMobile && !sidebarVisible;
   const activeSessionIds = activeSessions;
@@ -755,7 +761,13 @@ export function useSidebarController({
   // Keyed by projectId so the rename survives display-name mutations that arrive
   // while the input is open.
   const startEditingProject = useCallback((project: Project) => {
-    setActiveRename({ target: 'project', id: project.projectId, draft: project.displayName });
+    projectRenameOriginalPathRef.current = project.fullPath;
+    setActiveRename({
+      target: 'project',
+      id: project.projectId,
+      draft: project.displayName,
+      pathDraft: project.fullPath,
+    });
   }, []);
 
   const startEditingSession = useCallback(
@@ -769,6 +781,12 @@ export function useSidebarController({
     setActiveRename((previous) => (previous ? { ...previous, draft } : previous));
   }, []);
 
+  const updateRenamePathDraft = useCallback((pathDraft: string) => {
+    setActiveRename((previous) =>
+      previous?.target === 'project' ? { ...previous, pathDraft } : previous,
+    );
+  }, []);
+
   const cancelRename = useCallback(() => {
     setActiveRename(null);
   }, []);
@@ -776,21 +794,49 @@ export function useSidebarController({
   const saveProjectName = useCallback(
     // `projectId` is the DB primary key; the rename API resolves the path
     // through the `projects` table before writing the new display name.
-    async (projectId: string, nextName: string) => {
+    //
+    // The folder is saved first: it is the change that can legitimately fail
+    // (missing directory, path already taken), and applying the display name
+    // anyway would leave the row half-updated.
+    async (projectId: string, nextName: string, nextPath: string) => {
+      // Set by either save that goes through: a folder that moved has to show
+      // up in the sidebar even when the display name then fails to save.
+      let savedAnyChange = false;
       try {
+        const trimmedPath = nextPath.trim();
+        // Only a folder the user actually edited is sent. The path endpoint
+        // validates the folder, which a project discovered outside the
+        // workspace root would fail even though it is not being moved.
+        if (trimmedPath.length > 0 && trimmedPath !== projectRenameOriginalPathRef.current) {
+          const pathResponse = await api.updateProjectPath(projectId, trimmedPath);
+          if (!pathResponse.ok) {
+            const failure = (await pathResponse.json().catch(() => null)) as
+              | { error?: { message?: string; details?: string } }
+              | null;
+            alert(failure?.error?.details || failure?.error?.message || t('messages.updateProjectPathError'));
+            // The editor stays open so the rejected folder can be corrected
+            // instead of silently discarded.
+            return;
+          }
+          savedAnyChange = true;
+        }
+
         const response = await api.renameProject(projectId, nextName);
         if (response.ok) {
-          await paletteOps.refreshProjects();
+          savedAnyChange = true;
         } else {
           console.error('Failed to rename project');
         }
       } catch (error) {
         console.error('Error renaming project:', error);
-      } finally {
-        setActiveRename(null);
       }
+
+      if (savedAnyChange) {
+        await paletteOps.refreshProjects();
+      }
+      setActiveRename(null);
     },
-    [paletteOps],
+    [paletteOps, t],
   );
 
   const showDeleteSessionConfirmation = useCallback(
@@ -1099,6 +1145,7 @@ export function useSidebarController({
     startEditingProject,
     startEditingSession,
     updateRenameDraft,
+    updateRenamePathDraft,
     cancelRename,
     saveProjectName,
     showDeleteSessionConfirmation,

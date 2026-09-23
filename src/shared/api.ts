@@ -193,6 +193,10 @@ export const api = {
     get(`/api/projects/${encodeURIComponent(projectId)}/taskmaster`),
   renameProject: (projectId: string, displayName: string) =>
     put(`/api/projects/${projectId}/rename`, { displayName }),
+  // Repoints a project at a folder renamed or moved outside the app; the server
+  // moves its sessions and Claude transcripts along with it.
+  updateProjectPath: (projectId: string, projectPath: string) =>
+    put(`/api/projects/${encodeURIComponent(projectId)}/path`, { projectPath }),
   restoreProject: (projectId: string) =>
     post(`/api/projects/${encodeURIComponent(projectId)}/restore`),
   // `hardDelete` => server `?force=true` (remove DB row + Claude *.jsonl + sessions rows for path).

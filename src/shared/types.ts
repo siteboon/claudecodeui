@@ -1461,7 +1461,9 @@ export type SidebarProjectListProps = SessionRowActions & {
   onToggleStarProject: (projectId: string) => void;
   onStartEditingProject: (project: Project) => void;
   onCancelEditingProject: () => void;
-  onSaveProjectName: (projectId: string, nextName: string) => void;
+  /** Edits the folder the project points at, which is saved alongside its display name. */
+  onRenamePathDraftChange: (pathDraft: string) => void;
+  onSaveProjectName: (projectId: string, nextName: string, nextPath: string) => void;
   onDeleteProject: (project: Project) => void;
   onSessionSelect: (session: SessionWithProvider, projectName: string) => void;
   onNewSession: (project: Project) => void;
@@ -1512,9 +1514,13 @@ export type RecentConversationListItem = Pick<
  * A session rename carries the project that owns it so SidebarProjectList can
  * decide in O(1) which project row the draft belongs to. Without it every row
  * has to be handed the whole value and a keystroke invalidates all of them.
+ *
+ * A project rename also carries `pathDraft`, the folder the project points at:
+ * a folder renamed outside the app is repaired from the same editor, so both
+ * values are saved together.
  */
 export type ActiveSidebarRename =
-  | { target: 'project'; id: string; draft: string }
+  | { target: 'project'; id: string; draft: string; pathDraft: string }
   | { target: 'session'; id: string; projectId: string; draft: string };
 
 /**

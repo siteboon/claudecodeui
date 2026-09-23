@@ -927,6 +927,20 @@ export type WorkspacePathValidationResult = {
   error?: string;
 };
 
+/**
+ * One session's transcript file, as passed between the Projects module and a
+ * provider's `transcriptRelocation` facet when a project folder is repointed.
+ *
+ * On the way in, `jsonlPath` is where the transcript currently is; on the way
+ * out it is where it now lives (the same path when it was rewritten in place),
+ * so the caller can persist the new `sessions.jsonl_path`. Only sessions that
+ * actually own a file on disk belong in these lists.
+ */
+export type SessionTranscriptRelocation = {
+  sessionId: string;
+  jsonlPath: string;
+};
+
 // ---------------------------
 //----------------- GIT WORKTREE MANAGEMENT ------------
 /**
