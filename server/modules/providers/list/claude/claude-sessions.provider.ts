@@ -838,9 +838,10 @@ function isInternalContent(content: string): boolean {
  * Claude Code keeps user and assistant turns alternating. When a prompt follows
  * a turn that was interrupted (Stop, or a permission denial that stopped the
  * turn), it first writes a placeholder assistant row with this exact text and
- * `model: "<synthetic>"`, and the live stream carries the same row. Nothing was
- * said, so the row is not shown. Only this exact placeholder is hidden: other
- * synthetic rows, such as API error notices, stay visible.
+ * `model: "<synthetic>"` into the transcript. Nothing was said, so the row is
+ * not shown; the check sits in the normalizer that history and the live stream
+ * share, so a live copy would be hidden too. Only this exact placeholder is
+ * hidden: other synthetic rows, such as API error notices, stay visible.
  */
 const SYNTHETIC_NO_RESPONSE_TEXT = 'No response requested.';
 

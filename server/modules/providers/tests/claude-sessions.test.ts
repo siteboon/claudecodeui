@@ -2069,7 +2069,7 @@ const syntheticAssistantRow = (uuid: string, text: string) => ({
   message: { role: 'assistant', model: '<synthetic>', content: [{ type: 'text', text }] },
 });
 
-test('the live stream drops the CLI\'s synthetic "No response requested." row and keeps other rows', () => {
+test('the normalizer drops the CLI\'s synthetic "No response requested." row and keeps other rows', () => {
   const provider = new ClaudeSessionsProvider();
 
   assert.deepEqual(
