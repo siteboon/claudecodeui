@@ -2294,6 +2294,33 @@ test('an indexed session takes a /rename made at the end of a long transcript', 
   });
 });
 
+test('an indexed session takes a /rename whose row starts exactly where the tail read begins', { concurrency: false }, async () => {
+  await withClaudeRenameFixture(async ({ transcriptPath, synchronizer }) => {
+    await appendTranscriptRows(transcriptPath, cliRenameRows('Renamed in the TUI'));
+    const sessionId = await synchronizer.synchronizeFile(transcriptPath);
+    assert.equal(sessionsDb.getSessionById(sessionId!)?.custom_name, 'Renamed in the TUI');
+
+    // The rename row plus the padding after it fill the synchronizer's 1 MiB
+    // tail window exactly, so the row is the window's first line and a whole one.
+    const renameLine = `${JSON.stringify(cliRenameRows('Renamed in the TUI again')[0])}\n`;
+    const paddingLine = (text: string) => `${JSON.stringify({
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text }] },
+      uuid: 'msg-padding',
+      sessionId: 'test-session-1',
+    })}\n`;
+    const padding = paddingLine(
+      'x'.repeat(1024 * 1024 - Buffer.byteLength(renameLine) - Buffer.byteLength(paddingLine(''))),
+    );
+    assert.equal(Buffer.byteLength(renameLine + padding), 1024 * 1024);
+    await appendFile(transcriptPath, renameLine + padding, 'utf8');
+
+    await synchronizer.synchronizeFile(transcriptPath);
+
+    assert.equal(sessionsDb.getSessionById(sessionId!)?.custom_name, 'Renamed in the TUI again');
+  });
+});
+
 test('a CloudCLI rename made while the transcript is being indexed is kept', { concurrency: false }, async () => {
   await withClaudeRenameFixture(async ({ transcriptPath, synchronizer }) => {
     const sessionId = await synchronizer.synchronizeFile(transcriptPath);

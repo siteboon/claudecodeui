@@ -274,7 +274,9 @@ async function readTranscriptTail(filePath: string, maxBytes: number): Promise<B
   try {
     handle = await open(filePath, 'r');
     const { size } = await handle.stat();
-    const start = Math.max(0, size - maxBytes);
+    // One byte before the window is read too, so a line that starts exactly at
+    // the window's edge is seen to follow a newline and kept whole.
+    const start = Math.max(0, size - maxBytes - 1);
     const buffer = Buffer.alloc(size - start);
     const { bytesRead } = await handle.read(buffer, 0, buffer.length, start);
     const tail = buffer.subarray(0, bytesRead);
