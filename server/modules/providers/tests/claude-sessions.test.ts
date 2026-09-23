@@ -1576,6 +1576,216 @@ test('parallel tool calls are not mistaken for an edit', { concurrency: false },
   }
 });
 
+const INJECTED_FORK_SESSION_ID = 'claude-injected-fork-session';
+
+/**
+ * Writes `rows` as one transcript, one second apart in the order given, and
+ * returns what history shows: the text of each text message, the kind of any
+ * other message.
+ */
+async function readForkedTranscript(rows: Record<string, unknown>[]): Promise<unknown[]> {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-injected-fork-'));
+
+  try {
+    const transcriptPath = path.join(tempRoot, `${INJECTED_FORK_SESSION_ID}.jsonl`);
+    const lines = rows.map((row, index) => JSON.stringify({
+      sessionId: INJECTED_FORK_SESSION_ID,
+      timestamp: new Date(Date.UTC(2026, 8, 1, 10, 0, index)).toISOString(),
+      ...row,
+    }));
+    await writeFile(transcriptPath, `${lines.join('\n')}\n`, 'utf8');
+
+    let shown: unknown[] = [];
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(
+        INJECTED_FORK_SESSION_ID, 'claude', tempRoot, 'Forked session', now, now, transcriptPath,
+      );
+
+      const history = await new ClaudeSessionsProvider({ getLiveRunStartTime: () => null }).fetchHistory(
+        INJECTED_FORK_SESSION_ID,
+        { providerSessionId: INJECTED_FORK_SESSION_ID },
+      );
+      shown = history.messages.map((message) => (message.kind === 'text' ? message.content : message.kind));
+    });
+    return shown;
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+}
+
+const forkPrompt = (uuid: string, parentUuid: string | null, text: string, markers: Record<string, unknown> = {}) => ({
+  type: 'user', uuid, parentUuid, message: { role: 'user', content: text }, ...markers,
+});
+
+const forkAnswer = (uuid: string, parentUuid: string, text: string) => ({
+  type: 'assistant', uuid, parentUuid,
+  message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text }] },
+});
+
+test('a message from another session beside the typed prompt does not hide the conversation', { concurrency: false }, async () => {
+  // The fixture from issue #1297: the CLI parented a message delivered from
+  // another session onto the same row as the prompt the user typed, wrote it
+  // second, and did not tag it `isMeta`. Nobody edited anything.
+  const shown = await readForkedTranscript([
+    {
+      type: 'assistant', uuid: 'A', parentUuid: 'root', timestamp: '2026-01-01T00:00:00Z',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'turn 1' }] },
+    },
+    {
+      type: 'user', uuid: 'p1', parentUuid: 'A', timestamp: '2026-01-01T00:01:00Z',
+      message: { role: 'user', content: 'the prompt the user typed' },
+    },
+    {
+      type: 'user', uuid: 'p2', parentUuid: 'A', timestamp: '2026-01-01T00:01:01Z',
+      message: {
+        role: 'user',
+        content: 'Another Claude session sent a message: <teammate-message>status</teammate-message>',
+      },
+    },
+    {
+      type: 'assistant', uuid: 'B', parentUuid: 'p1', timestamp: '2026-01-01T00:02:00Z',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'the rest of the conversation' }] },
+    },
+  ]);
+
+  assert.deepEqual(shown, [
+    'turn 1',
+    'the prompt the user typed',
+    'Another Claude session sent a message: <teammate-message>status</teammate-message>',
+    'the rest of the conversation',
+  ]);
+});
+
+test('a task notification written twice keeps the conversation that followed the first copy', { concurrency: false }, async () => {
+  const toolUseId = 'toolu_fork_bash_1';
+  // Current CLI builds mark the notification with `origin`; the second copy
+  // lands under the same parent after the conversation has moved on from the
+  // first one.
+  const notification = (uuid: string) => forkPrompt(uuid, 'a2', [
+    '<task-notification>',
+    '<task-id>bfork1</task-id>',
+    `<tool-use-id>${toolUseId}</tool-use-id>`,
+    '<status>completed</status>',
+    '<summary>Background command "Run the tests" completed (exit code 0)</summary>',
+    '</task-notification>',
+  ].join('\n'), { origin: { kind: 'task-notification' }, promptSource: 'system' });
+
+  const shown = await readForkedTranscript([
+    forkPrompt('u1', null, 'run the tests in the background'),
+    {
+      type: 'assistant', uuid: 'a1', parentUuid: 'u1',
+      message: {
+        role: 'assistant', model: 'claude-opus-5',
+        content: [{ type: 'tool_use', id: toolUseId, name: 'Bash', input: { command: 'npm test', run_in_background: true } }],
+      },
+    },
+    {
+      type: 'user', uuid: 'r1', parentUuid: 'a1',
+      message: {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: toolUseId, content: 'Command running in background with ID: bfork1.' }],
+      },
+      toolUseResult: { stdout: '', stderr: '', interrupted: false, isImage: false, backgroundTaskId: 'bfork1' },
+    },
+    forkAnswer('a2', 'r1', 'the tests are running'),
+    notification('n1'),
+    forkAnswer('a3', 'n1', 'all tests passed'),
+    notification('n2'),
+    forkPrompt('u4', 'a3', 'now open a pull request'),
+    forkAnswer('a4', 'u4', 'opened the pull request'),
+  ]);
+
+  assert.deepEqual(shown, [
+    'run the tests in the background',
+    'tool_use',
+    'the tests are running',
+    'all tests passed',
+    'now open a pull request',
+    'opened the pull request',
+  ]);
+});
+
+test('a note delivered after an edit neither undoes the edit nor is hidden by it', { concurrency: false }, async () => {
+  // `origin` is how the CLI tells what it delivered from what the user typed,
+  // whatever the note says.
+  const shown = await readForkedTranscript([
+    forkPrompt('u1', null, 'first prompt'),
+    forkAnswer('a1', 'u1', 'first answer'),
+    forkPrompt('u2', 'a1', 'original second prompt'),
+    forkAnswer('a2', 'u2', 'answer to be replaced'),
+    forkPrompt('u2b', 'a1', 'edited second prompt'),
+    forkAnswer('a2b', 'u2b', 'answer to the edit'),
+    forkPrompt('n1', 'a1', 'the reviewer session says the build is green', {
+      origin: { kind: 'peer' }, promptSource: 'system',
+    }),
+  ]);
+
+  assert.deepEqual(shown, [
+    'first prompt',
+    'first answer',
+    'edited second prompt',
+    'answer to the edit',
+    'the reviewer session says the build is green',
+  ]);
+});
+
+test('a fork keeps the branch that grew last even when its prompt was written first', { concurrency: false }, async () => {
+  // The second prompt under `a1` went nowhere, while the conversation carried
+  // on from the first one: the branch holding the newest row is the live one.
+  const shown = await readForkedTranscript([
+    forkPrompt('u1', null, 'first prompt'),
+    forkAnswer('a1', 'u1', 'first answer'),
+    forkPrompt('u2', 'a1', 'the prompt the session continued from'),
+    forkAnswer('a2', 'u2', 'its answer'),
+    forkPrompt('u2x', 'a1', 'a prompt that went nowhere'),
+    forkPrompt('u3', 'a2', 'follow-up'),
+    forkAnswer('a3', 'u3', 'follow-up answer'),
+  ]);
+
+  assert.deepEqual(shown, [
+    'first prompt',
+    'first answer',
+    'the prompt the session continued from',
+    'its answer',
+    'follow-up',
+    'follow-up answer',
+  ]);
+});
+
+test('a fork made before a compaction keeps the branch the session was on when it compacted', { concurrency: false }, async () => {
+  // Rows after a compact boundary start a new chain (`parentUuid: null`), so
+  // they sit on neither branch of the fork; the fork is settled by the branch
+  // that grew last before the boundary, and the rows after it always stay.
+  const shown = await readForkedTranscript([
+    forkPrompt('u1', null, 'first prompt'),
+    forkAnswer('a1', 'u1', 'first answer'),
+    forkPrompt('u2', 'a1', 'the prompt the session continued from'),
+    forkAnswer('a2', 'u2', 'its answer'),
+    forkPrompt('u2x', 'a1', 'a prompt that went nowhere'),
+    forkAnswer('a2c', 'a2', 'more work on the live branch'),
+    {
+      type: 'system', subtype: 'compact_boundary', uuid: 'cb', parentUuid: null, logicalParentUuid: 'a2c',
+      content: 'Conversation compacted', compactMetadata: { trigger: 'manual' },
+    },
+    forkPrompt('cs', 'cb', 'summary of the conversation so far', { isCompactSummary: true }),
+    forkPrompt('u3', 'cs', 'prompt after the compaction'),
+    forkAnswer('a3', 'u3', 'answer after the compaction'),
+  ]);
+
+  assert.deepEqual(shown, [
+    'first prompt',
+    'first answer',
+    'the prompt the session continued from',
+    'its answer',
+    'more work on the live branch',
+    'Compacted · manual',
+    'summary of the conversation so far',
+    'prompt after the compaction',
+    'answer after the compaction',
+  ]);
+});
+
 test('resolving an edit anchor returns the assistant turn before it', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-edit-anchor-'));
 
