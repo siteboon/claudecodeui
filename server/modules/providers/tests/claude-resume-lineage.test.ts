@@ -302,3 +302,31 @@ test('Claude history leaves a single-run transcript exactly as it was', { concur
     await rm(tempRoot, { recursive: true, force: true });
   }
 });
+
+test('editing a prompt from before a resume finds its anchor in the lineage', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-resume-anchor-'));
+
+  try {
+    const jsonlPath = await writeTranscript(tempRoot, THIRD_RUN_ID, resumedLineageRows());
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(THIRD_RUN_ID, 'claude', PROJECT_PATH, 'Resumed session', now, now, jsonlPath);
+      const provider = new ClaudeSessionsProvider();
+
+      // 'u2' was written by the second run, so the old exact-id read could not see it.
+      assert.deepEqual(
+        await provider.resolveEditAnchor(THIRD_RUN_ID, 'u2'),
+        { found: true, resumeThroughId: 'a1' },
+        'the edit resumes through the first run\'s answer',
+      );
+      assert.deepEqual(
+        await provider.resolveEditAnchor(THIRD_RUN_ID, 'u1'),
+        { found: true, resumeThroughId: null },
+        'editing the very first prompt starts the conversation over',
+      );
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
