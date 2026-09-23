@@ -12,10 +12,12 @@
  * - WebSocket message streaming
  */
 
+import { execFile } from 'child_process';
 import crypto from 'crypto';
 import { promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
+import { promisify } from 'util';
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
 
@@ -74,6 +76,29 @@ const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEO
 // that never reports at all, so an abandoned session cannot leak a CLI process
 // forever. The timer resets on every message, so it measures silence, not total time.
 const BG_WAIT_CEILING_MS = 30 * 60 * 1000;
+
+// How long a turn's CLI process is kept alive for async hooks (`"async": true` in a
+// hooks config) that are still running when the turn ends. The CLI kills every one
+// still going when it exits, so closing stdin at `result` cut short the async Stop
+// hooks people use for sounds, spoken summaries and desktop notifications, which the
+// interactive CLI on the Shell page lets finish.
+//
+// This is a fixed window rather than a wait for the hooks: a headless CLI only
+// notices an async hook has finished when it next builds a turn, so between
+// `hook_started` and its own teardown the stream says nothing. Hooks that finish
+// inside the window run to completion; longer ones are still cancelled at its end.
+// A new turn on the session, or an abort, ends the window early.
+const ASYNC_HOOK_GRACE_MS = 60 * 1000;
+
+// First Claude Code release whose CLI accepts `--include-hook-events`, the flag behind
+// the SDK's `includeHookEvents` option (added in Agent SDK 0.2.89). An older CLI on
+// PATH rejects the unknown flag and the whole turn fails, so it is only passed to a
+// CLI that reports a new enough version.
+const HOOK_EVENTS_MIN_CLI_VERSION = [2, 1, 89];
+
+// `--version` probes per executable path. A pending or answered probe is reused;
+// a failed one is dropped so the next turn asks again.
+const hookEventsSupportByExecutable = new Map();
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
@@ -308,6 +333,53 @@ function mapCliOptionsToSDK(options = {}) {
   }
 
   return sdkOptions;
+}
+
+/**
+ * True when the first `major.minor.patch` in `versionText` is at least `minimum`.
+ * @param {string} versionText - `--version` output, e.g. `2.1.280 (Claude Code)`
+ * @param {number[]} minimum - Lowest accepted `[major, minor, patch]`
+ * @returns {boolean} False when no version can be read
+ */
+function isVersionAtLeast(versionText, minimum) {
+  const match = /(\d+)\.(\d+)\.(\d+)/.exec(String(versionText));
+  if (!match) {
+    return false;
+  }
+  const parts = match.slice(1, 4).map(Number);
+  for (let index = 0; index < minimum.length; index += 1) {
+    if (parts[index] !== minimum[index]) {
+      return parts[index] > minimum[index];
+    }
+  }
+  return true;
+}
+
+/**
+ * Whether the CLI the SDK is about to spawn accepts `--include-hook-events`.
+ *
+ * Asks the executable for its version once and remembers the answer. An
+ * executable that cannot be asked counts as too old: leaving the flag off only
+ * loses the async-hook grace, while passing it to an old CLI fails the turn.
+ * @param {string|undefined} executablePath - `pathToClaudeCodeExecutable`; unset
+ *   means the SDK's bundled CLI, which is always new enough
+ * @returns {Promise<boolean>}
+ */
+function cliReportsHookEvents(executablePath) {
+  if (!executablePath) {
+    return Promise.resolve(true);
+  }
+  let supported = hookEventsSupportByExecutable.get(executablePath);
+  if (!supported) {
+    supported = promisify(execFile)(executablePath, ['--version'], { timeout: 5000, windowsHide: true })
+      .then(({ stdout }) => isVersionAtLeast(stdout, HOOK_EVENTS_MIN_CLI_VERSION))
+      .catch(() => {
+        hookEventsSupportByExecutable.delete(executablePath);
+        return false;
+      });
+    hookEventsSupportByExecutable.set(executablePath, supported);
+  }
+  return supported;
 }
 
 /**
@@ -906,6 +978,12 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // Set once a turn publishes a budget read from an assistant message, so the
   // turn-ending `result` is only mined for usage when nothing better arrived.
   let assistantBudgetSent = false;
+  // Hook runs the stream reported starting (`hook_started`) and not finishing
+  // (`hook_response`), by hook id. A sync hook finishes before the turn moves
+  // on, so whatever is still here when a `result` arrives is an async hook.
+  const runningHookIds = new Set();
+  // Armed while the process is held for those async hooks; see ASYNC_HOOK_GRACE_MS.
+  let asyncHookGraceTimer = null;
 
   // A new turn supersedes any earlier one still holding this session's process
   // open, so held runs cannot stack up across a conversation.
@@ -927,6 +1005,30 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     idleReleaseTimer.unref?.();
   };
 
+  const clearAsyncHookGrace = () => {
+    if (asyncHookGraceTimer) {
+      clearTimeout(asyncHookGraceTimer);
+      asyncHookGraceTimer = null;
+    }
+  };
+
+  // Lets the CLI exit once nothing else holds it — right away, or after the
+  // async-hook grace when the turn left async hooks running.
+  const releaseAfterAsyncHooks = () => {
+    if (runningHookIds.size === 0) {
+      clearAsyncHookGrace();
+      releasePromptStream();
+      return;
+    }
+    if (!asyncHookGraceTimer) {
+      asyncHookGraceTimer = setTimeout(() => {
+        asyncHookGraceTimer = null;
+        releasePromptStream();
+      }, ASYNC_HOOK_GRACE_MS);
+      asyncHookGraceTimer.unref?.();
+    }
+  };
+
   // Hoisted above the try so the catch's cleanup can tell whether this run
   // still owns the activeSessions entry (or was superseded by a newer run).
   let queryInstance = null;
@@ -946,6 +1048,12 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       model: resolvedModel || options.model,
       effortModels,
     });
+
+    // Hook lifecycle events are how the run learns a turn left async hooks
+    // running; they normalize to nothing for the client.
+    if (await cliReportsHookEvents(sdkOptions.pathToClaudeCodeExecutable)) {
+      sdkOptions.includeHookEvents = true;
+    }
 
     const mcpServers = await loadMcpConfig(options.cwd);
     if (mcpServers) {
@@ -1155,6 +1263,20 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       }
       backgroundWork.apply(sessionKey(), message);
 
+      if (message.type === 'system' && typeof message.hook_id === 'string') {
+        if (message.subtype === 'hook_started') {
+          runningHookIds.add(message.hook_id);
+        } else if (message.subtype === 'hook_response') {
+          runningHookIds.delete(message.hook_id);
+          // The last async hook reported back during the grace. A plain async
+          // hook only reports at teardown; an `asyncRewake` one reports when it
+          // exits.
+          if (asyncHookGraceTimer && runningHookIds.size === 0) {
+            releaseAfterAsyncHooks();
+          }
+        }
+      }
+
       // A task the user stopped gets no follow-up turn from the CLI — only its
       // `stopped` notification — so when that was the last outstanding task
       // nothing will ever push the `result` the release below waits for, and
@@ -1169,7 +1291,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         && !backgroundWork.hasOutstanding(sessionKey())
       ) {
         heldForBackgroundWork = false;
-        releasePromptStream();
+        releaseAfterAsyncHooks();
       }
 
       if (message.type === 'result') {
@@ -1217,13 +1339,16 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         backgroundWorkPending = false;
         sawTaskEventThisTurn = false;
         if (holdForTurn) {
+          // The background hold outlasts any async-hook grace still armed.
+          clearAsyncHookGrace();
           heldForBackgroundWork = true;
           scheduleRelease();
         } else {
           // Either nothing was backgrounded, or the background work just
-          // reported in — let the CLI exit now, as it always has.
+          // reported in — let the CLI exit now, as it always has, once any
+          // async hooks the turn left running have had their grace.
           heldForBackgroundWork = false;
-          releasePromptStream();
+          releaseAfterAsyncHooks();
         }
       } else if (idleReleaseTimer) {
         // Background activity after the turn — push the countdown back out.
@@ -1310,6 +1435,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       clearTimeout(idleReleaseTimer);
       idleReleaseTimer = null;
     }
+    clearAsyncHookGrace();
     releasePromptStream();
   }
 }

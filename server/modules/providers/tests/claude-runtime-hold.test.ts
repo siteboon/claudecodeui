@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -29,6 +29,10 @@ type Scripted = {
   end: () => void;
   released: () => boolean;
   stopped: string[];
+  /** The options the runtime handed the SDK's `query`. */
+  options: () => Record<string, unknown> | null;
+  /** Settles once the runtime has built its query, i.e. finished setting the turn up. */
+  created: Promise<void>;
 };
 
 /** A stand-in for the SDK query: yields what the test emits, and reads the held prompt to notice its release. */
@@ -36,6 +40,9 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
   const queue: Array<Record<string, unknown> | null> = [];
   let wake: (() => void) | null = null;
   let released = false;
+  let options: Record<string, unknown> | null = null;
+  let markCreated: () => void = () => {};
+  const created = new Promise<void>((resolve) => { markCreated = resolve; });
   const stopped: string[] = [];
 
   const script: Scripted = {
@@ -43,9 +50,13 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
     end: () => { queue.push(null); wake?.(); },
     released: () => released,
     stopped,
+    options: () => options,
+    created,
   };
 
-  const createQuery: NonNullable<ProviderRuntimeContext['createQuery']> = ({ prompt }) => {
+  const createQuery: NonNullable<ProviderRuntimeContext['createQuery']> = ({ prompt, options: queryOptions }) => {
+    options = queryOptions;
+    markCreated();
     void (async () => {
       for await (const _message of prompt) { /* the CLI reads its stdin */ }
       released = true;
@@ -94,6 +105,9 @@ async function withRun(
 
   try {
     const done = queryClaudeSDK('hello', { sessionId: SESSION_ID, cwd }, writer as never, context);
+    // Setup asks the CLI for its version before building the query; wait it out
+    // so the scripted stream is read from the start.
+    await script.created;
     await runTest({ script, sent, done });
     script.end();
     await done;
@@ -102,7 +116,9 @@ async function withRun(
   }
 }
 
-const settle = () => new Promise((resolve) => { setTimeout(resolve, 25); });
+// Captured before any test mocks the timers, so waiting for the stream keeps working.
+const realSetTimeout = setTimeout;
+const settle = () => new Promise((resolve) => { realSetTimeout(resolve, 25); });
 
 const init = () => ({ type: 'system', subtype: 'init', session_id: NATIVE_ID });
 const toolUse = (id: string, name: string, input: Record<string, unknown>) => ({
@@ -198,4 +214,101 @@ test('a turn whose tool emits no task events still holds on the static rule', as
 
     assert.equal(script.released(), false, 'Monitor reports no task, so the launch rule decides');
   });
+});
+
+const hookStarted = (hookId: string, hookEvent: string) => ({
+  type: 'system', subtype: 'hook_started', session_id: NATIVE_ID, hook_id: hookId, hook_name: hookEvent, hook_event: hookEvent,
+});
+const hookResponse = (hookId: string, hookEvent: string) => ({
+  type: 'system', subtype: 'hook_response', session_id: NATIVE_ID, hook_id: hookId, hook_name: hookEvent, hook_event: hookEvent,
+  output: '', stdout: '', stderr: '', exit_code: 0, outcome: 'success',
+});
+
+test('an async hook still running when the turn ends keeps the process up for a bounded grace', async (t) => {
+  await withRun(async ({ script, sent }) => {
+    // Stop hooks run just before the result: the sync one has finished, the
+    // `async: true` one is still going. The CLI kills it when it exits.
+    script.emit(init());
+    script.emit(hookStarted('hook_sync', 'Stop'));
+    script.emit(hookResponse('hook_sync', 'Stop'));
+    script.emit(hookStarted('hook_async', 'Stop'));
+    await settle();
+
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    script.emit(result());
+    await settle();
+
+    assert.ok(sent.some((message) => message.kind === 'complete'), 'the client still hears the turn is over at once');
+    assert.equal(script.released(), false, 'stdin stays open so the async hook can finish');
+
+    t.mock.timers.tick(1000);
+    await settle();
+    assert.equal(script.released(), false);
+
+    t.mock.timers.tick(10 * 60 * 1000);
+    await settle();
+    assert.equal(script.released(), true, 'the grace ends on its own');
+  });
+});
+
+test('the async-hook grace ends as soon as the last running hook reports back', async () => {
+  await withRun(async ({ script }) => {
+    script.emit(init());
+    script.emit(hookStarted('hook_async', 'Stop'));
+    script.emit(result());
+    await settle();
+    assert.equal(script.released(), false);
+
+    script.emit(hookResponse('hook_async', 'Stop'));
+    await settle();
+    assert.equal(script.released(), true);
+  });
+});
+
+test('a turn whose hooks all finished releases the process at its result', async () => {
+  await withRun(async ({ script }) => {
+    script.emit(init());
+    script.emit(hookStarted('hook_prompt', 'UserPromptSubmit'));
+    script.emit(hookResponse('hook_prompt', 'UserPromptSubmit'));
+    script.emit(hookStarted('hook_stop', 'Stop'));
+    script.emit(hookResponse('hook_stop', 'Stop'));
+    script.emit(result());
+    await settle();
+
+    assert.equal(script.released(), true, 'nothing is running, so nothing to wait for');
+  });
+});
+
+test('hook events are only requested from a CLI new enough to accept the flag', { skip: process.platform === 'win32' }, async () => {
+  const binDir = await mkdtemp(path.join(os.tmpdir(), 'claude-runtime-hold-cli-'));
+  const fakeCli = async (name: string, body: string) => {
+    const file = path.join(binDir, name);
+    await writeFile(file, `#!/bin/sh\n${body}\n`);
+    await chmod(file, 0o755);
+    return file;
+  };
+  const previous = process.env.CLAUDE_CLI_PATH;
+  const includeHookEventsWith = async (cliPath: string) => {
+    process.env.CLAUDE_CLI_PATH = cliPath;
+    let requested: unknown;
+    await withRun(async ({ script }) => {
+      requested = script.options()?.includeHookEvents;
+    });
+    return requested;
+  };
+
+  try {
+    // 2.1.88 does not exist on npm; 2.1.87 is the last release without the flag.
+    assert.equal(await includeHookEventsWith(await fakeCli('old', 'echo "2.1.87 (Claude Code)"')), undefined);
+    assert.equal(await includeHookEventsWith(await fakeCli('first', 'echo "2.1.89 (Claude Code)"')), true);
+    assert.equal(await includeHookEventsWith(await fakeCli('current', 'echo "2.1.280 (Claude Code)"')), true);
+    assert.equal(await includeHookEventsWith(await fakeCli('broken', 'exit 1')), undefined, 'a CLI that cannot say its version is treated as too old');
+  } finally {
+    if (previous === undefined) {
+      delete process.env.CLAUDE_CLI_PATH;
+    } else {
+      process.env.CLAUDE_CLI_PATH = previous;
+    }
+    await rm(binDir, { recursive: true, force: true });
+  }
 });
