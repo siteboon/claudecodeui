@@ -2058,3 +2058,76 @@ test('synchronizeFile skips non-jsonl files', { concurrency: false }, async () =
     assert.equal(result, null);
   });
 });
+
+// After an interrupted turn (Stop, or a permission denial that stopped it) the
+// CLI answers the next prompt's alternation rule with a placeholder assistant
+// row that nobody wrote. Real API error notices are also `<synthetic>` rows and
+// must stay visible.
+const syntheticAssistantRow = (uuid: string, text: string) => ({
+  type: 'assistant', uuid, sessionId: 'claude-synthetic-session',
+  timestamp: '2026-09-23T17:18:43.224Z',
+  message: { role: 'assistant', model: '<synthetic>', content: [{ type: 'text', text }] },
+});
+
+test('the live stream drops the CLI\'s synthetic "No response requested." row and keeps other rows', () => {
+  const provider = new ClaudeSessionsProvider();
+
+  assert.deepEqual(
+    provider.normalizeMessage(syntheticAssistantRow('s1', 'No response requested.'), 'claude-synthetic-session'),
+    [],
+  );
+  const apiError = provider.normalizeMessage(syntheticAssistantRow('s2', 'API Error: 529 overloaded'), 'claude-synthetic-session');
+  assert.deepEqual(apiError.map((message) => message.content), ['API Error: 529 overloaded']);
+  // The same words written by the model are an answer, not a placeholder.
+  const modelAnswer = provider.normalizeMessage({
+    ...syntheticAssistantRow('s3', 'No response requested.'),
+    message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'No response requested.' }] },
+  }, 'claude-synthetic-session');
+  assert.deepEqual(modelAnswer.map((message) => message.content), ['No response requested.']);
+});
+
+test('Claude history hides the synthetic "No response requested." row after an interrupted turn', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-synthetic-history-'));
+  const sessionId = 'claude-synthetic-session';
+
+  try {
+    const transcriptPath = path.join(tempRoot, `${sessionId}.jsonl`);
+    const rows = [
+      { type: 'user', uuid: 'u1', parentUuid: null, sessionId, timestamp: '2026-09-23T17:18:00.000Z',
+        message: { role: 'user', content: 'write a marker file' } },
+      { type: 'assistant', uuid: 'a1', parentUuid: 'u1', sessionId, timestamp: '2026-09-23T17:18:01.000Z',
+        message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'tool_use', id: 'toolu_1', name: 'Bash', input: { command: 'echo hi' } }] } },
+      { type: 'user', uuid: 'r1', parentUuid: 'a1', sessionId, timestamp: '2026-09-23T17:18:02.000Z',
+        message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', is_error: true, content: "The user doesn't want to proceed with this tool use." }] } },
+      { type: 'user', uuid: 'i1', parentUuid: 'r1', sessionId, timestamp: '2026-09-23T17:18:03.000Z',
+        message: { role: 'user', content: [{ type: 'text', text: '[Request interrupted by user for tool use]' }] } },
+      { ...syntheticAssistantRow('s1', 'No response requested.'), parentUuid: 'i1', sessionId, timestamp: '2026-09-23T17:18:40.000Z' },
+      { type: 'user', uuid: 'u2', parentUuid: 's1', sessionId, timestamp: '2026-09-23T17:18:41.000Z',
+        message: { role: 'user', content: 'second prompt' } },
+      { type: 'assistant', uuid: 'a2', parentUuid: 'u2', sessionId, timestamp: '2026-09-23T17:18:42.000Z',
+        message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'ok' }] } },
+    ];
+    await writeFile(transcriptPath, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(sessionId, 'claude', tempRoot, 'Interrupted session', now, now, transcriptPath);
+
+      const history = await new ClaudeSessionsProvider().fetchHistory(sessionId, { providerSessionId: sessionId });
+
+      assert.deepEqual(
+        history.messages.map((message) => [message.kind, message.content ?? message.toolName]),
+        [
+          ['text', 'write a marker file'],
+          ['tool_use', 'Bash'],
+          ['text', 'second prompt'],
+          ['text', 'ok'],
+        ],
+      );
+      // The prompt after the placeholder is still anchored for edit and fork.
+      assert.equal(history.messages.find((message) => message.content === 'second prompt')?.transcriptAnchorId, 'u2');
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
