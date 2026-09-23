@@ -135,7 +135,8 @@
     "switchToScroll": "Switch to horizontal scroll",
     "switchToWrap": "Switch to text wrap",
     "scroll": "Scroll",
-    "wrap": "Wrap"
+    "wrap": "Wrap",
+    "binaryDiff": "Binary file — diff not shown"
   },
   "selection": {
     "selectedOfFiles": "{{selected}} of {{total}} files selected",

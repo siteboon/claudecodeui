@@ -1,7 +1,7 @@
 import { ChevronRight, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import type { FileStatusCode } from '@/shared/types';
+import type { FileStatusCode, GitFileDiff } from '@/shared/types';
 import { getStatusBadgeClass, getStatusLabelKey } from '@/modules/git-panel/utils/gitPanelUtils';
 import GitDiffViewer from '@/modules/git-panel/GitDiffViewer';
 
@@ -11,7 +11,7 @@ type FileChangeItemProps = {
   isMobile: boolean;
   isExpanded: boolean;
   isSelected: boolean;
-  diff?: string;
+  fileDiff?: GitFileDiff;
   wrapText: boolean;
   onToggleSelected: (filePath: string) => void;
   onToggleExpanded: (filePath: string) => void;
@@ -27,7 +27,7 @@ export default function FileChangeItem({
   isMobile,
   isExpanded,
   isSelected,
-  diff,
+  fileDiff,
   wrapText,
   onToggleSelected,
   onToggleExpanded,
@@ -38,6 +38,8 @@ export default function FileChangeItem({
   const { t } = useTranslation();
   const statusLabel = t(getStatusLabelKey(status));
   const badgeClass = getStatusBadgeClass(status);
+  // A binary file has no text diff, but its row still opens to say so.
+  const hasDiffContent = Boolean(fileDiff && (fileDiff.diff || fileDiff.isBinary));
 
   return (
     <div className="border-b border-border last:border-0">
@@ -99,7 +101,7 @@ export default function FileChangeItem({
       </div>
 
       <div
-        className={`duration-400 overflow-hidden bg-muted/50 transition-all ease-in-out ${isExpanded && diff ? 'max-h-[600px] translate-y-0 opacity-100' : 'max-h-0 -translate-y-1 opacity-0'
+        className={`duration-400 overflow-hidden bg-muted/50 transition-all ease-in-out ${isExpanded && hasDiffContent ? 'max-h-[600px] translate-y-0 opacity-100' : 'max-h-0 -translate-y-1 opacity-0'
           }`}
       >
         <div className="flex items-center justify-between border-b border-border p-2">
@@ -124,7 +126,11 @@ export default function FileChangeItem({
         </div>
 
         <div className="max-h-96 overflow-y-auto">
-          {diff && <GitDiffViewer diff={diff} isMobile={isMobile} wrapText={wrapText} />}
+          {fileDiff?.isBinary ? (
+            <div className="p-4 text-center text-sm text-muted-foreground">{t('git:item.binaryDiff')}</div>
+          ) : fileDiff?.diff ? (
+            <GitDiffViewer diff={fileDiff.diff} isMobile={isMobile} wrapText={wrapText} isTruncated={fileDiff.isTruncated} />
+          ) : null}
         </div>
       </div>
     </div>

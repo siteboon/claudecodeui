@@ -1,11 +1,11 @@
 import { FILE_STATUS_GROUPS } from '@/shared/constants';
-import type { FileStatusCode, GitDiffMap, GitStatusResponse } from '@/shared/types';
+import type { FileStatusCode, GitFileDiffMap, GitStatusResponse } from '@/shared/types';
 
 import FileChangeItem from '@/modules/git-panel/changes/FileChangeItem';
 
 type FileChangeListProps = {
   gitStatus: GitStatusResponse;
-  gitDiff: GitDiffMap;
+  gitDiff: GitFileDiffMap;
   expandedFiles: Set<string>;
   selectedFiles: Set<string>;
   isMobile: boolean;
@@ -46,7 +46,7 @@ export default function FileChangeList({
               isMobile={isMobile}
               isExpanded={expandedFiles.has(filePath)}
               isSelected={selectedFiles.has(filePath)}
-              diff={gitDiff[filePath]}
+              fileDiff={gitDiff[filePath]}
               wrapText={wrapText}
               onToggleSelected={onToggleSelected}
               onToggleExpanded={onToggleExpanded}
