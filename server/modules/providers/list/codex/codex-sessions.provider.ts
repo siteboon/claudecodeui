@@ -199,32 +199,35 @@ export async function readCodexRunPrompt(
 
   let turnId: string | null = null;
   let promptRecorded = false;
-  const lines = readline.createInterface({
-    input: fsSync.createReadStream(filePath, { start: fromOffset }),
-    crlfDelay: Infinity,
-  });
+  const stream = fsSync.createReadStream(filePath, { start: fromOffset });
+  const lines = readline.createInterface({ input: stream, crlfDelay: Infinity });
 
-  for await (const line of lines) {
-    if (!line.trim()) {
-      continue;
+  try {
+    for await (const line of lines) {
+      if (!line.trim()) {
+        continue;
+      }
+      let entry: AnyRecord;
+      try {
+        entry = JSON.parse(line) as AnyRecord;
+      } catch {
+        continue;
+      }
+      const payload = readObjectRecord(entry.payload);
+      if (entry.type !== 'event_msg' || !payload) {
+        continue;
+      }
+      if (!turnId && payload.type === 'task_started') {
+        turnId = readNonEmptyString(payload.turn_id) ?? null;
+      }
+      if (isCodexPromptEvent(payload)) {
+        promptRecorded = true;
+        break;
+      }
     }
-    let entry: AnyRecord;
-    try {
-      entry = JSON.parse(line) as AnyRecord;
-    } catch {
-      continue;
-    }
-    const payload = readObjectRecord(entry.payload);
-    if (entry.type !== 'event_msg' || !payload) {
-      continue;
-    }
-    if (!turnId && payload.type === 'task_started') {
-      turnId = readNonEmptyString(payload.turn_id) ?? null;
-    }
-    if (isCodexPromptEvent(payload)) {
-      promptRecorded = true;
-      break;
-    }
+  } finally {
+    // Leaving the loop early closes the reader but not the file.
+    stream.destroy();
   }
 
   return { turnId, promptRecorded };
