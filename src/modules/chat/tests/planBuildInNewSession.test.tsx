@@ -115,12 +115,12 @@ test('building in a new session stops the planning run and sends the plan to a n
 
   await act(async () => { await view.result.current.handleBuildPlanInNewSession(PLAN_REQUEST); });
 
-  // A new session is allocated in the same project, named after the plan.
+  // A new session is allocated in the same project, named after the plan's heading.
   assert.equal(createSessionCalls.length, 1);
   assert.deepEqual(createSessionCalls[0], {
     provider: 'claude',
     projectPath: '/work/project-one',
-    initialMessage: 'Add a hello file\n\n1. Create hello.txt containing "hi".',
+    initialMessage: 'Add a hello file',
   });
 
   // The planning run is told no, with an instruction to stop, so it does not

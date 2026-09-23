@@ -1315,9 +1315,9 @@ export function useChatComposerState({
       planHandoffsInFlightRef.current.add(request.requestId);
       try {
         const content = t('plan.newSessionPrompt', { plan });
-        // Named after the plan's opening words rather than the lead-in that
-        // every session built from a plan would otherwise share.
-        const nameSource = plan.replace(/^[#\s]+/, '');
+        // Named after the plan's first line (usually its heading) rather than
+        // the lead-in that every session built from a plan would otherwise share.
+        const nameSource = plan.replace(/^[#\s]+/, '').split('\n')[0].trim();
         let created: { sessionId: string | null; sessionName: string };
         try {
           created = await allocateAppSession({
