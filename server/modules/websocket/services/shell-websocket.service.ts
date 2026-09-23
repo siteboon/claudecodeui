@@ -184,7 +184,8 @@ function resolveResumeSessionId(
  */
 function buildShellCommand(
   message: ShellIncomingMessage,
-  dependencies: ShellWebSocketDependencies
+  dependencies: ShellWebSocketDependencies,
+  projectPath: string
 ): string {
   const hasSession = readBoolean(message.hasSession);
   const initialCommand = readString(message.initialCommand);
@@ -229,7 +230,7 @@ function buildShellCommand(
   const bypassFlag = readBoolean(message.bypassPermissions)
     ? ' --dangerously-skip-permissions'
     : '';
-  const launchFlags = `${bypassFlag}${buildClaudeThemeFlag(readColorScheme(message.colorScheme))}`;
+  const launchFlags = `${bypassFlag}${buildClaudeThemeFlag(readColorScheme(message.colorScheme), projectPath)}`;
   const command = initialCommand || `claude${launchFlags}`;
   if (resumeSessionId) {
     if (os.platform() === 'win32') {
@@ -240,18 +241,86 @@ function buildShellCommand(
   return command;
 }
 
+// Claude Code's built-in theme ids (the `/theme` picker of CLI 2.1.280). A
+// `custom:<slug>` theme is valid too; any other value is ignored by the CLI.
+const CLAUDE_THEME_IDS = new Set([
+  'auto',
+  'dark',
+  'light',
+  'dark-daltonized',
+  'light-daltonized',
+  'dark-ansi',
+  'light-ansi',
+]);
+
+// Dark themes and their light counterparts. A light theme, `auto` (it asks the
+// terminal for its background, which xterm answers from the live theme) or a
+// custom theme is the user's own choice and is left alone.
+const LIGHT_CLAUDE_THEME_BY_DARK_THEME = new Map([
+  ['dark', 'light'],
+  ['dark-daltonized', 'light-daltonized'],
+  ['dark-ansi', 'light-ansi'],
+]);
+
 /**
- * Claude Code paints its own colours and defaults to its dark theme whatever the
- * terminal looks like, so inside a light Shell tab its prompt rows became dark
- * bands. `--settings` applies `theme` to this launch only: the user's
- * ~/.claude.json and settings.json are never written. Skipped on Windows, where
- * the command runs through PowerShell and inline JSON quoting is not reliable.
+ * Reads the `theme` key of one Claude config file. A missing, unreadable or
+ * unparsable file, or a value the CLI would reject, counts as unset.
  */
-function buildClaudeThemeFlag(colorScheme: ShellColorScheme | null): string {
-  if (!colorScheme || os.platform() === 'win32') {
+function readClaudeThemeFile(filePath: string): string | null {
+  try {
+    const config: unknown = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    const theme = config && typeof config === 'object' ? (config as Record<string, unknown>).theme : undefined;
+    if (typeof theme !== 'string') {
+      return null;
+    }
+    return CLAUDE_THEME_IDS.has(theme) || theme.startsWith('custom:') ? theme : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Finds the theme Claude Code would start with in `projectPath`, read-only and
+ * in the CLI's own order: local, project and user settings, then the legacy
+ * global config key, then its "dark" default. Managed settings are not read:
+ * they outrank `--settings`, so no flag could change their theme anyway.
+ */
+function resolveClaudeTheme(projectPath: string): string {
+  const configDirOverride = process.env.CLAUDE_CONFIG_DIR;
+  const configHome = configDirOverride || path.join(os.homedir(), '.claude');
+  const legacyGlobalConfigPath = path.join(configHome, '.config.json');
+  const configFiles = [
+    path.join(projectPath, '.claude', 'settings.local.json'),
+    path.join(projectPath, '.claude', 'settings.json'),
+    path.join(configHome, 'settings.json'),
+    fs.existsSync(legacyGlobalConfigPath)
+      ? legacyGlobalConfigPath
+      : path.join(configDirOverride || os.homedir(), '.claude.json'),
+  ];
+
+  for (const filePath of configFiles) {
+    const theme = readClaudeThemeFile(filePath);
+    if (theme) {
+      return theme;
+    }
+  }
+  return 'dark';
+}
+
+/**
+ * Claude Code paints its own colours in its own theme, dark by default, so in
+ * a light Shell tab its prompt rows became dark bands. Only a light tab gets a
+ * flag, and only when the user's theme is a dark one: it is swapped for the
+ * matching light variant. `--settings` applies it to this launch only; no
+ * config file is written. Skipped on Windows, where the command runs through
+ * PowerShell and inline JSON quoting is not reliable.
+ */
+function buildClaudeThemeFlag(colorScheme: ShellColorScheme | null, projectPath: string): string {
+  if (colorScheme !== 'light' || os.platform() === 'win32') {
     return '';
   }
-  return ` --settings '{"theme":"${colorScheme}"}'`;
+  const lightTheme = LIGHT_CLAUDE_THEME_BY_DARK_THEME.get(resolveClaudeTheme(projectPath));
+  return lightTheme ? ` --settings '{"theme":"${lightTheme}"}'` : '';
 }
 
 function readEnvValue(env: NodeJS.ProcessEnv, key: string): string | undefined {
@@ -419,7 +488,7 @@ export function handleShellConnection(
           return;
         }
 
-        const shellCommand = buildShellCommand(data, dependencies);
+        const shellCommand = buildShellCommand(data, dependencies, resolvedProjectPath);
         const resumeSessionId = resolveResumeSessionId(data, dependencies);
         const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
         const shellArgs =
