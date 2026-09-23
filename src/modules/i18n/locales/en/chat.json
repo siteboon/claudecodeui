@@ -149,7 +149,8 @@
       "title": "Replacing an earlier message",
       "filesNotReverted": "files the agent already changed are not reverted",
       "cancel": "Cancel"
-    }
+    },
+    "notConnected": "Not connected to the server, so your message was not sent. Reconnecting — send it again in a moment."
   },
   "providerSelection": {
     "title": "Choose Your AI Assistant",

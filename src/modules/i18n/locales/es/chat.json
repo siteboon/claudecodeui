@@ -142,7 +142,8 @@
       "title": "Reemplazando un mensaje anterior",
       "filesNotReverted": "los archivos ya modificados no se revierten",
       "cancel": "Cancelar"
-    }
+    },
+    "notConnected": "Sin conexión con el servidor, así que tu mensaje no se ha enviado. Reconectando: vuelve a enviarlo en un momento."
   },
   "providerSelection": {
     "title": "Elige tu asistente de IA",

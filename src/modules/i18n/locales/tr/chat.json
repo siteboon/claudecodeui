@@ -221,7 +221,8 @@
       "title": "Önceki bir mesaj değiştiriliyor",
       "filesNotReverted": "zaten değiştirilen dosyalar geri alınmaz",
       "cancel": "İptal"
-    }
+    },
+    "notConnected": "Sunucuya bağlı değilsiniz, bu yüzden mesajınız gönderilmedi. Yeniden bağlanılıyor — birazdan tekrar gönderin."
   },
   "export": {
     "trigger": "Sohbeti dışa aktar",

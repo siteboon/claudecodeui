@@ -34,7 +34,8 @@ type ChatInterfaceProps = {
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   ws: WebSocket | null;
-  sendMessage: (message: unknown) => void;
+  /** Returns false when the socket was not open and the frame was not sent. */
+  sendMessage: (message: unknown) => boolean | void;
   onFileOpen?: (filePath: string, diffInfo?: any) => void;
   onNavigateToSession?: (targetSessionId: string, options?: SessionNavigationOptions) => void;
   onSessionEstablished?: (sessionId: string, context: SessionEstablishedContext) => void;
@@ -71,7 +72,7 @@ function ChatInterface({
   onShowAllTasks,
 }: ChatInterfaceProps) {
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
-  const { subscribe } = useWebSocket();
+  const { subscribe, isConnected, reconnectNow } = useWebSocket();
   const { t } = useTranslation('chat');
   const processingSessions = useProcessingSessions();
   const {
@@ -232,6 +233,7 @@ function ChatInterface({
     commandModalPayload,
     closeCommandModal,
     showCostModal,
+    showNotConnectedNotice,
     editingAnchorId,
     beginEditMessage,
     cancelEditMessage,
@@ -249,6 +251,8 @@ function ChatInterface({
     canAbortSession,
     tokenBudget,
     sendMessage,
+    isConnected,
+    reconnectNow,
     sendByCtrlEnter,
     onSessionProcessing,
     onSessionEstablished: handleSessionEstablished,
@@ -543,6 +547,7 @@ function ChatInterface({
           queuedDraft={queuedDraft}
           onEditQueuedDraft={editQueuedDraft}
           onDeleteQueuedDraft={deleteQueuedDraft}
+          showNotConnectedNotice={showNotConnectedNotice}
           attachedFiles={attachedFiles}
           onRemoveAttachment={(index) =>
             setAttachedFiles((previous) =>

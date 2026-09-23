@@ -221,7 +221,8 @@
       "title": "Sostituzione di un messaggio precedente",
       "filesNotReverted": "i file già modificati non vengono ripristinati",
       "cancel": "Annulla"
-    }
+    },
+    "notConnected": "Nessuna connessione al server, quindi il messaggio non è stato inviato. Riconnessione in corso: invialo di nuovo tra un momento."
   },
   "export": {
     "trigger": "Esporta conversazione",

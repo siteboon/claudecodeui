@@ -223,7 +223,8 @@
       "title": "Remplacement d’un message précédent",
       "filesNotReverted": "les fichiers déjà modifiés ne sont pas restaurés",
       "cancel": "Annuler"
-    }
+    },
+    "notConnected": "Pas de connexion au serveur : votre message n'a pas été envoyé. Reconnexion en cours — renvoyez-le dans un instant."
   },
   "export": {
     "trigger": "Exporter la conversation",
