@@ -232,6 +232,28 @@ test('relocateProject puts the rows back when the transcripts cannot be moved', 
   });
 });
 
+test('relocateProject reports a transcript already in the new folder as a conflict', async () => {
+  await withRelocateFixture(async (fixture) => {
+    await rename(fixture.oldProjectPath, fixture.newProjectPath);
+    const existingCopyPath = path.join(
+      fixture.claudeProjectsRoot,
+      encodeClaudeProjectDirName(fixture.newProjectPath),
+      `${SESSION_ID}.jsonl`,
+    );
+    await mkdir(path.dirname(existingCopyPath), { recursive: true });
+    await writeFile(existingCopyPath, '{"copy":true}\n');
+
+    await assert.rejects(
+      () => relocateProject(fixture.projectId, fixture.newProjectPath),
+      { statusCode: 409, code: 'TRANSCRIPT_ALREADY_EXISTS' },
+    );
+
+    assert.equal(projectsDb.getProjectPathById(fixture.projectId), fixture.oldProjectPath);
+    assert.equal(sessionsDb.getSessionById(SESSION_ID)?.jsonl_path, fixture.transcriptPath);
+    assert.equal(await readFile(existingCopyPath, 'utf8'), '{"copy":true}\n');
+  });
+});
+
 test('relocateProject rejects a path that no longer exists', async () => {
   await withRelocateFixture(async (fixture) => {
     await assert.rejects(
