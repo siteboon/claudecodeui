@@ -1319,7 +1319,15 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     // Complete
 
   } catch (error) {
-    console.error('SDK query error:', error);
+    // The user's denial stopped the turn, which already reported complete; the
+    // SDK rethrowing that turn's error result is the stop, not a failure, so it
+    // gets one line instead of a stack trace.
+    const isDenialStop = denialStopIsLastMessage && turnCompleteSent;
+    if (isDenialStop) {
+      console.log('Turn stopped by a permission denial for session:', capturedSessionId || sessionId || 'NEW');
+    } else {
+      console.error('SDK query error:', error);
+    }
 
     // Clean up session on error — only while this run still owns the map entry
     // (a superseding run may have replaced it).
@@ -1340,8 +1348,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       return;
     }
 
-    if (denialStopIsLastMessage && turnCompleteSent) {
-      // The user's denial stopped the turn, which already reported complete.
+    if (isDenialStop) {
       return;
     }
 

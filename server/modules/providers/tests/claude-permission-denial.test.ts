@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
+import test, { mock } from 'node:test';
 
 import { ClaudeSessionsProvider } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import { CLAUDE_PREDEFINED_MODELS } from '@/modules/providers/list/claude/claude-models.provider.js';
@@ -175,6 +175,8 @@ test('allowing is unchanged', async () => {
 });
 
 test('the turn a denial stopped ends quietly, without an error row', async () => {
+  const consoleError = mock.method(console, 'error', () => {});
+  const consoleLog = mock.method(console, 'log', () => {});
   await withRun(async (harness) => {
     harness.emit({ type: 'system', subtype: 'init', session_id: NATIVE_ID });
     await decide(harness, 'Bash', { allow: false });
@@ -192,10 +194,20 @@ test('the turn a denial stopped ends quietly, without an error row', async () =>
     assert.equal(completes.length, 1);
     assert.equal(completes[0].exitCode, 0);
     assert.deepEqual(harness.sent.filter((message) => message.kind === 'error'), []);
+  }).finally(() => {
+    consoleError.mock.restore();
+    consoleLog.mock.restore();
   });
+
+  // The expected stop is one log line, not an error with a stack trace.
+  const errorLogs = consoleError.mock.calls.filter((call) => call.arguments[0] === 'SDK query error:');
+  assert.deepEqual(errorLogs, []);
+  const stopLogs = consoleLog.mock.calls.filter((call) => String(call.arguments[0]).startsWith('Turn stopped by a permission denial'));
+  assert.equal(stopLogs.length, 1);
 });
 
 test('a failure that is not a denial stop is still reported', async () => {
+  const consoleError = mock.method(console, 'error', () => {});
   await withRun(async (harness) => {
     harness.emit({ type: 'system', subtype: 'init', session_id: NATIVE_ID });
     await decide(harness, 'Bash', { allow: false, message: 'try the other script' });
@@ -207,5 +219,9 @@ test('a failure that is not a denial stop is still reported', async () => {
     const errors = harness.sent.filter((message) => message.kind === 'error');
     assert.equal(errors.length, 1);
     assert.match(String(errors[0].content), /boom/);
+  }).finally(() => {
+    consoleError.mock.restore();
   });
+
+  assert.equal(consoleError.mock.calls.filter((call) => call.arguments[0] === 'SDK query error:').length, 1);
 });

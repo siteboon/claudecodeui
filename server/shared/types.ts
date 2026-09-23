@@ -576,9 +576,13 @@ export type ProviderPermissionDecision = {
   allow: boolean;
   updatedInput?: unknown;
   /**
-   * On a denial, what the user told the model to do instead. A permission
-   * denial without one stops the turn; with one, the turn continues and the
-   * model reads it. For interactive tools (plan approval) it is the reply.
+   * On a denial, what the user told the model to do instead: the turn goes on
+   * and the model reads it. A denial without one stops the turn only for a
+   * regular tool the main agent called. A subagent's call is refused without
+   * stopping, as in the CLI, and the subagent reports back to its parent. For
+   * the interactive tools (AskUserQuestion, ExitPlanMode) `message` is the reply
+   * itself, such as "revise the plan"; it is passed on verbatim and never stops
+   * the turn.
    */
   message?: string;
   rememberEntry?: unknown;
