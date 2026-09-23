@@ -456,25 +456,6 @@ test('a refused Restart leaves the live PTY on that key running', () => {
   }
 });
 
-test('a Shell resume is refused while the provider process outlives its turn', () => {
-  const sessionId = `process-held-${Date.now()}`;
-  const recorder = createSpawnRecorder();
-  // A Claude process held for a deferred wake-up reports no task, so neither
-  // the run status nor the retention guard sees it; the runtime does.
-  chatRunRegistry.setLiveProcessProbe((appSessionId) => appSessionId === sessionId);
-
-  try {
-    const socket = openShell(recorder.dependencies, { sessionId, hasSession: true });
-
-    assert.deepEqual(recorder.commands, []);
-    assert.equal(readFrames(socket)[0]?.type, 'error');
-    assert.match(String(readFrames(socket)[0]?.message), /background work/);
-  } finally {
-    chatRunRegistry.setLiveProcessProbe(() => false);
-    recorder.ptys.forEach((fakePty) => fakePty.emitExit());
-  }
-});
-
 test('a socket that sent two inits releases each session when that PTY exits or the socket closes', () => {
   const firstId = `two-inits-a-${Date.now()}`;
   const secondId = `two-inits-b-${Date.now()}`;

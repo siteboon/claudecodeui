@@ -51,14 +51,6 @@ export interface IProviderRuntime {
    * settled, or the id was never one of its own.
    */
   stopBackgroundTask?(sessionId: string, taskId: string): Promise<boolean>;
-  /**
-   * Whether the runtime still has a provider process up for the session: while
-   * a turn runs and, for a runtime that keeps its process open past the turn
-   * (background work, deferred wake-ups, the wind-down after `result`), until
-   * that process is gone. A runtime whose process ends with the turn leaves
-   * this undefined; the chat run's own status covers it.
-   */
-  hasLiveProcess?(sessionId: string): boolean;
 }
 
 /**

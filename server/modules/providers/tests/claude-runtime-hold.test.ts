@@ -7,7 +7,6 @@ import test from 'node:test';
 import { ClaudeSessionsProvider } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import { CLAUDE_PREDEFINED_MODELS } from '@/modules/providers/list/claude/claude-models.provider.js';
 import {
-  claudeRuntime,
   listClaudeSDKBackgroundWork,
   queryClaudeSDK,
   stopClaudeSDKTask,
@@ -199,23 +198,4 @@ test('a turn whose tool emits no task events still holds on the static rule', as
 
     assert.equal(script.released(), false, 'Monitor reports no task, so the launch rule decides');
   });
-});
-
-test('a process held on the static rule is reported live although it tracks no task', async () => {
-  // The Shell tab asks for exactly this before it resumes the session: the
-  // held CLI can still push a wake-up turn into the same transcript.
-  await withRun(async ({ script, sent }) => {
-    script.emit(init());
-    script.emit(toolUse('toolu_wake', 'ScheduleWakeup', { delaySeconds: 600, prompt: 'check the build' }));
-    script.emit(ack('toolu_wake', 'Wakeup scheduled', {}));
-    script.emit(result());
-    await settle();
-
-    assert.ok(sent.some((message) => message.kind === 'complete'), 'the turn is over for the client');
-    assert.deepEqual(listClaudeSDKBackgroundWork(), [], 'no task is tracked');
-    assert.equal(script.released(), false);
-    assert.equal(claudeRuntime.hasLiveProcess(SESSION_ID), true);
-  });
-
-  assert.equal(claudeRuntime.hasLiveProcess(SESSION_ID), false, 'gone once the process has ended');
 });
