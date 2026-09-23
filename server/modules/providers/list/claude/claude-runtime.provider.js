@@ -369,6 +369,29 @@ function removeSession(sessionId) {
 }
 
 /**
+ * Cleans up after a run whose SDK stream has ended or failed, i.e. whose CLI
+ * process is going away. The map entry goes only while the run still owns it:
+ * a superseding run may have replaced it, and deleting it here would strand
+ * that run (the supersede already cleared the tracker). When no entry is left
+ * at all, an abort removed it early; the tracker is cleared once more, since a
+ * nested task the process started and settled after the abort would otherwise
+ * leave the session reporting with no process left to end it.
+ * @param {string|null} sessionId - Session identifier
+ * @param {Object|null} queryInstance - The run's SDK query instance
+ */
+function removeExitedSession(sessionId, queryInstance) {
+  if (!sessionId) {
+    return;
+  }
+  const entry = getSession(sessionId);
+  if (entry?.instance === queryInstance) {
+    removeSession(sessionId);
+  } else if (!entry) {
+    backgroundWork.clear(sessionId);
+  }
+}
+
+/**
  * Gets a session from the active sessions map
  * @param {string} sessionId - Session identifier
  * @returns {Object|undefined} Session data or undefined
@@ -625,10 +648,15 @@ const TERMINAL_TASK_STATUSES = new Set(['completed', 'failed', 'killed']);
  * not tracked — nothing in the transcript could show them.
  *
  * It also remembers the step after the last task settles: unless the task was
- * stopped, the CLI pushes a turn of its own to hand the result to the model,
- * and the process is still held for that turn (see the release in the run
- * loop). `isReporting` covers that window, from the last task settling to the
- * next `result`.
+ * stopped, the CLI still has to hand the result to the model, and a new turn
+ * started before it has would replace the process mid-relay and fork the
+ * transcript. `isReporting` covers that window, from the last task settling
+ * until the session's process is gone (`clear`, from `removeSession` or a
+ * supersede). The next `result` is not the end of it: a task that settles
+ * while a model call is in flight, or during another task's relay, gets a
+ * relay turn of its own after that turn's `result`, and the CLI runs it even
+ * though the run loop has let go of stdin by then. It exits only once no
+ * relay is left.
  *
  * Exported so the folding can be driven with the four event shapes directly;
  * the runtime keeps one instance keyed like `activeSessions`.
@@ -654,9 +682,10 @@ export function createBackgroundWorkTracker() {
    */
   const ownToolUseIds = new Map();
   /**
-   * Sessions whose last task has settled while the turn that relays it to the
-   * model has not ended yet. The task list is already empty then, but a new
-   * turn would still replace the process in the middle of that relay.
+   * Sessions whose last task has settled with a result the CLI still relays
+   * to the model. The task list is already empty then, but a new turn would
+   * replace the process in the middle of that relay, so the flag stays until
+   * the process itself is gone.
    * @type {Set<string>}
    */
   const reporting = new Set();
@@ -678,12 +707,6 @@ export function createBackgroundWorkTracker() {
 
   return {
     apply(sessionKey, message) {
-      if (message?.type === 'result') {
-        // Whichever turn ends next carried the report: the one the CLI pushed
-        // for it, or the turn that was still going when the task settled.
-        reporting.delete(sessionKey);
-        return;
-      }
       if (message?.type === 'assistant' && !message.parent_tool_use_id) {
         const content = message.message?.content;
         if (Array.isArray(content)) {
@@ -1260,12 +1283,8 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       }
     }
 
-    // Clean up session on completion — only while this run still owns the map
-    // entry. A superseding run may have replaced it, and deleting here would
-    // strand that run.
-    if (sessionKey() && getSession(sessionKey())?.instance === queryInstance) {
-      removeSession(sessionKey());
-    }
+    // Clean up session on completion (see removeExitedSession for who owns it).
+    removeExitedSession(sessionKey(), queryInstance);
 
     // A superseded run winds down silently: the map entry, the abort flag,
     // and all client-facing events belong to the run that replaced it.
@@ -1293,11 +1312,8 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   } catch (error) {
     console.error('SDK query error:', error);
 
-    // Clean up session on error — only while this run still owns the map entry
-    // (a superseding run may have replaced it).
-    if (sessionKey() && getSession(sessionKey())?.instance === queryInstance) {
-      removeSession(sessionKey());
-    }
+    // Clean up session on error, the same way as on completion.
+    removeExitedSession(sessionKey(), queryInstance);
 
     if (supersededInstances.has(queryInstance)) {
       // Interrupted because a newer run took over this session id; that run
@@ -1399,9 +1415,9 @@ function listClaudeSDKBackgroundWork() {
 }
 
 /**
- * Whether a session's last background task has settled but the turn relaying
- * its result to the model is still running. The session has left the list
- * above by then, yet its process is still held for that turn.
+ * Whether a session's last background task has settled and the process that
+ * relays its result to the model is still up. The session has left the list
+ * above by then, yet a new turn would still cut that relay short.
  * @param {string} sessionId - Session identifier
  * @returns {boolean}
  */

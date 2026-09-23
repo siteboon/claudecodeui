@@ -7,6 +7,8 @@ import test from 'node:test';
 import { ClaudeSessionsProvider } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import { CLAUDE_PREDEFINED_MODELS } from '@/modules/providers/list/claude/claude-models.provider.js';
 import {
+  abortClaudeSDKSession,
+  claudeRuntime,
   listClaudeSDKBackgroundWork,
   queryClaudeSDK,
   stopClaudeSDKTask,
@@ -197,5 +199,105 @@ test('a turn whose tool emits no task events still holds on the static rule', as
     await settle();
 
     assert.equal(script.released(), false, 'Monitor reports no task, so the launch rule decides');
+  });
+});
+
+// What the queued-message dispatcher waits on for this session (the gateway's
+// hasBackgroundWork): tasks still running, or a settled task's result still
+// being relayed by a process that is up.
+const busy = () => listClaudeSDKBackgroundWork().some((entry) => entry.sessionId === SESSION_ID)
+  || claudeRuntime.isReportingBackgroundWork(SESSION_ID);
+const text = (value: string) => ({
+  type: 'assistant', session_id: NATIVE_ID, parent_tool_use_id: null,
+  message: { role: 'assistant', content: [{ type: 'text', text: value }] },
+});
+
+test('a task that settles during a model call keeps the session busy through the relay turn after the result', async () => {
+  await withRun(async ({ script, sent, done }) => {
+    script.emit(init());
+    script.emit(toolUse('toolu_bg', 'Bash', { command: 'sleep 3', run_in_background: true }));
+    script.emit(taskStarted('b1', 'toolu_bg', 'local_bash'));
+    script.emit(ack('toolu_bg', 'Command running in background with ID: b1', { backgroundTaskId: 'b1' }));
+    // The job finishes while the model is still answering the tool result.
+    script.emit(taskNotification('b1', 'toolu_bg', 'completed'));
+    script.emit(text('A ended its turn'));
+    script.emit(result());
+    await settle();
+
+    assert.ok(sent.some((message) => message.kind === 'complete'));
+    assert.equal(script.released(), true, 'nothing is outstanding, so stdin is let go');
+    // The CLI still pushes the turn that relays the job's result, after this
+    // result: a new turn now would replace the process in the middle of it.
+    assert.equal(busy(), true);
+
+    script.emit(init());
+    script.emit(text('RELAYED b1'));
+    script.emit(result());
+    await settle();
+    assert.equal(busy(), true, 'the process is still up after the relay\'s result');
+
+    script.end();
+    await done;
+    assert.equal(busy(), false, 'the process is gone, and the relay with it');
+  });
+});
+
+test('a task that settles during another task\'s relay keeps the session busy until the process exits', async () => {
+  await withRun(async ({ script, done }) => {
+    script.emit(init());
+    script.emit(toolUse('toolu_short', 'Bash', { command: 'sleep 4', run_in_background: true }));
+    script.emit(taskStarted('b1', 'toolu_short', 'local_bash'));
+    script.emit(toolUse('toolu_long', 'Bash', { command: 'sleep 10', run_in_background: true }));
+    script.emit(taskStarted('b2', 'toolu_long', 'local_bash'));
+    script.emit(text('A ended its turn'));
+    script.emit(result());
+    await settle();
+    assert.equal(script.released(), false, 'held for both jobs');
+
+    // The short job reports and the CLI starts relaying it; the long one
+    // finishes during that relay.
+    script.emit(taskNotification('b1', 'toolu_short', 'completed'));
+    script.emit(init());
+    script.emit(taskNotification('b2', 'toolu_long', 'completed'));
+    script.emit(text('RELAYED b1'));
+    script.emit(result());
+    await settle();
+    assert.equal(script.released(), true, 'nothing is outstanding after the first relay');
+    assert.equal(busy(), true, 'the second relay is a turn of its own, still to come');
+
+    script.emit(init());
+    script.emit(text('RELAYED b2'));
+    script.emit(result());
+    await settle();
+    assert.equal(busy(), true);
+
+    script.end();
+    await done;
+    assert.equal(busy(), false);
+  });
+});
+
+test('an aborted run leaves no relay behind once its process exits', async () => {
+  await withRun(async ({ script, done }) => {
+    script.emit(init());
+    script.emit(toolUse('toolu_agent', 'Agent', { prompt: 'Investigate', run_in_background: true }));
+    script.emit(taskStarted('a1', 'toolu_agent', 'local_agent'));
+    script.emit(ack('toolu_agent', 'Async agent launched', { status: 'async_launched', agentId: 'a1' }));
+    script.emit(result());
+    await settle();
+
+    assert.equal(await abortClaudeSDKSession(SESSION_ID), true);
+    assert.equal(busy(), false, 'the abort dropped what the process was tracking');
+
+    // Until the process exits, the agent can still start and finish a
+    // command of its own.
+    script.emit(taskStarted('n1', 'toolu_nested', 'local_bash'));
+    script.emit(taskNotification('n1', 'toolu_nested', 'completed'));
+    await settle();
+    assert.equal(claudeRuntime.isReportingBackgroundWork(SESSION_ID), true);
+
+    script.end();
+    await done;
+    assert.equal(busy(), false, 'nothing can relay once the process is gone');
   });
 });

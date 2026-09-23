@@ -76,7 +76,7 @@ export type ProviderRuntimeGateway = {
   stopBackgroundTask(provider: LLMProvider, sessionId: string, taskId: string): Promise<boolean>;
   /**
    * Whether a provider runtime still holds background work for the session
-   * after its turn ended, up to the end of the turn that relays its result.
+   * after its turn ended, until the process that relays its result exits.
    */
   hasBackgroundWork(sessionId: string): boolean;
   resolveToolApproval(requestId: string, payload: ProviderPermissionDecision): void;

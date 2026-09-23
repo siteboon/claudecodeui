@@ -212,11 +212,15 @@ test('messages that are not task events leave the set untouched', () => {
   assert.equal(tracker.has('s1', 't1'), true);
 });
 
-// Once the last task settles, the CLI pushes one more turn to hand its result
-// to the model, and the process is held until that turn's `result`. A new turn
-// started in between replaces the process mid-relay and forks the transcript,
-// so the session still counts as busy until then.
-test('after the last task reports in, the session is reporting until the next result', () => {
+// Once the last task settles, the CLI still hands its result to the model,
+// and a new turn started before it has replaces the process mid-relay and forks
+// the transcript. Only the process going away (`clear`) ends that: the relay
+// can be a turn of its own after the next `result`.
+const text = (value: string) => ({ type: 'assistant', message: { content: [{ type: 'text', text: value }] } });
+const result = { type: 'result', subtype: 'success' };
+const init = { type: 'system', subtype: 'init' };
+
+test('after the last task reports in, the session is reporting until its process is gone', () => {
   const tracker = createBackgroundWorkTracker();
   tracker.apply('s1', started('t1'));
   tracker.apply('s1', started('t2'));
@@ -228,9 +232,50 @@ test('after the last task reports in, the session is reporting until the next re
   assert.deepEqual(tracker.list(), []);
   assert.equal(tracker.isReporting('s1'), true);
 
-  tracker.apply('s1', { type: 'assistant', message: { content: [{ type: 'text', text: 'The job finished.' }] } });
+  tracker.apply('s1', text('The job finished.'));
+  tracker.apply('s1', result);
+  assert.equal(tracker.isReporting('s1'), true, 'a result does not end it');
+  tracker.clear('s1');
+  assert.equal(tracker.isReporting('s1'), false);
+});
+
+test('a task that settles during a model call is still reporting after that turn\'s result', () => {
+  // Measured with claude 2.1.280: the notification is not folded into the call
+  // in flight; the CLI pushes a separate relay turn after the turn's result.
+  const tracker = createBackgroundWorkTracker();
+  tracker.apply('s1', started('t1'));
+  tracker.apply('s1', notified('t1', 'completed'));
+  tracker.apply('s1', text('A ended its turn'));
+  tracker.apply('s1', result);
+  assert.equal(tracker.isReporting('s1'), true, 'the relay turn has not even started');
+
+  tracker.apply('s1', init);
+  tracker.apply('s1', text('RELAYED t1'));
+  tracker.apply('s1', result);
+  assert.equal(tracker.isReporting('s1'), true, 'still up until the process exits');
+  tracker.clear('s1');
+  assert.equal(tracker.isReporting('s1'), false);
+});
+
+test('a task that settles during another task\'s relay keeps the session reporting through both relays', () => {
+  const tracker = createBackgroundWorkTracker();
+  tracker.apply('s1', started('t1'));
+  tracker.apply('s1', started('t2'));
+  tracker.apply('s1', result);
+  tracker.apply('s1', notified('t1', 'completed'));
+  tracker.apply('s1', init);
+  tracker.apply('s1', notified('t2', 'completed'));
   assert.equal(tracker.isReporting('s1'), true);
-  tracker.apply('s1', { type: 'result', subtype: 'success' });
+
+  // The first relay ends; the CLI pushes the second one after its result.
+  tracker.apply('s1', text('RELAYED t1'));
+  tracker.apply('s1', result);
+  assert.equal(tracker.isReporting('s1'), true);
+  tracker.apply('s1', init);
+  tracker.apply('s1', text('RELAYED t2'));
+  tracker.apply('s1', result);
+  assert.equal(tracker.isReporting('s1'), true);
+  tracker.clear('s1');
   assert.equal(tracker.isReporting('s1'), false);
 });
 
