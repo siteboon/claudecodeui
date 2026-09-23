@@ -235,7 +235,8 @@
   },
   "message": {
     "editAndResend": "编辑并重新发送",
-    "forkFromHere": "从此处派生"
+    "forkFromHere": "从此处派生",
+    "answeredBy": "由 {{model}} 回答"
   },
   "composer": {
     "editing": {

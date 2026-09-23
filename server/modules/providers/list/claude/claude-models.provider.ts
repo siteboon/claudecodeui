@@ -7,7 +7,11 @@ import type {
   ProviderModelOption,
   ProviderModelsDefinition,
 } from '@/shared/types.js';
-import { buildDefaultProviderCurrentActiveModel, stripAnsiSequences } from '@/shared/utils.js';
+import {
+  buildDefaultProviderCurrentActiveModel,
+  isPlaceholderProviderModel,
+  stripAnsiSequences,
+} from '@/shared/utils.js';
 
 /**
  * Ultracode is not one of the SDK's reasoning-effort levels. Selecting it runs the turn at
@@ -179,13 +183,6 @@ type ClaudeInitEvent = {
   };
 };
 
-/**
- * Claude Code stamps locally-synthesized rows (API-error placeholders and the
- * like) with `model: "<synthetic>"`. Angle-bracketed values are placeholders,
- * never real model ids, and must not be surfaced as the session's model.
- */
-const isPlaceholderModel = (model: string): boolean => model.startsWith('<') && model.endsWith('>');
-
 /** Exported for tests. */
 export const extractClaudeEventModel = (event: ClaudeInitEvent, sessionId: string): string | null => {
   const eventSessionId = event.sessionId ?? event.session_id;
@@ -199,12 +196,12 @@ export const extractClaudeEventModel = (event: ClaudeInitEvent, sessionId: strin
   }
 
   const directModel = event.model?.trim();
-  if (directModel && !isPlaceholderModel(directModel)) {
+  if (directModel && !isPlaceholderProviderModel(directModel)) {
     return directModel;
   }
 
   const messageModel = event.message?.model?.trim();
-  return messageModel && !isPlaceholderModel(messageModel) ? messageModel : null;
+  return messageModel && !isPlaceholderProviderModel(messageModel) ? messageModel : null;
 };
 
 const extractTaggedContent = (content: string, tagName: string): string | null => {
@@ -220,13 +217,13 @@ const extractClaudeModelFromTextContent = (content: string): string | null => {
     const changedModel = /(?:set|changed|switched)\s+model\s+to\s+(.+?)\.?$/i.exec(cleanedStdout);
     const stdoutModel = changedModel?.[1]?.trim();
     // A placeholder stdout hit must not shadow a real <model> tag further down.
-    if (stdoutModel && !isPlaceholderModel(stdoutModel)) {
+    if (stdoutModel && !isPlaceholderProviderModel(stdoutModel)) {
       return stdoutModel;
     }
   }
 
   const modelTag = extractTaggedContent(content, 'model')?.trim();
-  return modelTag && !isPlaceholderModel(modelTag) ? modelTag : null;
+  return modelTag && !isPlaceholderProviderModel(modelTag) ? modelTag : null;
 };
 
 const extractClaudeModelFromMessageContent = (content: unknown): string | null => {

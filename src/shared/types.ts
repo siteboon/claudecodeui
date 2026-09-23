@@ -360,6 +360,12 @@ export type ChatMessage = {
    * already-sent one, naming the anchor it replaces. Local to this client.
    */
   replacesAnchorId?: string;
+  /**
+   * The model that produced this assistant turn, as the provider reported it
+   * on the transcript row. Absent on user turns and on rows the provider
+   * fabricated locally, so the footer shows nothing rather than guessing.
+   */
+  model?: string;
   isThinking?: boolean;
   isStreaming?: boolean;
   isToolUse?: boolean;
@@ -515,6 +521,13 @@ export type NormalizedMessage = {
   // kind-specific fields (flat for simplicity)
   role?: 'user' | 'assistant';
   content?: string;
+  /**
+   * The model that answered this turn, as the backend read it off the
+   * provider's own record of the row (today: Claude's `message.model`). Never
+   * set on a user turn — no provider records which model a request went out
+   * with — and never a placeholder the provider synthesized.
+   */
+  model?: string;
   /**
    * Mirrors optional transcript metadata from the server.
    *

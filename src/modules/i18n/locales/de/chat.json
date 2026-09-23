@@ -214,7 +214,8 @@
   },
   "message": {
     "editAndResend": "Bearbeiten und erneut senden",
-    "forkFromHere": "Ab hier verzweigen"
+    "forkFromHere": "Ab hier verzweigen",
+    "answeredBy": "Beantwortet von {{model}}"
   },
   "composer": {
     "editing": {
