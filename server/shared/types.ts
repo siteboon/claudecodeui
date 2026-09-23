@@ -606,6 +606,8 @@ export type ProviderRuntimeContext = {
    */
   createQuery?: (input: { prompt: AsyncIterable<unknown>; options: AnyRecord }) => AsyncIterable<unknown> & {
     interrupt(): Promise<void>;
+    /** Dispose a persistent SDK process after explicit abort or stream failure. */
+    close?(): void;
     stopTask?(taskId: string): Promise<void>;
   };
 };
