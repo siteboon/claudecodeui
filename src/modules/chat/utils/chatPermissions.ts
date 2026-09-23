@@ -82,16 +82,3 @@ export function grantClaudeToolPermission(entry: string | null): PermissionGrant
 export function isPlanApprovalRequest(request: Pick<PendingPermissionRequest, 'toolName'>): boolean {
   return request.toolName === 'ExitPlanMode' || request.toolName === 'exit_plan_mode';
 }
-
-/**
- * The plan a pending plan approval asks to build, as the model wrote it, or ''
- * when the request carries none. Read from the request rather than from a plan
- * card, because every plan card in a transcript offers the one pending request.
- */
-export function readPlanFromApprovalRequest(request: Pick<PendingPermissionRequest, 'input'>): string {
-  const input = request.input;
-  if (!input || typeof input !== 'object' || !('plan' in input)) {
-    return '';
-  }
-  return typeof input.plan === 'string' ? input.plan : '';
-}

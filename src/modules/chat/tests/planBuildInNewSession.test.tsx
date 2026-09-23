@@ -46,7 +46,7 @@ const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringif
   headers: { 'Content-Type': 'application/json' },
 });
 
-let createSessionResponse: () => Response;
+let createSessionResponse: () => Response | Promise<Response>;
 let createSessionCalls: Array<Record<string, unknown>>;
 
 beforeEach(() => {
@@ -79,12 +79,14 @@ const renderComposer = () => {
   const established: Array<{ sessionId: string; context: SessionEstablishedContext }> = [];
   const pinnedModes: Array<{ sessionId: string; mode: PermissionMode }> = [];
   const processing: string[] = [];
+  // The open session's pending approvals, as ChatInterface's state holds them.
+  const pending = { current: [PLAN_REQUEST] as PendingPermissionRequest[] };
 
-  const view = renderHook(() =>
+  const view = renderHook(({ openSession }: { openSession: ProjectSession }) =>
     useChatComposerState({
       selectedProject: PROJECT,
-      selectedSession: PLANNING_SESSION,
-      currentSessionId: PLANNING_SESSION.id,
+      selectedSession: openSession,
+      currentSessionId: openSession.id,
       provider: 'claude',
       // The planning session's composer is still in plan mode when Build is pressed.
       permissionMode: 'plan',
@@ -102,12 +104,25 @@ const renderComposer = () => {
       scrollToBottom: () => undefined,
       addMessage: (message, targetSessionId) => { added.push({ message, targetSessionId }); },
       setIsUserScrolledUp: () => undefined,
-      setPendingPermissionRequests: () => undefined,
+      setPendingPermissionRequests: (update) => {
+        pending.current = typeof update === 'function' ? update(pending.current) : update;
+      },
       rememberSessionPermissionMode: (sessionId, mode) => { pinnedModes.push({ sessionId, mode }); },
     }),
+    { initialProps: { openSession: PLANNING_SESSION } },
   );
 
-  return { view, sent, added, established, pinnedModes, processing };
+  return { view, sent, added, established, pinnedModes, processing, pending };
+};
+
+/** A session allocation the test lets through (or fails) when it chooses. */
+const holdSessionAllocation = () => {
+  let release: (response: Response) => void = () => undefined;
+  createSessionResponse = () => new Promise<Response>((resolve) => { release = resolve; });
+  return {
+    succeed: () => release(jsonResponse({ success: true, data: { sessionId: 'built-session', sessionName: 'Add a hello file' } })),
+    fail: () => release(jsonResponse({ success: false }, 500)),
+  };
 };
 
 test('building in a new session stops the planning run and sends the plan to a new session in default mode', async () => {
@@ -159,15 +174,61 @@ test('building in a new session stops the planning run and sends the plan to a n
 
 test('a failed session allocation leaves the plan approval pending', async () => {
   createSessionResponse = () => jsonResponse({ success: false }, 500);
-  const { view, sent, added, established } = renderComposer();
+  const { view, sent, added, established, pending } = renderComposer();
 
   await act(async () => { await view.result.current.handleBuildPlanInNewSession(PLAN_REQUEST); });
 
   assert.equal(sent.length, 0, 'neither answered nor sent: the plan card stays actionable');
+  assert.deepEqual(pending.current, [PLAN_REQUEST], 'the approval is back on the plan card');
   assert.equal(established.length, 0);
   assert.equal(added.length, 1);
   assert.equal(added[0].message.type, 'error');
   assert.equal(added[0].targetSessionId, undefined, 'the error shows in the planning session');
+
+  // Handed back for real: Build in this session now answers it.
+  act(() => { view.result.current.handlePermissionDecision(PLAN_REQUEST.requestId, { allow: true }); });
+  assert.deepEqual(sent.map((message) => [message.type, message.allow]), [['chat.permission-response', true]]);
+});
+
+test('Build, Revise or ⌘↩ while the new session is allocated does not build the plan in the planning session too', async () => {
+  const allocation = holdSessionAllocation();
+  const { view, sent, pending } = renderComposer();
+
+  let handoff: Promise<void> = Promise.resolve();
+  act(() => { handoff = view.result.current.handleBuildPlanInNewSession(PLAN_REQUEST); });
+
+  // Claimed at once: the card's Build/Revise and ⌘↩ read the pending list.
+  assert.deepEqual(pending.current, []);
+  // Anything that still reaches the approval (a click that was already on its
+  // way, a replayed prompt) is not answered in the planning session.
+  act(() => {
+    view.result.current.handlePermissionDecision(PLAN_REQUEST.requestId, { allow: true });
+    view.result.current.handlePermissionDecision(PLAN_REQUEST.requestId, { allow: false, message: 'revise' });
+  });
+  assert.equal(sent.length, 0);
+
+  await act(async () => { allocation.succeed(); await handoff; });
+
+  assert.deepEqual(
+    sent.map((message) => [message.type, message.allow ?? message.sessionId]),
+    [['chat.permission-response', false], ['chat.send', 'built-session']],
+    'one answer (the stop) and one build, in the new session only',
+  );
+});
+
+test('a failed allocation after the user moved to another session does not put the approval in that session', async () => {
+  const allocation = holdSessionAllocation();
+  const { view, sent, pending } = renderComposer();
+
+  let handoff: Promise<void> = Promise.resolve();
+  act(() => { handoff = view.result.current.handleBuildPlanInNewSession(PLAN_REQUEST); });
+  view.rerender({ openSession: { id: 'other-session', summary: 'Something else' } });
+  pending.current = [];
+
+  await act(async () => { allocation.fail(); await handoff; });
+
+  assert.deepEqual(pending.current, []);
+  assert.equal(sent.length, 0);
 });
 
 test('a second press while the first is in flight does not start a second session', async () => {

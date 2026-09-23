@@ -16,7 +16,7 @@ import { api } from '@/shared/api';
 import { PROVIDER_PERMISSION_PREFERENCE_KEYS } from '@/shared/constants';
 import { readUserPreference } from '@/shared/userSettings';
 import type { CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
-import { grantClaudeToolPermission, readPlanFromApprovalRequest } from '@/modules/chat/utils/chatPermissions';
+import { grantClaudeToolPermission } from '@/modules/chat/utils/chatPermissions';
 import {
   clearQueuedMessage,
   hydrateChatDrafts,
@@ -156,6 +156,19 @@ const getNotificationSessionSummary = (
   }
 
   return normalizedFallback.length > 80 ? `${normalizedFallback.slice(0, 77)}...` : normalizedFallback;
+};
+
+/**
+ * The plan a pending plan approval asks to build, as the model wrote it, or ''
+ * when the request carries none. Read from the request rather than from a plan
+ * card, because every plan card in a transcript offers the one pending request.
+ */
+const readPlanFromApprovalRequest = (request: PendingPermissionRequest): string => {
+  const input = request.input;
+  if (!input || typeof input !== 'object' || !('plan' in input)) {
+    return '';
+  }
+  return typeof input.plan === 'string' ? input.plan : '';
 };
 
 /**
@@ -1255,13 +1268,18 @@ export function useChatComposerState({
     [provider],
   );
 
+  // Plan approvals being moved to a new session right now. Until the handoff
+  // answers one itself, nothing else may: a Build, Revise or ⌘↩ during that
+  // round trip would build the plan in the planning session as well.
+  const planHandoffsInFlightRef = useRef(new Set<string>());
+
   const handlePermissionDecision = useCallback(
     (
       requestIds: string | string[],
       decision: { allow?: boolean; message?: string; rememberEntry?: string | null; updatedInput?: unknown },
     ) => {
       const ids = Array.isArray(requestIds) ? requestIds : [requestIds];
-      const validIds = ids.filter(Boolean);
+      const validIds = ids.filter((requestId) => requestId && !planHandoffsInFlightRef.current.has(requestId));
       if (validIds.length === 0) {
         return;
       }
@@ -1284,18 +1302,15 @@ export function useChatComposerState({
     [sendMessage, setPendingPermissionRequests],
   );
 
-  // Plan approvals being moved to a new session right now: a second click, or
-  // the shortcut, during that round trip must not start a second session.
-  const planHandoffsInFlightRef = useRef(new Set<string>());
-
   /**
    * Builds an approved plan in a brand-new session instead of the planning one,
    * like the Claude CLI's "clear context" approval: the file reads and
    * back-and-forth of planning stay behind, and the build starts from the plan.
    *
-   * The session is allocated before the approval is answered, so a failure
-   * leaves the plan card actionable. The planning run is then told no, with an
-   * instruction to stop — a yes would start the build there as well.
+   * The approval is claimed first (the card's buttons and ⌘↩ go away), the
+   * session is allocated, and only then is the planning run told no, with an
+   * instruction to stop — a yes would start the build there as well. If the
+   * allocation fails, the approval is handed back to the card untouched.
    */
   const handleBuildPlanInNewSession = useCallback(
     async (request: PendingPermissionRequest) => {
@@ -1313,6 +1328,21 @@ export function useChatComposerState({
       }
 
       planHandoffsInFlightRef.current.add(request.requestId);
+      setPendingPermissionRequests((previous) =>
+        previous.filter((pending) => pending.requestId !== request.requestId),
+      );
+      // Puts the approval back on the card after a failed allocation, unless
+      // the user has since moved to another session (whose list it would join).
+      const handBackPlanApproval = () => {
+        planHandoffsInFlightRef.current.delete(request.requestId);
+        if (request.sessionId && request.sessionId !== sessionKeyRef.current) {
+          return;
+        }
+        setPendingPermissionRequests((previous) =>
+          previous.some((pending) => pending.requestId === request.requestId) ? previous : [...previous, request],
+        );
+      };
+
       try {
         const content = t('plan.newSessionPrompt', { plan });
         // Named after the plan's first line (usually its heading) rather than
@@ -1328,6 +1358,7 @@ export function useChatComposerState({
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
           console.error('Session creation failed:', error);
+          handBackPlanApproval();
           addMessage({
             type: 'error',
             content: `Failed to start a new session: ${message}`,
@@ -1338,6 +1369,7 @@ export function useChatComposerState({
 
         const newSessionId = created.sessionId;
         if (!newSessionId) {
+          handBackPlanApproval();
           addMessage({
             type: 'error',
             content: 'Failed to start a new session: no session id returned.',
@@ -1346,6 +1378,8 @@ export function useChatComposerState({
           return;
         }
 
+        // Released just before its own answer, which the guard would drop.
+        planHandoffsInFlightRef.current.delete(request.requestId);
         handlePermissionDecision(request.requestId, {
           allow: false,
           message: t('plan.movedToNewSession'),
@@ -1394,6 +1428,7 @@ export function useChatComposerState({
       resolvePermissionModeForProvider,
       selectedProject,
       sendMessage,
+      setPendingPermissionRequests,
       t,
     ],
   );
