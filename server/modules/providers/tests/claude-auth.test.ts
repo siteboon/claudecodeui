@@ -20,7 +20,17 @@ type CheckCredentialsResult = {
 const checkCredentials = (auth: ClaudeProviderAuth): Promise<CheckCredentialsResult> =>
   (auth as unknown as { checkCredentials: () => Promise<CheckCredentialsResult> }).checkCredentials();
 
-const ENV_KEYS = ['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN'] as const;
+const ENV_KEYS = [
+  'CLAUDE_CODE_OAUTH_TOKEN',
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_AUTH_TOKEN',
+  'CLAUDE_CODE_USE_BEDROCK',
+  'CLAUDE_CODE_USE_FOUNDRY',
+  'CLAUDE_CODE_USE_ANTHROPIC_AWS',
+  'CLAUDE_CODE_USE_MANTLE',
+  'CLAUDE_CODE_USE_VERTEX',
+  'ANTHROPIC_VERTEX_PROJECT_ID',
+] as const;
 
 const withEnv = async (
   overrides: Partial<Record<(typeof ENV_KEYS)[number], string>>,
@@ -204,5 +214,102 @@ test('checkCredentials: ANTHROPIC_API_KEY takes precedence over CLAUDE_CODE_OAUT
         assert.equal(status.method, 'api_key');
       },
     );
+  });
+});
+
+test('checkCredentials: CLAUDE_CODE_USE_VERTEX in settings.json env is authenticated via the cloud provider', async () => {
+  await withTempHome(async (homeDir) => {
+    await writeSettingsFile(homeDir, {
+      CLAUDE_CODE_USE_VERTEX: '1',
+      ANTHROPIC_VERTEX_PROJECT_ID: 'my-gcp-project',
+      CLOUD_ML_REGION: 'us-east5',
+    });
+
+    await withEnv({}, async () => {
+      const status = await checkCredentials(new ClaudeProviderAuth());
+      assert.equal(status.authenticated, true);
+      assert.equal(status.method, 'cloud_provider');
+      assert.equal(status.email, 'Google Vertex AI (my-gcp-project)');
+    });
+  });
+});
+
+test('checkCredentials: CLAUDE_CODE_USE_VERTEX in the process env is authenticated, with or without a project id', async () => {
+  await withTempHome(async () => {
+    await withEnv({ CLAUDE_CODE_USE_VERTEX: 'true', ANTHROPIC_VERTEX_PROJECT_ID: 'env-project' }, async () => {
+      const status = await checkCredentials(new ClaudeProviderAuth());
+      assert.equal(status.authenticated, true);
+      assert.equal(status.method, 'cloud_provider');
+      assert.equal(status.email, 'Google Vertex AI (env-project)');
+    });
+
+    // The Vertex client can resolve the project from Google credentials, so a
+    // missing ANTHROPIC_VERTEX_PROJECT_ID does not stop the CLI from working.
+    await withEnv({ CLAUDE_CODE_USE_VERTEX: 'TRUE' }, async () => {
+      const status = await checkCredentials(new ClaudeProviderAuth());
+      assert.equal(status.authenticated, true);
+      assert.equal(status.method, 'cloud_provider');
+      assert.equal(status.email, 'Google Vertex AI');
+    });
+  });
+});
+
+test('checkCredentials: Bedrock, Foundry, Claude Platform on AWS and Mantle switches are authenticated via the cloud provider', async () => {
+  const cases = [
+    { key: 'CLAUDE_CODE_USE_BEDROCK', label: 'Amazon Bedrock' },
+    { key: 'CLAUDE_CODE_USE_FOUNDRY', label: 'Microsoft Foundry' },
+    { key: 'CLAUDE_CODE_USE_ANTHROPIC_AWS', label: 'Claude Platform on AWS' },
+    { key: 'CLAUDE_CODE_USE_MANTLE', label: 'Amazon Bedrock (Mantle)' },
+  ] as const;
+
+  await withTempHome(async () => {
+    for (const { key, label } of cases) {
+      await withEnv({ [key]: 'yes' }, async () => {
+        const status = await checkCredentials(new ClaudeProviderAuth());
+        assert.equal(status.authenticated, true, key);
+        assert.equal(status.method, 'cloud_provider', key);
+        assert.equal(status.email, label, key);
+      });
+    }
+  });
+});
+
+test('checkCredentials: a cloud provider switch wins over an Anthropic API key, matching the CLI routing', async () => {
+  await withTempHome(async () => {
+    await withEnv({ ANTHROPIC_API_KEY: 'test-api-key', CLAUDE_CODE_USE_BEDROCK: '1' }, async () => {
+      const status = await checkCredentials(new ClaudeProviderAuth());
+      assert.equal(status.authenticated, true);
+      assert.equal(status.method, 'cloud_provider');
+      assert.equal(status.email, 'Amazon Bedrock');
+    });
+  });
+});
+
+test('checkCredentials: with several cloud provider switches on, the one the CLI picks first is reported', async () => {
+  await withTempHome(async () => {
+    await withEnv({ CLAUDE_CODE_USE_VERTEX: '1', CLAUDE_CODE_USE_BEDROCK: '1' }, async () => {
+      const status = await checkCredentials(new ClaudeProviderAuth());
+      assert.equal(status.method, 'cloud_provider');
+      assert.equal(status.email, 'Amazon Bedrock');
+    });
+  });
+});
+
+test('checkCredentials: a disabled cloud provider switch does not count as authenticated', async () => {
+  await withTempHome(async (homeDir) => {
+    await withEnv({ CLAUDE_CODE_USE_VERTEX: '0', CLAUDE_CODE_USE_BEDROCK: 'false' }, async () => {
+      const status = await checkCredentials(new ClaudeProviderAuth());
+      assert.equal(status.authenticated, false);
+      assert.equal(status.method, null);
+    });
+
+    // settings.json env is applied over the process env by the CLI, so an
+    // explicit "0" there switches Vertex off even when the process env enables it.
+    await writeSettingsFile(homeDir, { CLAUDE_CODE_USE_VERTEX: '0' });
+    await withEnv({ CLAUDE_CODE_USE_VERTEX: '1' }, async () => {
+      const status = await checkCredentials(new ClaudeProviderAuth());
+      assert.equal(status.authenticated, false);
+      assert.equal(status.method, null);
+    });
   });
 });
