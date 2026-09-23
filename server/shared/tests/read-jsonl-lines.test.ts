@@ -115,3 +115,50 @@ test('extractFirstValidJsonlData reads a row that contains U+2028', async () => 
     assert.equal(extracted, '/workspace/demo');
   });
 });
+
+test('extractFirstValidJsonlData skips a null row instead of giving up on the file', async () => {
+  const content = ['null', JSON.stringify({ sessionId: 'test-session-1', cwd: '/workspace/demo' })].join('\n');
+
+  await withJsonlFile(content, async (filePath) => {
+    // Reads fields straight off the row, like the session synchronizers do.
+    const extracted = await extractFirstValidJsonlData(filePath, (row) => {
+      const data = row as Record<string, unknown>;
+      return typeof data.cwd === 'string' ? data.cwd : null;
+    });
+
+    assert.equal(extracted, '/workspace/demo');
+  });
+});
+
+test('extractFirstValidJsonlData passes only JSON object rows to the extractor', async () => {
+  const validRow = { sessionId: 'test-session-1', cwd: '/workspace/demo' };
+  const content = ['42', '"text"', '["a","b"]', JSON.stringify(validRow)].join('\n');
+
+  await withJsonlFile(content, async (filePath) => {
+    const seenRows: unknown[] = [];
+    const extracted = await extractFirstValidJsonlData(filePath, (row) => {
+      seenRows.push(row);
+      const data = row as Record<string, unknown>;
+      return typeof data.cwd === 'string' ? data.cwd : null;
+    });
+
+    assert.equal(extracted, '/workspace/demo');
+    assert.deepEqual(seenRows, [validRow]);
+  });
+});
+
+test('extractFirstValidJsonlData skips a row the extractor throws on and keeps scanning', async () => {
+  const content = [
+    JSON.stringify({ sessionId: 'test-session-1', payload: null }),
+    JSON.stringify({ sessionId: 'test-session-1', payload: { cwd: '/workspace/demo' } }),
+  ].join('\n');
+
+  await withJsonlFile(content, async (filePath) => {
+    const extracted = await extractFirstValidJsonlData(filePath, (row) => {
+      const data = row as { payload: { cwd: unknown } };
+      return typeof data.payload.cwd === 'string' ? data.payload.cwd : null;
+    });
+
+    assert.equal(extracted, '/workspace/demo');
+  });
+});

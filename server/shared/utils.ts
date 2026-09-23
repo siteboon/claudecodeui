@@ -1162,7 +1162,8 @@ export async function* readJsonlLines(filePath: string): AsyncGenerator<string> 
  * Use this for provider index files where session id -> display name metadata
  * is stored line-by-line. The first value for each key wins, preserving the
  * earliest known label while avoiding repeated map overwrites. A row that is
- * not valid JSON is skipped without dropping the rows around it.
+ * not a valid JSON object (malformed, `null`, a number, a string or an array)
+ * is skipped without dropping the rows around it.
  */
 export async function buildLookupMap(
   filePath: string,
@@ -1178,10 +1179,8 @@ export async function buildLookupMap(
         continue;
       }
 
-      let parsed: Record<string, unknown>;
-      try {
-        parsed = JSON.parse(trimmed) as Record<string, unknown>;
-      } catch {
+      const parsed = readJsonRecord(trimmed);
+      if (!parsed) {
         // One malformed row must not hide every label after it.
         continue;
       }
@@ -1205,9 +1204,10 @@ export async function buildLookupMap(
  *
  * The caller supplies an `extractor` that validates provider-specific row
  * shapes. This helper centralizes line-by-line parsing and lets indexers stop
- * scanning as soon as one valid row is found. A row that is not valid JSON
- * (for example one still being written) is skipped, so it cannot hide the
- * valid rows after it.
+ * scanning as soon as one valid row is found. A row that is not a valid JSON
+ * object (for example one still being written, or a `null` row) is skipped, and
+ * so is a row the extractor throws on, so neither can hide the valid rows after
+ * it. The extractor only receives JSON object rows.
  */
 export async function extractFirstValidJsonlData<T>(
   filePath: string,
@@ -1220,14 +1220,18 @@ export async function extractFirstValidJsonlData<T>(
         continue;
       }
 
-      let parsed: unknown;
+      const parsed = readJsonRecord(trimmed);
+      if (!parsed) {
+        continue;
+      }
+
+      let extracted: T | null | undefined;
       try {
-        parsed = JSON.parse(trimmed);
+        extracted = extractor(parsed);
       } catch {
         continue;
       }
 
-      const extracted = extractor(parsed);
       if (extracted) {
         return extracted;
       }

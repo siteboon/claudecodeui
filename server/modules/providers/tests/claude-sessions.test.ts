@@ -1780,6 +1780,58 @@ test('buildLookupMap keeps a value containing U+2028 and the rows after a malfor
   }
 });
 
+test('buildLookupMap keeps the rows after a null row', async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-lookup-'));
+  const filePath = path.join(tmp, 'history.jsonl');
+  try {
+    await writeFile(
+      filePath,
+      [
+        JSON.stringify({ sessionId: 's1', display: 'before the null row' }),
+        'null',
+        JSON.stringify({ sessionId: 's2', display: 'after the null row' }),
+      ].join('\n'),
+      'utf8',
+    );
+
+    const map = await buildLookupMap(filePath, 'sessionId', 'display');
+
+    assert.equal(map.get('s1'), 'before the null row');
+    assert.equal(map.get('s2'), 'after the null row');
+    assert.equal(map.size, 2);
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test('buildLookupMap keeps the rows after number, string and array rows', async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-lookup-'));
+  const filePath = path.join(tmp, 'history.jsonl');
+  try {
+    await writeFile(
+      filePath,
+      [
+        '42',
+        JSON.stringify({ sessionId: 's1', display: 'after a number row' }),
+        '"text"',
+        JSON.stringify({ sessionId: 's2', display: 'after a string row' }),
+        '["s3","not a label"]',
+        JSON.stringify({ sessionId: 's3', display: 'after an array row' }),
+      ].join('\n'),
+      'utf8',
+    );
+
+    const map = await buildLookupMap(filePath, 'sessionId', 'display');
+
+    assert.equal(map.get('s1'), 'after a number row');
+    assert.equal(map.get('s2'), 'after a string row');
+    assert.equal(map.get('s3'), 'after an array row');
+    assert.equal(map.size, 3);
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // extractSessionTitle — tested via synchronizeFile
 // ---------------------------------------------------------------------------
