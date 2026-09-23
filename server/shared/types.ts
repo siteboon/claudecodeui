@@ -190,7 +190,8 @@ export type MessageKind =
   | 'permission_cancelled'
   | 'session_created'
   | 'history_truncated'
-  | 'task_notification';
+  | 'task_notification'
+  | 'task_status';
 
 /**
  * Event kinds added by the chat gateway layer on top of provider message kinds.
@@ -346,12 +347,147 @@ export type NormalizedMessage = {
   subagentTools?: SubagentActivity[];
   /** Identity and lifecycle of the subagent this `tool_use` spawned. */
   subagent?: SubagentInfo;
+  /** The workflow run this `tool_use` launched, read from its journal on disk. */
+  workflow?: WorkflowInfo;
   /** Stored memory the reply drew on, when the provider reports it. */
   memoryCitations?: MemoryCitation[];
   toolUseResult?: unknown;
   sequence?: number;
   rowid?: number;
+  /**
+   * `task_status` fields: one lifecycle event of a background task the live
+   * run is tracking. `taskId` is the provider's task handle; `toolUseId` names
+   * the call that launched it and is absent on `updated`, which the SDK keys by
+   * task id alone. `status` and `summary` above carry the event's own.
+   */
+  event?: 'started' | 'progress' | 'updated' | 'notification';
+  taskId?: string;
+  toolUseId?: string;
+  taskType?: string;
+  workflowName?: string;
+  description?: string;
+  usage?: TaskUsage;
+  outputFile?: string;
+  /** A workflow's `progress` only: where each agent the run spawned stands. */
+  agents?: WorkflowAgentProgress[];
   [key: string]: unknown;
+};
+
+/**
+ * What a background task has spent so far, as the CLI reports it on
+ * `task_progress` and `task_notification`.
+ */
+export type TaskUsage = {
+  totalTokens: number;
+  toolUses: number;
+  durationMs: number;
+};
+
+/**
+ * One background task a live session still has outstanding — a spawned
+ * agent, a workflow run or a backgrounded command — as the runtime tracks it
+ * from the stream's `task_started` until the event that settles it.
+ *
+ * `taskId` is the handle a stop request names; `toolUseId` is the call that
+ * launched it, which is how the client pairs the task with its card.
+ * `startedAt` is the server clock at `task_started`, so a session whose turn
+ * has ended can still report how long its work has been going.
+ */
+export type BackgroundTaskSummary = {
+  taskId: string;
+  toolUseId: string;
+  taskType: string;
+  description: string;
+  workflowName?: string;
+  startedAt: number;
+  /**
+   * The task was launched by a subagent or workflow agent, not by the
+   * session's own turn: its `toolUseId` names a call in that agent's
+   * transcript, so no card in this session's transcript matches it. Listed so
+   * it can still be stopped; not counted as the session's own work.
+   */
+  nested?: boolean;
+};
+
+/**
+ * Where one agent of a running workflow stands, as the SDK reports it on the
+ * run's `task_progress` events.
+ *
+ * An entry the script has queued but not yet started has no `agentId` and is
+ * identified by `index` alone; once the agent runs, `agentId` names the
+ * transcript it writes. `lastToolName` and `lastToolSummary` are the agent's
+ * own latest tool call — unlike the event's task-level `last_tool_name`, which
+ * for a workflow is the current agent's label.
+ */
+export type WorkflowAgentProgress = {
+  index: number;
+  label?: string;
+  /** The title of the script phase the agent runs under, when it has one. */
+  phase?: string;
+  agentId?: string;
+  model?: string;
+  state: 'queued' | 'running' | 'done' | 'failed';
+  startedAt?: number;
+  lastToolName?: string;
+  lastToolSummary?: string;
+  promptPreview?: string;
+  tokens?: number;
+  toolCalls?: number;
+  durationMs?: number;
+  resultPreview?: string;
+};
+
+/**
+ * One workflow agent's recorded timeline, read from its transcript on demand
+ * when the card is opened — the SDK never streams an agent's own rows to the
+ * parent session, so this is the only way to see what it did.
+ *
+ * `activityCount` is the full length of the timeline; `activity` is capped
+ * for transport like a subagent's `subagentTools`.
+ */
+export type WorkflowAgentActivity = {
+  agent: {
+    id: string;
+    label?: string;
+    model?: string;
+    status: 'running' | 'completed' | 'failed' | 'stopped';
+  };
+  activity: SubagentActivity[];
+  activityCount: number;
+};
+
+/**
+ * One agent a workflow run spawned, as its journal records it.
+ *
+ * `label` and `phase` are whatever the script passed when it spawned the
+ * agent; older scripts passed neither. An agent with a `started` record and no
+ * `result` or `failed` one is still running as far as the journal knows.
+ */
+export type WorkflowAgentInfo = {
+  id: string;
+  label?: string;
+  phase?: string;
+  /** `stopped` is an agent the journal never settled although the run itself has — abandoned by a stop or a resume that re-ran the step. */
+  status: 'running' | 'completed' | 'failed' | 'stopped';
+};
+
+/**
+ * A `Workflow` tool call's run, attached to the `tool_use` that launched it.
+ *
+ * `status` follows the same rule as a background agent's: the task
+ * notification's word when one exists, else `running` only while the process
+ * that launched it is still up, else `stopped`. The agent list and counts come
+ * from `<transcriptDir>/journal.jsonl`; both are empty when the run left no
+ * journal behind (a fork copies only the parent's transcript).
+ */
+export type WorkflowInfo = {
+  runId: string;
+  name: string;
+  description?: string;
+  status: 'running' | 'completed' | 'failed' | 'stopped';
+  agents: WorkflowAgentInfo[];
+  agentCounts: { total: number; completed: number; failed: number; running: number; stopped: number };
+  scriptPath?: string;
 };
 
 /**
@@ -400,7 +536,8 @@ export type SubagentActivity = {
  * that it is whatever the provider reported — Claude's task notification
  * carries one — and `completed` when the provider reported nothing. A failed
  * tool call *inside* the agent is not a failed agent, so it is never inferred
- * from the transcript.
+ * from the transcript. A background agent whose session process ended before
+ * it reported is `stopped`: no outcome exists and none is coming.
  */
 export type SubagentInfo = {
   /** Provider-native agent id — Claude `agentId`, Codex `agent_thread_id`. */
@@ -411,7 +548,7 @@ export type SubagentInfo = {
   type?: string;
   /** One-line task summary shown in the collapsed header. */
   description?: string;
-  status: 'running' | 'completed' | 'failed';
+  status: 'running' | 'completed' | 'failed' | 'stopped';
   /** Model the subagent ran on, when the provider records it. */
   model?: string;
   /**
@@ -433,7 +570,6 @@ export type ProviderRuntimeWriter = {
   setSessionId?(sessionId: string): void;
   userId?: string | number | null;
   isWebSocketWriter?: boolean;
-  isSSEStreamWriter?: boolean;
 };
 
 export type ProviderPermissionDecision = {
@@ -463,6 +599,15 @@ export type ProviderRuntimeContext = {
   getProviderModels(): Promise<ProviderModelsDefinition>;
   normalizeMessage(raw: unknown, sessionId: string | null): NormalizedMessage[];
   isProviderInstalled(): Promise<boolean>;
+  /**
+   * Builds the SDK query for a run. Production leaves this unset and the
+   * runtime uses the SDK's own; tests supply a scripted stream so the hold
+   * and background-work paths can be driven without a CLI process.
+   */
+  createQuery?: (input: { prompt: AsyncIterable<unknown>; options: AnyRecord }) => AsyncIterable<unknown> & {
+    interrupt(): Promise<void>;
+    stopTask?(taskId: string): Promise<void>;
+  };
 };
 
 export type ProviderRunFunction = (
@@ -1128,6 +1273,13 @@ export type FileTreeProjectGateway = {
 export type FileTreeWorkspaceGateway = {
   rootPath: string;
   validatePath(candidatePath: string): Promise<WorkspacePathValidationResult>;
+  /**
+   * Resolves a path readable outside the workspace root — the system temp
+   * directory and the Claude projects directory — or `null` when it is not
+   * one. Read-only: the write policy is `validatePath` and it does not consult
+   * this.
+   */
+  resolveReadOnlyRootPath(candidatePath: string): Promise<string | null>;
 };
 
 /**
