@@ -153,7 +153,9 @@ export default function SidebarProjectSessions({
         <div className={cn('space-y-1', isCompact && 'px-3')}>
           {isSelecting ? (
             <>
-              <div className="flex items-center justify-between gap-1">
+              {/* Wraps rather than clips: at the narrowest sidebar width a long
+                  translated "Select all loaded" leaves no room for Cancel. */}
+              <div className="flex flex-wrap items-center justify-between gap-1">
                 <Button
                   variant="ghost"
                   size="sm"
