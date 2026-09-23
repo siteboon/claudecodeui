@@ -220,7 +220,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       setNeedsSetup(false);
 
-      if (!token) {
+      // Read the stored token instead of depending on `token` state: this
+      // bootstrap flips `isLoading`, which swaps the whole app for the loading
+      // screen, so it must run once on mount and not again on every
+      // X-Refreshed-Token rotation (each one remounted the workspace, #1269).
+      if (!readStoredToken()) {
         return;
       }
 
@@ -244,7 +248,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [checkOnboardingStatus, clearSession, t, token]);
+  }, [checkOnboardingStatus, clearSession, t]);
 
   useEffect(() => {
     if (IS_PLATFORM) {
