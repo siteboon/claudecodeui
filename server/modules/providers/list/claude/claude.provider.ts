@@ -7,6 +7,7 @@ import { ClaudeMcpProvider } from '@/modules/providers/list/claude/claude-mcp.pr
 import { ClaudeSessionSynchronizer } from '@/modules/providers/list/claude/claude-session-synchronizer.provider.js';
 import { ClaudeSessionsProvider } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import { ClaudeSkillsProvider } from '@/modules/providers/list/claude/claude-skills.provider.js';
+import { ClaudeTranscriptRelocationProvider } from '@/modules/providers/list/claude/claude-transcript-relocation.provider.js';
 import type {
   IProviderAuth,
   IProviderFork,
@@ -15,6 +16,7 @@ import type {
   IProviderSessionSynchronizer,
   IProviderSkills,
   IProviderSessions,
+  IProviderTranscriptRelocation,
 } from '@/shared/interfaces.js';
 
 export class ClaudeProvider extends AbstractProvider {
@@ -26,6 +28,7 @@ export class ClaudeProvider extends AbstractProvider {
   readonly sessions: IProviderSessions = new ClaudeSessionsProvider();
   readonly sessionSynchronizer: IProviderSessionSynchronizer = new ClaudeSessionSynchronizer();
   readonly fork: IProviderFork = new ClaudeForkProvider();
+  readonly transcriptRelocation: IProviderTranscriptRelocation = new ClaudeTranscriptRelocationProvider();
 
   constructor() {
     super('claude');

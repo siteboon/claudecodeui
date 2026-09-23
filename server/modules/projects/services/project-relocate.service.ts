@@ -2,8 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
-import { relocateClaudeTranscripts } from '@/modules/providers/index.js';
-import type { ClaudeTranscriptRelocation } from '@/shared/types.js';
+import { sessionsService } from '@/modules/providers/index.js';
 import { AppError, normalizeProjectPath, validateWorkspacePath } from '@/shared/utils.js';
 
 type RelocateProjectResult = {
@@ -102,17 +101,18 @@ export async function relocateProject(
   // Read before writing: once the project row moves, these rows are no longer
   // reachable through the old path.
   const sessionRows = sessionsDb.getSessionsByProjectPathIncludingArchived(previousPath);
-  const claudeTranscripts: ClaudeTranscriptRelocation[] = sessionRows
-    .filter((row) => row.provider === 'claude' && Boolean(row.jsonl_path))
+  const transcripts = sessionRows
+    .filter((row) => Boolean(row.jsonl_path))
     .map((row) => ({
       sessionId: row.session_id,
+      provider: row.provider,
       jsonlPath: path.isAbsolute(row.jsonl_path as string)
         ? path.normalize(row.jsonl_path as string)
         : path.resolve(row.jsonl_path as string),
     }));
 
-  const movedTranscripts = await relocateClaudeTranscripts({
-    sessions: claudeTranscripts,
+  const movedTranscripts = await sessionsService.relocateProjectTranscripts({
+    sessions: transcripts,
     oldProjectPath: previousPath,
     newProjectPath: nextPath,
   });

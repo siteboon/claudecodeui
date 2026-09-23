@@ -8,7 +8,7 @@ import { closeConnection, initializeDatabase, projectsDb, sessionsDb } from '@/m
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 import { chatRunRegistry } from '@/modules/websocket/index.js';
-import type { IProvider } from '@/shared/interfaces.js';
+import type { IProvider, IProviderTranscriptRelocation } from '@/shared/interfaces.js';
 import type { BackgroundTaskSummary } from '@/shared/types.js';
 
 async function withIsolatedDatabase(runTest: () => void | Promise<void>): Promise<void> {
@@ -193,6 +193,48 @@ test('history pages are sliced from the cached full transcript and see appended 
     });
   } finally {
     await rm(transcriptDirectory, { recursive: true, force: true });
+  }
+});
+
+test('project transcripts go to each provider that can relocate them and skip the rest', { concurrency: false }, async () => {
+  // Claude finds a transcript again from the cwd it resumes in, so it is the
+  // provider that has to follow a renamed project folder.
+  assert.ok(providerRegistry.resolveProvider('claude').transcriptRelocation);
+
+  const calls: Array<Parameters<IProviderTranscriptRelocation['relocateTranscripts']>[0]> = [];
+  const realListProviders = providerRegistry.listProviders;
+  providerRegistry.listProviders = () => [
+    {
+      id: 'claude',
+      transcriptRelocation: {
+        relocateTranscripts: async (input) => {
+          calls.push(input);
+          return [{ sessionId: 'claude-session', jsonlPath: '/new/claude-session.jsonl' }];
+        },
+      },
+    } as IProvider,
+    { id: 'codex' } as IProvider,
+  ];
+
+  try {
+    const relocated = await sessionsService.relocateProjectTranscripts({
+      sessions: [
+        { sessionId: 'claude-session', provider: 'claude', jsonlPath: '/old/claude-session.jsonl' },
+        { sessionId: 'codex-session', provider: 'codex', jsonlPath: '/old/rollout.jsonl' },
+        { sessionId: 'retired-session', provider: 'retired', jsonlPath: '/old/retired.jsonl' },
+      ],
+      oldProjectPath: '/old',
+      newProjectPath: '/new',
+    });
+
+    assert.deepEqual(calls, [{
+      sessions: [{ sessionId: 'claude-session', jsonlPath: '/old/claude-session.jsonl' }],
+      oldProjectPath: '/old',
+      newProjectPath: '/new',
+    }]);
+    assert.deepEqual(relocated, [{ sessionId: 'claude-session', jsonlPath: '/new/claude-session.jsonl' }]);
+  } finally {
+    providerRegistry.listProviders = realListProviders;
   }
 });
 
