@@ -23,12 +23,14 @@ type ClaudeCloudProvider = {
 };
 
 // Third-party providers Claude Code sends requests to instead of the Anthropic
-// API, in the order the CLI checks their switches when picking one. Labels are
-// the CLI's own display names.
+// API, in the order the current CLI (2.1.280) checks their switches when picking
+// one. Labels are the CLI's own display names. The older CLI bundled with the
+// Agent SDK (2.1.165) has no CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD switch.
 const CLAUDE_CLOUD_PROVIDERS: ClaudeCloudProvider[] = [
   { switchEnvKey: 'CLAUDE_CODE_USE_BEDROCK', label: 'Amazon Bedrock' },
   { switchEnvKey: 'CLAUDE_CODE_USE_FOUNDRY', label: 'Microsoft Foundry' },
   { switchEnvKey: 'CLAUDE_CODE_USE_ANTHROPIC_AWS', label: 'Claude Platform on AWS' },
+  { switchEnvKey: 'CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD', label: 'Claude Platform on Google Cloud' },
   { switchEnvKey: 'CLAUDE_CODE_USE_MANTLE', label: 'Amazon Bedrock (Mantle)' },
   { switchEnvKey: 'CLAUDE_CODE_USE_VERTEX', label: 'Google Vertex AI', projectEnvKey: 'ANTHROPIC_VERTEX_PROJECT_ID' },
 ];
@@ -51,9 +53,16 @@ const isEnvSwitchOn = (value: unknown): boolean => {
 
 // The CLI copies settings.json `env` over its process env at startup, so a key
 // set there wins over the same key inherited from this server's environment.
-const readCliEnvValue = (settingsEnv: Record<string, unknown>, key: string): unknown => (
-  Object.hasOwn(settingsEnv, key) ? settingsEnv[key] : process.env[key]
-);
+// Like the CLI, a settings value that is not a string, number or boolean (e.g.
+// null) is dropped and the process env value stays in effect. An empty string
+// is still applied, so "" in settings switches a key off.
+const readCliEnvValue = (settingsEnv: Record<string, unknown>, key: string): unknown => {
+  const settingsValue = settingsEnv[key];
+  const isAppliedByCli = typeof settingsValue === 'string'
+    || typeof settingsValue === 'number'
+    || typeof settingsValue === 'boolean';
+  return isAppliedByCli ? settingsValue : process.env[key];
+};
 
 export class ClaudeProviderAuth implements IProviderAuth {
   /**

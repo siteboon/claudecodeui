@@ -27,6 +27,7 @@ const ENV_KEYS = [
   'CLAUDE_CODE_USE_BEDROCK',
   'CLAUDE_CODE_USE_FOUNDRY',
   'CLAUDE_CODE_USE_ANTHROPIC_AWS',
+  'CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD',
   'CLAUDE_CODE_USE_MANTLE',
   'CLAUDE_CODE_USE_VERTEX',
   'ANTHROPIC_VERTEX_PROJECT_ID',
@@ -81,7 +82,7 @@ const writeCredentialsFile = async (homeDir: string, body: unknown) => {
   await writeFile(path.join(claudeDir, '.credentials.json'), JSON.stringify(body));
 };
 
-const writeSettingsFile = async (homeDir: string, env: Record<string, string>) => {
+const writeSettingsFile = async (homeDir: string, env: Record<string, unknown>) => {
   const claudeDir = path.join(homeDir, '.claude');
   await mkdir(claudeDir, { recursive: true });
   await writeFile(path.join(claudeDir, 'settings.json'), JSON.stringify({ env }));
@@ -306,6 +307,58 @@ test('checkCredentials: a disabled cloud provider switch does not count as authe
     // settings.json env is applied over the process env by the CLI, so an
     // explicit "0" there switches Vertex off even when the process env enables it.
     await writeSettingsFile(homeDir, { CLAUDE_CODE_USE_VERTEX: '0' });
+    await withEnv({ CLAUDE_CODE_USE_VERTEX: '1' }, async () => {
+      const status = await checkCredentials(new ClaudeProviderAuth());
+      assert.equal(status.authenticated, false);
+      assert.equal(status.method, null);
+    });
+  });
+});
+
+test('checkCredentials: CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD is checked after Claude Platform on AWS and before Mantle and Vertex', async () => {
+  await withTempHome(async () => {
+    await withEnv({ CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD: '1' }, async () => {
+      const status = await checkCredentials(new ClaudeProviderAuth());
+      assert.equal(status.authenticated, true);
+      assert.equal(status.method, 'cloud_provider');
+      assert.equal(status.email, 'Claude Platform on Google Cloud');
+    });
+
+    await withEnv(
+      { CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD: '1', CLAUDE_CODE_USE_MANTLE: '1', CLAUDE_CODE_USE_VERTEX: '1' },
+      async () => {
+        const status = await checkCredentials(new ClaudeProviderAuth());
+        assert.equal(status.email, 'Claude Platform on Google Cloud');
+      },
+    );
+
+    await withEnv({ CLAUDE_CODE_USE_ANTHROPIC_AWS: '1', CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD: '1' }, async () => {
+      const status = await checkCredentials(new ClaudeProviderAuth());
+      assert.equal(status.email, 'Claude Platform on AWS');
+    });
+  });
+});
+
+test('checkCredentials: a settings.json env value that is not a string, number or boolean leaves the process env in effect', async () => {
+  await withTempHome(async (homeDir) => {
+    // The CLI drops such values from settings env instead of applying them.
+    await writeSettingsFile(homeDir, { CLAUDE_CODE_USE_VERTEX: null, ANTHROPIC_VERTEX_PROJECT_ID: null });
+    await withEnv({ CLAUDE_CODE_USE_VERTEX: '1', ANTHROPIC_VERTEX_PROJECT_ID: 'env-project' }, async () => {
+      const status = await checkCredentials(new ClaudeProviderAuth());
+      assert.equal(status.authenticated, true);
+      assert.equal(status.method, 'cloud_provider');
+      assert.equal(status.email, 'Google Vertex AI (env-project)');
+    });
+
+    await writeSettingsFile(homeDir, { CLAUDE_CODE_USE_BEDROCK: { enabled: true } });
+    await withEnv({ CLAUDE_CODE_USE_BEDROCK: '1' }, async () => {
+      const status = await checkCredentials(new ClaudeProviderAuth());
+      assert.equal(status.authenticated, true);
+      assert.equal(status.email, 'Amazon Bedrock');
+    });
+
+    // An empty string is a string, so the CLI applies it and the switch is off.
+    await writeSettingsFile(homeDir, { CLAUDE_CODE_USE_VERTEX: '' });
     await withEnv({ CLAUDE_CODE_USE_VERTEX: '1' }, async () => {
       const status = await checkCredentials(new ClaudeProviderAuth());
       assert.equal(status.authenticated, false);
