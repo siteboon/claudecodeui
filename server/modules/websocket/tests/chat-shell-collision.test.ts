@@ -138,8 +138,17 @@ async function withGateway(
   }
 }
 
-/** The handler is async and the socket listener does not await it. */
-const settle = () => new Promise((resolve) => { setTimeout(resolve, 30); });
+/**
+ * The handler is async and the socket listener does not await it, so each test
+ * waits for the answer it asserts on (a frame, or a run), not a fixed delay
+ * that a loaded machine can outlast.
+ */
+async function settleUntil(isAnswered: () => boolean): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (!isAnswered() && Date.now() < deadline) {
+    await new Promise((resolve) => { setTimeout(resolve, 10); });
+  }
+}
 
 const sendFrame = (content: string) => JSON.stringify({ type: 'chat.send', sessionId: SESSION_ID, content });
 
@@ -148,7 +157,7 @@ test('chat.send is refused while the session is open in a live agent Shell', asy
     const shell = openShell();
 
     chatSocket.emit('message', sendFrame('second writer'));
-    await settle();
+    await settleUntil(() => chatSocket.frames.length > 0);
 
     assert.deepEqual(runs, []);
     assert.equal(chatRunRegistry.isProcessing(SESSION_ID), false);
@@ -156,16 +165,16 @@ test('chat.send is refused while the session is open in a live agent Shell', asy
     assert.equal(chatSocket.frames[0].kind, 'protocol_error');
     assert.equal(chatSocket.frames[0].code, 'SESSION_OPEN_IN_SHELL');
     assert.equal(chatSocket.frames[0].sessionId, SESSION_ID);
-    // Shown verbatim in the chat, so it has to say what to do about it.
-    assert.match(String(chatSocket.frames[0].error), /running in the Shell tab/);
-    assert.match(String(chatSocket.frames[0].error), /\/exit/);
-    assert.match(String(chatSocket.frames[0].error), /30 minutes/);
+    // Shown verbatim in the chat, so it has to say what to do about it. The
+    // tab only shows the session, so leaving it is enough.
+    assert.match(String(chatSocket.frames[0].error), /open in the Shell tab/);
+    assert.match(String(chatSocket.frames[0].error), /Leave the Shell tab/);
     assert.equal(shell.pty.killed, false, 'the user\'s CLI is never ended for a send');
 
     // Once the Shell's CLI exits, the same send goes through.
     shell.pty.emitExit();
     chatSocket.emit('message', sendFrame('after exit'));
-    await settle();
+    await settleUntil(() => runs.length > 0);
 
     assert.deepEqual(runs, ['after exit']);
   });
@@ -183,7 +192,7 @@ test('a plain shell or a new agent session in the project never blocks chat', as
     openShell({ sessionId: null, hasSession: false });
 
     chatSocket.emit('message', sendFrame('plain shells are not this session'));
-    await settle();
+    await settleUntil(() => runs.length > 0 || chatSocket.frames.length > 0);
 
     assert.deepEqual(runs, ['plain shells are not this session']);
     assert.equal(chatSocket.frames.some((frame) => frame.kind === 'protocol_error'), false);
@@ -200,7 +209,8 @@ test('a scheduled turn is not started on a session open in the Shell and says wh
     );
 
     assert.equal(result.started, false);
-    assert.match(String(result.error), /running in the Shell tab/);
+    assert.equal(result.busy, 'SESSION_OPEN_IN_SHELL');
+    assert.match(String(result.error), /open in the Shell tab/);
     assert.deepEqual(runs, []);
     assert.equal(chatRunRegistry.isProcessing(SESSION_ID), false);
   });
@@ -215,7 +225,7 @@ test('a Shell that was only opened and then left is ended, and the send goes thr
     shell.leave();
 
     chatSocket.emit('message', sendFrame('after a look at the Shell'));
-    await settle();
+    await settleUntil(() => runs.length > 0 || chatSocket.frames.length > 0);
 
     assert.equal(shell.pty.killed, true);
     assert.deepEqual(runs, ['after a look at the Shell']);
@@ -230,11 +240,14 @@ test('a Shell the user ran something in keeps the session after it is left', asy
     shell.leave();
 
     chatSocket.emit('message', sendFrame('would be a second writer'));
-    await settle();
+    await settleUntil(() => runs.length > 0 || chatSocket.frames.length > 0);
 
     assert.equal(shell.pty.killed, false);
     assert.deepEqual(runs, []);
     assert.equal(chatSocket.frames[0]?.code, 'SESSION_OPEN_IN_SHELL');
+    // Its CLI has run something, so only exiting that CLI frees the session.
+    assert.match(String(chatSocket.frames[0]?.error), /in use in the Shell tab/);
+    assert.match(String(chatSocket.frames[0]?.error), /Exit that CLI there/);
   });
 });
 

@@ -194,7 +194,9 @@ test('a queued message stays pending while its session is open in the Shell', as
 
     const runs: RunCall[] = [];
     await withSessionOpenInShell(async (exitShellCli) => {
-      assert.equal(await dispatchQueuedMessages(createRuntime(runs)), 0);
+      // The send is refused because the Shell's CLI has the session, and the
+      // claimed turn is put back for a later pass rather than dropped.
+      await dispatchQueuedMessages(createRuntime(runs));
       assert.equal(runs.length, 0);
       assert.deepEqual(sessionDraftsDb.getDrafts(userId)[0]?.queuedMessage, {
         content: 'send after the Shell exits',
@@ -245,7 +247,7 @@ test('a due message is recorded as failed, not sent, while its session is open i
     assert.equal(runs.length, 0);
     const row = scheduledMessagesDb.listForSession(userId, SESSION_ID)[0];
     assert.equal(row.status, 'failed');
-    assert.match(row.failure_reason ?? '', /running in the Shell tab/);
+    assert.match(row.failure_reason ?? '', /open in the Shell tab/);
   });
 });
 

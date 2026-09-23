@@ -303,7 +303,11 @@ test('an edit on a session the Shell tab holds is refused before the cut and the
         anchorId: 'turn-b',
         content: 'an edit while the Shell has the session',
       }));
-      await settle();
+      // Waits for the answer rather than a fixed delay a loaded machine outlasts.
+      const deadline = Date.now() + 5_000;
+      while (!socket.frames.some((frame) => frame.kind === 'protocol_error') && Date.now() < deadline) {
+        await settle();
+      }
     } finally {
       sessionsService.rewindSessionForEdit = realRewind;
       exitShellCli();

@@ -50,7 +50,7 @@ const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
 const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
 const TRAILING_URL_PUNCTUATION_REGEX = /[)\]}>.,;:!?]+$/;
 const SESSION_BUSY_IN_CHAT_MESSAGE =
-  "This session is still running in Chat (a turn, or background work that keeps its CLI open). Wait for it to finish or stop it in Chat, then press Restart here, so two CLIs don't write the same session.";
+  "Chat is running a turn or a background task on this session. Wait for it to finish, or stop it from Chat, then restart the Shell, so two CLIs don't write the same session.";
 
 /**
  * Whether the user may be working in this PTY: a Shell tab is attached to it,
@@ -62,21 +62,30 @@ function isPtySessionInUse(entry: PtySessionEntry): boolean {
 }
 
 /**
- * Used by the chat gateway and, through the module barrel, by the
- * queued-message dispatcher: each refuses to start a provider run while this
- * is true, because that Shell CLI already resumed the session and a second
- * CLI would append to the same transcript and act on the same working tree.
- * Only PTYs in use count (see `isPtySessionInUse`); an unused one is ended by
- * `endUnusedShellsForSession` instead. Entries leave the map when their PTY
- * exits or is killed, so presence means the process is still running.
+ * Used by the chat gateway, which refuses to start a provider run on the
+ * session while this returns a hold: that Shell CLI already resumed the
+ * session, and a second CLI would append to the same transcript and act on the
+ * same working tree. Only PTYs in use count (see `isPtySessionInUse`); an
+ * unused one is ended by `endUnusedShellsForSession` instead. `'used'` means a
+ * line was submitted to the CLI, so only exiting it frees the session;
+ * `'attached'` means a Shell tab shows it but nothing was submitted, so
+ * leaving that tab is enough. Entries leave the map when their PTY exits or is
+ * killed, so presence means the process is still running.
  */
-export function isSessionHeldByShell(appSessionId: string): boolean {
+export function getShellHoldOnSession(appSessionId: string): 'attached' | 'used' | null {
+  let hold: 'attached' | null = null;
   for (const entry of ptySessionsMap.values()) {
-    if (entry.resumedAppSessionId === appSessionId && isPtySessionInUse(entry)) {
-      return true;
+    if (entry.resumedAppSessionId !== appSessionId) {
+      continue;
+    }
+    if (entry.hasSubmittedInput) {
+      return 'used';
+    }
+    if (entry.ws !== null) {
+      hold = 'attached';
     }
   }
-  return false;
+  return hold;
 }
 
 /**
@@ -514,7 +523,7 @@ export function handleShellConnection(
         const spawnedKey = ptySessionKey;
         const spawnedPty = shellProcess;
 
-        spawnedPty.onData((chunk) => {
+        shellProcess.onData((chunk) => {
           const session = ptySessionsMap.get(spawnedKey);
           if (!session || session.pty !== spawnedPty) {
             return;
@@ -586,7 +595,7 @@ export function handleShellConnection(
           }
         });
 
-        spawnedPty.onExit((exitCode) => {
+        shellProcess.onExit((exitCode) => {
           const session = ptySessionsMap.get(spawnedKey);
           if (session && session.pty !== spawnedPty) {
             return;
@@ -668,32 +677,34 @@ export function handleShellConnection(
     }
   });
 
-  ws.on('close', () => {
-    // Every PTY this socket still owns is detached, not only the one its last
-    // init named: a socket that sent two inits owns two.
-    for (const [key, session] of ptySessionsMap) {
-      // Mobile networks can deliver an old socket's close after its
-      // replacement has attached. Only the socket that currently owns the PTY
-      // may detach it.
-      if (session.ws !== ws) {
-        continue;
-      }
-
-      session.ws = null;
-      if (session.timeoutId) {
-        clearTimeout(session.timeoutId);
-      }
-      session.timeoutId = setTimeout(() => {
-        // A reconnect may win just as this timer becomes runnable. Re-check the
-        // active socket so a queued cleanup can never kill a reattached PTY.
-        if (ptySessionsMap.get(key) !== session || session.ws !== null) {
-          return;
-        }
-
-        session.pty.kill();
-        ptySessionsMap.delete(key);
-      }, PTY_SESSION_TIMEOUT);
+  // Run on close for every PTY in the map, not only the one the last init
+  // named: a socket that sent two inits owns two, and one left pointing at a
+  // closed socket would never time out and would keep counting as attached.
+  const detachPtySession = (key: string, session: PtySessionEntry): void => {
+    // Mobile networks can deliver an old socket's close after its replacement
+    // has attached. Only the socket that currently owns the PTY may detach it.
+    if (session.ws !== ws) {
+      return;
     }
+
+    session.ws = null;
+    if (session.timeoutId) {
+      clearTimeout(session.timeoutId);
+    }
+    session.timeoutId = setTimeout(() => {
+      // A reconnect may win just as this timer becomes runnable. Re-check the
+      // active socket so a queued cleanup can never kill a reattached PTY.
+      if (ptySessionsMap.get(key) !== session || session.ws !== null) {
+        return;
+      }
+
+      session.pty.kill();
+      ptySessionsMap.delete(key);
+    }, PTY_SESSION_TIMEOUT);
+  };
+
+  ws.on('close', () => {
+    ptySessionsMap.forEach((session, key) => detachPtySession(key, session));
   });
 
   ws.on('error', (error) => {

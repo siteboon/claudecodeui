@@ -7,7 +7,7 @@ import { providerModelsService, sessionsService } from '@/modules/providers/inde
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
 import {
   endUnusedShellsForSession,
-  isSessionHeldByShell,
+  getShellHoldOnSession,
 } from '@/modules/websocket/services/shell-websocket.service.js';
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
 import {
@@ -25,10 +25,25 @@ import type {
 } from '@/shared/types.js';
 import { parseIncomingJsonObject } from '@/shared/utils.js';
 
-// Shown verbatim in the chat, so it names the way out: a Shell the user left
-// or disconnected keeps its CLI until the 30-minute detach timeout.
-const SESSION_OPEN_IN_SHELL_MESSAGE =
-  "This session's CLI is still running in the Shell tab. Type /exit there to end it, then send again (leaving or disconnecting the Shell keeps it running for up to 30 minutes). Two CLIs must not write the same session.";
+// Shown verbatim in the chat and as a failed scheduled message's reason, so
+// each names the way out for the way the Shell holds the session.
+const SESSION_OPEN_IN_SHELL_MESSAGES = {
+  attached:
+    "This session is open in the Shell tab, whose CLI has it resumed. Leave the Shell tab wherever it is open, then send again, so two CLIs don't write the same session.",
+  used:
+    "This session's CLI is in use in the Shell tab. Exit that CLI there (for example /exit in Claude), then send again, so two CLIs don't write the same session.",
+};
+
+/**
+ * What a turn dispatch reports. `busy` is set when nothing started because the
+ * session was taken, by another run or by a Shell CLI, so a caller that can
+ * wait (the queued-turn dispatcher) keeps the turn for a later pass.
+ */
+type ChatTurnDispatchResult = {
+  started: boolean;
+  error: string | null;
+  busy?: 'RUN_IN_PROGRESS' | 'SESSION_OPEN_IN_SHELL';
+};
 
 /**
  * Trust boundary for client-supplied image attachments: chat.send options come
@@ -226,20 +241,21 @@ async function dispatchRun(
   dependencies: ChatWebSocketDependencies,
   extraRuntimeOptions: AnyRecord = {},
   beforeRun?: (run: NonNullable<ReturnType<typeof chatRunRegistry.startRun>>) => void | Promise<void>,
-): Promise<{ started: boolean; error: string | null }> {
+): Promise<ChatTurnDispatchResult> {
   const provider = session.provider as LLMProvider;
 
   // A Shell CLI that resumed this session would be a second writer on the
   // same transcript and working tree. One that was only opened and left is
   // ended here; one the user is working in refuses the turn until it exits.
-  // Scheduled sends report the returned error on the schedule; queued turns
-  // wait instead.
+  // Scheduled sends report the returned error on the schedule; the queued-turn
+  // dispatcher sees `busy` and keeps its turn for a later pass.
   endUnusedShellsForSession(sessionId);
-  if (isSessionHeldByShell(sessionId)) {
+  const shellHold = getShellHoldOnSession(sessionId);
+  if (shellHold) {
     if (ws) {
-      sendProtocolError(ws, 'SESSION_OPEN_IN_SHELL', SESSION_OPEN_IN_SHELL_MESSAGE, sessionId);
+      sendProtocolError(ws, 'SESSION_OPEN_IN_SHELL', SESSION_OPEN_IN_SHELL_MESSAGES[shellHold], sessionId);
     }
-    return { started: false, error: SESSION_OPEN_IN_SHELL_MESSAGE };
+    return { started: false, error: SESSION_OPEN_IN_SHELL_MESSAGES[shellHold], busy: 'SESSION_OPEN_IN_SHELL' };
   }
 
   const run = chatRunRegistry.startRun({
@@ -259,7 +275,7 @@ async function dispatchRun(
         sessionId
       );
     }
-    return { started: false, error: 'A run is already in progress for this session.' };
+    return { started: false, error: 'A run is already in progress for this session.', busy: 'RUN_IN_PROGRESS' };
   }
 
   const clientOptions = (data.options ?? {}) as AnyRecord;
@@ -623,7 +639,8 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  * Resolves when the provider run settles. Returns false when the session has
  * gone away, is busy without `interruptActiveRun`, or is held by a Shell CLI
  * the user is working in (never interrupted: that is the user's own CLI),
- * which the caller reports on the schedule.
+ * which the caller reports on the schedule. The last two also set `busy`, so a
+ * caller that can wait keeps the turn instead.
  */
 export async function runDetachedChatTurn(
   input: {
@@ -639,7 +656,7 @@ export async function runDetachedChatTurn(
     interruptActiveRun?: boolean;
   },
   dependencies: ChatWebSocketDependencies,
-): Promise<{ started: boolean; error: string | null }> {
+): Promise<ChatTurnDispatchResult> {
   const session = sessionsDb.getSessionById(input.sessionId);
   if (!session) {
     return { started: false, error: 'The session no longer exists.' };
@@ -652,14 +669,15 @@ export async function runDetachedChatTurn(
 
   // Checked before an interrupt: a turn that cannot start must not cost the
   // session the run it is replacing.
-  if (isSessionHeldByShell(input.sessionId)) {
-    return { started: false, error: SESSION_OPEN_IN_SHELL_MESSAGE };
+  const shellHold = getShellHoldOnSession(input.sessionId);
+  if (shellHold) {
+    return { started: false, error: SESSION_OPEN_IN_SHELL_MESSAGES[shellHold], busy: 'SESSION_OPEN_IN_SHELL' };
   }
 
   const activeRun = chatRunRegistry.getRun(input.sessionId);
   if (activeRun && activeRun.status === 'running') {
     if (!input.interruptActiveRun) {
-      return { started: false, error: 'A run was already in progress for this session.' };
+      return { started: false, error: 'A run was already in progress for this session.', busy: 'RUN_IN_PROGRESS' };
     }
     // Same shape as `chat.abort`: cancel the provider run and emit the
     // terminal `complete` on its behalf, so every watching client sees the

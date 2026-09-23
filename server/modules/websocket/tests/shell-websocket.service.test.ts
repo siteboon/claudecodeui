@@ -9,8 +9,8 @@ import { WebSocket } from 'ws';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
 import {
   endUnusedShellsForSession,
+  getShellHoldOnSession,
   handleShellConnection,
-  isSessionHeldByShell,
 } from '@/modules/websocket/services/shell-websocket.service.js';
 
 function createFakeSocket() {
@@ -25,7 +25,7 @@ function createFakeSocket() {
   return socket;
 }
 
-function createFakePty() {
+function createFakePty(options: { exitOnKill?: boolean } = {}) {
   let dataListener: ((data: string) => void) | null = null;
   let exitListener: ((event: { exitCode: number; signal?: number }) => void) | null = null;
 
@@ -49,6 +49,10 @@ function createFakePty() {
     resize() {},
     kill() {
       this.killed = true;
+      if (options.exitOnKill) {
+        // Like node-pty, which reports a killed PTY's exit a moment later.
+        setImmediate(() => exitListener?.({ exitCode: 0, signal: 1 }));
+      }
     },
   };
 }
@@ -235,7 +239,7 @@ test('a missing project directory is reported as an error frame and starts no pt
  * Spawns fake PTYs and records the command line each one would have run, so a
  * test can tell "attached to the live PTY" apart from "started another CLI".
  */
-function createSpawnRecorder(providerSessionId = 'provider-sid') {
+function createSpawnRecorder(providerSessionId = 'provider-sid', ptyOptions: { exitOnKill?: boolean } = {}) {
   const commands: string[] = [];
   const ptys: Array<ReturnType<typeof createFakePty>> = [];
   return {
@@ -245,7 +249,7 @@ function createSpawnRecorder(providerSessionId = 'provider-sid') {
       resolveProviderSessionId: () => providerSessionId,
       spawnPty: (_shell: string, args: string | string[]) => {
         commands.push(Array.isArray(args) ? args[args.length - 1] : args);
-        const fakePty = createFakePty();
+        const fakePty = createFakePty(ptyOptions);
         ptys.push(fakePty);
         return fakePty as never;
       },
@@ -296,9 +300,9 @@ test('a Shell resume is refused while Chat is running a turn on the same session
       const frames = readFrames(refused);
       assert.equal(frames.length, 1);
       assert.equal(frames[0].type, 'error');
-      assert.match(String(frames[0].message), /running in Chat/);
+      assert.match(String(frames[0].message), /Chat is running a turn/);
     }
-    assert.equal(isSessionHeldByShell(sessionId), false);
+    assert.equal(getShellHoldOnSession(sessionId), null);
 
     // Once the turn has finished the same Shell request resumes normally.
     chatRunRegistry.completeRun(sessionId, { exitCode: 0 });
@@ -377,24 +381,24 @@ test('only a live agent Shell that resumed the session counts as holding it', ()
       isPlainShell: true,
       initialCommand: 'plain-command',
     });
-    assert.equal(isSessionHeldByShell(sessionId), false);
+    assert.equal(getShellHoldOnSession(sessionId), null);
 
     openShell(recorder.dependencies, { sessionId, hasSession: true });
-    assert.equal(isSessionHeldByShell(sessionId), true);
-    assert.equal(isSessionHeldByShell(`${sessionId}-other`), false);
+    assert.equal(getShellHoldOnSession(sessionId), 'attached');
+    assert.equal(getShellHoldOnSession(`${sessionId}-other`), null);
 
     // `/exit` in the CLI ends the PTY, which releases the session for Chat.
     recorder.ptys[1].emitExit();
-    assert.equal(isSessionHeldByShell(sessionId), false);
+    assert.equal(getShellHoldOnSession(sessionId), null);
   } finally {
     recorder.ptys.forEach((fakePty) => fakePty.emitExit());
   }
 });
 
-test('a Shell that was only opened and then left is ended for Chat; one the user typed a line into is kept', () => {
+test('a Shell that was only opened and then left is ended for Chat; one the user typed a line into is kept', async () => {
   const viewedId = `shell-viewed-${Date.now()}`;
   const usedId = `shell-used-${Date.now()}`;
-  const recorder = createSpawnRecorder();
+  const recorder = createSpawnRecorder('provider-sid', { exitOnKill: true });
   const input = (socket: ReturnType<typeof createFakeSocket>, data: string) =>
     socket.emit('message', JSON.stringify({ type: 'input', data }));
 
@@ -413,22 +417,30 @@ test('a Shell that was only opened and then left is ended for Chat; one the user
     endUnusedShellsForSession(viewedId);
     endUnusedShellsForSession(usedId);
     assert.equal(viewedPty.killed, false);
-    assert.equal(isSessionHeldByShell(viewedId), true);
+    assert.equal(getShellHoldOnSession(viewedId), 'attached');
+    assert.equal(getShellHoldOnSession(usedId), 'used');
 
     // Leaving the tab closes its socket; the PTYs wait out the detach timeout.
     viewed.emit('close');
     used.emit('close');
-    assert.equal(isSessionHeldByShell(viewedId), false, 'an untouched Shell does not block Chat');
-    assert.equal(isSessionHeldByShell(usedId), true, 'a CLI the user ran something in does');
+    assert.equal(getShellHoldOnSession(viewedId), null, 'an untouched Shell does not block Chat');
+    assert.equal(getShellHoldOnSession(usedId), 'used', 'a CLI the user ran something in does');
 
     endUnusedShellsForSession(viewedId);
     endUnusedShellsForSession(usedId);
     assert.equal(viewedPty.killed, true);
     assert.equal(usedPty.killed, false);
 
-    // The next visit resumes a fresh CLI instead of reattaching to the ended one.
+    // The next visit resumes a fresh CLI instead of reattaching to the ended
+    // one, and the ended CLI's exit, arriving after that, leaves the fresh
+    // CLI's entry alone.
     openShell(recorder.dependencies, { sessionId: viewedId, hasSession: true });
     assert.equal(recorder.commands.length, 3);
+    await new Promise((resolve) => { setImmediate(resolve); });
+    assert.equal(getShellHoldOnSession(viewedId), 'attached');
+    const reattached = openShell(recorder.dependencies, { sessionId: viewedId, hasSession: true });
+    assert.equal(recorder.commands.length, 3);
+    assert.match(String(readFrames(reattached)[0]?.data), /Reconnected to existing session/);
   } finally {
     recorder.ptys.forEach((fakePty) => fakePty.emitExit());
   }
@@ -449,7 +461,7 @@ test('a refused Restart leaves the live PTY on that key running', () => {
     assert.equal(readFrames(restart)[0]?.type, 'error');
     assert.equal(recorder.commands.length, 1);
     assert.equal(recorder.ptys[0].killed, false, 'the refusal comes before the restart kills anything');
-    assert.equal(isSessionHeldByShell(sessionId), true);
+    assert.equal(getShellHoldOnSession(sessionId), 'attached');
   } finally {
     recorder.ptys.forEach((fakePty) => fakePty.emitExit());
     chatRunRegistry.clearAll();
@@ -471,16 +483,16 @@ test('a socket that sent two inits releases each session when that PTY exits or 
 
     // Each PTY's exit removes its own entry, not the one the socket named last.
     firstPty.emitExit();
-    assert.equal(isSessionHeldByShell(firstId), false);
-    assert.equal(isSessionHeldByShell(secondId), true);
+    assert.equal(getShellHoldOnSession(firstId), null);
+    assert.equal(getShellHoldOnSession(secondId), 'attached');
 
     // Reopened on the same socket, then the socket goes: both are detached.
     socket.emit('message', JSON.stringify({
       type: 'init', projectPath: process.cwd(), provider: 'claude', sessionId: firstId, hasSession: true,
     }));
     socket.emit('close');
-    assert.equal(isSessionHeldByShell(firstId), false);
-    assert.equal(isSessionHeldByShell(secondId), false);
+    assert.equal(getShellHoldOnSession(firstId), null);
+    assert.equal(getShellHoldOnSession(secondId), null);
     assert.equal(secondPty.killed, false);
   } finally {
     recorder.ptys.forEach((fakePty) => fakePty.emitExit());

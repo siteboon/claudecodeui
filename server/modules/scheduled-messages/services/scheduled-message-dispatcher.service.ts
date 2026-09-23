@@ -1,6 +1,6 @@
 import { scheduledMessagesDb, sessionDraftsDb } from '@/modules/database/index.js';
 import type { QueuedSessionMessageRecord, ScheduledMessageRow } from '@/modules/database/index.js';
-import { chatRunRegistry, isSessionHeldByShell, runDetachedChatTurn } from '@/modules/websocket/index.js';
+import { chatRunRegistry, runDetachedChatTurn } from '@/modules/websocket/index.js';
 import type { ProviderRuntimeGateway } from '@/modules/websocket/index.js';
 
 /**
@@ -72,9 +72,11 @@ async function sendClaimedQueuedMessage(
     { runtime },
   );
 
-  // The registry check and run reservation are separate operations. If a run
-  // wins that tiny race, put the turn back so the next poll tries again.
-  if (!result.started && result.error === 'A run was already in progress for this session.') {
+  // A session that turns out to be busy gets the turn back so a later poll
+  // tries again: a run can win the tiny race between the registry check and
+  // the run reservation, and a Shell CLI the user is working in holds the
+  // session until it exits.
+  if (!result.started && result.busy) {
     sessionDraftsDb.restoreQueuedMessage(candidate);
     return;
   }
@@ -87,13 +89,7 @@ export async function dispatchQueuedMessages(runtime: ProviderRuntimeGateway): P
   let claimed = 0;
 
   await Promise.all(candidates.map(async (candidate) => {
-    // A session the user is working on in the Shell tab is busy too: its CLI
-    // has it resumed, and the send would be refused. Claiming it anyway would
-    // drop the turn.
-    if (
-      chatRunRegistry.isProcessing(candidate.sessionId)
-      || isSessionHeldByShell(candidate.sessionId)
-    ) {
+    if (chatRunRegistry.isProcessing(candidate.sessionId)) {
       return;
     }
     if (!sessionDraftsDb.claimQueuedMessage(candidate)) {
