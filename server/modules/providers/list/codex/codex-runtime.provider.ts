@@ -44,6 +44,28 @@ const CODEX_IMAGE_ONLY_PROMPT = 'Please analyze the attached image(s).';
  */
 const PROGRESSIVE_CODEX_ITEM_TYPES = new Set(['command_execution', 'mcp_tool_call', 'todo_list']);
 
+/**
+ * Normalized kinds the chat transcript draws nothing for — the same control
+ * events `useChatMessages` skips. Every run emits some of them, so they must
+ * not count as "the user saw something happen this turn".
+ */
+const SILENT_CODEX_MESSAGE_KINDS = new Set([
+  'complete',
+  'status',
+  'session_created',
+  'stream_end',
+  'history_truncated',
+  'permission_resolved',
+  'permission_cancelled',
+  'task_status',
+]);
+
+// Codex can have a request rejected upstream and still report a clean
+// `turn.completed` with zero items, which left the chat looking like the
+// prompt was never sent and had users resend it into new orphaned sessions.
+const CODEX_EMPTY_TURN_MESSAGE =
+  'Codex completed the turn without producing a response. This usually means the request was rejected upstream (model/CLI mismatch, auth, or rate limit) — check the host\'s codex logs.';
+
 function readUsageNumber(value: unknown) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -302,10 +324,20 @@ async function queryCodex(
   // stderr dump of unrelated CLI log lines, so the thrown wrapper is dropped
   // when the stream already reported the failure.
   let errorSurfaced = false;
+  // Whether anything the user can actually read reached the client this run.
+  let visibleOutputSent = false;
+  // The empty-turn warning is one-shot per run: a run that already showed
+  // something, or already failed loudly, must never receive it.
+  let emptyTurnWarned = false;
   const abortController = new AbortController();
   // Session-map key: the app session id when the caller supplied one, else
   // the provider-native thread id once captured (legacy/direct API callers).
   const sessionKey = () => sessionId || capturedSessionId || null;
+  // A run is aborted once the user cancels it, whether the signal fired or the
+  // session row was marked first. Both the stream loop and the terminal frames
+  // read the same predicate so they can never disagree.
+  const isRunAborted = () =>
+    abortController.signal.aborted || activeCodexSessions.get(sessionKey() || '')?.status === 'aborted';
 
   try {
     codex = new Codex();
@@ -376,14 +408,8 @@ async function queryCodex(
       }
 
       // Check if session was aborted
-      if (abortController.signal.aborted) {
+      if (isRunAborted()) {
         break;
-      }
-      if (sessionKey()) {
-        const session = activeCodexSessions.get(sessionKey() || '');
-        if (session?.status === 'aborted') {
-          break;
-        }
       }
 
       // Progress events used to be dropped, so a long shell command or a
@@ -399,6 +425,27 @@ async function queryCodex(
         continue;
       }
 
+      // A turn that completes without one readable row is the silent-failure
+      // family from issue #1012. Warn once, ahead of the turn's own terminal
+      // frames, so the user learns why the chat stopped instead of resending.
+      // The abort guard above ran for this very event and nothing awaits in
+      // between, so a cancelled run cannot reach this point.
+      if (
+        event.type === 'turn.completed'
+        && !visibleOutputSent
+        && !emptyTurnWarned
+        && !errorSurfaced
+        && !terminalFailure
+      ) {
+        emptyTurnWarned = true;
+        sendMessage(ws, createNormalizedMessage({
+          kind: 'error',
+          content: CODEX_EMPTY_TURN_MESSAGE,
+          sessionId: capturedSessionId || sessionId || null,
+          provider: 'codex',
+        }));
+      }
+
       const transformed = transformCodexEvent(event);
       if (transformed.type === 'error' || transformed.itemType === 'error') {
         errorSurfaced = true;
@@ -407,6 +454,9 @@ async function queryCodex(
       // Normalize the transformed event into NormalizedMessage(s) via adapter
       const normalizedMsgs = context.normalizeMessage(transformed, capturedSessionId || sessionId || null);
       for (const msg of normalizedMsgs) {
+        if (!SILENT_CODEX_MESSAGE_KINDS.has(msg.kind)) {
+          visibleOutputSent = true;
+        }
         sendMessage(ws, msg);
       }
 
@@ -434,8 +484,7 @@ async function queryCodex(
 
     // Send the terminal completion event — skipped for aborted runs, whose
     // terminal `complete` (aborted: true) was already sent by abort-session.
-    const runSession = activeCodexSessions.get(sessionKey() || '');
-    const runAborted = runSession?.status === 'aborted' || abortController.signal.aborted;
+    const runAborted = isRunAborted();
     if (!runAborted) {
       sendMessage(ws, createCompleteMessage({
         provider: 'codex',
