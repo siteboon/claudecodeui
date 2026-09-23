@@ -1,9 +1,10 @@
 import os from 'node:os';
 import path from 'node:path';
-import { readFile } from 'node:fs/promises';
+import { open, readFile } from 'node:fs/promises';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import {
+  buildCloudCliSessionName,
   buildLookupMap,
   extractFirstValidJsonlData,
   findFilesRecursivelyCreatedAfter,
@@ -16,7 +17,25 @@ type ParsedSession = {
   sessionId: string;
   projectPath: string;
   sessionName?: string;
+  /**
+   * The transcript's latest `/rename` title ('' when it has none) to record
+   * on the row, and whether it also becomes the session's name.
+   */
+  providerTitleUpdate?: { title: string; rename: boolean };
 };
+
+type IndexedSession = NonNullable<ReturnType<typeof sessionsDb.getSessionById>>;
+
+const UNTITLED_SESSION_NAME = 'Untitled Claude Session';
+
+/**
+ * How far back from a transcript's end the latest `/rename` title of an
+ * already-indexed session is looked for. The Claude CLI keeps its session
+ * metadata, `custom-title` included, within the last 64 KiB: its own session
+ * picker reads no further back, so it re-appends that metadata after every
+ * 32 KiB it writes, and on exit. 1 MiB leaves room for large single rows.
+ */
+const TRANSCRIPT_TAIL_BYTES = 1024 * 1024;
 
 /**
  * Session indexer for Claude transcript artifacts.
@@ -64,16 +83,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         continue;
       }
 
-      const timestamps = await readFileTimestamps(filePath);
-      sessionsDb.createSession(
-        parsed.sessionId,
-        this.provider,
-        parsed.projectPath,
-        parsed.sessionName,
-        timestamps.createdAt,
-        timestamps.updatedAt,
-        filePath
-      );
+      await this.upsertSession(filePath, parsed);
       processed += 1;
     }
 
@@ -97,8 +107,15 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       return null;
     }
 
+    return this.upsertSession(filePath, parsed);
+  }
+
+  /**
+   * Writes one parsed session to the DB and returns its app session id.
+   */
+  private async upsertSession(filePath: string, parsed: ParsedSession): Promise<string> {
     const timestamps = await readFileTimestamps(filePath);
-    return sessionsDb.createSession(
+    const sessionId = sessionsDb.createSession(
       parsed.sessionId,
       this.provider,
       parsed.projectPath,
@@ -107,6 +124,14 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       timestamps.updatedAt,
       filePath
     );
+
+    if (parsed.providerTitleUpdate) {
+      sessionsDb.setSessionProviderTitle(sessionId, parsed.providerTitleUpdate.title, {
+        rename: parsed.providerTitleUpdate.rename,
+      });
+    }
+
+    return sessionId;
   }
 
   /**
@@ -140,90 +165,276 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     const existingSession = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)
       ?? sessionsDb.getSessionById(parsed.sessionId);
     const existingSessionName = existingSession?.custom_name;
-    if (existingSessionName && existingSessionName !== 'Untitled Claude Session') {
+    if (existingSession && existingSessionName && existingSessionName !== UNTITLED_SESSION_NAME) {
+      // No `sessionName`: `createSession` then keeps the name the row holds
+      // when it writes, so a CloudCLI rename made while the transcript was
+      // being read is not overwritten by the name read before it.
       return {
         ...parsed,
-        sessionName: normalizeSessionName(existingSessionName, 'Untitled Claude Session'),
+        providerTitleUpdate: await this.resolveProviderTitleUpdate(
+          filePath,
+          parsed.sessionId,
+          existingSession,
+          nameMap.get(parsed.sessionId)
+        ),
       };
     }
 
-    let sessionName = await this.extractSessionTitle(filePath, parsed.sessionId);
+    const content = await readTranscript(filePath);
+    const findTitle = (type: string, field: string) => (
+      content ? findLastSessionRowValue(content, parsed.sessionId, type, field) : undefined
+    );
+    const customTitle = findTitle('custom-title', 'customTitle');
+    let sessionName = customTitle || findTitle('ai-title', 'aiTitle') || findTitle('last-prompt', 'lastPrompt');
     if (!sessionName) {
       sessionName = nameMap.get(parsed.sessionId);
     }
 
+    // Recording the title the name came from (or that there is none) lets
+    // later syncs tell a new `/rename` from the CLI re-stating this one.
+    const providerTitle = normalizeSessionName(customTitle, '');
     return {
       ...parsed,
-      sessionName: normalizeSessionName(sessionName, 'Untitled Claude Session'),
+      sessionName: normalizeSessionName(sessionName, UNTITLED_SESSION_NAME),
+      providerTitleUpdate: content ? { title: providerTitle, rename: Boolean(providerTitle) } : undefined,
     };
   }
 
   /**
-   * Returns the best available title for one session from its transcript.
+   * Decides whether a named session's transcript holds a new `/rename`.
    *
-   * Scans forward keeping the last match of each event type, then prefers
-   * `custom-title` (a manual `/rename`) over `ai-title` over `last-prompt`.
-   * Claude writes `custom-title` immediately before `ai-title`, so a reverse
-   * scan that returns its first hit would always lose the manual rename.
-   *
-   * Returns undefined on a missing or unreadable file so sync can continue.
+   * The CLI re-states the title it holds on exit, periodically and after
+   * compaction, so only a title that differs from the one recorded on the row
+   * is a new rename. A new rename is the user's latest choice and replaces the
+   * name, even one set in CloudCLI; a re-stated one changes nothing, so a
+   * later CloudCLI rename stands.
    */
-  private async extractSessionTitle(
+  private async resolveProviderTitleUpdate(
     filePath: string,
-    sessionId: string
-  ): Promise<string | undefined> {
-    try {
-      const content = await readFile(filePath, 'utf8');
-      const lines = content.split(/\r?\n/);
-
-      let foundCustomTitle: string | undefined;
-      let foundAiTitle: string | undefined;
-      let foundLastPrompt: string | undefined;
-
-      for (let index = 0; index < lines.length; index += 1) {
-        const line = lines[index]?.trim();
-        if (!line) {
-          continue;
-        }
-
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(line);
-        } catch {
-          continue;
-        }
-
-        const data = parsed as Record<string, unknown>;
-        const eventType = typeof data.type === 'string' ? data.type : undefined;
-        const eventSessionId = typeof data.sessionId === 'string' ? data.sessionId : undefined;
-
-        if (eventSessionId !== sessionId) {
-          continue;
-        }
-
-        if (eventType === 'custom-title') {
-          const title = typeof data.customTitle === 'string' ? data.customTitle : undefined;
-          if (title?.trim()) {
-            foundCustomTitle = title;
-          }
-        } else if (eventType === 'ai-title') {
-          const title = typeof data.aiTitle === 'string' ? data.aiTitle : undefined;
-          if (title?.trim()) {
-            foundAiTitle = title;
-          }
-        } else if (eventType === 'last-prompt') {
-          const prompt = typeof data.lastPrompt === 'string' ? data.lastPrompt : undefined;
-          if (prompt?.trim()) {
-            foundLastPrompt = prompt;
-          }
-        }
-      }
-
-      return foundCustomTitle || foundAiTitle || foundLastPrompt;
-    } catch {
-      // Ignore missing/unreadable files so sync can continue.
+    sessionId: string,
+    session: IndexedSession,
+    historyDisplay: string | undefined
+  ): Promise<ParsedSession['providerTitleUpdate']> {
+    if (session.provider_title !== null) {
+      const tail = await readTranscriptTail(filePath, TRANSCRIPT_TAIL_BYTES);
+      const title = normalizeSessionName(
+        tail ? findLastSessionRowValue(tail, sessionId, 'custom-title', 'customTitle') : undefined,
+        ''
+      );
+      return title && title !== session.provider_title ? { title, rename: true } : undefined;
     }
 
-    return undefined;
+    // Not read since titles are recorded (a row from before that, or one the
+    // app created): the latest title can sit anywhere in the transcript.
+    const content = await readTranscript(filePath);
+    if (!content) {
+      return undefined;
+    }
+
+    const title = normalizeSessionName(
+      findLastSessionRowValue(content, sessionId, 'custom-title', 'customTitle'),
+      ''
+    );
+    if (!title) {
+      return { title: '', rename: false };
+    }
+
+    // A fork's transcript opens with the title CloudCLI gave the branch (the
+    // SDK writes it as a `custom-title`), so it is not a rename.
+    if (session.forked_from_session_id) {
+      return { title, rename: false };
+    }
+
+    // The title may predate a CloudCLI rename, so it only replaces a name
+    // nobody chose.
+    return {
+      title,
+      rename: isAutomaticSessionName(session.custom_name, content, sessionId, historyDisplay),
+    };
   }
+}
+
+/**
+ * Reads a whole transcript; null when it is missing or unreadable.
+ */
+async function readTranscript(filePath: string): Promise<Buffer | null> {
+  try {
+    return await readFile(filePath);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Reads the complete lines within the last `maxBytes` of a transcript; null
+ * when it is missing or unreadable.
+ */
+async function readTranscriptTail(filePath: string, maxBytes: number): Promise<Buffer | null> {
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
+  try {
+    handle = await open(filePath, 'r');
+    const { size } = await handle.stat();
+    const start = Math.max(0, size - maxBytes);
+    const buffer = Buffer.alloc(size - start);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, start);
+    const tail = buffer.subarray(0, bytesRead);
+    if (start === 0) {
+      return tail;
+    }
+
+    // A tail that starts mid-file starts mid-line; drop that partial line.
+    const firstNewline = tail.indexOf(0x0a);
+    return firstNewline === -1 ? Buffer.alloc(0) : tail.subarray(firstNewline + 1);
+  } catch {
+    return null;
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
+}
+
+/**
+ * True when a session's stored name is one CloudCLI produced rather than one
+ * a user chose: the fallback, any title or prompt the transcript or
+ * history.jsonl offers (older versions did not always take the latest), or
+ * the first-message name CloudCLI gives a session it starts.
+ */
+function isAutomaticSessionName(
+  name: string | null,
+  content: Buffer,
+  sessionId: string,
+  historyDisplay: string | undefined
+): boolean {
+  const storedName = normalizeSessionName(name ?? undefined, UNTITLED_SESSION_NAME);
+  const isStoredName = (value: string | undefined) => normalizeSessionName(value, '') === storedName;
+
+  if (storedName === UNTITLED_SESSION_NAME || isStoredName(historyDisplay)) {
+    return true;
+  }
+
+  const titleRows = [
+    ['custom-title', 'customTitle'],
+    ['ai-title', 'aiTitle'],
+    ['last-prompt', 'lastPrompt'],
+  ] as const;
+  for (const [type, field] of titleRows) {
+    for (const value of findSessionRowValues(content, sessionId, type, field)) {
+      if (isStoredName(value)) {
+        return true;
+      }
+    }
+  }
+
+  const firstPrompt = findFirstUserPrompt(content, sessionId);
+  return firstPrompt !== undefined && isStoredName(buildCloudCliSessionName(firstPrompt));
+}
+
+/**
+ * Returns the newest non-blank `field` of the `type` rows one session wrote
+ * to a transcript.
+ */
+function findLastSessionRowValue(
+  content: Buffer,
+  sessionId: string,
+  type: string,
+  field: string
+): string | undefined {
+  for (const value of findSessionRowValues(content, sessionId, type, field)) {
+    return value;
+  }
+
+  return undefined;
+}
+
+/**
+ * Yields the non-blank `field` of every `type` row one session wrote to a
+ * transcript, newest first.
+ *
+ * Transcripts reach tens of megabytes, so instead of decoding and splitting
+ * the whole file this searches the raw bytes backwards for `"type":"<type>"`
+ * (the compact form the Claude CLI and SDK write these rows in, and the one
+ * the CLI searches for itself) and decodes only the lines that match.
+ */
+function* findSessionRowValues(
+  content: Buffer,
+  sessionId: string,
+  type: string,
+  field: string
+): Generator<string> {
+  const marker = `"type":"${type}"`;
+  let searchEnd = content.length - 1;
+
+  while (searchEnd >= 0) {
+    const markerIndex = content.lastIndexOf(marker, searchEnd);
+    if (markerIndex === -1) {
+      return;
+    }
+
+    const lineStart = content.lastIndexOf(0x0a, markerIndex) + 1;
+    const newlineIndex = content.indexOf(0x0a, markerIndex);
+    const line = content.toString('utf8', lineStart, newlineIndex === -1 ? content.length : newlineIndex);
+    // The next search must end before this line; a negative offset would
+    // make `lastIndexOf` count from the end of the buffer instead.
+    searchEnd = lineStart - 1;
+
+    let row: Record<string, unknown>;
+    try {
+      row = JSON.parse(line) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+
+    // The marker can also sit inside a nested object, and a transcript can
+    // carry rows of other sessions, so the row itself must match.
+    const value = row[field];
+    if (row.type === type && row.sessionId === sessionId && typeof value === 'string' && value.trim()) {
+      yield value;
+    }
+  }
+}
+
+/**
+ * Returns the text of the first prompt one session's user typed, skipping
+ * meta rows and tool results.
+ */
+function findFirstUserPrompt(content: Buffer, sessionId: string): string | undefined {
+  const marker = '"type":"user"';
+  let searchStart = 0;
+
+  while (searchStart < content.length) {
+    const markerIndex = content.indexOf(marker, searchStart);
+    if (markerIndex === -1) {
+      return undefined;
+    }
+
+    const lineStart = content.lastIndexOf(0x0a, markerIndex) + 1;
+    const newlineIndex = content.indexOf(0x0a, markerIndex);
+    const lineEnd = newlineIndex === -1 ? content.length : newlineIndex;
+    searchStart = lineEnd + 1;
+
+    let row: Record<string, unknown>;
+    try {
+      row = JSON.parse(content.toString('utf8', lineStart, lineEnd)) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+
+    if (row.type !== 'user' || row.sessionId !== sessionId || row.isMeta || row.isSidechain) {
+      continue;
+    }
+
+    const message = row.message as { content?: unknown } | undefined;
+    if (typeof message?.content === 'string') {
+      return message.content;
+    }
+    if (Array.isArray(message?.content)) {
+      const blocks = message.content as { type?: unknown; text?: unknown }[];
+      if (blocks.some((block) => block?.type === 'tool_result')) {
+        continue;
+      }
+      const textBlock = blocks.find((block) => block?.type === 'text' && typeof block.text === 'string');
+      return typeof textBlock?.text === 'string' ? textBlock.text : '';
+    }
+  }
+
+  return undefined;
 }

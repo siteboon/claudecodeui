@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { closeConnection } from '@/modules/database/connection.js';
+import { closeConnection, getConnection } from '@/modules/database/connection.js';
 import { initializeDatabase } from '@/modules/database/init-db.js';
 import { projectsDb } from '@/modules/database/repositories/projects.db.js';
 import { sessionsDb } from '@/modules/database/repositories/sessions.db.js';
@@ -165,4 +165,58 @@ test('recent sessions are globally ordered, paginated, and limited to visible co
       ['session-middle', 'session-oldest'],
     );
   });
+});
+
+test('an existing sessions table gains provider_title on startup, left NULL for its rows', async () => {
+  const previousDatabasePath = process.env.DATABASE_PATH;
+  const tempDirectory = await mkdtemp(path.join(tmpdir(), 'sessions-db-legacy-'));
+
+  closeConnection();
+  process.env.DATABASE_PATH = path.join(tempDirectory, 'auth.db');
+
+  try {
+    // The sessions table as it was before the column existed.
+    const db = getConnection();
+    db.exec(`
+      CREATE TABLE sessions (
+        session_id TEXT NOT NULL,
+        provider TEXT NOT NULL DEFAULT 'claude',
+        provider_session_id TEXT,
+        custom_name TEXT,
+        project_path TEXT,
+        jsonl_path TEXT,
+        model TEXT,
+        effort TEXT,
+        forked_from_session_id TEXT,
+        isArchived BOOLEAN DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (session_id)
+      )
+    `);
+    db.prepare(
+      `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name)
+       VALUES ('session-legacy', 'claude', 'session-legacy', 'Legacy Name')`
+    ).run();
+
+    await initializeDatabase();
+
+    assert.equal(sessionsDb.getSessionById('session-legacy')?.provider_title, null);
+
+    sessionsDb.setSessionProviderTitle('session-legacy', 'Renamed in the TUI', { rename: false });
+    const recorded = sessionsDb.getSessionById('session-legacy');
+    assert.equal(recorded?.provider_title, 'Renamed in the TUI');
+    assert.equal(recorded?.custom_name, 'Legacy Name');
+
+    sessionsDb.setSessionProviderTitle('session-legacy', 'Renamed in the TUI again', { rename: true });
+    assert.equal(sessionsDb.getSessionById('session-legacy')?.custom_name, 'Renamed in the TUI again');
+  } finally {
+    closeConnection();
+    if (previousDatabasePath === undefined) {
+      delete process.env.DATABASE_PATH;
+    } else {
+      process.env.DATABASE_PATH = previousDatabasePath;
+    }
+    await rm(tempDirectory, { recursive: true, force: true });
+  }
 });

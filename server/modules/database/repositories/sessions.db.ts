@@ -15,6 +15,8 @@ type SessionRow = {
   effort: string | null;
   /** The app session this one was branched from; NULL unless it is a fork. */
   forked_from_session_id: string | null;
+  /** Last title the provider CLI recorded (Claude's `/rename`); '' for none, NULL until indexed. */
+  provider_title: string | null;
   isArchived: number;
   created_at: string;
   updated_at: string;
@@ -26,7 +28,7 @@ type RecentSessionsPage = {
 };
 
 const SESSION_ROW_COLUMNS =
-  'session_id, provider, provider_session_id, project_path, jsonl_path, custom_name, model, effort, forked_from_session_id, isArchived, created_at, updated_at';
+  'session_id, provider, provider_session_id, project_path, jsonl_path, custom_name, model, effort, forked_from_session_id, provider_title, isArchived, created_at, updated_at';
 
 const SQLITE_UTC_TIMESTAMP_REGEX = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 
@@ -446,6 +448,26 @@ export const sessionsDb = {
        SET custom_name = ?
        WHERE session_id = ?`
     ).run(customName, sessionId);
+  },
+
+  /**
+   * Records the title the provider CLI holds for one session (Claude's
+   * `/rename`; '' records that it holds none), and makes it the session's
+   * name too when `rename` is set.
+   *
+   * Used by the Claude session synchronizer, which compares each transcript's
+   * latest title with the one recorded here to tell a new CLI rename from the
+   * CLI re-stating the current one. Renaming goes through here rather than
+   * `createSession` because that one keeps an app-created session's own name.
+   */
+  setSessionProviderTitle(sessionId: string, providerTitle: string, options: { rename: boolean }): void {
+    const db = getConnection();
+    db.prepare(
+      `UPDATE sessions
+       SET provider_title = ?,
+           custom_name = CASE WHEN ? THEN ? ELSE custom_name END
+       WHERE session_id = ?`
+    ).run(providerTitle, options.rename ? 1 : 0, providerTitle, sessionId);
   },
 
   getSessionById(sessionId: string): SessionRow | null {
