@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 
+import '@/modules/i18n';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
-import type { PermissionMode, Project } from '@/shared/types';
+import type { PermissionMode, Project, ProjectSession } from '@/shared/types';
 
 /**
  * The first message of a brand-new chat allocates its session id with
@@ -46,14 +47,14 @@ const releaseCreates = async (status = 201) => {
 const createRequests = (fetchMock: ReturnType<typeof vi.fn>) => fetchMock.mock.calls
   .filter(([url, init]) => String(url) === '/api/providers/sessions' && (init as RequestInit | undefined)?.method === 'POST');
 
-const renderNewChat = () => {
+const renderComposer = (initialSession: ProjectSession | null) => {
   const sent: Array<{ type: string; sessionId?: string; content?: string }> = [];
   const established: string[] = [];
-  const view = renderHook(() =>
+  const view = renderHook(({ session }: { session: ProjectSession | null }) =>
     useChatComposerState({
       selectedProject: PROJECT,
-      selectedSession: null,
-      currentSessionId: null,
+      selectedSession: session,
+      currentSessionId: session?.id ?? null,
       provider: 'claude',
       permissionMode: 'default',
       cyclePermissionMode: () => undefined,
@@ -70,18 +71,28 @@ const renderNewChat = () => {
       setIsUserScrolledUp: () => undefined,
       setPendingPermissionRequests: () => undefined,
     }),
-  );
+  { initialProps: { session: initialSession } });
   return { view, established, chatSends: () => sent.filter((message) => message.type === 'chat.send') };
 };
 
+const renderNewChat = () => renderComposer(null);
+
 let fetchMock: ReturnType<typeof vi.fn>;
+let pendingUploads: PendingCreate[] = [];
+
+const uploadRequests = () => fetchMock.mock.calls
+  .filter(([url, init]) => String(url) === '/api/assets/files' && (init as RequestInit | undefined)?.method === 'POST');
 
 beforeEach(() => {
   pendingCreates = [];
+  pendingUploads = [];
   createdCount = 0;
   fetchMock = vi.fn((url: RequestInfo | URL, init?: RequestInit) => {
     if (String(url) === '/api/providers/sessions' && init?.method === 'POST') {
       return new Promise<Response>((resolve) => { pendingCreates.push({ resolve }); });
+    }
+    if (String(url) === '/api/assets/files' && init?.method === 'POST') {
+      return new Promise<Response>((resolve) => { pendingUploads.push({ resolve }); });
     }
     return Promise.resolve(jsonResponse([]));
   });
@@ -137,4 +148,53 @@ test('a failed session creation does not block the retry', async () => {
   assert.equal(createRequests(fetchMock).length, 2);
   assert.deepEqual(established, ['session-2']);
   assert.deepEqual(chatSends().map((message) => message.sessionId), ['session-2']);
+});
+
+test('submitting again while an attachment uploads sends the message once', async () => {
+  const { view, chatSends } = renderComposer({ id: 'session-existing' });
+  const image = new File(['png'], 'shot.png', { type: 'image/png' });
+  await act(async () => {
+    view.result.current.setInput('look at this');
+    view.result.current.handlePaste({
+      clipboardData: { items: [{ type: 'image/png', getAsFile: () => image }], files: [] },
+    } as never);
+  });
+
+  await act(async () => {
+    void view.result.current.handleSubmit({ preventDefault: () => undefined } as never);
+    void view.result.current.handleSubmit({ preventDefault: () => undefined } as never);
+  });
+  await act(async () => {
+    for (const pending of pendingUploads) {
+      pending.resolve(jsonResponse({ attachments: [{ name: 'shot.png', mimeType: 'image/png' }] }));
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  assert.equal(uploadRequests().length, 1, 'the attachment is uploaded once');
+  assert.deepEqual(
+    chatSends().map((message) => [message.sessionId, message.content]),
+    [['session-existing', 'look at this']],
+  );
+});
+
+test('a pending new chat does not hold up a submit in another session', async () => {
+  const { view, chatSends } = renderNewChat();
+  await act(async () => { view.result.current.setInput('hello'); });
+  await act(async () => {
+    void view.result.current.handleSubmit({ preventDefault: () => undefined } as never);
+  });
+
+  // The user leaves the new chat while its session is still being created.
+  view.rerender({ session: { id: 'session-other' } });
+  await act(async () => { view.result.current.setInput('elsewhere'); });
+  await act(async () => {
+    void view.result.current.handleSubmit({ preventDefault: () => undefined } as never);
+  });
+
+  assert.deepEqual(
+    chatSends().map((message) => [message.sessionId, message.content]),
+    [['session-other', 'elsewhere']],
+  );
+  await releaseCreates();
 });
