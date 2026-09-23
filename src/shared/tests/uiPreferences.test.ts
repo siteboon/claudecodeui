@@ -34,10 +34,19 @@ test('a fresh install gets the documented defaults', () => {
   assert.deepEqual(readStoredUiPreferences(), {
     showRawParameters: false,
     showThinking: true,
+    expandThinking: false,
     sendByCtrlEnter: false,
     sidebarVisible: true,
     voiceEnabled: false,
   });
+});
+
+test('a blob stored before expandThinking existed reads back with it off', () => {
+  storeUiPreferences({ showThinking: true, voiceEnabled: true });
+
+  const preferences = readStoredUiPreferences();
+  assert.equal(preferences.expandThinking, false);
+  assert.equal(preferences.voiceEnabled, true);
 });
 
 test('the stored blob is read back', () => {
@@ -69,6 +78,17 @@ test('setting a preference changes only that key', () => {
 
   assert.equal(next.showThinking, false);
   assert.equal(next.sidebarVisible, state.sidebarVisible);
+});
+
+test('expandThinking is a real preference the reducer accepts and persists', () => {
+  const state = baseline();
+  const next = uiPreferencesReducer(state, { type: 'set', key: 'expandThinking', value: true });
+
+  assert.equal(next.expandThinking, true);
+  assert.equal(next.showThinking, state.showThinking);
+
+  storeUiPreferences({ expandThinking: 'true' });
+  assert.equal(readStoredUiPreferences().expandThinking, true, 'string form is coerced like the others');
 });
 
 test('setting a preference to its current value keeps the same object', () => {
