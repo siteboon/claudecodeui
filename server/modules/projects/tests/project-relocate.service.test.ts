@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -25,14 +25,15 @@ function encodeClaudeProjectDirName(projectPath: string): string {
 
 async function withRelocateFixture(
   runTest: (fixture: RelocateFixture) => Promise<void>,
+  folderNames: { oldName: string; newName: string } = { oldName: 'alpha', newName: 'beta' },
 ): Promise<void> {
   const previousDatabasePath = process.env.DATABASE_PATH;
   // Not the OS temp dir: this service runs the same `validateWorkspacePath`
   // check a real request does, which refuses `/tmp` and anything outside the
   // configured workspace root.
   const workspaceRoot = await mkdtemp(path.join(WORKSPACES_ROOT, '.cloudcli-relocate-test-'));
-  const oldProjectPath = path.join(workspaceRoot, 'alpha');
-  const newProjectPath = path.join(workspaceRoot, 'beta');
+  const oldProjectPath = path.join(workspaceRoot, folderNames.oldName);
+  const newProjectPath = path.join(workspaceRoot, folderNames.newName);
   const claudeProjectsRoot = path.join(workspaceRoot, 'claude-home', 'projects');
   const transcriptPath = path.join(
     claudeProjectsRoot,
@@ -130,6 +131,34 @@ test('relocateProject moves the Claude transcript into the folder a resume reads
     assert.equal(relocatedTranscript.sessionId, SESSION_ID);
     assert.equal(relocatedTranscript.cwd, fixture.newProjectPath);
   });
+});
+
+test('relocateProject rewrites the cwd in place when both folders share a Claude transcript folder', async () => {
+  await withRelocateFixture(
+    async (fixture) => {
+      assert.equal(
+        encodeClaudeProjectDirName(fixture.oldProjectPath),
+        encodeClaudeProjectDirName(fixture.newProjectPath),
+        'the fixture must collide for this test to mean anything',
+      );
+      await rename(fixture.oldProjectPath, fixture.newProjectPath);
+
+      const result = await relocateProject(fixture.projectId, fixture.newProjectPath);
+
+      assert.equal(result.movedTranscriptCount, 1);
+      assert.equal(sessionsDb.getSessionById(SESSION_ID)?.jsonl_path, fixture.transcriptPath);
+      // Left stale, the synchronizer would drag the session back to the old
+      // folder the next time the chat is used.
+      const transcript = JSON.parse((await readFile(fixture.transcriptPath, 'utf8')).trim()) as { cwd: string };
+      assert.equal(transcript.cwd, fixture.newProjectPath);
+      assert.deepEqual(
+        await readdir(path.dirname(fixture.transcriptPath)),
+        [`${SESSION_ID}.jsonl`],
+        'the rewrite must not leave a temporary file behind',
+      );
+    },
+    { oldName: 'a b', newName: 'a_b' },
+  );
 });
 
 test('relocateProject rejects a path that no longer exists', async () => {
