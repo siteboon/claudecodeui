@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 
 import { AuthProvider, useAuth } from '@/modules/auth/context/AuthContext';
+import { i18n } from '@/modules/i18n';
 import { storeAuthToken } from '@/shared/authToken';
 
 /**
@@ -13,7 +14,8 @@ import { storeAuthToken } from '@/shared/authToken';
  * refreshed token used to re-run the whole auth bootstrap, which flips
  * `isLoading` back to true, so ProtectedRoute swapped the entire workspace for
  * the loading screen and remounted it — once per token, visible as the app
- * flashing. A token rotation must only swap the credential.
+ * flashing. A token rotation must only swap the credential, and nothing after
+ * mount (a language change included) may re-run that bootstrap.
  */
 
 const makeToken = (issuedAtSeconds: number) => {
@@ -26,6 +28,8 @@ const nowSeconds = () => Math.floor(Date.now() / 1000);
 
 let requestedPaths: string[] = [];
 let nextRefreshedToken: string | null = null;
+let hasCompletedOnboarding = true;
+let onboardingStatusDelayMs = 0;
 
 const stubServer = () => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
@@ -34,13 +38,18 @@ const stubServer = () => {
     if (url === '/api/auth/user' && nextRefreshedToken) {
       headers['X-Refreshed-Token'] = nextRefreshedToken;
     }
+    if (url === '/api/user/onboarding-status' && onboardingStatusDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, onboardingStatusDelayMs));
+    }
     const body = url === '/api/auth/status'
       ? { needsSetup: false }
       : url === '/api/auth/user'
         ? { user: { id: 1, username: 'triage' } }
-        : url === '/api/user/onboarding-status'
-          ? { hasCompletedOnboarding: true }
-          : {};
+        : url === '/api/auth/login'
+          ? { token: makeToken(nowSeconds()), user: { id: 1, username: 'triage' } }
+          : url === '/api/user/onboarding-status'
+            ? { hasCompletedOnboarding }
+            : {};
     return new Response(JSON.stringify(body), { status: 200, headers });
   }));
 };
@@ -66,14 +75,17 @@ function LoadingScreen() {
 }
 
 function Gate() {
-  const { isLoading, user, token } = useAuth();
+  const { isLoading, user, token, hasCompletedOnboarding: onboarded } = useAuth();
   useEffect(() => {
     seenToken = token;
   }, [token]);
   if (isLoading) {
     return <LoadingScreen />;
   }
-  return user ? <Workspace /> : <div>login</div>;
+  if (!user) {
+    return <div>login</div>;
+  }
+  return onboarded ? <Workspace /> : <div>onboarding</div>;
 }
 
 const renderApp = () => render(
@@ -86,13 +98,16 @@ beforeEach(() => {
   localStorage.clear();
   requestedPaths = [];
   nextRefreshedToken = null;
+  hasCompletedOnboarding = true;
+  onboardingStatusDelayMs = 0;
   workspaceMounts = 0;
   loadingPasses = 0;
   seenToken = null;
   stubServer();
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await i18n.changeLanguage('en');
   vi.unstubAllGlobals();
 });
 
@@ -175,4 +190,67 @@ test('signing out after a token rotation still shows the login screen without a 
   assert.equal(localStorage.getItem('auth-token'), null);
   assert.equal(seenToken, null);
   assert.equal(loadingPasses, 1);
+});
+
+test('a language change after sign-in does not re-run the auth bootstrap', async () => {
+  localStorage.setItem('auth-token', makeToken(nowSeconds()));
+
+  renderApp();
+  await screen.findByText('workspace');
+  const bootstrapRequests = requestedPaths.length;
+
+  // react-i18next hands out a new `t` on every language change. Sign-in also
+  // changes the language by itself when the account's saved language differs
+  // from this device's.
+  await act(async () => {
+    await i18n.changeLanguage('de');
+  });
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+
+  assert.equal(i18n.language, 'de');
+  assert.equal(workspaceMounts, 1);
+  assert.equal(loadingPasses, 1);
+  assert.deepEqual(
+    requestedPaths.slice(bootstrapRequests).filter((path) => path.startsWith('/api/auth/')),
+    [],
+  );
+});
+
+test('signing in before onboarding shows onboarding without mounting the workspace first', async () => {
+  hasCompletedOnboarding = false;
+  // Long enough for React to render whatever the context publishes before
+  // the onboarding status arrives.
+  onboardingStatusDelayMs = 30;
+
+  let login: ((username: string, password: string) => Promise<unknown>) | null = null;
+  function LoginProbe() {
+    const { login: authLogin } = useAuth();
+    useEffect(() => {
+      login = authLogin;
+    }, [authLogin]);
+    return null;
+  }
+
+  render(
+    <AuthProvider>
+      <LoginProbe />
+      <Gate />
+    </AuthProvider>,
+  );
+  await screen.findByText('login');
+
+  let pendingLogin: Promise<unknown> | undefined;
+  act(() => {
+    pendingLogin = login?.('triage', 'triage-pass-123');
+  });
+  await screen.findByText('onboarding');
+  await act(async () => {
+    await pendingLogin;
+  });
+
+  assert.ok(requestedPaths.includes('/api/user/onboarding-status'));
+  assert.notEqual(localStorage.getItem('auth-token'), null);
+  assert.equal(workspaceMounts, 0);
 });
