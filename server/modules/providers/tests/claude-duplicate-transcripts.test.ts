@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -157,6 +157,61 @@ test('synchronizeFile keeps a session on the transcript copy that is further alo
         indexedUpdatedAt,
         'the stale copy must not re-date the session either',
       );
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+// Root reads through a 000 mode, so the unreadable-file case cannot be staged.
+const runningAsRoot = process.getuid?.() === 0;
+
+test('synchronizeFile keeps the stored transcript when it exists but cannot be read', { concurrency: false, skip: runningAsRoot }, async () => {
+  const { home, projects } = await createClaudeHome();
+  const restoreHomeDir = patchHomeDir(home);
+  const completedPath = await writeTranscript(path.join(projects, '-workspace-demo'), COMPLETED_ROWS);
+  const truncatedPath = await writeTranscript(path.join(projects, '-workspace-demo-copy'), TRUNCATED_ROWS);
+
+  try {
+    await withIsolatedDatabase(async () => {
+      const synchronizer = new ClaudeSessionSynchronizer();
+      await synchronizer.synchronizeFile(completedPath);
+
+      // A transient failure (EACCES here; EMFILE or EBUSY in the wild) is not
+      // the stored transcript moving away.
+      await chmod(completedPath, 0o000);
+      await synchronizer.synchronizeFile(truncatedPath);
+
+      assert.equal(sessionsDb.getSessionById(SESSION_ID)?.jsonl_path, completedPath);
+    });
+  } finally {
+    await chmod(completedPath, 0o644);
+    restoreHomeDir();
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test('synchronizeFile keeps an app-created session on the transcript that is further along', { concurrency: false }, async () => {
+  const { home, projects } = await createClaudeHome();
+  const restoreHomeDir = patchHomeDir(home);
+
+  try {
+    const completedPath = await writeTranscript(path.join(projects, '-workspace-demo'), COMPLETED_ROWS);
+    const truncatedPath = await writeTranscript(path.join(projects, '-workspace-demo-copy'), TRUNCATED_ROWS);
+
+    await withIsolatedDatabase(async () => {
+      // The common production shape: Chat allocated the row before the
+      // provider announced its own id.
+      sessionsDb.createAppSession('app-session-1', 'claude', PROJECT_PATH);
+      sessionsDb.assignProviderSessionId('app-session-1', SESSION_ID);
+
+      const synchronizer = new ClaudeSessionSynchronizer();
+      await synchronizer.synchronizeFile(completedPath);
+      const result = await synchronizer.synchronizeFile(truncatedPath);
+
+      assert.equal(result, 'app-session-1', 'the stale copy resolves to the app-facing id');
+      assert.equal(sessionsDb.getSessionById('app-session-1')?.jsonl_path, completedPath);
     });
   } finally {
     restoreHomeDir();

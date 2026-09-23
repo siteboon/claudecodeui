@@ -59,18 +59,22 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
   }
 
   /**
-   * Reads how far one transcript file has got, or null when it cannot be read.
+   * Reads how far one transcript file has got. Returns `'gone'` when the file
+   * no longer exists, and null when it exists but could not be read this time
+   * (EMFILE, EACCES, ...), which must not be mistaken for a move.
    *
    * The newest record timestamp wins over the last line's timestamp because a
    * transcript can end on bookkeeping rows that carry none (`atis-latch`,
-   * `queue-operation`), and a half-written trailing line is simply skipped.
+   * `last-prompt`, `ai-title`), and a half-written trailing line is simply
+   * skipped.
    */
-  private async readTranscriptProgress(filePath: string): Promise<TranscriptProgress | null> {
+  private async readTranscriptProgress(filePath: string): Promise<TranscriptProgress | 'gone' | null> {
     let content: string;
     try {
       content = await readFile(filePath, 'utf8');
-    } catch {
-      return null;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      return code === 'ENOENT' || code === 'ENOTDIR' ? 'gone' : null;
     }
 
     let lastTimestamp = 0;
@@ -115,9 +119,10 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
    * session — while the conversation had finished in the other file.
    *
    * The session only follows a different file when that file is strictly
-   * further along, or when the stored one can no longer be read (a transcript
-   * that genuinely moved must not pin the row to a deleted path). An exact tie
-   * keeps the stored value so the row cannot flap between two indexers.
+   * further along, or when the stored one no longer exists (a transcript that
+   * genuinely moved must not pin the row to a deleted path). A file that could
+   * not be read, on either side, never moves the row, and an exact tie keeps
+   * the stored value so the row cannot flap between two indexers.
    */
   private async findSessionAheadOfTranscript(
     providerSessionId: string,
@@ -135,10 +140,13 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       this.readTranscriptProgress(filePath),
     ]);
 
-    if (!storedProgress) {
+    if (incomingProgress === null || incomingProgress === 'gone') {
+      return existing.session_id;
+    }
+    if (storedProgress === 'gone') {
       return null;
     }
-    if (!incomingProgress) {
+    if (storedProgress === null) {
       return existing.session_id;
     }
 
