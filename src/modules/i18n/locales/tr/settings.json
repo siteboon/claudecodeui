@@ -59,6 +59,7 @@
     "darkMode": "Koyu Mod",
     "showRawParameters": "Ham parametreleri göster",
     "showThinking": "Düşünmeyi göster",
+    "expandThinking": "Düşünmeyi genişlet",
     "sendByCtrlEnter": "Ctrl+Enter ile gönder",
     "sendByCtrlEnterDescription": "Etkinleştirildiğinde, Ctrl+Enter'a basmak yalnız Enter yerine mesajı gönderir. IME (girdi metot düzenleyici) kullananlar için yanlışlıkla göndermeyi önler.",
     "dragHandle": {
@@ -131,6 +132,18 @@
       "description": "Projelerin kenar çubuğunda nasıl sıralanacağı",
       "alphabetical": "Alfabetik",
       "recentActivity": "Son Etkinlik"
+    },
+    "chatTranscript": {
+      "title": "Sohbet Dökümü",
+      "showThinking": {
+        "description": "Asistanın düşünme bloklarını dökümde göster"
+      },
+      "expandThinking": {
+        "description": "Düşünme bloklarını geldiklerinde aç ve açık tut"
+      },
+      "showRawParameters": {
+        "description": "Araç çağrılarının ham JSON parametrelerini göster"
+      }
     },
     "codeEditor": {
       "title": "Kod Editörü",

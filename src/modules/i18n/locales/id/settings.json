@@ -75,6 +75,7 @@
     "darkMode": "Mode Gelap",
     "showRawParameters": "Tampilkan parameter mentah",
     "showThinking": "Tampilkan proses berpikir",
+    "expandThinking": "Perluas proses berpikir",
     "sendByCtrlEnter": "Kirim dengan Ctrl+Enter",
     "voiceEnabled": "Suara (mikrofon + bacakan)",
     "sendByCtrlEnterDescription": "Jika diaktifkan, Ctrl+Enter akan mengirim pesan, bukan Enter saja. Berguna bagi pengguna IME untuk mencegah pengiriman tidak disengaja.",
@@ -156,6 +157,18 @@
       "description": "Cara proyek diurutkan di sidebar",
       "alphabetical": "Alfabetis",
       "recentActivity": "Aktivitas Terbaru"
+    },
+    "chatTranscript": {
+      "title": "Transkrip Obrolan",
+      "showThinking": {
+        "description": "Tampilkan blok proses berpikir asisten di transkrip"
+      },
+      "expandThinking": {
+        "description": "Buka blok proses berpikir saat tiba dan biarkan tetap terbuka"
+      },
+      "showRawParameters": {
+        "description": "Tampilkan parameter JSON mentah dari pemanggilan alat"
+      }
     },
     "codeEditor": {
       "title": "Editor Kode",

@@ -59,6 +59,7 @@
     "darkMode": "深色模式",
     "showRawParameters": "顯示原始參數",
     "showThinking": "顯示思考過程",
+    "expandThinking": "展開思考過程",
     "sendByCtrlEnter": "使用 Ctrl+Enter 傳送",
     "sendByCtrlEnterDescription": "啟用後，按 Ctrl+Enter 傳送訊息，而不是僅按 Enter。這對於使用輸入法的使用者可以避免意外傳送。",
     "dragHandle": {
@@ -131,6 +132,18 @@
       "description": "專案在側邊欄中的排列方式",
       "alphabetical": "依字母順序",
       "recentActivity": "最近活動"
+    },
+    "chatTranscript": {
+      "title": "聊天記錄",
+      "showThinking": {
+        "description": "在聊天記錄中顯示助理的思考過程"
+      },
+      "expandThinking": {
+        "description": "思考過程到達時自動展開並保持展開"
+      },
+      "showRawParameters": {
+        "description": "顯示工具呼叫的原始 JSON 參數"
+      }
     },
     "codeEditor": {
       "title": "程式碼編輯器",

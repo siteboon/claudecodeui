@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 
 import type { BackgroundTaskSummary,
@@ -74,6 +74,8 @@ type ChatMessagesPaneProps = {
   onGrantToolPermission: (suggestion: { entry: string; toolName: string }) => { success: boolean };
   showRawParameters?: boolean;
   showThinking?: boolean;
+  /** Thinking rows open on arrival and stay open, unless the user closes one by hand. */
+  expandThinking?: boolean;
   selectedProject: Project;
   /** Loads an already-sent message back into the composer; absent when the provider cannot re-run from a point. */
   onEditMessage?: (message: ChatMessage) => void;
@@ -134,6 +136,7 @@ function ChatMessagesPane({
   onGrantToolPermission,
   showRawParameters,
   showThinking,
+  expandThinking = false,
   selectedProject,
 }: ChatMessagesPaneProps) {
   const { t } = useTranslation('chat');
@@ -174,6 +177,31 @@ function ChatMessagesPane({
       messageKeyMap.get(message) ?? getIntrinsicMessageKey(message) ?? 'message-generated',
     [messageKeyMap],
   );
+
+  // The thinking rows the user has opened or closed by hand, by message key.
+  // Held here rather than inside the row because LazyMessageRow unmounts a row
+  // that scrolls out of its band, and the row's own disclosure state came back
+  // reset - closing a thought the user was still reading once a new one had
+  // pushed it up. A hand-made choice wins over the expandThinking preference
+  // for that row; every other row follows the preference.
+  const [thinkingOpenOverrides, setThinkingOpenOverrides] = useState<Map<string, boolean>>(
+    () => new Map(),
+  );
+  // Stable for the pane's lifetime: it reaches every memoised row, so
+  // depending on anything rebuilt per stream tick (getMessageKey is) would
+  // re-render every mounted row on each tick. The row reports its own key.
+  const handleThinkingOpenChange = useCallback((messageKey: string, open: boolean) => {
+    setThinkingOpenOverrides((current) => new Map(current).set(messageKey, open));
+  }, []);
+  // Flipping the preference discards the hand-made choices, so the toggle
+  // visibly applies to every row rather than to all but the ones touched.
+  // The preference the current choices were made under; compared during
+  // render so the reset lands in the same commit as the flip, not one later.
+  const [overridesForExpandThinking, setOverridesForExpandThinking] = useState(expandThinking);
+  if (overridesForExpandThinking !== expandThinking) {
+    setOverridesForExpandThinking(expandThinking);
+    setThinkingOpenOverrides(new Map());
+  }
 
   return (
     <div
@@ -323,10 +351,11 @@ function ChatMessagesPane({
 
               const messagePrevMessage = prevMessage;
               prevMessage = item;
+              const messageKey = getMessageKey(item);
 
               return (
                 <LazyMessageRow
-                  key={getMessageKey(item)}
+                  key={messageKey}
                   lazyRows={lazyRows}
                   timestamp={item.timestamp}
                   initiallyNearViewport={initiallyNearViewport}
@@ -340,6 +369,9 @@ function ChatMessagesPane({
                     onGrantToolPermission={onGrantToolPermission}
                     showRawParameters={showRawParameters}
                     showThinking={showThinking}
+                    messageKey={messageKey}
+                    thinkingOpen={thinkingOpenOverrides.get(messageKey) ?? expandThinking}
+                    onThinkingOpenChange={handleThinkingOpenChange}
                     selectedProject={selectedProject}
                     provider={provider}
                     onEditMessage={onEditMessage}

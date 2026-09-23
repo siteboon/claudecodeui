@@ -57,7 +57,7 @@ function WorkspaceMain({
   onProjectsRefresh,
 }: WorkspaceMainProps) {
   const preferences = useUiPreferences();
-  const { showRawParameters, showThinking, sendByCtrlEnter } = preferences;
+  const { showRawParameters, showThinking, expandThinking, sendByCtrlEnter } = preferences;
 
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
   const browserUseEnabled = useBrowserUseEnabled();
@@ -165,6 +165,7 @@ function WorkspaceMain({
                 onShowSettings={onShowSettings}
                 showRawParameters={showRawParameters}
                 showThinking={showThinking}
+                expandThinking={expandThinking}
                 sendByCtrlEnter={sendByCtrlEnter}
                 externalMessageUpdate={externalMessageUpdate}
                 newSessionTrigger={newSessionTrigger}

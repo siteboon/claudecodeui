@@ -59,6 +59,7 @@
     "darkMode": "Mode sombre",
     "showRawParameters": "Afficher les paramètres bruts",
     "showThinking": "Afficher la réflexion",
+    "expandThinking": "Déplier la réflexion",
     "sendByCtrlEnter": "Envoyer avec Ctrl+Entrée",
     "sendByCtrlEnterDescription": "Lorsqu'activé, appuyer sur Ctrl+Entrée envoie le message au lieu de simplement Entrée. Utile pour les utilisateurs IME pour éviter les envois accidentels.",
     "dragHandle": {
@@ -130,6 +131,18 @@
       "description": "Ordre d'affichage des projets dans la barre latérale",
       "alphabetical": "Alphabétique",
       "recentActivity": "Activité récente"
+    },
+    "chatTranscript": {
+      "title": "Transcription du chat",
+      "showThinking": {
+        "description": "Afficher les blocs de réflexion de l'assistant dans la transcription"
+      },
+      "expandThinking": {
+        "description": "Ouvrir les blocs de réflexion dès leur arrivée et les garder ouverts"
+      },
+      "showRawParameters": {
+        "description": "Afficher les paramètres JSON bruts des appels d'outils"
+      }
     },
     "codeEditor": {
       "title": "Éditeur de code",

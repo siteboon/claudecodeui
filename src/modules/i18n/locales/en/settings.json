@@ -75,6 +75,7 @@
     "darkMode": "Dark Mode",
     "showRawParameters": "Show raw parameters",
     "showThinking": "Show thinking",
+    "expandThinking": "Expand thinking",
     "sendByCtrlEnter": "Send by Ctrl+Enter",
     "voiceEnabled": "Voice (mic + read aloud)",
     "sendByCtrlEnterDescription": "When enabled, pressing Ctrl+Enter will send the message instead of just Enter. This is useful for IME users to avoid accidental sends.",
@@ -156,6 +157,18 @@
       "description": "How projects are ordered in the sidebar",
       "alphabetical": "Alphabetical",
       "recentActivity": "Recent Activity"
+    },
+    "chatTranscript": {
+      "title": "Chat Transcript",
+      "showThinking": {
+        "description": "Show the assistant's thinking blocks in the transcript"
+      },
+      "expandThinking": {
+        "description": "Open thinking blocks as they arrive and keep them open"
+      },
+      "showRawParameters": {
+        "description": "Show the raw JSON parameters of tool calls"
+      }
     },
     "codeEditor": {
       "title": "Code Editor",
