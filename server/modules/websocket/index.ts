@@ -10,7 +10,5 @@ export { broadcastSessionUpserted, broadcastSessionUpsertedBatch } from './servi
 export { runDetachedChatTurn } from './services/chat-websocket.service.js';
 export type { ProviderRuntimeGateway } from './services/chat-websocket.service.js';
 // isSessionHeldByShell: used by the scheduled-messages module to keep a queued
-// turn pending, and by the agent module to refuse an API run, while the user
-// is working on the session in a Shell CLI. endUnusedShellsForSession: used by
-// the agent module to end a Shell CLI that was only opened before its run.
-export { endUnusedShellsForSession, isSessionHeldByShell } from './services/shell-websocket.service.js';
+// turn pending while the user is working on the session in a Shell CLI.
+export { isSessionHeldByShell } from './services/shell-websocket.service.js';

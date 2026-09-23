@@ -241,8 +241,8 @@ test('a Shell the user ran something in keeps the session after it is left', asy
 test('a scheduled turn that a Shell refuses does not interrupt the turn it would replace', async () => {
   await withGateway(async ({ runs, aborts, runtime, openShell }) => {
     openShell();
-    // A turn that got going while the Shell was up (only the agent API could
-    // do that before it was guarded too; the registry is driven directly).
+    // A turn that got going while the Shell was up (the agent API does not
+    // check the Shell; the registry is driven directly).
     const run = chatRunRegistry.startRun({
       appSessionId: SESSION_ID,
       provider: 'claude',

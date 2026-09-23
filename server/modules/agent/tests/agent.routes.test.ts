@@ -47,7 +47,6 @@ function createDependencies(
       completeRunIfCurrent: () => undefined,
       isProcessing: () => false,
     },
-    shells: { isSessionHeldByShell: () => false, endUnusedShellsForSession: () => undefined },
     queryClaude: unexpectedProviderCall as AgentDependencies['queryClaude'],
     queryCursor: unexpectedProviderCall as AgentDependencies['queryCursor'],
     queryCodex: unexpectedProviderCall as AgentDependencies['queryCodex'],

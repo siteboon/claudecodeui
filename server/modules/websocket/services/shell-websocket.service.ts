@@ -63,13 +63,12 @@ function isPtySessionInUse(entry: PtySessionEntry): boolean {
 
 /**
  * Used by the chat gateway and, through the module barrel, by the
- * queued-message dispatcher and the agent API: each refuses to start a
- * provider run while this is true, because that Shell CLI already resumed the
- * session and a second CLI would append to the same transcript and act on the
- * same working tree. Only PTYs in use count (see `isPtySessionInUse`); an
- * unused one is ended by `endUnusedShellsForSession` instead. Entries leave
- * the map when their PTY exits or is killed, so presence means the process is
- * still running.
+ * queued-message dispatcher: each refuses to start a provider run while this
+ * is true, because that Shell CLI already resumed the session and a second
+ * CLI would append to the same transcript and act on the same working tree.
+ * Only PTYs in use count (see `isPtySessionInUse`); an unused one is ended by
+ * `endUnusedShellsForSession` instead. Entries leave the map when their PTY
+ * exits or is killed, so presence means the process is still running.
  */
 export function isSessionHeldByShell(appSessionId: string): boolean {
   for (const entry of ptySessionsMap.values()) {
@@ -81,8 +80,8 @@ export function isSessionHeldByShell(appSessionId: string): boolean {
 }
 
 /**
- * Used by the chat gateway and, through the module barrel, by the agent API,
- * right before they start a provider run on the session. Ends the agent Shell
+ * Used by the chat gateway right before it starts a provider run on the
+ * session (a send, an edit, a scheduled or queued turn). Ends the agent Shell
  * PTYs that resumed it but are not in use: nobody is looking at them and
  * nothing was ever submitted, so ending one loses nothing, and the next visit
  * to the Shell tab resumes a fresh CLI that includes the new turn instead of
