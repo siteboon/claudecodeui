@@ -228,8 +228,9 @@ export class ViewHost {
     } catch {
       return;
     }
+    // No setAutoResize(): DesktopWindowManager re-applies absolute bounds via resizeActiveView()
+    // whenever the window resizes, and auto-resize would add the size delta on top of them.
     view.setBounds(this.getContentViewBounds());
-    view.setAutoResize({ width: true, height: true });
   }
 
   resizeActiveView() {
