@@ -33,7 +33,8 @@ type TranscriptTitleSources = {
 // headless runs start with `<command-message>`, the interactive CLI with
 // `<command-name>`.
 const SLASH_COMMAND_WRAPPER_TAGS = ['<command-message>', '<command-name>'];
-// Opening tags of local command output rows, which are not prompts.
+// Opening tags of the rows the CLI writes around a local command (the caveat
+// note before it and the command output after it), which are not prompts.
 const LOCAL_COMMAND_OUTPUT_TAGS = ['<local-command-stdout>', '<local-command-caveat>'];
 
 /**
