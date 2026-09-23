@@ -6,7 +6,11 @@ import test from 'node:test';
 
 import { WebSocket } from 'ws';
 
-import { handleShellConnection } from '@/modules/websocket/services/shell-websocket.service.js';
+import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
+import {
+  handleShellConnection,
+  hasLiveAgentShellForSession,
+} from '@/modules/websocket/services/shell-websocket.service.js';
 
 function createFakeSocket() {
   const socket = new EventEmitter() as EventEmitter & {
@@ -224,4 +228,164 @@ test('a missing project directory is reported as an error frame and starts no pt
     socket.frames.map((frame) => JSON.parse(frame) as Record<string, unknown>),
     [{ type: 'error', message: 'Invalid project path' }]
   );
+});
+
+/**
+ * Spawns fake PTYs and records the command line each one would have run, so a
+ * test can tell "attached to the live PTY" apart from "started another CLI".
+ */
+function createSpawnRecorder(providerSessionId = 'provider-sid') {
+  const commands: string[] = [];
+  const ptys: Array<ReturnType<typeof createFakePty>> = [];
+  return {
+    commands,
+    ptys,
+    dependencies: {
+      resolveProviderSessionId: () => providerSessionId,
+      spawnPty: (_shell: string, args: string | string[]) => {
+        commands.push(Array.isArray(args) ? args[args.length - 1] : args);
+        const fakePty = createFakePty();
+        ptys.push(fakePty);
+        return fakePty as never;
+      },
+    },
+  };
+}
+
+function openShell(
+  dependencies: ReturnType<typeof createSpawnRecorder>['dependencies'],
+  init: Record<string, unknown>,
+) {
+  const socket = createFakeSocket();
+  handleShellConnection(socket as never, dependencies);
+  socket.emit(
+    'message',
+    JSON.stringify({ type: 'init', projectPath: process.cwd(), provider: 'claude', ...init }),
+  );
+  return socket;
+}
+
+function readFrames(socket: ReturnType<typeof createFakeSocket>) {
+  return socket.frames.map((frame) => JSON.parse(frame) as Record<string, unknown>);
+}
+
+function startChatRun(appSessionId: string) {
+  const run = chatRunRegistry.startRun({
+    appSessionId,
+    provider: 'claude',
+    providerSessionId: 'provider-sid',
+    connection: null,
+    userId: null,
+  });
+  assert.ok(run);
+}
+
+test('a Shell resume is refused while Chat is running a turn on the same session', () => {
+  const sessionId = `chat-busy-${Date.now()}`;
+  const recorder = createSpawnRecorder();
+  startChatRun(sessionId);
+
+  try {
+    const socket = openShell(recorder.dependencies, { sessionId, hasSession: true });
+    // Restart is the other way the Shell tab starts a CLI; it must not slip past.
+    const restartSocket = openShell(recorder.dependencies, { sessionId, hasSession: true, forceRestart: true });
+
+    assert.deepEqual(recorder.commands, []);
+    for (const refused of [socket, restartSocket]) {
+      const frames = readFrames(refused);
+      assert.equal(frames.length, 1);
+      assert.equal(frames[0].type, 'error');
+      assert.match(String(frames[0].message), /running in Chat/);
+    }
+    assert.equal(hasLiveAgentShellForSession(sessionId), false);
+
+    // Once the turn has finished the same Shell request resumes normally.
+    chatRunRegistry.completeRun(sessionId, { exitCode: 0 });
+    const afterRun = openShell(recorder.dependencies, { sessionId, hasSession: true });
+
+    assert.equal(recorder.commands.length, 1);
+    if (os.platform() !== 'win32') {
+      assert.equal(recorder.commands[0], 'claude --resume "provider-sid" || claude');
+    }
+    assert.match(String(readFrames(afterRun).at(-1)?.data), /Resuming Claude session provider-sid/);
+  } finally {
+    recorder.ptys.forEach((fakePty) => fakePty.emitExit());
+    chatRunRegistry.clearAll();
+  }
+});
+
+test('a Shell resume is refused while a finished turn is held open for background work', () => {
+  const sessionId = `chat-held-${Date.now()}`;
+  const recorder = createSpawnRecorder();
+  startChatRun(sessionId);
+  chatRunRegistry.completeRun(sessionId, { exitCode: 0 });
+  chatRunRegistry.setRetentionGuard((appSessionId) => appSessionId === sessionId);
+
+  try {
+    const socket = openShell(recorder.dependencies, { sessionId, hasSession: true });
+
+    assert.deepEqual(recorder.commands, []);
+    assert.equal(readFrames(socket)[0]?.type, 'error');
+  } finally {
+    chatRunRegistry.setRetentionGuard(() => false);
+    recorder.ptys.forEach((fakePty) => fakePty.emitExit());
+    chatRunRegistry.clearAll();
+  }
+});
+
+test('a busy chat session does not stop plain shells, new sessions, or reattaching', () => {
+  const sessionId = `chat-busy-others-${Date.now()}`;
+  const recorder = createSpawnRecorder();
+
+  try {
+    // A Shell that was already resuming the session before the chat turn began.
+    openShell(recorder.dependencies, { sessionId, hasSession: true });
+    assert.equal(recorder.commands.length, 1);
+    startChatRun(sessionId);
+
+    // Attaching to that PTY starts no second process, so it stays allowed.
+    const reattached = openShell(recorder.dependencies, { sessionId, hasSession: true });
+    assert.equal(recorder.commands.length, 1);
+    assert.match(String(readFrames(reattached)[0]?.data), /Reconnected to existing session/);
+
+    // A plain shell and a brand-new agent session never resume this session.
+    openShell(recorder.dependencies, {
+      sessionId,
+      hasSession: false,
+      provider: 'plain-shell',
+      isPlainShell: true,
+      initialCommand: 'plain-command',
+    });
+    openShell(recorder.dependencies, { sessionId: null, hasSession: false });
+    assert.equal(recorder.commands.length, 3);
+  } finally {
+    recorder.ptys.forEach((fakePty) => fakePty.emitExit());
+    chatRunRegistry.clearAll();
+  }
+});
+
+test('only a live agent Shell that resumed the session counts as holding it', () => {
+  const sessionId = `shell-holds-${Date.now()}`;
+  const recorder = createSpawnRecorder();
+
+  try {
+    openShell(recorder.dependencies, {
+      sessionId,
+      hasSession: false,
+      provider: 'plain-shell',
+      isPlainShell: true,
+      initialCommand: 'plain-command',
+    });
+    assert.equal(hasLiveAgentShellForSession(sessionId), false);
+
+    openShell(recorder.dependencies, { sessionId, hasSession: true });
+    assert.equal(hasLiveAgentShellForSession(sessionId), true);
+    assert.equal(hasLiveAgentShellForSession(`${sessionId}-other`), false);
+
+    // `/exit` in the CLI ends the PTY, which releases the session for Chat.
+    recorder.ptys[1].emitExit();
+    assert.equal(hasLiveAgentShellForSession(sessionId), false);
+  } finally {
+    recorder.ptys.forEach((fakePty) => fakePty.emitExit());
+  }
 });
