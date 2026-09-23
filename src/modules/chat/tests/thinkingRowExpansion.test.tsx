@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createRef } from 'react';
 import type { ComponentProps } from 'react';
 import { act, fireEvent, render } from '@testing-library/react';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 
 import '@/modules/i18n';
 import { TranscriptRenderContext } from '@/modules/chat/context/TranscriptRenderContext';
@@ -11,6 +11,26 @@ import ChatMessagesPane from '@/modules/chat/transcript/ChatMessagesPane';
 import MessageComponent from '@/modules/chat/transcript/MessageComponent';
 import { UiPreferencesProvider } from '@/shared/context/UiPreferencesContext';
 import type { ChatMessage, DiffLine, Project } from '@/shared/types';
+// Type-only, so it is erased before vi.mock's hoisted factory runs.
+import type * as MarkdownModule from '@/modules/chat/transcript/Markdown';
+
+/**
+ * Counts renders of a row's markdown. Markdown itself is memoised, so this
+ * pass-through counts every time the row around it re-renders - which a
+ * stream tick must not cause for rows it did not change.
+ */
+const markdownRenders = { count: 0 };
+vi.mock('@/modules/chat/transcript/Markdown', async (importOriginal) => {
+  const actual = await importOriginal<typeof MarkdownModule>();
+  const { createElement } = await import('react');
+  return {
+    ...actual,
+    Markdown: (props: ComponentProps<typeof actual.Markdown>) => {
+      markdownRenders.count += 1;
+      return createElement(actual.Markdown, props);
+    },
+  };
+});
 
 /**
  * Thinking rows used to mount collapsed with their open flag held inside the
@@ -84,15 +104,18 @@ test('a thinking row is open when the pane says so', () => {
   assert.deepEqual(openStates(container), ['true']);
 });
 
-test('clicking a thinking row reports the choice instead of flipping on its own', () => {
-  const reported: Array<[ChatMessage, boolean]> = [];
+test('clicking a thinking row reports the choice under its key instead of flipping on its own', () => {
+  const reported: Array<[string, boolean]> = [];
   const { container } = render(
-    renderRow({ onThinkingOpenChange: (message, open) => reported.push([message, open]) }),
+    renderRow({
+      messageKey: 'first-thought-row',
+      onThinkingOpenChange: (messageKey, open) => reported.push([messageKey, open]),
+    }),
   );
 
   fireEvent.click(thinkingTriggers(container)[0]);
 
-  assert.deepEqual(reported, [[FIRST_THOUGHT, true]]);
+  assert.deepEqual(reported, [['first-thought-row', true]]);
   assert.deepEqual(openStates(container), ['false'], 'the pane owns the state, not the row');
 });
 
@@ -107,6 +130,8 @@ test('a thinking row is always open in an export, where nothing can be clicked',
 type PaneProps = ComponentProps<typeof ChatMessagesPane>;
 
 const noop = () => {};
+// Hoisted so each render hands the rows the same function, as the app does.
+const grantToolPermission = () => ({ success: true });
 
 const PROJECT: Project = {
   projectId: 'project-1',
@@ -154,7 +179,7 @@ const paneProps = (overrides: Partial<PaneProps>): PaneProps => {
     loadAllJustFinished: false,
     showLoadAllOverlay: false,
     createDiff,
-    onGrantToolPermission: () => ({ success: true }),
+    onGrantToolPermission: grantToolPermission,
     selectedProject: PROJECT,
     showThinking: true,
     ...overrides,
@@ -226,4 +251,19 @@ test('flipping the preference re-applies it to every row, hand-touched ones incl
     rerender(renderPane({ expandThinking: false }));
   });
   assert.deepEqual(openStates(container), ['false', 'false']);
+});
+
+test('a stream tick re-renders only the rows it changed', () => {
+  const { rerender } = render(renderPane({ expandThinking: true }));
+  markdownRenders.count = 0;
+
+  // The realtime handler republishes the list as a new array of the same
+  // message objects, which gives no mounted row anything new to draw.
+  rerender(renderPane({ chatMessages: [...TRANSCRIPT], expandThinking: true }));
+  assert.equal(markdownRenders.count, 0);
+
+  // A thought arriving draws that one row and nothing else.
+  const thirdThought = thinking('thought-3', 'Nothing between five and sixteen divides it either.');
+  rerender(renderPane({ chatMessages: [...TRANSCRIPT, thirdThought], expandThinking: true }));
+  assert.equal(markdownRenders.count, 1);
 });

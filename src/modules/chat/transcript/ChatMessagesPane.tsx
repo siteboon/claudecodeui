@@ -187,13 +187,12 @@ function ChatMessagesPane({
   const [thinkingOpenOverrides, setThinkingOpenOverrides] = useState<Map<string, boolean>>(
     () => new Map(),
   );
-  const handleThinkingOpenChange = useCallback(
-    (message: ChatMessage, open: boolean) => {
-      const key = getMessageKey(message);
-      setThinkingOpenOverrides((current) => new Map(current).set(key, open));
-    },
-    [getMessageKey],
-  );
+  // Stable for the pane's lifetime: it reaches every memoised row, so
+  // depending on anything rebuilt per stream tick (getMessageKey is) would
+  // re-render every mounted row on each tick. The row reports its own key.
+  const handleThinkingOpenChange = useCallback((messageKey: string, open: boolean) => {
+    setThinkingOpenOverrides((current) => new Map(current).set(messageKey, open));
+  }, []);
   // Flipping the preference discards the hand-made choices, so the toggle
   // visibly applies to every row rather than to all but the ones touched.
   // The preference the current choices were made under; compared during
@@ -370,6 +369,7 @@ function ChatMessagesPane({
                     onGrantToolPermission={onGrantToolPermission}
                     showRawParameters={showRawParameters}
                     showThinking={showThinking}
+                    messageKey={messageKey}
                     thinkingOpen={thinkingOpenOverrides.get(messageKey) ?? expandThinking}
                     onThinkingOpenChange={handleThinkingOpenChange}
                     selectedProject={selectedProject}

@@ -31,8 +31,14 @@ type MessageComponentProps = {
    * there so it outlives this row being unmounted while scrolled out of view.
    */
   thinkingOpen?: boolean;
+  /**
+   * The key ChatMessagesPane renders this row under, handed back with
+   * onThinkingOpenChange so the pane's callback can stay the same across
+   * renders and leave this memoised row alone.
+   */
+  messageKey?: string;
   /** Reports the user opening or closing a thinking row, for ChatMessagesPane to remember. */
-  onThinkingOpenChange?: (message: ChatMessage, open: boolean) => void;
+  onThinkingOpenChange?: (messageKey: string, open: boolean) => void;
   selectedProject?: Project | null;
   provider: LLMProvider | string;
   /**
@@ -54,7 +60,7 @@ const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'Edit', 'Write', 'ApplyPatch']);
  * Rendered by chat's ChatMessagesPane and ToolGroupContainer to draw one
  * transcript entry — user turn, assistant turn, or a tool call and its result.
  */
-const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, showRawParameters, showThinking, thinkingOpen = false, onThinkingOpenChange, selectedProject, provider, onEditMessage, onForkFromMessage }: MessageComponentProps) => {
+const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, showRawParameters, showThinking, thinkingOpen = false, messageKey, onThinkingOpenChange, selectedProject, provider, onEditMessage, onForkFromMessage }: MessageComponentProps) => {
   const { t } = useTranslation('chat');
   const isGrouped = prevMessage && prevMessage.type === message.type &&
     ((prevMessage.type === 'assistant') ||
@@ -335,7 +341,11 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                  Always open in an export, where nothing can be clicked. */
               <Reasoning
                 open={isExporting || thinkingOpen}
-                onOpenChange={(open) => onThinkingOpenChange?.(message, open)}
+                onOpenChange={(open) => {
+                  if (messageKey) {
+                    onThinkingOpenChange?.(messageKey, open);
+                  }
+                }}
               >
                 <ReasoningTrigger />
                 <ReasoningContent>
