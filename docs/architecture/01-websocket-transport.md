@@ -233,7 +233,7 @@ Every code that exists, with the line that emits it:
 | `SESSION_NOT_FOUND` | `:186` | No row in `sessions` — create it over REST first |
 | `UNSUPPORTED_PROVIDER` | `:195` | The session's provider has no registered runtime |
 | `RUN_IN_PROGRESS` | `:232` | `startRun` refused: this session already has a running run |
-| `SESSION_OPEN_IN_SHELL` | `:240` | A Shell CLI the user is working in has the session resumed (a `chat.send` or `chat.edit-send`, refused before any rewind) |
+| `SESSION_OPEN_IN_SHELL` | `:256` | A Shell CLI in use has the session resumed: a Shell tab is attached to it or a line was submitted to it (a `chat.send` or `chat.edit-send`, refused before any rewind) |
 | `ANCHOR_REQUIRED` | `:328` | `chat.edit-send` without an `anchorId` |
 | `EDIT_NOT_SUPPORTED` | `:338` | The provider cannot re-run from a point |
 | `ANCHOR_NOT_FOUND` | `:345` | The anchor is no longer in the transcript |
@@ -561,7 +561,8 @@ The parts worth knowing:
 
 - **PTYs outlive their socket too.** `ptySessionsMap` (`:34`) holds them, and a disconnect
   starts a 30 minute `PTY_SESSION_TIMEOUT` (`:35`) before the process is killed
-  (`:587-617`). A reconnect within that window reattaches.
+  (`:587-617`). A reconnect within that window reattaches, unless a chat run on the
+  session has ended the PTY first because nothing was ever submitted to it (below).
 - **Output is buffered per session, capped at 5000 chunks** (`:432-447`), and replayed to a
   returning client (`:361-377`) so a reconnect shows recent terminal output instead of a
   blank screen.
@@ -571,11 +572,14 @@ The parts worth knowing:
 - **Provider auth URLs are detected in the output stream** and forwarded as
   `type: 'auth_url'`, deduplicated per connection (`:459-475`).
 - **One CLI per session between the Shell and Chat.** An agent Shell will not spawn (or
-  restart) a `--resume` while `chatRunRegistry.holdsProviderProcess()` says the chat side
-  still has a process on that session; it sends `type: 'error'` instead. The other way,
-  a chat send, queued turn or agent API run first ends Shell PTYs nobody is using (no
-  socket attached, no line ever submitted: the tab resumed the session only because it
-  was opened), then is refused while `isSessionHeldByShell()` still finds one in use.
+  restart) a `--resume` while `chatRunRegistry.holdsProviderProcess()` says Chat is running
+  a turn on that session or keeps a finished one for tracked background work; it sends
+  `type: 'error'` instead, and reattaching to the live PTY stays allowed. The other way,
+  every chat run first ends the session's Shell PTYs nobody is using (no socket attached,
+  no line ever submitted: the tab resumed the session only because it was opened), then
+  checks `getShellHoldOnSession()`. If a PTY in use remains, `chat.send`/`chat.edit-send`
+  get `SESSION_OPEN_IN_SHELL`, a due scheduled message is marked failed with that reason,
+  and a queued turn stays pending until the Shell lets go.
 
 The client is `useShellConnection.ts:127` via `getShellWebSocketUrl`
 (`src/modules/shell/utils/socket.ts:39-53`), which builds the URL the same way the chat one
