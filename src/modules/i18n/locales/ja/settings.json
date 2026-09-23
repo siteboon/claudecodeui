@@ -59,6 +59,7 @@
     "darkMode": "ダークモード",
     "showRawParameters": "生パラメータを表示",
     "showThinking": "思考を表示",
+    "expandThinking": "思考を展開",
     "sendByCtrlEnter": "Ctrl+Enterで送信",
     "sendByCtrlEnterDescription": "有効にすると、Enterではなく Ctrl+Enter でメッセージを送信します。IMEユーザーの誤送信防止に便利です。",
     "dragHandle": {
@@ -130,6 +131,18 @@
       "description": "サイドバーでのプロジェクトの並び順を設定します",
       "alphabetical": "アルファベット順",
       "recentActivity": "最近のアクティビティ順"
+    },
+    "chatTranscript": {
+      "title": "チャット履歴",
+      "showThinking": {
+        "description": "アシスタントの思考ブロックを履歴に表示します"
+      },
+      "expandThinking": {
+        "description": "思考ブロックを届いた時点で開き、開いたままにします"
+      },
+      "showRawParameters": {
+        "description": "ツール呼び出しの生の JSON パラメータを表示します"
+      }
     },
     "codeEditor": {
       "title": "コードエディタ",

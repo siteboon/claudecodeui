@@ -59,6 +59,7 @@
     "darkMode": "Темная тема",
     "showRawParameters": "Показывать сырые параметры",
     "showThinking": "Показывать размышления",
+    "expandThinking": "Разворачивать размышления",
     "sendByCtrlEnter": "Отправка по Ctrl+Enter",
     "sendByCtrlEnterDescription": "Когда включено, нажатие Ctrl+Enter будет отправлять сообщение вместо просто Enter. Это полезно для пользователей IME, чтобы избежать случайной отправки.",
     "dragHandle": {
@@ -130,6 +131,18 @@
       "description": "Как проекты упорядочены на боковой панели",
       "alphabetical": "По алфавиту",
       "recentActivity": "По недавней активности"
+    },
+    "chatTranscript": {
+      "title": "Стенограмма чата",
+      "showThinking": {
+        "description": "Показывать блоки размышлений ассистента в стенограмме"
+      },
+      "expandThinking": {
+        "description": "Открывать блоки размышлений по мере появления и не сворачивать их"
+      },
+      "showRawParameters": {
+        "description": "Показывать необработанные JSON-параметры вызовов инструментов"
+      }
     },
     "codeEditor": {
       "title": "Редактор кода",

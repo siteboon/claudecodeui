@@ -75,6 +75,7 @@
     "darkMode": "다크 모드",
     "showRawParameters": "Raw 파라미터 표시",
     "showThinking": "생각 과정 표시",
+    "expandThinking": "생각 과정 펼치기",
     "sendByCtrlEnter": "Ctrl+Enter로 전송",
     "voiceEnabled": "음성 (마이크 + 소리 내어 읽기)",
     "sendByCtrlEnterDescription": "활성화하면 Enter 대신 Ctrl+Enter로 메시지를 전송합니다. IME 사용자가 실수로 전송하는 것을 방지하는 데 유용합니다.",
@@ -156,6 +157,18 @@
       "description": "사이드바에서 프로젝트 정렬 방식",
       "alphabetical": "알파벳순",
       "recentActivity": "최근 활동순"
+    },
+    "chatTranscript": {
+      "title": "채팅 기록",
+      "showThinking": {
+        "description": "어시스턴트의 생각 과정 블록을 채팅 기록에 표시합니다"
+      },
+      "expandThinking": {
+        "description": "생각 과정 블록이 도착하면 열고 계속 열어 둡니다"
+      },
+      "showRawParameters": {
+        "description": "도구 호출의 원시 JSON 매개변수를 표시합니다"
+      }
     },
     "codeEditor": {
       "title": "코드 에디터",

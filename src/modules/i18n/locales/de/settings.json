@@ -59,6 +59,7 @@
     "darkMode": "Darkmode",
     "showRawParameters": "Rohe Parameter anzeigen",
     "showThinking": "Denken anzeigen",
+    "expandThinking": "Denken ausklappen",
     "sendByCtrlEnter": "Mit Strg+Enter senden",
     "sendByCtrlEnterDescription": "Wenn aktiviert, sendet Strg+Enter die Nachricht anstelle von Enter. Dies ist nützlich für IME-Benutzer:innen, um versehentliches Senden zu vermeiden.",
     "dragHandle": {
@@ -130,6 +131,18 @@
       "description": "Wie Projekte in der Seitenleiste angeordnet werden",
       "alphabetical": "Alphabetisch",
       "recentActivity": "Letzte Aktivität"
+    },
+    "chatTranscript": {
+      "title": "Chat-Verlauf",
+      "showThinking": {
+        "description": "Die Denkblöcke des Assistenten im Verlauf anzeigen"
+      },
+      "expandThinking": {
+        "description": "Denkblöcke beim Eintreffen öffnen und geöffnet lassen"
+      },
+      "showRawParameters": {
+        "description": "Die rohen JSON-Parameter von Tool-Aufrufen anzeigen"
+      }
     },
     "codeEditor": {
       "title": "Code-Editor",

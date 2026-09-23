@@ -1287,6 +1287,7 @@ export type ProviderAuthStatusMap = Record<LLMProvider, ProviderAuthStatus>;
 export type PreferenceToggleKey =
   | 'showRawParameters'
   | 'showThinking'
+  | 'expandThinking'
   | 'sendByCtrlEnter'
   | 'voiceEnabled';
 

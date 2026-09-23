@@ -75,6 +75,7 @@
     "darkMode": "深色模式",
     "showRawParameters": "显示原始参数",
     "showThinking": "显示思考过程",
+    "expandThinking": "展开思考过程",
     "sendByCtrlEnter": "使用 Ctrl+Enter 发送",
     "voiceEnabled": "语音（麦克风 + 朗读）",
     "sendByCtrlEnterDescription": "启用后，按 Ctrl+Enter 发送消息，而不是仅按 Enter。这对于使用输入法的用户可以避免意外发送。",
@@ -156,6 +157,18 @@
       "description": "项目在侧边栏中的排列方式",
       "alphabetical": "按字母顺序",
       "recentActivity": "最近活动"
+    },
+    "chatTranscript": {
+      "title": "聊天记录",
+      "showThinking": {
+        "description": "在聊天记录中显示助手的思考过程"
+      },
+      "expandThinking": {
+        "description": "思考过程到达时自动展开并保持展开"
+      },
+      "showRawParameters": {
+        "description": "显示工具调用的原始 JSON 参数"
+      }
     },
     "codeEditor": {
       "title": "代码编辑器",

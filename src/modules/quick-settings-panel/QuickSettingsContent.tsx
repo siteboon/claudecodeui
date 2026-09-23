@@ -1,5 +1,6 @@
 import {
   Brain,
+  ChevronsUpDown,
   Eye,
   Languages,
   Mic,
@@ -34,6 +35,11 @@ const TOOL_DISPLAY_TOGGLES: PreferenceToggleItem[] = [
     labelKey: 'quickSettings.showThinking',
     icon: Brain,
   },
+  {
+    key: 'expandThinking',
+    labelKey: 'quickSettings.expandThinking',
+    icon: ChevronsUpDown,
+  },
 ];
 
 const INPUT_SETTING_TOGGLES: PreferenceToggleItem[] = [
@@ -62,6 +68,10 @@ export default function QuickSettingsContent({
   onPreferenceChange,
 }: QuickSettingsContentProps) {
   const { t } = useTranslation('settings');
+  // Expanding thinking is moot while thinking rows are hidden altogether.
+  const toolDisplayToggles = preferences.showThinking
+    ? TOOL_DISPLAY_TOGGLES
+    : TOOL_DISPLAY_TOGGLES.filter(({ key }) => key !== 'expandThinking');
   const inputSettingToggles = preferences.voiceEnabled
     ? INPUT_SETTING_TOGGLES
     : INPUT_SETTING_TOGGLES.filter(({ key }) => key !== 'voiceEnabled');
@@ -96,7 +106,7 @@ export default function QuickSettingsContent({
       </QuickSettingsSection>
 
       <QuickSettingsSection title={t('quickSettings.sections.toolDisplay')}>
-        {renderToggleRows(TOOL_DISPLAY_TOGGLES)}
+        {renderToggleRows(toolDisplayToggles)}
       </QuickSettingsSection>
 
       <QuickSettingsSection title={t('quickSettings.sections.inputSettings')}>

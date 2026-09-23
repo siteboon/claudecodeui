@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 
 import { DarkModeToggle } from '@/shared/ui';
 import type { CodeEditorSettingsState, ProjectSortOrder } from '@/shared/types';
+import { useUiPreferences, useSetUiPreference } from '@/shared/context/UiPreferencesContext';
 import { LanguageSelector } from '@/modules/i18n';
 import SettingsCard from '@/modules/settings/SettingsCard';
 import SettingsRow from '@/modules/settings/SettingsRow';
@@ -18,7 +19,7 @@ type AppearanceSettingsTabProps = {
   onCodeEditorFontSizeChange: (value: string) => void;
 };
 
-/** Rendered by Settings for the "appearance" tab, covering theme, project sorting and code editor preferences. */
+/** Rendered by Settings for the "appearance" tab, covering theme, project sorting, chat transcript and code editor preferences. */
 export default function AppearanceSettingsTab({
   projectSortOrder,
   onProjectSortOrderChange,
@@ -29,6 +30,9 @@ export default function AppearanceSettingsTab({
   onCodeEditorFontSizeChange,
 }: AppearanceSettingsTabProps) {
   const { t } = useTranslation('settings');
+  // The same store the quick settings drawer writes, so the two mirror each other.
+  const preferences = useUiPreferences();
+  const setPreference = useSetUiPreference();
 
   return (
     <div className="space-y-8">
@@ -63,6 +67,45 @@ export default function AppearanceSettingsTab({
               <option value="name">{t('appearanceSettings.projectSorting.alphabetical')}</option>
               <option value="date">{t('appearanceSettings.projectSorting.recentActivity')}</option>
             </select>
+          </SettingsRow>
+        </SettingsCard>
+      </SettingsSection>
+
+      <SettingsSection title={t('appearanceSettings.chatTranscript.title')}>
+        <SettingsCard divided>
+          <SettingsRow
+            label={t('quickSettings.showThinking')}
+            description={t('appearanceSettings.chatTranscript.showThinking.description')}
+          >
+            <SettingsToggle
+              checked={preferences.showThinking}
+              onChange={(value) => setPreference('showThinking', value)}
+              ariaLabel={t('quickSettings.showThinking')}
+            />
+          </SettingsRow>
+
+          <SettingsRow
+            label={t('quickSettings.expandThinking')}
+            description={t('appearanceSettings.chatTranscript.expandThinking.description')}
+          >
+            <SettingsToggle
+              checked={preferences.expandThinking}
+              onChange={(value) => setPreference('expandThinking', value)}
+              ariaLabel={t('quickSettings.expandThinking')}
+              // Moot while thinking rows are hidden altogether.
+              disabled={!preferences.showThinking}
+            />
+          </SettingsRow>
+
+          <SettingsRow
+            label={t('quickSettings.showRawParameters')}
+            description={t('appearanceSettings.chatTranscript.showRawParameters.description')}
+          >
+            <SettingsToggle
+              checked={preferences.showRawParameters}
+              onChange={(value) => setPreference('showRawParameters', value)}
+              ariaLabel={t('quickSettings.showRawParameters')}
+            />
           </SettingsRow>
         </SettingsCard>
       </SettingsSection>

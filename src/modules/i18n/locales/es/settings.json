@@ -75,6 +75,7 @@
     "darkMode": "Modo oscuro",
     "showRawParameters": "Mostrar parámetros sin procesar",
     "showThinking": "Mostrar razonamiento",
+    "expandThinking": "Expandir razonamiento",
     "sendByCtrlEnter": "Enviar con Ctrl+Enter",
     "voiceEnabled": "Voz (micro + lectura en voz alta)",
     "sendByCtrlEnterDescription": "Si está activado, Ctrl+Enter envía el mensaje en lugar de solo Enter. Útil para usuarios de IME y evitar envíos accidentales.",
@@ -156,6 +157,18 @@
       "description": "Cómo se ordenan los proyectos en la barra lateral",
       "alphabetical": "Alfabético",
       "recentActivity": "Actividad reciente"
+    },
+    "chatTranscript": {
+      "title": "Transcripción del chat",
+      "showThinking": {
+        "description": "Mostrar los bloques de razonamiento del asistente en la transcripción"
+      },
+      "expandThinking": {
+        "description": "Abrir los bloques de razonamiento al llegar y mantenerlos abiertos"
+      },
+      "showRawParameters": {
+        "description": "Mostrar los parámetros JSON sin procesar de las llamadas a herramientas"
+      }
     },
     "codeEditor": {
       "title": "Editor de código",

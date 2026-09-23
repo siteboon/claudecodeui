@@ -12,6 +12,8 @@ import { readUserPreference } from '@/shared/userSettings';
 export type UiPreferences = {
   showRawParameters: boolean;
   showThinking: boolean;
+  /** Thinking rows open on arrival and stay open, instead of collapsing behind their trigger. */
+  expandThinking: boolean;
   sendByCtrlEnter: boolean;
   sidebarVisible: boolean;
   voiceEnabled: boolean;
@@ -26,6 +28,7 @@ export type UiPreferencesAction =
 const DEFAULTS: UiPreferences = {
   showRawParameters: false,
   showThinking: true,
+  expandThinking: false,
   sendByCtrlEnter: false,
   sidebarVisible: true,
   voiceEnabled: false,
