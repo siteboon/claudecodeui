@@ -13,12 +13,16 @@ import type { LLMProvider } from '@/shared/types';
  * `projectId` is set to a well-known sentinel ('default') because the empty
  * shell doesn't correspond to any real project row in the database; any API
  * call that routes through this placeholder must tolerate a missing match.
+ *
+ * The paths stay empty so the server starts the shell in its configured
+ * workspaces root. Only the server knows that root; a path guessed here fails
+ * with "Invalid project path" on every install where it does not exist.
  */
 const DEFAULT_PROJECT_FOR_EMPTY_SHELL = {
   projectId: 'default',
   displayName: 'default',
-  fullPath: IS_PLATFORM ? '/workspace' : '',
-  path: IS_PLATFORM ? '/workspace' : '',
+  fullPath: '',
+  path: '',
 };
 
 type ProviderLoginModalProps = {
