@@ -113,6 +113,8 @@ CREATE TABLE IF NOT EXISTS scheduled_messages (
     status TEXT NOT NULL DEFAULT 'pending',
     -- Why a failed one failed, shown next to it in the composer.
     failure_reason TEXT,
+    -- Minutes between sends for a repeating message; NULL for a one-shot.
+    repeat_every_minutes INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
