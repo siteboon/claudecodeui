@@ -71,7 +71,7 @@ function PermissionRequestActions({ toolName, onDeny, children }: PermissionRequ
 
   if (isWritingReason) {
     return (
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center">
         <Input
           ref={reasonInputRef}
           autoFocus
