@@ -1,5 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 
 import type { ClaudeTranscriptRelocation } from '@/shared/types.js';
 
@@ -75,6 +76,10 @@ function rewriteTranscriptCwd(content: string, oldProjectPath: string, newProjec
  * them. Copies are written before any original is removed, and a failure
  * removes the copies again, so the caller never writes rows for a half-finished
  * move.
+ *
+ * When both paths encode to the same folder ("my project" -> "my_project"),
+ * the transcript is already where a resume looks, but its `cwd` still has to
+ * be rewritten; that one is rewritten in place and reported like a move.
  */
 export async function relocateClaudeTranscripts(input: {
   sessions: ClaudeTranscriptRelocation[];
@@ -88,7 +93,11 @@ export async function relocateClaudeTranscripts(input: {
   }
 
   const moved: ClaudeTranscriptRelocation[] = [];
+  // Every file written so far, which a failure removes again.
+  const writtenPaths: string[] = [];
   const sourcePaths: string[] = [];
+  // Rewritten transcripts waiting to replace an original that stays in place.
+  const inPlaceRewrites: Array<{ temporaryPath: string; jsonlPath: string }> = [];
 
   try {
     for (const session of input.sessions) {
@@ -102,35 +111,56 @@ export async function relocateClaudeTranscripts(input: {
         encodedNewDirName,
         path.basename(session.jsonlPath),
       );
+      const content = await readFile(session.jsonlPath, 'utf8');
+      const rewrittenContent = rewriteTranscriptCwd(content, input.oldProjectPath, input.newProjectPath);
+
       if (targetPath === session.jsonlPath) {
+        // Written beside the original and swapped in only after every other
+        // transcript is in place, so a failure leaves this one untouched. The
+        // `.tmp` suffix keeps the session watcher from indexing it.
+        const temporaryPath = `${session.jsonlPath}.${randomUUID()}.tmp`;
+        await writeFile(temporaryPath, rewrittenContent, { flag: 'wx' });
+        writtenPaths.push(temporaryPath);
+        inPlaceRewrites.push({ temporaryPath, jsonlPath: session.jsonlPath });
+        moved.push({ sessionId: session.sessionId, jsonlPath: session.jsonlPath });
         continue;
       }
 
-      const content = await readFile(session.jsonlPath, 'utf8');
       await mkdir(path.dirname(targetPath), { recursive: true });
       // `wx` rather than an overwrite: anything already at the destination is a
       // transcript the new folder legitimately owns.
-      await writeFile(
-        targetPath,
-        rewriteTranscriptCwd(content, input.oldProjectPath, input.newProjectPath),
-        { flag: 'wx' },
-      );
+      await writeFile(targetPath, rewrittenContent, { flag: 'wx' });
+      writtenPaths.push(targetPath);
 
       moved.push({ sessionId: session.sessionId, jsonlPath: targetPath });
       sourcePaths.push(session.jsonlPath);
     }
   } catch (error) {
-    for (const relocation of moved) {
+    for (const writtenPath of writtenPaths) {
       try {
-        await unlink(relocation.jsonlPath);
+        await unlink(writtenPath);
       } catch (cleanupError) {
         console.warn(
-          `[claude-transcript-relocation] Failed to remove ${relocation.jsonlPath}:`,
+          `[claude-transcript-relocation] Failed to remove ${writtenPath}:`,
           (cleanupError as Error).message,
         );
       }
     }
     throw error;
+  }
+
+  // A rename over the original is atomic, so a reader sees either the old
+  // transcript or the rewritten one, never a half-written file.
+  for (const { temporaryPath, jsonlPath } of inPlaceRewrites) {
+    try {
+      await rename(temporaryPath, jsonlPath);
+    } catch (error) {
+      console.warn(
+        `[claude-transcript-relocation] Failed to rewrite ${jsonlPath}:`,
+        (error as Error).message,
+      );
+      await unlink(temporaryPath).catch(() => undefined);
+    }
   }
 
   // Only once every copy exists: a transcript that failed to copy must still be
