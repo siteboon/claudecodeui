@@ -3,7 +3,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import readline from 'node:readline';
 
-import { sessionsDb } from '@/modules/database/index.js';
+import { sessionsDb, unrecordedPromptsDb } from '@/modules/database/index.js';
 import { codexAppServer } from '@/modules/providers/list/codex/codex-app-server.client.js';
 import { parseFilesInputTag, toImageAttachments } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
@@ -157,6 +157,77 @@ async function readCodexLiveTurnIds(filePath: string): Promise<string[]> {
   }
 
   return turns.getLiveTurnIds();
+}
+
+/**
+ * Whether an `event_msg` payload is a prompt the transcript shows: the typed
+ * `item_completed`/`UserMessage` current Codex writes, or the legacy
+ * `user_message` event. Same rule as the two prompt branches of
+ * `getCodexSessionMessages`.
+ */
+function isCodexPromptEvent(payload: AnyRecord): boolean {
+  if (payload.type === 'item_completed') {
+    const item = readObjectRecord(payload.item);
+    return item?.type === 'UserMessage'
+      && (extractCodexTextContent(item.content).trim().length > 0
+        || Boolean(extractCodexTypedUserImages(item.content)?.length));
+  }
+
+  return isVisibleCodexUserMessage(payload);
+}
+
+/**
+ * Reads the rows one Codex run added to its rollout — everything past the byte
+ * offset the file had when the run started — and reports the turn the run
+ * opened and whether that turn recorded the prompt.
+ *
+ * Used by the Codex runtime once a resumed run has ended, to find a prompt
+ * Codex never wrote down. `null` means the rows can no longer be told apart:
+ * the file is gone, or is shorter than the offset because it was replaced.
+ */
+export async function readCodexRunPrompt(
+  filePath: string,
+  fromOffset: number,
+): Promise<{ turnId: string | null; promptRecorded: boolean } | null> {
+  try {
+    if ((await fsp.stat(filePath)).size < fromOffset) {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+
+  let turnId: string | null = null;
+  let promptRecorded = false;
+  const lines = readline.createInterface({
+    input: fsSync.createReadStream(filePath, { start: fromOffset }),
+    crlfDelay: Infinity,
+  });
+
+  for await (const line of lines) {
+    if (!line.trim()) {
+      continue;
+    }
+    let entry: AnyRecord;
+    try {
+      entry = JSON.parse(line) as AnyRecord;
+    } catch {
+      continue;
+    }
+    const payload = readObjectRecord(entry.payload);
+    if (entry.type !== 'event_msg' || !payload) {
+      continue;
+    }
+    if (!turnId && payload.type === 'task_started') {
+      turnId = readNonEmptyString(payload.turn_id) ?? null;
+    }
+    if (isCodexPromptEvent(payload)) {
+      promptRecorded = true;
+      break;
+    }
+  }
+
+  return { turnId, promptRecorded };
 }
 
 /**
@@ -1191,7 +1262,8 @@ const CODEX_COLLABORATION_CONTROL_TOOLS = new Set([
  * `normalizeHistoryEntry` turns into `NormalizedMessage`s.
  */
 async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryResult> {
-  const sessionFilePath = sessionsDb.getSessionById(sessionId)?.jsonl_path;
+  const session = sessionsDb.getSessionById(sessionId);
+  const sessionFilePath = session?.jsonl_path;
 
   if (!sessionFilePath) {
     console.warn(`Codex session file not found for session ${sessionId}`);
@@ -1791,6 +1863,33 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
   }
 
   await attachCodexSubagentTranscripts(sessionFilePath, subagentsByCallId);
+
+  // Prompts the runtime kept because Codex never wrote them (a resumed turn
+  // whose pre-turn compaction failed). The timestamp sort below puts each where
+  // it was sent. One whose turn recorded a prompt after all is skipped, so the
+  // same prompt cannot show twice.
+  if (session?.provider_session_id) {
+    const liveTurnIds = new Set(turns.getLiveTurnIds());
+    const keptPrompts = unrecordedPromptsDb.listForProviderSession(sessionId, PROVIDER, session.provider_session_id);
+    for (const prompt of keptPrompts) {
+      if (prompt.turnId && anchoredTurnIds.has(prompt.turnId)) {
+        continue;
+      }
+      // The turn Codex opened for it is what an edit of this prompt cuts at,
+      // exactly as for a prompt Codex recorded itself.
+      const turnId = prompt.turnId && liveTurnIds.has(prompt.turnId) ? prompt.turnId : undefined;
+      if (turnId) {
+        anchoredTurnIds.add(turnId);
+      }
+      messages.push({
+        type: 'user',
+        timestamp: prompt.submittedAt,
+        message: { role: 'user', content: prompt.text },
+        ...(prompt.imagePaths.length > 0 ? { images: toImageAttachments(prompt.imagePaths) } : {}),
+        ...(turnId ? { turnId } : {}),
+      });
+    }
+  }
 
   // A rollback is recorded after the turns it retires, so a prompt can be
   // anchored and then retired later in the same file. Its rows still render —

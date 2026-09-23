@@ -592,6 +592,13 @@ export type ProviderRuntimePermissionGateway = {
  */
 export type ProviderRuntimeContext = {
   resolveProviderSessionId(sessionId: string | null | undefined): string | null;
+  /**
+   * The transcript file indexed for an app session, or null when none is yet.
+   * The Codex runtime reads it after a resumed run to find a prompt Codex never
+   * wrote down. Optional so a runtime test that has no sessions index can leave
+   * it out; that check is then skipped.
+   */
+  resolveTranscriptPath?(sessionId: string): string | null;
   resolveResumeModel(
     sessionId: string | undefined,
     requestedModel?: string | null,
