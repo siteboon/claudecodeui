@@ -490,9 +490,50 @@ async function readTranscriptRows(jsonlPath: string, providerSessionId: string):
   return rows;
 }
 
+/**
+ * How the notes Claude delivers into a session begin, for rows written by CLI
+ * builds that do not mark them with `origin` (and do not always set `isMeta`).
+ */
+const INJECTED_NOTE_PREFIXES = [
+  '<task-notification>',
+  'Another Claude session sent a message:',
+  '<teammate-message',
+  '<agent-message',
+] as const;
+
+/**
+ * True for a user row Claude delivered into the session rather than one the
+ * user typed: a background task's notification, a message from another session
+ * or a teammate. These often end up sharing a parent with another user row — a
+ * notification gets written twice, a message lands beside the prompt it arrived
+ * with — and neither is an edit.
+ *
+ * Current CLI builds say so in `origin`: every kind but `human` is input the
+ * CLI itself files as system-sent. Rows without it are recognised by their text.
+ */
+function isInjectedNoteRow(row: AnyRecord): boolean {
+  const originKind = row.origin?.kind;
+  if (typeof originKind === 'string') {
+    return originKind !== 'human';
+  }
+
+  const content = row.message?.content;
+  let text = '';
+  if (typeof content === 'string') {
+    text = content;
+  } else if (Array.isArray(content)) {
+    text = String(content.find((part: AnyRecord) => part?.type === 'text')?.text ?? '');
+  }
+  const leadingText = text.trimStart();
+  return INJECTED_NOTE_PREFIXES.some((prefix) => leadingText.startsWith(prefix));
+}
+
 /** True for a row the user typed, as opposed to a tool result or an injected note. */
 function isUserPromptRow(row: AnyRecord): boolean {
   if (row.type !== 'user' || row.isMeta === true || row.isCompactSummary === true) {
+    return false;
+  }
+  if (isInjectedNoteRow(row)) {
     return false;
   }
 
@@ -505,6 +546,33 @@ function isUserPromptRow(row: AnyRecord): boolean {
 }
 
 /**
+ * Maps each row's uuid to the file position of the newest row in its subtree.
+ *
+ * The transcript is append-only and a child is always written after its
+ * parent, so one backward pass hands every row's position to its parent and
+ * each uuid ends up holding the position of the last line its branch grew.
+ * Rows after a compact boundary do not link back across it, so this only
+ * orders branches within one compaction segment.
+ */
+function indexNewestRowPerBranch(rows: AnyRecord[]): Map<string, number> {
+  const newestByUuid = new Map<string, number>();
+
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index];
+    if (typeof row.uuid !== 'string') {
+      continue;
+    }
+    const newest = newestByUuid.get(row.uuid) ?? index;
+    newestByUuid.set(row.uuid, newest);
+    if (typeof row.parentUuid === 'string' && (newestByUuid.get(row.parentUuid) ?? -1) < newest) {
+      newestByUuid.set(row.parentUuid, newest);
+    }
+  }
+
+  return newestByUuid;
+}
+
+/**
  * Drops the rows belonging to prompts that were replaced by an edit.
  *
  * When a message is edited, Claude resumes the conversation partway and appends
@@ -512,34 +580,76 @@ function isUserPromptRow(row: AnyRecord): boolean {
  * both the abandoned attempt and the live one. A flat read would show them
  * stacked, which reads as the app having sent the message twice.
  *
+ * The sibling kept is the one whose branch holds the newest row: the branch the
+ * conversation carried on from. The prompt written last is not a safe stand-in
+ * for it — when that prompt's branch went nowhere, keeping it drops the live
+ * conversation instead of the abandoned one.
+ *
+ * A prompt sent right after an injected note hangs off that note, but an edit
+ * resumes through the assistant row above it (see `resolveEditAnchor`), so the
+ * replacement lands beside the note instead. Prompts are therefore paired by
+ * the row above any notes they hang off. Only the replaced prompt's subtree is
+ * dropped; the note itself stays, since it really arrived.
+ *
  * Only sibling *prompts* are treated as a fork. Branch points made by parallel
  * tool calls are extremely common — one assistant turn writes several chained
  * rows and each tool result parents onto its own — and pruning those would
  * delete tool output from every transcript in the app.
  */
 function dropSupersededPromptBranches(rows: AnyRecord[]): AnyRecord[] {
+  const noteParents = new Map<string, unknown>();
+  for (const row of rows) {
+    if (row.type === 'user' && typeof row.uuid === 'string' && isInjectedNoteRow(row)) {
+      noteParents.set(row.uuid, row.parentUuid);
+    }
+  }
+  const forkPointOf = (row: AnyRecord): unknown => {
+    let parentUuid: unknown = row.parentUuid;
+    const visited = new Set<string>();
+    while (typeof parentUuid === 'string' && noteParents.has(parentUuid) && !visited.has(parentUuid)) {
+      visited.add(parentUuid);
+      parentUuid = noteParents.get(parentUuid);
+    }
+    return parentUuid;
+  };
+
   const promptSiblings = new Map<string, AnyRecord[]>();
   for (const row of rows) {
-    if (typeof row.parentUuid !== 'string' || !isUserPromptRow(row)) {
+    if (!isUserPromptRow(row)) {
       continue;
     }
-    const siblings = promptSiblings.get(row.parentUuid);
+    const forkPoint = forkPointOf(row);
+    if (typeof forkPoint !== 'string') {
+      continue;
+    }
+    const siblings = promptSiblings.get(forkPoint);
     if (siblings) {
       siblings.push(row);
     } else {
-      promptSiblings.set(row.parentUuid, [row]);
+      promptSiblings.set(forkPoint, [row]);
     }
   }
 
+  const forks = [...promptSiblings.values()].filter((siblings) => siblings.length > 1);
+  if (forks.length === 0) {
+    return rows;
+  }
+
+  const newestByUuid = indexNewestRowPerBranch(rows);
+  const newestRowOf = (row: AnyRecord): number => (
+    typeof row.uuid === 'string' ? newestByUuid.get(row.uuid) ?? -1 : -1
+  );
+
   const supersededRoots = new Set<string>();
-  for (const siblings of promptSiblings.values()) {
-    if (siblings.length < 2) {
-      continue;
+  for (const siblings of forks) {
+    let live = siblings[0];
+    for (const row of siblings) {
+      if (newestRowOf(row) > newestRowOf(live)) {
+        live = row;
+      }
     }
-    // The transcript is append-only, so the last prompt written under a parent
-    // is the one that replaced the others.
-    for (const row of siblings.slice(0, -1)) {
-      if (typeof row.uuid === 'string') {
+    for (const row of siblings) {
+      if (row !== live && typeof row.uuid === 'string') {
         supersededRoots.add(row.uuid);
       }
     }
