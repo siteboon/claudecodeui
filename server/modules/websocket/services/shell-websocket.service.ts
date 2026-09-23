@@ -20,7 +20,10 @@ type ShellIncomingMessage = {
   isPlainShell?: boolean;
   forceRestart?: boolean;
   bypassPermissions?: boolean;
+  colorScheme?: string;
 };
+
+type ShellColorScheme = 'light' | 'dark';
 
 type PtySessionEntry = {
   pty: IPty;
@@ -126,6 +129,14 @@ function readNumber(value: unknown, fallback: number): number {
 }
 
 /**
+ * Reads the app theme the Shell tab is painted in. Older clients send none and
+ * anything unexpected is ignored, which keeps the launch exactly as before.
+ */
+function readColorScheme(value: unknown): ShellColorScheme | null {
+  return value === 'light' || value === 'dark' ? value : null;
+}
+
+/**
  * Parses incoming websocket shell messages and keeps processing safe when
  * malformed payloads are received.
  */
@@ -218,14 +229,29 @@ function buildShellCommand(
   const bypassFlag = readBoolean(message.bypassPermissions)
     ? ' --dangerously-skip-permissions'
     : '';
-  const command = initialCommand || `claude${bypassFlag}`;
+  const launchFlags = `${bypassFlag}${buildClaudeThemeFlag(readColorScheme(message.colorScheme))}`;
+  const command = initialCommand || `claude${launchFlags}`;
   if (resumeSessionId) {
     if (os.platform() === 'win32') {
-      return `claude --resume "${resumeSessionId}"${bypassFlag}; if ($LASTEXITCODE -ne 0) { claude${bypassFlag} }`;
+      return `claude --resume "${resumeSessionId}"${launchFlags}; if ($LASTEXITCODE -ne 0) { claude${launchFlags} }`;
     }
-    return `claude --resume "${resumeSessionId}"${bypassFlag} || claude${bypassFlag}`;
+    return `claude --resume "${resumeSessionId}"${launchFlags} || claude${launchFlags}`;
   }
   return command;
+}
+
+/**
+ * Claude Code paints its own colours and defaults to its dark theme whatever the
+ * terminal looks like, so inside a light Shell tab its prompt rows became dark
+ * bands. `--settings` applies `theme` to this launch only: the user's
+ * ~/.claude.json and settings.json are never written. Skipped on Windows, where
+ * the command runs through PowerShell and inline JSON quoting is not reliable.
+ */
+function buildClaudeThemeFlag(colorScheme: ShellColorScheme | null): string {
+  if (!colorScheme || os.platform() === 'win32') {
+    return '';
+  }
+  return ` --settings '{"theme":"${colorScheme}"}'`;
 }
 
 function readEnvValue(env: NodeJS.ProcessEnv, key: string): string | undefined {
@@ -313,6 +339,7 @@ export function handleShellConnection(
         const provider = readString(data.provider, 'claude');
         const initialCommand = readString(data.initialCommand);
         const forceRestart = readBoolean(data.forceRestart);
+        const colorScheme = readColorScheme(data.colorScheme);
         const isPlainShell =
           readBoolean(data.isPlainShell) ||
           (!!initialCommand && !hasSession) ||
@@ -412,6 +439,10 @@ export function handleShellConnection(
             TERM: 'xterm-256color',
             COLORTERM: 'truecolor',
             FORCE_COLOR: '3',
+            // rxvt's "foreground;background" palette indices (15 = white, 0 = black).
+            // Programs that cannot query the terminal (vim, Claude Code's "auto"
+            // theme before its OSC 11 reply arrives) read it to pick light or dark.
+            ...(colorScheme ? { COLORFGBG: colorScheme === 'light' ? '0;15' : '15;0' } : {}),
           },
         });
 

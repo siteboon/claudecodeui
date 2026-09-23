@@ -13,6 +13,9 @@ type ShellInitMessage = {
   isPlainShell: boolean;
   forceRestart?: boolean;
   bypassPermissions?: boolean;
+  // The app theme at launch, so the server can start a CLI in the colour scheme
+  // the terminal is painted in.
+  colorScheme?: 'light' | 'dark';
 };
 
 type ShellResizeMessage = {

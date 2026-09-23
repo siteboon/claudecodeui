@@ -21,6 +21,7 @@ type UseShellConnectionOptions = {
   initialCommandRef: MutableRefObject<string | null | undefined>;
   isPlainShellRef: MutableRefObject<boolean>;
   bypassPermissionsRef: MutableRefObject<boolean>;
+  isDarkModeRef: MutableRefObject<boolean>;
   onProcessCompleteRef: MutableRefObject<((exitCode: number) => void) | null | undefined>;
   isInitialized: boolean;
   autoConnect: boolean;
@@ -46,6 +47,7 @@ export function useShellConnection({
   initialCommandRef,
   isPlainShellRef,
   bypassPermissionsRef,
+  isDarkModeRef,
   onProcessCompleteRef,
   isInitialized,
   autoConnect,
@@ -167,6 +169,8 @@ export function useShellConnection({
               // Launch-time flag: bypass mode can only join the CLI's
               // shift+tab cycle when claude starts with it.
               bypassPermissions: bypassPermissionsRef.current,
+              // Launch-time too: a CLI picks its colours when it starts.
+              colorScheme: isDarkModeRef.current ? 'dark' : 'light',
             });
           }, TERMINAL_INIT_DELAY_MS);
         };
@@ -203,6 +207,7 @@ export function useShellConnection({
       initialCommandRef,
       isConnected,
       isConnecting,
+      isDarkModeRef,
       isPlainShellRef,
       selectedProjectRef,
       selectedSessionRef,

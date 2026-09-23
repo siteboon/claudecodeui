@@ -3,6 +3,7 @@ import type { MutableRefObject, RefObject } from 'react';
 import type { FitAddon } from '@xterm/addon-fit';
 import type { Terminal } from '@xterm/xterm';
 
+import { useTheme } from '@/shared/context/ThemeContext';
 import type { Project, ProjectSession } from '@/shared/types';
 import { useShellConnection } from '@/modules/shell/hooks/useShellConnection';
 import { useShellTerminal } from '@/modules/shell/hooks/useShellTerminal';
@@ -43,6 +44,7 @@ export function useShellRuntime({
   onProcessComplete,
   onOutputRef,
 }: UseShellRuntimeOptions): UseShellRuntimeResult {
+  const { isDarkMode } = useTheme();
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -53,6 +55,7 @@ export function useShellRuntime({
   const initialCommandRef = useRef(initialCommand);
   const isPlainShellRef = useRef(isPlainShell);
   const bypassPermissionsRef = useRef(bypassPermissions);
+  const isDarkModeRef = useRef(isDarkMode);
   const onProcessCompleteRef = useRef(onProcessComplete);
   const lastSessionIdRef = useRef<string | null>(selectedSession?.id ?? null);
 
@@ -63,8 +66,9 @@ export function useShellRuntime({
     initialCommandRef.current = initialCommand;
     isPlainShellRef.current = isPlainShell;
     bypassPermissionsRef.current = bypassPermissions;
+    isDarkModeRef.current = isDarkMode;
     onProcessCompleteRef.current = onProcessComplete;
-  }, [selectedProject, selectedSession, initialCommand, isPlainShell, bypassPermissions, onProcessComplete]);
+  }, [selectedProject, selectedSession, initialCommand, isPlainShell, bypassPermissions, isDarkMode, onProcessComplete]);
 
   const closeSocket = useCallback(() => {
     const activeSocket = wsRef.current;
@@ -102,6 +106,7 @@ export function useShellRuntime({
     initialCommandRef,
     isPlainShellRef,
     bypassPermissionsRef,
+    isDarkModeRef,
     onProcessCompleteRef,
     isInitialized,
     autoConnect,

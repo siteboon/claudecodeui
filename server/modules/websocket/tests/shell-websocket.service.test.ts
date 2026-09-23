@@ -225,3 +225,89 @@ test('a missing project directory is reported as an error frame and starts no pt
     [{ type: 'error', message: 'Invalid project path' }]
   );
 });
+
+type SpawnCall = { command: string; env: Record<string, string | undefined> };
+
+function spawnRecorder(resumeSessionId: string | null = null) {
+  const calls: SpawnCall[] = [];
+  const dependencies = {
+    resolveProviderSessionId: () => resumeSessionId,
+    spawnPty: (_shell: string, args: string | string[], options?: { env?: Record<string, string | undefined> }) => {
+      calls.push({
+        command: Array.isArray(args) ? args[args.length - 1] : args,
+        env: options?.env ?? {},
+      });
+      return createFakePty() as never;
+    },
+  };
+  return { calls, dependencies };
+}
+
+function launch(dependencies: ReturnType<typeof spawnRecorder>['dependencies'], init: Record<string, unknown>) {
+  const socket = createFakeSocket();
+  handleShellConnection(socket as never, dependencies);
+  socket.emit(
+    'message',
+    JSON.stringify({ type: 'init', projectPath: process.cwd(), hasSession: false, ...init })
+  );
+}
+
+// Claude Code defaults to its dark theme whatever the terminal looks like, so a
+// light Shell tab showed dark prompt bands until the launch carried the theme.
+test('claude starts in the colour scheme the Shell tab is painted in', () => {
+  const { calls, dependencies } = spawnRecorder();
+
+  launch(dependencies, { sessionId: `scheme-light-${Date.now()}`, provider: 'claude', colorScheme: 'light' });
+  launch(dependencies, { sessionId: `scheme-dark-${Date.now()}`, provider: 'claude', colorScheme: 'dark' });
+
+  if (os.platform() !== 'win32') {
+    assert.deepEqual(
+      calls.map((call) => call.command),
+      [`claude --settings '{"theme":"light"}'`, `claude --settings '{"theme":"dark"}'`]
+    );
+  }
+  assert.equal(calls[0].env.COLORFGBG, '0;15');
+  assert.equal(calls[1].env.COLORFGBG, '15;0');
+});
+
+test('the colour scheme rides along with bypass and resume launches', () => {
+  const { calls, dependencies } = spawnRecorder('resumed-session-id');
+
+  launch(dependencies, {
+    sessionId: `scheme-resume-${Date.now()}`,
+    hasSession: true,
+    provider: 'claude',
+    bypassPermissions: true,
+    colorScheme: 'light',
+  });
+
+  assert.equal(calls.length, 1);
+  if (os.platform() !== 'win32') {
+    const flags = ` --dangerously-skip-permissions --settings '{"theme":"light"}'`;
+    assert.equal(calls[0].command, `claude --resume "resumed-session-id"${flags} || claude${flags}`);
+  }
+});
+
+test('other shells only get the COLORFGBG hint, and old clients launch exactly as before', () => {
+  const { calls, dependencies } = spawnRecorder();
+
+  launch(dependencies, {
+    sessionId: `scheme-plain-${Date.now()}`,
+    provider: 'plain-shell',
+    isPlainShell: true,
+    initialCommand: 'npx task-master init',
+    colorScheme: 'light',
+  });
+  launch(dependencies, { sessionId: `scheme-codex-${Date.now()}`, provider: 'codex', colorScheme: 'dark' });
+  launch(dependencies, { sessionId: `scheme-none-${Date.now()}`, provider: 'claude' });
+  launch(dependencies, { sessionId: `scheme-bogus-${Date.now()}`, provider: 'claude', colorScheme: 'sepia' });
+
+  assert.deepEqual(
+    calls.map((call) => call.command),
+    ['npx task-master init', 'codex', 'claude', 'claude']
+  );
+  assert.equal(calls[0].env.COLORFGBG, '0;15');
+  assert.equal(calls[1].env.COLORFGBG, '15;0');
+  assert.equal(calls[2].env.COLORFGBG, process.env.COLORFGBG);
+  assert.equal(calls[3].env.COLORFGBG, process.env.COLORFGBG);
+});
