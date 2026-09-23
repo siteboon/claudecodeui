@@ -65,7 +65,13 @@
     "addTo": "Añade {{entry}} a las herramientas permitidas.",
     "retry": "Permiso guardado. Reintenta la solicitud para usar la herramienta.",
     "error": "No se pudieron actualizar los permisos. Inténtalo de nuevo.",
-    "openSettings": "Abrir ajustes"
+    "openSettings": "Abrir ajustes",
+    "denyHint": "Denegar y detener a Claude hasta que respondas",
+    "denyWithReason": "Denegar con motivo",
+    "denyReasonPlaceholder": "Dile a Claude qué hacer en su lugar",
+    "denyReasonLabel": "Motivo para denegar {{tool}}",
+    "cancelDenyReason": "Cancelar",
+    "sendDenyReason": "Denegar y enviar"
   },
   "todo": {
     "updated": "La lista de pendientes se actualizó correctamente",

@@ -64,7 +64,13 @@
     "addTo": "{{entry}} İzin Verilen Araçlar listesine ekleniyor.",
     "retry": "İzin kaydedildi. Aracı kullanmak için isteği tekrar dene.",
     "error": "İzinler güncellenemedi. Lütfen tekrar dene.",
-    "openSettings": "Ayarları aç"
+    "openSettings": "Ayarları aç",
+    "denyHint": "Reddet ve sen yanıt verene kadar Claude'u durdur",
+    "denyWithReason": "Gerekçeyle reddet",
+    "denyReasonPlaceholder": "Claude'a bunun yerine ne yapmasını istediğini söyle",
+    "denyReasonLabel": "{{tool}} için ret gerekçesi",
+    "cancelDenyReason": "İptal",
+    "sendDenyReason": "Reddet ve gönder"
   },
   "todo": {
     "updated": "Yapılacaklar listesi başarıyla güncellendi",

@@ -77,6 +77,41 @@ const BG_WAIT_CEILING_MS = 30 * 60 * 1000;
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
+// What the model reads when the user refuses a tool from the permission prompt,
+// worded after the Claude Code CLI's own rejection texts.
+const USER_DENIAL_PREFIX = 'The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file).';
+
+/**
+ * Builds the SDK deny result for a tool the user refused in the permission prompt.
+ *
+ * Matches the CLI's "No, and tell Claude what to do differently" prompt: a bare
+ * denial stops the turn (`interrupt`), because the user said no without saying
+ * what to do instead and the model must not route around the refusal. A denial
+ * that carries a reason is guidance: the turn goes on and the model reads it.
+ * Subagent calls are never interrupted, as in the CLI; the refusal ends the
+ * subagent's work and its parent decides what happens next.
+ * @param {string} toolName - The tool the user refused
+ * @param {unknown} reason - Free text the user typed, if any
+ * @param {boolean} isSubagent - Whether a subagent (not the main agent) made the call
+ * @returns {{ behavior: 'deny', message: string, interrupt: boolean }}
+ */
+function buildUserDenial(toolName, reason, isSubagent) {
+  const trimmedReason = typeof reason === 'string' ? reason.trim() : '';
+  const denied = `The user denied permission to use ${toolName}. ${USER_DENIAL_PREFIX}`;
+  if (trimmedReason) {
+    return {
+      behavior: 'deny',
+      message: `${denied} To tell you how to proceed, the user said:\n${trimmedReason}`,
+      interrupt: false
+    };
+  }
+  return {
+    behavior: 'deny',
+    message: `${denied} STOP what you are doing and wait for the user to tell you how to proceed.`,
+    interrupt: !isSubagent
+  };
+}
+
 // Ultracode is a session-scoped setting rather than an SDK effort level: it pairs xhigh
 // effort with standing dynamic-workflow orchestration, and the CLI only honours it when
 // Workflows are enabled. The catalog offers it as an effort choice for the picker, so the
@@ -906,6 +941,13 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // Set once a turn publishes a budget read from an assistant message, so the
   // turn-ending `result` is only mined for usage when nothing better arrived.
   let assistantBudgetSent = false;
+  // Set when a permission denial asked the CLI to stop the turn; cleared by the
+  // `result` that ends it.
+  let turnStoppedByDenial = false;
+  // True while the last message was the error `result` of a turn a denial
+  // stopped. The CLI then exits non-zero and the SDK rethrows that result, which
+  // is the stop the user asked for, not a failure to report.
+  let denialStopIsLastMessage = false;
 
   // A new turn supersedes any earlier one still holding this session's process
   // open, so held runs cannot stack up across a conversation.
@@ -1062,7 +1104,17 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         return { behavior: 'allow', updatedInput: decision.updatedInput ?? input };
       }
 
-      return { behavior: 'deny', message: decision.message ?? 'User denied tool use' };
+      // Interactive tools are answered, not refused: a "deny" there is a reply
+      // such as "revise the plan", which the model must receive as-is.
+      if (requiresInteraction) {
+        return { behavior: 'deny', message: decision.message ?? 'User denied tool use' };
+      }
+
+      const denial = buildUserDenial(toolName, decision.message, Boolean(context?.agentID));
+      if (denial.interrupt) {
+        turnStoppedByDenial = true;
+      }
+      return denial;
     };
 
     // The SDK's own `query`, unless the caller supplies one (tests script the
@@ -1098,6 +1150,11 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     // Process streaming messages
     console.log('Starting async generator loop for session:', capturedSessionId || 'NEW');
     for await (const message of queryInstance) {
+      denialStopIsLastMessage = message.type === 'result' && message.is_error === true && turnStoppedByDenial;
+      if (message.type === 'result') {
+        turnStoppedByDenial = false;
+      }
+
       // Capture session ID from first message
       if (message.session_id && !capturedSessionId) {
 
@@ -1280,6 +1337,11 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     if (wasAborted) {
       // The abort already produced the terminal complete; a generator throw
       // caused by interrupt() is expected noise, not a user-facing error.
+      return;
+    }
+
+    if (denialStopIsLastMessage && turnCompleteSent) {
+      // The user's denial stopped the turn, which already reported complete.
       return;
     }
 

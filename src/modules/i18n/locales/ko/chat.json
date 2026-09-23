@@ -65,7 +65,13 @@
     "addTo": "{{entry}}을(를) 허용된 도구에 추가합니다.",
     "retry": "권한이 저장되었습니다. 도구를 사용하려면 요청을 재시도하세요.",
     "error": "권한을 업데이트할 수 없습니다. 다시 시도해주세요.",
-    "openSettings": "설정 열기"
+    "openSettings": "설정 열기",
+    "denyHint": "거부하고 답장할 때까지 Claude를 중지합니다",
+    "denyWithReason": "이유와 함께 거부",
+    "denyReasonPlaceholder": "대신 무엇을 할지 Claude에게 알려주세요",
+    "denyReasonLabel": "{{tool}} 거부 이유",
+    "cancelDenyReason": "취소",
+    "sendDenyReason": "거부 및 전송"
   },
   "todo": {
     "updated": "Todo 리스트가 업데이트되었습니다",

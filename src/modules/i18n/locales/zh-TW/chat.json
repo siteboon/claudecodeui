@@ -64,7 +64,13 @@
     "addTo": "將 {{entry}} 加入允許的工具。",
     "retry": "權限已儲存。重試請求以使用該工具。",
     "error": "無法更新權限。請重試。",
-    "openSettings": "開啟設定"
+    "openSettings": "開啟設定",
+    "denyHint": "拒絕並暫停 Claude，直到你回覆",
+    "denyWithReason": "拒絕並說明原因",
+    "denyReasonPlaceholder": "告訴 Claude 改做什麼",
+    "denyReasonLabel": "拒絕 {{tool}} 的原因",
+    "cancelDenyReason": "取消",
+    "sendDenyReason": "拒絕並傳送"
   },
   "todo": {
     "updated": "待辦清單已成功更新",

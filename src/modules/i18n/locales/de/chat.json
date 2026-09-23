@@ -64,7 +64,13 @@
     "addTo": "Fügt {{entry}} zu erlaubten Werkzeugen hinzu.",
     "retry": "Berechtigung gespeichert. Wiederhole die Anfrage, um das Werkzeug zu verwenden.",
     "error": "Berechtigungen konnten nicht aktualisiert werden. Bitte erneut versuchen.",
-    "openSettings": "Einstellungen öffnen"
+    "openSettings": "Einstellungen öffnen",
+    "denyHint": "Ablehnen und Claude anhalten, bis du antwortest",
+    "denyWithReason": "Mit Begründung ablehnen",
+    "denyReasonPlaceholder": "Sag Claude, was es stattdessen tun soll",
+    "denyReasonLabel": "Grund für die Ablehnung von {{tool}}",
+    "cancelDenyReason": "Abbrechen",
+    "sendDenyReason": "Ablehnen & senden"
   },
   "todo": {
     "updated": "Aufgabenliste wurde erfolgreich aktualisiert",

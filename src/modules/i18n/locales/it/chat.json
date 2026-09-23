@@ -64,7 +64,13 @@
     "addTo": "Aggiunge {{entry}} agli strumenti consentiti.",
     "retry": "Permesso salvato. Riprova la richiesta per usare lo strumento.",
     "error": "Impossibile aggiornare i permessi. Riprova.",
-    "openSettings": "Apri impostazioni"
+    "openSettings": "Apri impostazioni",
+    "denyHint": "Nega e ferma Claude finché non rispondi",
+    "denyWithReason": "Nega con motivo",
+    "denyReasonPlaceholder": "Di' a Claude cosa fare invece",
+    "denyReasonLabel": "Motivo per negare {{tool}}",
+    "cancelDenyReason": "Annulla",
+    "sendDenyReason": "Nega e invia"
   },
   "todo": {
     "updated": "Lista attività aggiornata con successo",

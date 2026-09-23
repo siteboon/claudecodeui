@@ -575,6 +575,11 @@ export type ProviderRuntimeWriter = {
 export type ProviderPermissionDecision = {
   allow: boolean;
   updatedInput?: unknown;
+  /**
+   * On a denial, what the user told the model to do instead. A permission
+   * denial without one stops the turn; with one, the turn continues and the
+   * model reads it. For interactive tools (plan approval) it is the reply.
+   */
   message?: string;
   rememberEntry?: unknown;
 };
