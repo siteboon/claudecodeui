@@ -33,6 +33,9 @@ const binaryBytes = (size: number) => {
 const numberedLines = (count: number, label: string) =>
   Array.from({ length: count }, (_, index) => `${label} line ${String(index).padStart(6, '0')}`).join('\n') + '\n';
 
+// One very long line, like a committed minified bundle.
+const minifiedLine = (length: number, label: string) => `var ${label}=1;`.repeat(Math.ceil(length / 8)).slice(0, length);
+
 before(async () => {
   repositoryRootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'git-file-diff-'));
   git('init', '-q');
@@ -46,6 +49,7 @@ before(async () => {
   await fs.writeFile(path.join(repositoryRootPath, 'gone-big.txt'), numberedLines(100_000, 'old'));
   await fs.writeFile(path.join(repositoryRootPath, 'image.png'), binaryBytes(4_000));
   await fs.writeFile(path.join(repositoryRootPath, 'rewritten.txt'), numberedLines(40_000, 'old'));
+  await fs.writeFile(path.join(repositoryRootPath, 'bundle.min.js'), minifiedLine(600_000, 'a'));
   git('add', '.');
   git('commit', '-qm', 'init');
 
@@ -57,6 +61,9 @@ before(async () => {
   await fs.rm(path.join(repositoryRootPath, 'gone-big.txt'));
   await fs.writeFile(path.join(repositoryRootPath, 'image.png'), binaryBytes(5_000));
   await fs.writeFile(path.join(repositoryRootPath, 'rewritten.txt'), numberedLines(40_000, 'new'));
+  await fs.writeFile(path.join(repositoryRootPath, 'bundle.min.js'), minifiedLine(600_000, 'b'));
+  // 3-byte characters and no newline: 500,000 bytes is not a whole number of them.
+  await fs.writeFile(path.join(repositoryRootPath, 'wide.txt'), '界'.repeat(200_000));
   await fs.writeFile(path.join(repositoryRootPath, 'notes.txt'), 'first\nsecond\n');
   await fs.writeFile(path.join(repositoryRootPath, 'artifact.bin'), binaryBytes(2 * 1024 * 1024));
   await fs.writeFile(path.join(repositoryRootPath, 'huge.log'), numberedLines(150_000, 'log'));
@@ -147,7 +154,7 @@ test('a modified tracked binary is reported as binary instead of an empty diff',
   assert.deepEqual(await readDiff('image.png'), { diff: '', isBinary: true, isTruncated: false });
 });
 
-test('an oversized untracked text file is cut at a line boundary and flagged', async () => {
+test('an oversized untracked text file is cut at the byte limit and flagged', async () => {
   const { counter, fileSystem } = createReadCountingFileSystem();
   const result = await readDiff('huge.log', fileSystem);
 
@@ -157,9 +164,20 @@ test('an oversized untracked text file is cut at a line boundary and flagged', a
   const [header, ...addedLines] = result.diff.split('\n').slice(2);
   assert.equal(header, `@@ -0,0 +1,${addedLines.length} @@`);
   assert.equal(addedLines[0], '+log line 000000');
-  // Every shown line is whole: no partial line where the read stopped.
-  assert.ok(addedLines.every((line) => /^\+log line \d{6}$/.test(line)));
+  // Whole lines up to where the read stopped, then the part of the next line that was read.
+  assert.ok(addedLines.slice(0, -1).every((line) => /^\+log line \d{6}$/.test(line)));
+  assert.ok('+log line 000000'.length >= addedLines[addedLines.length - 1].length);
+  assert.equal(Buffer.byteLength(addedLines.map((line) => line.slice(1)).join('\n')), BYTE_LIMIT);
   assert.ok(result.diff.length < TRUNCATED_CEILING);
+});
+
+test('an oversized file cut inside a multi-byte character drops only that character', async () => {
+  const result = await readDiff('wide.txt');
+
+  assert.equal(result.isTruncated, true);
+  assert.equal(result.diff.includes('\uFFFD'), false);
+  const addedText = result.diff.split('\n')[3].slice(1);
+  assert.equal(addedText, '界'.repeat(Math.floor(BYTE_LIMIT / 3)));
 });
 
 test('an oversized deleted text file is cut and flagged', async () => {
@@ -167,7 +185,8 @@ test('an oversized deleted text file is cut and flagged', async () => {
 
   assert.equal(result.isTruncated, true);
   assert.ok(result.diff.startsWith('--- a/gone-big.txt\n+++ /dev/null\n@@ -1,'));
-  assert.ok(result.diff.split('\n').slice(3).every((line) => /^-old line \d{6}$/.test(line)));
+  const removedLines = result.diff.split('\n').slice(3);
+  assert.ok(removedLines.slice(0, -1).every((line) => /^-old line \d{6}$/.test(line)));
   assert.ok(result.diff.length < TRUNCATED_CEILING);
 });
 
@@ -176,6 +195,16 @@ test('an oversized tracked diff is cut and flagged', async () => {
 
   assert.equal(result.isTruncated, true);
   assert.ok(result.diff.startsWith('@@ -1,40000 +1,40000 @@\n-old line 000000\n'));
+  assert.ok(result.diff.length <= BYTE_LIMIT);
+});
+
+test('an oversized single-line (minified) change still has a preview', async () => {
+  const result = await readDiff('bundle.min.js');
+
+  assert.equal(result.isTruncated, true);
+  assert.ok(result.diff.startsWith('@@ -1 +1 @@\n-var a=1;var a=1;'));
+  // GitDiffViewer renders the first 200K characters, so the cut diff must still carry that many.
+  assert.ok(result.diff.length > 400_000, `preview was only ${result.diff.length} characters`);
   assert.ok(result.diff.length <= BYTE_LIMIT);
 });
 

@@ -37,15 +37,31 @@ function looksBinary(bytes: Buffer): boolean {
   return bytes.subarray(0, BINARY_SNIFF_BYTE_COUNT).includes(0);
 }
 
-// A truncated read can end mid-line (or mid UTF-8 sequence), so drop the
-// partial last line instead of showing a broken one.
+// Byte length of the UTF-8 sequence that `leadByte` starts (1 for ASCII and stray bytes).
+function utf8SequenceLength(leadByte: number): number {
+  if (leadByte >= 0xf0) return 4;
+  if (leadByte >= 0xe0) return 3;
+  if (leadByte >= 0xc0) return 2;
+  return 1;
+}
+
+// A truncated read can stop inside a multi-byte UTF-8 character, which would
+// decode as U+FFFD, so only that incomplete character is dropped. The partial
+// last line itself is kept: backing up to the previous newline would leave a
+// long single-line file (a minified bundle) with no preview at all.
 function decodeBoundedText({ bytes, isTruncated }: BoundedBytes): string {
   if (!isTruncated) {
     return bytes.toString('utf8');
   }
 
-  const lastNewlineIndex = bytes.lastIndexOf(0x0a);
-  return bytes.subarray(0, lastNewlineIndex >= 0 ? lastNewlineIndex : bytes.length).toString('utf8');
+  // Walk back over at most three continuation bytes (10xxxxxx) to the lead byte.
+  let leadByteIndex = bytes.length - 1;
+  while (leadByteIndex > 0 && bytes.length - leadByteIndex < 4 && (bytes[leadByteIndex] & 0xc0) === 0x80) {
+    leadByteIndex -= 1;
+  }
+  const endsMidCharacter = leadByteIndex >= 0
+    && bytes.length - leadByteIndex < utf8SequenceLength(bytes[leadByteIndex]);
+  return bytes.subarray(0, endsMidCharacter ? leadByteIndex : bytes.length).toString('utf8');
 }
 
 /** Runs git and keeps at most `byteLimit` bytes of stdout, stopping git once the limit is passed. */
