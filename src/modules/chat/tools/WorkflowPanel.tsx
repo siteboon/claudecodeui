@@ -15,6 +15,7 @@ import type {
 } from '@/shared/types';
 import { api, readApiJson } from '@/shared/api';
 import { cn } from '@/shared/utils';
+import { AgentTaskPrompt } from '@/modules/chat/tools/AgentTaskPrompt';
 import { MarkdownContent } from '@/modules/chat/tools/ContentRenderers/MarkdownContent';
 import { SubagentTimeline } from '@/modules/chat/tools/SubagentTimeline';
 import { ToolErrorDisplay } from '@/modules/chat/tools/ToolErrorDisplay';
@@ -44,6 +45,10 @@ type WorkflowPanelProps = {
 /** What the agent-activity route answers with. */
 type WorkflowAgentActivity = {
   agent: { id: string; label?: string; model?: string; status: BackgroundTaskStatus };
+  /** The brief the script gave the agent, whole. */
+  prompt?: string;
+  /** What the agent returned, whole: prose, or structured output as JSON. Absent until it settles. */
+  result?: string;
   activity: SubagentActivity[];
   activityCount: number;
 };
@@ -202,7 +207,9 @@ type WorkflowAgentTimelineProps = {
 };
 
 /**
- * One agent's timeline, read from its transcript when its row is opened.
+ * One agent's brief, timeline and result, read from its transcript and the
+ * run's journal when its row is opened — what the CLI's `/workflows` view
+ * shows for an agent.
  *
  * The SDK streams nothing of a workflow agent's own work to the parent
  * session, so this is fetched rather than folded from the store — and
@@ -265,17 +272,32 @@ const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFi
       </div>
     );
   }
-  if (loaded.activity.activity.length === 0) {
-    return <div className="text-[11px] text-muted-foreground/60">{t('workflow.agentTimelineEmpty', 'Nothing recorded yet')}</div>;
-  }
+  const { prompt, result, activity, activityCount } = loaded.activity;
   return (
-    <SubagentTimeline
-      activity={loaded.activity.activity}
-      activityCount={loaded.activity.activityCount}
-      onFileOpen={onFileOpen}
-      createDiff={createDiff}
-      selectedProject={selectedProject}
-    />
+    <>
+      {prompt && <AgentTaskPrompt prompt={prompt} />}
+
+      {activity.length === 0 ? (
+        <div className="text-[11px] text-muted-foreground/60">{t('workflow.agentTimelineEmpty', 'Nothing recorded yet')}</div>
+      ) : (
+        <SubagentTimeline
+          activity={activity}
+          activityCount={activityCount}
+          onFileOpen={onFileOpen}
+          createDiff={createDiff}
+          selectedProject={selectedProject}
+        />
+      )}
+
+      {/* The whole answer: the timeline's last note is capped for transport,
+          and the row's preview is two lines from the live stream. */}
+      {result && (
+        <div className="rounded border border-border/40 bg-muted/30 p-2">
+          <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground/60">{t('workflow.result', 'Result')}</div>
+          <MarkdownContent content={formatResultText(result)} className="prose prose-sm max-w-none dark:prose-invert" />
+        </div>
+      )}
+    </>
   );
 });
 WorkflowAgentTimeline.displayName = 'WorkflowAgentTimeline';
@@ -292,10 +314,11 @@ type WorkflowAgentRowProps = {
 /**
  * One agent of the run: its name, phase and status, what it is on while it
  * runs and what it came back with when done — and, opened on demand, its
- * timeline.
+ * brief, timeline and whole result.
  */
 const WorkflowAgentRowView = memo(({ agent, timelineAddress, onFileOpen, createDiff, selectedProject }: WorkflowAgentRowProps) => {
   const { t } = useTranslation();
+  const isExporting = useIsExportingTranscript();
   // Opened on demand: the timeline is a fetch and, for a long run, a few
   // hundred tool renderers.
   const [isOpen, setIsOpen] = useState(false);
@@ -346,7 +369,11 @@ const WorkflowAgentRowView = memo(({ agent, timelineAddress, onFileOpen, createD
       )}
 
       {agent.status === 'completed' && agent.resultPreview && (
-        <div className="line-clamp-2 whitespace-pre-wrap break-words pl-[30px] text-[11px] text-muted-foreground/70">{agent.resultPreview}</div>
+        // Clamped on screen, where opening the row shows the whole result;
+        // an export cannot open it, so there the preview is all there is.
+        <div className={cn('whitespace-pre-wrap break-words pl-[30px] text-[11px] text-muted-foreground/70', !isExporting && 'line-clamp-2')}>
+          {agent.resultPreview}
+        </div>
       )}
 
       {isOpen && timelineAddress && agent.agentId && (

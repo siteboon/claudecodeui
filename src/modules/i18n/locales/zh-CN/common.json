@@ -267,5 +267,10 @@
       "closeSidebar": "关闭侧边栏",
       "resizeSidebar": "调整侧边栏宽度"
     }
+  },
+  "workflow": {
+    "agentTask": "任务",
+    "agentTaskShowMore": "显示更多",
+    "agentTaskShowLess": "收起"
   }
 }

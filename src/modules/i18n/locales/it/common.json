@@ -267,5 +267,10 @@
       "closeSidebar": "Chiudi barra laterale",
       "resizeSidebar": "Ridimensiona barra laterale"
     }
+  },
+  "workflow": {
+    "agentTask": "Compito",
+    "agentTaskShowMore": "Mostra di più",
+    "agentTaskShowLess": "Mostra meno"
   }
 }

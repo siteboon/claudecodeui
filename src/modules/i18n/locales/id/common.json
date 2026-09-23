@@ -349,5 +349,10 @@
     "closeLoginModal": "Tutup modal login",
     "pluginLoadFailed": "Plugin gagal dimuat: {{error}}"
   },
+  "workflow": {
+    "agentTask": "Tugas",
+    "agentTaskShowMore": "Tampilkan lebih banyak",
+    "agentTaskShowLess": "Tampilkan lebih sedikit"
+  },
   "cancel": "Batal"
 }

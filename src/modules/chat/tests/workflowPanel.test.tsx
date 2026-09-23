@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import '@/modules/i18n';
+import { TranscriptRenderContext } from '@/modules/chat/context/TranscriptRenderContext';
 import { TranscriptSessionContext } from '@/modules/chat/context/TranscriptSessionContext';
 import MessageComponent from '@/modules/chat/transcript/MessageComponent';
 import { UiPreferencesProvider } from '@/shared/context/UiPreferencesContext';
@@ -11,7 +13,7 @@ import type { LiveTaskStatus, SubagentActivity, ToolResult, WorkflowAgentProgres
 // What the agent-activity route answers with, keyed by agent id; a missing
 // key answers the way the server does for an agent that left no transcript.
 const { agentActivityByAgentId, workflowAgentActivity } = vi.hoisted(() => {
-  const agentActivityByAgentId = new Map<string, { agent: { id: string; label?: string; status: string }; activity: SubagentActivity[]; activityCount: number }>();
+  const agentActivityByAgentId = new Map<string, { agent: { id: string; label?: string; status: string }; prompt?: string; result?: string; activity: SubagentActivity[]; activityCount: number }>();
   const workflowAgentActivity = vi.fn(async (_sessionId: string, _runId: string, agentId: string) => {
     const payload = agentActivityByAgentId.get(agentId);
     return payload
@@ -450,6 +452,66 @@ describe('the agents of a workflow card', () => {
     expect(workflowAgentActivity).toHaveBeenCalledTimes(4);
     await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
     expect(workflowAgentActivity).toHaveBeenCalledTimes(4);
+  });
+
+  it('shows an opened agent\'s task and its whole result around its steps', async () => {
+    // What the CLI's `/workflows` view shows per agent. The row alone offers
+    // at most a two-line preview from the live stream, which a reload loses.
+    const prompt = [
+      'You are the chat step of a frontend audit.',
+      'Read src/modules/chat and report its largest hooks.',
+      'Return { area, hooks }.',
+    ].join('\n');
+    agentActivityByAgentId.set('aa1e064cf8bd159d6', {
+      agent: { id: 'aa1e064cf8bd159d6', label: 'audit:chat', status: 'completed' },
+      prompt,
+      result: '{"area":"chat","hooks":["useChatMessages","useChatComposerState"]}',
+      activity: [{ kind: 'text', content: 'Three large hooks carry most of the module.' }],
+      activityCount: 1,
+    });
+    renderPanel({ toolResult: { content: '{"audits":[]}', isError: false }, workflow: completedWorkflow }, 'session-1');
+    openCard();
+
+    fireEvent.click(screen.getByRole('button', { name: /audit:chat/ }));
+    await waitFor(() => expect(screen.getByText('Three large hooks carry most of the module.')).toBeTruthy());
+
+    expect(screen.getByText('Task')).toBeTruthy();
+    expect(screen.getByText(/You are the chat step of a frontend audit\./).textContent).toBe(prompt);
+    // The agent's own result, next to the run's, pretty-printed like it.
+    expect(screen.getAllByText('Result')).toHaveLength(2);
+    const agentResult = [...document.querySelectorAll('code')].find((code) => code.textContent?.includes('"area": "chat"'));
+    expect(agentResult?.textContent).toContain('"hooks": [');
+  });
+
+  it('shows no task or result for an agent whose transcript has neither', async () => {
+    agentActivityByAgentId.set('a9cfe29aa8f2afcbf', {
+      agent: { id: 'a9cfe29aa8f2afcbf', label: 'audit:sidebar', status: 'failed' },
+      activity: [{ kind: 'thinking', content: 'Two hooks to compare.' }],
+      activityCount: 1,
+    });
+    renderPanel({ toolResult: { content: '', isError: false }, workflow: { ...completedWorkflow, status: 'failed' } }, 'session-1');
+    openCard();
+
+    fireEvent.click(screen.getByRole('button', { name: /audit:sidebar/ }));
+    await waitFor(() => expect(screen.getByText('Two hooks to compare.')).toBeTruthy());
+    expect(screen.queryByText('Task')).toBeNull();
+    expect(screen.queryByText('Result')).toBeNull();
+  });
+
+  it('exports a finished agent\'s whole result preview, since nothing in the file can open the row', () => {
+    const markup = renderToStaticMarkup(
+      <TranscriptRenderContext.Provider value={{ isExporting: true }}>
+        <WorkflowPanel
+          toolInput="{}"
+          toolResult={LAUNCH_ACK}
+          taskStatus={{ status: 'running', agents: liveAgents }}
+          createDiff={() => []}
+        />
+      </TranscriptRenderContext.Provider>,
+    );
+
+    expect(markup).toContain('Three large hooks carry most of the module.');
+    expect(markup).not.toContain('line-clamp');
   });
 
   it('says so in one line when an agent left no transcript', async () => {

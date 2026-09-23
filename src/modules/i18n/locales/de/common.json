@@ -237,5 +237,10 @@
       "closeSidebar": "Seitenleiste schließen",
       "resizeSidebar": "Seitenleistenbreite ändern"
     }
+  },
+  "workflow": {
+    "agentTask": "Aufgabe",
+    "agentTaskShowMore": "Mehr anzeigen",
+    "agentTaskShowLess": "Weniger anzeigen"
   }
 }

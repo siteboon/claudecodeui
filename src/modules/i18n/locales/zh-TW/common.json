@@ -267,5 +267,10 @@
       "closeSidebar": "關閉側邊欄",
       "resizeSidebar": "調整側邊欄寬度"
     }
+  },
+  "workflow": {
+    "agentTask": "任務",
+    "agentTaskShowMore": "顯示更多",
+    "agentTaskShowLess": "收合"
   }
 }

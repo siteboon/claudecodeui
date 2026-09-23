@@ -237,5 +237,10 @@
       "closeSidebar": "Закрыть боковую панель",
       "resizeSidebar": "Изменить ширину боковой панели"
     }
+  },
+  "workflow": {
+    "agentTask": "Задача",
+    "agentTaskShowMore": "Показать больше",
+    "agentTaskShowLess": "Показать меньше"
   }
 }
