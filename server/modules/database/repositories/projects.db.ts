@@ -140,14 +140,15 @@ export const projectsDb = {
     },
 
     /**
-     * Points one project row at a different absolute directory.
+     * Points one project row, and every session row of it, at a different
+     * absolute directory.
      *
      * `project_path` is this table's natural key and the value every `sessions`
      * row joins on, so a folder that was renamed or moved on disk has to be
      * rewritten here rather than registered as a second project. The FK on
-     * `sessions.project_path` declares `ON UPDATE CASCADE`, but callers must
-     * still repoint the session rows explicitly because SQLite only enforces
-     * that when `PRAGMA foreign_keys` is on for the connection.
+     * `sessions.project_path` declares `ON UPDATE CASCADE` and the connection
+     * runs with `PRAGMA foreign_keys = ON`, so the session rows (archived ones
+     * included) move within this same statement.
      */
     updateProjectPathById(projectId: string, projectPath: string): void {
         const db = getConnection();

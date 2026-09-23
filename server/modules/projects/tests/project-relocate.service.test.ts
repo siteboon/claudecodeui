@@ -6,6 +6,7 @@ import test from 'node:test';
 
 import { closeConnection, initializeDatabase, projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { relocateProject } from '@/modules/projects/services/project-relocate.service.js';
+import { sessionsService } from '@/modules/providers/index.js';
 import { WORKSPACES_ROOT } from '@/shared/utils.js';
 
 type RelocateFixture = {
@@ -187,6 +188,48 @@ test('relocateProject rewrites the cwd in place when both folders share a Claude
     },
     { oldName: 'a b', newName: 'a_b' },
   );
+});
+
+test('relocateProject survives the watcher indexing a moved transcript mid-relocation', async (t) => {
+  await withRelocateFixture(async (fixture) => {
+    await rename(fixture.oldProjectPath, fixture.newProjectPath);
+    const relocateTranscripts = sessionsService.relocateProjectTranscripts.bind(sessionsService);
+    t.mock.method(sessionsService, 'relocateProjectTranscripts', async (
+      input: Parameters<typeof sessionsService.relocateProjectTranscripts>[0],
+    ) => {
+      const moved = await relocateTranscripts(input);
+      // What the session watcher does when it picks up the copy, whose cwd
+      // already names the new folder, before the relocation has finished.
+      sessionsDb.createSession(SESSION_ID, 'claude', fixture.newProjectPath, undefined, undefined, undefined, moved[0].jsonlPath);
+      return moved;
+    });
+
+    await relocateProject(fixture.projectId, fixture.newProjectPath);
+
+    const projectAtNewPath = projectsDb.getProjectPath(fixture.newProjectPath);
+    assert.equal(projectAtNewPath?.project_id, fixture.projectId, 'the watcher must not split off a second project');
+    assert.equal(projectAtNewPath?.custom_project_name, 'alpha');
+    assert.equal(sessionsDb.getSessionById(SESSION_ID)?.project_path, fixture.newProjectPath);
+  });
+});
+
+test('relocateProject puts the rows back when the transcripts cannot be moved', async (t) => {
+  await withRelocateFixture(async (fixture) => {
+    await rename(fixture.oldProjectPath, fixture.newProjectPath);
+    t.mock.method(sessionsService, 'relocateProjectTranscripts', async () => {
+      // The watcher indexed a copy before the move failed and was undone.
+      sessionsDb.createSession(SESSION_ID, 'claude', fixture.newProjectPath, undefined, undefined, undefined, '/gone/copy.jsonl');
+      throw new Error('disk full');
+    });
+
+    await assert.rejects(() => relocateProject(fixture.projectId, fixture.newProjectPath), /disk full/);
+
+    assert.equal(projectsDb.getProjectPathById(fixture.projectId), fixture.oldProjectPath);
+    assert.equal(projectsDb.getProjectPath(fixture.newProjectPath), null);
+    const session = sessionsDb.getSessionById(SESSION_ID);
+    assert.equal(session?.project_path, fixture.oldProjectPath);
+    assert.equal(session?.jsonl_path, fixture.transcriptPath);
+  });
 });
 
 test('relocateProject rejects a path that no longer exists', async () => {

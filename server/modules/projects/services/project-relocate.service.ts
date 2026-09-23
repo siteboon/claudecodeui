@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { sessionsService } from '@/modules/providers/index.js';
+import type { SessionTranscriptRelocation } from '@/shared/types.js';
 import { AppError, normalizeProjectPath, validateWorkspacePath } from '@/shared/utils.js';
 
 type RelocateProjectResult = {
@@ -41,8 +42,10 @@ async function assertDirectoryExists(projectPath: string): Promise<void> {
  * session attached to a `project_path` that no longer exists, which is what
  * breaks Files, Source Control, the shell and every new run.
  *
- * The transcripts are moved before anything is written, so a failure there
- * leaves the database describing the state that is still on disk.
+ * The project row moves first (its sessions follow through the FK's
+ * `ON UPDATE CASCADE`), then the transcripts, then their new `jsonl_path`s. If
+ * the transcripts cannot be moved, the rows are put back as they were read, so
+ * the database keeps describing what is on disk.
  */
 export async function relocateProject(
   projectId: string,
@@ -111,14 +114,32 @@ export async function relocateProject(
         : path.resolve(row.jsonl_path as string),
     }));
 
-  const movedTranscripts = await sessionsService.relocateProjectTranscripts({
-    sessions: transcripts,
-    oldProjectPath: previousPath,
-    newProjectPath: nextPath,
-  });
-
+  // The row moves before any transcript does. The session watcher may index a
+  // relocated transcript, whose cwd already names the new folder, at any point
+  // during the move; its `createProjectPath(nextPath)` then lands on this row
+  // instead of inserting a second project that this update would collide with.
   projectsDb.updateProjectPathById(projectId, nextPath);
-  sessionsDb.updateSessionsProjectPath(previousPath, nextPath);
+
+  let movedTranscripts: SessionTranscriptRelocation[];
+  try {
+    movedTranscripts = await sessionsService.relocateProjectTranscripts({
+      sessions: transcripts,
+      oldProjectPath: previousPath,
+      newProjectPath: nextPath,
+    });
+  } catch (error) {
+    // The providers undid their file changes, so the rows go back to what is
+    // on disk, including any `jsonl_path` the watcher pointed at a copy that
+    // has since been removed.
+    projectsDb.updateProjectPathById(projectId, previousPath);
+    for (const row of sessionRows) {
+      if (row.jsonl_path) {
+        sessionsDb.updateSessionTranscriptPath(row.session_id, row.jsonl_path);
+      }
+    }
+    throw error;
+  }
+
   for (const transcript of movedTranscripts) {
     sessionsDb.updateSessionTranscriptPath(transcript.sessionId, transcript.jsonlPath);
   }
