@@ -356,7 +356,7 @@
   },
   "modelLibrary": {
     "effortLevels": "Tingkat penalaran",
-    "effortLevelsHint": "Pilih tingkat upaya penalaran yang diterima model ini. Jika tidak ada yang dipilih, composer menyembunyikan Penalaran untuk model ini.",
+    "effortLevelsHint": "Pilih tingkat upaya penalaran yang diterima model ini. Jika tidak ada yang dipilih, tidak ada tingkat yang bisa dipilih untuk model ini di composer.",
     "effortSummary": "Penalaran: {{levels}}"
   }
 }

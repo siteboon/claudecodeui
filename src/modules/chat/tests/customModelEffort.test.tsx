@@ -17,8 +17,9 @@ import type {
 /**
  * Custom models used to carry no effort metadata, so the composer hid its
  * Reasoning section for them (#1294). These tests pin both halves of the fix
- * on the client: the Model Library form declares effort levels, and a catalog
- * entry that carries them drives the composer's effort options.
+ * on the client: the Model Library form declares effort levels (the ones the
+ * catalog's `EFFORT_LEVELS` allows), and a catalog entry that carries them
+ * drives the composer's effort options.
  */
 
 const CUSTOM_CLAUDE_MODEL: ProviderModelOption = {
@@ -53,10 +54,19 @@ const CATALOG: Partial<Record<LLMProvider, ProviderModelsDefinition>> = {
       CUSTOM_CLAUDE_MODEL,
     ],
     DEFAULT: 'default',
+    EFFORT_LEVELS: ['low', 'medium', 'high', 'xhigh', 'max', 'ultracode'],
   },
   cursor: {
     OPTIONS: [{ value: 'auto', label: 'Auto', isCustom: false }],
     DEFAULT: 'auto',
+    EFFORT_LEVELS: [],
+  },
+  // What OpenCode serves on a machine with only OpenCode Zen connected: none of
+  // the visible built-in models declares effort, yet the provider supports it.
+  opencode: {
+    OPTIONS: [{ value: 'opencode/gpt-5.5', label: 'GPT 5.5', isCustom: false }],
+    DEFAULT: 'opencode/gpt-5.5',
+    EFFORT_LEVELS: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'thinking'],
   },
 };
 
@@ -108,11 +118,11 @@ test('the model library declares effort levels for a new custom model', async ()
   const { actions, created } = createActions();
   render(<ModelLibraryPanel initialProvider="claude" providerModelCatalog={CATALOG} actions={actions} />);
 
-  // Every level a built-in Claude model accepts is offered, weakest first.
-  const levelButtons = ['low', 'medium', 'high', 'xhigh', 'max'].map((level) => (
+  // Every level the catalog allows is offered, in the server's order.
+  const levelButtons = ['low', 'medium', 'high', 'xhigh', 'max', 'ultracode'].map((level) => (
     screen.getByRole('button', { name: level, pressed: false })
   ));
-  assert.equal(levelButtons.length, 5);
+  assert.equal(levelButtons.length, 6);
 
   fireEvent.change(screen.getByLabelText('Model name'), { target: { value: 'Gateway Claude' } });
   fireEvent.change(screen.getByLabelText('Model ID'), { target: { value: 'gateway-claude' } });
@@ -152,6 +162,21 @@ test('editing a custom model keeps its default level and can clear its levels', 
   fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
   await waitFor(() => assert.equal(updated.length, 2));
   assert.equal(updated[1]?.input.effort, null);
+});
+
+test('OpenCode offers its effort levels even when no visible built-in model declares any', async () => {
+  const { actions, created } = createActions();
+  render(<ModelLibraryPanel initialProvider="opencode" providerModelCatalog={CATALOG} actions={actions} />);
+
+  screen.getByText('Reasoning levels');
+  fireEvent.change(screen.getByLabelText('Model name'), { target: { value: 'Router model' } });
+  fireEvent.change(screen.getByLabelText('Model ID'), { target: { value: 'openrouter/router-model' } });
+  fireEvent.click(screen.getByRole('button', { name: 'high' }));
+  fireEvent.click(screen.getByRole('button', { name: 'none' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add model' }));
+
+  await waitFor(() => assert.equal(created.length, 1));
+  assert.deepEqual(created[0]?.input.effort, { values: ['none', 'high'] });
 });
 
 test('providers without effort support show no effort levels and send none', async () => {

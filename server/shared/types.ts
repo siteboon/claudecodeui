@@ -94,6 +94,13 @@ export type ProviderModelOption = {
 export type ProviderModelsDefinition = {
   OPTIONS: ProviderModelOption[];
   DEFAULT: string;
+  /**
+   * Reasoning-effort levels a custom entry of this catalog may declare, weakest
+   * first; empty for providers without effort support. The Providers service
+   * sets it on merged catalogs from the capability matrix, so the model
+   * library offers the same levels on every machine. Adapter catalogs omit it.
+   */
+  EFFORT_LEVELS?: string[];
 };
 
 /**

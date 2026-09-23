@@ -258,7 +258,7 @@
   },
   "modelLibrary": {
     "effortLevels": "Akıl yürütme seviyeleri",
-    "effortLevelsHint": "Bu modelin kabul ettiği akıl yürütme çabası seviyelerini seçin. Hiçbiri seçilmezse, yazma alanı bu model için Akıl yürütme bölümünü gizler.",
+    "effortLevelsHint": "Bu modelin kabul ettiği akıl yürütme çabası seviyelerini seçin. Hiçbiri seçilmezse, yazma alanında bu model için seviye seçilemez.",
     "effortSummary": "Akıl yürütme: {{levels}}"
   }
 }

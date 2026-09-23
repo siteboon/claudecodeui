@@ -1,5 +1,6 @@
 import { providerModelsDb, sessionsDb } from '@/modules/database/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
+import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
 import type { IProvider } from '@/shared/interfaces.js';
 import type {
   CustomProviderModelInput,
@@ -63,17 +64,21 @@ const toCustomProviderModelOption = (
 });
 
 /**
- * Effort levels a custom model of this provider may declare: every level one
- * of the provider's predefined models accepts. Those are the levels its
- * runtime knows how to pass on (Claude's `ultracode`, for instance, is
- * translated by the runtime), and a provider whose predefined models declare
- * none (Cursor) has no effort support at all.
+ * Effort levels a custom model of this provider may declare, weakest first:
+ * the levels its runtime can pass on, from the capability matrix. Empty
+ * (Cursor) means no effort support at all.
+ *
+ * Deliberately not derived from the predefined models: OpenCode narrows its
+ * catalog to the upstream providers this machine has connected, and only its
+ * OpenCode Go models declare effort, so a catalog-derived set would vanish for
+ * Zen, Anthropic, or OpenAI users and change with unrelated credentials.
  */
-const readProviderEffortLevels = (predefined: ProviderModelsDefinition): Set<string> => new Set(
-  predefined.OPTIONS.flatMap((option) => option.effort?.values.map((level) => level.value) ?? []),
+const readCustomModelEffortLevels = (provider: LLMProvider): string[] => (
+  providerCapabilitiesService.getProviderCapabilities(provider).effortLevels
 );
 
 const mergeProviderModels = (
+  provider: LLMProvider,
   predefined: ProviderModelsDefinition,
   custom: CustomProviderModelRecord[],
 ): ProviderModelsDefinition => {
@@ -83,6 +88,8 @@ const mergeProviderModels = (
       ...custom.map(toCustomProviderModelOption),
     ],
     DEFAULT: predefined.DEFAULT,
+    // Copied so no caller can mutate the shared capability matrix.
+    EFFORT_LEVELS: [...readCustomModelEffortLevels(provider)],
   };
 };
 
@@ -94,7 +101,6 @@ const normalizeCustomModelInput = (input: CustomProviderModelInput): CustomProvi
 
 const assertEffortLevelsSupported = (
   provider: LLMProvider,
-  predefined: ProviderModelsDefinition,
   input: CustomProviderModelInput,
 ): void => {
   const declaredLevels = input.effort?.values ?? [];
@@ -102,18 +108,18 @@ const assertEffortLevelsSupported = (
     return;
   }
 
-  const supportedLevels = readProviderEffortLevels(predefined);
-  if (supportedLevels.size === 0) {
+  const supportedLevels = readCustomModelEffortLevels(provider);
+  if (supportedLevels.length === 0) {
     throw new AppError(`${provider} models do not support reasoning effort.`, {
       code: 'MODEL_EFFORT_NOT_SUPPORTED',
       statusCode: 400,
     });
   }
 
-  const unsupportedLevel = declaredLevels.find((level) => !supportedLevels.has(level));
+  const unsupportedLevel = declaredLevels.find((level) => !supportedLevels.includes(level));
   if (unsupportedLevel) {
     throw new AppError(
-      `"${unsupportedLevel}" is not a ${provider} effort level. Use one of: ${[...supportedLevels].join(', ')}.`,
+      `"${unsupportedLevel}" is not a ${provider} effort level. Use one of: ${supportedLevels.join(', ')}.`,
       {
         code: 'INVALID_MODEL_EFFORT',
         statusCode: 400,
@@ -146,7 +152,7 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
 
   const getProviderModels = async (provider: LLMProvider): Promise<ProviderModelsDefinition> => {
     const predefined = await resolveProvider(provider).models.getSupportedModels();
-    return mergeProviderModels(predefined, catalog.listCustomProviderModels(provider));
+    return mergeProviderModels(provider, predefined, catalog.listCustomProviderModels(provider));
   };
 
   const getCurrentActiveModel = async (
@@ -198,13 +204,13 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     const predefined = await resolveProvider(provider).models.getSupportedModels();
     const normalized = normalizeCustomModelInput(input);
     assertModelIdAvailable(provider, predefined, normalized.id);
-    assertEffortLevelsSupported(provider, predefined, normalized);
+    assertEffortLevelsSupported(provider, normalized);
 
     try {
       const created = catalog.createCustomProviderModel(provider, normalized);
       return {
         model: toCustomProviderModelOption(created),
-        models: mergeProviderModels(predefined, catalog.listCustomProviderModels(provider)),
+        models: mergeProviderModels(provider, predefined, catalog.listCustomProviderModels(provider)),
       };
     } catch (error) {
       if (isUniqueConstraintError(error)) {
@@ -226,7 +232,7 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     readCustomModel(provider, recordId);
     const normalized = normalizeCustomModelInput(input);
     assertModelIdAvailable(provider, predefined, normalized.id, recordId);
-    assertEffortLevelsSupported(provider, predefined, normalized);
+    assertEffortLevelsSupported(provider, normalized);
 
     try {
       const updated = catalog.updateCustomProviderModel(provider, recordId, normalized);
@@ -239,7 +245,7 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
 
       return {
         model: toCustomProviderModelOption(updated),
-        models: mergeProviderModels(predefined, catalog.listCustomProviderModels(provider)),
+        models: mergeProviderModels(provider, predefined, catalog.listCustomProviderModels(provider)),
       };
     } catch (error) {
       if (isUniqueConstraintError(error)) {
@@ -268,7 +274,7 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
 
     return {
       model: toCustomProviderModelOption(removed),
-      models: mergeProviderModels(predefined, catalog.listCustomProviderModels(provider)),
+      models: mergeProviderModels(provider, predefined, catalog.listCustomProviderModels(provider)),
     };
   };
 

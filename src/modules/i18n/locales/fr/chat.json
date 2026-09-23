@@ -260,7 +260,7 @@
   },
   "modelLibrary": {
     "effortLevels": "Niveaux de raisonnement",
-    "effortLevelsHint": "Sélectionnez les niveaux d'effort de raisonnement acceptés par ce modèle. Sans sélection, le compositeur masque Raisonnement pour ce modèle.",
+    "effortLevelsHint": "Sélectionnez les niveaux d'effort de raisonnement acceptés par ce modèle. Sans sélection, aucun niveau ne pourra être choisi pour ce modèle dans le compositeur.",
     "effortSummary": "Raisonnement : {{levels}}"
   }
 }

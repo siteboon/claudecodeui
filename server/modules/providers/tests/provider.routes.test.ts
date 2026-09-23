@@ -261,7 +261,7 @@ test('custom model routes accept, validate, and return reasoning-effort levels',
             model: { recordId: number; effort?: unknown };
             models: { OPTIONS: Array<{ value: string; effort?: unknown }> };
           };
-          error?: { code: string };
+          error?: { code: string; message?: string };
         },
       };
     };
@@ -277,12 +277,27 @@ test('custom model routes accept, validate, and return reasoning-effort levels',
 
     const catalogResponse = await fetch(`${baseUrl}/api/providers/claude/models`);
     const catalogPayload = await catalogResponse.json() as {
-      data: { models: { OPTIONS: Array<{ value: string; effort?: unknown }> } };
+      data: { models: { OPTIONS: Array<{ value: string; effort?: unknown }>; EFFORT_LEVELS?: string[] } };
     };
     assert.deepEqual(
       catalogPayload.data.models.OPTIONS.find((option) => option.value === 'my-custom-model')?.effort,
       expectedEffort,
     );
+    // The model library's toggles come from here, not from the built-in models.
+    assert.deepEqual(
+      catalogPayload.data.models.EFFORT_LEVELS,
+      ['low', 'medium', 'high', 'xhigh', 'max', 'ultracode'],
+    );
+
+    // OpenCode's allowed levels do not depend on which upstream providers the
+    // machine running the tests has connected.
+    const openCodeModel = await postModel('opencode', {
+      model: 'Router model',
+      id: 'openrouter/router-model',
+      effort: { values: ['none', 'high'] },
+    });
+    assert.equal(openCodeModel.status, 201, JSON.stringify(openCodeModel.payload));
+    assert.deepEqual(openCodeModel.payload.data?.model.effort, { values: [{ value: 'none' }, { value: 'high' }] });
 
     // A PATCH from a client that predates effort metadata keeps the levels.
     const renameResponse = await fetch(
@@ -314,6 +329,17 @@ test('custom model routes accept, validate, and return reasoning-effort levels',
       assert.equal(rejected.status, 400, JSON.stringify(invalid));
       assert.equal(rejected.payload.error?.code, invalid.code, JSON.stringify(invalid));
     }
+
+    // An oversized list is refused by its length, before any entry is walked:
+    // the JSON parser accepts bodies of up to 50 MB.
+    const oversized = await postModel('claude', {
+      model: 'Oversized',
+      id: 'oversized',
+      effort: { values: Array.from({ length: 33 }, (_, index) => `level-${index}`) },
+    });
+    assert.equal(oversized.status, 400);
+    assert.equal(oversized.payload.error?.code, 'INVALID_MODEL_EFFORT');
+    assert.match(oversized.payload.error?.message ?? '', /at most 32 effort levels/);
   });
 });
 

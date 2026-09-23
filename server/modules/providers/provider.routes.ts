@@ -501,6 +501,13 @@ const invalidModelEffort = (message: string): AppError => new AppError(message, 
 });
 
 /**
+ * Upper bound on declared effort levels, far above any provider's level set.
+ * Checked before the per-entry loop so an oversized body (the JSON parser
+ * accepts up to 50 MB) is rejected at once instead of being walked in full.
+ */
+const MAX_MODEL_EFFORT_LEVELS = 32;
+
+/**
  * Parses the optional `effort` field of a custom-model payload.
  *
  * Only the shape is checked here (unique, trimmed, non-empty level ids and a
@@ -525,16 +532,21 @@ const parseCustomProviderModelEffort = (
   if (!Array.isArray(effort.values)) {
     throw invalidModelEffort('effort.values must be an array of effort levels.');
   }
+  if (effort.values.length > MAX_MODEL_EFFORT_LEVELS) {
+    throw invalidModelEffort(`effort.values can list at most ${MAX_MODEL_EFFORT_LEVELS} effort levels.`);
+  }
 
   const values: string[] = [];
+  const seenLevels = new Set<string>();
   for (const entry of effort.values) {
     const level = typeof entry === 'string' ? entry.trim() : '';
     if (!level || level.length > 40) {
       throw invalidModelEffort('effort.values must contain non-empty strings of 40 characters or fewer.');
     }
-    if (values.includes(level)) {
+    if (seenLevels.has(level)) {
       throw invalidModelEffort(`effort.values contains "${level}" more than once.`);
     }
+    seenLevels.add(level);
     values.push(level);
   }
 

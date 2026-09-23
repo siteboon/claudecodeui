@@ -285,7 +285,7 @@
   },
   "modelLibrary": {
     "effortLevels": "Niveles de razonamiento",
-    "effortLevelsHint": "Selecciona los niveles de esfuerzo de razonamiento que acepta este modelo. Si no seleccionas ninguno, el compositor oculta Razonamiento para este modelo.",
+    "effortLevelsHint": "Selecciona los niveles de esfuerzo de razonamiento que acepta este modelo. Si no seleccionas ninguno, no se podrá elegir un nivel para este modelo en el compositor.",
     "effortSummary": "Razonamiento: {{levels}}"
   }
 }

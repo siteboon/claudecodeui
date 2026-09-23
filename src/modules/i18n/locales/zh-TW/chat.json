@@ -294,7 +294,7 @@
   },
   "modelLibrary": {
     "effortLevels": "推理等級",
-    "effortLevelsHint": "選擇此模型支援的推理強度等級。若未選擇任何等級，輸入框將不會為此模型顯示推理選項。",
+    "effortLevelsHint": "選擇此模型支援的推理強度等級。若未選擇任何等級，將無法在輸入框中為此模型選擇等級。",
     "effortSummary": "推理：{{levels}}"
   }
 }

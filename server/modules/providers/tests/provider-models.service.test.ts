@@ -111,7 +111,6 @@ const createTestService = (options: {
   sessions?: ReturnType<typeof createSessionStore>;
   activeModel?: (provider: LLMProvider, sessionId?: string) => string;
   onCatalogRead?: (provider: LLMProvider) => void;
-  predefined?: (provider: LLMProvider) => ProviderModelsDefinition;
 } = {}) => {
   const catalog = options.catalog ?? createCatalogStore();
   const sessions = options.sessions ?? createSessionStore();
@@ -122,7 +121,7 @@ const createTestService = (options: {
       models: {
         getSupportedModels: async () => {
           options.onCatalogRead?.(provider);
-          return options.predefined?.(provider) ?? createModels(`${provider}-default`);
+          return createModels(`${provider}-default`);
         },
         getCurrentActiveModel: async (sessionId) => createCurrentActiveModel(
           options.activeModel?.(provider, sessionId) ?? `${provider}-default`,
@@ -173,31 +172,8 @@ test('custom models can be created, edited, and deleted', async () => {
   assert.equal(removed.models.OPTIONS.some((option) => option.recordId === recordId), false);
 });
 
-/** Predefined catalogs shaped like the real ones: Cursor declares no effort levels. */
-const createEffortAwareModels = (provider: LLMProvider): ProviderModelsDefinition => {
-  if (provider === 'cursor') {
-    return createModels('cursor-default');
-  }
-
-  return {
-    OPTIONS: [
-      {
-        value: `${provider}-default`,
-        label: `${provider}-default`,
-        effort: { default: 'medium', values: [{ value: 'low' }, { value: 'medium' }, { value: 'high' }] },
-      },
-      {
-        value: `${provider}-large`,
-        label: `${provider}-large`,
-        effort: { values: [{ value: 'high' }, { value: 'max' }] },
-      },
-    ],
-    DEFAULT: `${provider}-default`,
-  };
-};
-
 test('custom models carry declared effort levels into the merged catalog', async () => {
-  const { service } = createTestService({ predefined: createEffortAwareModels });
+  const { service } = createTestService();
 
   const created = await service.createCustomModel('claude', {
     model: 'My Custom Model',
@@ -227,7 +203,7 @@ test('custom models carry declared effort levels into the merged catalog', async
 });
 
 test('custom models without declared effort levels expose no effort', async () => {
-  const { service } = createTestService({ predefined: createEffortAwareModels });
+  const { service } = createTestService();
 
   const created = await service.createCustomModel('codex', { model: 'Plain', id: 'plain-model' });
 
@@ -235,7 +211,7 @@ test('custom models without declared effort levels expose no effort', async () =
 });
 
 test('custom effort levels must be levels the provider supports', async () => {
-  const { service } = createTestService({ predefined: createEffortAwareModels });
+  const { service } = createTestService();
 
   await assert.rejects(
     () => service.createCustomModel('codex', {
@@ -258,6 +234,33 @@ test('custom effort levels must be levels the provider supports', async () => {
       && error.code === 'MODEL_EFFORT_NOT_SUPPORTED'
       && error.statusCode === 400,
   );
+});
+
+test('allowed effort levels come from the provider, not from the built-in models this machine sees', async () => {
+  // The fake adapters' built-in models declare no effort at all, which is what
+  // the real OpenCode adapter returns once it narrows its catalog to OpenCode
+  // Zen, Anthropic, or OpenAI: only its OpenCode Go models declare effort.
+  const { service } = createTestService();
+
+  const created = await service.createCustomModel('opencode', {
+    model: 'Router model',
+    id: 'openrouter/router-model',
+    effort: { values: ['none', 'high'] },
+  });
+  assert.deepEqual(created.model.effort, { values: [{ value: 'none' }, { value: 'high' }] });
+
+  // Every merged catalog carries the provider's levels for the model library,
+  // weakest first, and an empty list where effort is unsupported.
+  const expectedLevels: Record<LLMProvider, string[]> = {
+    claude: ['low', 'medium', 'high', 'xhigh', 'max', 'ultracode'],
+    codex: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+    cursor: [],
+    opencode: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'thinking'],
+  };
+  for (const [provider, levels] of Object.entries(expectedLevels) as Array<[LLMProvider, string[]]>) {
+    assert.deepEqual((await service.getProviderModels(provider)).EFFORT_LEVELS, levels, provider);
+  }
+  assert.deepEqual(created.models.EFFORT_LEVELS, expectedLevels.opencode);
 });
 
 test('duplicate model ids are rejected within one provider', async () => {

@@ -258,7 +258,7 @@
   },
   "modelLibrary": {
     "effortLevels": "Reasoning-Stufen",
-    "effortLevelsHint": "Wähle die Reasoning-Effort-Stufen, die dieses Modell akzeptiert. Ohne Auswahl blendet der Composer Reasoning für dieses Modell aus.",
+    "effortLevelsHint": "Wähle die Reasoning-Effort-Stufen, die dieses Modell akzeptiert. Ohne Auswahl lässt sich im Composer für dieses Modell keine Stufe wählen.",
     "effortSummary": "Reasoning: {{levels}}"
   }
 }

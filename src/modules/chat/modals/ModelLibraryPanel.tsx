@@ -27,29 +27,6 @@ const PROVIDERS: Array<{ id: LLMProvider; label: string }> = [
   { id: 'opencode', label: 'OpenCode' },
 ];
 
-/**
- * Display order for reasoning-effort levels, weakest first. Levels a provider
- * adds later that are not listed here keep their catalog order after these.
- */
-const EFFORT_LEVEL_ORDER = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra', 'ultracode'];
-
-/**
- * Effort levels a custom model of this provider may declare: every level one of
- * its built-in models accepts (the server enforces the same set). Empty for
- * providers without effort support, which hides the section entirely.
- */
-const collectProviderEffortLevels = (predefinedModels: ProviderModelOption[]): string[] => {
-  const levels = [...new Set(
-    predefinedModels.flatMap((option) => option.effort?.values.map((level) => level.value) ?? []),
-  )];
-  const rank = (level: string) => {
-    const index = EFFORT_LEVEL_ORDER.indexOf(level);
-    return index === -1 ? EFFORT_LEVEL_ORDER.length : index;
-  };
-  // Array.prototype.sort is stable, so unranked levels keep their catalog order.
-  return levels.sort((left, right) => rank(left) - rank(right));
-};
-
 type ModelLibraryPanelProps = {
   initialProvider: LLMProvider;
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
@@ -101,10 +78,12 @@ export default function ModelLibraryPanel({
     () => options.filter((option) => !option.isCustom),
     [options],
   );
-  const providerEffortLevels = useMemo(
-    () => collectProviderEffortLevels(predefinedModels),
-    [predefinedModels],
-  );
+  // Levels a custom model of this provider may declare, weakest first, exactly
+  // as the server validates them. They come with the catalog rather than from
+  // its built-in models, whose effort metadata depends on which upstream
+  // providers this machine has connected (OpenCode). Empty for providers
+  // without effort support, which hides the section entirely.
+  const providerEffortLevels = providerModelCatalog[selectedProvider]?.EFFORT_LEVELS ?? [];
 
   const resetForm = () => {
     setEditing(null);
