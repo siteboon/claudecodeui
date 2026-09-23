@@ -1948,6 +1948,103 @@ test('a late notification does not replace a prompt the user typed on the same t
   ]);
 });
 
+test('a late notification written after an edit keeps the edit and replaces nothing', { concurrency: false }, async () => {
+  // Three siblings under `r-end`: the original prompt, its edit, and a report
+  // the process that launched the job wrote on the leaf it last saw.
+  const { texts, jobResult } = await readResumedSessionTexts([
+    ...backgroundJobLaunchRows(),
+    {
+      type: 'user', uuid: 'r-p2', parentUuid: 'r-end', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:05:00.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: 'original question' }] },
+    },
+    {
+      type: 'assistant', uuid: 'r-a2', parentUuid: 'r-p2', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:05:01.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'answer to be replaced' }] },
+    },
+    {
+      type: 'user', uuid: 'r-p2b', parentUuid: 'r-end', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:10:00.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: 'edited question' }] },
+    },
+    {
+      type: 'assistant', uuid: 'r-a2b', parentUuid: 'r-p2b', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:10:01.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'answer to the edit' }] },
+    },
+    {
+      type: 'user', uuid: 'r-completed', parentUuid: 'r-end', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:30:00.000Z',
+      message: { role: 'user', content: backgroundJobNotification('completed', 'job output') },
+    },
+    {
+      type: 'assistant', uuid: 'r-a3', parentUuid: 'r-completed', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:30:05.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'the long job finished' }] },
+    },
+  ]);
+
+  assert.deepEqual(texts, [
+    'start the long job',
+    'started it',
+    'edited question',
+    'answer to the edit',
+    'the long job finished',
+  ]);
+  assert.equal(jobResult, 'job output');
+});
+
+test('two notifications on one parent that the model both answered are both kept', { concurrency: false }, async () => {
+  // The most common fork in real transcripts: the resumed process reports the
+  // job it cannot see as stopped and the model answers, then the process that
+  // outlived the resume reports it completed on the same leaf and the model
+  // answers that too. Neither is an edit of the other.
+  const { texts, jobResult } = await readResumedSessionTexts([
+    ...backgroundJobLaunchRows(),
+    {
+      type: 'user', uuid: 'r-stopped', parentUuid: 'r-end', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:05:00.000Z',
+      message: { role: 'user', content: backgroundJobNotification('stopped', '') },
+    },
+    {
+      type: 'assistant', uuid: 'r-a2', parentUuid: 'r-stopped', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:05:05.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'the long job was stopped' }] },
+    },
+    {
+      type: 'user', uuid: 'r-p3', parentUuid: 'r-a2', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:20:00.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: 'ship it anyway' }] },
+    },
+    {
+      type: 'assistant', uuid: 'r-a3', parentUuid: 'r-p3', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:20:01.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'shipped' }] },
+    },
+    {
+      type: 'user', uuid: 'r-completed', parentUuid: 'r-end', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:30:00.000Z',
+      message: { role: 'user', content: backgroundJobNotification('completed', 'job output') },
+    },
+    {
+      type: 'assistant', uuid: 'r-a4', parentUuid: 'r-completed', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:30:05.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'the long job finished' }] },
+    },
+  ]);
+
+  assert.deepEqual(texts, [
+    'start the long job',
+    'started it',
+    'the long job was stopped',
+    'ship it anyway',
+    'shipped',
+    'the long job finished',
+  ]);
+  assert.equal(jobResult, 'job output');
+});
+
 test('an edit whose run first reports a pending notification still replaces the original prompt', { concurrency: false }, async () => {
   // Resuming partway to replace `r-p2` makes the new run report the job it
   // cannot see as stopped before it sends the edited prompt, so the edit's
