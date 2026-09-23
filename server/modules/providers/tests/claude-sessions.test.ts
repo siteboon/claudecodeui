@@ -403,6 +403,174 @@ test('Claude history drops every notification row of a task that reported more t
   }
 });
 
+test('Claude history folds a relaunched agent\'s report that names no launch onto the relaunch by task id', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-relaunched-agent-'));
+  const sessionId = 'claude-relaunched-session';
+  const agentId = 'a14ed4c6a9f61a8c8';
+  const notification = (toolUseId: string, taskId: string, result: string) => [
+    '<task-notification>',
+    `<task-id>${taskId}</task-id>`,
+    `<tool-use-id>${toolUseId}</tool-use-id>`,
+    '<status>completed</status>',
+    '<summary>Agent "Forum research" completed</summary>',
+    `<result>${result}</result>`,
+    '</task-notification>',
+  ].join('\n');
+  const launch = (toolUseId: string, parentUuid: string, timestamp: string, description: string) => [
+    {
+      type: 'assistant', uuid: `${toolUseId}-call`, parentUuid, sessionId, timestamp,
+      message: {
+        role: 'assistant', model: 'claude-opus-5',
+        content: [{ type: 'tool_use', id: toolUseId, name: 'Agent', input: { description, prompt: description, run_in_background: true } }],
+      },
+    },
+    {
+      type: 'user', uuid: `${toolUseId}-ack`, parentUuid: `${toolUseId}-call`, sessionId, timestamp,
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUseId, content: 'Async agent launched successfully.' }] },
+      toolUseResult: { isAsync: true, status: 'async_launched', agentId, description },
+    },
+  ];
+
+  try {
+    // The reporter's table: launch A, a relaunch B with the same agent (and so
+    // the same task id) after the host session was interrupted, report #1 for
+    // A, and report #2 — the relaunch's — naming a tool-use id no call has.
+    // A task a subagent launched reports into this file too, under ids that
+    // match nothing here.
+    const rows = [
+      {
+        type: 'user', uuid: 'f-u1', parentUuid: null, sessionId, timestamp: '2026-09-20T10:00:00.000Z',
+        message: { role: 'user', content: [{ type: 'text', text: 'research the forum' }] },
+      },
+      ...launch('toolu_A', 'f-u1', '2026-09-20T10:00:01.000Z', 'Mine the forum'),
+      ...launch('toolu_B', 'toolu_A-ack', '2026-09-20T10:30:00.000Z', 'Resume the forum research'),
+      {
+        type: 'user', uuid: 'f-n1', parentUuid: 'toolu_B-ack', sessionId, timestamp: '2026-09-20T10:40:00.000Z',
+        message: { role: 'user', content: [{ type: 'text', text: notification('toolu_A', agentId, 'first pass') }] },
+      },
+      {
+        type: 'user', uuid: 'f-n2', parentUuid: 'f-n1', sessionId, timestamp: '2026-09-20T11:00:00.000Z',
+        message: { role: 'user', content: [{ type: 'text', text: notification('toolu_C', agentId, 'resumed pass') }] },
+      },
+      {
+        type: 'user', uuid: 'f-child', parentUuid: 'f-n2', sessionId, timestamp: '2026-09-20T11:00:01.000Z',
+        message: { role: 'user', content: [{ type: 'text', text: notification('toolu_child', 'bchild123', 'child output') }] },
+      },
+      {
+        type: 'assistant', uuid: 'f-a1', parentUuid: 'f-child', sessionId, timestamp: '2026-09-20T11:00:05.000Z',
+        message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'the research is done' }] },
+      },
+    ];
+    const transcriptPath = path.join(tempRoot, `${sessionId}.jsonl`);
+    await writeFile(transcriptPath, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(sessionId, 'claude', tempRoot, 'Relaunched agent', now, now, transcriptPath);
+
+      const history = await new ClaudeSessionsProvider({ getLiveRunStartTime: () => null }).fetchHistory(sessionId, {
+        providerSessionId: sessionId,
+      });
+      const card = (toolUseId: string) => history.messages.find(
+        (message) => message.kind === 'tool_use' && message.toolId === toolUseId,
+      );
+      const notificationBubbles = history.messages
+        .map((message) => message.content ?? '')
+        .filter((content) => content.includes('<task-notification>'));
+
+      assert.equal(card('toolu_A')?.subagent?.status, 'completed');
+      assert.equal(card('toolu_A')?.toolResult?.content, 'first pass');
+      // Keyed by tool-use id alone, the relaunch had no report: `stopped`, no
+      // content, and report #2 rendered as a raw bubble of its own.
+      assert.equal(card('toolu_B')?.subagent?.status, 'completed');
+      assert.equal(card('toolu_B')?.toolResult?.content, 'resumed pass');
+      assert.equal(notificationBubbles.some((content) => content.includes('toolu_C')), false);
+      // The subagent's task names no launch of this transcript, by either id,
+      // so its report renders exactly as before.
+      assert.equal(notificationBubbles.length, 1);
+      assert.match(notificationBubbles[0], /bchild123/);
+      assert.ok(history.messages.some((message) => message.content === 'the research is done'));
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('Claude history leaves a report that names no launch alone when the task\'s latest launch already reported', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-reported-relaunch-'));
+  const sessionId = 'claude-reported-relaunch-session';
+  const agentId = 'a14ed4c6a9f61a8c8';
+  const notification = (toolUseId: string, result: string) => [
+    '<task-notification>',
+    `<task-id>${agentId}</task-id>`,
+    `<tool-use-id>${toolUseId}</tool-use-id>`,
+    '<status>completed</status>',
+    '<summary>Agent "Forum research" completed</summary>',
+    `<result>${result}</result>`,
+    '</task-notification>',
+  ].join('\n');
+  const launch = (toolUseId: string, parentUuid: string, timestamp: string) => [
+    {
+      type: 'assistant', uuid: `${toolUseId}-call`, parentUuid, sessionId, timestamp,
+      message: {
+        role: 'assistant', model: 'claude-opus-5',
+        content: [{ type: 'tool_use', id: toolUseId, name: 'Agent', input: { description: 'Forum research', prompt: 'go', run_in_background: true } }],
+      },
+    },
+    {
+      type: 'user', uuid: `${toolUseId}-ack`, parentUuid: `${toolUseId}-call`, sessionId, timestamp,
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUseId, content: 'Async agent launched successfully.' }] },
+      toolUseResult: { isAsync: true, status: 'async_launched', agentId, description: 'Forum research' },
+    },
+  ];
+
+  try {
+    // Launch A never reported; relaunch B did, under its own id. A later report
+    // naming no launch is not B's missing answer, and it is not A's either: it
+    // must not bring A's dead card back to life, so it renders on its own.
+    const rows = [
+      {
+        type: 'user', uuid: 'r-u1', parentUuid: null, sessionId, timestamp: '2026-09-20T10:00:00.000Z',
+        message: { role: 'user', content: [{ type: 'text', text: 'research the forum' }] },
+      },
+      ...launch('toolu_A', 'r-u1', '2026-09-20T10:00:01.000Z'),
+      ...launch('toolu_B', 'toolu_A-ack', '2026-09-20T10:30:00.000Z'),
+      {
+        type: 'user', uuid: 'r-n1', parentUuid: 'toolu_B-ack', sessionId, timestamp: '2026-09-20T10:40:00.000Z',
+        message: { role: 'user', content: [{ type: 'text', text: notification('toolu_B', 'relaunch pass') }] },
+      },
+      {
+        type: 'user', uuid: 'r-n2', parentUuid: 'r-n1', sessionId, timestamp: '2026-09-20T11:00:00.000Z',
+        message: { role: 'user', content: [{ type: 'text', text: notification('toolu_C', 'follow-up pass') }] },
+      },
+    ];
+    const transcriptPath = path.join(tempRoot, `${sessionId}.jsonl`);
+    await writeFile(transcriptPath, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(sessionId, 'claude', tempRoot, 'Reported relaunch', now, now, transcriptPath);
+
+      const history = await new ClaudeSessionsProvider({ getLiveRunStartTime: () => null }).fetchHistory(sessionId, {
+        providerSessionId: sessionId,
+      });
+      const card = (toolUseId: string) => history.messages.find(
+        (message) => message.kind === 'tool_use' && message.toolId === toolUseId,
+      );
+
+      assert.equal(card('toolu_A')?.subagent?.status, 'stopped');
+      assert.equal(card('toolu_B')?.subagent?.status, 'completed');
+      assert.equal(card('toolu_B')?.toolResult?.content, 'relaunch pass');
+      assert.ok(
+        history.messages.some((message) => (message.content ?? '').includes('toolu_C')),
+        'the unmatched report must keep rendering on its own',
+      );
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 /** Strips the `<task-notification>` turn so the agent has no reported outcome. */
 async function dropTaskNotification(parentPath: string): Promise<void> {
   const raw = await readFile(parentPath, 'utf8');
@@ -1686,6 +1854,369 @@ test('resolving an edit anchor skips rows that are not conversation turns', { co
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
+});
+
+const RESUMED_SESSION_ID = 'claude-resumed-session';
+
+const backgroundJobNotification = (status: string, result: string): string => [
+  '<task-notification>',
+  '<task-id>bjob1234</task-id>',
+  '<tool-use-id>toolu_job</tool-use-id>',
+  `<status>${status}</status>`,
+  `<summary>Background command "long job" ${status}</summary>`,
+  result ? `<result>${result}</result>` : '',
+  '</task-notification>',
+].filter(Boolean).join('\n');
+
+/**
+ * The start every resumed-session transcript below shares: a background
+ * command launched, and the turn that launched it ended at `r-end` while the
+ * command was still running.
+ */
+const backgroundJobLaunchRows = () => [
+  {
+    type: 'user', uuid: 'r-u1', parentUuid: null, sessionId: RESUMED_SESSION_ID,
+    timestamp: '2026-09-20T10:00:00.000Z',
+    message: { role: 'user', content: [{ type: 'text', text: 'start the long job' }] },
+  },
+  {
+    type: 'assistant', uuid: 'r-call', parentUuid: 'r-u1', sessionId: RESUMED_SESSION_ID,
+    timestamp: '2026-09-20T10:00:01.000Z',
+    message: {
+      role: 'assistant', model: 'claude-opus-5',
+      content: [{ type: 'tool_use', id: 'toolu_job', name: 'Bash', input: { command: 'long-job', run_in_background: true } }],
+    },
+  },
+  {
+    type: 'user', uuid: 'r-ack', parentUuid: 'r-call', sessionId: RESUMED_SESSION_ID,
+    timestamp: '2026-09-20T10:00:02.000Z',
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_job', content: 'Command running in background with ID: bjob1234' }] },
+    toolUseResult: { backgroundTaskId: 'bjob1234' },
+  },
+  {
+    type: 'assistant', uuid: 'r-end', parentUuid: 'r-ack', sessionId: RESUMED_SESSION_ID,
+    timestamp: '2026-09-20T10:00:03.000Z',
+    message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'started it' }] },
+  },
+];
+
+async function readResumedSessionTexts(rows: Record<string, unknown>[]): Promise<{ texts: unknown[]; jobResult: unknown }> {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-resumed-'));
+
+  try {
+    const transcriptPath = path.join(tempRoot, `${RESUMED_SESSION_ID}.jsonl`);
+    await writeFile(transcriptPath, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+
+    let result: { texts: unknown[]; jobResult: unknown } = { texts: [], jobResult: undefined };
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(RESUMED_SESSION_ID, 'claude', tempRoot, 'Resumed session', now, now, transcriptPath);
+
+      const history = await new ClaudeSessionsProvider({ getLiveRunStartTime: () => null }).fetchHistory(
+        RESUMED_SESSION_ID,
+        { providerSessionId: RESUMED_SESSION_ID },
+      );
+      result = {
+        texts: history.messages.filter((message) => message.kind === 'text').map((message) => message.content),
+        jobResult: history.messages.find((message) => message.toolId === 'toolu_job')?.toolResult?.content,
+      };
+    });
+    return result;
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+}
+
+test('a late notification from a process that outlived a resume keeps the resumed conversation', { concurrency: false }, async () => {
+  // The CLI that launched the job stays up for it. Meanwhile the session is
+  // resumed in a new process, which reports the job it cannot see as stopped
+  // (parented on `r-end`, the last row it read) and carries the conversation
+  // on. When the job finishes, the first process writes its notification on
+  // `r-end` too — the leaf it last saw — and answers it.
+  const { texts, jobResult } = await readResumedSessionTexts([
+    ...backgroundJobLaunchRows(),
+    {
+      type: 'user', uuid: 'r-stopped', parentUuid: 'r-end', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:05:00.000Z',
+      message: { role: 'user', content: backgroundJobNotification('stopped', '') },
+    },
+    {
+      type: 'user', uuid: 'r-p2', parentUuid: 'r-stopped', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:05:01.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: 'meanwhile, check the tests' }] },
+    },
+    {
+      type: 'assistant', uuid: 'r-a2', parentUuid: 'r-p2', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:05:02.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'the tests pass' }] },
+    },
+    {
+      type: 'user', uuid: 'r-p3', parentUuid: 'r-a2', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T11:00:00.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: 'ship it' }] },
+    },
+    {
+      type: 'assistant', uuid: 'r-a3', parentUuid: 'r-p3', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T11:00:01.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'shipped' }] },
+    },
+    {
+      type: 'user', uuid: 'r-completed', parentUuid: 'r-end', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T11:30:00.000Z',
+      message: { role: 'user', content: backgroundJobNotification('completed', 'job output') },
+    },
+    {
+      type: 'attachment', uuid: 'r-completed-attachment', parentUuid: 'r-completed', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T11:30:00.000Z',
+    },
+    {
+      type: 'assistant', uuid: 'r-a4', parentUuid: 'r-completed-attachment', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T11:30:05.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'the long job finished' }] },
+    },
+  ]);
+
+  assert.deepEqual(texts, [
+    'start the long job',
+    'started it',
+    'meanwhile, check the tests',
+    'the tests pass',
+    'ship it',
+    'shipped',
+    'the long job finished',
+  ]);
+  // Both reports still fold onto the command's card, the later word winning.
+  assert.equal(jobResult, 'job output');
+});
+
+test('a late notification does not replace a prompt the user typed on the same turn', { concurrency: false }, async () => {
+  const { texts } = await readResumedSessionTexts([
+    ...backgroundJobLaunchRows(),
+    {
+      type: 'user', uuid: 'r-p2', parentUuid: 'r-end', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:05:00.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: 'next question' }] },
+    },
+    {
+      type: 'assistant', uuid: 'r-a2', parentUuid: 'r-p2', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:05:01.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'next answer' }] },
+    },
+    {
+      type: 'user', uuid: 'r-completed', parentUuid: 'r-end', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:30:00.000Z',
+      message: { role: 'user', content: backgroundJobNotification('completed', 'job output') },
+    },
+    {
+      type: 'assistant', uuid: 'r-a3', parentUuid: 'r-completed', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:30:05.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'the long job finished' }] },
+    },
+  ]);
+
+  assert.deepEqual(texts, [
+    'start the long job',
+    'started it',
+    'next question',
+    'next answer',
+    'the long job finished',
+  ]);
+});
+
+test('a late notification written after an edit keeps the edit and replaces nothing', { concurrency: false }, async () => {
+  // Three siblings under `r-end`: the original prompt, its edit, and a report
+  // the process that launched the job wrote on the leaf it last saw.
+  const { texts, jobResult } = await readResumedSessionTexts([
+    ...backgroundJobLaunchRows(),
+    {
+      type: 'user', uuid: 'r-p2', parentUuid: 'r-end', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:05:00.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: 'original question' }] },
+    },
+    {
+      type: 'assistant', uuid: 'r-a2', parentUuid: 'r-p2', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:05:01.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'answer to be replaced' }] },
+    },
+    {
+      type: 'user', uuid: 'r-p2b', parentUuid: 'r-end', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:10:00.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: 'edited question' }] },
+    },
+    {
+      type: 'assistant', uuid: 'r-a2b', parentUuid: 'r-p2b', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:10:01.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'answer to the edit' }] },
+    },
+    {
+      type: 'user', uuid: 'r-completed', parentUuid: 'r-end', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:30:00.000Z',
+      message: { role: 'user', content: backgroundJobNotification('completed', 'job output') },
+    },
+    {
+      type: 'assistant', uuid: 'r-a3', parentUuid: 'r-completed', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:30:05.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'the long job finished' }] },
+    },
+  ]);
+
+  assert.deepEqual(texts, [
+    'start the long job',
+    'started it',
+    'edited question',
+    'answer to the edit',
+    'the long job finished',
+  ]);
+  assert.equal(jobResult, 'job output');
+});
+
+test('two notifications on one parent that the model both answered are both kept', { concurrency: false }, async () => {
+  // The most common fork in real transcripts: the resumed process reports the
+  // job it cannot see as stopped and the model answers, then the process that
+  // outlived the resume reports it completed on the same leaf and the model
+  // answers that too. Neither is an edit of the other.
+  const { texts, jobResult } = await readResumedSessionTexts([
+    ...backgroundJobLaunchRows(),
+    {
+      type: 'user', uuid: 'r-stopped', parentUuid: 'r-end', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:05:00.000Z',
+      message: { role: 'user', content: backgroundJobNotification('stopped', '') },
+    },
+    {
+      type: 'assistant', uuid: 'r-a2', parentUuid: 'r-stopped', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:05:05.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'the long job was stopped' }] },
+    },
+    {
+      type: 'user', uuid: 'r-p3', parentUuid: 'r-a2', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:20:00.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: 'ship it anyway' }] },
+    },
+    {
+      type: 'assistant', uuid: 'r-a3', parentUuid: 'r-p3', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:20:01.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'shipped' }] },
+    },
+    {
+      type: 'user', uuid: 'r-completed', parentUuid: 'r-end', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:30:00.000Z',
+      message: { role: 'user', content: backgroundJobNotification('completed', 'job output') },
+    },
+    {
+      type: 'assistant', uuid: 'r-a4', parentUuid: 'r-completed', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:30:05.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'the long job finished' }] },
+    },
+  ]);
+
+  assert.deepEqual(texts, [
+    'start the long job',
+    'started it',
+    'the long job was stopped',
+    'ship it anyway',
+    'shipped',
+    'the long job finished',
+  ]);
+  assert.equal(jobResult, 'job output');
+});
+
+test('an edit whose run first reports a pending notification still replaces the original prompt', { concurrency: false }, async () => {
+  // Resuming partway to replace `r-p2` makes the new run report the job it
+  // cannot see as stopped before it sends the edited prompt, so the edit's
+  // branch starts with the notification rather than the prompt.
+  const { texts } = await readResumedSessionTexts([
+    ...backgroundJobLaunchRows(),
+    {
+      type: 'user', uuid: 'r-p2', parentUuid: 'r-end', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:05:00.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: 'original question' }] },
+    },
+    {
+      type: 'assistant', uuid: 'r-a2', parentUuid: 'r-p2', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:05:01.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'answer to be replaced' }] },
+    },
+    {
+      type: 'user', uuid: 'r-stopped', parentUuid: 'r-end', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:10:00.000Z',
+      message: { role: 'user', content: backgroundJobNotification('stopped', '') },
+    },
+    {
+      type: 'user', uuid: 'r-p2b', parentUuid: 'r-stopped', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:10:01.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: 'edited question' }] },
+    },
+    {
+      type: 'assistant', uuid: 'r-a2b', parentUuid: 'r-p2b', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:10:02.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'answer to the edit' }] },
+    },
+  ]);
+
+  assert.deepEqual(texts, [
+    'start the long job',
+    'started it',
+    'edited question',
+    'answer to the edit',
+  ]);
+});
+
+test('an edit still replaces the original when harness notes sit between its notification and prompt', { concurrency: false }, async () => {
+  // The edit's run reports the job as stopped, then writes what it writes at
+  // the start of any run before the edited prompt: a `system` note (session
+  // b4687029 has an `informational` "AGENTS.md loaded" exactly there), an
+  // `isMeta` user row and attachments. None of them is an answer, so the
+  // notification still opens the edit's turn.
+  const { texts } = await readResumedSessionTexts([
+    ...backgroundJobLaunchRows(),
+    {
+      type: 'user', uuid: 'r-p2', parentUuid: 'r-end', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:05:00.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: 'original question' }] },
+    },
+    {
+      type: 'assistant', uuid: 'r-a2', parentUuid: 'r-p2', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:05:01.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'answer to be replaced' }] },
+    },
+    {
+      type: 'user', uuid: 'r-stopped', parentUuid: 'r-end', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:10:00.000Z',
+      message: { role: 'user', content: backgroundJobNotification('stopped', '') },
+    },
+    {
+      type: 'system', subtype: 'informational', level: 'notice', isMeta: false,
+      uuid: 'r-note', parentUuid: 'r-stopped', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:10:00.000Z',
+      content: 'agents-md: no CLAUDE.md found; AGENTS.md loaded',
+    },
+    {
+      type: 'user', isMeta: true, uuid: 'r-meta', parentUuid: 'r-note', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:10:00.000Z',
+      message: { role: 'user', content: '<local-command-caveat>Caveat: injected by the harness</local-command-caveat>' },
+    },
+    {
+      type: 'attachment', uuid: 'r-attachment', parentUuid: 'r-meta', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:10:00.000Z',
+    },
+    {
+      type: 'user', uuid: 'r-p2b', parentUuid: 'r-attachment', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:10:01.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: 'edited question' }] },
+    },
+    {
+      type: 'assistant', uuid: 'r-a2b', parentUuid: 'r-p2b', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:10:02.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'answer to the edit' }] },
+    },
+  ]);
+
+  assert.deepEqual(texts, [
+    'start the long job',
+    'started it',
+    'edited question',
+    'answer to the edit',
+  ]);
 });
 
 // ---------------------------------------------------------------------------

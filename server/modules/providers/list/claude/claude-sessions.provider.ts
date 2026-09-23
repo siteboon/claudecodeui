@@ -332,6 +332,20 @@ function readBackgroundLaunch(toolUseResult: unknown): ClaudeBackgroundLaunch | 
   return null;
 }
 
+/**
+ * The id a background launch's `<task-notification>`s carry in `<task-id>`,
+ * read off the same `toolUseResult`: an agent's `agentId`, a workflow's
+ * `taskId`, a backgrounded shell's `backgroundTaskId`. Every notification in
+ * the transcripts this was checked on that names its launch by tool-use id
+ * carries exactly that value.
+ */
+function readBackgroundTaskId(toolUseResult: AnyRecord, launch: ClaudeBackgroundLaunch): string {
+  const taskId = launch === 'agent'
+    ? toolUseResult.agentId
+    : launch === 'workflow' ? toolUseResult.taskId : toolUseResult.backgroundTaskId;
+  return typeof taskId === 'string' ? taskId : '';
+}
+
 type ClaudeTaskNotification = {
   /**
    * `uuid`s of every transcript row that notified for this call, so all of
@@ -343,6 +357,10 @@ type ClaudeTaskNotification = {
    */
   sourceUuids: string[];
   toolUseId: string;
+  /** The `<task-id>`, which `foldNotificationsByTaskId` falls back to. */
+  taskId: string;
+  /** Where in the transcript the row that had the last word sits. */
+  position: number;
   status: string;
   summary: string;
   result: string;
@@ -401,7 +419,7 @@ function readTaskNotificationTexts(message: AnyRecord): string[] {
 function collectTaskNotifications(messages: AnyRecord[]): Map<string, ClaudeTaskNotification> {
   const notifications = new Map<string, ClaudeTaskNotification>();
 
-  for (const message of messages) {
+  for (const [position, message] of messages.entries()) {
     for (const text of readTaskNotificationTexts(message)) {
       if (!text.trimStart().startsWith('<task-notification>')) {
         continue;
@@ -421,6 +439,8 @@ function collectTaskNotifications(messages: AnyRecord[]): Map<string, ClaudeTask
       notifications.set(toolUseId, {
         sourceUuids,
         toolUseId,
+        taskId: readTaggedValue(text, 'task-id'),
+        position,
         status: readTaggedValue(text, 'status') || 'completed',
         summary: readTaggedValue(text, 'summary'),
         result: readTaggedValue(text, 'result'),
@@ -429,6 +449,75 @@ function collectTaskNotifications(messages: AnyRecord[]): Map<string, ClaudeTask
   }
 
   return notifications;
+}
+
+/**
+ * Re-keys a notification whose `<tool-use-id>` names no launch in the
+ * transcript onto the launch its `<task-id>` names, so it folds onto that card.
+ *
+ * Work that is started again under a new tool call can keep its task id and
+ * report under a tool-use id that no call in the file has: an agent relaunched
+ * after its host session was interrupted reported under a third id. The fold
+ * keyed by tool-use id then left the relaunch's card `stopped` and empty, and
+ * rendered the report as a raw bubble of its own.
+ *
+ * The notification goes to the latest background launch written before it
+ * that carries the same task id, and only when that launch got no report of
+ * its own by tool-use id. A launch that did is left alone, and the notification
+ * is not passed on to an older launch either: an agent resumed through
+ * `SendMessage` reports under the `SendMessage` call's id, and its first report
+ * already sits on its launch. A synchronous agent never takes one, since its
+ * answer is its own tool result. Notifications that still find nothing — a
+ * task launched inside a subagent names no launch row of this transcript —
+ * stay exactly as they were. When several land on one launch, the last one
+ * written wins, as for any task that reports more than once.
+ */
+function foldNotificationsByTaskId(
+  messages: AnyRecord[],
+  notificationsByToolUseId: Map<string, ClaudeTaskNotification>,
+): void {
+  const launches: Array<{ position: number; toolUseId: string; taskId: string; isAsync: boolean }> = [];
+  for (const [position, message] of messages.entries()) {
+    const launch = readBackgroundLaunch(message.toolUseResult);
+    const toolUseId = launch ? readLaunchToolUseId(message) : null;
+    if (launch && toolUseId) {
+      launches.push({
+        position,
+        toolUseId,
+        taskId: readBackgroundTaskId(message.toolUseResult, launch),
+        isAsync: launch !== 'agent' || message.toolUseResult.isAsync === true,
+      });
+    }
+  }
+
+  const launchToolUseIds = new Set(launches.map((launch) => launch.toolUseId));
+  const reportedToolUseIds = new Set(
+    launches.map((launch) => launch.toolUseId).filter((toolUseId) => notificationsByToolUseId.has(toolUseId)),
+  );
+  const unmatched = [...notificationsByToolUseId.values()]
+    .filter((notification) => notification.taskId && !launchToolUseIds.has(notification.toolUseId))
+    .sort((a, b) => a.position - b.position);
+
+  for (const notification of unmatched) {
+    const target = launches
+      .filter((launch) => (
+        launch.isAsync
+        && launch.position < notification.position
+        && launch.taskId === notification.taskId
+      ))
+      .pop();
+    if (!target || reportedToolUseIds.has(target.toolUseId)) {
+      continue;
+    }
+
+    const earlier = notificationsByToolUseId.get(target.toolUseId);
+    notificationsByToolUseId.delete(notification.toolUseId);
+    notificationsByToolUseId.set(target.toolUseId, {
+      ...notification,
+      toolUseId: target.toolUseId,
+      sourceUuids: [...(earlier?.sourceUuids ?? []), ...notification.sourceUuids],
+    });
+  }
 }
 
 /** Reads the `tool_use_id` off the tool-result row that launched background work. */
@@ -490,7 +579,13 @@ async function readTranscriptRows(jsonlPath: string, providerSessionId: string):
   return rows;
 }
 
-/** True for a row the user typed, as opposed to a tool result or an injected note. */
+/**
+ * True for a row the user typed, as opposed to a tool result or an injected note.
+ *
+ * A `<task-notification>` the harness delivers between turns is written in the
+ * same shape and passes this check too; `isTaskNotificationRow` tells the two
+ * apart where that matters.
+ */
 function isUserPromptRow(row: AnyRecord): boolean {
   if (row.type !== 'user' || row.isMeta === true || row.isCompactSummary === true) {
     return false;
@@ -502,6 +597,55 @@ function isUserPromptRow(row: AnyRecord): boolean {
   }
 
   return typeof content === 'string' && content.length > 0;
+}
+
+/** True for a user-role row that carries a `<task-notification>` rather than something typed. */
+function isTaskNotificationRow(row: AnyRecord): boolean {
+  return row.type === 'user'
+    && readTaskNotificationTexts(row).some((text) => text.trimStart().startsWith('<task-notification>'));
+}
+
+/**
+ * Whether a sibling prompt row opens a turn the user sent, so it can stand for
+ * an edit that replaced its earlier siblings.
+ *
+ * A typed prompt does. A task notification does only when the first
+ * conversation turn below it is a typed prompt: a resumed run, an edit's
+ * included, delivers the notifications still pending for it before the prompt
+ * it was started for. Everything the harness writes in between is passed over
+ * — further notifications, attachments, `system` notes (an `informational`
+ * "AGENTS.md loaded" sits right there in real transcripts), `isMeta` user rows
+ * and progress rows — so only an assistant row, which means the model answered
+ * the notification, ends the search short.
+ *
+ * A notification the model simply answers is not an edit. It is what a CLI
+ * process that outlived a resume writes once its background work finishes,
+ * parented on the leaf it last saw, which is where the resumed run's own first
+ * row went too. Letting it replace that sibling dropped the whole conversation
+ * the resumed run went on to have.
+ */
+function opensUserTurn(row: AnyRecord, childrenByParent: Map<string, AnyRecord[]>): boolean {
+  if (!isTaskNotificationRow(row)) {
+    return true;
+  }
+
+  const visited = new Set<string>();
+  const pending = [...(childrenByParent.get(String(row.uuid)) ?? [])];
+  while (pending.length > 0) {
+    const child = pending.pop() as AnyRecord;
+    const childUuid = String(child.uuid);
+    if (visited.has(childUuid) || child.type === 'assistant') {
+      continue;
+    }
+    visited.add(childUuid);
+
+    if (isUserPromptRow(child) && !isTaskNotificationRow(child)) {
+      return true;
+    }
+    pending.push(...(childrenByParent.get(childUuid) ?? []));
+  }
+
+  return false;
 }
 
 /**
@@ -532,13 +676,35 @@ function dropSupersededPromptBranches(rows: AnyRecord[]): AnyRecord[] {
   }
 
   const supersededRoots = new Set<string>();
+  let childrenByParent: Map<string, AnyRecord[]> | null = null;
   for (const siblings of promptSiblings.values()) {
     if (siblings.length < 2) {
       continue;
     }
+
+    if (!childrenByParent) {
+      childrenByParent = new Map();
+      for (const row of rows) {
+        if (typeof row.parentUuid === 'string' && typeof row.uuid === 'string') {
+          const children = childrenByParent.get(row.parentUuid);
+          if (children) {
+            children.push(row);
+          } else {
+            childrenByParent.set(row.parentUuid, [row]);
+          }
+        }
+      }
+    }
+
     // The transcript is append-only, so the last prompt written under a parent
-    // is the one that replaced the others.
-    for (const row of siblings.slice(0, -1)) {
+    // is the one that replaced the others — provided it opens a user turn (see
+    // `opensUserTurn`). Siblings written after the replacement are not part of
+    // the edit and stay.
+    let replacementIndex = siblings.length - 1;
+    while (replacementIndex > 0 && !opensUserTurn(siblings[replacementIndex], childrenByParent)) {
+      replacementIndex -= 1;
+    }
+    for (const row of siblings.slice(0, replacementIndex)) {
       if (typeof row.uuid === 'string') {
         supersededRoots.add(row.uuid);
       }
@@ -653,6 +819,7 @@ async function getSessionMessages(
     // acknowledgement forever, with its report rendering as a raw user bubble
     // further down or, for a queue-operation record, nowhere at all.
     const notificationsByToolUseId = collectTaskNotifications(messages);
+    foldNotificationsByTaskId(messages, notificationsByToolUseId);
     const foldedNotificationUuids = new Set<string>();
 
     // A background agent runs inside the CLI process that launched it, so once
