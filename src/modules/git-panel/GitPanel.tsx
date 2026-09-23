@@ -76,6 +76,7 @@ export default function GitPanel({
     createInitialCommit,
     initRepository,
     openFile,
+    loadFileDiff,
   } = useGitPanelController({
     selectedProject,
     activeView,
@@ -179,6 +180,7 @@ export default function GitPanel({
               onWrapTextChange={setWrapText}
               onCreateInitialCommit={createInitialCommit}
               onOpenFile={openFile}
+              onLoadFileDiff={loadFileDiff}
               onDiscardFile={discardChanges}
               onDeleteFile={deleteUntrackedFile}
               onStageFiles={stageFiles}

@@ -2,7 +2,7 @@ import { GitBranch, GitCommit, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import type { ConfirmationRequest, FileStatusCode, GitDiffMap, GitStatusResponse } from '@/shared/types';
+import type { ConfirmationRequest, FileStatusCode, GitFileDiffMap, GitStatusResponse } from '@/shared/types';
 import { getAllChangedFiles, hasChangedFiles } from '@/modules/git-panel/utils/gitPanelUtils';
 import CommitComposer from '@/modules/git-panel/changes/CommitComposer';
 import FileChangeList from '@/modules/git-panel/changes/FileChangeList';
@@ -12,13 +12,14 @@ type ChangesViewProps = {
   isMobile: boolean;
   projectPath: string;
   gitStatus: GitStatusResponse | null;
-  gitDiff: GitDiffMap;
+  gitDiff: GitFileDiffMap;
   isLoading: boolean;
   wrapText: boolean;
   isCreatingInitialCommit: boolean;
   onWrapTextChange: (wrapText: boolean) => void;
   onCreateInitialCommit: () => Promise<boolean>;
   onOpenFile: (filePath: string) => Promise<void>;
+  onLoadFileDiff: (filePath: string) => void;
   onDiscardFile: (filePath: string) => Promise<void>;
   onDeleteFile: (filePath: string) => Promise<void>;
   onStageFiles: (files: string[]) => Promise<boolean>;
@@ -40,6 +41,7 @@ export default function ChangesView({
   onWrapTextChange,
   onCreateInitialCommit,
   onOpenFile,
+  onLoadFileDiff,
   onDiscardFile,
   onDeleteFile,
   onStageFiles,
@@ -85,6 +87,17 @@ export default function ChangesView({
     // re-runs when the queue drains, syncing to the final refreshed status.
     setSelectedFiles(new Set(gitStatus.staged ?? []));
   }, [gitStatus, pendingStageOps]);
+
+  // Diffs load lazily: only expanded rows need one. Re-runs after every status
+  // refresh (new `changedFiles`), which is when the controller forgets what it
+  // already fetched, so an expanded row keeps showing the file's current diff.
+  useEffect(() => {
+    changedFiles.forEach((filePath) => {
+      if (expandedFiles.has(filePath)) {
+        onLoadFileDiff(filePath);
+      }
+    });
+  }, [changedFiles, expandedFiles, onLoadFileDiff]);
 
   useEffect(() => {
     onExpandedFilesChange(hasExpandedFiles);

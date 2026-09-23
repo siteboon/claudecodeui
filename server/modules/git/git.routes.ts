@@ -9,6 +9,7 @@ import { AppError } from '@/shared/utils.js';
 // cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
 import { parseGitLogWithStats, parseGitStatusOutput } from './git-parsing.service.js';
 import { deleteLocalBranch } from './git-branch.service.js';
+import { readWorkingTreeFileDiff } from './git-file-diff.service.js';
 
 type GitRouterDependencies = {
   fileSystem: typeof import('node:fs/promises');
@@ -135,35 +136,6 @@ async function getActualProjectPath(projectId) {
     throw new Error(`Unable to resolve project path for "${projectId}"`);
   }
   return validateProjectPath(projectPath);
-}
-
-// Helper function to strip git diff headers
-function stripDiffHeaders(diff) {
-  if (!diff) return '';
-
-  const lines = diff.split('\n');
-  const filteredLines = [];
-  let startIncluding = false;
-
-  for (const line of lines) {
-    // Skip all header lines including diff --git, index, file mode, and --- / +++ file paths
-    if (line.startsWith('diff --git') ||
-        line.startsWith('index ') ||
-        line.startsWith('new file mode') ||
-        line.startsWith('deleted file mode') ||
-        line.startsWith('---') ||
-        line.startsWith('+++')) {
-      continue;
-    }
-
-    // Start including lines from @@ hunk headers onwards
-    if (line.startsWith('@@') || startIncluding) {
-      startIncluding = true;
-      filteredLines.push(line);
-    }
-  }
-
-  return filteredLines.join('\n');
 }
 
 // Helper function to validate git repository
@@ -426,64 +398,15 @@ router.get('/diff', async (req, res) => {
       repositoryRelativeFilePath,
     } = await resolveRepositoryFilePath(projectPath, file);
 
-    // Check if file is untracked or deleted
-    const { stdout: statusOutput } = await spawnAsync(
-      'git',
-      ['status', '--porcelain', '--', repositoryRelativeFilePath],
-      { cwd: repositoryRootPath },
-    );
-    const isUntracked = statusOutput.startsWith('??');
-    const isDeleted = statusOutput.trim().startsWith('D ') || statusOutput.trim().startsWith(' D');
+    // Bounded read: binary files are skipped and huge files/diffs are cut (see the service).
+    const fileDiff = await readWorkingTreeFileDiff({
+      repositoryRootPath,
+      repositoryRelativeFilePath,
+      fileSystem: fs,
+      spawnProcess: spawn,
+    });
 
-    let diff;
-    if (isUntracked) {
-      // For untracked files, show the entire file content as additions
-      const filePath = path.join(repositoryRootPath, repositoryRelativeFilePath);
-      const stats = await fs.stat(filePath);
-
-      if (stats.isDirectory()) {
-        // For directories, show a simple message
-        diff = `Directory: ${repositoryRelativeFilePath}\n(Cannot show diff for directories)`;
-      } else {
-        const fileContent = await fs.readFile(filePath, 'utf-8');
-        const lines = fileContent.split('\n');
-        diff = `--- /dev/null\n+++ b/${repositoryRelativeFilePath}\n@@ -0,0 +1,${lines.length} @@\n` +
-               lines.map(line => `+${line}`).join('\n');
-      }
-    } else if (isDeleted) {
-      // For deleted files, show the entire file content from HEAD as deletions
-      const { stdout: fileContent } = await spawnAsync(
-        'git',
-        ['show', `HEAD:${repositoryRelativeFilePath}`],
-        { cwd: repositoryRootPath },
-      );
-      const lines = fileContent.split('\n');
-      diff = `--- a/${repositoryRelativeFilePath}\n+++ /dev/null\n@@ -1,${lines.length} +0,0 @@\n` +
-             lines.map(line => `-${line}`).join('\n');
-    } else {
-      // Get diff for tracked files
-      // First check for unstaged changes (working tree vs index)
-      const { stdout: unstagedDiff } = await spawnAsync(
-        'git',
-        ['diff', '--', repositoryRelativeFilePath],
-        { cwd: repositoryRootPath },
-      );
-
-      if (unstagedDiff) {
-        // Show unstaged changes if they exist
-        diff = stripDiffHeaders(unstagedDiff);
-      } else {
-        // If no unstaged changes, check for staged changes (index vs HEAD)
-        const { stdout: stagedDiff } = await spawnAsync(
-          'git',
-          ['diff', '--cached', '--', repositoryRelativeFilePath],
-          { cwd: repositoryRootPath },
-        );
-        diff = stripDiffHeaders(stagedDiff) || '';
-      }
-    }
-
-    res.json({ diff });
+    res.json(fileDiff);
   } catch (error) {
     console.error('Git diff error:', error);
     res.json({ error: error.message });

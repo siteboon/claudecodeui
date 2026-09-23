@@ -135,7 +135,8 @@
     "switchToScroll": "Beralih ke scroll horizontal",
     "switchToWrap": "Beralih ke pembungkusan teks",
     "scroll": "Scroll",
-    "wrap": "Bungkus"
+    "wrap": "Bungkus",
+    "binaryDiff": "File biner — diff tidak ditampilkan"
   },
   "selection": {
     "selectedOfFiles": "{{selected}} dari {{total}} file dipilih",

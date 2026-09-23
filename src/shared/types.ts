@@ -1006,8 +1006,18 @@ export type GitCommitSummary = {
   refs?: string[];
 };
 
-/** Unified diff text keyed by file path, used both for working-tree diffs and for the per-file diffs of an expanded commit. */
+/** Unified diff text keyed by commit hash, filled as the user expands commits in the History view. */
 export type GitDiffMap = Record<string, string>;
+
+/** One working-tree file's diff from `/api/git/diff`: the unified diff text plus whether git saw a binary file (empty `diff`) or the server cut an oversized diff short. */
+export type GitFileDiff = {
+  diff: string;
+  isBinary: boolean;
+  isTruncated: boolean;
+};
+
+/** Working-tree diffs keyed by file path, loaded lazily as the user expands rows in the Changes view. */
+export type GitFileDiffMap = Record<string, GitFileDiff>;
 
 /** A pending confirmation dialog — its message, confirm handler and optional escalated alternative — raised by git panel actions and rendered by the shared Confirmation UI. */
 export type ConfirmationRequest = {

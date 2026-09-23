@@ -4,6 +4,8 @@ type GitDiffViewerProps = {
   diff: string | null;
   isMobile: boolean;
   wrapText: boolean;
+  /** The server already cut this diff short, so the preview notice must show even if the text fits. */
+  isTruncated?: boolean;
 };
 
 const PREVIEW_CHARACTER_LIMIT = 200_000;
@@ -29,10 +31,10 @@ function buildDiffPreview(diff: string): DiffPreview {
 }
 
 /** Rendered by the git panel's changes and history views to display one file's diff. */
-export default function GitDiffViewer({ diff, isMobile, wrapText }: GitDiffViewerProps) {
+export default function GitDiffViewer({ diff, isMobile, wrapText, isTruncated = false }: GitDiffViewerProps) {
   // Render a bounded preview to keep huge commit diffs from freezing the UI thread.
   const preview = useMemo(() => buildDiffPreview(diff || ''), [diff]);
-  const isPreviewTruncated = preview.isCharacterTruncated || preview.isLineTruncated;
+  const isPreviewTruncated = isTruncated || preview.isCharacterTruncated || preview.isLineTruncated;
 
   if (!diff) {
     return (

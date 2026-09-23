@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { api } from '@/shared/api';
-import type { FileOpenHandler, GitApiErrorResponse, GitCommitSummary, GitDiffMap, GitOperationResponse, GitPanelView, GitRemoteStatus, GitStatusResponse, Project } from '@/shared/types';
-import { getAllChangedFiles } from '@/modules/git-panel/utils/gitPanelUtils';
+import type { FileOpenHandler, GitApiErrorResponse, GitCommitSummary, GitDiffMap, GitFileDiff, GitFileDiffMap, GitOperationResponse, GitPanelView, GitRemoteStatus, GitStatusResponse, Project } from '@/shared/types';
 import { useSelectedProvider } from '@/modules/git-panel/hooks/useSelectedProvider';
 
 const DEFAULT_BRANCH = 'main';
@@ -17,7 +16,7 @@ type UseGitPanelControllerOptions = {
 
 type GitPanelController = {
   gitStatus: GitStatusResponse | null;
-  gitDiff: GitDiffMap;
+  gitDiff: GitFileDiffMap;
   isLoading: boolean;
   isLoadingCommits: boolean;
   currentBranch: string;
@@ -54,7 +53,10 @@ type GitPanelController = {
   createInitialCommit: () => Promise<boolean>;
   initRepository: () => Promise<boolean>;
   openFile: (filePath: string) => Promise<void>;
+  loadFileDiff: (filePath: string) => void;
 };
+
+type GitFileDiffResponse = GitApiErrorResponse & Partial<GitFileDiff>;
 
 type GitDiffResponse = GitApiErrorResponse & {
   diff?: string;
@@ -105,7 +107,7 @@ export function useGitPanelController({
   onFileOpen,
 }: UseGitPanelControllerOptions): GitPanelController {
   const [gitStatus, setGitStatus] = useState<GitStatusResponse | null>(null);
-  const [gitDiff, setGitDiff] = useState<GitDiffMap>({});
+  const [gitDiff, setGitDiff] = useState<GitFileDiffMap>({});
   const [isLoading, setIsLoading] = useState(false);
   const [currentBranch, setCurrentBranch] = useState('');
   const [branches, setBranches] = useState<string[]>([]);
@@ -136,43 +138,79 @@ export function useGitPanelController({
     selectedProjectIdRef.current = selectedProject?.projectId ?? null;
   }, [selectedProject]);
 
+  // File diffs are fetched only for expanded rows. These track which paths were
+  // already requested since the last status refresh (one request per row) and
+  // which refresh a response belongs to (older answers are dropped).
+  const requestedFileDiffPathsRef = useRef<Set<string>>(new Set());
+  const fileDiffGenerationRef = useRef(0);
+
+  const forgetRequestedFileDiffs = useCallback(() => {
+    requestedFileDiffPathsRef.current = new Set();
+    fileDiffGenerationRef.current += 1;
+  }, []);
+
   const provider = useSelectedProvider();
 
   const fetchFileDiff = useCallback(
-    async (filePath: string, signal?: AbortSignal) => {
+    async (filePath: string) => {
       if (!selectedProject) {
         return;
       }
 
       // Git endpoints receive the DB projectId via the `project` query param.
       const projectId = selectedProject.projectId;
+      const generation = fileDiffGenerationRef.current;
+      const isCurrentRequest = () =>
+        selectedProjectIdRef.current === projectId && fileDiffGenerationRef.current === generation;
+      // A failed request must not count as "already requested", or collapsing and
+      // re-expanding the row could never retry it before the next status refresh.
+      const allowRetry = () => {
+        if (isCurrentRequest()) {
+          requestedFileDiffPathsRef.current.delete(filePath);
+        }
+      };
 
       try {
-        const response = await api.git.diff(projectId, filePath, { signal });
-        const data = await readJson<GitDiffResponse>(response, signal);
+        const response = await api.git.diff(projectId, filePath);
+        const data = await readJson<GitFileDiffResponse>(response);
 
-        if (
-          signal?.aborted ||
-          selectedProjectIdRef.current !== projectId
-        ) {
+        if (!isCurrentRequest()) {
           return;
         }
 
-        if (!data.error && data.diff) {
-          setGitDiff((previous) => ({
-            ...previous,
-            [filePath]: data.diff as string,
-          }));
+        if (data.error) {
+          allowRetry();
+          return;
         }
+
+        setGitDiff((previous) => ({
+          ...previous,
+          [filePath]: {
+            diff: data.diff ?? '',
+            isBinary: data.isBinary === true,
+            isTruncated: data.isTruncated === true,
+          },
+        }));
       } catch (error) {
-        if (signal?.aborted || isAbortError(error)) {
-          return;
-        }
-
         console.error('Error fetching file diff:', error);
+        allowRetry();
       }
     },
     [selectedProject],
+  );
+
+  // Called by the Changes view for each expanded row; a path is fetched at most
+  // once per status refresh, so re-expanding or re-rendering never refetches.
+  const loadFileDiff = useCallback(
+    (filePath: string) => {
+      if (requestedFileDiffPathsRef.current.has(filePath)) {
+        return;
+      }
+
+      requestedFileDiffPathsRef.current.add(filePath);
+      void fetchFileDiff(filePath);
+    },
+    [fetchFileDiff],
   );
 
   const fetchGitStatus = useCallback(async (signal?: AbortSignal) => {
@@ -209,13 +247,10 @@ export function useGitPanelController({
         return;
       }
 
+      // A new status means diffs may have changed: expanded rows refetch theirs.
+      forgetRequestedFileDiffs();
       setGitStatus(data);
       setCurrentBranch(data.branch || DEFAULT_BRANCH);
-
-      const changedFiles = getAllChangedFiles(data);
-      changedFiles.forEach((filePath) => {
-        void fetchFileDiff(filePath, signal);
-      });
     } catch (error) {
       if (signal?.aborted || isAbortError(error)) {
         return;
@@ -233,7 +268,7 @@ export function useGitPanelController({
     } finally {
       setIsLoading(false);
     }
-  }, [fetchFileDiff, selectedProject]);
+  }, [forgetRequestedFileDiffs, selectedProject]);
 
   const fetchBranches = useCallback(async () => {
     if (!selectedProject) {
@@ -771,6 +806,7 @@ export function useGitPanelController({
     setGitStatus(null);
     setRemoteStatus(null);
     setGitDiff({});
+    forgetRequestedFileDiffs();
     setRecentCommits([]);
     setCommitDiffs({});
     setIsLoading(false);
@@ -791,7 +827,7 @@ export function useGitPanelController({
     return () => {
       controller.abort();
     };
-  }, [fetchBranches, fetchGitStatus, fetchRemoteStatus, selectedProject]);
+  }, [fetchBranches, fetchGitStatus, fetchRemoteStatus, forgetRequestedFileDiffs, selectedProject]);
 
   useEffect(() => {
     if (!selectedProject || activeView !== 'history') {
@@ -841,5 +877,6 @@ export function useGitPanelController({
     createInitialCommit,
     initRepository,
     openFile,
+    loadFileDiff,
   };
 }
