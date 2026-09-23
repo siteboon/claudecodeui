@@ -19,6 +19,22 @@ type ParsedSession = {
 };
 
 /**
+ * How far one transcript file has got, used to pick between two files that
+ * carry the same session id.
+ *
+ * `lastTimestamp` is the newest record timestamp in the file (epoch ms) and
+ * `size` its byte length, which breaks ties between files whose records stop
+ * at the same instant. File mtime is deliberately not part of this: tooling
+ * that copies a transcript between project directories normally preserves it
+ * (`cp -p`, `shutil.copy2`), which leaves the copy indistinguishable from the
+ * original by timestamp.
+ */
+type TranscriptProgress = {
+  lastTimestamp: number;
+  size: number;
+};
+
+/**
  * Session indexer for Claude transcript artifacts.
  */
 export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
@@ -43,6 +59,107 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
   }
 
   /**
+   * Reads how far one transcript file has got. Returns `'gone'` when the file
+   * no longer exists, and null when it exists but could not be read this time
+   * (EMFILE, EACCES, ...), which must not be mistaken for a move.
+   *
+   * The newest record timestamp wins over the last line's timestamp because a
+   * transcript can end on bookkeeping rows that carry none (`atis-latch`,
+   * `last-prompt`, `ai-title`), and a half-written trailing line is simply
+   * skipped.
+   */
+  private async readTranscriptProgress(filePath: string): Promise<TranscriptProgress | 'gone' | null> {
+    let content: string;
+    try {
+      content = await readFile(filePath, 'utf8');
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      return code === 'ENOENT' || code === 'ENOTDIR' ? 'gone' : null;
+    }
+
+    let lastTimestamp = 0;
+    for (const line of content.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        continue;
+      }
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        continue;
+      }
+
+      const rawTimestamp = (parsed as Record<string, unknown>).timestamp;
+      if (typeof rawTimestamp !== 'string') {
+        continue;
+      }
+
+      const timestamp = Date.parse(rawTimestamp);
+      if (!Number.isNaN(timestamp) && timestamp > lastTimestamp) {
+        lastTimestamp = timestamp;
+      }
+    }
+
+    return { lastTimestamp, size: Buffer.byteLength(content) };
+  }
+
+  /**
+   * Returns the id of the session already pointed at a transcript that is
+   * further along than `filePath`, or null when `filePath` is the file the
+   * session should be read from.
+   *
+   * Claude derives a transcript's project directory from the session cwd, so
+   * one session ends up with two `<session-id>.jsonl` files whenever its cwd
+   * changes mid-session (entering a git worktree) or tooling copies the
+   * transcript into another project directory to keep `--resume` working.
+   * Nothing else compares them: the row simply kept whichever file was indexed
+   * last, so Chat could render a copy that stops mid-turn — reading as a hung
+   * session — while the conversation had finished in the other file.
+   *
+   * The session only follows a different file when that file is strictly
+   * further along, or when the stored one no longer exists (a transcript that
+   * genuinely moved must not pin the row to a deleted path). A file that could
+   * not be read, on either side, never moves the row, and an exact tie keeps
+   * the stored value so the row cannot flap between two indexers.
+   */
+  private async findSessionAheadOfTranscript(
+    providerSessionId: string,
+    filePath: string
+  ): Promise<string | null> {
+    const existing = sessionsDb.getSessionByProviderSessionId(providerSessionId)
+      ?? sessionsDb.getSessionById(providerSessionId);
+    const storedPath = existing?.jsonl_path;
+    if (!existing || !storedPath || storedPath === filePath) {
+      return null;
+    }
+
+    const [storedProgress, incomingProgress] = await Promise.all([
+      this.readTranscriptProgress(storedPath),
+      this.readTranscriptProgress(filePath),
+    ]);
+
+    if (incomingProgress === null || incomingProgress === 'gone') {
+      return existing.session_id;
+    }
+    if (storedProgress === 'gone') {
+      return null;
+    }
+    if (storedProgress === null) {
+      return existing.session_id;
+    }
+
+    if (incomingProgress.lastTimestamp !== storedProgress.lastTimestamp) {
+      return incomingProgress.lastTimestamp > storedProgress.lastTimestamp
+        ? null
+        : existing.session_id;
+    }
+
+    return incomingProgress.size > storedProgress.size ? null : existing.session_id;
+  }
+
+  /**
    * Scans ~/.claude/projects and upserts discovered sessions into DB.
    */
   async synchronize(since?: Date): Promise<number> {
@@ -61,6 +178,12 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
 
       const parsed = await this.processSessionFile(filePath, nameMap);
       if (!parsed) {
+        continue;
+      }
+
+      // A second copy of an already indexed transcript must not overwrite the
+      // row — not its path, and not the timestamps or title read off it.
+      if (await this.findSessionAheadOfTranscript(parsed.sessionId, filePath)) {
         continue;
       }
 
@@ -95,6 +218,13 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     const parsed = await this.processSessionFile(filePath, nameMap);
     if (!parsed) {
       return null;
+    }
+
+    // The file still belongs to that session, so the caller may broadcast it,
+    // but nothing in this copy may move the row back onto it.
+    const sessionAhead = await this.findSessionAheadOfTranscript(parsed.sessionId, filePath);
+    if (sessionAhead) {
+      return sessionAhead;
     }
 
     const timestamps = await readFileTimestamps(filePath);
