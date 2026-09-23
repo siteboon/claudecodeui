@@ -574,7 +574,8 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
      * The run's token usage, from the last `status` / `token_budget` report
      * the runtime streamed: Claude sends one per assistant message (that
      * request's context-window reading), Codex one per turn, OpenCode one
-     * when its process exits; zeros for a runtime that reports none (Cursor).
+     * when its process exits; zeros when the runtime forwards none (the Cursor
+     * runtime drops the usage on the CLI's `result` event).
      */
     getTotalTokens() {
       let budget = null;

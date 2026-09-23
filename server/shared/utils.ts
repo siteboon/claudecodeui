@@ -480,10 +480,13 @@ export function createCompleteMessage(opts: {
  *
  * Final rows win: when the run produced any, its deltas are ignored, so a
  * runtime that streams partials ahead of its final row is never counted twice.
- * Otherwise consecutive chunks are joined, as the chat joins them, into one
- * reply per unbroken run of deltas (a run ends at `stream_end` or at any other
- * event), keeping the first chunk's envelope (id, sessionId, timestamp,
- * provider, seq).
+ * Otherwise consecutive chunks are concatenated as-is (a chunk may be a partial
+ * word, so no separator is added) into one reply per unbroken run of deltas. A
+ * run ends at `stream_end` or at any other event, such as a `tool_use`; the
+ * chat instead keeps one bubble open until `stream_end` or `complete`, so text
+ * on both sides of a tool call is one bubble there but two replies here. Each
+ * reply keeps its first chunk's envelope (id, sessionId, timestamp, provider,
+ * seq), so its id matches that chunk's in the streamed output.
  *
  * `events` may hold anything a writer was sent; entries that are not
  * normalized messages (the agent route's own `type` events, unparsed strings)

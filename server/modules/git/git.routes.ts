@@ -1097,7 +1097,7 @@ Generate the commit message:`;
 /**
  * Cleans the AI-generated commit message by removing markdown, code blocks, and extra formatting
  * @param {string} text - Raw AI response
- * @returns {string} Clean commit message
+ * @returns {string} Clean commit message, or '' when the response holds no conventional-commit line
  */
 function cleanCommitMessage(text) {
   if (!text || !text.trim()) {
@@ -1123,9 +1123,15 @@ function cleanCommitMessage(text) {
   // Remove any explanatory text before the actual commit message
   // Look for conventional commit pattern and start from there
   const conventionalCommitMatch = cleaned.match(/(feat|fix|docs|style|refactor|perf|test|build|ci|chore)(\(.+?\))?:.+/s);
-  if (conventionalCommitMatch) {
-    cleaned = cleaned.substring(cleaned.indexOf(conventionalCommitMatch[0]));
+  if (!conventionalCommitMatch) {
+    // Not a commit message. Claude reports its own failures as ordinary
+    // assistant text ("Not logged in · Please run /login", usage limits, API
+    // errors) and Cursor forwards non-JSON stdout as reply chunks, so a reply
+    // with no conventional-commit line counts as no reply and the caller
+    // falls back.
+    return '';
   }
+  cleaned = cleaned.substring(cleaned.indexOf(conventionalCommitMatch[0]));
 
   return cleaned.trim();
 }

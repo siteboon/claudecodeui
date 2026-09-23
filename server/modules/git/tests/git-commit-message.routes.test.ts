@@ -17,7 +17,8 @@ type RunFunction = GitDependencies['queryClaude'];
  * reads its answer off the writer. The reader only knew the pre-unification
  * `claude-response` / `cursor-output` shapes, so it never found the reply in
  * the normalized events the runtimes send and always answered the
- * `chore: update files` fallback.
+ * `chore: update files` fallback. The fallback is still the answer when the
+ * reply holds no commit message, such as a failure the CLI words as a reply.
  */
 
 /** A git stand-in for one repository at /workspace/repo with a modified a.txt. */
@@ -95,4 +96,29 @@ test('a Cursor run\'s streamed chunks become the generated commit message', asyn
   }, 'cursor');
 
   assert.equal(message, 'fix(a): add line2\n\nAppend a second line.');
+});
+
+test('a Claude failure delivered as reply text falls back instead of becoming the commit message', async () => {
+  const message = await generateCommitMessage({
+    // What the Claude runtime sends when the CLI is not logged in: the CLI's
+    // synthetic assistant message normalizes to an ordinary `text` row, and
+    // its `result` (is_error: true) still completes with exit code 0.
+    queryClaude: async (_command, _options, writer) => {
+      writer.send(createNormalizedMessage({ kind: 'text', role: 'assistant', content: 'Not logged in · Please run /login', sessionId: 'native-1', provider: 'claude' }));
+      writer.send(createCompleteMessage({ provider: 'claude', sessionId: 'native-1', exitCode: 0 }));
+    },
+  }, 'claude');
+
+  assert.equal(message, 'chore: update files');
+});
+
+test('explanatory text ahead of the commit message is dropped', async () => {
+  const message = await generateCommitMessage({
+    queryClaude: async (_command, _options, writer) => {
+      writer.send(createNormalizedMessage({ kind: 'text', role: 'assistant', content: 'Here is the commit message:\n\nfeat(a): add line2', sessionId: 'native-1', provider: 'claude' }));
+      writer.send(createCompleteMessage({ provider: 'claude', sessionId: 'native-1', exitCode: 0 }));
+    },
+  }, 'claude');
+
+  assert.equal(message, 'feat(a): add line2');
 });
