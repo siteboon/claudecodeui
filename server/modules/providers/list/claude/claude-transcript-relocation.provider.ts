@@ -4,6 +4,7 @@ import { mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promis
 
 import type { IProviderTranscriptRelocation } from '@/shared/interfaces.js';
 import type { SessionTranscriptRelocation } from '@/shared/types.js';
+import { AppError } from '@/shared/utils.js';
 
 /**
  * Longest encoded folder name the Claude SDK writes verbatim. Past it the SDK
@@ -19,7 +20,10 @@ const CLAUDE_PROJECT_DIR_MAX_LENGTH = 200;
  * folder is invisible to a resume from the renamed one.
  */
 function encodeClaudeProjectDirName(projectPath: string): string | null {
-  const encoded = projectPath.replace(/[^a-zA-Z0-9]/g, '-');
+  // The SDK NFC-normalizes the path on macOS before encoding it, and an accent
+  // stored decomposed (NFD) would otherwise encode to a different folder name.
+  const sdkPath = process.platform === 'darwin' ? projectPath.normalize('NFC') : projectPath;
+  const encoded = sdkPath.replace(/[^a-zA-Z0-9]/g, '-');
   return encoded.length > CLAUDE_PROJECT_DIR_MAX_LENGTH ? null : encoded;
 }
 
@@ -180,6 +184,18 @@ export class ClaudeTranscriptRelocationProvider implements IProviderTranscriptRe
             (cleanupError as Error).message,
           );
         }
+      }
+
+      // Something already sits where a transcript or its session folder was
+      // headed, typically a copy made by resuming the session from the renamed
+      // folder. It is not ours to overwrite, so the user has to decide.
+      const fsError = error as NodeJS.ErrnoException & { dest?: string };
+      if (fsError.code === 'EEXIST' || fsError.code === 'ENOTEMPTY') {
+        throw new AppError('The new folder already holds a copy of one of this project\'s conversations', {
+          code: 'TRANSCRIPT_ALREADY_EXISTS',
+          statusCode: 409,
+          details: `Claude already has ${fsError.dest ?? fsError.path} for the new folder. Move or delete it, then try again.`,
+        });
       }
       throw error;
     }
