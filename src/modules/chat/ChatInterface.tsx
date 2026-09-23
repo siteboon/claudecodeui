@@ -317,6 +317,12 @@ function ChatInterface({
       if (event.key !== 'Escape' || event.repeat || event.defaultPrevented) {
         return;
       }
+      // An open menu or modal marks itself with `data-escape-layer` and takes
+      // this Escape to close. Stopping the run as well would make dismissing the
+      // plan card's Build menu discard the plan waiting for approval.
+      if (document.querySelector('[data-escape-layer]')) {
+        return;
+      }
 
       event.preventDefault();
       handleAbortSession();
