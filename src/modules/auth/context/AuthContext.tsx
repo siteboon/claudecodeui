@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { ReactNode } from 'react';
 
 import { IS_PLATFORM } from '@/shared/utils';
-import { api } from '@/shared/api';
+import { api, readApiErrorMessage } from '@/shared/api';
 import { AUTH_SESSION_EXPIRED_EVENT, AUTH_TOKEN_REFRESHED_EVENT, getAuthTokenRefreshDelay, isValidRefreshedToken, storeAuthToken } from '@/shared/authToken';
 import { hydrateChatDrafts, resetChatDrafts } from '@/shared/chatDrafts';
 import { hydrateUserPreferences, resetUserPreferences } from '@/shared/userSettings';
@@ -29,8 +29,6 @@ type AuthActionResult = { success: true } | { success: false; error: string };
 type AuthSessionPayload = {
   token?: string;
   user?: AuthUser;
-  error?: string;
-  message?: string;
 };
 
 type AuthStatusPayload = {
@@ -43,11 +41,6 @@ type AuthUserPayload = {
 
 type OnboardingStatusPayload = {
   hasCompletedOnboarding?: boolean;
-};
-
-type ApiErrorPayload = {
-  error?: string;
-  message?: string;
 };
 
 type AuthContextValue = {
@@ -73,14 +66,6 @@ async function parseJsonSafely<T>(response: Response): Promise<T | null> {
   } catch {
     return null;
   }
-}
-
-function resolveApiErrorMessage(payload: ApiErrorPayload | null, fallback: string): string {
-  if (!payload) {
-    return fallback;
-  }
-
-  return payload.error ?? payload.message ?? fallback;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -301,7 +286,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const payload = await parseJsonSafely<AuthSessionPayload>(response);
 
         if (!response.ok || !payload?.token || !payload.user) {
-          const message = resolveApiErrorMessage(payload, t(AUTH_ERROR_MESSAGES.loginFailed));
+          // Most auth failures arrive as the structured AppError envelope; passing its
+          // `error` object on would render it as a React child and blank the screen.
+          const message = readApiErrorMessage(payload) ?? t(AUTH_ERROR_MESSAGES.loginFailed);
           setError(message);
           return { success: false, error: message };
         }
@@ -327,7 +314,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const payload = await parseJsonSafely<AuthSessionPayload>(response);
 
         if (!response.ok || !payload?.token || !payload.user) {
-          const message = resolveApiErrorMessage(payload, t(AUTH_ERROR_MESSAGES.registrationFailed));
+          const message = readApiErrorMessage(payload) ?? t(AUTH_ERROR_MESSAGES.registrationFailed);
           setError(message);
           return { success: false, error: message };
         }
