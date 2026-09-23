@@ -505,12 +505,119 @@ function isUserPromptRow(row: AnyRecord): boolean {
 }
 
 /**
- * Drops the rows belonging to prompts that were replaced by an edit.
+ * Returns the uuids on the chain the next `claude --resume` replays, from the
+ * leaf it continues from back to the root.
+ *
+ * Mirrors the transcript loader of the Claude CLI, which the Agent SDK's
+ * `resume` spawns as well. Every CLI process stamps a `last-prompt` row naming
+ * the leaf it was on when it exits, so with two writers on one session it is
+ * that stamp — not the newest row — that decides which branch is replayed. The
+ * newest conversation row only takes over when it descends from the stamped
+ * leaf (the stamping process kept going), or when the file carries no stamp.
+ * A compact boundary clears the stamp, and `progress` rows are skipped over
+ * when linking a row to its parent, as the CLI does.
+ */
+function resolveResumePath(rows: AnyRecord[]): Set<string> {
+  const conversation = new Map<string, AnyRecord>();
+  const progressParents = new Map<string, string | null>();
+  const parentOf = (row: AnyRecord): string | undefined => {
+    const parentUuid = typeof row.parentUuid === 'string' ? row.parentUuid : undefined;
+    if (parentUuid && progressParents.has(parentUuid)) {
+      return progressParents.get(parentUuid) ?? undefined;
+    }
+    return parentUuid;
+  };
+
+  let newestRow: string | undefined;
+  let stampedLeaf: string | undefined;
+  let stampIsExplicit = false;
+
+  for (const row of rows) {
+    if (row.type === 'progress' && typeof row.uuid === 'string') {
+      progressParents.set(row.uuid, parentOf(row) ?? null);
+      continue;
+    }
+    if (typeof row.uuid === 'string'
+      && (row.type === 'user' || row.type === 'assistant' || row.type === 'attachment' || row.type === 'system')) {
+      conversation.set(row.uuid, row);
+      if (row.isSidechain !== true) {
+        newestRow = row.uuid;
+        stampIsExplicit = false;
+      }
+      if (row.type === 'system' && row.subtype === 'compact_boundary') {
+        stampedLeaf = undefined;
+        stampIsExplicit = false;
+      }
+    } else if (row.type === 'last-prompt' && typeof row.leafUuid === 'string' && row.leafUuid) {
+      stampIsExplicit = row.explicit === true || (stampIsExplicit && row.leafUuid === stampedLeaf);
+      stampedLeaf = row.leafUuid;
+    }
+  }
+
+  const chainFrom = (leaf: string | undefined): string[] => {
+    const chain: string[] = [];
+    const seen = new Set<string>();
+    let cursor = leaf;
+    while (cursor && conversation.has(cursor) && !seen.has(cursor)) {
+      seen.add(cursor);
+      chain.push(cursor);
+      cursor = parentOf(conversation.get(cursor) as AnyRecord);
+    }
+    return chain;
+  };
+
+  let leaf = stampedLeaf && conversation.has(stampedLeaf) ? stampedLeaf : undefined;
+  if (leaf && !stampIsExplicit && newestRow && newestRow !== leaf && chainFrom(newestRow).includes(leaf)) {
+    leaf = newestRow;
+  }
+
+  return new Set(chainFrom(leaf ?? newestRow));
+}
+
+/**
+ * Maps each row's uuid to the file position of the newest row in its subtree.
+ *
+ * The transcript is append-only and a child is always written after its
+ * parent, so one backward pass hands every row's position to its parent and
+ * each uuid ends up holding the position of the last line its branch grew.
+ * Rows after a compact boundary do not link back across it, so this only
+ * orders branches within one compaction segment.
+ */
+function indexNewestRowPerBranch(rows: AnyRecord[]): Map<string, number> {
+  const newestByUuid = new Map<string, number>();
+
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index];
+    if (typeof row.uuid !== 'string') {
+      continue;
+    }
+    const newest = newestByUuid.get(row.uuid) ?? index;
+    newestByUuid.set(row.uuid, newest);
+    if (typeof row.parentUuid === 'string' && (newestByUuid.get(row.parentUuid) ?? -1) < newest) {
+      newestByUuid.set(row.parentUuid, newest);
+    }
+  }
+
+  return newestByUuid;
+}
+
+/**
+ * Drops the rows belonging to prompts the next resume will not replay.
  *
  * When a message is edited, Claude resumes the conversation partway and appends
  * the replacement, so two prompts end up sharing one parent and the file holds
  * both the abandoned attempt and the live one. A flat read would show them
- * stacked, which reads as the app having sent the message twice.
+ * stacked, which reads as the app having sent the message twice. The same shape
+ * appears without an edit when a session is driven from Chat and from the
+ * native `claude` CLI at once: both writers branch off the row each of them saw
+ * last.
+ *
+ * Which sibling survives is decided by the branch the runtime will actually
+ * resume: the sibling on the chain `resolveResumePath` returns. Going by the
+ * newest prompt, or by the newest row, would show a branch the model was never
+ * sent whenever the two writers exit in a different order than they wrote. A
+ * fork that is not on that chain at all (one made before a compaction) keeps
+ * the branch that was appended to last.
  *
  * Only sibling *prompts* are treated as a fork. Branch points made by parallel
  * tool calls are extremely common — one assistant turn writes several chained
@@ -531,15 +638,31 @@ function dropSupersededPromptBranches(rows: AnyRecord[]): AnyRecord[] {
     }
   }
 
+  const forks = [...promptSiblings.values()].filter((siblings) => siblings.length > 1);
+  if (forks.length === 0) {
+    return rows;
+  }
+
+  const resumePath = resolveResumePath(rows);
+  let newestByUuid: Map<string, number> | undefined;
+  const newestRowOf = (row: AnyRecord): number => {
+    newestByUuid ??= indexNewestRowPerBranch(rows);
+    return typeof row.uuid === 'string' ? newestByUuid.get(row.uuid) ?? -1 : -1;
+  };
+
   const supersededRoots = new Set<string>();
-  for (const siblings of promptSiblings.values()) {
-    if (siblings.length < 2) {
-      continue;
+  for (const siblings of forks) {
+    let live = siblings.find((row) => typeof row.uuid === 'string' && resumePath.has(row.uuid));
+    if (!live) {
+      live = siblings[0];
+      for (const row of siblings) {
+        if (newestRowOf(row) > newestRowOf(live)) {
+          live = row;
+        }
+      }
     }
-    // The transcript is append-only, so the last prompt written under a parent
-    // is the one that replaced the others.
-    for (const row of siblings.slice(0, -1)) {
-      if (typeof row.uuid === 'string') {
+    for (const row of siblings) {
+      if (row !== live && typeof row.uuid === 'string') {
         supersededRoots.add(row.uuid);
       }
     }

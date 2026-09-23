@@ -1519,6 +1519,137 @@ test('an edited prompt replaces the one it superseded instead of stacking on it'
   }
 });
 
+const CONCURRENT_SESSION_ID = 'claude-concurrent-session';
+
+/**
+ * Rows two live writers leave behind: Chat and the native `claude` CLI both
+ * branch off the assistant row each of them saw last. `last-prompt` is the row
+ * every CLI process appends when it exits, naming the leaf it was on.
+ */
+const concurrentRow = {
+  sharedPrompt: {
+    type: 'user', uuid: 'u1', parentUuid: null, sessionId: CONCURRENT_SESSION_ID,
+    timestamp: '2026-08-23T10:00:00.000Z',
+    message: { role: 'user', content: [{ type: 'text', text: 'shared prompt' }] },
+  },
+  sharedAnswer: {
+    type: 'assistant', uuid: 'a1', parentUuid: 'u1', sessionId: CONCURRENT_SESSION_ID,
+    timestamp: '2026-08-23T10:00:01.000Z',
+    message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'shared answer' }] },
+  },
+  chatPrompt: {
+    type: 'user', uuid: 'u2', parentUuid: 'a1', sessionId: CONCURRENT_SESSION_ID,
+    timestamp: '2026-08-23T10:00:02.000Z',
+    message: { role: 'user', content: [{ type: 'text', text: 'chat prompt' }] },
+  },
+  chatAnswer: {
+    type: 'assistant', uuid: 'a2', parentUuid: 'u2', sessionId: CONCURRENT_SESSION_ID,
+    timestamp: '2026-08-23T10:00:03.000Z',
+    message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'chat answer' }] },
+  },
+  // The native CLI had loaded the session before `u2` existed, so its prompt
+  // parents onto `a1` too.
+  terminalPrompt: {
+    type: 'user', uuid: 't1', parentUuid: 'a1', sessionId: CONCURRENT_SESSION_ID,
+    timestamp: '2026-08-23T10:00:04.000Z',
+    message: { role: 'user', content: [{ type: 'text', text: 'terminal prompt' }] },
+  },
+  terminalAnswer: {
+    type: 'assistant', uuid: 't2', parentUuid: 't1', sessionId: CONCURRENT_SESSION_ID,
+    timestamp: '2026-08-23T10:00:05.000Z',
+    message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'terminal answer' }] },
+  },
+  chatFollowUp: {
+    type: 'user', uuid: 'u3', parentUuid: 'a2', sessionId: CONCURRENT_SESSION_ID,
+    timestamp: '2026-08-23T10:00:06.000Z',
+    message: { role: 'user', content: [{ type: 'text', text: 'chat follow-up' }] },
+  },
+  chatFollowUpAnswer: {
+    type: 'assistant', uuid: 'a3', parentUuid: 'u3', sessionId: CONCURRENT_SESSION_ID,
+    timestamp: '2026-08-23T10:00:07.000Z',
+    message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'chat follow-up answer' }] },
+  },
+};
+
+const exitStamp = (leafUuid: string) => ({
+  type: 'last-prompt', lastPrompt: 'redacted', leafUuid, sessionId: CONCURRENT_SESSION_ID,
+});
+
+async function readConcurrentlyForkedHistory(rows: object[]): Promise<unknown[]> {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-concurrent-history-'));
+
+  try {
+    const transcriptPath = path.join(tempRoot, `${CONCURRENT_SESSION_ID}.jsonl`);
+    await writeFile(transcriptPath, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+
+    let texts: unknown[] = [];
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(
+        CONCURRENT_SESSION_ID, 'claude', tempRoot, 'Concurrently forked session', now, now, transcriptPath,
+      );
+
+      const history = await new ClaudeSessionsProvider().fetchHistory(CONCURRENT_SESSION_ID, {
+        providerSessionId: CONCURRENT_SESSION_ID,
+      });
+      texts = history.messages.map((message) => message.content);
+    });
+    return texts;
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+}
+
+const SHARED_TURN = ['shared prompt', 'shared answer'];
+const TERMINAL_TURN = ['terminal prompt', 'terminal answer'];
+
+test('a fork with no exit stamp shows the branch ending at the newest row', { concurrency: false }, async () => {
+  const r = concurrentRow;
+  // With no `last-prompt` in the file, `--resume` falls back to the newest row:
+  // Chat forked first but kept the session going.
+  const texts = await readConcurrentlyForkedHistory([
+    r.sharedPrompt, r.sharedAnswer, r.chatPrompt, r.chatAnswer,
+    r.terminalPrompt, r.terminalAnswer, r.chatFollowUp, r.chatFollowUpAnswer,
+  ]);
+
+  assert.deepEqual(texts, [...SHARED_TURN, 'chat prompt', 'chat answer', 'chat follow-up', 'chat follow-up answer']);
+});
+
+test('a fork shows the branch Chat stamped when Chat exited last', { concurrency: false }, async () => {
+  const r = concurrentRow;
+  const texts = await readConcurrentlyForkedHistory([
+    r.sharedPrompt, r.sharedAnswer, r.chatPrompt, r.chatAnswer, exitStamp('a2'),
+    r.terminalPrompt, r.terminalAnswer, r.chatFollowUp, r.chatFollowUpAnswer, exitStamp('a3'),
+  ]);
+
+  assert.deepEqual(texts, [...SHARED_TURN, 'chat prompt', 'chat answer', 'chat follow-up', 'chat follow-up answer']);
+});
+
+test('a fork shows the terminal branch once the terminal exits after Chat', { concurrency: false }, async () => {
+  const r = concurrentRow;
+  // Chat wrote the newest rows, but closing the terminal stamps its own leaf
+  // last, and that stamp is what the next resume continues from.
+  const texts = await readConcurrentlyForkedHistory([
+    r.sharedPrompt, r.sharedAnswer, r.chatPrompt, r.chatAnswer, exitStamp('a2'),
+    r.terminalPrompt, r.terminalAnswer, r.chatFollowUp, r.chatFollowUpAnswer, exitStamp('a3'),
+    exitStamp('t2'),
+  ]);
+
+  assert.deepEqual(texts, [...SHARED_TURN, ...TERMINAL_TURN]);
+});
+
+test('a fork keeps the stamped branch while the other writer is still open', { concurrency: false }, async () => {
+  const r = concurrentRow;
+  // Chat exited after its turn; the terminal then typed a prompt and is still
+  // open. Its rows are the newest, but they do not descend from Chat's stamp.
+  const texts = await readConcurrentlyForkedHistory([
+    r.sharedPrompt, r.sharedAnswer, r.chatPrompt, r.chatAnswer, exitStamp('a2'),
+    r.terminalPrompt, r.terminalAnswer,
+  ]);
+
+  assert.deepEqual(texts, [...SHARED_TURN, 'chat prompt', 'chat answer']);
+});
+
 test('parallel tool calls are not mistaken for an edit', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-parallel-tools-'));
   const sessionId = 'claude-parallel-session';
