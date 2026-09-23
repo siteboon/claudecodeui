@@ -222,6 +222,7 @@ function SidebarProjectItem({
                         onChange={(event) => onRenamePathDraftChange(event.target.value)}
                         className="block w-full rounded-lg border-2 border-border bg-background px-3 py-2 text-xs text-muted-foreground shadow-sm transition-all duration-200 focus:border-primary focus:shadow-md focus:outline-none"
                         placeholder={t('projects.projectPathPlaceholder')}
+                        aria-label={t('projects.projectPathPlaceholder')}
                         title={t('projects.projectPathHint')}
                         spellCheck={false}
                         autoComplete="off"
@@ -383,6 +384,7 @@ function SidebarProjectItem({
                     onChange={(event) => onRenamePathDraftChange(event.target.value)}
                     className="block w-full rounded border border-border bg-background px-2 py-1 text-xs text-muted-foreground focus:ring-2 focus:ring-primary/20"
                     placeholder={t('projects.projectPathPlaceholder')}
+                    aria-label={t('projects.projectPathPlaceholder')}
                     title={t('projects.projectPathHint')}
                     spellCheck={false}
                     autoComplete="off"
