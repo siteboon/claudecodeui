@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { useEffect } from 'react';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 
@@ -107,6 +107,9 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  // Unmount before restoring the language, so the reset cannot reach this
+  // test's provider and leak its requests into the next test.
+  cleanup();
   await i18n.changeLanguage('en');
   vi.unstubAllGlobals();
 });
