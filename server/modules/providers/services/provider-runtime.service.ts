@@ -98,7 +98,7 @@ export function createProviderRuntimeService(
     },
 
     hasBackgroundWork(sessionId: string): boolean {
-      // Includes the relay of the last task's result: the work is not done
+      // Includes the relay of a settled task's result: the work is not done
       // until the model has it, and the process stays up until then.
       return dependencies.listProviders().some((provider) =>
         (provider.runtime.listBackgroundWork?.() ?? []).some((entry) => entry.sessionId === sessionId)

@@ -46,12 +46,12 @@ export interface IProviderRuntime {
    */
   listBackgroundWork?(): Array<{ sessionId: string; tasks: BackgroundTaskSummary[] }>;
   /**
-   * Whether the session's last background task has settled and the process
-   * that relays its result to the model is still up. The session is no longer
-   * in `listBackgroundWork` then, but a new turn would still replace that
-   * process mid-relay. The relay can take more than one turn, so this lasts
-   * until the process exits, not until the next turn ends. Runtimes without
-   * background work leave this undefined.
+   * Whether a background task of the session has settled and the process
+   * that relays its result to the model is still up. The session may have
+   * left `listBackgroundWork` by then (a task stopped mid-relay empties it),
+   * but a new turn would still replace that process mid-relay. The relay can
+   * take more than one turn, so this lasts until the process exits, not until
+   * the next turn ends. Runtimes without background work leave this undefined.
    */
   isReportingBackgroundWork?(sessionId: string): boolean;
   /**

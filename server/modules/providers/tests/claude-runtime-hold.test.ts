@@ -211,6 +211,18 @@ const text = (value: string) => ({
   type: 'assistant', session_id: NATIVE_ID, parent_tool_use_id: null,
   message: { role: 'assistant', content: [{ type: 'text', text: value }] },
 });
+// A turn that backgrounds two commands, each answered at once with its task id.
+const launchTwo = (script: Scripted) => {
+  script.emit(init());
+  script.emit(toolUse('toolu_short', 'Bash', { command: 'sleep 4', run_in_background: true }));
+  script.emit(taskStarted('b1', 'toolu_short', 'local_bash'));
+  script.emit(ack('toolu_short', 'Command running in background with ID: b1', { backgroundTaskId: 'b1' }));
+  script.emit(toolUse('toolu_long', 'Bash', { command: 'sleep 10', run_in_background: true }));
+  script.emit(taskStarted('b2', 'toolu_long', 'local_bash'));
+  script.emit(ack('toolu_long', 'Command running in background with ID: b2', { backgroundTaskId: 'b2' }));
+  script.emit(text('A ended its turn'));
+  script.emit(result());
+};
 
 test('a task that settles during a model call keeps the session busy through the relay turn after the result', async () => {
   await withRun(async ({ script, sent, done }) => {
@@ -244,13 +256,7 @@ test('a task that settles during a model call keeps the session busy through the
 
 test('a task that settles during another task\'s relay keeps the session busy until the process exits', async () => {
   await withRun(async ({ script, done }) => {
-    script.emit(init());
-    script.emit(toolUse('toolu_short', 'Bash', { command: 'sleep 4', run_in_background: true }));
-    script.emit(taskStarted('b1', 'toolu_short', 'local_bash'));
-    script.emit(toolUse('toolu_long', 'Bash', { command: 'sleep 10', run_in_background: true }));
-    script.emit(taskStarted('b2', 'toolu_long', 'local_bash'));
-    script.emit(text('A ended its turn'));
-    script.emit(result());
+    launchTwo(script);
     await settle();
     assert.equal(script.released(), false, 'held for both jobs');
 
@@ -273,6 +279,53 @@ test('a task that settles during another task\'s relay keeps the session busy un
 
     script.end();
     await done;
+    assert.equal(busy(), false);
+  });
+});
+
+test('stopping the last task during another task\'s relay keeps the session busy until the process exits', async () => {
+  await withRun(async ({ script, done }) => {
+    launchTwo(script);
+    await settle();
+
+    // The short job reports and the CLI starts relaying it. The user stops the
+    // long one from the pill before that relay ends (a TaskStop the model
+    // calls inside the relay settles it the same way).
+    script.emit(taskNotification('b1', 'toolu_short', 'completed'));
+    script.emit(init());
+    await settle();
+    assert.equal(await stopClaudeSDKTask(SESSION_ID, 'b2'), true);
+    script.emit(taskNotification('b2', 'toolu_long', 'stopped'));
+    await settle();
+    assert.deepEqual(listClaudeSDKBackgroundWork(), []);
+    assert.equal(script.released(), true, 'nothing is outstanding, so stdin is let go');
+    assert.equal(busy(), true, 'the CLI still finishes relaying b1');
+
+    script.emit(text('RELAYED b1'));
+    script.emit(result());
+    await settle();
+    assert.equal(busy(), true);
+
+    script.end();
+    await done;
+    assert.equal(busy(), false);
+  });
+});
+
+test('a foreground agent leaves the session idle once its turn ends', async () => {
+  await withRun(async ({ script, sent }) => {
+    // Its task settles before its tool result, which carries the agent's
+    // answer; the CLI pushes no relay turn for it.
+    script.emit(init());
+    script.emit(toolUse('toolu_agent', 'Agent', { prompt: 'Return the word FOUR', subagent_type: 'general-purpose' }));
+    script.emit(taskStarted('a1', 'toolu_agent', 'local_agent'));
+    script.emit(taskNotification('a1', 'toolu_agent', 'completed'));
+    script.emit(ack('toolu_agent', 'FOUR', { status: 'completed', agentId: 'a1' }));
+    script.emit(text('A ended its turn'));
+    script.emit(result());
+    await settle();
+
+    assert.ok(sent.some((message) => message.kind === 'complete'));
     assert.equal(busy(), false);
   });
 });

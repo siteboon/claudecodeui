@@ -212,20 +212,38 @@ test('messages that are not task events leave the set untouched', () => {
   assert.equal(tracker.has('s1', 't1'), true);
 });
 
-// Once the last task settles, the CLI still hands its result to the model,
-// and a new turn started before it has replaces the process mid-relay and forks
-// the transcript. Only the process going away (`clear`) ends that: the relay
-// can be a turn of its own after the next `result`.
+// Once a task settles, the CLI still hands its result to the model, and a new
+// turn started before it has replaces the process mid-relay and forks the
+// transcript. Only the process going away (`clear`) ends that: the relay can be
+// a turn of its own after the next `result`.
 const text = (value: string) => ({ type: 'assistant', message: { content: [{ type: 'text', text: value }] } });
 const result = { type: 'result', subtype: 'success' };
 const init = { type: 'system', subtype: 'init' };
+const call = (taskId: string, name = 'Bash') => ({
+  type: 'assistant',
+  parent_tool_use_id: null,
+  message: { role: 'assistant', content: [{ type: 'tool_use', id: `toolu_${taskId}`, name, input: {} }] },
+});
+const answer = (taskId: string, content: string) => ({
+  type: 'user',
+  parent_tool_use_id: null,
+  message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: `toolu_${taskId}`, content }] },
+});
+// A backgrounded call as the stream carries it: the call, its task, and the
+// tool result that returns at once with the task id.
+const launch = (tracker: ReturnType<typeof createBackgroundWorkTracker>, session: string, taskId: string) => {
+  tracker.apply(session, call(taskId));
+  tracker.apply(session, started(taskId, { task_type: 'local_bash' }));
+  tracker.apply(session, answer(taskId, `Command running in background with ID: ${taskId}`));
+};
 
-test('after the last task reports in, the session is reporting until its process is gone', () => {
+test('once a task reports in, the session is reporting until its process is gone', () => {
   const tracker = createBackgroundWorkTracker();
-  tracker.apply('s1', started('t1'));
-  tracker.apply('s1', started('t2'));
+  launch(tracker, 's1', 't1');
+  launch(tracker, 's1', 't2');
   tracker.apply('s1', notified('t1', 'completed'));
-  assert.equal(tracker.isReporting('s1'), false, 'the other task is still running');
+  assert.equal(tracker.hasOutstanding('s1'), true, 'the other task is still running');
+  assert.equal(tracker.isReporting('s1'), true, 't1 is being relayed meanwhile');
 
   tracker.apply('s1', notified('t2', 'completed'));
   assert.equal(tracker.hasOutstanding('s1'), false);
@@ -243,7 +261,7 @@ test('a task that settles during a model call is still reporting after that turn
   // Measured with claude 2.1.280: the notification is not folded into the call
   // in flight; the CLI pushes a separate relay turn after the turn's result.
   const tracker = createBackgroundWorkTracker();
-  tracker.apply('s1', started('t1'));
+  launch(tracker, 's1', 't1');
   tracker.apply('s1', notified('t1', 'completed'));
   tracker.apply('s1', text('A ended its turn'));
   tracker.apply('s1', result);
@@ -259,8 +277,8 @@ test('a task that settles during a model call is still reporting after that turn
 
 test('a task that settles during another task\'s relay keeps the session reporting through both relays', () => {
   const tracker = createBackgroundWorkTracker();
-  tracker.apply('s1', started('t1'));
-  tracker.apply('s1', started('t2'));
+  launch(tracker, 's1', 't1');
+  launch(tracker, 's1', 't2');
   tracker.apply('s1', result);
   tracker.apply('s1', notified('t1', 'completed'));
   tracker.apply('s1', init);
@@ -279,9 +297,66 @@ test('a task that settles during another task\'s relay keeps the session reporti
   assert.equal(tracker.isReporting('s1'), false);
 });
 
+// The last task is stopped (from the pill, or by the model calling TaskStop in
+// the relay) while an earlier task's result is still being relayed: the task
+// list empties, but the process is still writing that relay.
+test('a task stopped during another task\'s relay does not end that relay', () => {
+  const tracker = createBackgroundWorkTracker();
+  launch(tracker, 's1', 't1');
+  launch(tracker, 's1', 't2');
+  tracker.apply('s1', result);
+  tracker.apply('s1', notified('t1', 'completed'));
+  tracker.apply('s1', init);
+  tracker.apply('s1', notified('t2', 'stopped'));
+  assert.equal(tracker.hasOutstanding('s1'), false);
+  assert.equal(tracker.isReporting('s1'), true, 't1 is still being relayed');
+
+  const other = createBackgroundWorkTracker();
+  launch(other, 's1', 't1');
+  launch(other, 's1', 't2');
+  other.apply('s1', notified('t1', 'completed'));
+  other.apply('s1', updated('t2', { status: 'killed', end_time: 1 }));
+  other.apply('s1', notified('t2', 'stopped'));
+  assert.equal(other.hasOutstanding('s1'), false);
+  assert.equal(other.isReporting('s1'), true);
+  other.clear('s1');
+  assert.equal(other.isReporting('s1'), false);
+});
+
+// Measured with claude 2.1.280: the task of a foreground agent, or of a
+// foreground command that runs for more than about 3 s, settles before its
+// tool result, which carries its outcome, and no relay turn follows.
+test('a task that settles before its own call returns leaves nothing to relay', () => {
+  const tracker = createBackgroundWorkTracker();
+  tracker.apply('s1', call('a1', 'Agent'));
+  tracker.apply('s1', started('a1'));
+  tracker.apply('s1', notified('a1', 'completed'));
+  tracker.apply('s1', answer('a1', 'FOUR'));
+  tracker.apply('s1', call('f1'));
+  tracker.apply('s1', started('f1', { task_type: 'local_bash' }));
+  tracker.apply('s1', updated('f1', { status: 'completed', end_time: 1 }));
+  tracker.apply('s1', answer('f1', '(Bash completed with no output)'));
+  tracker.apply('s1', text('A ended its turn'));
+  tracker.apply('s1', result);
+  assert.equal(tracker.hasOutstanding('s1'), false);
+  assert.equal(tracker.isReporting('s1'), false);
+
+  // A backgrounded call answered before its task settles is still relayed.
+  launch(tracker, 's1', 't1');
+  tracker.apply('s1', notified('t1', 'completed'));
+  assert.equal(tracker.isReporting('s1'), true);
+
+  // A nested task's call is answered inside its agent, out of this stream's
+  // sight, so it counts as relayed.
+  const nested = createBackgroundWorkTracker();
+  nested.apply('s1', started('n1', { task_type: 'local_bash' }));
+  nested.apply('s1', notified('n1', 'completed'));
+  assert.equal(nested.isReporting('s1'), true);
+});
+
 test('a failed task is reported like a completed one', () => {
   const tracker = createBackgroundWorkTracker();
-  tracker.apply('s1', started('t1'));
+  launch(tracker, 's1', 't1');
   tracker.apply('s1', updated('t1', { status: 'failed', end_time: 1 }));
   assert.equal(tracker.isReporting('s1'), true);
   // Its notification arriving afterwards changes nothing.
@@ -312,7 +387,7 @@ test('a notification for a task that was never tracked is not a report', () => {
 test('clearing a session drops its pending report and leaves the others alone', () => {
   const tracker = createBackgroundWorkTracker();
   for (const session of ['s1', 's2']) {
-    tracker.apply(session, started(`t-${session}`));
+    launch(tracker, session, `t-${session}`);
     tracker.apply(session, notified(`t-${session}`, 'completed'));
   }
   tracker.clear('s1');

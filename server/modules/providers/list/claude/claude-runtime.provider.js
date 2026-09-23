@@ -641,22 +641,31 @@ const TERMINAL_TASK_STATUSES = new Set(['completed', 'failed', 'killed']);
  *
  * Verified against a real query (SDK 0.3.165): `task_started` carries
  * `task_id`, `tool_use_id`, `task_type` and `description` for every agent,
- * workflow and backgrounded command (a foreground Bash emits nothing);
+ * workflow and backgrounded command (a foreground Bash only once it has run
+ * for about 3 s, measured with claude 2.1.280);
  * `task_notification` settles a task with any status; `task_updated` carries
  * only `task_id` and a patch, and is terminal when the patch's `status` is.
  * Housekeeping tasks the CLI starts on its own have no `tool_use_id` and are
  * not tracked — nothing in the transcript could show them.
  *
- * It also remembers the step after the last task settles: unless the task was
- * stopped, the CLI still has to hand the result to the model, and a new turn
- * started before it has would replace the process mid-relay and fork the
- * transcript. `isReporting` covers that window, from the last task settling
- * until the session's process is gone (`clear`, from `removeSession` or a
- * supersede). The next `result` is not the end of it: a task that settles
- * while a model call is in flight, or during another task's relay, gets a
- * relay turn of its own after that turn's `result`, and the CLI runs it even
- * though the run loop has let go of stdin by then. It exits only once no
- * relay is left.
+ * It also remembers that a settled task's result may still be on its way to
+ * the model: a new turn started before the CLI has handed it over would
+ * replace the process mid-relay and fork the transcript. `isReporting` covers
+ * that window, from such a task settling until the session's process is gone
+ * (`clear`, from `removeSession` or a supersede). Any such task counts, not
+ * only the last one: a task stopped while an earlier one's result is being
+ * relayed empties the list but does not end that relay. The next `result` is
+ * not the end of it either: a task that settles while a model call is in
+ * flight, or during another task's relay, gets a relay turn of its own after
+ * that turn's `result`, and the CLI runs it even though the run loop has let
+ * go of stdin by then. It exits only once no relay is left.
+ *
+ * Two kinds of settled task are not relayed. A stopped one gets no turn from
+ * the CLI. One that settles before its own tool call has returned — a
+ * foreground agent or command, whose outcome is that call's result — reaches
+ * the model in the next model call of the same turn, as does any notification
+ * that lands while tools are still running (both measured with claude
+ * 2.1.280).
  *
  * Exported so the folding can be driven with the four event shapes directly;
  * the runtime keeps one instance keyed like `activeSessions`.
@@ -682,10 +691,16 @@ export function createBackgroundWorkTracker() {
    */
   const ownToolUseIds = new Map();
   /**
-   * Sessions whose last task has settled with a result the CLI still relays
-   * to the model. The task list is already empty then, but a new turn would
-   * replace the process in the middle of that relay, so the flag stays until
-   * the process itself is gone.
+   * Own tool calls whose result has come back in the stream. A task that
+   * settles before its call is in here is not relayed (see above).
+   * @type {Map<string, Set<string>>}
+   */
+  const answeredToolUseIds = new Map();
+  /**
+   * Sessions with a settled task whose result the CLI still relays to the
+   * model. The task list may be empty by then, but a new turn would replace
+   * the process in the middle of that relay, so the flag stays until the
+   * process itself is gone.
    * @type {Set<string>}
    */
   const reporting = new Set();
@@ -694,19 +709,39 @@ export function createBackgroundWorkTracker() {
   // the run loop releases the process on its notification instead.
   const remove = (sessionKey, taskId, relayed) => {
     const tasks = sessions.get(sessionKey);
-    if (!tasks?.delete(taskId)) {
+    const task = tasks?.get(taskId);
+    if (!task) {
       return;
     }
+    tasks.delete(taskId);
     if (tasks.size === 0) {
       sessions.delete(sessionKey);
-      if (relayed) {
-        reporting.add(sessionKey);
-      }
+    }
+    // A nested task's call is answered inside its agent's transcript, which
+    // this stream does not follow; it counts as relayed.
+    if (relayed && (task.nested || answeredToolUseIds.get(sessionKey)?.has(task.toolUseId))) {
+      reporting.add(sessionKey);
     }
   };
 
   return {
     apply(sessionKey, message) {
+      if (message?.type === 'user' && !message.parent_tool_use_id) {
+        const content = message.message?.content;
+        if (Array.isArray(content)) {
+          for (const block of content) {
+            if (block?.type === 'tool_result' && typeof block.tool_use_id === 'string') {
+              let ids = answeredToolUseIds.get(sessionKey);
+              if (!ids) {
+                ids = new Set();
+                answeredToolUseIds.set(sessionKey, ids);
+              }
+              ids.add(block.tool_use_id);
+            }
+          }
+        }
+        return;
+      }
       if (message?.type === 'assistant' && !message.parent_tool_use_id) {
         const content = message.message?.content;
         if (Array.isArray(content)) {
@@ -779,6 +814,7 @@ export function createBackgroundWorkTracker() {
     clear(sessionKey) {
       sessions.delete(sessionKey);
       ownToolUseIds.delete(sessionKey);
+      answeredToolUseIds.delete(sessionKey);
       reporting.delete(sessionKey);
     },
 
@@ -1212,7 +1248,9 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       // nothing will ever push the `result` the release below waits for, and
       // the process would sit until the idle ceiling. Release it here. A
       // completed task is different: the CLI relays its result in a turn of
-      // its own, which closing stdin now would cut short.
+      // its own, which closing stdin now would cut short. (A relay already
+      // under way for an earlier task still runs to its end after this
+      // release; the tracker keeps the session reporting until the exit.)
       if (
         heldForBackgroundWork
         && message.type === 'system'
@@ -1415,9 +1453,9 @@ function listClaudeSDKBackgroundWork() {
 }
 
 /**
- * Whether a session's last background task has settled and the process that
- * relays its result to the model is still up. The session has left the list
- * above by then, yet a new turn would still cut that relay short.
+ * Whether a background task of the session has settled and the process that
+ * relays its result to the model is still up. The session may have left the
+ * list above by then, yet a new turn would still cut that relay short.
  * @param {string} sessionId - Session identifier
  * @returns {boolean}
  */
