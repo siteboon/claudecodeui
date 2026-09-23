@@ -73,7 +73,16 @@
   },
   "plan": {
     "viewPlan": "📋 Ver plan de implementación",
-    "title": "Plan de implementación"
+    "title": "Plan de implementación",
+    "build": "Implementar",
+    "revise": "Revisar",
+    "buildInNewSession": "Implementar en una nueva sesión",
+    "buildInNewSessionDescription": "Empezar una sesión nueva con solo el plan como contexto",
+    "buildInThisSession": "Implementar en esta sesión",
+    "buildInThisSessionDescription": "Conservar la conversación de planificación como contexto",
+    "moreBuildOptions": "Más opciones de implementación",
+    "newSessionPrompt": "Implementa el siguiente plan:\n\n{{plan}}",
+    "movedToNewSession": "El usuario aprobó este plan y lo está implementando en una nueva sesión. No lo implementes aquí ni vuelvas a llamar a ExitPlanMode. Termina tu turno ahora."
   },
   "usageLimit": {
     "resetAt": "Se alcanzó el límite de uso de Claude. Tu límite se restablecerá a las **{{time}} {{timezone}}** - {{date}}"

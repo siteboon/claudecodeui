@@ -10,6 +10,7 @@ import { TranscriptSessionContext } from '@/modules/chat/context/TranscriptSessi
 import { api } from '@/shared/api';
 import type {
   ChatMessage,
+  PendingPermissionRequest,
   Project,
   ProjectSession,
   SessionEstablishedContext,
@@ -21,6 +22,9 @@ import { useChatSessionState } from '@/modules/chat/hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '@/modules/chat/hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
 import { useSessionStore } from '@/modules/chat/hooks/useSessionStore';
+import { usePlanBuildShortcut } from '@/modules/chat/hooks/usePlanBuildShortcut';
+import { useEscapeToStopRun } from '@/modules/chat/hooks/useEscapeToStopRun';
+import { isPlanApprovalRequest } from '@/modules/chat/utils/chatPermissions';
 import {
   useProcessingSessions,
   useSessionProtectionActions,
@@ -42,6 +46,8 @@ type ChatInterfaceProps = {
   showRawParameters?: boolean;
   showThinking?: boolean;
   sendByCtrlEnter?: boolean;
+  /** The "Build approved plans in: New session" setting, which ⌘↩ on a pending plan follows. */
+  buildPlansInNewSession?: boolean;
   externalMessageUpdate?: number;
   newSessionTrigger?: number;
   onTaskClick?: (...args: unknown[]) => void;
@@ -66,6 +72,7 @@ function ChatInterface({
   showRawParameters,
   showThinking,
   sendByCtrlEnter,
+  buildPlansInNewSession = false,
   externalMessageUpdate,
   newSessionTrigger,
   onShowAllTasks,
@@ -114,6 +121,7 @@ function ChatInterface({
     setPendingPermissionRequests,
     availablePermissionModes,
     selectPermissionMode,
+    rememberSessionPermissionMode,
     cyclePermissionMode,
     providerModelCatalog,
     providerModelsLoading,
@@ -226,6 +234,7 @@ function ChatInterface({
     handleClearInput,
     handleAbortSession,
     handlePermissionDecision,
+    handleBuildPlanInNewSession,
     handleGrantToolPermission,
     handleInputFocusChange,
     isInputFocused,
@@ -259,6 +268,7 @@ function ChatInterface({
     setIsUserScrolledUp,
     setPendingPermissionRequests,
     resolvePermissionModeForProvider,
+    rememberSessionPermissionMode,
   });
 
   // On WebSocket reconnect, request a bounded persisted-tail sync (deferred
@@ -300,25 +310,32 @@ function ChatInterface({
     sessionStore,
   });
 
-  useEffect(() => {
-    if (!canAbortSession) {
+  useEscapeToStopRun({ canAbortSession, onAbortSession: handleAbortSession });
+
+  /**
+   * Answers a pending plan approval with Build: an allow in the planning
+   * session, or a new session started from the plan. Shared by the plan card's
+   * split button and the ⌘↩ shortcut.
+   */
+  const handleBuildPlan = useCallback((request: PendingPermissionRequest, inNewSession: boolean) => {
+    if (inNewSession) {
+      void handleBuildPlanInNewSession(request);
       return;
     }
+    handlePermissionDecision(request.requestId, { allow: true });
+  }, [handleBuildPlanInNewSession, handlePermissionDecision]);
 
-    const handleGlobalEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.repeat || event.defaultPrevented) {
-        return;
-      }
+  const pendingPlanRequest = useMemo(
+    () => pendingPermissionRequests.find(isPlanApprovalRequest) ?? null,
+    [pendingPermissionRequests],
+  );
 
-      event.preventDefault();
-      handleAbortSession();
-    };
-
-    document.addEventListener('keydown', handleGlobalEscape, { capture: true });
-    return () => {
-      document.removeEventListener('keydown', handleGlobalEscape, { capture: true });
-    };
-  }, [canAbortSession, handleAbortSession]);
+  usePlanBuildShortcut({
+    isActive,
+    pendingPlanRequest,
+    buildInNewSession: buildPlansInNewSession,
+    onBuildPlan: handleBuildPlan,
+  });
 
   useEffect(() => {
     return () => {
@@ -372,7 +389,8 @@ function ChatInterface({
   const permissionContextValue = useMemo(() => ({
     pendingPermissionRequests,
     handlePermissionDecision,
-  }), [pendingPermissionRequests, handlePermissionDecision]);
+    buildPlan: handleBuildPlan,
+  }), [pendingPermissionRequests, handlePermissionDecision, handleBuildPlan]);
 
   // Lets markdown image paths in the transcript resolve against this project.
   const markdownWorkspaceValue = useMemo(() => ({

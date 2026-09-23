@@ -73,7 +73,16 @@
   },
   "plan": {
     "viewPlan": "📋 구현 계획 보기",
-    "title": "구현 계획"
+    "title": "구현 계획",
+    "build": "구현",
+    "revise": "수정",
+    "buildInNewSession": "새 세션에서 구현",
+    "buildInNewSessionDescription": "계획만 컨텍스트로 삼아 새 세션을 시작합니다",
+    "buildInThisSession": "이 세션에서 구현",
+    "buildInThisSessionDescription": "계획 대화를 컨텍스트로 유지합니다",
+    "moreBuildOptions": "추가 구현 옵션",
+    "newSessionPrompt": "다음 계획을 구현하세요:\n\n{{plan}}",
+    "movedToNewSession": "사용자가 이 계획을 승인했으며 새 세션에서 구현하고 있습니다. 여기서는 구현하지 말고 ExitPlanMode를 다시 호출하지 마세요. 지금 턴을 종료하세요."
   },
   "usageLimit": {
     "resetAt": "Claude 사용량 한도에 도달했습니다. 한도는 **{{time}} {{timezone}}** - {{date}}에 초기화됩니다"

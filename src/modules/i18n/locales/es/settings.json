@@ -157,6 +157,13 @@
       "alphabetical": "Alfabético",
       "recentActivity": "Actividad reciente"
     },
+    "planBuild": {
+      "title": "Modo de planificación",
+      "label": "Implementar los planes aprobados en",
+      "description": "Qué hacen el botón Implementar de un plan y ⌘↩. El menú junto a él siempre ofrece la otra opción.",
+      "sameSession": "La misma sesión",
+      "newSession": "Una nueva sesión"
+    },
     "codeEditor": {
       "title": "Editor de código",
       "theme": {

@@ -73,7 +73,16 @@
   },
   "plan": {
     "viewPlan": "📋 Voir le plan d'implémentation",
-    "title": "Plan d'implémentation"
+    "title": "Plan d'implémentation",
+    "build": "Implémenter",
+    "revise": "Réviser",
+    "buildInNewSession": "Implémenter dans une nouvelle session",
+    "buildInNewSessionDescription": "Démarrer une nouvelle session avec seulement le plan comme contexte",
+    "buildInThisSession": "Implémenter dans cette session",
+    "buildInThisSessionDescription": "Garder la conversation de planification comme contexte",
+    "moreBuildOptions": "Plus d'options d'implémentation",
+    "newSessionPrompt": "Implémente le plan suivant :\n\n{{plan}}",
+    "movedToNewSession": "L'utilisateur a approuvé ce plan et l'implémente dans une nouvelle session. Ne l'implémente pas ici et n'appelle plus ExitPlanMode. Termine ton tour maintenant."
   },
   "usageLimit": {
     "resetAt": "Limite d'utilisation Claude atteinte. Votre limite sera réinitialisée à **{{time}} {{timezone}}** - {{date}}"

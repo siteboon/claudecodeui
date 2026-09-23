@@ -1,8 +1,11 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronsUpDown, FileText } from 'lucide-react';
+import { ChevronDown, ChevronsUpDown, FileText, MessageSquare, MessageSquarePlus } from 'lucide-react';
 
+import type { PendingPermissionRequest } from '@/shared/types';
+import { useUiPreferences } from '@/shared/context/UiPreferencesContext';
 import {
+  ActionMenu,
   Card,
   CardHeader,
   CardTitle,
@@ -15,7 +18,9 @@ import {
   Shimmer,
 } from '@/shared/ui';
 import { usePermission } from '@/modules/chat/context/PermissionContext';
+import type { PermissionContextValue } from '@/modules/chat/context/PermissionContext';
 import { MarkdownContent } from '@/modules/chat/tools/ContentRenderers/MarkdownContent';
+import { isPlanApprovalRequest } from '@/modules/chat/utils/chatPermissions';
 
 type PlanDisplayProps = {
   title: string;
@@ -27,6 +32,72 @@ type PlanDisplayProps = {
   toolName: string;
   toolId?: string;
 };
+
+type PlanBuildButtonProps = {
+  request: PendingPermissionRequest;
+  buildPlan: PermissionContextValue['buildPlan'];
+};
+
+/**
+ * Build as a split button: the main half builds where the "Build approved plans
+ * in" setting says, the menu offers the other place for this plan only.
+ *
+ * Its own component because it reads the UI preferences, which only exist in
+ * the live app — the HTML export renders plan cards without that provider, and
+ * without a pending request, so it never mounts this.
+ */
+function PlanBuildButton({ request, buildPlan }: PlanBuildButtonProps) {
+  const { t } = useTranslation('chat');
+  const { buildPlansInNewSession } = useUiPreferences();
+
+  const otherOption = buildPlansInNewSession
+    ? {
+        key: 'same-session',
+        label: t('plan.buildInThisSession'),
+        description: t('plan.buildInThisSessionDescription'),
+        icon: MessageSquare,
+        onSelect: () => buildPlan(request, false),
+      }
+    : {
+        key: 'new-session',
+        label: t('plan.buildInNewSession'),
+        description: t('plan.buildInNewSessionDescription'),
+        icon: MessageSquarePlus,
+        onSelect: () => buildPlan(request, true),
+      };
+
+  // On a phone the card is ~300px wide and "Build in new session" runs long in
+  // most languages: the label may shrink and truncate, the menu trigger never,
+  // and the shortcut hint (no ⌘ key to press there) is hidden.
+  return (
+    <div className="inline-flex min-w-0">
+      <Button
+        size="sm"
+        onClick={() => buildPlan(request, buildPlansInNewSession)}
+        className="min-w-0 rounded-r-none"
+      >
+        <span className="truncate">
+          {buildPlansInNewSession ? t('plan.buildInNewSession') : t('plan.build')}
+        </span>
+        <kbd className="ml-1 hidden rounded bg-primary-foreground/20 px-1 py-0.5 font-mono text-[10px] sm:inline">
+          ⌘↩
+        </kbd>
+      </Button>
+      <ActionMenu
+        label={t('plan.moreBuildOptions')}
+        icon={ChevronDown}
+        iconOnly
+        portal
+        variant="default"
+        size="sm"
+        className="shrink-0"
+        triggerClassName="rounded-l-none border-l border-primary-foreground/20 px-2"
+        menuClassName="w-[260px] rounded-xl p-1.5 shadow-xl"
+        items={[otherOption]}
+      />
+    </div>
+  );
+}
 
 /**
  * Rendered by chat's ToolRenderer for plan tools (ExitPlanMode), showing the
@@ -44,15 +115,7 @@ export const PlanDisplay: React.FC<PlanDisplayProps> = ({
   const { t } = useTranslation();
   const permissionCtx = usePermission();
 
-  const pendingRequest = permissionCtx?.pendingPermissionRequests.find(
-    (r) => r.toolName === 'ExitPlanMode' || r.toolName === 'exit_plan_mode'
-  );
-
-  const handleBuild = () => {
-    if (pendingRequest && permissionCtx) {
-      permissionCtx.handlePermissionDecision(pendingRequest.requestId, { allow: true });
-    }
-  };
+  const pendingRequest = permissionCtx?.pendingPermissionRequests.find(isPlanApprovalRequest);
 
   const handleRevise = () => {
     if (pendingRequest && permissionCtx) {
@@ -118,22 +181,17 @@ export const PlanDisplay: React.FC<PlanDisplayProps> = ({
         </CollapsibleContent>
 
         {/* Footer — always visible when permission is pending */}
-        {pendingRequest && (
-          <CardFooter className="justify-end gap-2 border-t border-border/40 px-4 pb-3 pt-3">
+        {pendingRequest && permissionCtx && (
+          <CardFooter className="flex-wrap justify-end gap-2 border-t border-border/40 px-4 pb-3 pt-3">
             <Button
               variant="ghost"
               size="sm"
               onClick={handleRevise}
               className="text-muted-foreground"
             >
-              Revise
+              {t('chat:plan.revise')}
             </Button>
-            <Button size="sm" onClick={handleBuild}>
-              Build{' '}
-              <kbd className="ml-1 rounded bg-primary-foreground/20 px-1 py-0.5 font-mono text-[10px]">
-                ⌘↩
-              </kbd>
-            </Button>
+            <PlanBuildButton request={pendingRequest} buildPlan={permissionCtx.buildPlan} />
           </CardFooter>
         )}
       </Card>

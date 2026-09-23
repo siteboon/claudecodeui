@@ -72,7 +72,16 @@
   },
   "plan": {
     "viewPlan": "📋 実装プランを表示",
-    "title": "実装プラン"
+    "title": "実装プラン",
+    "build": "実装",
+    "revise": "修正",
+    "buildInNewSession": "新しいセッションで実装",
+    "buildInNewSessionDescription": "プランだけをコンテキストにして新しいセッションを開始します",
+    "buildInThisSession": "このセッションで実装",
+    "buildInThisSessionDescription": "プランニングの会話をコンテキストとして残します",
+    "moreBuildOptions": "その他の実装オプション",
+    "newSessionPrompt": "次のプランを実装してください:\n\n{{plan}}",
+    "movedToNewSession": "ユーザーはこのプランを承認し、新しいセッションで実装しています。ここでは実装せず、ExitPlanMode を再度呼び出さないでください。今すぐターンを終了してください。"
   },
   "usageLimit": {
     "resetAt": "Claudeの使用制限に達しました。制限は**{{time}} {{timezone}}** - {{date}}にリセットされます"

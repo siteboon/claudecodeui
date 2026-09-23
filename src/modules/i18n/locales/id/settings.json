@@ -157,6 +157,13 @@
       "alphabetical": "Alfabetis",
       "recentActivity": "Aktivitas Terbaru"
     },
+    "planBuild": {
+      "title": "Mode Rencana",
+      "label": "Bangun rencana yang disetujui di",
+      "description": "Apa yang dilakukan tombol Bangun pada rencana dan ⌘↩. Menu di sebelahnya selalu menawarkan pilihan lainnya.",
+      "sameSession": "Sesi yang sama",
+      "newSession": "Sesi baru"
+    },
     "codeEditor": {
       "title": "Editor Kode",
       "theme": {

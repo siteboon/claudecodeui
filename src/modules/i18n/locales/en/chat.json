@@ -80,7 +80,16 @@
   },
   "plan": {
     "viewPlan": "📋 View implementation plan",
-    "title": "Implementation Plan"
+    "title": "Implementation Plan",
+    "build": "Build",
+    "revise": "Revise",
+    "buildInNewSession": "Build in new session",
+    "buildInNewSessionDescription": "Start a fresh session with only the plan as context",
+    "buildInThisSession": "Build in this session",
+    "buildInThisSessionDescription": "Keep the planning conversation as context",
+    "moreBuildOptions": "More build options",
+    "newSessionPrompt": "Implement the following plan:\n\n{{plan}}",
+    "movedToNewSession": "The user approved this plan and is building it in a new session. Do not implement it here and do not call ExitPlanMode again. End your turn now."
   },
   "usageLimit": {
     "resetAt": "Claude usage limit reached. Your limit will reset at **{{time}} {{timezone}}** - {{date}}"

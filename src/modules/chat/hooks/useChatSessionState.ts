@@ -427,16 +427,20 @@ export function useChatSessionState({
   /*  addMessage                                                       */
   /* ---------------------------------------------------------------- */
 
-  const addMessage = useCallback((msg: ChatMessage) => {
-    if (!activeSessionId) {
+  // `targetSessionId` files the message under a session other than the one on
+  // screen — the first message of a session started from a plan, sent just
+  // before the view switches to it.
+  const addMessage = useCallback((msg: ChatMessage, targetSessionId?: string) => {
+    const sessionId = targetSessionId || activeSessionId;
+    if (!sessionId) {
       // No session yet — show as pending until the backend creates one
       setPendingUserMessage(msg);
       return;
     }
     const prov = readSelectedProvider();
-    const normalized = chatMessageToNormalized(msg, activeSessionId, prov);
+    const normalized = chatMessageToNormalized(msg, sessionId, prov);
     if (normalized) {
-      sessionStore.appendRealtime(activeSessionId, normalized);
+      sessionStore.appendRealtime(sessionId, normalized);
     }
   }, [activeSessionId, sessionStore]);
 

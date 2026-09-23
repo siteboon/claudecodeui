@@ -37,6 +37,7 @@ test('a fresh install gets the documented defaults', () => {
     sendByCtrlEnter: false,
     sidebarVisible: true,
     voiceEnabled: false,
+    buildPlansInNewSession: false,
   });
 });
 

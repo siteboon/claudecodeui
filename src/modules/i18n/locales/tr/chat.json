@@ -72,7 +72,16 @@
   },
   "plan": {
     "viewPlan": "📋 Uygulama planını göster",
-    "title": "Uygulama Planı"
+    "title": "Uygulama Planı",
+    "build": "Uygula",
+    "revise": "Düzelt",
+    "buildInNewSession": "Yeni oturumda uygula",
+    "buildInNewSessionDescription": "Yalnızca planı bağlam olarak alan yeni bir oturum başlat",
+    "buildInThisSession": "Bu oturumda uygula",
+    "buildInThisSessionDescription": "Planlama konuşmasını bağlam olarak koru",
+    "moreBuildOptions": "Diğer uygulama seçenekleri",
+    "newSessionPrompt": "Aşağıdaki planı uygula:\n\n{{plan}}",
+    "movedToNewSession": "Kullanıcı bu planı onayladı ve yeni bir oturumda uyguluyor. Burada uygulama ve ExitPlanMode aracını yeniden çağırma. Turunu şimdi bitir."
   },
   "usageLimit": {
     "resetAt": "Claude kullanım limitin doldu. Limitin **{{time}} {{timezone}}** — {{date}} tarihinde sıfırlanacak"

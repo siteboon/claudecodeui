@@ -73,7 +73,16 @@
   },
   "plan": {
     "viewPlan": "📋 查看实施计划",
-    "title": "实施计划"
+    "title": "实施计划",
+    "build": "实施",
+    "revise": "修改",
+    "buildInNewSession": "在新会话中实施",
+    "buildInNewSessionDescription": "开启一个只以计划为上下文的新会话",
+    "buildInThisSession": "在此会话中实施",
+    "buildInThisSessionDescription": "保留规划对话作为上下文",
+    "moreBuildOptions": "更多实施选项",
+    "newSessionPrompt": "请实施以下计划：\n\n{{plan}}",
+    "movedToNewSession": "用户已批准此计划，并正在新会话中实施。不要在这里实施，也不要再次调用 ExitPlanMode。现在结束你的回合。"
   },
   "usageLimit": {
     "resetAt": "Claude 使用限制已达到。您的限制将在 **{{time}} {{timezone}}** - {{date}} 重置"

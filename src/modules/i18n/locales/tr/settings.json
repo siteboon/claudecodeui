@@ -132,6 +132,13 @@
       "alphabetical": "Alfabetik",
       "recentActivity": "Son Etkinlik"
     },
+    "planBuild": {
+      "title": "Plan Modu",
+      "label": "Onaylanan planları uygula",
+      "description": "Bir plandaki Uygula düğmesinin ve ⌘↩ kısayolunun ne yapacağı. Yanındaki menü her zaman diğer seçeneği sunar.",
+      "sameSession": "Aynı oturumda",
+      "newSession": "Yeni oturumda"
+    },
     "codeEditor": {
       "title": "Kod Editörü",
       "theme": {

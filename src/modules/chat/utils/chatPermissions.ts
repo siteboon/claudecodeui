@@ -1,4 +1,4 @@
-import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult } from '@/shared/types';
+import type { ChatMessage, ClaudePermissionSuggestion, PendingPermissionRequest, PermissionGrantResult } from '@/shared/types';
 import { getClaudeSettings, saveClaudePermissions } from '@/modules/chat/utils/chatStorage';
 
 export function buildClaudeToolPermissionEntry(toolName?: string, toolInput?: unknown) {
@@ -73,4 +73,12 @@ export function grantClaudeToolPermission(entry: string | null): PermissionGrant
     skipPermissions: settings.skipPermissions,
   });
   return { success: true, alreadyAllowed, updatedSettings };
+}
+
+/**
+ * Whether a pending request is a plan approval (ExitPlanMode), which the plan
+ * card answers inline rather than the composer's permission banner.
+ */
+export function isPlanApprovalRequest(request: Pick<PendingPermissionRequest, 'toolName'>): boolean {
+  return request.toolName === 'ExitPlanMode' || request.toolName === 'exit_plan_mode';
 }
