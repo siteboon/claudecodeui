@@ -4,17 +4,21 @@ import { PencilIcon, XIcon } from 'lucide-react';
 type QueuedMessageCardProps = {
   content: string;
   attachmentCount?: number;
-  onEdit: () => void;
+  /** 1-based place in the queue, shown when more than one is waiting. */
+  position?: number;
+  /** Absent when the message has attachments, which the composer cannot take back. */
+  onEdit?: () => void;
   onDelete: () => void;
 };
 
 /**
- * Rendered by chat's ChatComposer to show the message queued for a busy
- * session, with edit and delete actions before it is auto-sent.
+ * Rendered by chat's ChatComposer, one per message queued for a busy session,
+ * with edit and delete actions before the server sends it.
  */
 export default function QueuedMessageCard({
   content,
   attachmentCount = 0,
+  position,
   onEdit,
   onDelete,
 }: QueuedMessageCardProps) {
@@ -27,7 +31,7 @@ export default function QueuedMessageCard({
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-primary/70">
-            <span>{t('input.queue.label', { defaultValue: 'Queued' })}</span>
+            <span>{t('input.queue.label', { defaultValue: 'Queued' })}{position ? ` #${position}` : ''}</span>
             <span className="normal-case text-muted-foreground/60">
               · {t('input.queue.willSend', { defaultValue: 'Will send when this finishes' })}
             </span>
@@ -41,15 +45,17 @@ export default function QueuedMessageCard({
         </div>
 
         <div className="flex shrink-0 items-center gap-0.5">
-          <button
-            type="button"
-            onClick={onEdit}
-            aria-label={t('input.queue.edit', { defaultValue: 'Edit queued message' })}
-            title={t('input.queue.edit', { defaultValue: 'Edit queued message' })}
-            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <PencilIcon className="h-3.5 w-3.5" />
-          </button>
+          {onEdit && (
+            <button
+              type="button"
+              onClick={onEdit}
+              aria-label={t('input.queue.edit', { defaultValue: 'Edit queued message' })}
+              title={t('input.queue.edit', { defaultValue: 'Edit queued message' })}
+              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <PencilIcon className="h-3.5 w-3.5" />
+            </button>
+          )}
           <button
             type="button"
             onClick={onDelete}

@@ -1,5 +1,5 @@
-import { scheduledMessagesDb, sessionDraftsDb } from '@/modules/database/index.js';
-import type { QueuedSessionMessageRecord, ScheduledMessageRow } from '@/modules/database/index.js';
+import { queuedMessagesDb, scheduledMessagesDb } from '@/modules/database/index.js';
+import type { QueuedMessageRow, ScheduledMessageRow } from '@/modules/database/index.js';
 import { chatRunRegistry, runDetachedChatTurn } from '@/modules/websocket/index.js';
 import type { ProviderRuntimeGateway } from '@/modules/websocket/index.js';
 
@@ -53,19 +53,24 @@ function readQueuedMessage(value: unknown): StoredQueuedMessage | null {
 }
 
 async function sendClaimedQueuedMessage(
-  candidate: QueuedSessionMessageRecord,
+  row: QueuedMessageRow,
   runtime: ProviderRuntimeGateway,
 ): Promise<void> {
-  const message = readQueuedMessage(candidate.queuedMessage);
+  let parsed: unknown = null;
+  try {
+    parsed = JSON.parse(row.message);
+  } catch {
+    // Unreadable: dropped, like an empty one.
+  }
+  const message = readQueuedMessage(parsed);
   if (!message) {
-    sessionDraftsDb.deleteEmptyDraft(candidate.userId, candidate.sessionId);
     return;
   }
 
   const result = await runDetachedChatTurn(
     {
-      sessionId: candidate.sessionId,
-      userId: candidate.userId,
+      sessionId: row.session_id,
+      userId: row.user_id,
       content: message.content,
       options: { ...message.options, attachments: message.attachments },
     },
@@ -73,12 +78,10 @@ async function sendClaimedQueuedMessage(
   );
 
   // The registry check and run reservation are separate operations. If a run
-  // wins that tiny race, put the turn back so the next poll tries again.
+  // wins that tiny race, put the message back so the next poll tries again.
   if (!result.started && result.error === 'A run was already in progress for this session.') {
-    sessionDraftsDb.restoreQueuedMessage(candidate);
-    return;
+    queuedMessagesDb.restore(row);
   }
-  sessionDraftsDb.deleteEmptyDraft(candidate.userId, candidate.sessionId);
 }
 
 /**
@@ -94,20 +97,23 @@ function isSessionBusy(sessionId: string, runtime: ProviderRuntimeGateway): bool
   return chatRunRegistry.isProcessing(sessionId) || runtime.hasBackgroundWork(sessionId);
 }
 
-/** Sends every persisted queued turn whose session is currently idle. */
+/**
+ * Sends the oldest queued message of every idle session; the rest wait for the
+ * turn that one starts to finish.
+ */
 export async function dispatchQueuedMessages(runtime: ProviderRuntimeGateway): Promise<number> {
-  const candidates = sessionDraftsDb.listQueuedMessages();
   let claimed = 0;
 
-  await Promise.all(candidates.map(async (candidate) => {
-    if (isSessionBusy(candidate.sessionId, runtime)) {
+  await Promise.all(queuedMessagesDb.listQueuedSessionIds().map(async (sessionId) => {
+    if (isSessionBusy(sessionId, runtime)) {
       return;
     }
-    if (!sessionDraftsDb.claimQueuedMessage(candidate)) {
+    const row = queuedMessagesDb.claimOldest(sessionId);
+    if (!row) {
       return;
     }
     claimed += 1;
-    await sendClaimedQueuedMessage(candidate, runtime);
+    await sendClaimedQueuedMessage(row, runtime);
   }));
 
   return claimed;
