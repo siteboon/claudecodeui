@@ -4,7 +4,7 @@ import { fireEvent, render } from '@testing-library/react';
 import React from 'react';
 import { test, vi } from 'vitest';
 
-import '@/modules/i18n';
+import { i18n } from '@/modules/i18n';
 import PermissionRequestsBanner from '@/modules/chat/composer/PermissionRequestsBanner';
 import type { PendingPermissionRequest } from '@/shared/types';
 
@@ -100,5 +100,19 @@ test('Escape closes the reason input without deciding and without stopping the r
     assert.equal(globalEscape.mock.calls.length, 0, 'the run-stopping Escape never saw the key');
   } finally {
     document.removeEventListener('keydown', globalEscape, { capture: true });
+  }
+});
+
+test('every label of the prompt follows the UI language', async () => {
+  await i18n.changeLanguage('de');
+  try {
+    const { container, getByText } = renderBanner();
+
+    assert.ok(getByText('Berechtigung erforderlich'));
+    assert.ok(getByText('Werkzeugeingabe anzeigen'));
+    const buttons = Array.from(container.querySelectorAll('button')).map((button) => button.textContent);
+    assert.deepEqual(buttons, ['Ablehnen', 'Mit Begründung ablehnen', 'Erlauben & merken', 'Einmal erlauben']);
+  } finally {
+    await i18n.changeLanguage('en');
   }
 });

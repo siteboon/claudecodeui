@@ -71,7 +71,15 @@
     "denyReasonPlaceholder": "대신 무엇을 할지 Claude에게 알려주세요",
     "denyReasonLabel": "{{tool}} 거부 이유",
     "cancelDenyReason": "취소",
-    "sendDenyReason": "거부 및 전송"
+    "sendDenyReason": "거부 및 전송",
+    "required": "권한 필요",
+    "toolLabel": "도구:",
+    "allowRule": "허용 규칙:",
+    "viewToolInput": "도구 입력 보기",
+    "deny": "거부",
+    "allowOnce": "한 번 허용",
+    "allowAndRemember": "허용 및 기억",
+    "allowSaved": "허용 (저장됨)"
   },
   "todo": {
     "updated": "Todo 리스트가 업데이트되었습니다",

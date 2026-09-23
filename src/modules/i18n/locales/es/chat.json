@@ -71,7 +71,15 @@
     "denyReasonPlaceholder": "Dile a Claude qué hacer en su lugar",
     "denyReasonLabel": "Motivo para denegar {{tool}}",
     "cancelDenyReason": "Cancelar",
-    "sendDenyReason": "Denegar y enviar"
+    "sendDenyReason": "Denegar y enviar",
+    "required": "Permiso requerido",
+    "toolLabel": "Herramienta:",
+    "allowRule": "Regla de permiso:",
+    "viewToolInput": "Ver entrada de la herramienta",
+    "deny": "Denegar",
+    "allowOnce": "Permitir una vez",
+    "allowAndRemember": "Permitir y recordar",
+    "allowSaved": "Permitir (guardado)"
   },
   "todo": {
     "updated": "La lista de pendientes se actualizó correctamente",

@@ -71,7 +71,15 @@
     "denyReasonPlaceholder": "Dites à Claude quoi faire à la place",
     "denyReasonLabel": "Motif du refus de {{tool}}",
     "cancelDenyReason": "Annuler",
-    "sendDenyReason": "Refuser et envoyer"
+    "sendDenyReason": "Refuser et envoyer",
+    "required": "Autorisation requise",
+    "toolLabel": "Outil :",
+    "allowRule": "Règle d'autorisation :",
+    "viewToolInput": "Voir l'entrée de l'outil",
+    "deny": "Refuser",
+    "allowOnce": "Autoriser une fois",
+    "allowAndRemember": "Autoriser et mémoriser",
+    "allowSaved": "Autoriser (enregistré)"
   },
   "todo": {
     "updated": "La liste de tâches a été mise à jour avec succès",

@@ -70,7 +70,15 @@
     "denyReasonPlaceholder": "Claude'a bunun yerine ne yapmasını istediğini söyle",
     "denyReasonLabel": "{{tool}} için ret gerekçesi",
     "cancelDenyReason": "İptal",
-    "sendDenyReason": "Reddet ve gönder"
+    "sendDenyReason": "Reddet ve gönder",
+    "required": "İzin gerekli",
+    "toolLabel": "Araç:",
+    "allowRule": "İzin kuralı:",
+    "viewToolInput": "Araç girdisini görüntüle",
+    "deny": "Reddet",
+    "allowOnce": "Bir kez izin ver",
+    "allowAndRemember": "İzin ver ve hatırla",
+    "allowSaved": "İzin ver (kaydedildi)"
   },
   "todo": {
     "updated": "Yapılacaklar listesi başarıyla güncellendi",

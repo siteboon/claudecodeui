@@ -78,7 +78,15 @@
     "denyReasonPlaceholder": "Beri tahu Claude apa yang harus dilakukan",
     "denyReasonLabel": "Alasan menolak {{tool}}",
     "cancelDenyReason": "Batal",
-    "sendDenyReason": "Tolak & kirim"
+    "sendDenyReason": "Tolak & kirim",
+    "required": "Izin diperlukan",
+    "toolLabel": "Alat:",
+    "allowRule": "Aturan izin:",
+    "viewToolInput": "Lihat input alat",
+    "deny": "Tolak",
+    "allowOnce": "Izinkan sekali",
+    "allowAndRemember": "Izinkan & ingat",
+    "allowSaved": "Izinkan (tersimpan)"
   },
   "todo": {
     "updated": "Daftar tugas berhasil diperbarui",

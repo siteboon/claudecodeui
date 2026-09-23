@@ -70,7 +70,15 @@
     "denyReasonPlaceholder": "Скажите Claude, что сделать вместо этого",
     "denyReasonLabel": "Причина отказа для {{tool}}",
     "cancelDenyReason": "Отмена",
-    "sendDenyReason": "Отклонить и отправить"
+    "sendDenyReason": "Отклонить и отправить",
+    "required": "Требуется разрешение",
+    "toolLabel": "Инструмент:",
+    "allowRule": "Правило разрешения:",
+    "viewToolInput": "Показать входные данные инструмента",
+    "deny": "Отклонить",
+    "allowOnce": "Разрешить один раз",
+    "allowAndRemember": "Разрешить и запомнить",
+    "allowSaved": "Разрешить (сохранено)"
   },
   "todo": {
     "updated": "Список задач успешно обновлен",

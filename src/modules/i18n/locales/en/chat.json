@@ -78,7 +78,15 @@
     "denyReasonPlaceholder": "Tell Claude what to do instead",
     "denyReasonLabel": "Reason for denying {{tool}}",
     "cancelDenyReason": "Cancel",
-    "sendDenyReason": "Deny & send"
+    "sendDenyReason": "Deny & send",
+    "required": "Permission required",
+    "toolLabel": "Tool:",
+    "allowRule": "Allow rule:",
+    "viewToolInput": "View tool input",
+    "deny": "Deny",
+    "allowOnce": "Allow once",
+    "allowAndRemember": "Allow & remember",
+    "allowSaved": "Allow (saved)"
   },
   "todo": {
     "updated": "Todo list has been updated successfully",

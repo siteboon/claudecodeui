@@ -70,7 +70,15 @@
     "denyReasonPlaceholder": "Di' a Claude cosa fare invece",
     "denyReasonLabel": "Motivo per negare {{tool}}",
     "cancelDenyReason": "Annulla",
-    "sendDenyReason": "Nega e invia"
+    "sendDenyReason": "Nega e invia",
+    "required": "Autorizzazione richiesta",
+    "toolLabel": "Strumento:",
+    "allowRule": "Regola di autorizzazione:",
+    "viewToolInput": "Mostra l'input dello strumento",
+    "deny": "Nega",
+    "allowOnce": "Consenti una volta",
+    "allowAndRemember": "Consenti e ricorda",
+    "allowSaved": "Consenti (salvato)"
   },
   "todo": {
     "updated": "Lista attività aggiornata con successo",

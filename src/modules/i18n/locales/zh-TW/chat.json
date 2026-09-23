@@ -70,7 +70,15 @@
     "denyReasonPlaceholder": "告訴 Claude 改做什麼",
     "denyReasonLabel": "拒絕 {{tool}} 的原因",
     "cancelDenyReason": "取消",
-    "sendDenyReason": "拒絕並傳送"
+    "sendDenyReason": "拒絕並傳送",
+    "required": "需要權限",
+    "toolLabel": "工具：",
+    "allowRule": "允許規則：",
+    "viewToolInput": "檢視工具輸入",
+    "deny": "拒絕",
+    "allowOnce": "允許一次",
+    "allowAndRemember": "允許並記住",
+    "allowSaved": "允許（已儲存）"
   },
   "todo": {
     "updated": "待辦清單已成功更新",
