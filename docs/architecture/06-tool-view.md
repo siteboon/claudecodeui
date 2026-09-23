@@ -246,14 +246,21 @@ rows never carry one, so their status is always inferred.
 | `running` | blue `Running` | Codex reported `in_progress`, or there is no result yet |
 | `completed` | none | A result with no `isError`. `STATUS_CONFIG` has a green `Completed` pill, but every caller passes `undefined` for this status, so it never renders |
 | `error` | red `Error` | Codex reported `failed`, or the result has `isError` |
-| `denied` | orange `Denied` | `isError` and the lowercased, trimmed content **contains** one of `CLAUDE_DENIAL_MESSAGES`: `user denied tool use`, `tool disallowed by settings`, `permission request timed out`, `permission request cancelled` |
+| `denied` | orange `Denied` | `isError` and the lowercased, trimmed content **contains** one of `CLAUDE_DENIAL_MESSAGES`: `the user doesn't want to proceed with this tool use`, `the user denied permission to use`, `user denied tool use`, `tool disallowed by settings`, `permission request timed out`, `permission request cancelled` |
 
-The four phrases are the deny messages `canUseTool` returns in
-`claude-runtime.provider.js`. They are capitalized at the source, so the check lowercases,
-and it is a substring test rather than equality so it survives the SDK wrapping the message
-in error text. A deny carrying a different message does not match — `canUseTool` returns
-the client's `decision.message` verbatim when one is supplied — so a custom deny reason
-lands on `error`, not `denied`.
+The six phrases cover every text a refused Claude tool call can carry. The first two come
+from the permission prompt. A bare Deny makes `canUseTool` in `claude-runtime.provider.js`
+return `interrupt: true`, and the CLI then writes its own rejection text ("The user doesn't
+want to proceed with this tool use. …") in place of the runtime's message. A Deny with a
+reason, and a bare Deny of a subagent call, carry the runtime's own text from
+`buildUserDenial` ("The user denied permission to use <Tool>. …", followed by the reason).
+The other four are the runtime's remaining deny messages, plus `User denied tool use`, which
+the client sent with every Deny before the reason input existed and which older transcripts
+still carry. They are capitalized at the source, so the check lowercases, and it is a
+substring test rather than equality so it survives the SDK wrapping the message in error
+text and the reason appended after it. A deny whose text matches none of them — the plan's
+"User asked to revise the plan" reply, which `canUseTool` passes through verbatim for the
+interactive tools — lands on `error`, not `denied`.
 
 Two rows spell "running" their own way. `BashCommandDisplay` draws a spinning ring and
 suppresses the pill; `PlanDisplay` shimmers its title while `mode === 'input' &&
@@ -451,8 +458,15 @@ Three consumers pick a panel three different ways:
 `{allow: true}` for Build and `{allow: false, message: 'User asked to revise the plan'}`
 for Revise.
 
-The generic banner offers three actions. **Deny** sends `{allow: false, message: 'User
-denied tool use'}`. **Allow once** sends `{allow: true}`. **Allow & remember** computes a
+The generic banner offers four actions. **Deny** sends `{allow: false}` with no message.
+The runtime then answers the SDK with `interrupt: true`, so the turn stops and Claude waits
+for the user; a subagent's call is refused without the interrupt, as in the CLI, and the
+subagent reports back to its parent. **Deny with reason** swaps the buttons for a one-line
+input that takes focus. Enter (but not an Enter that confirms an IME candidate) or **Deny &
+send** sends `{allow: false, message: <trimmed reason>}`: the turn goes on and the model
+reads the reason. An empty reason cannot be sent. Escape or **Cancel** closes the input
+without deciding; the input claims Escape in a `window` capture listener, so the chat's
+Escape-to-stop does not fire. **Allow once** sends `{allow: true}`. **Allow & remember** computes a
 permission entry with `buildClaudeToolPermissionEntry`, appends it to the stored
 `allowedTools` — only when the provider is `claude`; the button is disabled outright when
 no entry can be derived — and then answers *every* pending request that computes the same
@@ -620,7 +634,7 @@ memoized, and four with no other reason to know exports exist.
 | `TOOL_CONFIGS` entry shape | `ToolRenderer`'s three `type` branches and its `contentType` switch; the `input` and `result` unions differ, so a field valid on one may not be on the other; `ToolGroupContainer` reads `label`, `colorScheme` and `contentType` off the same config |
 | `getToolConfig` fallback | `toolGrouping.ts` → `getToolInputPreview` calls it for the collapsed line, so an unmapped tool must still name what it did |
 | `deriveToolStatus` | `ToolStatusBadge`'s `STATUS_CONFIG` needs a key for every `ToolStatus`; `BashCommandDisplay` and `OneLineDisplay` both special-case `running`; every caller filters out `completed` |
-| `CLAUDE_DENIAL_MESSAGES` | The exact strings the Claude runtime adapter emits. The test is `includes` on lowercased content, so a rewording silently downgrades `denied` to `error` |
+| `CLAUDE_DENIAL_MESSAGES` | The deny texts of the Claude runtime adapter (`buildUserDenial` and the other `canUseTool` deny returns) and the CLI's rejection text. The test is `includes` on lowercased content, so a rewording silently downgrades `denied` to `error`; `src/modules/chat/tests/toolDenialStatus.test.tsx` pins every text |
 | Result pairing in `normalizedToChatMessages` | The `WeakMap` projection cache keys `toolResultSource` and `subagentActivitySource`, and `src/modules/chat/tests/useChatMessages.test.ts` |
 | `groupConsecutiveTools` | `src/modules/chat/tests/toolGrouping.test.ts`; `ChatMessagesPane`'s key map, which assigns keys per group member; and `useChatSessionState`'s search jump, which matches a group by its first timestamp |
 | `parentToolUseId` handling | `liveSubagentGrouping.test.ts`, and `isSubagentPromptEcho` in `claude-runtime.provider.js` — the two must agree on which rows are echoes |

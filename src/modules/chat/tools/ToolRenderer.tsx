@@ -44,8 +44,14 @@ function getToolCategory(toolName: string): string {
   return 'default';
 }
 
-// Exact denial messages from the Claude runtime adapter — other providers can't reliably signal denial
+// Denial texts a Claude tool result can carry — other providers can't reliably signal denial.
+// The first two come from the permission prompt: the CLI's own rejection text, which it writes
+// for a bare Deny, and the runtime's denial that relays the user's reason (or a subagent's
+// refusal). The rest are the runtime adapter's other deny texts; 'user denied tool use' is
+// also what older transcripts carry for every Deny.
 const CLAUDE_DENIAL_MESSAGES = [
+  "the user doesn't want to proceed with this tool use",
+  'the user denied permission to use',
   'user denied tool use',
   'tool disallowed by settings',
   'permission request timed out',
