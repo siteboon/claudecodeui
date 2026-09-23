@@ -332,6 +332,20 @@ function readBackgroundLaunch(toolUseResult: unknown): ClaudeBackgroundLaunch | 
   return null;
 }
 
+/**
+ * The id a background launch's `<task-notification>`s carry in `<task-id>`,
+ * read off the same `toolUseResult`: an agent's `agentId`, a workflow's
+ * `taskId`, a backgrounded shell's `backgroundTaskId`. Every notification in
+ * the transcripts this was checked on that names its launch by tool-use id
+ * carries exactly that value.
+ */
+function readBackgroundTaskId(toolUseResult: AnyRecord, launch: ClaudeBackgroundLaunch): string {
+  const taskId = launch === 'agent'
+    ? toolUseResult.agentId
+    : launch === 'workflow' ? toolUseResult.taskId : toolUseResult.backgroundTaskId;
+  return typeof taskId === 'string' ? taskId : '';
+}
+
 type ClaudeTaskNotification = {
   /**
    * `uuid`s of every transcript row that notified for this call, so all of
@@ -343,6 +357,10 @@ type ClaudeTaskNotification = {
    */
   sourceUuids: string[];
   toolUseId: string;
+  /** The `<task-id>`, which `foldNotificationsByTaskId` falls back to. */
+  taskId: string;
+  /** Where in the transcript the row that had the last word sits. */
+  position: number;
   status: string;
   summary: string;
   result: string;
@@ -401,7 +419,7 @@ function readTaskNotificationTexts(message: AnyRecord): string[] {
 function collectTaskNotifications(messages: AnyRecord[]): Map<string, ClaudeTaskNotification> {
   const notifications = new Map<string, ClaudeTaskNotification>();
 
-  for (const message of messages) {
+  for (const [position, message] of messages.entries()) {
     for (const text of readTaskNotificationTexts(message)) {
       if (!text.trimStart().startsWith('<task-notification>')) {
         continue;
@@ -421,6 +439,8 @@ function collectTaskNotifications(messages: AnyRecord[]): Map<string, ClaudeTask
       notifications.set(toolUseId, {
         sourceUuids,
         toolUseId,
+        taskId: readTaggedValue(text, 'task-id'),
+        position,
         status: readTaggedValue(text, 'status') || 'completed',
         summary: readTaggedValue(text, 'summary'),
         result: readTaggedValue(text, 'result'),
@@ -429,6 +449,75 @@ function collectTaskNotifications(messages: AnyRecord[]): Map<string, ClaudeTask
   }
 
   return notifications;
+}
+
+/**
+ * Re-keys a notification whose `<tool-use-id>` names no launch in the
+ * transcript onto the launch its `<task-id>` names, so it folds onto that card.
+ *
+ * Work that is started again under a new tool call can keep its task id and
+ * report under a tool-use id that no call in the file has: an agent relaunched
+ * after its host session was interrupted reported under a third id. The fold
+ * keyed by tool-use id then left the relaunch's card `stopped` and empty, and
+ * rendered the report as a raw bubble of its own.
+ *
+ * The notification goes to the latest background launch written before it
+ * that carries the same task id and got no report of its own by tool-use id.
+ * A launch that did is left alone: an agent resumed through `SendMessage`
+ * reports under the `SendMessage` call's id, and its first report already
+ * sits on its launch. So is a synchronous agent, whose answer is its own tool
+ * result. Notifications that still find nothing — a task launched inside a
+ * subagent names no launch row of this transcript — stay exactly as they
+ * were. When several land on one launch, the last one written wins, as for
+ * any task that reports more than once.
+ */
+function foldNotificationsByTaskId(
+  messages: AnyRecord[],
+  notificationsByToolUseId: Map<string, ClaudeTaskNotification>,
+): void {
+  const launches: Array<{ position: number; toolUseId: string; taskId: string; isAsync: boolean }> = [];
+  for (const [position, message] of messages.entries()) {
+    const launch = readBackgroundLaunch(message.toolUseResult);
+    const toolUseId = launch ? readLaunchToolUseId(message) : null;
+    if (launch && toolUseId) {
+      launches.push({
+        position,
+        toolUseId,
+        taskId: readBackgroundTaskId(message.toolUseResult, launch),
+        isAsync: launch !== 'agent' || message.toolUseResult.isAsync === true,
+      });
+    }
+  }
+
+  const launchToolUseIds = new Set(launches.map((launch) => launch.toolUseId));
+  const reportedToolUseIds = new Set(
+    launches.map((launch) => launch.toolUseId).filter((toolUseId) => notificationsByToolUseId.has(toolUseId)),
+  );
+  const unmatched = [...notificationsByToolUseId.values()]
+    .filter((notification) => notification.taskId && !launchToolUseIds.has(notification.toolUseId))
+    .sort((a, b) => a.position - b.position);
+
+  for (const notification of unmatched) {
+    const target = launches
+      .filter((launch) => (
+        launch.isAsync
+        && launch.position < notification.position
+        && launch.taskId === notification.taskId
+        && !reportedToolUseIds.has(launch.toolUseId)
+      ))
+      .pop();
+    if (!target) {
+      continue;
+    }
+
+    const earlier = notificationsByToolUseId.get(target.toolUseId);
+    notificationsByToolUseId.delete(notification.toolUseId);
+    notificationsByToolUseId.set(target.toolUseId, {
+      ...notification,
+      toolUseId: target.toolUseId,
+      sourceUuids: [...(earlier?.sourceUuids ?? []), ...notification.sourceUuids],
+    });
+  }
 }
 
 /** Reads the `tool_use_id` off the tool-result row that launched background work. */
@@ -730,6 +819,7 @@ async function getSessionMessages(
     // acknowledgement forever, with its report rendering as a raw user bubble
     // further down or, for a queue-operation record, nowhere at all.
     const notificationsByToolUseId = collectTaskNotifications(messages);
+    foldNotificationsByTaskId(messages, notificationsByToolUseId);
     const foldedNotificationUuids = new Set<string>();
 
     // A background agent runs inside the CLI process that launched it, so once

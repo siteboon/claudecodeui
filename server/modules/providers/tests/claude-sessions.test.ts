@@ -403,6 +403,99 @@ test('Claude history drops every notification row of a task that reported more t
   }
 });
 
+test('Claude history folds a relaunched agent\'s report that names no launch onto the relaunch by task id', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-relaunched-agent-'));
+  const sessionId = 'claude-relaunched-session';
+  const agentId = 'a14ed4c6a9f61a8c8';
+  const notification = (toolUseId: string, taskId: string, result: string) => [
+    '<task-notification>',
+    `<task-id>${taskId}</task-id>`,
+    `<tool-use-id>${toolUseId}</tool-use-id>`,
+    '<status>completed</status>',
+    '<summary>Agent "Forum research" completed</summary>',
+    `<result>${result}</result>`,
+    '</task-notification>',
+  ].join('\n');
+  const launch = (toolUseId: string, parentUuid: string, timestamp: string, description: string) => [
+    {
+      type: 'assistant', uuid: `${toolUseId}-call`, parentUuid, sessionId, timestamp,
+      message: {
+        role: 'assistant', model: 'claude-opus-5',
+        content: [{ type: 'tool_use', id: toolUseId, name: 'Agent', input: { description, prompt: description, run_in_background: true } }],
+      },
+    },
+    {
+      type: 'user', uuid: `${toolUseId}-ack`, parentUuid: `${toolUseId}-call`, sessionId, timestamp,
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUseId, content: 'Async agent launched successfully.' }] },
+      toolUseResult: { isAsync: true, status: 'async_launched', agentId, description },
+    },
+  ];
+
+  try {
+    // The reporter's table: launch A, a relaunch B with the same agent (and so
+    // the same task id) after the host session was interrupted, report #1 for
+    // A, and report #2 — the relaunch's — naming a tool-use id no call has.
+    // A task a subagent launched reports into this file too, under ids that
+    // match nothing here.
+    const rows = [
+      {
+        type: 'user', uuid: 'f-u1', parentUuid: null, sessionId, timestamp: '2026-09-20T10:00:00.000Z',
+        message: { role: 'user', content: [{ type: 'text', text: 'research the forum' }] },
+      },
+      ...launch('toolu_A', 'f-u1', '2026-09-20T10:00:01.000Z', 'Mine the forum'),
+      ...launch('toolu_B', 'toolu_A-ack', '2026-09-20T10:30:00.000Z', 'Resume the forum research'),
+      {
+        type: 'user', uuid: 'f-n1', parentUuid: 'toolu_B-ack', sessionId, timestamp: '2026-09-20T10:40:00.000Z',
+        message: { role: 'user', content: [{ type: 'text', text: notification('toolu_A', agentId, 'first pass') }] },
+      },
+      {
+        type: 'user', uuid: 'f-n2', parentUuid: 'f-n1', sessionId, timestamp: '2026-09-20T11:00:00.000Z',
+        message: { role: 'user', content: [{ type: 'text', text: notification('toolu_C', agentId, 'resumed pass') }] },
+      },
+      {
+        type: 'user', uuid: 'f-child', parentUuid: 'f-n2', sessionId, timestamp: '2026-09-20T11:00:01.000Z',
+        message: { role: 'user', content: [{ type: 'text', text: notification('toolu_child', 'bchild123', 'child output') }] },
+      },
+      {
+        type: 'assistant', uuid: 'f-a1', parentUuid: 'f-child', sessionId, timestamp: '2026-09-20T11:00:05.000Z',
+        message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'the research is done' }] },
+      },
+    ];
+    const transcriptPath = path.join(tempRoot, `${sessionId}.jsonl`);
+    await writeFile(transcriptPath, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(sessionId, 'claude', tempRoot, 'Relaunched agent', now, now, transcriptPath);
+
+      const history = await new ClaudeSessionsProvider({ getLiveRunStartTime: () => null }).fetchHistory(sessionId, {
+        providerSessionId: sessionId,
+      });
+      const card = (toolUseId: string) => history.messages.find(
+        (message) => message.kind === 'tool_use' && message.toolId === toolUseId,
+      );
+      const notificationBubbles = history.messages
+        .map((message) => message.content ?? '')
+        .filter((content) => content.includes('<task-notification>'));
+
+      assert.equal(card('toolu_A')?.subagent?.status, 'completed');
+      assert.equal(card('toolu_A')?.toolResult?.content, 'first pass');
+      // Keyed by tool-use id alone, the relaunch had no report: `stopped`, no
+      // content, and report #2 rendered as a raw bubble of its own.
+      assert.equal(card('toolu_B')?.subagent?.status, 'completed');
+      assert.equal(card('toolu_B')?.toolResult?.content, 'resumed pass');
+      assert.equal(notificationBubbles.some((content) => content.includes('toolu_C')), false);
+      // The subagent's task names no launch of this transcript, by either id,
+      // so its report renders exactly as before.
+      assert.equal(notificationBubbles.length, 1);
+      assert.match(notificationBubbles[0], /bchild123/);
+      assert.ok(history.messages.some((message) => message.content === 'the research is done'));
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 /** Strips the `<task-notification>` turn so the agent has no reported outcome. */
 async function dropTaskNotification(parentPath: string): Promise<void> {
   const raw = await readFile(parentPath, 'utf8');
