@@ -4,7 +4,6 @@ import { ArrowDownIcon } from 'lucide-react';
 
 import { useTasksSettings } from '@/modules/task-master';
 import { useWebSocket } from '@/shared/context/WebSocketContext';
-import { useUiPreferences } from '@/shared/context/UiPreferencesContext';
 import PermissionContext from '@/modules/chat/context/PermissionContext';
 import { MarkdownWorkspaceContext } from '@/modules/chat/context/MarkdownWorkspaceContext';
 import { TranscriptSessionContext } from '@/modules/chat/context/TranscriptSessionContext';
@@ -47,6 +46,8 @@ type ChatInterfaceProps = {
   showRawParameters?: boolean;
   showThinking?: boolean;
   sendByCtrlEnter?: boolean;
+  /** The "Build approved plans in: New session" setting, which ⌘↩ on a pending plan follows. */
+  buildPlansInNewSession?: boolean;
   externalMessageUpdate?: number;
   newSessionTrigger?: number;
   onTaskClick?: (...args: unknown[]) => void;
@@ -71,13 +72,13 @@ function ChatInterface({
   showRawParameters,
   showThinking,
   sendByCtrlEnter,
+  buildPlansInNewSession = false,
   externalMessageUpdate,
   newSessionTrigger,
   onShowAllTasks,
 }: ChatInterfaceProps) {
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
   const { subscribe } = useWebSocket();
-  const { buildPlansInNewSession } = useUiPreferences();
   const { t } = useTranslation('chat');
   const processingSessions = useProcessingSessions();
   const {
