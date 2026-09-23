@@ -41,11 +41,17 @@ export const useEditorSidebar = ({
 
   const handleFileOpen = useCallback(
     (filePath: string, diffInfo: CodeEditorDiffInfo | null = null, line: number | null = null) => {
-      // Re-opening the open file with no diff payload on either side reuses the
-      // loaded buffer; any other open reloads it, which loses unsaved edits
-      // exactly like closing does, so it gets the same confirmation.
+      // Re-opening the open file of the same project with no diff payload on
+      // either side reuses the loaded buffer; any other open reloads it, which
+      // loses unsaved edits exactly like closing does, so it gets the same
+      // confirmation. The project matters because nested projects share
+      // absolute paths and the editor re-reads the file when its project changes.
       const openFile = editingFileRef.current;
-      const reusesBuffer = openFile !== null && openFile.path === filePath && !openFile.diffInfo && !diffInfo;
+      const reusesBuffer = openFile !== null
+        && openFile.path === filePath
+        && openFile.projectId === selectedProject?.projectId
+        && !openFile.diffInfo
+        && !diffInfo;
       if (
         openFile !== null
         && !reusesBuffer

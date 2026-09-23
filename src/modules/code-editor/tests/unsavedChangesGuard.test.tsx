@@ -296,3 +296,38 @@ test('re-opening the open file, or opening while clean, never asks', () => {
   assert.equal(confirm.mock.calls.length, 0);
   assert.equal(result.current.editingFile?.path, '/repo/b.txt');
 });
+
+test('re-opening the open path with a diff payload reloads the buffer, so it asks first', () => {
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  const { result } = renderHook(() => useEditorSidebar({ selectedProject: project, isMobile: false }));
+
+  act(() => result.current.handleFileOpen('/repo/a.txt'));
+  act(() => result.current.handleUnsavedChangesChange(true));
+  act(() => result.current.handleFileOpen('/repo/a.txt', { old_string: 'a', new_string: 'b' }));
+
+  assert.equal(confirm.mock.calls.length, 1);
+  assert.equal(result.current.editingFile?.diffInfo, null);
+});
+
+test('the same path in another project is a different file, so it asks first', () => {
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  // Nested projects list the same absolute paths, and the editor re-reads the
+  // file whenever its project changes.
+  const nestedProject: Project = { projectId: 'p2', displayName: 'sub', fullPath: '/repo/sub', path: '/repo/sub' };
+  const { result, rerender } = renderHook(
+    ({ selectedProject }) => useEditorSidebar({ selectedProject, isMobile: false }),
+    { initialProps: { selectedProject: project } },
+  );
+
+  act(() => result.current.handleFileOpen('/repo/sub/a.txt'));
+  act(() => result.current.handleUnsavedChangesChange(true));
+  rerender({ selectedProject: nestedProject });
+  act(() => result.current.handleFileOpen('/repo/sub/a.txt'));
+
+  assert.equal(confirm.mock.calls.length, 1);
+  assert.equal(result.current.editingFile?.projectId, 'p1');
+
+  confirm.mockReturnValue(true);
+  act(() => result.current.handleFileOpen('/repo/sub/a.txt'));
+  assert.equal(result.current.editingFile?.projectId, 'p2');
+});
