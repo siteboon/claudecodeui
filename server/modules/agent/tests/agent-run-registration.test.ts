@@ -348,9 +348,11 @@ test('a non-streaming run answers with the assistant\'s replies, its token usage
   });
 });
 
-// Cursor and OpenCode never emit a final `text` row: their prose reaches the
-// writer only as `stream_delta` chunks (shapes copied from the runtimes and
-// their normalizers), so a collector that kept `text` rows answered `[]`.
+// Cursor and OpenCode never emit a final `text` row: their normalizers turn
+// prose into `stream_delta` chunks only (shapes copied from the runtimes and
+// normalizers), so a collector that kept `text` rows answered `[]`. The OpenCode
+// case covers the normalizer's output shape; with opencode 1.18.25 no prose
+// reaches the writer yet, because its live events nest the text in `part`.
 test('a non-streaming Cursor run answers with the reply its deltas carried', async () => {
   await withIsolatedDatabase(async () => {
     const unusedClaude: RunFunction = async () => { throw new Error('unexpected provider call'); };
