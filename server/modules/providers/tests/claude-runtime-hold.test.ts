@@ -298,8 +298,8 @@ test('a caller that awaits the run for its output is not held for async hooks', 
     script.emit(result());
     await settle();
 
-    assert.equal(script.options()?.includeHookEvents, undefined);
     assert.equal(script.released(), true, 'stdin closes at the result, as it always has');
+    assert.equal(script.options()?.includeHookEvents, undefined);
     // The CLI exits on that EOF, and the caller's promise settles with it.
     script.end();
     await settle();
