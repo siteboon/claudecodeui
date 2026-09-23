@@ -111,6 +111,15 @@ test('the project editor exposes the folder the project points at', () => {
   assert.ok(folderInputs.length > 0, 'the editor must show the current project folder');
 });
 
+test('every folder input is labelled, since its placeholder never shows', () => {
+  render(React.createElement(SidebarProjectItem, itemProps({})));
+
+  // The field is always prefilled, so a screen reader would otherwise announce
+  // only its hover tooltip, which touch devices never show at all.
+  const folderInputs = screen.getAllByPlaceholderText('projects.projectPathPlaceholder');
+  assert.equal(screen.getAllByLabelText('projects.projectPathPlaceholder').length, folderInputs.length);
+});
+
 test('saving the editor hands the edited folder to the save callback', () => {
   const saved: Array<[string, string, string]> = [];
 
