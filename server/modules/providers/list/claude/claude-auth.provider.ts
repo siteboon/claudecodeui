@@ -16,9 +16,53 @@ type ClaudeCredentialsStatus = {
   error?: string;
 };
 
+type ClaudeCloudProvider = {
+  switchEnvKey: string;
+  label: string;
+  projectEnvKey?: string;
+};
+
+// Third-party providers Claude Code sends requests to instead of the Anthropic
+// API, in the order the current CLI (2.1.280) checks their switches when picking
+// one. Labels are the CLI's own display names. The older CLI bundled with the
+// Agent SDK (2.1.165) has no CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD switch.
+const CLAUDE_CLOUD_PROVIDERS: ClaudeCloudProvider[] = [
+  { switchEnvKey: 'CLAUDE_CODE_USE_BEDROCK', label: 'Amazon Bedrock' },
+  { switchEnvKey: 'CLAUDE_CODE_USE_FOUNDRY', label: 'Microsoft Foundry' },
+  { switchEnvKey: 'CLAUDE_CODE_USE_ANTHROPIC_AWS', label: 'Claude Platform on AWS' },
+  { switchEnvKey: 'CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD', label: 'Claude Platform on Google Cloud' },
+  { switchEnvKey: 'CLAUDE_CODE_USE_MANTLE', label: 'Amazon Bedrock (Mantle)' },
+  { switchEnvKey: 'CLAUDE_CODE_USE_VERTEX', label: 'Google Vertex AI', projectEnvKey: 'ANTHROPIC_VERTEX_PROJECT_ID' },
+];
+
 const hasErrorCode = (error: unknown, code: string): boolean => (
   error instanceof Error && 'code' in error && error.code === code
 );
+
+// Same rule the CLI applies to its boolean env switches: only "1", "true",
+// "yes" or "on" (trimmed, any case) turn one on, so "0" or "false" leave it off.
+const isEnvSwitchOn = (value: unknown): boolean => {
+  if (!value) {
+    return false;
+  }
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  return ['1', 'true', 'yes', 'on'].includes(String(value).trim().toLowerCase());
+};
+
+// The CLI copies settings.json `env` over its process env at startup, so a key
+// set there wins over the same key inherited from this server's environment.
+// Like the CLI, a settings value that is not a string, number or boolean (e.g.
+// null) is dropped and the process env value stays in effect. An empty string
+// is still applied, so "" in settings switches a key off.
+const readCliEnvValue = (settingsEnv: Record<string, unknown>, key: string): unknown => {
+  const settingsValue = settingsEnv[key];
+  const isAppliedByCli = typeof settingsValue === 'string'
+    || typeof settingsValue === 'number'
+    || typeof settingsValue === 'boolean';
+  return isAppliedByCli ? settingsValue : process.env[key];
+};
 
 export class ClaudeProviderAuth implements IProviderAuth {
   /**
@@ -84,6 +128,26 @@ export class ClaudeProviderAuth implements IProviderAuth {
    */
   private async checkCredentials(): Promise<ClaudeCredentialsStatus> {
     const missingCredentialsError = 'Claude CLI is not authenticated. Run claude /login or configure ANTHROPIC_API_KEY.';
+    const settingsEnv = await this.loadSettingsEnv();
+
+    // With a cloud provider switched on, the CLI authenticates with that cloud's
+    // own credentials (e.g. gcloud ADC for Vertex) and ignores the Anthropic keys
+    // and login checked below. Like those checks, this only looks at what is
+    // configured: cloud credentials can come from a metadata server with no local
+    // file, and the Vertex project can be resolved from them when no ID is set.
+    const cloudProvider = CLAUDE_CLOUD_PROVIDERS.find(({ switchEnvKey }) => (
+      isEnvSwitchOn(readCliEnvValue(settingsEnv, switchEnvKey))
+    ));
+    if (cloudProvider) {
+      const projectId = cloudProvider.projectEnvKey
+        ? readOptionalString(readCliEnvValue(settingsEnv, cloudProvider.projectEnvKey))
+        : undefined;
+      return {
+        authenticated: true,
+        email: projectId ? `${cloudProvider.label} (${projectId})` : cloudProvider.label,
+        method: 'cloud_provider',
+      };
+    }
 
     if (process.env.ANTHROPIC_AUTH_TOKEN?.trim()) {
       return { authenticated: true, email: 'Auth Token', method: 'api_key' };
@@ -93,7 +157,6 @@ export class ClaudeProviderAuth implements IProviderAuth {
       return { authenticated: true, email: 'API Key Auth', method: 'api_key' };
     }
 
-    const settingsEnv = await this.loadSettingsEnv();
     if (readOptionalString(settingsEnv.ANTHROPIC_API_KEY)) {
       return { authenticated: true, email: 'API Key Auth', method: 'api_key' };
     }
