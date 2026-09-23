@@ -17,7 +17,6 @@ import crypto from 'crypto';
 import { promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
-import { promisify } from 'util';
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
 
@@ -77,17 +76,21 @@ const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEO
 // forever. The timer resets on every message, so it measures silence, not total time.
 const BG_WAIT_CEILING_MS = 30 * 60 * 1000;
 
-// How long a turn's CLI process is kept alive for async hooks (`"async": true` in a
-// hooks config) that are still running when the turn ends. The CLI kills every one
-// still going when it exits, so closing stdin at `result` cut short the async Stop
-// hooks people use for sounds, spoken summaries and desktop notifications, which the
-// interactive CLI on the Shell page lets finish.
+// How long a Chat turn's CLI process is kept alive for async hooks (`"async": true`
+// in a hooks config) that are still running when the turn ends. The CLI kills every
+// one still going when it exits, so closing stdin at `result` cut short the async
+// Stop hooks people use for sounds, spoken summaries and desktop notifications,
+// which the interactive CLI on the Shell page lets finish.
 //
 // This is a fixed window rather than a wait for the hooks: a headless CLI only
 // notices an async hook has finished when it next builds a turn, so between
 // `hook_started` and its own teardown the stream says nothing. Hooks that finish
 // inside the window run to completion; longer ones are still cancelled at its end.
 // A new turn on the session, or an abort, ends the window early.
+//
+// Only runs that pass `holdForAsyncHooks` get the window: the run's promise settles
+// when the CLI exits, so every caller that awaits it for its output (commit
+// messages, /api/agent, the scheduled-message dispatcher) would wait it out too.
 const ASYNC_HOOK_GRACE_MS = 60 * 1000;
 
 // First Claude Code release whose CLI accepts `--include-hook-events`, the flag behind
@@ -96,9 +99,13 @@ const ASYNC_HOOK_GRACE_MS = 60 * 1000;
 // CLI that reports a new enough version.
 const HOOK_EVENTS_MIN_CLI_VERSION = [2, 1, 89];
 
-// `--version` probes per executable path. A pending or answered probe is reused;
-// a failed one is dropped so the next turn asks again.
+// `--version` probes per executable path, kept for the server's lifetime. A failed
+// probe is remembered as unsupported too, so a slow or broken CLI costs one probe,
+// not one per turn.
 const hookEventsSupportByExecutable = new Map();
+
+// Launchers the SDK runs through Node instead of spawning directly (its own list).
+const SCRIPT_LAUNCHER_EXTENSIONS = ['.js', '.mjs', '.tsx', '.ts', '.jsx'];
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
@@ -336,13 +343,15 @@ function mapCliOptionsToSDK(options = {}) {
 }
 
 /**
- * True when the first `major.minor.patch` in `versionText` is at least `minimum`.
+ * True when the Claude Code version in `versionText` is at least `minimum`.
+ * Anchored to the CLI's own `(Claude Code)` suffix, so a wrapper that prints a
+ * banner of its own first (a Node or mise version) is not misread.
  * @param {string} versionText - `--version` output, e.g. `2.1.280 (Claude Code)`
  * @param {number[]} minimum - Lowest accepted `[major, minor, patch]`
  * @returns {boolean} False when no version can be read
  */
 function isVersionAtLeast(versionText, minimum) {
-  const match = /(\d+)\.(\d+)\.(\d+)/.exec(String(versionText));
+  const match = /(\d+)\.(\d+)\.(\d+) \(Claude Code\)/.exec(String(versionText));
   if (!match) {
     return false;
   }
@@ -371,12 +380,21 @@ function cliReportsHookEvents(executablePath) {
   }
   let supported = hookEventsSupportByExecutable.get(executablePath);
   if (!supported) {
-    supported = promisify(execFile)(executablePath, ['--version'], { timeout: 5000, windowsHide: true })
-      .then(({ stdout }) => isVersionAtLeast(stdout, HOOK_EVENTS_MIN_CLI_VERSION))
-      .catch(() => {
-        hookEventsSupportByExecutable.delete(executablePath);
-        return false;
-      });
+    // Asked the way the SDK will launch it: script launchers through Node.
+    const [file, args] = SCRIPT_LAUNCHER_EXTENSIONS.some((extension) => executablePath.endsWith(extension))
+      ? [process.execPath, [executablePath, '--version']]
+      : [executablePath, ['--version']];
+    supported = new Promise((resolve) => {
+      try {
+        execFile(file, args, { timeout: 5000, windowsHide: true }, (error, stdout) => {
+          resolve(!error && isVersionAtLeast(stdout, HOOK_EVENTS_MIN_CLI_VERSION));
+        });
+      } catch {
+        // Node throws some spawn failures synchronously instead of reporting
+        // them to the callback (on Windows, anything that is not an .exe).
+        resolve(false);
+      }
+    });
     hookEventsSupportByExecutable.set(executablePath, supported);
   }
   return supported;
@@ -930,13 +948,16 @@ async function loadMcpConfig(cwd) {
 /**
  * Executes a Claude query using the SDK
  * @param {string} command - User prompt/command
- * @param {Object} options - Query options
+ * @param {Object} options - Query options. `holdForAsyncHooks` (set only by the
+ *   chat websocket for turns a client sent) keeps the CLI up for
+ *   ASYNC_HOOK_GRACE_MS after the turn when it left async hooks running.
  * @param {Object} ws - WebSocket connection
  * @param {Object} context - Provider-scoped model, session, and auth lookups
- * @returns {Promise<void>}
+ * @returns {Promise<void>} Settles when the CLI process exits
  */
 async function queryClaudeSDK(command, options = {}, ws, context) {
   const { sessionId, sessionSummary } = options;
+  const holdForAsyncHooks = options.holdForAsyncHooks === true;
   // Callers pass the stable app session id; the SDK only understands the
   // provider-native id recorded on the session row.
   const providerSessionId = context.resolveProviderSessionId(sessionId);
@@ -981,6 +1002,8 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // Hook runs the stream reported starting (`hook_started`) and not finishing
   // (`hook_response`), by hook id. A sync hook finishes before the turn moves
   // on, so whatever is still here when a `result` arrives is an async hook.
+  // Only tracked for runs that hold for async hooks; for any other run it stays
+  // empty, so they release at `result` as they always have.
   const runningHookIds = new Set();
   // Armed while the process is held for those async hooks; see ASYNC_HOOK_GRACE_MS.
   let asyncHookGraceTimer = null;
@@ -1051,7 +1074,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
 
     // Hook lifecycle events are how the run learns a turn left async hooks
     // running; they normalize to nothing for the client.
-    if (await cliReportsHookEvents(sdkOptions.pathToClaudeCodeExecutable)) {
+    if (holdForAsyncHooks && await cliReportsHookEvents(sdkOptions.pathToClaudeCodeExecutable)) {
       sdkOptions.includeHookEvents = true;
     }
 
@@ -1263,7 +1286,9 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       }
       backgroundWork.apply(sessionKey(), message);
 
-      if (message.type === 'system' && typeof message.hook_id === 'string') {
+      // SessionStart hooks report even without `includeHookEvents`, hence the
+      // explicit opt-in check.
+      if (holdForAsyncHooks && message.type === 'system' && typeof message.hook_id === 'string') {
         if (message.subtype === 'hook_started') {
           runningHookIds.add(message.hook_id);
         } else if (message.subtype === 'hook_response') {

@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
-import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import childProcess from 'node:child_process';
+import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { promisify } from 'node:util';
 
 import { ClaudeSessionsProvider } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import { CLAUDE_PREDEFINED_MODELS } from '@/modules/providers/list/claude/claude-models.provider.js';
@@ -23,6 +26,9 @@ import type { NormalizedMessage, ProviderRuntimeContext } from '@/shared/types.j
 
 const SESSION_ID = 'app-hold-session';
 const NATIVE_ID = 'native-hold-session';
+
+/** What the chat websocket passes for a turn a client sent. */
+const CHAT_TURN = { sessionId: SESSION_ID, holdForAsyncHooks: true };
 
 type Scripted = {
   emit: (message: Record<string, unknown>) => void;
@@ -88,6 +94,7 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
 
 async function withRun(
   runTest: (context: { script: Scripted; sent: NormalizedMessage[]; done: Promise<unknown> }) => Promise<void>,
+  runOptions: Record<string, unknown> = CHAT_TURN,
 ): Promise<void> {
   const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-runtime-hold-'));
   const { createQuery, script } = createScriptedQuery();
@@ -104,10 +111,10 @@ async function withRun(
   };
 
   try {
-    const done = queryClaudeSDK('hello', { sessionId: SESSION_ID, cwd }, writer as never, context);
+    const done = queryClaudeSDK('hello', { ...runOptions, cwd }, writer as never, context);
     // Setup asks the CLI for its version before building the query; wait it out
-    // so the scripted stream is read from the start.
-    await script.created;
+    // so the scripted stream is read from the start (or for the run to fail).
+    await Promise.race([script.created, done]);
     await runTest({ script, sent, done });
     script.end();
     await done;
@@ -279,6 +286,27 @@ test('a turn whose hooks all finished releases the process at its result', async
   });
 });
 
+test('a caller that awaits the run for its output is not held for async hooks', async () => {
+  // Shaped like the commit-message request: no session, no opt-in. It waits
+  // for the CLI to exit, so an async hook must not keep the CLI up.
+  await withRun(async ({ script, done }) => {
+    let settled = false;
+    void done.then(() => { settled = true; });
+    script.emit(init());
+    // SessionStart hooks report even without `includeHookEvents`.
+    script.emit(hookStarted('hook_async', 'SessionStart'));
+    script.emit(result());
+    await settle();
+
+    assert.equal(script.options()?.includeHookEvents, undefined);
+    assert.equal(script.released(), true, 'stdin closes at the result, as it always has');
+    // The CLI exits on that EOF, and the caller's promise settles with it.
+    script.end();
+    await settle();
+    assert.equal(settled, true);
+  }, { permissionMode: 'bypassPermissions', model: 'sonnet' });
+});
+
 test('background work started after the grace was armed is not cut short by it', async (t) => {
   await withRun(async ({ script }) => {
     script.emit(init());
@@ -333,21 +361,43 @@ test('hook events are only requested from a CLI new enough to accept the flag', 
     return file;
   };
   const previous = process.env.CLAUDE_CLI_PATH;
-  const includeHookEventsWith = async (cliPath: string) => {
+  const includeHookEventsWith = async (cliPath: string, runOptions?: Record<string, unknown>) => {
     process.env.CLAUDE_CLI_PATH = cliPath;
     let requested: unknown;
     await withRun(async ({ script }) => {
       requested = script.options()?.includeHookEvents;
-    });
+    }, runOptions);
     return requested;
   };
+  const probes = path.join(binDir, 'probes.log');
+  const probeCount = async () => (await readFile(probes, 'utf8').catch(() => '')).split('\n').filter(Boolean).length;
 
   try {
     // 2.1.88 does not exist on npm; 2.1.87 is the last release without the flag.
     assert.equal(await includeHookEventsWith(await fakeCli('old', 'echo "2.1.87 (Claude Code)"')), undefined);
     assert.equal(await includeHookEventsWith(await fakeCli('first', 'echo "2.1.89 (Claude Code)"')), true);
     assert.equal(await includeHookEventsWith(await fakeCli('current', 'echo "2.1.280 (Claude Code)"')), true);
-    assert.equal(await includeHookEventsWith(await fakeCli('broken', 'exit 1')), undefined, 'a CLI that cannot say its version is treated as too old');
+    assert.equal(
+      await includeHookEventsWith(await fakeCli('banner', 'echo "Using node v22.23.1"; echo "2.1.80 (Claude Code)"')),
+      undefined,
+      'a wrapper\'s own banner is not read as the CLI version',
+    );
+
+    // A script launcher is asked through Node, the way the SDK runs it.
+    const launcher = path.join(binDir, 'cli.js');
+    await writeFile(launcher, 'console.log("2.1.280 (Claude Code)");\n');
+    assert.equal(await includeHookEventsWith(launcher), true);
+
+    // A CLI that cannot say its version is treated as too old, and asked once.
+    const broken = await fakeCli('broken', `echo probed >> "${probes}"; exit 1`);
+    assert.equal(await includeHookEventsWith(broken), undefined);
+    assert.equal(await includeHookEventsWith(broken), undefined);
+    assert.equal(await probeCount(), 1);
+
+    // A run that does not hold for async hooks never asks.
+    const unasked = await fakeCli('unasked', `echo probed >> "${probes}"; echo "2.1.280 (Claude Code)"`);
+    assert.equal(await includeHookEventsWith(unasked, {}), undefined);
+    assert.equal(await probeCount(), 1);
   } finally {
     if (previous === undefined) {
       delete process.env.CLAUDE_CLI_PATH;
@@ -355,5 +405,33 @@ test('hook events are only requested from a CLI new enough to accept the flag', 
       process.env.CLAUDE_CLI_PATH = previous;
     }
     await rm(binDir, { recursive: true, force: true });
+  }
+});
+
+test('a CLI path Node refuses to spawn leaves hook events off instead of failing the turn', async () => {
+  // Node throws some spawn failures synchronously instead of passing them to
+  // the callback, and so does its promisified execFile: on Windows, a .cmd or
+  // a script it cannot run directly.
+  const refuse = () => { throw Object.assign(new Error('spawn EFTYPE'), { code: 'EFTYPE' }); };
+  const originalExecFile = childProcess.execFile;
+  const previous = process.env.CLAUDE_CLI_PATH;
+  (childProcess as { execFile: unknown }).execFile = Object.assign(refuse, { [promisify.custom]: refuse });
+  syncBuiltinESMExports();
+  process.env.CLAUDE_CLI_PATH = path.join(os.tmpdir(), 'claude-runtime-hold-unspawnable');
+
+  try {
+    await withRun(async ({ script, sent }) => {
+      assert.notEqual(script.options(), null, 'the turn still reaches the SDK');
+      assert.equal(script.options()?.includeHookEvents, undefined);
+      assert.equal(sent.some((message) => message.kind === 'error'), false);
+    });
+  } finally {
+    (childProcess as { execFile: unknown }).execFile = originalExecFile;
+    syncBuiltinESMExports();
+    if (previous === undefined) {
+      delete process.env.CLAUDE_CLI_PATH;
+    } else {
+      process.env.CLAUDE_CLI_PATH = previous;
+    }
   }
 });
