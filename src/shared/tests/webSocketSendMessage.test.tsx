@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 
 import { act, render } from '@testing-library/react';
+import { useEffect } from 'react';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 
 /**
@@ -60,7 +61,10 @@ const { WebSocketProvider, useWebSocket } = await import('@/shared/context/WebSo
 let context: ReturnType<typeof useWebSocket> | null = null;
 
 function CaptureContext() {
-  context = useWebSocket();
+  const value = useWebSocket();
+  useEffect(() => {
+    context = value;
+  });
   return null;
 }
 

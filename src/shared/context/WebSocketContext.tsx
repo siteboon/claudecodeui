@@ -134,7 +134,9 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   // Latest `connect` for the stable `sendMessage`, which may cut a pending
   // reconnect delay short.
   const connectRef = useRef(connect);
-  connectRef.current = connect;
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
 
   // Declared after `connect` so the effect body does not reference it before
   // initialization. `connect` is memoized on [dispatch, isAuthLoading, token,
