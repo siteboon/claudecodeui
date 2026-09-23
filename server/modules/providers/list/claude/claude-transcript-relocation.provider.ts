@@ -87,12 +87,12 @@ function rewriteTranscriptCwd(content: string, oldProjectPath: string, newProjec
  * encodes to before it is touched, so a Claude release that changes the
  * encoding degrades to "leave the files where they are" instead of scattering
  * them. Copies are written before any original is removed, and a failure
- * removes the copies again, so the caller never writes rows for a half-finished
- * move.
+ * removes the copies again, so the caller can put its rows back and they match
+ * the disk.
  *
  * The `<session-id>/` folder beside a transcript (subagent transcripts, tool
- * results, workflow journals) moves with it: the history reader looks for it
- * next to the transcript.
+ * results, workflow journals) moves with it, and back again on a failure: the
+ * history reader looks for it next to the transcript.
  *
  * When both paths encode to the same folder ("my project" -> "my_project"),
  * the transcript is already where a resume looks, but its `cwd` still has to
