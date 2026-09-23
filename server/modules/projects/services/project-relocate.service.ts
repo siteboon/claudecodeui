@@ -124,7 +124,7 @@ export async function relocateProject(
   // The row moves before any transcript does. The session watcher may index a
   // relocated transcript, whose cwd already names the new folder, at any point
   // during the move; its `createProjectPath(nextPath)` then lands on this row
-  // instead of inserting a second project that this update would collide with.
+  // instead of inserting a second project that claims the new path.
   projectsDb.updateProjectPathById(projectId, nextPath);
 
   let movedTranscripts: SessionTranscriptRelocation[];
