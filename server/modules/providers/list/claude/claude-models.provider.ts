@@ -7,7 +7,11 @@ import type {
   ProviderModelOption,
   ProviderModelsDefinition,
 } from '@/shared/types.js';
-import { buildDefaultProviderCurrentActiveModel, stripAnsiSequences } from '@/shared/utils.js';
+import {
+  buildDefaultProviderCurrentActiveModel,
+  extractTaggedContent,
+  stripAnsiSequences,
+} from '@/shared/utils.js';
 
 /**
  * Ultracode is not one of the SDK's reasoning-effort levels. Selecting it runs the turn at
@@ -205,12 +209,6 @@ export const extractClaudeEventModel = (event: ClaudeInitEvent, sessionId: strin
 
   const messageModel = event.message?.model?.trim();
   return messageModel && !isPlaceholderModel(messageModel) ? messageModel : null;
-};
-
-const extractTaggedContent = (content: string, tagName: string): string | null => {
-  const escapedTagName = tagName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = new RegExp(`<${escapedTagName}>([\\s\\S]*?)<\\/${escapedTagName}>`).exec(content);
-  return match ? match[1] : null;
 };
 
 const extractClaudeModelFromTextContent = (content: string): string | null => {

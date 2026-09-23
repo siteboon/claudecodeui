@@ -22,6 +22,7 @@ import { parseFilesInputTag } from '@/shared/image-attachments.js';
 import { prepareTranscriptMessages, truncateNestedOutput } from '@/shared/message-unification.js';
 import {
   createNormalizedMessage,
+  extractTaggedContent,
   generateMessageId,
   readObjectRecord,
   sliceTailPage,
@@ -832,17 +833,6 @@ const INTERNAL_CONTENT_PREFIXES = [
 
 function isInternalContent(content: string): boolean {
   return INTERNAL_CONTENT_PREFIXES.some((prefix) => content.startsWith(prefix));
-}
-
-/**
- * Claude wraps local slash-command metadata in lightweight XML-like tags inside
- * a plain string payload. We intentionally parse only the small tag surface we
- * care about instead of introducing a generic XML parser for untrusted history.
- */
-function extractTaggedContent(content: string, tagName: string): string | null {
-  const escapedTagName = tagName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = new RegExp(`<${escapedTagName}>([\\s\\S]*?)<\\/${escapedTagName}>`).exec(content);
-  return match ? match[1] : null;
 }
 
 type ClaudeLocalCommandPayload = {

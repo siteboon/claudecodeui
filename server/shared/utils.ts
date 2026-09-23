@@ -1203,6 +1203,29 @@ export function flattenPromptForWindowsShell(prompt: string): string {
 }
 
 // ---------------------------
+//----------------- CLAUDE TRANSCRIPT TAG UTILITIES ------------
+/**
+ * Returns the text between the first `<tagName>` and `</tagName>` pair in a
+ * Claude transcript string, or null when the pair is absent. An empty pair
+ * returns an empty string, so callers can tell "tag present but empty" apart
+ * from "no tag".
+ *
+ * Claude serializes slash commands (`<command-name>`, `<command-message>`,
+ * `<command-args>`), their output (`<local-command-stdout>`) and `/model`
+ * results (`<model>`) as lightweight XML-like tags inside plain string
+ * payloads. The Claude sessions provider (chat history), the conversation
+ * search service, the Claude models provider and the Claude session
+ * synchronizer (sidebar titles) all read those tags. Only this small tag
+ * surface is parsed, not XML: attributes and nesting of the same tag are not
+ * supported, and the tag name is escaped so it is always matched literally.
+ */
+export function extractTaggedContent(content: string, tagName: string): string | null {
+  const escapedTagName = tagName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = new RegExp(`<${escapedTagName}>([\\s\\S]*?)<\\/${escapedTagName}>`).exec(content);
+  return match ? match[1] : null;
+}
+
+// ---------------------------
 //----------------- TERMINAL OUTPUT UTILITIES ------------
 /**
  * Matches the escape sequences a CLI emits when it believes it is writing to a

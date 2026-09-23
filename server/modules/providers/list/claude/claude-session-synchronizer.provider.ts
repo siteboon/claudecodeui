@@ -6,6 +6,7 @@ import { sessionsDb } from '@/modules/database/index.js';
 import {
   buildLookupMap,
   extractFirstValidJsonlData,
+  extractTaggedContent,
   findFilesRecursivelyCreatedAfter,
   normalizeSessionName,
   readFileTimestamps,
@@ -17,6 +18,51 @@ type ParsedSession = {
   projectPath: string;
   sessionName?: string;
 };
+
+/**
+ * Title sources read from one transcript pass. `title` is the explicit title
+ * (custom-title > ai-title > last-prompt). `slashCommand` is only a fallback,
+ * used after the history.jsonl lookup.
+ */
+type TranscriptTitleSources = {
+  title?: string;
+  slashCommand?: string;
+};
+
+/**
+ * Returns "<command-name> <command-args>" when a transcript row is the wrapper
+ * Claude writes for a slash command the user typed, e.g.
+ * `<command-message>morning-briefing</command-message>
+ * <command-name>/morning-briefing</command-name>`.
+ *
+ * A headless `claude -p "/morning-briefing"` run has no history.jsonl entry, no
+ * ai-title, and a `last-prompt` row without `lastPrompt`, so this wrapper is
+ * the only name the transcript holds. Command bodies expanded by Claude and
+ * skills invoked by the model are `isMeta` rows, and tool results use array
+ * content, so neither is read here. Compact summaries and command output are
+ * skipped explicitly.
+ */
+function readSlashCommandTitle(data: Record<string, unknown>): string | undefined {
+  if (data.type !== 'user' || data.isMeta === true || data.isCompactSummary === true) {
+    return undefined;
+  }
+
+  const message = data.message as Record<string, unknown> | undefined;
+  const content = message?.role === 'user' ? message.content : undefined;
+  if (typeof content !== 'string' || extractTaggedContent(content, 'local-command-stdout') !== null) {
+    return undefined;
+  }
+
+  // Same precedence the chat uses to show the command: name, then message.
+  const command = extractTaggedContent(content, 'command-name')?.trim()
+    || extractTaggedContent(content, 'command-message')?.trim();
+  if (!command) {
+    return undefined;
+  }
+
+  const commandArgs = extractTaggedContent(content, 'command-args')?.trim();
+  return commandArgs ? `${command} ${commandArgs}` : command;
+}
 
 /**
  * Session indexer for Claude transcript artifacts.
@@ -147,9 +193,13 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       };
     }
 
-    let sessionName = await this.extractSessionTitle(filePath, parsed.sessionId);
+    const titleSources = await this.extractSessionTitle(filePath, parsed.sessionId);
+    let sessionName = titleSources.title;
     if (!sessionName) {
       sessionName = nameMap.get(parsed.sessionId);
+    }
+    if (!sessionName) {
+      sessionName = titleSources.slashCommand;
     }
 
     return {
@@ -165,13 +215,15 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
    * `custom-title` (a manual `/rename`) over `ai-title` over `last-prompt`.
    * Claude writes `custom-title` immediately before `ai-title`, so a reverse
    * scan that returns its first hit would always lose the manual rename.
+   * The same pass also records the first slash command the user typed, which
+   * the caller uses only when no other source names the session.
    *
-   * Returns undefined on a missing or unreadable file so sync can continue.
+   * Returns no titles on a missing or unreadable file so sync can continue.
    */
   private async extractSessionTitle(
     filePath: string,
     sessionId: string
-  ): Promise<string | undefined> {
+  ): Promise<TranscriptTitleSources> {
     try {
       const content = await readFile(filePath, 'utf8');
       const lines = content.split(/\r?\n/);
@@ -179,6 +231,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       let foundCustomTitle: string | undefined;
       let foundAiTitle: string | undefined;
       let foundLastPrompt: string | undefined;
+      let foundSlashCommand: string | undefined;
 
       for (let index = 0; index < lines.length; index += 1) {
         const line = lines[index]?.trim();
@@ -216,14 +269,19 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
           if (prompt?.trim()) {
             foundLastPrompt = prompt;
           }
+        } else if (eventType === 'user' && !foundSlashCommand) {
+          foundSlashCommand = readSlashCommandTitle(data);
         }
       }
 
-      return foundCustomTitle || foundAiTitle || foundLastPrompt;
+      return {
+        title: foundCustomTitle || foundAiTitle || foundLastPrompt,
+        slashCommand: foundSlashCommand,
+      };
     } catch {
       // Ignore missing/unreadable files so sync can continue.
     }
 
-    return undefined;
+    return {};
   }
 }
