@@ -5,7 +5,7 @@ import path from 'node:path';
 import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
-import { parseIncomingJsonObject, stripAnsiSequences } from '@/shared/utils.js';
+import { WORKSPACES_ROOT, parseIncomingJsonObject, stripAnsiSequences } from '@/shared/utils.js';
 
 type ShellIncomingMessage = {
   type?: string;
@@ -307,7 +307,11 @@ export function handleShellConnection(
       }
 
       if (data.type === 'init') {
-        const projectPath = readString(data.projectPath, process.cwd());
+        // The provider login dialog runs without a project and sends no path.
+        // Start it in the workspaces root the server is configured with; the
+        // client cannot know that root, and the server's own cwd is just
+        // wherever it happened to be launched.
+        const projectPath = readString(data.projectPath) || WORKSPACES_ROOT;
         const sessionId = readString(data.sessionId) || null;
         const hasSession = readBoolean(data.hasSession);
         const provider = readString(data.provider, 'claude');
