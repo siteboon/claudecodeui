@@ -467,9 +467,24 @@ function replaceLaunchToolResultContent(message: AnyRecord, replacement: string)
  * The file is append-only and every row names its predecessor in `parentUuid`,
  * so a conversation is a path through it rather than the whole file. Editing a
  * sent message makes a second path appear alongside the first.
+ *
+ * One file is one conversation, which is why the whole file is read. A
+ * resumed or continued session keeps writing into a single transcript while
+ * each run stamps its rows with its own `sessionId`, so keeping only the rows
+ * matching the id the database happens to store dropped an entire segment per
+ * resume boundary — silently, since everything downstream counts the rows it
+ * is handed. Rows that belong to something other than the conversation live in
+ * files of their own (`<session>/subagents/…`, `tool-results/…`) and are read
+ * by their own readers.
+ *
+ * A row is only skipped when its `uuid` was already seen: a resume that
+ * re-copies the rows it inherited would otherwise show those turns twice.
+ * Bookkeeping rows (`queue-operation`, `cost-state`, …) carry no `uuid` and
+ * are never deduplicated against each other.
  */
-async function readTranscriptRows(jsonlPath: string, providerSessionId: string): Promise<AnyRecord[]> {
+async function readTranscriptRows(jsonlPath: string): Promise<AnyRecord[]> {
   const rows: AnyRecord[] = [];
+  const seenRowUuids = new Set<string>();
   const fileStream = fs.createReadStream(jsonlPath);
   const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
 
@@ -479,9 +494,13 @@ async function readTranscriptRows(jsonlPath: string, providerSessionId: string):
     }
     try {
       const entry = JSON.parse(line) as AnyRecord;
-      if (entry.sessionId === providerSessionId) {
-        rows.push(entry);
+      if (typeof entry.uuid === 'string') {
+        if (seenRowUuids.has(entry.uuid)) {
+          continue;
+        }
+        seenRowUuids.add(entry.uuid);
       }
+      rows.push(entry);
     } catch {
       // A row can be half-written while the CLI is streaming into the file.
     }
@@ -582,9 +601,7 @@ async function getSessionMessages(
 
     const projectDir = path.dirname(jsonLPath);
 
-    const messages = dropSupersededPromptBranches(
-      await readTranscriptRows(jsonLPath, providerSessionId),
-    );
+    const messages = dropSupersededPromptBranches(await readTranscriptRows(jsonLPath));
 
     const agentIds = new Set<string>();
     for (const message of messages) {
@@ -1488,7 +1505,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       return { found: false, resumeThroughId: null };
     }
 
-    const rows = await readTranscriptRows(jsonlPath, providerSessionId);
+    const rows = await readTranscriptRows(jsonlPath);
     const byUuid = new Map<string, AnyRecord>();
     for (const row of rows) {
       if (typeof row.uuid === 'string') {
