@@ -505,11 +505,83 @@ function isUserPromptRow(row: AnyRecord): boolean {
 }
 
 /**
+ * Returns the uuids on the chain the next `claude --resume` replays, from the
+ * leaf it continues from back to the root.
+ *
+ * Mirrors the transcript loader of the Claude CLI, which the Agent SDK's
+ * `resume` spawns as well. Every CLI process stamps a `last-prompt` row naming
+ * the leaf it was on when it exits, so with two writers on one session it is
+ * that stamp — not the newest row — that decides which branch is replayed. The
+ * newest conversation row only takes over when it descends from the stamped
+ * leaf (the stamping process kept going), or when the file carries no stamp.
+ * A compact boundary clears the stamp, and `progress` rows are skipped over
+ * when linking a row to its parent, as the CLI does.
+ */
+function resolveResumePath(rows: AnyRecord[]): Set<string> {
+  const conversation = new Map<string, AnyRecord>();
+  const progressParents = new Map<string, string | null>();
+  const parentOf = (row: AnyRecord): string | undefined => {
+    const parentUuid = typeof row.parentUuid === 'string' ? row.parentUuid : undefined;
+    if (parentUuid && progressParents.has(parentUuid)) {
+      return progressParents.get(parentUuid) ?? undefined;
+    }
+    return parentUuid;
+  };
+
+  let newestRow: string | undefined;
+  let stampedLeaf: string | undefined;
+  let stampIsExplicit = false;
+
+  for (const row of rows) {
+    if (row.type === 'progress' && typeof row.uuid === 'string') {
+      progressParents.set(row.uuid, parentOf(row) ?? null);
+      continue;
+    }
+    if (typeof row.uuid === 'string'
+      && (row.type === 'user' || row.type === 'assistant' || row.type === 'attachment' || row.type === 'system')) {
+      conversation.set(row.uuid, row);
+      if (row.isSidechain !== true) {
+        newestRow = row.uuid;
+        stampIsExplicit = false;
+      }
+      if (row.type === 'system' && row.subtype === 'compact_boundary') {
+        stampedLeaf = undefined;
+        stampIsExplicit = false;
+      }
+    } else if (row.type === 'last-prompt' && typeof row.leafUuid === 'string' && row.leafUuid) {
+      stampIsExplicit = row.explicit === true || (stampIsExplicit && row.leafUuid === stampedLeaf);
+      stampedLeaf = row.leafUuid;
+    }
+  }
+
+  const chainFrom = (leaf: string | undefined): string[] => {
+    const chain: string[] = [];
+    const seen = new Set<string>();
+    let cursor = leaf;
+    while (cursor && conversation.has(cursor) && !seen.has(cursor)) {
+      seen.add(cursor);
+      chain.push(cursor);
+      cursor = parentOf(conversation.get(cursor) as AnyRecord);
+    }
+    return chain;
+  };
+
+  let leaf = stampedLeaf && conversation.has(stampedLeaf) ? stampedLeaf : undefined;
+  if (leaf && !stampIsExplicit && newestRow && newestRow !== leaf && chainFrom(newestRow).includes(leaf)) {
+    leaf = newestRow;
+  }
+
+  return new Set(chainFrom(leaf ?? newestRow));
+}
+
+/**
  * Maps each row's uuid to the file position of the newest row in its subtree.
  *
  * The transcript is append-only and a child is always written after its
  * parent, so one backward pass hands every row's position to its parent and
  * each uuid ends up holding the position of the last line its branch grew.
+ * Rows after a compact boundary do not link back across it, so this only
+ * orders branches within one compaction segment.
  */
 function indexNewestRowPerBranch(rows: AnyRecord[]): Map<string, number> {
   const newestByUuid = new Map<string, number>();
@@ -540,13 +612,12 @@ function indexNewestRowPerBranch(rows: AnyRecord[]): Map<string, number> {
  * native `claude` CLI at once: both writers branch off the row each of them saw
  * last.
  *
- * Which sibling survives is decided by which branch the runtime will actually
- * resume. `claude --resume` — and the Agent SDK's `resume`, which spawns that
- * same CLI — replays the chain ending at the newest row in the file, so the
- * branch that was *appended to* last wins rather than the one that was *started*
- * last. For an edit the two rules agree, because nothing is ever added to the
- * abandoned attempt again; for two live writers they do not, and going by the
- * newest prompt would show a branch the model was never sent.
+ * Which sibling survives is decided by the branch the runtime will actually
+ * resume: the sibling on the chain `resolveResumePath` returns. Going by the
+ * newest prompt, or by the newest row, would show a branch the model was never
+ * sent whenever the two writers exit in a different order than they wrote. A
+ * fork that is not on that chain at all (one made before a compaction) keeps
+ * the branch that was appended to last.
  *
  * Only sibling *prompts* are treated as a fork. Branch points made by parallel
  * tool calls are extremely common — one assistant turn writes several chained
@@ -572,17 +643,22 @@ function dropSupersededPromptBranches(rows: AnyRecord[]): AnyRecord[] {
     return rows;
   }
 
-  const newestByUuid = indexNewestRowPerBranch(rows);
-  const newestRowOf = (row: AnyRecord): number => (
-    typeof row.uuid === 'string' ? newestByUuid.get(row.uuid) ?? -1 : -1
-  );
+  const resumePath = resolveResumePath(rows);
+  let newestByUuid: Map<string, number> | undefined;
+  const newestRowOf = (row: AnyRecord): number => {
+    newestByUuid ??= indexNewestRowPerBranch(rows);
+    return typeof row.uuid === 'string' ? newestByUuid.get(row.uuid) ?? -1 : -1;
+  };
 
   const supersededRoots = new Set<string>();
   for (const siblings of forks) {
-    let live = siblings[0];
-    for (const row of siblings) {
-      if (newestRowOf(row) > newestRowOf(live)) {
-        live = row;
+    let live = siblings.find((row) => typeof row.uuid === 'string' && resumePath.has(row.uuid));
+    if (!live) {
+      live = siblings[0];
+      for (const row of siblings) {
+        if (newestRowOf(row) > newestRowOf(live)) {
+          live = row;
+        }
       }
     }
     for (const row of siblings) {
