@@ -45,13 +45,14 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
   const fileName = file.name;
   const fileDiffNewString = file.diffInfo?.new_string;
   const fileDiffOldString = file.diffInfo?.old_string;
-  // Counts the loads this editor has performed. A save whose request is still
-  // in flight when another file is opened must not write the old text over the
-  // new file's baseline, which would show the untouched file as edited.
+  // Counts the loads this editor has performed. A read or save still in flight
+  // when another file is opened belongs to the previous file and must not land
+  // on the new one's buffer, baseline or save state.
   const loadGenerationRef = useRef(0);
 
   useEffect(() => {
-    loadGenerationRef.current += 1;
+    const loadGeneration = ++loadGenerationRef.current;
+    const isStaleLoad = () => loadGenerationRef.current !== loadGeneration;
 
     // Every load path resets the saved baseline together with the buffer, so a
     // freshly opened file (or an error placeholder) never counts as dirty.
@@ -64,6 +65,9 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
       try {
         setLoading(true);
         setIsBinary(false);
+        // Any save still in flight or failed belongs to the previous file.
+        setSaving(false);
+        setSaveError(null);
 
         // Natively previewable media (image/pdf/audio/video) is rendered by
         // CodeEditorMediaPreview, so there is nothing to read as text here.
@@ -99,13 +103,21 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
         // pane — a directory, a path outside the project root, a missing file.
         // The bare status showed all of those as an opaque "403 Forbidden".
         const data = await readApiJson<{ content: string }>(response);
+        if (isStaleLoad()) {
+          return;
+        }
         applyLoadedContent(data.content);
       } catch (error) {
+        if (isStaleLoad()) {
+          return;
+        }
         const message = getErrorMessage(error);
         console.error('Error loading file:', error);
         applyLoadedContent(`// Error loading file: ${message}\n// File: ${fileName}\n// Path: ${filePath}`);
       } finally {
-        setLoading(false);
+        if (!isStaleLoad()) {
+          setLoading(false);
+        }
       }
     };
 
@@ -120,6 +132,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     }
 
     const saveGeneration = loadGenerationRef.current;
+    const isStaleSave = () => loadGenerationRef.current !== saveGeneration;
 
     setSaving(true);
     setSaveError(null);
@@ -145,9 +158,9 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
 
       await response.json();
 
-      // Another file loaded while this write was in flight: it owns the buffer
-      // and the baseline now, and the tick would advertise the wrong save.
-      if (loadGenerationRef.current !== saveGeneration) {
+      // Another file loaded while this write was in flight: it owns the buffer,
+      // the baseline and the save state now.
+      if (isStaleSave()) {
         return;
       }
 
@@ -159,9 +172,13 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     } catch (error) {
       const message = getErrorMessage(error);
       console.error('Error saving file:', error);
-      setSaveError(message);
+      if (!isStaleSave()) {
+        setSaveError(message);
+      }
     } finally {
-      setSaving(false);
+      if (!isStaleSave()) {
+        setSaving(false);
+      }
     }
   }, [content, filePath, fileProjectId, previewKind, fileName]);
 
@@ -180,17 +197,22 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     URL.revokeObjectURL(url);
   }, [content, file.name]);
 
+  // The baseline only changes on load and save, so it is not re-normalised on
+  // every keystroke.
+  const normalizedSavedContent = useMemo(() => normalizeLineEndings(savedContent), [savedContent]);
+
   // Preview and binary files have no editable buffer, and while a file loads
-  // the buffer still belongs to the previous one. Memoised because comparing
-  // two normalised copies of a large file on every keystroke is not free.
+  // the buffer still belongs to the previous one. Memoised so renders that do
+  // not change the buffer (a save's spinner and tick) skip the comparison.
   const hasUnsavedChanges = useMemo(
     () => (
       !loading
       && !previewKind
       && !isBinary
-      && normalizeLineEndings(content) !== normalizeLineEndings(savedContent)
+      && content !== savedContent
+      && normalizeLineEndings(content) !== normalizedSavedContent
     ),
-    [content, isBinary, loading, previewKind, savedContent],
+    [content, isBinary, loading, normalizedSavedContent, previewKind, savedContent],
   );
 
   return {

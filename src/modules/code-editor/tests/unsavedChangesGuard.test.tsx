@@ -44,6 +44,7 @@ const { default: CodeEditor } = await import('@/modules/code-editor/CodeEditor')
 const { useEditorSidebar } = await import('@/modules/code-editor/hooks/useEditorSidebar');
 
 const file: CodeEditorFile = { name: 'a.txt', path: '/repo/a.txt', projectId: 'p1' };
+const otherFile: CodeEditorFile = { name: 'b.txt', path: '/repo/b.txt', projectId: 'p1' };
 
 const renderEditor = async (onUnsavedChangesChange?: (dirty: boolean) => void) => {
   const onClose = vi.fn();
@@ -170,7 +171,6 @@ test('a save still in flight when another file opens leaves that file clean', as
   await waitFor(() => assert.equal(saveFile.mock.calls.length, 1));
 
   // The user accepts the switch while the write is still on the wire.
-  const otherFile: CodeEditorFile = { name: 'b.txt', path: '/repo/b.txt', projectId: 'p1' };
   rerender(<CodeEditor file={otherFile} onClose={onClose} />);
   await waitFor(() => assert.equal(screen.getByTestId<HTMLTextAreaElement>('editor').value, 'other file'));
 
@@ -185,6 +185,67 @@ test('a save still in flight when another file opens leaves that file clean', as
   pressEscape();
   assert.equal(confirm.mock.calls.length, 0);
   assert.equal(onClose.mock.calls.length, 1);
+});
+
+// A macrotask boundary lets a released request's whole promise chain settle.
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+test('a slow read of the previous file never replaces the one open now', async () => {
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  let releaseFirstRead: (() => void) | null = null;
+  readFile.mockImplementationOnce(async () => {
+    await new Promise<void>((resolve) => { releaseFirstRead = resolve; });
+    return { ok: true, json: async () => ({ content: 'hello' }) };
+  });
+  readFile.mockImplementationOnce(async () => ({ ok: true, json: async () => ({ content: 'other file' }) }));
+
+  const onClose = vi.fn();
+  const { rerender } = render(<CodeEditor file={file} onClose={onClose} />);
+  rerender(<CodeEditor file={otherFile} onClose={onClose} />);
+  const editor = await screen.findByTestId<HTMLTextAreaElement>('editor');
+  await waitFor(() => assert.equal(editor.value, 'other file'));
+  typeInto(editor, 'other file edited');
+
+  await act(async () => {
+    releaseFirstRead?.();
+    await settle();
+  });
+
+  assert.equal(screen.getByTestId<HTMLTextAreaElement>('editor').value, 'other file edited');
+  assert.equal(isDirtyDotShown(), true);
+  pressEscape();
+  assert.equal(confirm.mock.calls.length, 1);
+  assert.equal(onClose.mock.calls.length, 0);
+});
+
+test('a failed save of the previous file is not reported on the one open now', async () => {
+  let failSave: ((error: Error) => void) | null = null;
+  saveFile.mockImplementationOnce(async () => {
+    await new Promise<void>((_resolve, reject) => { failSave = reject; });
+    return { ok: true, json: async () => ({ success: true }) };
+  });
+  readFile.mockImplementationOnce(async () => ({ ok: true, json: async () => ({ content: 'hello' }) }));
+  readFile.mockImplementationOnce(async () => ({ ok: true, json: async () => ({ content: 'other file' }) }));
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+  const onClose = vi.fn();
+  const { rerender } = render(<CodeEditor file={file} onClose={onClose} />);
+  const editor = await screen.findByTestId<HTMLTextAreaElement>('editor');
+  await waitFor(() => assert.equal(editor.value, 'hello'));
+  typeInto(editor, 'hello edited');
+  fireEvent.keyDown(document, { key: 's', ctrlKey: true });
+  await waitFor(() => assert.equal(saveFile.mock.calls.length, 1));
+
+  rerender(<CodeEditor file={otherFile} onClose={onClose} />);
+  await waitFor(() => assert.equal(screen.getByTestId<HTMLTextAreaElement>('editor').value, 'other file'));
+  await act(async () => {
+    failSave?.(new Error('disk full'));
+    await settle();
+  });
+
+  assert.equal(screen.queryByText('disk full') !== null, false);
+  // The open file can be saved straight away rather than waiting on the old write.
+  assert.equal(screen.getByTitle('actions.save').hasAttribute('disabled'), false);
 });
 
 test('the header close button is guarded the same way', async () => {
