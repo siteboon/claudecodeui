@@ -2192,6 +2192,16 @@ test('synchronizeFile ignores command tags that are not a slash command the user
   ];
 
   assert.equal(await synchronizeCommandTranscript(rows), 'Untitled Claude Session');
+
+  // None of those rows counts as the first prompt either, so the command the
+  // user types after them still names the session.
+  const typedCommand = {
+    type: 'user',
+    message: { role: 'user', content: '<command-message>morning-briefing</command-message>\n<command-name>/morning-briefing</command-name>' },
+    uuid: 'msg-6',
+    ...rowContext,
+  };
+  assert.equal(await synchronizeCommandTranscript([...rows, typedCommand]), '/morning-briefing');
 });
 
 test('synchronizeFile renames an indexed "Untitled Claude Session" slash command session', { concurrency: false }, async () => {
