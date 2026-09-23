@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { Project,CodeEditorDiffInfo,CodeEditorFile } from '@/shared/types';
 
@@ -14,15 +15,48 @@ export const useEditorSidebar = ({
   isMobile,
   initialWidth = 600,
 }: UseEditorSidebarOptions) => {
+  const { t } = useTranslation('codeEditor');
   const [editingFile, setEditingFile] = useState<CodeEditorFile | null>(null);
   const [editorWidth, setEditorWidth] = useState(initialWidth);
   const [editorExpanded, setEditorExpanded] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [hasManualWidth, setHasManualWidth] = useState(false);
   const resizeHandleRef = useRef<HTMLDivElement | null>(null);
+  // Whether the open editor's buffer differs from disk, as reported by
+  // CodeEditor. A ref rather than state or a dependency: it is only read inside
+  // `handleFileOpen`, and keeping it out of that callback's dependency list
+  // keeps the callback stable for the memoised chat and tree consumers.
+  const hasUnsavedChangesRef = useRef(false);
+  // The open file, mirrored for the same reason: `handleFileOpen` has to know
+  // which file is on screen without re-creating itself whenever it changes.
+  const editingFileRef = useRef<CodeEditorFile | null>(null);
+
+  useEffect(() => {
+    editingFileRef.current = editingFile;
+  }, [editingFile]);
+
+  const handleUnsavedChangesChange = useCallback((hasUnsavedChanges: boolean) => {
+    hasUnsavedChangesRef.current = hasUnsavedChanges;
+  }, []);
 
   const handleFileOpen = useCallback(
     (filePath: string, diffInfo: CodeEditorDiffInfo | null = null, line: number | null = null) => {
+      // Re-opening the open file with no diff payload on either side reuses the
+      // loaded buffer; any other open reloads it, which loses unsaved edits
+      // exactly like closing does, so it gets the same confirmation.
+      const openFile = editingFileRef.current;
+      const reusesBuffer = openFile !== null && openFile.path === filePath && !openFile.diffInfo && !diffInfo;
+      if (
+        openFile !== null
+        && !reusesBuffer
+        && hasUnsavedChangesRef.current
+        // No inline fallback here on purpose: CodeEditor's `requestClose` owns
+        // the one for this key, and two copies would eventually disagree.
+        && !window.confirm(t('unsavedChanges.confirmClose'))
+      ) {
+        return;
+      }
+
       const normalizedPath = filePath.replace(/\\/g, '/');
       const fileName = normalizedPath.split('/').pop() || filePath;
 
@@ -36,7 +70,7 @@ export const useEditorSidebar = ({
         line,
       });
     },
-    [selectedProject?.projectId],
+    [selectedProject?.projectId, t],
   );
 
   const handleCloseEditor = useCallback(() => {
@@ -138,5 +172,6 @@ export const useEditorSidebar = ({
     handleCloseEditor,
     handleToggleEditorExpand,
     handleResizeStart,
+    handleUnsavedChangesChange,
   };
 };

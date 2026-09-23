@@ -34,5 +34,9 @@
   "binaryFile": {
     "title": "Binärdatei",
     "message": "Die Datei \"{{fileName}}\" kann im Texteditor nicht angezeigt werden, da es sich um eine Binärdatei handelt."
+  },
+  "unsavedChanges": {
+    "confirmClose": "Du hast ungespeicherte Änderungen. Diese Datei schließen und die Änderungen verwerfen?",
+    "indicator": "Ungespeicherte Änderungen"
   }
 }

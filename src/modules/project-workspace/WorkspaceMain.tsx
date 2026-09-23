@@ -80,6 +80,7 @@ function WorkspaceMain({
     handleCloseEditor,
     handleToggleEditorExpand,
     handleResizeStart,
+    handleUnsavedChangesChange,
   } = useEditorSidebar({
     selectedProject,
     isMobile,
@@ -235,6 +236,7 @@ function WorkspaceMain({
           onResizeStart={handleResizeStart}
           onCloseEditor={handleCloseEditor}
           onToggleEditorExpand={handleToggleEditorExpand}
+          onUnsavedChangesChange={handleUnsavedChangesChange}
           projectPath={selectedProject.path}
           fillSpace={activeTab === 'files'}
         />
