@@ -259,6 +259,9 @@
   "misc": {
     "modelCommandSession": "Теперь этот сеанс использует {{model}}.",
     "modelCommandDefault": "Новые чаты теперь используют {{model}}.",
-    "modelCommandNeedsSession": "{{model}} нет в списке моделей, поэтому её можно применить только к открытому сеансу. Сначала отправьте сообщение или добавьте модель через /models → Manage models."
+    "modelCommandNeedsSession": "{{model}} нет в списке моделей, поэтому её можно применить только к открытому сеансу. Сначала отправьте сообщение или добавьте модель через /models → Manage models.",
+    "fallbackCommands": {
+      "model": "Сменить модель этого сеанса: /model <id-модели>."
+    }
   }
 }

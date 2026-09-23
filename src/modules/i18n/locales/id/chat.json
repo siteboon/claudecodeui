@@ -325,6 +325,7 @@
     "userDeniedTool": "Pengguna menolak penggunaan tool",
     "showTokenUsage": "Tampilkan penggunaan token",
     "fallbackCommands": {
+      "model": "Ganti model untuk sesi ini: /model <id-model>.",
       "models": "Telusuri model yang tersedia untuk provider aktif.",
       "cost": "Tinjau penggunaan token untuk sesi aktif.",
       "status": "Periksa status runtime, versi, provider, dan environment.",

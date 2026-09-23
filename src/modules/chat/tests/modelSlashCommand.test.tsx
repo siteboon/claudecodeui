@@ -8,7 +8,7 @@ import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState'
 import { useChatProviderState } from '@/modules/chat/hooks/useChatProviderState';
 import { resetChatDrafts } from '@/shared/chatDrafts';
 import { resetUserPreferences } from '@/shared/userSettings';
-import type { ChatMessage, PermissionMode, Project, ProjectSession } from '@/shared/types';
+import type { ChatMessage, PermissionMode, Project, ProjectSession, SelectProviderModel } from '@/shared/types';
 
 /**
  * Issue #1315: `/model claude-fable-5-1` typed in the chat used to go to the
@@ -16,7 +16,7 @@ import type { ChatMessage, PermissionMode, Project, ProjectSession } from '@/sha
  * session only", but that only lasted for that one CLI process: the next turn
  * started a new process with the composer's model, so the session kept running
  * (and showing) the old model. `/model <id>` is now a built-in that applies the
- * id the way the composer's model picker does.
+ * id the way the composer's model picker does, also while a turn is running.
  */
 
 const PROJECT: Project = { projectId: 'project-1', displayName: 'Project One', fullPath: '/tmp/project-one' };
@@ -52,7 +52,7 @@ vi.mock('@/shared/api', () => ({
     commands: {
       list: () => okJson({
         builtIn: [{ name: '/model', description: 'Switch the model', namespace: 'builtin', metadata: { type: 'builtin' } }],
-        custom: [],
+        custom: [{ name: '/deploy', description: 'Deploy', namespace: 'project', path: '/tmp/project-one/.claude/commands/deploy.md' }],
       }),
       execute: (request: { commandName: string; args: string[] }) => executeCommand(request),
     },
@@ -71,9 +71,11 @@ vi.mock('@/shared/api', () => ({
   },
 }));
 
-type SelectProviderModel = NonNullable<Parameters<typeof useChatComposerState>[0]['onSelectProviderModel']>;
-
-const renderComposer = (session: ProjectSession | null, onSelectProviderModel: SelectProviderModel) => {
+const renderComposer = (
+  session: ProjectSession | null,
+  onSelectProviderModel: SelectProviderModel,
+  { isLoading = false }: { isLoading?: boolean } = {},
+) => {
   const sent: Array<{ type: string }> = [];
   const messages: ChatMessage[] = [];
   const view = renderHook(() => useChatComposerState({
@@ -86,7 +88,7 @@ const renderComposer = (session: ProjectSession | null, onSelectProviderModel: S
     resolvePermissionModeForProvider: () => 'default' as PermissionMode,
     currentProviderModel: 'sonnet',
     currentProviderEffort: 'medium',
-    isLoading: false,
+    isLoading,
     canAbortSession: false,
     tokenBudget: null,
     sendMessage: (message) => { sent.push(message as { type: string }); },
@@ -101,7 +103,7 @@ const renderComposer = (session: ProjectSession | null, onSelectProviderModel: S
 
 const submit = async (view: ReturnType<typeof renderComposer>['view'], text: string) => {
   // The composer only intercepts commands its slash-command list contains.
-  await waitFor(() => assert.equal(view.result.current.slashCommandsCount, 1));
+  await waitFor(() => assert.equal(view.result.current.slashCommandsCount, 2));
   await act(async () => { view.result.current.setInput(text); });
   await act(async () => { await view.result.current.handleSubmit({ preventDefault: () => undefined } as never); });
 };
@@ -127,6 +129,37 @@ test('/model <id> in an open session switches that session instead of prompting 
   assert.deepEqual(onSelectProviderModel.mock.calls, [['claude', 'claude-fable-5-1', 'session-1']]);
   assert.equal(messages[0].content, 'This session now uses claude-fable-5-1.');
   assert.equal(sent.filter((message) => message.type === 'chat.send').length, 0, '/model must not reach the CLI');
+});
+
+test('/model <id> typed while a turn is running switches the session instead of being queued', async () => {
+  const onSelectProviderModel = vi.fn<SelectProviderModel>(async (_provider, model) => ({ scope: 'session', model }));
+  const { view, sent, messages } = renderComposer({ id: 'session-1' }, onSelectProviderModel, { isLoading: true });
+
+  await submit(view, '/model claude-fable-5-1');
+
+  // Queued, the text would be dispatched to the CLI later as a prompt, where
+  // the switch only lasts for that one CLI process.
+  await waitFor(() => assert.equal(messages.length, 1));
+  assert.equal(view.result.current.queuedDraft, null);
+  assert.deepEqual(onSelectProviderModel.mock.calls, [['claude', 'claude-fable-5-1', 'session-1']]);
+  assert.equal(messages[0].content, 'This session now uses claude-fable-5-1.');
+  assert.equal(sent.length, 0);
+});
+
+test('messages and custom commands typed while a turn is running are still queued', async () => {
+  const onSelectProviderModel = vi.fn<SelectProviderModel>(async (_provider, model) => ({ scope: 'session', model }));
+  const { view, sent } = renderComposer({ id: 'session-1' }, onSelectProviderModel, { isLoading: true });
+
+  await submit(view, '/deploy staging');
+  assert.equal(view.result.current.queuedDraft?.content, '/deploy staging');
+
+  await act(async () => { view.result.current.deleteQueuedDraft(); });
+  await submit(view, 'hello');
+  assert.equal(view.result.current.queuedDraft?.content, 'hello');
+
+  assert.equal(executeCommand.mock.calls.length, 0);
+  assert.equal(onSelectProviderModel.mock.calls.length, 0);
+  assert.equal(sent.length, 0);
 });
 
 test('/model with a catalog model before the first message sets the default for new chats', async () => {

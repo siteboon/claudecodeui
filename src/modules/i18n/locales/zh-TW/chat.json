@@ -295,6 +295,9 @@
   "misc": {
     "modelCommandSession": "此工作階段現在使用 {{model}}。",
     "modelCommandDefault": "新聊天現在使用 {{model}}。",
-    "modelCommandNeedsSession": "{{model}} 不在模型清單中，因此只能套用到已開啟的工作階段。請先傳送一則訊息，或透過 /models → Manage models 新增。"
+    "modelCommandNeedsSession": "{{model}} 不在模型清單中，因此只能套用到已開啟的工作階段。請先傳送一則訊息，或透過 /models → Manage models 新增。",
+    "fallbackCommands": {
+      "model": "切換此工作階段的模型：/model <模型 ID>。"
+    }
   }
 }

@@ -286,6 +286,9 @@
   "misc": {
     "modelCommandSession": "Esta sesión ahora usa {{model}}.",
     "modelCommandDefault": "Los chats nuevos ahora usan {{model}}.",
-    "modelCommandNeedsSession": "{{model}} no está en la lista de modelos, así que solo se puede aplicar a una sesión abierta. Envía primero un mensaje o añádelo en /models → Manage models."
+    "modelCommandNeedsSession": "{{model}} no está en la lista de modelos, así que solo se puede aplicar a una sesión abierta. Envía primero un mensaje o añádelo en /models → Manage models.",
+    "fallbackCommands": {
+      "model": "Cambia el modelo de esta sesión: /model <id-del-modelo>."
+    }
   }
 }

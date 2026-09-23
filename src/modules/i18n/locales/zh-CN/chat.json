@@ -280,6 +280,9 @@
   "misc": {
     "modelCommandSession": "此会话现在使用 {{model}}。",
     "modelCommandDefault": "新聊天现在使用 {{model}}。",
-    "modelCommandNeedsSession": "{{model}} 不在模型列表中，因此只能应用于已打开的会话。请先发送一条消息，或通过 /models → Manage models 添加它。"
+    "modelCommandNeedsSession": "{{model}} 不在模型列表中，因此只能应用于已打开的会话。请先发送一条消息，或通过 /models → Manage models 添加它。",
+    "fallbackCommands": {
+      "model": "切换此会话的模型：/model <模型 ID>。"
+    }
   }
 }

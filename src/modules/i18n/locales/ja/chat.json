@@ -246,6 +246,9 @@
   "misc": {
     "modelCommandSession": "このセッションは {{model}} を使用します。",
     "modelCommandDefault": "新しいチャットは {{model}} を使用します。",
-    "modelCommandNeedsSession": "{{model}} はモデル一覧にないため、開いているセッションにのみ適用できます。先にメッセージを送信するか、/models → Manage models から追加してください。"
+    "modelCommandNeedsSession": "{{model}} はモデル一覧にないため、開いているセッションにのみ適用できます。先にメッセージを送信するか、/models → Manage models から追加してください。",
+    "fallbackCommands": {
+      "model": "このセッションのモデルを切り替えます: /model <モデルID>。"
+    }
   }
 }

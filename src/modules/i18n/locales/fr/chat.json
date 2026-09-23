@@ -261,6 +261,9 @@
   "misc": {
     "modelCommandSession": "Cette session utilise désormais {{model}}.",
     "modelCommandDefault": "Les nouveaux chats utilisent désormais {{model}}.",
-    "modelCommandNeedsSession": "{{model}} ne figure pas dans la liste des modèles : il ne peut donc s'appliquer qu'à une session ouverte. Envoyez d'abord un message, ou ajoutez-le via /models → Manage models."
+    "modelCommandNeedsSession": "{{model}} ne figure pas dans la liste des modèles : il ne peut donc s'appliquer qu'à une session ouverte. Envoyez d'abord un message, ou ajoutez-le via /models → Manage models.",
+    "fallbackCommands": {
+      "model": "Changer le modèle de cette session : /model <id-du-modèle>."
+    }
   }
 }
