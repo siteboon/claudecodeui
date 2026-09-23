@@ -504,7 +504,7 @@ const INJECTED_NOTE_PREFIXES = [
 /**
  * True for a user row Claude delivered into the session rather than one the
  * user typed: a background task's notification, a message from another session
- * or a teammate. These share a parent with a real prompt all the time — a
+ * or a teammate. These often end up sharing a parent with another user row — a
  * notification gets written twice, a message lands beside the prompt it arrived
  * with — and neither is an edit.
  *
