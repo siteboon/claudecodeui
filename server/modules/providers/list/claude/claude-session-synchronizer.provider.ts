@@ -29,27 +29,56 @@ type TranscriptTitleSources = {
   slashCommand?: string;
 };
 
+// Opening tags of the rows Claude writes for a slash command the user typed:
+// headless runs start with `<command-message>`, the interactive CLI with
+// `<command-name>`.
+const SLASH_COMMAND_WRAPPER_TAGS = ['<command-message>', '<command-name>'];
+// Opening tags of local command output rows, which are not prompts.
+const LOCAL_COMMAND_OUTPUT_TAGS = ['<local-command-stdout>', '<local-command-caveat>'];
+
 /**
- * Returns "<command-name> <command-args>" when a transcript row is the wrapper
- * Claude writes for a slash command the user typed, e.g.
- * `<command-message>morning-briefing</command-message>
- * <command-name>/morning-briefing</command-name>`.
- *
- * A headless `claude -p "/morning-briefing"` run has no history.jsonl entry, no
- * ai-title, and a `last-prompt` row without `lastPrompt`, so this wrapper is
- * the only name the transcript holds. Command bodies expanded by Claude and
- * skills invoked by the model are `isMeta` rows, and tool results use array
- * content, so neither is read here. Compact summaries and command output are
- * skipped explicitly.
+ * Returns the message content when a transcript row is a prompt the user
+ * typed, or undefined for the rows Claude writes around prompts: `isMeta` rows
+ * (expanded command bodies, skills the model invoked, `<local-command-caveat>`
+ * notes), compact summaries, tool results and local command output. Plain
+ * prompts are strings; SDK streaming input and image attachments store the
+ * prompt as content blocks.
  */
-function readSlashCommandTitle(data: Record<string, unknown>): string | undefined {
+function readTypedPromptContent(data: Record<string, unknown>): string | unknown[] | undefined {
   if (data.type !== 'user' || data.isMeta === true || data.isCompactSummary === true) {
     return undefined;
   }
 
   const message = data.message as Record<string, unknown> | undefined;
   const content = message?.role === 'user' ? message.content : undefined;
-  if (typeof content !== 'string' || extractTaggedContent(content, 'local-command-stdout') !== null) {
+  if (typeof content === 'string') {
+    const leadingText = content.trimStart();
+    return LOCAL_COMMAND_OUTPUT_TAGS.some((tag) => leadingText.startsWith(tag)) ? undefined : content;
+  }
+
+  const isToolResultRow = Array.isArray(content)
+    && content.every((block) => (block as { type?: unknown } | null)?.type === 'tool_result');
+  return Array.isArray(content) && !isToolResultRow ? content : undefined;
+}
+
+/**
+ * Returns "<command-name> <command-args>" when a typed prompt is the wrapper
+ * Claude writes for a slash command, e.g.
+ * `<command-message>morning-briefing</command-message>
+ * <command-name>/morning-briefing</command-name>`.
+ *
+ * A headless `claude -p "/morning-briefing"` run has no history.jsonl entry, no
+ * ai-title, and a `last-prompt` row without `lastPrompt`, so this wrapper is
+ * the only name the transcript holds. The wrapper must open the prompt, so a
+ * prompt that merely quotes command tags is not read as a command.
+ */
+function readSlashCommandTitle(content: string | unknown[]): string | undefined {
+  if (typeof content !== 'string') {
+    return undefined;
+  }
+
+  const leadingText = content.trimStart();
+  if (!SLASH_COMMAND_WRAPPER_TAGS.some((tag) => leadingText.startsWith(tag))) {
     return undefined;
   }
 
@@ -215,8 +244,9 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
    * `custom-title` (a manual `/rename`) over `ai-title` over `last-prompt`.
    * Claude writes `custom-title` immediately before `ai-title`, so a reverse
    * scan that returns its first hit would always lose the manual rename.
-   * The same pass also records the first slash command the user typed, which
-   * the caller uses only when no other source names the session.
+   * The same pass also records the slash command when the session's first
+   * typed prompt is one, which the caller uses only when no other source
+   * names the session.
    *
    * Returns no titles on a missing or unreadable file so sync can continue.
    */
@@ -232,6 +262,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       let foundAiTitle: string | undefined;
       let foundLastPrompt: string | undefined;
       let foundSlashCommand: string | undefined;
+      let sawFirstPrompt = false;
 
       for (let index = 0; index < lines.length; index += 1) {
         const line = lines[index]?.trim();
@@ -269,8 +300,14 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
           if (prompt?.trim()) {
             foundLastPrompt = prompt;
           }
-        } else if (eventType === 'user' && !foundSlashCommand) {
-          foundSlashCommand = readSlashCommandTitle(data);
+        } else if (eventType === 'user' && !sawFirstPrompt) {
+          const promptContent = readTypedPromptContent(data);
+          if (promptContent !== undefined) {
+            // Only the first prompt can name the session: a command typed
+            // later (e.g. `/compact` after a plain prompt) does not describe it.
+            sawFirstPrompt = true;
+            foundSlashCommand = readSlashCommandTitle(promptContent);
+          }
         }
       }
 
