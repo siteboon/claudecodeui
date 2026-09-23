@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 
-import type { ClaudeTranscriptRelocation } from '@/shared/types.js';
+import type { IProviderTranscriptRelocation } from '@/shared/interfaces.js';
+import type { SessionTranscriptRelocation } from '@/shared/types.js';
 
 /**
  * Longest encoded folder name the Claude SDK writes verbatim. Past it the SDK
@@ -73,10 +74,10 @@ function rewriteTranscriptCwd(content: string, oldProjectPath: string, newProjec
  * transcript directory the Claude SDK will look in once the project runs from
  * its new path, and reports the rows whose `jsonl_path` must be updated.
  *
- * Used by the Projects module when a project is repointed at a renamed folder:
- * without the move, history still reads from the old file but resuming the
- * conversation fails, because the SDK derives the transcript folder from the
- * cwd it is given.
+ * Reached through `sessionsService.relocateProjectTranscripts` when the
+ * Projects module repoints a project at a renamed folder: without the move,
+ * history still reads from the old file but resuming the conversation fails,
+ * because the SDK derives the transcript folder from the cwd it is given.
  *
  * Every transcript is verified to sit in the folder the old project path
  * encodes to before it is touched, so a Claude release that changes the
@@ -93,121 +94,123 @@ function rewriteTranscriptCwd(content: string, oldProjectPath: string, newProjec
  * the transcript is already where a resume looks, but its `cwd` still has to
  * be rewritten; that one is rewritten in place and reported like a move.
  */
-export async function relocateClaudeTranscripts(input: {
-  sessions: ClaudeTranscriptRelocation[];
-  oldProjectPath: string;
-  newProjectPath: string;
-}): Promise<ClaudeTranscriptRelocation[]> {
-  const encodedOldDirName = encodeClaudeProjectDirName(input.oldProjectPath);
-  const encodedNewDirName = encodeClaudeProjectDirName(input.newProjectPath);
-  if (!encodedOldDirName || !encodedNewDirName) {
-    return [];
-  }
-
-  const moved: ClaudeTranscriptRelocation[] = [];
-  // Every file written so far, which a failure removes again.
-  const writtenPaths: string[] = [];
-  const sourcePaths: string[] = [];
-  // Rewritten transcripts waiting to replace an original that stays in place.
-  const inPlaceRewrites: Array<{ temporaryPath: string; jsonlPath: string }> = [];
-  // Session folders already moved, which a failure moves back.
-  const movedDirectories: Array<{ sourcePath: string; targetPath: string }> = [];
-
-  try {
-    for (const session of input.sessions) {
-      const currentDirectory = path.dirname(session.jsonlPath);
-      if (path.basename(currentDirectory) !== encodedOldDirName) {
-        continue;
-      }
-
-      const targetPath = path.join(
-        path.dirname(currentDirectory),
-        encodedNewDirName,
-        path.basename(session.jsonlPath),
-      );
-      const content = await readFile(session.jsonlPath, 'utf8');
-      const rewrittenContent = rewriteTranscriptCwd(content, input.oldProjectPath, input.newProjectPath);
-
-      if (targetPath === session.jsonlPath) {
-        // Written beside the original and swapped in only after every other
-        // transcript is in place, so a failure leaves this one untouched. The
-        // `.tmp` suffix keeps the session watcher from indexing it.
-        const temporaryPath = `${session.jsonlPath}.${randomUUID()}.tmp`;
-        await writeFile(temporaryPath, rewrittenContent, { flag: 'wx' });
-        writtenPaths.push(temporaryPath);
-        inPlaceRewrites.push({ temporaryPath, jsonlPath: session.jsonlPath });
-        moved.push({ sessionId: session.sessionId, jsonlPath: session.jsonlPath });
-        continue;
-      }
-
-      await mkdir(path.dirname(targetPath), { recursive: true });
-      // `wx` rather than an overwrite: anything already at the destination is a
-      // transcript the new folder legitimately owns.
-      await writeFile(targetPath, rewrittenContent, { flag: 'wx' });
-      writtenPaths.push(targetPath);
-
-      // Both folders share a parent, so this is a single atomic rename.
-      const sessionDirectoryName = path.basename(session.jsonlPath, '.jsonl');
-      const sessionDirectory = path.join(currentDirectory, sessionDirectoryName);
-      if (await isDirectory(sessionDirectory)) {
-        const targetDirectory = path.join(path.dirname(targetPath), sessionDirectoryName);
-        await rename(sessionDirectory, targetDirectory);
-        movedDirectories.push({ sourcePath: sessionDirectory, targetPath: targetDirectory });
-      }
-
-      moved.push({ sessionId: session.sessionId, jsonlPath: targetPath });
-      sourcePaths.push(session.jsonlPath);
+export class ClaudeTranscriptRelocationProvider implements IProviderTranscriptRelocation {
+  async relocateTranscripts(input: {
+    sessions: SessionTranscriptRelocation[];
+    oldProjectPath: string;
+    newProjectPath: string;
+  }): Promise<SessionTranscriptRelocation[]> {
+    const encodedOldDirName = encodeClaudeProjectDirName(input.oldProjectPath);
+    const encodedNewDirName = encodeClaudeProjectDirName(input.newProjectPath);
+    if (!encodedOldDirName || !encodedNewDirName) {
+      return [];
     }
-  } catch (error) {
-    for (const directory of movedDirectories) {
+
+    const moved: SessionTranscriptRelocation[] = [];
+    // Every file written so far, which a failure removes again.
+    const writtenPaths: string[] = [];
+    const sourcePaths: string[] = [];
+    // Rewritten transcripts waiting to replace an original that stays in place.
+    const inPlaceRewrites: Array<{ temporaryPath: string; jsonlPath: string }> = [];
+    // Session folders already moved, which a failure moves back.
+    const movedDirectories: Array<{ sourcePath: string; targetPath: string }> = [];
+
+    try {
+      for (const session of input.sessions) {
+        const currentDirectory = path.dirname(session.jsonlPath);
+        if (path.basename(currentDirectory) !== encodedOldDirName) {
+          continue;
+        }
+
+        const targetPath = path.join(
+          path.dirname(currentDirectory),
+          encodedNewDirName,
+          path.basename(session.jsonlPath),
+        );
+        const content = await readFile(session.jsonlPath, 'utf8');
+        const rewrittenContent = rewriteTranscriptCwd(content, input.oldProjectPath, input.newProjectPath);
+
+        if (targetPath === session.jsonlPath) {
+          // Written beside the original and swapped in only after every other
+          // transcript is in place, so a failure leaves this one untouched. The
+          // `.tmp` suffix keeps the session watcher from indexing it.
+          const temporaryPath = `${session.jsonlPath}.${randomUUID()}.tmp`;
+          await writeFile(temporaryPath, rewrittenContent, { flag: 'wx' });
+          writtenPaths.push(temporaryPath);
+          inPlaceRewrites.push({ temporaryPath, jsonlPath: session.jsonlPath });
+          moved.push({ sessionId: session.sessionId, jsonlPath: session.jsonlPath });
+          continue;
+        }
+
+        await mkdir(path.dirname(targetPath), { recursive: true });
+        // `wx` rather than an overwrite: anything already at the destination is a
+        // transcript the new folder legitimately owns.
+        await writeFile(targetPath, rewrittenContent, { flag: 'wx' });
+        writtenPaths.push(targetPath);
+
+        // Both folders share a parent, so this is a single atomic rename.
+        const sessionDirectoryName = path.basename(session.jsonlPath, '.jsonl');
+        const sessionDirectory = path.join(currentDirectory, sessionDirectoryName);
+        if (await isDirectory(sessionDirectory)) {
+          const targetDirectory = path.join(path.dirname(targetPath), sessionDirectoryName);
+          await rename(sessionDirectory, targetDirectory);
+          movedDirectories.push({ sourcePath: sessionDirectory, targetPath: targetDirectory });
+        }
+
+        moved.push({ sessionId: session.sessionId, jsonlPath: targetPath });
+        sourcePaths.push(session.jsonlPath);
+      }
+    } catch (error) {
+      for (const directory of movedDirectories) {
+        try {
+          await rename(directory.targetPath, directory.sourcePath);
+        } catch (cleanupError) {
+          console.warn(
+            `[claude-transcript-relocation] Failed to move ${directory.targetPath} back:`,
+            (cleanupError as Error).message,
+          );
+        }
+      }
+      for (const writtenPath of writtenPaths) {
+        try {
+          await unlink(writtenPath);
+        } catch (cleanupError) {
+          console.warn(
+            `[claude-transcript-relocation] Failed to remove ${writtenPath}:`,
+            (cleanupError as Error).message,
+          );
+        }
+      }
+      throw error;
+    }
+
+    // A rename over the original is atomic, so a reader sees either the old
+    // transcript or the rewritten one, never a half-written file.
+    for (const { temporaryPath, jsonlPath } of inPlaceRewrites) {
       try {
-        await rename(directory.targetPath, directory.sourcePath);
-      } catch (cleanupError) {
+        await rename(temporaryPath, jsonlPath);
+      } catch (error) {
         console.warn(
-          `[claude-transcript-relocation] Failed to move ${directory.targetPath} back:`,
-          (cleanupError as Error).message,
+          `[claude-transcript-relocation] Failed to rewrite ${jsonlPath}:`,
+          (error as Error).message,
+        );
+        await unlink(temporaryPath).catch(() => undefined);
+      }
+    }
+
+    // Only once every copy exists: a transcript that failed to copy must still be
+    // readable where the database says it is.
+    for (const sourcePath of sourcePaths) {
+      try {
+        await unlink(sourcePath);
+      } catch (error) {
+        console.warn(
+          `[claude-transcript-relocation] Failed to remove ${sourcePath}:`,
+          (error as Error).message,
         );
       }
     }
-    for (const writtenPath of writtenPaths) {
-      try {
-        await unlink(writtenPath);
-      } catch (cleanupError) {
-        console.warn(
-          `[claude-transcript-relocation] Failed to remove ${writtenPath}:`,
-          (cleanupError as Error).message,
-        );
-      }
-    }
-    throw error;
-  }
 
-  // A rename over the original is atomic, so a reader sees either the old
-  // transcript or the rewritten one, never a half-written file.
-  for (const { temporaryPath, jsonlPath } of inPlaceRewrites) {
-    try {
-      await rename(temporaryPath, jsonlPath);
-    } catch (error) {
-      console.warn(
-        `[claude-transcript-relocation] Failed to rewrite ${jsonlPath}:`,
-        (error as Error).message,
-      );
-      await unlink(temporaryPath).catch(() => undefined);
-    }
+    return moved;
   }
-
-  // Only once every copy exists: a transcript that failed to copy must still be
-  // readable where the database says it is.
-  for (const sourcePath of sourcePaths) {
-    try {
-      await unlink(sourcePath);
-    } catch (error) {
-      console.warn(
-        `[claude-transcript-relocation] Failed to remove ${sourcePath}:`,
-        (error as Error).message,
-      );
-    }
-  }
-
-  return moved;
 }
