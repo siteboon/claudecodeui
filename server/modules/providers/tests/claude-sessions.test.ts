@@ -1688,6 +1688,214 @@ test('resolving an edit anchor skips rows that are not conversation turns', { co
   }
 });
 
+const RESUMED_SESSION_ID = 'claude-resumed-session';
+
+const backgroundJobNotification = (status: string, result: string): string => [
+  '<task-notification>',
+  '<task-id>bjob1234</task-id>',
+  '<tool-use-id>toolu_job</tool-use-id>',
+  `<status>${status}</status>`,
+  `<summary>Background command "long job" ${status}</summary>`,
+  result ? `<result>${result}</result>` : '',
+  '</task-notification>',
+].filter(Boolean).join('\n');
+
+/**
+ * The start every resumed-session transcript below shares: a background
+ * command launched, and the turn that launched it ended at `r-end` while the
+ * command was still running.
+ */
+const backgroundJobLaunchRows = () => [
+  {
+    type: 'user', uuid: 'r-u1', parentUuid: null, sessionId: RESUMED_SESSION_ID,
+    timestamp: '2026-09-20T10:00:00.000Z',
+    message: { role: 'user', content: [{ type: 'text', text: 'start the long job' }] },
+  },
+  {
+    type: 'assistant', uuid: 'r-call', parentUuid: 'r-u1', sessionId: RESUMED_SESSION_ID,
+    timestamp: '2026-09-20T10:00:01.000Z',
+    message: {
+      role: 'assistant', model: 'claude-opus-5',
+      content: [{ type: 'tool_use', id: 'toolu_job', name: 'Bash', input: { command: 'long-job', run_in_background: true } }],
+    },
+  },
+  {
+    type: 'user', uuid: 'r-ack', parentUuid: 'r-call', sessionId: RESUMED_SESSION_ID,
+    timestamp: '2026-09-20T10:00:02.000Z',
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_job', content: 'Command running in background with ID: bjob1234' }] },
+    toolUseResult: { backgroundTaskId: 'bjob1234' },
+  },
+  {
+    type: 'assistant', uuid: 'r-end', parentUuid: 'r-ack', sessionId: RESUMED_SESSION_ID,
+    timestamp: '2026-09-20T10:00:03.000Z',
+    message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'started it' }] },
+  },
+];
+
+async function readResumedSessionTexts(rows: Record<string, unknown>[]): Promise<{ texts: unknown[]; jobResult: unknown }> {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-resumed-'));
+
+  try {
+    const transcriptPath = path.join(tempRoot, `${RESUMED_SESSION_ID}.jsonl`);
+    await writeFile(transcriptPath, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+
+    let result: { texts: unknown[]; jobResult: unknown } = { texts: [], jobResult: undefined };
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(RESUMED_SESSION_ID, 'claude', tempRoot, 'Resumed session', now, now, transcriptPath);
+
+      const history = await new ClaudeSessionsProvider({ getLiveRunStartTime: () => null }).fetchHistory(
+        RESUMED_SESSION_ID,
+        { providerSessionId: RESUMED_SESSION_ID },
+      );
+      result = {
+        texts: history.messages.filter((message) => message.kind === 'text').map((message) => message.content),
+        jobResult: history.messages.find((message) => message.toolId === 'toolu_job')?.toolResult?.content,
+      };
+    });
+    return result;
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+}
+
+test('a late notification from a process that outlived a resume keeps the resumed conversation', { concurrency: false }, async () => {
+  // The CLI that launched the job stays up for it. Meanwhile the session is
+  // resumed in a new process, which reports the job it cannot see as stopped
+  // (parented on `r-end`, the last row it read) and carries the conversation
+  // on. When the job finishes, the first process writes its notification on
+  // `r-end` too — the leaf it last saw — and answers it.
+  const { texts, jobResult } = await readResumedSessionTexts([
+    ...backgroundJobLaunchRows(),
+    {
+      type: 'user', uuid: 'r-stopped', parentUuid: 'r-end', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:05:00.000Z',
+      message: { role: 'user', content: backgroundJobNotification('stopped', '') },
+    },
+    {
+      type: 'user', uuid: 'r-p2', parentUuid: 'r-stopped', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:05:01.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: 'meanwhile, check the tests' }] },
+    },
+    {
+      type: 'assistant', uuid: 'r-a2', parentUuid: 'r-p2', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:05:02.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'the tests pass' }] },
+    },
+    {
+      type: 'user', uuid: 'r-p3', parentUuid: 'r-a2', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T11:00:00.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: 'ship it' }] },
+    },
+    {
+      type: 'assistant', uuid: 'r-a3', parentUuid: 'r-p3', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T11:00:01.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'shipped' }] },
+    },
+    {
+      type: 'user', uuid: 'r-completed', parentUuid: 'r-end', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T11:30:00.000Z',
+      message: { role: 'user', content: backgroundJobNotification('completed', 'job output') },
+    },
+    {
+      type: 'attachment', uuid: 'r-completed-attachment', parentUuid: 'r-completed', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T11:30:00.000Z',
+    },
+    {
+      type: 'assistant', uuid: 'r-a4', parentUuid: 'r-completed-attachment', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T11:30:05.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'the long job finished' }] },
+    },
+  ]);
+
+  assert.deepEqual(texts, [
+    'start the long job',
+    'started it',
+    'meanwhile, check the tests',
+    'the tests pass',
+    'ship it',
+    'shipped',
+    'the long job finished',
+  ]);
+  // Both reports still fold onto the command's card, the later word winning.
+  assert.equal(jobResult, 'job output');
+});
+
+test('a late notification does not replace a prompt the user typed on the same turn', { concurrency: false }, async () => {
+  const { texts } = await readResumedSessionTexts([
+    ...backgroundJobLaunchRows(),
+    {
+      type: 'user', uuid: 'r-p2', parentUuid: 'r-end', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:05:00.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: 'next question' }] },
+    },
+    {
+      type: 'assistant', uuid: 'r-a2', parentUuid: 'r-p2', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:05:01.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'next answer' }] },
+    },
+    {
+      type: 'user', uuid: 'r-completed', parentUuid: 'r-end', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:30:00.000Z',
+      message: { role: 'user', content: backgroundJobNotification('completed', 'job output') },
+    },
+    {
+      type: 'assistant', uuid: 'r-a3', parentUuid: 'r-completed', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:30:05.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'the long job finished' }] },
+    },
+  ]);
+
+  assert.deepEqual(texts, [
+    'start the long job',
+    'started it',
+    'next question',
+    'next answer',
+    'the long job finished',
+  ]);
+});
+
+test('an edit whose run first reports a pending notification still replaces the original prompt', { concurrency: false }, async () => {
+  // Resuming partway to replace `r-p2` makes the new run report the job it
+  // cannot see as stopped before it sends the edited prompt, so the edit's
+  // branch starts with the notification rather than the prompt.
+  const { texts } = await readResumedSessionTexts([
+    ...backgroundJobLaunchRows(),
+    {
+      type: 'user', uuid: 'r-p2', parentUuid: 'r-end', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:05:00.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: 'original question' }] },
+    },
+    {
+      type: 'assistant', uuid: 'r-a2', parentUuid: 'r-p2', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:05:01.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'answer to be replaced' }] },
+    },
+    {
+      type: 'user', uuid: 'r-stopped', parentUuid: 'r-end', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:10:00.000Z',
+      message: { role: 'user', content: backgroundJobNotification('stopped', '') },
+    },
+    {
+      type: 'user', uuid: 'r-p2b', parentUuid: 'r-stopped', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:10:01.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: 'edited question' }] },
+    },
+    {
+      type: 'assistant', uuid: 'r-a2b', parentUuid: 'r-p2b', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:10:02.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'answer to the edit' }] },
+    },
+  ]);
+
+  assert.deepEqual(texts, [
+    'start the long job',
+    'started it',
+    'edited question',
+    'answer to the edit',
+  ]);
+});
+
 // ---------------------------------------------------------------------------
 // buildLookupMap
 // ---------------------------------------------------------------------------

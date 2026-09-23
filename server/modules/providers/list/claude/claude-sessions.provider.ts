@@ -490,7 +490,13 @@ async function readTranscriptRows(jsonlPath: string, providerSessionId: string):
   return rows;
 }
 
-/** True for a row the user typed, as opposed to a tool result or an injected note. */
+/**
+ * True for a row the user typed, as opposed to a tool result or an injected note.
+ *
+ * A `<task-notification>` the harness delivers between turns is written in the
+ * same shape and passes this check too; `isTaskNotificationRow` tells the two
+ * apart where that matters.
+ */
 function isUserPromptRow(row: AnyRecord): boolean {
   if (row.type !== 'user' || row.isMeta === true || row.isCompactSummary === true) {
     return false;
@@ -502,6 +508,52 @@ function isUserPromptRow(row: AnyRecord): boolean {
   }
 
   return typeof content === 'string' && content.length > 0;
+}
+
+/** True for a user-role row that carries a `<task-notification>` rather than something typed. */
+function isTaskNotificationRow(row: AnyRecord): boolean {
+  return row.type === 'user'
+    && readTaskNotificationTexts(row).some((text) => text.trimStart().startsWith('<task-notification>'));
+}
+
+/**
+ * Whether a sibling prompt row opens a turn the user sent, so it can stand for
+ * an edit that replaced its earlier siblings.
+ *
+ * A typed prompt does. A task notification does only when the first thing
+ * below it — past any further notifications and their attachments — is a typed
+ * prompt: a resumed run, an edit's included, delivers the notifications still
+ * pending for it before the prompt it was started for.
+ *
+ * A notification the model simply answers is not an edit. It is what a CLI
+ * process that outlived a resume writes once its background work finishes,
+ * parented on the leaf it last saw, which is where the resumed run's own first
+ * row went too. Letting it replace that sibling dropped the whole conversation
+ * the resumed run went on to have.
+ */
+function opensUserTurn(row: AnyRecord, childrenByParent: Map<string, AnyRecord[]>): boolean {
+  if (!isTaskNotificationRow(row)) {
+    return true;
+  }
+
+  const visited = new Set<string>();
+  const pending = [...(childrenByParent.get(String(row.uuid)) ?? [])];
+  while (pending.length > 0) {
+    const child = pending.pop() as AnyRecord;
+    const childUuid = String(child.uuid);
+    if (visited.has(childUuid)) {
+      continue;
+    }
+    visited.add(childUuid);
+
+    if (child.type === 'attachment' || isTaskNotificationRow(child)) {
+      pending.push(...(childrenByParent.get(childUuid) ?? []));
+    } else if (isUserPromptRow(child)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -532,13 +584,35 @@ function dropSupersededPromptBranches(rows: AnyRecord[]): AnyRecord[] {
   }
 
   const supersededRoots = new Set<string>();
+  let childrenByParent: Map<string, AnyRecord[]> | null = null;
   for (const siblings of promptSiblings.values()) {
     if (siblings.length < 2) {
       continue;
     }
+
+    if (!childrenByParent) {
+      childrenByParent = new Map();
+      for (const row of rows) {
+        if (typeof row.parentUuid === 'string' && typeof row.uuid === 'string') {
+          const children = childrenByParent.get(row.parentUuid);
+          if (children) {
+            children.push(row);
+          } else {
+            childrenByParent.set(row.parentUuid, [row]);
+          }
+        }
+      }
+    }
+
     // The transcript is append-only, so the last prompt written under a parent
-    // is the one that replaced the others.
-    for (const row of siblings.slice(0, -1)) {
+    // is the one that replaced the others — provided it opens a user turn (see
+    // `opensUserTurn`). Siblings written after the replacement are not part of
+    // the edit and stay.
+    let replacementIndex = siblings.length - 1;
+    while (replacementIndex > 0 && !opensUserTurn(siblings[replacementIndex], childrenByParent)) {
+      replacementIndex -= 1;
+    }
+    for (const row of siblings.slice(0, replacementIndex)) {
       if (typeof row.uuid === 'string') {
         supersededRoots.add(row.uuid);
       }
