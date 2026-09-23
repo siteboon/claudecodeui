@@ -98,8 +98,11 @@ export function createProviderRuntimeService(
     },
 
     hasBackgroundWork(sessionId: string): boolean {
+      // Includes the turn that relays the last task's result: the work is not
+      // done until the model has it, and the process is held until then.
       return dependencies.listProviders().some((provider) =>
-        (provider.runtime.listBackgroundWork?.() ?? []).some((entry) => entry.sessionId === sessionId));
+        (provider.runtime.listBackgroundWork?.() ?? []).some((entry) => entry.sessionId === sessionId)
+        || Boolean(provider.runtime.isReportingBackgroundWork?.(sessionId)));
     },
 
     resolveToolApproval(requestId: string, decision: ProviderPermissionDecision): void {

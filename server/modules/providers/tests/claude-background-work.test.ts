@@ -211,3 +211,67 @@ test('messages that are not task events leave the set untouched', () => {
 
   assert.equal(tracker.has('s1', 't1'), true);
 });
+
+// Once the last task settles, the CLI pushes one more turn to hand its result
+// to the model, and the process is held until that turn's `result`. A new turn
+// started in between replaces the process mid-relay and forks the transcript,
+// so the session still counts as busy until then.
+test('after the last task reports in, the session is reporting until the next result', () => {
+  const tracker = createBackgroundWorkTracker();
+  tracker.apply('s1', started('t1'));
+  tracker.apply('s1', started('t2'));
+  tracker.apply('s1', notified('t1', 'completed'));
+  assert.equal(tracker.isReporting('s1'), false, 'the other task is still running');
+
+  tracker.apply('s1', notified('t2', 'completed'));
+  assert.equal(tracker.hasOutstanding('s1'), false);
+  assert.deepEqual(tracker.list(), []);
+  assert.equal(tracker.isReporting('s1'), true);
+
+  tracker.apply('s1', { type: 'assistant', message: { content: [{ type: 'text', text: 'The job finished.' }] } });
+  assert.equal(tracker.isReporting('s1'), true);
+  tracker.apply('s1', { type: 'result', subtype: 'success' });
+  assert.equal(tracker.isReporting('s1'), false);
+});
+
+test('a failed task is reported like a completed one', () => {
+  const tracker = createBackgroundWorkTracker();
+  tracker.apply('s1', started('t1'));
+  tracker.apply('s1', updated('t1', { status: 'failed', end_time: 1 }));
+  assert.equal(tracker.isReporting('s1'), true);
+  // Its notification arriving afterwards changes nothing.
+  tracker.apply('s1', notified('t1', 'failed'));
+  assert.equal(tracker.isReporting('s1'), true);
+});
+
+test('a stopped task leaves no report behind', () => {
+  // The CLI pushes no turn for it; the run loop releases the process on the
+  // notification instead.
+  const tracker = createBackgroundWorkTracker();
+  tracker.apply('s1', started('t1'));
+  tracker.apply('s1', notified('t1', 'stopped'));
+  assert.equal(tracker.isReporting('s1'), false);
+
+  tracker.apply('s1', started('t2'));
+  tracker.apply('s1', updated('t2', { status: 'killed', end_time: 1 }));
+  tracker.apply('s1', notified('t2', 'stopped'));
+  assert.equal(tracker.isReporting('s1'), false);
+});
+
+test('a notification for a task that was never tracked is not a report', () => {
+  const tracker = createBackgroundWorkTracker();
+  tracker.apply('s1', notified('ambient', 'completed'));
+  assert.equal(tracker.isReporting('s1'), false);
+});
+
+test('clearing a session drops its pending report and leaves the others alone', () => {
+  const tracker = createBackgroundWorkTracker();
+  for (const session of ['s1', 's2']) {
+    tracker.apply(session, started(`t-${session}`));
+    tracker.apply(session, notified(`t-${session}`, 'completed'));
+  }
+  tracker.clear('s1');
+
+  assert.equal(tracker.isReporting('s1'), false);
+  assert.equal(tracker.isReporting('s2'), true);
+});

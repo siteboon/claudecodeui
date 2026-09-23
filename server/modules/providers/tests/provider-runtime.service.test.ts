@@ -136,3 +136,19 @@ test('routes permission decisions through provider-owned runtime capabilities', 
     { requestId: 'request-1', sessionId: 'session-1' },
   ]);
 });
+
+test('a session has background work while its tasks run and while their result is relayed', () => {
+  const claudeRuntime = createRuntime({
+    listBackgroundWork: () => [{ sessionId: 'running-tasks', tasks: [] }],
+    isReportingBackgroundWork: (sessionId) => sessionId === 'relaying-result',
+  });
+  // A runtime that never holds background work implements neither.
+  const service = createService([
+    createProvider('claude', claudeRuntime),
+    createProvider('cursor', createRuntime()),
+  ]);
+
+  assert.equal(service.hasBackgroundWork('running-tasks'), true);
+  assert.equal(service.hasBackgroundWork('relaying-result'), true);
+  assert.equal(service.hasBackgroundWork('idle'), false);
+});

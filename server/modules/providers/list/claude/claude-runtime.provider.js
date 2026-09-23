@@ -624,12 +624,19 @@ const TERMINAL_TASK_STATUSES = new Set(['completed', 'failed', 'killed']);
  * Housekeeping tasks the CLI starts on its own have no `tool_use_id` and are
  * not tracked — nothing in the transcript could show them.
  *
+ * It also remembers the step after the last task settles: unless the task was
+ * stopped, the CLI pushes a turn of its own to hand the result to the model,
+ * and the process is still held for that turn (see the release in the run
+ * loop). `isReporting` covers that window, from the last task settling to the
+ * next `result`.
+ *
  * Exported so the folding can be driven with the four event shapes directly;
  * the runtime keeps one instance keyed like `activeSessions`.
  *
  * @returns {{
  *   apply: (sessionKey: string, message: Object) => void,
  *   hasOutstanding: (sessionKey: string) => boolean,
+ *   isReporting: (sessionKey: string) => boolean,
  *   has: (sessionKey: string, taskId: string) => boolean,
  *   clear: (sessionKey: string) => void,
  *   list: () => Array<{ sessionId: string, tasks: Array<import('@/shared/types.js').BackgroundTaskSummary> }>
@@ -646,20 +653,37 @@ export function createBackgroundWorkTracker() {
    * @type {Map<string, Set<string>>}
    */
   const ownToolUseIds = new Map();
+  /**
+   * Sessions whose last task has settled while the turn that relays it to the
+   * model has not ended yet. The task list is already empty then, but a new
+   * turn would still replace the process in the middle of that relay.
+   * @type {Set<string>}
+   */
+  const reporting = new Set();
 
-  const remove = (sessionKey, taskId) => {
+  // `relayed` is false for a stopped task: the CLI pushes no turn for it, and
+  // the run loop releases the process on its notification instead.
+  const remove = (sessionKey, taskId, relayed) => {
     const tasks = sessions.get(sessionKey);
-    if (!tasks) {
+    if (!tasks?.delete(taskId)) {
       return;
     }
-    tasks.delete(taskId);
     if (tasks.size === 0) {
       sessions.delete(sessionKey);
+      if (relayed) {
+        reporting.add(sessionKey);
+      }
     }
   };
 
   return {
     apply(sessionKey, message) {
+      if (message?.type === 'result') {
+        // Whichever turn ends next carried the report: the one the CLI pushed
+        // for it, or the turn that was still going when the task settled.
+        reporting.delete(sessionKey);
+        return;
+      }
       if (message?.type === 'assistant' && !message.parent_tool_use_id) {
         const content = message.message?.content;
         if (Array.isArray(content)) {
@@ -706,11 +730,11 @@ export function createBackgroundWorkTracker() {
           return;
         }
         case 'task_notification':
-          remove(sessionKey, message.task_id);
+          remove(sessionKey, message.task_id, message.status !== 'stopped');
           return;
         case 'task_updated':
           if (TERMINAL_TASK_STATUSES.has(message.patch?.status)) {
-            remove(sessionKey, message.task_id);
+            remove(sessionKey, message.task_id, message.patch.status !== 'killed');
           }
           return;
         default:
@@ -721,6 +745,10 @@ export function createBackgroundWorkTracker() {
       return sessions.has(sessionKey);
     },
 
+    isReporting(sessionKey) {
+      return reporting.has(sessionKey);
+    },
+
     has(sessionKey, taskId) {
       return Boolean(sessions.get(sessionKey)?.has(taskId));
     },
@@ -728,6 +756,7 @@ export function createBackgroundWorkTracker() {
     clear(sessionKey) {
       sessions.delete(sessionKey);
       ownToolUseIds.delete(sessionKey);
+      reporting.delete(sessionKey);
     },
 
     list() {
@@ -1370,6 +1399,17 @@ function listClaudeSDKBackgroundWork() {
 }
 
 /**
+ * Whether a session's last background task has settled but the turn relaying
+ * its result to the model is still running. The session has left the list
+ * above by then, yet its process is still held for that turn.
+ * @param {string} sessionId - Session identifier
+ * @returns {boolean}
+ */
+function isClaudeSDKReportingBackgroundWork(sessionId) {
+  return backgroundWork.isReporting(sessionId);
+}
+
+/**
  * Stops one outstanding background task through the SDK, which then emits a
  * `task_notification` with status `stopped` — the same event that drops the
  * task from the tracker and settles its card.
@@ -1464,6 +1504,7 @@ export const claudeRuntime = {
     listPending: getPendingApprovalsForSession,
   },
   listBackgroundWork: listClaudeSDKBackgroundWork,
+  isReportingBackgroundWork: isClaudeSDKReportingBackgroundWork,
   stopBackgroundTask: stopClaudeSDKTask,
 };
 

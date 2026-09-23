@@ -46,6 +46,13 @@ export interface IProviderRuntime {
    */
   listBackgroundWork?(): Array<{ sessionId: string; tasks: BackgroundTaskSummary[] }>;
   /**
+   * Whether the session's last background task has settled but the follow-up
+   * turn that relays its result to the model has not ended. The session is no
+   * longer in `listBackgroundWork` then, but its process is still busy with
+   * that turn. Runtimes without background work leave this undefined.
+   */
+  isReportingBackgroundWork?(sessionId: string): boolean;
+  /**
    * Stops one outstanding background task. Resolves false when the session has
    * no live process or that process is not tracking the task — it already
    * settled, or the id was never one of its own.
