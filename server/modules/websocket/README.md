@@ -144,7 +144,7 @@ flowchart TD
 2. **Unified terminal lifecycle**: every provider run ends with exactly one `complete` message built by `createCompleteMessage()` (`server/shared/utils.ts`): `{ kind: "complete", sessionId, actualSessionId, exitCode, success, aborted }`. The chat handler emits a synthetic `complete` for runs that crash or get aborted, and the run registry drops duplicate completes.
 3. **Per-run event log**: every live event gets a monotonically increasing `seq`. `chat.subscribe { sessions: [{ sessionId, lastSeq }] }` re-attaches the live stream to the requesting socket (any provider, not just Claude) and replays events with `seq > lastSeq`. If the buffer no longer covers `lastSeq`, the client refreshes over REST.
 4. `chat_subscribed` includes `isProcessing` (replaces `check-session-status`) and `pendingPermissions` (replaces `get-pending-permissions`).
-5. A send (`chat.send`, `chat.edit-send`, or a scheduled turn) is refused with `SESSION_OPEN_IN_SHELL` while a live agent Shell PTY has the same session resumed, so two CLIs never write one transcript. Queued turns stay pending until that CLI exits.
+5. One CLI per session: before a send (`chat.send`, `chat.edit-send`, a scheduled or queued turn) starts a run, agent Shell PTYs that resumed the session but are not in use (no socket attached and no line ever submitted, i.e. the Shell tab was only opened) are ended. If one in use remains, `chat.send`/`chat.edit-send` get `SESSION_OPEN_IN_SHELL` (before any edit rewind), a due scheduled message is recorded as failed with that reason (without interrupting a running turn), and a queued turn stays pending until that CLI exits.
 
 ## `/shell` Terminal Flow
 
@@ -197,7 +197,7 @@ Strips ANSI, accumulates text buffer, extracts URLs, emits `auth_url` once per n
 7. Close behavior:
 Socket disconnect does not instantly kill PTY; session is kept alive and terminated on timeout.
 8. One CLI per session:
-An agent shell for a session is not spawned (not even by a restart) while `chatRunRegistry.holdsProviderProcess()` reports a chat turn or its held background work on that session; the socket gets `{ type: "error", message }`. Reattaching to the session's live PTY is still allowed. PTYs that resumed a session are reported by `hasLiveAgentShellForSession()`, which chat consults in the other direction.
+An agent shell for a session is not spawned (not even by a restart, and before a restart kills anything) while `chatRunRegistry.holdsProviderProcess()` reports a running chat turn, held background work, or a provider process still up after its turn; the socket gets `{ type: "error", message }`. Reattaching to the session's live PTY is still allowed. In the other direction chat, queued turns and the agent API call `endUnusedShellsForSession()` and then refuse while `isSessionHeldByShell()` finds a PTY in use.
 
 ## `/plugin-ws/:pluginName` Proxy Flow
 

@@ -233,6 +233,7 @@ Every code that exists, with the line that emits it:
 | `SESSION_NOT_FOUND` | `:186` | No row in `sessions` — create it over REST first |
 | `UNSUPPORTED_PROVIDER` | `:195` | The session's provider has no registered runtime |
 | `RUN_IN_PROGRESS` | `:232` | `startRun` refused: this session already has a running run |
+| `SESSION_OPEN_IN_SHELL` | `:240` | A Shell CLI the user is working in has the session resumed (a `chat.send` or `chat.edit-send`, refused before any rewind) |
 | `ANCHOR_REQUIRED` | `:328` | `chat.edit-send` without an `anchorId` |
 | `EDIT_NOT_SUPPORTED` | `:338` | The provider cannot re-run from a point |
 | `ANCHOR_NOT_FOUND` | `:345` | The anchor is no longer in the transcript |
@@ -569,6 +570,12 @@ The parts worth knowing:
   close cannot detach the socket that replaced it*.
 - **Provider auth URLs are detected in the output stream** and forwarded as
   `type: 'auth_url'`, deduplicated per connection (`:459-475`).
+- **One CLI per session between the Shell and Chat.** An agent Shell will not spawn (or
+  restart) a `--resume` while `chatRunRegistry.holdsProviderProcess()` says the chat side
+  still has a process on that session; it sends `type: 'error'` instead. The other way,
+  a chat send, queued turn or agent API run first ends Shell PTYs nobody is using (no
+  socket attached, no line ever submitted: the tab resumed the session only because it
+  was opened), then is refused while `isSessionHeldByShell()` still finds one in use.
 
 The client is `useShellConnection.ts:127` via `getShellWebSocketUrl`
 (`src/modules/shell/utils/socket.ts:39-53`), which builds the URL the same way the chat one
