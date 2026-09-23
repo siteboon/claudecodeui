@@ -271,6 +271,7 @@
   "workflow": {
     "agentTask": "任務",
     "agentTaskShowMore": "顯示更多",
-    "agentTaskShowLess": "收合"
+    "agentTaskShowLess": "收合",
+    "agentResult": "結果"
   }
 }

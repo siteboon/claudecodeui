@@ -199,7 +199,10 @@ type WorkflowAgentTimelineProps = {
   sessionId: string;
   runId: string;
   agentId: string;
-  /** Whether the card still lists the agent as running, which is what keeps the timeline re-reading. */
+  /**
+   * Whether the card still lists the agent as running: the timeline re-reads
+   * through failed reads while it does, and reads once more when it stops.
+   */
   isRunning: boolean;
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
@@ -213,8 +216,9 @@ type WorkflowAgentTimelineProps = {
  *
  * The SDK streams nothing of a workflow agent's own work to the parent
  * session, so this is fetched rather than folded from the store — and
- * re-read every few seconds while the agent runs, since the transcript is
- * the only place its progress lands.
+ * re-read every few seconds until a read finds the agent settled, since the
+ * transcript is the only place its progress lands and the journal the only
+ * place its result does.
  */
 const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFileOpen, createDiff, selectedProject }: WorkflowAgentTimelineProps) => {
   const { t } = useTranslation();
@@ -226,9 +230,10 @@ const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFi
   useEffect(() => {
     let cancelled = false;
     let nextRead: ReturnType<typeof setTimeout> | undefined;
+    // The agent's status as the last read that landed gave it; none until one has.
+    let serverStatus: BackgroundTaskStatus | undefined;
 
     const read = async () => {
-      let settled = false;
       try {
         const payload = await readApiJson<{ data: WorkflowAgentActivity }>(
           await api.workflowAgentActivity(sessionId, runId, agentId),
@@ -237,9 +242,7 @@ const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFi
           return;
         }
         setLoaded({ activity: payload.data });
-        // The transcript's own status can settle the agent before the card
-        // hears of it.
-        settled = payload.data.agent.status !== 'running';
+        serverStatus = payload.data.agent.status;
       } catch (error) {
         if (cancelled) {
           return;
@@ -250,7 +253,14 @@ const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFi
           ? previous
           : { error: error instanceof Error ? error.message : String(error) });
       }
-      if (isRunning && !settled) {
+      // Read again until a read finds the agent settled. The transcript's own
+      // status can settle the agent before the card hears of it, and the card
+      // can hear first too: the CLI reports an agent done before it writes the
+      // result to the journal — in auto mode only after a classifier request —
+      // so the read the card's change triggers can land while the server still
+      // has the agent running. It stops saying so once the journal settles the
+      // agent or the session's run ends.
+      if (serverStatus === 'running' || (isRunning && serverStatus === undefined)) {
         nextRead = setTimeout(read, AGENT_TIMELINE_POLL_MS);
       }
     };
@@ -290,12 +300,15 @@ const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFi
       )}
 
       {/* The whole answer: the timeline's last note is capped for transport,
-          and the row's preview is two lines from the live stream. */}
+          and the row's preview is two lines from the live stream. Foldable
+          like the run's own result, since it can run to many screens. */}
       {result && (
-        <div className="rounded border border-border/40 bg-muted/30 p-2">
-          <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground/60">{t('workflow.result', 'Result')}</div>
+        <details open className="rounded border border-border/40 bg-muted/30 p-2">
+          <summary className="cursor-pointer text-[10px] uppercase tracking-wide text-muted-foreground/60">
+            {t('workflow.agentResult', 'Result')}
+          </summary>
           <MarkdownContent content={formatResultText(result)} className="prose prose-sm max-w-none dark:prose-invert" />
-        </div>
+        </details>
       )}
     </>
   );

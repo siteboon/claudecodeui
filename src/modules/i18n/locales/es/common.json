@@ -271,6 +271,7 @@
   "workflow": {
     "agentTask": "Tarea",
     "agentTaskShowMore": "Mostrar más",
-    "agentTaskShowLess": "Mostrar menos"
+    "agentTaskShowLess": "Mostrar menos",
+    "agentResult": "Resultado"
   }
 }

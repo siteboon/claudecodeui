@@ -271,6 +271,7 @@
   "workflow": {
     "agentTask": "작업",
     "agentTaskShowMore": "더 보기",
-    "agentTaskShowLess": "간단히 보기"
+    "agentTaskShowLess": "간단히 보기",
+    "agentResult": "결과"
   }
 }

@@ -352,7 +352,8 @@
   "workflow": {
     "agentTask": "Tugas",
     "agentTaskShowMore": "Tampilkan lebih banyak",
-    "agentTaskShowLess": "Tampilkan lebih sedikit"
+    "agentTaskShowLess": "Tampilkan lebih sedikit",
+    "agentResult": "Hasil"
   },
   "cancel": "Batal"
 }

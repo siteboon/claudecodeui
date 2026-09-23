@@ -271,6 +271,7 @@
   "workflow": {
     "agentTask": "タスク",
     "agentTaskShowMore": "もっと見る",
-    "agentTaskShowLess": "折りたたむ"
+    "agentTaskShowLess": "折りたたむ",
+    "agentResult": "結果"
   }
 }
