@@ -920,6 +920,22 @@ export function normalizeSessionName(rawValue: string | undefined, fallback: str
   return normalized.slice(0, 120);
 }
 
+const MAX_CLOUDCLI_SESSION_NAME_WORDS = 4;
+
+/**
+ * Builds the name CloudCLI gives a session it starts: the first four whole
+ * words of the first message, or "Untitled Session" when it has none.
+ *
+ * Used by the providers module's sessions service, which names new app
+ * sessions with it, and by the Claude session synchronizer, which uses it to
+ * tell that automatic name from one the user chose. Both must agree, so the
+ * rule lives only here.
+ */
+export function buildCloudCliSessionName(initialMessage: string): string {
+  const words = initialMessage.trim().split(/\s+/).filter(Boolean);
+  return words.slice(0, MAX_CLOUDCLI_SESSION_NAME_WORDS).join(' ') || 'Untitled Session';
+}
+
 // ---------------------------
 //----------------- PROVIDER SESSION VALUE NORMALIZATION UTILITIES ------------
 /**

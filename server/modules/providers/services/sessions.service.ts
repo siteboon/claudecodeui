@@ -14,7 +14,7 @@ import type {
   NormalizedMessage,
   WorkflowAgentActivity,
 } from '@/shared/types.js';
-import { AppError, sliceTailPage } from '@/shared/utils.js';
+import { AppError, buildCloudCliSessionName, sliceTailPage } from '@/shared/utils.js';
 
 /**
  * One session the running-sessions poll reports as busy.
@@ -85,13 +85,6 @@ type SessionDetails = {
     isArchived: boolean;
   } | null;
 };
-
-const MAX_CLOUDCLI_SESSION_NAME_WORDS = 4;
-
-function buildCloudCliSessionName(initialMessage: string): string {
-  const words = initialMessage.trim().split(/\s+/).filter(Boolean);
-  return words.slice(0, MAX_CLOUDCLI_SESSION_NAME_WORDS).join(' ') || 'Untitled Session';
-}
 
 /**
  * Removes one file if it exists.

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -2012,6 +2012,336 @@ test('synchronizeFile does NOT treat "Untitled Claude Session" in DB as a real c
     restoreHomeDir();
     await rm(tmp, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Renames made in the Claude CLI (`/rename`) after a session was indexed
+// ---------------------------------------------------------------------------
+
+/**
+ * Runs one rename scenario against a throwaway `~/.claude` (with a
+ * history.jsonl entry competing for the name) and database.
+ */
+async function withClaudeRenameFixture(
+  runTest: (fixture: { transcriptPath: string; synchronizer: ClaudeSessionSynchronizer }) => Promise<void>,
+): Promise<void> {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-sync-rename-'));
+  const workspacePath = path.join(tmp, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tmp);
+
+  try {
+    const claudeHome = path.join(tmp, '.claude');
+    await mkdir(claudeHome, { recursive: true });
+    await writeFile(
+      path.join(claudeHome, 'history.jsonl'),
+      JSON.stringify({ sessionId: 'test-session-1', display: 'first prompt' }) + '\n',
+      'utf8',
+    );
+
+    const transcriptPath = await writeSessionJsonl(workspacePath, 'test-session-1.jsonl', [
+      JSON.stringify({ type: 'ai-title', aiTitle: 'AI generated title', sessionId: 'test-session-1' }),
+    ]);
+
+    await withIsolatedDatabase(async () => {
+      await runTest({ transcriptPath, synchronizer: new ClaudeSessionSynchronizer() });
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tmp, { recursive: true, force: true });
+  }
+}
+
+async function appendTranscriptRows(transcriptPath: string, rows: Record<string, unknown>[]): Promise<void> {
+  await appendFile(transcriptPath, rows.map((row) => `${JSON.stringify(row)}\n`).join(''), 'utf8');
+}
+
+// What Claude CLI 2.1.x appends for `/rename <title>`.
+const cliRenameRows = (title: string) => [
+  { type: 'custom-title', customTitle: title, sessionId: 'test-session-1' },
+  { type: 'agent-name', agentName: title, sessionId: 'test-session-1' },
+];
+
+// What Claude CLI 2.1.x re-appends on exit: the metadata it holds in memory.
+const cliExitRows = (title: string) => [
+  { type: 'last-prompt', lastPrompt: 'a later prompt', leafUuid: 'msg-9', sessionId: 'test-session-1' },
+  { type: 'custom-title', customTitle: title, sessionId: 'test-session-1' },
+  { type: 'ai-title', aiTitle: 'AI generated title', sessionId: 'test-session-1' },
+];
+
+test('synchronizeFile applies a /rename made after the session was first indexed', { concurrency: false }, async () => {
+  await withClaudeRenameFixture(async ({ transcriptPath, synchronizer }) => {
+    const sessionId = await synchronizer.synchronizeFile(transcriptPath);
+    assert.equal(sessionsDb.getSessionById(sessionId!)?.custom_name, 'AI generated title');
+
+    await appendTranscriptRows(transcriptPath, [...cliRenameRows('Renamed in the TUI'), ...cliExitRows('Renamed in the TUI')]);
+    await synchronizer.synchronizeFile(transcriptPath);
+
+    assert.equal(sessionsDb.getSessionById(sessionId!)?.custom_name, 'Renamed in the TUI');
+  });
+});
+
+test('synchronizeFile applies a /rename to a session started in CloudCLI', { concurrency: false }, async () => {
+  await withClaudeRenameFixture(async ({ transcriptPath, synchronizer }) => {
+    sessionsDb.createAppSession('app-session-1', 'claude', '/workspace/demo', 'Fix the login bug');
+    sessionsDb.assignProviderSessionId('app-session-1', 'test-session-1');
+
+    // Title churn from the provider must not replace the app's own name.
+    assert.equal(await synchronizer.synchronizeFile(transcriptPath), 'app-session-1');
+    assert.equal(sessionsDb.getSessionById('app-session-1')?.custom_name, 'Fix the login bug');
+
+    // `claude --resume` in the Shell tab, then `/rename`.
+    await appendTranscriptRows(transcriptPath, [...cliRenameRows('Renamed in the shell'), ...cliExitRows('Renamed in the shell')]);
+    await synchronizer.synchronizeFile(transcriptPath);
+
+    assert.equal(sessionsDb.getSessionById('app-session-1')?.custom_name, 'Renamed in the shell');
+  });
+});
+
+test('a CloudCLI rename outlives the CLI re-stating an older /rename, and a newer /rename replaces it', { concurrency: false }, async () => {
+  await withClaudeRenameFixture(async ({ transcriptPath, synchronizer }) => {
+    await appendTranscriptRows(transcriptPath, cliRenameRows('Renamed in the TUI'));
+    const sessionId = await synchronizer.synchronizeFile(transcriptPath);
+    assert.equal(sessionsDb.getSessionById(sessionId!)?.custom_name, 'Renamed in the TUI');
+
+    // Sidebar rename, then the CLI exits and re-appends the title it holds.
+    sessionsDb.updateSessionCustomName(sessionId!, 'Renamed in CloudCLI');
+    await appendTranscriptRows(transcriptPath, cliExitRows('Renamed in the TUI'));
+    await synchronizer.synchronizeFile(transcriptPath);
+    assert.equal(sessionsDb.getSessionById(sessionId!)?.custom_name, 'Renamed in CloudCLI');
+
+    await appendTranscriptRows(transcriptPath, [...cliRenameRows('Renamed in the TUI again'), ...cliExitRows('Renamed in the TUI again')]);
+    await synchronizer.synchronizeFile(transcriptPath);
+    assert.equal(sessionsDb.getSessionById(sessionId!)?.custom_name, 'Renamed in the TUI again');
+  });
+});
+
+test('a fork keeps a CloudCLI rename over the title it was branched with', { concurrency: false }, async () => {
+  await withClaudeRenameFixture(async ({ transcriptPath, synchronizer }) => {
+    // The SDK writes the fork's title into the new transcript as a custom-title.
+    await appendTranscriptRows(transcriptPath, [{
+      type: 'custom-title',
+      sessionId: 'test-session-1',
+      customTitle: 'first prompt (fork)',
+      uuid: 'fork-title-1',
+      timestamp: '2026-07-10T00:00:05.000Z',
+    }]);
+    sessionsDb.createForkedSession({
+      sessionId: 'app-fork-1',
+      provider: 'claude',
+      projectPath: '/workspace/demo',
+      customName: 'first prompt (fork)',
+      providerSessionId: 'test-session-1',
+      jsonlPath: transcriptPath,
+      forkedFromSessionId: 'app-source-1',
+      model: null,
+      effort: null,
+    });
+    sessionsDb.updateSessionCustomName('app-fork-1', 'Try the other approach');
+
+    await synchronizer.synchronizeFile(transcriptPath);
+    assert.equal(sessionsDb.getSessionById('app-fork-1')?.custom_name, 'Try the other approach');
+
+    await appendTranscriptRows(transcriptPath, cliRenameRows('Renamed in the shell'));
+    await synchronizer.synchronizeFile(transcriptPath);
+    assert.equal(sessionsDb.getSessionById('app-fork-1')?.custom_name, 'Renamed in the shell');
+  });
+});
+
+test('a session indexed since titles are recorded takes its first /rename over a CloudCLI rename', { concurrency: false }, async () => {
+  await withClaudeRenameFixture(async ({ transcriptPath, synchronizer }) => {
+    const sessionId = await synchronizer.synchronizeFile(transcriptPath);
+    // Recorded as "no title yet", so the next title that shows up is a rename.
+    assert.equal(sessionsDb.getSessionById(sessionId!)?.provider_title, '');
+
+    sessionsDb.updateSessionCustomName(sessionId!, 'Renamed in CloudCLI');
+    await appendTranscriptRows(transcriptPath, cliRenameRows('Renamed in the TUI'));
+    await synchronizer.synchronizeFile(transcriptPath);
+
+    assert.equal(sessionsDb.getSessionById(sessionId!)?.custom_name, 'Renamed in the TUI');
+  });
+});
+
+// Rows indexed before `provider_title` existed have it NULL. A `/rename` their
+// transcript already holds may be older than a rename made in the sidebar, so
+// it only replaces a name the user did not choose.
+
+test('a /rename from before titles were recorded replaces a name the indexer derived', { concurrency: false }, async () => {
+  const derivedNames = [
+    'AI generated title', // ai-title
+    'a later prompt', // last-prompt
+    'first prompt', // history.jsonl display
+    'Renamed earlier', // an earlier custom-title
+  ];
+
+  for (const storedName of derivedNames) {
+    await withClaudeRenameFixture(async ({ transcriptPath, synchronizer }) => {
+      await appendTranscriptRows(transcriptPath, [
+        ...cliRenameRows('Renamed earlier'),
+        ...cliExitRows('Renamed earlier'),
+        ...cliRenameRows('Renamed in the TUI'),
+      ]);
+      // The row as an earlier version left it.
+      sessionsDb.createSession('test-session-1', 'claude', '/workspace/demo', storedName);
+
+      await synchronizer.synchronizeFile(transcriptPath);
+
+      const session = sessionsDb.getSessionById('test-session-1');
+      assert.equal(session?.custom_name, 'Renamed in the TUI', `stored name "${storedName}"`);
+      assert.equal(session?.provider_title, 'Renamed in the TUI');
+    });
+  }
+});
+
+test('a /rename from before titles were recorded replaces the first-message name of a CloudCLI session', { concurrency: false }, async () => {
+  await withClaudeRenameFixture(async ({ transcriptPath, synchronizer }) => {
+    await writeFile(transcriptPath, [
+      {
+        type: 'user',
+        message: { role: 'user', content: 'Fix the login bug in the auth module' },
+        uuid: 'msg-1',
+        cwd: '/workspace/demo',
+        sessionId: 'test-session-1',
+      },
+      { type: 'ai-title', aiTitle: 'Login bug fix', sessionId: 'test-session-1' },
+      ...cliRenameRows('Renamed in the shell'),
+    ].map((row) => `${JSON.stringify(row)}\n`).join(''), 'utf8');
+    sessionsDb.createAppSession('app-session-1', 'claude', '/workspace/demo', 'Fix the login bug');
+    sessionsDb.assignProviderSessionId('app-session-1', 'test-session-1');
+
+    await synchronizer.synchronizeFile(transcriptPath);
+
+    assert.equal(sessionsDb.getSessionById('app-session-1')?.custom_name, 'Renamed in the shell');
+  });
+});
+
+test('a CloudCLI rename from before titles were recorded outlives an older /rename', { concurrency: false }, async () => {
+  const setups = [
+    {
+      label: 'session started in the CLI',
+      sessionId: 'test-session-1',
+      create: () => {
+        sessionsDb.createSession('test-session-1', 'claude', '/workspace/demo', 'AI generated title');
+        sessionsDb.updateSessionCustomName('test-session-1', 'Renamed in CloudCLI');
+      },
+    },
+    {
+      label: 'session started in CloudCLI',
+      sessionId: 'app-session-1',
+      create: () => {
+        sessionsDb.createAppSession('app-session-1', 'claude', '/workspace/demo', 'first prompt');
+        sessionsDb.assignProviderSessionId('app-session-1', 'test-session-1');
+        sessionsDb.updateSessionCustomName('app-session-1', 'Renamed in CloudCLI');
+      },
+    },
+  ];
+
+  for (const setup of setups) {
+    await withClaudeRenameFixture(async ({ transcriptPath, synchronizer }) => {
+      await appendTranscriptRows(transcriptPath, cliRenameRows('Renamed in the TUI'));
+      setup.create();
+
+      await synchronizer.synchronizeFile(transcriptPath);
+      let session = sessionsDb.getSessionById(setup.sessionId);
+      assert.equal(session?.custom_name, 'Renamed in CloudCLI', setup.label);
+      assert.equal(session?.provider_title, 'Renamed in the TUI', setup.label);
+
+      // The CLI re-stating that title later changes nothing either...
+      await appendTranscriptRows(transcriptPath, cliExitRows('Renamed in the TUI'));
+      await synchronizer.synchronizeFile(transcriptPath);
+      assert.equal(sessionsDb.getSessionById(setup.sessionId)?.custom_name, 'Renamed in CloudCLI', setup.label);
+
+      // ...while a new /rename does.
+      await appendTranscriptRows(transcriptPath, cliRenameRows('Renamed in the TUI again'));
+      await synchronizer.synchronizeFile(transcriptPath);
+      session = sessionsDb.getSessionById(setup.sessionId);
+      assert.equal(session?.custom_name, 'Renamed in the TUI again', setup.label);
+    });
+  }
+});
+
+// About 1.2 MB of conversation, more than the indexer reads back from the end
+// of an already-indexed transcript. Two-byte characters make the cut-off land
+// mid-character as well as mid-line.
+const longConversationRows = () => Array.from({ length: 12 }, (_, index) => ({
+  type: 'assistant',
+  message: { role: 'assistant', content: [{ type: 'text', text: 'é'.repeat(50_000) }] },
+  uuid: `msg-long-${index}`,
+  sessionId: 'test-session-1',
+}));
+
+test('a /rename from before titles were recorded is found however far back it is', { concurrency: false }, async () => {
+  await withClaudeRenameFixture(async ({ transcriptPath, synchronizer }) => {
+    await appendTranscriptRows(transcriptPath, [...cliRenameRows('Renamed in the TUI'), ...longConversationRows()]);
+    sessionsDb.createSession('test-session-1', 'claude', '/workspace/demo', 'AI generated title');
+
+    await synchronizer.synchronizeFile(transcriptPath);
+
+    assert.equal(sessionsDb.getSessionById('test-session-1')?.custom_name, 'Renamed in the TUI');
+  });
+});
+
+test('an indexed session takes a /rename made at the end of a long transcript', { concurrency: false }, async () => {
+  await withClaudeRenameFixture(async ({ transcriptPath, synchronizer }) => {
+    await appendTranscriptRows(transcriptPath, cliRenameRows('Renamed in the TUI'));
+    const sessionId = await synchronizer.synchronizeFile(transcriptPath);
+    assert.equal(sessionsDb.getSessionById(sessionId!)?.custom_name, 'Renamed in the TUI');
+
+    await appendTranscriptRows(transcriptPath, [...longConversationRows(), ...cliRenameRows('Renamed in the TUI again')]);
+    await synchronizer.synchronizeFile(transcriptPath);
+
+    assert.equal(sessionsDb.getSessionById(sessionId!)?.custom_name, 'Renamed in the TUI again');
+  });
+});
+
+test('an indexed session takes a /rename whose row starts exactly where the tail read begins', { concurrency: false }, async () => {
+  await withClaudeRenameFixture(async ({ transcriptPath, synchronizer }) => {
+    await appendTranscriptRows(transcriptPath, cliRenameRows('Renamed in the TUI'));
+    const sessionId = await synchronizer.synchronizeFile(transcriptPath);
+    assert.equal(sessionsDb.getSessionById(sessionId!)?.custom_name, 'Renamed in the TUI');
+
+    // The rename row plus the padding after it fill the synchronizer's 1 MiB
+    // tail window exactly, so the row is the window's first line and a whole one.
+    const renameLine = `${JSON.stringify(cliRenameRows('Renamed in the TUI again')[0])}\n`;
+    const paddingLine = (text: string) => `${JSON.stringify({
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text }] },
+      uuid: 'msg-padding',
+      sessionId: 'test-session-1',
+    })}\n`;
+    const padding = paddingLine(
+      'x'.repeat(1024 * 1024 - Buffer.byteLength(renameLine) - Buffer.byteLength(paddingLine(''))),
+    );
+    assert.equal(Buffer.byteLength(renameLine + padding), 1024 * 1024);
+    await appendFile(transcriptPath, renameLine + padding, 'utf8');
+
+    await synchronizer.synchronizeFile(transcriptPath);
+
+    assert.equal(sessionsDb.getSessionById(sessionId!)?.custom_name, 'Renamed in the TUI again');
+  });
+});
+
+test('a CloudCLI rename made while the transcript is being indexed is kept', { concurrency: false }, async () => {
+  await withClaudeRenameFixture(async ({ transcriptPath, synchronizer }) => {
+    const sessionId = await synchronizer.synchronizeFile(transcriptPath);
+    assert.equal(sessionsDb.getSessionById(sessionId!)?.custom_name, 'AI generated title');
+    await appendTranscriptRows(transcriptPath, cliExitRows('Renamed in the TUI').slice(0, 1));
+
+    // The sidebar rename lands after the synchronizer read the row, right
+    // before it writes the row back.
+    const createSession = sessionsDb.createSession;
+    sessionsDb.createSession = (...args: Parameters<typeof createSession>) => {
+      sessionsDb.updateSessionCustomName(sessionId!, 'Renamed in CloudCLI');
+      return createSession.apply(sessionsDb, args);
+    };
+    try {
+      await synchronizer.synchronizeFile(transcriptPath);
+    } finally {
+      sessionsDb.createSession = createSession;
+    }
+
+    assert.equal(sessionsDb.getSessionById(sessionId!)?.custom_name, 'Renamed in CloudCLI');
+  });
 });
 
 // ---------------------------------------------------------------------------
