@@ -23,16 +23,29 @@ export type ProviderModelOption = {
   };
 };
 
-/** The full model catalog for one provider: every option plus the value used when the user has not chosen one. */
+/**
+ * The full model catalog for one provider: every option plus the value used when the user has not chosen one.
+ * `EFFORT_LEVELS` lists, weakest first, the reasoning-effort levels a custom model may declare in the model
+ * library; the server derives it from the provider, not from the options, and it is empty without effort support.
+ */
 export type ProviderModelsDefinition = {
   OPTIONS: ProviderModelOption[];
   DEFAULT: string;
+  EFFORT_LEVELS?: string[];
 };
 
-/** User-supplied fields for creating or editing a custom provider model entry. */
+/**
+ * User-supplied fields for creating or editing a custom provider model entry.
+ * `effort` lists the reasoning-effort levels the model accepts; omit it to keep
+ * the stored levels on edit, send `null` to clear them.
+ */
 export type CustomProviderModelInput = {
   model: string;
   id: string;
+  effort?: {
+    values: string[];
+    default?: string;
+  } | null;
 };
 
 /** Mutation callbacks a model menu calls to persist custom provider models. */

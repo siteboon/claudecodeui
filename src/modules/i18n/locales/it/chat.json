@@ -255,5 +255,10 @@
     "failed": "Non inviato — {{reason}}",
     "cancel": "Annulla messaggio programmato",
     "dismiss": "Ignora l'avviso di errore"
+  },
+  "modelLibrary": {
+    "effortLevels": "Livelli di ragionamento",
+    "effortLevelsHint": "Seleziona i livelli di sforzo di ragionamento accettati da questo modello. Senza selezione, nel composer non si potrà scegliere alcun livello per questo modello.",
+    "effortSummary": "Ragionamento: {{levels}}"
   }
 }
