@@ -6,6 +6,7 @@ import { sessionsDb } from '@/modules/database/index.js';
 import {
   buildLookupMap,
   extractFirstValidJsonlData,
+  extractTaggedContent,
   findFilesRecursivelyCreatedAfter,
   normalizeSessionName,
   readFileTimestamps,
@@ -17,6 +18,81 @@ type ParsedSession = {
   projectPath: string;
   sessionName?: string;
 };
+
+/**
+ * Title sources read from one transcript pass. `title` is the explicit title
+ * (custom-title > ai-title > last-prompt). `slashCommand` is only a fallback,
+ * used after the history.jsonl lookup.
+ */
+type TranscriptTitleSources = {
+  title?: string;
+  slashCommand?: string;
+};
+
+// Opening tags of the rows Claude writes for a slash command the user typed:
+// headless runs start with `<command-message>`, the interactive CLI with
+// `<command-name>`.
+const SLASH_COMMAND_WRAPPER_TAGS = ['<command-message>', '<command-name>'];
+// Opening tags of the rows the CLI writes around a local command (the caveat
+// note before it and the command output after it), which are not prompts.
+const LOCAL_COMMAND_OUTPUT_TAGS = ['<local-command-stdout>', '<local-command-caveat>'];
+
+/**
+ * Returns the message content when a transcript row is a prompt the user
+ * typed, or undefined for the rows Claude writes around prompts: `isMeta` rows
+ * (expanded command bodies, skills the model invoked, `<local-command-caveat>`
+ * notes), compact summaries, tool results and local command output. Plain
+ * prompts are strings; SDK streaming input and image attachments store the
+ * prompt as content blocks.
+ */
+function readTypedPromptContent(data: Record<string, unknown>): string | unknown[] | undefined {
+  if (data.type !== 'user' || data.isMeta === true || data.isCompactSummary === true) {
+    return undefined;
+  }
+
+  const message = data.message as Record<string, unknown> | undefined;
+  const content = message?.role === 'user' ? message.content : undefined;
+  if (typeof content === 'string') {
+    const leadingText = content.trimStart();
+    return LOCAL_COMMAND_OUTPUT_TAGS.some((tag) => leadingText.startsWith(tag)) ? undefined : content;
+  }
+
+  const isToolResultRow = Array.isArray(content)
+    && content.every((block) => (block as { type?: unknown } | null)?.type === 'tool_result');
+  return Array.isArray(content) && !isToolResultRow ? content : undefined;
+}
+
+/**
+ * Returns "<command-name> <command-args>" when a typed prompt is the wrapper
+ * Claude writes for a slash command, e.g.
+ * `<command-message>morning-briefing</command-message>
+ * <command-name>/morning-briefing</command-name>`.
+ *
+ * A headless `claude -p "/morning-briefing"` run has no history.jsonl entry, no
+ * ai-title, and a `last-prompt` row without `lastPrompt`, so this wrapper is
+ * the only name the transcript holds. The wrapper must open the prompt, so a
+ * prompt that merely quotes command tags is not read as a command.
+ */
+function readSlashCommandTitle(content: string | unknown[]): string | undefined {
+  if (typeof content !== 'string') {
+    return undefined;
+  }
+
+  const leadingText = content.trimStart();
+  if (!SLASH_COMMAND_WRAPPER_TAGS.some((tag) => leadingText.startsWith(tag))) {
+    return undefined;
+  }
+
+  // Same precedence the chat uses to show the command: name, then message.
+  const command = extractTaggedContent(content, 'command-name')?.trim()
+    || extractTaggedContent(content, 'command-message')?.trim();
+  if (!command) {
+    return undefined;
+  }
+
+  const commandArgs = extractTaggedContent(content, 'command-args')?.trim();
+  return commandArgs ? `${command} ${commandArgs}` : command;
+}
 
 /**
  * Session indexer for Claude transcript artifacts.
@@ -147,9 +223,13 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       };
     }
 
-    let sessionName = await this.extractSessionTitle(filePath, parsed.sessionId);
+    const titleSources = await this.extractSessionTitle(filePath, parsed.sessionId);
+    let sessionName = titleSources.title;
     if (!sessionName) {
       sessionName = nameMap.get(parsed.sessionId);
+    }
+    if (!sessionName) {
+      sessionName = titleSources.slashCommand;
     }
 
     return {
@@ -165,13 +245,16 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
    * `custom-title` (a manual `/rename`) over `ai-title` over `last-prompt`.
    * Claude writes `custom-title` immediately before `ai-title`, so a reverse
    * scan that returns its first hit would always lose the manual rename.
+   * The same pass also records the slash command when the session's first
+   * typed prompt is one, which the caller uses only when no other source
+   * names the session.
    *
-   * Returns undefined on a missing or unreadable file so sync can continue.
+   * Returns no titles on a missing or unreadable file so sync can continue.
    */
   private async extractSessionTitle(
     filePath: string,
     sessionId: string
-  ): Promise<string | undefined> {
+  ): Promise<TranscriptTitleSources> {
     try {
       const content = await readFile(filePath, 'utf8');
       const lines = content.split(/\r?\n/);
@@ -179,6 +262,8 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       let foundCustomTitle: string | undefined;
       let foundAiTitle: string | undefined;
       let foundLastPrompt: string | undefined;
+      let foundSlashCommand: string | undefined;
+      let sawFirstPrompt = false;
 
       for (let index = 0; index < lines.length; index += 1) {
         const line = lines[index]?.trim();
@@ -216,14 +301,25 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
           if (prompt?.trim()) {
             foundLastPrompt = prompt;
           }
+        } else if (eventType === 'user' && !sawFirstPrompt) {
+          const promptContent = readTypedPromptContent(data);
+          if (promptContent !== undefined) {
+            // Only the first prompt can name the session: a command typed
+            // later (e.g. `/compact` after a plain prompt) does not describe it.
+            sawFirstPrompt = true;
+            foundSlashCommand = readSlashCommandTitle(promptContent);
+          }
         }
       }
 
-      return foundCustomTitle || foundAiTitle || foundLastPrompt;
+      return {
+        title: foundCustomTitle || foundAiTitle || foundLastPrompt,
+        slashCommand: foundSlashCommand,
+      };
     } catch {
       // Ignore missing/unreadable files so sync can continue.
     }
 
-    return undefined;
+    return {};
   }
 }

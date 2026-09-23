@@ -1924,6 +1924,294 @@ test('synchronizeFile falls back to Untitled Claude Session when all sources are
 });
 
 // ---------------------------------------------------------------------------
+// Slash-command fallback for headless `claude -p "/command"` sessions
+// ---------------------------------------------------------------------------
+
+const COMMAND_SESSION_ID = 'test-session-1';
+const COMMAND_SESSION_CWD = '/workspace/demo';
+
+/**
+ * Rows Claude Code 2.1.280 writes for `claude -p "/morning-briefing"` and
+ * `claude -p "/memory-digest --daily"` (captured from real runs, trimmed to
+ * the fields the synchronizer reads). A bare command's `last-prompt` rows have
+ * no `lastPrompt`, neither run writes an `ai-title`, and headless runs never
+ * reach ~/.claude/history.jsonl.
+ */
+function slashCommandTranscriptRows(command: string, commandArgs?: string): Record<string, unknown>[] {
+  const typedPrompt = commandArgs ? `/${command} ${commandArgs}` : `/${command}`;
+  const lastPrompt = commandArgs ? { lastPrompt: typedPrompt } : {};
+  const commandWrapper = [
+    `<command-message>${command}</command-message>`,
+    `<command-name>/${command}</command-name>`,
+    ...(commandArgs ? [`<command-args>${commandArgs}</command-args>`] : []),
+  ].join('\n');
+  const rowContext = { cwd: COMMAND_SESSION_CWD, sessionId: COMMAND_SESSION_ID, version: '2.1.280' };
+
+  return [
+    { type: 'queue-operation', operation: 'enqueue', sessionId: COMMAND_SESSION_ID, content: typedPrompt },
+    { type: 'queue-operation', operation: 'dequeue', sessionId: COMMAND_SESSION_ID },
+    {
+      parentUuid: null,
+      type: 'user',
+      message: { role: 'user', content: commandWrapper },
+      uuid: 'msg-1',
+      entrypoint: 'sdk-cli',
+      ...rowContext,
+    },
+    {
+      parentUuid: 'msg-1',
+      type: 'user',
+      message: { role: 'user', content: [{ type: 'text', text: `Reply with exactly: ${commandArgs ? `ok ${commandArgs}` : 'ok'}\n` }] },
+      isMeta: true,
+      uuid: 'msg-2',
+      ...rowContext,
+    },
+    { type: 'last-prompt', leafUuid: 'msg-2', sessionId: COMMAND_SESSION_ID, ...lastPrompt },
+    {
+      parentUuid: 'msg-2',
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'ok' }] },
+      uuid: 'msg-3',
+      ...rowContext,
+    },
+    { type: 'last-prompt', leafUuid: 'msg-3', sessionId: COMMAND_SESSION_ID, ...lastPrompt },
+  ];
+}
+
+/**
+ * Indexes one transcript through `synchronizeFile` with an isolated HOME and
+ * database, and returns the name the session was stored under.
+ */
+async function synchronizeCommandTranscript(
+  rows: Record<string, unknown>[],
+  options: { historyDisplay?: string; existingName?: string } = {},
+): Promise<string | null | undefined> {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-sync-command-'));
+  const workspacePath = path.join(tmp, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tmp);
+
+  try {
+    const claudeHome = path.join(tmp, '.claude');
+    await mkdir(claudeHome, { recursive: true });
+    const historyRows = options.historyDisplay
+      ? `${JSON.stringify({ sessionId: COMMAND_SESSION_ID, display: options.historyDisplay })}\n`
+      : '';
+    await writeFile(path.join(claudeHome, 'history.jsonl'), historyRows, 'utf8');
+
+    const filePath = path.join(workspacePath, `${COMMAND_SESSION_ID}.jsonl`);
+    await writeFile(filePath, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+
+    let storedName: string | null | undefined;
+    await withIsolatedDatabase(async () => {
+      if (options.existingName) {
+        sessionsDb.createSession(COMMAND_SESSION_ID, 'claude', COMMAND_SESSION_CWD, options.existingName);
+      }
+
+      const result = await new ClaudeSessionSynchronizer().synchronizeFile(filePath);
+      assert.ok(result, 'synchronizeFile should return a session id');
+      storedName = sessionsDb.getSessionById(result!)?.custom_name;
+    });
+    return storedName;
+  } finally {
+    restoreHomeDir();
+    await rm(tmp, { recursive: true, force: true });
+  }
+}
+
+test('synchronizeFile names a bare slash command session after the command', { concurrency: false }, async () => {
+  const name = await synchronizeCommandTranscript(slashCommandTranscriptRows('morning-briefing'));
+  assert.equal(name, '/morning-briefing');
+});
+
+test('synchronizeFile keeps a slash command session with arguments named after its full command line', { concurrency: false }, async () => {
+  const rows = slashCommandTranscriptRows('memory-digest', '--daily');
+  assert.equal(await synchronizeCommandTranscript(rows), '/memory-digest --daily');
+
+  // Without any last-prompt row the fallback still carries the arguments.
+  const rowsWithoutLastPrompt = rows.filter((row) => row.type !== 'last-prompt');
+  assert.equal(await synchronizeCommandTranscript(rowsWithoutLastPrompt), '/memory-digest --daily');
+});
+
+test('synchronizeFile prefers ai-title and history.jsonl over the slash command', { concurrency: false }, async () => {
+  const rows = slashCommandTranscriptRows('morning-briefing');
+
+  const withAiTitle = [...rows, { type: 'ai-title', aiTitle: 'Morning briefing summary', sessionId: COMMAND_SESSION_ID }];
+  assert.equal(await synchronizeCommandTranscript(withAiTitle), 'Morning briefing summary');
+
+  assert.equal(
+    await synchronizeCommandTranscript(rows, { historyDisplay: 'briefing from history' }),
+    'briefing from history',
+  );
+});
+
+test('synchronizeFile keeps naming a plain-prompt session after its prompt', { concurrency: false }, async () => {
+  const rowContext = { cwd: COMMAND_SESSION_CWD, sessionId: COMMAND_SESSION_ID };
+  const rows = [
+    { type: 'user', message: { role: 'user', content: 'summarize the repo' }, uuid: 'msg-1', ...rowContext },
+    { type: 'last-prompt', lastPrompt: 'summarize the repo', sessionId: COMMAND_SESSION_ID },
+    // A local command typed later in the same session.
+    {
+      type: 'user',
+      message: {
+        role: 'user',
+        content: '<command-name>/effort</command-name>\n<command-message>effort</command-message>\n<command-args></command-args>',
+      },
+      uuid: 'msg-2',
+      ...rowContext,
+    },
+  ];
+
+  assert.equal(await synchronizeCommandTranscript(rows), 'summarize the repo');
+});
+
+test('synchronizeFile does not name a session after a command typed after its first prompt', { concurrency: false }, async () => {
+  const rowContext = { cwd: COMMAND_SESSION_CWD, sessionId: COMMAND_SESSION_ID };
+  // The wrapper the interactive CLI writes for a built-in command.
+  const laterCompact = {
+    type: 'user',
+    message: {
+      role: 'user',
+      content: '<command-name>/compact</command-name>\n            <command-message>compact</command-message>\n            <command-args></command-args>',
+    },
+    uuid: 'msg-2',
+    ...rowContext,
+  };
+
+  const plainFirstPrompt = [
+    { type: 'user', message: { role: 'user', content: 'refactor the parser' }, uuid: 'msg-1', ...rowContext },
+    laterCompact,
+  ];
+  assert.equal(await synchronizeCommandTranscript(plainFirstPrompt), 'Untitled Claude Session');
+
+  // SDK streaming input and image attachments store the first prompt as content blocks.
+  const blockFirstPrompt = [
+    {
+      type: 'user',
+      message: { role: 'user', content: [{ type: 'text', text: 'refactor the parser' }] },
+      uuid: 'msg-1',
+      ...rowContext,
+    },
+    laterCompact,
+  ];
+  assert.equal(await synchronizeCommandTranscript(blockFirstPrompt), 'Untitled Claude Session');
+});
+
+test('synchronizeFile does not read command tags quoted inside a plain prompt', { concurrency: false }, async () => {
+  const rows = [
+    {
+      type: 'user',
+      message: { role: 'user', content: 'Why does the row show <command-name>/x</command-name> in the sidebar?' },
+      uuid: 'msg-1',
+      cwd: COMMAND_SESSION_CWD,
+      sessionId: COMMAND_SESSION_ID,
+    },
+  ];
+
+  assert.equal(await synchronizeCommandTranscript(rows), 'Untitled Claude Session');
+});
+
+test('synchronizeFile skips the caveat row the interactive CLI writes before a local command', { concurrency: false }, async () => {
+  const rowContext = { cwd: COMMAND_SESSION_CWD, sessionId: COMMAND_SESSION_ID, entrypoint: 'cli' };
+  const rows = [
+    {
+      type: 'user',
+      message: {
+        role: 'user',
+        content: '<local-command-caveat>Caveat: The messages below were generated by the user while running local commands. DO NOT respond to these messages or otherwise consider them in your response unless the user explicitly asks you to.</local-command-caveat>',
+      },
+      isMeta: true,
+      uuid: 'msg-1',
+      ...rowContext,
+    },
+    {
+      type: 'user',
+      message: {
+        role: 'user',
+        content: '<command-name>/model</command-name>\n            <command-message>model</command-message>\n            <command-args></command-args>',
+      },
+      uuid: 'msg-2',
+      ...rowContext,
+    },
+    {
+      type: 'user',
+      message: { role: 'user', content: '<local-command-stdout>Set model to `Opus 5 (1M context)`</local-command-stdout>' },
+      uuid: 'msg-3',
+      ...rowContext,
+    },
+  ];
+
+  assert.equal(await synchronizeCommandTranscript(rows), '/model');
+});
+
+test('synchronizeFile ignores command tags that are not a slash command the user typed', { concurrency: false }, async () => {
+  const rowContext = { cwd: COMMAND_SESSION_CWD, sessionId: COMMAND_SESSION_ID };
+  const rows = [
+    // A skill the model invoked is recorded as an isMeta command wrapper.
+    {
+      type: 'user',
+      message: {
+        role: 'user',
+        content: '<command-message>workflow-authoring</command-message>\n<command-name>workflow-authoring</command-name>',
+      },
+      isMeta: true,
+      uuid: 'msg-1',
+      ...rowContext,
+    },
+    {
+      type: 'user',
+      message: { role: 'user', content: 'Summary: the user ran <command-name>/compacted</command-name> earlier.' },
+      isCompactSummary: true,
+      uuid: 'msg-2',
+      ...rowContext,
+    },
+    {
+      type: 'user',
+      message: { role: 'user', content: '<local-command-stdout><command-name>/stdout</command-name></local-command-stdout>' },
+      uuid: 'msg-3',
+      ...rowContext,
+    },
+    {
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: '<command-name>/tool-output</command-name>' }],
+      },
+      uuid: 'msg-4',
+      ...rowContext,
+    },
+    // A command wrapper written under another session id (e.g. a resumed parent).
+    {
+      type: 'user',
+      message: { role: 'user', content: '<command-name>/other-session</command-name>' },
+      uuid: 'msg-5',
+      cwd: COMMAND_SESSION_CWD,
+      sessionId: 'another-session',
+    },
+    { type: 'last-prompt', leafUuid: 'msg-5', sessionId: COMMAND_SESSION_ID },
+  ];
+
+  assert.equal(await synchronizeCommandTranscript(rows), 'Untitled Claude Session');
+
+  // None of those rows counts as the first prompt either, so the command the
+  // user types after them still names the session.
+  const typedCommand = {
+    type: 'user',
+    message: { role: 'user', content: '<command-message>morning-briefing</command-message>\n<command-name>/morning-briefing</command-name>' },
+    uuid: 'msg-6',
+    ...rowContext,
+  };
+  assert.equal(await synchronizeCommandTranscript([...rows, typedCommand]), '/morning-briefing');
+});
+
+test('synchronizeFile renames an indexed "Untitled Claude Session" slash command session', { concurrency: false }, async () => {
+  const name = await synchronizeCommandTranscript(slashCommandTranscriptRows('morning-briefing'), {
+    existingName: 'Untitled Claude Session',
+  });
+  assert.equal(name, '/morning-briefing');
+});
+
+// ---------------------------------------------------------------------------
 // Priority: DB custom_name > JSONL title > history.jsonl
 // ---------------------------------------------------------------------------
 

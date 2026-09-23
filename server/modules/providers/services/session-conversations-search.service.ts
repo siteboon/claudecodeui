@@ -5,7 +5,7 @@ import readline from 'node:readline';
 import { spawn } from 'cross-spawn';
 import { rgPath } from '@vscode/ripgrep';
 
-import { stripAnsiSequences } from '@/shared/utils.js';
+import { extractTaggedContent, stripAnsiSequences } from '@/shared/utils.js';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 
 type AnyRecord = Record<string, any>;
@@ -367,12 +367,6 @@ function extractClaudeText(content: unknown): string {
     .filter((part: AnyRecord) => part?.type === 'text' && typeof part?.text === 'string')
     .map((part: AnyRecord) => String(part.text))
     .join(' ');
-}
-
-function extractTaggedContent(content: string, tagName: string): string | null {
-  const escapedTagName = tagName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = new RegExp(`<${escapedTagName}>([\\s\\S]*?)<\\/${escapedTagName}>`).exec(content);
-  return match ? match[1] : null;
 }
 
 type ClaudeLocalCommandPayload = {
