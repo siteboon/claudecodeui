@@ -32,7 +32,13 @@
     "loadingSessions": "載入工作階段中...",
     "unnamed": "未命名",
     "loading": "載入中...",
-    "showMore": "顯示更多工作階段"
+    "showMore": "顯示更多工作階段",
+    "select": "選取",
+    "selectAll": "全選",
+    "selectAllLoaded": "全選已載入",
+    "clearSelection": "清除選取",
+    "deleteSelected_one": "刪除 {{count}} 個工作階段",
+    "deleteSelected_other": "刪除 {{count}} 個工作階段"
   },
   "tooltips": {
     "viewEnvironments": "查看環境",
@@ -113,7 +119,8 @@
     "restoreProjectError": "還原專案時出錯，請重試。",
     "restoreSessionFailed": "還原工作階段失敗，請重試。",
     "restoreSessionError": "還原工作階段時出錯，請重試。",
-    "forkSessionError": "無法分支此工作階段，請再試一次。"
+    "forkSessionError": "無法分支此工作階段，請再試一次。",
+    "deleteSessionsPartialFailure": "{{total}} 個工作階段中有 {{failed}} 個刪除失敗，請重試。"
   },
   "version": {
     "updateAvailable": "有可用更新",
@@ -148,6 +155,14 @@
     "deleteSessionPermanently": "永久刪除",
     "deleteAllData": "永久刪除所有資料",
     "allConversationsDeleted": "專案將從側邊欄中移除。您的檔案、記憶和工作階段資料將會保留。",
-    "cannotUndo": "您可以稍後重新新增此專案。"
+    "cannotUndo": "您可以稍後重新新增此專案。",
+    "deleteSessions_one": "刪除 {{count}} 個工作階段",
+    "deleteSessions_other": "刪除 {{count}} 個工作階段",
+    "selectedSessions_one": "選取的 {{count}} 個工作階段",
+    "selectedSessions_other": "選取的 {{count}} 個工作階段",
+    "archiveSessions_one": "封存 {{count}} 個工作階段",
+    "archiveSessions_other": "封存 {{count}} 個工作階段",
+    "archiveSessionsNotice_one": "封存會將該工作階段移出使用中清單，但保留其歷史記錄。",
+    "archiveSessionsNotice_other": "封存會將這些工作階段移出使用中清單，但保留其歷史記錄。"
   }
 }

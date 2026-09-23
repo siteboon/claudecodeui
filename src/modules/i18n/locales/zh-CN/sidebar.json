@@ -32,7 +32,13 @@
     "loadingSessions": "加载会话中...",
     "unnamed": "未命名",
     "loading": "加载中...",
-    "showMore": "显示更多会话"
+    "showMore": "显示更多会话",
+    "select": "选择",
+    "selectAll": "全选",
+    "selectAllLoaded": "全选已加载",
+    "clearSelection": "清除选择",
+    "deleteSelected_one": "删除 {{count}} 个会话",
+    "deleteSelected_other": "删除 {{count}} 个会话"
   },
   "tooltips": {
     "viewEnvironments": "查看环境",
@@ -114,7 +120,8 @@
     "restoreProjectError": "恢复项目时出错，请重试。",
     "restoreSessionFailed": "恢复会话失败，请重试。",
     "restoreSessionError": "恢复会话时出错，请重试。",
-    "forkSessionError": "无法派生该会话，请重试。"
+    "forkSessionError": "无法派生该会话，请重试。",
+    "deleteSessionsPartialFailure": "{{total}} 个会话中有 {{failed}} 个删除失败，请重试。"
   },
   "version": {
     "updateAvailable": "有可用更新",
@@ -149,6 +156,14 @@
     "deleteSessionPermanently": "永久删除",
     "deleteAllData": "永久删除所有数据",
     "allConversationsDeleted": "项目将从侧边栏中移除。您的文件、记忆和会话数据将会保留。",
-    "cannotUndo": "您可以稍后重新添加此项目。"
+    "cannotUndo": "您可以稍后重新添加此项目。",
+    "deleteSessions_one": "删除 {{count}} 个会话",
+    "deleteSessions_other": "删除 {{count}} 个会话",
+    "selectedSessions_one": "选中的 {{count}} 个会话",
+    "selectedSessions_other": "选中的 {{count}} 个会话",
+    "archiveSessions_one": "归档 {{count}} 个会话",
+    "archiveSessions_other": "归档 {{count}} 个会话",
+    "archiveSessionsNotice_one": "归档会将该会话移出活动列表，但保留其历史记录。",
+    "archiveSessionsNotice_other": "归档会将这些会话移出活动列表，但保留其历史记录。"
   }
 }

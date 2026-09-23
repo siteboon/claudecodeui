@@ -32,7 +32,13 @@
     "loadingSessions": "Sitzungen werden geladen...",
     "unnamed": "Unbenannt",
     "loading": "Lädt...",
-    "showMore": "Weitere Sitzungen anzeigen"
+    "showMore": "Weitere Sitzungen anzeigen",
+    "select": "Auswählen",
+    "selectAll": "Alle auswählen",
+    "selectAllLoaded": "Alle geladenen auswählen",
+    "clearSelection": "Auswahl aufheben",
+    "deleteSelected_one": "{{count}} Sitzung löschen",
+    "deleteSelected_other": "{{count}} Sitzungen löschen"
   },
   "tooltips": {
     "viewEnvironments": "Umgebungen anzeigen",
@@ -114,7 +120,8 @@
     "restoreProjectError": "Fehler beim Wiederherstellen des Projekts. Bitte erneut versuchen.",
     "restoreSessionFailed": "Sitzung konnte nicht wiederhergestellt werden. Bitte erneut versuchen.",
     "restoreSessionError": "Fehler beim Wiederherstellen der Sitzung. Bitte erneut versuchen.",
-    "forkSessionError": "Diese Sitzung konnte nicht verzweigt werden. Bitte erneut versuchen."
+    "forkSessionError": "Diese Sitzung konnte nicht verzweigt werden. Bitte erneut versuchen.",
+    "deleteSessionsPartialFailure": "{{failed}} von {{total}} Sitzungen konnten nicht gelöscht werden. Bitte erneut versuchen."
   },
   "version": {
     "updateAvailable": "Update verfügbar",
@@ -149,6 +156,14 @@
     "deleteSessionPermanently": "Endgültig löschen",
     "deleteAllData": "Alle Daten dauerhaft löschen",
     "allConversationsDeleted": "Das Projekt wird aus der Seitenleiste entfernt. Deine Dateien, Erinnerungen und Sitzungsdaten bleiben erhalten.",
-    "cannotUndo": "Du kannst das Projekt später erneut hinzufügen."
+    "cannotUndo": "Du kannst das Projekt später erneut hinzufügen.",
+    "deleteSessions_one": "{{count}} Sitzung löschen",
+    "deleteSessions_other": "{{count}} Sitzungen löschen",
+    "selectedSessions_one": "{{count}} ausgewählten Sitzung",
+    "selectedSessions_other": "{{count}} ausgewählten Sitzungen",
+    "archiveSessions_one": "{{count}} Sitzung archivieren",
+    "archiveSessions_other": "{{count}} Sitzungen archivieren",
+    "archiveSessionsNotice_one": "Beim Archivieren verschwindet die Sitzung aus der aktiven Liste, ihr Verlauf bleibt erhalten.",
+    "archiveSessionsNotice_other": "Beim Archivieren verschwinden die Sitzungen aus der aktiven Liste, ihr Verlauf bleibt erhalten."
   }
 }

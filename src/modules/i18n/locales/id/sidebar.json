@@ -32,7 +32,13 @@
     "loadingSessions": "Memuat sesi...",
     "unnamed": "Tanpa Nama",
     "loading": "Memuat...",
-    "showMore": "Tampilkan sesi lainnya"
+    "showMore": "Tampilkan sesi lainnya",
+    "select": "Pilih",
+    "selectAll": "Pilih semua",
+    "selectAllLoaded": "Pilih semua yang dimuat",
+    "clearSelection": "Hapus pilihan",
+    "deleteSelected_one": "Hapus {{count}} sesi",
+    "deleteSelected_other": "Hapus {{count}} sesi"
   },
   "tooltips": {
     "viewEnvironments": "Lihat Lingkungan",
@@ -114,7 +120,8 @@
     "restoreProjectError": "Terjadi kesalahan saat memulihkan proyek. Silakan coba lagi.",
     "restoreSessionFailed": "Gagal memulihkan sesi. Silakan coba lagi.",
     "restoreSessionError": "Terjadi kesalahan saat memulihkan sesi. Silakan coba lagi.",
-    "forkSessionError": "Sesi ini tidak dapat di-fork. Silakan coba lagi."
+    "forkSessionError": "Sesi ini tidak dapat di-fork. Silakan coba lagi.",
+    "deleteSessionsPartialFailure": "{{failed}} dari {{total}} sesi gagal dihapus. Silakan coba lagi."
   },
   "version": {
     "updateAvailable": "Pembaruan tersedia",
@@ -157,6 +164,14 @@
     "deleteSessionPermanently": "Hapus permanen",
     "deleteAllData": "Hapus semua data secara permanen",
     "allConversationsDeleted": "Proyek akan dihapus dari sidebar. File, memori, dan data sesi tetap dipertahankan.",
-    "cannotUndo": "Proyek dapat ditambahkan kembali nanti."
+    "cannotUndo": "Proyek dapat ditambahkan kembali nanti.",
+    "deleteSessions_one": "Hapus {{count}} Sesi",
+    "deleteSessions_other": "Hapus {{count}} Sesi",
+    "selectedSessions_one": "{{count}} sesi terpilih",
+    "selectedSessions_other": "{{count}} sesi terpilih",
+    "archiveSessions_one": "Arsipkan {{count}} sesi",
+    "archiveSessions_other": "Arsipkan {{count}} sesi",
+    "archiveSessionsNotice_one": "Pengarsipan menyembunyikan sesi ini dari daftar aktif tanpa menghapus riwayatnya.",
+    "archiveSessionsNotice_other": "Pengarsipan menyembunyikan sesi-sesi ini dari daftar aktif tanpa menghapus riwayatnya."
   }
 }

@@ -4,7 +4,7 @@ import type { TFunction } from 'i18next';
 import { api } from '@/shared/api';
 import { subscribeToUserPreferences } from '@/shared/userSettings';
 import { usePaletteOps } from '@/modules/command-palette';
-import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationProjectResult, ConversationSearchResults, LLMProvider, Project, ProjectSession, ProjectSortOrder, RecentConversationListItem, SearchProgress, ActiveSidebarRename, PendingSidebarDeletion, SessionTitleSearchResult, SessionWithProvider, SidebarSearchMode } from '@/shared/types';
+import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationProjectResult, ConversationSearchResults, LLMProvider, Project, ProjectSession, ProjectSortOrder, RecentConversationListItem, SearchProgress, ActiveSidebarRename, PendingSidebarDeletion, SessionTitleSearchResult, SessionWithProvider, SidebarSearchMode, SidebarSessionSelection } from '@/shared/types';
 import {
   filterProjects,
   getAllSessions,
@@ -96,6 +96,11 @@ export function useSidebarController({
   // project and session dialogs are portalled at the same z-index and would
   // otherwise stack. See PendingSidebarDeletion.
   const [pendingDeletion, setPendingDeletion] = useState<PendingSidebarDeletion | null>(null);
+  // The one session list currently in bulk-selection mode, with the rows ticked
+  // in it. It lives here rather than in the list component because the delete it
+  // feeds runs from this hook, and because holding a single selection is what
+  // keeps a bulk delete from spanning two projects. See SidebarSessionSelection.
+  const [sessionSelection, setSessionSelection] = useState<SidebarSessionSelection | null>(null);
   const [showVersionModal, setShowVersionModal] = useState(false);
   const [searchMode, setSearchMode] = useState<SidebarSearchMode>('projects');
   const [conversationResults, setConversationResults] = useState<ConversationSearchResults | null>(null);
@@ -494,6 +499,10 @@ export function useSidebarController({
   // `projectId` as their identifier after the migration.
   const toggleProject = useCallback(
     (projectId: string) => {
+      // Collapsing or expanding takes the ticked rows off screen, so the
+      // selection they belong to is dropped with them.
+      setSessionSelection(null);
+
       if (searchMode === 'running') {
         setCollapsedRunningProjects((prev) => {
           const next = new Set(prev);
@@ -847,6 +856,97 @@ export function useSidebarController({
     }
   }, [fetchArchivedSessions, onSessionDelete, pendingDeletion, t]);
 
+  const setProjectSessionSelection = useCallback((selection: SidebarSessionSelection) => {
+    setSessionSelection(selection);
+    // Selecting replaces the row's controls, so an open rename would be left
+    // hanging behind the checkboxes with no way to save it.
+    setActiveRename(null);
+  }, []);
+
+  const toggleSessionSelected = useCallback((projectId: string, sessionId: string) => {
+    setSessionSelection((previous) => {
+      // A row of another project starts that project's selection from scratch;
+      // one selection at a time is what keeps a bulk delete inside one list.
+      const sessionIds = new Set(previous?.projectId === projectId ? previous.sessionIds : []);
+      if (!sessionIds.delete(sessionId)) {
+        sessionIds.add(sessionId);
+      }
+      return { projectId, sessionIds };
+    });
+  }, []);
+
+  const cancelSessionSelection = useCallback(() => {
+    setSessionSelection(null);
+  }, []);
+
+  // Takes the ids instead of reading `sessionSelection`, so it stays referentially
+  // stable: it is handed to every memoized project row, and re-creating it on each
+  // tick of the selection would re-render all of them.
+  const showDeleteSelectedSessionsConfirmation = useCallback((sessionIds: string[]) => {
+    if (sessionIds.length === 0) {
+      return;
+    }
+
+    setPendingDeletion({ kind: 'sessions', sessionIds });
+  }, []);
+
+  const confirmDeleteSessions = useCallback(async (hardDelete = false) => {
+    if (pendingDeletion?.kind !== 'sessions') {
+      return;
+    }
+
+    const { sessionIds } = pendingDeletion;
+    setPendingDeletion(null);
+
+    // One request per id: the endpoint deletes a single session, and settling
+    // them all means one failure does not hide the sessions that did go.
+    const outcomes = await Promise.allSettled(
+      sessionIds.map(async (sessionId) => {
+        const response = await api.deleteSession(sessionId, hardDelete);
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`status ${response.status}: ${errorText}`);
+        }
+        return sessionId;
+      }),
+    );
+
+    const deletedSessionIds: string[] = [];
+    outcomes.forEach((outcome, index) => {
+      if (outcome.status === 'fulfilled') {
+        deletedSessionIds.push(outcome.value);
+      } else {
+        console.error('[Sidebar] Failed to delete session:', {
+          sessionId: sessionIds[index],
+          error: outcome.reason,
+        });
+      }
+    });
+
+    if (deletedSessionIds.length > 0) {
+      const deletedIdSet = new Set(deletedSessionIds);
+      deletedSessionIds.forEach((sessionId) => onSessionDelete?.(sessionId));
+      // Same bookkeeping as the single delete, batched: the recents feed is not
+      // refetched here, so the rows that just went are pruned from it by hand.
+      setRecentConversations((previous) => {
+        const remaining = previous.filter((conversation) => !deletedIdSet.has(conversation.sessionId));
+        const removed = previous.length - remaining.length;
+        if (removed > 0) {
+          setRecentConversationsTotal((total) => Math.max(0, total - removed));
+        }
+        return remaining;
+      });
+      await fetchArchivedSessions();
+    }
+
+    setSessionSelection(null);
+
+    const failedCount = sessionIds.length - deletedSessionIds.length;
+    if (failedCount > 0) {
+      alert(t('messages.deleteSessionsPartialFailure', { failed: failedCount, total: sessionIds.length }));
+    }
+  }, [fetchArchivedSessions, onSessionDelete, pendingDeletion, t]);
+
   const requestProjectDelete = useCallback(
     (project: Project) => {
       setPendingDeletion({
@@ -1062,6 +1162,13 @@ export function useSidebarController({
     setSidebarVisible(true);
   }, [setSidebarVisible]);
 
+  // Wrapped rather than reset from an effect: leaving the Projects tab hides the
+  // ticked rows, and a selection left behind would come back with the tab.
+  const changeSearchMode = useCallback((mode: SidebarSearchMode) => {
+    setSessionSelection(null);
+    setSearchMode(mode);
+  }, []);
+
   return {
     isSidebarCollapsed,
     isProjectExpanded,
@@ -1103,6 +1210,12 @@ export function useSidebarController({
     saveProjectName,
     showDeleteSessionConfirmation,
     confirmDeleteSession,
+    sessionSelection,
+    setProjectSessionSelection,
+    toggleSessionSelected,
+    cancelSessionSelection,
+    showDeleteSelectedSessionsConfirmation,
+    confirmDeleteSessions,
     requestProjectDelete,
     confirmDeleteProject,
     handleProjectSelect,
@@ -1115,7 +1228,7 @@ export function useSidebarController({
     expandSidebar,
     setShowNewProject,
     searchMode,
-    setSearchMode,
+    setSearchMode: changeSearchMode,
     conversationResults,
     isSearching,
     searchProgress,

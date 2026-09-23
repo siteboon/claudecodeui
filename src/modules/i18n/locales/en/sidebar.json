@@ -32,7 +32,13 @@
     "loadingSessions": "Loading sessions...",
     "unnamed": "Unnamed",
     "loading": "Loading...",
-    "showMore": "Show more sessions"
+    "showMore": "Show more sessions",
+    "select": "Select",
+    "selectAll": "Select all",
+    "selectAllLoaded": "Select all loaded",
+    "clearSelection": "Clear",
+    "deleteSelected_one": "Delete {{count}} session",
+    "deleteSelected_other": "Delete {{count}} sessions"
   },
   "tooltips": {
     "viewEnvironments": "View Environments",
@@ -115,7 +121,8 @@
     "restoreProjectError": "Error restoring project. Please try again.",
     "restoreSessionFailed": "Failed to restore session. Please try again.",
     "restoreSessionError": "Error restoring session. Please try again.",
-    "forkSessionError": "Could not fork this session. Please try again."
+    "forkSessionError": "Could not fork this session. Please try again.",
+    "deleteSessionsPartialFailure": "{{failed}} of {{total}} sessions could not be deleted. Please try again."
   },
   "version": {
     "updateAvailable": "Update available",
@@ -158,6 +165,14 @@
     "deleteSessionPermanently": "Delete permanently",
     "deleteAllData": "Delete all data permanently",
     "allConversationsDeleted": "The project will be removed from the sidebar. Your files, memories, and session data will be preserved.",
-    "cannotUndo": "You can re-add the project later."
+    "cannotUndo": "You can re-add the project later.",
+    "deleteSessions_one": "Delete {{count}} Session",
+    "deleteSessions_other": "Delete {{count}} Sessions",
+    "selectedSessions_one": "{{count}} selected session",
+    "selectedSessions_other": "{{count}} selected sessions",
+    "archiveSessions_one": "Archive {{count}} session",
+    "archiveSessions_other": "Archive {{count}} sessions",
+    "archiveSessionsNotice_one": "Archive keeps the session out of the active list while preserving its history.",
+    "archiveSessionsNotice_other": "Archive keeps the sessions out of the active list while preserving their history."
   }
 }
