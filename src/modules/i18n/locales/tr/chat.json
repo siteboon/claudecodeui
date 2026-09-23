@@ -255,5 +255,10 @@
     "failed": "Gönderilmedi — {{reason}}",
     "cancel": "Zamanlanmış mesajı iptal et",
     "dismiss": "Hata bildirimini kapat"
+  },
+  "modelLibrary": {
+    "effortLevels": "Akıl yürütme seviyeleri",
+    "effortLevelsHint": "Bu modelin kabul ettiği akıl yürütme çabası seviyelerini seçin. Hiçbiri seçilmezse, yazma alanı bu model için Akıl yürütme bölümünü gizler.",
+    "effortSummary": "Akıl yürütme: {{levels}}"
   }
 }

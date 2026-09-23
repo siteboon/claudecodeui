@@ -257,5 +257,10 @@
     "failed": "Non envoyé — {{reason}}",
     "cancel": "Annuler le message programmé",
     "dismiss": "Masquer l'avis d'échec"
+  },
+  "modelLibrary": {
+    "effortLevels": "Niveaux de raisonnement",
+    "effortLevelsHint": "Sélectionnez les niveaux d'effort de raisonnement acceptés par ce modèle. Sans sélection, le compositeur masque Raisonnement pour ce modèle.",
+    "effortSummary": "Raisonnement : {{levels}}"
   }
 }

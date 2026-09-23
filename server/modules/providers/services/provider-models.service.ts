@@ -36,6 +36,15 @@ type ProviderModelsServiceDependencies = {
   sessions?: ProviderModelsSessionStore;
 };
 
+/**
+ * Converts a stored custom row into a catalog option.
+ *
+ * `effort` is emitted in the same shape predefined models use, so the composer
+ * and every runtime's effort validation treat declared levels identically.
+ * Rows without declared levels omit `effort` on purpose: the composer then
+ * hides Reasoning and runtimes send no effort, instead of guessing levels the
+ * model might reject.
+ */
 const toCustomProviderModelOption = (
   record: CustomProviderModelRecord,
 ): ProviderModelOption => ({
@@ -43,7 +52,26 @@ const toCustomProviderModelOption = (
   label: record.model,
   recordId: record.recordId,
   isCustom: true,
+  ...(record.effort
+    ? {
+      effort: {
+        ...(record.effort.default ? { default: record.effort.default } : {}),
+        values: record.effort.values.map((value) => ({ value })),
+      },
+    }
+    : {}),
 });
+
+/**
+ * Effort levels a custom model of this provider may declare: every level one
+ * of the provider's predefined models accepts. Those are the levels its
+ * runtime knows how to pass on (Claude's `ultracode`, for instance, is
+ * translated by the runtime), and a provider whose predefined models declare
+ * none (Cursor) has no effort support at all.
+ */
+const readProviderEffortLevels = (predefined: ProviderModelsDefinition): Set<string> => new Set(
+  predefined.OPTIONS.flatMap((option) => option.effort?.values.map((level) => level.value) ?? []),
+);
 
 const mergeProviderModels = (
   predefined: ProviderModelsDefinition,
@@ -61,7 +89,38 @@ const mergeProviderModels = (
 const normalizeCustomModelInput = (input: CustomProviderModelInput): CustomProviderModelInput => ({
   id: input.id.trim(),
   model: input.model.trim(),
+  ...(input.effort === undefined ? {} : { effort: input.effort }),
 });
+
+const assertEffortLevelsSupported = (
+  provider: LLMProvider,
+  predefined: ProviderModelsDefinition,
+  input: CustomProviderModelInput,
+): void => {
+  const declaredLevels = input.effort?.values ?? [];
+  if (declaredLevels.length === 0) {
+    return;
+  }
+
+  const supportedLevels = readProviderEffortLevels(predefined);
+  if (supportedLevels.size === 0) {
+    throw new AppError(`${provider} models do not support reasoning effort.`, {
+      code: 'MODEL_EFFORT_NOT_SUPPORTED',
+      statusCode: 400,
+    });
+  }
+
+  const unsupportedLevel = declaredLevels.find((level) => !supportedLevels.has(level));
+  if (unsupportedLevel) {
+    throw new AppError(
+      `"${unsupportedLevel}" is not a ${provider} effort level. Use one of: ${[...supportedLevels].join(', ')}.`,
+      {
+        code: 'INVALID_MODEL_EFFORT',
+        statusCode: 400,
+      },
+    );
+  }
+};
 
 const isUniqueConstraintError = (error: unknown): boolean => (
   error !== null
@@ -139,6 +198,7 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     const predefined = await resolveProvider(provider).models.getSupportedModels();
     const normalized = normalizeCustomModelInput(input);
     assertModelIdAvailable(provider, predefined, normalized.id);
+    assertEffortLevelsSupported(provider, predefined, normalized);
 
     try {
       const created = catalog.createCustomProviderModel(provider, normalized);
@@ -166,6 +226,7 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     readCustomModel(provider, recordId);
     const normalized = normalizeCustomModelInput(input);
     assertModelIdAvailable(provider, predefined, normalized.id, recordId);
+    assertEffortLevelsSupported(provider, predefined, normalized);
 
     try {
       const updated = catalog.updateCustomProviderModel(provider, recordId, normalized);

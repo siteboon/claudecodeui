@@ -291,5 +291,10 @@
     "failed": "未傳送 — {{reason}}",
     "cancel": "取消排程訊息",
     "dismiss": "關閉失敗提示"
+  },
+  "modelLibrary": {
+    "effortLevels": "推理等級",
+    "effortLevelsHint": "選擇此模型支援的推理強度等級。若未選擇任何等級，輸入框將不會為此模型顯示推理選項。",
+    "effortSummary": "推理：{{levels}}"
   }
 }

@@ -69,6 +69,7 @@ const createCatalogStore = () => {
         modelId: input.id,
         model: input.model,
         sortOrder: readRows(provider).length,
+        effort: input.effort ?? null,
       };
       rows.set(provider, [...readRows(provider), record]);
       return record;
@@ -82,7 +83,13 @@ const createCatalogStore = () => {
       if (!existing) {
         return null;
       }
-      const updated = { ...existing, modelId: input.id, model: input.model };
+      const updated = {
+        ...existing,
+        modelId: input.id,
+        model: input.model,
+        // Mirrors the repository: an omitted effort keeps the stored levels.
+        effort: input.effort === undefined ? existing.effort : input.effort,
+      };
       rows.set(provider, readRows(provider).map((record) => (
         record.recordId === recordId ? updated : record
       )));
@@ -104,6 +111,7 @@ const createTestService = (options: {
   sessions?: ReturnType<typeof createSessionStore>;
   activeModel?: (provider: LLMProvider, sessionId?: string) => string;
   onCatalogRead?: (provider: LLMProvider) => void;
+  predefined?: (provider: LLMProvider) => ProviderModelsDefinition;
 } = {}) => {
   const catalog = options.catalog ?? createCatalogStore();
   const sessions = options.sessions ?? createSessionStore();
@@ -114,7 +122,7 @@ const createTestService = (options: {
       models: {
         getSupportedModels: async () => {
           options.onCatalogRead?.(provider);
-          return createModels(`${provider}-default`);
+          return options.predefined?.(provider) ?? createModels(`${provider}-default`);
         },
         getCurrentActiveModel: async (sessionId) => createCurrentActiveModel(
           options.activeModel?.(provider, sessionId) ?? `${provider}-default`,
@@ -163,6 +171,93 @@ test('custom models can be created, edited, and deleted', async () => {
   const removed = await service.deleteCustomModel('claude', recordId);
   assert.equal(removed.model.value, 'claude-my-model-v2');
   assert.equal(removed.models.OPTIONS.some((option) => option.recordId === recordId), false);
+});
+
+/** Predefined catalogs shaped like the real ones: Cursor declares no effort levels. */
+const createEffortAwareModels = (provider: LLMProvider): ProviderModelsDefinition => {
+  if (provider === 'cursor') {
+    return createModels('cursor-default');
+  }
+
+  return {
+    OPTIONS: [
+      {
+        value: `${provider}-default`,
+        label: `${provider}-default`,
+        effort: { default: 'medium', values: [{ value: 'low' }, { value: 'medium' }, { value: 'high' }] },
+      },
+      {
+        value: `${provider}-large`,
+        label: `${provider}-large`,
+        effort: { values: [{ value: 'high' }, { value: 'max' }] },
+      },
+    ],
+    DEFAULT: `${provider}-default`,
+  };
+};
+
+test('custom models carry declared effort levels into the merged catalog', async () => {
+  const { service } = createTestService({ predefined: createEffortAwareModels });
+
+  const created = await service.createCustomModel('claude', {
+    model: 'My Custom Model',
+    id: 'my-custom-model',
+    effort: { values: ['low', 'max'], default: 'max' },
+  });
+  const expectedEffort = { default: 'max', values: [{ value: 'low' }, { value: 'max' }] };
+  assert.deepEqual(created.model.effort, expectedEffort);
+
+  const catalog = await service.getProviderModels('claude');
+  const merged = catalog.OPTIONS.find((option) => option.value === 'my-custom-model');
+  assert.deepEqual(merged?.effort, expectedEffort);
+
+  // A rename that does not mention effort (an older client) keeps the levels.
+  const renamed = await service.updateCustomModel('claude', created.model.recordId as number, {
+    model: 'Renamed',
+    id: 'my-custom-model',
+  });
+  assert.deepEqual(renamed.model.effort, expectedEffort);
+
+  const cleared = await service.updateCustomModel('claude', created.model.recordId as number, {
+    model: 'Renamed',
+    id: 'my-custom-model',
+    effort: null,
+  });
+  assert.equal('effort' in cleared.model, false);
+});
+
+test('custom models without declared effort levels expose no effort', async () => {
+  const { service } = createTestService({ predefined: createEffortAwareModels });
+
+  const created = await service.createCustomModel('codex', { model: 'Plain', id: 'plain-model' });
+
+  assert.equal('effort' in created.model, false);
+});
+
+test('custom effort levels must be levels the provider supports', async () => {
+  const { service } = createTestService({ predefined: createEffortAwareModels });
+
+  await assert.rejects(
+    () => service.createCustomModel('codex', {
+      model: 'Unknown level',
+      id: 'unknown-level',
+      effort: { values: ['low', 'turbo'] },
+    }),
+    (error) => error instanceof AppError
+      && error.code === 'INVALID_MODEL_EFFORT'
+      && error.statusCode === 400,
+  );
+
+  await assert.rejects(
+    () => service.createCustomModel('cursor', {
+      model: 'Cursor effort',
+      id: 'cursor-effort',
+      effort: { values: ['low'] },
+    }),
+    (error) => error instanceof AppError
+      && error.code === 'MODEL_EFFORT_NOT_SUPPORTED'
+      && error.statusCode === 400,
+  );
 });
 
 test('duplicate model ids are rejected within one provider', async () => {

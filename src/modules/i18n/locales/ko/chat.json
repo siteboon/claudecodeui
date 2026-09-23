@@ -276,5 +276,10 @@
     "failed": "전송되지 않음 — {{reason}}",
     "cancel": "예약 취소",
     "dismiss": "실패 알림 닫기"
+  },
+  "modelLibrary": {
+    "effortLevels": "추론 수준",
+    "effortLevelsHint": "이 모델이 지원하는 추론 노력 수준을 선택하세요. 선택하지 않으면 작성기에서 이 모델의 추론 항목이 숨겨집니다.",
+    "effortSummary": "추론: {{levels}}"
   }
 }

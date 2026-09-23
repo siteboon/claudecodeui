@@ -9,6 +9,7 @@ import { providerSkillsService } from '@/modules/providers/services/skills.servi
 import { sessionConversationsSearchService } from '@/modules/providers/services/session-conversations-search.service.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 import type {
+  CustomProviderModelEffort,
   CustomProviderModelInput,
   LLMProvider,
   McpScope,
@@ -494,6 +495,66 @@ const parseModelRecordId = (value: unknown): number => {
   return recordId;
 };
 
+const invalidModelEffort = (message: string): AppError => new AppError(message, {
+  code: 'INVALID_MODEL_EFFORT',
+  statusCode: 400,
+});
+
+/**
+ * Parses the optional `effort` field of a custom-model payload.
+ *
+ * Only the shape is checked here (unique, trimmed, non-empty level ids and a
+ * default drawn from them); which levels a provider accepts is decided by the
+ * Providers service. `undefined` means "not sent" and `null` or an empty
+ * `values` list means "no effort levels".
+ */
+const parseCustomProviderModelEffort = (
+  value: unknown,
+): CustomProviderModelEffort | null | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null) {
+    return null;
+  }
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw invalidModelEffort('effort must be an object with a values array.');
+  }
+
+  const effort = value as Record<string, unknown>;
+  if (!Array.isArray(effort.values)) {
+    throw invalidModelEffort('effort.values must be an array of effort levels.');
+  }
+
+  const values: string[] = [];
+  for (const entry of effort.values) {
+    const level = typeof entry === 'string' ? entry.trim() : '';
+    if (!level || level.length > 40) {
+      throw invalidModelEffort('effort.values must contain non-empty strings of 40 characters or fewer.');
+    }
+    if (values.includes(level)) {
+      throw invalidModelEffort(`effort.values contains "${level}" more than once.`);
+    }
+    values.push(level);
+  }
+
+  if (effort.default !== undefined && effort.default !== null && typeof effort.default !== 'string') {
+    throw invalidModelEffort('effort.default must be a string.');
+  }
+  const defaultLevel = readOptionalQueryString(effort.default);
+  if (values.length === 0) {
+    if (defaultLevel) {
+      throw invalidModelEffort('effort.default requires at least one effort level.');
+    }
+    return null;
+  }
+  if (defaultLevel && !values.includes(defaultLevel)) {
+    throw invalidModelEffort('effort.default must be one of effort.values.');
+  }
+
+  return defaultLevel ? { values, default: defaultLevel } : { values };
+};
+
 const parseCustomProviderModelPayload = (payload: unknown): CustomProviderModelInput => {
   if (!payload || typeof payload !== 'object') {
     throw new AppError('Request body must be an object.', {
@@ -530,7 +591,8 @@ const parseCustomProviderModelPayload = (payload: unknown): CustomProviderModelI
     });
   }
 
-  return { model, id };
+  const effort = parseCustomProviderModelEffort(body.effort);
+  return effort === undefined ? { model, id } : { model, id, effort };
 };
 
 router.get(

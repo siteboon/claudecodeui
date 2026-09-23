@@ -353,5 +353,10 @@
     "tokensLabel_other": "token",
     "escClosesModal": "Esc menutup modal.",
     "close": "Tutup"
+  },
+  "modelLibrary": {
+    "effortLevels": "Tingkat penalaran",
+    "effortLevelsHint": "Pilih tingkat upaya penalaran yang diterima model ini. Jika tidak ada yang dipilih, composer menyembunyikan Penalaran untuk model ini.",
+    "effortSummary": "Penalaran: {{levels}}"
   }
 }

@@ -29,10 +29,18 @@ export type ProviderModelsDefinition = {
   DEFAULT: string;
 };
 
-/** User-supplied fields for creating or editing a custom provider model entry. */
+/**
+ * User-supplied fields for creating or editing a custom provider model entry.
+ * `effort` lists the reasoning-effort levels the model accepts; omit it to keep
+ * the stored levels on edit, send `null` to clear them.
+ */
 export type CustomProviderModelInput = {
   model: string;
   id: string;
+  effort?: {
+    values: string[];
+    default?: string;
+  } | null;
 };
 
 /** Mutation callbacks a model menu calls to persist custom provider models. */

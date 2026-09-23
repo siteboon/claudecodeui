@@ -282,5 +282,10 @@
     "failed": "No enviado — {{reason}}",
     "cancel": "Cancelar mensaje programado",
     "dismiss": "Descartar el aviso de fallo"
+  },
+  "modelLibrary": {
+    "effortLevels": "Niveles de razonamiento",
+    "effortLevelsHint": "Selecciona los niveles de esfuerzo de razonamiento que acepta este modelo. Si no seleccionas ninguno, el compositor oculta Razonamiento para este modelo.",
+    "effortSummary": "Razonamiento: {{levels}}"
   }
 }

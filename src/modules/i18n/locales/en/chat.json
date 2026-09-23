@@ -363,5 +363,10 @@
     "tokensLabel_other": "tokens",
     "escClosesModal": "Esc closes the modal.",
     "close": "Close"
+  },
+  "modelLibrary": {
+    "effortLevels": "Reasoning levels",
+    "effortLevelsHint": "Select the reasoning-effort levels this model accepts. With none selected, the composer hides Reasoning for this model.",
+    "effortSummary": "Reasoning: {{levels}}"
   }
 }

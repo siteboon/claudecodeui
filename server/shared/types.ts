@@ -110,6 +110,22 @@ export type CustomProviderModelRecord = {
   modelId: string;
   model: string;
   sortOrder: number;
+  /** NULL for rows that never declared effort levels, including pre-existing rows. */
+  effort: CustomProviderModelEffort | null;
+};
+
+/**
+ * Reasoning-effort levels a user declared for one custom model.
+ *
+ * `values` holds unique, non-empty level ids drawn from the levels the
+ * provider's predefined models declare, and is never empty (an empty
+ * declaration is stored as NULL). `default`, when present, is one of `values`
+ * and documents the level the provider applies when the composer sends
+ * `Default`, mirroring `ProviderModelOption['effort'].default`.
+ */
+export type CustomProviderModelEffort = {
+  values: string[];
+  default?: string;
 };
 
 /**
@@ -122,6 +138,12 @@ export type CustomProviderModelRecord = {
 export type CustomProviderModelInput = {
   id: string;
   model: string;
+  /**
+   * Optional reasoning-effort declaration. `undefined` leaves stored metadata
+   * untouched on update (and stores none on create) so clients that predate
+   * effort metadata keep working; `null` clears it.
+   */
+  effort?: CustomProviderModelEffort | null;
 };
 
 // ---------------------------

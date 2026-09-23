@@ -246,6 +246,77 @@ test('model routes expose immutable defaults and full custom model CRUD', async 
   });
 });
 
+test('custom model routes accept, validate, and return reasoning-effort levels', async () => {
+  await withProviderServer(async (baseUrl) => {
+    const postModel = async (provider: string, body: unknown) => {
+      const response = await fetch(`${baseUrl}/api/providers/${provider}/models`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      return {
+        status: response.status,
+        payload: await response.json() as {
+          data?: {
+            model: { recordId: number; effort?: unknown };
+            models: { OPTIONS: Array<{ value: string; effort?: unknown }> };
+          };
+          error?: { code: string };
+        },
+      };
+    };
+
+    const created = await postModel('claude', {
+      model: 'My Custom Model',
+      id: 'my-custom-model',
+      effort: { values: [' low ', 'high'], default: 'high' },
+    });
+    const expectedEffort = { default: 'high', values: [{ value: 'low' }, { value: 'high' }] };
+    assert.equal(created.status, 201);
+    assert.deepEqual(created.payload.data?.model.effort, expectedEffort);
+
+    const catalogResponse = await fetch(`${baseUrl}/api/providers/claude/models`);
+    const catalogPayload = await catalogResponse.json() as {
+      data: { models: { OPTIONS: Array<{ value: string; effort?: unknown }> } };
+    };
+    assert.deepEqual(
+      catalogPayload.data.models.OPTIONS.find((option) => option.value === 'my-custom-model')?.effort,
+      expectedEffort,
+    );
+
+    // A PATCH from a client that predates effort metadata keeps the levels.
+    const renameResponse = await fetch(
+      `${baseUrl}/api/providers/claude/models/${created.payload.data?.model.recordId}`,
+      {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ model: 'Renamed', id: 'my-custom-model' }),
+      },
+    );
+    const renamePayload = await renameResponse.json() as { data: { model: { effort?: unknown } } };
+    assert.equal(renameResponse.status, 200);
+    assert.deepEqual(renamePayload.data.model.effort, expectedEffort);
+
+    const invalidPayloads: Array<{ provider: string; effort: unknown; code: string }> = [
+      { provider: 'claude', effort: { values: ['low', 'low'] }, code: 'INVALID_MODEL_EFFORT' },
+      { provider: 'claude', effort: { values: ['low', ''] }, code: 'INVALID_MODEL_EFFORT' },
+      { provider: 'claude', effort: { values: ['low'], default: 'high' }, code: 'INVALID_MODEL_EFFORT' },
+      { provider: 'claude', effort: { values: ['turbo'] }, code: 'INVALID_MODEL_EFFORT' },
+      { provider: 'claude', effort: 'high', code: 'INVALID_MODEL_EFFORT' },
+      { provider: 'cursor', effort: { values: ['low'] }, code: 'MODEL_EFFORT_NOT_SUPPORTED' },
+    ];
+    for (const [index, invalid] of invalidPayloads.entries()) {
+      const rejected = await postModel(invalid.provider, {
+        model: `Invalid ${index}`,
+        id: `invalid-${index}`,
+        effort: invalid.effort,
+      });
+      assert.equal(rejected.status, 400, JSON.stringify(invalid));
+      assert.equal(rejected.payload.error?.code, invalid.code, JSON.stringify(invalid));
+    }
+  });
+});
+
 test('the running-sessions route reports a session held open for background work', async () => {
   // The client polls this route to keep every tab's activity map in step, so
   // a session whose turn ended but whose agent is still running has to be in
