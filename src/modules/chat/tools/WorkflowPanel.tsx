@@ -204,6 +204,12 @@ type WorkflowAgentTimelineProps = {
    * through failed reads while it does, and reads once more when it stops.
    */
   isRunning: boolean;
+  /**
+   * Whether the card lists the agent as stopped: its run is over without the
+   * journal settling it, so no result can still land and a server read that
+   * calls it running only means the session's own run is still up.
+   */
+  isStopped: boolean;
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
   selectedProject?: Project | null;
@@ -220,7 +226,7 @@ type WorkflowAgentTimelineProps = {
  * transcript is the only place its progress lands and the journal the only
  * place its result does.
  */
-const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFileOpen, createDiff, selectedProject }: WorkflowAgentTimelineProps) => {
+const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, isStopped, onFileOpen, createDiff, selectedProject }: WorkflowAgentTimelineProps) => {
   const { t } = useTranslation();
   // What the last read returned — the timeline, or why there is none — and
   // null until the first read lands. A later read that fails keeps the last
@@ -259,8 +265,9 @@ const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFi
       // result to the journal — in auto mode only after a classifier request —
       // so the read the card's change triggers can land while the server still
       // has the agent running. It stops saying so once the journal settles the
-      // agent or the session's run ends.
-      if (serverStatus === 'running' || (isRunning && serverStatus === undefined)) {
+      // agent or the session's run ends — an aborted run never settles its
+      // agents, so a stopped one is not read again.
+      if (!isStopped && (serverStatus === 'running' || (isRunning && serverStatus === undefined))) {
         nextRead = setTimeout(read, AGENT_TIMELINE_POLL_MS);
       }
     };
@@ -270,7 +277,7 @@ const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFi
       cancelled = true;
       clearTimeout(nextRead);
     };
-  }, [sessionId, runId, agentId, isRunning]);
+  }, [sessionId, runId, agentId, isRunning, isStopped]);
 
   if (!loaded) {
     return <div className="text-[11px] text-muted-foreground/60">{t('workflow.agentTimelineLoading', 'Reading the agent\'s steps…')}</div>;
@@ -396,6 +403,7 @@ const WorkflowAgentRowView = memo(({ agent, timelineAddress, onFileOpen, createD
             runId={timelineAddress.runId}
             agentId={agent.agentId}
             isRunning={agent.status === 'running'}
+            isStopped={agent.status === 'stopped'}
             onFileOpen={onFileOpen}
             createDiff={createDiff}
             selectedProject={selectedProject}

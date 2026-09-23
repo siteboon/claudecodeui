@@ -512,6 +512,28 @@ describe('the agents of a workflow card', () => {
     expect(workflowAgentActivity).toHaveBeenCalledTimes(4);
   });
 
+  it('reads a stopped run\'s unsettled agent once, even while the session\'s run keeps the server calling it running', async () => {
+    // A workflow the user stopped never settles its agents in the journal, and
+    // the server calls an unsettled agent running for as long as the session's
+    // own run is up — which a held session can be for a long while.
+    vi.useFakeTimers();
+    agentActivityByAgentId.set('ab89f2cde612a51b1', {
+      agent: { id: 'ab89f2cde612a51b1', label: 'synthesize', status: 'running' },
+      prompt: 'Merge the audit findings.',
+      activity: [{ kind: 'thinking', content: 'Collecting findings.' }],
+      activityCount: 1,
+    });
+    renderPanel({ toolResult: LAUNCH_ACK, workflow: { ...completedWorkflow, status: 'stopped' } }, 'session-1');
+    openCard();
+    expect(agentRows().find((row) => row.textContent?.includes('synthesize'))?.textContent).toContain('no result');
+
+    fireEvent.click(screen.getByRole('button', { name: /synthesize/ }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.getByText('Collecting findings.')).toBeTruthy();
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(workflowAgentActivity).toHaveBeenCalledTimes(1);
+  });
+
   it('shows an opened agent\'s task and its whole result around its steps', async () => {
     // What the CLI's `/workflows` view shows per agent. The row alone offers
     // at most a two-line preview from the live stream, which a reload loses.
