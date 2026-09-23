@@ -104,12 +104,8 @@ export default function EditorSidebar({
     return null;
   }
 
-  // Popped out and mobile show the editor as a floating overlay, docked shows
-  // it beside the workspace — but always the same single CodeEditor element in
-  // the same position, with only the wrappers restyled. Returning a different
-  // root per layout remounted the editor, so it re-read the file from disk and
-  // silently dropped unsaved edits whenever the toolbar's pop-out button, a
-  // container too narrow to split, or the mobile breakpoint switched layouts.
+  // One CodeEditor element in one position for every layout; only the wrappers
+  // change, so switching layouts never remounts it and drops the buffer.
   const isFloating = isMobile || poppedOut;
 
   // In files tab, fill the remaining width unless user has dragged manually.

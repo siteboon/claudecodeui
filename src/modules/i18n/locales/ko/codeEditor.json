@@ -41,7 +41,7 @@
     "openInNewTab": "새 탭에서 열기"
   },
   "unsavedChanges": {
-    "confirmClose": "저장하지 않은 변경 사항이 있습니다. 이 파일을 닫고 변경 사항을 버리시겠습니까?",
-    "indicator": "저장되지 않은 변경 사항"
+    "confirmClose": "저장하지 않은 변경사항이 있습니다. 이 파일을 닫고 변경사항을 버리시겠습니까?",
+    "indicator": "저장되지 않은 변경사항"
   }
 }

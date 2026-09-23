@@ -378,15 +378,19 @@ test('switching to another file while dirty asks first and keeps the current one
 
   act(() => result.current.handleFileOpen('/repo/a.txt'));
   act(() => result.current.handleUnsavedChangesChange(true));
-  act(() => result.current.handleFileOpen('/repo/b.txt'));
+  let opened: boolean | null = null;
+  act(() => { opened = result.current.handleFileOpen('/repo/b.txt'); });
 
   assert.equal(confirm.mock.calls.length, 1);
+  // Reported so the command palette does not switch tabs for a declined open.
+  assert.equal(opened, false);
   assert.equal(result.current.editingFile?.path, '/repo/a.txt');
 
   confirm.mockReturnValue(true);
-  act(() => result.current.handleFileOpen('/repo/b.txt'));
+  act(() => { opened = result.current.handleFileOpen('/repo/b.txt'); });
 
   assert.equal(confirm.mock.calls.length, 2);
+  assert.equal(opened, true);
   assert.equal(result.current.editingFile?.path, '/repo/b.txt');
 });
 

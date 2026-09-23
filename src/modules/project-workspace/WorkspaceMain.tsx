@@ -110,8 +110,9 @@ function WorkspaceMain({
   }, [setActiveTab]);
 
   const openFile = useCallback((filePath: string) => {
-    setActiveTab('files');
-    handleFileOpen(filePath);
+    if (handleFileOpen(filePath)) {
+      setActiveTab('files');
+    }
   }, [handleFileOpen, setActiveTab]);
 
   // Opens the editor side panel in place, keeping the current tab (e.g. chat).

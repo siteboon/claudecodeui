@@ -39,13 +39,13 @@ export const useEditorSidebar = ({
     hasUnsavedChangesRef.current = hasUnsavedChanges;
   }, []);
 
+  // Returns whether the file was opened, i.e. false when the user kept the
+  // unsaved buffer, so callers can skip follow-ups such as switching tabs.
   const handleFileOpen = useCallback(
-    (filePath: string, diffInfo: CodeEditorDiffInfo | null = null, line: number | null = null) => {
-      // Re-opening the open file of the same project with no diff payload on
-      // either side reuses the loaded buffer; any other open reloads it, which
-      // loses unsaved edits exactly like closing does, so it gets the same
-      // confirmation. The project matters because nested projects share
-      // absolute paths and the editor re-reads the file when its project changes.
+    (filePath: string, diffInfo: CodeEditorDiffInfo | null = null, line: number | null = null): boolean => {
+      // Only the open file of the same project (nested projects share absolute
+      // paths) without a diff payload reuses the buffer; any other open reloads
+      // it and would lose unsaved edits, so it asks like closing does.
       const openFile = editingFileRef.current;
       const reusesBuffer = openFile !== null
         && openFile.path === filePath
@@ -60,7 +60,7 @@ export const useEditorSidebar = ({
         // the one for this key, and two copies would eventually disagree.
         && !window.confirm(t('unsavedChanges.confirmClose'))
       ) {
-        return;
+        return false;
       }
 
       const normalizedPath = filePath.replace(/\\/g, '/');
@@ -75,6 +75,7 @@ export const useEditorSidebar = ({
         diffInfo,
         line,
       });
+      return true;
     },
     [selectedProject?.projectId, t],
   );
