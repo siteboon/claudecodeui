@@ -1896,6 +1896,64 @@ test('an edit whose run first reports a pending notification still replaces the 
   ]);
 });
 
+test('an edit still replaces the original when harness notes sit between its notification and prompt', { concurrency: false }, async () => {
+  // The edit's run reports the job as stopped, then writes what it writes at
+  // the start of any run before the edited prompt: a `system` note (session
+  // b4687029 has an `informational` "AGENTS.md loaded" exactly there), an
+  // `isMeta` user row and attachments. None of them is an answer, so the
+  // notification still opens the edit's turn.
+  const { texts } = await readResumedSessionTexts([
+    ...backgroundJobLaunchRows(),
+    {
+      type: 'user', uuid: 'r-p2', parentUuid: 'r-end', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:05:00.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: 'original question' }] },
+    },
+    {
+      type: 'assistant', uuid: 'r-a2', parentUuid: 'r-p2', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:05:01.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'answer to be replaced' }] },
+    },
+    {
+      type: 'user', uuid: 'r-stopped', parentUuid: 'r-end', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:10:00.000Z',
+      message: { role: 'user', content: backgroundJobNotification('stopped', '') },
+    },
+    {
+      type: 'system', subtype: 'informational', level: 'notice', isMeta: false,
+      uuid: 'r-note', parentUuid: 'r-stopped', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:10:00.000Z',
+      content: 'agents-md: no CLAUDE.md found; AGENTS.md loaded',
+    },
+    {
+      type: 'user', isMeta: true, uuid: 'r-meta', parentUuid: 'r-note', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:10:00.000Z',
+      message: { role: 'user', content: '<local-command-caveat>Caveat: injected by the harness</local-command-caveat>' },
+    },
+    {
+      type: 'attachment', uuid: 'r-attachment', parentUuid: 'r-meta', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:10:00.000Z',
+    },
+    {
+      type: 'user', uuid: 'r-p2b', parentUuid: 'r-attachment', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:10:01.000Z',
+      message: { role: 'user', content: [{ type: 'text', text: 'edited question' }] },
+    },
+    {
+      type: 'assistant', uuid: 'r-a2b', parentUuid: 'r-p2b', sessionId: RESUMED_SESSION_ID,
+      timestamp: '2026-09-20T10:10:02.000Z',
+      message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'answer to the edit' }] },
+    },
+  ]);
+
+  assert.deepEqual(texts, [
+    'start the long job',
+    'started it',
+    'edited question',
+    'answer to the edit',
+  ]);
+});
+
 // ---------------------------------------------------------------------------
 // buildLookupMap
 // ---------------------------------------------------------------------------

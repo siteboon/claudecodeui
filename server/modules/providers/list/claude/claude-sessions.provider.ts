@@ -520,10 +520,14 @@ function isTaskNotificationRow(row: AnyRecord): boolean {
  * Whether a sibling prompt row opens a turn the user sent, so it can stand for
  * an edit that replaced its earlier siblings.
  *
- * A typed prompt does. A task notification does only when the first thing
- * below it — past any further notifications and their attachments — is a typed
- * prompt: a resumed run, an edit's included, delivers the notifications still
- * pending for it before the prompt it was started for.
+ * A typed prompt does. A task notification does only when the first
+ * conversation turn below it is a typed prompt: a resumed run, an edit's
+ * included, delivers the notifications still pending for it before the prompt
+ * it was started for. Everything the harness writes in between is passed over
+ * — further notifications, attachments, `system` notes (an `informational`
+ * "AGENTS.md loaded" sits right there in real transcripts), `isMeta` user rows
+ * and progress rows — so only an assistant row, which means the model answered
+ * the notification, ends the search short.
  *
  * A notification the model simply answers is not an edit. It is what a CLI
  * process that outlived a resume writes once its background work finishes,
@@ -541,16 +545,15 @@ function opensUserTurn(row: AnyRecord, childrenByParent: Map<string, AnyRecord[]
   while (pending.length > 0) {
     const child = pending.pop() as AnyRecord;
     const childUuid = String(child.uuid);
-    if (visited.has(childUuid)) {
+    if (visited.has(childUuid) || child.type === 'assistant') {
       continue;
     }
     visited.add(childUuid);
 
-    if (child.type === 'attachment' || isTaskNotificationRow(child)) {
-      pending.push(...(childrenByParent.get(childUuid) ?? []));
-    } else if (isUserPromptRow(child)) {
+    if (isUserPromptRow(child) && !isTaskNotificationRow(child)) {
       return true;
     }
+    pending.push(...(childrenByParent.get(childUuid) ?? []));
   }
 
   return false;
