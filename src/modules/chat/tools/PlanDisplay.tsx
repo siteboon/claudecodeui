@@ -66,15 +66,20 @@ function PlanBuildButton({ request, buildPlan }: PlanBuildButtonProps) {
         onSelect: () => buildPlan(request, true),
       };
 
+  // On a phone the card is ~300px wide and "Build in new session" runs long in
+  // most languages: the label may shrink and truncate, the menu trigger never,
+  // and the shortcut hint (no ⌘ key to press there) is hidden.
   return (
-    <div className="inline-flex">
+    <div className="inline-flex min-w-0">
       <Button
         size="sm"
         onClick={() => buildPlan(request, buildPlansInNewSession)}
-        className="rounded-r-none"
+        className="min-w-0 rounded-r-none"
       >
-        {buildPlansInNewSession ? t('plan.buildInNewSession') : t('plan.build')}{' '}
-        <kbd className="ml-1 rounded bg-primary-foreground/20 px-1 py-0.5 font-mono text-[10px]">
+        <span className="truncate">
+          {buildPlansInNewSession ? t('plan.buildInNewSession') : t('plan.build')}
+        </span>
+        <kbd className="ml-1 hidden rounded bg-primary-foreground/20 px-1 py-0.5 font-mono text-[10px] sm:inline">
           ⌘↩
         </kbd>
       </Button>
@@ -85,6 +90,7 @@ function PlanBuildButton({ request, buildPlan }: PlanBuildButtonProps) {
         portal
         variant="default"
         size="sm"
+        className="shrink-0"
         triggerClassName="rounded-l-none border-l border-primary-foreground/20 px-2"
         menuClassName="w-[260px] rounded-xl p-1.5 shadow-xl"
         items={[otherOption]}
@@ -176,7 +182,7 @@ export const PlanDisplay: React.FC<PlanDisplayProps> = ({
 
         {/* Footer — always visible when permission is pending */}
         {pendingRequest && permissionCtx && (
-          <CardFooter className="justify-end gap-2 border-t border-border/40 px-4 pb-3 pt-3">
+          <CardFooter className="flex-wrap justify-end gap-2 border-t border-border/40 px-4 pb-3 pt-3">
             <Button
               variant="ghost"
               size="sm"
