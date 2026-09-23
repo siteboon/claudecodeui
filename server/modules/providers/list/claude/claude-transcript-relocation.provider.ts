@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 
 import type { ClaudeTranscriptRelocation } from '@/shared/types.js';
 
@@ -20,6 +20,14 @@ const CLAUDE_PROJECT_DIR_MAX_LENGTH = 200;
 function encodeClaudeProjectDirName(projectPath: string): string | null {
   const encoded = projectPath.replace(/[^a-zA-Z0-9]/g, '-');
   return encoded.length > CLAUDE_PROJECT_DIR_MAX_LENGTH ? null : encoded;
+}
+
+async function isDirectory(candidatePath: string): Promise<boolean> {
+  try {
+    return (await stat(candidatePath)).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -77,6 +85,10 @@ function rewriteTranscriptCwd(content: string, oldProjectPath: string, newProjec
  * removes the copies again, so the caller never writes rows for a half-finished
  * move.
  *
+ * The `<session-id>/` folder beside a transcript (subagent transcripts, tool
+ * results, workflow journals) moves with it: the history reader looks for it
+ * next to the transcript.
+ *
  * When both paths encode to the same folder ("my project" -> "my_project"),
  * the transcript is already where a resume looks, but its `cwd` still has to
  * be rewritten; that one is rewritten in place and reported like a move.
@@ -98,6 +110,8 @@ export async function relocateClaudeTranscripts(input: {
   const sourcePaths: string[] = [];
   // Rewritten transcripts waiting to replace an original that stays in place.
   const inPlaceRewrites: Array<{ temporaryPath: string; jsonlPath: string }> = [];
+  // Session folders already moved, which a failure moves back.
+  const movedDirectories: Array<{ sourcePath: string; targetPath: string }> = [];
 
   try {
     for (const session of input.sessions) {
@@ -132,10 +146,29 @@ export async function relocateClaudeTranscripts(input: {
       await writeFile(targetPath, rewrittenContent, { flag: 'wx' });
       writtenPaths.push(targetPath);
 
+      // Both folders share a parent, so this is a single atomic rename.
+      const sessionDirectoryName = path.basename(session.jsonlPath, '.jsonl');
+      const sessionDirectory = path.join(currentDirectory, sessionDirectoryName);
+      if (await isDirectory(sessionDirectory)) {
+        const targetDirectory = path.join(path.dirname(targetPath), sessionDirectoryName);
+        await rename(sessionDirectory, targetDirectory);
+        movedDirectories.push({ sourcePath: sessionDirectory, targetPath: targetDirectory });
+      }
+
       moved.push({ sessionId: session.sessionId, jsonlPath: targetPath });
       sourcePaths.push(session.jsonlPath);
     }
   } catch (error) {
+    for (const directory of movedDirectories) {
+      try {
+        await rename(directory.targetPath, directory.sourcePath);
+      } catch (cleanupError) {
+        console.warn(
+          `[claude-transcript-relocation] Failed to move ${directory.targetPath} back:`,
+          (cleanupError as Error).message,
+        );
+      }
+    }
     for (const writtenPath of writtenPaths) {
       try {
         await unlink(writtenPath);
