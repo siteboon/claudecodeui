@@ -146,47 +146,79 @@ test('Codex stays quiet when the output only arrived as in-flight item updates',
   assert.ok(messages.some((message) => message.kind === 'tool_use' && message.toolName === 'Bash'));
 });
 
-test('Codex reports turn.failed once and adds no empty-turn warning', async (t) => {
+// The sequences below were captured from the real vendored binary
+// (`codex exec --json`, codex-cli 0.153.4) against a local fake Responses API.
+// Codex reports a fatal failure as a top-level `error` event followed by a
+// `turn.failed` carrying the same message; it reuses `error` events for
+// transient reconnect notices and `error` items for non-fatal warnings.
+const modelMetadataWarning = {
+  type: 'item.completed',
+  item: {
+    id: 'item_0',
+    type: 'error',
+    message: 'Model metadata for `bogus` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.',
+  },
+};
+const reconnectNotice = {
+  type: 'error',
+  message: 'Reconnecting... 1/2 (stream disconnected before completion: stream closed before response.completed)',
+};
+
+test('Codex shows an upstream rejection once and adds no empty-turn warning', async (t) => {
+  const rejection = '{"error":{"message":"The model `bogus` does not exist","type":"invalid_request_error","code":"model_not_found"}}';
   const messages = await runCodexTurn(t, async function* () {
     yield threadStarted;
+    yield modelMetadataWarning;
     yield turnStarted;
-    yield { type: 'turn.failed', error: { message: 'model not available' } };
-    yield turnCompleted;
+    yield { type: 'error', message: rejection };
+    yield { type: 'turn.failed', error: { message: rejection } };
   });
 
   const errors = errorRows(messages);
   assert.equal(errors.length, 1, `expected only the failure row, got ${JSON.stringify(errors.map((m) => m.content))}`);
-  assert.equal(errors[0].content, 'model not available');
+  assert.equal(errors[0].content, rejection);
   assert.equal(emptyTurnWarnings(messages).length, 0);
   assert.ok(messages.some((message) => message.kind === 'complete' && message.exitCode === 1));
 });
 
-test('Codex renders a streamed error item instead of an empty-turn warning', async (t) => {
+test('Codex still warns about an empty turn that followed a non-fatal warning item', async (t) => {
   const messages = await runCodexTurn(t, async function* () {
     yield threadStarted;
+    yield modelMetadataWarning;
     yield turnStarted;
-    yield { type: 'item.completed', item: { id: 'item-1', type: 'error', message: 'unexpected status 400 Bad Request' } };
     yield turnCompleted;
   });
 
+  // The warning item is not a transcript row, so the empty-turn warning is
+  // the only thing that tells the user why nothing came back.
   const errors = errorRows(messages);
-  assert.equal(errors.length, 1);
-  assert.equal(errors[0].content, 'unexpected status 400 Bad Request');
-  assert.equal(emptyTurnWarnings(messages).length, 0);
+  assert.equal(errors.length, 1, `expected only the empty-turn warning, got ${JSON.stringify(errors.map((m) => m.content))}`);
+  assert.equal(emptyTurnWarnings(messages).length, 1);
 });
 
-test('Codex renders a fatal stream error event', async (t) => {
+test('Codex does not paint a recovered reconnect as an error', async (t) => {
   const messages = await runCodexTurn(t, async function* () {
     yield threadStarted;
     yield turnStarted;
-    yield { type: 'error', message: 'stream closed unexpectedly' };
+    yield reconnectNotice;
+    yield { type: 'item.completed', item: { id: 'item_0', type: 'agent_message', text: 'hi there' } };
     yield turnCompleted;
   });
 
-  const errors = errorRows(messages);
-  assert.equal(errors.length, 1);
-  assert.equal(errors[0].content, 'stream closed unexpectedly');
-  assert.equal(emptyTurnWarnings(messages).length, 0);
+  assert.equal(errorRows(messages).length, 0, `unexpected error rows ${JSON.stringify(errorRows(messages).map((m) => m.content))}`);
+  assert.ok(messages.some((message) => message.kind === 'text' && message.content === 'hi there'));
+});
+
+test('Codex still warns about an empty turn that followed a reconnect notice', async (t) => {
+  const messages = await runCodexTurn(t, async function* () {
+    yield threadStarted;
+    yield turnStarted;
+    yield reconnectNotice;
+    yield turnCompleted;
+  });
+
+  assert.equal(errorRows(messages).length, 1);
+  assert.equal(emptyTurnWarnings(messages).length, 1);
 });
 
 test('Codex does not warn when the user aborted the run', async (t) => {

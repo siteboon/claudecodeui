@@ -333,11 +333,6 @@ async function queryCodex(
   // Session-map key: the app session id when the caller supplied one, else
   // the provider-native thread id once captured (legacy/direct API callers).
   const sessionKey = () => sessionId || capturedSessionId || null;
-  // A run is aborted once the user cancels it, whether the signal fired or the
-  // session row was marked first. Both the stream loop and the terminal frames
-  // read the same predicate so they can never disagree.
-  const isRunAborted = () =>
-    abortController.signal.aborted || activeCodexSessions.get(sessionKey() || '')?.status === 'aborted';
 
   try {
     codex = new Codex();
@@ -408,8 +403,14 @@ async function queryCodex(
       }
 
       // Check if session was aborted
-      if (isRunAborted()) {
+      if (abortController.signal.aborted) {
         break;
+      }
+      if (sessionKey()) {
+        const session = activeCodexSessions.get(sessionKey() || '');
+        if (session?.status === 'aborted') {
+          break;
+        }
       }
 
       // Progress events used to be dropped, so a long shell command or a
@@ -430,11 +431,14 @@ async function queryCodex(
       // frames, so the user learns why the chat stopped instead of resending.
       // The abort guard above ran for this very event and nothing awaits in
       // between, so a cancelled run cannot reach this point.
+      // This deliberately ignores `errorSurfaced`: codex also emits non-fatal
+      // notices as `error` events ("Reconnecting... 1/N") and warnings as
+      // `error` items ("Model metadata for X not found"), which the chat does
+      // not render, so they must not stand in for a visible failure.
       if (
         event.type === 'turn.completed'
         && !visibleOutputSent
         && !emptyTurnWarned
-        && !errorSurfaced
         && !terminalFailure
       ) {
         emptyTurnWarned = true;
@@ -484,7 +488,8 @@ async function queryCodex(
 
     // Send the terminal completion event — skipped for aborted runs, whose
     // terminal `complete` (aborted: true) was already sent by abort-session.
-    const runAborted = isRunAborted();
+    const runSession = activeCodexSessions.get(sessionKey() || '');
+    const runAborted = runSession?.status === 'aborted' || abortController.signal.aborted;
     if (!runAborted) {
       sendMessage(ws, createCompleteMessage({
         provider: 'codex',

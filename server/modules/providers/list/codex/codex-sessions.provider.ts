@@ -2069,11 +2069,7 @@ export class CodexSessionsProvider implements IProviderSessions {
       return [];
     }
 
-    // Only persisted user/assistant rows belong on the history path. A live
-    // Codex `error` item also carries a `message.role` ('error'), and sending
-    // it here dropped it on the floor — the live `error` case below is what
-    // renders it.
-    if (raw.message?.role === 'user' || raw.message?.role === 'assistant') {
+    if (raw.message?.role) {
       return this.normalizeHistoryEntry(raw, sessionId);
     }
 
@@ -2259,19 +2255,6 @@ export class CodexSessionsProvider implements IProviderSessions {
         timestamp: ts,
         provider: PROVIDER,
         kind: 'complete',
-      })];
-    }
-    if (raw.type === 'error') {
-      // The SDK's unrecoverable stream error. The runtime treats it as the
-      // failure already being surfaced, so this is the client's only chance to
-      // see it.
-      return [createNormalizedMessage({
-        id: baseId,
-        sessionId,
-        timestamp: ts,
-        provider: PROVIDER,
-        kind: 'error',
-        content: readNonEmptyString(raw.message) ?? 'Unknown error',
       })];
     }
     if (raw.type === 'turn_failed') {
