@@ -171,7 +171,8 @@ test('Escape is left to an open menu or marked escape layer', async () => {
 
   // The file tree's context menu and the shared ActionMenu close on Escape
   // without consuming it.
-  for (const attributes of [{ role: 'menu' }, { 'data-escape-layer': '' }]) {
+  const layers: Record<string, string>[] = [{ role: 'menu' }, { 'data-escape-layer': '' }];
+  for (const attributes of layers) {
     const layer = openLayer(attributes);
     fireEvent.keyDown(layer, { key: 'Escape' });
     layer.remove();
