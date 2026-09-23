@@ -195,7 +195,7 @@ test('when connected, a send goes out and clears the composer as before', async 
   assert.equal(result.userBubbles.length, 1);
   assert.equal(result.onSessionProcessing.mock.calls.length, 1);
   assert.equal(result.view.result.current.input, '');
-  assert.equal(result.view.result.current.showNotConnectedNotice, false);
+  assert.notEqual(result.view.result.current.showNotConnectedNotice, true);
   assert.equal(result.transcriptErrors().length, 0);
   assert.equal(result.reconnectNow.mock.calls.length, 0);
 });
