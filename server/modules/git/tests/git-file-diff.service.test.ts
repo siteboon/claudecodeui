@@ -60,6 +60,8 @@ before(async () => {
   await fs.writeFile(path.join(repositoryRootPath, 'notes.txt'), 'first\nsecond\n');
   await fs.writeFile(path.join(repositoryRootPath, 'artifact.bin'), binaryBytes(2 * 1024 * 1024));
   await fs.writeFile(path.join(repositoryRootPath, 'huge.log'), numberedLines(150_000, 'log'));
+  await fs.mkdir(path.join(repositoryRootPath, 'new-folder'));
+  await fs.writeFile(path.join(repositoryRootPath, 'new-folder', 'inside.txt'), 'inside\n');
 });
 
 after(async () => {
@@ -116,6 +118,15 @@ test('a modified tracked file keeps the exact legacy (header-stripped) diff', as
 test('a staged-only change falls back to the cached diff', async () => {
   assert.deepEqual(await readDiff('staged.txt'), {
     diff: '@@ -1 +1 @@\n-before\n+after\n',
+    isBinary: false,
+    isTruncated: false,
+  });
+});
+
+test('an untracked directory keeps the legacy placeholder text', async () => {
+  // git status collapses a new folder to "?? new-folder/", which is what the panel sends back.
+  assert.deepEqual(await readDiff('new-folder/'), {
+    diff: 'Directory: new-folder/\n(Cannot show diff for directories)',
     isBinary: false,
     isTruncated: false,
   });
