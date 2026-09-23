@@ -133,6 +133,34 @@ test('relocateProject moves the Claude transcript into the folder a resume reads
   });
 });
 
+test('relocateProject moves the session folder that holds subagent transcripts', async () => {
+  await withRelocateFixture(async (fixture) => {
+    const oldSubagentPath = path.join(
+      path.dirname(fixture.transcriptPath),
+      SESSION_ID,
+      'subagents',
+      'agent-a1.jsonl',
+    );
+    await mkdir(path.dirname(oldSubagentPath), { recursive: true });
+    await writeFile(oldSubagentPath, '{"type":"assistant"}\n');
+    await rename(fixture.oldProjectPath, fixture.newProjectPath);
+
+    await relocateProject(fixture.projectId, fixture.newProjectPath);
+
+    // The history reader looks for `<id>/subagents/` beside the transcript, so
+    // anything left behind drops out of the session's history.
+    const newSubagentPath = path.join(
+      fixture.claudeProjectsRoot,
+      encodeClaudeProjectDirName(fixture.newProjectPath),
+      SESSION_ID,
+      'subagents',
+      'agent-a1.jsonl',
+    );
+    assert.equal(await readFile(newSubagentPath, 'utf8'), '{"type":"assistant"}\n');
+    await assert.rejects(() => readFile(oldSubagentPath, 'utf8'));
+  });
+});
+
 test('relocateProject rewrites the cwd in place when both folders share a Claude transcript folder', async () => {
   await withRelocateFixture(
     async (fixture) => {
