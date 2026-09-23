@@ -160,30 +160,40 @@ export function useGitPanelController({
       // Git endpoints receive the DB projectId via the `project` query param.
       const projectId = selectedProject.projectId;
       const generation = fileDiffGenerationRef.current;
+      const isCurrentRequest = () =>
+        selectedProjectIdRef.current === projectId && fileDiffGenerationRef.current === generation;
+      // A failed request must not count as "already requested", or collapsing and
+      // re-expanding the row could never retry it before the next status refresh.
+      const allowRetry = () => {
+        if (isCurrentRequest()) {
+          requestedFileDiffPathsRef.current.delete(filePath);
+        }
+      };
 
       try {
         const response = await api.git.diff(projectId, filePath);
         const data = await readJson<GitFileDiffResponse>(response);
 
-        if (
-          selectedProjectIdRef.current !== projectId ||
-          fileDiffGenerationRef.current !== generation
-        ) {
+        if (!isCurrentRequest()) {
           return;
         }
 
-        if (!data.error) {
-          setGitDiff((previous) => ({
-            ...previous,
-            [filePath]: {
-              diff: data.diff ?? '',
-              isBinary: data.isBinary === true,
-              isTruncated: data.isTruncated === true,
-            },
-          }));
+        if (data.error) {
+          allowRetry();
+          return;
         }
+
+        setGitDiff((previous) => ({
+          ...previous,
+          [filePath]: {
+            diff: data.diff ?? '',
+            isBinary: data.isBinary === true,
+            isTruncated: data.isTruncated === true,
+          },
+        }));
       } catch (error) {
         console.error('Error fetching file diff:', error);
+        allowRetry();
       }
     },
     [selectedProject],

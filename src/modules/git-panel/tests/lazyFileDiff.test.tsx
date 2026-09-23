@@ -135,3 +135,17 @@ test('refreshing the status re-fetches only the expanded rows', async () => {
 
   assert.deepEqual(requestedDiffs(), ['notes.txt', 'notes.txt']);
 });
+
+test('a diff request that failed is retried when the row is expanded again', async () => {
+  gitApi.diff.mockImplementationOnce(async () => jsonResponse({ error: 'temporarily unavailable' }));
+  await renderPanel();
+
+  toggleRow('notes.txt');
+  await settle();
+  assert.deepEqual(requestedDiffs(), ['notes.txt']);
+
+  toggleRow('notes.txt');
+  toggleRow('notes.txt');
+  await screen.findByText('+first note');
+  assert.deepEqual(requestedDiffs(), ['notes.txt', 'notes.txt']);
+});
