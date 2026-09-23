@@ -42,6 +42,11 @@ export function usePlanBuildShortcut({
       ) {
         return;
       }
+      // A menu or modal open over the chat, the Build menu included, owns the
+      // keyboard; the plan behind it is not what the keys are aimed at.
+      if (document.querySelector('[data-escape-layer]')) {
+        return;
+      }
 
       const target = event.target;
       if (

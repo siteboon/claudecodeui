@@ -24,6 +24,7 @@ import { useChatRealtimeHandlers } from '@/modules/chat/hooks/useChatRealtimeHan
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
 import { useSessionStore } from '@/modules/chat/hooks/useSessionStore';
 import { usePlanBuildShortcut } from '@/modules/chat/hooks/usePlanBuildShortcut';
+import { useEscapeToStopRun } from '@/modules/chat/hooks/useEscapeToStopRun';
 import { isPlanApprovalRequest } from '@/modules/chat/utils/chatPermissions';
 import {
   useProcessingSessions,
@@ -308,31 +309,7 @@ function ChatInterface({
     sessionStore,
   });
 
-  useEffect(() => {
-    if (!canAbortSession) {
-      return;
-    }
-
-    const handleGlobalEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.repeat || event.defaultPrevented) {
-        return;
-      }
-      // An open menu or modal marks itself with `data-escape-layer` and takes
-      // this Escape to close. Stopping the run as well would make dismissing the
-      // plan card's Build menu discard the plan waiting for approval.
-      if (document.querySelector('[data-escape-layer]')) {
-        return;
-      }
-
-      event.preventDefault();
-      handleAbortSession();
-    };
-
-    document.addEventListener('keydown', handleGlobalEscape, { capture: true });
-    return () => {
-      document.removeEventListener('keydown', handleGlobalEscape, { capture: true });
-    };
-  }, [canAbortSession, handleAbortSession]);
+  useEscapeToStopRun({ canAbortSession, onAbortSession: handleAbortSession });
 
   /**
    * Answers a pending plan approval with Build: an allow in the planning

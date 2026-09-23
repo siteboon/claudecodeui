@@ -1,15 +1,18 @@
 import assert from 'node:assert/strict';
 
-import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 
 import '@/modules/i18n';
 import PermissionContext from '@/modules/chat/context/PermissionContext';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
+import { useChatProviderState } from '@/modules/chat/hooks/useChatProviderState';
+import { useEscapeToStopRun } from '@/modules/chat/hooks/useEscapeToStopRun';
 import { usePlanBuildShortcut } from '@/modules/chat/hooks/usePlanBuildShortcut';
 import { PlanDisplay } from '@/modules/chat/tools/PlanDisplay';
 import { UiPreferencesProvider } from '@/shared/context/UiPreferencesContext';
+import { ActionMenu } from '@/shared/ui';
 import { resetUserPreferences, writeUserPreference } from '@/shared/userSettings';
 import type {
   ChatMessage,
@@ -375,5 +378,64 @@ test('⌘↩ leaves typed text to the composer and does nothing without a pendin
   pressBuildShortcut();
   assert.equal(onBuildPlan.mock.calls.length, 1, 'a hidden chat or no pending plan ignores it');
 
+  rerender({ pendingPlanRequest: PLAN_REQUEST, isActive: true });
+  const openMenu = document.createElement('div');
+  openMenu.setAttribute('data-escape-layer', '');
+  document.body.appendChild(openMenu);
+  pressBuildShortcut();
+  assert.equal(onBuildPlan.mock.calls.length, 1, 'a menu or modal open over the chat keeps the keys');
+  openMenu.remove();
+
   textarea.remove();
+});
+
+// ---------------------------------------------------------------------------
+// Escape closes a menu over the chat without stopping the run
+// ---------------------------------------------------------------------------
+
+test('Escape closes an open menu without stopping the run, and stops it otherwise', () => {
+  const onAbortSession = vi.fn();
+  renderHook(() => useEscapeToStopRun({ canAbortSession: true, onAbortSession }));
+  render(
+    <ActionMenu
+      label="More build options"
+      portal
+      items={[{ key: 'new-session', label: 'Build in new session', onSelect: () => undefined }]}
+    />,
+  );
+  const pressEscape = () => {
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+  };
+
+  fireEvent.click(screen.getByRole('button', { name: 'More build options' }));
+  assert.ok(screen.queryByRole('menu'));
+  pressEscape();
+  assert.equal(screen.queryByRole('menu'), null, 'the menu took the Escape');
+  assert.equal(onAbortSession.mock.calls.length, 0, 'and the run waiting on the plan was not stopped');
+
+  pressEscape();
+  assert.equal(onAbortSession.mock.calls.length, 1, 'with nothing open, Escape stops the run');
+});
+
+// ---------------------------------------------------------------------------
+// The new session opens in the mode it was sent in
+// ---------------------------------------------------------------------------
+
+test('a session pinned by the handoff opens in its own mode, not the provider-wide plan mode', async () => {
+  // The planning session left plan mode as the provider-wide last pick.
+  localStorage.setItem('permissionMode-last-claude', 'plan');
+
+  const view = renderHook(
+    ({ openSession }: { openSession: ProjectSession }) => useChatProviderState({ selectedSession: openSession, selectedProject: PROJECT }),
+    { initialProps: { openSession: { ...PLANNING_SESSION, __provider: 'claude' } as ProjectSession } },
+  );
+  await waitFor(() => assert.equal(view.result.current.permissionMode, 'plan'));
+
+  act(() => { view.result.current.rememberSessionPermissionMode('built-session', 'default'); });
+  view.rerender({ openSession: { id: 'built-session', summary: 'Add a hello file', __provider: 'claude' } as ProjectSession });
+  await waitFor(() => assert.equal(view.result.current.permissionMode, 'default'));
+
+  // Without the pin, a session opens in the provider-wide pick.
+  view.rerender({ openSession: { id: 'unpinned-session', summary: 'x', __provider: 'claude' } as ProjectSession });
+  await waitFor(() => assert.equal(view.result.current.permissionMode, 'plan'));
 });
