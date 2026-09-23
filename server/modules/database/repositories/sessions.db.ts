@@ -659,27 +659,11 @@ export const sessionsDb = {
   },
 
   /**
-   * Moves every session row of one project onto a new project path.
-   *
-   * Used when a project folder is renamed or moved: the conversations belong to
-   * the same workspace, so they have to follow it instead of staying attached
-   * to a path that no longer exists. Archived rows move too — restoring one
-   * later must not resurrect the stale path.
-   */
-  updateSessionsProjectPath(oldProjectPath: string, newProjectPath: string): void {
-    const db = getConnection();
-    db.prepare(
-      `UPDATE sessions
-       SET project_path = ?
-       WHERE project_path = ?`
-    ).run(normalizeProjectPath(newProjectPath), normalizeProjectPath(oldProjectPath));
-  },
-
-  /**
    * Repoints one session at the transcript file it now lives in.
    *
    * Only used when the file itself was moved on disk (a relocated project
-   * folder), so the row keeps resolving to a readable transcript.
+   * folder), or to put a row back when that move failed, so the row keeps
+   * resolving to a readable transcript.
    */
   updateSessionTranscriptPath(sessionId: string, jsonlPath: string): void {
     const db = getConnection();
