@@ -186,3 +186,35 @@ test('a refetch that lands after Escape dismissed the dropdown does not re-open 
   await waitFor(() => assert.deepEqual(shownNames(), ['new.txt']));
   assert.equal(getFiles.mock.calls.length, 3);
 });
+
+test('Escape before any file matched stops a late refetch from showing the dropdown', async () => {
+  getFiles.mockReset();
+  getFiles.mockResolvedValueOnce(treeResponse(['a.txt']));
+  const refetch = deferredTreeResponse();
+  getFiles.mockReturnValueOnce(refetch.promise);
+
+  const { result, type, shownNames } = renderMentions();
+  await waitFor(() => assert.equal(getFiles.mock.calls.length, 1));
+
+  // Nothing in the loaded list matches yet, so no dropdown is shown.
+  type('mail foo@zz');
+  await waitFor(() => assert.equal(getFiles.mock.calls.length, 2));
+  assert.deepEqual(shownNames(), []);
+
+  act(() => {
+    result.current.handleFileMentionsKeyDown(keyEvent('Escape'));
+  });
+
+  // The refetch brings a matching file.
+  await act(async () => {
+    refetch.resolve(['a.txt', 'zz-new.txt']);
+    await new Promise((resolveTimeout) => setTimeout(resolveTimeout, 0));
+  });
+
+  assert.equal(result.current.showFileDropdown, false);
+  let enterHandled = true;
+  act(() => {
+    enterHandled = result.current.handleFileMentionsKeyDown(keyEvent('Enter'));
+  });
+  assert.equal(enterHandled, false);
+});

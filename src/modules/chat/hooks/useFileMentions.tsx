@@ -260,7 +260,22 @@ export function useFileMentions({ selectedProject, input, setInput, textareaRef 
 
   const handleFileMentionsKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
-      if (!showFileDropdown || filteredFiles.length === 0) {
+      if (!showFileDropdown) {
+        return false;
+      }
+
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        // The caret is still inside the `@` query, so a refetch landing after
+        // this would re-open the dropdown (or first show it, when nothing
+        // matched yet) and take the next Enter. Drop it; re-opening the
+        // dropdown fetches again.
+        fileListRequestRef.current?.abort();
+        setShowFileDropdown(false);
+        return true;
+      }
+
+      if (filteredFiles.length === 0) {
         return false;
       }
 
@@ -287,16 +302,6 @@ export function useFileMentions({ selectedProject, input, setInput, textareaRef 
         } else if (filteredFiles.length > 0) {
           selectFile(filteredFiles[0]);
         }
-        return true;
-      }
-
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        // The caret is still inside the `@` query, so a refetch landing after
-        // this would re-open the dropdown and take the next Enter. Drop it;
-        // re-opening the dropdown fetches again.
-        fileListRequestRef.current?.abort();
-        setShowFileDropdown(false);
         return true;
       }
 
