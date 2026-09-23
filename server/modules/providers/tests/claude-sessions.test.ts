@@ -1730,6 +1730,95 @@ test('a note delivered after an edit neither undoes the edit nor is hidden by it
   ]);
 });
 
+test('an edit of a prompt sent right after a task notification replaces it', { concurrency: false }, async () => {
+  // Chat writes a prompt that follows a notification as the notification's
+  // child. Editing it resumes through the assistant row above both, so the
+  // replacement lands beside the notification instead of beside the prompt it
+  // replaces. Older CLI builds wrote the notification without `origin`.
+  const sessionId = 'claude-edit-after-note-session';
+  const toolUseId = 'toolu_edit_bash_1';
+  const summary = 'Background command "Run the tests" completed (exit code 0)';
+  const noteShapes: [string, Record<string, unknown>][] = [
+    ['marked with origin', { origin: { kind: 'task-notification' }, promptSource: 'system' }],
+    ['unmarked', {}],
+  ];
+
+  for (const [shape, markers] of noteShapes) {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-edit-after-note-'));
+    try {
+      const transcriptPath = path.join(tempRoot, `${sessionId}.jsonl`);
+      const rows = [
+        forkPrompt('u1', null, 'run the tests in the background'),
+        {
+          type: 'assistant', uuid: 'a1', parentUuid: 'u1',
+          message: {
+            role: 'assistant', model: 'claude-opus-5',
+            content: [{ type: 'tool_use', id: toolUseId, name: 'Bash', input: { command: 'npm test', run_in_background: true } }],
+          },
+        },
+        {
+          type: 'user', uuid: 'r1', parentUuid: 'a1',
+          message: {
+            role: 'user',
+            content: [{ type: 'tool_result', tool_use_id: toolUseId, content: 'Command running in background with ID: bedit1.' }],
+          },
+          toolUseResult: { stdout: '', stderr: '', interrupted: false, isImage: false, backgroundTaskId: 'bedit1' },
+        },
+        forkAnswer('a2', 'r1', 'the tests are running'),
+        forkPrompt('n1', 'a2', [
+          '<task-notification>',
+          '<task-id>bedit1</task-id>',
+          `<tool-use-id>${toolUseId}</tool-use-id>`,
+          '<status>completed</status>',
+          `<summary>${summary}</summary>`,
+          '</task-notification>',
+        ].join('\n'), markers),
+        forkPrompt('u2', 'n1', 'original second prompt'),
+        forkAnswer('a3', 'u2', 'answer to be replaced'),
+        forkPrompt('u2b', 'a2', 'edited second prompt'),
+        forkAnswer('a3b', 'u2b', 'answer to the edit'),
+      ];
+      const lines = rows.map((row, index) => JSON.stringify({
+        sessionId,
+        timestamp: new Date(Date.UTC(2026, 8, 1, 10, 0, index)).toISOString(),
+        ...row,
+      }));
+      await writeFile(transcriptPath, `${lines.join('\n')}\n`, 'utf8');
+
+      await withIsolatedDatabase(async () => {
+        const now = new Date().toISOString();
+        sessionsDb.createSession(sessionId, 'claude', tempRoot, 'Edit after note', now, now, transcriptPath);
+        const provider = new ClaudeSessionsProvider({ getLiveRunStartTime: () => null });
+
+        // The row Chat resumes through when `u2` is edited: the replacement's parent.
+        assert.deepEqual(
+          await provider.resolveEditAnchor(sessionId, 'u2'),
+          { found: true, resumeThroughId: 'a2' },
+          `note ${shape}`,
+        );
+
+        const history = await provider.fetchHistory(sessionId, { providerSessionId: sessionId });
+        assert.deepEqual(
+          history.messages.map((message) => (message.kind === 'text' ? message.content : message.kind)),
+          [
+            'run the tests in the background',
+            'tool_use',
+            'the tests are running',
+            'edited second prompt',
+            'answer to the edit',
+          ],
+          `note ${shape}`,
+        );
+        // The notification really arrived, so it stays and settles its command's card.
+        const bashRow = history.messages.find((message) => message.kind === 'tool_use');
+        assert.equal(bashRow?.toolResult?.content, summary, `note ${shape}`);
+      });
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  }
+});
+
 test('a fork keeps the branch that grew last even when its prompt was written first', { concurrency: false }, async () => {
   // The second prompt under `a1` went nowhere, while the conversation carried
   // on from the first one: the branch holding the newest row is the live one.
