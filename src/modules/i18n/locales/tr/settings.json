@@ -126,6 +126,13 @@
       "label": "Koyu Mod",
       "description": "Açık ve koyu temalar arasında geçiş yap"
     },
+    "theme": {
+      "label": "Tema",
+      "description": "Açık veya koyu bir görünüm seçin ya da işletim sisteminizi izleyin",
+      "light": "Açık",
+      "dark": "Koyu",
+      "system": "Sistem görünümünü izle"
+    },
     "projectSorting": {
       "label": "Proje Sıralama",
       "description": "Projelerin kenar çubuğunda nasıl sıralanacağı",

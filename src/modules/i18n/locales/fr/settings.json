@@ -125,6 +125,13 @@
       "label": "Mode sombre",
       "description": "Basculer entre les thèmes clair et sombre"
     },
+    "theme": {
+      "label": "Thème",
+      "description": "Choisissez une apparence claire ou sombre, ou suivez celle de votre système d'exploitation",
+      "light": "Clair",
+      "dark": "Sombre",
+      "system": "Suivre l'apparence du système"
+    },
     "projectSorting": {
       "label": "Tri des projets",
       "description": "Ordre d'affichage des projets dans la barre latérale",

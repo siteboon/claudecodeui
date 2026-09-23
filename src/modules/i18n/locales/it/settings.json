@@ -125,6 +125,13 @@
       "label": "Modalità scura",
       "description": "Alterna tra tema chiaro e scuro"
     },
+    "theme": {
+      "label": "Tema",
+      "description": "Scegli un aspetto chiaro o scuro, oppure segui quello del sistema operativo",
+      "light": "Chiaro",
+      "dark": "Scuro",
+      "system": "Segui l'aspetto del sistema"
+    },
     "projectSorting": {
       "label": "Ordinamento progetti",
       "description": "Come vengono ordinati i progetti nella barra laterale",

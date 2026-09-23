@@ -151,6 +151,13 @@
       "label": "Modo oscuro",
       "description": "Alterna entre el tema claro y el oscuro"
     },
+    "theme": {
+      "label": "Tema",
+      "description": "Elige una apariencia clara u oscura, o sigue la de tu sistema operativo",
+      "light": "Claro",
+      "dark": "Oscuro",
+      "system": "Seguir la apariencia del sistema"
+    },
     "projectSorting": {
       "label": "Orden de proyectos",
       "description": "Cómo se ordenan los proyectos en la barra lateral",

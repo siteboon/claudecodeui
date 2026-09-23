@@ -125,6 +125,13 @@
       "label": "Darkmode",
       "description": "Zwischen hellem und dunklem Design wechseln"
     },
+    "theme": {
+      "label": "Design",
+      "description": "Wählen Sie ein helles oder dunkles Erscheinungsbild oder folgen Sie Ihrem Betriebssystem",
+      "light": "Hell",
+      "dark": "Dunkel",
+      "system": "Systemdarstellung folgen"
+    },
     "projectSorting": {
       "label": "Projektsortierung",
       "description": "Wie Projekte in der Seitenleiste angeordnet werden",

@@ -125,6 +125,13 @@
       "label": "ダークモード",
       "description": "ライトテーマとダークテーマを切り替えます"
     },
+    "theme": {
+      "label": "テーマ",
+      "description": "ライトまたはダークの外観を選ぶか、OS の設定に合わせます",
+      "light": "ライト",
+      "dark": "ダーク",
+      "system": "システムの外観に合わせる"
+    },
     "projectSorting": {
       "label": "プロジェクトの並び順",
       "description": "サイドバーでのプロジェクトの並び順を設定します",

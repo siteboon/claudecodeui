@@ -151,6 +151,13 @@
       "label": "Mode Gelap",
       "description": "Beralih antara tema terang dan gelap"
     },
+    "theme": {
+      "label": "Tema",
+      "description": "Pilih tampilan terang atau gelap, atau ikuti sistem operasi Anda",
+      "light": "Terang",
+      "dark": "Gelap",
+      "system": "Ikuti tampilan sistem"
+    },
     "projectSorting": {
       "label": "Urutan Proyek",
       "description": "Cara proyek diurutkan di sidebar",
