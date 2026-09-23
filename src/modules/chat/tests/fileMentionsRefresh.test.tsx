@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 
 import { act, renderHook, waitFor } from '@testing-library/react';
-import type { RefObject } from 'react';
+import type { KeyboardEvent, RefObject } from 'react';
 import { test, vi } from 'vitest';
 
 import type { Project } from '@/shared/types';
@@ -35,6 +35,9 @@ const deferredTreeResponse = () => {
   });
   return { promise, resolve };
 };
+
+const keyEvent = (key: string) =>
+  ({ key, preventDefault: () => {} }) as unknown as KeyboardEvent<HTMLTextAreaElement>;
 
 const renderMentions = () => {
   const textareaRef: RefObject<HTMLTextAreaElement> = { current: null };
@@ -142,4 +145,44 @@ test('an older refetch that lands after a newer one cannot overwrite it', async 
     olderRefetch.resolve(['a.txt', 'older.txt']);
   });
   assert.deepEqual(shownNames(), ['a.txt', 'newer.txt']);
+});
+
+test('a refetch that lands after Escape dismissed the dropdown does not re-open it', async () => {
+  getFiles.mockReset();
+  getFiles.mockResolvedValueOnce(treeResponse(['a.txt']));
+  const refetch = deferredTreeResponse();
+  getFiles.mockReturnValueOnce(refetch.promise);
+  getFiles.mockResolvedValue(treeResponse(['a.txt', 'new.txt']));
+
+  const { result, type, shownNames } = renderMentions();
+  await waitFor(() => assert.equal(getFiles.mock.calls.length, 1));
+
+  type('mail me at foo@');
+  await waitFor(() => assert.equal(getFiles.mock.calls.length, 2));
+  assert.equal(result.current.showFileDropdown, true);
+
+  act(() => {
+    result.current.handleFileMentionsKeyDown(keyEvent('Escape'));
+  });
+  assert.equal(result.current.showFileDropdown, false);
+
+  // Let the refetch, which brings a changed list, finish completely.
+  await act(async () => {
+    refetch.resolve(['a.txt', 'new.txt']);
+    await new Promise((resolveTimeout) => setTimeout(resolveTimeout, 0));
+  });
+
+  // Still dismissed, so the next Enter reaches the composer and sends the message.
+  assert.equal(result.current.showFileDropdown, false);
+  let enterHandled = true;
+  act(() => {
+    enterHandled = result.current.handleFileMentionsKeyDown(keyEvent('Enter'));
+  });
+  assert.equal(enterHandled, false);
+  assert.equal(getFiles.mock.calls.length, 2);
+
+  // Typing on inside the query re-opens the dropdown, which fetches again.
+  type('mail me at foo@ne');
+  await waitFor(() => assert.deepEqual(shownNames(), ['new.txt']));
+  assert.equal(getFiles.mock.calls.length, 3);
 });

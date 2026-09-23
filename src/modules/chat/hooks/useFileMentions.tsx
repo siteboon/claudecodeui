@@ -292,6 +292,10 @@ export function useFileMentions({ selectedProject, input, setInput, textareaRef 
 
       if (event.key === 'Escape') {
         event.preventDefault();
+        // The caret is still inside the `@` query, so a refetch landing after
+        // this would re-open the dropdown and take the next Enter. Drop it;
+        // re-opening the dropdown fetches again.
+        fileListRequestRef.current?.abort();
         setShowFileDropdown(false);
         return true;
       }
