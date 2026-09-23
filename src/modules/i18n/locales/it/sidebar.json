@@ -121,7 +121,8 @@
     "restoreSessionFailed": "Impossibile ripristinare la sessione. Riprova.",
     "restoreSessionError": "Errore durante il ripristino della sessione. Riprova.",
     "forkSessionError": "Impossibile creare un ramo da questa sessione. Riprova.",
-    "deleteSessionsPartialFailure": "Impossibile eliminare {{failed}} sessioni su {{total}}. Riprova."
+    "deleteSessionsPartialFailure_one": "Impossibile eliminare {{count}} sessione su {{total}}. Riprova.",
+    "deleteSessionsPartialFailure_other": "Impossibile eliminare {{count}} sessioni su {{total}}. Riprova."
   },
   "version": {
     "updateAvailable": "Aggiornamento disponibile",
@@ -157,6 +158,7 @@
     "deleteAllData": "Elimina tutti i dati permanentemente",
     "allConversationsDeleted": "Il progetto verrà rimosso dalla barra laterale. I tuoi file, memorie e dati delle sessioni verranno preservati.",
     "cannotUndo": "Puoi riaggiungerlo in seguito.",
+    "confirmDeleteSessions": "Cosa vuoi fare con",
     "deleteSessions_one": "Elimina {{count}} sessione",
     "deleteSessions_other": "Elimina {{count}} sessioni",
     "selectedSessions_one": "{{count}} sessione selezionata",

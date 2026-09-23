@@ -121,7 +121,8 @@
     "restoreSessionFailed": "Gagal memulihkan sesi. Silakan coba lagi.",
     "restoreSessionError": "Terjadi kesalahan saat memulihkan sesi. Silakan coba lagi.",
     "forkSessionError": "Sesi ini tidak dapat di-fork. Silakan coba lagi.",
-    "deleteSessionsPartialFailure": "{{failed}} dari {{total}} sesi gagal dihapus. Silakan coba lagi."
+    "deleteSessionsPartialFailure_one": "{{count}} dari {{total}} sesi gagal dihapus. Silakan coba lagi.",
+    "deleteSessionsPartialFailure_other": "{{count}} dari {{total}} sesi gagal dihapus. Silakan coba lagi."
   },
   "version": {
     "updateAvailable": "Pembaruan tersedia",
@@ -165,13 +166,14 @@
     "deleteAllData": "Hapus semua data secara permanen",
     "allConversationsDeleted": "Proyek akan dihapus dari sidebar. File, memori, dan data sesi tetap dipertahankan.",
     "cannotUndo": "Proyek dapat ditambahkan kembali nanti.",
+    "confirmDeleteSessions": "Apa yang ingin dilakukan dengan",
     "deleteSessions_one": "Hapus {{count}} Sesi",
     "deleteSessions_other": "Hapus {{count}} Sesi",
     "selectedSessions_one": "{{count}} sesi terpilih",
     "selectedSessions_other": "{{count}} sesi terpilih",
     "archiveSessions_one": "Arsipkan {{count}} sesi",
     "archiveSessions_other": "Arsipkan {{count}} sesi",
-    "archiveSessionsNotice_one": "Pengarsipan menyembunyikan sesi ini dari daftar aktif tanpa menghapus riwayatnya.",
-    "archiveSessionsNotice_other": "Pengarsipan menyembunyikan sesi-sesi ini dari daftar aktif tanpa menghapus riwayatnya."
+    "archiveSessionsNotice_one": "Pengarsipan menyembunyikan sesi yang dipilih dari daftar aktif tanpa menghapus riwayatnya.",
+    "archiveSessionsNotice_other": "Pengarsipan menyembunyikan sesi yang dipilih dari daftar aktif tanpa menghapus riwayatnya."
   }
 }

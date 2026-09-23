@@ -121,7 +121,8 @@
     "restoreSessionFailed": "No se pudo restaurar la sesión. Inténtalo de nuevo.",
     "restoreSessionError": "Error al restaurar la sesión. Inténtalo de nuevo.",
     "forkSessionError": "No se pudo bifurcar esta sesión. Inténtalo de nuevo.",
-    "deleteSessionsPartialFailure": "No se pudieron eliminar {{failed}} de {{total}} sesiones. Inténtalo de nuevo."
+    "deleteSessionsPartialFailure_one": "No se pudo eliminar {{count}} sesión de {{total}}. Inténtalo de nuevo.",
+    "deleteSessionsPartialFailure_other": "No se pudieron eliminar {{count}} de {{total}} sesiones. Inténtalo de nuevo."
   },
   "version": {
     "updateAvailable": "Actualización disponible",
@@ -157,6 +158,7 @@
     "deleteAllData": "Eliminar todos los datos permanentemente",
     "allConversationsDeleted": "El proyecto se quitará de la barra lateral. Tus archivos, memorias y datos de sesión se conservarán.",
     "cannotUndo": "Puedes volver a añadir el proyecto más tarde.",
+    "confirmDeleteSessions": "¿Qué quieres hacer con",
     "deleteSessions_one": "Eliminar {{count}} sesión",
     "deleteSessions_other": "Eliminar {{count}} sesiones",
     "selectedSessions_one": "{{count}} sesión seleccionada",

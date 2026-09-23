@@ -151,6 +151,7 @@ function Sidebar({
     selectedProject,
     selectedSession,
     activeSessions,
+    backgroundSessionIds,
     isLoading,
     isMobile,
     t,

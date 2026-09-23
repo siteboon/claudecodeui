@@ -122,7 +122,8 @@
     "restoreSessionFailed": "Failed to restore session. Please try again.",
     "restoreSessionError": "Error restoring session. Please try again.",
     "forkSessionError": "Could not fork this session. Please try again.",
-    "deleteSessionsPartialFailure": "{{failed}} of {{total}} sessions could not be deleted. Please try again."
+    "deleteSessionsPartialFailure_one": "{{count}} session out of {{total}} could not be deleted. Please try again.",
+    "deleteSessionsPartialFailure_other": "{{count}} of {{total}} sessions could not be deleted. Please try again."
   },
   "version": {
     "updateAvailable": "Update available",
@@ -166,6 +167,7 @@
     "deleteAllData": "Delete all data permanently",
     "allConversationsDeleted": "The project will be removed from the sidebar. Your files, memories, and session data will be preserved.",
     "cannotUndo": "You can re-add the project later.",
+    "confirmDeleteSessions": "What would you like to do with",
     "deleteSessions_one": "Delete {{count}} Session",
     "deleteSessions_other": "Delete {{count}} Sessions",
     "selectedSessions_one": "{{count}} selected session",

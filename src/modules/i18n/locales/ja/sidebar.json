@@ -119,7 +119,7 @@
     "restoreSessionFailed": "セッションの復元に失敗しました。もう一度お試しください。",
     "restoreSessionError": "セッションの復元でエラーが発生しました。もう一度お試しください。",
     "forkSessionError": "このセッションを分岐できませんでした。もう一度お試しください。",
-    "deleteSessionsPartialFailure": "{{total}}件中{{failed}}件のセッションを削除できませんでした。もう一度お試しください。"
+    "deleteSessionsPartialFailure": "{{total}}件中{{count}}件のセッションを削除できませんでした。もう一度お試しください。"
   },
   "version": {
     "updateAvailable": "アップデートあり",
@@ -144,6 +144,7 @@
     "deleteAllData": "すべてのデータを完全に削除",
     "allConversationsDeleted": "プロジェクトはサイドバーから除去されます。ファイル、メモリ、セッションデータは保持されます。",
     "cannotUndo": "後からプロジェクトを再追加できます。",
+    "confirmDeleteSessions": "次のセッションをどうしますか：",
     "deleteSessions": "{{count}}件のセッションを削除",
     "selectedSessions": "選択した{{count}}件のセッション",
     "archiveSessions": "{{count}}件のセッションをアーカイブ",

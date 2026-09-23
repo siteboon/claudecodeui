@@ -45,6 +45,8 @@ type UseSidebarControllerArgs = {
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   activeSessions: ReadonlySet<string>;
+  /** The busy sessions only running background work; unlike the rest of `activeSessions` they can be deleted. */
+  backgroundSessionIds: ReadonlySet<string>;
   isLoading: boolean;
   isMobile: boolean;
   t: TFunction;
@@ -65,6 +67,7 @@ export function useSidebarController({
   selectedProject,
   selectedSession: _selectedSession,
   activeSessions,
+  backgroundSessionIds,
   isLoading,
   isMobile,
   t,
@@ -101,6 +104,10 @@ export function useSidebarController({
   // feeds runs from this hook, and because holding a single selection is what
   // keeps a bulk delete from spanning two projects. See SidebarSessionSelection.
   const [sessionSelection, setSessionSelection] = useState<SidebarSessionSelection | null>(null);
+  // The ids a bulk delete has sent and not yet heard back about. A ref, not
+  // state: nothing renders from it, it only stops a second confirmation of the
+  // same rows (still on screen until the first settles) from sending them again.
+  const sessionIdsBeingDeletedRef = useRef<Set<string>>(new Set());
   const [showVersionModal, setShowVersionModal] = useState(false);
   const [searchMode, setSearchMode] = useState<SidebarSearchMode>('projects');
   const [conversationResults, setConversationResults] = useState<ConversationSearchResults | null>(null);
@@ -895,8 +902,27 @@ export function useSidebarController({
       return;
     }
 
-    const { sessionIds } = pendingDeletion;
+    const selectionProjectId = sessionSelection?.projectId ?? null;
     setPendingDeletion(null);
+    // Leaving selection mode as soon as the dialog is accepted takes the
+    // "Delete N sessions" button away while the requests are out, so the same
+    // rows cannot be confirmed twice.
+    setSessionSelection(null);
+
+    // The ids were resolved when the dialog opened, so they are checked again
+    // now: a session that started a response since then is left alone (the rule
+    // the rows apply), and one an earlier confirmation is still deleting is not
+    // sent twice. Neither is a failure — nothing was attempted for them.
+    const deletingIds = sessionIdsBeingDeletedRef.current;
+    const sessionIds = pendingDeletion.sessionIds.filter(
+      (sessionId) =>
+        !deletingIds.has(sessionId) &&
+        !(activeSessions.has(sessionId) && !backgroundSessionIds.has(sessionId)),
+    );
+    if (sessionIds.length === 0) {
+      return;
+    }
+    sessionIds.forEach((sessionId) => deletingIds.add(sessionId));
 
     // One request per id: the endpoint deletes a single session, and settling
     // them all means one failure does not hide the sessions that did go.
@@ -910,12 +936,15 @@ export function useSidebarController({
         return sessionId;
       }),
     );
+    sessionIds.forEach((sessionId) => deletingIds.delete(sessionId));
 
     const deletedSessionIds: string[] = [];
+    const failedSessionIds: string[] = [];
     outcomes.forEach((outcome, index) => {
       if (outcome.status === 'fulfilled') {
         deletedSessionIds.push(outcome.value);
       } else {
+        failedSessionIds.push(sessionIds[index]);
         console.error('[Sidebar] Failed to delete session:', {
           sessionId: sessionIds[index],
           error: outcome.reason,
@@ -939,13 +968,22 @@ export function useSidebarController({
       await fetchArchivedSessions();
     }
 
-    setSessionSelection(null);
-
-    const failedCount = sessionIds.length - deletedSessionIds.length;
-    if (failedCount > 0) {
-      alert(t('messages.deleteSessionsPartialFailure', { failed: failedCount, total: sessionIds.length }));
+    if (failedSessionIds.length > 0) {
+      // The rows that could not be deleted come back ticked, ready to retry —
+      // unless another selection was started while the requests were out.
+      if (selectionProjectId) {
+        setSessionSelection(
+          (current) => current ?? { projectId: selectionProjectId, sessionIds: new Set(failedSessionIds) },
+        );
+      }
+      alert(
+        t('messages.deleteSessionsPartialFailure', {
+          count: failedSessionIds.length,
+          total: sessionIds.length,
+        }),
+      );
     }
-  }, [fetchArchivedSessions, onSessionDelete, pendingDeletion, t]);
+  }, [activeSessions, backgroundSessionIds, fetchArchivedSessions, onSessionDelete, pendingDeletion, sessionSelection, t]);
 
   const requestProjectDelete = useCallback(
     (project: Project) => {

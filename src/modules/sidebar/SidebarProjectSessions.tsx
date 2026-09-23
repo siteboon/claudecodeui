@@ -114,10 +114,9 @@ export default function SidebarProjectSessions({
   const allLoadedSelected =
     selectableSessionIds.length > 0 && effectiveSelectedIds.length === selectableSessionIds.length;
   // With more sessions on the server than on screen, the button only reaches the
-  // loaded rows, so it keeps saying "Select all loaded" instead of flipping to
-  // "Clear", which would read as a claim that everything is now selected.
-  const clearsOnToggle = allLoadedSelected && !hasMoreSessions;
-  const selectAllLabel = clearsOnToggle
+  // loaded rows, so it offers "Select all loaded" rather than a "Select all" it
+  // could not honour. Once those rows are ticked it flips to "Clear" either way.
+  const selectAllLabel = allLoadedSelected
     ? t('sessions.clearSelection')
     : hasMoreSessions
       ? t('sessions.selectAllLoaded')
@@ -162,7 +161,7 @@ export default function SidebarProjectSessions({
                   onClick={() =>
                     onSetSessionSelection({
                       projectId: project.projectId,
-                      sessionIds: new Set(clearsOnToggle ? [] : selectableSessionIds),
+                      sessionIds: new Set(allLoadedSelected ? [] : selectableSessionIds),
                     })
                   }
                   disabled={selectableSessionIds.length === 0}
@@ -207,9 +206,11 @@ export default function SidebarProjectSessions({
         </div>
       )}
 
+      {/* A page emptied by deleting every loaded row still has sessions behind
+          it on the server, so it keeps its "Load more" instead of "No sessions". */}
       {!initialSessionsLoaded ? (
         <SessionListSkeleton />
-      ) : !hasSessions ? (
+      ) : !hasSessions && !hasMoreSessions ? (
         <div className="px-3 py-2 text-left">
           <p className="text-xs text-muted-foreground">{t('sessions.noSessions')}</p>
         </div>

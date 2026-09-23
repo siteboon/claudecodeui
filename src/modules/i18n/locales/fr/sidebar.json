@@ -121,7 +121,8 @@
     "restoreSessionFailed": "Échec de la restauration de la session. Veuillez réessayer.",
     "restoreSessionError": "Erreur lors de la restauration de la session. Veuillez réessayer.",
     "forkSessionError": "Impossible de dupliquer cette session. Veuillez réessayer.",
-    "deleteSessionsPartialFailure": "{{failed}} session(s) sur {{total}} n'ont pas pu être supprimées. Veuillez réessayer."
+    "deleteSessionsPartialFailure_one": "{{count}} session sur {{total}} n'a pas pu être supprimée. Veuillez réessayer.",
+    "deleteSessionsPartialFailure_other": "{{count}} sessions sur {{total}} n'ont pas pu être supprimées. Veuillez réessayer."
   },
   "version": {
     "updateAvailable": "Mise à jour disponible",
@@ -157,6 +158,7 @@
     "deleteAllData": "Supprimer toutes les données définitivement",
     "allConversationsDeleted": "Le projet sera retiré de la barre latérale. Vos fichiers, mémoires et données de session seront conservés.",
     "cannotUndo": "Vous pourrez rajouter le projet ultérieurement.",
+    "confirmDeleteSessions": "Que souhaitez-vous faire avec",
     "deleteSessions_one": "Supprimer {{count}} session",
     "deleteSessions_other": "Supprimer {{count}} sessions",
     "selectedSessions_one": "{{count}} session sélectionnée",

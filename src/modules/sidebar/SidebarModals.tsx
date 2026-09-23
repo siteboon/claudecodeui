@@ -220,7 +220,7 @@ export default function SidebarModals({
                       {t('deleteConfirmation.deleteSessions', { count: pendingDeletion.sessionIds.length })}
                     </h3>
                     <p className="mb-1 text-sm text-muted-foreground">
-                      {t('deleteConfirmation.confirmDelete')}{' '}
+                      {t('deleteConfirmation.confirmDeleteSessions')}{' '}
                       <span className="font-medium text-foreground">
                         {t('deleteConfirmation.selectedSessions', { count: pendingDeletion.sessionIds.length })}
                       </span>

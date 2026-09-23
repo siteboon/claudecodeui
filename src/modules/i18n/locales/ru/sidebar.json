@@ -123,7 +123,10 @@
     "restoreSessionFailed": "Не удалось восстановить сеанс. Попробуйте снова.",
     "restoreSessionError": "Ошибка при восстановлении сеанса. Попробуйте снова.",
     "forkSessionError": "Не удалось создать ветку сессии. Попробуйте ещё раз.",
-    "deleteSessionsPartialFailure": "Не удалось удалить {{failed}} из {{total}} сеансов. Попробуйте снова."
+    "deleteSessionsPartialFailure_one": "Не удалось удалить {{count}} сеанс из {{total}}. Попробуйте снова.",
+    "deleteSessionsPartialFailure_few": "Не удалось удалить {{count}} сеанса из {{total}}. Попробуйте снова.",
+    "deleteSessionsPartialFailure_many": "Не удалось удалить {{count}} сеансов из {{total}}. Попробуйте снова.",
+    "deleteSessionsPartialFailure_other": "Не удалось удалить {{count}} сеансов из {{total}}. Попробуйте снова."
   },
   "version": {
     "updateAvailable": "Доступно обновление",
@@ -165,6 +168,7 @@
     "deleteAllData": "Удалить все данные навсегда",
     "allConversationsDeleted": "Проект будет убран из боковой панели. Ваши файлы, воспоминания и данные сеансов сохранятся.",
     "cannotUndo": "Вы сможете добавить проект позже.",
+    "confirmDeleteSessions": "Что вы хотите сделать с",
     "deleteSessions_one": "Удалить {{count}} сеанс",
     "deleteSessions_few": "Удалить {{count}} сеанса",
     "deleteSessions_many": "Удалить {{count}} сеансов",

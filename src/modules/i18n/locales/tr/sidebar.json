@@ -121,7 +121,8 @@
     "restoreSessionFailed": "Oturum geri yüklenemedi. Lütfen tekrar dene.",
     "restoreSessionError": "Oturum geri yüklenirken hata oluştu. Lütfen tekrar dene.",
     "forkSessionError": "Bu oturum çatallanamadı. Lütfen tekrar deneyin.",
-    "deleteSessionsPartialFailure": "{{total}} oturumdan {{failed}} tanesi silinemedi. Lütfen tekrar dene."
+    "deleteSessionsPartialFailure_one": "{{total}} oturumdan {{count}} tanesi silinemedi. Lütfen tekrar dene.",
+    "deleteSessionsPartialFailure_other": "{{total}} oturumdan {{count}} tanesi silinemedi. Lütfen tekrar dene."
   },
   "version": {
     "updateAvailable": "Güncelleme mevcut",
@@ -157,6 +158,7 @@
     "deleteAllData": "Tüm veriyi kalıcı olarak sil",
     "allConversationsDeleted": "Proje kenar çubuğundan kaldırılacak. Dosyaların, bellek verilerin ve oturum verilerin korunacak.",
     "cannotUndo": "Projeyi sonra tekrar ekleyebilirsin.",
+    "confirmDeleteSessions": "Ne yapmak istersin:",
     "deleteSessions_one": "{{count}} Oturumu Sil",
     "deleteSessions_other": "{{count}} Oturumu Sil",
     "selectedSessions_one": "seçili {{count}} oturum",

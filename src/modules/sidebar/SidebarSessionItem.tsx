@@ -109,8 +109,8 @@ function SidebarSessionItem({
   const toggleSelected = () => {
     onToggleSessionSelected(project.projectId, session.id);
   };
-  // Space never activates a row by itself — the desktop row is an anchor and the
-  // compact one a div — so the checkbox role is given the key it is expected to answer.
+  // Space activates neither the desktop anchor nor the compact div, and Enter
+  // only the anchor, so both keys are handled here and tick either row alike.
   const handleSelectionKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (!isSelectable || (event.key !== ' ' && event.key !== 'Enter')) {
       return;

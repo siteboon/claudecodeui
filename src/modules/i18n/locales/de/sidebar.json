@@ -121,7 +121,8 @@
     "restoreSessionFailed": "Sitzung konnte nicht wiederhergestellt werden. Bitte erneut versuchen.",
     "restoreSessionError": "Fehler beim Wiederherstellen der Sitzung. Bitte erneut versuchen.",
     "forkSessionError": "Diese Sitzung konnte nicht verzweigt werden. Bitte erneut versuchen.",
-    "deleteSessionsPartialFailure": "{{failed}} von {{total}} Sitzungen konnten nicht gelöscht werden. Bitte erneut versuchen."
+    "deleteSessionsPartialFailure_one": "{{count}} Sitzung von {{total}} konnte nicht gelöscht werden. Bitte erneut versuchen.",
+    "deleteSessionsPartialFailure_other": "{{count}} von {{total}} Sitzungen konnten nicht gelöscht werden. Bitte erneut versuchen."
   },
   "version": {
     "updateAvailable": "Update verfügbar",
@@ -157,6 +158,7 @@
     "deleteAllData": "Alle Daten dauerhaft löschen",
     "allConversationsDeleted": "Das Projekt wird aus der Seitenleiste entfernt. Deine Dateien, Erinnerungen und Sitzungsdaten bleiben erhalten.",
     "cannotUndo": "Du kannst das Projekt später erneut hinzufügen.",
+    "confirmDeleteSessions": "Was möchtest du mit",
     "deleteSessions_one": "{{count}} Sitzung löschen",
     "deleteSessions_other": "{{count}} Sitzungen löschen",
     "selectedSessions_one": "{{count}} ausgewählten Sitzung",
