@@ -34,6 +34,11 @@ type AgentRouterDependencies = {
   };
   /** The live-run registry the chat socket uses; registering here is what puts an API run on the running-sessions list. */
   runs: Pick<typeof import('../websocket/index.js').chatRunRegistry, 'startRun' | 'completeRunIfCurrent' | 'isProcessing'>;
+  /** The Shell tab's PTYs: a session the user has resumed in a Shell CLI must not get a second CLI from an API run. */
+  shells: {
+    isSessionHeldByShell(appSessionId: string): boolean;
+    endUnusedShellsForSession(appSessionId: string): void;
+  };
   queryClaude: ProviderRunFunction;
   queryCursor: ProviderRunFunction;
   queryCodex: ProviderRunFunction;
@@ -58,6 +63,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
   const providerModelsService = dependencies.models;
   const sessionGateway = dependencies.sessions;
   const runRegistry = dependencies.runs;
+  const shellSessions = dependencies.shells;
   const queryClaudeSDK = dependencies.queryClaude;
   const spawnCursor = dependencies.queryCursor;
   const queryCodex = dependencies.queryCodex;
@@ -915,6 +921,9 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       if (runRegistry.isProcessing(sessionRow.session_id)) {
         return res.status(409).json({ error: `Session "${sessionRow.session_id}" already has a run in progress` });
       }
+      if (shellSessions.isSessionHeldByShell(sessionRow.session_id)) {
+        return res.status(409).json({ error: `Session "${sessionRow.session_id}" is open in a Shell CLI; exit it there before continuing the session` });
+      }
     }
     const provider = sessionRow?.provider ?? requestedProvider ?? 'claude';
 
@@ -977,6 +986,19 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       const appSessionId = sessionRow
         ? sessionRow.session_id
         : sessionGateway.createAppSession(provider, finalProjectPath, message.trim()).sessionId;
+
+      // As a chat send does: a Shell CLI that was only opened is ended, one
+      // in use keeps the session. Checked again here because the clone above
+      // gave a Shell time to resume it.
+      if (sessionRow) {
+        shellSessions.endUnusedShellsForSession(appSessionId);
+        if (shellSessions.isSessionHeldByShell(appSessionId)) {
+          if (cleanup && githubUrl && clonedProjectCreated) {
+            cleanupProject(finalProjectPath, null);
+          }
+          return res.status(409).json({ error: `Session "${appSessionId}" is open in a Shell CLI; exit it there before continuing the session` });
+        }
+      }
 
       // Registered before any header goes out, so a session already mid-run
       // is refused with a plain 409 rather than an empty stream. The HTTP

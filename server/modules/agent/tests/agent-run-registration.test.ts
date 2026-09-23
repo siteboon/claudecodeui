@@ -10,7 +10,12 @@ import test from 'node:test';
 import express from 'express';
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
-import { chatRunRegistry, connectedClients } from '@/modules/websocket/index.js';
+import {
+  chatRunRegistry,
+  connectedClients,
+  endUnusedShellsForSession,
+  isSessionHeldByShell,
+} from '@/modules/websocket/index.js';
 import type { NormalizedMessage } from '@/shared/types.js';
 import { createNormalizedMessage } from '@/shared/utils.js';
 
@@ -72,6 +77,7 @@ function createDependencies(queryClaude: RunFunction): AgentDependencies {
       },
     },
     runs: chatRunRegistry,
+    shells: { isSessionHeldByShell, endUnusedShellsForSession },
     queryClaude,
     queryCursor: unexpected as RunFunction,
     queryCodex: unexpected as RunFunction,
@@ -293,6 +299,48 @@ test('a busy session is refused before anything is cloned', async () => {
 
       runtime.release();
       await first;
+    });
+  });
+});
+
+test('a session the user has open in a Shell CLI is refused with 409, and a Shell only opened is ended first', async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createAppSession('app-in-shell', 'claude', '/home/test/project', 'In the Shell');
+    const runtime = createHeldRuntime();
+    runtime.release();
+    const dependencies = createDependencies(runtime.queryClaude);
+    // What the Shell service answers: whether a CLI the user works in holds
+    // the session at each check, and which sessions had an unused one ended.
+    const heldAnswers: boolean[] = [];
+    const ended: string[] = [];
+    dependencies.shells = {
+      isSessionHeldByShell: () => heldAnswers.shift() ?? false,
+      endUnusedShellsForSession: (appSessionId) => { ended.push(appSessionId); },
+    };
+    await withAgentServer(dependencies, async (baseUrl) => {
+      const request = { projectPath: '/home/test/project', message: 'More', sessionId: 'app-in-shell', stream: false };
+
+      // Held when the request arrives: refused before any side effect.
+      heldAnswers.push(true);
+      const refused = await post(baseUrl, request);
+      assert.equal(refused.status, 409);
+      assert.match((await refused.json() as { error: string }).error, /open in a Shell CLI/);
+      assert.deepEqual(ended, []);
+
+      // Resumed in the Shell while the project was being prepared: refused at
+      // the last check, before the run is registered.
+      heldAnswers.push(false, true);
+      const late = await post(baseUrl, request);
+      assert.equal(late.status, 409);
+      assert.deepEqual(ended, ['app-in-shell']);
+      assert.equal(runtime.seen.length, 0, 'no second CLI is started');
+      assert.deepEqual(chatRunRegistry.listRunningRuns(), []);
+
+      // Not held: an unused Shell is ended, then the session continues.
+      const continued = await post(baseUrl, request);
+      assert.equal(continued.status, 200);
+      assert.deepEqual(ended, ['app-in-shell', 'app-in-shell']);
+      assert.deepEqual(runtime.seen.map((call) => call.sessionId), ['app-in-shell']);
     });
   });
 });

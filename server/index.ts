@@ -102,6 +102,9 @@ const agentRoutes = createAgentModule({
 // A completed run stays subscribable while its session's background work
 // (agents, workflows, backgrounded commands) is still reporting through it.
 chatRunRegistry.setRetentionGuard((sessionId) => providerRuntimeService.hasBackgroundWork(sessionId));
+// The Shell tab asks the registry before resuming a session; a Claude process
+// held open after its turn (a deferred wake-up reports no task) still has it.
+chatRunRegistry.setLiveProcessProbe((sessionId) => providerRuntimeService.hasLiveProcess(sessionId));
 
 createWebSocketServer(server, {
     verifyClient: {

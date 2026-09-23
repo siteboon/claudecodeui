@@ -1465,6 +1465,9 @@ export const claudeRuntime = {
   },
   listBackgroundWork: listClaudeSDKBackgroundWork,
   stopBackgroundTask: stopClaudeSDKTask,
+  // The activeSessions entry lives from the query's creation until its loop
+  // ends, which covers the post-turn hold and the CLI's wind-down.
+  hasLiveProcess: isClaudeSDKSessionActive,
 };
 
 // Export public API

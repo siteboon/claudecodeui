@@ -69,6 +69,15 @@ const runs = new Map<string, ChatRun>();
 let retainCompletedRun: (appSessionId: string) => boolean = () => false;
 
 /**
+ * Answers whether a provider runtime still has a process up for the session.
+ * Set by the composition root. It covers what the run's status and the
+ * retention guard miss: a Claude process held open after its turn for a
+ * deferred wake-up (Monitor, ScheduleWakeup, CronCreate) that reports no
+ * task, and the wind-down after the turn's `result`.
+ */
+let hasLiveProviderProcess: (appSessionId: string) => boolean = () => false;
+
+/**
  * Schedules one run's eviction. The timer is bound to the run it was armed
  * for: a later run can take the session's slot while this one's retention —
  * re-armed for as long as the guard holds — is still pending, and firing on
@@ -184,6 +193,11 @@ export const chatRunRegistry = {
     retainCompletedRun = guard;
   },
 
+  /** Installs the check that tells `holdsProviderProcess` a provider process is still up for a session. */
+  setLiveProcessProbe(probe: (appSessionId: string) => boolean): void {
+    hasLiveProviderProcess = probe;
+  },
+
   /**
    * Starts tracking a run and returns it, or `null` when a run is already in
    * progress for the session (callers must reject the duplicate send).
@@ -243,13 +257,18 @@ export const chatRunRegistry = {
 
   /**
    * Whether the chat side may still have a provider CLI resumed on the
-   * session: a turn is running, or a finished turn's process is still held
-   * open for its background work (the retention guard). The Shell service
+   * session: a turn is running, a finished turn's process is still held open
+   * for its background work (the retention guard), or the runtime reports
+   * its process still up (the live-process probe). The Shell service
    * consults it so it never starts a second CLI on the same session, which
    * would append to the same transcript and act on the same working tree.
    */
   holdsProviderProcess(appSessionId: string): boolean {
-    return runs.get(appSessionId)?.status === 'running' || retainCompletedRun(appSessionId);
+    return (
+      runs.get(appSessionId)?.status === 'running'
+      || retainCompletedRun(appSessionId)
+      || hasLiveProviderProcess(appSessionId)
+    );
   },
 
   listRunningRuns(): Array<{

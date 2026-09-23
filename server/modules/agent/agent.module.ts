@@ -13,7 +13,7 @@ import {
   userDb,
 } from '@/modules/database/index.js';
 import { providerModelsService, sessionsService } from '@/modules/providers/index.js';
-import { chatRunRegistry } from '@/modules/websocket/index.js';
+import { chatRunRegistry, endUnusedShellsForSession, isSessionHeldByShell } from '@/modules/websocket/index.js';
 import type { LLMProvider } from '@/shared/types.js';
 import { IS_PLATFORM } from '@/shared/utils.js';
 
@@ -56,6 +56,7 @@ export function createAgentModule(externalDependencies: AgentExternalDependencie
         sessionsService.createAppSession(provider as LLMProvider, projectPath, initialMessage),
     },
     runs: chatRunRegistry,
+    shells: { isSessionHeldByShell, endUnusedShellsForSession },
     GithubClient: Octokit,
     ...externalDependencies,
   });

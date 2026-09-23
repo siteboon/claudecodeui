@@ -5,7 +5,10 @@ import type { WebSocket } from 'ws';
 import { sessionsDb } from '@/modules/database/index.js';
 import { providerModelsService, sessionsService } from '@/modules/providers/index.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
-import { hasLiveAgentShellForSession } from '@/modules/websocket/services/shell-websocket.service.js';
+import {
+  endUnusedShellsForSession,
+  isSessionHeldByShell,
+} from '@/modules/websocket/services/shell-websocket.service.js';
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
 import {
   getGlobalImageAssetsDir,
@@ -21,6 +24,11 @@ import type {
   ProviderRuntimeWriter,
 } from '@/shared/types.js';
 import { parseIncomingJsonObject } from '@/shared/utils.js';
+
+// Shown verbatim in the chat, so it names the way out: a Shell the user left
+// or disconnected keeps its CLI until the 30-minute detach timeout.
+const SESSION_OPEN_IN_SHELL_MESSAGE =
+  "This session's CLI is still running in the Shell tab. Type /exit there to end it, then send again (leaving or disconnecting the Shell keeps it running for up to 30 minutes). Two CLIs must not write the same session.";
 
 /**
  * Trust boundary for client-supplied image attachments: chat.send options come
@@ -221,17 +229,17 @@ async function dispatchRun(
 ): Promise<{ started: boolean; error: string | null }> {
   const provider = session.provider as LLMProvider;
 
-  // A live agent Shell PTY already has this session resumed in its own CLI.
-  // The runtime would start a second one on the same transcript and working
-  // tree, so the turn is refused until that CLI exits. Scheduled sends report
-  // the returned error on the schedule; queued turns wait instead.
-  if (hasLiveAgentShellForSession(sessionId)) {
-    const message =
-      "This session is open in the Shell tab and its CLI is still running. Exit it there (for example with /exit) before sending from Chat, so two CLIs don't write the same session.";
+  // A Shell CLI that resumed this session would be a second writer on the
+  // same transcript and working tree. One that was only opened and left is
+  // ended here; one the user is working in refuses the turn until it exits.
+  // Scheduled sends report the returned error on the schedule; queued turns
+  // wait instead.
+  endUnusedShellsForSession(sessionId);
+  if (isSessionHeldByShell(sessionId)) {
     if (ws) {
-      sendProtocolError(ws, 'SESSION_OPEN_IN_SHELL', message, sessionId);
+      sendProtocolError(ws, 'SESSION_OPEN_IN_SHELL', SESSION_OPEN_IN_SHELL_MESSAGE, sessionId);
     }
-    return { started: false, error: message };
+    return { started: false, error: SESSION_OPEN_IN_SHELL_MESSAGE };
   }
 
   const run = chatRunRegistry.startRun({
@@ -613,9 +621,9 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  * everywhere in the meantime.
  *
  * Resolves when the provider run settles. Returns false when the session has
- * gone away, is busy without `interruptActiveRun`, or is open in a live agent
- * Shell (never interrupted: that is the user's own CLI), which the caller
- * reports on the schedule.
+ * gone away, is busy without `interruptActiveRun`, or is held by a Shell CLI
+ * the user is working in (never interrupted: that is the user's own CLI),
+ * which the caller reports on the schedule.
  */
 export async function runDetachedChatTurn(
   input: {
@@ -640,6 +648,12 @@ export async function runDetachedChatTurn(
   const provider = session.provider as LLMProvider;
   if (!dependencies.runtime.hasRuntime(provider)) {
     return { started: false, error: `Provider "${provider}" is not available.` };
+  }
+
+  // Checked before an interrupt: a turn that cannot start must not cost the
+  // session the run it is replacing.
+  if (isSessionHeldByShell(input.sessionId)) {
+    return { started: false, error: SESSION_OPEN_IN_SHELL_MESSAGE };
   }
 
   const activeRun = chatRunRegistry.getRun(input.sessionId);

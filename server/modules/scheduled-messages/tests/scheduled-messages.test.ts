@@ -61,9 +61,12 @@ function createRuntime(runs: RunCall[], behaviour: 'ok' | 'throw' = 'ok', aborts
 /**
  * Opens the Shell tab on the session through the websocket gateway, the way
  * the browser does, with a fake PTY standing in for `claude --resume`. The
- * callback gets a function that makes that CLI exit, as `/exit` would.
+ * callback gets a function that makes that CLI exit, as `/exit` would, and
+ * one that leaves the tab (its socket closes, the CLI stays up).
  */
-async function withSessionOpenInShell(runTest: (exitShellCli: () => void) => Promise<void>): Promise<void> {
+async function withSessionOpenInShell(
+  runTest: (exitShellCli: () => void, leaveShell: () => Promise<void>) => Promise<void>,
+): Promise<void> {
   let exitListener: ((event: { exitCode: number }) => void) | null = null;
   const fakePty = {
     onData: () => ({ dispose: () => undefined }),
@@ -88,6 +91,12 @@ async function withSessionOpenInShell(runTest: (exitShellCli: () => void) => Pro
   await once(server, 'listening');
   const { port } = server.address() as AddressInfo;
   const socket = new WebSocket(`ws://127.0.0.1:${port}/shell`);
+  const leaveShell = async () => {
+    socket.close();
+    await once(socket, 'close');
+    // The server's close handler runs on its own side of the socket.
+    await new Promise((resolve) => { setTimeout(resolve, 50); });
+  };
 
   try {
     await once(socket, 'open');
@@ -100,11 +109,13 @@ async function withSessionOpenInShell(runTest: (exitShellCli: () => void) => Pro
       provider: 'claude',
     }));
     await answered;
-    await runTest(exitShellCli);
+    await runTest(exitShellCli, leaveShell);
   } finally {
     exitShellCli();
-    socket.close();
-    await once(socket, 'close');
+    if (socket.readyState !== WebSocket.CLOSED) {
+      socket.close();
+      await once(socket, 'close');
+    }
     gateway.close();
     await new Promise((resolve) => { server.close(resolve); });
   }
@@ -198,6 +209,25 @@ test('a queued message stays pending while its session is open in the Shell', as
   });
 });
 
+test('a queued message is sent, not held, once a Shell that was only opened has been left', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    sessionDraftsDb.saveDraft(userId, SESSION_ID, {
+      text: '',
+      queuedMessage: { content: 'after a look at the Shell' },
+    });
+
+    const runs: RunCall[] = [];
+    await withSessionOpenInShell(async (_exitShellCli, leaveShell) => {
+      // Nothing was typed into it, so it is not the user's CLI to protect.
+      await leaveShell();
+      assert.equal(await dispatchQueuedMessages(createRuntime(runs)), 1);
+    });
+
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0].command, 'after a look at the Shell');
+  });
+});
+
 test('a due message is recorded as failed, not sent, while its session is open in the Shell', async () => {
   await withIsolatedDatabase(async (userId) => {
     scheduledMessagesService.schedule({
@@ -215,7 +245,7 @@ test('a due message is recorded as failed, not sent, while its session is open i
     assert.equal(runs.length, 0);
     const row = scheduledMessagesDb.listForSession(userId, SESSION_ID)[0];
     assert.equal(row.status, 'failed');
-    assert.match(row.failure_reason ?? '', /open in the Shell tab/);
+    assert.match(row.failure_reason ?? '', /running in the Shell tab/);
   });
 });
 

@@ -36,6 +36,13 @@ type PtySessionEntry = {
    * session is never driven by two CLIs at once.
    */
   resumedAppSessionId: string | null;
+  /**
+   * Set once a line is submitted to the PTY (its input carried Enter). Until
+   * then the CLI has run nothing: the Shell tab resumed the session only
+   * because it was opened. Terminal replies such as focus or colour reports
+   * never carry a bare Enter, so they do not count.
+   */
+  hasSubmittedInput: boolean;
 };
 
 const ptySessionsMap = new Map<string, PtySessionEntry>();
@@ -43,23 +50,56 @@ const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
 const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
 const TRAILING_URL_PUNCTUATION_REGEX = /[)\]}>.,;:!?]+$/;
 const SESSION_BUSY_IN_CHAT_MESSAGE =
-  "This session is running in Chat right now. Wait for it to finish (or stop it) before resuming it in the Shell, so two CLIs don't write the same session.";
+  "This session is still running in Chat (a turn, or background work that keeps its CLI open). Wait for it to finish or stop it in Chat, then press Restart here, so two CLIs don't write the same session.";
 
 /**
- * Used by the chat gateway and, through the module barrel, the queued-message
- * dispatcher: both refuse to start a provider run on a session whose agent
- * Shell PTY is still alive, because that CLI already resumed it and a second
- * one would append to the same transcript and act on the same working tree.
- * Entries leave the map when their PTY exits or is killed, so presence means
- * the process is still running.
+ * Whether the user may be working in this PTY: a Shell tab is attached to it,
+ * or a line was submitted to it. Anything else was started by opening the
+ * Shell tab and has done nothing since.
  */
-export function hasLiveAgentShellForSession(appSessionId: string): boolean {
+function isPtySessionInUse(entry: PtySessionEntry): boolean {
+  return entry.ws !== null || entry.hasSubmittedInput;
+}
+
+/**
+ * Used by the chat gateway and, through the module barrel, by the
+ * queued-message dispatcher and the agent API: each refuses to start a
+ * provider run while this is true, because that Shell CLI already resumed the
+ * session and a second CLI would append to the same transcript and act on the
+ * same working tree. Only PTYs in use count (see `isPtySessionInUse`); an
+ * unused one is ended by `endUnusedShellsForSession` instead. Entries leave
+ * the map when their PTY exits or is killed, so presence means the process is
+ * still running.
+ */
+export function isSessionHeldByShell(appSessionId: string): boolean {
   for (const entry of ptySessionsMap.values()) {
-    if (entry.resumedAppSessionId === appSessionId) {
+    if (entry.resumedAppSessionId === appSessionId && isPtySessionInUse(entry)) {
       return true;
     }
   }
   return false;
+}
+
+/**
+ * Used by the chat gateway and, through the module barrel, by the agent API,
+ * right before they start a provider run on the session. Ends the agent Shell
+ * PTYs that resumed it but are not in use: nobody is looking at them and
+ * nothing was ever submitted, so ending one loses nothing, and the next visit
+ * to the Shell tab resumes a fresh CLI that includes the new turn instead of
+ * reattaching to a stale one. Without this, just opening the Shell tab would
+ * block Chat on that session until the PTY's 30-minute detach timeout.
+ */
+export function endUnusedShellsForSession(appSessionId: string): void {
+  for (const [key, entry] of ptySessionsMap) {
+    if (entry.resumedAppSessionId !== appSessionId || isPtySessionInUse(entry)) {
+      continue;
+    }
+    if (entry.timeoutId) {
+      clearTimeout(entry.timeoutId);
+    }
+    entry.pty.kill();
+    ptySessionsMap.delete(key);
+  }
 }
 
 function normalizeDetectedUrl(url: string): string | null {
@@ -465,15 +505,19 @@ export function handleShellConnection(
           projectPath,
           sessionId,
           resumedAppSessionId: !isPlainShell && resumeSessionId ? sessionId : null,
+          hasSubmittedInput: false,
         });
 
-        shellProcess.onData((chunk) => {
-          if (!ptySessionKey) {
-            return;
-          }
+        // The connection's `ptySessionKey` and `shellProcess` change if this
+        // socket sends another init, so the PTY's own handlers keep the ones
+        // it was spawned with. Otherwise its exit would remove the other PTY's
+        // entry and leave its own behind for good.
+        const spawnedKey = ptySessionKey;
+        const spawnedPty = shellProcess;
 
-          const session = ptySessionsMap.get(ptySessionKey);
-          if (!session) {
+        spawnedPty.onData((chunk) => {
+          const session = ptySessionsMap.get(spawnedKey);
+          if (!session || session.pty !== spawnedPty) {
             return;
           }
 
@@ -543,13 +587,9 @@ export function handleShellConnection(
           }
         });
 
-        shellProcess.onExit((exitCode) => {
-          if (!ptySessionKey) {
-            return;
-          }
-
-          const session = ptySessionsMap.get(ptySessionKey);
-          if (session && session.pty !== shellProcess) {
+        spawnedPty.onExit((exitCode) => {
+          const session = ptySessionsMap.get(spawnedKey);
+          if (session && session.pty !== spawnedPty) {
             return;
           }
 
@@ -568,8 +608,10 @@ export function handleShellConnection(
             clearTimeout(session.timeoutId);
           }
 
-          ptySessionsMap.delete(ptySessionKey);
-          shellProcess = null;
+          ptySessionsMap.delete(spawnedKey);
+          if (shellProcess === spawnedPty) {
+            shellProcess = null;
+          }
         });
 
         let welcomeMsg = `\x1b[36mStarting terminal in: ${projectPath}\x1b[0m\r\n`;
@@ -598,7 +640,12 @@ export function handleShellConnection(
 
       if (data.type === 'input') {
         if (shellProcess) {
-          shellProcess.write(readString(data.data));
+          const input = readString(data.data);
+          shellProcess.write(input);
+          const session = ptySessionKey ? ptySessionsMap.get(ptySessionKey) : undefined;
+          if (session?.pty === shellProcess && /[\r\n]/.test(input)) {
+            session.hasSubmittedInput = true;
+          }
         }
         return;
       }
@@ -623,35 +670,31 @@ export function handleShellConnection(
   });
 
   ws.on('close', () => {
-    if (!ptySessionKey) {
-      return;
-    }
-
-    const session = ptySessionsMap.get(ptySessionKey);
-    if (!session) {
-      return;
-    }
-
-    // Mobile networks can deliver an old socket's close after its replacement
-    // has attached. Only the socket that currently owns the PTY may detach it.
-    if (session.ws !== ws) {
-      return;
-    }
-
-    session.ws = null;
-    if (session.timeoutId) {
-      clearTimeout(session.timeoutId);
-    }
-    session.timeoutId = setTimeout(() => {
-      // A reconnect may win just as this timer becomes runnable. Re-check the
-      // active socket so a queued cleanup can never kill a reattached PTY.
-      if (ptySessionsMap.get(ptySessionKey as string) !== session || session.ws !== null) {
-        return;
+    // Every PTY this socket still owns is detached, not only the one its last
+    // init named: a socket that sent two inits owns two.
+    for (const [key, session] of ptySessionsMap) {
+      // Mobile networks can deliver an old socket's close after its
+      // replacement has attached. Only the socket that currently owns the PTY
+      // may detach it.
+      if (session.ws !== ws) {
+        continue;
       }
 
-      session.pty.kill();
-      ptySessionsMap.delete(ptySessionKey as string);
-    }, PTY_SESSION_TIMEOUT);
+      session.ws = null;
+      if (session.timeoutId) {
+        clearTimeout(session.timeoutId);
+      }
+      session.timeoutId = setTimeout(() => {
+        // A reconnect may win just as this timer becomes runnable. Re-check the
+        // active socket so a queued cleanup can never kill a reattached PTY.
+        if (ptySessionsMap.get(key) !== session || session.ws !== null) {
+          return;
+        }
+
+        session.pty.kill();
+        ptySessionsMap.delete(key);
+      }, PTY_SESSION_TIMEOUT);
+    }
   });
 
   ws.on('error', (error) => {

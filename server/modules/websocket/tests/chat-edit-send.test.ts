@@ -9,6 +9,7 @@ import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/datab
 import { sessionsService } from '@/modules/providers/index.js';
 import { handleChatConnection } from '@/modules/websocket/services/chat-websocket.service.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
+import { handleShellConnection } from '@/modules/websocket/services/shell-websocket.service.js';
 import { connectedClients } from '@/modules/websocket/services/websocket-state.service.js';
 
 const SESSION_ID = 'edit-session';
@@ -263,6 +264,55 @@ test('a refused send never rewinds the conversation', async () => {
     assert.equal(rewound, false);
     assert.equal(runs.length, 1);
     assert.equal(socket.frames.at(-1)?.code, 'RUN_IN_PROGRESS');
+  }, CODEX_TRANSCRIPT_ROWS);
+});
+
+test('an edit on a session the Shell tab holds is refused before the cut and the rewind', async () => {
+  await withGateway('codex', async ({ socket, runs }) => {
+    // The Shell tab resumed the session and is still attached: its CLI would
+    // be a second writer, and the rewind cannot be taken back.
+    let exitShellCli: () => void = () => undefined;
+    const shellSocket = new EventEmitter() as EventEmitter & { readyState: number; send: (data: string) => void };
+    shellSocket.readyState = 1;
+    shellSocket.send = () => undefined;
+    handleShellConnection(shellSocket as never, {
+      resolveProviderSessionId: () => 'provider-thread',
+      spawnPty: () => ({
+        onData: () => ({ dispose: () => undefined }),
+        onExit: (listener: (event: { exitCode: number }) => void) => {
+          exitShellCli = () => listener({ exitCode: 0 });
+          return { dispose: () => undefined };
+        },
+        write() {},
+        resize() {},
+        kill() {},
+      }) as never,
+    });
+    shellSocket.emit('message', JSON.stringify({
+      type: 'init', projectPath: os.tmpdir(), sessionId: SESSION_ID, hasSession: true, provider: 'codex',
+    }));
+
+    const realRewind = sessionsService.rewindSessionForEdit;
+    let rewound = false;
+    sessionsService.rewindSessionForEdit = async () => { rewound = true; };
+
+    try {
+      socket.emit('message', JSON.stringify({
+        type: 'chat.edit-send',
+        sessionId: SESSION_ID,
+        anchorId: 'turn-b',
+        content: 'an edit while the Shell has the session',
+      }));
+      await settle();
+    } finally {
+      sessionsService.rewindSessionForEdit = realRewind;
+      exitShellCli();
+    }
+
+    assert.equal(rewound, false);
+    assert.equal(runs.length, 0);
+    assert.equal(socket.frames.some((frame) => frame.kind === 'history_truncated'), false);
+    assert.equal(socket.frames.at(-1)?.code, 'SESSION_OPEN_IN_SHELL');
   }, CODEX_TRANSCRIPT_ROWS);
 });
 
