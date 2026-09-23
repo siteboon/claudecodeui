@@ -221,7 +221,8 @@
       "title": "Ersetzt eine frühere Nachricht",
       "filesNotReverted": "bereits geänderte Dateien werden nicht zurückgesetzt",
       "cancel": "Abbrechen"
-    }
+    },
+    "notConnected": "Keine Verbindung zum Server, deine Nachricht wurde daher nicht gesendet. Verbindung wird wiederhergestellt – sende sie gleich noch einmal."
   },
   "export": {
     "trigger": "Unterhaltung exportieren",

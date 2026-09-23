@@ -242,7 +242,8 @@
       "title": "正在替换先前的消息",
       "filesNotReverted": "已修改的文件不会被还原",
       "cancel": "取消"
-    }
+    },
+    "notConnected": "未连接到服务器，消息未发送。正在重新连接，请稍后再次发送。"
   },
   "export": {
     "trigger": "导出对话",

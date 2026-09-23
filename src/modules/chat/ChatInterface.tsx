@@ -34,7 +34,10 @@ type ChatInterfaceProps = {
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   ws: WebSocket | null;
-  sendMessage: (message: unknown) => void;
+  /** Returns false when the socket was not open and the frame was not sent. */
+  sendMessage: (message: unknown) => boolean | void;
+  /** Whether the chat socket is open; treated as open when omitted. */
+  isConnected?: boolean;
   onFileOpen?: (filePath: string, diffInfo?: any) => void;
   onNavigateToSession?: (targetSessionId: string, options?: SessionNavigationOptions) => void;
   onSessionEstablished?: (sessionId: string, context: SessionEstablishedContext) => void;
@@ -59,6 +62,7 @@ function ChatInterface({
   selectedSession,
   ws,
   sendMessage,
+  isConnected,
   onFileOpen,
   onNavigateToSession,
   onSessionEstablished,
@@ -249,6 +253,7 @@ function ChatInterface({
     canAbortSession,
     tokenBudget,
     sendMessage,
+    isConnected,
     sendByCtrlEnter,
     onSessionProcessing,
     onSessionEstablished: handleSessionEstablished,

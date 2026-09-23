@@ -257,7 +257,8 @@
       "title": "正在取代先前的訊息",
       "filesNotReverted": "已修改的檔案不會還原",
       "cancel": "取消"
-    }
+    },
+    "notConnected": "未連線到伺服器，訊息未送出。正在重新連線，請稍後再傳送一次。"
   },
   "export": {
     "trigger": "匯出對話",

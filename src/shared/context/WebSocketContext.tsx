@@ -10,7 +10,12 @@ type ServerEventListener = (event: ServerEvent) => void;
 
 type WebSocketContextType = {
   ws: WebSocket | null;
-  sendMessage: (message: unknown) => void;
+  /**
+   * Sends one frame on the chat socket. Returns false when the socket is not
+   * open and the frame was NOT sent, so callers that carry user input can keep
+   * it instead of treating it as delivered.
+   */
+  sendMessage: (message: unknown) => boolean;
   /**
    * Subscribes to every websocket frame. Returns an unsubscribe function.
    *
@@ -111,6 +116,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
 
         // Attempt to reconnect after 3 seconds
         reconnectTimeoutRef.current = setTimeout(() => {
+          reconnectTimeoutRef.current = null;
           if (unmountedRef.current) return; // Prevent reconnection if unmounted
           connect();
         }, 3000);
@@ -124,6 +130,11 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       console.error('Error creating WebSocket connection:', error);
     }
   }, [dispatch, isAuthLoading, token, user]); // reconnect with current authentication state
+
+  // Latest `connect` for the stable `sendMessage`, which may cut a pending
+  // reconnect delay short.
+  const connectRef = useRef(connect);
+  connectRef.current = connect;
 
   // Declared after `connect` so the effect body does not reference it before
   // initialization. `connect` is memoized on [dispatch, isAuthLoading, token,
@@ -143,6 +154,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       unmountedRef.current = true;
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
       }
       const activeSocket = wsRef.current;
       if (activeSocket) {
@@ -162,9 +174,18 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     const socket = wsRef.current;
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(message));
-    } else {
-      console.warn('WebSocket not connected');
+      return true;
     }
+    console.warn('WebSocket not connected');
+    // The socket is gone and a reconnect is waiting out its delay. Someone is
+    // trying to reach the server right now (typically a phone whose tab was
+    // just brought back), so reconnect immediately instead.
+    if (!socket && reconnectTimeoutRef.current && !unmountedRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+      connectRef.current();
+    }
+    return false;
   }, []);
 
   const subscribe = useCallback((listener: ServerEventListener) => {

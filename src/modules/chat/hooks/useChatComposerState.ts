@@ -50,7 +50,17 @@ type UseChatComposerStateArgs = {
   processingSessions?: SessionActivityMap;
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
-  sendMessage: (message: unknown) => void;
+  /**
+   * Returns false when the chat socket was not open and the frame was NOT
+   * sent; the composer then keeps the message. A sender that returns nothing
+   * is treated as having sent it.
+   */
+  sendMessage: (message: unknown) => boolean | void;
+  /**
+   * Whether the chat socket is open. A send is refused up front while it is
+   * not, before a new session is allocated for it. Treated as open when omitted.
+   */
+  isConnected?: boolean;
   sendByCtrlEnter?: boolean;
   onSessionProcessing?: MarkSessionProcessing;
   /**
@@ -182,6 +192,7 @@ export function useChatComposerState({
   canAbortSession,
   tokenBudget,
   sendMessage,
+  isConnected = true,
   sendByCtrlEnter,
   onSessionProcessing,
   onSessionEstablished,
@@ -662,6 +673,18 @@ export function useChatComposerState({
     processingSessionsRef.current = processingSessions;
   }, [processingSessions]);
 
+  // The message stays in the composer; this only tells the user why nothing
+  // happened, which a dropped frame otherwise never does.
+  const reportNotConnected = useCallback(() => {
+    addMessage({
+      type: 'error',
+      content: t('composer.notConnected', {
+        defaultValue: 'Not connected to the server, so your message was not sent. Reconnecting — send it again in a moment.',
+      }),
+      timestamp: new Date(),
+    });
+  }, [addMessage, t]);
+
   const handleSubmit = useCallback(
     async (
       event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
@@ -791,6 +814,14 @@ export function useChatComposerState({
         }
       }
 
+      // A closed socket drops the frame, so refuse the send up front — before
+      // files are uploaded or a session is allocated for a message that cannot
+      // go out — and leave everything in the composer to send again.
+      if (!isConnected) {
+        reportNotConnected();
+        return;
+      }
+
       const messageContent = currentInput;
 
       let uploadedAttachments = previouslyUploadedAttachments;
@@ -816,7 +847,8 @@ export function useChatComposerState({
       // BEFORE the first websocket send: brand-new chats allocate one here
       // via the session gateway. There is no client-visible session-id
       // handoff later — this id stays valid for the conversation's lifetime.
-      let targetSessionId = selectedSession?.id || currentSessionId || null;
+      const existingSessionId = selectedSession?.id || currentSessionId || null;
+      let targetSessionId = existingSessionId;
       if (!targetSessionId) {
         let createdSessionName = sessionSummary;
         try {
@@ -896,22 +928,10 @@ export function useChatComposerState({
         ...(editingAnchorId ? { replacesAnchorId: editingAnchorId } : {}),
       };
 
-      addMessage(userMessage);
-      // Mark this request as processing in the per-session activity map (the
-      // single source of truth the indicator derives from). The id is always
-      // concrete at this point — no pending placeholder exists anymore.
-      onSessionProcessing?.(targetSessionId, {
-        statusText: null,
-        canInterrupt: true,
-      });
-
-      setIsUserScrolledUp(false);
-      setTimeout(() => scrollToBottom(), 100);
-
       // One message shape for every provider. The backend resolves the
       // provider, project path, and provider-native resume id from the
       // session row; `options` only carries composer-level preferences.
-      sendMessage({
+      const sent = sendMessage({
         // Replacing an already-sent message is its own frame: it changes the
         // shape of the conversation, so it gets validated separately and can
         // report why it was refused.
@@ -924,6 +944,34 @@ export function useChatComposerState({
           attachments: uploadedAttachments,
         },
       });
+      // The socket closed after the check above. Nothing was drawn or marked
+      // yet, so keeping the composer as it is loses nothing — except for a
+      // session allocated just now: the composer is about to switch to it and
+      // show its draft, so the text is moved over to it.
+      if (sent === false) {
+        if (targetSessionId !== existingSessionId) {
+          writeDraftText(targetSessionId, currentInput);
+          if (draftScopeRef.current && draftScopeRef.current !== targetSessionId) {
+            writeDraftText(draftScopeRef.current, '');
+          }
+        }
+        reportNotConnected();
+        return;
+      }
+
+      // Drawn only once the frame is out, so a message is never shown as sent
+      // when it was not. Server frames for it arrive asynchronously, after this.
+      addMessage(userMessage);
+      // Mark this request as processing in the per-session activity map (the
+      // single source of truth the indicator derives from). The id is always
+      // concrete at this point — no pending placeholder exists anymore.
+      onSessionProcessing?.(targetSessionId, {
+        statusText: null,
+        canInterrupt: true,
+      });
+
+      setIsUserScrolledUp(false);
+      setTimeout(() => scrollToBottom(), 100);
       setEditingAnchorId(null);
 
       // Recorded under the (possibly just-allocated) session id, so the first
@@ -953,11 +1001,13 @@ export function useChatComposerState({
       currentSessionId,
       editingAnchorId,
       executeCommand,
+      isConnected,
       isLoading,
       onSessionProcessing,
       onSessionEstablished,
       provider,
       recordSentMessage,
+      reportNotConnected,
       resetCommandMenuState,
       scrollToBottom,
       selectedProject,

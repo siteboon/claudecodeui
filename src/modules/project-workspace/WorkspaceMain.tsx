@@ -22,7 +22,8 @@ type WorkspaceMainProps = {
   activeTab: AppTab;
   setActiveTab: Dispatch<SetStateAction<AppTab>>;
   ws: WebSocket | null;
-  sendMessage: (message: unknown) => void;
+  sendMessage: (message: unknown) => boolean;
+  isConnected: boolean;
   isMobile: boolean;
   onMenuClick: () => void;
   isLoading: boolean;
@@ -45,6 +46,7 @@ function WorkspaceMain({
   setActiveTab,
   ws,
   sendMessage,
+  isConnected,
   isMobile,
   onMenuClick,
   isLoading,
@@ -159,6 +161,7 @@ function WorkspaceMain({
                 selectedSession={selectedSession}
                 ws={ws}
                 sendMessage={sendMessage}
+                isConnected={isConnected}
                 onFileOpen={handleFileOpen}
                 onNavigateToSession={onNavigateToSession}
                 onSessionEstablished={onSessionEstablished}
