@@ -86,7 +86,8 @@ const BG_WAIT_CEILING_MS = 30 * 60 * 1000;
 // notices an async hook has finished when it next builds a turn, so between
 // `hook_started` and its own teardown the stream says nothing. Hooks that finish
 // inside the window run to completion; longer ones are still cancelled at its end.
-// A new turn on the session, or an abort, ends the window early.
+// A new turn on the session ends the window early (the turn has already completed, so
+// `chat.abort` no longer reaches it).
 //
 // Only runs that pass `holdForAsyncHooks` get the window: the run's promise settles
 // when the CLI exits, so every caller that awaits it for its output (commit
