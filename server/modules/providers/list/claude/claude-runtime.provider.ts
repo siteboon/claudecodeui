@@ -83,6 +83,10 @@ const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEO
 // Reclaim an idle conversation after 30 minutes, but never while it owns work.
 // Closing stdin is a process shutdown, not a turn-completion signal.
 const SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+// Fallback for SDK/tool versions without lifecycle events. Silent deferred work
+// beyond this lease cannot be distinguished from finished work; tracked tasks
+// remain protected independently, with no time limit.
+const UNTRACKED_WORK_CEILING_MS = 24 * 60 * 60 * 1000;
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
@@ -898,6 +902,7 @@ export async function queryClaudeSDK(command: string, options: AnyRecord, ws: Pr
   const processClosed = new Promise<void>((resolve) => { finishProcess = resolve; });
   let automaticTurnPending = false;
   let untrackedWorkPending = false;
+  let untrackedWorkTimer: ReturnType<typeof setTimeout> | null = null;
   // The client is told the turn is over as soon as `result` lands, even though
   // the process lingers, so the UI never waits out the idle hold.
   let turnCompleteSent = false;
@@ -930,6 +935,24 @@ export async function queryClaudeSDK(command: string, options: AnyRecord, ws: Pr
       releasePromptStream();
     }, SESSION_IDLE_TIMEOUT_MS);
     idleReleaseTimer.unref?.();
+  };
+
+  /** Renew the fallback lease without imposing a deadline on tracked tasks. */
+  const renewUntrackedWork = () => {
+    if (untrackedWorkTimer) clearTimeout(untrackedWorkTimer);
+    untrackedWorkPending = true;
+    untrackedWorkTimer = setTimeout(() => {
+      untrackedWorkTimer = null;
+      untrackedWorkPending = false;
+      console.warn('[Claude SDK] Untracked background work lease expired for session:', sessionKey());
+      try {
+        ws.send(createNormalizedMessage({ kind: 'status', text: 'Background work without task events has been silent for 24 hours. This session can now expire when idle.', sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+      } catch (error) {
+        console.warn('[Claude SDK] Unable to report background lease expiry:', error);
+      }
+      scheduleRelease();
+    }, UNTRACKED_WORK_CEILING_MS);
+    untrackedWorkTimer.unref?.();
   };
 
   // Hoisted above the try so the catch's cleanup can tell whether this run
@@ -990,6 +1013,13 @@ export async function queryClaudeSDK(command: string, options: AnyRecord, ws: Pr
     // auto-approves them and the model acts on a generated answer. Move these
     // tools to a PreToolUse hook (runs before the mode check) if we need them
     // to work in those modes.
+    // Track only permission changes actually accepted by this process. A new
+    // client-side grant still needs a restart; a remembered decision does not.
+    const liveToolsSettings = {
+      allowedTools: [...(options.toolsSettings?.allowedTools ?? [])] as string[],
+      disallowedTools: [...(options.toolsSettings?.disallowedTools ?? [])] as string[],
+      skipPermissions: options.toolsSettings?.skipPermissions ?? false,
+    };
     sdkOptions.canUseTool = async (toolName: string, input: AnyRecord, context: AnyRecord) => {
       cancelIdleRelease();
       if (turnCompleteSent) automaticTurnPending = true;
@@ -1060,6 +1090,10 @@ export async function queryClaudeSDK(command: string, options: AnyRecord, ws: Pr
 
       if (decision.allow) {
         if (decision.rememberEntry && typeof decision.rememberEntry === 'string') {
+          if (!liveToolsSettings.allowedTools.includes(decision.rememberEntry)) {
+            liveToolsSettings.allowedTools.push(decision.rememberEntry);
+          }
+          liveToolsSettings.disallowedTools = liveToolsSettings.disallowedTools.filter((entry) => entry !== decision.rememberEntry);
           if (!sdkOptions.allowedTools.includes(decision.rememberEntry)) {
             sdkOptions.allowedTools.push(decision.rememberEntry);
           }
@@ -1102,13 +1136,16 @@ export async function queryClaudeSDK(command: string, options: AnyRecord, ws: Pr
       });
     }
 
-    // A live process has immutable startup settings. Never silently ignore a
-    // permission/model change or destroy its tasks to apply one.
+    /** Compare startup settings plus permissions remembered by the live process. */
     const settingsKey = (input: AnyRecord) => JSON.stringify({
       cwd: input.cwd, model: input.model ?? null, effort: input.effort ?? null,
-      permissionMode: input.permissionMode ?? 'default', toolsSettings: input.toolsSettings ?? null,
+      permissionMode: input.permissionMode ?? 'default',
+      toolsSettings: {
+        allowedTools: [...new Set(input.toolsSettings?.allowedTools ?? [])].sort(),
+        disallowedTools: [...new Set(input.toolsSettings?.disallowedTools ?? [])].sort(),
+        skipPermissions: input.toolsSettings?.skipPermissions ?? false,
+      },
     });
-    const initialSettings = settingsKey(options);
     const registerSession = () => {
       if (!sessionKey() || !queryInstance) return;
       addSession(sessionKey(), queryInstance, ws, () => {
@@ -1125,7 +1162,7 @@ export async function queryClaudeSDK(command: string, options: AnyRecord, ws: Pr
         if (closing || heldPrompt.closed) return refuse('The Claude session is closing. Retry the message.');
         if (!turnCompleteSent) return refuse('This Claude session already has a turn in progress.');
         const requiresRestart = nextOptions.resumeAnchorId || nextOptions.resumeFromScratch
-          || settingsKey(nextOptions) !== initialSettings || !supportsPromptCorrelation;
+          || settingsKey(nextOptions) !== settingsKey({ ...options, toolsSettings: liveToolsSettings }) || !supportsPromptCorrelation;
         if (requiresRestart) {
           if (backgroundWork.hasOutstanding(sessionKey()) || untrackedWorkPending || automaticTurnPending) {
             return refuse('Stop background work before changing session settings, editing an earlier message, or continuing with a CLI that cannot correlate turns. Background work has been preserved.');
@@ -1231,6 +1268,8 @@ export async function queryClaudeSDK(command: string, options: AnyRecord, ws: Pr
         cancelIdleRelease();
       }
       if (message.type === 'assistant' && turnCompleteSent) {
+        // A spontaneous follow-up is evidence that deferred work is still alive.
+        if (untrackedWorkPending) renewUntrackedWork();
         automaticTurnPending = true;
         cancelIdleRelease();
       }
@@ -1288,9 +1327,9 @@ export async function queryClaudeSDK(command: string, options: AnyRecord, ws: Pr
         // Task events are authoritative when available; deferred tools that
         // never report tasks retain the conservative launch-based fallback.
         const holdForTurn = sawTaskEventThisTurn ? stillOutstanding : backgroundWorkPending || stillOutstanding;
-        // A deferred tool without task events cannot be proven idle by an
-        // unrelated result. Keep it alive until the user explicitly stops it.
-        if (backgroundWorkPending && !sawTaskEventThisTurn) untrackedWorkPending = true;
+        // Unrelated results do not prove unknown work finished. Bound the
+        // fallback hold, renewing it when deferred work launches or reports back.
+        if (backgroundWorkPending && !sawTaskEventThisTurn) renewUntrackedWork();
         backgroundWorkPending = false;
         sawTaskEventThisTurn = false;
         heldForBackgroundWork = holdForTurn;
@@ -1383,6 +1422,10 @@ export async function queryClaudeSDK(command: string, options: AnyRecord, ws: Pr
     if (idleReleaseTimer) {
       clearTimeout(idleReleaseTimer);
       idleReleaseTimer = null;
+    }
+    if (untrackedWorkTimer) {
+      clearTimeout(untrackedWorkTimer);
+      untrackedWorkTimer = null;
     }
     closing = true;
     releasePromptStream();

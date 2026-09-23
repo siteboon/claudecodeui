@@ -333,6 +333,156 @@ test('permission requests after reuse reach the current turn writer', async () =
   });
 });
 
+test('remembered permissions reuse the live query while client-only changes remain blocked', async () => {
+  await withRun(async ({ script, sent, submit }) => {
+    script.emit(init());
+    script.emit(taskStarted('a1', 'tool1', 'local_agent'));
+    const permission = script.options.canUseTool('Bash', { command: 'pwd' }, { signal: new AbortController().signal });
+    const request = sent.find((message) => message.kind === 'permission_request');
+    assert.ok(request?.requestId);
+    resolveToolApproval(request.requestId, { allow: true, rememberEntry: 'Bash(pwd)' });
+    assert.equal((await permission).behavior, 'allow');
+    script.emit(result(script.prompts[0].uuid));
+    await until(() => sent.some((message) => message.kind === 'complete'));
+
+    const next: NormalizedMessage[] = [];
+    const toolsSettings = { allowedTools: ['Bash(pwd)'], disallowedTools: [], skipPermissions: false };
+    const done = submit('continue', next, { toolsSettings });
+    await until(() => script.prompts.length === 2 || next.some((message) => message.kind === 'error'));
+    assert.equal(script.prompts.length, 2, 'the remembered permission must not require a restart');
+    script.emit(result(script.prompts[1].uuid));
+    await done;
+    for (const changed of [
+      { ...toolsSettings, allowedTools: ['Bash(pwd)', 'Write'] },
+      { ...toolsSettings, allowedTools: [] },
+      { ...toolsSettings, disallowedTools: ['Bash(pwd)'] },
+      { ...toolsSettings, skipPermissions: true },
+    ]) {
+      const refused: NormalizedMessage[] = [];
+      await submit('change settings', refused, { toolsSettings: changed });
+      assert.ok(refused.some((message) => message.kind === 'error'));
+    }
+    assert.equal(script.creations, 1);
+    assert.equal(script.released(), false);
+    assert.equal(script.interruptions, 0);
+  });
+});
+
+test('explicit empty permission defaults match omitted settings', async () => {
+  await withRun(async ({ script, sent, submit }) => {
+    script.emit(init());
+    script.emit(taskStarted('a1', 'tool1', 'local_agent'));
+    script.emit(result(script.prompts[0].uuid));
+    await until(() => sent.some((message) => message.kind === 'complete'));
+    const next: NormalizedMessage[] = [];
+    const done = submit('continue', next, { toolsSettings: { allowedTools: [], disallowedTools: [], skipPermissions: false } });
+    await until(() => script.prompts.length === 2 || next.some((message) => message.kind === 'error'));
+    assert.equal(script.prompts.length, 2);
+    script.emit(result(script.prompts[1].uuid));
+    await done;
+    assert.equal(script.creations, 1);
+  });
+});
+
+test('untracked work expires only after its lease and the normal idle timeout', async (t) => {
+  await withRun(async ({ script, sent }) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const drain = () => new Promise<void>((resolve) => setImmediate(resolve));
+    script.emit(init());
+    script.emit(toolUse('monitor', 'Monitor', {}));
+    script.emit(result(script.prompts[0].uuid));
+    await drain();
+    t.mock.timers.tick(24 * 60 * 60 * 1000 - 1);
+    await drain();
+    assert.equal(script.released(), false);
+    t.mock.timers.tick(1);
+    await drain();
+    assert.equal(script.released(), false, 'expiry starts the normal idle grace period');
+    assert.ok(sent.some((message) => message.kind === 'status' && message.text?.includes('silent for 24 hours')));
+    t.mock.timers.tick(30 * 60 * 1000);
+    await drain();
+    assert.equal(script.released(), true);
+    t.mock.timers.reset();
+  });
+});
+
+test('automatic untracked activity renews the lease and exit cancels it', async (t) => {
+  await withRun(async ({ script, sent, done }) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const drain = () => new Promise<void>((resolve) => setImmediate(resolve));
+    script.emit(init());
+    script.emit(toolUse('monitor', 'Monitor', {}));
+    script.emit(result(script.prompts[0].uuid));
+    await drain();
+    t.mock.timers.tick(23 * 60 * 60 * 1000);
+    script.emit({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Scheduled update' }] } });
+    script.emit(result());
+    await drain();
+    t.mock.timers.tick(2 * 60 * 60 * 1000);
+    await drain();
+    assert.equal(script.released(), false, 'automatic activity renewed the unknown-work lease');
+    assert.equal(sent.some((message) => message.kind === 'status' && message.text?.includes('silent for 24 hours')), false);
+    script.end();
+    await done;
+    const messagesAtExit = sent.length;
+    t.mock.timers.tick(48 * 60 * 60 * 1000);
+    await drain();
+    assert.equal(sent.length, messagesAtExit, 'no lease callback after query exit');
+    t.mock.timers.reset();
+  });
+});
+
+test('untracked expiry cannot release tracked tasks or their automatic follow-up', async (t) => {
+  await withRun(async ({ script }) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const drain = () => new Promise<void>((resolve) => setImmediate(resolve));
+    script.emit(init());
+    script.emit(toolUse('monitor', 'Monitor', {}));
+    script.emit(result(script.prompts[0].uuid));
+    await drain();
+    script.emit(taskStarted('a1', 'tool1', 'local_agent'));
+    await drain();
+    t.mock.timers.tick(25 * 60 * 60 * 1000);
+    await drain();
+    assert.equal(script.released(), false);
+    script.emit(taskNotification('a1', 'tool1', 'completed'));
+    await drain();
+    t.mock.timers.tick(60 * 60 * 1000);
+    await drain();
+    assert.equal(script.released(), false);
+    script.emit(result());
+    await drain();
+    t.mock.timers.tick(30 * 60 * 1000);
+    await drain();
+    assert.equal(script.released(), true);
+    t.mock.timers.reset();
+  });
+});
+
+test('untracked expiry cannot close an active user turn', async (t) => {
+  await withRun(async ({ script, submit }) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const drain = () => new Promise<void>((resolve) => setImmediate(resolve));
+    script.emit(init());
+    script.emit(toolUse('monitor', 'Monitor', {}));
+    script.emit(result(script.prompts[0].uuid));
+    await drain();
+    const next: NormalizedMessage[] = [];
+    const done = submit('continue', next);
+    await drain();
+    assert.equal(script.prompts.length, 2);
+    t.mock.timers.tick(25 * 60 * 60 * 1000);
+    await drain();
+    assert.equal(script.released(), false);
+    script.emit(result(script.prompts[1].uuid));
+    await done;
+    t.mock.timers.tick(30 * 60 * 1000);
+    await drain();
+    assert.equal(script.released(), true);
+    t.mock.timers.reset();
+  });
+});
+
 test('idle timeout never closes active tasks or their pending follow-up turn', async (t) => {
   await withRun(async ({ script, sent }) => {
     script.emit(init());
