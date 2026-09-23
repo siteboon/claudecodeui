@@ -254,6 +254,7 @@ function ChatInterface({
     onSessionEstablished: handleSessionEstablished,
     onFileOpen,
     onShowSettings,
+    onSelectProviderModel: selectProviderModel,
     scrollToBottom,
     addMessage,
     setIsUserScrolledUp,

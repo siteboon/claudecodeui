@@ -255,5 +255,10 @@
     "failed": "Nicht gesendet – {{reason}}",
     "cancel": "Geplante Nachricht abbrechen",
     "dismiss": "Fehlerhinweis ausblenden"
+  },
+  "misc": {
+    "modelCommandSession": "Diese Sitzung verwendet jetzt {{model}}.",
+    "modelCommandDefault": "Neue Chats verwenden jetzt {{model}}.",
+    "modelCommandNeedsSession": "{{model}} ist nicht in der Modellliste und kann daher nur auf eine offene Sitzung angewendet werden. Sende zuerst eine Nachricht oder füge es unter /models → Manage models hinzu."
   }
 }

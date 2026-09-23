@@ -63,6 +63,15 @@ type UseChatComposerStateArgs = {
   onSessionEstablished?: (sessionId: string, context: SessionEstablishedContext) => void;
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
+  /**
+   * Applies a model the way the composer's model picker does. `/model <id>`
+   * goes through it so later turns run with, and the picker shows, that model.
+   */
+  onSelectProviderModel?: (
+    provider: LLMProvider,
+    model: string,
+    sessionId?: string | null,
+  ) => Promise<{ scope: 'default' | 'session'; model: string }>;
   scrollToBottom: () => void;
   addMessage: (msg: ChatMessage) => void;
   setIsUserScrolledUp: (isScrolledUp: boolean) => void;
@@ -81,6 +90,13 @@ type CommandExecutionResult = {
   content?: string;
   hasBashCommands?: boolean;
   hasFileIncludes?: boolean;
+};
+
+/** Payload of the `/model <id>` built-in (see the Commands module). */
+type ModelSwitchCommandData = {
+  model?: string;
+  /** False for an id the provider catalog does not list, e.g. `claude-fable-5-1`. */
+  inCatalog?: boolean;
 };
 
 
@@ -187,6 +203,7 @@ export function useChatComposerState({
   onSessionEstablished,
   onFileOpen,
   onShowSettings,
+  onSelectProviderModel,
   scrollToBottom,
   addMessage,
   setIsUserScrolledUp,
@@ -370,11 +387,60 @@ export function useChatComposerState({
           onShowSettings?.();
           break;
 
+        case 'model': {
+          const { model: requestedModel, inCatalog } = (data || {}) as ModelSwitchCommandData;
+          if (!requestedModel || !onSelectProviderModel) {
+            break;
+          }
+
+          const sessionId = currentSessionId || selectedSession?.id || null;
+          // Without a session the id could only become the default for new
+          // chats, and the composer resets a default the catalog does not list.
+          if (!sessionId && !inCatalog) {
+            addMessage({
+              type: 'assistant',
+              content: t('misc.modelCommandNeedsSession', { model: requestedModel }),
+              timestamp: Date.now(),
+            });
+            break;
+          }
+
+          void onSelectProviderModel(provider, requestedModel, sessionId).then(
+            (selection) => {
+              addMessage({
+                type: 'assistant',
+                content: selection.scope === 'session'
+                  ? t('misc.modelCommandSession', { model: selection.model })
+                  : t('misc.modelCommandDefault', { model: selection.model }),
+                timestamp: Date.now(),
+              });
+            },
+            (error: unknown) => {
+              console.error('Error changing the model with /model:', error);
+              addMessage({
+                type: 'assistant',
+                content: t('misc.modelChangeFailed'),
+                timestamp: Date.now(),
+              });
+            },
+          );
+          break;
+        }
+
         default:
           console.warn('Unknown built-in command action:', action);
       }
     },
-    [onFileOpen, onShowSettings, addMessage],
+    [
+      onFileOpen,
+      onShowSettings,
+      addMessage,
+      currentSessionId,
+      selectedSession?.id,
+      onSelectProviderModel,
+      provider,
+      t,
+    ],
   );
 
   const closeCommandModal = useCallback(() => {

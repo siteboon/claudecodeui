@@ -276,5 +276,10 @@
     "failed": "未发送 — {{reason}}",
     "cancel": "取消定时消息",
     "dismiss": "关闭失败提示"
+  },
+  "misc": {
+    "modelCommandSession": "此会话现在使用 {{model}}。",
+    "modelCommandDefault": "新聊天现在使用 {{model}}。",
+    "modelCommandNeedsSession": "{{model}} 不在模型列表中，因此只能应用于已打开的会话。请先发送一条消息，或通过 /models → Manage models 添加它。"
   }
 }

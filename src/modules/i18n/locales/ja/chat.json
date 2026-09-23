@@ -242,5 +242,10 @@
     "failed": "未送信 — {{reason}}",
     "cancel": "予約を取り消す",
     "dismiss": "失敗の通知を閉じる"
+  },
+  "misc": {
+    "modelCommandSession": "このセッションは {{model}} を使用します。",
+    "modelCommandDefault": "新しいチャットは {{model}} を使用します。",
+    "modelCommandNeedsSession": "{{model}} はモデル一覧にないため、開いているセッションにのみ適用できます。先にメッセージを送信するか、/models → Manage models から追加してください。"
   }
 }

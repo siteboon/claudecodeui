@@ -255,5 +255,10 @@
     "failed": "Non inviato — {{reason}}",
     "cancel": "Annulla messaggio programmato",
     "dismiss": "Ignora l'avviso di errore"
+  },
+  "misc": {
+    "modelCommandSession": "Questa sessione ora usa {{model}}.",
+    "modelCommandDefault": "Le nuove chat ora usano {{model}}.",
+    "modelCommandNeedsSession": "{{model}} non è nell'elenco dei modelli, quindi può essere applicato solo a una sessione aperta. Invia prima un messaggio oppure aggiungilo da /models → Manage models."
   }
 }

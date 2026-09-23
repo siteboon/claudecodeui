@@ -559,7 +559,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   /**
    * Applies a model choice.
    *
-   * The pick always becomes the per-provider default so the next new chat
+   * A catalog pick becomes the per-provider default so the next new chat
    * inherits it, and — when a session is open — is also recorded against that
    * session so reopening it later restores this model.
    */
@@ -568,7 +568,13 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     model: string,
     sessionId?: string | null,
   ) => {
-    setStoredProviderModel(targetProvider, model);
+    // An id the catalog does not list (typed with `/model <id>`) only applies
+    // to the session: as a default the catalog reconciliation would replace it
+    // with the catalog default and lose the user's previous default.
+    const catalog = providerModelCatalog[targetProvider];
+    if (!catalog || catalog.OPTIONS.some((option) => option.value === model)) {
+      setStoredProviderModel(targetProvider, model);
+    }
 
     const normalizedSessionId = typeof sessionId === 'string' ? sessionId.trim() : '';
     if (!normalizedSessionId) {
@@ -608,7 +614,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       }));
     }
     return { scope: 'session' as const, model: storedModel };
-  }, [setStoredProviderModel]);
+  }, [providerModelCatalog, setStoredProviderModel]);
 
   /**
    * Applies an effort choice optimistically and persists it for the open

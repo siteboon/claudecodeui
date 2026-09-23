@@ -42,6 +42,7 @@ async function executeCommand(
   commandName: string,
   context: Record<string, unknown>,
   sessionModels: Record<string, string> = {},
+  args: string[] = [],
 ): Promise<Record<string, unknown>> {
   const router = createCommandsRouter({
     fileSystem: {
@@ -63,7 +64,7 @@ async function executeCommand(
     const address = server.address() as AddressInfo;
     const response = await fetch(`http://127.0.0.1:${address.port}/api/commands/execute`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ commandName, context }),
+      body: JSON.stringify({ commandName, args, context }),
     });
     assert.equal(response.status, 200);
     return await response.json() as Record<string, unknown>;
@@ -111,4 +112,39 @@ test('cost and status commands report the same resolved model as /models', async
 
   assert.equal((cost.data as { model: string }).model, 'haiku');
   assert.equal((status.data as { model: string }).model, 'haiku');
+});
+
+test('model command returns the requested model for the client to apply', async () => {
+  const result = await executeCommand(
+    '/model',
+    { provider: 'claude', sessionId: 'session-1', model: 'sonnet' },
+    {},
+    ['claude-fable-5-1'],
+  );
+
+  assert.equal(result.type, 'builtin');
+  assert.equal(result.action, 'model');
+  assert.deepEqual(result.data, { provider: 'claude', model: 'claude-fable-5-1', inCatalog: false });
+});
+
+test('model command flags a model that is already in the provider catalog', async () => {
+  const result = await executeCommand('/model', { provider: 'claude' }, {}, ['default']);
+
+  assert.equal((result.data as { inCatalog: boolean }).inCatalog, true);
+});
+
+test('model command without an argument shows the models picker', async () => {
+  const result = await executeCommand('/model', { provider: 'claude', model: 'haiku' });
+
+  assert.equal(result.action, 'models');
+  assert.equal((result.data as { current: { model: string } }).current.model, 'haiku');
+});
+
+test('model command is listed with the built-in commands', async () => {
+  // /help reports the same built-in list /api/commands/list serves, and the
+  // composer only intercepts a slash command that list contains.
+  const result = await executeCommand('/help', { provider: 'claude' });
+
+  const names = (result.data as { commands: { name: string }[] }).commands.map((command) => command.name);
+  assert.ok(names.includes('/model'));
 });
