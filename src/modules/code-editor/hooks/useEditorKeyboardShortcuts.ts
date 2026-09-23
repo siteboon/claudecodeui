@@ -1,5 +1,9 @@
 import { useEffect } from 'react';
 
+// Open menus, modal dialogs and layers using the app's `data-escape-layer`
+// marker sit above the editor and close on Escape themselves.
+const ESCAPE_LAYER_SELECTOR = '[data-escape-layer], [aria-modal="true"], [role="menu"]';
+
 type UseEditorKeyboardShortcutsParams = {
   onSave: () => void;
   onClose: () => void;
@@ -14,12 +18,8 @@ export const useEditorKeyboardShortcuts = ({
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        // Escape is shared: the chat aborts a running session with it and the
-        // composer's @-mention and slash-command menus close with it, all of
-        // which call preventDefault() first. Only the last Escape in the page
-        // should reach the editor, or a dirty buffer would ask to be discarded
-        // every time one of those was dismissed.
-        if (event.defaultPrevented) {
+        // Leave Escapes another handler consumed or a layer above the editor owns.
+        if (event.defaultPrevented || document.querySelector(ESCAPE_LAYER_SELECTOR)) {
           return;
         }
 

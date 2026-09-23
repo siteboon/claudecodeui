@@ -128,6 +128,59 @@ test('an Escape already handled elsewhere in the page is left alone', async () =
   }
 });
 
+const openLayer = (attributes: Record<string, string>) => {
+  const layer = document.createElement('div');
+  Object.entries(attributes).forEach(([name, value]) => layer.setAttribute(name, value));
+  document.body.appendChild(layer);
+  return layer;
+};
+
+test('Escape that closes Settings over a dirty editor does not ask to discard it', async () => {
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  const { onClose, editor } = await renderEditor();
+  typeInto(editor, 'hello edited');
+
+  // Shaped like Settings: a modal dialog closing on a window-level Escape that
+  // it does not consume, opened from the editor's own gear so focus stays there.
+  const settings = openLayer({ role: 'dialog', 'aria-modal': 'true' });
+  const closeSettings = vi.fn(() => settings.remove());
+  const closeSettingsOnEscape = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') closeSettings();
+  };
+  window.addEventListener('keydown', closeSettingsOnEscape);
+  try {
+    fireEvent.keyDown(editor, { key: 'Escape' });
+  } finally {
+    window.removeEventListener('keydown', closeSettingsOnEscape);
+    settings.remove();
+  }
+
+  assert.equal(closeSettings.mock.calls.length, 1);
+  assert.equal(confirm.mock.calls.length, 0);
+  assert.equal(onClose.mock.calls.length, 0);
+
+  // With Settings gone the next Escape is the editor's again.
+  pressEscape();
+  assert.equal(confirm.mock.calls.length, 1);
+});
+
+test('Escape is left to an open menu or marked escape layer', async () => {
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  const { onClose, editor } = await renderEditor();
+  typeInto(editor, 'hello edited');
+
+  // The file tree's context menu and the shared ActionMenu close on Escape
+  // without consuming it.
+  for (const attributes of [{ role: 'menu' }, { 'data-escape-layer': '' }]) {
+    const layer = openLayer(attributes);
+    fireEvent.keyDown(layer, { key: 'Escape' });
+    layer.remove();
+  }
+
+  assert.equal(confirm.mock.calls.length, 0);
+  assert.equal(onClose.mock.calls.length, 0);
+});
+
 test('a CRLF file is not dirty just because CodeMirror reports LF', async () => {
   const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
   readFile.mockImplementationOnce(async () => ({ ok: true, json: async () => ({ content: 'first\r\nsecond' }) }));
