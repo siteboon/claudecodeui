@@ -9,7 +9,6 @@ function ProjectMainRegion({
   isMobile,
   ws,
   sendMessage,
-  isConnected,
   navigate,
 }: ProjectWorkspaceShellProps) {
   const {
@@ -57,7 +56,6 @@ function ProjectMainRegion({
       setActiveTab={setActiveTab}
       ws={ws}
       sendMessage={sendMessage}
-      isConnected={isConnected}
       isMobile={isMobile}
       onMenuClick={handleOpenSidebar}
       isLoading={isLoadingProjects}

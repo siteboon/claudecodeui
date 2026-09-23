@@ -29,7 +29,7 @@ function ProjectWorkspaceRouteContent() {
   const navigate = useNavigate();
   const { sessionId } = useParams<{ sessionId?: string }>();
   const { isMobile } = useDeviceSettings({ trackPWA: false });
-  const { ws, sendMessage, subscribe, isConnected } = useWebSocket();
+  const { ws, sendMessage, subscribe } = useWebSocket();
   const { isSessionProcessing } = useSessionProtectionActions();
 
   useVisualViewportKeyboardOffset();
@@ -46,7 +46,6 @@ function ProjectWorkspaceRouteContent() {
         isMobile={isMobile}
         ws={ws}
         sendMessage={sendMessage}
-        isConnected={isConnected}
         navigate={navigate}
       />
     </ProjectsStateProvider>

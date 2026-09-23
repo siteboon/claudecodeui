@@ -12,7 +12,6 @@ function ProjectWorkspaceShell({
   isMobile,
   ws,
   sendMessage,
-  isConnected,
   navigate,
 }: ProjectWorkspaceShellProps) {
   return (
@@ -28,7 +27,6 @@ function ProjectWorkspaceShell({
           isMobile={isMobile}
           ws={ws}
           sendMessage={sendMessage}
-          isConnected={isConnected}
           navigate={navigate}
         />
       </div>

@@ -61,6 +61,11 @@ type UseChatComposerStateArgs = {
    * not, before a new session is allocated for it. Treated as open when omitted.
    */
   isConnected?: boolean;
+  /**
+   * Skips the rest of the socket's reconnect delay. Called when a send is
+   * refused while disconnected, so the attempt itself brings the socket back.
+   */
+  reconnectNow?: () => void;
   sendByCtrlEnter?: boolean;
   onSessionProcessing?: MarkSessionProcessing;
   /**
@@ -193,6 +198,7 @@ export function useChatComposerState({
   tokenBudget,
   sendMessage,
   isConnected = true,
+  reconnectNow,
   sendByCtrlEnter,
   onSessionProcessing,
   onSessionEstablished,
@@ -239,6 +245,12 @@ export function useChatComposerState({
   const [fileErrors, setFileErrors] = useState<Map<string, string>>(new Map());
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
   const [commandModalPayload, setCommandModalPayload] = useState<CommandModalPayload | null>(null);
+  // The chat scope (see `draftScope`) whose send was refused because the socket
+  // was closed, or null. The notice is shown at the composer rather than added
+  // to the transcript: with no session open yet, a transcript row is flushed
+  // into whichever session is opened next, and every retry would add a row
+  // that outlives the outage.
+  const [notConnectedScope, setNotConnectedScope] = useState<string | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputHighlightRef = useRef<HTMLDivElement>(null);
@@ -673,17 +685,13 @@ export function useChatComposerState({
     processingSessionsRef.current = processingSessions;
   }, [processingSessions]);
 
-  // The message stays in the composer; this only tells the user why nothing
-  // happened, which a dropped frame otherwise never does.
-  const reportNotConnected = useCallback(() => {
-    addMessage({
-      type: 'error',
-      content: t('composer.notConnected', {
-        defaultValue: 'Not connected to the server, so your message was not sent. Reconnecting — send it again in a moment.',
-      }),
-      timestamp: new Date(),
-    });
-  }, [addMessage, t]);
+  // The message stays in the composer; this tells the user why nothing
+  // happened, which a dropped frame otherwise never does, and brings the socket
+  // back now instead of after the rest of its reconnect delay.
+  const reportNotConnected = useCallback((scope: string | null) => {
+    setNotConnectedScope(scope);
+    reconnectNow?.();
+  }, [reconnectNow]);
 
   const handleSubmit = useCallback(
     async (
@@ -818,7 +826,7 @@ export function useChatComposerState({
       // files are uploaded or a session is allocated for a message that cannot
       // go out — and leave everything in the composer to send again.
       if (!isConnected) {
-        reportNotConnected();
+        reportNotConnected(draftScopeRef.current);
         return;
       }
 
@@ -947,7 +955,7 @@ export function useChatComposerState({
       // The socket closed after the check above. Nothing was drawn or marked
       // yet, so keeping the composer as it is loses nothing — except for a
       // session allocated just now: the composer is about to switch to it and
-      // show its draft, so the text is moved over to it.
+      // show its draft, so the text (and the notice with it) is moved over to it.
       if (sent === false) {
         if (targetSessionId !== existingSessionId) {
           writeDraftText(targetSessionId, currentInput);
@@ -955,7 +963,7 @@ export function useChatComposerState({
             writeDraftText(draftScopeRef.current, '');
           }
         }
-        reportNotConnected();
+        reportNotConnected(targetSessionId);
         return;
       }
 
@@ -973,6 +981,7 @@ export function useChatComposerState({
       setIsUserScrolledUp(false);
       setTimeout(() => scrollToBottom(), 100);
       setEditingAnchorId(null);
+      setNotConnectedScope(null);
 
       // Recorded under the (possibly just-allocated) session id, so the first
       // message of a new chat lands in the history of the session the user is
@@ -1340,6 +1349,12 @@ export function useChatComposerState({
     inputValueRef.current = '';
   }, [setInput]);
 
+  // Only while still disconnected: once the socket is back, the message kept in
+  // the composer can simply be sent again.
+  const showNotConnectedNotice = !isConnected
+    && notConnectedScope !== null
+    && notConnectedScope === draftScope;
+
   return {
     input,
     setInput,
@@ -1390,5 +1405,6 @@ export function useChatComposerState({
     commandModalPayload,
     closeCommandModal,
     showCostModal,
+    showNotConnectedNotice,
   };
 }
