@@ -279,6 +279,51 @@ test('a turn whose hooks all finished releases the process at its result', async
   });
 });
 
+test('background work started after the grace was armed is not cut short by it', async (t) => {
+  await withRun(async ({ script }) => {
+    script.emit(init());
+    script.emit(hookStarted('hook_async', 'Stop'));
+    await settle();
+
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    script.emit(result());
+    await settle();
+
+    // A turn the CLI pushes during the grace launches a workflow: the process
+    // is now held for that, and the grace must not close stdin under it.
+    script.emit(toolUse('toolu_wf', 'Workflow', { script: 'export const meta = {}' }));
+    script.emit(taskStarted('wf1', 'toolu_wf', 'local_workflow'));
+    script.emit(ack('toolu_wf', 'Workflow launched in background. Task ID: wf1', { status: 'async_launched', taskId: 'wf1', taskType: 'local_workflow' }));
+    script.emit(result());
+    await settle();
+
+    t.mock.timers.tick(10 * 60 * 1000);
+    await settle();
+    assert.equal(script.released(), false, 'the workflow keeps the process');
+  });
+});
+
+test('stopping the last task while an async hook still runs leaves the hook its grace', async () => {
+  await withRun(async ({ script }) => {
+    script.emit(init());
+    script.emit(toolUse('toolu_wf', 'Workflow', { script: 'export const meta = {}' }));
+    script.emit(taskStarted('wf1', 'toolu_wf', 'local_workflow'));
+    script.emit(ack('toolu_wf', 'Workflow launched in background. Task ID: wf1', { status: 'async_launched', taskId: 'wf1', taskType: 'local_workflow' }));
+    script.emit(hookStarted('hook_async', 'Stop'));
+    script.emit(result());
+    await settle();
+
+    assert.equal(await stopClaudeSDKTask(SESSION_ID, 'wf1'), true);
+    script.emit(taskNotification('wf1', 'toolu_wf', 'stopped'));
+    await settle();
+    assert.equal(script.released(), false, 'the async hook is still running');
+
+    script.emit(hookResponse('hook_async', 'Stop'));
+    await settle();
+    assert.equal(script.released(), true);
+  });
+});
+
 test('hook events are only requested from a CLI new enough to accept the flag', { skip: process.platform === 'win32' }, async () => {
   const binDir = await mkdtemp(path.join(os.tmpdir(), 'claude-runtime-hold-cli-'));
   const fakeCli = async (name: string, body: string) => {
