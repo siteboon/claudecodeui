@@ -9,3 +9,6 @@ export { broadcastSessionUpserted, broadcastSessionUpsertedBatch } from './servi
 // from a timer, with no socket to stream to or report errors on.
 export { runDetachedChatTurn } from './services/chat-websocket.service.js';
 export type { ProviderRuntimeGateway } from './services/chat-websocket.service.js';
+// hasLiveAgentShellForSession: used by the scheduled-messages module to keep a
+// queued turn pending while the session's CLI is open in the Shell tab.
+export { hasLiveAgentShellForSession } from './services/shell-websocket.service.js';

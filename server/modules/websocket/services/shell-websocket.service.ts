@@ -5,6 +5,7 @@ import path from 'node:path';
 import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
+import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
 import { parseIncomingJsonObject, stripAnsiSequences } from '@/shared/utils.js';
 
 type ShellIncomingMessage = {
@@ -29,12 +30,37 @@ type PtySessionEntry = {
   timeoutId: NodeJS.Timeout | null;
   projectPath: string;
   sessionId: string | null;
+  /**
+   * The app session whose provider CLI this PTY was launched to resume, or
+   * null for plain shells and brand-new agent sessions. Chat checks it so one
+   * session is never driven by two CLIs at once.
+   */
+  resumedAppSessionId: string | null;
 };
 
 const ptySessionsMap = new Map<string, PtySessionEntry>();
 const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
 const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
 const TRAILING_URL_PUNCTUATION_REGEX = /[)\]}>.,;:!?]+$/;
+const SESSION_BUSY_IN_CHAT_MESSAGE =
+  "This session is running in Chat right now. Wait for it to finish (or stop it) before resuming it in the Shell, so two CLIs don't write the same session.";
+
+/**
+ * Used by the chat gateway and, through the module barrel, the queued-message
+ * dispatcher: both refuse to start a provider run on a session whose agent
+ * Shell PTY is still alive, because that CLI already resumed it and a second
+ * one would append to the same transcript and act on the same working tree.
+ * Entries leave the map when their PTY exits or is killed, so presence means
+ * the process is still running.
+ */
+export function hasLiveAgentShellForSession(appSessionId: string): boolean {
+  for (const entry of ptySessionsMap.values()) {
+    if (entry.resumedAppSessionId === appSessionId) {
+      return true;
+    }
+  }
+  return false;
+}
 
 function normalizeDetectedUrl(url: string): string | null {
   const cleanedUrl = url.trim().replace(TRAILING_URL_PUNCTUATION_REGEX, '');
@@ -333,6 +359,22 @@ export function handleShellConnection(
             : '';
         ptySessionKey = `${projectPath}_${sessionId ?? 'default'}${commandSuffix}`;
 
+        // While Chat runs this session its own CLI has it resumed, so starting
+        // another `--resume` here would put two writers on one transcript.
+        // Checked before a restart kills anything; reattaching to this key's
+        // live PTY starts no process and stays allowed.
+        const wouldSpawn = isLoginCommand || forceRestart || !ptySessionsMap.has(ptySessionKey);
+        if (
+          wouldSpawn &&
+          !isPlainShell &&
+          hasSession &&
+          sessionId &&
+          chatRunRegistry.holdsProviderProcess(sessionId)
+        ) {
+          ws.send(JSON.stringify({ type: 'error', message: SESSION_BUSY_IN_CHAT_MESSAGE }));
+          return;
+        }
+
         if (isLoginCommand || forceRestart) {
           const oldSession = ptySessionsMap.get(ptySessionKey);
           if (oldSession) {
@@ -422,6 +464,7 @@ export function handleShellConnection(
           timeoutId: null,
           projectPath,
           sessionId,
+          resumedAppSessionId: !isPlainShell && resumeSessionId ? sessionId : null,
         });
 
         shellProcess.onData((chunk) => {

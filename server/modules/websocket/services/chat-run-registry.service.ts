@@ -241,6 +241,17 @@ export const chatRunRegistry = {
     return runs.get(appSessionId)?.status === 'running';
   },
 
+  /**
+   * Whether the chat side may still have a provider CLI resumed on the
+   * session: a turn is running, or a finished turn's process is still held
+   * open for its background work (the retention guard). The Shell service
+   * consults it so it never starts a second CLI on the same session, which
+   * would append to the same transcript and act on the same working tree.
+   */
+  holdsProviderProcess(appSessionId: string): boolean {
+    return runs.get(appSessionId)?.status === 'running' || retainCompletedRun(appSessionId);
+  },
+
   listRunningRuns(): Array<{
     sessionId: string;
     provider: LLMProvider;

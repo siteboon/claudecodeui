@@ -5,6 +5,7 @@ import type { WebSocket } from 'ws';
 import { sessionsDb } from '@/modules/database/index.js';
 import { providerModelsService, sessionsService } from '@/modules/providers/index.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
+import { hasLiveAgentShellForSession } from '@/modules/websocket/services/shell-websocket.service.js';
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
 import {
   getGlobalImageAssetsDir,
@@ -219,6 +220,19 @@ async function dispatchRun(
   beforeRun?: (run: NonNullable<ReturnType<typeof chatRunRegistry.startRun>>) => void | Promise<void>,
 ): Promise<{ started: boolean; error: string | null }> {
   const provider = session.provider as LLMProvider;
+
+  // A live agent Shell PTY already has this session resumed in its own CLI.
+  // The runtime would start a second one on the same transcript and working
+  // tree, so the turn is refused until that CLI exits. Scheduled sends report
+  // the returned error on the schedule; queued turns wait instead.
+  if (hasLiveAgentShellForSession(sessionId)) {
+    const message =
+      "This session is open in the Shell tab and its CLI is still running. Exit it there (for example with /exit) before sending from Chat, so two CLIs don't write the same session.";
+    if (ws) {
+      sendProtocolError(ws, 'SESSION_OPEN_IN_SHELL', message, sessionId);
+    }
+    return { started: false, error: message };
+  }
 
   const run = chatRunRegistry.startRun({
     appSessionId: sessionId,
@@ -599,8 +613,9 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  * everywhere in the meantime.
  *
  * Resolves when the provider run settles. Returns false when the session has
- * gone away or is busy without `interruptActiveRun`, which the caller reports
- * on the schedule.
+ * gone away, is busy without `interruptActiveRun`, or is open in a live agent
+ * Shell (never interrupted: that is the user's own CLI), which the caller
+ * reports on the schedule.
  */
 export async function runDetachedChatTurn(
   input: {

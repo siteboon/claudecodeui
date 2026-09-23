@@ -1,6 +1,6 @@
 import { scheduledMessagesDb, sessionDraftsDb } from '@/modules/database/index.js';
 import type { QueuedSessionMessageRecord, ScheduledMessageRow } from '@/modules/database/index.js';
-import { chatRunRegistry, runDetachedChatTurn } from '@/modules/websocket/index.js';
+import { chatRunRegistry, hasLiveAgentShellForSession, runDetachedChatTurn } from '@/modules/websocket/index.js';
 import type { ProviderRuntimeGateway } from '@/modules/websocket/index.js';
 
 /**
@@ -87,7 +87,12 @@ export async function dispatchQueuedMessages(runtime: ProviderRuntimeGateway): P
   let claimed = 0;
 
   await Promise.all(candidates.map(async (candidate) => {
-    if (chatRunRegistry.isProcessing(candidate.sessionId)) {
+    // A session open in the Shell tab is busy too: its CLI has it resumed, and
+    // the send would be refused. Claiming it anyway would drop the turn.
+    if (
+      chatRunRegistry.isProcessing(candidate.sessionId)
+      || hasLiveAgentShellForSession(candidate.sessionId)
+    ) {
       return;
     }
     if (!sessionDraftsDb.claimQueuedMessage(candidate)) {
