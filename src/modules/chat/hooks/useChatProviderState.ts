@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 
 import { api } from '@/shared/api';
 import type { PendingPermissionRequest, PermissionMode,
@@ -9,8 +9,9 @@ import type { PendingPermissionRequest, PermissionMode,
   ProviderModelActions,
   ProviderModelOption,
   ProviderModelsDefinition } from '@/shared/types';
-import { DEFAULT_EFFORT_VALUE } from '@/shared/constants';
+import { DEFAULT_EFFORT_VALUE, PROVIDER_PERMISSION_PREFERENCE_KEYS } from '@/shared/constants';
 import { readSelectedProvider, writeSelectedProvider } from '@/shared/selectedProvider';
+import { readUserPreference, subscribeToUserPreferences } from '@/shared/userSettings';
 
 const FALLBACK_PROVIDER_EFFORT_VALUES: Partial<Record<LLMProvider, readonly string[]>> = {
   // Superset used only before the model catalog loads; `ultracode` belongs to the
@@ -122,6 +123,30 @@ type SessionProviderSelection = {
 
 const getSessionSelectionKey = (provider: LLMProvider, sessionId: string): string => (
   `${provider}:${sessionId}`
+);
+
+/**
+ * The permission mode saved for a provider in Settings, or null when its
+ * settings carry none. Only Codex's settings store a mode today; Claude's and
+ * Cursor's store a `skipPermissions` flag, which travels separately as
+ * `toolsSettings` and is not a composer mode, so they read as null here.
+ */
+const readSettingsPermissionMode = (targetProvider: LLMProvider): string | null => {
+  const settings = readUserPreference<unknown>(PROVIDER_PERMISSION_PREFERENCE_KEYS[targetProvider], null);
+  if (!settings || typeof settings !== 'object') {
+    return null;
+  }
+  const { permissionMode } = settings as { permissionMode?: unknown };
+  return typeof permissionMode === 'string' ? permissionMode : null;
+};
+
+/**
+ * sessionStorage key for a mode picked in a brand-new chat before its first
+ * send. Per tab: it survives a reload of that tab, as the chat's draft does,
+ * but another tab can neither see it nor clear it.
+ */
+const newChatPermissionModeKey = (targetProvider: LLMProvider): string => (
+  `permissionMode-new-${targetProvider}`
 );
 
 export function useChatProviderState({ selectedSession, selectedProject: _selectedProject }: UseChatProviderStateArgs) {
@@ -406,21 +431,47 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     }
   }, [providerEfforts, providerModels, reconcileStoredEffort]);
 
+  // The Settings default is read from the preference store rather than once on
+  // mount: preferences hydrate from the server after login and can be re-saved
+  // from the Settings dialog while a chat is open, and the composer follows both.
+  const settingsPermissionMode = useSyncExternalStore(
+    subscribeToUserPreferences,
+    () => readSettingsPermissionMode(provider),
+  );
+
   useEffect(() => {
     const validModes = getPermissionModesForProvider(provider);
     const sessionSavedMode = selectedSession?.id
-      ? (localStorage.getItem(`permissionMode-${selectedSession.id}`) as PermissionMode | null)
+      ? localStorage.getItem(`permissionMode-${selectedSession.id}`)
       : null;
-    // Fall back to the last mode picked for this provider: a brand-new chat
-    // only receives its session id after the first send, so without this the
-    // mode chosen beforehand would snap back to the default as soon as the
-    // session id appears.
-    const providerSavedMode = localStorage.getItem(`permissionMode-last-${provider}`) as PermissionMode | null;
-    const savedMode = [sessionSavedMode, providerSavedMode].find(
-      (mode): mode is PermissionMode => Boolean(mode && validModes.includes(mode)),
+    // A mode picked in a brand-new chat before its first send has no session
+    // id to live under yet; `bindNewChatPermissionMode` moves it to the id
+    // once one is allocated, so it does not snap back to the Settings default.
+    let newChatMode: string | null = null;
+    if (selectedSession?.id) {
+      // Opening a session without sending abandons that pick: it was for that
+      // chat only and must not outrank Settings in a later new chat.
+      for (const targetProvider of PROVIDERS) {
+        sessionStorage.removeItem(newChatPermissionModeKey(targetProvider));
+      }
+    } else {
+      newChatMode = sessionStorage.getItem(newChatPermissionModeKey(provider));
+    }
+    // The last mode picked for this provider ranks below Settings, so a stale
+    // pick can never mask the Settings default; it still carries a pick into
+    // later chats for providers whose Settings store no mode.
+    const providerSavedMode = localStorage.getItem(`permissionMode-last-${provider}`);
+    const savedMode = [sessionSavedMode, newChatMode, settingsPermissionMode, providerSavedMode].find(
+      (mode): mode is PermissionMode => Boolean(mode && validModes.includes(mode as PermissionMode)),
     );
     setPermissionMode(savedMode ?? getDefaultPermissionModeForProvider(provider));
-  }, [selectedSession?.id, provider, getDefaultPermissionModeForProvider, getPermissionModesForProvider]);
+  }, [
+    selectedSession?.id,
+    provider,
+    settingsPermissionMode,
+    getDefaultPermissionModeForProvider,
+    getPermissionModesForProvider,
+  ]);
 
   useEffect(() => {
     if (!selectedSession?.__provider || selectedSession.__provider === provider) {
@@ -442,14 +493,31 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   const selectPermissionMode = useCallback((nextMode: PermissionMode) => {
     setPermissionMode(nextMode);
 
-    // Persist per provider as well as per session: a brand-new chat has no
-    // session id yet, and the per-provider key keeps the choice sticky when
-    // the real id arrives (and for future sessions of this provider).
+    // Persist per session, or — for a brand-new chat that has no session id
+    // yet — hold it until `bindNewChatPermissionMode` receives the id. The
+    // per-provider key is a lower-ranked fallback for later chats.
     localStorage.setItem(`permissionMode-last-${provider}`, nextMode);
     if (selectedSession?.id) {
       localStorage.setItem(`permissionMode-${selectedSession.id}`, nextMode);
+    } else {
+      sessionStorage.setItem(newChatPermissionModeKey(provider), nextMode);
     }
   }, [provider, selectedSession?.id]);
+
+  /**
+   * Binds a mode picked before a brand-new chat's first send to the session id
+   * the composer just allocated, so it outranks the Settings default from then
+   * on. Without a pick nothing is written and the session keeps following
+   * Settings.
+   */
+  const bindNewChatPermissionMode = useCallback((sessionId: string) => {
+    const pendingKey = newChatPermissionModeKey(provider);
+    const pendingNewChatMode = sessionStorage.getItem(pendingKey);
+    sessionStorage.removeItem(pendingKey);
+    if (pendingNewChatMode) {
+      localStorage.setItem(`permissionMode-${sessionId}`, pendingNewChatMode);
+    }
+  }, [provider]);
 
   const cyclePermissionMode = useCallback(() => {
     const modes = getPermissionModesForProvider(provider);
@@ -821,6 +889,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     setPendingPermissionRequests,
     availablePermissionModes,
     selectPermissionMode,
+    bindNewChatPermissionMode,
     cyclePermissionMode,
     providerModelCatalog,
     providerModelsLoading,

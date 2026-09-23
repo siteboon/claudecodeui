@@ -8,6 +8,7 @@ import PermissionContext from '@/modules/chat/context/PermissionContext';
 import { MarkdownWorkspaceContext } from '@/modules/chat/context/MarkdownWorkspaceContext';
 import { TranscriptSessionContext } from '@/modules/chat/context/TranscriptSessionContext';
 import { api } from '@/shared/api';
+import { inheritSessionPermissionMode } from '@/shared/utils';
 import type {
   ChatMessage,
   Project,
@@ -114,6 +115,7 @@ function ChatInterface({
     setPendingPermissionRequests,
     availablePermissionModes,
     selectPermissionMode,
+    bindNewChatPermissionMode,
     cyclePermissionMode,
     providerModelCatalog,
     providerModelsLoading,
@@ -180,10 +182,12 @@ function ChatInterface({
   // the session gateway before the first send. Record it locally and put it
   // in the URL — this id never changes again, so there is no later handoff.
   const handleSessionEstablished = useCallback<NonNullable<ChatInterfaceProps['onSessionEstablished']>>((sessionId, context) => {
+    // Before navigating, so the new session opens in the mode picked for it.
+    bindNewChatPermissionMode(sessionId);
     setCurrentSessionId(sessionId);
     onSessionEstablished?.(sessionId, context);
     onNavigateToSession?.(sessionId);
-  }, [setCurrentSessionId, onSessionEstablished, onNavigateToSession]);
+  }, [bindNewChatPermissionMode, setCurrentSessionId, onSessionEstablished, onNavigateToSession]);
 
   const {
     input,
@@ -342,6 +346,7 @@ function ChatInterface({
       if (!response.ok || typeof forkedSessionId !== 'string') {
         throw new Error(payload?.message || `HTTP ${response.status}`);
       }
+      inheritSessionPermissionMode(sourceSessionId, forkedSessionId);
       onNavigateToSession?.(forkedSessionId);
     } catch (error) {
       console.error('Error forking session:', error);
