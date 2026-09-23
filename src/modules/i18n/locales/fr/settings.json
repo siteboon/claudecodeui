@@ -131,6 +131,13 @@
       "alphabetical": "Alphabétique",
       "recentActivity": "Activité récente"
     },
+    "planBuild": {
+      "title": "Mode planification",
+      "label": "Implémenter les plans approuvés dans",
+      "description": "Ce que font le bouton Implémenter d'un plan et ⌘↩. Le menu à côté propose toujours l'autre choix.",
+      "sameSession": "La même session",
+      "newSession": "Une nouvelle session"
+    },
     "codeEditor": {
       "title": "Éditeur de code",
       "theme": {

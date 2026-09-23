@@ -131,6 +131,13 @@
       "alphabetical": "Alfabetico",
       "recentActivity": "Attività recente"
     },
+    "planBuild": {
+      "title": "Modalità piano",
+      "label": "Implementa i piani approvati in",
+      "description": "Cosa fanno il pulsante Implementa di un piano e ⌘↩. Il menu accanto offre sempre l'altra scelta.",
+      "sameSession": "La stessa sessione",
+      "newSession": "Una nuova sessione"
+    },
     "codeEditor": {
       "title": "Editor codice",
       "theme": {

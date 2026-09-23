@@ -4,12 +4,14 @@ import { ArrowDownIcon } from 'lucide-react';
 
 import { useTasksSettings } from '@/modules/task-master';
 import { useWebSocket } from '@/shared/context/WebSocketContext';
+import { useUiPreferences } from '@/shared/context/UiPreferencesContext';
 import PermissionContext from '@/modules/chat/context/PermissionContext';
 import { MarkdownWorkspaceContext } from '@/modules/chat/context/MarkdownWorkspaceContext';
 import { TranscriptSessionContext } from '@/modules/chat/context/TranscriptSessionContext';
 import { api } from '@/shared/api';
 import type {
   ChatMessage,
+  PendingPermissionRequest,
   Project,
   ProjectSession,
   SessionEstablishedContext,
@@ -21,6 +23,8 @@ import { useChatSessionState } from '@/modules/chat/hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '@/modules/chat/hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
 import { useSessionStore } from '@/modules/chat/hooks/useSessionStore';
+import { usePlanBuildShortcut } from '@/modules/chat/hooks/usePlanBuildShortcut';
+import { isPlanApprovalRequest } from '@/modules/chat/utils/chatPermissions';
 import {
   useProcessingSessions,
   useSessionProtectionActions,
@@ -72,6 +76,7 @@ function ChatInterface({
 }: ChatInterfaceProps) {
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
   const { subscribe } = useWebSocket();
+  const { buildPlansInNewSession } = useUiPreferences();
   const { t } = useTranslation('chat');
   const processingSessions = useProcessingSessions();
   const {
@@ -114,6 +119,7 @@ function ChatInterface({
     setPendingPermissionRequests,
     availablePermissionModes,
     selectPermissionMode,
+    rememberSessionPermissionMode,
     cyclePermissionMode,
     providerModelCatalog,
     providerModelsLoading,
@@ -226,6 +232,7 @@ function ChatInterface({
     handleClearInput,
     handleAbortSession,
     handlePermissionDecision,
+    handleBuildPlanInNewSession,
     handleGrantToolPermission,
     handleInputFocusChange,
     isInputFocused,
@@ -259,6 +266,7 @@ function ChatInterface({
     setIsUserScrolledUp,
     setPendingPermissionRequests,
     resolvePermissionModeForProvider,
+    rememberSessionPermissionMode,
   });
 
   // On WebSocket reconnect, request a bounded persisted-tail sync (deferred
@@ -320,6 +328,31 @@ function ChatInterface({
     };
   }, [canAbortSession, handleAbortSession]);
 
+  /**
+   * Answers a pending plan approval with Build: an allow in the planning
+   * session, or a new session started from the plan. Shared by the plan card's
+   * split button and the ⌘↩ shortcut.
+   */
+  const handleBuildPlan = useCallback((request: PendingPermissionRequest, inNewSession: boolean) => {
+    if (inNewSession) {
+      void handleBuildPlanInNewSession(request);
+      return;
+    }
+    handlePermissionDecision(request.requestId, { allow: true });
+  }, [handleBuildPlanInNewSession, handlePermissionDecision]);
+
+  const pendingPlanRequest = useMemo(
+    () => pendingPermissionRequests.find(isPlanApprovalRequest) ?? null,
+    [pendingPermissionRequests],
+  );
+
+  usePlanBuildShortcut({
+    isActive,
+    pendingPlanRequest,
+    buildInNewSession: buildPlansInNewSession,
+    onBuildPlan: handleBuildPlan,
+  });
+
   useEffect(() => {
     return () => {
       resetStreamingState();
@@ -372,7 +405,8 @@ function ChatInterface({
   const permissionContextValue = useMemo(() => ({
     pendingPermissionRequests,
     handlePermissionDecision,
-  }), [pendingPermissionRequests, handlePermissionDecision]);
+    buildPlan: handleBuildPlan,
+  }), [pendingPermissionRequests, handlePermissionDecision, handleBuildPlan]);
 
   // Lets markdown image paths in the transcript resolve against this project.
   const markdownWorkspaceValue = useMemo(() => ({

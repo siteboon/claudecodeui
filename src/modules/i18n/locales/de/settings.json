@@ -131,6 +131,13 @@
       "alphabetical": "Alphabetisch",
       "recentActivity": "Letzte Aktivität"
     },
+    "planBuild": {
+      "title": "Planmodus",
+      "label": "Genehmigte Pläne umsetzen in",
+      "description": "Was die Umsetzen-Schaltfläche eines Plans und ⌘↩ tun. Das Menü daneben bietet immer die andere Wahl.",
+      "sameSession": "Derselben Sitzung",
+      "newSession": "Neuer Sitzung"
+    },
     "codeEditor": {
       "title": "Code-Editor",
       "theme": {

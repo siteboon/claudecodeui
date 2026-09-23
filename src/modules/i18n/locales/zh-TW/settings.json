@@ -132,6 +132,13 @@
       "alphabetical": "依字母順序",
       "recentActivity": "最近活動"
     },
+    "planBuild": {
+      "title": "計畫模式",
+      "label": "實作已核准計畫的位置",
+      "description": "計畫上的「實作」按鈕和 ⌘↩ 的行為。旁邊的選單始終提供另一個選項。",
+      "sameSession": "同一工作階段",
+      "newSession": "新工作階段"
+    },
     "codeEditor": {
       "title": "程式碼編輯器",
       "theme": {

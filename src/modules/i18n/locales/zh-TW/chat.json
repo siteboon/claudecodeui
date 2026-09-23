@@ -72,7 +72,16 @@
   },
   "plan": {
     "viewPlan": "📋 查看實作計畫",
-    "title": "實作計畫"
+    "title": "實作計畫",
+    "build": "實作",
+    "revise": "修改",
+    "buildInNewSession": "在新工作階段中實作",
+    "buildInNewSessionDescription": "開啟一個只以計畫為上下文的新工作階段",
+    "buildInThisSession": "在此工作階段中實作",
+    "buildInThisSessionDescription": "保留規劃對話作為上下文",
+    "moreBuildOptions": "更多實作選項",
+    "newSessionPrompt": "請實作以下計畫：\n\n{{plan}}",
+    "movedToNewSession": "使用者已核准此計畫，並正在新工作階段中實作。不要在這裡實作，也不要再次呼叫 ExitPlanMode。現在結束你的回合。"
   },
   "usageLimit": {
     "resetAt": "Claude 使用限制已達到。您的限制將在 **{{time}} {{timezone}}** - {{date}} 重置"

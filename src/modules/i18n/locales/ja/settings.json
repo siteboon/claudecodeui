@@ -131,6 +131,13 @@
       "alphabetical": "アルファベット順",
       "recentActivity": "最近のアクティビティ順"
     },
+    "planBuild": {
+      "title": "プランモード",
+      "label": "承認したプランの実装先",
+      "description": "プランの「実装」ボタンと ⌘↩ の動作です。隣のメニューからはいつでももう一方を選べます。",
+      "sameSession": "同じセッション",
+      "newSession": "新しいセッション"
+    },
     "codeEditor": {
       "title": "コードエディタ",
       "theme": {

@@ -157,6 +157,13 @@
       "alphabetical": "按字母顺序",
       "recentActivity": "最近活动"
     },
+    "planBuild": {
+      "title": "计划模式",
+      "label": "实施已批准计划的位置",
+      "description": "计划上的“实施”按钮和 ⌘↩ 的行为。旁边的菜单始终提供另一个选项。",
+      "sameSession": "同一会话",
+      "newSession": "新会话"
+    },
     "codeEditor": {
       "title": "代码编辑器",
       "theme": {

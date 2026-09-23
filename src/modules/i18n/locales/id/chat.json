@@ -80,7 +80,16 @@
   },
   "plan": {
     "viewPlan": "📋 Lihat rencana implementasi",
-    "title": "Rencana Implementasi"
+    "title": "Rencana Implementasi",
+    "build": "Bangun",
+    "revise": "Revisi",
+    "buildInNewSession": "Bangun di sesi baru",
+    "buildInNewSessionDescription": "Mulai sesi baru dengan hanya rencana sebagai konteks",
+    "buildInThisSession": "Bangun di sesi ini",
+    "buildInThisSessionDescription": "Pertahankan percakapan perencanaan sebagai konteks",
+    "moreBuildOptions": "Opsi build lainnya",
+    "newSessionPrompt": "Implementasikan rencana berikut:\n\n{{plan}}",
+    "movedToNewSession": "Pengguna telah menyetujui rencana ini dan sedang membangunnya di sesi baru. Jangan implementasikan di sini dan jangan panggil ExitPlanMode lagi. Akhiri giliranmu sekarang."
   },
   "usageLimit": {
     "resetAt": "Batas penggunaan Claude tercapai. Batas akan direset pada **{{time}} {{timezone}}** - {{date}}"

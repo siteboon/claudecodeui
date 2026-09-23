@@ -451,6 +451,13 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     }
   }, [provider, selectedSession?.id]);
 
+  // Pins the mode a session other than the open one opens with. A session
+  // started from an approved plan must not pick up the provider-wide last pick,
+  // which is still 'plan' at that point.
+  const rememberSessionPermissionMode = useCallback((sessionId: string, mode: PermissionMode) => {
+    localStorage.setItem(`permissionMode-${sessionId}`, mode);
+  }, []);
+
   const cyclePermissionMode = useCallback(() => {
     const modes = getPermissionModesForProvider(provider);
 
@@ -821,6 +828,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     setPendingPermissionRequests,
     availablePermissionModes,
     selectPermissionMode,
+    rememberSessionPermissionMode,
     cyclePermissionMode,
     providerModelCatalog,
     providerModelsLoading,

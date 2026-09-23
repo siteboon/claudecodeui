@@ -16,7 +16,7 @@ import { api } from '@/shared/api';
 import { PROVIDER_PERMISSION_PREFERENCE_KEYS } from '@/shared/constants';
 import { readUserPreference } from '@/shared/userSettings';
 import type { CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
-import { grantClaudeToolPermission } from '@/modules/chat/utils/chatPermissions';
+import { grantClaudeToolPermission, readPlanFromApprovalRequest } from '@/modules/chat/utils/chatPermissions';
 import {
   clearQueuedMessage,
   hydrateChatDrafts,
@@ -64,9 +64,12 @@ type UseChatComposerStateArgs = {
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
   scrollToBottom: () => void;
-  addMessage: (msg: ChatMessage) => void;
+  /** Adds a message to the open session's transcript, or to `targetSessionId`'s when given. */
+  addMessage: (msg: ChatMessage, targetSessionId?: string) => void;
   setIsUserScrolledUp: (isScrolledUp: boolean) => void;
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
+  /** Pins the permission mode a session that is not open yet will open with. */
+  rememberSessionPermissionMode?: (sessionId: string, mode: PermissionMode) => void;
 };
 
 type MentionableFile = {
@@ -156,6 +159,27 @@ const getNotificationSessionSummary = (
 };
 
 /**
+ * Allocates the stable backend id for a brand-new conversation through the
+ * session gateway. `sessionName` is the server's title for it, '' when blank.
+ * Throws when the gateway refuses.
+ */
+const allocateAppSession = async (payload: {
+  provider: LLMProvider;
+  projectPath: string;
+  initialMessage: string;
+}): Promise<{ sessionId: string | null; sessionName: string }> => {
+  const response = await api.providers.createSession(payload);
+  if (!response.ok) {
+    throw new Error(`Failed to create session (${response.status})`);
+  }
+  const body = await response.json();
+  return {
+    sessionId: body?.data?.sessionId || null,
+    sessionName: typeof body?.data?.sessionName === 'string' ? body.data.sessionName.trim() : '',
+  };
+};
+
+/**
  * Enter that CONFIRMS an IME candidate must not also submit.
  *
  * `event.isComposing` alone is not enough: Safari fires `compositionend` BEFORE the confirming
@@ -191,6 +215,7 @@ export function useChatComposerState({
   addMessage,
   setIsUserScrolledUp,
   setPendingPermissionRequests,
+  rememberSessionPermissionMode,
 }: UseChatComposerStateArgs) {
   const { t } = useTranslation('chat');
   // The composer text together with the chat scope it belongs to. They are one
@@ -820,23 +845,16 @@ export function useChatComposerState({
       if (!targetSessionId) {
         let createdSessionName = sessionSummary;
         try {
-          const response = await api.providers.createSession({
+          const created = await allocateAppSession({
             provider,
             projectPath: resolvedProjectPath,
             initialMessage: messageContent,
           });
-          if (!response.ok) {
-            throw new Error(`Failed to create session (${response.status})`);
-          }
-          const body = await response.json();
-          targetSessionId = body?.data?.sessionId || null;
+          targetSessionId = created.sessionId;
           // A blank server name would leave the session unlabeled, so the local
           // summary stays the fallback unless a real name comes back.
-          const returnedSessionName = typeof body?.data?.sessionName === 'string'
-            ? body.data.sessionName.trim()
-            : '';
-          if (returnedSessionName) {
-            createdSessionName = returnedSessionName;
+          if (created.sessionName) {
+            createdSessionName = created.sessionName;
           }
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
@@ -1266,6 +1284,120 @@ export function useChatComposerState({
     [sendMessage, setPendingPermissionRequests],
   );
 
+  // Plan approvals being moved to a new session right now: a second click, or
+  // the shortcut, during that round trip must not start a second session.
+  const planHandoffsInFlightRef = useRef(new Set<string>());
+
+  /**
+   * Builds an approved plan in a brand-new session instead of the planning one,
+   * like the Claude CLI's "clear context" approval: the file reads and
+   * back-and-forth of planning stay behind, and the build starts from the plan.
+   *
+   * The session is allocated before the approval is answered, so a failure
+   * leaves the plan card actionable. The planning run is then told no, with an
+   * instruction to stop — a yes would start the build there as well.
+   */
+  const handleBuildPlanInNewSession = useCallback(
+    async (request: PendingPermissionRequest) => {
+      const plan = readPlanFromApprovalRequest(request).trim();
+      if (!selectedProject || planHandoffsInFlightRef.current.has(request.requestId)) {
+        return;
+      }
+      if (!plan) {
+        addMessage({
+          type: 'error',
+          content: 'Failed to start a new session: the plan has no text to send.',
+          timestamp: new Date(),
+        });
+        return;
+      }
+
+      planHandoffsInFlightRef.current.add(request.requestId);
+      try {
+        const content = t('plan.newSessionPrompt', { plan });
+        // Named after the plan's opening words rather than the lead-in that
+        // every session built from a plan would otherwise share.
+        const nameSource = plan.replace(/^[#\s]+/, '');
+        let created: { sessionId: string | null; sessionName: string };
+        try {
+          created = await allocateAppSession({
+            provider,
+            projectPath: selectedProject.fullPath || selectedProject.path || '',
+            initialMessage: nameSource,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unknown error';
+          console.error('Session creation failed:', error);
+          addMessage({
+            type: 'error',
+            content: `Failed to start a new session: ${message}`,
+            timestamp: new Date(),
+          });
+          return;
+        }
+
+        const newSessionId = created.sessionId;
+        if (!newSessionId) {
+          addMessage({
+            type: 'error',
+            content: 'Failed to start a new session: no session id returned.',
+            timestamp: new Date(),
+          });
+          return;
+        }
+
+        handlePermissionDecision(request.requestId, {
+          allow: false,
+          message: t('plan.movedToNewSession'),
+        });
+
+        // Build leaves plan mode for 'default': the CLI returns to the mode it
+        // was in before plan mode, and plan turns start directly in plan mode.
+        // The new session is sent in that mode and opens showing it.
+        const buildPermissionMode = resolvePermissionModeForProvider(provider, 'default');
+        rememberSessionPermissionMode?.(newSessionId, buildPermissionMode);
+
+        const sessionSummary = created.sessionName || getNotificationSessionSummary(null, nameSource);
+        onSessionEstablished?.(newSessionId, {
+          provider,
+          project: selectedProject,
+          summary: sessionSummary,
+        });
+
+        addMessage({ type: 'user', content, timestamp: new Date() }, newSessionId);
+        onSessionProcessing?.(newSessionId, {
+          statusText: null,
+          canInterrupt: true,
+        });
+        sendMessage({
+          type: 'chat.send',
+          sessionId: newSessionId,
+          content,
+          options: {
+            ...buildSendOptions(content),
+            permissionMode: buildPermissionMode,
+            sessionSummary,
+          },
+        });
+      } finally {
+        planHandoffsInFlightRef.current.delete(request.requestId);
+      }
+    },
+    [
+      addMessage,
+      buildSendOptions,
+      handlePermissionDecision,
+      onSessionEstablished,
+      onSessionProcessing,
+      provider,
+      rememberSessionPermissionMode,
+      resolvePermissionModeForProvider,
+      selectedProject,
+      sendMessage,
+      t,
+    ],
+  );
+
   const [isInputFocused, setIsInputFocused] = useState(false);
 
   const handleInputFocusChange = useCallback(
@@ -1334,6 +1466,7 @@ export function useChatComposerState({
     handleClearInput,
     handleAbortSession,
     handlePermissionDecision,
+    handleBuildPlanInNewSession,
     handleGrantToolPermission,
     handleInputFocusChange,
     isInputFocused,

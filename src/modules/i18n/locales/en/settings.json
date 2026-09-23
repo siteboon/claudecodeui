@@ -157,6 +157,13 @@
       "alphabetical": "Alphabetical",
       "recentActivity": "Recent Activity"
     },
+    "planBuild": {
+      "title": "Plan mode",
+      "label": "Build approved plans in",
+      "description": "What the Build button on a plan and ⌘↩ do. The menu next to Build always offers the other choice.",
+      "sameSession": "Same session",
+      "newSession": "New session"
+    },
     "codeEditor": {
       "title": "Code Editor",
       "theme": {

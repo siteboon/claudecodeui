@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 
 import { DarkModeToggle } from '@/shared/ui';
 import type { CodeEditorSettingsState, ProjectSortOrder } from '@/shared/types';
+import { useSetUiPreference, useUiPreferences } from '@/shared/context/UiPreferencesContext';
 import { LanguageSelector } from '@/modules/i18n';
 import SettingsCard from '@/modules/settings/SettingsCard';
 import SettingsRow from '@/modules/settings/SettingsRow';
@@ -18,7 +19,7 @@ type AppearanceSettingsTabProps = {
   onCodeEditorFontSizeChange: (value: string) => void;
 };
 
-/** Rendered by Settings for the "appearance" tab, covering theme, project sorting and code editor preferences. */
+/** Rendered by Settings for the "appearance" tab, covering theme, project sorting, plan building and code editor preferences. */
 export default function AppearanceSettingsTab({
   projectSortOrder,
   onProjectSortOrderChange,
@@ -29,6 +30,8 @@ export default function AppearanceSettingsTab({
   onCodeEditorFontSizeChange,
 }: AppearanceSettingsTabProps) {
   const { t } = useTranslation('settings');
+  const { buildPlansInNewSession } = useUiPreferences();
+  const setUiPreference = useSetUiPreference();
 
   return (
     <div className="space-y-8">
@@ -62,6 +65,25 @@ export default function AppearanceSettingsTab({
             >
               <option value="name">{t('appearanceSettings.projectSorting.alphabetical')}</option>
               <option value="date">{t('appearanceSettings.projectSorting.recentActivity')}</option>
+            </select>
+          </SettingsRow>
+        </SettingsCard>
+      </SettingsSection>
+
+      <SettingsSection title={t('appearanceSettings.planBuild.title')}>
+        <SettingsCard>
+          <SettingsRow
+            label={t('appearanceSettings.planBuild.label')}
+            description={t('appearanceSettings.planBuild.description')}
+          >
+            <select
+              value={buildPlansInNewSession ? 'new' : 'same'}
+              onChange={(event) => setUiPreference('buildPlansInNewSession', event.target.value === 'new')}
+              aria-label={t('appearanceSettings.planBuild.label')}
+              className="w-full touch-manipulation rounded-lg border border-input bg-card p-2.5 text-sm text-foreground focus:border-primary focus:ring-1 focus:ring-primary sm:w-40"
+            >
+              <option value="same">{t('appearanceSettings.planBuild.sameSession')}</option>
+              <option value="new">{t('appearanceSettings.planBuild.newSession')}</option>
             </select>
           </SettingsRow>
         </SettingsCard>

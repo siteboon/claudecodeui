@@ -15,6 +15,11 @@ export type UiPreferences = {
   sendByCtrlEnter: boolean;
   sidebarVisible: boolean;
   voiceEnabled: boolean;
+  /**
+   * What the plan card's main Build button (and its shortcut) does: false
+   * builds in the planning session, true starts a new session from the plan.
+   */
+  buildPlansInNewSession: boolean;
 };
 
 export type UiPreferenceKey = keyof UiPreferences;
@@ -29,6 +34,7 @@ const DEFAULTS: UiPreferences = {
   sendByCtrlEnter: false,
   sidebarVisible: true,
   voiceEnabled: false,
+  buildPlansInNewSession: false,
 };
 
 const PREFERENCE_KEYS = Object.keys(DEFAULTS) as UiPreferenceKey[];
