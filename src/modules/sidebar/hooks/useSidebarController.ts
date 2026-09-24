@@ -957,14 +957,15 @@ export function useSidebarController({
       deletedSessionIds.forEach((sessionId) => onSessionDelete?.(sessionId));
       // Same bookkeeping as the single delete, batched: the recents feed is not
       // refetched here, so the rows that just went are pruned from it by hand.
-      setRecentConversations((previous) => {
-        const remaining = previous.filter((conversation) => !deletedIdSet.has(conversation.sessionId));
-        const removed = previous.length - remaining.length;
-        if (removed > 0) {
-          setRecentConversationsTotal((total) => Math.max(0, total - removed));
-        }
-        return remaining;
-      });
+      // Counted outside the updater so both updaters stay pure: React may run an
+      // updater twice, which would take the rows off the total twice.
+      const removed = recentConversations.filter((conversation) => deletedIdSet.has(conversation.sessionId)).length;
+      setRecentConversations((previous) =>
+        previous.filter((conversation) => !deletedIdSet.has(conversation.sessionId)),
+      );
+      if (removed > 0) {
+        setRecentConversationsTotal((total) => Math.max(0, total - removed));
+      }
       await fetchArchivedSessions();
     }
 
@@ -983,7 +984,7 @@ export function useSidebarController({
         }),
       );
     }
-  }, [activeSessions, backgroundSessionIds, fetchArchivedSessions, onSessionDelete, pendingDeletion, sessionSelection, t]);
+  }, [activeSessions, backgroundSessionIds, fetchArchivedSessions, onSessionDelete, pendingDeletion, recentConversations, sessionSelection, t]);
 
   const requestProjectDelete = useCallback(
     (project: Project) => {
