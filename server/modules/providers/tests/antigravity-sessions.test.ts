@@ -137,6 +137,27 @@ test('Antigravity history reader normalizes transcript messages', async () => {
   }
 });
 
+test('Antigravity history reader resolves the native transcript when the indexed path is missing', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'antigravity-history-fallback-'));
+  const restoreHomeDir = patchHomeDir(tempRoot);
+  try {
+    await writeAntigravityTranscript(tempRoot, 'agy-session-fallback');
+    const provider = new AntigravitySessionsProvider();
+
+    const history = await provider.fetchHistory('app-session-fallback', {
+      providerSessionId: 'agy-session-fallback',
+      jsonlPath: null,
+    });
+
+    assert.equal(history.total, 2);
+    assert.equal(history.messages[0]?.content, 'Fix Antigravity history');
+    assert.equal(history.messages[1]?.content, 'History is visible now.');
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('Antigravity history reader skips a partially written JSONL line', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'antigravity-partial-history-'));
   try {

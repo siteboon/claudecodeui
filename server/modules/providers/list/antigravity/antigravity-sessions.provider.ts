@@ -1,3 +1,5 @@
+import os from 'node:os';
+import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 
 import type { IProviderSessions } from '@/shared/interfaces.js';
@@ -7,10 +9,36 @@ import {
   generateMessageId,
   readObjectRecord,
   readOptionalString,
+  sanitizeLeafDirectoryName,
   sliceTailPage,
 } from '@/shared/utils.js';
 
 const PROVIDER = 'antigravity';
+
+/** Resolves AGY's standard transcript location when an app-created DB row has not been synchronized yet. */
+function resolveAntigravityTranscriptPath(options: FetchHistoryOptions): string | null {
+  const indexedPath = readOptionalString(options.jsonlPath);
+  if (indexedPath) {
+    return indexedPath;
+  }
+
+  const providerSessionId = readOptionalString(options.providerSessionId);
+  if (!providerSessionId) {
+    return null;
+  }
+
+  const safeSessionId = sanitizeLeafDirectoryName(providerSessionId, 'Antigravity session id');
+  return path.join(
+    os.homedir(),
+    '.gemini',
+    'antigravity-cli',
+    'brain',
+    safeSessionId,
+    '.system_generated',
+    'logs',
+    'transcript.jsonl',
+  );
+}
 
 /** Removes provider metadata tags from user-facing transcript content. */
 function stripAntigravityTags(content: string): string {
@@ -134,7 +162,7 @@ export class AntigravitySessionsProvider implements IProviderSessions {
     const { limit = null, offset = 0 } = options;
     const normalizedOffset = Math.max(0, offset);
     const normalizedLimit = limit === null ? null : Math.max(0, limit);
-    const transcriptPath = readOptionalString(options.jsonlPath) ?? null;
+    const transcriptPath = resolveAntigravityTranscriptPath(options);
     if (!transcriptPath) {
       return {
         messages: [],
