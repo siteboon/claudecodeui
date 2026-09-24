@@ -158,7 +158,8 @@
     "status": {
       "newSession": "Yeni Oturum",
       "initializing": "Başlatılıyor...",
-      "restarting": "Yeniden başlatılıyor..."
+      "restarting": "Yeniden başlatılıyor...",
+      "themeRestartHint": "Yeni temayı Claude Code'a uygulamak için yeniden başlatın"
     },
     "actions": {
       "disconnect": "Bağlantıyı Kes",

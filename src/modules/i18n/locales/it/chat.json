@@ -158,7 +158,8 @@
     "status": {
       "newSession": "Nuova sessione",
       "initializing": "Inizializzazione...",
-      "restarting": "Riavvio..."
+      "restarting": "Riavvio...",
+      "themeRestartHint": "Riavvia per applicare il nuovo tema a Claude Code"
     },
     "actions": {
       "disconnect": "Disconnetti",

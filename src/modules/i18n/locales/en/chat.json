@@ -206,7 +206,8 @@
     "status": {
       "newSession": "New Session",
       "initializing": "Initializing...",
-      "restarting": "Restarting..."
+      "restarting": "Restarting...",
+      "themeRestartHint": "Restart to apply the new theme to Claude Code"
     },
     "actions": {
       "disconnect": "Disconnect",
