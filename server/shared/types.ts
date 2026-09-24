@@ -69,6 +69,26 @@ export type AuthenticatedWebSocketRequest = IncomingMessage & {
 export type LLMProvider = 'claude' | 'codex' | 'cursor' | 'opencode';
 
 /**
+ * Safe runtime-profile metadata returned to the browser.
+ *
+ * Executable paths and environment values are deliberately absent because a
+ * profile may contain deployment paths or credentials that must stay server-side.
+ */
+export type ProviderRuntimeProfileSummary = {
+  id: string;
+  name: string;
+  provider: LLMProvider;
+  description?: string;
+  isDefault: boolean;
+};
+
+/** Server-only process configuration selected for one provider session. */
+export type ProviderRuntimeProfile = ProviderRuntimeProfileSummary & {
+  executable?: string;
+  env: Record<string, string>;
+};
+
+/**
  * One selectable model row in a provider model catalog.
  */
 export type ProviderModelOption = {
@@ -591,6 +611,8 @@ export type ProviderRuntimePermissionGateway = {
  * adapters from importing services that resolve back through providerRegistry.
  */
 export type ProviderRuntimeContext = {
+  /** Runtime process configuration fixed to the app session before its first turn. */
+  runtimeProfile?: ProviderRuntimeProfile;
   resolveProviderSessionId(sessionId: string | null | undefined): string | null;
   resolveResumeModel(
     sessionId: string | undefined,

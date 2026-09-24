@@ -70,6 +70,23 @@ test('app sessions get the provider id assigned without creating a duplicate row
   });
 });
 
+test('app sessions retain their selected runtime profile', async () => {
+  await withIsolatedDatabase(() => {
+    sessionsDb.createAppSession(
+      'app-profile-1',
+      'codex',
+      '/workspace/demo',
+      'Profile session',
+      'codex-work',
+    );
+
+    assert.equal(
+      sessionsDb.getSessionById('app-profile-1')?.runtime_profile_id,
+      'codex-work',
+    );
+  });
+});
+
 test('assignProviderSessionId merges a watcher-created duplicate into the app row', async () => {
   await withIsolatedDatabase(() => {
     sessionsDb.createAppSession('app-id-2', 'codex', '/workspace/demo');

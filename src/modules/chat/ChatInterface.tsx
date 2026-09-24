@@ -16,6 +16,7 @@ import type {
   SessionNavigationOptions,
 } from '@/shared/types';
 import { useChatProviderState } from '@/modules/chat/hooks/useChatProviderState';
+import { useRuntimeProfiles } from '@/modules/chat/hooks/useRuntimeProfiles';
 import { useScheduledMessages } from '@/modules/chat/composer/useScheduledMessages';
 import { useChatSessionState } from '@/modules/chat/hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '@/modules/chat/hooks/useChatRealtimeHandlers';
@@ -127,6 +128,11 @@ function ChatInterface({
     selectedSession,
     selectedProject,
   });
+  const {
+    providerProfiles,
+    selectedRuntimeProfileId,
+    selectRuntimeProfile,
+  } = useRuntimeProfiles(provider);
 
   const {
     chatMessages,
@@ -240,6 +246,7 @@ function ChatInterface({
     selectedSession,
     currentSessionId,
     provider,
+    runtimeProfileId: selectedRuntimeProfileId,
     permissionMode,
     cyclePermissionMode,
     currentProviderModel,
@@ -452,6 +459,9 @@ function ChatInterface({
               currentSessionId={currentSessionId}
               provider={provider}
               setProvider={setProvider}
+              runtimeProfiles={providerProfiles}
+              selectedRuntimeProfileId={selectedRuntimeProfileId}
+              onSelectRuntimeProfile={selectRuntimeProfile}
               textareaRef={textareaRef}
               providerModels={providerModels}
               setProviderModel={setStoredProviderModel}

@@ -8,6 +8,7 @@ import type {
   ProviderPermissionDecision,
   ProviderRunFunction,
   ProviderRuntimeContext,
+  ProviderRuntimeProfile,
   ProviderRuntimeWriter,
 } from '@/shared/types.js';
 
@@ -15,6 +16,10 @@ type ProviderRuntimeServiceDependencies = {
   listProviders(): IProvider[];
   resolveProvider(provider: string): IProvider;
   resolveProviderSessionId(sessionId: string | null | undefined): string | null;
+  resolveRuntimeProfile(
+    provider: LLMProvider,
+    sessionId: string | null | undefined,
+  ): ProviderRuntimeProfile;
   resolveResumeModel(
     provider: LLMProvider,
     sessionId: string | undefined,
@@ -27,6 +32,7 @@ const defaultDependencies: ProviderRuntimeServiceDependencies = {
   listProviders: () => providerRegistry.listProviders(),
   resolveProvider: (provider) => providerRegistry.resolveProvider(provider),
   resolveProviderSessionId: (sessionId) => sessionsService.resolveProviderSessionId(sessionId),
+  resolveRuntimeProfile: (provider, sessionId) => sessionsService.resolveRuntimeProfile(provider, sessionId),
   resolveResumeModel: (provider, sessionId, requestedModel) =>
     providerModelsService.resolveResumeModel(provider, sessionId, requestedModel),
   getProviderModels: (provider) => providerModelsService.getProviderModels(provider),
@@ -46,7 +52,9 @@ export function createProviderRuntimeService(
 
   const createRuntimeContext = (
     provider: IProvider,
+    sessionId: string | null | undefined,
   ): ProviderRuntimeContext => ({
+    runtimeProfile: dependencies.resolveRuntimeProfile(provider.id, sessionId),
     resolveProviderSessionId: dependencies.resolveProviderSessionId,
     resolveResumeModel: (sessionId, requestedModel) =>
       dependencies.resolveResumeModel(provider.id, sessionId, requestedModel),
@@ -69,7 +77,8 @@ export function createProviderRuntimeService(
     writer: ProviderRuntimeWriter,
   ): Promise<unknown> => {
     const provider = dependencies.resolveProvider(providerName);
-    return provider.runtime.run(command, options, writer, createRuntimeContext(provider));
+    const sessionId = typeof options.sessionId === 'string' ? options.sessionId : undefined;
+    return provider.runtime.run(command, options, writer, createRuntimeContext(provider, sessionId));
   };
 
   return {

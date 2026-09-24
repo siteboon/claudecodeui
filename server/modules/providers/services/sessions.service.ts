@@ -5,6 +5,7 @@ import path from 'node:path';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
+import { providerRuntimeProfilesService } from '@/modules/providers/services/provider-runtime-profiles.service.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import type {
   BackgroundTaskSummary,
@@ -41,6 +42,7 @@ type CreateAppSessionResult = {
   provider: LLMProvider;
   projectPath: string;
   sessionName: string;
+  runtimeProfileId: string;
 };
 
 type ArchivedSessionListItem = {
@@ -258,6 +260,7 @@ export const sessionsService = {
     provider: LLMProvider,
     projectPath: string,
     initialMessage: string,
+    runtimeProfileId?: string | null,
   ): CreateAppSessionResult {
     const normalizedProjectPath = projectPath.trim();
     if (!normalizedProjectPath) {
@@ -269,13 +272,24 @@ export const sessionsService = {
 
     const sessionId = randomUUID();
     const sessionName = buildCloudCliSessionName(initialMessage);
-    sessionsDb.createAppSession(sessionId, provider, normalizedProjectPath, sessionName);
+    const resolvedRuntimeProfileId = providerRuntimeProfilesService.validateSelection(
+      provider,
+      runtimeProfileId,
+    );
+    sessionsDb.createAppSession(
+      sessionId,
+      provider,
+      normalizedProjectPath,
+      sessionName,
+      resolvedRuntimeProfileId,
+    );
 
     return {
       sessionId,
       provider,
       projectPath: normalizedProjectPath,
       sessionName,
+      runtimeProfileId: resolvedRuntimeProfileId ?? 'default',
     };
   },
 
@@ -340,6 +354,7 @@ export const sessionsService = {
       // differently from the conversation it was branched from.
       model: source.model,
       effort: source.effort,
+      runtimeProfileId: source.runtime_profile_id ?? null,
     });
 
     await broadcastSessionUpserted(forkSessionId);
@@ -349,7 +364,26 @@ export const sessionsService = {
       provider,
       projectPath: source.project_path ?? '',
       sessionName,
+      runtimeProfileId: source.runtime_profile_id ?? 'default',
     };
+  },
+
+  /** Returns the server-only runtime profile fixed to an app session. */
+  resolveRuntimeProfile(provider: LLMProvider, sessionId: string | null | undefined) {
+    if (!sessionId) {
+      return providerRuntimeProfilesService.resolve(provider, null);
+    }
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session) {
+      return providerRuntimeProfilesService.resolve(provider, null);
+    }
+    if (session.provider !== provider) {
+      throw new AppError(`Session "${sessionId}" does not belong to ${provider}.`, {
+        code: 'SESSION_PROVIDER_MISMATCH',
+        statusCode: 409,
+      });
+    }
+    return providerRuntimeProfilesService.resolve(provider, session.runtime_profile_id);
   },
 
   /**

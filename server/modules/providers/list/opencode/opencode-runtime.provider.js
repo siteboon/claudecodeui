@@ -287,10 +287,10 @@ async function spawnOpenCode(command, options = {}, ws, context) {
         args.push(flattenPromptForWindowsShell(promptWithAttachments));
       }
 
-      opencodeProcess = spawnFunction('opencode', args, {
+      opencodeProcess = spawnFunction(context.runtimeProfile?.executable || 'opencode', args, {
         cwd: workingDir,
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env, ...permissionOptions.env },
+        env: { ...process.env, ...(context.runtimeProfile?.env || {}), ...permissionOptions.env },
       });
 
       activeOpenCodeProcesses.set(processKey, opencodeProcess);
