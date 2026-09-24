@@ -5,6 +5,10 @@ import express from "express";
 
 import { parseFrontMatter } from "../../shared/frontmatter.js";
 
+import {
+  getNativeCommands,
+} from "./native-commands.js";
+
 type CommandsRouterDependencies = {
   fileSystem: typeof import('node:fs/promises');
   homeDirectory(): string;
@@ -445,7 +449,11 @@ Custom commands can be created in:
  */
 router.post("/list", async (req, res) => {
   try {
-    const { projectPath } = req.body;
+    const { projectPath, provider } = req.body;
+    // Native commands are provider-specific: a Codex session must not be
+    // shown `/compact` any more than a Claude session Codex's `/approvals`.
+    // Anything unknown falls back to claude, matching readModelProvider.
+    const nativeProvider = MODEL_PROVIDERS.includes(provider) ? provider : "claude";
     const allCommands = [...builtInCommands];
 
     // Scan project-level commands (.claude/commands/)
@@ -479,6 +487,11 @@ router.post("/list", async (req, res) => {
 
     res.json({
       builtIn: builtInCommands,
+      // CLI-native commands ride along so the composer's slash menu can list
+      // them; the frontend inserts them into the input instead of executing,
+      // which is what keeps them out of the resubmission loop described on
+      // the native-commands module.
+      native: getNativeCommands(nativeProvider),
       custom: customCommands,
       count: allCommands.length,
     });

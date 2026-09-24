@@ -426,7 +426,9 @@ export const api = {
   commands: {
     // `projectPath` stays optional: a workspace without a resolved path omits
     // the field entirely, which is what the server expects.
-    list: (projectPath: string | undefined) => post('/api/commands/list', { projectPath }),
+    // `provider` scopes the CLI-native command list to the session's CLI.
+    list: (projectPath: string | undefined, provider?: string) =>
+      post('/api/commands/list', { projectPath, provider }),
     execute: (payload: unknown) => post('/api/commands/execute', payload),
   },
 

@@ -60,6 +60,14 @@ const isPromiseLike = (value: unknown): value is Promise<unknown> =>
 const isSkillCommand = (command: SlashCommand) =>
   command.type === 'skill' || command.metadata?.type === 'skill';
 
+// CLI-native commands are not executed by this app — the CLI behind the
+// session handles them when the text reaches it — so picking one from the
+// menu inserts it into the input exactly like a skill, instead of routing
+// through the execute endpoint (whose resubmission loop a native command
+// would spin forever).
+const isCliNativeCommand = (command: SlashCommand) =>
+  command.namespace === 'cli' || command.type === 'cli';
+
 const dedupeProviderSkills = (skills: ProviderSkill[]): ProviderSkill[] => {
   const seenCommands = new Set<string>();
 
@@ -135,7 +143,6 @@ export function useSlashCommands({
   onExecuteCommand,
 }: UseSlashCommandsOptions) {
   const [slashCommands, setSlashCommands] = useState<SlashCommand[]>([]);
-  const [filteredCommands, setFilteredCommands] = useState<SlashCommand[]>([]);
   const [showCommandMenu, setShowCommandMenu] = useState(false);
   const [commandQuery, setCommandQuery] = useState('');
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(-1);
@@ -164,13 +171,12 @@ export function useSlashCommands({
     const fetchCommands = async () => {
       if (!selectedProject) {
         setSlashCommands([]);
-        setFilteredCommands([]);
         return;
       }
 
       try {
         const workspacePath = selectedProject.fullPath || selectedProject.path || '';
-        const response = await api.commands.list(workspacePath || selectedProject.path);
+        const response = await api.commands.list(workspacePath || selectedProject.path, provider);
 
         if (!response.ok) {
           throw new Error('Failed to fetch commands');
@@ -187,6 +193,11 @@ export function useSlashCommands({
           ...((data.builtIn || []) as SlashCommand[]).map((command) => ({
             ...command,
             type: 'built-in',
+          })),
+          ...((data.native || []) as SlashCommand[]).map((command) => ({
+            ...command,
+            namespace: 'cli' as const,
+            type: 'cli' as const,
           })),
           ...skillCommands,
           ...((data.custom || []) as SlashCommand[]).map((command) => ({
@@ -219,15 +230,13 @@ export function useSlashCommands({
     };
   }, [selectedProject, provider]);
 
-  useEffect(() => {
-    if (!showCommandMenu) {
-      setSelectedCommandIndex(-1);
-    }
-  }, [showCommandMenu]);
-
-  useEffect(() => {
-    setFilteredCommands(filterSlashCommands(slashCommands, commandQuery));
-  }, [commandQuery, slashCommands]);
+  // Derived, not stored: the filtered view is a pure function of the full
+  // list and the typed query, so keeping it in state would only risk the two
+  // drifting apart.
+  const filteredCommands = useMemo(
+    () => filterSlashCommands(slashCommands, commandQuery),
+    [slashCommands, commandQuery],
+  );
 
   const frequentCommands = useMemo(() => {
     if (!selectedProject || slashCommands.length === 0) {
@@ -308,7 +317,7 @@ export function useSlashCommands({
 
   const selectCommandFromKeyboard = useCallback(
     (command: SlashCommand) => {
-      if (isSkillCommand(command)) {
+      if (isSkillCommand(command) || isCliNativeCommand(command)) {
         insertCommandIntoInput(command);
         return;
       }
@@ -330,7 +339,7 @@ export function useSlashCommands({
       }
 
       trackCommandUsage(command);
-      if (isSkillCommand(command)) {
+      if (isSkillCommand(command) || isCliNativeCommand(command)) {
         insertCommandIntoInput(command);
         return;
       }
@@ -346,12 +355,8 @@ export function useSlashCommands({
     setCommandQuery('');
     setSelectedCommandIndex(-1);
 
-    if (isOpening) {
-      setFilteredCommands(slashCommands);
-    }
-
     textareaRef.current?.focus();
-  }, [showCommandMenu, slashCommands, textareaRef]);
+  }, [showCommandMenu, textareaRef]);
 
   const handleCommandInputChange = useCallback(
     (newValue: string, cursorPos: number) => {
