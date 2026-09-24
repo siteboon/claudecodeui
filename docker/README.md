@@ -132,6 +132,21 @@ CloudCLI auto-starts via `.bashrc` when using `sbx run`.
 
 Full options in the [Docker Sandboxes usage guide](https://docs.docker.com/ai/sandboxes/usage/).
 
+## Developing claudecodeui itself in a sandbox
+
+The templates above install the published `@cloudcli-ai/cloudcli` package. To
+instead run **this checkout's source** in an isolated sandbox (e.g. to avoid
+host Node/native-module mismatches), use the `claudecodeui-dev` kit in
+[`docker/sbx-kit/`](sbx-kit/):
+
+```bash
+ln -sf "$(pwd)/docker/sbx-kit/bin/ccui-sbx" ~/.local/bin/ccui-sbx  # one-time install
+ccui-sbx .   # launches claude + the kit + both ports, forwards any sbx run flag
+```
+
+See [`docker/sbx-kit/README.md`](sbx-kit/README.md) for details, including
+the raw `sbx create`/`sbx ports` equivalent.
+
 ## Network policies
 
 Sandboxes restrict outbound access by default. To reach host services from inside the sandbox:

@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+# ccui-sbx — launch a `claude` Docker Sandbox for this claudecodeui checkout
+# with the claudecodeui-dev kit (docker/sbx-kit) attached and the dev
+# server's ports published.
+#
+# It is a thin wrapper around `sbx run claude` — every argument you pass is
+# forwarded to `sbx run` untouched, so all of `sbx run`'s normal flags and
+# positional args (PATH, --env, --clone, -- AGENT_ARGS, etc.) work exactly
+# as documented in `sbx run --help`.
+#
+# By default the sandbox is created headless (`--detached`): the claude
+# TUI never takes over your terminal, so the actual published ports stay
+# visible. A summary with the resolved URLs and follow-up commands prints
+# once the sandbox is up. Pass CCUI_SBX_ATTACH=1 to get the old behavior
+# (attach to the interactive claude session immediately).
+#
+# Usage:
+#   ccui-sbx [PATH] [sbx run flags...] [-- AGENT_ARGS...]
+#
+# Examples:
+#   ccui-sbx                          # mount $PWD, headless, prints the URLs
+#   ccui-sbx ~/repos/claudecodeui
+#   ccui-sbx . --name ccui-dev
+#   CCUI_SBX_ATTACH=1 ccui-sbx .      # attach to claude interactively instead
+#
+# Env overrides:
+#   CCUI_SBX_SERVER_PORT   host port published to the API/web UI (container :3001). Default 3001.
+#   CCUI_SBX_CLIENT_PORT   host port published to the Vite client (container :5173). Default 5173.
+#   CCUI_SBX_NO_KIT=1      skip attaching the claudecodeui-dev kit (plain claude sandbox + ports)
+#   CCUI_SBX_ATTACH=1      attach to the interactive claude session instead of running headless
+#
+# The kit is resolved relative to this script's own real location, so it
+# always uses the kit from the checkout this script was installed from,
+# regardless of what PATH you launch or what directory you run it from.
+#
+# If a default/override host port is already bound by something else, this
+# script does not fail the whole launch: it drops the host-side port number
+# and lets sbx allocate an ephemeral one instead, printing a warning. The
+# headless summary below reports whatever port actually got used.
+
+set -euo pipefail
+
+usage() {
+  sed -n '2,37p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  usage
+  echo
+  echo "── sbx run --help ──"
+  exec sbx run --help
+fi
+
+resolve_self() {
+  local src="${BASH_SOURCE[0]}"
+  while [ -h "$src" ]; do
+    local dir
+    dir="$(cd -P "$(dirname "$src")" >/dev/null 2>&1 && pwd)"
+    src="$(readlink "$src")"
+    case "$src" in
+      /*) ;;
+      *) src="$dir/$src" ;;
+    esac
+  done
+  cd -P "$(dirname "$src")" >/dev/null 2>&1 && pwd
+}
+
+if ! command -v sbx >/dev/null 2>&1; then
+  echo "ccui-sbx: 'sbx' CLI not found. Install Docker Sandboxes: https://docs.docker.com/ai/sandboxes/get-started/" >&2
+  exit 1
+fi
+
+SCRIPT_DIR="$(resolve_self)"
+KIT_DIR="$(cd "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)"
+
+SERVER_PORT="${CCUI_SBX_SERVER_PORT:-3001}"
+CLIENT_PORT="${CCUI_SBX_CLIENT_PORT:-5173}"
+
+# Is something already listening on this host port? Prefer lsof (fast,
+# no network round trip); fall back to a bash TCP connect if lsof is
+# unavailable. Best-effort: on any doubt, assume free so we don't block
+# the happy path over a detection failure.
+port_in_use() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
+    return $?
+  fi
+  ( : <"/dev/tcp/127.0.0.1/$port" ) >/dev/null 2>&1
+}
+
+# Build a --publish value for a given desired host port + container port.
+# Falls back to an ephemeral host port (bare container port, no HOST_PORT)
+# when the desired host port is already taken, instead of failing outright.
+publish_spec() {
+  local host_port="$1" container_port="$2" label="$3"
+  if port_in_use "$host_port"; then
+    echo "ccui-sbx: warning: host port $host_port ($label) is already in use — letting sbx pick an ephemeral port instead." >&2
+    printf '%s' "$container_port"
+  else
+    printf '%s:%s' "$host_port" "$container_port"
+  fi
+}
+
+server_publish="$(publish_spec "$SERVER_PORT" 3001 "API/web UI")"
+client_publish="$(publish_spec "$CLIENT_PORT" 5173 "Vite client")"
+
+kit_flags=()
+if [ "${CCUI_SBX_NO_KIT:-0}" != "1" ]; then
+  if [ -f "$KIT_DIR/spec.yaml" ]; then
+    kit_flags=(--kit "$KIT_DIR")
+  else
+    echo "ccui-sbx: warning: no kit found at $KIT_DIR — launching a plain claude sandbox" >&2
+  fi
+fi
+
+# Respect an explicit --name/--name=X the caller already passed (scanning
+# only up to a literal `--`, since anything after that belongs to the
+# agent, not to sbx run). Otherwise pick a deterministic default of our
+# own so headless mode always knows which sandbox to query afterwards.
+sbx_name=""
+take_next=0
+for arg in "$@"; do
+  if [ "$take_next" = 1 ]; then
+    sbx_name="$arg"
+    break
+  fi
+  case "$arg" in
+    --) break ;;
+    --name) take_next=1 ;;
+    --name=*) sbx_name="${arg#--name=}"; break ;;
+  esac
+done
+
+name_flags=()
+if [ -z "$sbx_name" ]; then
+  sbx_name="ccui-$(basename "$PWD")"
+  name_flags=(--name "$sbx_name")
+fi
+
+if [ "${CCUI_SBX_ATTACH:-0}" = "1" ]; then
+  exec sbx run claude \
+    "${kit_flags[@]}" \
+    --publish "$server_publish" \
+    --publish "$client_publish" \
+    "${name_flags[@]}" \
+    "$@"
+fi
+
+sbx run claude \
+  "${kit_flags[@]}" \
+  --publish "$server_publish" \
+  --publish "$client_publish" \
+  "${name_flags[@]}" \
+  --detached \
+  "$@"
+
+echo
+echo "── ccui-sbx: '$sbx_name' is running headless ──"
+
+server_url=""
+client_url=""
+ports_json="$(sbx ports "$sbx_name" --json 2>/dev/null || true)"
+if command -v jq >/dev/null 2>&1 && [ -n "$ports_json" ]; then
+  server_url="$(printf '%s' "$ports_json" | jq -r '.[] | select(.sandbox_port==3001) | "http://\(.host_ip):\(.host_port)"' 2>/dev/null | head -1)"
+  client_url="$(printf '%s' "$ports_json" | jq -r '.[] | select(.sandbox_port==5173) | "http://\(.host_ip):\(.host_port)"' 2>/dev/null | head -1)"
+fi
+
+if [ -n "$server_url" ]; then
+  echo "  Web UI / API:  $server_url"
+fi
+if [ -n "$client_url" ]; then
+  echo "  Vite (HMR):    $client_url"
+fi
+if [ -z "$server_url$client_url" ]; then
+  echo "  (couldn't resolve the published ports automatically — run: sbx ports $sbx_name)"
+fi
+
+echo
+echo "  Attach to the claude agent:   sbx run --name $sbx_name"
+echo "  Tail the dev server logs:    sbx exec $sbx_name bash -lc 'tail -f /tmp/claudecodeui-dev.log'"
+echo "  Stop it:                     sbx stop $sbx_name"

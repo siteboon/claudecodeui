@@ -1,0 +1,51 @@
+schemaVersion: "1"
+kind: mixin
+name: claudecodeui-dev
+displayName: CloudCLI (claudecodeui) dev server
+description: >-
+  Installs the native build toolchain and launches this repo's CloudCLI
+  dev server from source (API on :3001, Vite client on :5173) inside the
+  sandbox. Rebuilds native modules (better-sqlite3, node-pty, bcrypt) for
+  the sandbox's platform, since the workspace bind mount can otherwise
+  carry over host-built binaries that fail to load on Linux.
+
+commands:
+  install:
+    - command: "apt-get update -qq && apt-get install -y --no-install-recommends build-essential python3 python3-setuptools >/dev/null && rm -rf /var/lib/apt/lists/*"
+      user: "root"
+      description: "Install native build toolchain for better-sqlite3 / node-pty / bcrypt"
+
+  initFiles:
+    - path: /home/agent/.claudecodeui-start.sh
+      mode: "0755"
+      content: |
+        #!/bin/sh
+        set -e
+        # commands.startup runs with a minimal PATH that drops the image's
+        # own additions (/home/agent/.local/bin, where the `claude` binary
+        # lives) — without this the dev server's Node process can't find
+        # `claude` and every session fails with "Claude Code native binary
+        # not found at claude". CLAUDE_CLI_PATH is a belt-and-suspenders
+        # explicit override for the same lookup.
+        export PATH="/home/agent/.local/bin:/usr/local/share/npm-global/bin:$PATH"
+        export CLAUDE_CLI_PATH="/home/agent/.local/bin/claude"
+        cd "${WORKDIR}"
+        echo "[claudecodeui] npm install..."
+        npm install >/tmp/claudecodeui-install.log 2>&1
+        echo "[claudecodeui] rebuilding native modules for this sandbox..."
+        npm rebuild better-sqlite3 node-pty bcrypt >>/tmp/claudecodeui-install.log 2>&1
+        echo "[claudecodeui] starting dev server (server :3001, vite :5173)..."
+        nohup npm run dev >/tmp/claudecodeui-dev.log 2>&1 &
+
+  startup:
+    - command: ["sh", "/home/agent/.claudecodeui-start.sh"]
+      user: "1000"
+      background: true
+      description: "Install deps, rebuild native modules, and start the dev server"
+
+agentContext: |
+  This kit installs and starts the claudecodeui (CloudCLI) dev server from
+  the mounted workspace source. Logs: /tmp/claudecodeui-install.log and
+  /tmp/claudecodeui-dev.log. Server API listens on :3001, Vite client on
+  :5173. Publish ports from the host with:
+    sbx ports <sandbox-name> --publish 3001:3001 --publish 5173:5173
