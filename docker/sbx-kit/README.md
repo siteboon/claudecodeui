@@ -20,6 +20,22 @@ using this kit, native modules in `node_modules` will be Linux binaries and
 won't load if you go back to running `npm run dev` directly on the host
 until you `npm rebuild` there again.
 
+## Permissions default
+
+The kit sets `CLOUDCLI_DEFAULT_CLAUDE_SKIP_PERMISSIONS=true` in the
+container's environment. `server/modules/auth/auth.module.ts` reads that at
+startup and, only at the moment the sandbox's one user account is first
+registered through the web UI, seeds their `claudePermissions` preference
+with `skipPermissions: true` — matching the sandbox's own interactive
+`claude` agent, which already runs with `--dangerously-skip-permissions`.
+Without this, every tool call in a web-UI chat session prompts for approval,
+since the app's default permission mode is independent of that CLI flag.
+
+This only affects the one-time account creation; it never touches an
+existing account's settings. To go back to the historical ask-every-time
+default, remove the `CLOUDCLI_DEFAULT_CLAUDE_SKIP_PERMISSIONS` line from
+`spec.yaml`'s `environment.variables`.
+
 ## Usage
 
 ### Option A: `ccui-sbx` launcher (recommended)

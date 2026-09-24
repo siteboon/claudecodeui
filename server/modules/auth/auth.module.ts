@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 
-import { getConnection, userDb } from '@/modules/database/index.js';
+import { getConnection, userDb, userPreferencesDb } from '@/modules/database/index.js';
 
 import { authenticateToken, generateToken } from './auth.middleware.js';
 import { createAuthRouter } from './auth.routes.js';
@@ -17,6 +17,14 @@ const require = createRequire(import.meta.url);
 const bcrypt = require('bcrypt') as BcryptAdapter;
 const databaseConnection = getConnection();
 
+// Lets a deployment (e.g. a sandbox kit with no one around to click through
+// the settings dialog) default the one user this system will ever create to
+// running Claude Code without permission prompts, instead of the client's
+// historical skipPermissions: false.
+const defaultUserPreferences = process.env.CLOUDCLI_DEFAULT_CLAUDE_SKIP_PERMISSIONS === 'true'
+  ? { claudePermissions: { allowedTools: [], disallowedTools: [], skipPermissions: true } }
+  : undefined;
+
 const authService = createAuthService({
   users: {
     hasUsers: () => userDb.hasUsers(),
@@ -32,6 +40,10 @@ const authService = createAuthService({
   hashPassword: (password) => bcrypt.hash(password, 12),
   comparePassword: (password, passwordHash) => bcrypt.compare(password, passwordHash),
   generateToken,
+  preferences: {
+    savePreferences: (userId, updates) => userPreferencesDb.savePreferences(userId, updates),
+  },
+  defaultUserPreferences,
 });
 
 /** Auth router assembled for the server entrypoint. */

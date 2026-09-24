@@ -22,6 +22,16 @@ type AuthDependencies = {
   hashPassword(password: string): Promise<string>;
   comparePassword(password: string, passwordHash: string): Promise<boolean>;
   generateToken(user: AuthUser): string;
+  preferences?: {
+    savePreferences(userId: number, updates: Record<string, unknown>): void;
+  };
+  /**
+   * Preferences seeded onto the one user this single-user system will ever
+   * create, e.g. so a deployment can default Claude sessions to
+   * skipPermissions without anyone opening the settings dialog first. Absent
+   * or empty means "seed nothing", which is the historical default.
+   */
+  defaultUserPreferences?: Record<string, unknown>;
 };
 
 function numericUserId(userId: number | bigint): number {
@@ -79,6 +89,13 @@ export function createAuthService(dependencies: AuthDependencies) {
         const token = dependencies.generateToken(user);
         dependencies.transaction.commit();
         dependencies.users.updateLastLogin(numericUserId(user.id));
+
+        if (dependencies.defaultUserPreferences && dependencies.preferences) {
+          dependencies.preferences.savePreferences(
+            numericUserId(user.id),
+            dependencies.defaultUserPreferences,
+          );
+        }
 
         return {
           success: true,

@@ -56,6 +56,40 @@ test('register hashes credentials and commits through injected dependencies', as
   assert.deepEqual(operations, ['begin', 'hash:secret12', 'create:alice:hash', 'commit', 'login:1']);
 });
 
+test('register seeds default preferences onto the new user when configured', async () => {
+  const savedPreferences: Array<{ userId: number; updates: Record<string, unknown> }> = [];
+  const service = createAuthService(createDependencies({
+    preferences: {
+      savePreferences: (userId, updates) => {
+        savedPreferences.push({ userId, updates });
+      },
+    },
+    defaultUserPreferences: {
+      claudePermissions: { allowedTools: [], disallowedTools: [], skipPermissions: true },
+    },
+  }));
+
+  await service.register('alice', 'secret12');
+
+  assert.deepEqual(savedPreferences, [{
+    userId: 1,
+    updates: { claudePermissions: { allowedTools: [], disallowedTools: [], skipPermissions: true } },
+  }]);
+});
+
+test('register seeds nothing when no default preferences are configured', async () => {
+  let saveCalled = false;
+  const service = createAuthService(createDependencies({
+    preferences: {
+      savePreferences: () => { saveCalled = true; },
+    },
+  }));
+
+  await service.register('alice', 'secret12');
+
+  assert.equal(saveCalled, false);
+});
+
 test('login rejects an invalid password without issuing a token', async () => {
   let tokenIssued = false;
   const service = createAuthService(createDependencies({
