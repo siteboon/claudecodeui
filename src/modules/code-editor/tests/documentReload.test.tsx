@@ -170,6 +170,73 @@ test('a superseded read does not overwrite the file opened after it', async () =
   assert.deepEqual(saveFile.mock.calls[0], ['project-1', 'src/other.ts', 'other content']);
 });
 
+const openOtherFile = (): CodeEditorFile => ({ name: 'other.ts', path: 'src/other.ts', projectId: 'project-1' });
+
+test('a save that answers after another file opened leaves that file alone', async () => {
+  let finishSave: () => void = () => undefined;
+  saveFile.mockImplementation(() => new Promise<Response>((resolve) => {
+    finishSave = () => resolve(jsonResponse({ success: true }));
+  }));
+
+  const { result, rerender } = renderDocument();
+  await waitFor(() => assert.equal(result.current.content, 'first version'));
+
+  act(() => result.current.setContent('app edit'));
+  let save: Promise<void> = Promise.resolve();
+  act(() => {
+    save = result.current.handleSave();
+  });
+
+  disk.content = 'other on disk';
+  rerender({ file: openOtherFile() });
+  await waitFor(() => assert.equal(result.current.content, 'other on disk'));
+
+  await act(async () => {
+    finishSave();
+    await save;
+  });
+  assert.equal(result.current.saving, false);
+
+  disk.content = 'other changed on disk';
+  rerender({ file: openOtherFile() });
+
+  await waitFor(() => assert.equal(result.current.content, 'other changed on disk'));
+  assert.equal(result.current.unsavedChangesBlockedReload, false);
+});
+
+test('opening the same file with an edit to show counts as another document', async () => {
+  const { result, rerender } = renderDocument();
+  await waitFor(() => assert.equal(result.current.content, 'first version'));
+
+  act(() => result.current.setContent('work in progress'));
+  rerender({
+    file: { ...openSameFile(), diffInfo: { old_string: 'first version', new_string: 'edited by the agent' } },
+  });
+
+  await waitFor(() => assert.equal(result.current.content, 'edited by the agent'));
+  assert.equal(result.current.unsavedChangesBlockedReload, false);
+});
+
+test('opening a file again while its first read is still out is not refused', async () => {
+  const pendingReads = new Map<string, (content: string) => void>();
+  const { result, rerender } = renderDocument();
+  await waitFor(() => assert.equal(result.current.content, 'first version'));
+  act(() => result.current.setContent('app edit given up by opening another file'));
+
+  readFile.mockImplementation((_projectId: string, path: string) => new Promise<Response>((resolve) => {
+    pendingReads.set(path, (content) => resolve(jsonResponse({ content })));
+  }));
+  rerender({ file: openOtherFile() });
+  await waitFor(() => assert.ok(pendingReads.has('src/other.ts')));
+
+  rerender({ file: openOtherFile() });
+
+  assert.equal(result.current.unsavedChangesBlockedReload, false);
+  await act(async () => pendingReads.get('src/other.ts')?.('other content'));
+  await waitFor(() => assert.equal(result.current.content, 'other content'));
+  assert.equal(result.current.unsavedChangesBlockedReload, false);
+});
+
 test('the header offers the reload', () => {
   const onReload = vi.fn();
 

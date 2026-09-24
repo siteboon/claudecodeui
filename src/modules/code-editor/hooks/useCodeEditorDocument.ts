@@ -54,7 +54,10 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
   // unsaved changes when the same document is being read again; opening a
   // different file has always replaced the buffer.
   const loadedDocumentKeyRef = useRef<string | null>(null);
-  const documentKey = `${fileProjectId ?? ''}::${filePath}`;
+  // A diff payload is its own document: the chat opening an edit on a file that
+  // is already open must show that edit, not reuse the plain buffer.
+  const diffKey = file.diffInfo ? JSON.stringify([fileDiffOldString, fileDiffNewString]) : '';
+  const documentKey = `${fileProjectId ?? ''}::${filePath}::${diffKey}`;
   // Identifies the newest load. `api.readFile` cannot be aborted, so a read that
   // was superseded may still resolve; only the current one may touch the buffer,
   // or an older file's text could land under the newer path and be saved there.
@@ -74,6 +77,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     contentRef.current = nextContent;
     diskContentRef.current = nextContent;
     setContentState(nextContent);
+    setUnsavedChangesBlockedReload(false);
   }, []);
 
   useEffect(() => {
@@ -93,6 +97,15 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     }
 
     setUnsavedChangesBlockedReload(false);
+    if (!isSameDocument) {
+      // Until the new document arrives the buffer still holds the previous one,
+      // whose edits were already given up by opening another file. Treat it as
+      // clean so opening the new one again meanwhile is not refused.
+      diskContentRef.current = contentRef.current;
+      // A save still in flight belongs to the previous document.
+      setSaving(false);
+      setSaveError(null);
+    }
     loadedDocumentKeyRef.current = documentKey;
     latestLoadIdRef.current += 1;
     const loadId = latestLoadIdRef.current;
@@ -181,6 +194,11 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
       return;
     }
 
+    // Another document may load while the write is in flight; it then owns the
+    // baseline, the notice and the save state, so a late answer must not touch them.
+    const saveLoadId = latestLoadIdRef.current;
+    const isStaleSave = () => latestLoadIdRef.current !== saveLoadId;
+
     setSaving(true);
     setSaveError(null);
 
@@ -205,6 +223,10 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
 
       await response.json();
 
+      if (isStaleSave()) {
+        return;
+      }
+
       // What was saved is now what is on disk, which makes the buffer clean and
       // the next reload harmless.
       diskContentRef.current = content;
@@ -214,9 +236,13 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     } catch (error) {
       const message = getErrorMessage(error);
       console.error('Error saving file:', error);
-      setSaveError(message);
+      if (!isStaleSave()) {
+        setSaveError(message);
+      }
     } finally {
-      setSaving(false);
+      if (!isStaleSave()) {
+        setSaving(false);
+      }
     }
   }, [content, filePath, fileProjectId, previewKind, fileName]);
 
