@@ -12,7 +12,7 @@
  */
 
 import { Codex } from '@openai/codex-sdk';
-import type { ModelReasoningEffort, Thread, ThreadOptions } from '@openai/codex-sdk';
+import type { CodexOptions, ModelReasoningEffort, Thread, ThreadOptions } from '@openai/codex-sdk';
 
 import {
   appendFilesInputTag,
@@ -37,6 +37,10 @@ const activeCodexSessions = new Map<string, ActiveCodexSession>();
 // Codex CLI requires non-whitespace stdin even when --image arguments are
 // present, so attachment-only turns need a small text instruction.
 const CODEX_IMAGE_ONLY_PROMPT = 'Please analyze the attached image(s).';
+
+const inheritedEnvironment = (): Record<string, string> => Object.fromEntries(
+  Object.entries(process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+);
 
 /**
  * Item types whose in-flight updates are worth showing. These are the ones a
@@ -308,7 +312,15 @@ async function queryCodex(
   const sessionKey = () => sessionId || capturedSessionId || null;
 
   try {
-    codex = new Codex();
+    const runtimeProfile = context.runtimeProfile;
+    const codexOptions: CodexOptions = {};
+    if (runtimeProfile?.executable) {
+      codexOptions.codexPathOverride = runtimeProfile.executable;
+    }
+    if (runtimeProfile && Object.keys(runtimeProfile.env).length > 0) {
+      codexOptions.env = { ...inheritedEnvironment(), ...runtimeProfile.env };
+    }
+    codex = new Codex(codexOptions);
 
     const threadOptions: ThreadOptions = {
       workingDirectory,

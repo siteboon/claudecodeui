@@ -366,6 +366,7 @@ export const api = {
   // Provider (coding agent) endpoints — models, capabilities, sessions, MCP, skills.
   providers: {
     capabilities: () => get('/api/providers/capabilities'),
+    runtimeProfiles: () => get('/api/providers/runtime-profiles'),
     authStatus: (provider: string) =>
       get(`/api/providers/${encodeURIComponent(provider)}/auth/status`),
 
@@ -381,6 +382,7 @@ export const api = {
       provider: string;
       projectPath: string;
       initialMessage?: unknown;
+      runtimeProfileId?: string;
     }) => post('/api/providers/sessions', payload),
     sessionMessages: (
       sessionId: string,

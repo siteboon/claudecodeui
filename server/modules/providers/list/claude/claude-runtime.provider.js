@@ -221,19 +221,25 @@ function matchesToolPermission(entry, toolName, input) {
 }
 
 function mapCliOptionsToSDK(options = {}) {
-  const { providerSessionId, cwd, toolsSettings, permissionMode, effort, resumeAnchorId, resumeFromScratch } = options;
+  const { providerSessionId, cwd, toolsSettings, permissionMode, effort, resumeAnchorId, resumeFromScratch, runtimeProfile } = options;
 
   const sdkOptions = {};
 
   // Forward all host env vars (e.g. ANTHROPIC_BASE_URL) to the subprocess.
   // Since SDK 0.2.113, options.env replaces process.env instead of overlaying it.
-  sdkOptions.env = { ...process.env, CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: String(BG_WAIT_CEILING_MS) };
+  sdkOptions.env = {
+    ...process.env,
+    ...(runtimeProfile?.env || {}),
+    CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: String(BG_WAIT_CEILING_MS),
+  };
 
   // Resolve the executable eagerly on Windows because the SDK uses raw child_process.spawn,
   // which does not reliably follow npm's shell wrappers like cross-spawn does.
   // When nothing resolves the option stays unset on purpose: the SDK then falls back to the
   // binary it ships, which beats handing it a bare `claude` that raw spawn can never launch.
-  const claudeExecutablePath = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
+  const claudeExecutablePath = resolveClaudeCodeExecutablePath(
+    runtimeProfile?.executable || process.env.CLAUDE_CLI_PATH,
+  );
   if (claudeExecutablePath) {
     sdkOptions.pathToClaudeCodeExecutable = claudeExecutablePath;
   }
@@ -945,6 +951,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       providerSessionId,
       model: resolvedModel || options.model,
       effortModels,
+      runtimeProfile: context.runtimeProfile,
     });
 
     const mcpServers = await loadMcpConfig(options.cwd);
