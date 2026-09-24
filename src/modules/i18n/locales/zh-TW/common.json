@@ -264,7 +264,8 @@
       "showSidebar": "顯示側邊欄",
       "settings": "設定",
       "updateAvailable": "有可用更新",
-      "closeSidebar": "關閉側邊欄"
+      "closeSidebar": "關閉側邊欄",
+      "resizeSidebar": "調整側邊欄寬度"
     }
   }
 }

@@ -264,7 +264,8 @@
       "showSidebar": "Mostrar barra lateral",
       "settings": "Ajustes",
       "updateAvailable": "Actualización disponible",
-      "closeSidebar": "Cerrar barra lateral"
+      "closeSidebar": "Cerrar barra lateral",
+      "resizeSidebar": "Redimensionar barra lateral"
     }
   }
 }
