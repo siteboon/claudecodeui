@@ -227,14 +227,16 @@ test('a missing project directory is reported as an error frame and starts no pt
   );
 });
 
-type SpawnCall = { command: string; env: Record<string, string | undefined> };
+type SpawnCall = { shell: string; args: string[]; command: string; env: Record<string, string | undefined> };
 
 function spawnRecorder(resumeSessionId: string | null = null) {
   const calls: SpawnCall[] = [];
   const dependencies = {
     resolveProviderSessionId: () => resumeSessionId,
-    spawnPty: (_shell: string, args: string | string[], options?: { env?: Record<string, string | undefined> }) => {
+    spawnPty: (shell: string, args: string | string[], options?: { env?: Record<string, string | undefined> }) => {
       calls.push({
+        shell,
+        args: Array.isArray(args) ? args : [args],
         command: Array.isArray(args) ? args[args.length - 1] : args,
         env: options?.env ?? {},
       });
@@ -269,23 +271,32 @@ function launch(
 
 type ClaudeConfigFixture = {
   configHome: string;
+  home: string;
   projectPath: string;
   write: (filePath: string, contents: unknown) => void;
 };
 
 /**
  * Runs `body` against a throwaway CLAUDE_CONFIG_DIR, HOME and project folder,
- * so the user's real Claude config never leaks into (or out of) the tests.
+ * so the user's real Claude config and app data folder never leak into (or
+ * out of) the tests. `homeName` names the HOME folder, to test awkward paths.
  */
-function withClaudeConfig(body: (fixture: ClaudeConfigFixture) => void) {
+function withClaudeConfig(body: (fixture: ClaudeConfigFixture) => void, homeName = 'home') {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-claude-theme-'));
   const configHome = path.join(root, 'config');
+  const home = path.join(root, homeName);
   const projectPath = path.join(root, 'project');
   fs.mkdirSync(configHome, { recursive: true });
   fs.mkdirSync(projectPath, { recursive: true });
-  const savedEnv = { CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR, HOME: process.env.HOME };
+  const savedEnv = {
+    CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR,
+    HOME: process.env.HOME,
+    USERPROFILE: process.env.USERPROFILE,
+  };
   process.env.CLAUDE_CONFIG_DIR = configHome;
-  process.env.HOME = path.join(root, 'home');
+  // os.homedir() reads HOME on POSIX and USERPROFILE on Windows.
+  process.env.HOME = home;
+  process.env.USERPROFILE = home;
 
   const write = (filePath: string, contents: unknown) => {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -293,7 +304,7 @@ function withClaudeConfig(body: (fixture: ClaudeConfigFixture) => void) {
   };
 
   try {
-    body({ configHome, projectPath, write });
+    body({ configHome, home, projectPath, write });
   } finally {
     for (const [key, value] of Object.entries(savedEnv)) {
       if (value === undefined) {
@@ -306,12 +317,16 @@ function withClaudeConfig(body: (fixture: ClaudeConfigFixture) => void) {
   }
 }
 
-const themeFlag = (theme: string) => ` --settings '{"theme":"${theme}"}'`;
+// The server-owned settings file a light launch points `--settings` at. The
+// default fixture HOME has no quote in it, so bash quoting is a plain wrap.
+const themeSettingsPath = (theme: string) =>
+  path.join(os.homedir(), '.cloudcli', `claude-shell-theme-${theme}.json`);
+const themeFlag = (theme: string) => ` --settings '${themeSettingsPath(theme)}'`;
 
 // The flag outranks the user's own settings, so a dark Shell tab must not send
 // one: it would turn a daltonized or ANSI theme back into the plain dark one.
 test('a dark Shell tab launches claude exactly as before, whatever the user theme is', () => {
-  withClaudeConfig(({ configHome, projectPath, write }) => {
+  withClaudeConfig(({ configHome, home, projectPath, write }) => {
     write(path.join(configHome, 'settings.json'), { theme: 'dark-daltonized' });
     const { calls, dependencies } = spawnRecorder('resumed-session-id');
 
@@ -336,6 +351,7 @@ test('a dark Shell tab launches claude exactly as before, whatever the user them
     assert.equal(calls[0].env.COLORFGBG, '15;0');
     assert.equal(calls[3].env.COLORFGBG, process.env.COLORFGBG);
     assert.equal(calls[4].env.COLORFGBG, process.env.COLORFGBG);
+    assert.equal(fs.existsSync(path.join(home, '.cloudcli')), false, 'a dark launch writes no file');
   });
 });
 
@@ -362,6 +378,9 @@ test('a light Shell tab swaps a dark Claude theme for its light variant', () => 
       if (os.platform() !== 'win32') {
         assert.equal(calls[0].command, `claude${themeFlag(expectedTheme)}`, `user theme ${userTheme}`);
       }
+      assert.deepEqual(JSON.parse(fs.readFileSync(themeSettingsPath(expectedTheme), 'utf8')), {
+        theme: expectedTheme,
+      });
       assert.equal(calls[0].env.COLORFGBG, '0;15');
     });
   }
@@ -463,6 +482,91 @@ test('the light theme rides along with bypass and resume launches', () => {
       const flags = ` --dangerously-skip-permissions${themeFlag('light')}`;
       assert.equal(calls[0].command, `claude --resume "resumed-session-id"${flags} || claude${flags}`);
     }
+  });
+});
+
+// The file lives in the app's own data folder: the user's Claude config and
+// the project are only ever read.
+test('the light theme settings file is written once to the app data folder', () => {
+  withClaudeConfig(({ configHome, home, projectPath, write }) => {
+    write(path.join(configHome, 'settings.json'), { theme: 'dark-daltonized' });
+    const configBefore = fs.readdirSync(configHome).sort();
+    const settingsPath = path.join(home, '.cloudcli', 'claude-shell-theme-light-daltonized.json');
+    const { calls, dependencies } = spawnRecorder();
+
+    launch(dependencies, { provider: 'claude', colorScheme: 'light' }, projectPath);
+    assert.equal(fs.readFileSync(settingsPath, 'utf8'), '{"theme":"light-daltonized"}\n');
+
+    // Unchanged contents are not rewritten.
+    const past = new Date('2020-01-01T00:00:00Z');
+    fs.utimesSync(settingsPath, past, past);
+    launch(dependencies, { provider: 'claude', colorScheme: 'light' }, projectPath);
+    assert.equal(fs.statSync(settingsPath).mtimeMs, past.getTime());
+
+    // Stale contents are replaced.
+    fs.writeFileSync(settingsPath, '{"theme":"dark"}');
+    launch(dependencies, { provider: 'claude', colorScheme: 'light' }, projectPath);
+    assert.equal(fs.readFileSync(settingsPath, 'utf8'), '{"theme":"light-daltonized"}\n');
+
+    assert.equal(calls.length, 3);
+    assert.deepEqual(fs.readdirSync(path.join(home, '.cloudcli')), ['claude-shell-theme-light-daltonized.json']);
+    assert.deepEqual(fs.readdirSync(configHome).sort(), configBefore);
+    assert.equal(fs.existsSync(path.join(projectPath, '.claude')), false);
+  });
+});
+
+// Windows runs the command through `powershell.exe -Command`, which is why the
+// theme travels as a file path: PowerShell strips the double quotes of inline
+// JSON when it hands an argument to a native program.
+test('the settings file path is quoted for bash and for PowerShell', (t) => {
+  withClaudeConfig(({ home, projectPath }) => {
+    const settingsPath = path.join(home, '.cloudcli', 'claude-shell-theme-light.json');
+    const { calls, dependencies } = spawnRecorder('resumed-session-id');
+
+    launch(dependencies, { provider: 'claude', colorScheme: 'light' }, projectPath);
+    launch(dependencies, { provider: 'claude', colorScheme: 'light', hasSession: true }, projectPath);
+    t.mock.method(os, 'platform', () => 'win32');
+    launch(dependencies, { provider: 'claude', colorScheme: 'light' }, projectPath);
+    launch(dependencies, { provider: 'claude', colorScheme: 'light', hasSession: true }, projectPath);
+
+    const bashFlag = ` --settings '${settingsPath.replace(/'/g, `'\\''`)}'`;
+    const powerShellFlag = ` --settings '${settingsPath.replace(/['\u2019]/g, '$&$&')}'`;
+    assert.ok(settingsPath.includes("it's a \u2019quoted\u2019 home"), settingsPath);
+    assert.deepEqual(calls.map((call) => [call.shell, ...call.args]), [
+      ['bash', '-c', `claude${bashFlag}`],
+      ['bash', '-c', `claude --resume "resumed-session-id"${bashFlag} || claude${bashFlag}`],
+      ['powershell.exe', '-Command', `claude${powerShellFlag}`],
+      [
+        'powershell.exe',
+        '-Command',
+        `claude --resume "resumed-session-id"${powerShellFlag}; if ($LASTEXITCODE -ne 0) { claude${powerShellFlag} }`,
+      ],
+    ]);
+    // Spelled out once, so the escaping above is not only checked against itself.
+    assert.ok(calls[0].command.endsWith(`/it'\\''s a \u2019quoted\u2019 home/.cloudcli/claude-shell-theme-light.json'`));
+    assert.ok(calls[2].command.endsWith(`/it''s a \u2019\u2019quoted\u2019\u2019 home/.cloudcli/claude-shell-theme-light.json'`));
+    assert.deepEqual(JSON.parse(fs.readFileSync(settingsPath, 'utf8')), { theme: 'light' });
+  }, "it's a \u2019quoted\u2019 home");
+});
+
+test('a settings file that cannot be written drops the flag, logs once and still launches', (t) => {
+  withClaudeConfig(({ home, projectPath, write }) => {
+    // A file where the app data folder should be makes every write fail.
+    write(path.join(home, '.cloudcli'), 'not a folder');
+    const warn = t.mock.method(console, 'warn', () => undefined);
+    const { calls, dependencies } = spawnRecorder();
+
+    const firstSocket = launch(dependencies, { provider: 'claude', colorScheme: 'light' }, projectPath);
+    const secondSocket = launch(dependencies, { provider: 'claude', colorScheme: 'light' }, projectPath);
+
+    assert.deepEqual(calls.map((call) => call.command), ['claude', 'claude']);
+    assert.deepEqual(calls.map((call) => call.env.COLORFGBG), ['0;15', '0;15']);
+    for (const socket of [firstSocket, secondSocket]) {
+      const frames = socket.frames.map((frame) => JSON.parse(frame) as { type: string });
+      assert.deepEqual(frames.map((frame) => frame.type), ['output']);
+    }
+    assert.equal(warn.mock.callCount(), 1);
+    assert.match(String(warn.mock.calls[0].arguments[0]), /Claude theme settings file/);
   });
 });
 

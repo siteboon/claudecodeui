@@ -307,20 +307,78 @@ function resolveClaudeTheme(projectPath: string): string {
   return 'dark';
 }
 
+let hasLoggedThemeSettingsFileError = false;
+
+/**
+ * Returns a settings file that holds only `{"theme": theme}`, writing it when
+ * it is missing or differs. It lives in the app's own data folder
+ * (`~/.cloudcli`, like the chat assets); the user's Claude config is never
+ * written. The write goes through a temp file and a rename, so a CLI starting
+ * at the same time never reads half a file. Returns null, and logs once, when
+ * the file cannot be written (a read-only home, say): the launch then simply
+ * goes ahead without a theme.
+ */
+function ensureClaudeThemeSettingsFile(theme: string): string | null {
+  const contents = `${JSON.stringify({ theme })}\n`;
+  let tempPath: string | null = null;
+  try {
+    const filePath = path.join(os.homedir(), '.cloudcli', `claude-shell-theme-${theme}.json`);
+    let currentContents: string | null = null;
+    try {
+      currentContents = fs.readFileSync(filePath, 'utf8');
+    } catch {
+      // Missing or unreadable: (re)write it below.
+    }
+    if (currentContents !== contents) {
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      tempPath = `${filePath}.${process.pid}.tmp`;
+      fs.writeFileSync(tempPath, contents);
+      fs.renameSync(tempPath, filePath);
+    }
+    return filePath;
+  } catch (error) {
+    if (tempPath) {
+      // Asynchronous and unchecked: cleaning up must not throw into the launch.
+      fs.rm(tempPath, { force: true }, () => undefined);
+    }
+    if (!hasLoggedThemeSettingsFileError) {
+      hasLoggedThemeSettingsFileError = true;
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[WARN] Shell: cannot write the Claude theme settings file, launching without it: ${message}`);
+    }
+    return null;
+  }
+}
+
+/**
+ * Quotes one argument for the shell that runs the launch command. bash takes
+ * everything between single quotes literally, so a `'` closes the quote, adds
+ * an escaped one and reopens it. PowerShell (win32) single quotes are literal
+ * too, backslashes included; a quote is doubled, and PowerShell also treats
+ * the typographic single quotes as quote characters.
+ */
+function quoteShellArgument(value: string): string {
+  if (os.platform() === 'win32') {
+    return `'${value.replace(/['\u2018\u2019\u201A\u201B]/g, '$&$&')}'`;
+  }
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
 /**
  * Claude Code paints its own colours in its own theme, dark by default, so in
  * a light Shell tab its prompt rows became dark bands. Only a light tab gets a
  * flag, and only when the user's theme is a dark one: it is swapped for the
- * matching light variant. `--settings` applies it to this launch only; no
- * config file is written. Skipped on Windows, where the command runs through
- * PowerShell and inline JSON quoting is not reliable.
+ * matching light variant. `--settings` applies it to this launch only. It is
+ * given a file path rather than inline JSON because PowerShell strips the
+ * JSON's double quotes when it passes an argument to a native program.
  */
 function buildClaudeThemeFlag(colorScheme: ShellColorScheme | null, projectPath: string): string {
-  if (colorScheme !== 'light' || os.platform() === 'win32') {
+  if (colorScheme !== 'light') {
     return '';
   }
   const lightTheme = LIGHT_CLAUDE_THEME_BY_DARK_THEME.get(resolveClaudeTheme(projectPath));
-  return lightTheme ? ` --settings '{"theme":"${lightTheme}"}'` : '';
+  const settingsPath = lightTheme ? ensureClaudeThemeSettingsFile(lightTheme) : null;
+  return settingsPath ? ` --settings ${quoteShellArgument(settingsPath)}` : '';
 }
 
 function readEnvValue(env: NodeJS.ProcessEnv, key: string): string | undefined {
