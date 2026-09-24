@@ -65,7 +65,7 @@ const isSkillCommand = (command: SlashCommand) =>
 // menu inserts it into the input exactly like a skill, instead of routing
 // through the execute endpoint (whose resubmission loop a native command
 // would spin forever).
-const isCliNativeCommand = (command: SlashCommand) =>
+export const isCliNativeCommand = (command: SlashCommand) =>
   command.namespace === 'cli' || command.type === 'cli';
 
 const dedupeProviderSkills = (skills: ProviderSkill[]): ProviderSkill[] => {
