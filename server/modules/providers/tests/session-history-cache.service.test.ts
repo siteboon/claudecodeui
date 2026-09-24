@@ -163,3 +163,39 @@ test('invalidating a session re-parses its unchanged transcript on the next read
     assert.equal(second?.messages[0]?.content, 'load-2');
   });
 });
+
+test('a load already running when the session is invalidated is neither cached nor joined', async () => {
+  await withTranscriptFile(async (transcriptPath) => {
+    const cache = createSessionHistoryCache();
+    let loads = 0;
+    let markStarted: (() => void) | undefined;
+    const firstLoadStarted = new Promise<void>((resolve) => { markStarted = resolve; });
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const loadFull = async () => {
+      loads += 1;
+      const marker = `load-${loads}`;
+      if (loads === 1) {
+        markStarted!();
+        await gate;
+      }
+      return historyResult(marker);
+    };
+
+    // Codex's runtime stores a prompt the rollout lacks and then invalidates,
+    // without touching the file: a load that read the store before that write
+    // has the same stat as one that read it after.
+    const staleRequest = cache.getFullHistory({ sessionId: 's1', transcriptPath, loadFull });
+    await firstLoadStarted;
+    cache.invalidate('s1');
+    const freshRequest = cache.getFullHistory({ sessionId: 's1', transcriptPath, loadFull });
+    release!();
+    const [stale, fresh] = await Promise.all([staleRequest, freshRequest]);
+    const next = await cache.getFullHistory({ sessionId: 's1', transcriptPath, loadFull });
+
+    assert.equal(stale?.messages[0]?.content, 'load-1');
+    assert.equal(fresh?.messages[0]?.content, 'load-2');
+    assert.equal(next?.messages[0]?.content, 'load-2');
+    assert.equal(loads, 2);
+  });
+});
