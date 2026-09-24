@@ -45,6 +45,7 @@ const conversation = (
 const makeActions = (overrides: Partial<SessionRowActions> = {}): SessionRowActions => ({
   activeRename: null,
   activeSessions: new Set<string>(),
+  backgroundSessionIds: new Set<string>(),
   attentionSessionIds: new Set<string>(),
   onRenameDraftChange: noop,
   onStartEditingSession: noop,
@@ -129,6 +130,22 @@ test('a running session is marked processing and shows a spinner instead of its 
   assert.equal(recordedOptionsProps[1].isProcessing, false);
   assert.equal(container.querySelectorAll('.animate-spin').length, 1);
   assert.equal(container.querySelectorAll('time').length, 1);
+});
+
+test('a session with only background work running gets the purple dot, not the spinner, and is not processing', () => {
+  // Its turn has ended: the row's destructive actions stay available and
+  // nothing spins, but the session still counts as running and says so.
+  const { container } = renderList(
+    [conversation('s1'), conversation('s2')],
+    makeActions({ activeSessions: new Set(['s1']), backgroundSessionIds: new Set(['s1']) }),
+  );
+
+  assert.equal(recordedOptionsProps[0].isProcessing, false);
+  assert.equal(container.querySelectorAll('.animate-spin').length, 0);
+  const dots = container.querySelectorAll('[role="status"].bg-purple-500');
+  assert.equal(dots.length, 1);
+  assert.equal(dots[0].getAttribute('aria-label'), 'tooltips.backgroundWorkIndicator');
+  assert.equal(container.querySelectorAll('time').length, 1, 'the other row shows its age');
 });
 
 test('a session needing attention gets the amber dot', () => {

@@ -123,6 +123,7 @@
   "search": {
     "modeProjects": "Проекты",
     "modeConversations": "Разговоры",
+    "modeMore": "Ещё",
     "conversationsPlaceholder": "Поиск в разговорах...",
     "searching": "Поиск...",
     "sessionTitles": "Названия сеансов",

@@ -24,7 +24,11 @@ const { disk, readFile, saveFile } = vi.hoisted(() => ({
   saveFile: vi.fn(),
 }));
 
-vi.mock('@/shared/api', () => ({ api: { readFile, saveFile } }));
+// Partial mock: the hook parses reads with the real readApiJson.
+vi.mock('@/shared/api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  api: { readFile, saveFile },
+}));
 
 const { useCodeEditorDocument } = await import('@/modules/code-editor/hooks/useCodeEditorDocument');
 const { default: CodeEditorHeader } = await import('@/modules/code-editor/CodeEditorHeader');
