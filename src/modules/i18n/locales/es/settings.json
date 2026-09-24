@@ -157,6 +157,13 @@
       "alphabetical": "Alfabético",
       "recentActivity": "Actividad reciente"
     },
+    "chatContent": {
+      "title": "Contenido del chat",
+      "fontSize": {
+        "label": "Tamaño del texto",
+        "description": "Ajusta el texto, las fórmulas y el contenido de las tablas del chat"
+      }
+    },
     "codeEditor": {
       "title": "Editor de código",
       "theme": {

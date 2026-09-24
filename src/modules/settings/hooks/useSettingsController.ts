@@ -2,7 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useTheme } from '@/shared/context/ThemeContext';
 import { api } from '@/shared/api';
-import { setNotificationSoundEnabled } from '@/shared/utils';
+import {
+  persistChatBodyFontSize,
+  readChatBodyFontSize,
+  setNotificationSoundEnabled,
+} from '@/shared/utils';
 import {
   readCodeEditorSettings,
   writeCodeEditorSettings,
@@ -129,6 +133,8 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
   const [codeEditorSettings, setCodeEditorSettings] = useState<CodeEditorSettingsState>(() => (
     readCodeEditorSettings()
   ));
+  // Mirrors the applied reading size so the appearance control updates immediately.
+  const [chatBodyFontSize, setChatBodyFontSize] = useState(readChatBodyFontSize);
 
   const [claudePermissions, setClaudePermissions] = useState<ClaudePermissionsState>(() => (
     createEmptyClaudePermissions()
@@ -282,6 +288,10 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     [],
   );
 
+  const updateChatBodyFontSize = useCallback((value: number) => {
+    setChatBodyFontSize(persistChatBodyFontSize(value));
+  }, []);
+
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -358,6 +368,8 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     saveStatus,
     projectSortOrder,
     setProjectSortOrder,
+    chatBodyFontSize,
+    updateChatBodyFontSize,
     codeEditorSettings,
     updateCodeEditorSetting,
     claudePermissions,

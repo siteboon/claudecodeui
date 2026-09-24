@@ -157,6 +157,13 @@
       "alphabetical": "按字母顺序",
       "recentActivity": "最近活动"
     },
+    "chatContent": {
+      "title": "聊天内容",
+      "fontSize": {
+        "label": "正文字号",
+        "description": "调整聊天正文、公式和表格内容的大小"
+      }
+    },
     "codeEditor": {
       "title": "代码编辑器",
       "theme": {
