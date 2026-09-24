@@ -1519,6 +1519,83 @@ test('an edited prompt replaces the one it superseded instead of stacking on it'
   }
 });
 
+test('background task notifications sharing a parent are not mistaken for an edit', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-task-notifications-'));
+  const sessionId = 'claude-task-notification-session';
+
+  try {
+    const transcriptPath = path.join(tempRoot, `${sessionId}.jsonl`);
+    // Claude Code delivers a background task's completion as a user row it
+    // wrote itself (`promptSource: "system"`), and a second task reporting
+    // later hangs off the same parent as the first. That is the exact shape
+    // of an edit — two prompts under one parent — except nobody edited
+    // anything, and everything the conversation did after the first notice
+    // descends from it.
+    const notification = (uuid: string, parentUuid: string, taskId: string, timestamp: string) => ({
+      type: 'user', uuid, parentUuid, sessionId, timestamp,
+      promptSource: 'system', origin: { kind: 'task-notification' },
+      message: { role: 'user', content: `<task-notification>\n<task-id>${taskId}</task-id>\n<status>completed</status>\n</task-notification>` },
+    });
+    const rows = [
+      {
+        type: 'user', uuid: 'q1', parentUuid: null, sessionId,
+        timestamp: '2026-09-24T10:00:00.000Z',
+        message: { role: 'user', content: [{ type: 'text', text: 'run two jobs in the background' }] },
+      },
+      {
+        type: 'assistant', uuid: 'qa1', parentUuid: 'q1', sessionId,
+        timestamp: '2026-09-24T10:00:01.000Z',
+        message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'both launched' }] },
+      },
+      notification('n1', 'qa1', 'job-1', '2026-09-24T10:05:00.000Z'),
+      {
+        type: 'assistant', uuid: 'qa2', parentUuid: 'n1', sessionId,
+        timestamp: '2026-09-24T10:05:01.000Z',
+        message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'job one is done, carrying on' }] },
+      },
+      {
+        type: 'user', uuid: 'q2', parentUuid: 'qa2', sessionId,
+        timestamp: '2026-09-24T10:06:00.000Z',
+        message: { role: 'user', content: [{ type: 'text', text: 'good, what did it find' }] },
+      },
+      {
+        type: 'assistant', uuid: 'qa3', parentUuid: 'q2', sessionId,
+        timestamp: '2026-09-24T10:06:01.000Z',
+        message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'it found three things' }] },
+      },
+      // The second task reports back onto the same parent as the first.
+      notification('n2', 'qa1', 'job-2', '2026-09-24T10:30:00.000Z'),
+      {
+        type: 'assistant', uuid: 'qa4', parentUuid: 'n2', sessionId,
+        timestamp: '2026-09-24T10:30:01.000Z',
+        message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'job two is done as well' }] },
+      },
+    ];
+    await writeFile(transcriptPath, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(sessionId, 'claude', tempRoot, 'Task notification session', now, now, transcriptPath);
+
+      const history = await new ClaudeSessionsProvider().fetchHistory(sessionId, { providerSessionId: sessionId });
+      const texts = history.messages.map((message) => message.content);
+
+      // Nothing under the first notification was abandoned: the answer to it,
+      // the user's follow-up and its answer all stay, in order, ahead of the
+      // second task's report.
+      for (const expected of ['job one is done, carrying on', 'good, what did it find', 'it found three things', 'job two is done as well']) {
+        assert.ok(texts.includes(expected), `history must keep "${expected}", got ${JSON.stringify(texts)}`);
+      }
+      assert.ok(
+        texts.indexOf('it found three things') < texts.indexOf('job two is done as well'),
+        'the conversation after the first notice comes before the second task\'s report',
+      );
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('parallel tool calls are not mistaken for an edit', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-parallel-tools-'));
   const sessionId = 'claude-parallel-session';

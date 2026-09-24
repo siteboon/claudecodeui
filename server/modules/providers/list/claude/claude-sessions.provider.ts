@@ -490,9 +490,17 @@ async function readTranscriptRows(jsonlPath: string, providerSessionId: string):
   return rows;
 }
 
-/** True for a row the user typed, as opposed to a tool result or an injected note. */
+/**
+ * True for a row the user typed, as opposed to a tool result or an injected note.
+ *
+ * Rows the system injects are user rows only in shape: a background task's
+ * `<task-notification>`, a queued peer message. Claude Code stamps them
+ * `promptSource: "system"`, and it commonly writes two of them under the same
+ * parent — which is not an edit, and must not read as one (see
+ * dropSupersededPromptBranches).
+ */
 function isUserPromptRow(row: AnyRecord): boolean {
-  if (row.type !== 'user' || row.isMeta === true || row.isCompactSummary === true) {
+  if (row.type !== 'user' || row.isMeta === true || row.isCompactSummary === true || row.promptSource === 'system') {
     return false;
   }
 
