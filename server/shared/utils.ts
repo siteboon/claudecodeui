@@ -469,6 +469,65 @@ export function createCompleteMessage(opts: {
   });
 }
 
+/**
+ * Collects the assistant's replies from the live events of one provider run,
+ * each as a `kind: 'text'`, `role: 'assistant'` message.
+ *
+ * Runtimes deliver assistant prose in one of two ways:
+ * - Claude and Codex emit a final `text` row per assistant message.
+ * - Cursor and OpenCode emit only `stream_delta` chunks; OpenCode closes each
+ *   step with `stream_end`, Cursor never does.
+ *
+ * Final rows win: when the run produced any, its deltas are ignored, so a
+ * runtime that streams partials ahead of its final row is never counted twice.
+ * Otherwise consecutive chunks are concatenated as-is (a chunk may be a partial
+ * word, so no separator is added) into one reply per unbroken run of deltas. A
+ * run ends at `stream_end` or at any other event, such as a `tool_use`; the
+ * chat instead keeps one bubble open until `stream_end` or `complete`, so text
+ * on both sides of a tool call is one bubble there but two replies here. Each
+ * reply keeps its first chunk's envelope (id, sessionId, timestamp, provider,
+ * seq), so its id matches that chunk's in the streamed output.
+ *
+ * `events` may hold anything a writer was sent; entries that are not
+ * normalized messages (the agent route's own `type` events, unparsed strings)
+ * are skipped. Used by the agent API's non-streaming response and the git
+ * module's commit-message generator: both run a provider headlessly and need
+ * only what it answered.
+ */
+export function collectAssistantReplies(events: readonly unknown[]): NormalizedMessage[] {
+  const finalReplies: NormalizedMessage[] = [];
+  const streamedReplies: NormalizedMessage[] = [];
+  let openStreamedReply: NormalizedMessage | null = null;
+
+  for (const event of events) {
+    const message = readObjectRecord(event) as NormalizedMessage | null;
+    if (!message || typeof message.kind !== 'string') {
+      continue;
+    }
+
+    if (message.kind === 'stream_delta') {
+      const chunk = typeof message.content === 'string' ? message.content : '';
+      if (!chunk) {
+        continue;
+      }
+      if (openStreamedReply) {
+        openStreamedReply.content += chunk;
+      } else {
+        openStreamedReply = { ...message, kind: 'text', role: 'assistant', content: chunk };
+        streamedReplies.push(openStreamedReply);
+      }
+      continue;
+    }
+
+    openStreamedReply = null;
+    if (message.kind === 'text' && message.role === 'assistant') {
+      finalReplies.push(message);
+    }
+  }
+
+  return finalReplies.length > 0 ? finalReplies : streamedReplies;
+}
+
 // ---------------------------
 //----------------- SUBAGENT TIMELINE UTILITIES ------------
 /**

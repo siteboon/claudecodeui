@@ -658,10 +658,12 @@ print(response.json())</code></pre>
 
                     <div class="example-block">
                         <h4>Streaming Response</h4>
-<pre><code class="language-javascript">data: {"type":"status","message":"Repository cloned"}
-data: {"type":"thinking","content":"Analyzing..."}
-data: {"type":"tool_use","tool":"read_file"}
-data: {"type":"content","content":"Done!"}
+<pre><code class="language-javascript">data: {"type":"status","message":"Session started","projectPath":"/path/to/project"}
+data: {"type":"session-id","sessionId":"abc123"}
+data: {"kind":"tool_use","toolName":"Read","sessionId":"abc123","provider":"claude",...}
+data: {"kind":"text","role":"assistant","content":"I've completed the task...","sessionId":"abc123","provider":"claude",...}
+data: {"kind":"status","text":"token_budget","tokenBudget":{"inputTokens":150,"outputTokens":50,...},"sessionId":"abc123",...}
+data: {"kind":"complete","exitCode":0,"success":true,"aborted":false,"sessionId":"abc123","provider":"claude",...}
 data: {"type":"done"}</code></pre>
                     </div>
 
@@ -672,20 +674,13 @@ data: {"type":"done"}</code></pre>
   "sessionId": "abc123",
   "messages": [
     {
-      "type": "assistant",
-      "message": {
-        "role": "assistant",
-        "content": [
-          {
-            "type": "text",
-            "text": "I've completed the task..."
-          }
-        ],
-        "usage": {
-          "input_tokens": 150,
-          "output_tokens": 50
-        }
-      }
+      "id": "msg_01_0",
+      "sessionId": "abc123",
+      "timestamp": "2026-01-01T12:00:00.000Z",
+      "provider": "claude",
+      "kind": "text",
+      "role": "assistant",
+      "content": "I've completed the task..."
     }
   ],
   "tokens": {

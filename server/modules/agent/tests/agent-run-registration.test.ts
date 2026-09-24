@@ -12,7 +12,7 @@ import express from 'express';
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import { chatRunRegistry, connectedClients } from '@/modules/websocket/index.js';
 import type { NormalizedMessage } from '@/shared/types.js';
-import { createNormalizedMessage } from '@/shared/utils.js';
+import { createCompleteMessage, createNormalizedMessage } from '@/shared/utils.js';
 
 import { createAgentRouter } from '../agent.routes.js';
 
@@ -49,7 +49,7 @@ async function withIsolatedDatabase(run: () => Promise<void>): Promise<void> {
   }
 }
 
-function createDependencies(queryClaude: RunFunction): AgentDependencies {
+function createDependencies(queryClaude: RunFunction, overrides: Partial<AgentDependencies> = {}): AgentDependencies {
   const unexpected = async (): Promise<never> => { throw new Error('unexpected provider call'); };
   return {
     fileSystem: { access: async () => undefined } as unknown as AgentDependencies['fileSystem'],
@@ -77,6 +77,7 @@ function createDependencies(queryClaude: RunFunction): AgentDependencies {
     queryCodex: unexpected as RunFunction,
     queryOpenCode: unexpected as RunFunction,
     GithubClient: class {} as unknown as AgentDependencies['GithubClient'],
+    ...overrides,
   };
 }
 
@@ -343,6 +344,66 @@ test('a non-streaming run answers with the assistant\'s replies, its token usage
       assert.equal(body.providerSessionId, 'native-7');
       assert.deepEqual(body.messages.map((message) => message.content), ['pong']);
       assert.deepEqual(body.tokens, { inputTokens: 100, outputTokens: 30, cacheReadTokens: 60, cacheCreationTokens: 10, totalTokens: 130 });
+    });
+  });
+});
+
+// Cursor and OpenCode never emit a final `text` row: their normalizers turn
+// prose into `stream_delta` chunks only (shapes copied from the runtimes and
+// normalizers), so a collector that kept `text` rows answered `[]`. The OpenCode
+// case covers the normalizer's output shape; with opencode 1.18.25 no prose
+// reaches the writer yet, because its live events nest the text in `part`.
+test('a non-streaming Cursor run answers with the reply its deltas carried', async () => {
+  await withIsolatedDatabase(async () => {
+    const unusedClaude: RunFunction = async () => { throw new Error('unexpected provider call'); };
+    const dependencies = createDependencies(unusedClaude, {
+      queryCursor: async (_command, _options, writer) => {
+        writer.send(createNormalizedMessage({ kind: 'session_created', newSessionId: 'cursor-native', model: 'gpt-5', cwd: '/home/test/project', sessionId: 'cursor-native', provider: 'cursor' }));
+        writer.send(createNormalizedMessage({ kind: 'stream_delta', content: 'The file says', sessionId: 'cursor-native', provider: 'cursor' }));
+        writer.send(createNormalizedMessage({ kind: 'stream_delta', content: ' hello.', sessionId: 'cursor-native', provider: 'cursor' }));
+        writer.send(createCompleteMessage({ provider: 'cursor', sessionId: 'cursor-native', exitCode: 0 }));
+      },
+    });
+    await withAgentServer(dependencies, async (baseUrl) => {
+      const response = await post(baseUrl, { projectPath: '/home/test/project', provider: 'cursor', message: 'What does it say?', stream: false });
+      const body = await response.json() as { success: boolean; sessionId: string; messages: Array<Record<string, unknown>>; tokens: Record<string, number> };
+      assert.equal(body.success, true);
+      assert.equal(body.messages.length, 1);
+      assert.equal(body.messages[0]?.kind, 'text');
+      assert.equal(body.messages[0]?.role, 'assistant');
+      assert.equal(body.messages[0]?.content, 'The file says hello.');
+      assert.equal(body.messages[0]?.sessionId, body.sessionId);
+      // Cursor reports no usage.
+      assert.deepEqual(body.tokens, { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, totalTokens: 0 });
+    });
+  });
+});
+
+test('a non-streaming OpenCode run answers with one reply per step and the usage it reported', async () => {
+  await withIsolatedDatabase(async () => {
+    const unusedClaude: RunFunction = async () => { throw new Error('unexpected provider call'); };
+    const dependencies = createDependencies(unusedClaude, {
+      queryOpenCode: async (_command, _options, writer) => {
+        const sessionId = 'ses_native';
+        writer.send(createNormalizedMessage({ kind: 'session_created', newSessionId: sessionId, sessionId, provider: 'opencode' }));
+        writer.send(createNormalizedMessage({ kind: 'stream_delta', content: 'Reading a.txt.', sessionId, provider: 'opencode' }));
+        writer.send(createNormalizedMessage({ kind: 'stream_end', sessionId, provider: 'opencode' }));
+        writer.send(createNormalizedMessage({ kind: 'tool_use', toolName: 'read', toolInput: { filePath: 'a.txt' }, toolId: 'call_1', sessionId, provider: 'opencode' }));
+        writer.send(createNormalizedMessage({ kind: 'stream_delta', content: 'It says hello.', sessionId, provider: 'opencode' }));
+        writer.send(createNormalizedMessage({ kind: 'stream_end', sessionId, provider: 'opencode' }));
+        writer.send(createNormalizedMessage({
+          kind: 'status', text: 'token_budget', sessionId, provider: 'opencode',
+          tokenBudget: { used: 11513, inputTokens: 11509, outputTokens: 4, breakdown: { input: 11509, output: 4 } },
+        }));
+        writer.send(createCompleteMessage({ provider: 'opencode', sessionId, exitCode: 0 }));
+      },
+    });
+    await withAgentServer(dependencies, async (baseUrl) => {
+      const response = await post(baseUrl, { projectPath: '/home/test/project', provider: 'opencode', message: 'What does a.txt say?', stream: false });
+      const body = await response.json() as { success: boolean; messages: Array<{ content: string }>; tokens: Record<string, number> };
+      assert.equal(body.success, true);
+      assert.deepEqual(body.messages.map((message) => message.content), ['Reading a.txt.', 'It says hello.']);
+      assert.deepEqual(body.tokens, { inputTokens: 11509, outputTokens: 4, cacheReadTokens: 0, cacheCreationTokens: 0, totalTokens: 11513 });
     });
   });
 });

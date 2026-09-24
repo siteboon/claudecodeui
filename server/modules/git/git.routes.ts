@@ -4,7 +4,7 @@ import path from 'path';
 import express from 'express';
 
 import type { ProviderRunFunction } from '@/shared/types.js';
-import { AppError } from '@/shared/utils.js';
+import { AppError, collectAssistantReplies } from '@/shared/utils.js';
 
 // cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
 import { parseGitLogWithStats, parseGitStatusOutput } from './git-parsing.service.js';
@@ -1045,39 +1045,13 @@ ${diffContext.substring(0, 4000)}
 Generate the commit message:`;
 
   try {
-    // Create a simple writer that collects the response
-    let responseText = '';
+    // Create a simple writer that collects the run's normalized events. The
+    // runtimes send objects; a string is parsed in case a writer forwards JSON.
+    const events = [];
     const writer = {
       send: (data) => {
         try {
-          const parsed = typeof data === 'string' ? JSON.parse(data) : data;
-          console.log('🔍 Writer received message type:', parsed.type);
-
-          // Handle different message formats from Claude SDK and Cursor CLI
-          // Claude SDK sends: {type: 'claude-response', data: {message: {content: [...]}}}
-          if (parsed.type === 'claude-response' && parsed.data) {
-            const message = parsed.data.message || parsed.data;
-            console.log('📦 Claude response message:', JSON.stringify(message, null, 2).substring(0, 500));
-            if (message.content && Array.isArray(message.content)) {
-              // Extract text from content array
-              for (const item of message.content) {
-                if (item.type === 'text' && item.text) {
-                  console.log('✅ Extracted text chunk:', item.text.substring(0, 100));
-                  responseText += item.text;
-                }
-              }
-            }
-          }
-          // Cursor CLI sends: {type: 'cursor-output', output: '...'}
-          else if (parsed.type === 'cursor-output' && parsed.output) {
-            console.log('✅ Cursor output:', parsed.output.substring(0, 100));
-            responseText += parsed.output;
-          }
-          // Also handle direct text messages
-          else if (parsed.type === 'text' && parsed.text) {
-            console.log('✅ Direct text:', parsed.text.substring(0, 100));
-            responseText += parsed.text;
-          }
+          events.push(typeof data === 'string' ? JSON.parse(data) : data);
         } catch (e) {
           // Ignore parse errors
           console.error('Error parsing writer data:', e);
@@ -1103,6 +1077,8 @@ Generate the commit message:`;
       }, writer);
     }
 
+    // Claude answers in `text` rows, Cursor in `stream_delta` chunks.
+    const responseText = collectAssistantReplies(events).map((reply) => reply.content).join('\n\n');
     console.log('📊 Total response text collected:', responseText.length, 'characters');
     console.log('📄 Response preview:', responseText.substring(0, 200));
 
@@ -1121,7 +1097,7 @@ Generate the commit message:`;
 /**
  * Cleans the AI-generated commit message by removing markdown, code blocks, and extra formatting
  * @param {string} text - Raw AI response
- * @returns {string} Clean commit message
+ * @returns {string} Clean commit message, or '' when the response holds no conventional-commit line
  */
 function cleanCommitMessage(text) {
   if (!text || !text.trim()) {
@@ -1146,10 +1122,16 @@ function cleanCommitMessage(text) {
 
   // Remove any explanatory text before the actual commit message
   // Look for conventional commit pattern and start from there
-  const conventionalCommitMatch = cleaned.match(/(feat|fix|docs|style|refactor|perf|test|build|ci|chore)(\(.+?\))?:.+/s);
-  if (conventionalCommitMatch) {
-    cleaned = cleaned.substring(cleaned.indexOf(conventionalCommitMatch[0]));
+  const conventionalCommitMatch = cleaned.match(/(feat|fix|docs|style|refactor|perf|test|build|ci|chore)(\(.+?\))?!?:.+/s);
+  if (!conventionalCommitMatch) {
+    // Not a commit message. Claude reports its own failures as ordinary
+    // assistant text ("Not logged in · Please run /login", usage limits, API
+    // errors) and Cursor forwards non-JSON stdout as reply chunks, so a reply
+    // with no conventional-commit line counts as no reply and the caller
+    // falls back.
+    return '';
   }
+  cleaned = cleaned.substring(cleaned.indexOf(conventionalCommitMatch[0]));
 
   return cleaned.trim();
 }

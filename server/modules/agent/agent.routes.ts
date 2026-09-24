@@ -5,7 +5,7 @@ import express from 'express';
 
 import type { ProviderRunFunction } from '@/shared/types.js';
 
-import { normalizeProjectPath } from '../../shared/utils.js';
+import { collectAssistantReplies, normalizeProjectPath } from '../../shared/utils.js';
 
 /** What the route reads off a session row it continues: the row, not the request, says which provider and project a session belongs to. */
 type AgentSessionRow = {
@@ -562,20 +562,20 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
     }
 
     /**
-     * The assistant's replies, as the normalized `text` events the run
-     * produced. (Earlier versions filtered a `claude-response` shape no
-     * runtime has emitted since the providers were unified, so this was
-     * always empty.)
+     * The assistant's replies as normalized `text` messages: the run's own
+     * `text` rows (Claude, Codex) or, for a runtime that only streams
+     * `stream_delta` chunks (Cursor, OpenCode), those chunks joined per reply.
      */
     getAssistantMessages() {
-      return this.messages.filter((msg) => msg && msg.kind === 'text' && msg.role === 'assistant');
+      return collectAssistantReplies(this.messages);
     }
 
     /**
-     * The run's token usage, from the last context-window report the
-     * runtime streamed (`status` / `token_budget`, which the Claude and Codex
-     * runtimes emit per assistant message); zeros for a runtime that
-     * reports none.
+     * The run's token usage, from the last `status` / `token_budget` report
+     * the runtime streamed: Claude sends one per assistant message (that
+     * request's context-window reading), Codex one per turn, OpenCode one
+     * when its process exits; zeros when the runtime forwards none (the Cursor
+     * runtime drops the usage on the CLI's `result` event).
      */
     getTotalTokens() {
       let budget = null;
@@ -790,7 +790,8 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
    *   Events:
    *     - { type: "status", message: "...", projectPath: "..." }
    *     - { type: "session-id", sessionId: "..." }   // the app session id, usable as `sessionId` later
-   *     - { kind: "text" | "tool_use" | ... , sessionId, seq, ... }   // the provider's normalized events
+   *     - { kind: "text" | "stream_delta" | "tool_use" | ... , sessionId, seq, ... }   // the provider's normalized events
+   *     - { kind: "status", text: "token_budget", tokenBudget: { inputTokens, outputTokens, ... } }   // usage, when the provider reports it
    *     - { kind: "complete", ... }
    *     - { type: "status", message: "Run aborted", aborted: true }   // only when a tab aborted the run; no branch/PR follows
    *     - { type: "github-branch", branch: { name: "...", url: "..." } }
@@ -804,7 +805,8 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
    *     success: true,          // false, with aborted: true, when a tab aborted the run
    *     sessionId: "session-123",          // the app session id; pass it back as `sessionId` to continue
    *     providerSessionId: "native-id",    // the provider's own id, for tooling that drives the CLI directly
-   *     messages: [...],        // The assistant's replies: the run's normalized `text` events
+   *     messages: [...],        // The assistant's replies as normalized `text` messages ({ id, kind: "text", role: "assistant", content, ... });
+   *                             // for Cursor and OpenCode, which only stream `stream_delta` chunks, the chunks joined per reply
    *     tokens: {
    *       inputTokens: 150,
    *       outputTokens: 50,
