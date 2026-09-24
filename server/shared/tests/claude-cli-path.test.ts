@@ -61,6 +61,41 @@ test('resolveClaudeCodeExecutablePath skips a PATH entry whose executable is mis
   assert.equal(resolved, undefined);
 });
 
+test('resolveClaudeCodeExecutablePath searches the current directory before PATH', () => {
+  // Windows command resolution checks the current directory first, and the
+  // previous where.exe lookup inherited that behavior; a claude.exe that only
+  // exists in the working directory must still be found.
+  const workingDirectory = 'C:\\work\\project';
+  const nativePath = `${workingDirectory}\\claude.exe`;
+
+  const resolved = resolveClaudeCodeExecutablePath(undefined, {
+    platform: 'win32',
+    currentWorkingDirectory: workingDirectory,
+    pathEnvironment: 'C:\\Windows\\System32',
+    existsSync: existsOnly(nativePath),
+    readFileSync: readNpmShim,
+  });
+
+  assert.equal(resolved, nativePath);
+});
+
+test('resolveClaudeCodeExecutablePath does not search the current directory twice', () => {
+  // A working directory that also appears on PATH must not be scanned twice;
+  // deduplication keeps the first occurrence only.
+  const workingDirectory = 'C:\\work\\project';
+  const nativePath = `${workingDirectory}\\claude.exe`;
+
+  const resolved = resolveClaudeCodeExecutablePath(undefined, {
+    platform: 'win32',
+    currentWorkingDirectory: workingDirectory,
+    pathEnvironment: `${workingDirectory};C:\\Windows\\System32`,
+    existsSync: existsOnly(nativePath),
+    readFileSync: readNpmShim,
+  });
+
+  assert.equal(resolved, nativePath);
+});
+
 test('resolveClaudeCodeExecutablePath keeps an explicit JavaScript launcher path unchanged', () => {
   const scriptPath = 'C:\\tools\\claude.js';
 

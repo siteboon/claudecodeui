@@ -14,12 +14,25 @@ const NATIVE_EXECUTABLE_EXTENSION = '.exe';
 const DEFAULT_PATH_EXTENSIONS = '.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC';
 
 export type ResolveClaudeCodeExecutablePathDependencies = {
+  currentWorkingDirectory?: string;
   existsSync?: typeof fs.existsSync;
   pathEnvironment?: string;
   pathExtensions?: string;
   platform?: NodeJS.Platform;
   readFileSync?: typeof fs.readFileSync;
 };
+
+/**
+ * `process.cwd()` throws when the directory the server was started from has
+ * since been deleted, which must not take the CLI lookup down with it.
+ */
+function safeCurrentWorkingDirectory(): string | undefined {
+  try {
+    return process.cwd();
+  } catch {
+    return undefined;
+  }
+}
 
 function getPathApi(platform: NodeJS.Platform): path.PlatformPath {
   return platform === 'win32' ? path.win32 : path;
@@ -41,14 +54,23 @@ function isPathLike(value: string): boolean {
 }
 
 /**
- * Splits PATH into absolute, quote-stripped directories, preserving order and
- * dropping duplicates so a repeated entry cannot shadow a later install.
+ * Builds the directory list to search, in Windows command-resolution order:
+ * the current directory first, then PATH — the same order `where.exe` and
+ * `cmd.exe` use. Entries are resolved to absolute, quote-stripped form, and
+ * duplicates are dropped so a repeated entry cannot shadow a later install.
  */
-function readPathEntries(pathEnvironment: string, pathApi: path.PlatformPath): string[] {
+function readSearchDirectories(
+  pathEnvironment: string,
+  currentWorkingDirectory: string | undefined,
+  pathApi: path.PlatformPath,
+): string[] {
+  const rawEntries = currentWorkingDirectory
+    ? [currentWorkingDirectory, ...pathEnvironment.split(pathApi.delimiter)]
+    : [...pathEnvironment.split(pathApi.delimiter)];
   const seen = new Set<string>();
   const entries: string[] = [];
 
-  for (const rawEntry of pathEnvironment.split(pathApi.delimiter)) {
+  for (const rawEntry of rawEntries) {
     const entry = stripWrappingQuotes(rawEntry);
     if (!entry) {
       continue;
@@ -103,7 +125,7 @@ function findClaudeCandidates(
   const candidates: string[] = [];
   const seen = new Set<string>();
 
-  for (const directory of readPathEntries(deps.pathEnvironment, pathApi)) {
+  for (const directory of readSearchDirectories(deps.pathEnvironment, deps.currentWorkingDirectory, pathApi)) {
     for (const extension of extensions) {
       const candidate = pathApi.join(directory, `${configuredPath}${extension}`);
       const key = candidate.toLowerCase();
@@ -218,6 +240,9 @@ export function resolveClaudeCodeExecutablePath(
   dependencies: ResolveClaudeCodeExecutablePathDependencies = {},
 ): string | undefined {
   const deps: Required<ResolveClaudeCodeExecutablePathDependencies> = {
+    // An empty string reads as "no current directory" in the search below,
+    // which is exactly what a deleted working directory should mean.
+    currentWorkingDirectory: dependencies.currentWorkingDirectory ?? safeCurrentWorkingDirectory() ?? '',
     existsSync: dependencies.existsSync ?? fs.existsSync,
     pathEnvironment: dependencies.pathEnvironment ?? process.env.PATH ?? '',
     pathExtensions: dependencies.pathExtensions ?? process.env.PATHEXT ?? DEFAULT_PATH_EXTENSIONS,
