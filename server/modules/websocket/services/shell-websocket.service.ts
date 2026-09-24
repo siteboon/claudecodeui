@@ -32,6 +32,10 @@ type PtySessionEntry = {
   timeoutId: NodeJS.Timeout | null;
   projectPath: string;
   sessionId: string | null;
+  // The app theme a Claude CLI in this pty was launched for; null for any other
+  // program. A running CLI keeps its launch-time colours, so a reattaching
+  // client needs this, not its own current theme, to know if they differ.
+  claudeColorScheme: ShellColorScheme | null;
 };
 
 const ptySessionsMap = new Map<string, PtySessionEntry>();
@@ -86,6 +90,17 @@ function extractUrlsFromText(value: string): string[] {
   }
 
   return Array.from(new Set([...directMatches, ...wrappedMatches]));
+}
+
+/**
+ * Tells the client which app theme the Claude CLI in its pty was launched for,
+ * so the Shell can suggest a restart once the app theme no longer matches it.
+ * Clients that predate this frame ignore unknown frame types.
+ */
+function sendClaudeColorScheme(ws: WebSocket, colorScheme: ShellColorScheme | null): void {
+  if (colorScheme && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'claude_theme', colorScheme }));
+  }
 }
 
 function shouldAutoOpenUrlFromOutput(value: string): boolean {
@@ -553,6 +568,7 @@ export function handleShellConnection(
           }
 
           existingSession.ws = ws;
+          sendClaudeColorScheme(ws, existingSession.claudeColorScheme);
           return;
         }
 
@@ -575,6 +591,14 @@ export function handleShellConnection(
 
         const shellCommand = buildShellCommand(data, dependencies, resolvedProjectPath);
         const resumeSessionId = resolveResumeSessionId(data, dependencies);
+        // Mirrors buildShellCommand, where every provider but cursor, codex and
+        // opencode starts claude: only a claude command the server builds
+        // itself (not a caller's initialCommand) is launched in the app theme.
+        const launchesThemedClaude =
+          !isPlainShell &&
+          !['cursor', 'codex', 'opencode'].includes(provider) &&
+          (!initialCommand || !!resumeSessionId);
+        const claudeColorScheme = launchesThemedClaude ? colorScheme : null;
         const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
         const shellArgs =
           os.platform() === 'win32' ? ['-Command', shellCommand] : ['-c', shellCommand];
@@ -607,6 +631,7 @@ export function handleShellConnection(
           timeoutId: null,
           projectPath,
           sessionId,
+          claudeColorScheme,
         });
 
         shellProcess.onData((chunk) => {
@@ -735,6 +760,7 @@ export function handleShellConnection(
             data: welcomeMsg,
           })
         );
+        sendClaudeColorScheme(ws, claudeColorScheme);
         return;
       }
 

@@ -33,6 +33,7 @@ type UseShellConnectionOptions = {
 type UseShellConnectionResult = {
   isConnected: boolean;
   isConnecting: boolean;
+  claudeLaunchColorScheme: 'light' | 'dark' | null;
   closeSocket: () => void;
   connectToShell: (options?: { forceRestart?: boolean }) => void;
   disconnectFromShell: (options?: { suppressAutoConnect?: boolean }) => void;
@@ -57,6 +58,10 @@ export function useShellConnection({
 }: UseShellConnectionOptions): UseShellConnectionResult {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  // The theme the server says the Claude CLI in this pty was launched for. Only
+  // the server knows it: a reconnect can reattach to a CLI started in another
+  // theme. Null when the pty runs anything else or no socket is open.
+  const [claudeLaunchColorScheme, setClaudeLaunchColorScheme] = useState<'light' | 'dark' | null>(null);
   const connectingRef = useRef(false);
   const forceRestartOnInitRef = useRef(false);
   const suppressAutoConnectRef = useRef(false);
@@ -114,6 +119,11 @@ export function useShellConnection({
           : 'Shell error';
         terminalRef.current?.write(`\r\n\x1b[31m${detail}\x1b[0m\r\n`);
         return;
+      }
+
+      if (message.type === 'claude_theme') {
+        const { colorScheme } = message;
+        setClaudeLaunchColorScheme(colorScheme === 'light' || colorScheme === 'dark' ? colorScheme : null);
       }
     },
     [handleProcessCompletion, onOutputRef, terminalRef],
@@ -183,6 +193,7 @@ export function useShellConnection({
         socket.onclose = () => {
           setIsConnected(false);
           setIsConnecting(false);
+          setClaudeLaunchColorScheme(null);
           connectingRef.current = false;
           clearTerminalScreen();
         };
@@ -237,6 +248,7 @@ export function useShellConnection({
     clearTerminalScreen();
     setIsConnected(false);
     setIsConnecting(false);
+    setClaudeLaunchColorScheme(null);
     connectingRef.current = false;
     forceRestartOnInitRef.current = false;
   }, [clearTerminalScreen, closeSocket]);
@@ -258,6 +270,7 @@ export function useShellConnection({
   return {
     isConnected,
     isConnecting,
+    claudeLaunchColorScheme,
     closeSocket,
     connectToShell,
     disconnectFromShell,

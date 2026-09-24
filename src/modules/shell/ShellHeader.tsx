@@ -1,4 +1,4 @@
-import { RotateCcw, Shield, ShieldOff, X } from 'lucide-react';
+import { Palette, RotateCcw, Shield, ShieldOff, X } from 'lucide-react';
 
 type ShellHeaderProps = {
   isConnected: boolean;
@@ -11,6 +11,8 @@ type ShellHeaderProps = {
   statusNewSessionText: string;
   statusInitializingText: string;
   statusRestartingText: string;
+  showThemeRestartHint: boolean;
+  themeRestartHintText: string;
   disconnectLabel: string;
   disconnectTitle: string;
   restartLabel: string;
@@ -35,6 +37,8 @@ export default function ShellHeader({
   statusNewSessionText,
   statusInitializingText,
   statusRestartingText,
+  showThemeRestartHint,
+  themeRestartHintText,
   disconnectLabel,
   disconnectTitle,
   restartLabel,
@@ -109,6 +113,14 @@ export default function ShellHeader({
           </button>
         </div>
       </div>
+
+      {/* A running Claude CLI keeps the theme it was launched in; Restart applies the new one. */}
+      {showThemeRestartHint && (
+        <p role="status" className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Palette className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+          <span>{themeRestartHintText}</span>
+        </p>
+      )}
     </div>
   );
 }

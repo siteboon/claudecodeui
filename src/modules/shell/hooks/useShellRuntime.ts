@@ -28,6 +28,9 @@ type UseShellRuntimeResult = {
   isConnected: boolean;
   isInitialized: boolean;
   isConnecting: boolean;
+  // A live Claude CLI was launched in the other theme and keeps those colours
+  // until it is restarted.
+  isClaudeThemeOutdated: boolean;
   connectToShell: (options?: { forceRestart?: boolean }) => void;
   disconnectFromShell: (options?: { suppressAutoConnect?: boolean }) => void;
 };
@@ -97,7 +100,13 @@ export function useShellRuntime({
     closeSocket,
   });
 
-  const { isConnected, isConnecting, connectToShell, disconnectFromShell } = useShellConnection({
+  const {
+    isConnected,
+    isConnecting,
+    claudeLaunchColorScheme,
+    connectToShell,
+    disconnectFromShell,
+  } = useShellConnection({
     wsRef,
     terminalRef,
     fitAddonRef,
@@ -114,6 +123,11 @@ export function useShellRuntime({
     clearTerminalScreen,
     onOutputRef,
   });
+
+  const isClaudeThemeOutdated =
+    isConnected &&
+    claudeLaunchColorScheme !== null &&
+    claudeLaunchColorScheme !== (isDarkMode ? 'dark' : 'light');
 
   useEffect(() => {
     if (!isRestarting) {
@@ -149,6 +163,7 @@ export function useShellRuntime({
     isConnected,
     isInitialized,
     isConnecting,
+    isClaudeThemeOutdated,
     connectToShell,
     disconnectFromShell,
   };

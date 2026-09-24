@@ -67,6 +67,7 @@ export default function Shell({
     isConnected,
     isInitialized,
     isConnecting,
+    isClaudeThemeOutdated,
     connectToShell,
     disconnectFromShell,
   } = useShellRuntime({
@@ -307,6 +308,8 @@ export default function Shell({
         statusNewSessionText={t('shell.status.newSession')}
         statusInitializingText={t('shell.status.initializing')}
         statusRestartingText={t('shell.status.restarting')}
+        showThemeRestartHint={isClaudeThemeOutdated}
+        themeRestartHintText={t('shell.status.themeRestartHint')}
         disconnectLabel={t('shell.actions.disconnect')}
         disconnectTitle={t('shell.actions.disconnectTitle')}
         restartLabel={t('shell.actions.restart')}

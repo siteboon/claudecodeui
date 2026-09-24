@@ -464,7 +464,7 @@ test('an unreadable or unparsable Claude config counts as unset and never blocks
       assert.equal(calls[0].command, `claude${themeFlag('light')}`);
     }
     const frames = socket.frames.map((frame) => JSON.parse(frame) as { type: string });
-    assert.deepEqual(frames.map((frame) => frame.type), ['output']);
+    assert.deepEqual(frames.map((frame) => frame.type), ['output', 'claude_theme']);
   });
 });
 
@@ -498,7 +498,7 @@ test('a Claude config that is not a regular file is skipped without being opened
       assert.ok(Date.now() - startedAt < 1000, 'the launch did not wait for the FIFO');
       assert.deepEqual(calls.map((call) => call.command), [`claude${themeFlag('light')}`]);
       const frames = socket.frames.map((frame) => JSON.parse(frame) as { type: string });
-      assert.deepEqual(frames.map((frame) => frame.type), ['output']);
+      assert.deepEqual(frames.map((frame) => frame.type), ['output', 'claude_theme']);
     } finally {
       writer.kill();
     }
@@ -621,10 +621,51 @@ test('a settings file that cannot be written drops the flag, logs once and still
     assert.deepEqual(calls.map((call) => call.env.COLORFGBG), ['0;15', '0;15']);
     for (const socket of [firstSocket, secondSocket]) {
       const frames = socket.frames.map((frame) => JSON.parse(frame) as { type: string });
-      assert.deepEqual(frames.map((frame) => frame.type), ['output']);
+      assert.deepEqual(frames.map((frame) => frame.type), ['output', 'claude_theme']);
     }
     assert.equal(warn.mock.callCount(), 1);
     assert.match(String(warn.mock.calls[0].arguments[0]), /Claude theme settings file/);
+  });
+});
+
+// A running CLI keeps its launch-time colours. The client is told the theme the
+// pty's claude was launched for, also when it reattaches later in another theme,
+// so the Shell can suggest a restart when they differ.
+test('claude launches report the app theme they started in, also on reattach', () => {
+  withClaudeConfig(({ projectPath }) => {
+    const { calls, dependencies } = spawnRecorder();
+    const themeFrames = (socket: ReturnType<typeof createFakeSocket>) =>
+      socket.frames
+        .map((frame) => JSON.parse(frame) as Record<string, unknown>)
+        .filter((frame) => frame.type === 'claude_theme');
+    const sessionId = `claude-theme-${Date.now()}`;
+    const attach = (colorScheme: string) => {
+      const socket = createFakeSocket();
+      handleShellConnection(socket as never, dependencies);
+      socket.emit(
+        'message',
+        JSON.stringify({ type: 'init', projectPath, sessionId, hasSession: false, provider: 'claude', colorScheme })
+      );
+      return socket;
+    };
+
+    const firstSocket = attach('light');
+    const reattachedSocket = attach('dark');
+
+    assert.equal(calls.length, 1, 'the second init reattached to the running pty');
+    assert.deepEqual(themeFrames(firstSocket), [{ type: 'claude_theme', colorScheme: 'light' }]);
+    assert.deepEqual(themeFrames(reattachedSocket), [{ type: 'claude_theme', colorScheme: 'light' }]);
+
+    const darkSocket = launch(dependencies, { provider: 'claude', colorScheme: 'dark' }, projectPath);
+    assert.deepEqual(themeFrames(darkSocket), [{ type: 'claude_theme', colorScheme: 'dark' }]);
+
+    const silentLaunches = [
+      launch(dependencies, { provider: 'claude' }, projectPath),
+      launch(dependencies, { provider: 'claude', initialCommand: 'claude /login', colorScheme: 'light' }, projectPath),
+      launch(dependencies, { provider: 'codex', colorScheme: 'light' }, projectPath),
+      launch(dependencies, { provider: 'plain-shell', isPlainShell: true, colorScheme: 'light' }, projectPath),
+    ];
+    assert.deepEqual(silentLaunches.map(themeFrames), [[], [], [], []]);
   });
 });
 
