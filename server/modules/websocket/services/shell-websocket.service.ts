@@ -262,13 +262,44 @@ const LIGHT_CLAUDE_THEME_BY_DARK_THEME = new Map([
   ['dark-ansi', 'light-ansi'],
 ]);
 
+// Far above any real Claude config (`~/.claude.json` can grow to several MB;
+// the CLI itself refuses settings files over 2 MiB), yet small enough that a
+// huge file is never pulled into the server's memory.
+const MAX_CLAUDE_CONFIG_FILE_BYTES = 64 * 1024 * 1024;
+
 /**
- * Reads the `theme` key of one Claude config file. A missing, unreadable or
- * unparsable file, or a value the CLI would reject, counts as unset.
+ * Reads a config file only when it is a regular, non-empty file of sane size,
+ * else returns null. The project can be a cloned repository whose
+ * `.claude/settings.local.json` is a symlink to a FIFO or to a device such as
+ * /dev/zero: reading one would stall the server's event loop or exhaust its
+ * memory. `statSync` follows the symlink without opening the target. Empty
+ * files are skipped too: they hold no theme, and kernel pseudo-files (procfs,
+ * tracefs) report a size of 0 even when a read would block.
+ */
+function readRegularConfigFile(filePath: string): string | null {
+  try {
+    const stats = fs.statSync(filePath);
+    if (!stats.isFile() || stats.size === 0 || stats.size > MAX_CLAUDE_CONFIG_FILE_BYTES) {
+      return null;
+    }
+    return fs.readFileSync(filePath, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Reads the `theme` key of one Claude config file. A missing, unreadable,
+ * special (FIFO, device) or unparsable file, or a value the CLI would reject,
+ * counts as unset.
  */
 function readClaudeThemeFile(filePath: string): string | null {
+  const text = readRegularConfigFile(filePath);
+  if (text === null) {
+    return null;
+  }
   try {
-    const config: unknown = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    const config: unknown = JSON.parse(text);
     const theme = config && typeof config === 'object' ? (config as Record<string, unknown>).theme : undefined;
     if (typeof theme !== 'string') {
       return null;
@@ -323,13 +354,9 @@ function ensureClaudeThemeSettingsFile(theme: string): string | null {
   let tempPath: string | null = null;
   try {
     const filePath = path.join(os.homedir(), '.cloudcli', `claude-shell-theme-${theme}.json`);
-    let currentContents: string | null = null;
-    try {
-      currentContents = fs.readFileSync(filePath, 'utf8');
-    } catch {
-      // Missing or unreadable: (re)write it below.
-    }
-    if (currentContents !== contents) {
+    // Anything but the expected regular file is replaced; the rename never
+    // opens what it replaces.
+    if (readRegularConfigFile(filePath) !== contents) {
       fs.mkdirSync(path.dirname(filePath), { recursive: true });
       tempPath = `${filePath}.${process.pid}.tmp`;
       fs.writeFileSync(tempPath, contents);

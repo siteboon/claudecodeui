@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -464,6 +465,63 @@ test('an unreadable or unparsable Claude config counts as unset and never blocks
     }
     const frames = socket.frames.map((frame) => JSON.parse(frame) as { type: string });
     assert.deepEqual(frames.map((frame) => frame.type), ['output']);
+  });
+});
+
+// The project can be a cloned repository, and the repository decides what its
+// `.claude/settings.local.json` is. Reading a symlink to a FIFO blocked the
+// server until something wrote to it; one to /dev/zero exhausted its memory.
+test('a Claude config that is not a regular file is skipped without being opened', (t) => {
+  if (os.platform() === 'win32') {
+    t.skip('needs mkfifo and /dev/null');
+    return;
+  }
+  withClaudeConfig(({ configHome, projectPath }) => {
+    const fifoPath = path.join(projectPath, 'settings.fifo');
+    execFileSync('mkfifo', [fifoPath]);
+    fs.mkdirSync(path.join(projectPath, '.claude'));
+    fs.symlinkSync(fifoPath, path.join(projectPath, '.claude', 'settings.local.json'));
+    fs.symlinkSync('/dev/null', path.join(projectPath, '.claude', 'settings.json'));
+    fs.symlinkSync(os.tmpdir(), path.join(configHome, 'settings.json'));
+    // A reader that opened the FIFO would get a dark-daltonized theme from this
+    // writer (and so launch light-daltonized) instead of blocking forever. A
+    // launch that skips it falls through to the default dark theme.
+    const writer = spawn('sh', ['-c', `printf %s '{"theme":"dark-daltonized"}' > "$0"`, fifoPath], {
+      stdio: 'ignore',
+    });
+    try {
+      const { calls, dependencies } = spawnRecorder();
+      const startedAt = Date.now();
+
+      const socket = launch(dependencies, { provider: 'claude', colorScheme: 'light' }, projectPath);
+
+      assert.ok(Date.now() - startedAt < 1000, 'the launch did not wait for the FIFO');
+      assert.deepEqual(calls.map((call) => call.command), [`claude${themeFlag('light')}`]);
+      const frames = socket.frames.map((frame) => JSON.parse(frame) as { type: string });
+      assert.deepEqual(frames.map((frame) => frame.type), ['output']);
+    } finally {
+      writer.kill();
+    }
+  });
+});
+
+test('an oversized Claude config is skipped without being read', (t) => {
+  withClaudeConfig(({ configHome, projectPath }) => {
+    const settingsPath = path.join(configHome, 'settings.json');
+    // A sparse tail takes the file past the 64 MiB cap without using the disk.
+    fs.writeFileSync(settingsPath, '{"theme":"dark-daltonized"}');
+    fs.truncateSync(settingsPath, 64 * 1024 * 1024 + 1);
+    const readFileSync = t.mock.method(fs, 'readFileSync');
+    const { calls, dependencies } = spawnRecorder();
+
+    launch(dependencies, { provider: 'claude', colorScheme: 'light' }, projectPath);
+
+    const readPaths = readFileSync.mock.calls.map((call) => String(call.arguments[0]));
+    assert.equal(readPaths.includes(settingsPath), false, 'the oversized file was read');
+    assert.equal(calls.length, 1);
+    if (os.platform() !== 'win32') {
+      assert.equal(calls[0].command, `claude${themeFlag('light')}`);
+    }
   });
 });
 
