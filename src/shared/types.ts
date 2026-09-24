@@ -1465,6 +1465,16 @@ export type SidebarProjectListProps = SessionRowActions & {
   onDeleteProject: (project: Project) => void;
   onSessionSelect: (session: SessionWithProvider, projectName: string) => void;
   onNewSession: (project: Project) => void;
+  /** The project whose session list is in bulk-selection mode and the rows ticked in it, or null while no list is selecting. */
+  sessionSelection: SidebarSessionSelection | null;
+  /** Enters bulk-selection mode for one project, or replaces its ticked rows (used by "Select all" and "Clear"). */
+  onSetSessionSelection: (selection: SidebarSessionSelection) => void;
+  /** Ticks or unticks one row; takes the owning projectId so a memoized row can bind itself without a per-row closure. */
+  onToggleSessionSelected: (projectId: string, sessionId: string) => void;
+  /** Leaves bulk-selection mode, discarding the ticked rows. */
+  onCancelSessionSelection: () => void;
+  /** Opens the bulk delete confirmation for the ids the list resolved as still deletable. */
+  onDeleteSelectedSessions: (sessionIds: string[]) => void;
   t: TFunction;
 };
 
@@ -1521,11 +1531,23 @@ export type ActiveSidebarRename =
  * The sidebar's pending delete confirmation. One value rather than a pair of
  * nullable states, so a project dialog and a session dialog cannot both be
  * open — they are portalled at the same z-index and would stack. The project
- * variant carries the session count the dialog warns with.
+ * variant carries the session count the dialog warns with, and the `sessions`
+ * variant the ids of a bulk delete, resolved when the dialog was opened.
  */
 export type PendingSidebarDeletion =
   | { kind: 'project'; project: Project; sessionCount: number }
-  | { kind: 'session'; sessionId: string; sessionTitle: string; isArchived: boolean };
+  | { kind: 'session'; sessionId: string; sessionTitle: string; isArchived: boolean }
+  | { kind: 'sessions'; sessionIds: string[] };
+
+/**
+ * The sessions ticked for a bulk action, scoped to the one project whose list
+ * is in selection mode. Scoping it keeps a delete from mixing rows of two
+ * projects, and lets every other project row be handed a constant `null`.
+ */
+export type SidebarSessionSelection = {
+  projectId: string;
+  sessionIds: ReadonlySet<string>;
+};
 
 /** Whether a TaskMaster MCP server is present and configured for a project, or null while that status is still unknown. */
 export type MCPServerStatus = {

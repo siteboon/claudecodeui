@@ -32,7 +32,12 @@
     "loadingSessions": "セッションを読み込んでいます...",
     "unnamed": "名称未設定",
     "loading": "読み込み中...",
-    "showMore": "さらにセッションを表示"
+    "showMore": "さらにセッションを表示",
+    "select": "選択",
+    "selectAll": "すべて選択",
+    "selectAllLoaded": "読み込み済みをすべて選択",
+    "clearSelection": "選択を解除",
+    "deleteSelected": "{{count}}件のセッションを削除"
   },
   "tooltips": {
     "viewEnvironments": "環境を表示",
@@ -113,7 +118,8 @@
     "restoreProjectError": "プロジェクトの復元でエラーが発生しました。もう一度お試しください。",
     "restoreSessionFailed": "セッションの復元に失敗しました。もう一度お試しください。",
     "restoreSessionError": "セッションの復元でエラーが発生しました。もう一度お試しください。",
-    "forkSessionError": "このセッションを分岐できませんでした。もう一度お試しください。"
+    "forkSessionError": "このセッションを分岐できませんでした。もう一度お試しください。",
+    "deleteSessionsPartialFailure": "{{total}}件中{{count}}件のセッションを削除できませんでした。もう一度お試しください。"
   },
   "version": {
     "updateAvailable": "アップデートあり",
@@ -137,6 +143,11 @@
     "deleteSessionPermanently": "完全に削除",
     "deleteAllData": "すべてのデータを完全に削除",
     "allConversationsDeleted": "プロジェクトはサイドバーから除去されます。ファイル、メモリ、セッションデータは保持されます。",
-    "cannotUndo": "後からプロジェクトを再追加できます。"
+    "cannotUndo": "後からプロジェクトを再追加できます。",
+    "confirmDeleteSessions": "次のセッションをどうしますか：",
+    "deleteSessions": "{{count}}件のセッションを削除",
+    "selectedSessions": "選択した{{count}}件のセッション",
+    "archiveSessions": "{{count}}件のセッションをアーカイブ",
+    "archiveSessionsNotice": "アーカイブすると、セッションはアクティブな一覧から外れますが、履歴は保持されます。"
   }
 }
