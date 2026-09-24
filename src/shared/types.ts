@@ -953,11 +953,11 @@ type FileDiffInfo = {
 export type FileOpenHandler = (filePath: string, diffInfo?: FileDiffInfo) => void;
 
 
-/** Which tab the git panel is showing (changes, history, branches or worktrees), driving both the tab bar and which data its controller loads. */
-export type GitPanelView = 'changes' | 'history' | 'branches' | 'worktrees';
+/** Which tab the git panel is showing (changes, compare, history, branches or worktrees), driving both the tab bar and which data its controller loads. */
+export type GitPanelView = 'changes' | 'compare' | 'history' | 'branches' | 'worktrees';
 
-/** Single-letter git status of a changed file (M, A, D or U), used to pick its label, badge styling and change group. */
-export type FileStatusCode = 'M' | 'A' | 'D' | 'U';
+/** Single-letter git status of a changed file (M, A, D, R or U), used to pick its label and badge styling; the Changes tab groups only M/A/D/U, while R (renamed) appears in the Compare tab. */
+export type FileStatusCode = 'M' | 'A' | 'D' | 'R' | 'U';
 
 /** The git action a confirmation dialog is guarding, selecting that dialog's title, action label and colour scheme. */
 export type ConfirmActionType = 'discard' | 'delete' | 'commit' | 'pull' | 'push' | 'publish' | 'revertLocalCommit' | 'deleteBranch';
@@ -1032,6 +1032,26 @@ export type GitApiErrorResponse = {
 export type GitOperationResponse = GitApiErrorResponse & {
   success?: boolean;
   output?: string;
+};
+
+/** Response of the single-file diff endpoints (`/diff`, `/branch-diff/file`): the shared error fields plus the unified `diff` text with its headers stripped. */
+export type GitFileDiffResponse = GitApiErrorResponse & {
+  diff?: string;
+};
+
+/** One file the working copy changed relative to the compare base's merge base, as listed by the branch-diff endpoint; `oldPath` is only set for renames. */
+export type GitBranchDiffFile = {
+  path: string;
+  oldPath?: string;
+  status: FileStatusCode;
+};
+
+/** Payload of the branch-diff endpoint: the requested `base`, the merge-base sha it resolved to and the changed `files`, or the shared error fields plus a stable `code` (e.g. `GIT_NO_MERGE_BASE`) when the base cannot be compared. */
+export type GitBranchDiffResponse = GitApiErrorResponse & {
+  base?: string;
+  mergeBase?: string;
+  files?: GitBranchDiffFile[];
+  code?: string;
 };
 
 /** One git worktree as reported by the worktrees API, including its branch, ahead/behind counts and the linked project used to open it. */

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { api } from '@/shared/api';
-import type { FileOpenHandler, GitApiErrorResponse, GitCommitSummary, GitDiffMap, GitOperationResponse, GitPanelView, GitRemoteStatus, GitStatusResponse, Project } from '@/shared/types';
+import type { FileOpenHandler, GitApiErrorResponse, GitCommitSummary, GitDiffMap, GitFileDiffResponse, GitOperationResponse, GitPanelView, GitRemoteStatus, GitStatusResponse, Project } from '@/shared/types';
 import { getAllChangedFiles } from '@/modules/git-panel/utils/gitPanelUtils';
 import { useSelectedProvider } from '@/modules/git-panel/hooks/useSelectedProvider';
 
@@ -24,6 +24,8 @@ type GitPanelController = {
   branches: string[];
   localBranches: string[];
   remoteBranches: string[];
+  /** Full remote-tracking names (`origin/main`) — the Compare tab offers them as bases. */
+  remoteRefs: string[];
   recentCommits: GitCommitSummary[];
   commitDiffs: GitDiffMap;
   remoteStatus: GitRemoteStatus | null;
@@ -56,14 +58,11 @@ type GitPanelController = {
   openFile: (filePath: string) => Promise<void>;
 };
 
-type GitDiffResponse = GitApiErrorResponse & {
-  diff?: string;
-};
-
 type GitBranchesResponse = GitApiErrorResponse & {
   branches?: string[];
   localBranches?: string[];
   remoteBranches?: string[];
+  remoteRefs?: string[];
 };
 
 type GitCommitsResponse = GitApiErrorResponse & {
@@ -118,6 +117,10 @@ export function useGitPanelController({
   const [remoteStatus, setRemoteStatus] = useState<GitRemoteStatus | null>(null);
   const [localBranches, setLocalBranches] = useState<string[]>([]);
   const [remoteBranches, setRemoteBranches] = useState<string[]>([]);
+  // Unambiguous remote-tracking refs for the Compare tab's base selector;
+  // `remoteBranches` strips the remote prefix and drops names shadowed by a
+  // local branch, so it cannot serve as a diff base.
+  const [remoteRefs, setRemoteRefs] = useState<string[]>([]);
   const [isCreatingBranch, setIsCreatingBranch] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
@@ -149,7 +152,7 @@ export function useGitPanelController({
 
       try {
         const response = await api.git.diff(projectId, filePath, { signal });
-        const data = await readJson<GitDiffResponse>(response, signal);
+        const data = await readJson<GitFileDiffResponse>(response, signal);
 
         if (
           signal?.aborted ||
@@ -248,17 +251,20 @@ export function useGitPanelController({
         setBranches(data.branches);
         setLocalBranches(data.localBranches ?? data.branches);
         setRemoteBranches(data.remoteBranches ?? []);
+        setRemoteRefs(data.remoteRefs ?? []);
         return;
       }
 
       setBranches([]);
       setLocalBranches([]);
       setRemoteBranches([]);
+      setRemoteRefs([]);
     } catch (error) {
       console.error('Error fetching branches:', error);
       setBranches([]);
       setLocalBranches([]);
       setRemoteBranches([]);
+      setRemoteRefs([]);
     }
   }, [selectedProject]);
 
@@ -594,7 +600,7 @@ export function useGitPanelController({
 
       try {
         const response = await api.git.commitDiff(selectedProject.projectId, commitHash);
-        const data = await readJson<GitDiffResponse>(response);
+        const data = await readJson<GitFileDiffResponse>(response);
 
         if (!data.error && data.diff) {
           setCommitDiffs((previous) => ({
@@ -768,6 +774,7 @@ export function useGitPanelController({
     setBranches([]);
     setLocalBranches([]);
     setRemoteBranches([]);
+    setRemoteRefs([]);
     setGitStatus(null);
     setRemoteStatus(null);
     setGitDiff({});
@@ -811,6 +818,7 @@ export function useGitPanelController({
     branches,
     localBranches,
     remoteBranches,
+    remoteRefs,
     recentCommits,
     commitDiffs,
     remoteStatus,
