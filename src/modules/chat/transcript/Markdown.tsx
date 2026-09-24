@@ -19,7 +19,13 @@ import type { PrismStyleSheet } from '@/modules/chat/utils/syntaxHighlightTheme'
 type MarkdownProps = {
   children: React.ReactNode;
   className?: string;
-  /** Render single newlines as hard line breaks (for user-typed messages). */
+  /**
+   * Render single newlines as hard line breaks. On by default: replies,
+   * thinking and tool output are written for a terminal, where a newline is a
+   * line break, and CommonMark's soft-break joining squished file contents or
+   * code quoted without a fence into one wrapped paragraph — while the MD copy
+   * of the same message kept its lines.
+   */
   breaks?: boolean;
 };
 
@@ -255,7 +261,7 @@ const markdownComponents = {
  * render model-authored markdown with this module's shared prose styling,
  * code highlighting and table rules.
  */
-function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 'className'>) {
+function MarkdownBodyRenderer({ children, breaks = true }: Omit<MarkdownProps, 'className'>) {
   const content = useMemo(
     () => normalizeInlineCodeFences(String(children ?? '')),
     [children],

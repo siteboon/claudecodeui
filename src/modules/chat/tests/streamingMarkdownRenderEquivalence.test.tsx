@@ -4,6 +4,7 @@ import { test } from 'vitest';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ReactMarkdown from 'react-markdown';
+import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
@@ -18,7 +19,7 @@ import { splitStreamingMarkdown } from '@/modules/chat/utils/streamingMarkdown';
  */
 
 // Same plugin set as Markdown.tsx.
-const remarkPlugins = [remarkGfm, [remarkMath, { singleDollarTextMath: false }]] as never;
+const remarkPlugins = [remarkGfm, [remarkMath, { singleDollarTextMath: false }], remarkBreaks] as never;
 const rehypePlugins = [rehypeKatex] as never;
 
 /**
