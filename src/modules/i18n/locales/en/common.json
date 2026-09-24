@@ -95,7 +95,9 @@
     "createProjectDesktop": "Create a new project by clicking the folder icon in the sidebar",
     "newSession": "New Session",
     "untitledSession": "Untitled Session",
-    "projectFiles": "Project Files"
+    "projectFiles": "Project Files",
+    "renameSessionHint": "{{title}} (double-click to rename)",
+    "renameSessionLabel": "Session title"
   },
   "fileTree": {
     "loading": "Loading files...",
