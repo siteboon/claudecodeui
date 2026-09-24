@@ -23,7 +23,9 @@ import type { FetchHistoryResult } from '@/shared/types.js';
  * status from that, so a session's entry is also dropped explicitly when its
  * process starts or ends (`invalidate`) — otherwise a page read while the
  * process was up would keep reporting `running` after it had gone, until the
- * next row happened to land in the file.
+ * next row happened to land in the file. Codex's runtime invalidates for a
+ * similar reason after it keeps a prompt the rollout never recorded: that
+ * prompt lives in the app DB, so the file's stat does not change.
  *
  * Only history readers that read `jsonl_path` itself may use this cache —
  * callers pass `transcriptPath: null` for providers whose messages live
