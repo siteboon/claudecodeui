@@ -25,7 +25,7 @@ type ShellHeaderProps = {
   bypassTitle: string;
 };
 
-/** Rendered by Shell above the terminal to show connection status and the restart/disconnect actions. */
+/** Rendered by Shell above the terminal to show connection status, the restart/disconnect actions and the theme restart hint. */
 export default function ShellHeader({
   isConnected,
   isInitialized,

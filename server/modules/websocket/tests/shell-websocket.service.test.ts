@@ -508,9 +508,10 @@ test('a Claude config that is not a regular file is skipped without being opened
 test('an oversized Claude config is skipped without being read', (t) => {
   withClaudeConfig(({ configHome, projectPath }) => {
     const settingsPath = path.join(configHome, 'settings.json');
-    // A sparse tail takes the file past the 64 MiB cap without using the disk.
+    // The CLI refuses settings files over 2 MiB. A sparse tail takes the file
+    // past that cap without using the disk.
     fs.writeFileSync(settingsPath, '{"theme":"dark-daltonized"}');
-    fs.truncateSync(settingsPath, 64 * 1024 * 1024 + 1);
+    fs.truncateSync(settingsPath, 2 * 1024 * 1024 + 1);
     const readFileSync = t.mock.method(fs, 'readFileSync');
     const { calls, dependencies } = spawnRecorder();
 
@@ -521,6 +522,24 @@ test('an oversized Claude config is skipped without being read', (t) => {
     assert.equal(calls.length, 1);
     if (os.platform() !== 'win32') {
       assert.equal(calls[0].command, `claude${themeFlag('light')}`);
+    }
+  });
+});
+
+test('the legacy global config may be bigger than a settings file', () => {
+  withClaudeConfig(({ configHome, projectPath, write }) => {
+    // `~/.claude.json` keeps per-project history and can grow to several MB.
+    write(path.join(configHome, '.claude.json'), {
+      theme: 'dark-daltonized',
+      padding: 'x'.repeat(3 * 1024 * 1024),
+    });
+    const { calls, dependencies } = spawnRecorder();
+
+    launch(dependencies, { provider: 'claude', colorScheme: 'light' }, projectPath);
+
+    assert.equal(calls.length, 1);
+    if (os.platform() !== 'win32') {
+      assert.equal(calls[0].command, `claude${themeFlag('light-daltonized')}`);
     }
   });
 });
@@ -577,6 +596,10 @@ test('the light theme settings file is written once to the app data folder', () 
 // theme travels as a file path: PowerShell strips the double quotes of inline
 // JSON when it hands an argument to a native program.
 test('the settings file path is quoted for bash and for PowerShell', (t) => {
+  if (os.platform() === 'win32') {
+    t.skip('asserts the bash launch and POSIX paths first');
+    return;
+  }
   withClaudeConfig(({ home, projectPath }) => {
     const settingsPath = path.join(home, '.cloudcli', 'claude-shell-theme-light.json');
     const { calls, dependencies } = spawnRecorder('resumed-session-id');
@@ -619,9 +642,10 @@ test('a settings file that cannot be written drops the flag, logs once and still
 
     assert.deepEqual(calls.map((call) => call.command), ['claude', 'claude']);
     assert.deepEqual(calls.map((call) => call.env.COLORFGBG), ['0;15', '0;15']);
+    // The CLI paints its dark default in either app theme, so no restart hint.
     for (const socket of [firstSocket, secondSocket]) {
       const frames = socket.frames.map((frame) => JSON.parse(frame) as { type: string });
-      assert.deepEqual(frames.map((frame) => frame.type), ['output', 'claude_theme']);
+      assert.deepEqual(frames.map((frame) => frame.type), ['output']);
     }
     assert.equal(warn.mock.callCount(), 1);
     assert.match(String(warn.mock.calls[0].arguments[0]), /Claude theme settings file/);
@@ -667,6 +691,35 @@ test('claude launches report the app theme they started in, also on reattach', (
     ];
     assert.deepEqual(silentLaunches.map(themeFrames), [[], [], [], []]);
   });
+});
+
+// A restart only helps when the CLI's colours follow the app theme. A light or
+// custom theme the user chose paints the same in either app theme.
+test('the restart hint is only offered when a restart would change the CLI colours', () => {
+  for (const [userTheme, expectsHint] of [
+    ['dark-daltonized', true],
+    ['auto', true],
+    ['light', false],
+    ['light-daltonized', false],
+    ['custom:mine', false],
+  ] as const) {
+    withClaudeConfig(({ configHome, projectPath, write }) => {
+      write(path.join(configHome, 'settings.json'), { theme: userTheme });
+      const { dependencies } = spawnRecorder();
+
+      for (const colorScheme of ['light', 'dark']) {
+        const socket = launch(dependencies, { provider: 'claude', colorScheme }, projectPath);
+        const themeFrames = socket.frames
+          .map((frame) => JSON.parse(frame) as Record<string, unknown>)
+          .filter((frame) => frame.type === 'claude_theme');
+        assert.deepEqual(
+          themeFrames,
+          expectsHint ? [{ type: 'claude_theme', colorScheme }] : [],
+          `${userTheme} in a ${colorScheme} tab`,
+        );
+      }
+    });
+  }
 });
 
 test('other shells and initial commands only get the COLORFGBG hint', () => {

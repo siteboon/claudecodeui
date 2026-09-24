@@ -194,6 +194,15 @@ function resolveResumeSessionId(
   return resolvedSessionId;
 }
 
+type ShellLaunch = {
+  command: string;
+  /**
+   * Whether the command starts a Claude CLI that paints in the app's colour
+   * scheme, so a later theme toggle can be applied by restarting it.
+   */
+  claudeFollowsAppTheme: boolean;
+};
+
 /**
  * Resolves provider command line for plain shell and agent-backed shell modes.
  */
@@ -201,7 +210,7 @@ function buildShellCommand(
   message: ShellIncomingMessage,
   dependencies: ShellWebSocketDependencies,
   projectPath: string
-): string {
+): ShellLaunch {
   const hasSession = readBoolean(message.hasSession);
   const initialCommand = readString(message.initialCommand);
   const provider = readString(message.provider, 'claude');
@@ -211,32 +220,34 @@ function buildShellCommand(
     (!!initialCommand && !hasSession) ||
     provider === 'plain-shell';
 
+  const otherProgram = (command: string): ShellLaunch => ({ command, claudeFollowsAppTheme: false });
+
   if (isPlainShell) {
-    return initialCommand;
+    return otherProgram(initialCommand);
   }
 
   if (provider === 'cursor') {
     if (resumeSessionId) {
-      return `cursor-agent --resume="${resumeSessionId}"`;
+      return otherProgram(`cursor-agent --resume="${resumeSessionId}"`);
     }
-    return 'cursor-agent';
+    return otherProgram('cursor-agent');
   }
 
   if (provider === 'codex') {
     if (resumeSessionId) {
       if (os.platform() === 'win32') {
-        return `codex resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { codex }`;
+        return otherProgram(`codex resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { codex }`);
       }
-      return `codex resume "${resumeSessionId}" || codex`;
+      return otherProgram(`codex resume "${resumeSessionId}" || codex`);
     }
-    return 'codex';
+    return otherProgram('codex');
   }
 
   if (provider === 'opencode') {
     if (resumeSessionId) {
-      return `opencode --session "${resumeSessionId}"`;
+      return otherProgram(`opencode --session "${resumeSessionId}"`);
     }
-    return initialCommand || 'opencode';
+    return otherProgram(initialCommand || 'opencode');
   }
 
   // Launching with the flag is what unlocks "bypass permissions" in the CLI's
@@ -245,15 +256,19 @@ function buildShellCommand(
   const bypassFlag = readBoolean(message.bypassPermissions)
     ? ' --dangerously-skip-permissions'
     : '';
-  const launchFlags = `${bypassFlag}${buildClaudeThemeFlag(readColorScheme(message.colorScheme), projectPath)}`;
-  const command = initialCommand || `claude${launchFlags}`;
+  const theme = buildClaudeThemeLaunch(readColorScheme(message.colorScheme), projectPath);
+  const launchFlags = `${bypassFlag}${theme.flag}`;
   if (resumeSessionId) {
-    if (os.platform() === 'win32') {
-      return `claude --resume "${resumeSessionId}"${launchFlags}; if ($LASTEXITCODE -ne 0) { claude${launchFlags} }`;
-    }
-    return `claude --resume "${resumeSessionId}"${launchFlags} || claude${launchFlags}`;
+    const command = os.platform() === 'win32'
+      ? `claude --resume "${resumeSessionId}"${launchFlags}; if ($LASTEXITCODE -ne 0) { claude${launchFlags} }`
+      : `claude --resume "${resumeSessionId}"${launchFlags} || claude${launchFlags}`;
+    return { command, claudeFollowsAppTheme: theme.followsAppTheme };
   }
-  return command;
+  if (initialCommand) {
+    // A caller's own command (e.g. `claude /login`) is launched as given.
+    return otherProgram(initialCommand);
+  }
+  return { command: `claude${launchFlags}`, claudeFollowsAppTheme: theme.followsAppTheme };
 }
 
 // Claude Code's built-in theme ids (the `/theme` picker of CLI 2.1.280). A
@@ -277,10 +292,12 @@ const LIGHT_CLAUDE_THEME_BY_DARK_THEME = new Map([
   ['dark-ansi', 'light-ansi'],
 ]);
 
-// Far above any real Claude config (`~/.claude.json` can grow to several MB;
-// the CLI itself refuses settings files over 2 MiB), yet small enough that a
-// huge file is never pulled into the server's memory.
-const MAX_CLAUDE_CONFIG_FILE_BYTES = 64 * 1024 * 1024;
+// The CLI refuses settings files over 2 MiB, so a bigger one holds no theme it
+// would use. The legacy global config (`~/.claude.json`) is not a settings file
+// and can grow to several MB; its cap is only there so a huge file is never
+// pulled into the server's memory.
+const MAX_CLAUDE_SETTINGS_FILE_BYTES = 2 * 1024 * 1024;
+const MAX_CLAUDE_GLOBAL_CONFIG_FILE_BYTES = 64 * 1024 * 1024;
 
 /**
  * Reads a config file only when it is a regular, non-empty file of sane size,
@@ -291,10 +308,10 @@ const MAX_CLAUDE_CONFIG_FILE_BYTES = 64 * 1024 * 1024;
  * files are skipped too: they hold no theme, and kernel pseudo-files (procfs,
  * tracefs) report a size of 0 even when a read would block.
  */
-function readRegularConfigFile(filePath: string): string | null {
+function readRegularConfigFile(filePath: string, maxBytes = MAX_CLAUDE_SETTINGS_FILE_BYTES): string | null {
   try {
     const stats = fs.statSync(filePath);
-    if (!stats.isFile() || stats.size === 0 || stats.size > MAX_CLAUDE_CONFIG_FILE_BYTES) {
+    if (!stats.isFile() || stats.size === 0 || stats.size > maxBytes) {
       return null;
     }
     return fs.readFileSync(filePath, 'utf8');
@@ -308,8 +325,8 @@ function readRegularConfigFile(filePath: string): string | null {
  * special (FIFO, device) or unparsable file, or a value the CLI would reject,
  * counts as unset.
  */
-function readClaudeThemeFile(filePath: string): string | null {
-  const text = readRegularConfigFile(filePath);
+function readClaudeThemeFile(filePath: string, maxBytes: number): string | null {
+  const text = readRegularConfigFile(filePath, maxBytes);
   if (text === null) {
     return null;
   }
@@ -335,17 +352,20 @@ function resolveClaudeTheme(projectPath: string): string {
   const configDirOverride = process.env.CLAUDE_CONFIG_DIR;
   const configHome = configDirOverride || path.join(os.homedir(), '.claude');
   const legacyGlobalConfigPath = path.join(configHome, '.config.json');
-  const configFiles = [
-    path.join(projectPath, '.claude', 'settings.local.json'),
-    path.join(projectPath, '.claude', 'settings.json'),
-    path.join(configHome, 'settings.json'),
-    fs.existsSync(legacyGlobalConfigPath)
-      ? legacyGlobalConfigPath
-      : path.join(configDirOverride || os.homedir(), '.claude.json'),
+  const configFiles: Array<[string, number]> = [
+    [path.join(projectPath, '.claude', 'settings.local.json'), MAX_CLAUDE_SETTINGS_FILE_BYTES],
+    [path.join(projectPath, '.claude', 'settings.json'), MAX_CLAUDE_SETTINGS_FILE_BYTES],
+    [path.join(configHome, 'settings.json'), MAX_CLAUDE_SETTINGS_FILE_BYTES],
+    [
+      fs.existsSync(legacyGlobalConfigPath)
+        ? legacyGlobalConfigPath
+        : path.join(configDirOverride || os.homedir(), '.claude.json'),
+      MAX_CLAUDE_GLOBAL_CONFIG_FILE_BYTES,
+    ],
   ];
 
-  for (const filePath of configFiles) {
-    const theme = readClaudeThemeFile(filePath);
+  for (const [filePath, maxBytes] of configFiles) {
+    const theme = readClaudeThemeFile(filePath, maxBytes);
     if (theme) {
       return theme;
     }
@@ -406,6 +426,12 @@ function quoteShellArgument(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
+type ClaudeThemeLaunch = {
+  flag: string;
+  /** Whether the CLI will paint in the app's colour scheme. */
+  followsAppTheme: boolean;
+};
+
 /**
  * Claude Code paints its own colours in its own theme, dark by default, so in
  * a light Shell tab its prompt rows became dark bands. Only a light tab gets a
@@ -413,14 +439,32 @@ function quoteShellArgument(value: string): string {
  * matching light variant. `--settings` applies it to this launch only. It is
  * given a file path rather than inline JSON because PowerShell strips the
  * JSON's double quotes when it passes an argument to a native program.
+ *
+ * The CLI follows the app theme when it gets that flag, when a dark tab runs a
+ * dark theme, and with `auto` (it asks the terminal, which xterm answers from
+ * the live theme). A light or custom theme the user chose, or a flag that
+ * could not be written, paints the same in either app theme, so restarting
+ * after a toggle would change nothing.
  */
-function buildClaudeThemeFlag(colorScheme: ShellColorScheme | null, projectPath: string): string {
-  if (colorScheme !== 'light') {
-    return '';
+function buildClaudeThemeLaunch(colorScheme: ShellColorScheme | null, projectPath: string): ClaudeThemeLaunch {
+  if (!colorScheme) {
+    return { flag: '', followsAppTheme: false };
   }
-  const lightTheme = LIGHT_CLAUDE_THEME_BY_DARK_THEME.get(resolveClaudeTheme(projectPath));
-  const settingsPath = lightTheme ? ensureClaudeThemeSettingsFile(lightTheme) : null;
-  return settingsPath ? ` --settings ${quoteShellArgument(settingsPath)}` : '';
+  const userTheme = resolveClaudeTheme(projectPath);
+  if (userTheme === 'auto') {
+    return { flag: '', followsAppTheme: true };
+  }
+  const lightTheme = LIGHT_CLAUDE_THEME_BY_DARK_THEME.get(userTheme);
+  if (!lightTheme) {
+    return { flag: '', followsAppTheme: false };
+  }
+  if (colorScheme === 'dark') {
+    return { flag: '', followsAppTheme: true };
+  }
+  const settingsPath = ensureClaudeThemeSettingsFile(lightTheme);
+  return settingsPath
+    ? { flag: ` --settings ${quoteShellArgument(settingsPath)}`, followsAppTheme: true }
+    : { flag: '', followsAppTheme: false };
 }
 
 function readEnvValue(env: NodeJS.ProcessEnv, key: string): string | undefined {
@@ -589,16 +633,13 @@ export function handleShellConnection(
           return;
         }
 
-        const shellCommand = buildShellCommand(data, dependencies, resolvedProjectPath);
+        const { command: shellCommand, claudeFollowsAppTheme } = buildShellCommand(
+          data,
+          dependencies,
+          resolvedProjectPath,
+        );
         const resumeSessionId = resolveResumeSessionId(data, dependencies);
-        // Mirrors buildShellCommand, where every provider but cursor, codex and
-        // opencode starts claude: only a claude command the server builds
-        // itself (not a caller's initialCommand) is launched in the app theme.
-        const launchesThemedClaude =
-          !isPlainShell &&
-          !['cursor', 'codex', 'opencode'].includes(provider) &&
-          (!initialCommand || !!resumeSessionId);
-        const claudeColorScheme = launchesThemedClaude ? colorScheme : null;
+        const claudeColorScheme = claudeFollowsAppTheme ? colorScheme : null;
         const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
         const shellArgs =
           os.platform() === 'win32' ? ['-Command', shellCommand] : ['-c', shellCommand];
