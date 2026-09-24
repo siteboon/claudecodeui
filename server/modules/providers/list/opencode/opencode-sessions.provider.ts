@@ -2,9 +2,17 @@ import fsSync from 'node:fs';
 
 import Database from 'better-sqlite3';
 
+import { isOpenCodeSessionActive } from '@/modules/providers/list/opencode/opencode-runtime.provider.js';
 import { parseFilesInputTag, parseImagesInputTag } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
-import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
+import type {
+  AnyRecord,
+  FetchHistoryOptions,
+  FetchHistoryResult,
+  NormalizedMessage,
+  SubagentActivity,
+  SubagentInfo,
+} from '@/shared/types.js';
 import {
   createNormalizedMessage,
   generateMessageId,
@@ -14,10 +22,17 @@ import {
   readJsonRecord,
   readOptionalString,
   sliceTailPage,
+  truncateSubagentActivity,
   unwrapJsonStringLiteral,
 } from '@/shared/utils.js';
 
 const PROVIDER = 'opencode';
+
+/** OpenCode's tool for spawning a subagent; it runs in a child session of the caller. */
+const SUBAGENT_TOOL_NAME = 'task';
+
+/** Upper bound on how much of a subagent's timeline is sent to the client, as for Claude and Codex. */
+const MAX_TRANSMITTED_SUBAGENT_ACTIVITIES = 200;
 
 type OpenCodeHistoryRow = {
   message_id: string;
@@ -225,6 +240,145 @@ const aggregateOpenCodeSessionTokenUsage = (
   });
 };
 
+const readToolResult = (state: AnyRecord): SubagentActivity['toolResult'] => {
+  const status = readOptionalString(state.status);
+  if (status !== 'completed' && status !== 'error') {
+    return null;
+  }
+
+  return {
+    content: formatToolContent(state.output ?? state.error),
+    isError: status === 'error',
+  };
+};
+
+/**
+ * Flattens the child session a `task` call spawned into the shared subagent
+ * timeline. OpenCode keeps it in the same database as the parent.
+ */
+const readOpenCodeSubagentActivity = (
+  db: Database.Database,
+  childSessionId: string,
+): SubagentActivity[] => {
+  const rows = db.prepare(`
+    SELECT p.data AS part_data, p.time_created AS part_time_created
+    FROM part p
+    INNER JOIN message m
+      ON m.id = p.message_id
+     AND m.session_id = p.session_id
+    WHERE p.session_id = ?
+      AND json_extract(m.data, '$.role') = 'assistant'
+    ORDER BY COALESCE(m.time_created, 0), m.id, COALESCE(p.time_created, 0), p.id
+  `).all(childSessionId) as { part_data: string | null; part_time_created: number | null }[];
+
+  const activity: SubagentActivity[] = [];
+  for (const row of rows) {
+    const partData = readJsonRecord(row.part_data) ?? {};
+    const timestamp = normalizeProviderTimestamp(row.part_time_created);
+    const partType = readOptionalString(partData.type);
+
+    if (partType === 'tool') {
+      const state = readObjectRecord(partData.state) ?? {};
+      activity.push({
+        kind: 'tool',
+        toolId: readOptionalString(partData.callID) ?? readOptionalString(partData.id),
+        toolName: readOptionalString(partData.tool) ?? 'Tool',
+        toolInput: state.input ?? {},
+        toolResult: readToolResult(state),
+        timestamp,
+      });
+      continue;
+    }
+
+    if (partType === 'text' || partType === 'reasoning') {
+      const content = extractText(partData);
+      if (content.trim()) {
+        activity.push({ kind: partType === 'text' ? 'text' : 'thinking', content, timestamp });
+      }
+    }
+  }
+
+  return activity;
+};
+
+// The task tool wraps the subagent's answer as `<task …><task_result>…</task_result></task>`.
+const TASK_OUTPUT_PATTERN = /<task_(result|error)>\n?([\s\S]*?)\n?<\/task_\1>/;
+
+const unwrapTaskOutput = (content: string): string => {
+  const match = TASK_OUTPUT_PATTERN.exec(content);
+  return match ? match[2] : content;
+};
+
+/**
+ * Turns a `task` tool row into a subagent container, the way Claude's `Agent`
+ * rows are: identity from the call, timeline from the child session.
+ *
+ * `runIsLive` says whether a run of this session is still in progress: a task
+ * without a result outside one was stopped and will never report.
+ */
+const attachOpenCodeSubagent = (
+  message: NormalizedMessage,
+  state: AnyRecord,
+  db: Database.Database | null,
+  runIsLive: boolean,
+): void => {
+  if (message.toolName !== SUBAGENT_TOOL_NAME) {
+    return;
+  }
+
+  const input = readObjectRecord(state.input) ?? {};
+  const metadata = readObjectRecord(state.metadata) ?? {};
+  const childSessionId = readOptionalString(metadata.sessionId);
+  const toolResult = message.toolResult;
+  let status: SubagentInfo['status'] = runIsLive ? 'running' : 'stopped';
+  if (metadata.interrupted === true) {
+    status = 'stopped';
+  } else if (toolResult) {
+    status = toolResult.isError ? 'failed' : 'completed';
+  }
+
+  if (toolResult?.content) {
+    toolResult.content = unwrapTaskOutput(toolResult.content);
+  }
+
+  const subagent: SubagentInfo = {
+    id: childSessionId ?? message.toolId ?? message.id,
+    type: readOptionalString(input.subagent_type),
+    description: readOptionalString(input.description),
+    status,
+    model: readOptionalString(readObjectRecord(metadata.model)?.modelID),
+  };
+
+  if (db && childSessionId) {
+    try {
+      const activity = readOpenCodeSubagentActivity(db, childSessionId);
+      if (activity.length > 0) {
+        // Keep the latest steps: the timeline says the missing ones are the earlier ones.
+        message.subagentTools = activity
+          .slice(-MAX_TRANSMITTED_SUBAGENT_ACTIVITIES)
+          .map(truncateSubagentActivity);
+        subagent.activityCount = activity.length;
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      console.warn(`[OpenCodeProvider] Failed to read subagent session ${childSessionId}:`, reason);
+    }
+  }
+
+  message.subagent = subagent;
+};
+
+/** Opens the shared database for a live event, or null when it cannot be read right now. */
+const openOpenCodeDatabaseForLiveEvent = (): Database.Database | null => {
+  try {
+    return openOpenCodeDatabase();
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    console.warn('[OpenCodeProvider] Failed to open opencode.db for a live event:', reason);
+    return null;
+  }
+};
+
 export class OpenCodeSessionsProvider implements IProviderSessions {
   /**
    * Normalizes live `opencode run --format json` events into frontend messages.
@@ -327,6 +481,17 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
         };
       }
 
+      if (toolName === SUBAGENT_TOOL_NAME) {
+        // `opencode run` reports a task only once it has finished, so its
+        // child session is complete in the database by now.
+        const db = openOpenCodeDatabaseForLiveEvent();
+        try {
+          attachOpenCodeSubagent(toolMessage, toolState, db, true);
+        } finally {
+          db?.close();
+        }
+      }
+
       return [toolMessage];
     }
 
@@ -391,7 +556,7 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
           p.id
       `).all(providerSessionId) as OpenCodeHistoryRow[];
 
-      const normalized = this.normalizeHistoryRows(rows, sessionId);
+      const normalized = this.normalizeHistoryRows(rows, sessionId, db);
       const tokenUsage = aggregateOpenCodeSessionTokenUsage(db, providerSessionId);
 
       const normalizedOffset = Math.max(0, offset);
@@ -416,9 +581,14 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
     }
   }
 
-  private normalizeHistoryRows(rows: OpenCodeHistoryRow[], sessionId: string): NormalizedMessage[] {
+  private normalizeHistoryRows(
+    rows: OpenCodeHistoryRow[],
+    sessionId: string,
+    db: Database.Database,
+  ): NormalizedMessage[] {
     const normalized: NormalizedMessage[] = [];
     const emittedMessageErrors = new Set<string>();
+    const runIsLive = isOpenCodeSessionActive(sessionId);
 
     for (const row of rows) {
       const timestamp = normalizeProviderTimestamp(row.part_time_created ?? row.message_time_created);
@@ -519,6 +689,7 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
           };
         }
 
+        attachOpenCodeSubagent(toolMessage, state, db, runIsLive);
         normalized.push(toolMessage);
         continue;
       }
