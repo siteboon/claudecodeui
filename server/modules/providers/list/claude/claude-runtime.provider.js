@@ -29,7 +29,7 @@ import {
   CLAUDE_ULTRACODE_EFFORT
 } from '@/modules/providers/list/claude/claude-models.provider.js';
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
-import { recordNativeCommands } from '@/modules/commands/index.js';
+import { recordNativeCommands } from '@/shared/native-commands.js';
 import {
   createNotificationEvent,
   notifyBackgroundWorkCompleted,

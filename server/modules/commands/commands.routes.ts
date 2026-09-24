@@ -4,10 +4,7 @@ import path from "path";
 import express from "express";
 
 import { parseFrontMatter } from "../../shared/frontmatter.js";
-
-import {
-  getNativeCommands,
-} from "./native-commands.js";
+import { getNativeCommands } from "../../shared/native-commands.js";
 
 type CommandsRouterDependencies = {
   fileSystem: typeof import('node:fs/promises');
