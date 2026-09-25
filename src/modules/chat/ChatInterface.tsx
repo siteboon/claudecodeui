@@ -434,7 +434,9 @@ function ChatInterface({
         ? t('messageTypes.codex')
         : provider === 'opencode'
             ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
-          : t('messageTypes.claude');
+          : provider === 'kiro'
+            ? t('messageTypes.kiro')
+            : t('messageTypes.claude');
 
   if (!selectedProject) {
     return (

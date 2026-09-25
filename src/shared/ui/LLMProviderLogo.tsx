@@ -3,6 +3,7 @@ import ClaudeLogo from '@/shared/ui/ClaudeLogo';
 import CodexLogo from '@/shared/ui/CodexLogo';
 import CursorLogo from '@/shared/ui/CursorLogo';
 import OpenCodeLogo from '@/shared/ui/OpenCodeLogo';
+import KiroLogo from '@/shared/ui/KiroLogo';
 
 type LLMProviderLogoProps = {
   provider?: LLMProvider | string | null;
@@ -24,6 +25,10 @@ export function LLMProviderLogo({
 
   if (provider === 'opencode') {
     return <OpenCodeLogo className={className} />;
+  }
+
+  if (provider === 'kiro') {
+    return <KiroLogo className={className} />;
   }
 
   return <ClaudeLogo className={className} />;

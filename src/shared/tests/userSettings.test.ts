@@ -67,6 +67,16 @@ test('a write is readable synchronously and reaches the server after the debounc
   assert.deepEqual(saved, [{ theme: 'dark' }]);
 });
 
+test('Kiro remains selected after preferences migrate from localStorage', async () => {
+  localStorage.setItem('selected-provider', 'kiro');
+  localStorage.setItem('kiro-settings', JSON.stringify({ allowedTools: ['fs_read'] }));
+  const store = await loadStore();
+  const { readSelectedProvider } = await import('@/shared/selectedProvider');
+  await store.hydrateUserPreferences();
+  assert.equal(readSelectedProvider(), 'kiro');
+  assert.deepEqual(store.readUserPreference('kiroPermissions', {}), { allowedTools: ['fs_read'] });
+});
+
 test('a burst of writes collapses into one request carrying every change', async () => {
   const store = await loadStore();
 

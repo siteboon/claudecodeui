@@ -12,6 +12,7 @@
     "copyAsText": "Copier en texte brut"
   },
   "messageTypes": {
+    "kiro": "Kiro",
     "user": "U",
     "error": "Erreur",
     "tool": "Outil",
@@ -124,6 +125,7 @@
       "google": "par Google"
     },
     "readyPrompt": {
+      "kiro": "Prêt à utiliser Kiro avec {{model}}. Commencez à taper votre message ci-dessous.",
       "claude": "Prêt à utiliser Claude avec {{model}}. Commencez à taper votre message ci-dessous.",
       "cursor": "Prêt à utiliser Cursor avec {{model}}. Commencez à taper votre message ci-dessous.",
       "codex": "Prêt à utiliser Codex avec {{model}}. Commencez à taper votre message ci-dessous.",

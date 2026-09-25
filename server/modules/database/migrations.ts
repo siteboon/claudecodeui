@@ -476,6 +476,33 @@ const ensureProjectsForSessionPaths = (db: Database): void => {
   `);
 };
 
+/** SQLite requires a table rebuild to expand an existing CHECK constraint. */
+const allowKiroProviderModels = (db: Database): void => {
+  const table = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'provider_models'"
+  ).get() as { sql: string } | undefined;
+  if (!table || table.sql.includes("'kiro'")) return;
+
+  db.transaction(() => {
+    const sequence = db.prepare(
+      "SELECT seq FROM sqlite_sequence WHERE name = 'provider_models'"
+    ).get() as { seq: number } | undefined;
+    db.exec('ALTER TABLE provider_models RENAME TO provider_models_before_kiro');
+    db.exec(PROVIDER_MODELS_TABLE_SCHEMA_SQL);
+    db.exec(`
+      INSERT INTO provider_models (id, provider, model_id, model_name, sort_order, created_at, updated_at)
+      SELECT id, provider, model_id, model_name, sort_order, created_at, updated_at
+      FROM provider_models_before_kiro
+    `);
+    db.exec('DROP TABLE provider_models_before_kiro');
+    // Do not reuse ids belonging to models deleted before the migration.
+    if (sequence) {
+      db.prepare("DELETE FROM sqlite_sequence WHERE name = 'provider_models'").run();
+      db.prepare("INSERT INTO sqlite_sequence (name, seq) VALUES ('provider_models', ?)").run(sequence.seq);
+    }
+  })();
+};
+
 export const runMigrations = (db: Database) => {
   try {
     const usersTableInfo = db.prepare('PRAGMA table_info(users)').all() as { name: string }[];
@@ -500,6 +527,7 @@ export const runMigrations = (db: Database) => {
     db.exec('CREATE INDEX IF NOT EXISTS idx_notification_channel_endpoints_user_channel ON notification_channel_endpoints(user_id, channel)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_notification_channel_endpoints_enabled ON notification_channel_endpoints(enabled)');
     db.exec(PROVIDER_MODELS_TABLE_SCHEMA_SQL);
+    allowKiroProviderModels(db);
     db.exec(`
       CREATE INDEX IF NOT EXISTS idx_provider_models_provider_order
       ON provider_models(provider, sort_order, id)

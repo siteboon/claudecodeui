@@ -51,6 +51,7 @@ function createDependencies(
     queryCursor: unexpectedProviderCall as AgentDependencies['queryCursor'],
     queryCodex: unexpectedProviderCall as AgentDependencies['queryCodex'],
     queryOpenCode: unexpectedProviderCall as AgentDependencies['queryOpenCode'],
+    queryKiro: unexpectedProviderCall as AgentDependencies['queryKiro'],
     GithubClient: class {} as unknown as AgentDependencies['GithubClient'],
     ...overrides,
   };
@@ -251,4 +252,31 @@ test('Agent route starts codex on the catalog default when the request names no 
   });
 
   assert.deepEqual(codexCalls.map((call) => call.model), ['catalog-default']);
+});
+
+test('Agent route dispatches Kiro prompts through its injected runtime', async () => {
+  const calls: unknown[] = [];
+  await withAgentServer(createDependencies({
+    fileSystem: { access: async () => undefined } as unknown as AgentDependencies['fileSystem'],
+    models: {
+      getProviderModels: async () => ({ OPTIONS: [], DEFAULT: 'catalog-default' }),
+    } as unknown as AgentDependencies['models'],
+    queryKiro: async (prompt, options) => {
+      calls.push({ prompt, options });
+    },
+  }), async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/agent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectPath: '/home/test/project', message: 'Run Kiro',
+        provider: 'kiro', model: 'auto', stream: false,
+      }),
+    });
+    assert.equal(response.status, 200);
+  });
+  assert.deepEqual(calls, [{
+    prompt: 'Run Kiro',
+    options: { projectPath: '/home/test/project', cwd: '/home/test/project', sessionId: 'app-session-1', model: 'auto' },
+  }]);
 });
