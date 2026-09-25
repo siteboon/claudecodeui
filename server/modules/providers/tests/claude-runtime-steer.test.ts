@@ -311,3 +311,75 @@ test('a session held open for background work after its result refuses to steer'
     assert.equal(sent.filter((message) => message.kind === 'complete').length, 1, 'still exactly one complete — no second terminal event was triggered by the refused steer');
   });
 });
+
+test('a late message from a superseded run does not settle or clear the superseding run\'s pending steer', async () => {
+  // `chat.send { interrupt: true }` (chat-websocket.service.ts's
+  // abortRunningRun + dispatchRun) replaces an in-flight turn with a new run
+  // on the SAME app session id. `addSession` sees a different live instance
+  // under that key and supersedes the old entry, interrupting it
+  // asynchronously — but the old run's own generator keeps yielding whatever
+  // the fake CLI already queued, same as a real process winding down instead
+  // of dying instantly. Any message it emits after that point must not reach
+  // into the entry that now belongs to the new run.
+  const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-runtime-steer-supersede-'));
+  try {
+    const runA = createScriptedQuery();
+    const runB = createScriptedQuery();
+    const sentA: NormalizedMessage[] = [];
+    const sentB: NormalizedMessage[] = [];
+    const writerA = { send: (message: NormalizedMessage) => { sentA.push(message); }, userId: null };
+    const writerB = { send: (message: NormalizedMessage) => { sentB.push(message); }, userId: null };
+    const sessions = new ClaudeSessionsProvider({ getLiveRunStartTime: () => null });
+    const makeContext = (createQuery: NonNullable<ProviderRuntimeContext['createQuery']>): ProviderRuntimeContext => ({
+      resolveProviderSessionId: () => null,
+      resolveResumeModel: async () => undefined,
+      getProviderModels: async () => CLAUDE_PREDEFINED_MODELS as never,
+      normalizeMessage: (raw, sessionId) => sessions.normalizeMessage(raw, sessionId),
+      isProviderInstalled: async () => true,
+      createQuery,
+    });
+
+    // Run A starts and registers the session entry.
+    const doneA = queryClaudeSDK('hello', { sessionId: SESSION_ID, cwd }, writerA as never, makeContext(runA.createQuery));
+    runA.script.emit(init());
+    await waitFor(() => runA.script.stdin.length >= 1, 'run A\'s initial prompt to reach stdin');
+
+    // Run B starts on the same app session id and supersedes run A.
+    const doneB = queryClaudeSDK('replace it', { sessionId: SESSION_ID, cwd }, writerB as never, makeContext(runB.createQuery));
+    runB.script.emit(init());
+    await waitFor(() => runB.script.stdin.length >= 1, 'run B\'s initial prompt to reach stdin');
+
+    // Run B registers a real pending steer of its own — unconfirmed, same as
+    // this file's very first test.
+    const steered = await steerClaudeSDKSession(SESSION_ID, 'do this in run B', { cwd });
+    assert.ok(steered, 'run B is the live, steerable session now');
+    await waitFor(() => runB.script.stdin.length >= 2, 'run B\'s steered record to reach stdin');
+
+    // Run A (superseded, but still draining what its own scripted stream
+    // already queued) reports a `result` of its own late.
+    runA.script.emit(result());
+    await flushMicrotasks();
+
+    // Run B's own first `result` — with nothing having confirmed its steer's
+    // fold, this must defer `complete` by one extra result, exactly like the
+    // unconfirmed-steer case in this file's first test. Before the fix, run
+    // A's late result read/cleared run B's `pendingSteers` (both were fetched
+    // via the same unguarded `getSession(sessionKey())`), so run B's result
+    // found nothing pending and completed immediately instead.
+    runB.script.emit(result());
+    await flushMicrotasks();
+    assert.equal(sentB.some((message) => message.kind === 'complete'), false, 'run A\'s late result must not have cleared run B\'s pending steer');
+
+    // The follow-up turn the CLI is guaranteed to push for the dropped steer.
+    runB.script.emit(result());
+    await waitFor(() => sentB.some((message) => message.kind === 'complete'), 'run B\'s deferred complete');
+    assert.equal(sentB.filter((message) => message.kind === 'complete').length, 1, 'run B completes exactly once');
+
+    runA.script.end();
+    runB.script.end();
+    await doneA;
+    await doneB;
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});

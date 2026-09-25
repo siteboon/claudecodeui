@@ -1313,12 +1313,19 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       // undeclared on the pinned SDK's `SDKAssistantMessage` type (the real
       // CLI emits them regardless), so `settlePendingSteers` reads both
       // defensively.
+      // A superseding run may already own this session key (see the same
+      // guard on `turnCompleted` below) — settle steers only against the
+      // entry this run still owns, never a newer run's entry.
+      const ownedSteerSession = (() => {
+        const candidate = getSession(sessionKey());
+        return candidate && candidate.instance === queryInstance ? candidate : undefined;
+      })();
       if (message.type === 'assistant') {
-        settlePendingSteers(getSession(sessionKey()), message);
+        settlePendingSteers(ownedSteerSession, message);
       }
       // Second fold-confirmation signal — see `settlePendingSteerByMarker`
       // and the CLI-version note above `STEER_FOLD_MARKER`.
-      settlePendingSteerByMarker(getSession(sessionKey()), message);
+      settlePendingSteerByMarker(ownedSteerSession, message);
       backgroundWork.apply(sessionKey(), message);
 
       // A task the user stopped gets no follow-up turn from the CLI — only its
@@ -1343,7 +1350,11 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         // just the `assistant` frame that preceded it), so settle against
         // this message first — same helper, same defensive reads — before
         // deciding whether any steer is still unconfirmed.
-        const session = getSession(sessionKey());
+        // Same ownership guard as above: a superseding run may already own
+        // this session key, and this (old) run must not settle or read that
+        // run's pending steers.
+        const rawSession = getSession(sessionKey());
+        const session = rawSession && rawSession.instance === queryInstance ? rawSession : undefined;
         settlePendingSteers(session, message);
 
         // A steer pushed onto this turn that the CLI never confirmed folding
