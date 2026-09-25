@@ -249,7 +249,7 @@ export function resolvePluginAssetPath(name, assetPath) {
   return realResolved;
 }
 
-export function installPluginFromGit(url) {
+export function installPluginFromGit(url, spawnProcess = spawn) {
   return new Promise((resolve, reject) => {
     if (typeof url !== 'string' || !url.trim()) {
       return reject(new Error('Invalid URL: must be a non-empty string'));
@@ -295,7 +295,7 @@ export function installPluginFromGit(url) {
       resolve(manifest);
     };
 
-    const gitProcess = spawn('git', ['clone', '--depth', '1', '--', url, tempDir], {
+    const gitProcess = spawnProcess('git', ['clone', '--depth', '1', '--', url, tempDir], {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -340,7 +340,7 @@ export function installPluginFromGit(url) {
       // --ignore-scripts prevents postinstall hooks from executing arbitrary code.
       const packageJsonPath = path.join(tempDir, 'package.json');
       if (fs.existsSync(packageJsonPath)) {
-        const npmProcess = spawn('npm', ['install', '--ignore-scripts'], {
+        const npmProcess = spawnProcess('npm', ['install', '--ignore-scripts', '--include=dev'], {
           cwd: tempDir,
           stdio: ['ignore', 'pipe', 'pipe'],
         });
@@ -369,7 +369,7 @@ export function installPluginFromGit(url) {
   });
 }
 
-export function updatePluginFromGit(name) {
+export function updatePluginFromGit(name, spawnProcess = spawn) {
   return new Promise((resolve, reject) => {
     const pluginDir = getPluginDir(name);
     if (!pluginDir) {
@@ -377,7 +377,7 @@ export function updatePluginFromGit(name) {
     }
 
     // Only fast-forward to avoid silent divergence
-    const gitProcess = spawn('git', ['pull', '--ff-only', '--'], {
+    const gitProcess = spawnProcess('git', ['pull', '--ff-only', '--'], {
       cwd: pluginDir,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -407,7 +407,7 @@ export function updatePluginFromGit(name) {
       // Re-run npm install if package.json exists
       const packageJsonPath = path.join(pluginDir, 'package.json');
       if (fs.existsSync(packageJsonPath)) {
-        const npmProcess = spawn('npm', ['install', '--ignore-scripts'], {
+        const npmProcess = spawnProcess('npm', ['install', '--ignore-scripts', '--include=dev'], {
           cwd: pluginDir,
           stdio: ['ignore', 'pipe', 'pipe'],
         });
