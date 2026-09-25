@@ -97,6 +97,24 @@ export function createProviderRuntimeService(
       return Boolean(await runtime.stopBackgroundTask?.(sessionId, taskId));
     },
 
+    canSteer(providerName: string): boolean {
+      try {
+        return typeof dependencies.resolveProvider(providerName).runtime.steer === 'function';
+      } catch {
+        return false;
+      }
+    },
+
+    async steer(
+      providerName: LLMProvider,
+      sessionId: string,
+      command: string,
+      options: AnyRecord,
+    ): Promise<{ uuid: string } | null> {
+      const { runtime } = dependencies.resolveProvider(providerName);
+      return (await runtime.steer?.(sessionId, command, options)) ?? null;
+    },
+
     hasBackgroundWork(sessionId: string): boolean {
       return dependencies.listProviders().some((provider) =>
         (provider.runtime.listBackgroundWork?.() ?? []).some((entry) => entry.sessionId === sessionId));

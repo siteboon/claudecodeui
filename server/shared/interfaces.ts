@@ -37,6 +37,18 @@ export interface IProviderRuntime {
     context: ProviderRuntimeContext,
   ): Promise<unknown>;
   abort(sessionId: string): boolean | Promise<boolean>;
+  /**
+   * Pushes a message into an already-running turn's stdin instead of queuing
+   * it for a turn of its own. Only implemented by runtimes that keep stdin
+   * held open across a turn (today: Claude's SDK runtime). Resolves `null`
+   * when there is no live process for the session, or it cannot accept more
+   * input (already winding down).
+   */
+  steer?(
+    sessionId: string,
+    command: string,
+    options: { images?: unknown[]; files?: unknown[]; cwd?: string },
+  ): Promise<{ uuid: string } | null>;
   permissions?: ProviderRuntimePermissionGateway;
   /**
    * Sessions with background tasks still outstanding, whether or not their
