@@ -1,5 +1,7 @@
 export { sessionSynchronizerService } from './services/session-synchronizer.service.js';
 export { providerSkillsService } from './services/skills.service.js';
+// providerMcpService: used by the server entrypoint's MCP routes and by Commands,
+// whose `/mcp` builtin lists the configured servers and their connection status.
 export { providerMcpService } from './services/mcp.service.js';
 export { providerRuntimeService } from './services/provider-runtime.service.js';
 

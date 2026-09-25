@@ -498,6 +498,19 @@
     "help": {
       "title": "关于 Codex MCP",
       "description": "Codex 支持基于 stdio 的 MCP 服务器。您可以添加服务器，通过额外的工具和资源来扩展 Codex 的功能。"
+    },
+    "connection": {
+      "check": "检查状态",
+      "checking": "检查中…",
+      "checkHint": "连接每个已配置的 MCP 服务器并报告其是否响应",
+      "checkFailed": "无法检查 MCP 服务器状态。{{details}}",
+      "unsupported": "{{provider}} 不报告 MCP 连接状态。",
+      "state": {
+        "connected": "已连接",
+        "failed": "未连接",
+        "pending": "等待批准",
+        "unknown": "未知"
+      }
     }
   },
   "pluginSettings": {

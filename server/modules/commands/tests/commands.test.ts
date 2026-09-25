@@ -38,10 +38,27 @@ function createModelsService(sessionModels: Record<string, string> = {}) {
   };
 }
 
+/**
+ * Stands in for `providerMcpService`. `listProviderMcpServers` returns the
+ * scope-grouped shape the real service returns, and the probe reports one
+ * status per server name exactly as the Claude health check does - including
+ * the case of a name the health check never mentioned.
+ */
+function createMcpService(overrides: {
+  scopes?: Record<string, unknown[]>;
+  report?: Record<string, unknown>;
+} = {}) {
+  return {
+    listProviderMcpServers: async () => overrides.scopes ?? { user: [], local: [], project: [] },
+    probeProviderMcpServerStatuses: async () => overrides.report ?? { supported: false, statuses: [] },
+  };
+}
+
 async function executeCommand(
   commandName: string,
   context: Record<string, unknown>,
   sessionModels: Record<string, string> = {},
+  mcpService: ReturnType<typeof createMcpService> = createMcpService(),
 ): Promise<Record<string, unknown>> {
   const router = createCommandsRouter({
     fileSystem: {
@@ -50,6 +67,7 @@ async function executeCommand(
     homeDirectory: () => '/home/test',
     appRoot: '/app',
     models: createModelsService(sessionModels) as never,
+    mcp: mcpService as never,
     runtime: {
       uptime: () => 0,
       memoryUsage: () => ({ rss: 0, heapTotal: 0, heapUsed: 0, external: 0, arrayBuffers: 0 }),
@@ -111,4 +129,71 @@ test('cost and status commands report the same resolved model as /models', async
 
   assert.equal((cost.data as { model: string }).model, 'haiku');
   assert.equal((status.data as { model: string }).model, 'haiku');
+});
+
+test('mcp command lists every scope with the status the provider reported', async () => {
+  const result = await executeCommand('/mcp', { provider: 'claude', projectPath: '/work/repo' }, {}, createMcpService({
+    scopes: {
+      user: [{ name: 'internal-http', scope: 'user', transport: 'http', url: 'https://mcp.example/mcp' }],
+      project: [{ name: 'repo-tools', scope: 'project', transport: 'stdio', command: 'node', args: ['server.js'] }],
+      local: [{ name: 'scratch', scope: 'local', transport: 'stdio', command: 'node', args: ['scratch.js'] }],
+    },
+    report: {
+      supported: true,
+      statuses: [
+        { name: 'internal-http', state: 'failed', detail: 'Failed to connect - HTTP 401' },
+        { name: 'repo-tools', state: 'connected' },
+      ],
+    },
+  }));
+
+  assert.equal(result.action, 'mcp');
+  const data = result.data as {
+    statusSupported: boolean;
+    servers: Array<{ name: string; scope: string; target: string; status: string; statusDetail?: string }>;
+  };
+
+  assert.equal(data.statusSupported, true);
+  // User scope first, then project, then local - the settings list's order.
+  assert.deepEqual(data.servers.map((server) => server.name), ['internal-http', 'repo-tools', 'scratch']);
+  assert.equal(data.servers[0].status, 'failed');
+  assert.equal(data.servers[0].statusDetail, 'Failed to connect - HTTP 401');
+  assert.equal(data.servers[0].target, 'https://mcp.example/mcp');
+  assert.equal(data.servers[1].status, 'connected');
+  assert.equal(data.servers[1].target, 'node server.js');
+  // A server the health check never mentioned stays unknown, never "failed".
+  assert.equal(data.servers[2].status, 'unknown');
+});
+
+test('mcp command reports unsupported status probing without claiming a failure', async () => {
+  const result = await executeCommand('/mcp', { provider: 'codex' }, {}, createMcpService({
+    scopes: { user: [{ name: 'codex-tools', scope: 'user', transport: 'stdio', command: 'node' }], local: [], project: [] },
+    report: { supported: false, statuses: [] },
+  }));
+
+  const data = result.data as {
+    provider: string;
+    statusSupported: boolean;
+    servers: Array<{ status: string }>;
+  };
+
+  assert.equal(data.provider, 'codex');
+  assert.equal(data.statusSupported, false);
+  assert.equal(data.servers[0].status, 'unknown');
+});
+
+test('mcp command skips the probe entirely when no servers are configured', async () => {
+  let probed = false;
+  const mcpService = {
+    listProviderMcpServers: async () => ({ user: [], local: [], project: [] }),
+    probeProviderMcpServerStatuses: async () => {
+      probed = true;
+      return { supported: true, statuses: [] };
+    },
+  };
+
+  const result = await executeCommand('/mcp', { provider: 'claude' }, {}, mcpService as never);
+
+  assert.deepEqual((result.data as { servers: unknown[] }).servers, []);
+  assert.equal(probed, false);
 });

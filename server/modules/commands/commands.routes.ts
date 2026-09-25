@@ -10,6 +10,7 @@ type CommandsRouterDependencies = {
   homeDirectory(): string;
   appRoot: string;
   models: typeof import('../providers/index.js').providerModelsService;
+  mcp: typeof import('../providers/index.js').providerMcpService;
   runtime: {
     uptime(): number;
     memoryUsage(): NodeJS.MemoryUsage;
@@ -25,6 +26,7 @@ const fs = dependencies.fileSystem;
 const os = { homedir: dependencies.homeDirectory };
 const APP_ROOT = dependencies.appRoot;
 const providerModelsService = dependencies.models;
+const providerMcpService = dependencies.mcp;
 const process = dependencies.runtime;
 const router = express.Router();
 
@@ -165,6 +167,76 @@ async function scanCommandsDirectory(dir, baseDir, namespace) {
 }
 
 /**
+ * Orders MCP servers the way the settings list does - user scope first, then
+ * the workspace's project and local scopes - so the same configuration reads
+ * the same in both places.
+ */
+const MCP_SCOPE_ORDER = ["user", "project", "local"];
+
+/** Renders the connection target of one MCP server for display. */
+const formatMcpTarget = (server) => {
+  if (server.url) {
+    return server.url;
+  }
+
+  const args = Array.isArray(server.args) ? server.args : [];
+  return [server.command, ...args].filter(Boolean).join(" ");
+};
+
+/**
+ * Lists the current provider's MCP servers with the connection status the
+ * provider itself reports, which is the chat-side answer to "is this server
+ * connected or still waiting to be authenticated?".
+ *
+ * Status is matched on the server name because that is the only identifier the
+ * health check reports; a provider without a health check yields
+ * `statusSupported: false` and every server stays `unknown`.
+ */
+const executeMcpCommand = async (args, context, mcpService) => {
+  const provider = readModelProvider(context?.provider);
+  const workspacePath =
+    typeof context?.projectPath === "string" && context.projectPath
+      ? context.projectPath
+      : undefined;
+
+  const scopedServers = await mcpService.listProviderMcpServers(provider, {
+    workspacePath,
+  });
+
+  const servers = MCP_SCOPE_ORDER.flatMap((scope) => scopedServers[scope] || []);
+
+  const report = servers.length > 0
+    ? await mcpService.probeProviderMcpServerStatuses(provider, { workspacePath })
+    : { supported: false, statuses: [] };
+
+  const statusByName = new Map(
+    (report.statuses || []).map((status) => [status.name, status]),
+  );
+
+  return {
+    type: "builtin",
+    action: "mcp",
+    data: {
+      provider,
+      providerLabel: MODEL_PROVIDER_LABELS[provider],
+      statusSupported: Boolean(report.supported),
+      statusError: report.error,
+      servers: servers.map((server) => {
+        const status = statusByName.get(server.name);
+        return {
+          name: server.name,
+          scope: server.scope,
+          transport: server.transport,
+          target: formatMcpTarget(server),
+          status: status?.state || "unknown",
+          statusDetail: status?.detail,
+        };
+      }),
+    },
+  };
+};
+
+/**
  * Built-in commands that are always available
  */
 const builtInCommands = [
@@ -195,6 +267,12 @@ const builtInCommands = [
   {
     name: "/config",
     description: "Open settings and configuration",
+    namespace: "builtin",
+    metadata: { type: "builtin" },
+  },
+  {
+    name: "/mcp",
+    description: "List MCP servers and their connection status",
     namespace: "builtin",
     metadata: { type: "builtin" },
   },
@@ -259,6 +337,8 @@ Custom commands can be created in:
   },
 
   "/models": (args, context) => executeModelsCommand(args, context, providerModelsService),
+
+  "/mcp": (args, context) => executeMcpCommand(args, context, providerMcpService),
 
   "/cost": async (args, context) => {
     const tokenUsage = context?.tokenUsage || {};

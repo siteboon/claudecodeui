@@ -683,6 +683,18 @@ router.get(
   }),
 );
 
+// On demand only: the probe connects to every configured server, so it must not
+// ride along with the list request that paints the settings page.
+router.get(
+  '/:provider/mcp/servers/status',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const workspacePath = readOptionalQueryString(req.query.workspacePath);
+    const report = await providerMcpService.probeProviderMcpServerStatuses(provider, { workspacePath });
+    res.json(createApiSuccessResponse(report));
+  }),
+);
+
 router.post(
   '/:provider/mcp/servers',
   asyncHandler(async (req: Request, res: Response) => {

@@ -335,7 +335,8 @@
       "status": "Inspect runtime, version, provider, and environment status.",
       "memory": "Open the project CLAUDE.md memory file.",
       "config": "Open settings and configuration.",
-      "help": "Show command documentation and syntax."
+      "help": "Show command documentation and syntax.",
+      "mcp": "List MCP servers and their connection status."
     },
     "modalMeta": {
       "helpEyebrow": "Command center",
@@ -350,7 +351,22 @@
       "statusEyebrow": "Runtime health",
       "statusTitle": "System Status",
       "statusSubtitle": "Version, provider, runtime, and environment details in one place.",
-      "commandResult": "Command Result"
+      "commandResult": "Command Result",
+      "mcpEyebrow": "Integrations",
+      "mcpTitle": "MCP Servers",
+      "mcpSubtitle": "Configured Model Context Protocol servers and their connection status."
+    },
+    "mcpCommand": {
+      "empty": "No MCP servers are configured for {{provider}}.",
+      "statusUnsupported": "{{provider}} does not report MCP connection status.",
+      "statusFailed": "Could not check MCP server status. {{details}}",
+      "authHint": "A server that needs authentication is signed in from a terminal with the Claude CLI: run claude, then /mcp.",
+      "state": {
+        "connected": "Connected",
+        "failed": "Not connected",
+        "pending": "Pending approval",
+        "unknown": "Unknown"
+      }
     },
     "choiceSavedSession": "Your choice is saved for this session and becomes the default for new chats.",
     "choiceSavedDefault": "Your choice becomes the default model for new chats.",

@@ -1,7 +1,14 @@
 import path from 'node:path';
 
 import type { IProviderMcp } from '@/shared/interfaces.js';
-import type { LLMProvider, McpScope, McpTransport, ProviderMcpServer, UpsertProviderMcpServerInput } from '@/shared/types.js';
+import type {
+  LLMProvider,
+  McpScope,
+  McpTransport,
+  ProviderMcpServer,
+  ProviderMcpServerStatus,
+  UpsertProviderMcpServerInput,
+} from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
 
 const resolveWorkspacePath = (workspacePath?: string): string =>
@@ -109,6 +116,15 @@ export abstract class McpProvider implements IProviderMcp {
     }
 
     return { removed, provider: this.provider, name: normalizedName, scope };
+  }
+
+  /**
+   * Providers that can ask their CLI to health-check MCP servers override this.
+   * The default answers "no health check available" so every provider satisfies
+   * `IProviderMcp` without inventing a state it cannot observe.
+   */
+  async probeServerStatuses(): Promise<ProviderMcpServerStatus[] | null> {
+    return null;
   }
 
   protected abstract readScopedServers(

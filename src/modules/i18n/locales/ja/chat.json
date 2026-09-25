@@ -242,5 +242,27 @@
     "failed": "未送信 — {{reason}}",
     "cancel": "予約を取り消す",
     "dismiss": "失敗の通知を閉じる"
+  },
+  "misc": {
+    "fallbackCommands": {
+      "mcp": "MCP サーバーと接続状態を一覧表示します。"
+    },
+    "modalMeta": {
+      "mcpEyebrow": "連携",
+      "mcpTitle": "MCP サーバー",
+      "mcpSubtitle": "設定済みの Model Context Protocol サーバーと接続状態。"
+    },
+    "mcpCommand": {
+      "empty": "{{provider}} に設定された MCP サーバーはありません。",
+      "statusUnsupported": "{{provider}} は MCP の接続状態を報告しません。",
+      "statusFailed": "MCP サーバーの状態を確認できませんでした。{{details}}",
+      "authHint": "認証が必要なサーバーは、ターミナルで Claude CLI を使って接続します。claude を実行し、/mcp を入力してください。",
+      "state": {
+        "connected": "接続済み",
+        "failed": "未接続",
+        "pending": "承認待ち",
+        "unknown": "不明"
+      }
+    }
   }
 }

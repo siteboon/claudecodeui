@@ -12,6 +12,7 @@ import type {
   ProviderCurrentActiveModel,
   ProviderModelsDefinition,
   ProviderMcpServer,
+  ProviderMcpServerStatus,
   ProviderSkillCreateInput,
   ProviderSkillRemoveInput,
   ProviderRuntimeContext,
@@ -186,6 +187,18 @@ export interface IProviderMcp {
   removeServer(
     input: { name: string; scope?: McpScope; workspacePath?: string },
   ): Promise<{ removed: boolean; provider: LLMProvider; name: string; scope: McpScope }>;
+
+  /**
+   * Health-checks the MCP servers visible from `workspacePath`, so the UI can
+   * tell a connected server from one that is still waiting to be authenticated.
+   *
+   * Resolves to null for providers that offer no health check at all, which
+   * callers must report as an unknown state rather than a failure. Individual
+   * unreachable servers are a `failed` entry, not a rejection.
+   */
+  probeServerStatuses(
+    options?: { workspacePath?: string },
+  ): Promise<ProviderMcpServerStatus[] | null>;
 }
 
 // ---------------------------

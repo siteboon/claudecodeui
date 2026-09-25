@@ -3,10 +3,20 @@ import { useTranslation } from 'react-i18next';
 
 import { api } from '@/shared/api';
 import { MCP_GLOBAL_SUPPORTED_TRANSPORTS, MCP_PROVIDER_NAMES, MCP_SUPPORTED_SCOPES } from '@/shared/constants';
-import type { McpFormState, McpProject, McpProvider, McpScope, McpTransport, ProviderMcpServer, UpsertProviderMcpServerPayload } from '@/shared/types';
+import type {
+  McpFormState,
+  McpProject,
+  McpProvider,
+  McpScope,
+  McpServerConnectionStatus,
+  McpTransport,
+  ProviderMcpServer,
+  UpsertProviderMcpServerPayload,
+} from '@/shared/types';
 import {
   createMcpPayloadFromForm,
   getErrorMessage,
+  getMcpServerIdentity,
   getProjectPath,
   isMcpScope,
   isMcpTransport,
@@ -42,6 +52,24 @@ type ProviderMcpServerResponse = {
 
 type GlobalMcpServerResponse = {
   results: GlobalMcpServerResult[];
+};
+
+type McpServerStatusResponse = {
+  provider: McpProvider;
+  supported: boolean;
+  statuses: McpServerConnectionStatus[];
+  error?: string;
+};
+
+// One probe covers the user scope plus one workspace's project/local scopes, so
+// the hook runs one per distinct workspace path in the list. `undefined` asks
+// the server to probe from its own working directory, which is all that is
+// needed when only user-scoped servers are configured.
+type McpStatusProbeResult = {
+  workspacePath?: string;
+  supported: boolean;
+  statusesByName: Map<string, McpServerConnectionStatus>;
+  error?: string;
 };
 
 // Internal MCP-side shape; `name` is now filled from the DB projectId since
@@ -171,6 +199,25 @@ const fetchProviderScopeServers = async (
   return (data.data.servers || []).map((server) => normalizeServer(provider, scope, server, project));
 };
 
+const fetchProviderServerStatuses = async (
+  provider: McpProvider,
+  workspacePath?: string,
+): Promise<McpStatusProbeResult> => {
+  const response = await api.providers.mcpServerStatuses(provider, { workspacePath });
+  const data = await toResponseJson<ApiResponse<McpServerStatusResponse>>(response);
+
+  if (!response.ok || !data.success) {
+    throw new Error(getApiErrorMessage(data, `Failed to check ${provider} MCP server status`));
+  }
+
+  return {
+    workspacePath,
+    supported: Boolean(data.data.supported),
+    statusesByName: new Map((data.data.statuses || []).map((status) => [status.name, status])),
+    error: data.data.error,
+  };
+};
+
 const deleteProviderServer = async (
   provider: McpProvider,
   server: ProviderMcpServer,
@@ -220,9 +267,38 @@ const didServerIdentityChange = (
   || (editingServer.workspacePath || '') !== (payload.workspacePath || '')
 );
 
-const getServerIdentity = (server: ProviderMcpServer): string => (
-  `${server.provider}:${server.scope}:${server.workspacePath || 'global'}:${server.name}`
-);
+/**
+ * Joins probe results onto the listed servers by identity.
+ *
+ * A workspace-scoped server may only take the status from the probe run in its
+ * own workspace; a user-scoped server appears in every probe, so the first one
+ * that mentions it wins. A server no probe mentioned is recorded as `unknown`
+ * rather than left out, so a completed check labels every card instead of
+ * silently skipping the ones the provider did not mention.
+ */
+const mapStatusesToServers = (
+  servers: ProviderMcpServer[],
+  probes: McpStatusProbeResult[],
+): Map<string, McpServerConnectionStatus> => {
+  const statusesByIdentity = new Map<string, McpServerConnectionStatus>();
+
+  servers.forEach((server) => {
+    const candidates = server.workspacePath
+      ? probes.filter((probe) => probe.workspacePath === server.workspacePath)
+      : probes;
+
+    const match = candidates
+      .map((probe) => probe.statusesByName.get(server.name))
+      .find((status): status is McpServerConnectionStatus => Boolean(status));
+
+    statusesByIdentity.set(
+      getMcpServerIdentity(server),
+      match ?? { name: server.name, state: 'unknown' },
+    );
+  });
+
+  return statusesByIdentity;
+};
 
 const getCacheKey = (provider: McpProvider, projects: ProjectTarget[]): string => {
   const projectKey = projects.map((project) => project.path).sort().join('|');
@@ -263,10 +339,10 @@ const mergeServers = (
 ): ProviderMcpServer[] => {
   const serversById = new Map<string, ProviderMcpServer>();
   existingServers.forEach((server) => {
-    serversById.set(getServerIdentity(server), server);
+    serversById.set(getMcpServerIdentity(server), server);
   });
   incomingServers.forEach((server) => {
-    serversById.set(getServerIdentity(server), server);
+    serversById.set(getMcpServerIdentity(server), server);
   });
 
   return sortServers([...serversById.values()]);
@@ -312,6 +388,17 @@ export function useMcpServers({ selectedProvider, currentProjects }: UseMcpServe
   // `editingServer` made eight combinations representable, of which three were
   // legal, and both modals stayed mounted running a full form hook while closed.
   const [serverForm, setServerForm] = useState<McpServerFormState>(null);
+  // Connection statuses keyed by server identity. Separate from `servers`
+  // because the probe is an explicit user action that contacts every configured
+  // server, so the list must be able to paint long before any status exists.
+  const [serverStatuses, setServerStatuses] = useState<Map<string, McpServerConnectionStatus>>(new Map());
+  // Drives the refresh button's pending state; the probe takes seconds, so
+  // "nothing happened yet" and "still checking" have to look different.
+  const [isCheckingStatuses, setIsCheckingStatuses] = useState(false);
+  // Why the last probe produced nothing: an unsupported provider, or a failure
+  // message. Held apart from `loadError` so a failed probe never makes the
+  // server list itself look broken.
+  const [statusNotice, setStatusNotice] = useState<{ kind: 'unsupported' | 'error'; message?: string } | null>(null);
   const activeLoadIdRef = useRef(0);
 
   const projectTargets = useMemo(() => createProjectTargets(currentProjects), [currentProjects]);
@@ -415,6 +502,45 @@ export function useMcpServers({ selectedProvider, currentProjects }: UseMcpServe
     setIsLoadingProjectScopes(false);
   }, [cacheKey, projectTargets, selectedProvider]);
 
+  const checkStatuses = useCallback(async () => {
+    if (servers.length === 0) {
+      return;
+    }
+
+    setIsCheckingStatuses(true);
+    setStatusNotice(null);
+
+    // Probe once per distinct workspace, since one run covers that workspace's
+    // project and local scopes plus the shared user scope.
+    const workspacePaths = Array.from(
+      new Set(servers.map((server) => server.workspacePath).filter((path): path is string => Boolean(path))),
+    );
+    const probeTargets: Array<string | undefined> = workspacePaths.length > 0 ? workspacePaths : [undefined];
+
+    try {
+      const probes = await Promise.all(
+        probeTargets.map((workspacePath) => fetchProviderServerStatuses(selectedProvider, workspacePath)),
+      );
+
+      setServerStatuses(mapStatusesToServers(servers, probes));
+
+      if (probes.every((probe) => !probe.supported)) {
+        setStatusNotice({ kind: 'unsupported' });
+        return;
+      }
+
+      const failedProbe = probes.find((probe) => probe.error);
+      if (failedProbe) {
+        setStatusNotice({ kind: 'error', message: failedProbe.error });
+      }
+    } catch (error) {
+      setServerStatuses(new Map());
+      setStatusNotice({ kind: 'error', message: getErrorMessage(error) });
+    } finally {
+      setIsCheckingStatuses(false);
+    }
+  }, [selectedProvider, servers]);
+
   const openForm = useCallback((server?: ProviderMcpServer) => {
     setServerForm({ scope: 'provider', editingServer: server || null });
   }, []);
@@ -512,6 +638,10 @@ export function useMcpServers({ selectedProvider, currentProjects }: UseMcpServe
     setServerForm(null);
     setDeleteError(null);
     setSaveStatus(null);
+    // Statuses belong to the provider that was probed; keeping them across a
+    // tab switch would label another provider's servers with stale results.
+    setServerStatuses(new Map());
+    setStatusNotice(null);
   }, [selectedProvider]);
 
   useEffect(() => {
@@ -531,6 +661,10 @@ export function useMcpServers({ selectedProvider, currentProjects }: UseMcpServe
     deleteError,
     saveStatus,
     serverForm,
+    serverStatuses,
+    isCheckingStatuses,
+    statusNotice,
+    checkStatuses,
     openForm,
     openGlobalForm,
     closeForm,

@@ -1,5 +1,11 @@
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
-import type { LLMProvider, McpScope, ProviderMcpServer, UpsertProviderMcpServerInput } from '@/shared/types.js';
+import type {
+  LLMProvider,
+  McpScope,
+  ProviderMcpServer,
+  ProviderMcpStatusReport,
+  UpsertProviderMcpServerInput,
+} from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
 
 
@@ -25,6 +31,37 @@ export const providerMcpService = {
   ): Promise<ProviderMcpServer[]> {
     const provider = providerRegistry.resolveProvider(providerName);
     return provider.mcp.listServersForScope(scope, options);
+  },
+
+  /**
+   * Health-checks one provider's MCP servers as seen from `workspacePath`.
+   *
+   * Always resolves: an unreachable server is a `failed` entry, a provider with
+   * no health check reports `supported: false`, and a probe that could not run
+   * at all reports `error`. Callers render a status column from this, so a
+   * rejection here would turn a hung MCP server into a broken settings page.
+   */
+  async probeProviderMcpServerStatuses(
+    providerName: string,
+    options?: { workspacePath?: string },
+  ): Promise<ProviderMcpStatusReport> {
+    const provider = providerRegistry.resolveProvider(providerName);
+
+    try {
+      const statuses = await provider.mcp.probeServerStatuses(options);
+      if (statuses === null) {
+        return { provider: provider.id, supported: false, statuses: [] };
+      }
+
+      return { provider: provider.id, supported: true, statuses };
+    } catch (error) {
+      return {
+        provider: provider.id,
+        supported: true,
+        statuses: [],
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
   },
 
   /**

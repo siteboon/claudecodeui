@@ -464,6 +464,19 @@
     "help": {
       "title": "Codex MCPについて",
       "description": "Codexはstdioベースのツールサーバーをサポートしています。追加のツールやリソースでCodexの機能を拡張するサーバーを追加できます。"
+    },
+    "connection": {
+      "check": "接続を確認",
+      "checking": "確認中…",
+      "checkHint": "設定済みの各 MCP サーバーに接続し、応答するかどうかを報告します",
+      "checkFailed": "MCP サーバーの状態を確認できませんでした。{{details}}",
+      "unsupported": "{{provider}} は MCP の接続状態を報告しません。",
+      "state": {
+        "connected": "接続済み",
+        "failed": "未接続",
+        "pending": "承認待ち",
+        "unknown": "不明"
+      }
     }
   },
   "pluginSettings": {

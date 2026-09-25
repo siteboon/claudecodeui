@@ -291,5 +291,27 @@
     "failed": "未傳送 — {{reason}}",
     "cancel": "取消排程訊息",
     "dismiss": "關閉失敗提示"
+  },
+  "misc": {
+    "fallbackCommands": {
+      "mcp": "列出 MCP 伺服器及其連線狀態。"
+    },
+    "modalMeta": {
+      "mcpEyebrow": "整合",
+      "mcpTitle": "MCP 伺服器",
+      "mcpSubtitle": "已設定的 Model Context Protocol 伺服器及其連線狀態。"
+    },
+    "mcpCommand": {
+      "empty": "{{provider}} 尚未設定任何 MCP 伺服器。",
+      "statusUnsupported": "{{provider}} 不會回報 MCP 連線狀態。",
+      "statusFailed": "無法檢查 MCP 伺服器狀態。{{details}}",
+      "authHint": "需要驗證的伺服器請在終端機使用 Claude CLI 連線：執行 claude，然後輸入 /mcp。",
+      "state": {
+        "connected": "已連線",
+        "failed": "未連線",
+        "pending": "等待核准",
+        "unknown": "未知"
+      }
+    }
   }
 }

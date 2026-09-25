@@ -464,6 +464,19 @@
     "help": {
       "title": "Über Codex MCP",
       "description": "Codex unterstützt stdio-basierte MCP-Server. Du kannst Server hinzufügen, die die Fähigkeiten von Codex mit zusätzlichen Werkzeugen und Ressourcen erweitern."
+    },
+    "connection": {
+      "check": "Status prüfen",
+      "checking": "Wird geprüft …",
+      "checkHint": "Jeden konfigurierten MCP-Server kontaktieren und melden, ob er antwortet",
+      "checkFailed": "MCP-Serverstatus konnte nicht geprüft werden. {{details}}",
+      "unsupported": "{{provider}} meldet keinen MCP-Verbindungsstatus.",
+      "state": {
+        "connected": "Verbunden",
+        "failed": "Nicht verbunden",
+        "pending": "Genehmigung ausstehend",
+        "unknown": "Unbekannt"
+      }
     }
   },
   "pluginSettings": {
