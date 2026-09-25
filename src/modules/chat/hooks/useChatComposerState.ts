@@ -865,12 +865,10 @@ export function useChatComposerState({
         });
       }
 
-      // A new turn replaces the CLI process a session's background work runs
-      // under: the agents, workflows and commands it still has going are
-      // stopped, or finish where nothing is listening. Sending is the user's
-      // call, but not one to make for them.
+      // Claude feeds the next turn into the live process, preserving its
+      // background work. Other providers still replace their per-turn process.
       const backgroundActivity = processingSessionsRef.current?.get(targetSessionId);
-      if (backgroundActivity?.background) {
+      if (provider !== 'claude' && backgroundActivity?.background) {
         const work = ownBackgroundTasks(backgroundActivity.tasks ?? [])
           .map((task) => `• ${describeBackgroundTask(task, t)}`)
           .join('\n');
