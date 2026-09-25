@@ -1349,6 +1349,11 @@ export type FileTreeServices = {
     path: string;
     suggestions: Array<{ path: string; name: string; type: 'directory' }>;
   }>;
+  searchWorkspaceFolders(searchQuery: string, inputRoot: string | null): Promise<{
+    query: string;
+    root: string | null;
+    results: Array<{ path: string; name: string; type: 'directory' }>;
+  }>;
   createWorkspaceFolder(folderPath: string): Promise<{ success: true; path: string }>;
   readTextFile(projectId: string, filePath: string): Promise<{ content: string; path: string }>;
   openFile(projectId: string, filePath: string): Promise<{ contentType: string; stream: Readable }>;
