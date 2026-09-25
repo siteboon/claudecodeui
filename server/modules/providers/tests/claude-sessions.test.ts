@@ -1519,6 +1519,166 @@ test('an edited prompt replaces the one it superseded instead of stacking on it'
   }
 });
 
+const STEER_SESSION_ID = 'claude-steer-session';
+
+test('a folded queued_command steer message renders as a user turn in history', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-steer-history-'));
+
+  try {
+    const transcriptPath = path.join(tempRoot, `${STEER_SESSION_ID}.jsonl`);
+    const rows = [
+      {
+        type: 'user', uuid: 'q1', parentUuid: null, sessionId: STEER_SESSION_ID,
+        timestamp: '2026-09-25T10:00:00.000Z',
+        message: { role: 'user', content: [{ type: 'text', text: 'first question' }] },
+      },
+      {
+        type: 'assistant', uuid: 'qa1', parentUuid: 'q1', sessionId: STEER_SESSION_ID,
+        timestamp: '2026-09-25T10:00:01.000Z',
+        message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'first answer' }] },
+      },
+      // Control: an ordinary internal/meta user row is dropped today, and
+      // must stay dropped — the new branch below must not accidentally widen
+      // what counts as a renderable "queued" row.
+      {
+        type: 'user', uuid: 'meta1', parentUuid: 'qa1', sessionId: STEER_SESSION_ID, isMeta: true,
+        timestamp: '2026-09-25T10:00:01.500Z',
+        message: { role: 'user', content: [{ type: 'text', text: 'an injected note' }] },
+      },
+      // A steered message the CLI folded into the running turn: no ordinary
+      // `user` row exists for it, only the attachment wrapping the prompt,
+      // followed by the queue-operation that removed it from the queue.
+      // `origin.kind: 'human'` is what steerClaudeSDKSession stamps on every
+      // record it pushes — see claude-runtime.provider.js.
+      {
+        type: 'attachment', uuid: 'att1', parentUuid: 'qa1', sessionId: STEER_SESSION_ID, isMeta: true,
+        timestamp: '2026-09-25T10:00:02.000Z',
+        attachment: { type: 'queued_command', prompt: 'also do X', source_uuid: 'steer-1', commandMode: 'prompt', origin: { kind: 'human' } },
+      },
+      {
+        type: 'queue-operation', uuid: 'qop1', parentUuid: 'att1', sessionId: STEER_SESSION_ID,
+        timestamp: '2026-09-25T10:00:02.500Z',
+        operation: 'remove', reason: 'absorbed_mid_turn',
+      },
+      {
+        type: 'assistant', uuid: 'qa2', parentUuid: 'att1', sessionId: STEER_SESSION_ID,
+        timestamp: '2026-09-25T10:00:03.000Z',
+        message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'second answer' }] },
+      },
+      // Control: a `queued_command` row that is NOT a human steer — the same
+      // "fold into the running turn" transcript shape can carry a background
+      // agent's or peer session's own message. This must not render as a
+      // plain user bubble (it has no `origin.kind: 'human'`).
+      {
+        type: 'attachment', uuid: 'att2', parentUuid: 'qa2', sessionId: STEER_SESSION_ID, isMeta: true,
+        timestamp: '2026-09-25T10:00:03.500Z',
+        attachment: { type: 'queued_command', prompt: 'also agent do Y', source_uuid: 'agent-1', commandMode: 'prompt', origin: { kind: 'agent' } },
+      },
+      {
+        type: 'queue-operation', uuid: 'qop2', parentUuid: 'att2', sessionId: STEER_SESSION_ID,
+        timestamp: '2026-09-25T10:00:03.750Z',
+        operation: 'remove', reason: 'absorbed_mid_turn',
+      },
+      {
+        type: 'assistant', uuid: 'qa3', parentUuid: 'att2', sessionId: STEER_SESSION_ID,
+        timestamp: '2026-09-25T10:00:04.000Z',
+        message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'third answer' }] },
+      },
+    ];
+
+    await writeFile(transcriptPath, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(STEER_SESSION_ID, 'claude', tempRoot, 'Steer session', now, now, transcriptPath);
+
+      const history = await new ClaudeSessionsProvider().fetchHistory(STEER_SESSION_ID, {
+        providerSessionId: STEER_SESSION_ID,
+      });
+      const texts = history.messages.map((message) => message.content);
+
+      // 'an injected note' must not appear — the isMeta user row control.
+      // 'also agent do Y' must not appear either — the non-human origin control.
+      assert.deepEqual(texts, ['first question', 'first answer', 'also do X', 'second answer', 'third answer']);
+      const steered = history.messages.find((message) => message.content === 'also do X');
+      assert.equal(steered?.role, 'user');
+      assert.equal(steered?.steered, true);
+      assert.equal(steered?.id, 'steer-1', 'the rendered message keeps the queued command\'s source_uuid as its id');
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('a folded queued_command steer message with an image keeps the image on reload', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-steer-image-history-'));
+  const sessionId = 'claude-steer-image-session';
+  const imageBase64 = 'aW1hZ2UtYnl0ZXM=';
+
+  try {
+    const transcriptPath = path.join(tempRoot, `${sessionId}.jsonl`);
+    const rows = [
+      {
+        type: 'user', uuid: 'iq1', parentUuid: null, sessionId,
+        timestamp: '2026-09-25T10:00:00.000Z',
+        message: { role: 'user', content: [{ type: 'text', text: 'first question' }] },
+      },
+      {
+        type: 'assistant', uuid: 'iqa1', parentUuid: 'iq1', sessionId,
+        timestamp: '2026-09-25T10:00:01.000Z',
+        message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'first answer' }] },
+      },
+      // A steered message whose prompt carries an image: the CLI writes
+      // `prompt` as a content-block array (text + image) instead of a plain
+      // string in this case.
+      {
+        type: 'attachment', uuid: 'iatt1', parentUuid: 'iqa1', sessionId, isMeta: true,
+        timestamp: '2026-09-25T10:00:02.000Z',
+        attachment: {
+          type: 'queued_command',
+          prompt: [
+            { type: 'text', text: 'also look at this' },
+            { type: 'image', source: { type: 'base64', media_type: 'image/png', data: imageBase64 } },
+          ],
+          source_uuid: 'steer-img-1',
+          commandMode: 'prompt',
+          origin: { kind: 'human' },
+        },
+      },
+      {
+        type: 'queue-operation', uuid: 'iqop1', parentUuid: 'iatt1', sessionId,
+        timestamp: '2026-09-25T10:00:02.500Z',
+        operation: 'remove', reason: 'absorbed_mid_turn',
+      },
+      {
+        type: 'assistant', uuid: 'iqa2', parentUuid: 'iatt1', sessionId,
+        timestamp: '2026-09-25T10:00:03.000Z',
+        message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'second answer' }] },
+      },
+    ];
+
+    await writeFile(transcriptPath, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(sessionId, 'claude', tempRoot, 'Steer image session', now, now, transcriptPath);
+
+      const history = await new ClaudeSessionsProvider().fetchHistory(sessionId, {
+        providerSessionId: sessionId,
+      });
+
+      const steered = history.messages.find((message) => message.content === 'also look at this');
+      assert.ok(steered, 'the steered row with an array-shaped prompt still renders');
+      assert.equal(steered?.role, 'user');
+      assert.equal(steered?.steered, true);
+      assert.equal(steered?.id, 'steer-img-1');
+      assert.deepEqual(steered?.images, [{ data: `data:image/png;base64,${imageBase64}` }]);
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('parallel tool calls are not mistaken for an edit', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-parallel-tools-'));
   const sessionId = 'claude-parallel-session';

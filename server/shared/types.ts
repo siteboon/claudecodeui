@@ -300,6 +300,22 @@ export type NormalizedMessage = {
   role?: 'user' | 'assistant';
   content?: string;
   /**
+   * Set on a user text message that was delivered into an already-running
+   * turn (`chat.steer`) rather than started as a turn of its own — both on
+   * the live echo sent when the steer is accepted and on the equivalent row
+   * reconstructed from history (Claude's `queue-operation`/`attachment` rows,
+   * which have no ordinary `user` row of their own). Informational only; the
+   * message still renders as a normal user bubble.
+   */
+  steered?: boolean;
+  /**
+   * Set on a `complete { aborted: true }` emitted because the run it ends was
+   * replaced by `chat.send { options.interrupt: true }`, not because the
+   * user actually stopped the session. Tells the client that a new run is
+   * about to take over, so it should NOT idle the session on this complete.
+   */
+  replaced?: boolean;
+  /**
    * Optional display-oriented metadata used by providers that need to expose
    * richer transcript artifacts without introducing a brand-new message kind.
    *

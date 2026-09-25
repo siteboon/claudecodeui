@@ -118,12 +118,13 @@ export class ChatSessionWriter {
    * Emits the synthetic terminal `complete` for runs that ended without one
    * (runtime crash before completing, or user abort).
    */
-  sendComplete(opts: { exitCode: number; aborted?: boolean }): void {
+  sendComplete(opts: { exitCode: number; aborted?: boolean; replaced?: boolean }): void {
     const message = createCompleteMessage({
       provider: this.options.provider,
       sessionId: this.providerSessionId,
       exitCode: opts.exitCode,
       aborted: opts.aborted,
+      replaced: opts.replaced,
     });
     const outbound = this.options.decorateOutboundEvent(message);
     if (outbound) {
