@@ -30,7 +30,7 @@ import { escapeRegExp } from '@/modules/chat/utils/chatFormatting';
 import { describeBackgroundTask, ownBackgroundTasks } from '@/modules/chat/utils/backgroundTasks';
 import { useFileMentions } from '@/modules/chat/hooks/useFileMentions';
 import { useInputHistory } from '@/modules/chat/hooks/useInputHistory';
-import { useSlashCommands } from '@/modules/chat/hooks/useSlashCommands';
+import { isCliNativeCommand, useSlashCommands } from '@/modules/chat/hooks/useSlashCommands';
 
 type UseChatComposerStateArgs = {
   selectedProject: Project | null;
@@ -775,7 +775,11 @@ export function useChatComposerState({
                 metadata: { type: 'builtin' },
               } as SlashCommand)
             : undefined);
-        if (matchedCommand && matchedCommand.type !== 'skill') {
+        // CLI-native commands must fall through to the ordinary send: the
+        // execute endpoint only knows this server's built-ins and custom
+        // commands, and a native one arriving there dies with "Command path
+        // is required" instead of reaching the CLI that owns it.
+        if (matchedCommand && matchedCommand.type !== 'skill' && !isCliNativeCommand(matchedCommand)) {
           executeCommand(matchedCommand, isHelpAlias ? '/help' : commandInput);
           recordSentMessage(currentInput);
           setInput('');

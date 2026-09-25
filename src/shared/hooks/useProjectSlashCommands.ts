@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { api } from '@/shared/api';
 import type { LLMProvider, Project, SlashCommand } from '@/shared/types';
@@ -30,6 +30,8 @@ type UseProjectSlashCommandsResult = {
   commands: SlashCommand[];
   isLoading: boolean;
   error: boolean;
+  /** Refetches now — used so a menu reflects catalogue updates that landed after the initial fetch. */
+  refresh: () => void;
 };
 
 const dedupeProviderSkills = (skills: ProviderSkill[]): ProviderSkill[] => {
@@ -80,13 +82,28 @@ export function useProjectSlashCommands(
 ): UseProjectSlashCommandsResult {
   // The fetched list, kept in state because it arrives asynchronously after
   // the project or provider changes and every consumer derives its view from it.
-  const [commands, setCommands] = useState<SlashCommand[]>([]);
+  const [commandsState, setCommands] = useState<SlashCommand[]>([]);
   // Distinguishes "no commands yet" from "no commands at all" so a list can
   // show a loading state instead of an empty one while the request is in flight.
   const [isLoading, setIsLoading] = useState(false);
   // Set when the request failed so a list can explain the emptiness; cleared
   // on the next successful fetch.
   const [error, setError] = useState(false);
+  // Bumped by refresh() to re-run the fetch without changing the inputs —
+  // the CLI-native catalogue improves after the first session initializes
+  // (and on later commands_changed pushes), and menus must pick that up.
+  const [reloadToken, setReloadToken] = useState(0);
+  const refresh = useCallback(() => setReloadToken((token) => token + 1), []);
+
+  // The scope the visible list was fetched for. During a provider or project
+  // switch the fetch is still in flight, and until it lands the previous
+  // scope's commands must not be offered to the new one — a Codex session
+  // seeing Claude's /compact for a second is exactly the leak this feature
+  // exists to prevent. A refresh of the same scope keeps the list.
+  const scope = selectedProject
+    ? `${provider}::${selectedProject.fullPath || selectedProject.path || ''}`
+    : '';
+  const [fetchedScope, setFetchedScope] = useState('');
 
   useEffect(() => {
     if (!enabled) {
@@ -108,7 +125,10 @@ export function useProjectSlashCommands(
 
       try {
         const workspacePath = selectedProject.fullPath || selectedProject.path || '';
-        const response = await api.commands.list(workspacePath || selectedProject.path);
+        // `provider` scopes the CLI-native command list to the session's CLI:
+        // a Codex session must not be shown Claude's /compact any more than a
+        // Claude session should see Codex's /approve.
+        const response = await api.commands.list(workspacePath || selectedProject.path, provider);
 
         if (!response.ok) {
           throw new Error('Failed to fetch commands');
@@ -126,6 +146,14 @@ export function useProjectSlashCommands(
             ...command,
             type: 'built-in',
           })),
+          // CLI-native commands are executed by the CLI behind the session,
+          // not by this server — consumers insert them into the composer
+          // instead of routing them through the execute endpoint.
+          ...((data.native || []) as SlashCommand[]).map((command) => ({
+            ...command,
+            namespace: 'cli' as const,
+            type: 'cli' as const,
+          })),
           ...skillCommands,
           ...((data.custom || []) as SlashCommand[]).map((command) => ({
             ...command,
@@ -135,12 +163,14 @@ export function useProjectSlashCommands(
 
         if (!cancelled) {
           setCommands(allCommands);
+          setFetchedScope(scope);
           setIsLoading(false);
         }
       } catch (fetchError) {
         console.error('Error fetching slash commands:', fetchError);
         if (!cancelled) {
           setCommands([]);
+          setFetchedScope(scope);
           setError(true);
           setIsLoading(false);
         }
@@ -151,7 +181,11 @@ export function useProjectSlashCommands(
     return () => {
       cancelled = true;
     };
-  }, [enabled, selectedProject, provider]);
+  }, [enabled, selectedProject, provider, reloadToken, scope]);
 
-  return { commands, isLoading, error };
+  // The list only becomes visible once it belongs to the current scope.
+  // Returning the raw state would offer the previous provider's commands
+  // during the in-flight switch.
+  const commands = fetchedScope === scope ? commandsState : [];
+  return { commands, isLoading, error, refresh };
 }

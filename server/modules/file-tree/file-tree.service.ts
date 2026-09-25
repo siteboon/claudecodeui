@@ -38,6 +38,15 @@ const COMMON_WORKSPACE_DIRECTORY_NAMES = [
 // server heap before the browser has a chance to switch to a narrower project.
 const MAXIMUM_FILE_TREE_ENTRIES = 10_000;
 
+// The directory picker's search walks outward from the directory being
+// browsed. The walk is capped in depth, visited directories and results so a
+// broad root (a user's home directory) cannot pin the server, and heavy
+// folders (node_modules, .git, dist, ...) are skipped outright — searching is
+// for finding a project to open, not for indexing everything on disk.
+const MAXIMUM_FOLDER_SEARCH_DEPTH = 4;
+const MAXIMUM_FOLDER_SEARCH_RESULTS = 30;
+const MAXIMUM_FOLDER_SEARCH_VISITED_DIRECTORIES = 4000;
+
 type FileTreeEntryFilter = (entryPath: string, isDirectory: boolean) => boolean;
 
 function includeEntryByHardExclusions(entryPath: string, isDirectory: boolean): boolean {
@@ -413,6 +422,94 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
         : directories;
 
       return { path: resolvedPath, suggestions };
+    },
+
+    async searchWorkspaceFolders(searchQuery, inputRoot) {
+      const trimmedQuery = searchQuery.trim().toLowerCase();
+      if (trimmedQuery.length < 2) {
+        return { query: searchQuery, root: null, results: [] };
+      }
+
+      const requestedRoot = inputRoot
+        ? expandWorkspacePath(dependencies.workspace.rootPath, inputRoot)
+        : dependencies.workspace.rootPath;
+      const resolvedRoot = await resolveBrowsablePath(path.resolve(requestedRoot));
+
+      try {
+        await fileSystem.access(resolvedRoot);
+        const rootStats = await fileSystem.stat(resolvedRoot);
+        if (!rootStats.isDirectory()) {
+          throw createFileTreeError('Path is not a directory', 400, 'NOT_A_DIRECTORY');
+        }
+      } catch (error) {
+        if (error instanceof AppError) throw error;
+        throw createFileTreeError('Directory not accessible', 404, 'DIRECTORY_NOT_ACCESSIBLE');
+      }
+
+      const results: Array<{ path: string; name: string; type: 'directory' }> = [];
+      let visitedDirectories = 0;
+
+      // One directory at a time through the shared limiter, mirroring the
+      // tree walk: the search runs beside live file operations and must not
+      // starve them of the concurrency budget. An unreadable branch is
+      // skipped — a best-effort search reports what it could reach rather
+      // than failing on one locked directory.
+      const walk = async (directoryPath: string, currentDepth: number): Promise<void> => {
+        if (results.length >= MAXIMUM_FOLDER_SEARCH_RESULTS
+          || visitedDirectories >= MAXIMUM_FOLDER_SEARCH_VISITED_DIRECTORIES) {
+          return;
+        }
+        visitedDirectories += 1;
+
+        await acquire();
+        try {
+          for await (const entry of fileSystem.openDirectory(directoryPath)) {
+            if (results.length >= MAXIMUM_FOLDER_SEARCH_RESULTS
+              || visitedDirectories >= MAXIMUM_FOLDER_SEARCH_VISITED_DIRECTORIES) {
+              return;
+            }
+            if (!entry.isDirectory()
+              || entry.name.startsWith('.')
+              || IGNORED_DIRECTORY_NAMES.has(entry.name)) {
+              continue;
+            }
+
+            const itemPath = path.join(directoryPath, entry.name);
+            if (FORBIDDEN_WORKSPACE_PATHS.includes(normalizeProjectPath(itemPath))) {
+              continue;
+            }
+
+            if (entry.name.toLowerCase().includes(trimmedQuery)) {
+              results.push({ path: itemPath, name: entry.name, type: 'directory' as const });
+              if (results.length >= MAXIMUM_FOLDER_SEARCH_RESULTS) {
+                return;
+              }
+            }
+
+            if (currentDepth < MAXIMUM_FOLDER_SEARCH_DEPTH) {
+              await walk(itemPath, currentDepth + 1);
+            }
+          }
+        } catch {
+          // An unreadable branch is skipped, not fatal.
+        } finally {
+          release();
+        }
+      };
+
+      await walk(resolvedRoot, 1);
+
+      // Shallowest first: the closer a match is to the directory the user was
+      // browsing, the more likely it is the one they meant.
+      results.sort((left, right) => {
+        const depthDifference = left.path.split(/[\\/]/).length - right.path.split(/[\\/]/).length;
+        if (depthDifference !== 0) {
+          return depthDifference;
+        }
+        return left.name.toLowerCase().localeCompare(right.name.toLowerCase());
+      });
+
+      return { query: searchQuery, root: resolvedRoot, results };
     },
 
     async createWorkspaceFolder(folderPath) {

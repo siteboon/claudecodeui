@@ -41,6 +41,14 @@ const saveCommandHistory = (projectName: string, history: Record<string, number>
 const isPromiseLike = (value: unknown): value is Promise<unknown> =>
   Boolean(value) && typeof (value as Promise<unknown>).then === 'function';
 
+// CLI-native commands are not executed by this app — the CLI behind the
+// session handles them when the text reaches it — so picking one from the
+// menu inserts it into the input exactly like a skill, instead of routing
+// through the execute endpoint (whose resubmission loop a native command
+// would spin forever).
+export const isCliNativeCommand = (command: SlashCommand) =>
+  command.namespace === 'cli' || command.type === 'cli';
+
 const filterSlashCommands = (
   commands: SlashCommand[],
   query: string,
@@ -83,8 +91,10 @@ export function useSlashCommands({
   textareaRef,
   onExecuteCommand,
 }: UseSlashCommandsOptions) {
-  const { commands: projectCommands } = useProjectSlashCommands(selectedProject, provider);
-  const [filteredCommands, setFilteredCommands] = useState<SlashCommand[]>([]);
+  const { commands: projectCommands, refresh: refreshProjectCommands } = useProjectSlashCommands(
+    selectedProject,
+    provider,
+  );
   const [showCommandMenu, setShowCommandMenu] = useState(false);
   const [commandQuery, setCommandQuery] = useState('');
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(-1);
@@ -122,15 +132,13 @@ export function useSlashCommands({
     });
   }, [projectCommands, selectedProject]);
 
-  useEffect(() => {
-    if (!showCommandMenu) {
-      setSelectedCommandIndex(-1);
-    }
-  }, [showCommandMenu]);
-
-  useEffect(() => {
-    setFilteredCommands(filterSlashCommands(slashCommands, commandQuery));
-  }, [commandQuery, slashCommands]);
+  // Derived, not stored: the filtered view is a pure function of the full
+  // list and the typed query, so keeping it in state would only risk the two
+  // drifting apart.
+  const filteredCommands = useMemo(
+    () => filterSlashCommands(slashCommands, commandQuery),
+    [slashCommands, commandQuery],
+  );
 
   const frequentCommands = useMemo(() => {
     if (!selectedProject || slashCommands.length === 0) {
@@ -211,7 +219,7 @@ export function useSlashCommands({
 
   const selectCommandFromKeyboard = useCallback(
     (command: SlashCommand) => {
-      if (isSkillCommand(command)) {
+      if (isSkillCommand(command) || isCliNativeCommand(command)) {
         insertCommandIntoInput(command);
         return;
       }
@@ -233,7 +241,7 @@ export function useSlashCommands({
       }
 
       trackCommandUsage(command);
-      if (isSkillCommand(command)) {
+      if (isSkillCommand(command) || isCliNativeCommand(command)) {
         insertCommandIntoInput(command);
         return;
       }
@@ -249,12 +257,14 @@ export function useSlashCommands({
     setCommandQuery('');
     setSelectedCommandIndex(-1);
 
+    // Refresh on every open: the native catalogue may have improved since the
+    // last fetch (first session initialize, later commands_changed pushes).
     if (isOpening) {
-      setFilteredCommands(slashCommands);
+      refreshProjectCommands();
     }
 
     textareaRef.current?.focus();
-  }, [showCommandMenu, slashCommands, textareaRef]);
+  }, [refreshProjectCommands, showCommandMenu, textareaRef]);
 
   const handleCommandInputChange = useCallback(
     (newValue: string, cursorPos: number) => {
@@ -286,15 +296,22 @@ export function useSlashCommands({
       const query = match[1].slice(1); // strip leading /
 
       setSlashPosition(slashPos);
+      const menuWasOpen = showCommandMenu;
       setShowCommandMenu(true);
       setSelectedCommandIndex(-1);
+
+      // Opening by typing must refresh too, not just the toggle button: the
+      // native catalogue may have improved since the last fetch.
+      if (!menuWasOpen) {
+        refreshProjectCommands();
+      }
 
       clearCommandQueryTimer();
       commandQueryTimerRef.current = window.setTimeout(() => {
         setCommandQuery(query);
       }, COMMAND_QUERY_DEBOUNCE_MS);
     },
-    [resetCommandMenuState, clearCommandQueryTimer],
+    [resetCommandMenuState, clearCommandQueryTimer, refreshProjectCommands, showCommandMenu],
   );
 
   const handleCommandMenuKeyDown = useCallback(
@@ -330,8 +347,12 @@ export function useSlashCommands({
 
       if (event.key === 'Tab' || event.key === 'Enter') {
         event.preventDefault();
-        if (selectedCommandIndex >= 0) {
-          selectCommandFromKeyboard(filteredCommands[selectedCommandIndex]);
+        // A refresh may have shrunk the list under the stored index — resolve
+        // the command defensively and fall back to the first row.
+        const selectedCommand =
+          selectedCommandIndex >= 0 ? filteredCommands[selectedCommandIndex] : undefined;
+        if (selectedCommand) {
+          selectCommandFromKeyboard(selectedCommand);
         } else if (filteredCommands.length > 0) {
           selectCommandFromKeyboard(filteredCommands[0]);
         }

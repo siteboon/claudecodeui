@@ -29,6 +29,7 @@ import {
   CLAUDE_ULTRACODE_EFFORT
 } from '@/modules/providers/list/claude/claude-models.provider.js';
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
+import { beginNativeCommandsCapture } from '@/shared/native-commands.js';
 import {
   createNotificationEvent,
   notifyBackgroundWorkCompleted,
@@ -1095,9 +1096,37 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       addSession(sessionKey(), queryInstance, ws, releasePromptStream);
     }
 
+    // The initialize handshake carries the CLI's real command catalogue — the
+    // same list the CLI's own `/` menu shows, including locally installed
+    // skills and plugins. Capturing it here is what keeps the composer's
+    // native-command list per-machine accurate; the static table in
+    // native-commands is only the fallback until this lands. The capture is
+    // generation-guarded: two sessions in one workspace race their writes, and
+    // the SDK does not order initializationResult() against stream messages —
+    // only the newest attempt for a workspace may record, everything older is
+    // dropped wherever it finally settles.
+    const recordNativeCatalogue = beginNativeCommandsCapture('claude', options.cwd ?? '');
+    if (typeof queryInstance.initializationResult === 'function') {
+      void Promise.resolve(queryInstance.initializationResult())
+        .then((initialization) => {
+          recordNativeCatalogue(initialization?.commands ?? []);
+        })
+        .catch(() => {
+          // A CLI that declines the control request leaves the fallback table
+          // in place; nothing else about the run is affected.
+        });
+    }
+
     // Process streaming messages
     console.log('Starting async generator loop for session:', capturedSessionId || 'NEW');
     for await (const message of queryInstance) {
+      // A mid-session command catalogue change (skills or plugins discovered
+      // on the fly) arrives as a full replacement, not a delta — the protocol
+      // is explicit that clients must replace their cached list.
+      if (message.type === 'system' && message.subtype === 'commands_changed') {
+        recordNativeCatalogue(message.commands ?? []);
+      }
+
       // Capture session ID from first message
       if (message.session_id && !capturedSessionId) {
 

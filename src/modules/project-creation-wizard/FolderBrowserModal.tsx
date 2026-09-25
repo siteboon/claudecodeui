@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Eye, EyeOff, FolderOpen, FolderPlus, Loader2, Plus, X } from 'lucide-react';
+import { Eye, EyeOff, FolderOpen, FolderPlus, Loader2, Plus, Search, X } from 'lucide-react';
 
 import { Button, Input } from '@/shared/ui';
-import { browseFilesystemFolders, createFolderInFilesystem } from '@/modules/project-creation-wizard/utils/workspaceApi';
+import {
+  browseFilesystemFolders,
+  createFolderInFilesystem,
+  searchFilesystemFolders,
+} from '@/modules/project-creation-wizard/utils/workspaceApi';
 import { getParentPath, joinFolderPath } from '@/modules/project-creation-wizard/utils/pathUtils';
 import type { FolderSuggestion } from '@/shared/types';
 
@@ -30,6 +34,13 @@ export default function FolderBrowserModal({
   const [newFolderName, setNewFolderName] = useState('');
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Search takes over the browse listing from two typed characters on. Results
+  // are found under the directory being browsed, so navigating first narrows
+  // the hunt — and clearing the query returns to plain browsing.
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<FolderSuggestion[] | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const searchActive = searchQuery.trim().length >= 2;
 
   // Keep the loader stable across locale changes: t lands in a ref so an
   // open browser does not reload and snap back to the home folder when the
@@ -62,6 +73,42 @@ export default function FolderBrowserModal({
     void loadFoldersRef.current?.('~');
   }, [isOpen]);
 
+  // Debounced search rooted at the directory being browsed. Below two
+  // characters the search stands down and the browse listing shows — the
+  // render gates on `searchActive`, so no state reset is needed for that.
+  useEffect(() => {
+    const trimmed = searchQuery.trim();
+    if (trimmed.length < 2) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const timerId = window.setTimeout(async () => {
+      setIsSearching(true);
+      setError(null);
+      try {
+        const results = await searchFilesystemFolders(trimmed, currentPath);
+        if (!cancelled) {
+          setSearchResults(results);
+        }
+      } catch (searchError) {
+        if (!cancelled) {
+          setError(searchError instanceof Error ? searchError.message : t('folderBrowser.searchFailed'));
+          setSearchResults([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsSearching(false);
+        }
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timerId);
+    };
+  }, [searchQuery, currentPath, t]);
+
   const visibleFolders = useMemo(
     () =>
       folders
@@ -79,6 +126,8 @@ export default function FolderBrowserModal({
 
   const handleClose = () => {
     setError(null);
+    setSearchQuery('');
+    setSearchResults(null);
     resetNewFolderState();
     onClose();
   };
@@ -185,6 +234,19 @@ export default function FolderBrowserModal({
           </div>
         )}
 
+        <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-700">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <Input
+              type="text"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder={t('folderBrowser.searchPlaceholder')}
+              className="pl-9"
+            />
+          </div>
+        </div>
+
         {error && (
           <div className="px-4 pt-3">
             <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
@@ -192,7 +254,53 @@ export default function FolderBrowserModal({
         )}
 
         <div className="flex-1 overflow-y-auto p-4">
-          {loadingFolders ? (
+          {searchActive ? (
+            // Search mode replaces the browse listing: results are flat and
+            // carry full paths, and jumping into one hands control back to the
+            // normal navigation.
+            isSearching ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+              </div>
+            ) : searchResults && searchResults.length > 0 ? (
+              <div className="space-y-1">
+                {searchResults.map((folder) => (
+                  <div key={folder.path} className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setSearchQuery('');
+                        setSearchResults(null);
+                        void loadFolders(folder.path);
+                      }}
+                      className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-4 py-3 text-left hover:bg-gray-100 dark:hover:bg-gray-700"
+                    >
+                      <FolderPlus className="h-5 w-5 flex-shrink-0 text-blue-500" />
+                      <span className="min-w-0">
+                        <span className="block font-medium text-gray-900 dark:text-white">
+                          {folder.name}
+                        </span>
+                        <span className="block truncate text-xs text-gray-500 dark:text-gray-400">
+                          {folder.path}
+                        </span>
+                      </span>
+                    </button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onFolderSelected(folder.path, autoAdvanceOnSelect)}
+                      className="px-3 text-xs"
+                    >
+                      {t('folderBrowser.select')}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="py-8 text-center text-gray-500 dark:text-gray-400">
+                {t('folderBrowser.searchNoResults')}
+              </div>
+            )
+          ) : loadingFolders ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
             </div>

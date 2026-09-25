@@ -19,6 +19,13 @@ type CreateFolderResponse = {
   details?: string;
 };
 
+type SearchFilesystemResponse = {
+  query?: string;
+  root?: string | null;
+  results?: FolderSuggestion[];
+  error?: string;
+};
+
 type CreateProjectPayload = {
   path: string;
   customName?: string;
@@ -131,6 +138,22 @@ export const createFolderInFilesystem = async (folderPath: string) => {
   }
 
   return data.path || folderPath;
+};
+
+/**
+ * Bounded recursive folder search rooted at the directory being browsed. The
+ * server caps the walk in depth and visited directories, so a broad root
+ * cannot pin it; fewer than two characters returns an empty result set.
+ */
+export const searchFilesystemFolders = async (searchQuery: string, rootPath?: string | null) => {
+  const response = await api.searchFilesystem(searchQuery, rootPath);
+  const data = await parseJson<SearchFilesystemResponse>(response);
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to search filesystem');
+  }
+
+  return (data.results || []) as FolderSuggestion[];
 };
 
 export const createProjectRequest = async (payload: CreateProjectPayload) => {

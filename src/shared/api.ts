@@ -293,6 +293,10 @@ export const api = {
   browseFilesystem: (dirPath: string | null = null) =>
     get(`/api/file-tree/browse-filesystem${query({ path: dirPath })}`),
 
+  // Bounded recursive folder search rooted at the browsed directory
+  searchFilesystem: (searchQuery: string, rootPath?: string | null) =>
+    get(`/api/file-tree/search-filesystem${query({ query: searchQuery, root: rootPath })}`),
+
   createFolder: (folderPath: string) => post('/api/file-tree/create-folder', { path: folderPath }),
 
   // Git endpoints. The `project` param carries the DB projectId post-migration.
@@ -436,7 +440,9 @@ export const api = {
   commands: {
     // `projectPath` stays optional: a workspace without a resolved path omits
     // the field entirely, which is what the server expects.
-    list: (projectPath: string | undefined) => post('/api/commands/list', { projectPath }),
+    // `provider` scopes the CLI-native command list to the session's CLI.
+    list: (projectPath: string | undefined, provider?: string) =>
+      post('/api/commands/list', { projectPath, provider }),
     execute: (payload: unknown) => post('/api/commands/execute', payload),
   },
 
