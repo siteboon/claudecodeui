@@ -184,6 +184,52 @@ test('chat.steer is refused with STEER_UNSUPPORTED when the provider cannot stee
   });
 });
 
+test('chat.steer whose runtime throws reports STEER_UNSUPPORTED, not an untagged INTERNAL_ERROR', async () => {
+  const calls: Calls = { steer: [], run: [], order: [] };
+  const runtime: ProviderRuntimeGateway = {
+    hasRuntime: () => true,
+    run: async (provider, command, options) => {
+      calls.run.push({ provider, command, options });
+      calls.order.push('run');
+    },
+    abort: async () => {
+      calls.order.push('abort');
+      return true;
+    },
+    stopBackgroundTask: async () => false,
+    hasBackgroundWork: () => false,
+    resolveToolApproval: () => {},
+    getPendingApprovalsForSession: () => [],
+    canSteer: () => true,
+    steer: async (provider, sessionId, command, options) => {
+      calls.steer.push({ provider, sessionId, command, options });
+      // e.g. buildPromptMessages failing on an unreadable image attachment.
+      throw new Error('cannot read attachment');
+    },
+  };
+
+  await withCustomGateway(runtime, calls, async ({ socket }) => {
+    chatRunRegistry.startRun({
+      appSessionId: SESSION_ID,
+      provider: 'claude',
+      providerSessionId: null,
+      connection: socket as never,
+      userId: 1,
+    });
+
+    socket.emit('message', JSON.stringify({ type: 'chat.steer', sessionId: SESSION_ID, content: 'also do X' }));
+    await settle();
+
+    assert.equal(socket.frames.some((frame) => frame.code === 'INTERNAL_ERROR'), false, 'must not fall through to the generic untagged handler');
+
+    const error = socket.frames.find((frame) => frame.kind === 'protocol_error');
+    assert.ok(error, 'the sender gets a protocol error');
+    assert.equal(error?.code, 'STEER_UNSUPPORTED');
+    assert.equal(error?.sessionId, SESSION_ID, 'tagged with the session so the client can re-queue the steer');
+    assert.equal(error?.requestType, 'chat.steer');
+  });
+});
+
 test('chat.send refused with RUN_IN_PROGRESS carries requestType: chat.send, not chat.steer', async () => {
   await withGateway(true, async ({ socket }) => {
     chatRunRegistry.startRun({
@@ -325,6 +371,66 @@ test('chat.send with options.interrupt on a running session aborts, then runs �
     const abortComplete = socket.frames.find((frame) => frame.kind === 'complete' && frame.aborted === true);
     assert.ok(abortComplete, 'the interrupted run emits its terminal complete');
     assert.equal(abortComplete?.replaced, true);
+  });
+});
+
+test('chat.send with options.interrupt carries a second attached socket over to the replacement run', async () => {
+  const calls: Calls = { steer: [], run: [], order: [] };
+  const runtime: ProviderRuntimeGateway = {
+    hasRuntime: () => true,
+    run: async (provider, command, options, writer) => {
+      calls.run.push({ provider, command, options });
+      calls.order.push('run');
+      // The replacement run's own live event — distinct from the old run's
+      // `complete { replaced: true }` — proves a carried-over socket is
+      // actually attached to the NEW run's writer, not just a leftover.
+      writer.send({ kind: 'text', role: 'assistant', content: 'replacement turn', sessionId: SESSION_ID, provider });
+    },
+    abort: async () => {
+      calls.order.push('abort');
+      return true;
+    },
+    stopBackgroundTask: async () => false,
+    hasBackgroundWork: () => false,
+    resolveToolApproval: () => {},
+    getPendingApprovalsForSession: () => [],
+    canSteer: () => true,
+    steer: async () => null,
+  };
+
+  await withCustomGateway(runtime, calls, async ({ socket: socketA }) => {
+    chatRunRegistry.startRun({
+      appSessionId: SESSION_ID,
+      provider: 'claude',
+      providerSessionId: null,
+      connection: socketA as never,
+      userId: 1,
+    });
+
+    // A second tab on the same session, attached via chat.subscribe the same
+    // way a real reconnect/second-tab would be.
+    const socketB = createFakeSocket();
+    handleChatConnection(socketB as never, { user: { id: 1 } } as never, { runtime });
+    socketB.emit('message', JSON.stringify({ type: 'chat.subscribe', sessions: [{ sessionId: SESSION_ID, lastSeq: 0 }] }));
+    await settle();
+
+    socketA.emit('message', JSON.stringify({
+      type: 'chat.send',
+      sessionId: SESSION_ID,
+      content: 'replace it',
+      options: { interrupt: true },
+    }));
+    await settle();
+
+    const replacedComplete = socketB.frames.find((frame) => frame.kind === 'complete' && frame.replaced === true);
+    assert.ok(replacedComplete, 'B sees the old run end with replaced: true, as before');
+
+    const replacementEvent = socketB.frames.find((frame) => frame.kind === 'text' && frame.content === 'replacement turn');
+    assert.ok(replacementEvent, 'B must also receive the replacement run\'s own events, not just the old run\'s replaced-complete');
+
+    const completes = socketB.frames.filter((frame) => frame.kind === 'complete');
+    assert.equal(completes.length, 2, 'B sees both the old run\'s replaced complete and the new run\'s own terminal complete');
+    assert.notEqual(completes[1]?.replaced, true, 'the replacement run\'s own terminal complete is not itself flagged replaced');
   });
 });
 
