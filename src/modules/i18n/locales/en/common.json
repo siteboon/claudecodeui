@@ -328,6 +328,9 @@
     "loadFailed": "Failed to load folders",
     "createFailed": "Failed to create folder",
     "noSubfolders": "No subfolders found",
+    "searchPlaceholder": "Search folders by name (2+ characters)",
+    "searchNoResults": "No matching folders found",
+    "searchFailed": "Folder search failed",
     "select": "Select",
     "pathLabel": "Path:",
     "useThisFolder": "Use this folder"
