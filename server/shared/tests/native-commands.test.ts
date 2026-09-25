@@ -92,3 +92,35 @@ test('an empty catalogue recording is ignored so the fallback survives', () => {
     clearNativeCommandsCache();
   }
 });
+
+test('a catalogue captured in one workspace is not served to another', () => {
+  clearNativeCommandsCache();
+  try {
+    recordNativeCommands('claude', [{ name: '/project-skill', description: 'Workspace A only' }], 'C:\\repos\\a');
+    recordNativeCommands('codex', [{ name: '/other-skill', description: 'Workspace B codex' }], 'C:\\repos\\b');
+
+    assert.deepEqual(
+      getNativeCommands('claude', 'C:\\repos\\b').map((command) => command.name),
+      ['/clear', '/compact', '/context', '/init', '/review', '/security-review', '/usage'],
+      'workspace B has no Claude capture, so it gets the static fallback',
+    );
+    assert.deepEqual(
+      getNativeCommands('codex', 'C:\\repos\\b').map((command) => command.name),
+      ['/other-skill'],
+    );
+  } finally {
+    clearNativeCommandsCache();
+  }
+});
+
+test('a workspace without its own capture falls back to the static table', () => {
+  clearNativeCommandsCache();
+  try {
+    recordNativeCommands('claude', [{ name: '/captured', description: 'workspace scoped' }], 'C:\\repos\\a');
+
+    assert.ok(getNativeCommands('claude', 'C:\\repos\\nowhere').some((command) => command.name === '/compact'));
+    assert.ok(getNativeCommands('claude').some((command) => command.name === '/compact'));
+  } finally {
+    clearNativeCommandsCache();
+  }
+});

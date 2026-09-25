@@ -482,13 +482,23 @@ router.post("/list", async (req, res) => {
     // Sort commands alphabetically by name
     customCommands.sort((a, b) => a.name.localeCompare(b.name));
 
+    // CLI-native commands ride along so the composer's slash menu can list
+    // them; the frontend inserts them into the input instead of executing,
+    // which is what keeps them out of the resubmission loop described on the
+    // native-commands module. The catalogue is workspace-scoped: project
+    // skills and plugins make it differ per directory. A native command whose
+    // name collides with a server built-in (/status on Codex, /help on
+    // OpenCode) is dropped in favor of the built-in — two same-name entries
+    // would make keyboard submit ambiguous, and the built-in already works
+    // identically for every provider.
+    const builtinNames = new Set(builtInCommands.map((cmd) => cmd.name));
+    const nativeCommands = getNativeCommands(nativeProvider, projectPath).filter(
+      (cmd) => !builtinNames.has(cmd.name),
+    );
+
     res.json({
       builtIn: builtInCommands,
-      // CLI-native commands ride along so the composer's slash menu can list
-      // them; the frontend inserts them into the input instead of executing,
-      // which is what keeps them out of the resubmission loop described on
-      // the native-commands module.
-      native: getNativeCommands(nativeProvider),
+      native: nativeCommands,
       custom: customCommands,
       count: allCommands.length,
     });

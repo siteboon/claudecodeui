@@ -1100,10 +1100,19 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     // same list the CLI's own `/` menu shows, including locally installed
     // skills and plugins. Capturing it here is what keeps the composer's
     // native-command list per-machine accurate; the static table in
-    // native-commands is only the fallback until this lands.
+    // native-commands is only the fallback until this lands. The SDK does not
+    // order initializationResult() against stream messages, so once a
+    // `commands_changed` push has recorded a catalogue for this run, the
+    // initialization write stands down instead of overwriting newer data.
+    let commandChangeRecorded = false;
+    const runtimeWorkspace = options.cwd ?? '';
     if (typeof queryInstance.initializationResult === 'function') {
       void Promise.resolve(queryInstance.initializationResult())
-        .then((initialization) => recordNativeCommands('claude', initialization?.commands ?? []))
+        .then((initialization) => {
+          if (!commandChangeRecorded) {
+            recordNativeCommands('claude', initialization?.commands ?? [], runtimeWorkspace);
+          }
+        })
         .catch(() => {
           // A CLI that declines the control request leaves the fallback table
           // in place; nothing else about the run is affected.
@@ -1117,7 +1126,10 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       // on the fly) arrives as a full replacement, not a delta — the protocol
       // is explicit that clients must replace their cached list.
       if (message.type === 'system' && message.subtype === 'commands_changed') {
-        recordNativeCommands('claude', message.commands ?? []);
+        if (Array.isArray(message.commands) && message.commands.length > 0) {
+          commandChangeRecorded = true;
+        }
+        recordNativeCommands('claude', message.commands ?? [], runtimeWorkspace);
       }
 
       // Capture session ID from first message

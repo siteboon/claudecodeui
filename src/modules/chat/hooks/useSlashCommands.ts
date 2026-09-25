@@ -165,70 +165,67 @@ export function useSlashCommands({
     clearCommandQueryTimer();
   }, [clearCommandQueryTimer]);
 
-  useEffect(() => {
-    let cancelled = false;
+  // Reloadable at will: the initial fetch happens on project/provider change,
+  // and the menu re-fetches on every open — the native catalogue improves
+  // after the first session initializes (static fallback replaced by the
+  // CLI's live list), and a stale menu must not outlive that.
+  const fetchCommands = useCallback(async () => {
+    if (!selectedProject) {
+      setSlashCommands([]);
+      return;
+    }
 
-    const fetchCommands = async () => {
-      if (!selectedProject) {
-        setSlashCommands([]);
-        return;
+    try {
+      const workspacePath = selectedProject.fullPath || selectedProject.path || '';
+      const response = await api.commands.list(workspacePath || selectedProject.path, provider);
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch commands');
       }
 
-      try {
-        const workspacePath = selectedProject.fullPath || selectedProject.path || '';
-        const response = await api.commands.list(workspacePath || selectedProject.path, provider);
+      const data = await response.json();
+      const skillsResponse = await api.providers.skills(provider, { workspacePath });
+      const skillsData = skillsResponse.ok
+        ? ((await skillsResponse.json()) as ProviderSkillsResponse)
+        : null;
+      const skillCommands = dedupeProviderSkills(skillsData?.data?.skills || [])
+        .map(mapSkillToSlashCommand);
+      const allCommands: SlashCommand[] = [
+        ...((data.builtIn || []) as SlashCommand[]).map((command) => ({
+          ...command,
+          type: 'built-in',
+        })),
+        ...((data.native || []) as SlashCommand[]).map((command) => ({
+          ...command,
+          namespace: 'cli' as const,
+          type: 'cli' as const,
+        })),
+        ...skillCommands,
+        ...((data.custom || []) as SlashCommand[]).map((command) => ({
+          ...command,
+          type: 'custom',
+        })),
+      ];
 
-        if (!response.ok) {
-          throw new Error('Failed to fetch commands');
-        }
+      const parsedHistory = readCommandHistory(selectedProject.projectId);
+      const sortedCommands = [...allCommands].sort((commandA, commandB) => {
+        const commandAUsage = parsedHistory[commandA.name] || 0;
+        const commandBUsage = parsedHistory[commandB.name] || 0;
+        return commandBUsage - commandAUsage;
+      });
 
-        const data = await response.json();
-        const skillsResponse = await api.providers.skills(provider, { workspacePath });
-        const skillsData = skillsResponse.ok
-          ? ((await skillsResponse.json()) as ProviderSkillsResponse)
-          : null;
-        const skillCommands = dedupeProviderSkills(skillsData?.data?.skills || [])
-          .map(mapSkillToSlashCommand);
-        const allCommands: SlashCommand[] = [
-          ...((data.builtIn || []) as SlashCommand[]).map((command) => ({
-            ...command,
-            type: 'built-in',
-          })),
-          ...((data.native || []) as SlashCommand[]).map((command) => ({
-            ...command,
-            namespace: 'cli' as const,
-            type: 'cli' as const,
-          })),
-          ...skillCommands,
-          ...((data.custom || []) as SlashCommand[]).map((command) => ({
-            ...command,
-            type: 'custom',
-          })),
-        ];
-
-        const parsedHistory = readCommandHistory(selectedProject.projectId);
-        const sortedCommands = [...allCommands].sort((commandA, commandB) => {
-          const commandAUsage = parsedHistory[commandA.name] || 0;
-          const commandBUsage = parsedHistory[commandB.name] || 0;
-          return commandBUsage - commandAUsage;
-        });
-
-        if (!cancelled) {
-          setSlashCommands(sortedCommands);
-        }
-      } catch (error) {
-        console.error('Error fetching slash commands:', error);
-        if (!cancelled) {
-          setSlashCommands([]);
-        }
-      }
-    };
-
-    fetchCommands();
-    return () => {
-      cancelled = true;
-    };
+      setSlashCommands(sortedCommands);
+    } catch (error) {
+      console.error('Error fetching slash commands:', error);
+      setSlashCommands([]);
+    }
   }, [selectedProject, provider]);
+
+  useEffect(() => {
+    // Deferred to a microtask: the effect itself must not set state
+    // synchronously (the empty-project branch writes through immediately).
+    void Promise.resolve().then(fetchCommands);
+  }, [fetchCommands]);
 
   // Derived, not stored: the filtered view is a pure function of the full
   // list and the typed query, so keeping it in state would only risk the two
@@ -355,8 +352,14 @@ export function useSlashCommands({
     setCommandQuery('');
     setSelectedCommandIndex(-1);
 
+    // Refresh on every open: the native catalogue may have improved since the
+    // last fetch (first session initialize, later commands_changed pushes).
+    if (isOpening) {
+      void fetchCommands();
+    }
+
     textareaRef.current?.focus();
-  }, [showCommandMenu, textareaRef]);
+  }, [fetchCommands, showCommandMenu, textareaRef]);
 
   const handleCommandInputChange = useCallback(
     (newValue: string, cursorPos: number) => {

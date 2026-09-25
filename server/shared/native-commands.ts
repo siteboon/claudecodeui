@@ -96,23 +96,32 @@ const STATIC_NATIVE_COMMANDS: Record<NativeCommandProvider, NativeSlashCommand[]
   ],
 };
 
-const dynamicCommands = new Map<NativeCommandProvider, NativeSlashCommand[]>();
+// Keyed by provider AND the workspace the session ran in: project-scoped
+// skills and plugins make the catalogue workspace-specific, so workspace A's
+// list must never be served to workspace B. The lookup is exact-match; a
+// workspace that has no capture of its own gets the static fallback.
+const dynamicCommands = new Map<string, NativeSlashCommand[]>();
+
+const cacheKey = (provider: string, workspacePath?: string): string =>
+  `${provider}::${workspacePath ?? ''}`;
 
 /**
  * Records the catalogue a live CLI session reported. Called by the runtime
  * on the initialize handshake and on every `commands_changed` push, which
  * the protocol documents as a full replacement — clients must not merge it.
+ * `workspacePath` is the cwd the session runs in (`options.cwd`).
  */
 export function recordNativeCommands(
   provider: NativeCommandProvider,
   commands: NativeSlashCommand[],
+  workspacePath?: string,
 ): void {
   if (!Array.isArray(commands) || commands.length === 0) {
     return;
   }
 
   dynamicCommands.set(
-    provider,
+    cacheKey(provider, workspacePath),
     commands
       .filter((command) => typeof command?.name === 'string' && command.name.length > 0)
       .map((command) => ({
@@ -125,9 +134,12 @@ export function recordNativeCommands(
   );
 }
 
-/** The native commands to advertise for one provider: dynamic capture if a live session has reported one, the static fallback otherwise. */
-export function getNativeCommands(provider: string): NativeSlashCommand[] {
-  const dynamic = dynamicCommands.get(provider as NativeCommandProvider);
+/**
+ * The native commands to advertise for one provider: the capture from a live
+ * session in this workspace if one has reported, the static fallback otherwise.
+ */
+export function getNativeCommands(provider: string, workspacePath?: string): NativeSlashCommand[] {
+  const dynamic = dynamicCommands.get(cacheKey(provider, workspacePath));
   if (dynamic && dynamic.length > 0) {
     return dynamic;
   }
