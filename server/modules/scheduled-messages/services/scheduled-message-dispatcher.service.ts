@@ -72,9 +72,11 @@ async function sendClaimedQueuedMessage(
     { runtime },
   );
 
-  // The registry check and run reservation are separate operations. If a run
-  // wins that tiny race, put the turn back so the next poll tries again.
-  if (!result.started && result.error === 'A run was already in progress for this session.') {
+  // A session that turns out to be busy gets the turn back so a later poll
+  // tries again: a run can win the tiny race between the registry check and
+  // the run reservation, and a Shell CLI the user is working in holds the
+  // session until it exits.
+  if (!result.started && result.busy) {
     sessionDraftsDb.restoreQueuedMessage(candidate);
     return;
   }
