@@ -141,6 +141,19 @@ export class ChatSessionWriter {
     this.connections.add(newConnection);
   }
 
+  /**
+   * Snapshots the run's current live audience.
+   *
+   * Consumed by `chat.send`'s interrupt path (`chat-websocket.service.ts`) so
+   * every socket watching the run being replaced — not just the one that sent
+   * the interrupt — can be carried over to the replacement run's writer
+   * before it starts, instead of silently stopping mid-session on every tab
+   * but the sender's.
+   */
+  listConnections(): RealtimeClientConnection[] {
+    return Array.from(this.connections);
+  }
+
   setSessionId(sessionId: string): void {
     this.captureProviderSessionId(sessionId);
   }

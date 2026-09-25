@@ -19,6 +19,7 @@ import type {
   LLMProvider,
   ProviderPermissionDecision,
   ProviderRuntimeWriter,
+  RealtimeClientConnection,
 } from '@/shared/types.js';
 import { createNormalizedMessage, parseIncomingJsonObject } from '@/shared/utils.js';
 
@@ -252,14 +253,32 @@ async function handleChatSend(
   }
 
   const clientOptions = (data.options ?? {}) as AnyRecord;
+  // Every socket watching the run being replaced, captured before it's
+  // aborted. `dispatchRun` below only attaches the sender to the replacement
+  // run's writer, so without carrying these over, a second tab on the same
+  // session would see the old run's `complete { replaced: true }` (which it
+  // deliberately ignores, expecting a follow-up run) and then never hear from
+  // the replacement run again — stuck "processing" forever.
+  let carryOverConnections: RealtimeClientConnection[] = [];
   if (clientOptions.interrupt === true && chatRunRegistry.isProcessing(resolved.sessionId)) {
     const activeRun = chatRunRegistry.getRun(resolved.sessionId);
     if (activeRun) {
+      carryOverConnections = activeRun.writer.listConnections();
       await abortRunningRun(dependencies, activeRun.provider, resolved.sessionId, { replaced: true });
     }
   }
 
-  await dispatchRun(ws, userId, resolved.sessionId, resolved.session, data, dependencies);
+  await dispatchRun(ws, userId, resolved.sessionId, resolved.session, data, dependencies, {}, (run) => {
+    for (const connection of carryOverConnections) {
+      // The sender is already attached by `dispatchRun`/`startRun`; skip it
+      // so it isn't double-registered, and skip anything that dropped while
+      // the abort was in flight.
+      if (connection === ws || connection.readyState !== WS_OPEN_STATE) {
+        continue;
+      }
+      run.writer.updateWebSocket(connection);
+    }
+  });
 }
 
 /**
@@ -364,7 +383,23 @@ async function handleChatSteer(
     cwd: clientOptions.cwd ?? session.project_path ?? undefined,
   };
 
-  const result = await dependencies.runtime.steer(provider, sessionId, content, steerOptions);
+  let result: { uuid: string } | null;
+  try {
+    result = await dependencies.runtime.steer(provider, sessionId, content, steerOptions);
+  } catch (error) {
+    // The runtime can throw before ever reaching the CLI/SDK — e.g.
+    // `buildPromptMessages` failing on an unreadable image attachment.
+    // Left unguarded, this escaped to `handleChatConnection`'s catch as an
+    // untagged INTERNAL_ERROR with no sessionId, which idles the whole
+    // session client-side even though only this steer failed, and loses the
+    // steered text (the composer already cleared it optimistically on send).
+    // Reporting it as STEER_UNSUPPORTED instead matches the "runtime can't
+    // accept this steer" path below, so the client re-queues it.
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[Chat] Provider runtime "${provider}" steer failed`, { sessionId, error: message });
+    sendProtocolError(ws, 'STEER_UNSUPPORTED', message, sessionId, 'chat.steer');
+    return;
+  }
   if (!result) {
     if (!chatRunRegistry.isProcessing(sessionId)) {
       // The turn ended while we were awaiting `runtime.steer` (e.g. during
