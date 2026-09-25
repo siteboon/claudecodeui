@@ -296,15 +296,22 @@ export function useSlashCommands({
       const query = match[1].slice(1); // strip leading /
 
       setSlashPosition(slashPos);
+      const menuWasOpen = showCommandMenu;
       setShowCommandMenu(true);
       setSelectedCommandIndex(-1);
+
+      // Opening by typing must refresh too, not just the toggle button: the
+      // native catalogue may have improved since the last fetch.
+      if (!menuWasOpen) {
+        refreshProjectCommands();
+      }
 
       clearCommandQueryTimer();
       commandQueryTimerRef.current = window.setTimeout(() => {
         setCommandQuery(query);
       }, COMMAND_QUERY_DEBOUNCE_MS);
     },
-    [resetCommandMenuState, clearCommandQueryTimer],
+    [resetCommandMenuState, clearCommandQueryTimer, refreshProjectCommands, showCommandMenu],
   );
 
   const handleCommandMenuKeyDown = useCallback(
@@ -340,8 +347,12 @@ export function useSlashCommands({
 
       if (event.key === 'Tab' || event.key === 'Enter') {
         event.preventDefault();
-        if (selectedCommandIndex >= 0) {
-          selectCommandFromKeyboard(filteredCommands[selectedCommandIndex]);
+        // A refresh may have shrunk the list under the stored index — resolve
+        // the command defensively and fall back to the first row.
+        const selectedCommand =
+          selectedCommandIndex >= 0 ? filteredCommands[selectedCommandIndex] : undefined;
+        if (selectedCommand) {
+          selectCommandFromKeyboard(selectedCommand);
         } else if (filteredCommands.length > 0) {
           selectCommandFromKeyboard(filteredCommands[0]);
         }

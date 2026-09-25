@@ -82,7 +82,7 @@ export function useProjectSlashCommands(
 ): UseProjectSlashCommandsResult {
   // The fetched list, kept in state because it arrives asynchronously after
   // the project or provider changes and every consumer derives its view from it.
-  const [commands, setCommands] = useState<SlashCommand[]>([]);
+  const [commandsState, setCommands] = useState<SlashCommand[]>([]);
   // Distinguishes "no commands yet" from "no commands at all" so a list can
   // show a loading state instead of an empty one while the request is in flight.
   const [isLoading, setIsLoading] = useState(false);
@@ -94,6 +94,16 @@ export function useProjectSlashCommands(
   // (and on later commands_changed pushes), and menus must pick that up.
   const [reloadToken, setReloadToken] = useState(0);
   const refresh = useCallback(() => setReloadToken((token) => token + 1), []);
+
+  // The scope the visible list was fetched for. During a provider or project
+  // switch the fetch is still in flight, and until it lands the previous
+  // scope's commands must not be offered to the new one — a Codex session
+  // seeing Claude's /compact for a second is exactly the leak this feature
+  // exists to prevent. A refresh of the same scope keeps the list.
+  const scope = selectedProject
+    ? `${provider}::${selectedProject.fullPath || selectedProject.path || ''}`
+    : '';
+  const [fetchedScope, setFetchedScope] = useState('');
 
   useEffect(() => {
     if (!enabled) {
@@ -153,12 +163,14 @@ export function useProjectSlashCommands(
 
         if (!cancelled) {
           setCommands(allCommands);
+          setFetchedScope(scope);
           setIsLoading(false);
         }
       } catch (fetchError) {
         console.error('Error fetching slash commands:', fetchError);
         if (!cancelled) {
           setCommands([]);
+          setFetchedScope(scope);
           setError(true);
           setIsLoading(false);
         }
@@ -169,7 +181,11 @@ export function useProjectSlashCommands(
     return () => {
       cancelled = true;
     };
-  }, [enabled, selectedProject, provider, reloadToken]);
+  }, [enabled, selectedProject, provider, reloadToken, scope]);
 
+  // The list only becomes visible once it belongs to the current scope.
+  // Returning the raw state would offer the previous provider's commands
+  // during the in-flight switch.
+  const commands = fetchedScope === scope ? commandsState : [];
   return { commands, isLoading, error, refresh };
 }
