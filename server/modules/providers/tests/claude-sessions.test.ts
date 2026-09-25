@@ -1755,6 +1755,83 @@ test('buildLookupMap skips rows with non-string key or value', async () => {
   }
 });
 
+test('buildLookupMap keeps a value containing U+2028 and the rows after a malformed row', async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-lookup-'));
+  const filePath = path.join(tmp, 'history.jsonl');
+  try {
+    await writeFile(
+      filePath,
+      [
+        // JSON.stringify writes U+2028 unescaped.
+        JSON.stringify({ sessionId: 's1', display: 'first line\u2028pasted second line' }),
+        '{"sessionId":"s2","display":',
+        JSON.stringify({ sessionId: 's3', display: 'after the malformed row' }),
+      ].join('\n'),
+      'utf8',
+    );
+
+    const map = await buildLookupMap(filePath, 'sessionId', 'display');
+
+    assert.equal(map.get('s1'), 'first line\u2028pasted second line');
+    assert.equal(map.get('s3'), 'after the malformed row');
+    assert.equal(map.size, 2);
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test('buildLookupMap keeps the rows after a null row', async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-lookup-'));
+  const filePath = path.join(tmp, 'history.jsonl');
+  try {
+    await writeFile(
+      filePath,
+      [
+        JSON.stringify({ sessionId: 's1', display: 'before the null row' }),
+        'null',
+        JSON.stringify({ sessionId: 's2', display: 'after the null row' }),
+      ].join('\n'),
+      'utf8',
+    );
+
+    const map = await buildLookupMap(filePath, 'sessionId', 'display');
+
+    assert.equal(map.get('s1'), 'before the null row');
+    assert.equal(map.get('s2'), 'after the null row');
+    assert.equal(map.size, 2);
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test('buildLookupMap keeps the rows after number, string and array rows', async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-lookup-'));
+  const filePath = path.join(tmp, 'history.jsonl');
+  try {
+    await writeFile(
+      filePath,
+      [
+        '42',
+        JSON.stringify({ sessionId: 's1', display: 'after a number row' }),
+        '"text"',
+        JSON.stringify({ sessionId: 's2', display: 'after a string row' }),
+        '["s3","not a label"]',
+        JSON.stringify({ sessionId: 's3', display: 'after an array row' }),
+      ].join('\n'),
+      'utf8',
+    );
+
+    const map = await buildLookupMap(filePath, 'sessionId', 'display');
+
+    assert.equal(map.get('s1'), 'after a number row');
+    assert.equal(map.get('s2'), 'after a string row');
+    assert.equal(map.get('s3'), 'after an array row');
+    assert.equal(map.size, 3);
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // extractSessionTitle — tested via synchronizeFile
 // ---------------------------------------------------------------------------
@@ -2057,4 +2134,121 @@ test('synchronizeFile skips non-jsonl files', { concurrency: false }, async () =
     const result = await synchronizer.synchronizeFile('/tmp/not-a-jsonl.txt');
     assert.equal(result, null);
   });
+});
+
+// ---------------------------------------------------------------------------
+// U+2028 / U+2029 and malformed rows in transcripts
+// ---------------------------------------------------------------------------
+
+/** Writes a transcript whose first prompt row (the one carrying `cwd`) follows `leadingLines`. */
+async function writeSessionWithFirstPrompt(
+  dirPath: string,
+  prompt: string,
+  leadingLines: string[] = [],
+): Promise<string> {
+  const filePath = path.join(dirPath, 'test-session-1.jsonl');
+  const promptRow = JSON.stringify({
+    parentUuid: null,
+    isSidechain: false,
+    type: 'user',
+    message: { role: 'user', content: prompt },
+    uuid: 'msg-1',
+    timestamp: '2026-07-10T00:00:00.000Z',
+    cwd: '/workspace/demo',
+    sessionId: 'test-session-1',
+  });
+  await writeFile(filePath, [...leadingLines, promptRow, ''].join('\n'), 'utf8');
+  return filePath;
+}
+
+test('synchronizeFile indexes a session whose first prompt contains a U+2028 line separator', { concurrency: false }, async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-sync-line-separator-'));
+  const workspacePath = path.join(tmp, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tmp);
+
+  try {
+    const claudeHome = path.join(tmp, '.claude');
+    await mkdir(claudeHome, { recursive: true });
+    await writeFile(path.join(claudeHome, 'history.jsonl'), '', 'utf8');
+
+    // JSON.stringify writes U+2028 unescaped, so the row holds the raw character.
+    const filePath = await writeSessionWithFirstPrompt(workspacePath, 'first line\u2028pasted second line');
+
+    await withIsolatedDatabase(async () => {
+      const result = await new ClaudeSessionSynchronizer().synchronizeFile(filePath);
+
+      assert.ok(result, 'the session must be indexed');
+      const session = sessionsDb.getSessionById(result!);
+      assert.equal(session?.jsonl_path, filePath);
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test('synchronizeFile indexes a session whose transcript has a malformed row before its first prompt', { concurrency: false }, async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-sync-malformed-row-'));
+  const workspacePath = path.join(tmp, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tmp);
+
+  try {
+    const claudeHome = path.join(tmp, '.claude');
+    await mkdir(claudeHome, { recursive: true });
+    await writeFile(path.join(claudeHome, 'history.jsonl'), '', 'utf8');
+
+    const filePath = await writeSessionWithFirstPrompt(workspacePath, 'first prompt', [
+      '{"type":"permission-mode","permissionMode":"default","sessionId":',
+    ]);
+
+    await withIsolatedDatabase(async () => {
+      const result = await new ClaudeSessionSynchronizer().synchronizeFile(filePath);
+
+      assert.ok(result, 'one malformed row must not hide the whole transcript');
+      assert.equal(sessionsDb.getSessionById(result!)?.jsonl_path, filePath);
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test('Claude history keeps messages that contain U+2028 or U+2029', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-line-separator-history-'));
+  const sessionId = 'claude-line-separator-session';
+
+  try {
+    const transcriptPath = path.join(tempRoot, `${sessionId}.jsonl`);
+    const prompt = 'first line\u2028pasted second line';
+    const reply = 'first paragraph\u2029second paragraph';
+    const rows = [
+      {
+        type: 'user', uuid: 'ls-u1', parentUuid: null, sessionId,
+        timestamp: '2026-08-23T10:00:00.000Z',
+        message: { role: 'user', content: [{ type: 'text', text: prompt }] },
+      },
+      {
+        type: 'assistant', uuid: 'ls-a1', parentUuid: 'ls-u1', sessionId,
+        timestamp: '2026-08-23T10:00:01.000Z',
+        message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: reply }] },
+      },
+    ];
+    await writeFile(transcriptPath, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(sessionId, 'claude', tempRoot, 'Line separator session', now, now, transcriptPath);
+
+      const history = await new ClaudeSessionsProvider().fetchHistory(sessionId, {
+        providerSessionId: sessionId,
+      });
+
+      assert.equal(history.messages.find((message) => message.role === 'user')?.content, prompt);
+      assert.equal(history.messages.find((message) => message.role === 'assistant')?.content, reply);
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
 });

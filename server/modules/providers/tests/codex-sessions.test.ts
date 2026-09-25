@@ -553,6 +553,34 @@ test('an exec script that updates the plan yields the steps it set', () => {
 });
 
 
+test('Codex history keeps a prompt that contains a U+2028 line separator', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-line-separator-history-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tempRoot);
+
+  try {
+    // JSON.stringify writes U+2028 unescaped, so the row holds the raw character.
+    const prompt = 'first line\u2028pasted second line';
+    await writeCodexTranscript(tempRoot, 'codex-line-separator-1', workspacePath, prompt);
+
+    await withIsolatedDatabase(async () => {
+      sessionsDb.createAppSession('app-line-separator-1', 'codex', workspacePath);
+      sessionsDb.assignProviderSessionId('app-line-separator-1', 'codex-line-separator-1');
+      await new CodexSessionSynchronizer().synchronize();
+
+      const history = await new CodexSessionsProvider().fetchHistory('app-line-separator-1');
+      const users = history.messages.filter((message) => message.role === 'user');
+
+      assert.equal(users.length, 1);
+      assert.equal(users[0]?.content, prompt);
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('Codex history restores user prompts from typed item_completed rows', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-typed-user-history-'));
   const workspacePath = path.join(tempRoot, 'workspace');

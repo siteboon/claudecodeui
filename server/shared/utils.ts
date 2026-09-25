@@ -13,7 +13,7 @@ import {
 } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import readline from 'node:readline';
+import { StringDecoder } from 'node:string_decoder';
 import { fileURLToPath } from 'node:url';
 
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
@@ -1119,13 +1119,65 @@ export async function readFileTimestamps(
 }
 
 // ---------------------------
+//----------------- JSONL LINE READING UTILITIES ------------
+/**
+ * Streams the lines of a JSONL file, splitting on `\n` only.
+ *
+ * Use this instead of `readline` for every JSONL file. `readline` also ends a
+ * line at U+2028 (LINE SEPARATOR) and U+2029 (PARAGRAPH SEPARATOR), but JSON
+ * allows both characters unescaped inside strings, and `JSON.stringify` writes
+ * them raw, so they reach transcripts unescaped. `readline` then cuts such a
+ * record into two fragments that each fail `JSON.parse`, so the record is lost.
+ *
+ * A `\r` right before the `\n` is dropped, which matches `readline` with
+ * `crlfDelay: Infinity`. The last line is yielded even without a trailing
+ * newline, and no empty line is yielded after a final `\n`. Blank lines in the
+ * middle of the file are yielded as empty strings, so callers keep skipping them.
+ * Leaving the loop early (`break`/`return`) closes the file. A missing or
+ * unreadable file rejects the loop, like iterating a `readline` interface does.
+ *
+ * Used by the session synchronizers (through `buildLookupMap` and
+ * `extractFirstValidJsonlData`), the Claude and Codex session providers, and the
+ * session conversation search service to read provider transcripts.
+ */
+export async function* readJsonlLines(filePath: string): AsyncGenerator<string> {
+  const decoder = new StringDecoder('utf8');
+  // The unfinished line carried over from earlier chunks. Only newly decoded
+  // text is searched for `\n`, so one very long row is scanned once.
+  let pendingLine = '';
+
+  for await (const chunk of fs.createReadStream(filePath)) {
+    const text = decoder.write(chunk as Buffer);
+    let lineStart = 0;
+    let newlineIndex = text.indexOf('\n');
+
+    while (newlineIndex !== -1) {
+      const line = pendingLine + text.slice(lineStart, newlineIndex);
+      pendingLine = '';
+      yield line.endsWith('\r') ? line.slice(0, -1) : line;
+      lineStart = newlineIndex + 1;
+      newlineIndex = text.indexOf('\n', lineStart);
+    }
+
+    pendingLine += text.slice(lineStart);
+  }
+
+  pendingLine += decoder.end();
+  if (pendingLine) {
+    yield pendingLine.endsWith('\r') ? pendingLine.slice(0, -1) : pendingLine;
+  }
+}
+
+// ---------------------------
 //----------------- SESSION SYNCHRONIZER JSONL PARSING HELPERS ------------
 /**
  * Builds a first-seen key/value lookup map from a JSONL file.
  *
  * Use this for provider index files where session id -> display name metadata
  * is stored line-by-line. The first value for each key wins, preserving the
- * earliest known label while avoiding repeated map overwrites.
+ * earliest known label while avoiding repeated map overwrites. A row that is
+ * not a valid JSON object (malformed, `null`, a number, a string or an array)
+ * is skipped without dropping the rows around it.
  */
 export async function buildLookupMap(
   filePath: string,
@@ -1135,16 +1187,18 @@ export async function buildLookupMap(
   const lookup = new Map<string, string>();
 
   try {
-    const fileStream = fs.createReadStream(filePath);
-    const lineReader = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
-
-    for await (const line of lineReader) {
+    for await (const line of readJsonlLines(filePath)) {
       const trimmed = line.trim();
       if (!trimmed) {
         continue;
       }
 
-      const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+      const parsed = readJsonRecord(trimmed);
+      if (!parsed) {
+        // One malformed row must not hide every label after it.
+        continue;
+      }
+
       const key = parsed[keyField];
       const value = parsed[valueField];
 
@@ -1164,32 +1218,40 @@ export async function buildLookupMap(
  *
  * The caller supplies an `extractor` that validates provider-specific row
  * shapes. This helper centralizes line-by-line parsing and lets indexers stop
- * scanning as soon as one valid row is found.
+ * scanning as soon as one valid row is found. A row that is not a valid JSON
+ * object (for example one still being written, or a `null` row) is skipped, and
+ * so is a row the extractor throws on, so neither can hide the valid rows after
+ * it. The extractor only receives JSON object rows.
  */
 export async function extractFirstValidJsonlData<T>(
   filePath: string,
   extractor: (parsedJson: unknown) => T | null | undefined
 ): Promise<T | null> {
   try {
-    const fileStream = fs.createReadStream(filePath);
-    const lineReader = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
-
-    for await (const line of lineReader) {
+    for await (const line of readJsonlLines(filePath)) {
       const trimmed = line.trim();
       if (!trimmed) {
         continue;
       }
 
-      const parsed = JSON.parse(trimmed);
-      const extracted = extractor(parsed);
+      const parsed = readJsonRecord(trimmed);
+      if (!parsed) {
+        continue;
+      }
+
+      let extracted: T | null | undefined;
+      try {
+        extracted = extractor(parsed);
+      } catch {
+        continue;
+      }
+
       if (extracted) {
-        lineReader.close();
-        fileStream.close();
         return extracted;
       }
     }
   } catch {
-    // Ignore malformed or missing artifacts so full scans keep progressing.
+    // Ignore missing or unreadable artifacts so full scans keep progressing.
   }
 
   return null;
