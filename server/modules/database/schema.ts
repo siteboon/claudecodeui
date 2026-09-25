@@ -250,6 +250,35 @@ CREATE TABLE IF NOT EXISTS superseded_provider_sessions (
 );
 `;
 
+/**
+ * Prompts a provider accepted for a turn but never wrote to its own transcript.
+ *
+ * History is rebuilt from the provider's transcript, so a prompt missing there
+ * is missing from the conversation after a reload and on every other device.
+ * Codex does this to a resumed turn whose pre-turn compaction fails (a 429 at
+ * the usage limit, for one): the rollout gets the turn's start and its error,
+ * never the prompt. The runtime keeps the copy here and the history reader
+ * puts it back in place. `provider_session_id` scopes a row to the transcript
+ * it belongs to, and `turn_id` is the provider turn the prompt opened, when
+ * the provider got as far as opening one.
+ */
+export const UNRECORDED_PROMPTS_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS unrecorded_prompts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    provider_session_id TEXT NOT NULL,
+    turn_id TEXT,
+    prompt_text TEXT NOT NULL,
+    -- JSON array of the local image paths sent with the prompt.
+    image_paths TEXT NOT NULL DEFAULT '[]',
+    -- When the prompt was sent (ISO 8601 UTC); orders it among transcript rows.
+    submitted_at TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+);
+`;
+
 export const INIT_SCHEMA_SQL = `
 -- Initialize authentication database
 PRAGMA foreign_keys = ON;
