@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, KeyboardEvent, RefObject, SetStateAction } from 'react';
 
-import { api } from '@/shared/api';
 import { safeLocalStorage } from '@/modules/chat/utils/chatStorage';
+import { useProjectSlashCommands } from '@/shared/hooks/useProjectSlashCommands';
 import type { LLMProvider, Project, SlashCommand } from '@/shared/types';
+import { isSkillCommand } from '@/shared/utils';
 
 const COMMAND_QUERY_DEBOUNCE_MS = 150;
 
@@ -15,23 +16,6 @@ type UseSlashCommandsOptions = {
   setInput: Dispatch<SetStateAction<string>>;
   textareaRef: RefObject<HTMLTextAreaElement>;
   onExecuteCommand: (command: SlashCommand, rawInput?: string) => void | Promise<void>;
-};
-
-type ProviderSkill = {
-  name: string;
-  description?: string;
-  command: string;
-  scope: string;
-  sourcePath?: string;
-  pluginName?: string;
-  pluginId?: string;
-};
-
-type ProviderSkillsResponse = {
-  success?: boolean;
-  data?: {
-    skills?: ProviderSkill[];
-  };
 };
 
 const getCommandHistoryKey = (projectName: string) => `command_history_${projectName}`;
@@ -57,9 +41,6 @@ const saveCommandHistory = (projectName: string, history: Record<string, number>
 const isPromiseLike = (value: unknown): value is Promise<unknown> =>
   Boolean(value) && typeof (value as Promise<unknown>).then === 'function';
 
-const isSkillCommand = (command: SlashCommand) =>
-  command.type === 'skill' || command.metadata?.type === 'skill';
-
 // CLI-native commands are not executed by this app — the CLI behind the
 // session handles them when the text reaches it — so picking one from the
 // menu inserts it into the input exactly like a skill, instead of routing
@@ -67,38 +48,6 @@ const isSkillCommand = (command: SlashCommand) =>
 // would spin forever).
 export const isCliNativeCommand = (command: SlashCommand) =>
   command.namespace === 'cli' || command.type === 'cli';
-
-const dedupeProviderSkills = (skills: ProviderSkill[]): ProviderSkill[] => {
-  const seenCommands = new Set<string>();
-
-  return skills.filter((skill) => {
-    // Multiple physical Claude plugin folders can expose the same invocation.
-    // The slash menu should show each executable command only once.
-    const key = skill.command;
-    if (seenCommands.has(key)) {
-      return false;
-    }
-
-    seenCommands.add(key);
-    return true;
-  });
-};
-
-const mapSkillToSlashCommand = (skill: ProviderSkill): SlashCommand => ({
-  name: skill.command,
-  description: skill.description,
-  namespace: 'skill',
-  path: skill.sourcePath,
-  type: 'skill',
-  metadata: {
-    type: skill.scope,
-    scope: skill.scope,
-    sourcePath: skill.sourcePath,
-    pluginName: skill.pluginName,
-    pluginId: skill.pluginId,
-    skillName: skill.name,
-  },
-});
 
 const filterSlashCommands = (
   commands: SlashCommand[],
@@ -142,7 +91,10 @@ export function useSlashCommands({
   textareaRef,
   onExecuteCommand,
 }: UseSlashCommandsOptions) {
-  const [slashCommands, setSlashCommands] = useState<SlashCommand[]>([]);
+  const { commands: projectCommands, refresh: refreshProjectCommands } = useProjectSlashCommands(
+    selectedProject,
+    provider,
+  );
   const [showCommandMenu, setShowCommandMenu] = useState(false);
   const [commandQuery, setCommandQuery] = useState('');
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(-1);
@@ -165,67 +117,20 @@ export function useSlashCommands({
     clearCommandQueryTimer();
   }, [clearCommandQueryTimer]);
 
-  // Reloadable at will: the initial fetch happens on project/provider change,
-  // and the menu re-fetches on every open — the native catalogue improves
-  // after the first session initializes (static fallback replaced by the
-  // CLI's live list), and a stale menu must not outlive that.
-  const fetchCommands = useCallback(async () => {
+  // The shared list ordered by this project's usage history, most-used first,
+  // so the menu surfaces what the user actually reaches for.
+  const slashCommands = useMemo<SlashCommand[]>(() => {
     if (!selectedProject) {
-      setSlashCommands([]);
-      return;
+      return [];
     }
 
-    try {
-      const workspacePath = selectedProject.fullPath || selectedProject.path || '';
-      const response = await api.commands.list(workspacePath || selectedProject.path, provider);
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch commands');
-      }
-
-      const data = await response.json();
-      const skillsResponse = await api.providers.skills(provider, { workspacePath });
-      const skillsData = skillsResponse.ok
-        ? ((await skillsResponse.json()) as ProviderSkillsResponse)
-        : null;
-      const skillCommands = dedupeProviderSkills(skillsData?.data?.skills || [])
-        .map(mapSkillToSlashCommand);
-      const allCommands: SlashCommand[] = [
-        ...((data.builtIn || []) as SlashCommand[]).map((command) => ({
-          ...command,
-          type: 'built-in',
-        })),
-        ...((data.native || []) as SlashCommand[]).map((command) => ({
-          ...command,
-          namespace: 'cli' as const,
-          type: 'cli' as const,
-        })),
-        ...skillCommands,
-        ...((data.custom || []) as SlashCommand[]).map((command) => ({
-          ...command,
-          type: 'custom',
-        })),
-      ];
-
-      const parsedHistory = readCommandHistory(selectedProject.projectId);
-      const sortedCommands = [...allCommands].sort((commandA, commandB) => {
-        const commandAUsage = parsedHistory[commandA.name] || 0;
-        const commandBUsage = parsedHistory[commandB.name] || 0;
-        return commandBUsage - commandAUsage;
-      });
-
-      setSlashCommands(sortedCommands);
-    } catch (error) {
-      console.error('Error fetching slash commands:', error);
-      setSlashCommands([]);
-    }
-  }, [selectedProject, provider]);
-
-  useEffect(() => {
-    // Deferred to a microtask: the effect itself must not set state
-    // synchronously (the empty-project branch writes through immediately).
-    void Promise.resolve().then(fetchCommands);
-  }, [fetchCommands]);
+    const parsedHistory = readCommandHistory(selectedProject.projectId);
+    return [...projectCommands].sort((commandA, commandB) => {
+      const commandAUsage = parsedHistory[commandA.name] || 0;
+      const commandBUsage = parsedHistory[commandB.name] || 0;
+      return commandBUsage - commandAUsage;
+    });
+  }, [projectCommands, selectedProject]);
 
   // Derived, not stored: the filtered view is a pure function of the full
   // list and the typed query, so keeping it in state would only risk the two
@@ -355,11 +260,11 @@ export function useSlashCommands({
     // Refresh on every open: the native catalogue may have improved since the
     // last fetch (first session initialize, later commands_changed pushes).
     if (isOpening) {
-      void fetchCommands();
+      refreshProjectCommands();
     }
 
     textareaRef.current?.focus();
-  }, [fetchCommands, showCommandMenu, textareaRef]);
+  }, [refreshProjectCommands, showCommandMenu, textareaRef]);
 
   const handleCommandInputChange = useCallback(
     (newValue: string, cursorPos: number) => {

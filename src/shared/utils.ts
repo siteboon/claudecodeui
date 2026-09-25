@@ -1,7 +1,7 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
-import type { Project, ProjectSession } from '@/shared/types';
+import type { Project, ProjectSession, QuickSettingsTab, SlashCommand } from '@/shared/types';
 
 //----------------- DEPLOYMENT MODE ------------
 
@@ -223,3 +223,26 @@ export const getPageTitle = (
   const displayName = selectedProject?.displayName?.trim();
   return displayName ? `${displayName} - ${DEFAULT_PAGE_TITLE}` : DEFAULT_PAGE_TITLE;
 };
+
+// ---------------------------
+
+//----------------- SLASH COMMANDS ------------
+
+/**
+ * Whether a slash command is a provider skill (as opposed to a built-in or a
+ * custom `.md` command). Skills are mapped with `type: 'skill'`; the metadata
+ * check catches entries that only carry the skill marker there. Used wherever
+ * commands are grouped or executed differently by kind.
+ */
+export const isSkillCommand = (command: SlashCommand): boolean =>
+  command.type === 'skill' || command.metadata?.type === 'skill';
+
+// ---------------------------
+
+//----------------- QUICK SETTINGS PANEL ------------
+
+/** DOM id of a quick settings tab button; pairs with `getQuickSettingsTabPanelId` for aria-controls / aria-labelledby. */
+export const getQuickSettingsTabId = (tab: QuickSettingsTab): string => `quick-settings-tab-${tab}`;
+
+/** DOM id of the tabpanel a quick settings tab controls; pairs with `getQuickSettingsTabId`. */
+export const getQuickSettingsTabPanelId = (tab: QuickSettingsTab): string => `quick-settings-tabpanel-${tab}`;

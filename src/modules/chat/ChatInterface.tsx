@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { ArrowDownIcon } from 'lucide-react';
 
 import { useTasksSettings } from '@/modules/task-master';
+import { usePaletteOpsRegister } from '@/modules/command-palette';
 import { useWebSocket } from '@/shared/context/WebSocketContext';
 import PermissionContext from '@/modules/chat/context/PermissionContext';
 import { MarkdownWorkspaceContext } from '@/modules/chat/context/MarkdownWorkspaceContext';
@@ -299,6 +300,27 @@ function ChatInterface({
     requestLatestMessages,
     sessionStore,
   });
+
+  // Lets other modules (the quick settings Commands tab) hand text to the
+  // composer: append it after a separating space, then focus the textarea with
+  // the caret at the end once React has rendered the new value.
+  const insertComposerText = useCallback((text: string) => {
+    setInput((previous) => {
+      const separator = previous && !/\s$/.test(previous) ? ' ' : '';
+      return `${previous}${separator}${text}`;
+    });
+    window.requestAnimationFrame(() => {
+      const textarea = textareaRef.current;
+      if (!textarea) {
+        return;
+      }
+      textarea.focus();
+      const caretPosition = textarea.value.length;
+      textarea.setSelectionRange(caretPosition, caretPosition);
+    });
+  }, [setInput, textareaRef]);
+
+  usePaletteOpsRegister({ insertComposerText });
 
   useEffect(() => {
     if (!canAbortSession) {

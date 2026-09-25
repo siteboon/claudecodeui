@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, test } from 'vitest';
 
-import { useSelectedProvider } from '@/modules/git-panel/hooks/useSelectedProvider';
+import { useSelectedProvider } from '@/shared/hooks/useSelectedProvider';
 import { writeSelectedProvider } from '@/shared/selectedProvider';
 import {
   resetUserPreferences,

@@ -67,6 +67,27 @@
       "openPanel": "Einstellungspanel öffnen",
       "draggingStatus": "Wird gezogen...",
       "toggleAndMove": "Klicken zum Umschalten, ziehen zum Verschieben"
+    },
+    "tabs": {
+      "settings": "Einstellungen",
+      "commands": "Befehle"
+    },
+    "pin": "Panel anheften",
+    "unpin": "Panel lösen",
+    "close": "Panel schließen",
+    "commands": {
+      "searchPlaceholder": "Befehle durchsuchen…",
+      "noProject": "Wähle ein Projekt, um seine Befehle zu sehen.",
+      "loading": "Befehle werden geladen…",
+      "empty": "Für dieses Projekt sind keine Befehle verfügbar.",
+      "noMatches": "Keine Befehle entsprechen deiner Suche.",
+      "loadError": "Befehle konnten nicht geladen werden.",
+      "groups": {
+        "builtIn": "Integriert",
+        "custom": "Benutzerdefiniert",
+        "skills": "Skills"
+      },
+      "insertTitle": "{{command}} in den Chat einfügen"
     }
   },
   "terminalShortcuts": {
