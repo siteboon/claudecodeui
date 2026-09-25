@@ -40,6 +40,30 @@ type UseChatRealtimeHandlersArgs = {
   onSessionIdle?: MarkSessionIdle;
   /** Reports the tasks a session still runs once its turn ends, so it reads as background work rather than idle. */
   onSessionBackground?: MarkSessionBackground;
+  /**
+   * `chat_steered` ack: the composer's pending `chat.steer` for this session
+   * was resolved — either folded into the running turn (a real `uuid`), or,
+   * when nothing was running to fold into, the server fell back to an
+   * ordinary run (`fallback: true`, no `uuid` — see chat-websocket.service.ts's
+   * `handleChatSteer`).
+   */
+  onSteerAcked?: (sessionId: string, uuid?: string, fallback?: boolean) => void;
+  /**
+   * `protocol_error` with `STEER_UNSUPPORTED` or `RUN_IN_PROGRESS` while a
+   * `chat.steer` is outstanding — the composer silently re-queues the text
+   * instead of losing it. Returns `true` only when it actually consumed a
+   * pending steer for this session; the caller falls through to the normal
+   * error-row + idle handling for anything else (e.g. an ordinary
+   * `chat.send` refused with `RUN_IN_PROGRESS` while nothing was steering).
+   */
+  onSteerRejected?: (sessionId: string, code?: string) => boolean | void;
+  /**
+   * A session's turn ended (`complete`, any reason). Drops any `chat.steer`
+   * this session still has outstanding — the turn it was pushed at is over
+   * either way, so an ack/rejection that arrives late for it must not be
+   * allowed to re-queue stale text against whatever turn comes next.
+   */
+  onSteerSettled?: (sessionId: string) => void;
   getSessionActivity?: GetSessionActivity;
   onWebSocketReconnect?: () => void;
   requestLatestMessages: (sessionId: string, allowNetwork?: boolean) => Promise<void>;
@@ -75,6 +99,9 @@ export function useChatRealtimeHandlers({
   onSessionProcessing,
   onSessionIdle,
   onSessionBackground,
+  onSteerAcked,
+  onSteerRejected,
+  onSteerSettled,
   getSessionActivity,
   onWebSocketReconnect,
   requestLatestMessages,
@@ -171,6 +198,31 @@ export function useChatRealtimeHandlers({
 
         case 'protocol_error': {
           console.error('[Chat] Protocol error:', msg.code, msg.error);
+          // A rejected `chat.steer` (provider can't steer, or the process is
+          // winding down; or a `chat.steer`/abort race) is not a failed run —
+          // the turn it tried to fold into is still going. The composer
+          // silently re-queues the text instead, so this must not surface an
+          // error row or idle the session. But the same two codes also cover
+          // an ordinary `chat.send`/`chat.edit-send` refused because a run was
+          // already active (second tab, stale idle state, or a `chat.send`
+          // that lost a race with an outstanding `chat.steer` awaiting its
+          // `chat_steered` ack) — that one is a real failure and must fall
+          // through to the normal handling below, not be silently dropped.
+          // The server tags every such error with the inbound frame that
+          // triggered it (`requestType`, see chat-websocket.service.ts's
+          // `sendProtocolError`), so that — not merely "a steer happens to be
+          // pending" — is what decides which case this is. A server that
+          // sends no `requestType` (older build) is treated as ordinary.
+          // `onSteerRejected` also reports whether it actually consumed a
+          // pending steer for this session; both checks must agree.
+          if (
+            sid &&
+            msg.requestType === 'chat.steer' &&
+            (msg.code === 'STEER_UNSUPPORTED' || msg.code === 'RUN_IN_PROGRESS') &&
+            onSteerRejected?.(sid, msg.code as string) === true
+          ) {
+            return;
+          }
           if (sid) {
             // Surface the failure in the conversation and stop the spinner —
             // the run never started (or was rejected), so no `complete` follows.
@@ -188,6 +240,19 @@ export function useChatRealtimeHandlers({
               kind: 'error',
               content: String(msg.error || 'Request failed'),
             } as NormalizedMessage);
+          }
+          return;
+        }
+
+        case 'chat_steered': {
+          // Ack for chat.steer: either folded into the running turn, or (no
+          // turn to fold into) the server fell back to an ordinary run
+          // (`fallback: true`, no uuid). Neither is a transcript row on its
+          // own — the server's separate `text` echo (steered:true for a real
+          // fold, steered:false for the fallback's own run) is what renders
+          // the bubble in both cases.
+          if (sid) {
+            onSteerAcked?.(sid, msg.uuid as string | undefined, msg.fallback === true);
           }
           return;
         }
@@ -255,6 +320,14 @@ export function useChatRealtimeHandlers({
       // --- UI side effects for specific kinds ---
       switch (msg.kind) {
         case 'complete': {
+          // The turn any outstanding `chat.steer` for this session was
+          // pushed at is over now, one way or another — drop it so a late
+          // ack/rejection can never re-queue stale text against whatever
+          // turn comes next.
+          if (sid) {
+            onSteerSettled?.(sid);
+          }
+
           // Flush any remaining streaming state
           if (streamTimerRef.current) {
             clearTimeout(streamTimerRef.current);
@@ -272,8 +345,16 @@ export function useChatRealtimeHandlers({
           // immediately and atomically: a turn that ended with tasks still
           // running leaves the session as background work — the CLI is held
           // open for them — and any other leaves it idle. An abort releases
-          // the CLI and takes that work down with it.
-          if (sid && !msg.aborted) {
+          // the CLI and takes that work down with it — UNLESS this abort's
+          // `complete` is standing in for a run that `chat.send
+          // {options.interrupt:true}` replaced (`msg.replaced`): the
+          // replacement run's own turn is already under way server-side, so
+          // idling here would flash Send/no-activity for the whole
+          // replacement turn. Leave the session's processing state alone and
+          // let the replacement run's own `complete` settle it.
+          if (sid && msg.aborted && msg.replaced) {
+            // No-op: the replacement run keeps the session processing.
+          } else if (sid && !msg.aborted) {
             reportRemainingBackgroundWork(sid);
           } else {
             onSessionIdle?.(sid);
@@ -414,6 +495,9 @@ export function useChatRealtimeHandlers({
     onSessionProcessing,
     onSessionIdle,
     onSessionBackground,
+    onSteerAcked,
+    onSteerRejected,
+    onSteerSettled,
     getSessionActivity,
     onWebSocketReconnect,
     requestLatestMessages,

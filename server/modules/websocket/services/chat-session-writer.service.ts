@@ -118,12 +118,13 @@ export class ChatSessionWriter {
    * Emits the synthetic terminal `complete` for runs that ended without one
    * (runtime crash before completing, or user abort).
    */
-  sendComplete(opts: { exitCode: number; aborted?: boolean }): void {
+  sendComplete(opts: { exitCode: number; aborted?: boolean; replaced?: boolean }): void {
     const message = createCompleteMessage({
       provider: this.options.provider,
       sessionId: this.providerSessionId,
       exitCode: opts.exitCode,
       aborted: opts.aborted,
+      replaced: opts.replaced,
     });
     const outbound = this.options.decorateOutboundEvent(message);
     if (outbound) {
@@ -138,6 +139,19 @@ export class ChatSessionWriter {
    */
   updateWebSocket(newConnection: RealtimeClientConnection): void {
     this.connections.add(newConnection);
+  }
+
+  /**
+   * Snapshots the run's current live audience.
+   *
+   * Consumed by `chat.send`'s interrupt path (`chat-websocket.service.ts`) so
+   * every socket watching the run being replaced — not just the one that sent
+   * the interrupt — can be carried over to the replacement run's writer
+   * before it starts, instead of silently stopping mid-session on every tab
+   * but the sender's.
+   */
+  listConnections(): RealtimeClientConnection[] {
+    return Array.from(this.connections);
   }
 
   setSessionId(sessionId: string): void {

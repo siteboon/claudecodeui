@@ -562,6 +562,20 @@ export type NormalizedMessage = {
   /** Stored memory this reply drew on, when the provider reports it. */
   memoryCitations?: MemoryCitation[];
   isFinal?: boolean;
+  /**
+   * Set on a `chat.steer` echo — `{ kind:'text', role:'user', steered:true }` —
+   * so the composer knows not to add its own optimistic bubble for it (the
+   * echo itself is the bubble) and, optionally, a "sent mid-turn" badge can
+   * render on the row.
+   */
+  steered?: boolean;
+  /**
+   * Set on a `complete { aborted: true }` emitted because the run it ends was
+   * replaced by `chat.send { options.interrupt: true }`, not because the
+   * user actually stopped the session. Tells the client that a new run is
+   * about to take over, so it should NOT idle the session on this complete.
+   */
+  replaced?: boolean;
   // Cursor-specific ordering
   sequence?: number;
   rowid?: number;

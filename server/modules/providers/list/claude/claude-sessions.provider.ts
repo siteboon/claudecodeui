@@ -1182,6 +1182,77 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       return [];
     }
 
+    // A message steered into a running turn (`chat.steer`) that the CLI
+    // folded mid-turn has no ordinary `user` row of its own — the transcript
+    // instead carries an `attachment` row wrapping the prompt (immediately
+    // followed by a `queue-operation` row that removes it from the queue).
+    // Without this branch the message is live-echoed once by the steer
+    // handler and then disappears on the next reload, since nothing below
+    // recognizes `type: 'attachment'`. Run it through the same
+    // `parseFilesInputTag` handling the ordinary user branch uses so any
+    // `<files_input>` tag still renders as attachments.
+    //
+    // `prompt` is a plain string for a text-only steer, but the CLI writes it
+    // as a content-block array (text blocks plus `image` blocks) when the
+    // steered message carried an image — same shape as the ordinary user
+    // branch below. Handle both so a steered message with an image still
+    // renders after reload instead of vanishing.
+    //
+    // `queued_command` rows aren't exclusive to a person steering from the
+    // composer: the same "fold into the running turn" transcript shape can
+    // carry a background agent's or a peer session's own message (a
+    // `<task-notification>`/`<cross-session-message>` payload), and rendering
+    // one of those as a plain user bubble would show raw internal XML. Gate
+    // on `origin.kind === 'human'` — steerClaudeSDKSession stamps that on
+    // every record it pushes — plus a content-shape belt-and-braces check, so
+    // only an actual human steer renders here.
+    if (
+      raw.type === 'attachment'
+      && raw.attachment?.type === 'queued_command'
+      && raw.attachment?.origin?.kind === 'human'
+      && (typeof raw.attachment.prompt === 'string' || Array.isArray(raw.attachment.prompt))
+    ) {
+      const promptImages: Array<{ data: string }> = [];
+      let promptText: string;
+      if (typeof raw.attachment.prompt === 'string') {
+        promptText = raw.attachment.prompt;
+      } else {
+        const textBlocks: string[] = [];
+        for (const part of raw.attachment.prompt) {
+          if (part?.type === 'text' && typeof part.text === 'string') {
+            textBlocks.push(part.text);
+          } else if (part?.type === 'image' && part.source?.type === 'base64' && typeof part.source.data === 'string') {
+            const mediaType = typeof part.source.media_type === 'string' ? part.source.media_type : 'image/png';
+            promptImages.push({ data: `data:${mediaType};base64,${part.source.data}` });
+          }
+        }
+        promptText = textBlocks.join('\n');
+      }
+
+      const parsedFiles = parseFilesInputTag(promptText);
+      const trimmedPromptText = promptText.trimStart();
+      if (
+        (parsedFiles.text || parsedFiles.attachments.length > 0 || promptImages.length > 0)
+        && !isInternalContent(parsedFiles.text)
+        && !trimmedPromptText.startsWith('<task-notification')
+        && !trimmedPromptText.startsWith('<cross-session-message')
+      ) {
+        return [createNormalizedMessage({
+          id: typeof raw.attachment.source_uuid === 'string' ? raw.attachment.source_uuid : baseId,
+          sessionId,
+          timestamp: ts,
+          provider: PROVIDER,
+          kind: 'text',
+          role: 'user',
+          content: parsedFiles.text,
+          files: parsedFiles.attachments.length > 0 ? parsedFiles.attachments : undefined,
+          images: promptImages.length > 0 ? promptImages : undefined,
+          steered: true,
+        })];
+      }
+      return [];
+    }
+
     if (raw.message?.role === 'user' && raw.message?.content && raw.isMeta !== true) {
       if (Array.isArray(raw.message.content)) {
         // Image attachments sent through the SDK are persisted as base64
