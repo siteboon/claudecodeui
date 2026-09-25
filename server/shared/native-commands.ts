@@ -99,48 +99,64 @@ const STATIC_NATIVE_COMMANDS: Record<NativeCommandProvider, NativeSlashCommand[]
 // Keyed by provider AND the workspace the session ran in: project-scoped
 // skills and plugins make the catalogue workspace-specific, so workspace A's
 // list must never be served to workspace B. The lookup is exact-match; a
-// workspace that has no capture of its own gets the static fallback.
+// workspace that has no capture of its own gets the static fallback. An
+// existing entry — even an empty one — wins over the fallback: it is what the
+// CLI last reported for that workspace.
 const dynamicCommands = new Map<string, NativeSlashCommand[]>();
+
+// One generation per capture attempt. Two sessions in the same workspace run
+// concurrently, and the SDK does not order initializationResult() against
+// stream messages — a generation check is what keeps an older query's late
+// initialization from restoring stale commands over a newer capture.
+const captureGenerations = new Map<string, number>();
 
 const cacheKey = (provider: string, workspacePath?: string): string =>
   `${provider}::${workspacePath ?? ''}`;
 
-/**
- * Records the catalogue a live CLI session reported. Called by the runtime
- * on the initialize handshake and on every `commands_changed` push, which
- * the protocol documents as a full replacement — clients must not merge it.
- * `workspacePath` is the cwd the session runs in (`options.cwd`).
- */
-export function recordNativeCommands(
-  provider: NativeCommandProvider,
-  commands: NativeSlashCommand[],
-  workspacePath?: string,
-): void {
-  if (!Array.isArray(commands) || commands.length === 0) {
-    return;
-  }
+const normalizeCommands = (commands: NativeSlashCommand[]): NativeSlashCommand[] =>
+  commands
+    .filter((command) => typeof command?.name === 'string' && command.name.length > 0)
+    .map((command) => ({
+      name: command.name.startsWith('/') ? command.name : `/${command.name}`,
+      description: typeof command.description === 'string' ? command.description : '',
+      ...(typeof command.argumentHint === 'string' && command.argumentHint.length > 0
+        ? { argumentHint: command.argumentHint }
+        : {}),
+    }));
 
-  dynamicCommands.set(
-    cacheKey(provider, workspacePath),
-    commands
-      .filter((command) => typeof command?.name === 'string' && command.name.length > 0)
-      .map((command) => ({
-        name: command.name.startsWith('/') ? command.name : `/${command.name}`,
-        description: typeof command.description === 'string' ? command.description : '',
-        ...(typeof command.argumentHint === 'string' && command.argumentHint.length > 0
-          ? { argumentHint: command.argumentHint }
-          : {}),
-      })),
-  );
+/**
+ * Begins a capture attempt for one live session and returns its recorder.
+ * Called by the runtime when a query starts; the recorder handles the
+ * initialize handshake and every `commands_changed` push, which the protocol
+ * documents as a full replacement — clients must not merge it. An empty
+ * catalogue is recorded as such: the CLI said there are none. Writes from a
+ * superseded attempt are dropped.
+ */
+export function beginNativeCommandsCapture(
+  provider: NativeCommandProvider,
+  workspacePath?: string,
+): (commands: NativeSlashCommand[]) => void {
+  const key = cacheKey(provider, workspacePath);
+  const generation = (captureGenerations.get(key) ?? 0) + 1;
+  captureGenerations.set(key, generation);
+
+  return (commands: NativeSlashCommand[]) => {
+    if (!Array.isArray(commands) || captureGenerations.get(key) !== generation) {
+      return;
+    }
+
+    dynamicCommands.set(key, normalizeCommands(commands));
+  };
 }
 
 /**
  * The native commands to advertise for one provider: the capture from a live
- * session in this workspace if one has reported, the static fallback otherwise.
+ * session in this workspace if one has reported — even when it reported an
+ * empty catalogue — the static fallback otherwise.
  */
 export function getNativeCommands(provider: string, workspacePath?: string): NativeSlashCommand[] {
   const dynamic = dynamicCommands.get(cacheKey(provider, workspacePath));
-  if (dynamic && dynamic.length > 0) {
+  if (dynamic) {
     return dynamic;
   }
 
@@ -151,4 +167,5 @@ export function getNativeCommands(provider: string, workspacePath?: string): Nat
 /** Clears the runtime capture. Test seam only. */
 export function clearNativeCommandsCache(): void {
   dynamicCommands.clear();
+  captureGenerations.clear();
 }
