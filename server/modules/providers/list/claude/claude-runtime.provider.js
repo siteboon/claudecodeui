@@ -356,6 +356,41 @@ function addSession(sessionId, queryInstance, writer = null, releaseInput = null
 }
 
 /**
+ * Lets go of the process an earlier run left holding a session open, so the
+ * next turn can take the session over.
+ *
+ * Closing stdin is not enough on its own: the CLI's wind-down waits for the
+ * background agents the process still has going — for up to the ceiling it
+ * was started with (BG_WAIT_CEILING_MS) — so an abandoned process with an
+ * agent outstanding would run next to the process that replaced it for as
+ * long as the agent does, both appending to the same session file. Stop the
+ * tasks first, while stdin is still open: the SDK drops control requests
+ * written after stdin has ended, which is also why the interrupt a later
+ * supersede sends to this process cannot do the job.
+ *
+ * The stops are not awaited — each request is written to the CLI before this
+ * returns, and a reply is only missing when the process has already gone.
+ * @param {string} sessionId - Session identifier
+ */
+function releaseHeldSession(sessionId) {
+  const held = getSession(sessionId);
+  if (!held) {
+    return;
+  }
+  for (const task of backgroundWork.outstanding(sessionId)) {
+    // A stop that cannot be delivered changes nothing about what happens
+    // next: the process is on its way out either way. Guard the synchronous
+    // call too, so a failing stop can never skip the release below.
+    try {
+      Promise.resolve(held.instance?.stopTask?.(task.taskId)).catch(() => {});
+    } catch {
+      // Same as a rejected stop.
+    }
+  }
+  held.releaseInput?.();
+}
+
+/**
  * Removes a session from the active sessions map
  * @param {string} sessionId - Session identifier
  */
@@ -631,6 +666,7 @@ const TERMINAL_TASK_STATUSES = new Set(['completed', 'failed', 'killed']);
  *   apply: (sessionKey: string, message: Object) => void,
  *   hasOutstanding: (sessionKey: string) => boolean,
  *   has: (sessionKey: string, taskId: string) => boolean,
+ *   outstanding: (sessionKey: string) => Array<import('@/shared/types.js').BackgroundTaskSummary>,
  *   clear: (sessionKey: string) => void,
  *   list: () => Array<{ sessionId: string, tasks: Array<import('@/shared/types.js').BackgroundTaskSummary> }>
  * }}
@@ -723,6 +759,10 @@ export function createBackgroundWorkTracker() {
 
     has(sessionKey, taskId) {
       return Boolean(sessions.get(sessionKey)?.has(taskId));
+    },
+
+    outstanding(sessionKey) {
+      return Array.from(sessions.get(sessionKey)?.values() ?? []);
     },
 
     clear(sessionKey) {
@@ -910,7 +950,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // A new turn supersedes any earlier one still holding this session's process
   // open, so held runs cannot stack up across a conversation.
   if (sessionKey()) {
-    getSession(sessionKey())?.releaseInput?.();
+    releaseHeldSession(sessionKey());
   }
 
   // Arms (or re-arms) the idle countdown that eventually closes stdin.
