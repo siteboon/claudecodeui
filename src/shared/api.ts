@@ -111,6 +111,35 @@ export async function readApiJson<T>(response: Response): Promise<T> {
   }
   return data as T;
 }
+
+/**
+ * Picks the server's human-readable message out of a failed response body, or
+ * null when it carries none. Accepts the legacy string envelope
+ * (`error: 'message'`), the structured AppError envelope
+ * (`error: { code, message, details }`) and a top-level `message`.
+ *
+ * The non-throwing counterpart of readApiJson, used by the auth and onboarding
+ * screens because they show their own localized message when the server gives
+ * none.
+ */
+export function readApiErrorMessage(body: unknown): string | null {
+  if (!body || typeof body !== 'object') {
+    return null;
+  }
+
+  const { error, message } = body as { error?: unknown; message?: unknown };
+  const candidates = [
+    error && typeof error === 'object' ? (error as { message?: unknown }).message : error,
+    message,
+  ];
+  // The body is unchecked JSON: anything but a non-blank string is skipped, as
+  // an object rendered as a React child throws and unmounts the screen.
+  const readable = candidates.find(
+    (candidate): candidate is string => typeof candidate === 'string' && candidate.trim() !== '',
+  );
+  return readable ?? null;
+}
+
 const get = (url: string, options: ApiRequestOptions = {}) => authenticatedFetch(url, options);
 
 const withBody =
