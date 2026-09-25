@@ -67,6 +67,27 @@
       "openPanel": "Ouvrir le panneau de paramètres",
       "draggingStatus": "Glissement...",
       "toggleAndMove": "Cliquer pour basculer, glisser pour déplacer"
+    },
+    "tabs": {
+      "settings": "Paramètres",
+      "commands": "Commandes"
+    },
+    "pin": "Épingler le panneau",
+    "unpin": "Détacher le panneau",
+    "close": "Fermer le panneau",
+    "commands": {
+      "searchPlaceholder": "Rechercher des commandes…",
+      "noProject": "Sélectionnez un projet pour voir ses commandes.",
+      "loading": "Chargement des commandes…",
+      "empty": "Aucune commande disponible pour ce projet.",
+      "noMatches": "Aucune commande ne correspond à votre recherche.",
+      "loadError": "Impossible de charger les commandes.",
+      "groups": {
+        "builtIn": "Intégrées",
+        "custom": "Personnalisées",
+        "skills": "Skills"
+      },
+      "insertTitle": "Insérer {{command}} dans le chat"
     }
   },
   "terminalShortcuts": {

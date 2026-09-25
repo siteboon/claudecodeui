@@ -67,6 +67,27 @@
       "openPanel": "開啟設定面板",
       "draggingStatus": "正在拖曳...",
       "toggleAndMove": "點擊切換，拖曳移動"
+    },
+    "tabs": {
+      "settings": "設定",
+      "commands": "指令"
+    },
+    "pin": "固定面板",
+    "unpin": "取消固定面板",
+    "close": "關閉面板",
+    "commands": {
+      "searchPlaceholder": "搜尋指令…",
+      "noProject": "選擇一個專案以檢視其指令。",
+      "loading": "正在載入指令…",
+      "empty": "此專案沒有可用的指令。",
+      "noMatches": "沒有符合搜尋的指令。",
+      "loadError": "無法載入指令。",
+      "groups": {
+        "builtIn": "內建",
+        "custom": "自訂",
+        "skills": "技能"
+      },
+      "insertTitle": "將 {{command}} 插入聊天"
     }
   },
   "terminalShortcuts": {

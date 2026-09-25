@@ -67,6 +67,27 @@
       "openPanel": "Ayarlar panelini aç",
       "draggingStatus": "Sürükleniyor...",
       "toggleAndMove": "Açıp kapamak için tıkla, taşımak için sürükle"
+    },
+    "tabs": {
+      "settings": "Ayarlar",
+      "commands": "Komutlar"
+    },
+    "pin": "Paneli sabitle",
+    "unpin": "Panel sabitlemesini kaldır",
+    "close": "Paneli kapat",
+    "commands": {
+      "searchPlaceholder": "Komut ara…",
+      "noProject": "Komutlarını görmek için bir proje seçin.",
+      "loading": "Komutlar yükleniyor…",
+      "empty": "Bu proje için kullanılabilir komut yok.",
+      "noMatches": "Aramanızla eşleşen komut yok.",
+      "loadError": "Komutlar yüklenemedi.",
+      "groups": {
+        "builtIn": "Yerleşik",
+        "custom": "Özel",
+        "skills": "Beceriler"
+      },
+      "insertTitle": "{{command}} komutunu sohbete ekle"
     }
   },
   "terminalShortcuts": {

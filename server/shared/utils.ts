@@ -111,6 +111,20 @@ export class AppError extends Error {
   }
 }
 
+/**
+ * Flattens a failed `git` invocation into one searchable string: the error
+ * message followed by whatever stderr/stdout the process runner attached.
+ *
+ * Used by the Git routes and the branch compare service to classify git
+ * failures (e.g. "not a git repository", "unknown revision") and to surface
+ * git's own explanation as error `details`. Accepts any thrown value; missing
+ * fields contribute nothing, so the result may be empty.
+ */
+export function getGitErrorDetails(error: unknown): string {
+  const details = error as { message?: string; stderr?: string; stdout?: string } | null;
+  return `${details?.message ?? ''} ${details?.stderr ?? ''} ${details?.stdout ?? ''}`.trim();
+}
+
 // ---------------------------
 //----------------- WORKSPACE PATH VALIDATION UTILITIES ------------
 /**
