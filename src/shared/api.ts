@@ -170,6 +170,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     }),
+    changePassword: (currentPassword: string, newPassword: string) => post('/api/auth/change-password', {
+      currentPassword,
+      newPassword,
+    }),
     refresh: () => post('/api/auth/refresh'),
     user: () => get('/api/auth/user'),
   },

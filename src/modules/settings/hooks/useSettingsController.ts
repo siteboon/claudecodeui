@@ -13,6 +13,7 @@ import {
 } from '@/shared/userSettings';
 import { useProviderAuthStatus } from '@/modules/provider-auth';
 import type { AgentProvider, ClaudePermissionsState, CodeEditorSettingsState, CodexPermissionMode, CursorPermissionsState, NotificationPreferencesState, ProjectSortOrder, SettingsMainTab } from '@/shared/types';
+import { normalizeMainTab } from '@/modules/settings/hooks/normalizeMainTab';
 
 const DEFAULT_CURSOR_PERMISSIONS: CursorPermissionsState = {
   allowedCommands: [],
@@ -53,17 +54,6 @@ type NotificationPreferencesResponse = {
 };
 
 type ActiveLoginProvider = AgentProvider | '';
-
-const KNOWN_MAIN_TABS: SettingsMainTab[] = ['agents', 'appearance', 'git', 'api', 'tasks', 'browser', 'notifications', 'plugins', 'about'];
-
-const normalizeMainTab = (tab: string): SettingsMainTab => {
-  // Keep backwards compatibility with older callers that still pass "tools".
-  if (tab === 'tools') {
-    return 'agents';
-  }
-
-  return KNOWN_MAIN_TABS.includes(tab as SettingsMainTab) ? (tab as SettingsMainTab) : 'agents';
-};
 
 const toCodexPermissionMode = (value: unknown): CodexPermissionMode => {
   if (value === 'acceptEdits' || value === 'bypassPermissions') {

@@ -60,6 +60,7 @@ type AuthContextValue = {
   login: (username: string, password: string) => Promise<AuthActionResult>;
   register: (username: string, password: string) => Promise<AuthActionResult>;
   logout: () => void;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<AuthActionResult>;
   refreshOnboardingStatus: () => Promise<void>;
 };
 
@@ -351,6 +352,30 @@ export function AuthProvider({ children }: AuthProviderProps) {
     clearSession();
   }, [clearSession]);
 
+  const changePassword = useCallback<AuthContextValue['changePassword']>(
+    async (currentPassword, newPassword) => {
+      try {
+        setError(null);
+        const response = await api.auth.changePassword(currentPassword, newPassword);
+        const payload = await parseJsonSafely<ApiErrorPayload>(response);
+
+        if (!response.ok) {
+          return {
+            success: false,
+            error: resolveApiErrorMessage(payload, 'Password change failed'),
+          };
+        }
+
+        clearSession();
+        return { success: true };
+      } catch (caughtError) {
+        console.error('Change password error:', caughtError);
+        return { success: false, error: t(AUTH_ERROR_MESSAGES.networkError) };
+      }
+    },
+    [clearSession, t],
+  );
+
   const contextValue = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -362,12 +387,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
       login,
       register,
       logout,
+      changePassword,
       refreshOnboardingStatus,
     }),
     [
       error,
       hasCompletedOnboarding,
       isLoading,
+      changePassword,
       login,
       logout,
       needsSetup,
