@@ -34,5 +34,9 @@
   "binaryFile": {
     "title": "Fichier binaire",
     "message": "Le fichier \"{{fileName}}\" ne peut pas être affiché dans l'éditeur de texte car c'est un fichier binaire."
+  },
+  "unsavedChanges": {
+    "confirmClose": "Vous avez des modifications non enregistrées. Fermer ce fichier et les abandonner ?",
+    "indicator": "Modifications non enregistrées"
   }
 }
