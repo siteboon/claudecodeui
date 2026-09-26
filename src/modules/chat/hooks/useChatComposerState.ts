@@ -240,6 +240,12 @@ export function useChatComposerState({
     ) => Promise<void>) | null
   >(null);
   const inputValueRef = useRef(input);
+  // Guards a double-click on the Compact button: `isLoading` doesn't flip
+  // true until React commits the state update from the first click's submit,
+  // so a second click in that gap would otherwise fire a second `/compact`
+  // that the server refuses with `RUN_IN_PROGRESS`. Set synchronously before
+  // the first submit; cleared once `isLoading` reports the turn is over.
+  const compactInFlightRef = useRef(false);
   const selectedProjectId = selectedProject?.projectId;
   // Prefer the stable backend-allocated id (selectedSession.id) but fall back
   // to currentSessionId for a just-established session that hasn't been
@@ -935,10 +941,7 @@ export function useChatComposerState({
       // navigated to. Queued drafts were recorded when they were queued; the
       // consecutive-duplicate check keeps this second call a no-op.
       recordSentMessage(currentInput, targetSessionId);
-      setInput('');
-      inputValueRef.current = '';
       resetCommandMenuState();
-      setAttachedFiles([]);
       setFileErrors(new Map());
       setIsTextareaExpanded(false);
 
@@ -946,8 +949,18 @@ export function useChatComposerState({
         textareaRef.current.style.height = 'auto';
       }
 
-      if (draftScopeRef.current) {
-        writeDraftText(draftScopeRef.current, '');
+      // A submission whose content came from `queuedSubmission` (a synthetic
+      // draft like /compact's, or a real queued draft being dispatched) was
+      // never written into the live composer, so clearing the visible
+      // input/attachments/persisted draft here would wipe whatever the user
+      // is actually typing right now instead of the text that was sent.
+      if (!queuedSubmission) {
+        setInput('');
+        inputValueRef.current = '';
+        setAttachedFiles([]);
+        if (draftScopeRef.current) {
+          writeDraftText(draftScopeRef.current, '');
+        }
       }
     },
     [
@@ -1024,6 +1037,59 @@ export function useChatComposerState({
     inputValueRef.current = next;
     if (send) handleSubmitRef.current?.(createFakeSubmitEvent());
   }, [setInput]);
+
+  // The turn `/compact` started (if any) is over once the parent reports the
+  // run has finished — release the double-click guard then, whatever the
+  // outcome.
+  useEffect(() => {
+    if (!isLoading) {
+      compactInFlightRef.current = false;
+    }
+  }, [isLoading]);
+
+  /**
+   * Sends `/compact` through the same submit path a typed message uses —
+   * same "mirror into inputValueRef synchronously, then submit" trick as
+   * `handleVoiceTranscript`'s send-now branch above, since `handleSubmit`
+   * reads `inputValueRef`/`attachedFiles`, not a value this callback could
+   * pass directly. Submitting as a synthetic `queuedSubmission` (rather than
+   * writing into the live input) means `handleSubmit` never touches whatever
+   * the user is currently typing: it reads `queuedSubmission.content` ahead
+   * of `inputValueRef.current`, and its end-of-submit clear only clears the
+   * input/attachments/persisted draft when there was no `queuedSubmission`.
+   */
+  const sendCompactCommand = useCallback(() => {
+    // A sent message is mid-edit: handleSubmit is wired to emit
+    // `chat.edit-send` (replacing that message) instead of `chat.send`, so
+    // firing /compact here would truncate history at the edited message
+    // rather than sending a compact request. Bail before touching anything.
+    if (editingAnchorId) {
+      return;
+    }
+    // Guard against a double-click firing two `/compact` submits before
+    // `isLoading` has had a chance to update from the first one (the
+    // button's own `disabled={isLoading}` lags a render behind the click) —
+    // the second frame would otherwise be refused RUN_IN_PROGRESS.
+    if (isLoading || compactInFlightRef.current) {
+      return;
+    }
+    compactInFlightRef.current = true;
+    // `handleSubmit` can resolve without ever starting a run — the
+    // background-work confirm above returning false, or `!selectedProject` —
+    // and the `isLoading` effect above only clears this ref when a run
+    // actually starts and finishes. Without the `finally`, either bail-out
+    // path would leave the ref stuck `true` and the Compact button
+    // permanently disabled. Keep the guard set for the duration of the
+    // submit call itself, then always release it.
+    Promise.resolve(handleSubmitRef.current?.(createFakeSubmitEvent(), {
+      content: '/compact',
+      attachments: [],
+      uploadedAttachments: [],
+      options: buildSendOptions('/compact'),
+    })).finally(() => {
+      compactInFlightRef.current = false;
+    });
+  }, [editingAnchorId, isLoading, buildSendOptions]);
 
   useEffect(() => {
     inputValueRef.current = input;
@@ -1325,6 +1391,7 @@ export function useChatComposerState({
     isDragActive,
     openAttachmentPicker: open,
     handleSubmit,
+    sendCompactCommand,
     queuedDraft,
     editQueuedDraft,
     deleteQueuedDraft,
