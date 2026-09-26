@@ -4,6 +4,7 @@ import path from "path";
 import express from "express";
 
 import { parseFrontMatter } from "../../shared/frontmatter.js";
+import { getNativeCommands } from "../../shared/native-commands.js";
 
 type CommandsRouterDependencies = {
   fileSystem: typeof import('node:fs/promises');
@@ -445,7 +446,11 @@ Custom commands can be created in:
  */
 router.post("/list", async (req, res) => {
   try {
-    const { projectPath } = req.body;
+    const { projectPath, provider } = req.body;
+    // Native commands are provider-specific: a Codex session must not be
+    // shown `/compact` any more than a Claude session Codex's `/approvals`.
+    // Anything unknown falls back to claude, matching readModelProvider.
+    const nativeProvider = MODEL_PROVIDERS.includes(provider) ? provider : "claude";
     const allCommands = [...builtInCommands];
 
     // Scan project-level commands (.claude/commands/)
@@ -477,8 +482,23 @@ router.post("/list", async (req, res) => {
     // Sort commands alphabetically by name
     customCommands.sort((a, b) => a.name.localeCompare(b.name));
 
+    // CLI-native commands ride along so the composer's slash menu can list
+    // them; the frontend inserts them into the input instead of executing,
+    // which is what keeps them out of the resubmission loop described on the
+    // native-commands module. The catalogue is workspace-scoped: project
+    // skills and plugins make it differ per directory. A native command whose
+    // name collides with a server built-in (/status on Codex, /help on
+    // OpenCode) is dropped in favor of the built-in — two same-name entries
+    // would make keyboard submit ambiguous, and the built-in already works
+    // identically for every provider.
+    const builtinNames = new Set(builtInCommands.map((cmd) => cmd.name));
+    const nativeCommands = getNativeCommands(nativeProvider, projectPath).filter(
+      (cmd) => !builtinNames.has(cmd.name),
+    );
+
     res.json({
       builtIn: builtInCommands,
+      native: nativeCommands,
       custom: customCommands,
       count: allCommands.length,
     });

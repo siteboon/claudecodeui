@@ -1121,6 +1121,64 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       }
     }
 
+    // A native command's answer is not always an ordinary user-authored
+    // transcript entry the way `/compact`'s stdout is (a `user` row whose
+    // `message.content` carries the `<local-command-stdout>` tag, handled by
+    // `parseLocalCommandPayload`/the block below). Some commands — `/context`
+    // among them — are instead written as a `system`/`local_command` row with
+    // the wrapped stdout on `content` directly; there is no `message` field
+    // at all, so it matched nothing above and was silently dropped, leaving
+    // that command's history replay with only the command line and no answer.
+    //
+    // The same `system`/`local_command` row shape is also used for the
+    // command ECHO itself (either `<command-name>...</command-name>` tags or
+    // a bare `/command args` string) rather than its answer. Only a row that
+    // actually carries `<local-command-stdout>` becomes an assistant reply; a
+    // row that parses as a command echo becomes the same user command row the
+    // `user`-row branch below produces, so it is not misread as Claude's own
+    // words. Anything else on this row shape is internal and dropped.
+    if (raw.type === 'system' && raw.subtype === 'local_command' && typeof raw.content === 'string') {
+      const stdoutText = extractTaggedContent(raw.content, 'local-command-stdout');
+      if (stdoutText !== null) {
+        const displayText = stripAnsiSequences(stdoutText).trim();
+        if (displayText) {
+          return [createNormalizedMessage({
+            id: baseId,
+            sessionId,
+            timestamp: ts,
+            provider: PROVIDER,
+            kind: 'text',
+            role: 'assistant',
+            content: displayText,
+            isLocalCommandStdout: true,
+          })];
+        }
+        return [];
+      }
+
+      const localCommandPayload = parseLocalCommandPayload(raw.content);
+      if (localCommandPayload) {
+        const displayText = buildLocalCommandDisplayText(localCommandPayload);
+        if (displayText) {
+          return [createNormalizedMessage({
+            id: baseId,
+            sessionId,
+            timestamp: ts,
+            provider: PROVIDER,
+            kind: 'text',
+            role: 'user',
+            content: displayText,
+            commandName: localCommandPayload.commandName,
+            commandMessage: localCommandPayload.commandMessage,
+            commandArgs: localCommandPayload.commandArgs,
+            isLocalCommand: true,
+          })];
+        }
+      }
+
+      return [];
+    }
+
     // A compaction is the most expensive thing a long session does without
     // being asked, and neither record that describes it survives the branches
     // below: `system` events normalize to nothing. Both become one ordinary
