@@ -106,6 +106,7 @@ function showStatus(dependencies: CliServiceDependencies): void {
   output.log(`       DATABASE_PATH: ${terminalTextStyles.dim(environment.DATABASE_PATH || '(using default location)')}`);
   output.log(`       CLAUDE_CLI_PATH: ${terminalTextStyles.dim(environment.CLAUDE_CLI_PATH || 'claude (default)')}`);
   output.log(`       CONTEXT_WINDOW: ${terminalTextStyles.dim(environment.CONTEXT_WINDOW || '160000 (default)')}`);
+  output.log(`       CLAUDE_TOOL_APPROVAL_TIMEOUT_MS: ${terminalTextStyles.dim(environment.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS || '55000 (default)')}`);
   output.log(`\n${terminalTextStyles.info('[INFO]')} Claude Projects Folder:`);
   output.log(`       ${terminalTextStyles.dim(claudeProjectsPath)}`);
   output.log(`       Status: ${fileSystem.pathExists(claudeProjectsPath)
@@ -161,6 +162,8 @@ Environment Variables:
   DATABASE_PATH       Set custom database location
   CLAUDE_CLI_PATH     Set custom Claude CLI path
   CONTEXT_WINDOW      Set context window size (default: 160000)
+  CLAUDE_TOOL_APPROVAL_TIMEOUT_MS
+                      Permission prompt timeout in ms (default: 55000, 0 = wait forever)
 
 Documentation:
   ${dependencies.packageMetadata.homepage || 'https://github.com/siteboon/claudecodeui'}
