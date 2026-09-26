@@ -93,6 +93,22 @@ async function withRun(
 
 const settle = () => new Promise((resolve) => { setTimeout(resolve, 25); });
 
+// Runtime startup and message processing are asynchronous and machine-speed
+// dependent (MCP config load, session bookkeeping), so a fixed 25ms settle is
+// not a reliable point to assert from. Wait for the condition instead.
+const waitFor = async (predicate: () => boolean, timeoutMs = 3000): Promise<void> => {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() > deadline) {
+      return;
+    }
+    await new Promise((resolve) => { setTimeout(resolve, 10); });
+  }
+};
+
+const waitUntilCompleteSent = (sent: NormalizedMessage[]) =>
+  waitFor(() => sent.some((message) => message.kind === 'complete'));
+
 const init = () => ({ type: 'system', subtype: 'init', session_id: NATIVE_ID });
 const assistantText = (text: string) => ({
   type: 'assistant', session_id: NATIVE_ID, parent_tool_use_id: null,
@@ -104,7 +120,7 @@ test('a result-only turn synthesizes one assistant text message before complete'
   await withRun(async ({ script, sent }) => {
     script.emit(init());
     script.emit(result('## Context Usage\n\n**Tokens:** 14.1k / 1m (1%)'));
-    await settle();
+    await waitUntilCompleteSent(sent);
 
     const textMessages = sent.filter((message) => message.kind === 'text' && message.role === 'assistant');
     assert.equal(textMessages.length, 1, 'exactly one synthesized assistant text message');
@@ -122,7 +138,7 @@ test('a turn that already streamed assistant text does not get a duplicate from 
     script.emit(init());
     script.emit(assistantText('## Context Usage\n\n**Tokens:** 14.1k / 1m (1%)'));
     script.emit(result('## Context Usage\n\n**Tokens:** 14.1k / 1m (1%)'));
-    await settle();
+    await waitUntilCompleteSent(sent);
 
     const textMessages = sent.filter((message) => message.kind === 'text' && message.role === 'assistant');
     assert.equal(textMessages.length, 1, 'the streamed message is not duplicated by the result');
