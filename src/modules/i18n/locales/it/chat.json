@@ -64,7 +64,21 @@
     "addTo": "Aggiunge {{entry}} agli strumenti consentiti.",
     "retry": "Permesso salvato. Riprova la richiesta per usare lo strumento.",
     "error": "Impossibile aggiornare i permessi. Riprova.",
-    "openSettings": "Apri impostazioni"
+    "openSettings": "Apri impostazioni",
+    "denyHint": "Nega e ferma Claude finché non rispondi",
+    "denyWithReason": "Nega con motivo",
+    "denyReasonPlaceholder": "Di' a Claude cosa fare invece",
+    "denyReasonLabel": "Motivo per negare {{tool}}",
+    "cancelDenyReason": "Annulla",
+    "sendDenyReason": "Nega e invia",
+    "required": "Autorizzazione richiesta",
+    "toolLabel": "Strumento:",
+    "allowRule": "Regola di autorizzazione:",
+    "viewToolInput": "Mostra l'input dello strumento",
+    "deny": "Nega",
+    "allowOnce": "Consenti una volta",
+    "allowAndRemember": "Consenti e ricorda",
+    "allowSaved": "Consenti (salvato)"
   },
   "todo": {
     "updated": "Lista attività aggiornata con successo",

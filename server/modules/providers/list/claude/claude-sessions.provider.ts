@@ -835,6 +835,31 @@ function isInternalContent(content: string): boolean {
 }
 
 /**
+ * Claude Code keeps user and assistant turns alternating. When a prompt follows
+ * a turn that was interrupted (Stop, or a permission denial that stopped the
+ * turn), it first writes a placeholder assistant row with this exact text and
+ * `model: "<synthetic>"` into the transcript. Nothing was said, so the row is
+ * not shown; the check sits in the normalizer that history and the live stream
+ * share, so a live copy would be hidden too. Only this exact placeholder is
+ * hidden: other synthetic rows, such as API error notices, stay visible.
+ */
+const SYNTHETIC_NO_RESPONSE_TEXT = 'No response requested.';
+
+function isSyntheticNoResponse(message: AnyRecord): boolean {
+  if (message.model !== '<synthetic>') {
+    return false;
+  }
+  const { content } = message;
+  if (typeof content === 'string') {
+    return content === SYNTHETIC_NO_RESPONSE_TEXT;
+  }
+  return Array.isArray(content)
+    && content.length === 1
+    && content[0]?.type === 'text'
+    && content[0].text === SYNTHETIC_NO_RESPONSE_TEXT;
+}
+
+/**
  * Claude wraps local slash-command metadata in lightweight XML-like tags inside
  * a plain string payload. We intentionally parse only the small tag surface we
  * care about instead of introducing a generic XML parser for untrusted history.
@@ -1415,6 +1440,9 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     }
 
     if (raw.message?.role === 'assistant' && raw.message?.content) {
+      if (isSyntheticNoResponse(raw.message)) {
+        return messages;
+      }
       if (Array.isArray(raw.message.content)) {
         let partIndex = 0;
         for (const part of raw.message.content) {

@@ -64,7 +64,21 @@
     "addTo": "{{entry}}を許可されたツールに追加します。",
     "retry": "権限を保存しました。ツールを使用するにはリクエストを再試行してください。",
     "error": "権限を更新できませんでした。もう一度お試しください。",
-    "openSettings": "設定を開く"
+    "openSettings": "設定を開く",
+    "denyHint": "拒否して、返信するまで Claude を停止します",
+    "denyWithReason": "理由を添えて拒否",
+    "denyReasonPlaceholder": "代わりに何をすべきか Claude に伝える",
+    "denyReasonLabel": "{{tool}} を拒否する理由",
+    "cancelDenyReason": "キャンセル",
+    "sendDenyReason": "拒否して送信",
+    "required": "権限が必要です",
+    "toolLabel": "ツール：",
+    "allowRule": "許可ルール：",
+    "viewToolInput": "ツールの入力を表示",
+    "deny": "拒否",
+    "allowOnce": "今回のみ許可",
+    "allowAndRemember": "許可して記憶",
+    "allowSaved": "許可（保存済み）"
   },
   "todo": {
     "updated": "Todoリストを更新しました",

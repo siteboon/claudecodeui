@@ -72,7 +72,21 @@
     "addTo": "Menambahkan {{entry}} ke Tool yang Diizinkan.",
     "retry": "Izin disimpan. Coba lagi permintaan untuk menggunakan tool.",
     "error": "Tidak dapat memperbarui izin. Silakan coba lagi.",
-    "openSettings": "Buka pengaturan"
+    "openSettings": "Buka pengaturan",
+    "denyHint": "Tolak dan hentikan Claude sampai Anda membalas",
+    "denyWithReason": "Tolak dengan alasan",
+    "denyReasonPlaceholder": "Beri tahu Claude apa yang harus dilakukan",
+    "denyReasonLabel": "Alasan menolak {{tool}}",
+    "cancelDenyReason": "Batal",
+    "sendDenyReason": "Tolak & kirim",
+    "required": "Izin diperlukan",
+    "toolLabel": "Alat:",
+    "allowRule": "Aturan izin:",
+    "viewToolInput": "Lihat input alat",
+    "deny": "Tolak",
+    "allowOnce": "Izinkan sekali",
+    "allowAndRemember": "Izinkan & ingat",
+    "allowSaved": "Izinkan (tersimpan)"
   },
   "todo": {
     "updated": "Daftar tugas berhasil diperbarui",
@@ -319,7 +333,6 @@
     "modelSaveFailed": "Model ini tidak dapat disimpan.",
     "modelDeleteFailed": "Model ini tidak dapat dihapus.",
     "cancelEditing": "Batalkan edit",
-    "userDeniedTool": "Pengguna menolak penggunaan tool",
     "showTokenUsage": "Tampilkan penggunaan token",
     "fallbackCommands": {
       "models": "Telusuri model yang tersedia untuk provider aktif.",

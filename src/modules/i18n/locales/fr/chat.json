@@ -65,7 +65,21 @@
     "addTo": "Ajoute {{entry}} aux outils autorisés.",
     "retry": "Permission enregistrée. Relancez la requête pour utiliser l'outil.",
     "error": "Impossible de mettre à jour les permissions. Veuillez réessayer.",
-    "openSettings": "Ouvrir les paramètres"
+    "openSettings": "Ouvrir les paramètres",
+    "denyHint": "Refuser et arrêter Claude jusqu'à votre réponse",
+    "denyWithReason": "Refuser avec un motif",
+    "denyReasonPlaceholder": "Dites à Claude quoi faire à la place",
+    "denyReasonLabel": "Motif du refus de {{tool}}",
+    "cancelDenyReason": "Annuler",
+    "sendDenyReason": "Refuser et envoyer",
+    "required": "Autorisation requise",
+    "toolLabel": "Outil :",
+    "allowRule": "Règle d'autorisation :",
+    "viewToolInput": "Voir l'entrée de l'outil",
+    "deny": "Refuser",
+    "allowOnce": "Autoriser une fois",
+    "allowAndRemember": "Autoriser et mémoriser",
+    "allowSaved": "Autoriser (enregistré)"
   },
   "todo": {
     "updated": "La liste de tâches a été mise à jour avec succès",
