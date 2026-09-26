@@ -88,6 +88,8 @@ type ClaudeHistoryMessagesResult =
 type ClaudeSubagentTranscript = {
   activity: SubagentActivity[];
   model?: string;
+  /** The brief the agent was spawned with: the text of its transcript's first user row. */
+  prompt?: string;
   /** When the agent's first row was written: the moment it was spawned. */
   startedAt?: string;
 };
@@ -103,6 +105,7 @@ async function readClaudeSubagentTranscript(filePath: string): Promise<ClaudeSub
   const activity: SubagentActivity[] = [];
   const transcript: ClaudeSubagentTranscript = { activity };
   const toolsById = new Map<string, SubagentActivity>();
+  let hasReadPrompt = false;
 
   try {
     const fileStream = fs.createReadStream(filePath);
@@ -150,6 +153,24 @@ async function readClaudeSubagentTranscript(filePath: string): Promise<ClaudeSub
             if (part.type === 'thinking' && typeof part.thinking === 'string' && part.thinking.trim()) {
               activity.push({ kind: 'thinking', content: part.thinking, timestamp });
             }
+          }
+        }
+
+        // The transcript opens with the brief the agent was spawned with;
+        // every later user row hands a tool result back to it.
+        if (entry.message?.role === 'user' && !hasReadPrompt) {
+          hasReadPrompt = true;
+          const content = entry.message.content;
+          const prompt = typeof content === 'string'
+            ? content
+            : Array.isArray(content)
+              ? (content as AnyRecord[])
+                .filter((part) => part?.type === 'text' && typeof part.text === 'string')
+                .map((part) => part.text as string)
+                .join('\n\n')
+              : '';
+          if (prompt.trim()) {
+            transcript.prompt = prompt;
           }
         }
 
@@ -237,8 +258,20 @@ async function findClaudeSubagentTranscript(
   return null;
 }
 
+type WorkflowJournal = {
+  agents: WorkflowAgentInfo[];
+  /**
+   * What each settled agent returned, by agent id: the structured output or
+   * prose the script received. Kept apart from `agents`, which every history
+   * load ships for the whole run; only the on-demand read of one agent sends
+   * its result.
+   */
+  results: Map<string, unknown>;
+};
+
 /**
- * Reads which agents a workflow run spawned and how far each got.
+ * Reads which agents a workflow run spawned, how far each got and what the
+ * settled ones returned.
  *
  * The run appends one record per event to `<transcriptDir>/journal.jsonl`:
  * `started` names the agent (and the label and phase the script gave it, when
@@ -249,14 +282,15 @@ async function findClaudeSubagentTranscript(
  * record here (a fork copies only the parent's transcript), which reads as no
  * agents rather than an error.
  */
-async function readWorkflowJournal(transcriptDir: string): Promise<WorkflowAgentInfo[]> {
+async function readWorkflowJournal(transcriptDir: string): Promise<WorkflowJournal> {
   const agentsById = new Map<string, WorkflowAgentInfo>();
+  const results = new Map<string, unknown>();
 
   let journal: string;
   try {
     journal = await fsp.readFile(path.join(transcriptDir, 'journal.jsonl'), 'utf8');
   } catch {
-    return [];
+    return { agents: [], results };
   }
 
   for (const line of journal.split('\n')) {
@@ -284,6 +318,8 @@ async function readWorkflowJournal(transcriptDir: string): Promise<WorkflowAgent
         phase: typeof entry.phase === 'string' ? entry.phase : undefined,
         status: 'running',
       });
+      // A step the run starts again owes a new result.
+      results.delete(agentId);
       continue;
     }
 
@@ -293,12 +329,28 @@ async function readWorkflowJournal(transcriptDir: string): Promise<WorkflowAgent
     }
     if (entry.type === 'result') {
       agent.status = 'completed';
+      results.set(agentId, entry.result);
     } else if (entry.type === 'failed') {
       agent.status = 'failed';
     }
   }
 
-  return [...agentsById.values()];
+  return { agents: [...agentsById.values()], results };
+}
+
+/**
+ * A workflow agent's journal result as text: prose as written, structured
+ * output as its JSON (which the card pretty-prints), and nothing for a result
+ * with no content.
+ */
+function formatWorkflowAgentResult(result: unknown): string | undefined {
+  if (result === undefined || result === null) {
+    return undefined;
+  }
+  if (typeof result === 'string') {
+    return result.trim() ? result : undefined;
+  }
+  return JSON.stringify(result);
 }
 
 /**
@@ -639,7 +691,7 @@ async function getSessionMessages(
         && transcriptDir
         && !workflowAgentsByDir.has(transcriptDir)
       ) {
-        workflowAgentsByDir.set(transcriptDir, await readWorkflowJournal(transcriptDir));
+        workflowAgentsByDir.set(transcriptDir, (await readWorkflowJournal(transcriptDir)).agents);
       }
     }
 
@@ -1522,7 +1574,9 @@ export class ClaudeSessionsProvider implements IProviderSessions {
    * Reads one workflow agent's timeline from the transcript the run wrote for
    * it, under `<projectDir>/<providerSessionId>/subagents/workflows/<runId>/`
    * — the only place it exists, since the SDK never streams a workflow agent's
-   * rows to the parent session.
+   * rows to the parent session — with the brief it was given and, once it has
+   * settled, the result the journal recorded for it. Those two are sent whole:
+   * this read is for the one agent the user opened.
    *
    * The journal beside it settles the agent when it has; short of that the
    * agent is running only while the process that spawned it is — the same
@@ -1549,11 +1603,11 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       return null;
     }
 
-    const [transcript, journalAgents] = await Promise.all([
+    const [transcript, journal] = await Promise.all([
       readClaudeSubagentTranscript(transcriptPath),
       readWorkflowJournal(transcriptDir),
     ]);
-    const journalAgent = journalAgents.find((agent) => agent.id === agentId);
+    const journalAgent = journal.agents.find((agent) => agent.id === agentId);
 
     let status: WorkflowAgentActivity['agent']['status'];
     if (journalAgent && journalAgent.status !== 'running') {
@@ -1572,6 +1626,8 @@ export class ClaudeSessionsProvider implements IProviderSessions {
         model: transcript.model,
         status,
       },
+      prompt: transcript.prompt,
+      result: formatWorkflowAgentResult(journal.results.get(agentId)),
       activity: transcript.activity
         .slice(-MAX_TRANSMITTED_SUBAGENT_ACTIVITIES)
         .map(truncateSubagentActivity),

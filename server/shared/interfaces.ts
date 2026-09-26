@@ -234,7 +234,10 @@ export interface IProviderSessions {
 
   /**
    * Reads what one agent of a workflow run did, from the transcript the run
-   * wrote for it, with the status its journal gives it. Returns `null` when the
+   * wrote for it, with the status its journal gives it: the capped timeline,
+   * the brief the script gave it (`prompt`) and, once the journal has settled
+   * it, what it returned (`result`) — those two whole, since this is the
+   * on-demand read for the one agent the user opened. Returns `null` when the
    * run left no transcript for that agent.
    *
    * Implemented only by providers whose runtime spawns workflow agents; its
