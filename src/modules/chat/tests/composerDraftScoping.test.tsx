@@ -39,11 +39,25 @@ vi.mock('@/shared/api', () => {
       },
       commands: { list: () => okJson({ success: true, commands: [] }) },
       files: { search: () => okJson({ success: true, files: [] }) },
+      providers: {
+        createSession: () => Promise.resolve({
+          ok: true,
+          json: async () => ({ data: { sessionId: 'new-session', sessionName: 'test prompt' } }),
+        }),
+      },
+      discardUnsentSession: () => Promise.resolve({
+        ok: true,
+        json: async () => ({ data: { status: 'deleted' } }),
+      }),
     },
   };
 });
 
-const renderComposer = (selectedSession: ProjectSession | null) => renderHook(
+const renderComposer = (
+  selectedSession: ProjectSession | null,
+  sendMessageWithAck: () => Promise<'accepted' | 'not_sent' | 'unconfirmed'> = async () => 'accepted',
+  onSessionEstablished?: (sessionId: string) => void,
+) => renderHook(
   ({ session }: { session: ProjectSession | null }) => useChatComposerState({
     selectedProject: PROJECT,
     selectedSession: session,
@@ -58,6 +72,9 @@ const renderComposer = (selectedSession: ProjectSession | null) => renderHook(
     canAbortSession: false,
     tokenBudget: null,
     sendMessage: () => undefined,
+    sendMessageWithAck,
+    socketReady: true,
+    onSessionEstablished,
     scrollToBottom: () => undefined,
     addMessage: () => undefined,
     setIsUserScrolledUp: () => undefined,
@@ -82,6 +99,34 @@ test('a draft is stored under the open session, not the project', async () => {
 
   assert.equal(readDraftText('session-a'), 'for session A');
   assert.equal(readDraftText(`project:${PROJECT.projectId}`), '');
+});
+
+test('an unconfirmed first send keeps the draft and does not open a ghost session', async () => {
+  const established = vi.fn();
+  const view = renderComposer(null, async () => 'unconfirmed', established);
+  await act(async () => { view.result.current.setInput('test prompt'); });
+
+  await act(async () => {
+    await view.result.current.handleSubmit({ preventDefault: () => undefined } as never);
+  });
+
+  assert.equal(established.mock.calls.length, 0);
+  assert.equal(view.result.current.input, 'test prompt');
+  assert.equal(readDraftText(`project:${PROJECT.projectId}`), 'test prompt');
+  assert.match(view.result.current.sendError ?? '', /not confirmed/);
+});
+
+test('an accepted first send opens its session and clears the submitted draft', async () => {
+  const established = vi.fn();
+  const view = renderComposer(null, async () => 'accepted', established);
+  await act(async () => { view.result.current.setInput('test prompt'); });
+
+  await act(async () => {
+    await view.result.current.handleSubmit({ preventDefault: () => undefined } as never);
+  });
+
+  assert.equal(established.mock.calls[0]?.[0], 'new-session');
+  assert.equal(view.result.current.input, '');
 });
 
 test('a chat with no session yet is stored under its project', async () => {

@@ -765,6 +765,14 @@ router.post(
   }),
 );
 
+router.post(
+  '/sessions/:sessionId/discard-unsent',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    res.json(createApiSuccessResponse(sessionsService.discardUnsentSession(sessionId)));
+  }),
+);
+
 router.get(
   '/sessions/running',
   asyncHandler(async (_req: Request, res: Response) => {

@@ -81,6 +81,28 @@ test('session creation route names a CloudCLI session from the initial message',
   });
 });
 
+test('discard-unsent removes only sessions without an accepted first send', async () => {
+  await withProviderServer(async (baseUrl, workspacePath) => {
+    sessionsDb.createAppSession('never-sent', 'codex', workspacePath);
+    const discarded = await fetch(`${baseUrl}/api/providers/sessions/never-sent/discard-unsent`, {
+      method: 'POST',
+    });
+    const discardedBody = await discarded.json() as { data: { status: string } };
+    assert.equal(discarded.status, 200);
+    assert.equal(discardedBody.data.status, 'deleted');
+    assert.equal(sessionsDb.getSessionById('never-sent'), null);
+
+    sessionsDb.createAppSession('accepted-send', 'codex', workspacePath);
+    sessionsDb.recordAcceptedClientSend('accepted-send', 'request-1');
+    const retained = await fetch(`${baseUrl}/api/providers/sessions/accepted-send/discard-unsent`, {
+      method: 'POST',
+    });
+    const retainedBody = await retained.json() as { data: { status: string } };
+    assert.equal(retainedBody.data.status, 'accepted');
+    assert.ok(sessionsDb.getSessionById('accepted-send'));
+  });
+});
+
 test('conversation search streams title matches before transcript results', async () => {
   await withProviderServer(async (baseUrl, workspacePath) => {
     sessionsDb.createAppSession(

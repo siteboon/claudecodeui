@@ -8,9 +8,21 @@ import type { ServerEvent } from '@/shared/types';
 
 type ServerEventListener = (event: ServerEvent) => void;
 
+export type ChatSendStatus = 'accepted' | 'not_sent' | 'unconfirmed';
+
+type ConfirmedChatSend = {
+  type: 'chat.send';
+  sessionId: string;
+  clientSendId: string;
+  content: string;
+  options: Record<string, unknown>;
+};
+
 type WebSocketContextType = {
   ws: WebSocket | null;
   sendMessage: (message: unknown) => void;
+  /** Resolves only after the server confirms that it registered this turn. */
+  sendMessageWithAck: (message: ConfirmedChatSend) => Promise<ChatSendStatus>;
   /**
    * Subscribes to every websocket frame. Returns an unsubscribe function.
    *
@@ -56,7 +68,21 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   const listenersRef = useRef(new Set<ServerEventListener>());
   const [isConnected, setIsConnected] = useState(false);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingChatAcksRef = useRef(new Map<string, {
+    socket: WebSocket;
+    sessionId: string;
+    timer: ReturnType<typeof setTimeout>;
+    resolve: (status: ChatSendStatus) => void;
+  }>());
   const { isLoading: isAuthLoading, token, user } = useAuth();
+
+  const settleChatAck = useCallback((clientSendId: string, status: ChatSendStatus) => {
+    const pending = pendingChatAcksRef.current.get(clientSendId);
+    if (!pending) return;
+    pendingChatAcksRef.current.delete(clientSendId);
+    clearTimeout(pending.timer);
+    pending.resolve(status);
+  }, []);
 
   const dispatch = useCallback((event: ServerEvent) => {
     for (const listener of listenersRef.current) {
@@ -96,6 +122,13 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       websocket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data) as ServerEvent;
+          if (data.kind === 'chat_send_accepted' && typeof data.clientSendId === 'string') {
+            const pending = pendingChatAcksRef.current.get(data.clientSendId);
+            if (pending?.socket === websocket && pending.sessionId === data.sessionId) {
+              settleChatAck(data.clientSendId, 'accepted');
+            }
+            return;
+          }
           dispatch(data);
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
@@ -103,6 +136,9 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       };
 
       websocket.onclose = () => {
+        for (const [clientSendId, pending] of pendingChatAcksRef.current) {
+          if (pending.socket === websocket) settleChatAck(clientSendId, 'unconfirmed');
+        }
         if (wsRef.current !== websocket) {
           return;
         }
@@ -123,7 +159,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     } catch (error) {
       console.error('Error creating WebSocket connection:', error);
     }
-  }, [dispatch, isAuthLoading, token, user]); // reconnect with current authentication state
+  }, [dispatch, isAuthLoading, token, user, settleChatAck]); // reconnect with current authentication state
 
   // Declared after `connect` so the effect body does not reference it before
   // initialization. `connect` is memoized on [dispatch, isAuthLoading, token,
@@ -137,6 +173,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     if (!IS_PLATFORM && (isAuthLoading || !user)) {
       return undefined;
     }
+    const pendingChatAcks = pendingChatAcksRef.current;
     connect();
 
     return () => {
@@ -146,6 +183,9 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       }
       const activeSocket = wsRef.current;
       if (activeSocket) {
+        for (const [clientSendId, pending] of pendingChatAcks) {
+          if (pending.socket === activeSocket) settleChatAck(clientSendId, 'unconfirmed');
+        }
         // Prevent the intentionally closed, old-token socket from scheduling
         // a reconnect after the refreshed-token effect has already started.
         activeSocket.onopen = null;
@@ -156,7 +196,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
         wsRef.current = null;
       }
     };
-  }, [connect, isAuthLoading, user]); // reconnect after authentication or token refresh
+  }, [connect, isAuthLoading, user, settleChatAck]); // reconnect after authentication or token refresh
 
   const sendMessage = useCallback((message: unknown) => {
     const socket = wsRef.current;
@@ -166,6 +206,29 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       console.warn('WebSocket not connected');
     }
   }, []);
+
+  const sendMessageWithAck = useCallback((message: ConfirmedChatSend): Promise<ChatSendStatus> =>
+    new Promise((resolve) => {
+      const socket = wsRef.current;
+      if (!socket || socket.readyState !== WebSocket.OPEN) {
+        resolve('not_sent');
+        return;
+      }
+      if (pendingChatAcksRef.current.has(message.clientSendId)) {
+        resolve('unconfirmed');
+        return;
+      }
+      const timer = setTimeout(() => settleChatAck(message.clientSendId, 'unconfirmed'), 8000);
+      pendingChatAcksRef.current.set(message.clientSendId, {
+        socket, sessionId: message.sessionId, timer, resolve,
+      });
+      try {
+        socket.send(JSON.stringify(message));
+      } catch (error) {
+        console.error('WebSocket send failed:', error);
+        settleChatAck(message.clientSendId, 'not_sent');
+      }
+    }), [settleChatAck]);
 
   const subscribe = useCallback((listener: ServerEventListener) => {
     listenersRef.current.add(listener);
@@ -178,9 +241,10 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   ({
     ws: wsRef.current,
     sendMessage,
+    sendMessageWithAck,
     subscribe,
     isConnected
-  }), [sendMessage, subscribe, isConnected]);
+  }), [sendMessage, sendMessageWithAck, subscribe, isConnected]);
 
   return value;
 };

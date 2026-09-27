@@ -50,6 +50,8 @@ const submit = async (processingSessions: SessionActivityMap) => {
       canAbortSession: false,
       tokenBudget: null,
       sendMessage: (message) => { sent.push(message as { type: string }); },
+      sendMessageWithAck: async (message) => { sent.push(message); return 'accepted'; },
+      socketReady: true,
       scrollToBottom: () => undefined,
       addMessage: () => undefined,
       setIsUserScrolledUp: () => undefined,

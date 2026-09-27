@@ -157,7 +157,23 @@ async function handleChatSend(
     return;
   }
 
-  await dispatchRun(ws, userId, resolved.sessionId, resolved.session, data, dependencies);
+  const clientSendId = typeof data.clientSendId === 'string' ? data.clientSendId.trim() : null;
+  if (data.clientSendId !== undefined && (!clientSendId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clientSendId))) {
+    sendProtocolError(ws, 'INVALID_CLIENT_SEND_ID', 'chat.send clientSendId must be a UUID.', resolved.sessionId);
+    return;
+  }
+  if (clientSendId && sessionsDb.wasClientSendAccepted(resolved.sessionId, clientSendId)) {
+    sendJson(ws, { kind: 'chat_send_accepted', sessionId: resolved.sessionId, clientSendId, duplicate: true });
+    return;
+  }
+
+  await dispatchRun(
+    ws, userId, resolved.sessionId, resolved.session, data, dependencies, {},
+    clientSendId ? () => {
+      sessionsDb.recordAcceptedClientSend(resolved.sessionId, clientSendId);
+      sendJson(ws, { kind: 'chat_send_accepted', sessionId: resolved.sessionId, clientSendId, duplicate: false });
+    } : undefined,
+  );
 }
 
 type ResolvedSendTarget = {
@@ -240,50 +256,50 @@ async function dispatchRun(
     return { started: false, error: 'A run is already in progress for this session.' };
   }
 
-  const clientOptions = (data.options ?? {}) as AnyRecord;
-  const command = typeof data.content === 'string' ? data.content : '';
-
-  // Record what this turn runs with so reopening the session later restores the
-  // same model and reasoning effort, and so the resume path has a
-  // session-scoped model answer to use.
-  if (typeof clientOptions.model === 'string' && clientOptions.model.trim()) {
-    providerModelsService.setSessionModel(provider, sessionId, clientOptions.model);
-  }
-  if (typeof clientOptions.effort === 'string' && clientOptions.effort.trim()) {
-    providerModelsService.setSessionEffort(provider, sessionId, clientOptions.effort);
-  }
-
-  const attachmentCandidates = [
-    ...normalizeAttachmentDescriptors(clientOptions.images),
-    ...normalizeAttachmentDescriptors(clientOptions.files),
-    ...normalizeAttachmentDescriptors(clientOptions.attachments),
-  ];
-  const verifiedAttachments = filterAttachmentsToUploadStore(attachmentCandidates);
-  const uniqueAttachments = verifiedAttachments.filter(
-    (descriptor, index, all) => all.findIndex((candidate) => candidate.path === descriptor.path) === index,
-  );
-
-  // The provider runtimes receive the stable app session id. When their
-  // CLI/SDK needs the provider-native id for resume, they resolve it from the
-  // session row themselves (sessionsService.resolveProviderSessionId).
-  // Brand-new sessions have no provider id yet, so the runtime starts fresh
-  // and announces one, which the gateway writer captures and maps back to the
-  // app session id.
-  const runtimeOptions: AnyRecord = {
-    ...clientOptions,
-    ...extraRuntimeOptions,
-    // Attachments are re-validated server-side: only direct children of the
-    // global upload store may reach provider runtimes or their file tools.
-    attachments: uniqueAttachments,
-    images: uniqueAttachments.filter(isImageAttachmentDescriptor),
-    files: uniqueAttachments.filter((descriptor) => !isImageAttachmentDescriptor(descriptor)),
-    sessionId,
-    cwd: clientOptions.cwd ?? session.project_path ?? undefined,
-    projectPath: session.project_path ?? clientOptions.projectPath,
-  };
-
   let failure: string | null = null;
   try {
+    const clientOptions = (data.options ?? {}) as AnyRecord;
+    const command = typeof data.content === 'string' ? data.content : '';
+
+    // Record what this turn runs with so reopening the session later restores the
+    // same model and reasoning effort, and so the resume path has a
+    // session-scoped model answer to use.
+    if (typeof clientOptions.model === 'string' && clientOptions.model.trim()) {
+      providerModelsService.setSessionModel(provider, sessionId, clientOptions.model);
+    }
+    if (typeof clientOptions.effort === 'string' && clientOptions.effort.trim()) {
+      providerModelsService.setSessionEffort(provider, sessionId, clientOptions.effort);
+    }
+
+    const attachmentCandidates = [
+      ...normalizeAttachmentDescriptors(clientOptions.images),
+      ...normalizeAttachmentDescriptors(clientOptions.files),
+      ...normalizeAttachmentDescriptors(clientOptions.attachments),
+    ];
+    const verifiedAttachments = filterAttachmentsToUploadStore(attachmentCandidates);
+    const uniqueAttachments = verifiedAttachments.filter(
+      (descriptor, index, all) => all.findIndex((candidate) => candidate.path === descriptor.path) === index,
+    );
+
+    // The provider runtimes receive the stable app session id. When their
+    // CLI/SDK needs the provider-native id for resume, they resolve it from the
+    // session row themselves (sessionsService.resolveProviderSessionId).
+    // Brand-new sessions have no provider id yet, so the runtime starts fresh
+    // and announces one, which the gateway writer captures and maps back to the
+    // app session id.
+    const runtimeOptions: AnyRecord = {
+      ...clientOptions,
+      ...extraRuntimeOptions,
+      // Attachments are re-validated server-side: only direct children of the
+      // global upload store may reach provider runtimes or their file tools.
+      attachments: uniqueAttachments,
+      images: uniqueAttachments.filter(isImageAttachmentDescriptor),
+      files: uniqueAttachments.filter((descriptor) => !isImageAttachmentDescriptor(descriptor)),
+      sessionId,
+      cwd: clientOptions.cwd ?? session.project_path ?? undefined,
+      projectPath: session.project_path ?? clientOptions.projectPath,
+    };
+
     // Runs only now that the session is reserved, because an edit rewinds the
     // conversation here and a rewind for a run that was never admitted cannot
     // be taken back. Inside the try so a rewind that throws still releases the
@@ -293,6 +309,7 @@ async function dispatchRun(
   } catch (error) {
     failure = error instanceof Error ? error.message : String(error);
     console.error(`[Chat] Provider runtime "${provider}" failed`, { sessionId, error: failure });
+    if (ws) sendProtocolError(ws, 'PROVIDER_RUNTIME_FAILED', failure, sessionId);
   } finally {
     // Safety net: a runtime that crashed (or resolved) without emitting its
     // terminal `complete` would otherwise leave the session stuck in
@@ -578,7 +595,7 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  * Handles authenticated chat websocket messages used by the main chat panel.
  *
  * Inbound protocol (client to server):
- * - `chat.send`                { sessionId, content, options? }
+ * - `chat.send`                { sessionId, content, options?, clientSendId? }
  * - `chat.abort`               { sessionId }
  * - `chat.stop-task`           { sessionId, taskId }
  * - `chat.subscribe`           { sessions: [{ sessionId, lastSeq? }] }

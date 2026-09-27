@@ -70,6 +70,42 @@ function normalizeProjectPathForProvider(provider: string, projectPath: string):
 }
 
 export const sessionsDb = {
+  /** The WebSocket module checks this before admitting an idempotent retry. */
+  wasClientSendAccepted(sessionId: string, requestId: string): boolean {
+    const db = getConnection();
+    return Boolean(db.prepare(
+      'SELECT 1 FROM session_send_receipts WHERE session_id = ? AND request_id = ?'
+    ).get(sessionId, requestId));
+  },
+
+  /** The WebSocket module stores acceptance before provider execution begins. */
+  recordAcceptedClientSend(sessionId: string, requestId: string): void {
+    const db = getConnection();
+    db.prepare(
+      'INSERT OR IGNORE INTO session_send_receipts (session_id, request_id) VALUES (?, ?)'
+    ).run(sessionId, requestId);
+  },
+
+  /**
+   * The providers module calls this after an unconfirmed first send. Its
+   * transaction makes deletion and the receipt check indivisible: a late
+   * frame cannot start a run for the deleted session.
+   */
+  discardUnsentSession(sessionId: string): 'accepted' | 'deleted' | 'missing' {
+    const db = getConnection();
+    return db.transaction(() => {
+      const row = db.prepare(
+        'SELECT provider_session_id FROM sessions WHERE session_id = ?'
+      ).get(sessionId) as { provider_session_id: string | null } | undefined;
+      if (!row) return 'missing';
+      if (row.provider_session_id || db.prepare(
+        'SELECT 1 FROM session_send_receipts WHERE session_id = ? LIMIT 1'
+      ).get(sessionId)) return 'accepted';
+      db.prepare('DELETE FROM sessions WHERE session_id = ?').run(sessionId);
+      return 'deleted';
+    })();
+  },
+
   /**
    * Upserts one session row discovered on disk by a provider synchronizer.
    *

@@ -72,6 +72,19 @@ test('createSession reactivates archived rows when the session becomes active ag
   });
 });
 
+test('accepted send receipts survive a database reopen and prevent discarding the session', async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createAppSession('send-receipt', 'codex', '/workspace/demo-project');
+    sessionsDb.recordAcceptedClientSend('send-receipt', 'request-1');
+    closeConnection();
+    await initializeDatabase();
+
+    assert.equal(sessionsDb.wasClientSendAccepted('send-receipt', 'request-1'), true);
+    assert.equal(sessionsDb.discardUnsentSession('send-receipt'), 'accepted');
+    assert.ok(sessionsDb.getSessionById('send-receipt'));
+  });
+});
+
 test("createSession leaves an archived row archived when the transcript has not changed", async () => {
   await withIsolatedDatabase(() => {
     const createdAt = "2026-07-18T09:00:00.000Z";

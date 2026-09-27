@@ -55,6 +55,11 @@ const submit = async (provider: LLMProvider) => {
       sendMessage: (message) => {
         sent.push(message as SentMessage);
       },
+      sendMessageWithAck: async (message) => {
+        sent.push(message as SentMessage);
+        return 'accepted';
+      },
+      socketReady: true,
       scrollToBottom: () => undefined,
       addMessage: () => undefined,
       setIsUserScrolledUp: () => undefined,

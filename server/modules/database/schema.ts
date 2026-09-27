@@ -152,6 +152,17 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 `;
 
+/** The database migrations module creates this durable chat receipt table for the WebSocket gateway. */
+export const SESSION_SEND_RECEIPTS_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS session_send_receipts (
+    session_id TEXT NOT NULL,
+    request_id TEXT NOT NULL,
+    accepted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (session_id, request_id),
+    FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+);
+`;
+
 export const LAST_SCANNED_AT_SQL = `
 CREATE TABLE IF NOT EXISTS scan_state (
   id INTEGER PRIMARY KEY CHECK (id = 1),

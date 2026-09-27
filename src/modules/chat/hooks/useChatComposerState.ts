@@ -13,6 +13,7 @@ import { useDropzone } from 'react-dropzone';
 import { useTranslation } from 'react-i18next';
 
 import { api } from '@/shared/api';
+import type { ChatSendStatus } from '@/shared/context/WebSocketContext';
 import { PROVIDER_PERMISSION_PREFERENCE_KEYS } from '@/shared/constants';
 import { readUserPreference } from '@/shared/userSettings';
 import type { CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
@@ -51,6 +52,14 @@ type UseChatComposerStateArgs = {
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
   sendMessage: (message: unknown) => void;
+  sendMessageWithAck: (message: {
+    type: 'chat.send';
+    sessionId: string;
+    clientSendId: string;
+    content: string;
+    options: Record<string, unknown>;
+  }) => Promise<ChatSendStatus>;
+  socketReady: boolean;
   sendByCtrlEnter?: boolean;
   onSessionProcessing?: MarkSessionProcessing;
   /**
@@ -182,6 +191,8 @@ export function useChatComposerState({
   canAbortSession,
   tokenBudget,
   sendMessage,
+  sendMessageWithAck,
+  socketReady,
   sendByCtrlEnter,
   onSessionProcessing,
   onSessionEstablished,
@@ -228,6 +239,7 @@ export function useChatComposerState({
   const [fileErrors, setFileErrors] = useState<Map<string, string>>(new Map());
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
   const [commandModalPayload, setCommandModalPayload] = useState<CommandModalPayload | null>(null);
+  const [sendErrorState, setSendErrorState] = useState<{ scope: string; message: string } | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputHighlightRef = useRef<HTMLDivElement>(null);
@@ -240,6 +252,14 @@ export function useChatComposerState({
     ) => Promise<void>) | null
   >(null);
   const inputValueRef = useRef(input);
+  const isSubmittingRef = useRef(false);
+  const pendingNewSessionRef = useRef<{
+    sessionId: string;
+    projectId: string;
+    provider: LLMProvider;
+    sessionName: string | null;
+  } | null>(null);
+  const pendingSendRef = useRef<{ sessionId: string; content: string; clientSendId: string } | null>(null);
   const selectedProjectId = selectedProject?.projectId;
   // Prefer the stable backend-allocated id (selectedSession.id) but fall back
   // to currentSessionId for a just-established session that hasn't been
@@ -249,6 +269,7 @@ export function useChatComposerState({
   // chat that has not been sent yet and so has no session id. Drafts used to be
   // keyed by project alone, so every session in a project shared one draft.
   const draftScope = sessionKey ?? (selectedProjectId ? `project:${selectedProjectId}` : null);
+  const sendError = sendErrorState?.scope === draftScope ? sendErrorState.message : null;
   const draftScopeRef = useRef(draftScope);
   draftScopeRef.current = draftScope;
   // Composition is tracked on `window` in the capture phase rather than on the textarea, so a
@@ -793,157 +814,214 @@ export function useChatComposerState({
 
       const messageContent = currentInput;
 
-      let uploadedAttachments = previouslyUploadedAttachments;
-      if (uploadedAttachments.length === 0 && currentAttachments.length > 0) {
-        try {
-          uploadedAttachments = await uploadAttachmentFiles(currentAttachments);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Unknown error';
-          console.error('File upload failed:', error);
-          addMessage({
-            type: 'error',
-            content: `Failed to upload files: ${message}`,
-            timestamp: new Date(),
-          });
-          return;
-        }
-      }
-
-      const resolvedProjectPath = selectedProject.fullPath || selectedProject.path || '';
-      const sessionSummary = getNotificationSessionSummary(selectedSession, currentInput);
-
-      // The conversation always has a stable backend-allocated session id
-      // BEFORE the first websocket send: brand-new chats allocate one here
-      // via the session gateway. There is no client-visible session-id
-      // handoff later — this id stays valid for the conversation's lifetime.
-      let targetSessionId = selectedSession?.id || currentSessionId || null;
-      if (!targetSessionId) {
-        let createdSessionName = sessionSummary;
-        try {
-          const response = await api.providers.createSession({
-            provider,
-            projectPath: resolvedProjectPath,
-            initialMessage: messageContent,
-          });
-          if (!response.ok) {
-            throw new Error(`Failed to create session (${response.status})`);
-          }
-          const body = await response.json();
-          targetSessionId = body?.data?.sessionId || null;
-          // A blank server name would leave the session unlabeled, so the local
-          // summary stays the fallback unless a real name comes back.
-          const returnedSessionName = typeof body?.data?.sessionName === 'string'
-            ? body.data.sessionName.trim()
-            : '';
-          if (returnedSessionName) {
-            createdSessionName = returnedSessionName;
-          }
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Unknown error';
-          console.error('Session creation failed:', error);
-          addMessage({
-            type: 'error',
-            content: `Failed to start a new session: ${message}`,
-            timestamp: new Date(),
-          });
-          return;
-        }
-
-        if (!targetSessionId) {
-          addMessage({
-            type: 'error',
-            content: 'Failed to start a new session: no session id returned.',
-            timestamp: new Date(),
-          });
-          return;
-        }
-
-        onSessionEstablished?.(targetSessionId, {
-          provider,
-          project: selectedProject,
-          summary: createdSessionName,
+      if (!socketReady) {
+        setSendErrorState({
+          scope: draftScope ?? '',
+          message: 'Connection lost. Reconnect and send your message again.',
         });
+        return;
       }
+      if (isSubmittingRef.current) return;
+      isSubmittingRef.current = true;
+      try {
 
-      // A new turn replaces the CLI process a session's background work runs
-      // under: the agents, workflows and commands it still has going are
-      // stopped, or finish where nothing is listening. Sending is the user's
-      // call, but not one to make for them.
-      const backgroundActivity = processingSessionsRef.current?.get(targetSessionId);
-      if (backgroundActivity?.background) {
-        const work = ownBackgroundTasks(backgroundActivity.tasks ?? [])
-          .map((task) => `• ${describeBackgroundTask(task, t)}`)
-          .join('\n');
-        const confirmed = window.confirm(t('claudeStatus.backgroundTask.sendAnyway', {
-          work,
-          defaultValue: 'This session still has background work running:\n{{work}}\n\nA new message starts a new turn, which stops that work; anything it has not reported yet is lost. Send anyway?',
-        }));
-        if (!confirmed) {
-          return;
+        let uploadedAttachments = previouslyUploadedAttachments;
+        if (uploadedAttachments.length === 0 && currentAttachments.length > 0) {
+          try {
+            uploadedAttachments = await uploadAttachmentFiles(currentAttachments);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            console.error('File upload failed:', error);
+            addMessage({
+              type: 'error',
+              content: `Failed to upload files: ${message}`,
+              timestamp: new Date(),
+            });
+            return;
+          }
         }
-      }
 
-      const attachmentRecords = uploadedAttachments as ChatAttachment[];
-      const userMessage: ChatMessage = {
-        type: 'user',
-        content: currentInput,
-        images: attachmentRecords.filter(isImageAttachment),
-        files: attachmentRecords.filter((attachment) => !isImageAttachment(attachment)),
-        timestamp: new Date(),
-        // Tags this echo as the replacement, so the truncation the server
-        // broadcasts a moment later cuts the turns being replaced without
-        // taking the message the user just sent with them.
-        ...(editingAnchorId ? { replacesAnchorId: editingAnchorId } : {}),
-      };
+        const resolvedProjectPath = selectedProject.fullPath || selectedProject.path || '';
+        const sessionSummary = getNotificationSessionSummary(selectedSession, currentInput);
 
-      addMessage(userMessage);
-      // Mark this request as processing in the per-session activity map (the
-      // single source of truth the indicator derives from). The id is always
-      // concrete at this point — no pending placeholder exists anymore.
-      onSessionProcessing?.(targetSessionId, {
-        statusText: null,
-        canInterrupt: true,
-      });
+        // The conversation always has a stable backend-allocated session id
+        // BEFORE the first websocket send: brand-new chats allocate one here
+        // via the session gateway. There is no client-visible session-id
+        // handoff later — this id stays valid for the conversation's lifetime.
+        const pendingNewSession = pendingNewSessionRef.current;
+        const reusablePendingSession = pendingNewSession?.projectId === selectedProject.projectId
+          && pendingNewSession.provider === provider ? pendingNewSession : null;
+        let targetSessionId = selectedSession?.id || currentSessionId || reusablePendingSession?.sessionId || null;
+        if (!targetSessionId) {
+          let createdSessionName = sessionSummary;
+          try {
+            const response = await api.providers.createSession({
+              provider,
+              projectPath: resolvedProjectPath,
+              initialMessage: messageContent,
+            });
+            if (!response.ok) {
+              throw new Error(`Failed to create session (${response.status})`);
+            }
+            const body = await response.json();
+            targetSessionId = body?.data?.sessionId || null;
+            // A blank server name would leave the session unlabeled, so the local
+            // summary stays the fallback unless a real name comes back.
+            const returnedSessionName = typeof body?.data?.sessionName === 'string'
+              ? body.data.sessionName.trim()
+              : '';
+            if (returnedSessionName) {
+              createdSessionName = returnedSessionName;
+            }
+          } catch (error) {
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            console.error('Session creation failed:', error);
+            addMessage({
+              type: 'error',
+              content: `Failed to start a new session: ${message}`,
+              timestamp: new Date(),
+            });
+            return;
+          }
 
-      setIsUserScrolledUp(false);
-      setTimeout(() => scrollToBottom(), 100);
+          if (!targetSessionId) {
+            addMessage({
+              type: 'error',
+              content: 'Failed to start a new session: no session id returned.',
+              timestamp: new Date(),
+            });
+            return;
+          }
 
-      // One message shape for every provider. The backend resolves the
-      // provider, project path, and provider-native resume id from the
-      // session row; `options` only carries composer-level preferences.
-      sendMessage({
-        // Replacing an already-sent message is its own frame: it changes the
-        // shape of the conversation, so it gets validated separately and can
-        // report why it was refused.
-        type: editingAnchorId ? 'chat.edit-send' : 'chat.send',
-        sessionId: targetSessionId,
-        ...(editingAnchorId ? { anchorId: editingAnchorId } : {}),
-        content: messageContent,
-        options: {
+          pendingNewSessionRef.current = {
+            sessionId: targetSessionId,
+            projectId: selectedProject.projectId,
+            provider,
+            sessionName: createdSessionName,
+          };
+        }
+
+        // A new turn replaces the CLI process a session's background work runs
+        // under: the agents, workflows and commands it still has going are
+        // stopped, or finish where nothing is listening. Sending is the user's
+        // call, but not one to make for them.
+        const backgroundActivity = processingSessionsRef.current?.get(targetSessionId);
+        if (backgroundActivity?.background) {
+          const work = ownBackgroundTasks(backgroundActivity.tasks ?? [])
+            .map((task) => `• ${describeBackgroundTask(task, t)}`)
+            .join('\n');
+          const confirmed = window.confirm(t('claudeStatus.backgroundTask.sendAnyway', {
+            work,
+            defaultValue: 'This session still has background work running:\n{{work}}\n\nA new message starts a new turn, which stops that work; anything it has not reported yet is lost. Send anyway?',
+          }));
+          if (!confirmed) {
+            return;
+          }
+        }
+
+        const sendOptions = {
           ...(queuedSubmission?.options ?? buildSendOptions(messageContent)),
           attachments: uploadedAttachments,
-        },
-      });
-      setEditingAnchorId(null);
+        };
+        if (!editingAnchorId) {
+          const previousSend = pendingSendRef.current;
+          const clientSendId = previousSend?.sessionId === targetSessionId && previousSend.content === messageContent
+            ? previousSend.clientSendId : crypto.randomUUID();
+          pendingSendRef.current = { sessionId: targetSessionId, content: messageContent, clientSendId };
+          const sendStatus = await sendMessageWithAck({
+            type: 'chat.send', sessionId: targetSessionId, clientSendId,
+            content: messageContent, options: sendOptions,
+          });
+          let accepted = sendStatus === 'accepted';
+          if (!accepted && pendingNewSessionRef.current?.sessionId === targetSessionId) {
+            // The frame may have arrived even if its ack was lost. The server
+            // checks acceptance and deletion in one transaction.
+            try {
+              const response = await api.discardUnsentSession(targetSessionId);
+              if (response.ok) {
+                const body = await response.json();
+                accepted = body?.data?.status === 'accepted';
+                if (body?.data?.status === 'deleted' || body?.data?.status === 'missing') {
+                  pendingNewSessionRef.current = null;
+                  pendingSendRef.current = null;
+                }
+              }
+            } catch (error) {
+              console.error('Failed to check unconfirmed new session:', error);
+            }
+          }
+          if (!accepted) {
+            setSendErrorState({
+              scope: draftScope ?? '',
+              message: sendStatus === 'not_sent'
+                ? 'Connection lost before your message was sent. Reconnect and try again.'
+                : 'Message delivery was not confirmed. Your text is saved; reconnect and try again.',
+            });
+            return;
+          }
+          pendingSendRef.current = null;
+          setSendErrorState(null);
+          if (pendingNewSessionRef.current?.sessionId === targetSessionId) {
+            onSessionEstablished?.(targetSessionId, {
+              provider, project: selectedProject,
+              summary: pendingNewSessionRef.current.sessionName,
+            });
+            pendingNewSessionRef.current = null;
+          }
+        } else {
+          sendMessage({
+            type: 'chat.edit-send', sessionId: targetSessionId, anchorId: editingAnchorId,
+            content: messageContent, options: sendOptions,
+          });
+        }
 
-      // Recorded under the (possibly just-allocated) session id, so the first
-      // message of a new chat lands in the history of the session the user is
-      // navigated to. Queued drafts were recorded when they were queued; the
-      // consecutive-duplicate check keeps this second call a no-op.
-      recordSentMessage(currentInput, targetSessionId);
-      setInput('');
-      inputValueRef.current = '';
-      resetCommandMenuState();
-      setAttachedFiles([]);
-      setFileErrors(new Map());
-      setIsTextareaExpanded(false);
+        const attachmentRecords = uploadedAttachments as ChatAttachment[];
+        const userMessage: ChatMessage = {
+          type: 'user',
+          content: currentInput,
+          images: attachmentRecords.filter(isImageAttachment),
+          files: attachmentRecords.filter((attachment) => !isImageAttachment(attachment)),
+          timestamp: new Date(),
+          // Tags this echo as the replacement, so the truncation the server
+          // broadcasts a moment later cuts the turns being replaced without
+          // taking the message the user just sent with them.
+          ...(editingAnchorId ? { replacesAnchorId: editingAnchorId } : {}),
+        };
 
-      if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto';
-      }
+        addMessage(userMessage);
+        // Mark this request as processing in the per-session activity map (the
+        // single source of truth the indicator derives from). The id is always
+        // concrete at this point — no pending placeholder exists anymore.
+        onSessionProcessing?.(targetSessionId, {
+          statusText: null,
+          canInterrupt: true,
+        });
 
-      if (draftScopeRef.current) {
-        writeDraftText(draftScopeRef.current, '');
+        setIsUserScrolledUp(false);
+        setTimeout(() => scrollToBottom(), 100);
+
+        setEditingAnchorId(null);
+
+        // Recorded under the (possibly just-allocated) session id, so the first
+        // message of a new chat lands in the history of the session the user is
+        // navigated to. Queued drafts were recorded when they were queued; the
+        // consecutive-duplicate check keeps this second call a no-op.
+        recordSentMessage(currentInput, targetSessionId);
+        if (draftScopeRef.current === draftScope && inputValueRef.current === currentInput) {
+          setInput('');
+          inputValueRef.current = '';
+          resetCommandMenuState();
+          setAttachedFiles([]);
+          setFileErrors(new Map());
+          setIsTextareaExpanded(false);
+
+          if (textareaRef.current) {
+            textareaRef.current.style.height = 'auto';
+          }
+          if (draftScope) writeDraftText(draftScope, '');
+        }
+      } finally {
+        isSubmittingRef.current = false;
       }
     },
     [
@@ -951,6 +1029,7 @@ export function useChatComposerState({
       attachedFiles,
       buildSendOptions,
       currentSessionId,
+      draftScope,
       editingAnchorId,
       executeCommand,
       isLoading,
@@ -962,8 +1041,11 @@ export function useChatComposerState({
       scrollToBottom,
       selectedProject,
       sendMessage,
+      sendMessageWithAck,
+      socketReady,
       sessionKey,
       addMessage,
+      setInput,
       setIsUserScrolledUp,
       slashCommands,
       t,
@@ -1292,6 +1374,7 @@ export function useChatComposerState({
 
   return {
     input,
+    sendError,
     setInput,
     editingAnchorId,
     beginEditMessage,
