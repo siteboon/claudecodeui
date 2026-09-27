@@ -86,9 +86,13 @@ const submit = async ({ session, isConnected, delivered }: SubmitOptions) => {
   };
 };
 
-const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+let failDelete = false;
+const fetchMock = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
   const url = String(input);
-  if (url.includes('/api/providers/sessions')) {
+  if (url.includes('/api/providers/sessions') && options?.method === 'DELETE' && failDelete) {
+    return new Response('cleanup failed', { status: 503 });
+  }
+  if (url.includes('/api/providers/sessions') && options?.method === 'POST') {
     return new Response(JSON.stringify({ data: { sessionId: 'new-session' } }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -97,10 +101,14 @@ const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
   return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
 });
 
-const sessionCreations = () => fetchMock.mock.calls.filter(([input]) => String(input).includes('/api/providers/sessions'));
+const sessionCreations = () => fetchMock.mock.calls.filter(([input, options]) =>
+  String(input).includes('/api/providers/sessions') && options?.method === 'POST');
+const sessionDeletions = () => fetchMock.mock.calls.filter(([input, options]) =>
+  String(input).includes('/api/providers/sessions/new-session') && options?.method === 'DELETE');
 
 beforeEach(() => {
   fetchMock.mockClear();
+  failDelete = false;
   vi.stubGlobal('fetch', fetchMock);
   localStorage.clear();
   resetChatDrafts();
@@ -171,21 +179,44 @@ test('a socket that closes between the check and the send still keeps the messag
   assert.equal(result.view.result.current.showNotConnectedNotice, true);
 });
 
-test('a new chat whose socket closes after the session was allocated carries the draft into that session', async () => {
+test('a new chat whose socket closes after allocation removes the empty row and keeps the draft', async () => {
   const result = await submit({ session: null, isConnected: true, delivered: false });
 
   assert.equal(sessionCreations().length, 1);
-  assert.equal(result.onSessionEstablished.mock.calls[0]?.[0], 'new-session');
+  assert.equal(sessionDeletions().length, 1);
+  assert.match(String(sessionDeletions()[0][0]), /\?force=true$/, 'cleanup removes the row');
+  assert.equal(result.onSessionEstablished.mock.calls.length, 0, 'the empty row is never opened');
   assert.equal(result.userBubbles.length, 0);
-  // The composer is about to switch to the new session and show its draft.
-  assert.equal(readDraftText('new-session'), 'hello');
-  assert.equal(readDraftText(`project:${PROJECT.projectId}`), '');
+  assert.equal(readDraftText('new-session'), '', 'the removed row owns no draft');
+  assert.equal(readDraftText(`project:${PROJECT.projectId}`), 'hello');
   assert.equal(result.transcriptErrors().length, 0);
 
-  // ...and the notice goes with it.
+  result.view.rerender({ session: null, currentSessionId: null, isConnected: false });
+  assert.equal(result.view.result.current.input, 'hello');
+  assert.equal(result.view.result.current.showNotConnectedNotice, true);
+});
+
+test('if empty-row cleanup fails, the draft moves into that row for retry', async () => {
+  failDelete = true;
+  const result = await submit({ session: null, isConnected: true, delivered: false });
+
+  assert.equal(sessionDeletions().length, 1);
+  assert.equal(result.onSessionEstablished.mock.calls[0]?.[0], 'new-session');
+  assert.equal(readDraftText('new-session'), 'hello');
+  assert.equal(readDraftText(`project:${PROJECT.projectId}`), '');
   result.view.rerender({ session: null, currentSessionId: 'new-session', isConnected: false });
   assert.equal(result.view.result.current.input, 'hello');
   assert.equal(result.view.result.current.showNotConnectedNotice, true);
+});
+
+test('a connected new chat is established after its first send succeeds', async () => {
+  const result = await submit({ session: null, isConnected: true, delivered: true });
+
+  assert.equal(sessionCreations().length, 1);
+  assert.equal(sessionDeletions().length, 0);
+  assert.equal(result.sends.length, 1);
+  assert.equal(result.onSessionEstablished.mock.calls[0]?.[0], 'new-session');
+  assert.equal(result.view.result.current.input, '');
 });
 
 test('when connected, a send goes out and clears the composer as before', async () => {
