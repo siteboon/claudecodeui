@@ -156,10 +156,10 @@ async function spawnCursor(command, options = {}, ws, context) {
         console.log('Retrying Cursor CLI with --trust after workspace trust prompt');
       }
 
-      const cursorProcess = spawnFunction('cursor-agent', args, {
+      const cursorProcess = spawnFunction(context.runtimeProfile?.executable || 'cursor-agent', args, {
         cwd: workingDir,
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env } // Inherit all environment variables
+        env: { ...process.env, ...(context.runtimeProfile?.env || {}) }
       });
 
       activeCursorProcesses.set(processKey, cursorProcess);

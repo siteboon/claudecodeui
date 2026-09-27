@@ -56,6 +56,14 @@ function createService(providers: IProvider[]) {
       return provider;
     },
     resolveProviderSessionId: (sessionId) => sessionId ? `native-${sessionId}` : null,
+    resolveRuntimeProfile: (provider, sessionId) => ({
+      id: sessionId ? 'work' : 'default',
+      name: 'Work environment',
+      provider,
+      isDefault: !sessionId,
+      executable: '/opt/provider-cli',
+      env: { PROFILE_ACCOUNT: 'work' },
+    }),
     async resolveResumeModel(_provider, _sessionId, requestedModel) {
       return requestedModel?.trim() || undefined;
     },
@@ -87,6 +95,7 @@ test('dispatches runs and aborts through the runtime owned by providerRegistry',
     async run(command, options, writer, context) {
       calls.push(['run', command, options, writer]);
       assert.equal(context.resolveProviderSessionId('session-1'), 'native-session-1');
+      assert.equal(context.runtimeProfile?.id, 'default');
       assert.equal(await context.resolveResumeModel('session-1', 'sonnet'), 'sonnet');
       assert.deepEqual(await context.getProviderModels(), { OPTIONS: [], DEFAULT: 'default-model' });
       assert.equal(context.normalizeMessage('hello', 'session-1')[0]?.provider, 'claude');
@@ -109,6 +118,24 @@ test('dispatches runs and aborts through the runtime owned by providerRegistry',
     ['run', 'hello', { model: 'sonnet' }, writer],
     ['abort', 'session-1'],
   ]);
+});
+
+test('binds the persisted session runtime profile to the execution context', async () => {
+  const runtime = createRuntime({
+    async run(_command, _options, _writer, context) {
+      assert.deepEqual(context.runtimeProfile, {
+        id: 'work',
+        name: 'Work environment',
+        provider: 'codex',
+        isDefault: false,
+        executable: '/opt/provider-cli',
+        env: { PROFILE_ACCOUNT: 'work' },
+      });
+    },
+  });
+  const service = createService([createProvider('codex', runtime)]);
+
+  await service.run('codex', 'hello', { sessionId: 'session-1' }, { send() {} });
 });
 
 test('routes permission decisions through provider-owned runtime capabilities', () => {

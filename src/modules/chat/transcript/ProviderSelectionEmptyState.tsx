@@ -7,6 +7,7 @@ import type {
   LLMProvider,
   ProviderModelActions,
   ProviderModelsDefinition,
+  ProviderRuntimeProfileSummary,
 } from "@/shared/types";
 import { NextTaskBanner } from "@/modules/task-master";
 import {
@@ -52,6 +53,9 @@ type ProviderSelectionEmptyStateProps = {
   currentSessionId: string | null;
   provider: LLMProvider;
   setProvider: (next: LLMProvider) => void;
+  runtimeProfiles: ProviderRuntimeProfileSummary[];
+  selectedRuntimeProfileId: string;
+  onSelectRuntimeProfile: (profileId: string) => void;
   textareaRef: React.RefObject<HTMLTextAreaElement>;
   providerModels: Record<LLMProvider, string>;
   /** Records the pick as this provider's default and persists it. */
@@ -90,6 +94,9 @@ export default function ProviderSelectionEmptyState({
   currentSessionId,
   provider,
   setProvider,
+  runtimeProfiles,
+  selectedRuntimeProfileId,
+  onSelectRuntimeProfile,
   textareaRef,
   providerModels,
   setProviderModel,
@@ -268,6 +275,37 @@ export default function ProviderSelectionEmptyState({
               </Command>
             </DialogContent>
           </Dialog>
+
+          {runtimeProfiles.length > 1 && (
+            <div className="mx-auto mt-3 max-w-xs">
+              <label
+                htmlFor="runtime-profile"
+                className="mb-1 block text-[11px] font-medium text-muted-foreground"
+              >
+                {t("providerSelection.runtimeProfile", {
+                  defaultValue: "CLI environment",
+                })}
+              </label>
+              <select
+                id="runtime-profile"
+                value={selectedRuntimeProfileId}
+                onChange={(event) => onSelectRuntimeProfile(event.target.value)}
+                className="h-9 w-full rounded-lg border border-border/60 bg-background px-3 text-xs text-foreground outline-none transition-colors focus:border-ring"
+              >
+                {runtimeProfiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.name}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[11px] text-muted-foreground/70">
+                {runtimeProfiles.find((profile) => profile.id === selectedRuntimeProfileId)?.description
+                  || t("providerSelection.runtimeProfileDescription", {
+                    defaultValue: "This environment is fixed for the lifetime of the session.",
+                  })}
+              </p>
+            </div>
+          )}
 
           <Dialog
             open={modelLibraryOpen}

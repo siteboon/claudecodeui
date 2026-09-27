@@ -138,6 +138,9 @@ CREATE TABLE IF NOT EXISTS sessions (
     -- restores its exact runtime configuration instead of provider defaults.
     model TEXT,
     effort TEXT,
+    -- Server-configured CLI executable/environment selected when this app
+    -- session was created. NULL keeps the provider's default environment.
+    runtime_profile_id TEXT,
     -- The app session this one was branched from, NULL for sessions created
     -- normally. Informational only: a fork is a fully independent provider
     -- session, and deleting the source does not affect it.

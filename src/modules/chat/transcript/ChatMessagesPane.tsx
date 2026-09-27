@@ -8,7 +8,8 @@ import type { BackgroundTaskSummary,
   ProjectSession,
   LLMProvider,
   ProviderModelActions,
-  ProviderModelsDefinition } from '@/shared/types';
+  ProviderModelsDefinition,
+  ProviderRuntimeProfileSummary } from '@/shared/types';
 import { getIntrinsicMessageKey } from '@/modules/chat/utils/messageKeys';
 import { groupConsecutiveTools, isToolGroupItem } from '@/modules/chat/utils/toolGrouping';
 import { useLazyRowObserver } from '@/modules/chat/hooks/useLazyRowObserver';
@@ -41,6 +42,9 @@ type ChatMessagesPaneProps = {
   currentSessionId: string | null;
   provider: LLMProvider;
   setProvider: (provider: LLMProvider) => void;
+  runtimeProfiles: ProviderRuntimeProfileSummary[];
+  selectedRuntimeProfileId: string;
+  onSelectRuntimeProfile: (profileId: string) => void;
   textareaRef: RefObject<HTMLTextAreaElement>;
   providerModels: Record<LLMProvider, string>;
   setProviderModel: (provider: LLMProvider, model: string) => void;
@@ -100,6 +104,9 @@ function ChatMessagesPane({
   currentSessionId,
   provider,
   setProvider,
+  runtimeProfiles,
+  selectedRuntimeProfileId,
+  onSelectRuntimeProfile,
   textareaRef,
   providerModels,
   setProviderModel,
@@ -223,6 +230,9 @@ function ChatMessagesPane({
           currentSessionId={currentSessionId}
           provider={provider}
           setProvider={setProvider}
+          runtimeProfiles={runtimeProfiles}
+          selectedRuntimeProfileId={selectedRuntimeProfileId}
+          onSelectRuntimeProfile={onSelectRuntimeProfile}
           textareaRef={textareaRef}
           providerModels={providerModels}
           setProviderModel={setProviderModel}

@@ -457,6 +457,16 @@ const addSessionEffortColumn = (db: Database): void => {
   addColumnToTableIfNotExists(db, 'sessions', columnNames, 'effort', 'TEXT');
 };
 
+/**
+ * Adds the immutable runtime-profile selection for app-created sessions.
+ *
+ * Existing sessions remain on the default environment, represented by NULL.
+ */
+const addSessionRuntimeProfileColumn = (db: Database): void => {
+  const columnNames = getTableInfo(db, 'sessions').map((column) => column.name);
+  addColumnToTableIfNotExists(db, 'sessions', columnNames, 'runtime_profile_id', 'TEXT');
+};
+
 const ensureProjectsForSessionPaths = (db: Database): void => {
   if (!tableExists(db, 'sessions')) {
     return;
@@ -518,6 +528,7 @@ export const runMigrations = (db: Database) => {
     addProviderSessionIdMapping(db);
     addSessionModelColumn(db);
     addSessionEffortColumn(db);
+    addSessionRuntimeProfileColumn(db);
     addForkedFromSessionIdColumn(db);
     ensureProjectsForSessionPaths(db);
     db.exec(SCHEDULED_MESSAGES_TABLE_SCHEMA_SQL);
