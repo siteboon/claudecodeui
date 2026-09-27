@@ -251,6 +251,7 @@ export function useChatComposerState({
   // into whichever session is opened next, and every retry would add a row
   // that outlives the outage.
   const [notConnectedScope, setNotConnectedScope] = useState<string | null>(null);
+  const isCleaningUnsentSessionRef = useRef(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputHighlightRef = useRef<HTMLDivElement>(null);
@@ -699,6 +700,7 @@ export function useChatComposerState({
       queuedSubmission?: QueuedDraft,
     ) => {
       event.preventDefault();
+      if (isCleaningUnsentSessionRef.current) return;
       const currentInput = queuedSubmission?.content ?? inputValueRef.current;
       const currentAttachments = queuedSubmission?.attachments ?? attachedFiles;
       const previouslyUploadedAttachments = queuedSubmission?.uploadedAttachments ?? [];
@@ -857,8 +859,8 @@ export function useChatComposerState({
       // handoff later — this id stays valid for the conversation's lifetime.
       const existingSessionId = selectedSession?.id || currentSessionId || null;
       let targetSessionId = existingSessionId;
+      let createdSessionName = sessionSummary;
       if (!targetSessionId) {
-        let createdSessionName = sessionSummary;
         try {
           const response = await api.providers.createSession({
             provider,
@@ -897,12 +899,6 @@ export function useChatComposerState({
           });
           return;
         }
-
-        onSessionEstablished?.(targetSessionId, {
-          provider,
-          project: selectedProject,
-          summary: createdSessionName,
-        });
       }
 
       // A new turn replaces the CLI process a session's background work runs
@@ -953,18 +949,47 @@ export function useChatComposerState({
         },
       });
       // The socket closed after the check above. Nothing was drawn or marked
-      // yet, so keeping the composer as it is loses nothing — except for a
-      // session allocated just now: the composer is about to switch to it and
-      // show its draft, so the text (and the notice with it) is moved over to it.
+      // yet. Keep the draft in this composer and remove any new, unsent row.
       if (sent === false) {
-        if (targetSessionId !== existingSessionId) {
-          writeDraftText(targetSessionId, currentInput);
-          if (draftScopeRef.current && draftScopeRef.current !== targetSessionId) {
-            writeDraftText(draftScopeRef.current, '');
+        reportNotConnected(draftScopeRef.current);
+        if (!existingSessionId) {
+          isCleaningUnsentSessionRef.current = true;
+          let removed = false;
+          try {
+            const response = await api.deleteSession(targetSessionId, true);
+            removed = response.ok;
+            if (!removed) {
+              console.error('Failed to remove unsent session:', response.status);
+            }
+          } catch (error) {
+            console.error('Failed to remove unsent session:', error);
+          } finally {
+            isCleaningUnsentSessionRef.current = false;
+          }
+          if (!removed) {
+            // If cleanup fails, preserve the draft in the existing row so a
+            // retry can use it instead of creating another empty session.
+            writeDraftText(targetSessionId, currentInput);
+            if (draftScopeRef.current && draftScopeRef.current !== targetSessionId) {
+              writeDraftText(draftScopeRef.current, '');
+            }
+            onSessionEstablished?.(targetSessionId, {
+              provider,
+              project: selectedProject,
+              summary: createdSessionName,
+            });
+            reportNotConnected(targetSessionId);
           }
         }
-        reportNotConnected(targetSessionId);
         return;
+      }
+
+      if (!existingSessionId) {
+        onSessionEstablished?.(targetSessionId, {
+          provider,
+          project: selectedProject,
+          summary: createdSessionName,
+        });
       }
 
       // Drawn only once the frame is out, so a message is never shown as sent
