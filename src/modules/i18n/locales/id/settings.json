@@ -170,7 +170,22 @@
   "appearanceSettings": {
     "darkMode": {
       "label": "Mode Gelap",
-      "description": "Beralih antara tema terang dan gelap"
+      "description": "Beralih antara tema terang dan gelap",
+      "themeControlled": "Tema ini menentukan sendiri tampilan terang atau gelapnya"
+    },
+    "colorTheme": {
+      "label": "Tema Warna",
+      "description": "Palet warna yang dipakai di seluruh aplikasi",
+      "remove": "Hapus tema",
+      "importFailed": "Tema tersebut tidak dapat diimpor.",
+      "import": {
+        "label": "Impor tema VS Code",
+        "description": "Ubah berkas *-color-theme.json atau ekstensi .vsix menjadi palet",
+        "button": "Impor tema",
+        "urlLabel": "Atau tempel URL ekstensi",
+        "urlPlaceholder": "https://marketplace.visualstudio.com/items?itemName=…",
+        "urlButton": "Ambil"
+      }
     },
     "projectSorting": {
       "label": "Urutan Proyek",
