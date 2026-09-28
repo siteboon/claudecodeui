@@ -201,9 +201,9 @@ test('a timeout beyond what a Node timer can hold is clamped instead of firing a
   // the mocked ones do not reproduce the overflow.
   const timerDelays: unknown[] = [];
   const realSetTimeout = globalThis.setTimeout;
-  t.mock.method(globalThis, 'setTimeout', ((callback: () => void, delay?: number, ...rest: unknown[]) => {
+  t.mock.method(globalThis, 'setTimeout', ((callback: () => void, delay?: number) => {
     timerDelays.push(delay);
-    return realSetTimeout(callback, delay, ...rest);
+    return realSetTimeout(callback, delay);
   }) as typeof setTimeout);
 
   await withPromptRun({ permissionPromptTimeoutMs: 30 * 24 * ONE_HOUR_MS }, async ({ canUseTool, sent }) => {
