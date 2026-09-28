@@ -23,7 +23,7 @@ import type {
   LLMProvider,
   ProviderModelActions,
   ProviderModelOption,
-  ProviderModelsDefinition,CommandModalPayload,CostCommandData,HelpCommandData,ModelCommandData,StatusCommandData
+  ProviderModelsDefinition,CommandModalPayload,CostCommandData,HelpCommandData,ModelCommandData,SelectProviderModel,StatusCommandData
 } from '@/shared/types';
 import ModelLibraryPanel from '@/modules/chat/modals/ModelLibraryPanel';
 
@@ -35,14 +35,7 @@ type CommandResultModalProps = {
   activeProvider: LLMProvider;
   activeProviderModel: string;
   currentSessionId: string | null;
-  onSelectProviderModel: (
-    provider: LLMProvider,
-    model: string,
-    sessionId?: string | null,
-  ) => Promise<{
-    scope: 'default' | 'session';
-    model: string;
-  }>;
+  onSelectProviderModel: SelectProviderModel;
 };
 
 type CommandEntry = {
@@ -60,6 +53,7 @@ const PROVIDER_LABELS: Record<string, string> = {
 };
 
 const FALLBACK_COMMANDS: CommandEntry[] = [
+  { name: '/model', descriptionKey: 'chat:misc.fallbackCommands.model' },
   { name: '/models', descriptionKey: 'chat:misc.fallbackCommands.models' },
   { name: '/cost', descriptionKey: 'chat:misc.fallbackCommands.cost' },
   { name: '/status', descriptionKey: 'chat:misc.fallbackCommands.status' },
