@@ -56,7 +56,7 @@ type UseChatComposerStateArgs = {
    * resolves true once it is saved. The server replays `options` as-is when the
    * message comes due, so the composer hands it the same snapshot a send uses.
    */
-  scheduleMessage?: (input: { content: string; scheduledFor: Date; options: QueuedSendOptions }) => Promise<boolean>;
+  scheduleMessage: (input: { content: string; scheduledFor: Date; options: QueuedSendOptions }) => Promise<boolean>;
   sendByCtrlEnter?: boolean;
   onSessionProcessing?: MarkSessionProcessing;
   /**
@@ -670,7 +670,7 @@ export function useChatComposerState({
   // has left the composer either way.
   const handleScheduleMessage = useCallback(async (scheduledFor: Date) => {
     const content = inputValueRef.current.trim();
-    if (!content || !scheduleMessage) {
+    if (!content) {
       return;
     }
 

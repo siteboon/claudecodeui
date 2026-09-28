@@ -53,6 +53,7 @@ const composerArgs = (provider: LLMProvider, sent: SentMessage[]) => ({
   sendMessage: (message: unknown) => {
     sent.push(message as SentMessage);
   },
+  scheduleMessage: async () => true,
   scrollToBottom: () => undefined,
   addMessage: () => undefined,
   setIsUserScrolledUp: () => undefined,

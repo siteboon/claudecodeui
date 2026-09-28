@@ -58,6 +58,7 @@ const renderComposer = (selectedSession: ProjectSession | null) => renderHook(
     canAbortSession: false,
     tokenBudget: null,
     sendMessage: () => undefined,
+    scheduleMessage: async () => true,
     scrollToBottom: () => undefined,
     addMessage: () => undefined,
     setIsUserScrolledUp: () => undefined,

@@ -50,6 +50,7 @@ const submit = async (processingSessions: SessionActivityMap) => {
       canAbortSession: false,
       tokenBudget: null,
       sendMessage: (message) => { sent.push(message as { type: string }); },
+      scheduleMessage: async () => true,
       scrollToBottom: () => undefined,
       addMessage: () => undefined,
       setIsUserScrolledUp: () => undefined,
