@@ -452,6 +452,7 @@ export class CodexAppServerRuntime {
   private readonly runsByThread = new Map<string, AppServerRun>();
   private readonly runsBySession = new Map<string, AppServerRun>();
   private readonly pendingApprovals = new Map<string, PendingCodexApproval>();
+  private inFlightRuns = 0;
 
   constructor(options: CodexAppServerRuntimeOptions = {}) {
     this.manager = new CodexAppServerProcessManager({
@@ -468,6 +469,7 @@ export class CodexAppServerRuntime {
     writer: ProviderRuntimeWriter,
     context: ProviderRuntimeContext,
   ): Promise<unknown> {
+    this.inFlightRuns += 1;
     let run: AppServerRun | null = null;
     let threadId: string | null = null;
     let providerThreadCreated = false;
@@ -555,6 +557,7 @@ export class CodexAppServerRuntime {
       }
       throw normalized;
     } finally {
+      this.inFlightRuns -= 1;
       if (run) {
         this.removeRun(run);
       }
@@ -609,7 +612,7 @@ export class CodexAppServerRuntime {
    * action instead of terminating work that is still producing output.
    */
   async restart(): Promise<void> {
-    if (this.runsByThread.size > 0) {
+    if (this.inFlightRuns > 0 || this.runsByThread.size > 0) {
       throw new AppError('Wait for active Codex app-server runs to finish before restarting.', {
         code: 'CODEX_APP_SERVER_BUSY',
         statusCode: 409,

@@ -39,7 +39,10 @@ type RuntimeHarness = {
   respondWithError: (request: Record<string, unknown>, code: number, message: string) => void;
 };
 
-function createHarness(options: { failThreadStart?: boolean } = {}): RuntimeHarness {
+function createHarness(options: {
+  failThreadStart?: boolean;
+  pauseAt?: 'initialize' | 'thread/start' | 'thread/resume';
+} = {}): RuntimeHarness {
   const process = new FakeAppServerProcess();
   const requests: Record<string, unknown>[] = [];
   const waiters: Array<(request: Record<string, unknown>) => void> = [];
@@ -63,6 +66,11 @@ function createHarness(options: { failThreadStart?: boolean } = {}): RuntimeHarn
         waiter(request);
       } else {
         requests.push(request);
+      }
+
+      if (options.pauseAt && request.method === options.pauseAt) {
+        newlineIndex = inputBuffer.indexOf('\n');
+        continue;
       }
 
       if (request.method === 'initialize') {
@@ -505,6 +513,108 @@ test('interrupts an active turn and reports an aborted completion', async () => 
   assert.equal(output.messages.at(-1)?.aborted, true);
   assert.equal(output.messages.at(-1)?.success, false);
 });
+
+for (const pauseAt of ['initialize', 'thread/start', 'thread/resume'] as const) {
+  test(`refuses to restart while ${pauseAt} is pending before a turn exists`, async () => {
+    const harness = createHarness({ pauseAt });
+    const runtime = createRuntime(harness.process);
+    const output = createWriter();
+    const sessionId = pauseAt === 'thread/resume' ? 'resume-app' : 'app-pending';
+    const threadId = pauseAt === 'thread/resume' ? 'thread-existing' : 'thread-new';
+    const runPromise = runtime.run('Keep my pending request', { sessionId }, output.writer, context);
+    let pending = await harness.nextRequest();
+    while (pending.method !== pauseAt) {
+      pending = await harness.nextRequest();
+    }
+
+    await assert.rejects(runtime.restart(), { code: 'CODEX_APP_SERVER_BUSY', statusCode: 409 });
+    assert.equal(harness.process.stdin.writableEnded, false);
+
+    harness.respondWithResult(pending, pauseAt === 'initialize' ? {} : { thread: { id: threadId } });
+    let request = await harness.nextRequest();
+    while (request.method !== 'turn/start') {
+      request = await harness.nextRequest();
+    }
+    harness.notify('turn/completed', { threadId, turnId: 'turn-1', turn: { id: 'turn-1', status: 'completed' } });
+
+    assert.deepEqual(await runPromise, { status: 'completed' });
+  });
+}
+
+test('refuses to restart while model resolution is pending before thread setup', async () => {
+  const harness = createHarness();
+  const runtime = createRuntime(harness.process);
+  const output = createWriter();
+  let releaseModel = () => {};
+  const modelReady = new Promise<void>((resolve) => { releaseModel = resolve; });
+  let signalModelLookup = () => {};
+  const modelLookup = new Promise<void>((resolve) => { signalModelLookup = resolve; });
+  const runPromise = runtime.run('Wait for my model', { sessionId: 'app-pending-model' }, output.writer, {
+    ...context,
+    resolveResumeModel: async () => {
+      signalModelLookup();
+      await modelReady;
+      return 'gpt-test';
+    },
+  });
+  await modelLookup;
+
+  await assert.rejects(runtime.restart(), { code: 'CODEX_APP_SERVER_BUSY', statusCode: 409 });
+  assert.equal(harness.process.stdin.writableEnded, false);
+
+  releaseModel();
+  let request = await harness.nextRequest();
+  while (request.method !== 'turn/start') {
+    request = await harness.nextRequest();
+  }
+  harness.notify('turn/completed', {
+    threadId: 'thread-new', turnId: 'turn-1', turn: { id: 'turn-1', status: 'completed' },
+  });
+
+  assert.deepEqual(await runPromise, { status: 'completed' });
+});
+
+for (const failSetup of [false, true]) {
+  test(`allows restart after ${failSetup ? 'failed setup' : 'a completed run'} releases the in-flight counter`, async () => {
+    const harness = createHarness();
+    const replacement = createHarness();
+    let spawnCount = 0;
+    const runtime = createCodexAppServerRuntime({
+      managerOptions: {
+        shutdownGracePeriodMs: 1,
+        spawn: () => (spawnCount++ === 0 ? harness.process : replacement.process) as unknown as CodexAppServerProcess,
+      },
+    });
+    const output = createWriter();
+    const runPromise = runtime.run('Run before restart', { sessionId: 'app-before-restart' }, output.writer, {
+      ...context,
+      resolveResumeModel: async () => {
+        if (failSetup) {
+          throw new Error('Model lookup failed');
+        }
+        return 'gpt-test';
+      },
+    });
+    if (failSetup) {
+      await assert.rejects(runPromise, /Model lookup failed/);
+    } else {
+      let request = await harness.nextRequest();
+      while (request.method !== 'turn/start') {
+        request = await harness.nextRequest();
+      }
+      harness.notify('turn/completed', {
+        threadId: 'thread-new', turnId: 'turn-1', turn: { id: 'turn-1', status: 'completed' },
+      });
+      await runPromise;
+    }
+
+    await runtime.restart();
+
+    assert.equal(spawnCount, 2);
+    assert.equal((await replacement.nextRequest()).method, 'initialize');
+    assert.deepEqual(await replacement.nextRequest(), { method: 'initialized' });
+  });
+}
 
 test('refuses to restart while an app-server turn is active', async () => {
   const harness = createHarness();

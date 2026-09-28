@@ -9,7 +9,9 @@ Codex settings panel can override it per request:
 | `app-server` | Use the persistent Codex app-server runtime. |
 | `sdk` | Use the direct `@openai/codex-sdk` runtime. |
 
-Unset and invalid values resolve to `app-server`. Set the server default with:
+Unset and invalid values resolve to `app-server`. Unsupported non-empty values
+log a warning once per distinct value after trimming whitespace and ignoring
+case. Set the server default with:
 
 ```text
 CLOUDCLI_CODEX_RUNTIME_MODE=sdk
@@ -29,7 +31,8 @@ history, forking, message editing, or a manual restart needs it.
 
 The Codex settings panel can restart the managed process after `config.toml` or
 `auth.json` changes. Restart waits for the process to stop, performs a fresh
-initialize handshake, and refuses to interrupt an active app-server turn.
+initialize handshake, and refuses to interrupt an in-flight app-server request,
+including process startup, model lookup, thread setup, and active turns.
 
 App-server RPC requests have a 30-second default deadline, including thread
 forks and initialization. A stalled initialization stops the child process;

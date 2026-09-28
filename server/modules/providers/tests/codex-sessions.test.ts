@@ -637,7 +637,7 @@ test('Codex history restores user prompts from typed item_completed rows', { con
       sessionsDb.assignProviderSessionId('app-typed-1', providerSessionId);
       await new CodexSessionSynchronizer().synchronize();
 
-      const history = await new CodexSessionsProvider().fetchHistory('app-typed-1');
+      const history = await createSdkSessionsProvider().fetchHistory('app-typed-1');
       const users = history.messages.filter((message) => message.role === 'user');
       const images = users[0]?.images as Array<{ path?: string; data?: string }> | undefined;
 

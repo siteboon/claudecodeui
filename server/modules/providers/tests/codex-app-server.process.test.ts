@@ -142,6 +142,24 @@ test('defaults to app-server mode and accepts explicit runtime modes', () => {
   assert.equal(resolveCodexRuntimeMode('unsupported', { [CODEX_RUNTIME_MODE_ENV]: 'sdk' }), 'sdk');
 });
 
+test('warns once per unsupported non-empty runtime mode without changing the fallback', (context) => {
+  const warnings = context.mock.method(console, 'warn', () => {});
+  for (const value of [undefined, '', ' \n\t ', 'app-server', ' SDK ']) {
+    readCodexRuntimeMode({ [CODEX_RUNTIME_MODE_ENV]: value });
+  }
+  assert.equal(resolveCodexRuntimeMode('sdk', { [CODEX_RUNTIME_MODE_ENV]: 'overridden-invalid-mode' }), 'sdk');
+  assert.equal(warnings.mock.callCount(), 0);
+
+  for (const value of ['sdks', 'legacy-sdk', 'sdks', ' SDKS ', 'legacy-sdk']) {
+    assert.equal(readCodexRuntimeMode({ [CODEX_RUNTIME_MODE_ENV]: value }), 'app-server');
+  }
+
+  assert.equal(warnings.mock.callCount(), 2);
+  assert.match(warnings.mock.calls[0].arguments[0], /CLOUDCLI_CODEX_RUNTIME_MODE.*"sdks"/);
+  assert.match(warnings.mock.calls[1].arguments[0], /"legacy-sdk"/);
+  assert.match(warnings.mock.calls[0].arguments[0], /expected "app-server" or "sdk".*Falling back to "app-server"/);
+});
+
 test('starts app-server with the required stdio command and completes the handshake', async () => {
   const harness = createHarness();
 
