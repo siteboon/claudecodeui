@@ -136,8 +136,15 @@ then concatenate and sort by timestamp. Whatever comes out goes through
 persisted twin. When one side is empty — or when nothing survives the first two steps — the
 other side is returned deduped, without a sort.
 
-Two subtleties are load-bearing:
+Three subtleties are load-bearing:
 
+- **The interleave compares one clock, not two.** Persisted rows are stamped by the machine
+  running the provider CLI; live rows are created in the browser. Rows created client-side are
+  therefore stamped through `serverClock` (`src/shared/serverClock.ts`), which measures the
+  offset from the `chat_subscribed` ack and converts browser time onto the server timeline.
+  Without it a browser clock running a minute fast sorts the user's own message *after* the
+  reply to it, and pushes it past `removeOptimisticUserEchoes`' skew allowance so the echo
+  survives as a second bubble.
 - `readSortTime` floors the sort time of any row carrying `replacesAnchorId` to the newest
   server timestamp. Codex rewinds by copying the kept history into a new transcript, which
   re-stamps every surviving turn with the copy's clock — without the floor, the message the
@@ -537,6 +544,13 @@ of ~1 GB with seven thousand.
 - **`truncateAt` keeps exactly one replacement echo — the last.** A send that was refused
   leaves its echo behind, so a second attempt at the same message would otherwise survive the
   cut alongside the abandoned first and show the user both.
+- **Browser-created rows are stamped on the server clock, and that stamp never goes
+  backwards.** `serverClock` converts through `toServerTime`, which clamps to the last instant
+  it issued. A fresh offset sample can move the correction backwards, and without the clamp
+  two rows created a second apart could be stamped out of order and render out of order. The
+  clamp is safe only because both callers (`serverNowIso`, `toServerIso`) stamp rows at the
+  moment they are created. `LOCAL_USER_DEDUPE_CLOCK_SKEW_MS` stays as the net for the first
+  rows of a session, typed before any ack has been sampled.
 - **`replacesAfterRowCount` exists because a rewind re-stamps timestamps.**
   `removeOptimisticUserEchoes` starts scanning at that index, so an earlier turn with the same
   words ("yes", "continue", the typo being corrected) cannot retire the message the user just
@@ -597,6 +611,7 @@ of ~1 GB with seven thousand.
 | `INITIAL_MOUNTED_TAIL_ROWS` | The initial scroll-to-bottom, which relies on the newest rows having real measured heights. |
 | The history cache's key or validity check | `sessions.service.test.ts` and the Cursor/OpenCode bypass — their history does not live in `jsonl_path`. |
 | `prepareTranscriptMessages` | The live-vs-history divergence documented in [the realtime stream](./02-realtime-stream.md) and the tool grouping in [the tool view](./06-tool-view.md). |
+| `serverClock` or any `timestamp:` on a client-created row | `src/shared/tests/serverClock.test.ts` (the estimator and the #1195 regression case) and `serverClockWiring.test.tsx` (that the `chat_subscribed` ack still feeds it and the rows are still stamped through it). Reverting a call site to `new Date().toISOString()` is otherwise silent. |
 | `truncateAt` or `replacesAnchorId` | `history_truncated` emission order in the gateway ([websocket transport](./01-websocket-transport.md)) and `removeOptimisticUserEchoes`. |
 | `visibleMessageCount` or who writes it | All four writers: `INITIAL_VISIBLE_MESSAGES` on session change, `+SESSION_MESSAGES_PAGE_SIZE` on prepend, `Infinity` on "Load all", `Math.max` with `resolveSearchWindowSize` on a search jump, plus `loadEarlierMessages` stepping 100. A shrink anywhere can scroll the transcript out from under the user. |
 | `messagesRepresentSamePersistedRow` | Every other helper in `sessionMessagePagination.ts` — all overlap detection funnels through it, so loosening it silently glues unrelated pages together and tightening it turns every refresh into a full bridge walk. |

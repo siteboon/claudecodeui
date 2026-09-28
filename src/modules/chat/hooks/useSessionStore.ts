@@ -21,6 +21,7 @@ import {
   SESSION_MESSAGES_PAGE_SIZE,
 } from '@/modules/chat/utils/sessionMessagePagination';
 import type { SessionMessagesRequestOptions } from '@/modules/chat/utils/sessionMessagePagination';
+import { serverNowIso } from '@/shared/serverClock';
 
 // ─── NormalizedMessage (mirrors server/adapters/types.js) ────────────────────
 
@@ -813,7 +814,7 @@ export function useSessionStore() {
     const msg: NormalizedMessage = {
       id: streamId,
       sessionId,
-      timestamp: new Date().toISOString(),
+      timestamp: serverNowIso(),
       provider: msgProvider,
       kind: 'stream_delta',
       content: accumulatedText,
