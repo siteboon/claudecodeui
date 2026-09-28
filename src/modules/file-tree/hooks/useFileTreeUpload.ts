@@ -4,7 +4,7 @@ import type { DragEvent } from 'react';
 import { IS_PLATFORM } from '@/shared/utils';
 import type { FileTreeUploadProgressState, Project } from '@/shared/types';
 import { api } from '@/shared/api';
-import { expireAuthSession, getStoredAuthToken, storeAuthToken } from '@/shared/authToken';
+import { acceptRefreshedToken, expireAuthSession, getStoredAuthToken } from '@/shared/authToken';
 import { MAX_FILE_UPLOAD_SIZE_BYTES, MAX_FILE_UPLOAD_SIZE_LABEL } from '@/shared/constants';
 
 type UseFileTreeUploadOptions = {
@@ -123,7 +123,7 @@ const uploadFormDataWithProgress = (
     xhr.onload = () => {
       const refreshedToken = xhr.getResponseHeader('X-Refreshed-Token');
       if (refreshedToken) {
-        storeAuthToken(refreshedToken);
+        acceptRefreshedToken(refreshedToken);
       }
       if (xhr.getResponseHeader('X-Auth-Error')) {
         expireAuthSession();
