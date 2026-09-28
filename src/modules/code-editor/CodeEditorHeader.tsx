@@ -13,6 +13,7 @@ type CodeEditorHeaderProps = {
   markdownPreview: boolean;
   saving: boolean;
   saveSuccess: boolean;
+  hasUnsavedChanges: boolean;
   onToggleMarkdownPreview: () => void;
   onOpenHtmlPreview: () => void;
   onOpenSettings: () => void;
@@ -35,6 +36,7 @@ type CodeEditorHeaderProps = {
     fullscreen: string;
     exitFullscreen: string;
     close: string;
+    unsavedChanges: string;
   };
 };
 
@@ -48,6 +50,7 @@ export default function CodeEditorHeader({
   markdownPreview,
   saving,
   saveSuccess,
+  hasUnsavedChanges,
   onToggleMarkdownPreview,
   onOpenHtmlPreview,
   onOpenSettings,
@@ -86,6 +89,14 @@ export default function CodeEditorHeader({
         <div className="min-w-0 shrink">
           <div className="flex min-w-0 items-center gap-2">
             <h3 className="truncate text-sm font-medium text-gray-900 dark:text-white">{file.name}</h3>
+            {hasUnsavedChanges && (
+              <span
+                role="img"
+                aria-label={labels.unsavedChanges}
+                title={labels.unsavedChanges}
+                className="h-2 w-2 shrink-0 rounded-full bg-amber-500"
+              />
+            )}
             {file.diffInfo && (
               <span className="shrink-0 whitespace-nowrap rounded bg-blue-100 px-1.5 py-0.5 text-[10px] text-blue-600 dark:bg-blue-900 dark:text-blue-300">
                 {labels.showingChanges}

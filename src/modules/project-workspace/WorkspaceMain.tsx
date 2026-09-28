@@ -86,6 +86,7 @@ function WorkspaceMain({
     handleCloseEditor,
     handleToggleEditorExpand,
     handleResizeStart,
+    handleUnsavedChangesChange,
   } = useEditorSidebar({
     selectedProject,
     isMobile,
@@ -115,8 +116,9 @@ function WorkspaceMain({
   }, [setActiveTab]);
 
   const openFile = useCallback((filePath: string) => {
-    setActiveTab('files');
-    handleFileOpen(filePath);
+    if (handleFileOpen(filePath)) {
+      setActiveTab('files');
+    }
   }, [handleFileOpen, setActiveTab]);
 
   // Opens the editor side panel in place, keeping the current tab (e.g. chat).
@@ -244,6 +246,7 @@ function WorkspaceMain({
           onResizeStart={handleResizeStart}
           onCloseEditor={handleCloseEditor}
           onToggleEditorExpand={handleToggleEditorExpand}
+          onUnsavedChangesChange={handleUnsavedChangesChange}
           projectPath={selectedProject.path}
           fillSpace={activeTab === 'files'}
         />
