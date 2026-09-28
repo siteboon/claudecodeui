@@ -167,5 +167,9 @@
     "archiveSessions_other": "Archivia {{count}} sessioni",
     "archiveSessionsNotice_one": "L'archiviazione rimuove la sessione dall'elenco attivo mantenendone la cronologia.",
     "archiveSessionsNotice_other": "L'archiviazione rimuove le sessioni dall'elenco attivo mantenendone la cronologia."
+  },
+  "projectGroup": {
+    "locations_one": "{{count}} percorso",
+    "locations_other": "{{count}} percorsi"
   }
 }
