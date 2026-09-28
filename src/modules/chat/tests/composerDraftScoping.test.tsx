@@ -43,7 +43,12 @@ vi.mock('@/shared/api', () => {
   };
 });
 
-const renderComposer = (selectedSession: ProjectSession | null) => renderHook(
+type ScheduleMessage = Parameters<typeof useChatComposerState>[0]['scheduleMessage'];
+
+const renderComposer = (
+  selectedSession: ProjectSession | null,
+  scheduleMessage: ScheduleMessage = async () => true,
+) => renderHook(
   ({ session }: { session: ProjectSession | null }) => useChatComposerState({
     selectedProject: PROJECT,
     selectedSession: session,
@@ -58,6 +63,7 @@ const renderComposer = (selectedSession: ProjectSession | null) => renderHook(
     canAbortSession: false,
     tokenBudget: null,
     sendMessage: () => undefined,
+    scheduleMessage,
     scrollToBottom: () => undefined,
     addMessage: () => undefined,
     setIsUserScrolledUp: () => undefined,
@@ -159,4 +165,78 @@ test('clearing the composer clears that session\'s stored draft', async () => {
   });
 
   assert.equal(readDraftText('session-a'), '');
+});
+
+/** A scheduling call the test finishes by hand, to act while it is in flight. */
+function createPendingSchedule() {
+  let finish: (saved: boolean) => void = () => undefined;
+  const scheduleMessage: ScheduleMessage = () => new Promise<boolean>((resolve) => { finish = resolve; });
+  return { scheduleMessage, finish: (saved: boolean) => finish(saved) };
+}
+
+test('text typed while a message is being scheduled stays in the composer', async () => {
+  const pending = createPendingSchedule();
+  const view = renderComposer({ id: 'session-a' }, pending.scheduleMessage);
+
+  await act(async () => {
+    view.result.current.setInput('run the nightly checks');
+  });
+  let scheduling: Promise<void> = Promise.resolve();
+  await act(async () => {
+    scheduling = view.result.current.handleScheduleMessage(new Date(Date.now() + 3_600_000));
+  });
+  await act(async () => {
+    view.result.current.setInput('and then this');
+  });
+
+  await act(async () => {
+    pending.finish(true);
+    await scheduling;
+  });
+
+  assert.equal(view.result.current.input, 'and then this', 'only the scheduled text leaves the composer');
+  assert.equal(readDraftText('session-a'), 'and then this');
+});
+
+test('switching sessions while a message is being scheduled leaves the new session\'s draft alone', async () => {
+  writeDraftText('session-b', 'for session B');
+  const pending = createPendingSchedule();
+  const view = renderComposer({ id: 'session-a' }, pending.scheduleMessage);
+
+  await act(async () => {
+    view.result.current.setInput('run the nightly checks');
+  });
+  let scheduling: Promise<void> = Promise.resolve();
+  await act(async () => {
+    scheduling = view.result.current.handleScheduleMessage(new Date(Date.now() + 3_600_000));
+  });
+  await act(async () => {
+    view.rerender({ session: { id: 'session-b' } });
+  });
+
+  await act(async () => {
+    pending.finish(true);
+    await scheduling;
+  });
+
+  assert.equal(view.result.current.input, 'for session B');
+  assert.equal(readDraftText('session-b'), 'for session B', "the open session's draft is not cleared");
+  assert.equal(
+    readDraftText('session-a'),
+    '',
+    'the scheduled text does not come back to be scheduled twice when session A is reopened',
+  );
+});
+
+test('a message that fails to schedule stays in the composer', async () => {
+  const view = renderComposer({ id: 'session-a' }, async () => false);
+
+  await act(async () => {
+    view.result.current.setInput('run the nightly checks');
+  });
+  await act(async () => {
+    await view.result.current.handleScheduleMessage(new Date(Date.now() + 3_600_000));
+  });
+
+  assert.equal(view.result.current.input, 'run the nightly checks');
 });

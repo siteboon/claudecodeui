@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { AlertTriangle, Plus, Shield, X } from 'lucide-react';
+import { useId, useState } from 'react';
+import { AlertTriangle, Clock, Plus, Shield, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Button, Input } from '@/shared/ui';
@@ -21,6 +21,17 @@ const COMMON_CLAUDE_TOOLS = [
   'WebFetch',
   'WebSearch',
 ];
+
+// Choices for how long an unanswered Claude permission prompt waits before its
+// tool call is denied. 0 waits for the user, like the Claude Code CLI.
+const PERMISSION_PROMPT_TIMEOUT_PRESETS = [
+  { valueMs: 0, labelKey: 'permissions.promptTimeout.options.never' },
+  { valueMs: 60_000, labelKey: 'permissions.promptTimeout.options.oneMinute' },
+  { valueMs: 5 * 60_000, labelKey: 'permissions.promptTimeout.options.fiveMinutes' },
+  { valueMs: 15 * 60_000, labelKey: 'permissions.promptTimeout.options.fifteenMinutes' },
+  { valueMs: 30 * 60_000, labelKey: 'permissions.promptTimeout.options.thirtyMinutes' },
+  { valueMs: 60 * 60_000, labelKey: 'permissions.promptTimeout.options.oneHour' },
+] as const;
 
 const COMMON_CURSOR_COMMANDS = [
   'Shell(ls)',
@@ -50,10 +61,32 @@ const removeValue = (items: string[], value: string): string[] => (
   items.filter((item) => item !== value)
 );
 
+/**
+ * Formats a stored timeout that is not one of the presets (say, one written by
+ * another client) in the largest unit that divides it, e.g. "90 seconds".
+ */
+const formatCustomTimeout = (timeoutMs: number, locale: string): string => {
+  const [amount, unit] = timeoutMs % 3_600_000 === 0
+    ? [timeoutMs / 3_600_000, 'hour']
+    : timeoutMs % 60_000 === 0
+      ? [timeoutMs / 60_000, 'minute']
+      : timeoutMs % 1_000 === 0
+        ? [timeoutMs / 1_000, 'second']
+        : [timeoutMs, 'millisecond'];
+
+  try {
+    return new Intl.NumberFormat(locale, { style: 'unit', unit, unitDisplay: 'long' }).format(amount);
+  } catch {
+    return `${timeoutMs} ms`;
+  }
+};
+
 type ClaudePermissionsProps = {
   agent: 'claude';
   skipPermissions: boolean;
   onSkipPermissionsChange: (value: boolean) => void;
+  permissionPromptTimeoutMs: number;
+  onPermissionPromptTimeoutMsChange: (value: number) => void;
   allowedTools: string[];
   onAllowedToolsChange: (value: string[]) => void;
   disallowedTools: string[];
@@ -63,14 +96,23 @@ type ClaudePermissionsProps = {
 function ClaudePermissions({
   skipPermissions,
   onSkipPermissionsChange,
+  permissionPromptTimeoutMs,
+  onPermissionPromptTimeoutMsChange,
   allowedTools,
   onAllowedToolsChange,
   disallowedTools,
   onDisallowedToolsChange,
 }: Omit<ClaudePermissionsProps, 'agent'>) {
-  const { t } = useTranslation('settings');
+  const { t, i18n } = useTranslation('settings');
   const [newAllowedTool, setNewAllowedTool] = useState('');
   const [newDisallowedTool, setNewDisallowedTool] = useState('');
+  const promptTimeoutTitleId = useId();
+  const promptTimeoutDescriptionId = useId();
+  // A stored value outside the presets gets its own option, so the select
+  // never shows a different timeout from the one actually in effect.
+  const isPresetPromptTimeout = PERMISSION_PROMPT_TIMEOUT_PRESETS.some(
+    (preset) => preset.valueMs === permissionPromptTimeoutMs,
+  );
 
   const handleAddAllowedTool = (tool: string) => {
     const updated = addUnique(allowedTools, tool);
@@ -117,6 +159,38 @@ function ClaudePermissions({
             </div>
           </label>
         </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <Clock className="h-5 w-5 text-blue-500" />
+          <h3 id={promptTimeoutTitleId} className="text-lg font-medium text-foreground">
+            {t('permissions.promptTimeout.title')}
+          </h3>
+        </div>
+        <p id={promptTimeoutDescriptionId} className="text-sm text-muted-foreground">
+          {t('permissions.promptTimeout.description')}
+        </p>
+        <select
+          value={String(permissionPromptTimeoutMs)}
+          onChange={(event) => onPermissionPromptTimeoutMsChange(Number(event.target.value))}
+          aria-labelledby={promptTimeoutTitleId}
+          aria-describedby={promptTimeoutDescriptionId}
+          className="w-full touch-manipulation rounded-lg border border-input bg-card p-2.5 text-sm text-foreground focus:border-primary focus:ring-1 focus:ring-primary sm:w-72"
+        >
+          {PERMISSION_PROMPT_TIMEOUT_PRESETS.map((preset) => (
+            <option key={preset.valueMs} value={String(preset.valueMs)}>
+              {t(preset.labelKey)}
+            </option>
+          ))}
+          {!isPresetPromptTimeout && (
+            <option value={String(permissionPromptTimeoutMs)}>
+              {t('permissions.promptTimeout.options.custom', {
+                duration: formatCustomTimeout(permissionPromptTimeoutMs, i18n.resolvedLanguage ?? i18n.language),
+              })}
+            </option>
+          )}
+        </select>
       </div>
 
       <div className="space-y-4">

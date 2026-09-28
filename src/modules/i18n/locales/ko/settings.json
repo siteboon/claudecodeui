@@ -399,6 +399,19 @@
       "claudeDescription": "--dangerously-skip-permissions 플래그와 동일",
       "cursorDescription": "Cursor CLI의 -f 플래그와 동일"
     },
+    "promptTimeout": {
+      "title": "권한 확인 제한 시간",
+      "description": "응답하지 않은 권한 확인이 도구 호출을 거부하기 전까지 기다리는 시간입니다. Claude Code 자체는 무기한 기다립니다.",
+      "options": {
+        "never": "없음 — 내 응답을 기다림",
+        "oneMinute": "1분",
+        "fiveMinutes": "5분",
+        "fifteenMinutes": "15분",
+        "thirtyMinutes": "30분",
+        "oneHour": "1시간",
+        "custom": "사용자 정의 ({{duration}})"
+      }
+    },
     "allowedTools": {
       "title": "허용된 도구",
       "description": "권한 확인 없이 자동으로 허용되는 도구",

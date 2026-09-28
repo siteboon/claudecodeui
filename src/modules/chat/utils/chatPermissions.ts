@@ -71,6 +71,7 @@ export function grantClaudeToolPermission(entry: string | null): PermissionGrant
     allowedTools: nextAllowed,
     disallowedTools: nextDisallowed,
     skipPermissions: settings.skipPermissions,
+    permissionPromptTimeoutMs: settings.permissionPromptTimeoutMs,
   });
   return { success: true, alreadyAllowed, updatedSettings };
 }

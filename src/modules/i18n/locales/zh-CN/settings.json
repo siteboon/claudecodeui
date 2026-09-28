@@ -399,6 +399,19 @@
       "claudeDescription": "等同于 --dangerously-skip-permissions 标志",
       "cursorDescription": "等同于 Cursor CLI 中的 -f 标志"
     },
+    "promptTimeout": {
+      "title": "权限提示超时",
+      "description": "未应答的权限提示在拒绝工具调用前等待的时长。Claude Code 本身会无限期等待。",
+      "options": {
+        "never": "从不 — 等待我的回复",
+        "oneMinute": "1 分钟",
+        "fiveMinutes": "5 分钟",
+        "fifteenMinutes": "15 分钟",
+        "thirtyMinutes": "30 分钟",
+        "oneHour": "1 小时",
+        "custom": "自定义（{{duration}}）"
+      }
+    },
     "allowedTools": {
       "title": "允许的工具",
       "description": "无需权限提示即可自动使用的工具",

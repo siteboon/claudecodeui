@@ -1,5 +1,6 @@
-import type { ClaudeSettings } from '@/shared/types';
+import type { ClaudePermissionsState, ClaudeSettings } from '@/shared/types';
 import { readUserPreference, writeUserPreference } from '@/shared/userSettings';
+import { readPermissionPromptTimeoutMs } from '@/shared/utils';
 
 export const safeLocalStorage = {
   setItem: (key: string, value: string) => {
@@ -56,15 +57,16 @@ export function getClaudeSettings(): ClaudeSettings {
     allowedTools: Array.isArray(stored.allowedTools) ? stored.allowedTools : [],
     disallowedTools: Array.isArray(stored.disallowedTools) ? stored.disallowedTools : [],
     skipPermissions: Boolean(stored.skipPermissions),
+    permissionPromptTimeoutMs: readPermissionPromptTimeoutMs(stored.permissionPromptTimeoutMs),
     projectSortOrder: readUserPreference<ClaudeSettings['projectSortOrder']>('projectSortOrder', 'name'),
   };
 }
 
-/** Persists Claude's tool permissions after the user grants one from the chat. */
-export function saveClaudePermissions(permissions: {
-  allowedTools: string[];
-  disallowedTools: string[];
-  skipPermissions: boolean;
-}): void {
+/**
+ * Persists Claude's permission settings after the user grants a tool from the
+ * chat. The preference is replaced as a whole, so the caller passes every field
+ * (including the prompt timeout set in Settings) to avoid resetting one.
+ */
+export function saveClaudePermissions(permissions: ClaudePermissionsState): void {
   writeUserPreference('claudePermissions', permissions);
 }

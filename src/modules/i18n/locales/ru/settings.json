@@ -370,6 +370,19 @@
       "claudeDescription": "Эквивалентно флагу --dangerously-skip-permissions",
       "cursorDescription": "Эквивалентно флагу -f в Cursor CLI"
     },
+    "promptTimeout": {
+      "title": "Тайм-аут запросов разрешений",
+      "description": "Сколько запрос разрешения без ответа ждёт, прежде чем вызов инструмента будет отклонён. Сам Claude Code ждёт бесконечно.",
+      "options": {
+        "never": "Никогда — ждать моего ответа",
+        "oneMinute": "1 минута",
+        "fiveMinutes": "5 минут",
+        "fifteenMinutes": "15 минут",
+        "thirtyMinutes": "30 минут",
+        "oneHour": "1 час",
+        "custom": "Пользовательское значение ({{duration}})"
+      }
+    },
     "allowedTools": {
       "title": "Разрешенные инструменты",
       "description": "Инструменты, которые автоматически разрешены без запроса разрешения",
