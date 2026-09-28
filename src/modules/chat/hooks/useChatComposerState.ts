@@ -51,6 +51,12 @@ type UseChatComposerStateArgs = {
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
   sendMessage: (message: unknown) => void;
+  /**
+   * Stores a message on the server to be sent to the open session later;
+   * resolves true once it is saved. The server replays `options` as-is when the
+   * message comes due, so the composer hands it the same snapshot a send uses.
+   */
+  scheduleMessage?: (input: { content: string; scheduledFor: Date; options: QueuedSendOptions }) => Promise<boolean>;
   sendByCtrlEnter?: boolean;
   onSessionProcessing?: MarkSessionProcessing;
   /**
@@ -182,6 +188,7 @@ export function useChatComposerState({
   canAbortSession,
   tokenBudget,
   sendMessage,
+  scheduleMessage,
   sendByCtrlEnter,
   onSessionProcessing,
   onSessionEstablished,
@@ -623,9 +630,10 @@ export function useChatComposerState({
   });
 
   // Snapshot of everything `chat.send` needs beyond the text itself. Built at
-  // send time for immediate sends and at queue time for queued ones, so a
-  // queued message keeps the provider settings it was composed under even if
-  // it is later dispatched outside this composer (app-level auto-send).
+  // send time for immediate sends, at queue time for queued ones and at
+  // schedule time for scheduled ones, so a queued or scheduled message keeps
+  // the provider settings it was composed under even if it is later
+  // dispatched outside this composer (app-level auto-send, or the server).
   const buildSendOptions = useCallback((currentInput: string): QueuedSendOptions => {
     const getToolsSettings = () => readUserPreference(
       PROVIDER_PERMISSION_PREFERENCE_KEYS[provider],
@@ -654,6 +662,28 @@ export function useChatComposerState({
     resolvePermissionModeForProvider,
     selectedSession,
   ]);
+
+  // Hands the composer's text to the server to send later. The server has no
+  // copy of the user's permission settings, so the message must carry the same
+  // snapshot as a send, or a scheduled Claude run would drop the allow-list and
+  // the permission prompt timeout. Clears the box as a send would: the message
+  // has left the composer either way.
+  const handleScheduleMessage = useCallback(async (scheduledFor: Date) => {
+    const content = inputValueRef.current.trim();
+    if (!content || !scheduleMessage) {
+      return;
+    }
+
+    const scheduled = await scheduleMessage({
+      content,
+      scheduledFor,
+      options: buildSendOptions(content),
+    });
+    if (scheduled) {
+      setInput('');
+      inputValueRef.current = '';
+    }
+  }, [buildSendOptions, scheduleMessage, setInput]);
 
   // Read at send time through a ref: the map changes on every poll, and a
   // submit handler rebuilt that often would re-render the whole composer.
@@ -1321,6 +1351,7 @@ export function useChatComposerState({
     isDragActive,
     openAttachmentPicker: open,
     handleSubmit,
+    handleScheduleMessage,
     queuedDraft,
     editQueuedDraft,
     deleteQueuedDraft,
