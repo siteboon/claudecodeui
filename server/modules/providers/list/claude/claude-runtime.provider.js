@@ -54,7 +54,35 @@ const abortedSessionIds = new Set();
 // entry, the abort flag, and all client-facing events belong to the new run.
 const supersededInstances = new WeakSet();
 
-const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS, 10) || 55000;
+// Longest delay a Node timer can hold (2^31 - 1 ms, about 24.8 days). A longer
+// one overflows: Node warns and fires it after 1 ms, which would deny a prompt
+// the moment it appeared.
+const MAX_PERMISSION_PROMPT_TIMEOUT_MS = 2 ** 31 - 1;
+
+/**
+ * Resolves how long an unanswered permission prompt waits before the tool call
+ * is denied, from the `permissionPromptTimeoutMs` the client sends inside
+ * `toolsSettings` (Settings > Agents > Claude > Permissions).
+ *
+ * The default is 0, meaning no timeout: like the Claude Code CLI, the prompt
+ * waits until the user answers or the run is aborted. Only a finite, positive
+ * whole number of milliseconds turns a timeout on, capped at what a Node timer
+ * can hold. Anything else (absent, null, 0, negative, NaN, Infinity, fractions,
+ * strings, objects) is treated as "no timeout", because the value comes from
+ * whichever client version saved it and is replayed from queued and scheduled
+ * message snapshots.
+ *
+ * Used by queryClaudeSDK once per run; exported for the provider tests that pin
+ * the mapping.
+ * @param {unknown} value - `toolsSettings.permissionPromptTimeoutMs` as received
+ * @returns {number} Timeout in milliseconds, or 0 for no timeout
+ */
+export function resolvePermissionPromptTimeoutMs(value) {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+    return 0;
+  }
+  return Math.min(value, MAX_PERMISSION_PROMPT_TIMEOUT_MS);
+}
 
 // How long background work is allowed to keep running after a turn ends. This drives
 // two halves of the same behaviour:
@@ -124,7 +152,9 @@ function createRequestId() {
 }
 
 function waitForToolApproval(requestId, options = {}) {
-  const { timeoutMs = TOOL_APPROVAL_TIMEOUT_MS, signal, onCancel, metadata } = options;
+  // No timeout unless the caller asks for one: an unanswered prompt waits for
+  // the user, the same as in the Claude Code CLI.
+  const { timeoutMs = 0, signal, onCancel, metadata } = options;
 
   return new Promise(resolve => {
     let settled = false;
@@ -146,7 +176,7 @@ function waitForToolApproval(requestId, options = {}) {
       }
     };
 
-    // timeoutMs 0 = wait indefinitely (interactive tools)
+    // timeoutMs 0 = wait indefinitely (the default, and always for interactive tools)
     if (timeoutMs > 0) {
       timeout = setTimeout(() => {
         onCancel?.('timeout');
@@ -978,6 +1008,13 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       }]
     };
 
+    // Resolved once per run from the settings this turn was sent with, so a
+    // queued or scheduled turn keeps the timeout it was composed under. 0 (the
+    // default) means an unanswered prompt waits for the user.
+    const permissionPromptTimeoutMs = resolvePermissionPromptTimeoutMs(
+      options.toolsSettings?.permissionPromptTimeoutMs
+    );
+
     // Caveat: in 'auto' and 'bypassPermissions' modes the SDK resolves approval
     // at the permission-mode step and skips this callback, so interactive tools
     // (AskUserQuestion, ExitPlanMode) won't reach the UI — the classifier/bypass
@@ -1021,7 +1058,9 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       }));
 
       const decision = await waitForToolApproval(requestId, {
-        timeoutMs: requiresInteraction ? 0 : undefined,
+        // Questions Claude asks the user (AskUserQuestion, ExitPlanMode) are
+        // never timed out: denying one would answer it on the user's behalf.
+        timeoutMs: requiresInteraction ? 0 : permissionPromptTimeoutMs,
         signal: context?.signal,
         metadata: {
           // Keyed by the app session id so `chat.subscribe` can look pending
