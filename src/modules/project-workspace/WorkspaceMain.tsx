@@ -37,6 +37,8 @@ type WorkspaceMainProps = {
   onProjectsRefresh: () => void;
   /** Opens a new chat for a project — the host action behind `api.host.startNewSession`. */
   onStartNewSession: (project: Project) => void;
+  /** Persists a new title for a session; resolves false when the backend refuses it. Used by the header's inline rename. */
+  onRenameSession: (sessionId: string, summary: string) => Promise<boolean>;
 };
 
 /** Rendered by ProjectMainRegion to show the selected project's active tab: chat, files, shell, git, tasks, browser or a plugin. */
@@ -58,6 +60,7 @@ function WorkspaceMain({
   onProjectSelect,
   onProjectsRefresh,
   onStartNewSession,
+  onRenameSession,
 }: WorkspaceMainProps) {
   const preferences = useUiPreferences();
   const { showRawParameters, showThinking, sendByCtrlEnter } = preferences;
@@ -150,6 +153,7 @@ function WorkspaceMain({
         shouldShowBrowserTab={shouldShowBrowserTab}
         isMobile={isMobile}
         onMenuClick={onMenuClick}
+        onRenameSession={onRenameSession}
       />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">

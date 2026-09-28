@@ -263,7 +263,8 @@
   },
   "message": {
     "editAndResend": "Edit dan kirim ulang",
-    "forkFromHere": "Fork dari sini"
+    "forkFromHere": "Fork dari sini",
+    "answeredBy": "Dijawab oleh {{model}}"
   },
   "export": {
     "trigger": "Ekspor percakapan",

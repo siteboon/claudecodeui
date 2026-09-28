@@ -25,6 +25,7 @@ function ProjectMainRegion({
     handleProjectSelect,
     handleNewSession,
     refreshProjectsSilently,
+    renameSession,
   } = useProjectMainState();
 
   const handleOpenSidebar = useCallback(() => {
@@ -68,6 +69,7 @@ function ProjectMainRegion({
       onProjectSelect={handleProjectSelect}
       onProjectsRefresh={handleProjectsRefresh}
       onStartNewSession={handleNewSession}
+      onRenameSession={renameSession}
     />
   );
 }
