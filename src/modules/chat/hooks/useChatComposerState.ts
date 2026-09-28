@@ -662,12 +662,11 @@ export function useChatComposerState({
     processingSessionsRef.current = processingSessions;
   }, [processingSessions]);
 
-  const handleSubmit = useCallback(
+  const submitNow = useCallback(
     async (
       event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
       queuedSubmission?: QueuedDraft,
     ) => {
-      event.preventDefault();
       const currentInput = queuedSubmission?.content ?? inputValueRef.current;
       const currentAttachments = queuedSubmission?.attachments ?? attachedFiles;
       const previouslyUploadedAttachments = queuedSubmission?.uploadedAttachments ?? [];
@@ -968,6 +967,31 @@ export function useChatComposerState({
       slashCommands,
       t,
     ],
+  );
+
+  // A submit awaits file uploads and, for a new chat, session creation before
+  // it clears the input. On a slow or flapping connection the send button looks
+  // dead for that whole time, so it gets pressed again — and every extra press
+  // would allocate its own session and send the same prompt into it. Only one
+  // submit may be in flight; presses during it are dropped, not queued.
+  const submitInFlightRef = useRef(false);
+  const handleSubmit = useCallback(
+    async (
+      event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
+      queuedSubmission?: QueuedDraft,
+    ) => {
+      event.preventDefault();
+      if (submitInFlightRef.current) {
+        return;
+      }
+      submitInFlightRef.current = true;
+      try {
+        await submitNow(event, queuedSubmission);
+      } finally {
+        submitInFlightRef.current = false;
+      }
+    },
+    [submitNow],
   );
 
   useEffect(() => {
