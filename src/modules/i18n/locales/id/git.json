@@ -4,6 +4,7 @@
   },
   "tabs": {
     "changes": "Perubahan",
+    "compare": "Bandingkan",
     "history": "Commit",
     "branches": "Branch",
     "worktrees": "Worktree",
@@ -13,6 +14,7 @@
     "modified": "Diubah",
     "added": "Ditambahkan",
     "deleted": "Dihapus",
+    "renamed": "Diganti nama",
     "untracked": "Tidak dilacak"
   },
   "confirm": {
@@ -111,6 +113,23 @@
     "changesCount": "Perubahan ({{n}})",
     "stageAll": "Stage Semua",
     "allStaged": "Semua perubahan sudah staged"
+  },
+  "compare": {
+    "baseLabel": "Bandingkan dengan",
+    "localGroup": "Branch lokal",
+    "remoteGroup": "Branch remote",
+    "noBranches": "Tidak ada branch yang tersedia",
+    "summary_one": "{{count}} file berubah dibandingkan <ref>{{base}}</ref>",
+    "summary_other": "{{count}} file berubah dibandingkan <ref>{{base}}</ref>",
+    "mergeBase": "merge base {{sha}}",
+    "mergeBaseTitle": "Merge base dari {{base}} dan HEAD: {{sha}}",
+    "refresh": "Segarkan perbandingan",
+    "noChanges": "Tidak ada perbedaan dari {{base}}",
+    "noCommonHistory": "\"{{base}}\" tidak memiliki riwayat yang sama dengan branch saat ini, jadi tidak ada yang bisa dibandingkan.",
+    "loadError": "Tidak dapat membandingkan dengan \"{{base}}\"",
+    "renamedFrom": "diganti nama dari {{path}}",
+    "renameOnly": "Diganti nama tanpa perubahan isi",
+    "fileLoadError": "Tidak dapat memuat diff ini."
   },
   "composer": {
     "confirmCommit_one": "Commit {{count}} file dengan pesan: \"{{message}}\"?",

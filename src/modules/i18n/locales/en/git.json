@@ -4,6 +4,7 @@
   },
   "tabs": {
     "changes": "Changes",
+    "compare": "Compare",
     "history": "Commits",
     "branches": "Branches",
     "worktrees": "Worktrees",
@@ -13,6 +14,7 @@
     "modified": "Modified",
     "added": "Added",
     "deleted": "Deleted",
+    "renamed": "Renamed",
     "untracked": "Untracked"
   },
   "confirm": {
@@ -111,6 +113,23 @@
     "changesCount": "Changes ({{n}})",
     "stageAll": "Stage All",
     "allStaged": "All changes staged"
+  },
+  "compare": {
+    "baseLabel": "Compare against",
+    "localGroup": "Local branches",
+    "remoteGroup": "Remote branches",
+    "noBranches": "No branches available",
+    "summary_one": "{{count}} file changed vs <ref>{{base}}</ref>",
+    "summary_other": "{{count}} files changed vs <ref>{{base}}</ref>",
+    "mergeBase": "merge base {{sha}}",
+    "mergeBaseTitle": "Merge base of {{base}} and HEAD: {{sha}}",
+    "refresh": "Refresh comparison",
+    "noChanges": "No differences from {{base}}",
+    "noCommonHistory": "\"{{base}}\" shares no history with the current branch, so there is nothing to compare.",
+    "loadError": "Could not compare against \"{{base}}\"",
+    "renamedFrom": "renamed from {{path}}",
+    "renameOnly": "Renamed without content changes",
+    "fileLoadError": "Could not load this diff."
   },
   "composer": {
     "confirmCommit_one": "Commit {{count}} file with message: \"{{message}}\"?",
