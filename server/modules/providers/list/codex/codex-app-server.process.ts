@@ -1,4 +1,5 @@
 import type { SpawnOptions } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import type { Readable, Writable } from 'node:stream';
 
@@ -113,7 +114,26 @@ const resolveBundledCodexCli = (): string | null => {
   }
 };
 
+/**
+ * Reads the version of the bundled Codex package that also ships the
+ * app-server binary. The initialize handshake reports this as the client
+ * version, so it must describe the app-server we actually spawn instead of
+ * the CloudCLI release.
+ */
+const resolveBundledCodexVersion = (): string | null => {
+  try {
+    const packageJsonPath = createRequire(import.meta.url).resolve('@openai/codex/package.json');
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as { version?: unknown };
+    return typeof packageJson.version === 'string' && packageJson.version.length > 0
+      ? packageJson.version
+      : null;
+  } catch {
+    return null;
+  }
+};
+
 const BUNDLED_CODEX_CLI = resolveBundledCodexCli();
+const BUNDLED_CODEX_VERSION = resolveBundledCodexVersion();
 const DEFAULT_EXECUTABLE = BUNDLED_CODEX_CLI ? process.execPath : 'codex';
 const DEFAULT_ARGS = BUNDLED_CODEX_CLI
   ? [BUNDLED_CODEX_CLI, 'app-server', '--listen', 'stdio://']
@@ -174,9 +194,9 @@ export class CodexAppServerProcessManager {
     this.cwd = options.cwd;
     this.env = options.env;
     this.clientInfo = {
-      name: options.clientInfo?.name ?? 'cloudcli',
+      name: options.clientInfo?.name ?? 'codex-tui',
       title: options.clientInfo?.title ?? 'CloudCLI',
-      version: options.clientInfo?.version ?? process.env.CLOUDCLI_VERSION ?? 'unknown',
+      version: options.clientInfo?.version ?? BUNDLED_CODEX_VERSION ?? '0.154.0',
     };
     this.capabilities = options.capabilities;
     this.shutdownGracePeriodMs = Math.max(

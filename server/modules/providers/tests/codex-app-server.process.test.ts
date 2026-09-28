@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { PassThrough } from 'node:stream';
 import test from 'node:test';
 
@@ -10,6 +12,7 @@ import {
   resolveCodexRuntimeMode,
   type CodexAppServerDiagnostic,
   type CodexAppServerProcess,
+  type CodexAppServerProcessManagerOptions,
 } from '@/modules/providers/list/codex/index.js';
 
 class FakeAppServerProcess extends EventEmitter {
@@ -33,7 +36,13 @@ type ProcessHarness = {
   nextFrame: () => Promise<Record<string, unknown>>;
 };
 
-function createHarness(options: { shutdownGracePeriodMs?: number } = {}): ProcessHarness {
+type ProcessHarnessOptions = {
+  shutdownGracePeriodMs?: number;
+  /** Overrides the test client identity; pass null to exercise the manager defaults. */
+  clientInfo?: CodexAppServerProcessManagerOptions['clientInfo'] | null;
+};
+
+function createHarness(options: ProcessHarnessOptions = {}): ProcessHarness {
   const process = new FakeAppServerProcess();
   const frames: Record<string, unknown>[] = [];
   const frameWaiters: Array<(frame: Record<string, unknown>) => void> = [];
@@ -59,12 +68,15 @@ function createHarness(options: { shutdownGracePeriodMs?: number } = {}): Proces
   });
 
   const diagnostics: CodexAppServerDiagnostic[] = [];
-  const manager = new CodexAppServerProcessManager({
-    clientInfo: { name: 'cloudcli-test', version: 'test' },
+  const managerOptions: CodexAppServerProcessManagerOptions = {
     shutdownGracePeriodMs: options.shutdownGracePeriodMs ?? 10,
     spawn: () => process as unknown as CodexAppServerProcess,
     onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
-  });
+  };
+  if (options.clientInfo !== null) {
+    managerOptions.clientInfo = options.clientInfo ?? { name: 'cloudcli-test', version: 'test' };
+  }
+  const manager = new CodexAppServerProcessManager(managerOptions);
 
   return {
     process,
@@ -142,6 +154,23 @@ test('starts app-server with the required stdio command and completes the handsh
   });
   assert.equal(harness.manager.getHealth().pid, 1234);
   assert.equal(harness.diagnostics.some((diagnostic) => diagnostic.type === 'process_started'), true);
+});
+
+test('introduces itself as codex-tui with the bundled app-server version', async () => {
+  const harness = createHarness({ clientInfo: null });
+  const startPromise = harness.manager.start();
+  const initialize = await harness.nextFrame();
+  const params = initialize.params as { clientInfo?: { name?: unknown; version?: unknown } };
+  const bundledCodex = JSON.parse(
+    readFileSync(createRequire(import.meta.url).resolve('@openai/codex/package.json'), 'utf8'),
+  ) as { version: string };
+
+  assert.equal(params.clientInfo?.name, 'codex-tui');
+  assert.equal(params.clientInfo?.version, bundledCodex.version);
+
+  harness.process.stdout.write(`${JSON.stringify({ id: initialize.id, result: {} })}\n`);
+  await harness.nextFrame();
+  await startPromise;
 });
 
 test('rejects requests before the handshake and correlates requests after it', async () => {
