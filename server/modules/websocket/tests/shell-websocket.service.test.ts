@@ -7,6 +7,7 @@ import test from 'node:test';
 import { WebSocket } from 'ws';
 
 import { handleShellConnection } from '@/modules/websocket/services/shell-websocket.service.js';
+import { WORKSPACES_ROOT } from '@/shared/utils.js';
 
 function createFakeSocket() {
   const socket = new EventEmitter() as EventEmitter & {
@@ -224,4 +225,49 @@ test('a missing project directory is reported as an error frame and starts no pt
     socket.frames.map((frame) => JSON.parse(frame) as Record<string, unknown>),
     [{ type: 'error', message: 'Invalid project path' }]
   );
+});
+
+test('a shell opened without a project path starts in the workspaces root', () => {
+  // The provider login dialog has no project and sends an empty path; a payload
+  // that omits the field must land in the same place. The server's own cwd is
+  // not a directory the user chose, and a guessed `/workspace` may not exist.
+  const cases = [
+    { projectPath: '', initialCommand: 'claude --dangerously-skip-permissions /login' },
+    { projectPath: undefined, initialCommand: 'codex login' },
+  ];
+
+  for (const { projectPath, initialCommand } of cases) {
+    const pty = createFakePty();
+    const spawnedCwds: Array<string | undefined> = [];
+    const socket = createFakeSocket();
+    const dependencies = {
+      resolveProviderSessionId: () => null,
+      spawnPty: (_shell: string, _args: string | string[], options?: { cwd?: string }) => {
+        spawnedCwds.push(options?.cwd);
+        return pty as never;
+      },
+    };
+
+    handleShellConnection(socket as never, dependencies);
+    socket.emit(
+      'message',
+      JSON.stringify({
+        type: 'init',
+        projectPath,
+        sessionId: null,
+        hasSession: false,
+        provider: 'plain-shell',
+        isPlainShell: true,
+        initialCommand,
+      })
+    );
+
+    assert.deepEqual(spawnedCwds, [path.resolve(WORKSPACES_ROOT)], `cwd for projectPath=${String(projectPath)}`);
+    const frames = socket.frames.map((frame) => JSON.parse(frame) as Record<string, unknown>);
+    assert.deepEqual(frames, [
+      { type: 'output', data: `\x1b[36mStarting terminal in: ${WORKSPACES_ROOT}\x1b[0m\r\n` },
+    ]);
+
+    pty.emitExit();
+  }
 });

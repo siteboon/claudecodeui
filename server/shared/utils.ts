@@ -131,7 +131,8 @@ export function getGitErrorDetails(error: unknown): string {
  * Root directory that all workspace/project paths must stay under.
  *
  * This is resolved from `WORKSPACES_ROOT` when configured; otherwise it falls
- * back to the current user's home directory.
+ * back to the current user's home directory. The shell websocket also starts a
+ * terminal opened without a project (the provider login dialog) here.
  */
 export const WORKSPACES_ROOT = process.env.WORKSPACES_ROOT || os.homedir();
 
