@@ -67,6 +67,27 @@
       "openPanel": "設定パネルを開く",
       "draggingStatus": "ドラッグ中...",
       "toggleAndMove": "クリックで切替、ドラッグで移動"
+    },
+    "tabs": {
+      "settings": "設定",
+      "commands": "コマンド"
+    },
+    "pin": "パネルを固定",
+    "unpin": "パネルの固定を解除",
+    "close": "パネルを閉じる",
+    "commands": {
+      "searchPlaceholder": "コマンドを検索…",
+      "noProject": "プロジェクトを選択するとコマンドが表示されます。",
+      "loading": "コマンドを読み込み中…",
+      "empty": "このプロジェクトで利用できるコマンドはありません。",
+      "noMatches": "検索に一致するコマンドはありません。",
+      "loadError": "コマンドを読み込めませんでした。",
+      "groups": {
+        "builtIn": "組み込み",
+        "custom": "カスタム",
+        "skills": "スキル"
+      },
+      "insertTitle": "{{command}} をチャットに挿入"
     }
   },
   "terminalShortcuts": {

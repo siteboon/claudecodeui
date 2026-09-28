@@ -84,6 +84,27 @@
       "openPanel": "Open settings panel",
       "draggingStatus": "Dragging...",
       "toggleAndMove": "Click to toggle, drag to move"
+    },
+    "tabs": {
+      "settings": "Settings",
+      "commands": "Commands"
+    },
+    "pin": "Pin panel open",
+    "unpin": "Unpin panel",
+    "close": "Close panel",
+    "commands": {
+      "searchPlaceholder": "Search commands…",
+      "noProject": "Select a project to see its commands.",
+      "loading": "Loading commands…",
+      "empty": "No commands available for this project.",
+      "noMatches": "No commands match your search.",
+      "loadError": "Commands could not be loaded.",
+      "groups": {
+        "builtIn": "Built-in",
+        "custom": "Custom",
+        "skills": "Skills"
+      },
+      "insertTitle": "Insert {{command}} into the chat"
     }
   },
   "terminalShortcuts": {

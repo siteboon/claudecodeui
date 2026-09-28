@@ -84,6 +84,27 @@
       "openPanel": "Buka panel pengaturan",
       "draggingStatus": "Menyeret...",
       "toggleAndMove": "Klik untuk membuka/menutup, seret untuk memindahkan"
+    },
+    "tabs": {
+      "settings": "Pengaturan",
+      "commands": "Perintah"
+    },
+    "pin": "Sematkan panel",
+    "unpin": "Lepas sematan panel",
+    "close": "Tutup panel",
+    "commands": {
+      "searchPlaceholder": "Cari perintah…",
+      "noProject": "Pilih proyek untuk melihat perintahnya.",
+      "loading": "Memuat perintah…",
+      "empty": "Tidak ada perintah untuk proyek ini.",
+      "noMatches": "Tidak ada perintah yang cocok dengan pencarian Anda.",
+      "loadError": "Perintah tidak dapat dimuat.",
+      "groups": {
+        "builtIn": "Bawaan",
+        "custom": "Kustom",
+        "skills": "Skill"
+      },
+      "insertTitle": "Sisipkan {{command}} ke chat"
     }
   },
   "terminalShortcuts": {

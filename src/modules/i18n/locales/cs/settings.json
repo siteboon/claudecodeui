@@ -1,0 +1,804 @@
+{
+  "title": "Nastavení",
+  "tabs": {
+    "account": "Účet",
+    "permissions": "Oprávnění",
+    "mcpServers": "MCP servery",
+    "skills": "Skilly",
+    "appearance": "Vzhled"
+  },
+  "account": {
+    "title": "Účet",
+    "language": "Jazyk",
+    "languageLabel": "Jazyk rozhraní",
+    "languageDescription": "Vyberte preferovaný jazyk rozhraní",
+    "username": "Uživatelské jméno",
+    "email": "E-mail",
+    "profile": "Profil",
+    "changePassword": "Změnit heslo"
+  },
+  "mcp": {
+    "title": "MCP servery",
+    "addServer": "Přidat server",
+    "editServer": "Upravit server",
+    "deleteServer": "Smazat server",
+    "serverName": "Název serveru",
+    "serverType": "Typ serveru",
+    "config": "Konfigurace",
+    "testConnection": "Otestovat připojení",
+    "status": "Stav",
+    "connected": "Připojeno",
+    "disconnected": "Odpojeno",
+    "scope": {
+      "label": "Rozsah",
+      "user": "Uživatel",
+      "project": "Projekt"
+    }
+  },
+  "appearance": {
+    "title": "Vzhled",
+    "theme": "Motiv",
+    "codeEditor": "Editor kódu",
+    "editorTheme": "Motiv editoru",
+    "wordWrap": "Zalamování řádků",
+    "showMinimap": "Zobrazit minimapu",
+    "lineNumbers": "Čísla řádků",
+    "fontSize": "Velikost písma"
+  },
+  "actions": {
+    "saveChanges": "Uložit změny",
+    "resetToDefaults": "Obnovit výchozí",
+    "cancelChanges": "Zrušit změny"
+  },
+  "voiceSettings": {
+    "title": "Hlas",
+    "description": "Převod řeči na text a předčítání přes zvukový backend kompatibilní s OpenAI.",
+    "enable": "Zapnout hlas",
+    "enableDescription": "Zobrazí tlačítko mikrofonu a u zpráv tlačítko pro předčítání.",
+    "backendTitle": "Backend",
+    "backendDescription": "Nasměrujte na OpenAI, Groq nebo lokální server (LocalAI, Speaches, Kokoro-FastAPI). Ponechte prázdné, chcete-li použít výchozí nastavení serveru.",
+    "baseUrl": "Základní URL",
+    "apiKey": "API klíč",
+    "sttModel": "Model pro převod řeči na text",
+    "ttsModel": "Model pro převod textu na řeč",
+    "voice": "Hlas",
+    "format": "Formát zvuku",
+    "note": "Vlastní základní URL volá přímo váš prohlížeč, proto musí povolovat CORS požadavky z prohlížeče. Ponechte pole prázdné, chcete-li použít backend nakonfigurovaný na serveru."
+  },
+  "quickSettings": {
+    "title": "Rychlé nastavení",
+    "sections": {
+      "appearance": "Vzhled",
+      "toolDisplay": "Zobrazení nástrojů",
+      "inputSettings": "Nastavení vstupu"
+    },
+    "darkMode": "Tmavý režim",
+    "showRawParameters": "Zobrazit surové parametry",
+    "showThinking": "Zobrazit přemýšlení",
+    "sendByCtrlEnter": "Odesílat pomocí Ctrl+Enter",
+    "voiceEnabled": "Hlas (mikrofon + předčítání)",
+    "sendByCtrlEnterDescription": "Po zapnutí se zpráva odesílá klávesami Ctrl+Enter místo samotného Enter. Hodí se uživatelům IME, aby zprávy neodesílali omylem.",
+    "dragHandle": {
+      "dragging": "Přetahování úchytu",
+      "closePanel": "Zavřít panel nastavení",
+      "openPanel": "Otevřít panel nastavení",
+      "draggingStatus": "Přetahování...",
+      "toggleAndMove": "Kliknutím přepnete, přetažením přesunete"
+    }
+  },
+  "terminalShortcuts": {
+    "title": "Klávesové zkratky terminálu",
+    "sectionKeys": "Klávesy",
+    "sectionNavigation": "Navigace",
+    "paste": "Vložit",
+    "escape": "Escape",
+    "tab": "Tab",
+    "shiftTab": "Shift+Tab",
+    "arrowUp": "Šipka nahoru",
+    "arrowDown": "Šipka dolů",
+    "scrollDown": "Posunout dolů",
+    "handle": {
+      "closePanel": "Zavřít panel zkratek",
+      "openPanel": "Otevřít panel zkratek"
+    }
+  },
+  "mainTabs": {
+    "label": "Nastavení",
+    "agents": "Agenti",
+    "appearance": "Vzhled",
+    "git": "Git",
+    "apiTokens": "API a tokeny",
+    "voice": "Hlas",
+    "tasks": "Úkoly",
+    "browser": "Prohlížeč",
+    "notifications": "Oznámení",
+    "plugins": "Pluginy",
+    "about": "O aplikaci"
+  },
+  "notifications": {
+    "title": "Oznámení",
+    "description": "Určete, o kterých událostech chcete dostávat oznámení.",
+    "webPush": {
+      "title": "Oznámení v tomto prohlížeči",
+      "enable": "Zapnout oznámení",
+      "disable": "Vypnout oznámení",
+      "enabled": "Oznámení jsou v tomto prohlížeči zapnutá",
+      "loading": "Aktualizace...",
+      "unsupported": "Tento prohlížeč nepodporuje push oznámení.",
+      "denied": "Push oznámení jsou zablokovaná. Povolte je prosím v nastavení prohlížeče."
+    },
+    "desktop": {
+      "title": "Oznámení v této desktopové aplikaci",
+      "enable": "Zapnout oznámení",
+      "disable": "Vypnout oznámení",
+      "enabled": "Oznámení jsou v této desktopové aplikaci zapnutá",
+      "unsupported": "Tento systém nepodporuje desktopová oznámení."
+    },
+    "sound": {
+      "title": "Zvuk",
+      "description": "Přehrát krátký tón, když běh chatu skončí nebo čeká na schválení nástroje.",
+      "enabled": "Zapnuto",
+      "test": "Vyzkoušet zvuk"
+    },
+    "events": {
+      "title": "Typy událostí",
+      "actionRequired": "Vyžadována akce",
+      "stop": "Běh zastaven",
+      "error": "Běh selhal"
+    }
+  },
+  "appearanceSettings": {
+    "darkMode": {
+      "label": "Tmavý režim",
+      "description": "Přepínání mezi světlým a tmavým motivem"
+    },
+    "projectSorting": {
+      "label": "Řazení projektů",
+      "description": "Pořadí projektů v postranním panelu",
+      "alphabetical": "Podle abecedy",
+      "recentActivity": "Podle nedávné aktivity"
+    },
+    "codeEditor": {
+      "title": "Editor kódu",
+      "theme": {
+        "label": "Motiv editoru",
+        "description": "Výchozí motiv editoru kódu"
+      },
+      "wordWrap": {
+        "label": "Zalamování řádků",
+        "description": "Ve výchozím stavu zalamovat řádky v editoru"
+      },
+      "showMinimap": {
+        "label": "Zobrazit minimapu",
+        "description": "Zobrazit minimapu pro snazší orientaci v zobrazení rozdílů"
+      },
+      "lineNumbers": {
+        "label": "Zobrazit čísla řádků",
+        "description": "Zobrazit čísla řádků v editoru"
+      },
+      "fontSize": {
+        "label": "Velikost písma",
+        "description": "Velikost písma editoru v pixelech"
+      }
+    }
+  },
+  "mcpForm": {
+    "title": {
+      "add": "Přidat MCP server",
+      "edit": "Upravit MCP server"
+    },
+    "importMode": {
+      "form": "Formulář",
+      "json": "Import JSON"
+    },
+    "scope": {
+      "label": "Rozsah",
+      "userGlobal": "Uživatel (globální)",
+      "projectLocal": "Projekt (lokální)",
+      "userDescription": "Rozsah Uživatel: dostupné ve všech projektech na vašem počítači",
+      "projectDescription": "Lokální rozsah: dostupné pouze ve vybraném projektu",
+      "cannotChange": "Při úpravě existujícího serveru nelze rozsah změnit"
+    },
+    "fields": {
+      "serverName": "Název serveru",
+      "transportType": "Typ transportu",
+      "command": "Příkaz",
+      "arguments": "Argumenty (jeden na řádek)",
+      "jsonConfig": "Konfigurace JSON",
+      "url": "URL",
+      "envVars": "Proměnné prostředí (KEY=value, jedna na řádek)",
+      "headers": "Hlavičky (KEY=value, jedna na řádek)",
+      "selectProject": "Vyberte projekt..."
+    },
+    "placeholders": {
+      "serverName": "my-server"
+    },
+    "validation": {
+      "missingType": "Chybí povinné pole: type",
+      "stdioRequiresCommand": "Typ stdio vyžaduje pole command",
+      "httpRequiresUrl": "Typ {{type}} vyžaduje pole url",
+      "invalidJson": "Neplatný formát JSON",
+      "jsonHelp": "Vložte konfiguraci MCP serveru ve formátu JSON. Příklady formátů:",
+      "jsonExampleStdio": "• stdio: {\"type\":\"stdio\",\"command\":\"npx\",\"args\":[\"@upstash/context7-mcp\"]}",
+      "jsonExampleHttp": "• http/sse: {\"type\":\"http\",\"url\":\"https://api.example.com/mcp\"}"
+    },
+    "configDetails": "Podrobnosti konfigurace (ze souboru {{configFile}})",
+    "projectPath": "Cesta: {{path}}",
+    "actions": {
+      "cancel": "Zrušit",
+      "saving": "Ukládání...",
+      "addServer": "Přidat server",
+      "updateServer": "Aktualizovat server"
+    },
+    "scopes": {
+      "userGlobal": "Uživatel (globální)",
+      "userAllProviders": "Uživatel (všechny providery)",
+      "local": "Claude (lokální)",
+      "project": "Projekt",
+      "projectAllProviders": "Projekt (všechny providery)",
+      "userGlobalDesc": "Dostupné ve všech projektech na vašem počítači",
+      "userAllProvidersDesc": "Zapisuje do uživatelské konfigurace každého provideru a je dostupné ve všech projektech na tomto počítači",
+      "localDesc": "Uloženo v uživatelském nastavení Claude pro vybraný projekt",
+      "projectDesc": "Uloženo v pracovním prostoru vybraného projektu",
+      "projectAllProvidersDesc": "Zapisuje do pracovního prostoru vybraného projektu pro každý provider"
+    },
+    "unsupportedTransport": "Přidání MCP serveru pro všechny providery podporuje pouze stdio a http, nikoli {{transport}}.",
+    "addToProvider": "{{action}} pro {{provider}}",
+    "workingDirectory": "Pracovní adresář",
+    "envVarNames": "Názvy proměnných prostředí",
+    "bearerTokenEnvVar": "Proměnná prostředí s bearer tokenem"
+  },
+  "saveStatus": {
+    "success": "Nastavení uloženo.",
+    "error": "Nepodařilo se uložit nastavení",
+    "saving": "Ukládání..."
+  },
+  "footerActions": {
+    "save": "Uložit nastavení",
+    "cancel": "Zrušit"
+  },
+  "git": {
+    "title": "Konfigurace pro Git",
+    "description": "Nastavte identitu, pod kterou se budou vytvářet git commity. Nastavení se použije globálně přes git config --global",
+    "name": {
+      "label": "Jméno pro Git",
+      "help": "Vaše jméno pro git commity"
+    },
+    "email": {
+      "label": "E-mail pro Git",
+      "help": "Váš e-mail pro git commity"
+    },
+    "actions": {
+      "save": "Uložit konfiguraci",
+      "saving": "Ukládání..."
+    },
+    "status": {
+      "success": "Uloženo"
+    }
+  },
+  "apiKeys": {
+    "title": "API klíče",
+    "description": "Vygenerujte API klíče pro přístup k externímu API z jiných aplikací.",
+    "newKey": {
+      "alertTitle": "⚠️ Uložte si API klíč",
+      "alertMessage": "Tento klíč se zobrazí pouze nyní. Uložte si ho na bezpečné místo.",
+      "iveSavedIt": "Mám uloženo"
+    },
+    "form": {
+      "placeholder": "Název API klíče (např. Produkční server)",
+      "createButton": "Vytvořit",
+      "cancelButton": "Zrušit"
+    },
+    "newButton": "Nový API klíč",
+    "empty": "Zatím žádné API klíče.",
+    "list": {
+      "created": "Vytvořeno:",
+      "lastUsed": "Naposledy použito:"
+    },
+    "confirmDelete": "Opravdu chcete smazat tento API klíč?",
+    "status": {
+      "active": "Aktivní",
+      "inactive": "Neaktivní"
+    },
+    "github": {
+      "title": "Tokeny pro GitHub",
+      "description": "Přidejte osobní přístupové tokeny pro GitHub a klonujte soukromé repozitáře přes externí API.",
+      "descriptionAlt": "Přidejte osobní přístupové tokeny pro GitHub a klonujte soukromé repozitáře. Tokeny můžete předávat i přímo v API požadavcích, aniž byste je ukládali.",
+      "addButton": "Přidat token",
+      "form": {
+        "namePlaceholder": "Název tokenu (např. Osobní repozitáře)",
+        "tokenPlaceholder": "Osobní přístupový token pro GitHub (ghp_...)",
+        "descriptionPlaceholder": "Popis (volitelné)",
+        "addButton": "Přidat token",
+        "cancelButton": "Zrušit",
+        "howToCreate": "Jak vytvořit osobní přístupový token pro GitHub →"
+      },
+      "empty": "Zatím žádné tokeny pro GitHub.",
+      "added": "Přidáno:",
+      "confirmDelete": "Opravdu chcete smazat tento token pro GitHub?"
+    },
+    "apiDocsLink": "Dokumentace API",
+    "documentation": {
+      "title": "Dokumentace externího API",
+      "description": "Zjistěte, jak pomocí externího API spouštět z vašich aplikací relace Claude/Cursor.",
+      "viewLink": "Zobrazit dokumentaci API →"
+    },
+    "loading": "Načítání...",
+    "version": {
+      "updateAvailable": "K dispozici je aktualizace: v{{version}}"
+    }
+  },
+  "tasks": {
+    "checking": "Kontrola instalace TaskMaster...",
+    "notInstalled": {
+      "title": "Nástroj TaskMaster AI CLI není nainstalován",
+      "description": "Ke správě úkolů je potřeba nástroj TaskMaster CLI. Začněte jeho instalací:",
+      "installCommand": "npm install -g task-master-ai",
+      "viewOnGitHub": "Zobrazit na GitHubu",
+      "afterInstallation": "Po instalaci:",
+      "steps": {
+        "restart": "Restartujte tuto aplikaci",
+        "autoAvailable": "Funkce TaskMaster budou automaticky k dispozici",
+        "initCommand": "V adresáři projektu spusťte task-master init"
+      }
+    },
+    "settings": {
+      "enableLabel": "Zapnout integraci TaskMaster",
+      "enableDescription": "Zobrazovat v celém rozhraní úkoly TaskMaster, bannery a indikátory v postranním panelu"
+    }
+  },
+  "agents": {
+    "authStatus": {
+      "checking": "Ověřování...",
+      "connected": "Připojeno",
+      "notConnected": "Nepřipojeno",
+      "disconnected": "Odpojeno",
+      "checkingAuth": "Ověřování stavu přihlášení...",
+      "loggedInAs": "Přihlášeno jako {{email}}",
+      "authenticatedUser": "ověřený uživatel"
+    },
+    "account": {
+      "claude": {
+        "description": "AI asistent Claude od společnosti Anthropic"
+      },
+      "cursor": {
+        "description": "Editor kódu Cursor s podporou AI"
+      },
+      "codex": {
+        "description": "AI asistent Codex od společnosti OpenAI"
+      },
+      "opencode": {
+        "description": "CLI asistent OpenCode"
+      }
+    },
+    "connectionStatus": "Stav připojení",
+    "login": {
+      "title": "Přihlášení",
+      "reAuthenticate": "Znovu ověřit",
+      "description": "Přihlaste se ke svému účtu {{agent}} a zapněte funkce AI",
+      "reAuthDescription": "Přihlaste se jiným účtem nebo obnovte přihlašovací údaje",
+      "button": "Přihlásit se",
+      "reLoginButton": "Přihlásit znovu"
+    },
+    "error": "Chyba: {{error}}"
+  },
+  "permissions": {
+    "title": "Nastavení oprávnění",
+    "skipPermissions": {
+      "label": "Přeskočit dotazy na oprávnění (používejte opatrně)",
+      "claudeDescription": "Odpovídá přepínači --dangerously-skip-permissions",
+      "cursorDescription": "Odpovídá přepínači -f v Cursor CLI"
+    },
+    "allowedTools": {
+      "title": "Povolené nástroje",
+      "description": "Nástroje, které se automaticky povolí bez dotazu na oprávnění",
+      "placeholder": "např. \"Bash(git log:*)\" nebo \"Write\"",
+      "quickAdd": "Rychle přidat běžné nástroje:",
+      "empty": "Nejsou nastaveny žádné povolené nástroje"
+    },
+    "blockedTools": {
+      "title": "Blokované nástroje",
+      "description": "Nástroje, které se automaticky zablokují bez dotazu na oprávnění",
+      "placeholder": "např. \"Bash(rm:*)\"",
+      "empty": "Nejsou nastaveny žádné blokované nástroje"
+    },
+    "allowedCommands": {
+      "title": "Povolené příkazy shellu",
+      "description": "Příkazy shellu, které se automaticky povolí bez dotazu",
+      "placeholder": "např. \"Shell(ls)\" nebo \"Shell(git status)\"",
+      "quickAdd": "Rychle přidat běžné příkazy:",
+      "empty": "Nejsou nastaveny žádné povolené příkazy"
+    },
+    "blockedCommands": {
+      "title": "Blokované příkazy shellu",
+      "description": "Příkazy shellu, které se automaticky zablokují",
+      "placeholder": "např. \"Shell(rm -rf)\" nebo \"Shell(sudo)\"",
+      "empty": "Nejsou nastaveny žádné blokované příkazy"
+    },
+    "toolExamples": {
+      "title": "Příklady vzorů nástrojů:",
+      "bashGitLog": "- Povolí všechny příkazy git log",
+      "bashGitDiff": "- Povolí všechny příkazy git diff",
+      "write": "- Povolí veškeré použití nástroje Write",
+      "bashRm": "- Zablokuje všechny příkazy rm (nebezpečné)"
+    },
+    "shellExamples": {
+      "title": "Příklady příkazů shellu:",
+      "ls": "- Povolí příkaz ls",
+      "gitStatus": "- Povolí git status",
+      "npmInstall": "- Povolí npm install",
+      "rmRf": "- Zablokuje rekurzivní mazání"
+    },
+    "codex": {
+      "permissionMode": "Režim oprávnění",
+      "description": "Určuje, jak Codex zachází s úpravami souborů a spouštěním příkazů",
+      "modes": {
+        "default": {
+          "title": "Výchozí",
+          "description": "Spouští příkazy v sandboxu pracovního prostoru. Codex sám rozhoduje, kdy je potřeba schválení; v této neinteraktivní integraci však žádosti nelze schválit."
+        },
+        "acceptEdits": {
+          "title": "Přijímat úpravy",
+          "description": "Všechny příkazy se spouštějí automaticky v rámci pracovního prostoru. Plně automatický režim se spouštěním v sandboxu."
+        },
+        "bypassPermissions": {
+          "title": "Obejít oprávnění",
+          "description": "Plný přístup k systému bez omezení. Všechny příkazy se spouštějí automaticky s plným přístupem k disku a síti. Používejte opatrně."
+        }
+      },
+      "technicalDetails": "Technické podrobnosti",
+      "technicalInfo": {
+        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. Spouští příkazy v sandboxu pracovního prostoru. Codex sám rozhoduje, kdy je potřeba schválení; v této neinteraktivní integraci však žádosti nelze schválit.",
+        "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. Všechny příkazy se spouštějí automaticky v adresáři projektu.",
+        "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. Plný přístup k systému, používejte jen v důvěryhodných prostředích.",
+        "overrideNote": "Pro jednotlivé relace to můžete změnit tlačítkem režimu v rozhraní chatu."
+      }
+    },
+    "actions": {
+      "add": "Přidat"
+    }
+  },
+  "mcpServers": {
+    "title": "MCP servery",
+    "description": {
+      "claude": "Servery Model Context Protocol rozšiřují Claude o další nástroje a zdroje dat",
+      "cursor": "Servery Model Context Protocol rozšiřují Cursor o další nástroje a zdroje dat",
+      "codex": "Servery Model Context Protocol rozšiřují Codex o další nástroje a zdroje dat",
+      "opencode": "Servery Model Context Protocol rozšiřují OpenCode o další nástroje a zdroje dat"
+    },
+    "addButton": "Přidat MCP server",
+    "empty": "Nejsou nastaveny žádné MCP servery",
+    "serverType": "Typ",
+    "scope": {
+      "local": "lokální",
+      "user": "uživatelský"
+    },
+    "config": {
+      "command": "Příkaz",
+      "url": "URL",
+      "args": "Argumenty",
+      "environment": "Prostředí"
+    },
+    "tools": {
+      "title": "Nástroje",
+      "count_one": "({{count}}):",
+      "count_few": "({{count}}):",
+      "count_many": "({{count}}):",
+      "count_other": "({{count}}):",
+      "more_one": "+{{count}} další",
+      "more_few": "+{{count}} další",
+      "more_many": "+{{count}} dalšího",
+      "more_other": "+{{count}} dalších"
+    },
+    "actions": {
+      "edit": "Upravit server",
+      "delete": "Smazat server"
+    },
+    "managed": {
+      "badge": "Spravováno",
+      "hint": "Spravuje CloudCLI."
+    },
+    "help": {
+      "title": "O MCP pro Codex",
+      "description": "Codex podporuje MCP servery založené na stdio. Můžete přidat servery, které Codex rozšíří o další nástroje a zdroje."
+    }
+  },
+  "pluginSettings": {
+    "title": "Pluginy",
+    "description": "Rozšiřte rozhraní o vlastní pluginy. Nainstalujte je z git repozitáře nebo vložte složku do ~/.claude-code-ui/plugins/",
+    "installPlaceholder": "https://github.com/user/my-plugin",
+    "installButton": "Instalovat",
+    "installing": "Instalace…",
+    "securityWarning": "Instalujte pouze pluginy, jejichž zdrojový kód jste zkontrolovali, nebo pluginy od autorů, kterým důvěřujete.",
+    "scanningPlugins": "Prohledávání pluginů…",
+    "noPluginsInstalled": "Nejsou nainstalovány žádné pluginy",
+    "pullLatest": "Pullnout nejnovější verzi z git repozitáře",
+    "noGitRemote": "Chybí vzdálený git repozitář – aktualizace není k dispozici",
+    "uninstallPlugin": "Odinstalovat plugin",
+    "confirmUninstall": "Klikněte znovu pro potvrzení",
+    "confirmUninstallMessage": "Odstranit plugin {{name}}? Tuto akci nelze vrátit zpět.",
+    "cancel": "Zrušit",
+    "remove": "Odstranit",
+    "updateFailed": "Nepodařilo se aktualizovat plugin",
+    "installFailed": "Nepodařilo se nainstalovat plugin",
+    "uninstallFailed": "Nepodařilo se odinstalovat plugin",
+    "toggleFailed": "Nepodařilo se přepnout plugin",
+    "starterPluginLabel": "Startovací plugin",
+    "starter": "Šablona",
+    "docs": "Dokumentace",
+    "sections": {
+      "officialTitle": "Oficiální pluginy",
+      "officialDescription": "Spravuje je tým CloudCLI a jsou připravené k přímé instalaci.",
+      "unofficialTitle": "Další pluginy",
+      "unofficialDescription": "Neoficiální pluginy a integrace od jiných uživatelů. Před instalací zkontrolujte zdrojový kód."
+    },
+    "starterPlugin": {
+      "name": "Statistiky projektu",
+      "badge": "startovací",
+      "description": "Počty souborů, řádky kódu, rozdělení podle typů souborů a nedávná aktivita vašeho projektu.",
+      "install": "Instalovat"
+    },
+    "terminalPlugin": {
+      "name": "Terminál",
+      "badge": "oficiální",
+      "description": "Integrovaný terminál s plným přístupem k shellu přímo v rozhraní.",
+      "install": "Instalovat"
+    },
+    "scheduledPromptPlugin": {
+      "name": "Plánované prompty",
+      "badge": "neoficiální",
+      "description": "Plánujte prompty v pracovním prostoru, procházejte historii běhů a spravujte opakované lokální úkoly.",
+      "install": "Instalovat"
+    },
+    "claudeWatchPlugin": {
+      "name": "Claude Watch",
+      "badge": "neoficiální",
+      "description": "Hlídá dlouho běžící relace Claude Code, zda nezamrzly, a zpřístupňuje ovládání procesů.",
+      "install": "Instalovat"
+    },
+    "prismCloudCLI": {
+      "name": "PRISM CloudCLI",
+      "badge": "neoficiální",
+      "description": "Analýza relací Claude Code přímo v CloudCLI. Zjistěte, proč vaše relace spalují tokeny, aniž byste opustili prohlížeč.",
+      "install": "Instalovat"
+    },
+    "sessionManagerPlugin": {
+      "name": "Relace",
+      "badge": "neoficiální",
+      "description": "Zobrazujte, spravujte a ukončujte aktivní relace Claude Code.",
+      "install": "Instalovat"
+    },
+    "tokenCostCalculatorPlugin": {
+      "name": "Kalkulačka nákladů na tokeny",
+      "badge": "neoficiální",
+      "description": "Vypočítá náklady na API z cen modelů a využití tokenů, s podporou přednastavených ceníků modelů.",
+      "install": "Instalovat"
+    },
+    "taskQueuePlugin": {
+      "name": "Fronta úkolů",
+      "badge": "neoficiální",
+      "description": "Přehled fronty úkolů pro zobrazení, filtrování a spouštění úkolů agentů.",
+      "install": "Instalovat"
+    },
+    "githubIssuesBoardPlugin": {
+      "name": "Nástěnka GitHub Issues",
+      "badge": "neoficiální",
+      "description": "Kanban nástěnka pro GitHub Issues s obousměrnou synchronizací s TaskMaster a automatickou instalací CLI skillu /github-task",
+      "install": "Instalovat"
+    },
+    "claudeUsagePlugin": {
+      "name": "Využití Claude",
+      "badge": "neoficiální",
+      "description": "Sledujte aktuální limity plánu Claude Code a procházejte 30denní historii tokenů a nákladů.",
+      "install": "Instalovat"
+    },
+    "codexUsagePlugin": {
+      "name": "Využití Codex",
+      "badge": "neoficiální",
+      "description": "Sledujte aktuální limity plánu Codex, časy jejich obnovení a 30denní aktivitu tokenů na účtu.",
+      "install": "Instalovat"
+    },
+    "glmUsagePlugin": {
+      "name": "Využití GLM",
+      "badge": "neoficiální",
+      "description": "Sledujte aktuální kvóty programovacího plánu GLM/Zhipu a 30denní historii tokenů.",
+      "install": "Instalovat"
+    },
+    "morePlugins": "Další",
+    "enable": "Zapnout",
+    "disable": "Vypnout",
+    "installAriaLabel": "URL git repozitáře pluginu",
+    "tab": "karta",
+    "runningStatus": "běží"
+  },
+  "skillsPage": {
+    "description": "Spravujte skilly pro {{provider}} z lokálních souborů, celých složek a umístění v projektech.",
+    "searchPlaceholder": "Hledat skilly...",
+    "searchAriaLabel": "Hledat skilly",
+    "clearSearch": "Vymazat hledání skillů",
+    "addSkill": "Přidat skill",
+    "refresh": "Obnovit",
+    "scanningProjectSkills": "Prohledávání skillů v projektech...",
+    "addDialogTitle": "Přidat skill pro {{provider}}",
+    "addDialogDescription": "Nahrajte soubor SKILL.md nebo celou složku skillu.",
+    "closeDialog": "Zavřít dialog pro přidání skillu",
+    "savedSuccessfully": "Skilly uloženy.",
+    "footerHint": "Nahraná složka si ponechá svůj název; samostatné soubory použijí hodnotu `name` ze souboru `SKILL.md`.",
+    "installWithCount_one": "Instalovat {{count}} skill",
+    "installWithCount_few": "Instalovat {{count}} skilly",
+    "installWithCount_many": "Instalovat {{count}} skillu",
+    "installWithCount_other": "Instalovat {{count}} skillů",
+    "installPlain": "Instalovat skill",
+    "loading": "Načítání skillů pro {{provider}}…",
+    "emptyTitle": "Zatím žádné skilly",
+    "emptyDescription": "Přidejte výše globální skill, nebo v pracovním prostoru vytvořte složky se skilly pro konkrétní projekty.",
+    "noMatchTitle": "Žádné odpovídající skilly",
+    "noMatchDescription": "Zkuste jiný příkaz, název, rozsah, projekt nebo zdrojovou cestu.",
+    "count_one": "{{count}} skill",
+    "count_few": "{{count}} skilly",
+    "count_many": "{{count}} skillu",
+    "count_other": "{{count}} skillů",
+    "noDescription": "Front matter skillu neobsahuje popis.",
+    "pluginBadge": "Plugin: {{name}}",
+    "projectBadge": "Projekt: {{name}}",
+    "source": "Zdroj",
+    "upload": {
+      "dropTitle": "Přetáhněte sem složku skillu nebo SKILL.md",
+      "dropHint": "Složky mohou obsahovat skripty, reference a assety.",
+      "chooseFiles": "Vybrat soubory",
+      "chooseFolder": "Vybrat složku",
+      "readyToInstall": "Připraveno k instalaci",
+      "filesCount_one": "{{count}} soubor",
+      "filesCount_few": "{{count}} soubory",
+      "filesCount_many": "{{count}} souboru",
+      "filesCount_other": "{{count}} souborů",
+      "markdownFile": "Soubor Markdown",
+      "removeFile": "Odstranit {{name}}",
+      "hideInstallLocation": "Skrýt umístění instalace",
+      "whereToInstall": "Kam se to nainstaluje?"
+    },
+    "errors": {
+      "tooManyFiles": "Maximální počet souborů ve složce skillu: {{max}}.",
+      "tooLarge": "Vybrané složky skillů musí mít dohromady méně než 30 MB.",
+      "noSkillMd": "Vybraná složka neobsahuje soubor SKILL.md.",
+      "couldNotReadSkillMd": "Nepodařilo se načíst SKILL.md ze složky {{folder}}.",
+      "readFailed": "Nepodařilo se načíst složku skillu",
+      "dropMarkdown": "Přetáhněte sem jeden nebo více souborů Markdown, nebo složku se souborem SKILL.md.",
+      "addFirst": "Nejprve přidejte jeden nebo více souborů Markdown.",
+      "importFailed": "Nepodařilo se importovat skilly"
+    },
+    "scopes": {
+      "user": "Uživatel",
+      "plugin": "Plugin",
+      "repo": "Repozitář",
+      "project": "Projekt",
+      "admin": "Správce",
+      "system": "Systém"
+    }
+  },
+  "browserUse": {
+    "title": "Prohlížeč",
+    "subtitle": "Sledujte relace prohlížeče otevřené AI agenty.",
+    "openSettings": "Otevřít nastavení prohlížeče",
+    "refreshSessions": "Obnovit relace prohlížeče",
+    "runtimeDisabled": "Vypnuto",
+    "runtimeReady": "Připraveno",
+    "runtimeInstalling": "Instalace",
+    "runtimeSetupRequired": "Vyžaduje nastavení",
+    "loadFailed": "Nepodařilo se načíst prohlížeč",
+    "actionFailed": "Nepodařilo se provést akci prohlížeče",
+    "requestFailed": "Požadavek se nezdařil ({{status}})",
+    "never": "Nikdy",
+    "unknown": "Neznámé",
+    "justNow": "Právě teď",
+    "secondsAgo": "před {{n}} s",
+    "minutesAgo": "před {{n}} min",
+    "hoursAgo": "před {{n}} h",
+    "daysAgo": "před {{n}} d",
+    "noPageLoaded": "Není načtena žádná stránka",
+    "waitingAction": "Čekání",
+    "emptyTitleEnabled": "Zatím žádné relace prohlížeče",
+    "emptyTitleDisabled": "Prohlížeč je vypnutý",
+    "emptyDescEnabled": "Relace prohlížeče agentů se zde zobrazí, když AI úkol používá funkci Prohlížeč.",
+    "emptyDescDisabled": "Zapněte v nastavení funkci Prohlížeč, aby agenti mohli otevírat sledované relace prohlížeče.",
+    "runtimeSetupTitle": "Vyžaduje se nastavení běhového prostředí",
+    "installing": "Instalace...",
+    "installRuntime": "Instalovat běhové prostředí",
+    "promptLabel": "Prompt",
+    "prompt1": "Pomocí funkce Prohlížeč prozkoumejte proces pokladny a nahlaste všechny nefunkční stavy UI.",
+    "prompt2": "Otevřete <url> pomocí funkce Prohlížeč, pracujte se stránkou a po každém kroku shrňte, co se změnilo.",
+    "screenshotAlt": "Snímek obrazovky relace prohlížeče",
+    "waitingScreenshot": "Čekání na snímek obrazovky",
+    "waitingScreenshotHint": "Další snímek prohlížeče od agenta se zobrazí zde.",
+    "activeCount": "Aktivní: {{n}}",
+    "totalCount": "Celkem: {{n}}",
+    "updated": "Aktualizováno: {{time}}",
+    "statusEmpty": "prázdné",
+    "fullScreen": "Celá obrazovka",
+    "stopSession": "Zastavit relaci",
+    "deleteSession": "Smazat relaci",
+    "sessions": "Relace",
+    "noSessions": "Žádné relace prohlížeče agentů.",
+    "selected": "Vybraná relace",
+    "statusLabel": "Stav",
+    "none": "Žádné",
+    "lastAction": "Poslední akce",
+    "profileLabel": "Profil",
+    "temporaryProfile": "Dočasný",
+    "stop": "Zastavit",
+    "delete": "Smazat",
+    "sessionFallback": "Relace prohlížeče",
+    "close": "Zavřít",
+    "statusReadySession": "připraveno",
+    "statusStoppedSession": "zastaveno",
+    "statusUnavailableSession": "nedostupné",
+    "installFailed": "Nepodařilo se nainstalovat běhové prostředí prohlížeče"
+  },
+  "browserUseSettings": {
+    "sectionTitle": "Prohlížeč",
+    "sectionDescription": "Umožněte agentům vytvářet chráněné relace prohlížeče Playwright, které můžete sledovat na kartě Prohlížeč.",
+    "enableLabel": "Zapnout Prohlížeč",
+    "enableDescription": "Zaregistruje Prohlížeč pro podporované agenty. Agenti mohou vytvářet relace prohlížeče; vy je můžete sledovat, zastavit a smazat.",
+    "enableAriaLabel": "Zapnout Prohlížeč",
+    "playwrightLabel": "Playwright",
+    "chromiumLabel": "Chromium",
+    "statusPrefix": "Stav",
+    "checking": "ověřování...",
+    "installed": "nainstalováno",
+    "missing": "chybí",
+    "ready": "připraveno",
+    "setupRequired": "vyžaduje nastavení",
+    "disabled": "vypnuto",
+    "runtimeRequiredTitle": "Je potřeba běhové prostředí prohlížeče",
+    "runtimeRequiredFallback": "Než budou agenti moci vytvářet relace prohlížeče, nainstalujte běhové prostředí prohlížeče.",
+    "installing": "Instalace...",
+    "installRuntime": "Instalovat běhové prostředí",
+    "loadSettingsFailed": "Nepodařilo se načíst nastavení prohlížeče",
+    "loadStatusFailed": "Nepodařilo se načíst stav prohlížeče",
+    "saveFailed": "Nepodařilo se uložit nastavení prohlížeče",
+    "installFailed": "Nepodařilo se nainstalovat běhové prostředí prohlížeče"
+  },
+  "mcpServersAdd": {
+    "menuLabel": "Přidat MCP server",
+    "globalButtonLabel": "Přidat globální MCP server",
+    "providerButtonLabel": "Přidat MCP server pro {{provider}}",
+    "globalAddDescription": "„Přidat globální MCP server“ zapíše jeden společný stdio nebo HTTP server do konfigurace nástrojů Claude, Cursor, Codex a OpenCode.",
+    "providerAddDescription": "„{{button}}“ mění pouze konfiguraci pro {{provider}}.",
+    "globalModalDescription": "Přidá tento MCP server ke všem providerům: Claude, Cursor, Codex a OpenCode. Podporovány jsou pouze transporty stdio a HTTP, protože stejná konfigurace musí fungovat u všech providerů.",
+    "refreshingScopes": "Obnovování rozsahů projektů...",
+    "loadingServers": "Načítání MCP serverů...",
+    "configCwd": "Cwd",
+    "configEnvVars": "Proměnné prostředí"
+  },
+  "mcpTeamCard": {
+    "title": "Týmové konfigurace MCP",
+    "description": "Sdílejte konfigurace MCP serverů v rámci týmu. Všichni budou mít vše automaticky synchronizované.",
+    "proLink": "K dispozici v CloudCLI Pro"
+  },
+  "mcpServersAddErrors": {
+    "loadFailedProvider": "Nepodařilo se načíst MCP servery pro {{provider}}",
+    "deleteFailed": "Nepodařilo se smazat MCP server",
+    "saveFailed": "Nepodařilo se uložit MCP server",
+    "saveGlobalFailed": "Nepodařilo se uložit MCP server pro všechny providery",
+    "selectProjectRequired": "Pro MCP servery s rozsahem projektu vyberte projekt",
+    "globalScopeUnsupported": "Přidání MCP serveru pro všechny providery podporuje pouze rozsah Uživatel nebo Projekt.",
+    "globalAddFailed": "Nepodařilo se přidat MCP server ke všem providerům. {{details}}",
+    "deleteConfirm": "Opravdu chcete smazat tento MCP server?",
+    "unknownError": "Neznámá chyba"
+  },
+  "about": {
+    "tagline": "Open-source rozhraní pro AI asistenty programování",
+    "starOnGitHub": "Dát hvězdičku na GitHubu",
+    "docs": "Dokumentace",
+    "hostedTitle": "Vyzkoušejte CloudCLI Hosted",
+    "hostedDescription": "Týmová spolupráce, sdílené konfigurace MCP, synchronizace nastavení napříč prostředími a spravovaná infrastruktura.",
+    "learnMore": "Další informace",
+    "proFeaturesTitle": "Funkce CloudCLI Pro",
+    "syncSettingsTitle": "Synchronizace nastavení",
+    "syncSettingsDescription": "Mějte předvolby, konfigurace MCP a motiv synchronizované ve všech svých prostředích.",
+    "teamManagementTitle": "Správa týmu",
+    "teamManagementDescription": "Více uživatelů, přístup podle rolí a sdílené projekty pro váš tým.",
+    "licensed": "Šířeno pod licencí AGPL-3.0",
+    "proCta": "K dispozici v CloudCLI Pro"
+  }
+}
