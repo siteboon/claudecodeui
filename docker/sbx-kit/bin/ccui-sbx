@@ -183,6 +183,7 @@ fi
 # first boot has to wait out `npm install` + a native-module rebuild, and a
 # sandbox that already had a user before this run never prints the line at
 # all, which is expected, not an error.
+admin_username=""
 admin_password=""
 if [ "${CCUI_SBX_NO_KIT:-0}" != "1" ]; then
   echo
@@ -192,11 +193,14 @@ if [ "${CCUI_SBX_NO_KIT:-0}" != "1" ]; then
     [ -n "$admin_password" ] && break
     sleep 2
   done
+  if [ -n "$admin_password" ]; then
+    admin_username="$(sbx exec "$sbx_name" bash -lc 'grep -m1 "^CLOUDCLI_ADMIN_USERNAME=" /tmp/claudecodeui-dev.log 2>/dev/null | cut -d= -f2-' 2>/dev/null || true)"
+  fi
 fi
 
 echo
 if [ -n "$admin_password" ]; then
-  echo "  Admin login:   admin / $admin_password"
+  echo "  Admin login:   ${admin_username:-admin} / $admin_password"
 else
   echo "  (no auto-created admin found — sandbox may already have a user, or is still starting: sbx exec $sbx_name bash -lc 'tail -f /tmp/claudecodeui-dev.log')"
 fi
