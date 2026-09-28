@@ -3,9 +3,15 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import type { TestContext } from 'node:test';
 
 import { closeConnection, initializeDatabase, scheduledMessagesDb, sessionDraftsDb, sessionsDb, userDb } from '@/modules/database/index.js';
-import { dispatchDueScheduledMessages, dispatchQueuedMessages } from '@/modules/scheduled-messages/services/scheduled-message-dispatcher.service.js';
+import {
+  closeScheduledMessageDispatcher,
+  dispatchDueScheduledMessages,
+  dispatchQueuedMessages,
+  initializeScheduledMessageDispatcher,
+} from '@/modules/scheduled-messages/services/scheduled-message-dispatcher.service.js';
 import { scheduledMessagesService } from '@/modules/scheduled-messages/services/scheduled-messages.service.js';
 import { chatRunRegistry } from '@/modules/websocket/index.js';
 
@@ -306,5 +312,213 @@ test('scheduling validates its input', async () => {
       () => scheduledMessagesService.schedule({ ...base, sessionId: 'nope', content: 'hi' }),
       (error: Error & { code?: string }) => error.code === 'SESSION_NOT_FOUND',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A detached turn can stay open indefinitely: a Claude permission prompt now
+// waits for an answer instead of timing out after 55 s (#607), and nobody is
+// watching a scheduled or queued run. Such a turn must hold up only its own
+// session, never the dispatch of every other session's messages.
+
+const OTHER_SESSION_ID = 'scheduled-session-other';
+const THIRD_SESSION_ID = 'scheduled-session-third';
+const HELD = 'waits on a permission prompt';
+
+/** A runtime whose runs for HELD stay open until the test releases them. */
+function createHeldRuntime() {
+  const runs: RunCall[] = [];
+  const aborts: string[] = [];
+  const releases: Array<() => void> = [];
+  const runtime = {
+    hasRuntime: () => true,
+    run: async (provider: string, command: string, options: Record<string, unknown>) => {
+      runs.push({ provider, command, options });
+      if (command === HELD) {
+        await new Promise<void>((resolve) => { releases.push(resolve); });
+      }
+    },
+    abort: async (_provider: string, sessionId: string) => {
+      aborts.push(sessionId);
+      return true;
+    },
+  } as never;
+  const release = () => {
+    for (const resolve of releases.splice(0)) {
+      resolve();
+    }
+  };
+  return { runtime, runs, aborts, release };
+}
+
+const commandsRun = (runs: RunCall[]) => runs.map((run) => run.command);
+
+/** Waits in real time, bounded, until `condition` holds. */
+async function waitUntil(condition: () => boolean, description: string): Promise<void> {
+  const deadline = Date.now() + 2_000;
+  while (!condition()) {
+    if (Date.now() > deadline) {
+      assert.fail(`timed out waiting until ${description}`);
+    }
+    await new Promise((resolve) => { setTimeout(resolve, 5); });
+  }
+}
+
+/** Gives any run that is about to start the chance to. */
+const settle = () => new Promise((resolve) => { setTimeout(resolve, 20); });
+
+const scheduleDue = (userId: number, sessionId: string, content: string, secondsAgo = 1) => (
+  scheduledMessagesService.schedule({
+    userId,
+    sessionId,
+    content,
+    scheduledFor: new Date(Date.now() - secondsAgo * 1_000).toISOString(),
+  })
+);
+
+const queueTurn = (userId: number, sessionId: string, content: string) => {
+  sessionDraftsDb.saveDraft(userId, sessionId, { text: '', queuedMessage: { content } });
+};
+
+/**
+ * Releases the held run and lets everything it was holding up finish while the
+ * isolated database is still open.
+ */
+async function releaseAndDrain(release: () => void): Promise<void> {
+  closeScheduledMessageDispatcher();
+  release();
+  await settle();
+}
+
+test('a turn that never ends holds up only its own session within a pass', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    sessionsDb.createAppSession(OTHER_SESSION_ID, 'claude', tmpdir(), 'Other session');
+    scheduleDue(userId, SESSION_ID, HELD, 3);
+    scheduleDue(userId, SESSION_ID, 'next in the same session', 2);
+    scheduleDue(userId, OTHER_SESSION_ID, 'another session', 1);
+
+    const { runtime, runs, aborts, release } = createHeldRuntime();
+    const pass = dispatchDueScheduledMessages(runtime);
+    try {
+      await waitUntil(() => commandsRun(runs).includes('another session'), 'the other session is sent to');
+      assert.deepEqual(
+        commandsRun(runs),
+        [HELD, 'another session'],
+        'the same session\'s next message waits for the held turn',
+      );
+      assert.deepEqual(aborts, [], 'nothing interrupted the held turn');
+    } finally {
+      await releaseAndDrain(release);
+    }
+
+    assert.equal(await pass, 3);
+    assert.deepEqual(commandsRun(runs), [HELD, 'another session', 'next in the same session']);
+  });
+});
+
+for (const heldKind of ['scheduled', 'queued'] as const) {
+  test(`a ${heldKind} turn that never ends does not stop the next poll for other sessions`, async (t: TestContext) => {
+    await withIsolatedDatabase(async (userId) => {
+      sessionsDb.createAppSession(OTHER_SESSION_ID, 'claude', tmpdir(), 'Other session');
+      sessionsDb.createAppSession(THIRD_SESSION_ID, 'claude', tmpdir(), 'Third session');
+      if (heldKind === 'scheduled') {
+        scheduleDue(userId, SESSION_ID, HELD);
+      } else {
+        queueTurn(userId, SESSION_ID, HELD);
+      }
+
+      const { runtime, runs, release } = createHeldRuntime();
+      t.mock.timers.enable({ apis: ['setInterval'] });
+      try {
+        initializeScheduledMessageDispatcher(runtime);
+        await waitUntil(() => commandsRun(runs).includes(HELD), 'the held turn starts');
+
+        // Both come due while the held turn is still waiting for its answer.
+        scheduleDue(userId, OTHER_SESSION_ID, 'scheduled elsewhere');
+        queueTurn(userId, THIRD_SESSION_ID, 'queued elsewhere');
+        t.mock.timers.tick(30_000);
+
+        await waitUntil(
+          () => ['scheduled elsewhere', 'queued elsewhere'].every((command) => commandsRun(runs).includes(command)),
+          'the next poll sends the other sessions\' messages',
+        );
+      } finally {
+        await releaseAndDrain(release);
+      }
+    });
+  });
+}
+
+for (const heldKind of ['scheduled', 'queued'] as const) {
+  test(`a message that comes due behind its session's waiting ${heldKind} turn runs after it, not over it`, async (t: TestContext) => {
+    await withIsolatedDatabase(async (userId) => {
+      if (heldKind === 'scheduled') {
+        scheduleDue(userId, SESSION_ID, HELD);
+      } else {
+        queueTurn(userId, SESSION_ID, HELD);
+      }
+
+      const { runtime, runs, aborts, release } = createHeldRuntime();
+      t.mock.timers.enable({ apis: ['setInterval'] });
+      try {
+        initializeScheduledMessageDispatcher(runtime);
+        await waitUntil(() => runs.length === 1, 'the held turn starts');
+
+        // A scheduled message interrupts a run the user is watching, but not a
+        // turn the dispatcher itself is still sending into the same session.
+        scheduleDue(userId, SESSION_ID, 'due later');
+        t.mock.timers.tick(30_000);
+        await settle();
+        assert.deepEqual(commandsRun(runs), [HELD], 'the later message does not race into the busy session');
+        assert.deepEqual(aborts, [], 'nor does it interrupt the turn ahead of it');
+
+        release();
+        await settle();
+        t.mock.timers.tick(30_000);
+        await waitUntil(() => runs.length === 2, 'the later message is sent once the session is free');
+        t.mock.timers.tick(30_000);
+        await settle();
+        assert.deepEqual(commandsRun(runs), [HELD, 'due later'], 'in order, and once');
+        assert.deepEqual(aborts, []);
+      } finally {
+        await releaseAndDrain(release);
+      }
+    });
+  });
+}
+
+test('a queued turn is not sent into a session whose scheduled messages are still lined up', async (t: TestContext) => {
+  await withIsolatedDatabase(async (userId) => {
+    scheduleDue(userId, SESSION_ID, HELD);
+
+    const { runtime, runs, aborts, release } = createHeldRuntime();
+    t.mock.timers.enable({ apis: ['setInterval'] });
+    try {
+      initializeScheduledMessageDispatcher(runtime);
+      await waitUntil(() => runs.length === 1, 'the held turn starts');
+      scheduleDue(userId, SESSION_ID, 'due later');
+      t.mock.timers.tick(30_000);
+      await settle();
+
+      // The user stops the held turn from the browser: the session reads as
+      // idle straight away, while the provider run is still winding down and
+      // 'due later' is lined up behind it. A queued turn started now would be
+      // interrupted by 'due later' moments later.
+      chatRunRegistry.completeRun(SESSION_ID, { exitCode: 0, aborted: true });
+      queueTurn(userId, SESSION_ID, 'queued meanwhile');
+      t.mock.timers.tick(30_000);
+      await settle();
+      assert.deepEqual(commandsRun(runs), [HELD], 'the queued turn is left for a later poll');
+      assert.deepEqual(sessionDraftsDb.getDrafts(userId)[0]?.queuedMessage, { content: 'queued meanwhile' });
+
+      release();
+      await waitUntil(() => runs.length === 2, 'the lined-up scheduled message goes first');
+      t.mock.timers.tick(30_000);
+      await waitUntil(() => runs.length === 3, 'the queued turn follows on the next poll');
+      assert.deepEqual(commandsRun(runs), [HELD, 'due later', 'queued meanwhile']);
+      assert.deepEqual(aborts, [], 'nothing was interrupted');
+    } finally {
+      await releaseAndDrain(release);
+    }
   });
 });
