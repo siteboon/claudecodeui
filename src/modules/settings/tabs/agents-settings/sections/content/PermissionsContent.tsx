@@ -33,26 +33,6 @@ const PERMISSION_PROMPT_TIMEOUT_PRESETS = [
   { valueMs: 60 * 60_000, labelKey: 'permissions.promptTimeout.options.oneHour' },
 ] as const;
 
-/**
- * Formats a stored timeout that is not one of the presets (say, one written by
- * another client) in the largest unit that divides it, e.g. "90 seconds".
- */
-const formatCustomTimeout = (timeoutMs: number, locale: string): string => {
-  const [amount, unit] = timeoutMs % 3_600_000 === 0
-    ? [timeoutMs / 3_600_000, 'hour']
-    : timeoutMs % 60_000 === 0
-      ? [timeoutMs / 60_000, 'minute']
-      : timeoutMs % 1_000 === 0
-        ? [timeoutMs / 1_000, 'second']
-        : [timeoutMs, 'millisecond'];
-
-  try {
-    return new Intl.NumberFormat(locale, { style: 'unit', unit, unitDisplay: 'long' }).format(amount);
-  } catch {
-    return `${timeoutMs} ms`;
-  }
-};
-
 const COMMON_CURSOR_COMMANDS = [
   'Shell(ls)',
   'Shell(mkdir)',
@@ -80,6 +60,26 @@ const addUnique = (items: string[], value: string): string[] => {
 const removeValue = (items: string[], value: string): string[] => (
   items.filter((item) => item !== value)
 );
+
+/**
+ * Formats a stored timeout that is not one of the presets (say, one written by
+ * another client) in the largest unit that divides it, e.g. "90 seconds".
+ */
+const formatCustomTimeout = (timeoutMs: number, locale: string): string => {
+  const [amount, unit] = timeoutMs % 3_600_000 === 0
+    ? [timeoutMs / 3_600_000, 'hour']
+    : timeoutMs % 60_000 === 0
+      ? [timeoutMs / 60_000, 'minute']
+      : timeoutMs % 1_000 === 0
+        ? [timeoutMs / 1_000, 'second']
+        : [timeoutMs, 'millisecond'];
+
+  try {
+    return new Intl.NumberFormat(locale, { style: 'unit', unit, unitDisplay: 'long' }).format(amount);
+  } catch {
+    return `${timeoutMs} ms`;
+  }
+};
 
 type ClaudePermissionsProps = {
   agent: 'claude';

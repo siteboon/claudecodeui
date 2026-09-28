@@ -255,17 +255,26 @@ export const getQuickSettingsTabPanelId = (tab: QuickSettingsTab): string => `qu
 
 //----------------- CLAUDE PERMISSION PROMPT TIMEOUT ------------
 
+// Longest permission prompt timeout the server applies: the most a Node timer
+// can hold (2^31 - 1 ms, about 24.8 days). The server caps longer values here.
+const MAX_PERMISSION_PROMPT_TIMEOUT_MS = 2 ** 31 - 1;
+
 /**
  * Reads the `permissionPromptTimeoutMs` stored in the `claudePermissions`
  * preference as milliseconds, where 0 means an unanswered permission prompt
  * waits for the user indefinitely (the default).
  *
- * Anything that is not a positive whole number (absent because an older client
- * saved the preference, or malformed) reads as 0, which is also how the server
- * interprets it. Used by the settings controller and the chat's Claude settings
+ * Mirrors how the server interprets the value: anything that is not a positive
+ * whole number (absent because an older client saved the preference, or
+ * malformed) reads as 0, and a longer timeout than the server can apply is
+ * capped at the server's limit, so Settings shows the timeout actually in
+ * effect. Used by the settings controller and the chat's Claude settings
  * reader, so the Settings panel and the chat's "grant permission" action
  * round-trip the same value instead of one of them dropping it.
  */
 export function readPermissionPromptTimeoutMs(value: unknown): number {
-  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : 0;
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+    return 0;
+  }
+  return Math.min(value, MAX_PERMISSION_PROMPT_TIMEOUT_MS);
 }

@@ -227,12 +227,15 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
       // One call so the whole dialog's state reaches the server as a single
       // merge-patch rather than four racing requests.
       writeUserPreferences({
+        // Typed here because preference values are `unknown`: the whole
+        // preference is replaced, so a field missing from this object would
+        // silently reset that setting.
         claudePermissions: {
           allowedTools: claudePermissions.allowedTools,
           disallowedTools: claudePermissions.disallowedTools,
           skipPermissions: claudePermissions.skipPermissions,
           permissionPromptTimeoutMs: claudePermissions.permissionPromptTimeoutMs,
-        },
+        } satisfies ClaudePermissionsState,
         projectSortOrder,
         cursorPermissions: {
           allowedCommands: cursorPermissions.allowedCommands,

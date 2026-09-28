@@ -77,6 +77,12 @@ describe('Claude permission prompt timeout setting', () => {
     expect(select.options).toHaveLength(7);
   });
 
+  it('names a custom timeout in the largest unit that fits it', () => {
+    renderClaudePermissions(2 * 3_600_000);
+
+    expect(selectedLabel(timeoutSelect())).toBe('Custom (2 hours)');
+  });
+
   it('is placed between the skip-permissions switch and the allowed tools', () => {
     renderClaudePermissions(0);
 
