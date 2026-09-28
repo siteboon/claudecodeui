@@ -24,6 +24,11 @@ let pollTimer: ReturnType<typeof setInterval> | null = null;
  * and nobody is watching a scheduled or queued run. Holding one global gate
  * across whole runs meant such a turn stopped every other session's scheduled
  * and queued messages until someone answered it.
+ *
+ * A session with an entry here is busy for later polls: its scheduled messages
+ * that come due stay pending and its queued turn stays in the draft, so neither
+ * is claimed and then left waiting in memory, where it can no longer be seen,
+ * cancelled or edited, and where a restart would lose it.
  */
 const sessionTurnTails = new Map<string, Promise<void>>();
 
@@ -122,8 +127,10 @@ function startQueuedMessages(runtime: ProviderRuntimeGateway): Promise<void>[] {
   const turns: Promise<void>[] = [];
 
   for (const candidate of sessionDraftsDb.listQueuedMessages()) {
-    // Scheduled messages still lined up for the session count as busy too: the
-    // next one would interrupt this turn the moment it started.
+    // A session the dispatcher is still sending to counts as busy too, even
+    // when no run is registered (between two lined-up turns, or while a stopped
+    // turn winds down). Claiming the turn now would take it out of the draft
+    // only to leave it waiting in memory behind that turn.
     if (chatRunRegistry.isProcessing(candidate.sessionId) || sessionTurnTails.has(candidate.sessionId)) {
       continue;
     }
@@ -188,8 +195,9 @@ async function sendClaimedMessage(
  */
 function startDueScheduledMessages(runtime: ProviderRuntimeGateway, now: Date): Promise<void>[] {
   // Claimed before any of them runs, so a long turn cannot let the next poll
-  // pick the same message up again.
-  const due = scheduledMessagesDb.claimDue(now);
+  // pick the same message up again. Sessions the dispatcher is still sending
+  // to are skipped; their messages stay pending until a later poll.
+  const due = scheduledMessagesDb.claimDue(now, new Set(sessionTurnTails.keys()));
 
   // In session order: a session can only have one run at a time, and two due
   // messages for the same session must not race each other into it. Different
@@ -234,9 +242,10 @@ export function initializeScheduledMessageDispatcher(runtime: ProviderRuntimeGat
     // that stays open (an unanswered permission prompt waits indefinitely)
     // holds up its own session and nothing else. Overlap within a session is
     // ruled out by sendInSessionOrder, and each claim is transactional.
-    // Scheduled messages start first, so a queued turn for the same session
-    // finds it taken and goes out on a later poll instead of being
-    // interrupted by it.
+    // Scheduled messages start first because they are due at a time the user
+    // picked: a queued turn for the same session then finds the session taken
+    // and waits for a later poll. The other way round, the due message would
+    // wait behind the queued turn for as long as that turn stays open.
     try {
       const turns = [
         ...startDueScheduledMessages(runtime, new Date()),

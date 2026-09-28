@@ -75,19 +75,27 @@ export const scheduledMessagesDb = {
    * the moment a message was due, and the next poll after it starts picks the
    * message up instead of skipping it. Doing it in one transaction is what
    * stops two overlapping polls from sending the same message twice.
+   *
+   * Messages for a session in `busySessionIds` are left pending, not claimed:
+   * the dispatcher is still sending an earlier turn into that session, and a
+   * claimed row reads as sent. Left pending, the message stays listed and
+   * cancellable, survives a restart, and is claimed by the first poll after
+   * the session frees up.
    */
-  claimDue(now: Date): ScheduledMessageRow[] {
+  claimDue(now: Date, busySessionIds: ReadonlySet<string> = new Set()): ScheduledMessageRow[] {
     const db = getConnection();
     const nowIso = now.toISOString();
 
     return db.transaction(() => {
-      const due = db
-        .prepare(
-          `SELECT ${COLUMNS} FROM scheduled_messages
-           WHERE status = 'pending' AND scheduled_for <= ?
-           ORDER BY scheduled_for ASC`
-        )
-        .all(nowIso) as ScheduledMessageRow[];
+      const due = (
+        db
+          .prepare(
+            `SELECT ${COLUMNS} FROM scheduled_messages
+             WHERE status = 'pending' AND scheduled_for <= ?
+             ORDER BY scheduled_for ASC`
+          )
+          .all(nowIso) as ScheduledMessageRow[]
+      ).filter((row) => !busySessionIds.has(row.session_id));
 
       for (const row of due) {
         db.prepare(
