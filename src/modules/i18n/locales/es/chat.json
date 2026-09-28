@@ -248,7 +248,8 @@
   },
   "message": {
     "editAndResend": "Editar y reenviar",
-    "forkFromHere": "Bifurcar desde aquí"
+    "forkFromHere": "Bifurcar desde aquí",
+    "answeredBy": "Respondido por {{model}}"
   },
   "export": {
     "trigger": "Exportar conversación",

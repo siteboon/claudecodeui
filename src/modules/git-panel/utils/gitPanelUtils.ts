@@ -5,6 +5,7 @@ const FILE_STATUS_LABELS: Record<FileStatusCode, string> = {
   M: 'git:status.modified',
   A: 'git:status.added',
   D: 'git:status.deleted',
+  R: 'git:status.renamed',
   U: 'git:status.untracked',
 };
 
@@ -12,6 +13,7 @@ const FILE_STATUS_BADGE_CLASSES: Record<FileStatusCode, string> = {
   M: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800/50',
   A: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 border-green-200 dark:border-green-800/50',
   D: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 border-red-200 dark:border-red-800/50',
+  R: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-800/50',
   U: 'bg-muted text-muted-foreground border-border',
 };
 
@@ -37,6 +39,42 @@ export function getStatusLabelKey(status: FileStatusCode): string {
 
 export function getStatusBadgeClass(status: FileStatusCode): string {
   return FILE_STATUS_BADGE_CLASSES[status] || FILE_STATUS_BADGE_CLASSES.U;
+}
+
+// Preferred compare bases, in order: the usual integration branches locally,
+// then their remote-tracking counterparts.
+const PREFERRED_LOCAL_COMPARE_BASES = ['main', 'master', 'develop'];
+const PREFERRED_REMOTE_COMPARE_BASES = ['origin/main', 'origin/master'];
+
+/**
+ * Used by useBranchCompare to pick the branch the Compare tab diffs against
+ * before the user chooses one: a well-known integration branch if it exists,
+ * otherwise any branch other than the current one, and finally the current
+ * branch itself. Returns '' while both branch lists are empty (still loading,
+ * or a repository without commits) so no comparison is requested against an
+ * unverified name.
+ */
+export function pickDefaultCompareBase(
+  localBranches: string[],
+  remoteRefs: string[],
+  currentBranch: string,
+): string {
+  if (localBranches.length === 0 && remoteRefs.length === 0) {
+    return '';
+  }
+
+  const preferredLocal = PREFERRED_LOCAL_COMPARE_BASES.find((name) => localBranches.includes(name));
+  if (preferredLocal) {
+    return preferredLocal;
+  }
+
+  const preferredRemote = PREFERRED_REMOTE_COMPARE_BASES.find((name) => remoteRefs.includes(name));
+  if (preferredRemote) {
+    return preferredRemote;
+  }
+
+  const otherBranch = [...localBranches, ...remoteRefs].find((name) => name !== currentBranch);
+  return otherBranch ?? currentBranch;
 }
 
 // ---------------------------------------------------------------------------
