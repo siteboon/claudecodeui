@@ -7,7 +7,7 @@ import type { TestContext } from 'node:test';
 
 import { ClaudeSessionsProvider } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import { CLAUDE_PREDEFINED_MODELS } from '@/modules/providers/list/claude/claude-models.provider.js';
-import { queryClaudeSDK, resolveToolApproval } from '@/modules/providers/list/claude/claude-runtime.provider.js';
+import { claudeRuntime, queryClaudeSDK, resolveToolApproval } from '@/modules/providers/list/claude/claude-runtime.provider.js';
 import type { NormalizedMessage, ProviderRuntimeContext } from '@/shared/types.js';
 
 /**
@@ -31,10 +31,15 @@ type CanUseTool = (
 type PromptRun = {
   canUseTool: CanUseTool;
   sent: NormalizedMessage[];
+  sessionId: string;
 };
 
-/** Captures the `canUseTool` the runtime hands the SDK and keeps the run open until `end`. */
-function createCapturingQuery() {
+/**
+ * Captures the `canUseTool` the runtime hands the SDK and keeps the run open
+ * until `end`. `onInterrupt` stands in for what the SDK does when the run is
+ * interrupted.
+ */
+function createCapturingQuery(onInterrupt?: () => void) {
   let capture: ((canUseTool: CanUseTool) => void) | null = null;
   // Resolves once the runtime has finished its async setup and built the SDK options.
   const canUseTool = new Promise<CanUseTool>((resolve) => { capture = resolve; });
@@ -49,7 +54,7 @@ function createCapturingQuery() {
       [Symbol.asyncIterator]() { return this; },
       async next() { await ended; return { done: true, value: undefined }; },
     };
-    return Object.assign(iterator, { interrupt: async () => {} });
+    return Object.assign(iterator, { interrupt: async () => { onInterrupt?.(); } });
   };
 
   return { createQuery, canUseTool, end: () => finish?.() };
@@ -61,9 +66,10 @@ let runCounter = 0;
 async function withPromptRun(
   toolsSettings: Record<string, unknown> | undefined,
   runTest: (run: PromptRun) => Promise<void>,
+  onInterrupt?: () => void,
 ): Promise<void> {
   const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-permission-timeout-'));
-  const { createQuery, canUseTool, end } = createCapturingQuery();
+  const { createQuery, canUseTool, end } = createCapturingQuery(onInterrupt);
   const sent: NormalizedMessage[] = [];
   // No userId: the action_required notification short-circuits before touching the database.
   const writer = { send: (message: NormalizedMessage) => { sent.push(message); }, userId: null };
@@ -81,7 +87,7 @@ async function withPromptRun(
   const options = { sessionId: `permission-timeout-${runCounter}`, cwd, toolsSettings };
   const done = queryClaudeSDK('touch a file', options, writer as never, context);
   try {
-    await runTest({ canUseTool: await canUseTool, sent });
+    await runTest({ canUseTool: await canUseTool, sent, sessionId: options.sessionId });
   } finally {
     // Answer anything a failed assertion left open, so no prompt timer outlives the test.
     for (const message of sent as SentWithRequest[]) {
@@ -220,23 +226,35 @@ test('a timeout beyond what a Node timer can hold is clamped instead of firing a
   });
 });
 
-test('stopping the run retracts a prompt that has no timeout', async (t: TestContext) => {
-  // With no timeout, aborting the run (Stop, or a scheduled message that
-  // interrupts it) is what clears an unanswered prompt; without it the prompt
-  // would stay pending, and be replayed to every tab that subscribes, forever.
-  await withPromptRun(undefined, async ({ canUseTool, sent }) => {
+test('Stop retracts a prompt that has no timeout and leaves nothing to replay', async (t: TestContext) => {
+  // With no timeout, stopping the run (chat.abort, or a scheduled message that
+  // interrupts it) is what clears an unanswered prompt; if it did not, the
+  // prompt would stay pending, and be replayed to every tab that subscribes,
+  // for good. Against the real CLI, interrupting a run cancels its open
+  // can_use_tool request: the SDK aborts the signal it passed to canUseTool,
+  // and the client got permission_cancelled the moment Stop was pressed. The
+  // fake query does the same, so this covers the app's side of Stop: the
+  // runtime abort chat.abort dispatches to, the retraction, and the pending
+  // list chat.subscribe replays from.
+  const canUseToolRequest = new AbortController();
+  await withPromptRun(undefined, async ({ canUseTool, sent, sessionId }) => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
-    const controller = new AbortController();
-    const prompt = track(canUseTool('Bash', BASH_INPUT, { signal: controller.signal }));
+    const prompt = track(canUseTool('Bash', BASH_INPUT, { signal: canUseToolRequest.signal }));
     await flush();
-    assert.equal(prompt.decision, null);
+    assert.equal(
+      claudeRuntime.permissions.listPending(sessionId).length,
+      1,
+      'the prompt is listed for tabs that subscribe while it waits',
+    );
 
-    controller.abort();
+    assert.equal(await claudeRuntime.abort(sessionId), true);
     await flush();
+
     assert.deepEqual(prompt.decision, { behavior: 'deny', message: 'Permission request cancelled' });
     const [cancelled] = cancellations(sent);
     assert.equal(cancelled?.reason, 'cancelled');
     assert.equal(cancelled?.requestId, requestIdFor(sent, 'Bash'), 'the cancellation retracts that prompt');
+    assert.deepEqual(claudeRuntime.permissions.listPending(sessionId), [], 'nothing is left to replay');
     t.mock.timers.reset();
-  });
+  }, () => canUseToolRequest.abort());
 });
