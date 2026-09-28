@@ -67,6 +67,27 @@
       "openPanel": "Ouvrir le panneau de paramètres",
       "draggingStatus": "Glissement...",
       "toggleAndMove": "Cliquer pour basculer, glisser pour déplacer"
+    },
+    "tabs": {
+      "settings": "Paramètres",
+      "commands": "Commandes"
+    },
+    "pin": "Épingler le panneau",
+    "unpin": "Détacher le panneau",
+    "close": "Fermer le panneau",
+    "commands": {
+      "searchPlaceholder": "Rechercher des commandes…",
+      "noProject": "Sélectionnez un projet pour voir ses commandes.",
+      "loading": "Chargement des commandes…",
+      "empty": "Aucune commande disponible pour ce projet.",
+      "noMatches": "Aucune commande ne correspond à votre recherche.",
+      "loadError": "Impossible de charger les commandes.",
+      "groups": {
+        "builtIn": "Intégrées",
+        "custom": "Personnalisées",
+        "skills": "Skills"
+      },
+      "insertTitle": "Insérer {{command}} dans le chat"
     }
   },
   "terminalShortcuts": {
@@ -391,7 +412,7 @@
       "modes": {
         "default": {
           "title": "Par défaut",
-          "description": "Seules les commandes de confiance (ls, cat, grep, git status, etc.) s'exécutent automatiquement. Les autres sont ignorées. Peut écrire dans l'espace de travail."
+          "description": "Exécute les commandes dans le bac à sable de l’espace de travail. Codex décide quand une approbation est nécessaire ; les demandes ne peuvent pas être approuvées dans cette intégration non interactive."
         },
         "acceptEdits": {
           "title": "Accepter les modifications",
@@ -404,7 +425,7 @@
       },
       "technicalDetails": "Détails techniques",
       "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=untrusted. Commandes de confiance : cat, cd, grep, head, ls, pwd, tail, git status/log/diff/show, find (sans -exec), etc.",
+        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. Exécute les commandes dans le bac à sable de l’espace de travail. Codex décide quand une approbation est nécessaire ; les demandes ne peuvent pas être approuvées dans cette intégration non interactive.",
         "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. Toutes les commandes s'exécutent automatiquement dans le répertoire du projet.",
         "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. Accès système complet, à utiliser uniquement dans des environnements de confiance.",
         "overrideNote": "Vous pouvez remplacer ce mode par session via le bouton de mode dans l'interface de chat."

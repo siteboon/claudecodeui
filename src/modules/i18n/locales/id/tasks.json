@@ -1,0 +1,158 @@
+{
+  "notConfigured": {
+    "title": "TaskMaster AI belum dikonfigurasi",
+    "description": "TaskMaster membantu memecah proyek kompleks menjadi tugas yang dapat dikelola dengan bantuan AI",
+    "whatIsTitle": "🎯 Apa itu TaskMaster?",
+    "features": {
+      "aiPowered": "Manajemen Tugas Berbasis AI: Pecah proyek kompleks menjadi subtugas yang dapat dikelola",
+      "prdTemplates": "Template PRD: Buat tugas dari Product Requirements Document",
+      "dependencyTracking": "Pelacakan Dependensi: Pahami hubungan antar tugas dan urutan eksekusinya",
+      "progressVisualization": "Visualisasi Progres: Board Kanban dan analitik tugas terperinci",
+      "cliIntegration": "Integrasi CLI: Gunakan perintah taskmaster untuk workflow lanjutan"
+    },
+    "initializeButton": "Inisialisasi TaskMaster AI"
+  },
+  "gettingStarted": {
+    "title": "Memulai dengan TaskMaster",
+    "subtitle": "TaskMaster sudah diinisialisasi! Berikut langkah selanjutnya:",
+    "steps": {
+      "createPRD": {
+        "title": "Buat Product Requirements Document (PRD)",
+        "description": "Diskusikan ide proyek dan buat PRD yang menjelaskan apa yang ingin dibangun.",
+        "addButton": "Tambah PRD",
+        "existingPRDs": "PRD yang tersedia:"
+      },
+      "generateTasks": {
+        "title": "Buat Tugas dari PRD",
+        "description": "Setelah memiliki PRD, minta asisten AI untuk mem-parsing-nya dan TaskMaster akan otomatis memecahnya menjadi tugas yang dapat dikelola beserta detail implementasi."
+      },
+      "analyzeTasks": {
+        "title": "Analisis & Kembangkan Tugas",
+        "description": "Minta asisten AI menganalisis kompleksitas tugas dan mengembangkannya menjadi subtugas terperinci agar lebih mudah diimplementasikan."
+      },
+      "startBuilding": {
+        "title": "Mulai Membangun",
+        "description": "Minta asisten AI mulai mengerjakan tugas, memperbarui statusnya, dan menambahkan tugas baru seiring berkembangnya proyek."
+      }
+    },
+    "tip": "💡 Tips: Mulai dengan PRD untuk memaksimalkan pembuatan tugas berbasis AI dari TaskMaster"
+  },
+  "setupModal": {
+    "title": "Penyiapan TaskMaster",
+    "subtitle": "CLI interaktif untuk {{projectName}}",
+    "willStart": "Inisialisasi TaskMaster akan dimulai secara otomatis",
+    "completed": "Penyiapan TaskMaster selesai! Jendela ini sekarang dapat ditutup.",
+    "closeButton": "Tutup",
+    "closeContinueButton": "Tutup & Lanjutkan"
+  },
+  "helpGuide": {
+    "title": "Memulai dengan TaskMaster",
+    "subtitle": "Panduan untuk manajemen tugas yang produktif",
+    "examples": {
+      "parsePRD": "💬 Contoh:\n\"Saya baru saja menginisialisasi proyek baru dengan Claude Task Master. Saya punya PRD di .taskmaster/docs/prd.txt. Bisakah bantu mem-parsing-nya dan menyiapkan tugas awal?\"",
+      "expandTask": "💬 Contoh:\n\"Tugas 5 terlihat kompleks. Bisakah dipecah menjadi subtugas?\"",
+      "addTask": "💬 Contoh:\n\"Tolong tambahkan tugas baru untuk mengimplementasikan unggahan gambar profil pengguna menggunakan Cloudinary, lalu cari pendekatan terbaik.\""
+    },
+    "moreExamples": "Lihat contoh dan pola penggunaan lainnya →",
+    "proTips": {
+      "title": "💡 Tips Pro",
+      "search": "Gunakan bilah pencarian untuk menemukan tugas tertentu dengan cepat",
+      "views": "Beralih antara tampilan Kanban, Daftar, dan Grid menggunakan tombol tampilan",
+      "filters": "Gunakan filter untuk berfokus pada status atau prioritas tugas tertentu",
+      "details": "Klik tugas untuk melihat informasi terperinci dan mengelola subtugas"
+    },
+    "learnMore": {
+      "title": "📚 Pelajari Lebih Lanjut",
+      "description": "TaskMaster AI adalah sistem manajemen tugas lanjutan yang dibuat untuk developer. Dapatkan dokumentasi, contoh, dan berkontribusi ke proyek.",
+      "githubButton": "Lihat di GitHub"
+    }
+  },
+  "search": {
+    "placeholder": "Cari tugas..."
+  },
+  "filters": {
+    "button": "Filter",
+    "status": "Status",
+    "priority": "Prioritas",
+    "sortBy": "Urutkan Berdasarkan",
+    "allStatuses": "Semua Status",
+    "allPriorities": "Semua Prioritas",
+    "showing": "Menampilkan {{filtered}} dari {{total}} tugas",
+    "clearFilters": "Hapus Filter"
+  },
+  "sort": {
+    "id": "ID",
+    "status": "Status",
+    "priority": "Prioritas",
+    "idAsc": "ID (Naik)",
+    "idDesc": "ID (Turun)",
+    "titleAsc": "Judul (A-Z)",
+    "titleDesc": "Judul (Z-A)",
+    "statusAsc": "Status (Menunggu Dulu)",
+    "statusDesc": "Status (Selesai Dulu)",
+    "priorityAsc": "Prioritas (Tinggi Dulu)",
+    "priorityDesc": "Prioritas (Rendah Dulu)"
+  },
+  "views": {
+    "kanban": "Tampilan Kanban",
+    "list": "Tampilan daftar",
+    "grid": "Tampilan grid"
+  },
+  "kanban": {
+    "pending": "📋 Akan Dikerjakan",
+    "inProgress": "🚀 Sedang Berjalan",
+    "done": "✅ Selesai",
+    "blocked": "🚫 Terblokir",
+    "deferred": "⏳ Ditunda",
+    "cancelled": "❌ Dibatalkan",
+    "noTasksYet": "Belum ada tugas",
+    "tasksWillAppear": "Tugas akan muncul di sini",
+    "moveTasksHere": "Pindahkan tugas ke sini saat mulai dikerjakan",
+    "completedTasksHere": "Tugas yang selesai muncul di sini",
+    "statusTasksHere": "Tugas dengan status ini akan muncul di sini"
+  },
+  "buttons": {
+    "help": "Panduan Memulai TaskMaster",
+    "prds": "PRD",
+    "addPRD": "Tambah PRD",
+    "addTask": "Tambah Tugas",
+    "createNewPRD": "Buat PRD Baru",
+    "prdsAvailable": "{{count}} PRD tersedia"
+  },
+  "prd": {
+    "modified": "Diubah: {{date}}"
+  },
+  "statuses": {
+    "pending": "Menunggu",
+    "in-progress": "Sedang Berjalan",
+    "done": "Selesai",
+    "blocked": "Terblokir",
+    "deferred": "Ditunda",
+    "cancelled": "Dibatalkan"
+  },
+  "priorities": {
+    "high": "Tinggi",
+    "medium": "Sedang",
+    "low": "Rendah",
+    "highTitle": "Prioritas Tinggi",
+    "mediumTitle": "Prioritas Sedang",
+    "lowTitle": "Prioritas Rendah"
+  },
+  "noMatchingTasks": {
+    "title": "Tidak ada tugas yang cocok dengan filter",
+    "description": "Coba ubah pencarian atau kriteria filter."
+  },
+  "banner": {
+    "initialize": "Inisialisasi",
+    "hideDetails": "Sembunyikan detail",
+    "whatIsTaskmaster": "Apa itu TaskMaster?",
+    "detailAiPowered": "- Manajemen tugas berbasis AI dengan dependensi dan subtugas.",
+    "detailPrdDriven": "- Pembuatan tugas berbasis PRD untuk mempercepat penyiapan awal proyek.",
+    "detailKanbanList": "- Tampilan Kanban dan daftar untuk pengerjaan sehari-hari.",
+    "startTask": "Mulai Tugas",
+    "viewTaskDetails": "Lihat detail tugas",
+    "viewAllTasks": "Lihat semua tugas",
+    "allComplete": "Semua tugas selesai",
+    "noPending": "Tidak ada tugas tertunda"
+  }
+}

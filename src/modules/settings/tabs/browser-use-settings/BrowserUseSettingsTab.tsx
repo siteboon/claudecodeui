@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Download, Loader2 } from 'lucide-react';
 
 import { Button } from '@/shared/ui';
-import { api, readApiJson } from '@/shared/api';
+import { api, readApiJson, ApiRequestError } from '@/shared/api';
 import SettingsCard from '@/modules/settings/SettingsCard';
 import SettingsRow from '@/modules/settings/SettingsRow';
 import SettingsSection from '@/modules/settings/SettingsSection';
@@ -22,7 +23,22 @@ type BrowserUseStatus = {
 };
 
 /** Rendered by Settings for the "browser" tab, configuring the browser automation integration. */
+const BROWSER_USE_ERROR_KEYS: Record<string, string> = {
+  BROWSER_USE_STATUS_LOAD_FAILED: 'browserUseSettings.loadStatusFailed',
+  BROWSER_USE_SETTINGS_LOAD_FAILED: 'browserUseSettings.loadSettingsFailed',
+  BROWSER_USE_SETTINGS_SAVE_FAILED: 'browserUseSettings.saveFailed',
+  BROWSER_USE_RUNTIME_INSTALL_FAILED: 'browserUseSettings.installFailed',
+};
+
+function localizeApiError(err: unknown, fallbackKey: string, t: (key: string) => string): string {
+  if (err instanceof ApiRequestError && err.code && BROWSER_USE_ERROR_KEYS[err.code]) {
+    return t(BROWSER_USE_ERROR_KEYS[err.code]);
+  }
+  return t(fallbackKey);
+}
+
 export default function BrowserUseSettingsTab() {
+  const { t } = useTranslation('settings');
   const [settings, setSettings] = useState<BrowserUseSettings | null>(null);
   const [status, setStatus] = useState<BrowserUseStatus | null>(null);
   const [isSettingsLoading, setIsSettingsLoading] = useState(true);
@@ -35,13 +51,13 @@ export default function BrowserUseSettingsTab() {
     const settingsResponse = await api.browserUse.settings();
     const settingsData = await readApiJson<{ data: { settings: BrowserUseSettings } }>(settingsResponse);
     setSettings(settingsData.data.settings);
-  }, []);
+  }, [t]);
 
   const loadStatus = useCallback(async () => {
     const statusResponse = await api.browserUse.status();
     const statusData = await readApiJson<{ data: BrowserUseStatus }>(statusResponse);
     setStatus(statusData.data);
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     setError(null);
@@ -49,13 +65,13 @@ export default function BrowserUseSettingsTab() {
     setIsStatusLoading(true);
 
     void loadSettings()
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load Browser settings'))
+      .catch((err) => setError(localizeApiError(err, 'browserUseSettings.loadSettingsFailed', t)))
       .finally(() => setIsSettingsLoading(false));
 
     void loadStatus()
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load Browser status'))
+      .catch((err) => setError(localizeApiError(err, 'browserUseSettings.loadStatusFailed', t)))
       .finally(() => setIsStatusLoading(false));
-  }, [loadSettings, loadStatus]);
+  }, [loadSettings, loadStatus, t]);
 
   const updateSettings = async (nextSettings: Partial<BrowserUseSettings>) => {
     setIsSaving(true);
@@ -68,7 +84,7 @@ export default function BrowserUseSettingsTab() {
       setIsStatusLoading(true);
       await loadStatus();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save Browser settings');
+      setError(localizeApiError(err, 'browserUseSettings.saveFailed', t));
     } finally {
       setIsStatusLoading(false);
       setIsSaving(false);
@@ -84,7 +100,7 @@ export default function BrowserUseSettingsTab() {
       setIsStatusLoading(true);
       await loadStatus();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to install browser runtime');
+      setError(localizeApiError(err, 'browserUseSettings.installFailed', t));
     } finally {
       setIsStatusLoading(false);
       setIsInstalling(false);
@@ -95,21 +111,21 @@ export default function BrowserUseSettingsTab() {
   const needsBrowserBinaries = Boolean(browserEnabled && status && (!status.playwrightInstalled || !status.chromiumInstalled));
   const runtimeLabel = (installed?: boolean) => {
     if (isStatusLoading && !status) {
-      return 'checking...';
+      return t('browserUseSettings.checking');
     }
-    return installed ? 'installed' : 'missing';
+    return installed ? t('browserUseSettings.installed') : t('browserUseSettings.missing');
   };
 
   return (
     <div className="space-y-8">
       <SettingsSection
-        title="Browser"
-        description="Allow agents to create guarded Playwright browser sessions that you can monitor from the Browser tab."
+        title={t('browserUseSettings.sectionTitle')}
+        description={t('browserUseSettings.sectionDescription')}
       >
         <SettingsCard divided>
           <SettingsRow
-            label="Enable Browser"
-            description="Registers Browser for supported agents. Agents can create browser sessions; you can watch, stop, and delete them."
+            label={t('browserUseSettings.enableLabel')}
+            description={t('browserUseSettings.enableDescription')}
           >
             {isSettingsLoading && !settings ? (
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -117,7 +133,7 @@ export default function BrowserUseSettingsTab() {
               <SettingsToggle
                 checked={browserEnabled}
                 onChange={(value) => void updateSettings({ enabled: value })}
-                ariaLabel="Enable Browser"
+                ariaLabel={t('browserUseSettings.enableAriaLabel')}
                 disabled={isSaving}
               />
             )}
@@ -126,22 +142,28 @@ export default function BrowserUseSettingsTab() {
           <div className="space-y-4 px-4 py-4">
             <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
               <span className="rounded-md border border-border px-2 py-1">
-                Playwright: {runtimeLabel(status?.playwrightInstalled)}
+                {t('browserUseSettings.playwrightLabel')}: {runtimeLabel(status?.playwrightInstalled)}
               </span>
               <span className="rounded-md border border-border px-2 py-1">
-                Chromium: {runtimeLabel(status?.chromiumInstalled)}
+                {t('browserUseSettings.chromiumLabel')}: {runtimeLabel(status?.chromiumInstalled)}
               </span>
               <span className="rounded-md border border-border px-2 py-1">
-                Status: {isStatusLoading && !status ? 'checking...' : status?.available ? 'ready' : browserEnabled ? 'setup required' : 'disabled'}
+                {t('browserUseSettings.statusPrefix')}: {isStatusLoading && !status
+                  ? t('browserUseSettings.checking')
+                  : status?.available
+                    ? t('browserUseSettings.ready')
+                    : browserEnabled
+                      ? t('browserUseSettings.setupRequired')
+                      : t('browserUseSettings.disabled')}
               </span>
             </div>
 
             {needsBrowserBinaries && (
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0 space-y-1">
-                  <div className="text-sm font-medium text-foreground">Browser runtime required</div>
+                  <div className="text-sm font-medium text-foreground">{t('browserUseSettings.runtimeRequiredTitle')}</div>
                   <p className="text-sm text-muted-foreground">
-                    {status?.message || 'Install the browser runtime before agents can create Browser sessions.'}
+                    {t('browserUseSettings.runtimeRequiredFallback')}
                   </p>
                 </div>
 
@@ -157,7 +179,9 @@ export default function BrowserUseSettingsTab() {
                   ) : (
                     <Download className="h-4 w-4" />
                   )}
-                  {isInstalling || status?.installInProgress ? 'Installing...' : 'Install Runtime'}
+                  {isInstalling || status?.installInProgress
+                    ? t('browserUseSettings.installing')
+                    : t('browserUseSettings.installRuntime')}
                 </Button>
               </div>
             )}

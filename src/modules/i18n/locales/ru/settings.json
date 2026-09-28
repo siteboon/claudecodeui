@@ -67,6 +67,27 @@
       "openPanel": "Открыть панель настроек",
       "draggingStatus": "Перетаскивание...",
       "toggleAndMove": "Нажмите для переключения, перетащите для перемещения"
+    },
+    "tabs": {
+      "settings": "Настройки",
+      "commands": "Команды"
+    },
+    "pin": "Закрепить панель",
+    "unpin": "Открепить панель",
+    "close": "Закрыть панель",
+    "commands": {
+      "searchPlaceholder": "Поиск команд…",
+      "noProject": "Выберите проект, чтобы увидеть его команды.",
+      "loading": "Загрузка команд…",
+      "empty": "Для этого проекта нет доступных команд.",
+      "noMatches": "Нет команд, соответствующих запросу.",
+      "loadError": "Не удалось загрузить команды.",
+      "groups": {
+        "builtIn": "Встроенные",
+        "custom": "Пользовательские",
+        "skills": "Навыки"
+      },
+      "insertTitle": "Вставить {{command}} в чат"
     }
   },
   "terminalShortcuts": {
@@ -388,7 +409,7 @@
       "modes": {
         "default": {
           "title": "По умолчанию",
-          "description": "Только доверенные команды (ls, cat, grep, git status и т.д.) выполняются автоматически. Другие команды пропускаются. Может записывать в рабочее пространство."
+          "description": "Выполняет команды в песочнице рабочего пространства. Codex решает, когда требуется одобрение; запросы нельзя одобрить в этой неинтерактивной интеграции."
         },
         "acceptEdits": {
           "title": "Принимать правки",
@@ -401,7 +422,7 @@
       },
       "technicalDetails": "Технические детали",
       "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=untrusted. Доверенные команды: cat, cd, grep, head, ls, pwd, tail, git status/log/diff/show, find (без -exec) и т.д.",
+        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. Выполняет команды в песочнице рабочего пространства. Codex решает, когда требуется одобрение; запросы нельзя одобрить в этой неинтерактивной интеграции.",
         "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. Все команды автоматически выполняются в каталоге проекта.",
         "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. Полный системный доступ, используйте только в доверенных средах.",
         "overrideNote": "Вы можете переопределить это для каждого сеанса, используя кнопку режима в интерфейсе чата."

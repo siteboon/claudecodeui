@@ -67,6 +67,27 @@
       "openPanel": "Ayarlar panelini aç",
       "draggingStatus": "Sürükleniyor...",
       "toggleAndMove": "Açıp kapamak için tıkla, taşımak için sürükle"
+    },
+    "tabs": {
+      "settings": "Ayarlar",
+      "commands": "Komutlar"
+    },
+    "pin": "Paneli sabitle",
+    "unpin": "Panel sabitlemesini kaldır",
+    "close": "Paneli kapat",
+    "commands": {
+      "searchPlaceholder": "Komut ara…",
+      "noProject": "Komutlarını görmek için bir proje seçin.",
+      "loading": "Komutlar yükleniyor…",
+      "empty": "Bu proje için kullanılabilir komut yok.",
+      "noMatches": "Aramanızla eşleşen komut yok.",
+      "loadError": "Komutlar yüklenemedi.",
+      "groups": {
+        "builtIn": "Yerleşik",
+        "custom": "Özel",
+        "skills": "Beceriler"
+      },
+      "insertTitle": "{{command}} komutunu sohbete ekle"
     }
   },
   "terminalShortcuts": {
@@ -389,7 +410,7 @@
       "modes": {
         "default": {
           "title": "Varsayılan",
-          "description": "Sadece güvenilir komutlar (ls, cat, grep, git status, vb.) otomatik çalışır. Diğer komutlar atlanır. Çalışma alanına yazabilir."
+          "description": "Komutları çalışma alanı korumalı ortamında çalıştırır. Onay gerektiğine Codex karar verir; bu etkileşimsiz entegrasyonda istekler onaylanamaz."
         },
         "acceptEdits": {
           "title": "Düzenlemeleri Kabul Et",
@@ -402,7 +423,7 @@
       },
       "technicalDetails": "Teknik ayrıntılar",
       "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=untrusted. Güvenilir komutlar: cat, cd, grep, head, ls, pwd, tail, git status/log/diff/show, find (-exec olmadan), vb.",
+        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. Komutları çalışma alanı korumalı ortamında çalıştırır. Onay gerektiğine Codex karar verir; bu etkileşimsiz entegrasyonda istekler onaylanamaz.",
         "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. Tüm komutlar proje dizini içinde otomatik çalışır.",
         "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. Tam sistem erişimi, yalnızca güvenilir ortamlarda kullan.",
         "overrideNote": "Sohbet arayüzündeki mod düğmesini kullanarak bunu oturum başına geçersiz kılabilirsin."

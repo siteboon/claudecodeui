@@ -1,5 +1,6 @@
 import { ArrowRight, GitMerge, RefreshCw } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { MergeWorktreeOptions, WorktreeInfo } from '@/shared/types';
 
@@ -13,13 +14,6 @@ type MergeWorktreeModalProps = {
   onMerge: (worktreePath: string, options: MergeWorktreeOptions) => Promise<boolean>;
 };
 
-function defaultMessage(branch: string | null, squash: boolean): string {
-  if (!branch) {
-    return '';
-  }
-  return squash ? `Squash merge branch '${branch}'` : `Merge branch '${branch}'`;
-}
-
 /** Rendered by WorktreesView to confirm merging a worktree branch into the base branch. */
 export default function MergeWorktreeModal({
   worktree,
@@ -28,20 +22,46 @@ export default function MergeWorktreeModal({
   onClose,
   onMerge,
 }: MergeWorktreeModalProps) {
+  const { t, i18n } = useTranslation();
   const [squash, setSquash] = useState(true);
   const [message, setMessage] = useState('');
   const [removeAfterMerge, setRemoveAfterMerge] = useState(true);
   /** Tracks whether the user edited the message, so toggling squash only rewrites untouched defaults. */
   const [messageEdited, setMessageEdited] = useState(false);
+  // Default commit message for the current branch/squash combination.
+  const defaultMessage = useCallback((branch: string | null, nextSquash: boolean): string => {
+    if (!branch) {
+      return '';
+    }
+    return nextSquash
+      ? t('git:merge.defaultSquash', { branch })
+      : t('git:merge.defaultMerge', { branch });
+  }, [t]);
+
+  // Remembers which worktree the editable message belongs to, so the effect
+  // below can tell a newly opened worktree apart from a locale change.
+  const messageWorktreeRef = useRef<WorktreeInfo | null>(null);
 
   useEffect(() => {
-    if (worktree) {
+    if (!worktree) {
+      return;
+    }
+    if (messageWorktreeRef.current !== worktree) {
+      // A new worktree resets every field, including the commit message.
+      messageWorktreeRef.current = worktree;
       setSquash(true);
       setRemoveAfterMerge(true);
       setMessage(defaultMessage(worktree.branch, true));
       setMessageEdited(false);
+      return;
     }
-  }, [worktree]);
+    // Same worktree after the locale changed: refresh the untouched default
+    // message so the submitted merge uses the active language.
+    if (!messageEdited) {
+      setMessage(defaultMessage(worktree.branch, squash));
+    }
+  }, [worktree, i18n.language, squash, messageEdited, defaultMessage]);
+
 
   const handleSquashChange = (nextSquash: boolean) => {
     setSquash(nextSquash);
@@ -69,7 +89,7 @@ export default function MergeWorktreeModal({
     return null;
   }
 
-  const commitLabel = `${worktree.ahead} commit${worktree.ahead === 1 ? '' : 's'}`;
+  const commitLabel = t('git:merge.commitsCount', { count: worktree.ahead });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -82,7 +102,7 @@ export default function MergeWorktreeModal({
       >
         <div className="p-6">
           <h3 id="merge-worktree-title" className="mb-1 text-lg font-semibold text-foreground">
-            Merge Worktree
+            {t('git:merge.title')}
           </h3>
 
           {/* branch → base branch summary */}
@@ -105,16 +125,16 @@ export default function MergeWorktreeModal({
               className="mt-0.5 h-4 w-4 rounded border-border accent-primary"
             />
             <span>
-              Squash commits
+              {t('git:merge.squashLabel')}
               <span className="block text-xs text-muted-foreground">
-                Combine all {commitLabel} into a single commit on {baseBranch}
+                {t('git:merge.squashDesc', { count: worktree.ahead, branch: baseBranch })}
               </span>
             </span>
           </label>
 
           <div className="mb-3">
             <label htmlFor="merge-worktree-message" className="mb-2 block text-sm font-medium text-foreground/80">
-              Commit message
+              {t('git:merge.messageLabel')}
             </label>
             <textarea
               id="merge-worktree-message"
@@ -136,9 +156,9 @@ export default function MergeWorktreeModal({
               className="mt-0.5 h-4 w-4 rounded border-border accent-primary"
             />
             <span>
-              Clean up after merge
+              {t('git:merge.cleanupLabel')}
               <span className="block text-xs text-muted-foreground">
-                Remove the worktree and delete its branch once merged
+                {t('git:merge.cleanupDesc')}
               </span>
             </span>
           </label>
@@ -148,7 +168,7 @@ export default function MergeWorktreeModal({
               onClick={onClose}
               className="rounded-lg px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
-              Cancel
+              {t('git:confirm.cancel')}
             </button>
             <button
               onClick={() => void handleMerge()}
@@ -158,12 +178,12 @@ export default function MergeWorktreeModal({
               {isMerging ? (
                 <>
                   <RefreshCw className="h-3 w-3 animate-spin" />
-                  <span>Merging...</span>
+                  <span>{t('git:merge.merging')}</span>
                 </>
               ) : (
                 <>
                   <GitMerge className="h-3 w-3" />
-                  <span>{squash ? 'Squash & Merge' : 'Merge'}</span>
+                  <span>{squash ? t('git:merge.squashAndMerge') : t('git:merge.merge')}</span>
                 </>
               )}
             </button>

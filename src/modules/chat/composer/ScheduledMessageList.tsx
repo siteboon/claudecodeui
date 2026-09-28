@@ -13,7 +13,8 @@ type ScheduledMessageListProps = {
  * visible in the session it will be sent to — and can be called off.
  *
  * Failed ones are shown too: a message that did not go is exactly the thing a
- * user needs to know about, and the server records why.
+ * user needs to know about, and the server records why. Dismissing one goes
+ * through the same cancel endpoint, so it stays gone across reloads.
  */
 export function ScheduledMessageList({ scheduledMessages, onCancel }: ScheduledMessageListProps) {
   const { t } = useTranslation('chat');
@@ -52,17 +53,15 @@ export function ScheduledMessageList({ scheduledMessages, onCancel }: ScheduledM
               </p>
               <p className="mt-0.5 truncate text-foreground">{message.content}</p>
             </div>
-            {!isFailed && (
-              <button
-                type="button"
-                onClick={() => onCancel(message.id)}
-                title={t('schedule.cancel')}
-                aria-label={t('schedule.cancel')}
-                className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => onCancel(message.id)}
+              title={isFailed ? t('schedule.dismiss') : t('schedule.cancel')}
+              aria-label={isFailed ? t('schedule.dismiss') : t('schedule.cancel')}
+              className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           </div>
         );
       })}

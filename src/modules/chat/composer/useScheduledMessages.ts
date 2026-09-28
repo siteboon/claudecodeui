@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { api } from '@/shared/api';
 import type { ScheduledMessage } from '@/shared/types';
@@ -12,25 +12,42 @@ import type { ScheduledMessage } from '@/shared/types';
  */
 export function useScheduledMessages(sessionId: string | null) {
   const [scheduledMessages, setScheduledMessages] = useState<ScheduledMessage[]>([]);
+  // Which session the list on screen belongs to. A fetch that resolves after
+  // the user has moved on must not put the old session's banner on the new one.
+  const activeSessionRef = useRef(sessionId);
 
   const refresh = useCallback(async () => {
+    // No session means nothing to fetch; the render-time reset below already
+    // cleared whatever the previous session had on screen.
     if (!sessionId) {
-      setScheduledMessages([]);
       return;
     }
 
     try {
       const response = await api.scheduledMessages.list(sessionId);
       const payload = await response.json();
+      if (activeSessionRef.current !== sessionId) {
+        return;
+      }
       setScheduledMessages(Array.isArray(payload?.data) ? payload.data : []);
     } catch (error) {
       console.error('Failed to load scheduled messages:', error);
     }
   }, [sessionId]);
 
+  // Cleared during the switch render, not by the fetch that follows: the
+  // previous session's banner must never paint over the new session, not even
+  // for the frame before an effect could run.
+  const [renderedSessionId, setRenderedSessionId] = useState(sessionId);
+  if (renderedSessionId !== sessionId) {
+    setRenderedSessionId(sessionId);
+    setScheduledMessages([]);
+  }
+
   useEffect(() => {
+    activeSessionRef.current = sessionId;
     void refresh();
-  }, [refresh]);
+  }, [refresh, sessionId]);
 
   const schedule = useCallback(async (input: {
     content: string;

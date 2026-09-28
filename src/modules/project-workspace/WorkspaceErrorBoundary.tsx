@@ -1,4 +1,5 @@
 import { useCallback, useState, type ErrorInfo, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ErrorBoundary as ReactErrorBoundary,
   type FallbackProps,
@@ -30,6 +31,7 @@ function ErrorFallback({
   showDetails,
   componentStack,
 }: ErrorFallbackProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col items-center justify-center p-8 text-center">
       <div className="max-w-md rounded-lg border border-red-200 bg-red-50 p-6">
@@ -43,13 +45,13 @@ function ErrorFallback({
               />
             </svg>
           </div>
-          <h3 className="ml-3 text-sm font-medium text-red-800">Something went wrong</h3>
+          <h3 className="ml-3 text-sm font-medium text-red-800">{t('misc.errorTitle')}</h3>
         </div>
         <div className="text-sm text-red-700">
-          <p className="mb-2">An error occurred while loading the chat interface.</p>
+          <p className="mb-2">{t('misc.errorDescription')}</p>
           {showDetails && (
             <details className="mt-4">
-              <summary className="cursor-pointer font-mono text-xs">Error Details</summary>
+              <summary className="cursor-pointer font-mono text-xs">{t('misc.errorDetails')}</summary>
               <pre className="mt-2 max-h-40 overflow-auto rounded bg-red-100 p-2 text-xs">
                 {formatError(error)}
                 {componentStack}

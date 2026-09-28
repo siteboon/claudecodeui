@@ -30,6 +30,23 @@ function createDependencies(
     githubTokens: { getActiveGithubToken: () => null },
     projects: { createProjectPath: () => ({ outcome: 'created' }) },
     models: {} as AgentDependencies['models'],
+    sessions: {
+      getSessionById: () => null,
+      getSessionByProviderSessionId: () => null,
+      createAppSession: () => ({ sessionId: 'app-session-1' }),
+    },
+    // A registry stand-in: the runtime writes straight to the audience, which
+    // is all the tests above this file's registration tests need.
+    runs: {
+      startRun: ((input: { connection: { send(data: string): void } | null }) => ({
+        // The gateway writer's shape: a runtime that feature-detects it (codex)
+        // hands it objects to serialize, as the real one expects.
+        writer: { isWebSocketWriter: true, send: (data: unknown) => input.connection?.send(JSON.stringify(data)), getSessionId: () => null },
+        events: [],
+      })) as unknown as AgentDependencies['runs']['startRun'],
+      completeRunIfCurrent: () => undefined,
+      isProcessing: () => false,
+    },
     queryClaude: unexpectedProviderCall as AgentDependencies['queryClaude'],
     queryCursor: unexpectedProviderCall as AgentDependencies['queryCursor'],
     queryCodex: unexpectedProviderCall as AgentDependencies['queryCodex'],
@@ -154,7 +171,7 @@ test('GitHub cloning keeps credentials out of arguments and remote URL', async (
   assert.equal(cloneEnvironment?.CLOUDCLI_GITHUB_TOKEN, token);
   assert.equal(cloneEnvironment?.GIT_CONFIG_KEY_0, 'credential.helper');
   assert.equal(cloneEnvironment?.GIT_CONFIG_VALUE_0, '');
-  assert.equal(cloneEnvironment?.GIT_CONFIG_KEY_1, 'credential.helper');
+  assert.equal(cloneEnvironment?.GIT_CONFIG_KEY_1, 'credential.https://github.com.helper');
 });
 
 test('Agent route reuses a matching checkout without cloning or deleting it', async () => {
@@ -182,7 +199,7 @@ test('Agent route reuses a matching checkout without cloning or deleting it', as
     } as unknown as AgentDependencies['fileSystem'],
     spawnProcess,
     models: {
-      getProviderModels: async () => ({ models: { DEFAULT: 'default-model' } }),
+      getProviderModels: async () => ({ OPTIONS: [], DEFAULT: 'default-model' }),
     } as unknown as AgentDependencies['models'],
     queryClaude: (async () => undefined) as AgentDependencies['queryClaude'],
   }), async (baseUrl) => {
@@ -202,4 +219,36 @@ test('Agent route reuses a matching checkout without cloning or deleting it', as
 
   assert.deepEqual(spawnedArguments, [['config', '--get', 'remote.origin.url']]);
   assert.deepEqual(removedPaths, []);
+});
+
+test('Agent route starts codex on the catalog default when the request names no model', async () => {
+  const codexCalls: { model?: string }[] = [];
+
+  await withAgentServer(createDependencies({
+    fileSystem: {
+      access: async () => undefined,
+    } as unknown as AgentDependencies['fileSystem'],
+    models: {
+      // `getProviderModels` resolves to a `ProviderModelsDefinition` - `OPTIONS`
+      // and `DEFAULT`, with nothing wrapped around it.
+      getProviderModels: async () => ({ OPTIONS: [], DEFAULT: 'catalog-default' }),
+    } as unknown as AgentDependencies['models'],
+    queryCodex: (async (_prompt: string, options: { model?: string }) => {
+      codexCalls.push(options);
+    }) as unknown as AgentDependencies['queryCodex'],
+  }), async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/agent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectPath: '/home/test/project',
+        message: 'Run',
+        provider: 'codex',
+        stream: false,
+      }),
+    });
+    assert.equal(response.status, 200);
+  });
+
+  assert.deepEqual(codexCalls.map((call) => call.model), ['catalog-default']);
 });

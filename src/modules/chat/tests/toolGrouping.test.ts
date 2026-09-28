@@ -217,3 +217,16 @@ test('a subagent container is never absorbed into a group', () => {
   assert.equal(items.length, 2);
   assert.equal(items.filter(isToolGroupItem).length, 0);
 });
+
+test('consecutive workflow launches keep their own cards instead of folding into a run', () => {
+  // A collapsed run mounts nothing until expanded, which would hide two
+  // workflows' names, statuses and the anchors the background-tasks strip
+  // scrolls to.
+  const items = groupConsecutiveTools([
+    toolMessage('Workflow', { script: "export const meta = { name: 'a' }" }),
+    toolMessage('Workflow', { script: "export const meta = { name: 'b' }" }),
+  ]);
+
+  assert.equal(items.length, 2);
+  assert.ok(items.every((item) => !isToolGroupItem(item)));
+});

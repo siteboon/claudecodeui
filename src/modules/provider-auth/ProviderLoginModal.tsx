@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 
 import { StandaloneShell } from '@/modules/standalone-shell';
@@ -78,6 +79,7 @@ export default function ProviderLoginModal({
   customCommand,
   isAuthenticated = false,
 }: ProviderLoginModalProps) {
+  const { t } = useTranslation();
   if (!isOpen) {
     return null;
   }
@@ -91,14 +93,17 @@ export default function ProviderLoginModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-50 max-md:items-stretch max-md:justify-stretch">
+    <div
+      data-escape-layer
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-50 max-md:items-stretch max-md:justify-stretch"
+    >
       <div className="flex h-3/4 w-full max-w-4xl flex-col rounded-lg bg-white shadow-xl dark:bg-gray-800 max-md:m-0 max-md:h-full max-md:max-w-none max-md:rounded-none md:m-4 md:h-3/4 md:max-w-4xl md:rounded-lg">
         <div className="flex items-center justify-between border-b border-gray-200 p-4 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
           <button
             onClick={onClose}
             className="text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-gray-300"
-            aria-label="Close login modal"
+            aria-label={t('common:misc.closeLoginModal')}
           >
             <X className="h-6 w-6" />
           </button>

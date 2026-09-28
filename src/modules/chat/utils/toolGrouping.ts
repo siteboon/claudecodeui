@@ -13,8 +13,10 @@ export function isToolGroupItem(item: MessageListItem): item is ToolGroupItem {
   return '_isGroup' in item && (item as ToolGroupItem)._isGroup === true;
 }
 
+// An agent's or a workflow's row is its whole card — status, timeline, result —
+// so it never folds into a collapsed run with its neighbours.
 function isGroupableToolMessage(message: ChatMessage): message is ChatMessage & { toolName: string } {
-  return Boolean(message.isToolUse && message.toolName && !message.isSubagentContainer);
+  return Boolean(message.isToolUse && message.toolName && !message.isSubagentContainer && message.toolName !== 'Workflow');
 }
 
 // Messages that render nothing (e.g. reasoning hidden when showThinking is off)

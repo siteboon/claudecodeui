@@ -2,7 +2,8 @@ import { useTranslation } from 'react-i18next';
 import { memo, useCallback, useMemo } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 
-import type { ChatMessage,
+import type { BackgroundTaskSummary,
+  ChatMessage,
   Project,
   ProjectSession,
   LLMProvider,
@@ -17,6 +18,7 @@ import ProviderSelectionEmptyState from '@/modules/chat/transcript/ProviderSelec
 import ToolGroupContainer from '@/modules/chat/transcript/ToolGroupContainer';
 import LoadAllMessagesOverlay from '@/modules/chat/transcript/LoadAllMessagesOverlay';
 import ChatExportMenu from '@/modules/chat/transcript/ChatExportMenu';
+import { BackgroundTasksStrip } from '@/modules/chat/transcript/BackgroundTasksStrip';
 
 /**
  * How many of the newest rows mount with real content on the first commit,
@@ -56,6 +58,11 @@ type ChatMessagesPaneProps = {
   visibleMessageCount: number;
   visibleMessages: ChatMessage[];
   loadEarlierMessages: () => void;
+  revealMessage: (message: ChatMessage) => void;
+  /** The session's running background tasks from the activity map, for the strip to list ones whose rows are not loaded. */
+  backgroundTasks?: BackgroundTaskSummary[];
+  /** The chat websocket's send, which the background-tasks strip stops a task over. */
+  sendMessage: (message: unknown) => void;
   loadAllMessages: () => void;
   allMessagesLoaded: boolean;
   isLoadingAllMessages: boolean;
@@ -110,6 +117,9 @@ function ChatMessagesPane({
   visibleMessageCount,
   visibleMessages,
   loadEarlierMessages,
+  revealMessage,
+  backgroundTasks,
+  sendMessage,
   loadAllMessages,
   allMessagesLoaded,
   isLoadingAllMessages,
@@ -175,7 +185,18 @@ function ChatMessagesPane({
       }`}
     >
       {chatMessages.length > 0 && (
-        <div className="pointer-events-none sticky right-4 top-3 z-10 mb-2 flex justify-end sm:px-4">
+        <div className="pointer-events-none sticky right-4 top-3 z-10 mb-2 flex items-start justify-between gap-2 sm:px-4">
+          {/* Running background work stays in view while the transcript scrolls under it. */}
+          <div className="pointer-events-auto min-w-0 pl-4 sm:pl-0">
+            <BackgroundTasksStrip
+              messages={chatMessages}
+              tasks={backgroundTasks}
+              sessionId={selectedSession?.id || currentSessionId}
+              sendMessage={sendMessage}
+              onReveal={revealMessage}
+              onLoadAll={loadAllMessages}
+            />
+          </div>
           <div className="pointer-events-auto">
             <ChatExportMenu
               messages={chatMessages}

@@ -67,7 +67,7 @@ const listProps = (activeRename: ActiveSidebarRename | null): SidebarProjectList
   selectedSession: null,
   isLoading: false,
   loadingProgress: null,
-  expandedProjects: new Set(),
+  isProjectExpanded: () => false,
   activeRename,
   initialSessionsLoaded: new Set(),
   currentTime: NOW,
@@ -78,6 +78,7 @@ const listProps = (activeRename: ActiveSidebarRename | null): SidebarProjectList
   onLoadMoreSessions: noop,
   loadingMoreProjects: new Set(),
   activeSessions: NO_SESSION_IDS,
+  backgroundSessionIds: NO_SESSION_IDS,
   attentionSessionIds: NO_SESSION_IDS,
   isProjectStarred: () => false,
   onRenameDraftChange: noop,
@@ -105,6 +106,34 @@ const changedProps = (before: Record<string, unknown>, after: Record<string, unk
 beforeEach(() => {
   recordedProjectRowProps.length = 0;
   recordedSessionRowProps.length = 0;
+});
+
+test('project expansion is resolved per project without dropping rows', () => {
+  const props = listProps(null);
+  const { rerender } = render(
+    React.createElement(SidebarProjectList, {
+      ...props,
+      isProjectExpanded: (projectId) => projectId === PROJECT_A.projectId,
+    }),
+  );
+
+  assert.deepEqual(
+    recordedProjectRowProps.map(({ isExpanded }) => isExpanded),
+    [true, false],
+  );
+
+  rerender(
+    React.createElement(SidebarProjectList, {
+      ...props,
+      isProjectExpanded: () => true,
+    }),
+  );
+
+  assert.equal(recordedProjectRowProps.length, 4);
+  assert.deepEqual(
+    recordedProjectRowProps.slice(2).map(({ isExpanded }) => isExpanded),
+    [true, true],
+  );
 });
 
 test('renaming a project changes props on that row only', () => {
@@ -174,6 +203,7 @@ const sessionsProps = (sessionRenameId: string | null, sessionRenameDraft: strin
   hasMoreSessions: false,
   isLoadingMoreSessions: false,
   activeSessions: NO_SESSION_IDS,
+  backgroundSessionIds: NO_SESSION_IDS,
   attentionSessionIds: NO_SESSION_IDS,
   currentTime: NOW,
   sessionRenameId,

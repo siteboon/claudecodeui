@@ -264,7 +264,8 @@
       "showSidebar": "사이드바 표시",
       "settings": "설정",
       "updateAvailable": "업데이트 가능",
-      "closeSidebar": "사이드바 닫기"
+      "closeSidebar": "사이드바 닫기",
+      "resizeSidebar": "사이드바 크기 조절"
     }
   }
 }

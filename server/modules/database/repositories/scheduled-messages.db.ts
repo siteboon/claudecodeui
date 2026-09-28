@@ -109,13 +109,16 @@ export const scheduledMessagesDb = {
       .run(reason.slice(0, 500), id);
   },
 
-  /** Cancels a pending message. Returns false when it had already fired. */
+  /**
+   * Cancels a pending message, or dismisses a failed one so its banner goes
+   * away. Returns false when it had already fired successfully.
+   */
   cancel(userId: number, id: string): boolean {
     const result = getConnection()
       .prepare(
         `UPDATE scheduled_messages
          SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
-         WHERE id = ? AND user_id = ? AND status = 'pending'`
+         WHERE id = ? AND user_id = ? AND status IN ('pending', 'failed')`
       )
       .run(id, userId);
 

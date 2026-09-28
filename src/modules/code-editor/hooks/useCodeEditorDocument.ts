@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { api } from '@/shared/api';
+import { api, readApiJson } from '@/shared/api';
 import type { CodeEditorFile } from '@/shared/types';
 import { isBinaryFile } from '@/modules/code-editor/utils/binaryFile';
 import { getPreviewKind } from '@/modules/code-editor/utils/previewableFile';
@@ -73,11 +73,10 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
         }
 
         const response = await api.readFile(fileProjectId, filePath);
-        if (!response.ok) {
-          throw new Error(`Failed to load file: ${response.status} ${response.statusText}`);
-        }
-
-        const data = await response.json();
+        // Read through readApiJson so the API's own explanation reaches the
+        // pane — a directory, a path outside the project root, a missing file.
+        // The bare status showed all of those as an opaque "403 Forbidden".
+        const data = await readApiJson<{ content: string }>(response);
         setContent(data.content);
       } catch (error) {
         const message = getErrorMessage(error);

@@ -14,7 +14,7 @@ export default function SidebarProjectList({
   selectedSession,
   isLoading,
   loadingProgress,
-  expandedProjects,
+  isProjectExpanded,
   activeRename,
   initialSessionsLoaded,
   currentTime,
@@ -26,8 +26,8 @@ export default function SidebarProjectList({
   onLoadMoreSessions,
   loadingMoreProjects,
   activeSessions,
+  backgroundSessionIds,
   attentionSessionIds,
-  forceExpanded = false,
   isProjectStarred,
   onRenameDraftChange,
   onToggleProject,
@@ -88,7 +88,7 @@ export default function SidebarProjectList({
                 project={project}
                 selectedProject={selectedProject}
                 selectedSession={selectedSession}
-                isExpanded={forceExpanded || expandedProjects.has(project.projectId)}
+                isExpanded={isProjectExpanded(project.projectId)}
                 isDeleting={deletingProjects.has(project.projectId)}
                 isStarred={isProjectStarred(project.projectId)}
                 isEditing={renamingProject !== null}
@@ -114,6 +114,7 @@ export default function SidebarProjectList({
                 onForkSession={onForkSession}
                 onLoadMoreSessions={onLoadMoreSessions}
                 activeSessions={activeSessions}
+                backgroundSessionIds={backgroundSessionIds}
                 attentionSessionIds={attentionSessionIds}
                 onNewSession={onNewSession}
                 onStartEditingSession={onStartEditingSession}

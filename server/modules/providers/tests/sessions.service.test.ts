@@ -5,7 +5,11 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { closeConnection, initializeDatabase, projectsDb, sessionsDb } from '@/modules/database/index.js';
+import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
+import { chatRunRegistry } from '@/modules/websocket/index.js';
+import type { IProvider } from '@/shared/interfaces.js';
+import type { BackgroundTaskSummary } from '@/shared/types.js';
 
 async function withIsolatedDatabase(runTest: () => void | Promise<void>): Promise<void> {
   const previousDatabasePath = process.env.DATABASE_PATH;
@@ -190,4 +194,113 @@ test('history pages are sliced from the cached full transcript and see appended 
   } finally {
     await rm(transcriptDirectory, { recursive: true, force: true });
   }
+});
+
+/**
+ * Stands in for the provider registry with one provider per id, each with the
+ * runtime given — the seam through which a runtime's background work reaches
+ * the running-sessions list without an SDK run behind it.
+ */
+async function withProviders(
+  runtimes: Partial<Record<'claude' | 'codex', IProvider['runtime']>>,
+  runTest: () => void | Promise<void>,
+): Promise<void> {
+  const realListProviders = providerRegistry.listProviders;
+  providerRegistry.listProviders = () =>
+    Object.entries(runtimes).map(([id, runtime]) => ({ id, runtime }) as IProvider);
+  try {
+    await runTest();
+  } finally {
+    providerRegistry.listProviders = realListProviders;
+    chatRunRegistry.clearAll();
+  }
+}
+
+const task = (taskId: string, startedAt: number): BackgroundTaskSummary => ({
+  taskId,
+  toolUseId: `toolu_${taskId}`,
+  taskType: 'local_agent',
+  description: `Task ${taskId}`,
+  startedAt,
+});
+
+test('running sessions list a session whose background work outlived its turn', { concurrency: false }, async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createAppSession('held-session', 'claude', '/tmp/running-project');
+    // The turn ran and completed: the registry still holds the finished run.
+    const run = chatRunRegistry.startRun({
+      appSessionId: 'held-session', provider: 'claude', providerSessionId: null, connection: null, userId: null,
+    });
+    assert.ok(run);
+    run.writer.send({ kind: 'text', content: 'launched', sessionId: 'held-session', provider: 'claude' });
+    run.writer.sendComplete({ exitCode: 0 });
+    assert.equal(run.status, 'completed');
+
+    const tasks = [task('late', 2_000), task('early', 1_000)];
+    await withProviders(
+      { claude: { run: async () => undefined, abort: () => false, listBackgroundWork: () => [{ sessionId: 'held-session', tasks }] } },
+      () => {
+        assert.deepEqual(sessionsService.listRunningSessions(), [{
+          sessionId: 'held-session',
+          provider: 'claude',
+          startedAt: 1_000,
+          lastSeq: run.lastSeq,
+          background: true,
+          canInterrupt: false,
+          tasks,
+        }]);
+        assert.ok(run.lastSeq > 0, 'the finished run still reports its sequence for replay');
+      },
+    );
+  });
+});
+
+test('running sessions carry their tasks on a chat run that is still going', { concurrency: false }, async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createAppSession('busy-session', 'claude', '/tmp/running-project');
+    sessionsDb.createAppSession('idle-session', 'codex', '/tmp/running-project');
+    const run = chatRunRegistry.startRun({
+      appSessionId: 'busy-session', provider: 'claude', providerSessionId: null, connection: null, userId: null,
+    });
+    assert.ok(run);
+
+    const tasks = [task('agent', 5_000)];
+    await withProviders(
+      {
+        claude: { run: async () => undefined, abort: () => false, listBackgroundWork: () => [{ sessionId: 'busy-session', tasks }] },
+        // A runtime without background work contributes chat runs alone.
+        codex: { run: async () => undefined, abort: () => false },
+      },
+      () => {
+        const sessions = sessionsService.listRunningSessions();
+        assert.equal(sessions.length, 1, 'a session with a running chat run is listed once');
+        assert.deepEqual(sessions[0], {
+          sessionId: 'busy-session',
+          provider: 'claude',
+          startedAt: run.startedAt,
+          lastSeq: 0,
+          tasks,
+        });
+      },
+    );
+  });
+});
+
+test('running sessions with no background work are the chat runs alone', { concurrency: false }, async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createAppSession('plain-session', 'codex', '/tmp/running-project');
+    const run = chatRunRegistry.startRun({
+      appSessionId: 'plain-session', provider: 'codex', providerSessionId: null, connection: null, userId: null,
+    });
+    assert.ok(run);
+
+    await withProviders(
+      { codex: { run: async () => undefined, abort: () => false } },
+      () => {
+        assert.deepEqual(sessionsService.listRunningSessions(), [{
+          sessionId: 'plain-session', provider: 'codex', startedAt: run.startedAt, lastSeq: 0,
+        }]);
+      },
+    );
+  });
 });

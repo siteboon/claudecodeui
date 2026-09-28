@@ -1,0 +1,353 @@
+{
+  "buttons": {
+    "save": "Simpan",
+    "cancel": "Batal",
+    "delete": "Hapus",
+    "create": "Buat",
+    "edit": "Edit",
+    "close": "Tutup",
+    "confirm": "Konfirmasi",
+    "submit": "Kirim",
+    "retry": "Coba Lagi",
+    "refresh": "Segarkan",
+    "search": "Cari",
+    "clear": "Bersihkan",
+    "copy": "Salin",
+    "download": "Unduh",
+    "upload": "Unggah",
+    "browse": "Telusuri"
+  },
+  "tabs": {
+    "chat": "Chat",
+    "shell": "Shell",
+    "files": "File",
+    "git": "Kontrol Sumber",
+    "tasks": "Tugas",
+    "browser": "Browser",
+    "computer": "Komputer"
+  },
+  "status": {
+    "loading": "Memuat...",
+    "success": "Berhasil",
+    "error": "Kesalahan",
+    "failed": "Gagal",
+    "pending": "Menunggu",
+    "completed": "Selesai",
+    "inProgress": "Sedang Berjalan"
+  },
+  "messages": {
+    "savedSuccessfully": "Berhasil disimpan",
+    "deletedSuccessfully": "Berhasil dihapus",
+    "updatedSuccessfully": "Berhasil diperbarui",
+    "operationFailed": "Operasi gagal",
+    "networkError": "Kesalahan jaringan. Periksa koneksi.",
+    "unauthorized": "Tidak memiliki otorisasi. Silakan masuk.",
+    "notFound": "Tidak ditemukan",
+    "invalidInput": "Input tidak valid",
+    "requiredField": "Kolom ini wajib diisi",
+    "unknownError": "Terjadi kesalahan yang tidak diketahui"
+  },
+  "navigation": {
+    "settings": "Pengaturan",
+    "home": "Beranda",
+    "back": "Kembali",
+    "next": "Berikutnya",
+    "previous": "Sebelumnya",
+    "logout": "Keluar"
+  },
+  "common": {
+    "language": "Bahasa",
+    "theme": "Tema",
+    "darkMode": "Mode Gelap",
+    "lightMode": "Mode Terang",
+    "name": "Nama",
+    "description": "Deskripsi",
+    "enabled": "Aktif",
+    "disabled": "Nonaktif",
+    "optional": "Opsional",
+    "version": "Versi",
+    "select": "Pilih",
+    "selectAll": "Pilih Semua",
+    "deselectAll": "Batalkan Semua Pilihan"
+  },
+  "time": {
+    "justNow": "Baru saja",
+    "minutesAgo": "{{count}} menit lalu",
+    "hoursAgo": "{{count}} jam lalu",
+    "daysAgo": "{{count}} hari lalu",
+    "yesterday": "Kemarin"
+  },
+  "fileOperations": {
+    "newFile": "File Baru",
+    "newFolder": "Folder Baru",
+    "rename": "Ganti Nama",
+    "move": "Pindahkan",
+    "copyPath": "Salin Path",
+    "openInEditor": "Buka di Editor"
+  },
+  "mainContent": {
+    "loading": "Memuat CloudCLI",
+    "settingUpWorkspace": "Menyiapkan workspace...",
+    "chooseProject": "Pilih Proyek",
+    "selectProjectDescription": "Pilih proyek dari sidebar untuk mulai coding dengan Claude. Setiap proyek berisi sesi chat dan riwayat file.",
+    "tip": "Tips",
+    "createProjectMobile": "Ketuk tombol menu di atas untuk mengakses proyek",
+    "createProjectDesktop": "Buat proyek baru dengan mengeklik ikon folder di sidebar",
+    "newSession": "Sesi Baru",
+    "untitledSession": "Sesi Tanpa Judul",
+    "projectFiles": "File Proyek"
+  },
+  "fileTree": {
+    "loading": "Memuat file...",
+    "files": "File",
+    "simpleView": "Tampilan sederhana",
+    "compactView": "Tampilan ringkas",
+    "detailedView": "Tampilan terperinci",
+    "searchPlaceholder": "Cari file dan folder...",
+    "clearSearch": "Hapus pencarian",
+    "name": "Nama",
+    "size": "Ukuran",
+    "modified": "Diubah",
+    "permissions": "Izin",
+    "noFilesFound": "Tidak ada file",
+    "checkProjectPath": "Periksa apakah path proyek dapat diakses",
+    "loadFailed": "Gagal memuat file",
+    "noMatchesFound": "Tidak ada kecocokan",
+    "tryDifferentSearch": "Coba kata pencarian lain atau hapus pencarian",
+    "justNow": "baru saja",
+    "minAgo": "{{count}} menit lalu",
+    "hoursAgo": "{{count}} jam lalu",
+    "daysAgo": "{{count}} hari lalu",
+    "newFile": "File Baru (Cmd+N)",
+    "newFolder": "Folder Baru (Cmd+Shift+N)",
+    "refresh": "Segarkan",
+    "collapseAll": "Ciutkan Semua",
+    "context": {
+      "rename": "Ganti Nama",
+      "delete": "Hapus",
+      "copyPath": "Salin Path",
+      "download": "Unduh",
+      "newFile": "File Baru",
+      "newFolder": "Folder Baru",
+      "upload": "Unggah File",
+      "refresh": "Segarkan",
+      "menuLabel": "Menu konteks file",
+      "loading": "Memuat..."
+    }
+  },
+  "projectWizard": {
+    "title": "Buat Proyek Baru",
+    "steps": {
+      "type": "Jenis",
+      "configure": "Konfigurasi",
+      "confirm": "Konfirmasi"
+    },
+    "step1": {
+      "question": "Sudah memiliki workspace atau ingin membuat yang baru?",
+      "existing": {
+        "title": "Workspace yang Ada",
+        "description": "Saya sudah memiliki workspace di server dan hanya perlu menambahkannya ke daftar proyek"
+      },
+      "new": {
+        "title": "Workspace Baru",
+        "description": "Buat workspace baru, dengan opsi clone dari repositori GitHub"
+      }
+    },
+    "step2": {
+      "existingPath": "Path Workspace",
+      "newPath": "Path Workspace",
+      "existingPlaceholder": "/path/to/existing/workspace",
+      "newPlaceholder": "/path/to/new/workspace",
+      "existingHelp": "Path lengkap ke direktori workspace yang ada",
+      "newHelp": "Path lengkap ke direktori workspace",
+      "githubUrl": "URL GitHub (Opsional)",
+      "githubPlaceholder": "https://github.com/username/repository",
+      "githubHelp": "Opsional: berikan URL GitHub untuk clone repositori",
+      "githubAuth": "Autentikasi GitHub (Opsional)",
+      "githubAuthHelp": "Hanya diperlukan untuk repositori privat. Repositori publik dapat di-clone tanpa autentikasi.",
+      "loadingTokens": "Memuat token tersimpan...",
+      "storedToken": "Token Tersimpan",
+      "newToken": "Token Baru",
+      "nonePublic": "Tidak Ada (Publik)",
+      "selectToken": "Pilih Token",
+      "selectTokenPlaceholder": "-- Pilih token --",
+      "tokenPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "tokenHelp": "Token ini hanya akan digunakan untuk operasi ini",
+      "publicRepoInfo": "Repositori publik tidak memerlukan autentikasi. Token dapat dikosongkan saat clone repositori publik.",
+      "noTokensHelp": "Tidak ada token tersimpan. Token dapat ditambahkan di Pengaturan → Kunci API agar mudah digunakan kembali.",
+      "optionalTokenPublic": "Token GitHub (Opsional untuk Repo Publik)",
+      "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (kosongkan untuk repo publik)"
+    },
+    "step3": {
+      "reviewConfig": "Tinjau Konfigurasi",
+      "existingWorkspace": "Workspace yang Ada",
+      "newWorkspace": "Workspace Baru",
+      "path": "Path:",
+      "cloneFrom": "Clone Dari:",
+      "authentication": "Autentikasi:",
+      "usingStoredToken": "Menggunakan token tersimpan:",
+      "usingProvidedToken": "Menggunakan token yang diberikan",
+      "noAuthentication": "Tanpa autentikasi",
+      "sshKey": "Kunci SSH",
+      "existingInfo": "Workspace akan ditambahkan ke daftar proyek dan tersedia untuk sesi Claude/Cursor.",
+      "newWithClone": "Repositori akan di-clone dari folder ini.",
+      "newEmpty": "Workspace akan ditambahkan ke daftar proyek dan tersedia untuk sesi Claude/Cursor.",
+      "cloningRepository": "Melakukan clone repositori..."
+    },
+    "buttons": {
+      "cancel": "Batal",
+      "back": "Kembali",
+      "next": "Berikutnya",
+      "createProject": "Buat Proyek",
+      "creating": "Membuat...",
+      "cloning": "Melakukan clone..."
+    },
+    "errors": {
+      "selectType": "Pilih apakah menggunakan workspace yang ada atau ingin membuat yang baru",
+      "providePath": "Masukkan path workspace",
+      "failedToCreate": "Gagal membuat workspace",
+      "failedToCreateFolder": "Gagal membuat folder"
+    }
+  },
+  "notifications": {
+    "genericTool": "sebuah tool",
+    "codes": {
+      "generic": {
+        "info": {
+          "title": "Notifikasi"
+        }
+      },
+      "permission": {
+        "required": {
+          "title": "Tindakan Diperlukan",
+          "body": "{{toolName}} menunggu keputusan."
+        }
+      },
+      "run": {
+        "stopped": {
+          "title": "Proses Dihentikan",
+          "body": "Alasan: {{reason}}"
+        },
+        "failed": {
+          "title": "Proses Gagal"
+        }
+      },
+      "agent": {
+        "notification": {
+          "title": "Notifikasi Agen"
+        }
+      }
+    }
+  },
+  "versionUpdate": {
+    "title": "Pembaruan Tersedia",
+    "newVersionReady": "Versi baru siap digunakan",
+    "currentVersion": "Versi Saat Ini",
+    "latestVersion": "Versi Terbaru",
+    "whatsNew": "Yang Baru:",
+    "viewFullRelease": "Lihat rilis lengkap",
+    "updateProgress": "Progres Pembaruan:",
+    "manualUpgrade": "Pembaruan manual:",
+    "npmUpgradeCommand": "npm install -g @cloudcli-ai/cloudcli@latest",
+    "manualUpgradeHint": "Atau klik \"Perbarui Sekarang\" untuk menjalankan pembaruan secara otomatis.",
+    "updateCompleted": "Pembaruan berhasil diselesaikan!",
+    "restartServer": "Mulai ulang server untuk menerapkan perubahan.",
+    "updateFailed": "Pembaruan gagal",
+    "buttons": {
+      "close": "Tutup",
+      "later": "Nanti",
+      "copyCommand": "Salin Perintah",
+      "updateNow": "Perbarui Sekarang",
+      "updating": "Memperbarui..."
+    },
+    "ariaLabels": {
+      "closeModal": "Tutup modal pembaruan versi",
+      "showSidebar": "Tampilkan sidebar",
+      "settings": "Pengaturan",
+      "updateAvailable": "Pembaruan tersedia",
+      "closeSidebar": "Tutup sidebar"
+    },
+    "startingUpdate": "Memulai pembaruan...",
+    "updateStartedRestarting": "Pembaruan dimulai. Server tampaknya sedang dimulai ulang untuk menerapkannya.",
+    "unexpectedResponse": "Endpoint pembaruan mengembalikan respons yang tidak terduga (HTTP {{status}}). Perbarui secara manual dengan perintah di bawah.",
+    "connectionInterrupted": "Koneksi ke server terputus — kemungkinan server sedang dimulai ulang untuk menerapkan pembaruan.",
+    "unknownError": "Kesalahan tidak diketahui",
+    "refreshNow": "Menyegarkan jendela sekarang...",
+    "refreshIn_one": "Jendela akan disegarkan dalam {{count}} detik. Jika pembaruan tidak diterapkan, MULAI ULANG environment.",
+    "refreshIn_other": "Jendela akan disegarkan dalam {{count}} detik. Jika pembaruan tidak diterapkan, MULAI ULANG environment."
+  },
+  "commandPalette": {
+    "title": "Palet perintah",
+    "pages": {
+      "actions": "Tindakan",
+      "files": "File",
+      "sessions": "Sesi",
+      "commits": "Commit",
+      "branches": "Branch"
+    },
+    "backToAll": "Kembali ke semua",
+    "backspaceHint": "Backspace untuk kembali",
+    "searchPage": "Cari {{page}}…",
+    "searchAnything": "Ketik untuk mencari apa saja…",
+    "noResults": "Tidak ada hasil.",
+    "groupActions": "Tindakan",
+    "groupNavigate": "Navigasi",
+    "groupGit": "Git",
+    "groupSettings": "Pengaturan",
+    "groupSessions": "Sesi",
+    "groupFiles": "File",
+    "groupCommits": "Commit",
+    "groupBranches": "Branch",
+    "startNewChat": "Mulai chat baru",
+    "selectProjectFirst": "Pilih proyek terlebih dahulu",
+    "openSettings": "Buka pengaturan",
+    "toggleTheme": "Ganti tema",
+    "navChat": "Buka Chat",
+    "navFiles": "Buka File",
+    "navShell": "Buka Shell",
+    "navGit": "Buka Git",
+    "navTasks": "Buka Tugas",
+    "gitFetch": "Git: Fetch",
+    "gitPull": "Git: Pull",
+    "gitPush": "Git: Push",
+    "settingsItem": "Pengaturan: {{label}}",
+    "browseAllSessions": "Telusuri semua sesi ({{count}})",
+    "browseAllFiles": "Telusuri semua file ({{count}})",
+    "browseAllCommits": "Telusuri semua commit ({{count}})",
+    "browseAllBranches": "Telusuri semua branch ({{count}})",
+    "switchTo": "Beralih ke: {{name}}"
+  },
+  "folderBrowser": {
+    "title": "Pilih Folder",
+    "hideHidden": "Sembunyikan folder tersembunyi",
+    "showHidden": "Tampilkan folder tersembunyi",
+    "createNew": "Buat folder baru",
+    "newFolderPlaceholder": "Nama folder baru",
+    "create": "Buat",
+    "loadFailed": "Gagal memuat folder",
+    "createFailed": "Gagal membuat folder",
+    "noSubfolders": "Tidak ada subfolder",
+    "select": "Pilih",
+    "pathLabel": "Path:",
+    "useThisFolder": "Gunakan folder ini"
+  },
+  "misc": {
+    "errorTitle": "Terjadi kesalahan",
+    "errorDescription": "Terjadi kesalahan saat memuat antarmuka chat.",
+    "errorDetails": "Detail Kesalahan",
+    "tryAgain": "Coba Lagi",
+    "projectFallback": "Proyek",
+    "openMenu": "Buka menu",
+    "noProjectSelected": "Tidak Ada Proyek yang Dipilih",
+    "projectRequiredForShell": "Proyek diperlukan untuk membuka shell",
+    "completedBadge": "(Selesai)",
+    "close": "Tutup",
+    "hideToken": "Sembunyikan token",
+    "showToken": "Tampilkan token",
+    "unknownProvider": "Tidak Diketahui",
+    "browseFolders": "Telusuri folder",
+    "closeLoginModal": "Tutup modal login",
+    "pluginLoadFailed": "Plugin gagal dimuat: {{error}}"
+  },
+  "cancel": "Batal"
+}

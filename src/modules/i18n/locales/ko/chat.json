@@ -274,6 +274,7 @@
     },
     "pending": "{{when}}에 전송 예정",
     "failed": "전송되지 않음 — {{reason}}",
-    "cancel": "예약 취소"
+    "cancel": "예약 취소",
+    "dismiss": "실패 알림 닫기"
   }
 }

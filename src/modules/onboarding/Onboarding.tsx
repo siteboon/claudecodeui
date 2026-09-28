@@ -1,5 +1,6 @@
 import { Check, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { LLMProvider } from '@/shared/types';
 import { api } from '@/shared/api';
@@ -25,6 +26,7 @@ type OnboardingProps = {
 
 /** Used by the auth module's ProtectedRoute to run first-time git and agent setup before the app loads. */
 export default function Onboarding({ onComplete }: OnboardingProps) {
+  const { t } = useTranslation('auth');
   const [currentStep, setCurrentStep] = useState(0);
   const [gitName, setGitName] = useState('');
   const [gitEmail, setGitEmail] = useState('');
@@ -96,12 +98,12 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     }
 
     if (!gitName.trim() || !gitEmail.trim()) {
-      setErrorMessage('Both git name and email are required.');
+      setErrorMessage(t('onboarding.errorNameEmailRequired'));
       return;
     }
 
     if (!gitEmailPattern.test(gitEmail)) {
-      setErrorMessage('Please enter a valid email address.');
+      setErrorMessage(t('onboarding.errorInvalidEmail'));
       return;
     }
 
@@ -110,13 +112,13 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
       const response = await api.user.updateGitConfig(gitName, gitEmail);
 
       if (!response.ok) {
-        const message = await readErrorMessageFromResponse(response, 'Failed to save git configuration');
+        const message = await readErrorMessageFromResponse(response, t('onboarding.errorSaveGitConfig'));
         throw new Error(message);
       }
 
       setCurrentStep((previous) => previous + 1);
     } catch (caughtError) {
-      setErrorMessage(caughtError instanceof Error ? caughtError.message : 'Failed to save git configuration');
+      setErrorMessage(caughtError instanceof Error ? caughtError.message : t('onboarding.errorSaveGitConfig'));
     } finally {
       setIsSubmitting(false);
     }
@@ -134,13 +136,13 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     try {
       const response = await api.user.completeOnboarding();
       if (!response.ok) {
-        const message = await readErrorMessageFromResponse(response, 'Failed to complete onboarding');
+        const message = await readErrorMessageFromResponse(response, t('onboarding.errorCompleteOnboarding'));
         throw new Error(message);
       }
 
       await onComplete?.();
     } catch (caughtError) {
-      setErrorMessage(caughtError instanceof Error ? caughtError.message : 'Failed to complete onboarding');
+      setErrorMessage(caughtError instanceof Error ? caughtError.message : t('onboarding.errorCompleteOnboarding'));
     } finally {
       setIsSubmitting(false);
     }
@@ -195,7 +197,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-muted-foreground transition-colors duration-200 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <ChevronLeft className="h-4 w-4" />
-                Previous
+                {t('onboarding.previous')}
               </button>
 
               <div className="flex items-center gap-3">
@@ -208,11 +210,11 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                     {isSubmitting ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        Saving...
+                        {t('onboarding.saving')}
                       </>
                     ) : (
                       <>
-                        Next
+                        {t('onboarding.next')}
                         <ChevronRight className="h-4 w-4" />
                       </>
                     )}
@@ -226,12 +228,12 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                     {isSubmitting ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        Completing...
+                        {t('onboarding.completing')}
                       </>
                     ) : (
                       <>
                         <Check className="h-4 w-4" />
-                        Complete Setup
+                        {t('onboarding.completeSetup')}
                       </>
                     )}
                   </button>

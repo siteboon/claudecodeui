@@ -84,6 +84,27 @@
       "openPanel": "打开设置面板",
       "draggingStatus": "正在拖拽...",
       "toggleAndMove": "点击切换，拖拽移动"
+    },
+    "tabs": {
+      "settings": "设置",
+      "commands": "命令"
+    },
+    "pin": "固定面板",
+    "unpin": "取消固定面板",
+    "close": "关闭面板",
+    "commands": {
+      "searchPlaceholder": "搜索命令…",
+      "noProject": "选择一个项目以查看其命令。",
+      "loading": "正在加载命令…",
+      "empty": "此项目没有可用的命令。",
+      "noMatches": "没有与搜索匹配的命令。",
+      "loadError": "无法加载命令。",
+      "groups": {
+        "builtIn": "内置",
+        "custom": "自定义",
+        "skills": "技能"
+      },
+      "insertTitle": "将 {{command}} 插入聊天"
     }
   },
   "terminalShortcuts": {
@@ -439,7 +460,7 @@
       "modes": {
         "default": {
           "title": "默认",
-          "description": "只有受信任的命令（ls、cat、grep、git status 等）会自动运行。其他命令将被跳过。可以写入工作区。"
+          "description": "在工作区沙箱内运行命令。Codex 决定何时需要批准；此非交互式集成无法批准请求。"
         },
         "acceptEdits": {
           "title": "接受编辑",
@@ -452,7 +473,7 @@
       },
       "technicalDetails": "技术详情",
       "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=untrusted。受信任的命令：cat、cd、grep、head、ls、pwd、tail、git status/log/diff/show、find（不带 -exec）等。",
+        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. 在工作区沙箱内运行命令。Codex 决定何时需要批准；此非交互式集成无法批准请求。",
         "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never。所有命令在项目目录内自动执行。",
         "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never。完全系统访问权限，仅在可信环境中使用。",
         "overrideNote": "您可以使用聊天界面中的模式按钮按会话覆盖此设置。"
