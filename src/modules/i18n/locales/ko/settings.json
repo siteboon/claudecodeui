@@ -84,6 +84,27 @@
       "openPanel": "설정 패널 열기",
       "draggingStatus": "드래그 중...",
       "toggleAndMove": "클릭하여 토글, 드래그하여 이동"
+    },
+    "tabs": {
+      "settings": "설정",
+      "commands": "명령어"
+    },
+    "pin": "패널 고정",
+    "unpin": "패널 고정 해제",
+    "close": "패널 닫기",
+    "commands": {
+      "searchPlaceholder": "명령어 검색…",
+      "noProject": "프로젝트를 선택하면 명령어가 표시됩니다.",
+      "loading": "명령어 불러오는 중…",
+      "empty": "이 프로젝트에서 사용할 수 있는 명령어가 없습니다.",
+      "noMatches": "검색과 일치하는 명령어가 없습니다.",
+      "loadError": "명령어를 불러올 수 없습니다.",
+      "groups": {
+        "builtIn": "기본 제공",
+        "custom": "사용자 정의",
+        "skills": "스킬"
+      },
+      "insertTitle": "{{command}}을(를) 채팅에 삽입"
     }
   },
   "terminalShortcuts": {
