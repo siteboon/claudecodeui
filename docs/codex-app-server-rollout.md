@@ -31,5 +31,10 @@ The Codex settings panel can restart the managed process after `config.toml` or
 `auth.json` changes. Restart waits for the process to stop, performs a fresh
 initialize handshake, and refuses to interrupt an active app-server turn.
 
+App-server RPC requests have a 30-second default deadline, including thread
+forks and initialization. A stalled initialization stops the child process;
+other unanswered requests fail without switching runtimes. This deadline
+bounds each RPC response, not the duration of a streamed model turn.
+
 Both implementations remain available because the user can select either mode
 from settings.

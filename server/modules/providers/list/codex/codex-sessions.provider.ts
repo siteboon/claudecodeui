@@ -2378,6 +2378,7 @@ export class CodexSessionsProvider implements IProviderSessions {
       }
 
       const timestamp = timestampFromSeconds(turn.startedAt, thread.createdAt);
+      let hasUserMessage = false;
       for (const rawItem of turn.items) {
         const item = readObjectRecord(rawItem);
         if (!item) {
@@ -2385,6 +2386,10 @@ export class CodexSessionsProvider implements IProviderSessions {
         }
         const transformed = transformCodexAppServerItem(item);
         transformed.timestamp = timestamp;
+        if (!hasUserMessage && transformed.itemType === 'user_message') {
+          transformed.turnId = readNonEmptyString(turn.id);
+          hasUserMessage = true;
+        }
         normalized.push(...this.normalizeMessage(transformed, sessionId));
       }
 
@@ -2432,9 +2437,12 @@ export class CodexSessionsProvider implements IProviderSessions {
   ): Promise<FetchHistoryResult> {
     const { limit = null, offset = 0 } = options;
     if (this.readRuntimeMode() === 'app-server') {
+      if (!options.providerSessionId) {
+        return this.paginateHistory([], limit, offset);
+      }
       return this.fetchAppServerHistory(
         sessionId,
-        options.providerSessionId ?? sessionId,
+        options.providerSessionId,
         limit,
         offset,
       );

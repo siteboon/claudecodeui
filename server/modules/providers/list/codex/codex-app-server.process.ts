@@ -100,6 +100,7 @@ export type CodexAppServerProcessManagerOptions = {
   clientInfo?: Partial<CodexAppServerClientInfo> & Pick<CodexAppServerClientInfo, 'name'>;
   capabilities?: Record<string, unknown>;
   shutdownGracePeriodMs?: number;
+  handshakeTimeoutMs?: number;
   spawn?: CodexAppServerSpawn;
   onNotification?: (notification: JsonRpcNotification) => void;
   onRequest?: (request: JsonRpcRequest) => unknown | Promise<unknown>;
@@ -139,6 +140,7 @@ const DEFAULT_ARGS = BUNDLED_CODEX_CLI
   ? [BUNDLED_CODEX_CLI, 'app-server', '--listen', 'stdio://']
   : ['app-server', '--listen', 'stdio://'];
 const DEFAULT_SHUTDOWN_GRACE_PERIOD_MS = 2_000;
+const DEFAULT_HANDSHAKE_TIMEOUT_MS = 30_000;
 
 const defaultSpawn: CodexAppServerSpawn = (
   executable,
@@ -170,6 +172,7 @@ export class CodexAppServerProcessManager {
   private readonly clientInfo: CodexAppServerClientInfo;
   private readonly capabilities?: Record<string, unknown>;
   private readonly shutdownGracePeriodMs: number;
+  private readonly handshakeTimeoutMs: number;
   private readonly spawnProcess: CodexAppServerSpawn;
   private readonly callbacks: Pick<
     CodexAppServerProcessManagerOptions,
@@ -199,6 +202,7 @@ export class CodexAppServerProcessManager {
       version: options.clientInfo?.version ?? BUNDLED_CODEX_VERSION ?? '0.154.0',
     };
     this.capabilities = options.capabilities;
+    this.handshakeTimeoutMs = options.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS;
     this.shutdownGracePeriodMs = Math.max(
       0,
       options.shutdownGracePeriodMs ?? DEFAULT_SHUTDOWN_GRACE_PERIOD_MS,
@@ -400,7 +404,7 @@ export class CodexAppServerProcessManager {
       const initialize = this.transport.request<CodexAppServerInitializeResult>('initialize', {
         clientInfo: this.clientInfo,
         ...(this.capabilities ? { capabilities: this.capabilities } : {}),
-      } satisfies CodexAppServerInitializeParams);
+      } satisfies CodexAppServerInitializeParams, { timeoutMs: this.handshakeTimeoutMs });
       const initializeResult = await Promise.race([initialize, processExit]);
       await this.transport.notify('initialized');
 

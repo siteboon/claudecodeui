@@ -38,6 +38,7 @@ type ProcessHarness = {
 
 type ProcessHarnessOptions = {
   shutdownGracePeriodMs?: number;
+  handshakeTimeoutMs?: number;
   /** Overrides the test client identity; pass null to exercise the manager defaults. */
   clientInfo?: CodexAppServerProcessManagerOptions['clientInfo'] | null;
 };
@@ -70,6 +71,7 @@ function createHarness(options: ProcessHarnessOptions = {}): ProcessHarness {
   const diagnostics: CodexAppServerDiagnostic[] = [];
   const managerOptions: CodexAppServerProcessManagerOptions = {
     shutdownGracePeriodMs: options.shutdownGracePeriodMs ?? 10,
+    handshakeTimeoutMs: options.handshakeTimeoutMs,
     spawn: () => process as unknown as CodexAppServerProcess,
     onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
   };
@@ -171,6 +173,21 @@ test('introduces itself as codex-tui with the bundled app-server version', async
   harness.process.stdout.write(`${JSON.stringify({ id: initialize.id, result: {} })}\n`);
   await harness.nextFrame();
   await startPromise;
+});
+
+test('rejects a stalled initialize handshake and stops its child', async () => {
+  const harness = createHarness({ handshakeTimeoutMs: 10, shutdownGracePeriodMs: 1 });
+  const startPromise = harness.manager.start();
+  const rejection = assert.rejects(startPromise, /initialize timed out after 10 ms/);
+  const initialize = await harness.nextFrame();
+  assert.equal(initialize.method, 'initialize');
+
+  await rejection;
+
+  assert.equal(harness.manager.currentState, 'stopped');
+  assert.equal(harness.manager.currentHandshake, null);
+  assert.match(harness.manager.getHealth().lastError ?? '', /initialize timed out/);
+  assert.deepEqual(harness.process.killSignals, ['SIGTERM']);
 });
 
 test('rejects requests before the handshake and correlates requests after it', async () => {

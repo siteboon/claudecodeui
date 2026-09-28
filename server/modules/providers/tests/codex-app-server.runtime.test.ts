@@ -44,6 +44,7 @@ function createHarness(options: { failThreadStart?: boolean } = {}): RuntimeHarn
   const requests: Record<string, unknown>[] = [];
   const waiters: Array<(request: Record<string, unknown>) => void> = [];
   let inputBuffer = '';
+  let nextTurnId = 1;
 
   process.stdin.on('data', (chunk: Buffer | string) => {
     inputBuffer += String(chunk);
@@ -84,7 +85,7 @@ function createHarness(options: { failThreadStart?: boolean } = {}): RuntimeHarn
       } else if (request.method === 'turn/start') {
         process.stdout.write(JSON.stringify({
           id: request.id,
-          result: { turn: { id: 'turn-1', status: 'inProgress' } },
+          result: { turn: { id: `turn-${nextTurnId++}`, status: 'inProgress' } },
         }) + '\n');
       } else if (request.method === 'turn/interrupt') {
         process.stdout.write(JSON.stringify({ id: request.id, result: {} }) + '\n');
@@ -293,8 +294,9 @@ test('starts/resumes a thread, submits a turn, and normalizes completed items', 
     },
   }) + '\n');
   const approval = output.messages.find((message) => message.kind === 'permission_request');
-  assert.ok(approval?.requestId);
-  runtime.permissions.resolve(approval.requestId, { allow: false });
+  const requestId = approval?.requestId;
+  assert.ok(requestId);
+  runtime.permissions.resolve(requestId, { allow: false });
   assert.deepEqual(await harness.nextRequest(), {
     id: 99,
     result: { decision: 'decline' },
@@ -368,6 +370,82 @@ test('starts/resumes a thread, submits a turn, and normalizes completed items', 
   assert.equal((tokenStatuses[0]?.tokenBudget as AnyRecord)?.total, 200000);
   assert.equal(output.messages.filter((message) => message.kind === 'complete').length, 1);
   assert.equal(output.messages.at(-1)?.success, true);
+});
+
+test('ignores item and completion notifications from a superseded turn', async () => {
+  const harness = createHarness();
+  const runtime = createRuntime(harness.process);
+  const output = createWriter();
+  const runPromise = runtime.run('Current prompt', { sessionId: 'resume-app' }, output.writer, context);
+  await harness.nextRequest();
+  await harness.nextRequest();
+  await harness.nextRequest();
+  await harness.nextRequest();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  harness.notify('item/completed', {
+    threadId: 'thread-existing',
+    turnId: 'turn-stale',
+    item: { type: 'agentMessage', id: 'stale-item', text: 'Stale answer' },
+  });
+  harness.notify('turn/completed', {
+    threadId: 'thread-existing',
+    turnId: 'turn-stale',
+    turn: { id: 'turn-1', status: 'completed' },
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  assert.equal(output.messages.some((message) => message.content === 'Stale answer'), false);
+  assert.equal(output.messages.some((message) => message.kind === 'complete'), false);
+
+  harness.notify('item/completed', {
+    threadId: 'thread-existing',
+    turnId: 'turn-1',
+    item: { type: 'agentMessage', id: 'current-item', text: 'Current answer' },
+  });
+  harness.notify('turn/completed', {
+    threadId: 'thread-existing',
+    turnId: 'turn-1',
+    turn: { id: 'turn-1', status: 'completed' },
+  });
+
+  assert.deepEqual(await runPromise, { status: 'completed' });
+  assert.equal(output.messages.some((message) => message.content === 'Current answer'), true);
+  assert.equal(output.messages.filter((message) => message.kind === 'complete').length, 1);
+});
+
+test('routes turnId-only notifications to the matching run when multiple threads are active', async () => {
+  const harness = createHarness();
+  const runtime = createRuntime(harness.process);
+  const firstOutput = createWriter();
+  const secondOutput = createWriter();
+  const multiSessionContext: ProviderRuntimeContext = {
+    ...context,
+    resolveProviderSessionId: (sessionId) => sessionId === 'app-first' ? 'thread-first' : 'thread-second',
+  };
+  const firstRun = runtime.run('First prompt', { sessionId: 'app-first' }, firstOutput.writer, multiSessionContext);
+  await harness.nextRequest();
+  await harness.nextRequest();
+  await harness.nextRequest();
+  await harness.nextRequest();
+  const secondRun = runtime.run('Second prompt', { sessionId: 'app-second' }, secondOutput.writer, multiSessionContext);
+  await harness.nextRequest();
+  await harness.nextRequest();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  harness.notify('item/completed', {
+    turnId: 'turn-2',
+    item: { type: 'agentMessage', id: 'second-answer', text: 'Second answer' },
+  });
+  harness.notify('turn/completed', { turnId: 'turn-2', turn: { status: 'completed' } });
+
+  assert.deepEqual(await secondRun, { status: 'completed' });
+  assert.equal(secondOutput.messages.some((message) => message.content === 'Second answer'), true);
+  assert.equal(firstOutput.messages.some((message) => message.content === 'Second answer'), false);
+  assert.equal(firstOutput.messages.some((message) => message.kind === 'complete'), false);
+
+  harness.notify('turn/completed', { turnId: 'turn-1', turn: { status: 'completed' } });
+  assert.deepEqual(await firstRun, { status: 'completed' });
 });
 
 test('maps a failed turn to an error and one unsuccessful complete event', async () => {
@@ -472,6 +550,22 @@ test('surfaces a pre-turn app-server failure without runtime fallback', async ()
     assert.match((error as Error).message, /Cannot start thread/);
     return true;
   });
+});
+
+test('propagates an unanswered thread fork deadline to the caller', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] });
+  const harness = createHarness();
+  const runtime = createRuntime(harness.process);
+  const forkPromise = runtime.forkThread({ threadId: 'thread-source', lastTurnId: 'turn-source', cwd: '/tmp' });
+  const rejection = assert.rejects(forkPromise, /thread\/fork timed out after 30000 ms/);
+  await harness.nextRequest();
+  await harness.nextRequest();
+  const request = await harness.nextRequest();
+  assert.equal(request.method, 'thread/fork');
+
+  context.mock.timers.tick(30_000);
+
+  await rejection;
 });
 
 test('forks a persisted thread through the app-server protocol', async () => {

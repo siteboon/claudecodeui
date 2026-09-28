@@ -73,7 +73,11 @@ export default function PermissionRequestsBanner({
           ? pendingPermissionRequests
               .filter(
                 (item) =>
-                  buildToolPermissionEntry(item.toolName, formatToolInputForDisplay(item.input)) === permissionEntry,
+                  item.provider === request.provider
+                  && (!isCodexRequest || (request.sessionId
+                    ? item.sessionId === request.sessionId
+                    : item.requestId === request.requestId))
+                  && buildToolPermissionEntry(item.toolName, formatToolInputForDisplay(item.input)) === permissionEntry,
               )
               .map((item) => item.requestId)
           : [request.requestId];

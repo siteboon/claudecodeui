@@ -126,7 +126,7 @@ const readThreadId = (value: unknown): string | null => {
 const readTurnId = (value: unknown): string | null => {
   const record = readRecord(value);
   const turn = readNestedRecord(record ?? {}, 'turn') ?? record;
-  return readString(turn?.id);
+  return readString(record?.turnId) ?? readString(turn?.id);
 };
 
 const readErrorMessage = (value: unknown, fallback = 'Codex turn failed'): string => {

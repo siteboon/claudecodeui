@@ -1,4 +1,5 @@
 import type { Readable, Writable } from 'node:stream';
+import { StringDecoder } from 'node:string_decoder';
 
 export type JsonRpcId = number | string;
 
@@ -108,6 +109,8 @@ type PendingRequest = {
   reject: (error: Error) => void;
 };
 
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+
 const hasOwn = (value: Record<string, unknown>, key: string): boolean => (
   Object.prototype.hasOwnProperty.call(value, key)
 );
@@ -146,9 +149,11 @@ export class CodexAppServerTransport {
     'onNotification' | 'onRequest' | 'onDiagnostic' | 'onClose'
   >;
   private readonly pending = new Map<JsonRpcId, PendingRequest>();
+  private readonly inputDecoder = new StringDecoder('utf8');
   private nextRequestId = 1;
   private inputBuffer = '';
   private writeTail: Promise<void> = Promise.resolve();
+  private pendingWrite: ((error: Error) => void) | null = null;
   private closed = false;
 
   constructor(options: JsonRpcTransportOptions) {
@@ -159,6 +164,7 @@ export class CodexAppServerTransport {
 
     this.input.on('data', (chunk: Buffer | string) => this.handleData(chunk));
     this.input.on('end', () => {
+      this.handleData(this.inputDecoder.end());
       if (this.inputBuffer.trim()) {
         this.emitDiagnostic({
           type: 'malformed_message',
@@ -169,8 +175,10 @@ export class CodexAppServerTransport {
       this.close(new JsonRpcTransportClosedError('JSON-RPC input stream ended'));
     });
     this.input.on('error', (error) => this.closeFromStream(error));
+    this.input.on('close', () => this.close(new JsonRpcTransportClosedError('JSON-RPC input stream closed')));
 
     this.output.on('error', (error) => this.closeFromStream(error));
+    this.output.on('close', () => this.close(new JsonRpcTransportClosedError('JSON-RPC output stream closed')));
 
     options.stderr?.on('data', (chunk: Buffer | string) => {
       this.emitDiagnostic({ type: 'stderr', text: String(chunk) });
@@ -195,9 +203,18 @@ export class CodexAppServerTransport {
    * Sends a JSON-RPC request and resolves when the matching response arrives.
    * Responses are correlated by ID and may arrive in any order.
    */
-  request<TResult = unknown>(method: string, params?: unknown): Promise<TResult> {
+  request<TResult = unknown>(
+    method: string,
+    params?: unknown,
+    options: { timeoutMs?: number } = {},
+  ): Promise<TResult> {
     if (this.closed) {
       return Promise.reject(new JsonRpcTransportClosedError());
+    }
+
+    const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 2_147_483_647) {
+      return Promise.reject(new RangeError('JSON-RPC request timeout must be a positive timer duration'));
     }
 
     const id = this.nextRequestId;
@@ -205,13 +222,24 @@ export class CodexAppServerTransport {
 
     const request = withParams({ jsonrpc: '2.0' as const, id, method }, params);
     const promise = new Promise<TResult>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        const pending = this.pending.get(id);
+        this.pending.delete(id);
+        pending?.reject(new Error(`JSON-RPC request ${method} timed out after ${timeoutMs} ms`));
+      }, timeoutMs);
       this.pending.set(id, {
-        resolve: (value) => resolve(value as TResult),
-        reject,
+        resolve: (value) => {
+          clearTimeout(timer);
+          resolve(value as TResult);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
       });
     });
 
-    void this.enqueueWrite(request).catch((error: unknown) => {
+    void this.enqueueWrite(request, id).catch((error: unknown) => {
       const pending = this.pending.get(id);
       if (!pending) {
         return;
@@ -244,6 +272,7 @@ export class CodexAppServerTransport {
 
     this.closed = true;
     const error = reason ?? new JsonRpcTransportClosedError();
+    this.pendingWrite?.(error);
     for (const pending of this.pending.values()) {
       pending.reject(error);
     }
@@ -267,7 +296,7 @@ export class CodexAppServerTransport {
       return;
     }
 
-    this.inputBuffer += String(chunk);
+    this.inputBuffer += typeof chunk === 'string' ? chunk : this.inputDecoder.write(chunk);
     let newlineIndex = this.inputBuffer.indexOf('\n');
     while (newlineIndex >= 0) {
       const line = this.inputBuffer.slice(0, newlineIndex).replace(/\r$/, '');
@@ -449,8 +478,13 @@ export class CodexAppServerTransport {
     }
   }
 
-  private enqueueWrite(message: Record<string, unknown>): Promise<void> {
-    const operation = this.writeTail.then(() => this.writeMessage(message));
+  private enqueueWrite(message: Record<string, unknown>, requestId?: JsonRpcId): Promise<void> {
+    const operation = this.writeTail.then(() => {
+      if (requestId !== undefined && !this.pending.has(requestId)) {
+        return;
+      }
+      return this.writeMessage(message);
+    });
     this.writeTail = operation.catch(() => undefined);
     return operation;
   }
@@ -478,6 +512,8 @@ export class CodexAppServerTransport {
         }
         settled = true;
         this.output.removeListener('error', onError);
+        this.output.removeListener('drain', onDrain);
+        this.pendingWrite = null;
         if (error) {
           reject(error);
         } else {
@@ -485,8 +521,11 @@ export class CodexAppServerTransport {
         }
       };
       const onError = (error: Error) => finish(error);
+      const onDrain = () => finish();
 
+      this.pendingWrite = onError;
       this.output.once('error', onError);
+      this.output.once('drain', onDrain);
 
       try {
         const accepted = this.output.write(line, (error?: Error | null) => {
@@ -497,8 +536,6 @@ export class CodexAppServerTransport {
 
         if (accepted) {
           finish();
-        } else {
-          this.output.once('drain', () => finish());
         }
       } catch (error) {
         finish(toError(error, 'Could not write JSON-RPC message'));

@@ -236,6 +236,24 @@ test('rewinding a Codex session moves it onto the branch and retires the old thr
   });
 });
 
+test('a fork timeout leaves the edited session on its original thread', { concurrency: false }, async (context) => {
+  await withIndexedSession(THREE_TURNS, async ({ sessionId }) => {
+    const timeoutError = new Error('JSON-RPC request thread/fork timed out after 30000 ms');
+    context.mock.method(codexAppServer, 'forkThread', async () => {
+      throw timeoutError;
+    });
+    const originalSession = sessionsDb.getSessionById(sessionId);
+
+    await assert.rejects(
+      createSdkSessionsProvider().rewindSession(sessionId, 'turn-b'),
+      (error: unknown) => error === timeoutError,
+    );
+
+    assert.deepEqual(sessionsDb.getSessionById(sessionId), originalSession);
+    assert.equal(sessionsDb.isProviderSessionSuperseded('thread-1', 'codex'), false);
+  });
+});
+
 test('editing the first prompt starts the conversation over', { concurrency: false }, async () => {
   await withIndexedSession(THREE_TURNS, async ({ sessionId }) => {
     const realForkThread = codexAppServer.forkThread;
