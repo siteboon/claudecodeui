@@ -60,6 +60,9 @@ const agentConfig: Record<AgentProvider, AgentVisualConfig> = {
 export default function AccountContent({ agent, authStatus, onLogin }: AccountContentProps) {
   const { t } = useTranslation('settings');
   const config = agentConfig[agent];
+  // An API key or a cloud provider (Bedrock, Vertex AI, ...) is configured
+  // outside the CLI's login, so signing in again would not change what it uses.
+  const showLoginSection = authStatus.method !== 'api_key' && authStatus.method !== 'cloud_provider';
 
   return (
     <div className="space-y-6">
@@ -111,7 +114,7 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
             </div>
           </div>
 
-          {authStatus.method !== 'api_key' && (
+          {showLoginSection && (
             <div className="border-t border-border/50 pt-4">
               <div className="flex items-center justify-between">
                 <div>
