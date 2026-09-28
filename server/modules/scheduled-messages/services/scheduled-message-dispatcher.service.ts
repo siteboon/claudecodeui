@@ -6,9 +6,9 @@ import type { ProviderRuntimeGateway } from '@/modules/websocket/index.js';
 /**
  * How often due messages are looked for.
  *
- * A minute is the granularity the composer offers, and a claim is indexed on
- * `(status, scheduled_for)`, so the poll is one cheap query. Anything finer
- * would buy precision nobody asked for.
+ * A minute is the granularity the composer offers, and the due lookup is
+ * indexed on `(status, scheduled_for)`, so the poll is one cheap query.
+ * Anything finer would buy precision nobody asked for.
  */
 const POLL_INTERVAL_MS = 30_000;
 
@@ -196,7 +196,8 @@ async function sendClaimedMessage(
  */
 function startDueScheduledMessages(runtime: ProviderRuntimeGateway, now: Date): Promise<void>[] {
   // Sessions the dispatcher is still sending to are skipped; their messages
-  // stay pending until a later poll.
+  // stay pending until a later poll. Without this, every poll during a long
+  // wait would line the same message up behind that session's turn once more.
   const due = scheduledMessagesDb.listDue(now, new Set(sessionTurnTails.keys()));
 
   // In session order: a session can only have one run at a time, and two due

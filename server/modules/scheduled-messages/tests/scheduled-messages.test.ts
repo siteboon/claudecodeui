@@ -651,6 +651,31 @@ test('a turn lined up behind another keeps its session taken once the first one 
   });
 });
 
+test('a pass leaves a session alone while the dispatcher is still sending to it', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    scheduleDue(userId, SESSION_ID, HELD);
+
+    const { runtime, runs, release } = createHeldRuntime();
+    const firstPass = dispatchDueScheduledMessages(runtime);
+    try {
+      await waitUntil(() => runs.length === 1, 'the held turn starts');
+
+      // Picked up now, it would only be lined up behind the held turn, and the
+      // pass would wait on that turn for as long as its prompt goes unanswered.
+      scheduleDue(userId, SESSION_ID, 'due later');
+      const secondPass = dispatchDueScheduledMessages(runtime);
+      const stillWaiting = new Promise((resolve) => { setTimeout(resolve, 200, 'still waiting'); });
+      assert.equal(await Promise.race([secondPass, stillWaiting]), 0, 'the busy session is skipped');
+      assert.equal(statusOf(userId, 'due later'), 'pending');
+    } finally {
+      await releaseAndDrain(release);
+    }
+
+    assert.equal(await firstPass, 1);
+    assert.deepEqual(commandsRun(runs), [HELD], 'the skipped message waits for a later poll');
+  });
+});
+
 test('a message lined up behind one that failed outright is still sent', async (t: TestContext) => {
   await withIsolatedDatabase(async (userId) => {
     scheduleDue(userId, SESSION_ID, 'fails', 2);
