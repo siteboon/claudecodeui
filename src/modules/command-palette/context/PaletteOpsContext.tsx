@@ -10,6 +10,9 @@ export type PaletteOps = {
   openDirectory: (path: string) => void;
   openSettings: (tab?: string) => void;
   refreshProjects: () => Promise<void> | void;
+  // Appends text to the chat composer and focuses it (used by the quick
+  // settings Commands tab to hand a picked slash command to the composer).
+  insertComposerText: (text: string) => void;
 };
 
 type Registry = MutableRefObject<Partial<PaletteOps>>;
@@ -22,6 +25,7 @@ const defaultOps: PaletteOps = {
   openDirectory: () => undefined,
   openSettings: () => undefined,
   refreshProjects: () => undefined,
+  insertComposerText: () => undefined,
 };
 
 /** Mounted by the project-workspace module so CommandPalette and the chat, code-editor and sidebar modules share one set of palette operations. */
@@ -40,6 +44,8 @@ export function usePaletteOps(): PaletteOps {
       openDirectory: (path) => (ref?.current.openDirectory ?? defaultOps.openDirectory)(path),
       openSettings: (tab) => (ref?.current.openSettings ?? defaultOps.openSettings)(tab),
       refreshProjects: () => (ref?.current.refreshProjects ?? defaultOps.refreshProjects)(),
+      insertComposerText: (text) =>
+        (ref?.current.insertComposerText ?? defaultOps.insertComposerText)(text),
     }),
     [ref],
   );
@@ -47,7 +53,14 @@ export function usePaletteOps(): PaletteOps {
 
 export function usePaletteOpsRegister(partial: Partial<PaletteOps>) {
   const ref = useContext(PaletteOpsContext);
-  const { openFile, openFileInEditor, openDirectory, openSettings, refreshProjects } = partial;
+  const {
+    openFile,
+    openFileInEditor,
+    openDirectory,
+    openSettings,
+    refreshProjects,
+    insertComposerText,
+  } = partial;
 
   useEffect(() => {
     if (!ref) return undefined;
@@ -61,12 +74,14 @@ export function usePaletteOpsRegister(partial: Partial<PaletteOps>) {
     if (openDirectory) registry.openDirectory = openDirectory;
     if (openSettings) registry.openSettings = openSettings;
     if (refreshProjects) registry.refreshProjects = refreshProjects;
+    if (insertComposerText) registry.insertComposerText = insertComposerText;
     return () => {
       if (openFile && registry.openFile === openFile) registry.openFile = prev.openFile;
       if (openFileInEditor && registry.openFileInEditor === openFileInEditor) registry.openFileInEditor = prev.openFileInEditor;
       if (openDirectory && registry.openDirectory === openDirectory) registry.openDirectory = prev.openDirectory;
       if (openSettings && registry.openSettings === openSettings) registry.openSettings = prev.openSettings;
       if (refreshProjects && registry.refreshProjects === refreshProjects) registry.refreshProjects = prev.refreshProjects;
+      if (insertComposerText && registry.insertComposerText === insertComposerText) registry.insertComposerText = prev.insertComposerText;
     };
-  }, [ref, openFile, openFileInEditor, openDirectory, openSettings, refreshProjects]);
+  }, [ref, openFile, openFileInEditor, openDirectory, openSettings, refreshProjects, insertComposerText]);
 }

@@ -322,6 +322,41 @@ export function useSidebarController({
     reloadRecentConversations();
   }, [debouncedSearchQuery, reloadRecentConversations, searchMode]);
 
+  // The Conversations list is only fetched when its tab opens, while `projects`
+  // is patched the moment a session is renamed from the workspace header. Fold
+  // those title changes into the rows already loaded, or a header rename would
+  // leave the highlighted conversation on its old name. The loaded rows are
+  // returned as-is when no session carries a different custom name, so
+  // unrelated `projects` updates do not re-render the list, and an empty
+  // summary never overwrites the id the server shows for an unnamed session.
+  const recentConversationsWithCurrentTitles = useMemo(() => {
+    if (recentConversations.length === 0) {
+      return recentConversations;
+    }
+
+    // Trimmed, because that is how the server derives a row's `sessionTitle`.
+    const summaryBySessionId = new Map<string, string>();
+    for (const project of projects) {
+      for (const session of project.sessions ?? []) {
+        const summary = typeof session.summary === 'string' ? session.summary.trim() : '';
+        if (summary) {
+          summaryBySessionId.set(session.id, summary);
+        }
+      }
+    }
+
+    let changed = false;
+    const next = recentConversations.map((conversation) => {
+      const summary = summaryBySessionId.get(conversation.sessionId);
+      if (summary === undefined || summary === conversation.sessionTitle) {
+        return conversation;
+      }
+      changed = true;
+      return { ...conversation, sessionTitle: summary };
+    });
+    return changed ? next : recentConversations;
+  }, [projects, recentConversations]);
+
   useEffect(() => {
     if (searchMode !== 'archived') {
       return;
@@ -1081,7 +1116,7 @@ export function useSidebarController({
     archivedSessions: filteredArchivedSessions,
     archivedSessionsCount: archivedProjects.length + archivedSessions.length,
     isArchivedSessionsLoading,
-    recentConversations,
+    recentConversations: recentConversationsWithCurrentTitles,
     recentConversationsTotal,
     recentConversationsHasMore,
     isRecentConversationsLoading,
