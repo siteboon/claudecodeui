@@ -206,7 +206,8 @@
     "status": {
       "newSession": "Sesi Baru",
       "initializing": "Menginisialisasi...",
-      "restarting": "Memulai ulang..."
+      "restarting": "Memulai ulang...",
+      "themeRestartHint": "Mulai ulang untuk menerapkan tema baru ke Claude Code"
     },
     "actions": {
       "disconnect": "Putuskan",

@@ -178,7 +178,8 @@
     "status": {
       "newSession": "新会话",
       "initializing": "初始化中...",
-      "restarting": "重启中..."
+      "restarting": "重启中...",
+      "themeRestartHint": "重启以将新主题应用到 Claude Code"
     },
     "actions": {
       "disconnect": "断开连接",

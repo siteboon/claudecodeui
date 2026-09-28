@@ -178,7 +178,8 @@
     "status": {
       "newSession": "새 세션",
       "initializing": "초기화 중...",
-      "restarting": "재시작 중..."
+      "restarting": "재시작 중...",
+      "themeRestartHint": "재시작하면 Claude Code에 새 테마가 적용됩니다"
     },
     "actions": {
       "disconnect": "연결 끊기",

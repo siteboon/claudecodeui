@@ -151,7 +151,8 @@
     "status": {
       "newSession": "新しいセッション",
       "initializing": "初期化中...",
-      "restarting": "再起動中..."
+      "restarting": "再起動中...",
+      "themeRestartHint": "再起動すると Claude Code に新しいテーマが適用されます"
     },
     "actions": {
       "disconnect": "切断",
