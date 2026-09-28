@@ -1,4 +1,4 @@
-import { BrowserView } from 'electron';
+import { BrowserView, dialog } from 'electron';
 
 const TARGET_LOAD_TIMEOUT_MS = 20000;
 
@@ -84,6 +84,28 @@ export class ViewHost {
     webContents.setWindowOpenHandler(({ url }) => {
       void this.openExternalUrl(url).catch((error) => this.showError('Could not open external link', error));
       return { action: 'deny' };
+    });
+
+    // A page can block unloading (the code editor does while it has unsaved
+    // edits). Electron then cancels the reload or navigation without asking,
+    // so ask the way a browser would. The answer has to be given synchronously.
+    webContents.on('will-prevent-unload', (event) => {
+      const mainWindow = this.getMainWindow();
+      const options = {
+        type: 'question',
+        buttons: ['Leave', 'Stay'],
+        defaultId: 1,
+        cancelId: 1,
+        title: 'Leave page?',
+        message: 'You have unsaved changes.',
+        detail: 'Leaving or reloading the page discards them.',
+      };
+      const response = mainWindow && !mainWindow.isDestroyed()
+        ? dialog.showMessageBoxSync(mainWindow, options)
+        : dialog.showMessageBoxSync(options);
+      if (response === 0) {
+        event.preventDefault();
+      }
     });
   }
 

@@ -34,5 +34,9 @@
   "binaryFile": {
     "title": "File binario",
     "message": "Il file \"{{fileName}}\" non può essere visualizzato nell'editor di testo perché è un file binario."
+  },
+  "unsavedChanges": {
+    "confirmClose": "Ci sono modifiche non salvate. Chiudere questo file e scartarle?",
+    "indicator": "Modifiche non salvate"
   }
 }
