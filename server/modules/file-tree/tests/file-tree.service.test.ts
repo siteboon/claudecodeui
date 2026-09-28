@@ -531,3 +531,93 @@ test('reading through a symlink out of the temp directory is still refused', asy
     await fsPromises.rm(outsideDirectory, { recursive: true, force: true });
   }
 });
+
+/**
+ * Builds the service against the real filesystem but a permissive workspace
+ * policy rooted at the given directory — the search walk is exercised against
+ * actual directory iteration, which is what its ordering and locking behavior
+ * depend on.
+ */
+function createSearchFileSystemService(
+  rootPath: string,
+  fileSystemConcurrency: number,
+): FileTreeServices {
+  return createFileTreeService({
+    fileSystem: {
+      access: (candidatePath) => fsPromises.access(candidatePath),
+      stat: (candidatePath) => fsPromises.stat(candidatePath),
+      lstat: (candidatePath) => fsPromises.lstat(candidatePath),
+      openDirectory: async function* (directoryPath) {
+        yield* await fsPromises.opendir(directoryPath);
+      },
+      realpath: (candidatePath) => fsPromises.realpath(candidatePath),
+      readTextFile: (filePath) => fsPromises.readFile(filePath, 'utf8'),
+      writeTextFile: (filePath, content) => fsPromises.writeFile(filePath, content, 'utf8'),
+      async makeDirectory(directoryPath, recursive) {
+        await fsPromises.mkdir(directoryPath, { recursive });
+      },
+      rename: (oldPath, newPath) => fsPromises.rename(oldPath, newPath),
+      async removeDirectory(directoryPath) {
+        await fsPromises.rm(directoryPath, { recursive: true, force: true });
+      },
+      unlink: (filePath) => fsPromises.unlink(filePath),
+      copyFile: (source, destination) => fsPromises.copyFile(source, destination),
+      createReadStream: (filePath) => createReadStream(filePath),
+    },
+    projects: { getProjectPathById: async () => rootPath },
+    workspace: {
+      rootPath,
+      validatePath: async (candidatePath) => ({ valid: true, resolvedPath: candidatePath }),
+      resolveReadOnlyRootPath: async () => null,
+    },
+    resolveMimeType: () => 'text/plain',
+    fileSystemConcurrency,
+    logger: { error: () => undefined },
+  });
+}
+
+test('searchWorkspaceFolders finds a shallow match in a later branch despite a deep branch full of matches', async () => {
+  const rootPath = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'folder-search-bfs-'));
+
+  try {
+    // The branch visited first is full of matches one level deeper than the
+    // single match in the branch visited last. A depth-first walk hits the
+    // result cap inside the deep branch and the shallow match never appears;
+    // breadth-first discovery guarantees it does.
+    for (let index = 1; index <= 35; index += 1) {
+      const deepMatch = path.join(rootPath, 'aaaa', 'd1', `m-deep-${String(index).padStart(2, '0')}`);
+      await fsPromises.mkdir(deepMatch, { recursive: true });
+    }
+    await fsPromises.mkdir(path.join(rootPath, 'zzzz', 'm-top'), { recursive: true });
+
+    const service = createSearchFileSystemService(rootPath, 4);
+    const { results } = await service.searchWorkspaceFolders('m-', '');
+
+    assert.equal(results.length, 30);
+    assert.equal(results[0].name, 'm-top');
+  } finally {
+    await fsPromises.rm(rootPath, { recursive: true, force: true });
+  }
+});
+
+test('searchWorkspaceFolders completes when the filesystem concurrency is 1', { timeout: 10_000 }, async () => {
+  const rootPath = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'folder-search-lock-'));
+
+  try {
+    // With a single permit, a traversal that held it while awaiting child
+    // directories deadlocked outright. Every directory now takes and releases
+    // the permit on its own, so the walk finishes and reports its matches.
+    await fsPromises.mkdir(path.join(rootPath, 'projects', 'nested', 'm-inner'), { recursive: true });
+    await fsPromises.mkdir(path.join(rootPath, 'm-outer'), { recursive: true });
+
+    const service = createSearchFileSystemService(rootPath, 1);
+    const { results } = await service.searchWorkspaceFolders('m-', '');
+
+    assert.deepEqual(
+      results.map((entry) => entry.name).sort(),
+      ['m-inner', 'm-outer'],
+    );
+  } finally {
+    await fsPromises.rm(rootPath, { recursive: true, force: true });
+  }
+});
