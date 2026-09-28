@@ -669,19 +669,34 @@ export function useChatComposerState({
   // the permission prompt timeout. Clears the box as a send would: the message
   // has left the composer either way.
   const handleScheduleMessage = useCallback(async (scheduledFor: Date) => {
-    const content = inputValueRef.current.trim();
+    const scheduledText = inputValueRef.current;
+    const content = scheduledText.trim();
     if (!content) {
       return;
     }
+    // Saving takes a round trip, and the user can keep typing or open another
+    // session meanwhile. Only the text that was scheduled may leave the
+    // composer: newer text stays, and so does the other session's draft.
+    const scheduledScope = draftScopeRef.current;
 
     const scheduled = await scheduleMessage({
       content,
       scheduledFor,
       options: buildSendOptions(content),
     });
-    if (scheduled) {
-      setInput('');
-      inputValueRef.current = '';
+    if (!scheduled) {
+      return;
+    }
+
+    if (draftScopeRef.current === scheduledScope) {
+      if (inputValueRef.current === scheduledText) {
+        setInput('');
+        inputValueRef.current = '';
+      }
+    } else if (scheduledScope && readDraftText(scheduledScope) === scheduledText) {
+      // The scheduled text is still saved as its session's draft; left there it
+      // would be back in the box, ready to schedule twice, on returning.
+      writeDraftText(scheduledScope, '');
     }
   }, [buildSendOptions, scheduleMessage, setInput]);
 
