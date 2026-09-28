@@ -35,11 +35,19 @@ vi.mock('@/shared/userSettings', () => ({
   resetUserPreferences: vi.fn(),
 }));
 
-/** Creates a JSON API response with the supplied body and HTTP status for auth mocks. */
-const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
-  status,
-  headers: { 'Content-Type': 'application/json' },
-});
+/**
+ * Creates a JSON API response for mocked authentication requests.
+ *
+ * @param body - Payload to serialize as JSON.
+ * @param status - HTTP response status, defaulting to 200.
+ * @returns A response with a JSON body and content type.
+ */
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
 
 beforeEach(() => {
   localStorage.clear();
