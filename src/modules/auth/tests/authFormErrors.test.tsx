@@ -16,6 +16,12 @@ const requests = vi.hoisted(() => ({
 }));
 
 vi.mock('react-i18next', () => {
+  /**
+   * Returns translation keys unchanged so assertions are independent of locale.
+   *
+   * @param key - Translation key requested by the authentication form.
+   * @returns The same key for predictable labels and fallback messages.
+   */
   const t = (key: string) => key;
   return { useTranslation: () => ({ t }) };
 });
