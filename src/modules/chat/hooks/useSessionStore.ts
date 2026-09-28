@@ -10,6 +10,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { api } from '@/shared/api';
+import { readUserPreference } from '@/shared/userSettings';
 import type { LLMProvider, NormalizedMessage } from '@/shared/types';
 import { removeOptimisticUserEchoes } from '@/modules/chat/utils/sessionMessageReconciliation';
 import {
@@ -98,7 +99,11 @@ async function requestSessionHistoryPage(
   sessionId: string,
   options: SessionMessagesRequestOptions,
 ): Promise<SessionHistoryPage> {
-  const response = await api.providers.sessionMessages(sessionId, options, {
+  const settings = readUserPreference<{ runtimeMode?: unknown }>('codexPermissions', {});
+  const response = await api.providers.sessionMessages(sessionId, {
+    ...options,
+    codexRuntimeMode: settings?.runtimeMode === 'sdk' ? 'sdk' : 'app-server',
+  }, {
     signal: AbortSignal.timeout(SESSION_HISTORY_REQUEST_TIMEOUT_MS),
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);

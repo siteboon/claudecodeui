@@ -477,7 +477,10 @@
       "modes": {
         "default": {
           "title": "Default",
-          "description": "Runs commands within the workspace sandbox. Codex decides when approval is needed; requests cannot be approved in this non-interactive integration."
+          "description": {
+            "app-server": "Runs commands within the workspace sandbox. Codex decides when approval is needed; requests can be approved interactively in chat.",
+            "sdk": "Runs commands within the workspace sandbox. Codex decides when approval is needed; requests cannot be approved in the non-interactive SDK integration."
+          }
         },
         "acceptEdits": {
           "title": "Accept Edits",
@@ -490,7 +493,10 @@
       },
       "technicalDetails": "Technical details",
       "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. Runs commands within the workspace sandbox. Codex decides when approval is needed; requests cannot be approved in this non-interactive integration.",
+        "default": {
+          "app-server": "sandbox=workspace-write, approvalPolicy=on-request. Runs commands within the workspace sandbox; requests can be approved interactively in chat.",
+          "sdk": "sandboxMode=workspace-write, approvalPolicy=on-request. Runs commands within the workspace sandbox; requests cannot be approved in the non-interactive SDK integration."
+        },
         "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. All commands auto-execute within project directory.",
         "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. Full system access, use only in trusted environments.",
         "overrideNote": "You can override this per-session using the mode button in the chat interface."

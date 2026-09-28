@@ -26,7 +26,7 @@ import {
   truncateSubagentActivity,
 } from '@/shared/utils.js';
 
-import { readCodexRuntimeMode, type CodexRuntimeMode } from './codex-app-server.config.js';
+import { readCodexRuntimeMode, resolveCodexRuntimeMode, type CodexRuntimeMode } from './codex-app-server.config.js';
 import {
   codexAppServerRuntime,
   transformCodexAppServerItem,
@@ -714,9 +714,14 @@ type CodexFileChange = {
 export function unifiedDiffToTexts(unifiedDiff: string): { oldText: string; newText: string } {
   const oldLines: string[] = [];
   const newLines: string[] = [];
+  let inHunk = !/^@@/m.test(unifiedDiff);
 
   for (const line of unifiedDiff.split('\n')) {
-    if (line.startsWith('@@') || line.startsWith('\\ No newline')) {
+    if (line.startsWith('@@')) {
+      inHunk = true;
+      continue;
+    }
+    if (!inHunk || line.startsWith('\\ No newline')) {
       continue;
     }
     if (line.startsWith('+')) {
@@ -2193,17 +2198,30 @@ export class CodexSessionsProvider implements IProviderSessions {
         case 'file_change': {
           // One row per file so each change gets the same diff view as an Edit.
           const changes = Array.isArray(raw.changes) ? raw.changes : [];
-          return changes.map((change: AnyRecord, index: number) => createNormalizedMessage({
-            id: `${itemId}_${index}`,
-            sessionId,
-            timestamp: ts,
-            provider: PROVIDER,
-            kind: 'tool_use',
-            toolName: change?.kind === 'add' ? 'Write' : 'Edit',
-            toolInput: { file_path: change?.path, old_string: '', new_string: '' },
-            toolId: `${itemId}_${index}`,
-            status: raw.status,
-          }));
+          return changes.map((change: AnyRecord, index: number) => {
+            const diff = typeof change?.diff === 'string' ? change.diff : '';
+            const { oldText, newText } = change?.kind === 'add'
+              ? { oldText: '', newText: diff }
+              : change?.kind === 'delete'
+                ? { oldText: diff, newText: '' }
+                : unifiedDiffToTexts(diff);
+            return createNormalizedMessage({
+              id: `${itemId}_${index}`,
+              sessionId,
+              timestamp: ts,
+              provider: PROVIDER,
+              kind: 'tool_use',
+              toolName: change?.kind === 'add' ? 'Write' : 'Edit',
+              toolInput: {
+                file_path: change?.path,
+                old_string: oldText,
+                new_string: newText,
+                ...(change?.kind === 'delete' ? { deleted: true } : {}),
+              },
+              toolId: `${itemId}_${index}`,
+              status: raw.status,
+            });
+          });
         }
         case 'mcp_tool_call': {
           const toolName = raw.server ? `mcp__${String(raw.server)}__${String(raw.tool ?? 'tool')}` : String(raw.tool || 'MCP');
@@ -2499,7 +2517,8 @@ export class CodexSessionsProvider implements IProviderSessions {
     options: FetchHistoryOptions = {},
   ): Promise<FetchHistoryResult> {
     const { limit = null, offset = 0 } = options;
-    if (this.readRuntimeMode() === 'app-server') {
+    const runtimeMode = resolveCodexRuntimeMode(options.codexRuntimeMode ?? this.readRuntimeMode());
+    if (runtimeMode === 'app-server') {
       if (!options.providerSessionId) {
         return this.paginateHistory([], limit, offset);
       }

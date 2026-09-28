@@ -5,6 +5,7 @@ import path from 'node:path';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
+import { resolveCodexRuntimeMode } from '@/modules/providers/list/codex/codex-app-server.config.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import type {
   BackgroundTaskSummary,
@@ -453,7 +454,7 @@ export const sessionsService = {
 
   async fetchHistory(
     sessionId: string,
-    options: Pick<FetchHistoryOptions, 'limit' | 'offset'> = {},
+    options: Pick<FetchHistoryOptions, 'limit' | 'offset' | 'codexRuntimeMode'> = {},
   ): Promise<FetchHistoryResult> {
     const session = sessionsDb.getSessionById(sessionId);
     if (!session) {
@@ -481,13 +482,16 @@ export const sessionsService = {
     const projectPath = session.project_path ?? '';
     const requestedLimit = options.limit ?? null;
     const requestedOffset = options.offset ?? 0;
+    const codexRuntimeMode = provider === 'codex'
+      ? resolveCodexRuntimeMode(options.codexRuntimeMode)
+      : undefined;
 
-    // Claude and Codex history readers parse `jsonl_path` itself, so a page
+    // Claude and Codex SDK history readers parse `jsonl_path` itself, so a page
     // can be sliced from the stat-validated full-transcript cache instead of
     // re-parsing the whole file per request. Cursor and OpenCode read their
     // messages from elsewhere (store.db / shared SQLite), so that file's stat
     // says nothing about their history — they stay on the direct path.
-    const transcriptPath = provider === 'claude' || provider === 'codex'
+    const transcriptPath = provider === 'claude' || (provider === 'codex' && codexRuntimeMode === 'sdk')
       ? session.jsonl_path
       : null;
     const fullHistory = await sessionHistoryCache.getFullHistory({
@@ -498,6 +502,7 @@ export const sessionsService = {
         offset: 0,
         projectPath,
         providerSessionId,
+        ...(codexRuntimeMode ? { codexRuntimeMode } : {}),
       }),
     });
 
@@ -519,6 +524,7 @@ export const sessionsService = {
         offset: requestedOffset,
         projectPath,
         providerSessionId,
+        ...(codexRuntimeMode ? { codexRuntimeMode } : {}),
       });
     }
 

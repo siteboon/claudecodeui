@@ -11,6 +11,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import providerRouter from '@/modules/providers/provider.routes.js';
 import { providerRuntimeService } from '@/modules/providers/services/provider-runtime.service.js';
+import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import type { IProvider } from '@/shared/interfaces.js';
 import type { BackgroundTaskSummary, WorkflowAgentActivity } from '@/shared/types.js';
@@ -105,6 +106,33 @@ test('Codex app-server restart route delegates to the provider runtime service',
     });
   } finally {
     providerRuntimeService.restart = originalRestart;
+  }
+});
+
+test('history route validates and forwards the selected Codex runtime', async () => {
+  const originalFetchHistory = sessionsService.fetchHistory;
+  const calls: unknown[] = [];
+  sessionsService.fetchHistory = async (sessionId, options) => {
+    calls.push({ sessionId, ...options });
+    return { messages: [], total: 0, hasMore: false, offset: 0, limit: null };
+  };
+  try {
+    await withProviderServer(async (baseUrl) => {
+      for (const mode of ['sdk', 'app-server']) {
+        const response = await fetch(`${baseUrl}/api/providers/sessions/runtime-history/messages?codexRuntimeMode=${mode}&limit=5&offset=2`);
+        assert.equal(response.status, 200);
+      }
+      assert.deepEqual(calls, ['sdk', 'app-server'].map((codexRuntimeMode) => ({
+        sessionId: 'runtime-history', limit: 5, offset: 2, codexRuntimeMode,
+      })));
+      for (const query of ['codexRuntimeMode=sdks', 'codexRuntimeMode=sdk&codexRuntimeMode=app-server']) {
+        const response = await fetch(`${baseUrl}/api/providers/sessions/runtime-history/messages?${query}`);
+        assert.equal(response.status, 400);
+      }
+      assert.equal(calls.length, 2);
+    });
+  } finally {
+    sessionsService.fetchHistory = originalFetchHistory;
   }
 });
 

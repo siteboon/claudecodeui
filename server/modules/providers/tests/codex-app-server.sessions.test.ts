@@ -2,6 +2,57 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { CodexSessionsProvider } from '@/modules/providers/list/codex/codex-sessions.provider.js';
+import { transformCodexAppServerItem } from '@/modules/providers/list/codex/codex-app-server.runtime.js';
+
+for (const change of [
+  { kind: { type: 'add' }, diff: '+literal\nadded\n', oldText: '', newText: '+literal\nadded\n', toolName: 'Write' },
+  { kind: { type: 'delete' }, diff: '-literal\nremoved\n', oldText: '-literal\nremoved\n', newText: '', toolName: 'Edit' },
+  { kind: { type: 'update', move_path: null }, diff: '--- a/file.txt\n+++ b/file.txt\n@@ -1,2 +1,2 @@\n context\n-before\n+after\n', oldText: 'context\nbefore', newText: 'context\nafter', toolName: 'Edit' },
+]) {
+  test(`app-server ${change.kind.type} diffs are preserved in live messages and history`, async () => {
+    const item = {
+      type: 'fileChange', id: 'file-change', status: 'completed',
+      changes: [{ path: '/tmp/file.txt', kind: change.kind, diff: change.diff }],
+    };
+    const provider = new CodexSessionsProvider({
+      appServer: {
+        async readThread() {
+          return { thread: { turns: [{ id: 'turn-files', itemsView: 'full', items: [item] }] } };
+        },
+      },
+      readRuntimeMode: () => 'app-server',
+    });
+    const live = provider.normalizeMessage(transformCodexAppServerItem(item), 'file-session');
+    const history = await provider.fetchHistory('file-session', { providerSessionId: 'thread-files' });
+
+    for (const messages of [live, history.messages]) {
+      assert.equal(messages.length, 1);
+      assert.equal(messages[0].toolName, change.toolName);
+      assert.deepEqual(messages[0].toolInput, {
+        file_path: '/tmp/file.txt', old_string: change.oldText, new_string: change.newText,
+        ...(change.kind.type === 'delete' ? { deleted: true } : {}),
+      });
+    }
+  });
+}
+
+test('explicit app-server history overrides the SDK environment default', async () => {
+  let reads = 0;
+  const provider = new CodexSessionsProvider({
+    readRuntimeMode: () => 'sdk',
+    appServer: {
+      async readThread() {
+        reads += 1;
+        return { thread: { turns: [] } };
+      },
+    },
+  });
+
+  await provider.fetchHistory('app-history', {
+    providerSessionId: 'thread-history', codexRuntimeMode: 'app-server',
+  });
+  assert.equal(reads, 1);
+});
 
 test('app-server history uses the shared Codex normalizer', async () => {
   const provider = new CodexSessionsProvider({

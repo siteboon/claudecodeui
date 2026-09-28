@@ -878,9 +878,18 @@ router.get(
     const limit = parseBoundedIntegerQuery(req.query.limit, 'limit', null, 0);
     const offset = parseBoundedIntegerQuery(req.query.offset, 'offset', 0, 0);
 
+    const codexRuntimeMode = req.query.codexRuntimeMode;
+    if (codexRuntimeMode !== undefined && codexRuntimeMode !== 'sdk' && codexRuntimeMode !== 'app-server') {
+      throw new AppError('codexRuntimeMode must be "app-server" or "sdk".', {
+        code: 'INVALID_QUERY_PARAMETER',
+        statusCode: 400,
+      });
+    }
+
     const result = await sessionsService.fetchHistory(sessionId, {
       limit,
       offset,
+      codexRuntimeMode,
     });
     res.json(createApiSuccessResponse(result));
   }),

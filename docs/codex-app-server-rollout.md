@@ -25,6 +25,11 @@ runtime, so a failure is reported by the runtime selected for that request.
 
 The app-server mode provides persistent threads, app-server history, and tool
 approval bridging. The SDK mode keeps the direct SDK stream and JSONL history.
+Browser history requests carry the selected runtime along with pagination;
+non-browser callers can pass `codexRuntimeMode=sdk` or `codexRuntimeMode=app-server`
+to the session messages endpoint, or omit it to use the server default.
+Only SDK JSONL history uses the file-stat cache; app-server history is read
+directly so switching modes cannot reuse history from the other runtime.
 Background session indexing always scans JSONL files so it never starts the
 managed app-server process. The process starts lazily when app-server chat or
 history, forking, message editing, or a manual restart needs it.

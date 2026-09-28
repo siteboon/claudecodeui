@@ -70,6 +70,29 @@ const writeCodexTranscript = async (
   return filePath;
 };
 
+test('SDK-selected history reads JSONL without starting the default app-server', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-sdk-history-'));
+  const restoreHomeDir = patchHomeDir(tempRoot);
+  try {
+    const transcriptPath = await writeCodexTranscript(tempRoot, 'sdk-history-thread', tempRoot, 'SDK history');
+    await withIsolatedDatabase(async () => {
+      sessionsDb.createSession('sdk-history-thread', 'codex', tempRoot, 'SDK history',
+        '2026-09-28T00:00:00.000Z', '2026-09-28T00:00:00.000Z', transcriptPath);
+      const provider = new CodexSessionsProvider({
+        readRuntimeMode: () => 'app-server',
+        appServer: { async readThread() { assert.fail('SDK history must not start app-server'); } },
+      });
+      const history = await provider.fetchHistory('sdk-history-thread', {
+        providerSessionId: 'sdk-history-thread', codexRuntimeMode: 'sdk',
+      });
+      assert.ok(history.messages.some((message) => message.content === 'SDK history'));
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('Codex synchronizer preserves the title assigned when CloudCLI creates a session', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-session-sync-app-'));
   const workspacePath = path.join(tempRoot, 'workspace');

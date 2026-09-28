@@ -326,7 +326,14 @@ export function transformCodexAppServerItem(item: AnyRecord): AnyRecord {
         type: 'item',
         itemType,
         uuid,
-        changes: item.changes,
+        changes: Array.isArray(item.changes)
+          ? item.changes.map((change) => {
+            const record = readRecord(change);
+            return record
+              ? { ...record, kind: readString(readRecord(record.kind)?.type) ?? record.kind }
+              : change;
+          })
+          : item.changes,
         status: item.status,
       };
     case 'mcp_tool_call':

@@ -460,7 +460,10 @@
       "modes": {
         "default": {
           "title": "默认",
-          "description": "在工作区沙箱内运行命令。Codex 决定何时需要批准；此非交互式集成无法批准请求。"
+          "description": {
+            "app-server": "在工作区沙箱内运行命令。Codex 决定何时需要批准；您可以在聊天中交互式批准请求。",
+            "sdk": "在工作区沙箱内运行命令。Codex 决定何时需要批准；非交互式 SDK 集成无法批准请求。"
+          }
         },
         "acceptEdits": {
           "title": "接受编辑",
@@ -473,7 +476,10 @@
       },
       "technicalDetails": "技术详情",
       "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. 在工作区沙箱内运行命令。Codex 决定何时需要批准；此非交互式集成无法批准请求。",
+        "default": {
+          "app-server": "sandbox=workspace-write, approvalPolicy=on-request。在工作区沙箱内运行命令；您可以在聊天中交互式批准请求。",
+          "sdk": "sandboxMode=workspace-write, approvalPolicy=on-request。在工作区沙箱内运行命令；非交互式 SDK 集成无法批准请求。"
+        },
         "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never。所有命令在项目目录内自动执行。",
         "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never。完全系统访问权限，仅在可信环境中使用。",
         "overrideNote": "您可以使用聊天界面中的模式按钮按会话覆盖此设置。"

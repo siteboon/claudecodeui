@@ -5,6 +5,7 @@ import {
 } from '@/shared/authToken';
 import { IS_PLATFORM } from '@/shared/utils';
 import { readVoiceConfig, voiceConfigHeaders } from '@/shared/voiceConfig';
+import type { CodexRuntimeMode } from '@/shared/types';
 
 // Headers are a plain record rather than the full `HeadersInit` union so the
 // defaults below can be merged with a caller's headers by spreading.
@@ -131,6 +132,12 @@ const del = withBody('DELETE');
 // Exported for the consumers that cannot go through `authenticatedFetch`:
 // `EventSource` and `XMLHttpRequest` need a bare URL.
 
+type SessionHistoryQuery = {
+  limit?: number | null;
+  offset?: number;
+  codexRuntimeMode?: CodexRuntimeMode;
+};
+
 /**
  * Persisted messages for one session. Omitting `limit` requests the whole
  * transcript; passing one always pairs it with an explicit offset so automatic
@@ -138,12 +145,13 @@ const del = withBody('DELETE');
  */
 export const sessionMessagesUrl = (
   sessionId: string,
-  { limit = null, offset = 0 }: { limit?: number | null; offset?: number } = {},
+  { limit = null, offset = 0, codexRuntimeMode }: SessionHistoryQuery = {},
 ): string => {
   const base = `/api/providers/sessions/${encodeURIComponent(sessionId)}/messages`;
-  return limit === null || limit === undefined
-    ? base
-    : `${base}${query({ limit, offset: offset ?? 0 })}`;
+  return `${base}${query({
+    ...(limit === null || limit === undefined ? {} : { limit, offset: offset ?? 0 }),
+    codexRuntimeMode,
+  })}`;
 };
 
 const fileContentPath = (projectId: string, filePath: string) =>
@@ -395,7 +403,7 @@ export const api = {
     }) => post('/api/providers/sessions', payload),
     sessionMessages: (
       sessionId: string,
-      pagination: { limit?: number | null; offset?: number } = {},
+      pagination: SessionHistoryQuery = {},
       options: ApiRequestOptions = {},
     ) => get(sessionMessagesUrl(sessionId, pagination), options),
     sessionTokenUsage: (sessionId: string) =>
