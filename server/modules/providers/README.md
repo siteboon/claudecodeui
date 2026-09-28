@@ -1,4 +1,4 @@
-﻿# Providers Module Guide
+# Providers Module Guide
 
 This file documents the current provider contract in `server/modules/providers`.
 Keep it current whenever provider wiring, skill discovery, or session sync
@@ -45,6 +45,7 @@ Current provider ids in this repo are:
 - `codex`
 - `cursor`
 - `opencode`
+- `kiro`
 
 Those ids are mirrored in backend unions and frontend provider constants. If
 adding a new provider, update every place that hardcodes this list.
@@ -65,7 +66,7 @@ server/modules/providers/list/<provider>/
   <provider>-session-synchronizer.provider.ts
 ```
 
-The existing provider folders are `claude`, `codex`, `cursor`, and `opencode`.
+The existing provider folders are `claude`, `codex`, `cursor`, `opencode`, and `kiro`.
 
 Each provider wrapper owns its SDK/CLI runtime alongside its auth, model, and
 session facets. Runtime adapters receive registry-backed model and session
@@ -96,15 +97,15 @@ import the service from `server/modules/providers/index.ts`.
 1. Add the provider id everywhere it is part of the contract.
 
 - Update `server/shared/types.ts` `LLMProvider`.
-- Update `src/types/app.ts` `LLMProvider` if the frontend should know about it.
+- Update `src/shared/types.ts` `LLMProvider` if the frontend should know about it.
 - Update `server/modules/providers/provider.routes.ts`.
 - Update `server/modules/agent/agent.routes.ts` if the provider is launchable from the agent runtime.
 - Update `server/index.ts` if the provider needs runtime boot or shutdown wiring.
 - Update the `PROVIDER_ORDER` list in `public/api-docs.html` if the provider should appear in the public API docs.
-- Update `src/components/chat/hooks/useChatProviderState.ts` and
-  `src/components/chat/view/subcomponents/ProviderSelectionEmptyState.tsx` if
+- Update `src/modules/chat/hooks/useChatProviderState.ts` and
+  `src/modules/chat/transcript/ProviderSelectionEmptyState.tsx` if
   the provider should be selectable in chat.
-- Update `src/components/provider-auth/view/ProviderLoginModal.tsx` if the
+- Update `src/modules/provider-auth/ProviderLoginModal.tsx` if the
   provider has a login/setup flow.
 
 2. Create the wrapper class.
@@ -227,10 +228,37 @@ If the provider can run live chat sessions, update the runtime entrypoints too:
 If the provider is visible in the UI, update:
 
 - provider model fallback files under `server/modules/providers/list/<provider>/`
-- `src/components/chat/hooks/useChatProviderState.ts`
-- `src/components/chat/view/subcomponents/ProviderSelectionEmptyState.tsx`
-- `src/components/provider-auth/view/ProviderLoginModal.tsx`
-- `src/components/mcp/constants.ts`
+- `src/modules/chat/hooks/useChatProviderState.ts`
+- `src/modules/chat/transcript/ProviderSelectionEmptyState.tsx`
+- `src/modules/provider-auth/ProviderLoginModal.tsx`
+- `src/shared/constants.ts`
+
+## Kiro ACP Runtime
+
+Kiro adds `kiro` through the same seven facets. Its runtime lives in
+`list/kiro/kiro-runtime.provider.js` and uses `kiro-cli acp --trust-all-tools`
+with JSON-RPC over stdio. New runs call `session/new`; resumed runs resolve the
+app session id to the provider-native id before `session/load`. App model
+selections use `--model` for new sessions and `session/set_model` after loading.
+
+The process remains keyed by the app id for cancellation throughout startup
+and execution. Only real native ids reach the session writer. History replay
+from `session/load` is suppressed; live text uses `stream_delta` / `stream_end`
+and each non-aborted run emits one terminal `complete`. Prompt requests have
+no handshake timeout; cancellation shuts down the child with a bounded grace
+period.
+
+Kiro reads ACP transcripts and metadata from `~/.kiro/sessions/cli/*.{jsonl,json}`.
+MCP config is stored in `~/.kiro/settings/mcp.json` and
+`<workspace>/.kiro/settings/mcp.json`; edits preserve `disabled` and `autoApprove`.
+Skills are discovered under user/project `.kiro/skills` and `.agents/skills`;
+managed user skills are written to `~/.kiro/skills`. Auth probes use asynchronous
+`kiro-cli --version` and `kiro-cli whoami`, with the legacy AWS SSO token file as
+an optional hint only.
+
+The initial integration supports trusted tools and cancellation. Image/file
+attachments, interactive approvals, effort controls, token usage, message
+editing, and session forking are not exposed by its capability matrix.
 
 ## Minimal Wrapper Template
 
@@ -366,7 +394,7 @@ alongside the implementation.
 - Adding provider files but forgetting `provider.registry.ts` or
   `provider.routes.ts`.
 - Adding a live runtime without exposing it from the provider wrapper.
-- Updating backend provider ids but not `src/types/app.ts` or the frontend
+- Updating backend provider ids but not `src/shared/types.ts` or the frontend
   provider constants.
 - Omitting `runtime`, `skills`, or `sessionSynchronizer` from the wrapper.
 - Returning duplicate normalized message ids for split content.

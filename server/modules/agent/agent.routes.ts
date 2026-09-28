@@ -3,9 +3,10 @@ import path from 'path';
 
 import express from 'express';
 
-import type { ProviderRunFunction } from '@/shared/types.js';
+import type { ProviderRunFunction } from '@/shared/index.js';
+import { normalizeProjectPath } from '@/shared/index.js';
 
-import { normalizeProjectPath } from '../../shared/utils.js';
+import { collectAssistantMessages } from './agent-response.service.js';
 
 /** What the route reads off a session row it continues: the row, not the request, says which provider and project a session belongs to. */
 type AgentSessionRow = {
@@ -38,6 +39,7 @@ type AgentRouterDependencies = {
   queryCursor: ProviderRunFunction;
   queryCodex: ProviderRunFunction;
   queryOpenCode: ProviderRunFunction;
+  queryKiro: ProviderRunFunction;
   GithubClient: typeof import('@octokit/rest').Octokit;
 };
 
@@ -62,6 +64,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
   const spawnCursor = dependencies.queryCursor;
   const queryCodex = dependencies.queryCodex;
   const spawnOpenCode = dependencies.queryOpenCode;
+  const spawnKiro = dependencies.queryKiro;
   const Octokit = dependencies.GithubClient;
   const router = express.Router();
 
@@ -568,7 +571,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
      * always empty.)
      */
     getAssistantMessages() {
-      return this.messages.filter((msg) => msg && msg.kind === 'text' && msg.role === 'assistant');
+      return collectAssistantMessages(this.messages);
     }
 
     /**
@@ -628,7 +631,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
    *                          - Source for auto-generated branch names (if createBranch=true and no branchName)
    *                          - Fallback for PR title if no commits are made
    *
-   * @param {string} provider - (Optional) AI provider to use. Options: 'claude' | 'cursor' | 'codex' | 'opencode'
+   * @param {string} provider - (Optional) AI provider to use. Options: 'claude' | 'cursor' | 'codex' | 'opencode' | 'kiro'
    *                           Default: 'claude'
    *
    * @param {boolean} stream - (Optional) Enable Server-Sent Events (SSE) streaming for real-time updates.
@@ -756,7 +759,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
    * Input Validations (400 Bad Request):
    *   - Either githubUrl OR projectPath must be provided (not neither)
    *   - message must be non-empty string
-   *   - provider must be 'claude', 'cursor', 'codex', or 'opencode'
+   *   - provider must be 'claude', 'cursor', 'codex', 'opencode', or 'kiro'
    *   - createBranch/createPR requires githubUrl OR projectPath (not neither)
    *   - branchName must pass Git naming rules (if provided)
    *
@@ -886,8 +889,8 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       return res.status(400).json({ error: 'message is required' });
     }
 
-    if (requestedProvider !== null && !['claude', 'cursor', 'codex', 'opencode'].includes(requestedProvider)) {
-      return res.status(400).json({ error: 'provider must be "claude", "cursor", "codex", or "opencode"' });
+    if (requestedProvider !== null && !['claude', 'cursor', 'codex', 'opencode', 'kiro'].includes(requestedProvider)) {
+      return res.status(400).json({ error: 'provider must be "claude", "cursor", "codex", "opencode", or "kiro"' });
     }
 
     // Validate GitHub branch/PR creation requirements
@@ -1063,6 +1066,13 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           model: model || opencodeModels.DEFAULT,
           effort,
           permissionMode: 'bypassPermissions' // Agent runs are non-interactive, like the other providers above
+        }, run.writer);
+      } else if (provider === 'kiro') {
+        await spawnKiro(message.trim(), {
+          projectPath: finalProjectPath,
+          cwd: finalProjectPath,
+          sessionId: appSessionId,
+          model: model || undefined,
         }, run.writer);
       }
 

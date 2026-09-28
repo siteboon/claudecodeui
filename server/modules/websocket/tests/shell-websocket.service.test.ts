@@ -193,6 +193,28 @@ test('bypassPermissions carries through to resumed claude sessions', () => {
   }
 });
 
+test('Kiro shell launches and resumes using the provider-native id', () => {
+  for (const hasSession of [false, true]) {
+    const commands: string[] = [];
+    const pty = createFakePty();
+    const socket = createFakeSocket();
+    handleShellConnection(socket as never, {
+      resolveProviderSessionId: () => 'native-kiro',
+      spawnPty: (_shell: string, args: string | string[]) => {
+        commands.push(Array.isArray(args) ? args[args.length - 1] : args);
+        return pty as never;
+      },
+    });
+    socket.emit('message', JSON.stringify({
+      type: 'init', projectPath: process.cwd(), provider: 'kiro',
+      sessionId: `kiro-${hasSession}`, hasSession,
+    }));
+    assert.deepEqual(commands, [hasSession ? 'kiro-cli chat --resume-id "native-kiro"' : 'kiro-cli chat']);
+    assert.ok(socket.frames.some((frame) => frame.includes('Kiro')));
+    pty.emitExit();
+  }
+});
+
 test('a missing project directory is reported as an error frame and starts no pty', () => {
   const socket = createFakeSocket();
   let spawnCount = 0;

@@ -18,7 +18,8 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "kiro": "Kiro"
   },
   "tools": {
     "settings": "도구 설정",
@@ -142,6 +143,7 @@
       "google": "Google 제공"
     },
     "readyPrompt": {
+      "kiro": "Kiro를 {{model}}와 함께 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",
       "claude": "{{model}} 모델로 Claude를 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",
       "cursor": "{{model}} 모델로 Cursor를 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",
       "codex": "{{model}} 모델로 Codex를 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",

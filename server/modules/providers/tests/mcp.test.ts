@@ -313,7 +313,8 @@ test('providerMcpService global adder writes to all providers and rejects unsupp
       workspacePath,
     });
 
-    assert.equal(globalResult.length, 4);
+    // Five providers (claude, codex, cursor, opencode, kiro).
+    assert.equal(globalResult.length, 5);
     assert.ok(globalResult.every((entry) => entry.created === true));
 
     const claudeProject = await readJson(path.join(workspacePath, '.mcp.json'));
@@ -327,6 +328,9 @@ test('providerMcpService global adder writes to all providers and rejects unsupp
 
     const cursorProject = await readJson(path.join(workspacePath, '.cursor', 'mcp.json'));
     assert.ok((cursorProject.mcpServers as Record<string, unknown>)['global-http']);
+
+    const kiroProject = await readJson(path.join(workspacePath, '.kiro', 'settings', 'mcp.json'));
+    assert.ok((kiroProject.mcpServers as Record<string, unknown>)['global-http']);
 
     await assert.rejects(
       providerMcpService.addMcpServerToAllProviders({
