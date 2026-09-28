@@ -344,6 +344,9 @@ test('the workflow agent route reads an agent\'s timeline and status from its ru
     assert.deepEqual(finished.activity[0]?.toolInput, { pattern: 'useSidebar' });
     assert.deepEqual(finished.activity[0]?.toolResult, { content: 'src/modules/sidebar/useSidebar.ts', isError: false });
     assert.equal(finished.activity[1]?.content, 'One hook owns the sidebar.');
+    // The brief and the journal's result reach the response whole.
+    assert.equal(finished.prompt, 'You are the analysis step of a code-quality audit.');
+    assert.equal(finished.result, '{"area":"sidebar"}');
 
     // A `started` with no `result` or `failed`, and no live run of the session
     // to still be working in: nothing can report for it any more.
@@ -352,6 +355,7 @@ test('the workflow agent route reads an agent\'s timeline and status from its ru
     assert.equal(unreportedResponse.status, 200);
     assert.equal(unreported.agent.status, 'stopped');
     assert.equal(unreported.agent.label, 'synthesize');
+    assert.equal(unreported.result, undefined);
 
     // Both ids name a file under the session directory, so neither may carry
     // anything but the harness's own shapes — not even a well-formed

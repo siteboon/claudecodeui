@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -1106,6 +1106,74 @@ test('a workflow agent the journal has not settled is running only while the run
       const missing = await new ClaudeSessionsProvider({ getLiveRunStartTime: () => null })
         .readWorkflowAgentActivity(WORKFLOW_SESSION_ID, WORKFLOW_RUN_ID, 'aa1e064cf8bd159d6');
       assert.equal(missing, null);
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('a workflow agent read carries the task it was given and the whole result the journal recorded', { concurrency: false }, async () => {
+  // The CLI's `/workflows` view shows each agent's prompt and result; the
+  // card had only its steps, whose prose is capped for transport. Both are
+  // read for the one agent the user opens, so neither is cut short.
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-workflow-agent-brief-'));
+
+  try {
+    const parentPath = await writeClaudeWorkflowSession(tempRoot, { notification: 'user', journal: true });
+    const runDir = path.join(tempRoot, WORKFLOW_SESSION_ID, 'subagents', 'workflows', WORKFLOW_RUN_ID);
+    const prompt = [
+      'You are the chat step of a frontend audit.',
+      '',
+      ...Array.from({ length: 60 }, (_, index) => `${index + 1}. Read the hook named in item ${index + 1} of the brief and note what it owns.`),
+    ].join('\n');
+    const report = `# Chat audit\n\n${'Three large hooks carry most of the module. '.repeat(120)}\nLast line of the report.`;
+    assert.ok(prompt.length > 4000 && report.length > 4000, 'both must exceed the timeline\'s per-entry cap');
+
+    const agentRows = (agentId: string) => [
+      { parentUuid: null, isSidechain: true, agentId, type: 'user', uuid: `${agentId}-u1`, timestamp: '2026-08-21T10:40:00.000Z', message: { role: 'user', content: prompt } },
+      { parentUuid: `${agentId}-u1`, isSidechain: true, agentId, type: 'assistant', uuid: `${agentId}-a1`, timestamp: '2026-08-21T10:40:05.000Z', message: { role: 'assistant', model: 'claude-opus-4-1', content: [{ type: 'tool_use', id: `toolu_${agentId}_1`, name: 'Grep', input: { pattern: 'use' } }] } },
+      { parentUuid: `${agentId}-a1`, isSidechain: true, agentId, type: 'user', uuid: `${agentId}-u2`, timestamp: '2026-08-21T10:40:06.000Z', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: `toolu_${agentId}_1`, content: 'src/modules/chat/useChat.ts' }] } },
+      { parentUuid: `${agentId}-u2`, isSidechain: true, agentId, type: 'assistant', uuid: `${agentId}-a2`, timestamp: '2026-08-21T10:41:00.000Z', message: { role: 'assistant', model: 'claude-opus-4-1', content: [{ type: 'text', text: report }] } },
+    ];
+    const reportAgentId = 'ac0ffee0000000001';
+    for (const agentId of ['aa1e064cf8bd159d6', 'a9cfe29aa8f2afcbf', reportAgentId]) {
+      await writeFile(path.join(runDir, `agent-${agentId}.jsonl`), `${agentRows(agentId).map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+    }
+    // A fourth agent that returned prose rather than structured output.
+    await appendFile(path.join(runDir, 'journal.jsonl'), `${[
+      { type: 'started', key: 'v2:four', agentId: reportAgentId, label: 'report', phase: 'Synthesize' },
+      { type: 'result', key: 'v2:four', agentId: reportAgentId, result: report },
+    ].map((line) => JSON.stringify(line)).join('\n')}\n`, 'utf8');
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(WORKFLOW_SESSION_ID, 'claude', tempRoot, 'Workflow session', now, now, parentPath);
+      const provider = new ClaudeSessionsProvider({ getLiveRunStartTime: () => null });
+
+      // Structured output comes back as its JSON, for the card to lay out.
+      const structured = await provider.readWorkflowAgentActivity(WORKFLOW_SESSION_ID, WORKFLOW_RUN_ID, 'aa1e064cf8bd159d6');
+      assert.equal(structured?.prompt, prompt);
+      assert.equal(structured?.result, '{"area":"chat"}');
+
+      // Prose comes back whole, although the same text in the timeline is
+      // capped like any other step.
+      const prose = await provider.readWorkflowAgentActivity(WORKFLOW_SESSION_ID, WORKFLOW_RUN_ID, reportAgentId);
+      assert.equal(prose?.prompt, prompt);
+      assert.equal(prose?.result, report);
+      assert.match(prose?.activity.at(-1)?.content ?? '', /more characters$/);
+
+      // A failed agent returned nothing; its brief is still worth reading.
+      const failed = await provider.readWorkflowAgentActivity(WORKFLOW_SESSION_ID, WORKFLOW_RUN_ID, 'a9cfe29aa8f2afcbf');
+      assert.equal(failed?.agent.status, 'failed');
+      assert.equal(failed?.prompt, prompt);
+      assert.equal(failed?.result, undefined);
+
+      // None of it rides on the history load, which ships every agent of the
+      // run each time the session is opened.
+      const history = await provider.fetchHistory(WORKFLOW_SESSION_ID, { providerSessionId: WORKFLOW_SESSION_ID });
+      const workflowRow = history.messages.find((message) => message.kind === 'tool_use' && message.toolId === WORKFLOW_TOOL_USE_ID);
+      assert.equal(workflowRow?.workflow?.agents.length, 4);
+      assert.doesNotMatch(JSON.stringify(workflowRow?.workflow), /Three large hooks|frontend audit/);
     });
   } finally {
     await rm(tempRoot, { recursive: true, force: true });

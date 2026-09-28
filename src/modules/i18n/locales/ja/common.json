@@ -267,5 +267,11 @@
       "closeSidebar": "サイドバーを閉じる",
       "resizeSidebar": "サイドバーの幅を変更"
     }
+  },
+  "workflow": {
+    "agentTask": "タスク",
+    "agentTaskShowMore": "もっと見る",
+    "agentTaskShowLess": "折りたたむ",
+    "agentResult": "結果"
   }
 }

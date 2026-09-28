@@ -3,6 +3,7 @@ import { Bot, ChevronRight, CircleAlert, CircleCheck, CircleDashed } from 'lucid
 
 import type { DiffLine, LiveTaskStatus, Project, SubagentActivity, SubagentInfo, ToolResult } from '@/shared/types';
 import { cn } from '@/shared/utils';
+import { AgentTaskPrompt } from '@/modules/chat/tools/AgentTaskPrompt';
 import { SubagentTimeline } from '@/modules/chat/tools/SubagentTimeline';
 import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
 import { MarkdownContent } from '@/modules/chat/tools/ContentRenderers/MarkdownContent';
@@ -166,12 +167,7 @@ export const SubagentPanel = memo(({
             <div className="text-[10px] uppercase tracking-wide text-muted-foreground/50">{subagent.model}</div>
           )}
 
-          {prompt && (
-            <div className="rounded border border-border/40 bg-muted/40 p-2 text-xs text-muted-foreground">
-              <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground/60">Task</div>
-              <div className="line-clamp-6 whitespace-pre-wrap break-words">{prompt}</div>
-            </div>
-          )}
+          {prompt && <AgentTaskPrompt prompt={prompt} />}
 
           <SubagentTimeline
             activity={entries}

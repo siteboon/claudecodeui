@@ -15,6 +15,7 @@ import type {
 } from '@/shared/types';
 import { api, readApiJson } from '@/shared/api';
 import { cn } from '@/shared/utils';
+import { AgentTaskPrompt } from '@/modules/chat/tools/AgentTaskPrompt';
 import { MarkdownContent } from '@/modules/chat/tools/ContentRenderers/MarkdownContent';
 import { SubagentTimeline } from '@/modules/chat/tools/SubagentTimeline';
 import { ToolErrorDisplay } from '@/modules/chat/tools/ToolErrorDisplay';
@@ -44,6 +45,10 @@ type WorkflowPanelProps = {
 /** What the agent-activity route answers with. */
 type WorkflowAgentActivity = {
   agent: { id: string; label?: string; model?: string; status: BackgroundTaskStatus };
+  /** The brief the script gave the agent, whole. */
+  prompt?: string;
+  /** What the agent returned, whole: prose, or structured output as JSON. Absent until it settles. */
+  result?: string;
   activity: SubagentActivity[];
   activityCount: number;
 };
@@ -194,22 +199,34 @@ type WorkflowAgentTimelineProps = {
   sessionId: string;
   runId: string;
   agentId: string;
-  /** Whether the card still lists the agent as running, which is what keeps the timeline re-reading. */
+  /**
+   * Whether the card still lists the agent as running: the timeline re-reads
+   * through failed reads while it does, and reads once more when it stops.
+   */
   isRunning: boolean;
+  /**
+   * Whether the card lists the agent as stopped: its run is over without the
+   * journal settling it, so no result can still land and a server read that
+   * calls it running only means the session's own run is still up.
+   */
+  isStopped: boolean;
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
   selectedProject?: Project | null;
 };
 
 /**
- * One agent's timeline, read from its transcript when its row is opened.
+ * One agent's brief, timeline and result, read from its transcript and the
+ * run's journal when its row is opened — what the CLI's `/workflows` view
+ * shows for an agent.
  *
  * The SDK streams nothing of a workflow agent's own work to the parent
  * session, so this is fetched rather than folded from the store — and
- * re-read every few seconds while the agent runs, since the transcript is
- * the only place its progress lands.
+ * re-read every few seconds until a read finds the agent settled, since the
+ * transcript is the only place its progress lands and the journal the only
+ * place its result does.
  */
-const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFileOpen, createDiff, selectedProject }: WorkflowAgentTimelineProps) => {
+const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, isStopped, onFileOpen, createDiff, selectedProject }: WorkflowAgentTimelineProps) => {
   const { t } = useTranslation();
   // What the last read returned — the timeline, or why there is none — and
   // null until the first read lands. A later read that fails keeps the last
@@ -219,9 +236,10 @@ const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFi
   useEffect(() => {
     let cancelled = false;
     let nextRead: ReturnType<typeof setTimeout> | undefined;
+    // The agent's status as the last read that landed gave it; none until one has.
+    let serverStatus: BackgroundTaskStatus | undefined;
 
     const read = async () => {
-      let settled = false;
       try {
         const payload = await readApiJson<{ data: WorkflowAgentActivity }>(
           await api.workflowAgentActivity(sessionId, runId, agentId),
@@ -230,9 +248,7 @@ const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFi
           return;
         }
         setLoaded({ activity: payload.data });
-        // The transcript's own status can settle the agent before the card
-        // hears of it.
-        settled = payload.data.agent.status !== 'running';
+        serverStatus = payload.data.agent.status;
       } catch (error) {
         if (cancelled) {
           return;
@@ -243,7 +259,15 @@ const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFi
           ? previous
           : { error: error instanceof Error ? error.message : String(error) });
       }
-      if (isRunning && !settled) {
+      // Read again until a read finds the agent settled. The transcript's own
+      // status can settle the agent before the card hears of it, and the card
+      // can hear first too: the CLI reports an agent done before it writes the
+      // result to the journal — in auto mode only after a classifier request —
+      // so the read the card's change triggers can land while the server still
+      // has the agent running. It stops saying so once the journal settles the
+      // agent or the session's run ends — an aborted run never settles its
+      // agents, so a stopped one is not read again.
+      if (!isStopped && (serverStatus === 'running' || (isRunning && serverStatus === undefined))) {
         nextRead = setTimeout(read, AGENT_TIMELINE_POLL_MS);
       }
     };
@@ -253,7 +277,7 @@ const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFi
       cancelled = true;
       clearTimeout(nextRead);
     };
-  }, [sessionId, runId, agentId, isRunning]);
+  }, [sessionId, runId, agentId, isRunning, isStopped]);
 
   if (!loaded) {
     return <div className="text-[11px] text-muted-foreground/60">{t('workflow.agentTimelineLoading', 'Reading the agent\'s steps…')}</div>;
@@ -265,17 +289,35 @@ const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFi
       </div>
     );
   }
-  if (loaded.activity.activity.length === 0) {
-    return <div className="text-[11px] text-muted-foreground/60">{t('workflow.agentTimelineEmpty', 'Nothing recorded yet')}</div>;
-  }
+  const { prompt, result, activity, activityCount } = loaded.activity;
   return (
-    <SubagentTimeline
-      activity={loaded.activity.activity}
-      activityCount={loaded.activity.activityCount}
-      onFileOpen={onFileOpen}
-      createDiff={createDiff}
-      selectedProject={selectedProject}
-    />
+    <>
+      {prompt && <AgentTaskPrompt prompt={prompt} />}
+
+      {activity.length === 0 ? (
+        <div className="text-[11px] text-muted-foreground/60">{t('workflow.agentTimelineEmpty', 'Nothing recorded yet')}</div>
+      ) : (
+        <SubagentTimeline
+          activity={activity}
+          activityCount={activityCount}
+          onFileOpen={onFileOpen}
+          createDiff={createDiff}
+          selectedProject={selectedProject}
+        />
+      )}
+
+      {/* The whole answer: the timeline's last note is capped for transport,
+          and the row's preview is two lines from the live stream. Foldable
+          like the run's own result, since it can run to many screens. */}
+      {result && (
+        <details open className="rounded border border-border/40 bg-muted/30 p-2">
+          <summary className="cursor-pointer text-[10px] uppercase tracking-wide text-muted-foreground/60">
+            {t('workflow.agentResult', 'Result')}
+          </summary>
+          <MarkdownContent content={formatResultText(result)} className="prose prose-sm max-w-none dark:prose-invert" />
+        </details>
+      )}
+    </>
   );
 });
 WorkflowAgentTimeline.displayName = 'WorkflowAgentTimeline';
@@ -292,10 +334,11 @@ type WorkflowAgentRowProps = {
 /**
  * One agent of the run: its name, phase and status, what it is on while it
  * runs and what it came back with when done — and, opened on demand, its
- * timeline.
+ * brief, timeline and whole result.
  */
 const WorkflowAgentRowView = memo(({ agent, timelineAddress, onFileOpen, createDiff, selectedProject }: WorkflowAgentRowProps) => {
   const { t } = useTranslation();
+  const isExporting = useIsExportingTranscript();
   // Opened on demand: the timeline is a fetch and, for a long run, a few
   // hundred tool renderers.
   const [isOpen, setIsOpen] = useState(false);
@@ -346,7 +389,11 @@ const WorkflowAgentRowView = memo(({ agent, timelineAddress, onFileOpen, createD
       )}
 
       {agent.status === 'completed' && agent.resultPreview && (
-        <div className="line-clamp-2 whitespace-pre-wrap break-words pl-[30px] text-[11px] text-muted-foreground/70">{agent.resultPreview}</div>
+        // Clamped on screen, where opening the row shows the whole result;
+        // an export cannot open it, so there the preview is all there is.
+        <div className={cn('whitespace-pre-wrap break-words pl-[30px] text-[11px] text-muted-foreground/70', !isExporting && 'line-clamp-2')}>
+          {agent.resultPreview}
+        </div>
       )}
 
       {isOpen && timelineAddress && agent.agentId && (
@@ -356,6 +403,7 @@ const WorkflowAgentRowView = memo(({ agent, timelineAddress, onFileOpen, createD
             runId={timelineAddress.runId}
             agentId={agent.agentId}
             isRunning={agent.status === 'running'}
+            isStopped={agent.status === 'stopped'}
             onFileOpen={onFileOpen}
             createDiff={createDiff}
             selectedProject={selectedProject}

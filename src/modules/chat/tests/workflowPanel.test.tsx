@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import '@/modules/i18n';
+import { TranscriptRenderContext } from '@/modules/chat/context/TranscriptRenderContext';
 import { TranscriptSessionContext } from '@/modules/chat/context/TranscriptSessionContext';
 import MessageComponent from '@/modules/chat/transcript/MessageComponent';
 import { UiPreferencesProvider } from '@/shared/context/UiPreferencesContext';
@@ -11,7 +13,7 @@ import type { LiveTaskStatus, SubagentActivity, ToolResult, WorkflowAgentProgres
 // What the agent-activity route answers with, keyed by agent id; a missing
 // key answers the way the server does for an agent that left no transcript.
 const { agentActivityByAgentId, workflowAgentActivity } = vi.hoisted(() => {
-  const agentActivityByAgentId = new Map<string, { agent: { id: string; label?: string; status: string }; activity: SubagentActivity[]; activityCount: number }>();
+  const agentActivityByAgentId = new Map<string, { agent: { id: string; label?: string; status: string }; prompt?: string; result?: string; activity: SubagentActivity[]; activityCount: number }>();
   const workflowAgentActivity = vi.fn(async (_sessionId: string, _runId: string, agentId: string) => {
     const payload = agentActivityByAgentId.get(agentId);
     return payload
@@ -435,7 +437,14 @@ describe('the agents of a workflow card', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
     expect(workflowAgentActivity).toHaveBeenCalledTimes(3);
 
-    // …once more when it settles, and then no more.
+    // …once more when the card hears it is done — by when, outside auto mode,
+    // the journal has its result — and then no more.
+    agentActivityByAgentId.set('a9cfe29aa8f2afcbf', {
+      agent: { id: 'a9cfe29aa8f2afcbf', label: 'audit:sidebar', status: 'completed' },
+      result: 'One hook owns the sidebar.',
+      activity: [{ kind: 'thinking', content: 'Two hooks to compare.' }],
+      activityCount: 27,
+    });
     rerender(
       <TranscriptSessionContext.Provider value={{ sessionId: 'session-1' }}>
         <WorkflowPanel
@@ -448,16 +457,154 @@ describe('the agents of a workflow card', () => {
     );
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     expect(workflowAgentActivity).toHaveBeenCalledTimes(4);
+    expect(screen.getByText('One hook owns the sidebar.')).toBeTruthy();
     await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
     expect(workflowAgentActivity).toHaveBeenCalledTimes(4);
   });
 
-  it('says so in one line when an agent left no transcript', async () => {
+  it('keeps re-reading an agent the card has heard is done until the journal has its result', async () => {
+    // The CLI reports an agent done before it appends the result to the
+    // journal — in auto mode only after a classifier request — so the read
+    // the card's change triggers can find the server still calling it
+    // running. Stopping there would leave the row without its result.
+    vi.useFakeTimers();
+    const sidebarActivity = [{ kind: 'thinking' as const, content: 'Two hooks to compare.' }];
+    agentActivityByAgentId.set('a9cfe29aa8f2afcbf', {
+      agent: { id: 'a9cfe29aa8f2afcbf', label: 'audit:sidebar', status: 'running' },
+      activity: sidebarActivity,
+      activityCount: 1,
+    });
+    const renderWithSidebar = (state: WorkflowAgentProgress['state']) => (
+      <TranscriptSessionContext.Provider value={{ sessionId: 'session-1' }}>
+        <WorkflowPanel
+          toolInput="{}"
+          toolResult={LAUNCH_ACK}
+          taskStatus={{ status: 'running', agents: liveAgents.map((agent) => (agent.index === 1 ? { ...agent, state } : agent)) }}
+          createDiff={() => []}
+        />
+      </TranscriptSessionContext.Provider>
+    );
+    const { rerender } = render(renderWithSidebar('running'));
+    openCard();
+    fireEvent.click(screen.getByRole('button', { name: /audit:sidebar/ }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(workflowAgentActivity).toHaveBeenCalledTimes(1);
+
+    // The card hears the agent is done; the journal has nothing for it yet.
+    rerender(renderWithSidebar('done'));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(workflowAgentActivity).toHaveBeenCalledTimes(2);
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    expect(workflowAgentActivity).toHaveBeenCalledTimes(3);
+    expect(screen.queryByText('Result')).toBeNull();
+
+    // The journal catches up: the next read carries the result, and is the last.
+    agentActivityByAgentId.set('a9cfe29aa8f2afcbf', {
+      agent: { id: 'a9cfe29aa8f2afcbf', label: 'audit:sidebar', status: 'completed' },
+      result: 'FULL AGENT RESULT TEXT',
+      activity: sidebarActivity,
+      activityCount: 1,
+    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    expect(workflowAgentActivity).toHaveBeenCalledTimes(4);
+    expect(screen.getByText('FULL AGENT RESULT TEXT')).toBeTruthy();
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(workflowAgentActivity).toHaveBeenCalledTimes(4);
+  });
+
+  it('reads a stopped run\'s unsettled agent once, even while the session\'s run keeps the server calling it running', async () => {
+    // A workflow the user stopped never settles its agents in the journal, and
+    // the server calls an unsettled agent running for as long as the session's
+    // own run is up — which a held session can be for a long while.
+    vi.useFakeTimers();
+    agentActivityByAgentId.set('ab89f2cde612a51b1', {
+      agent: { id: 'ab89f2cde612a51b1', label: 'synthesize', status: 'running' },
+      prompt: 'Merge the audit findings.',
+      activity: [{ kind: 'thinking', content: 'Collecting findings.' }],
+      activityCount: 1,
+    });
+    renderPanel({ toolResult: LAUNCH_ACK, workflow: { ...completedWorkflow, status: 'stopped' } }, 'session-1');
+    openCard();
+    expect(agentRows().find((row) => row.textContent?.includes('synthesize'))?.textContent).toContain('no result');
+
+    fireEvent.click(screen.getByRole('button', { name: /synthesize/ }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.getByText('Collecting findings.')).toBeTruthy();
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(workflowAgentActivity).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows an opened agent\'s task and its whole result around its steps', async () => {
+    // What the CLI's `/workflows` view shows per agent. The row alone offers
+    // at most a two-line preview from the live stream, which a reload loses.
+    const prompt = [
+      'You are the chat step of a frontend audit.',
+      'Read src/modules/chat and report its largest hooks.',
+      'Return { area, hooks }.',
+    ].join('\n');
+    agentActivityByAgentId.set('aa1e064cf8bd159d6', {
+      agent: { id: 'aa1e064cf8bd159d6', label: 'audit:chat', status: 'completed' },
+      prompt,
+      result: '{"area":"chat","hooks":["useChatMessages","useChatComposerState"]}',
+      activity: [{ kind: 'text', content: 'Three large hooks carry most of the module.' }],
+      activityCount: 1,
+    });
+    renderPanel({ toolResult: { content: '{"audits":[]}', isError: false }, workflow: completedWorkflow }, 'session-1');
+    openCard();
+
+    fireEvent.click(screen.getByRole('button', { name: /audit:chat/ }));
+    await waitFor(() => expect(screen.getByText('Three large hooks carry most of the module.')).toBeTruthy());
+
+    expect(screen.getByText('Task')).toBeTruthy();
+    expect(screen.getByText(/You are the chat step of a frontend audit\./).textContent).toBe(prompt);
+    // The agent's own result, next to the run's, pretty-printed like it.
+    expect(screen.getAllByText('Result')).toHaveLength(2);
+    const agentResult = [...document.querySelectorAll('code')].find((code) => code.textContent?.includes('"area": "chat"'));
+    expect(agentResult?.textContent).toContain('"hooks": [');
+  });
+
+  it('shows no task or result for an agent whose transcript has neither', async () => {
+    agentActivityByAgentId.set('a9cfe29aa8f2afcbf', {
+      agent: { id: 'a9cfe29aa8f2afcbf', label: 'audit:sidebar', status: 'failed' },
+      activity: [{ kind: 'thinking', content: 'Two hooks to compare.' }],
+      activityCount: 1,
+    });
+    renderPanel({ toolResult: { content: '', isError: false }, workflow: { ...completedWorkflow, status: 'failed' } }, 'session-1');
+    openCard();
+
+    fireEvent.click(screen.getByRole('button', { name: /audit:sidebar/ }));
+    await waitFor(() => expect(screen.getByText('Two hooks to compare.')).toBeTruthy());
+    expect(screen.queryByText('Task')).toBeNull();
+    expect(screen.queryByText('Result')).toBeNull();
+  });
+
+  it('exports a finished agent\'s whole result preview, since nothing in the file can open the row', () => {
+    const markup = renderToStaticMarkup(
+      <TranscriptRenderContext.Provider value={{ isExporting: true }}>
+        <WorkflowPanel
+          toolInput="{}"
+          toolResult={LAUNCH_ACK}
+          taskStatus={{ status: 'running', agents: liveAgents }}
+          createDiff={() => []}
+        />
+      </TranscriptRenderContext.Provider>,
+    );
+
+    expect(markup).toContain('Three large hooks carry most of the module.');
+    expect(markup).not.toContain('line-clamp');
+  });
+
+  it('says so in one line when an agent left no transcript, and does not keep asking for a done one', async () => {
+    vi.useFakeTimers();
     renderPanel({ toolResult: LAUNCH_ACK, taskStatus: { status: 'running', agents: liveAgents } }, 'session-1');
     openCard();
 
     fireEvent.click(screen.getByRole('button', { name: /audit:chat/ }));
-    await waitFor(() => expect(screen.getByText('Steps unavailable: Workflow agent "aa1e064cf8bd159d6" was not found.')).toBeTruthy());
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.getByText('Steps unavailable: Workflow agent "aa1e064cf8bd159d6" was not found.')).toBeTruthy();
+    // No read ever said it was running, and the card has it done.
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(workflowAgentActivity).toHaveBeenCalledTimes(1);
   });
 
   it('cannot open an agent outside a session, where there is nothing to fetch from', () => {

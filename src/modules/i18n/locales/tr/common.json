@@ -267,5 +267,11 @@
       "closeSidebar": "Kenar çubuğunu kapat",
       "resizeSidebar": "Kenar çubuğunu yeniden boyutlandır"
     }
+  },
+  "workflow": {
+    "agentTask": "Görev",
+    "agentTaskShowMore": "Daha fazla göster",
+    "agentTaskShowLess": "Daha az göster",
+    "agentResult": "Sonuç"
   }
 }

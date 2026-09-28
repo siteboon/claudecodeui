@@ -267,5 +267,11 @@
       "closeSidebar": "Masquer la barre latérale",
       "resizeSidebar": "Redimensionner la barre latérale"
     }
+  },
+  "workflow": {
+    "agentTask": "Tâche",
+    "agentTaskShowMore": "Afficher plus",
+    "agentTaskShowLess": "Afficher moins",
+    "agentResult": "Résultat"
   }
 }

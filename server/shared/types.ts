@@ -443,7 +443,9 @@ export type WorkflowAgentProgress = {
  * parent session, so this is the only way to see what it did.
  *
  * `activityCount` is the full length of the timeline; `activity` is capped
- * for transport like a subagent's `subagentTools`.
+ * for transport like a subagent's `subagentTools`. `prompt` and `result` are
+ * not capped: they are one agent's brief and answer, read only when the user
+ * opens that agent, and never part of the history payload.
  */
 export type WorkflowAgentActivity = {
   agent: {
@@ -452,6 +454,13 @@ export type WorkflowAgentActivity = {
     model?: string;
     status: 'running' | 'completed' | 'failed' | 'stopped';
   };
+  /** The brief the script gave the agent: the first user message of its transcript. */
+  prompt?: string;
+  /**
+   * What the agent returned, from the run's journal: prose as written,
+   * structured output as JSON. Absent while it runs and for one that failed.
+   */
+  result?: string;
   activity: SubagentActivity[];
   activityCount: number;
 };
