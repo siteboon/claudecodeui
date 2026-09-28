@@ -30,6 +30,7 @@ export default function SidebarProjectList({
   attentionSessionIds,
   isProjectStarred,
   onRenameDraftChange,
+  onRenamePathDraftChange,
   onToggleProject,
   onProjectSelect,
   onToggleStarProject,
@@ -93,6 +94,7 @@ export default function SidebarProjectList({
                 isStarred={isProjectStarred(project.projectId)}
                 isEditing={renamingProject !== null}
                 renameDraft={renamingProject?.draft ?? ''}
+                renamePathDraft={renamingProject?.pathDraft ?? ''}
                 sessions={getProjectSessions(project)}
                 initialSessionsLoaded={initialSessionsLoaded.has(project.projectId)}
                 isLoadingMoreSessions={loadingMoreProjects.has(project.projectId)}
@@ -102,6 +104,7 @@ export default function SidebarProjectList({
                 tasksEnabled={tasksEnabled}
                 mcpServerStatus={mcpServerStatus}
                 onRenameDraftChange={onRenameDraftChange}
+                onRenamePathDraftChange={onRenamePathDraftChange}
                 onToggleProject={onToggleProject}
                 onProjectSelect={onProjectSelect}
                 onToggleStarProject={onToggleStarProject}

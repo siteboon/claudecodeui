@@ -39,6 +39,18 @@ The services that consume them are:
 Live execution is consumed through `providerRuntimeService`, which resolves the
 provider-owned runtime through the same `providerRegistry` as every other facet.
 
+A provider may also expose optional facets. Their absence is meaningful, so the
+consuming service checks for them and degrades instead of failing:
+
+- `fork` (`IProviderFork`): branch a conversation into a new session. Consumed by
+  `sessionsService.forkSessionById`; without it forking is unavailable.
+- `transcriptRelocation` (`IProviderTranscriptRelocation`): keep transcripts
+  resumable when a project folder is renamed or moved. Consumed by
+  `sessionsService.relocateProjectTranscripts`; without it the provider's
+  artifacts stay where they are.
+
+Claude and Codex implement `fork`; only Claude implements `transcriptRelocation`.
+
 Current provider ids in this repo are:
 
 - `claude`
@@ -63,6 +75,8 @@ server/modules/providers/list/<provider>/
   <provider>-skills.provider.ts
   <provider>-sessions.provider.ts
   <provider>-session-synchronizer.provider.ts
+  <provider>-fork.provider.ts                  (optional)
+  <provider>-transcript-relocation.provider.ts (optional)
 ```
 
 The existing provider folders are `claude`, `codex`, `cursor`, and `opencode`.
@@ -85,6 +99,8 @@ import the service from `server/modules/providers/index.ts`.
 | `skills` | Discover provider-native skill markdown files | `SkillsProvider` -> `providerSkillsService` |
 | `sessions` | Normalize live events and fetch session history | `IProviderSessions` -> `sessionsService` |
 | `sessionSynchronizer` | Scan transcript artifacts and upsert session metadata | `IProviderSessionSynchronizer` -> `sessionSynchronizerService` |
+| `fork` (optional) | Branch a conversation into an independent session | `IProviderFork` -> `sessionsService` |
+| `transcriptRelocation` (optional) | Move or rewrite transcripts when a project folder is renamed | `IProviderTranscriptRelocation` -> `sessionsService` |
 
 `sessions` and `sessionSynchronizer` are separate concerns:
 

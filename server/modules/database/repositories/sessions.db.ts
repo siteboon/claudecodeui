@@ -658,6 +658,22 @@ export const sessionsDb = {
     return Number(row?.count ?? 0);
   },
 
+  /**
+   * Repoints one session at the transcript file it now lives in.
+   *
+   * Only used when the file itself was moved on disk (a relocated project
+   * folder), or to put a row back when that move failed, so the row keeps
+   * resolving to a readable transcript.
+   */
+  updateSessionTranscriptPath(sessionId: string, jsonlPath: string): void {
+    const db = getConnection();
+    db.prepare(
+      `UPDATE sessions
+       SET jsonl_path = ?
+       WHERE session_id = ?`
+    ).run(jsonlPath, sessionId);
+  },
+
   deleteSessionsByProjectPath(projectPath: string): void {
     const db = getConnection();
     const normalizedProjectPath = normalizeProjectPath(projectPath);

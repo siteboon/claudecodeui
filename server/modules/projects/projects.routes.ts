@@ -5,6 +5,7 @@ import { createProjectCloneRouter } from '@/modules/projects/project-clone.route
 import { createPendingCloneRequests } from '@/modules/projects/services/project-clone-request.service.js';
 import { startCloneProject } from '@/modules/projects/services/project-clone.service.js';
 import { getProjectTaskMaster } from '@/modules/projects/services/projects-has-taskmaster.service.js';
+import { relocateProject } from '@/modules/projects/services/project-relocate.service.js';
 import { AppError, asyncHandler, createApiSuccessResponse } from '@/shared/utils.js';
 import { getArchivedProjectsWithSessions, getProjectSessionsPage, getProjectsWithSessions } from '@/modules/projects/services/projects-with-sessions-fetch.service.js';
 import { deleteOrArchiveProject, restoreArchivedProject } from '@/modules/projects/services/project-delete.service.js';
@@ -172,6 +173,27 @@ router.put('/:projectId/rename', (req, res) => {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to rename project' });
   }
 });
+
+/**
+ * Repoints a project at a folder that was renamed or moved outside the app, so
+ * its conversations follow instead of staying attached to a dead path.
+ */
+router.put(
+  '/:projectId/path',
+  asyncHandler(async (req, res) => {
+    const projectId = typeof req.params.projectId === 'string' ? req.params.projectId : '';
+    const { projectPath } = req.body as { projectPath?: unknown };
+    if (typeof projectPath !== 'string' || projectPath.trim().length === 0) {
+      throw new AppError('projectPath is required', {
+        code: 'PROJECT_PATH_REQUIRED',
+        statusCode: 400,
+      });
+    }
+
+    const result = await relocateProject(projectId, projectPath.trim());
+    res.json(createApiSuccessResponse(result));
+  }),
+);
 
 router.post(
   '/:projectId/toggle-star',

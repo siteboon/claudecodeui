@@ -17,6 +17,7 @@ import type {
   ProviderRuntimeContext,
   ProviderRuntimePermissionGateway,
   ProviderRuntimeWriter,
+  SessionTranscriptRelocation,
   UpsertProviderMcpServerInput,
   WorkflowAgentActivity,
 } from '@/shared/types.js';
@@ -74,6 +75,14 @@ export interface IProvider {
    * its absence is what makes "fork session" unavailable.
    */
   readonly fork?: IProviderFork;
+  /**
+   * Keeps transcripts resumable when a project folder is renamed or moved.
+   * Present only for providers whose artifacts are laid out by project path;
+   * a provider without it keeps its artifacts where they are. That includes
+   * the old cwd recorded in them (Codex, Cursor and OpenCode today), so the
+   * next synchronization of such a session moves it back to the old folder.
+   */
+  readonly transcriptRelocation?: IProviderTranscriptRelocation;
 }
 
 // ---------------------------
@@ -98,6 +107,34 @@ export interface IProviderFork {
     upToAnchorId?: string;
     title?: string;
   }): Promise<{ providerSessionId: string; jsonlPath: string }>;
+}
+
+// ---------------------------
+//----------------- PROVIDER TRANSCRIPT RELOCATION INTERFACE ------------
+/**
+ * Contract for following a project folder that was renamed or moved outside
+ * the app.
+ *
+ * Providers that find a transcript again from the cwd a session runs in, or
+ * that re-derive a session's project from a cwd recorded in the transcript,
+ * implement this so the session stays resumable and is not moved back to the
+ * old folder by the next synchronization.
+ */
+export interface IProviderTranscriptRelocation {
+  /**
+   * Moves or rewrites the given sessions' transcripts so they belong to
+   * `newProjectPath`, and returns the ones it touched with their new paths.
+   *
+   * All or nothing: a failure undoes this call's filesystem changes before it
+   * rethrows, so the caller can restore its rows and nothing on disk
+   * contradicts them. Sessions the provider cannot place are skipped and left
+   * out of the result.
+   */
+  relocateTranscripts(input: {
+    sessions: SessionTranscriptRelocation[];
+    oldProjectPath: string;
+    newProjectPath: string;
+  }): Promise<SessionTranscriptRelocation[]>;
 }
 
 // ---------------------------

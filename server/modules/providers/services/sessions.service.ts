@@ -12,6 +12,7 @@ import type {
   FetchHistoryResult,
   LLMProvider,
   NormalizedMessage,
+  SessionTranscriptRelocation,
   WorkflowAgentActivity,
 } from '@/shared/types.js';
 import { AppError, sliceTailPage } from '@/shared/utils.js';
@@ -350,6 +351,40 @@ export const sessionsService = {
       projectPath: source.project_path ?? '',
       sessionName,
     };
+  },
+
+  /**
+   * Moves the transcripts of a project whose folder was renamed or moved, so
+   * each session stays resumable from the new folder.
+   *
+   * Used by the Projects module when a project is repointed. Each provider's
+   * sessions go to its optional `transcriptRelocation` facet; providers without
+   * one, and provider ids that are no longer registered, are skipped and keep
+   * their artifacts where they are. Returns the sessions whose transcript now
+   * lives at the returned `jsonlPath`.
+   */
+  async relocateProjectTranscripts(input: {
+    sessions: Array<SessionTranscriptRelocation & { provider: string }>;
+    oldProjectPath: string;
+    newProjectPath: string;
+  }): Promise<SessionTranscriptRelocation[]> {
+    const relocated: SessionTranscriptRelocation[] = [];
+    for (const provider of providerRegistry.listProviders()) {
+      const sessions = input.sessions
+        .filter((session) => session.provider === provider.id)
+        .map(({ sessionId, jsonlPath }) => ({ sessionId, jsonlPath }));
+      if (!provider.transcriptRelocation || sessions.length === 0) {
+        continue;
+      }
+
+      relocated.push(...await provider.transcriptRelocation.relocateTranscripts({
+        sessions,
+        oldProjectPath: input.oldProjectPath,
+        newProjectPath: input.newProjectPath,
+      }));
+    }
+
+    return relocated;
   },
 
   /**
