@@ -39,8 +39,20 @@ export default function FolderBrowserModal({
   // the hunt — and clearing the query returns to plain browsing.
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<FolderSuggestion[] | null>(null);
+  // The query and root the stored results were computed for. Results from a
+  // previous input stay in state until the next request lands, and this
+  // comparison — not a clearing effect — is what keeps an outdated list
+  // invisible and unselectable the moment the input or the browsed
+  // directory changes.
+  const [searchMeta, setSearchMeta] = useState<{ query: string; root: string } | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const searchActive = searchQuery.trim().length >= 2;
+  const resultsAreCurrent =
+    searchMeta?.query === searchQuery.trim() && searchMeta?.root === currentPath;
+  // Pending spans the debounce window and the request itself: until results
+  // carrying the current query and root arrive, nothing stale is shown.
+  const isSearchPending = searchActive && (!resultsAreCurrent || isSearching);
+  const currentSearchResults = resultsAreCurrent ? searchResults : null;
 
   // Keep the loader stable across locale changes: t lands in a ref so an
   // open browser does not reload and snap back to the home folder when the
@@ -90,11 +102,13 @@ export default function FolderBrowserModal({
         const results = await searchFilesystemFolders(trimmed, currentPath);
         if (!cancelled) {
           setSearchResults(results);
+          setSearchMeta({ query: trimmed, root: currentPath });
         }
       } catch (searchError) {
         if (!cancelled) {
           setError(searchError instanceof Error ? searchError.message : t('folderBrowser.searchFailed'));
           setSearchResults([]);
+          setSearchMeta({ query: trimmed, root: currentPath });
         }
       } finally {
         if (!cancelled) {
@@ -128,6 +142,7 @@ export default function FolderBrowserModal({
     setError(null);
     setSearchQuery('');
     setSearchResults(null);
+    setSearchMeta(null);
     resetNewFolderState();
     onClose();
   };
@@ -258,18 +273,19 @@ export default function FolderBrowserModal({
             // Search mode replaces the browse listing: results are flat and
             // carry full paths, and jumping into one hands control back to the
             // normal navigation.
-            isSearching ? (
+            isSearchPending ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
               </div>
-            ) : searchResults && searchResults.length > 0 ? (
+            ) : currentSearchResults && currentSearchResults.length > 0 ? (
               <div className="space-y-1">
-                {searchResults.map((folder) => (
+                {currentSearchResults.map((folder) => (
                   <div key={folder.path} className="flex items-center gap-2">
                     <button
                       onClick={() => {
                         setSearchQuery('');
                         setSearchResults(null);
+                        setSearchMeta(null);
                         void loadFolders(folder.path);
                       }}
                       className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-4 py-3 text-left hover:bg-gray-100 dark:hover:bg-gray-700"
