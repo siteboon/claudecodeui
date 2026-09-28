@@ -189,6 +189,8 @@ CloudCLI has a plugin system that lets you add custom tabs with their own fronte
 
 **[Plugin Documentation →](https://cloudcli.ai/docs/plugin-overview)** — full guide to the plugin API, manifest format, security model, and more.
 
+**[User Identity for Plugins →](docs/plugins/identity.md)** — plugin servers receive the authenticated user as HMAC-signed `x-plugin-user-*` headers they can verify with `PLUGIN_IDENTITY_KEY`, without ever seeing the host's JWT secret.
+
 ---
 ## FAQ
 

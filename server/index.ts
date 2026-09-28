@@ -35,6 +35,7 @@ import projectModuleRoutes from './modules/projects/projects.routes.js';
 import notificationRoutes from './modules/notifications/notifications.routes.js';
 import { userRoutes } from './modules/user/index.js';
 import {
+    buildPluginIdentityHeaders,
     getPluginPort,
     pluginsRoutes,
     startEnabledPluginServers,
@@ -122,6 +123,8 @@ createWebSocketServer(server, {
         },
     },
     getPluginPort,
+    // Plugin websocket upgrades carry the same signed user identity as HTTP RPC.
+    buildPluginIdentityHeaders,
 });
 
 app.use(cors({ exposedHeaders: ['X-Refreshed-Token', 'X-Auth-Error'] }));

@@ -1,12 +1,27 @@
 import { WebSocket } from 'ws';
 
+import type {
+  AuthenticatedWebSocketUser,
+  PluginIdentityHeaders,
+  PluginIdentityUser,
+} from '@/shared/types.js';
+
+type PluginWsProxyDependencies = {
+  getPluginPort: (pluginName: string) => number | null;
+  // Same signer the HTTP RPC route uses, so plugins verify both transports alike.
+  buildIdentityHeaders: (pluginName: string, user: PluginIdentityUser | undefined) => PluginIdentityHeaders;
+};
+
 /**
- * Proxies an authenticated client websocket to a plugin websocket endpoint.
+ * Proxies an authenticated client websocket to a plugin websocket endpoint,
+ * attaching the signed x-plugin-user-* identity headers to the upstream upgrade.
+ * Used by websocket-server.service for the /plugin-ws/:name route.
  */
 export function handlePluginWsProxy(
   clientWs: WebSocket,
   pathname: string,
-  getPluginPort: (pluginName: string) => number | null
+  user: AuthenticatedWebSocketUser | undefined,
+  { getPluginPort, buildIdentityHeaders }: PluginWsProxyDependencies,
 ): void {
   const pluginName = pathname.replace('/plugin-ws/', '');
   if (!pluginName || /[^a-zA-Z0-9_-]/.test(pluginName)) {
@@ -20,7 +35,10 @@ export function handlePluginWsProxy(
     return;
   }
 
-  const upstream = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+  // Identity is computed per upgrade; the client's own headers are never forwarded.
+  const upstream = new WebSocket(`ws://127.0.0.1:${port}/ws`, [], {
+    headers: buildIdentityHeaders(pluginName, user),
+  });
 
   upstream.on('open', () => {
     console.log(`[Plugins] WS proxy connected to "${pluginName}" on port ${port}`);

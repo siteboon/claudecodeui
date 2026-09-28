@@ -7,3 +7,6 @@ export { authenticateToken } from './auth.middleware.js';
 export { authenticateWebSocket } from './auth.middleware.js';
 // validateApiKey: used by the server entrypoint for optional API-wide key validation.
 export { validateApiKey } from './auth.middleware.js';
+// JWT_SECRET: used by the plugins module to derive per-plugin identity keys
+// (HMAC-SHA256 of "plugin:<name>") so the secret itself never reaches a plugin.
+export { JWT_SECRET } from './auth.middleware.js';

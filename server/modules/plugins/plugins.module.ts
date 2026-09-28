@@ -3,6 +3,9 @@ import path from 'node:path';
 
 import mime from 'mime-types';
 
+import { JWT_SECRET } from '@/modules/auth/index.js';
+
+import { createPluginIdentitySigner } from './plugin-identity.service.js';
 import {
   getPluginDir, getPluginsConfig, getPluginsDir, installPluginFromGit,
   resolvePluginAssetPath, savePluginsConfig, scanPlugins, uninstallPlugin, updatePluginFromGit,
@@ -12,6 +15,13 @@ import {
 } from './plugin-process.service.js';
 import { createPluginsRouter } from './plugins.routes.js';
 import { createPluginsService } from './plugins.service.js';
+
+/**
+ * Signs the authenticated user into x-plugin-user-* headers with the plugin's
+ * derived key. Shared by the RPC route below and, through the plugins barrel,
+ * by the websocket plugin proxy so both transports carry the same identity.
+ */
+export const buildPluginIdentityHeaders = createPluginIdentitySigner(JWT_SECRET);
 
 const pluginsService = createPluginsService({
   scanPlugins, readConfig: getPluginsConfig, saveConfig: savePluginsConfig,
@@ -25,6 +35,7 @@ const pluginsService = createPluginsService({
   startServer: startPluginServer,
   stopServer: async (pluginName) => { await stopPluginServer(pluginName); },
   getServerPort: getPluginPort, isServerRunning: isPluginRunning,
+  signIdentity: buildPluginIdentityHeaders,
   joinPath: path.join,
   logError: (message, error) => console.error(message, error),
 });
