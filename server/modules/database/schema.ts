@@ -142,6 +142,12 @@ CREATE TABLE IF NOT EXISTS sessions (
     -- normally. Informational only: a fork is a fully independent provider
     -- session, and deleting the source does not affect it.
     forked_from_session_id TEXT,
+    -- The newest title the provider CLI itself recorded for this session
+    -- (Claude's \`/rename\`), as last indexed; '' when the transcript had none,
+    -- NULL until the indexer has read it. The indexer compares against it to
+    -- tell a new CLI rename from the CLI re-stating an old one, so a rename
+    -- made in the app is not overwritten by the latter.
+    provider_title TEXT,
     isArchived BOOLEAN DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
