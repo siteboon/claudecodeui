@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { MermaidDiagram } from '@/modules/code-editor';
 import { MarkdownImage } from '@/modules/chat/transcript/MarkdownImage';
 import { normalizeInlineCodeFences } from '@/modules/chat/utils/chatFormatting';
+import { normalizeLatexDelimiters } from '@/modules/chat/utils/latexDelimiters';
 import { copyTextToClipboard } from '@/shared/utils';
 import { SyntaxHighlighter } from '@/shared/syntaxHighlighter';
 import { usePaletteOps } from '@/modules/command-palette';
@@ -66,8 +67,10 @@ const childrenToText = (children: React.ReactNode): string => {
   return '';
 };
 
-// The delimiters `remark-math` recognizes with `singleDollarTextMath` off.
-const MATH_DELIMITER = /\$\$|\\\(|\\\[/;
+// The only delimiter `remark-math` recognizes with `singleDollarTextMath` off.
+// `\(…\)` and `\[…\]` are already rewritten to `$$` by normalizeLatexDelimiters,
+// so this one probe covers both notations.
+const MATH_DELIMITER = /\$\$/;
 
 const EMPTY_PLUGINS: never[] = [];
 
@@ -257,7 +260,9 @@ const markdownComponents = {
  */
 function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 'className'>) {
   const content = useMemo(
-    () => normalizeInlineCodeFences(String(children ?? '')),
+    // The LaTeX pass runs second because it reads the code spans the fence pass
+    // normalizes, and must leave the LaTeX inside them literal.
+    () => normalizeLatexDelimiters(normalizeInlineCodeFences(String(children ?? ''))),
     [children],
   );
   // Math support costs a remark tree pass plus a full KaTeX walk on every

@@ -307,6 +307,16 @@ export const api = {
       get(`/api/git/file-with-diff${query({ project: projectId, file: filePath })}`),
     branches: (projectId: string, options: ApiRequestOptions = {}) =>
       get(`/api/git/branches${query({ project: projectId })}`, options),
+    branchDiff: (projectId: string, base: string, options: ApiRequestOptions = {}) =>
+      get(`/api/git/branch-diff${query({ project: projectId, base })}`, options),
+    // `oldPath` is the pre-rename path of a renamed file so the server can diff the rename itself.
+    branchDiffFile: (
+      projectId: string,
+      base: string,
+      filePath: string,
+      oldPath?: string,
+      options: ApiRequestOptions = {},
+    ) => get(`/api/git/branch-diff/file${query({ project: projectId, base, file: filePath, oldPath })}`, options),
     remoteStatus: (projectId: string) =>
       get(`/api/git/remote-status${query({ project: projectId })}`),
     commits: (
