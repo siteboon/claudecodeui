@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '@/shared/api';
 import { PROVIDER_PERMISSION_PREFERENCE_KEYS } from '@/shared/constants';
 import { readUserPreference } from '@/shared/userSettings';
-import type { CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
+import type { CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, McpCommandData, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
 import { grantClaudeToolPermission } from '@/modules/chat/utils/chatPermissions';
 import {
   clearQueuedMessage,
@@ -343,6 +343,14 @@ export function useChatComposerState({
           setCommandModalPayload({
             kind: 'status',
             data: (data || {}) as StatusCommandData,
+          });
+          break;
+        }
+
+        case 'mcp': {
+          setCommandModalPayload({
+            kind: 'mcp',
+            data: (data || {}) as McpCommandData,
           });
           break;
         }

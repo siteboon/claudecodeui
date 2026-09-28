@@ -276,5 +276,27 @@
     "failed": "未发送 — {{reason}}",
     "cancel": "取消定时消息",
     "dismiss": "关闭失败提示"
+  },
+  "misc": {
+    "fallbackCommands": {
+      "mcp": "列出 MCP 服务器及其连接状态。"
+    },
+    "modalMeta": {
+      "mcpEyebrow": "集成",
+      "mcpTitle": "MCP 服务器",
+      "mcpSubtitle": "已配置的 Model Context Protocol 服务器及其连接状态。"
+    },
+    "mcpCommand": {
+      "empty": "{{provider}} 未配置任何 MCP 服务器。",
+      "statusUnsupported": "{{provider}} 不报告 MCP 连接状态。",
+      "statusFailed": "无法检查 MCP 服务器状态。{{details}}",
+      "authHint": "需要认证的服务器请在终端中使用 Claude CLI 连接：运行 claude，然后输入 /mcp。",
+      "state": {
+        "connected": "已连接",
+        "failed": "未连接",
+        "pending": "等待批准",
+        "unknown": "未知"
+      }
+    }
   }
 }

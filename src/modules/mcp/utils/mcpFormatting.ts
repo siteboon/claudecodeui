@@ -1,5 +1,13 @@
 import { MCP_SUPPORTED_TRANSPORTS, MCP_SUPPORTS_WORKING_DIRECTORY } from '@/shared/constants';
-import type { KeyValueMap, McpFormState, McpProvider, McpScope, McpTransport, UpsertProviderMcpServerPayload } from '@/shared/types';
+import type {
+  KeyValueMap,
+  McpFormState,
+  McpProvider,
+  McpScope,
+  McpTransport,
+  ProviderMcpServer,
+  UpsertProviderMcpServerPayload,
+} from '@/shared/types';
 
 type CreateMcpPayloadOptions = {
   supportedTransports?: McpTransport[];
@@ -73,6 +81,15 @@ export const isMcpTransport = (value: unknown): value is McpTransport => (
 
 export const getProjectPath = (project: { fullPath?: string; path?: string }): string => (
   project.fullPath || project.path || ''
+);
+
+/**
+ * Stable identity of one configured MCP server. The same server name can exist
+ * in several scopes and workspaces, so name alone is not unique; both the list
+ * rendering and the connection-status map key on this, and they must agree.
+ */
+export const getMcpServerIdentity = (server: ProviderMcpServer): string => (
+  `${server.provider}:${server.scope}:${server.workspacePath || 'global'}:${server.name}`
 );
 
 export const getErrorMessage = (error: unknown): string => (

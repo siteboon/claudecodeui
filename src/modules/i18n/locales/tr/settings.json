@@ -465,6 +465,19 @@
     "help": {
       "title": "Codex MCP Hakkında",
       "description": "Codex stdio tabanlı MCP sunucularını destekler. Codex'in yeteneklerini ek araçlar ve kaynaklarla genişleten sunucular ekleyebilirsin."
+    },
+    "connection": {
+      "check": "Durumu denetle",
+      "checking": "Denetleniyor…",
+      "checkHint": "Yapılandırılmış her MCP sunucusuna bağlanır ve yanıt verip vermediğini bildirir",
+      "checkFailed": "MCP sunucu durumu denetlenemedi. {{details}}",
+      "unsupported": "{{provider}} MCP bağlantı durumunu bildirmiyor.",
+      "state": {
+        "connected": "Bağlı",
+        "failed": "Bağlı değil",
+        "pending": "Onay bekliyor",
+        "unknown": "Bilinmiyor"
+      }
     }
   },
   "pluginSettings": {

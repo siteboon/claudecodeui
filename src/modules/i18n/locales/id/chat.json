@@ -327,7 +327,8 @@
       "status": "Periksa status runtime, versi, provider, dan environment.",
       "memory": "Buka file memori CLAUDE.md proyek.",
       "config": "Buka pengaturan dan konfigurasi.",
-      "help": "Tampilkan dokumentasi dan sintaks perintah."
+      "help": "Tampilkan dokumentasi dan sintaks perintah.",
+      "mcp": "Menampilkan server MCP beserta status koneksinya."
     },
     "modalMeta": {
       "helpEyebrow": "Pusat perintah",
@@ -342,7 +343,22 @@
       "statusEyebrow": "Kondisi runtime",
       "statusTitle": "Status Sistem",
       "statusSubtitle": "Detail versi, provider, runtime, dan environment dalam satu tempat.",
-      "commandResult": "Hasil Perintah"
+      "commandResult": "Hasil Perintah",
+      "mcpEyebrow": "Integrasi",
+      "mcpTitle": "Server MCP",
+      "mcpSubtitle": "Server Model Context Protocol yang dikonfigurasi beserta status koneksinya."
+    },
+    "mcpCommand": {
+      "empty": "Tidak ada server MCP yang dikonfigurasi untuk {{provider}}.",
+      "statusUnsupported": "{{provider}} tidak melaporkan status koneksi MCP.",
+      "statusFailed": "Tidak dapat memeriksa status server MCP. {{details}}",
+      "authHint": "Server yang memerlukan autentikasi dihubungkan dari terminal dengan CLI Claude: jalankan claude, lalu /mcp.",
+      "state": {
+        "connected": "Terhubung",
+        "failed": "Tidak terhubung",
+        "pending": "Menunggu persetujuan",
+        "unknown": "Tidak diketahui"
+      }
     },
     "choiceSavedSession": "Pilihan disimpan untuk sesi ini dan menjadi default untuk chat baru.",
     "choiceSavedDefault": "Pilihan menjadi model default untuk chat baru.",

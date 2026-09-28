@@ -414,6 +414,10 @@ export const api = {
       provider: string,
       { scope, workspacePath }: { scope: string; workspacePath?: string },
     ) => get(`/api/providers/${provider}/mcp/servers${query({ scope, workspacePath })}`),
+    // On-demand health check: the server contacts every configured MCP server,
+    // so this is never folded into `mcpServers`, which paints the settings list.
+    mcpServerStatuses: (provider: string, { workspacePath }: { workspacePath?: string } = {}) =>
+      get(`/api/providers/${provider}/mcp/servers/status${query({ workspacePath })}`),
     saveMcpServer: (provider: string, payload: unknown) =>
       post(`/api/providers/${provider}/mcp/servers`, payload),
     deleteMcpServer: (

@@ -255,5 +255,27 @@
     "failed": "Nicht gesendet – {{reason}}",
     "cancel": "Geplante Nachricht abbrechen",
     "dismiss": "Fehlerhinweis ausblenden"
+  },
+  "misc": {
+    "fallbackCommands": {
+      "mcp": "MCP-Server und ihren Verbindungsstatus auflisten."
+    },
+    "modalMeta": {
+      "mcpEyebrow": "Integrationen",
+      "mcpTitle": "MCP-Server",
+      "mcpSubtitle": "Konfigurierte Model-Context-Protocol-Server und ihr Verbindungsstatus."
+    },
+    "mcpCommand": {
+      "empty": "Für {{provider}} sind keine MCP-Server konfiguriert.",
+      "statusUnsupported": "{{provider}} meldet keinen MCP-Verbindungsstatus.",
+      "statusFailed": "MCP-Serverstatus konnte nicht geprüft werden. {{details}}",
+      "authHint": "Ein Server, der eine Anmeldung benötigt, wird im Terminal mit der Claude-CLI angemeldet: claude ausführen, dann /mcp.",
+      "state": {
+        "connected": "Verbunden",
+        "failed": "Nicht verbunden",
+        "pending": "Genehmigung ausstehend",
+        "unknown": "Unbekannt"
+      }
+    }
   }
 }

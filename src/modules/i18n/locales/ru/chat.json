@@ -255,5 +255,27 @@
     "failed": "Не отправлено — {{reason}}",
     "cancel": "Отменить запланированное сообщение",
     "dismiss": "Скрыть уведомление об ошибке"
+  },
+  "misc": {
+    "fallbackCommands": {
+      "mcp": "Показать MCP-серверы и их статус подключения."
+    },
+    "modalMeta": {
+      "mcpEyebrow": "Интеграции",
+      "mcpTitle": "MCP-серверы",
+      "mcpSubtitle": "Настроенные серверы Model Context Protocol и их статус подключения."
+    },
+    "mcpCommand": {
+      "empty": "Для {{provider}} не настроено ни одного MCP-сервера.",
+      "statusUnsupported": "{{provider}} не сообщает статус подключения MCP.",
+      "statusFailed": "Не удалось проверить статус MCP-серверов. {{details}}",
+      "authHint": "Сервер, требующий аутентификации, подключается в терминале через Claude CLI: запустите claude и введите /mcp.",
+      "state": {
+        "connected": "Подключён",
+        "failed": "Нет подключения",
+        "pending": "Ожидает подтверждения",
+        "unknown": "Неизвестно"
+      }
+    }
   }
 }
