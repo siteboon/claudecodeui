@@ -26,11 +26,9 @@ const AUTH_ERROR_MESSAGES = {
 
 type AuthActionResult = { success: true } | { success: false; error: string };
 
-type AuthSessionPayload = {
+type AuthSessionPayload = ApiErrorPayload & {
   token?: string;
   user?: AuthUser;
-  error?: string;
-  message?: string;
 };
 
 type AuthStatusPayload = {
@@ -46,8 +44,8 @@ type OnboardingStatusPayload = {
 };
 
 type ApiErrorPayload = {
-  error?: string;
-  message?: string;
+  error?: unknown;
+  message?: unknown;
 };
 
 type AuthContextValue = {
@@ -76,11 +74,16 @@ async function parseJsonSafely<T>(response: Response): Promise<T | null> {
 }
 
 function resolveApiErrorMessage(payload: ApiErrorPayload | null, fallback: string): string {
-  if (!payload) {
-    return fallback;
-  }
+  const error = payload?.error;
+  // AppError responses wrap the readable text in error.message. Never pass
+  // that envelope to React: invalid credentials would otherwise blank the form.
+  const errorMessage = error !== null && typeof error === 'object' && 'message' in error
+    ? error.message
+    : error;
 
-  return payload.error ?? payload.message ?? fallback;
+  return [errorMessage, payload?.message].find(
+    (message): message is string => typeof message === 'string' && message.trim().length > 0,
+  ) ?? fallback;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
