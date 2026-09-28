@@ -370,6 +370,19 @@
       "claudeDescription": "--dangerously-skip-permissions フラグに相当",
       "cursorDescription": "Cursor CLIの -f フラグに相当"
     },
+    "promptTimeout": {
+      "title": "権限プロンプトのタイムアウト",
+      "description": "未回答の権限プロンプトが、ツール呼び出しを拒否するまでに待機する時間です。Claude Code 自体は無期限に待機します。",
+      "options": {
+        "never": "なし — 回答を待つ",
+        "oneMinute": "1分",
+        "fiveMinutes": "5分",
+        "fifteenMinutes": "15分",
+        "thirtyMinutes": "30分",
+        "oneHour": "1時間",
+        "custom": "カスタム（{{duration}}）"
+      }
+    },
     "allowedTools": {
       "title": "許可されたツール",
       "description": "権限の確認なしに自動的に許可されるツール",

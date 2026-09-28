@@ -429,6 +429,19 @@
       "claudeDescription": "Equivalent to --dangerously-skip-permissions flag",
       "cursorDescription": "Equivalent to -f flag in Cursor CLI"
     },
+    "promptTimeout": {
+      "title": "Permission prompt timeout",
+      "description": "How long an unanswered permission prompt waits before the tool call is denied. Claude Code itself waits indefinitely.",
+      "options": {
+        "never": "Never — wait for my answer",
+        "oneMinute": "1 minute",
+        "fiveMinutes": "5 minutes",
+        "fifteenMinutes": "15 minutes",
+        "thirtyMinutes": "30 minutes",
+        "oneHour": "1 hour",
+        "custom": "Custom ({{duration}})"
+      }
+    },
     "allowedTools": {
       "title": "Allowed Tools",
       "description": "Tools that are automatically allowed without prompting for permission",

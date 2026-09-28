@@ -30,7 +30,7 @@ const SESSION: ProjectSession = { id: 'session-1' };
 type SentMessage = {
   type: string;
   options?: {
-    toolsSettings?: { allowedTools?: string[]; skipPermissions?: boolean };
+    toolsSettings?: { allowedTools?: string[]; skipPermissions?: boolean; permissionPromptTimeoutMs?: number };
     skipPermissions?: boolean;
   };
 };
@@ -154,4 +154,19 @@ test('a provider with nothing stored sends empty tool settings, not Claude setti
     skipPermissions: false,
   });
   assert.equal(options.skipPermissions, false);
+});
+
+test('a Claude send carries the permission prompt timeout set in Settings', async () => {
+  // The server reads the timeout from `toolsSettings` on every run, and a
+  // queued or scheduled turn replays this same snapshot (issue #607).
+  writeUserPreference('claudePermissions', {
+    allowedTools: [],
+    disallowedTools: [],
+    skipPermissions: false,
+    permissionPromptTimeoutMs: 300_000,
+  });
+
+  const options = await submit('claude');
+
+  assert.equal(options.toolsSettings?.permissionPromptTimeoutMs, 300_000);
 });

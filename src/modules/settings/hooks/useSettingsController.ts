@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useTheme } from '@/shared/context/ThemeContext';
 import { api } from '@/shared/api';
-import { setNotificationSoundEnabled } from '@/shared/utils';
+import { readPermissionPromptTimeoutMs, setNotificationSoundEnabled } from '@/shared/utils';
 import {
   readCodeEditorSettings,
   writeCodeEditorSettings,
@@ -34,6 +34,8 @@ type ClaudeSettingsStorage = {
   allowedTools?: string[];
   disallowedTools?: string[];
   skipPermissions?: boolean;
+  // Unknown until read: older clients never wrote it.
+  permissionPromptTimeoutMs?: unknown;
   projectSortOrder?: ProjectSortOrder;
 };
 
@@ -79,6 +81,7 @@ const createEmptyClaudePermissions = (): ClaudePermissionsState => ({
   allowedTools: [],
   disallowedTools: [],
   skipPermissions: false,
+  permissionPromptTimeoutMs: 0,
 });
 
 const createEmptyCursorPermissions = (): CursorPermissionsState => ({
@@ -156,6 +159,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
         allowedTools: savedClaudeSettings.allowedTools || [],
         disallowedTools: savedClaudeSettings.disallowedTools || [],
         skipPermissions: Boolean(savedClaudeSettings.skipPermissions),
+        permissionPromptTimeoutMs: readPermissionPromptTimeoutMs(savedClaudeSettings.permissionPromptTimeoutMs),
       });
       setProjectSortOrder(readUserPreference<ProjectSortOrder>('projectSortOrder', 'name') === 'date' ? 'date' : 'name');
 
@@ -227,6 +231,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
           allowedTools: claudePermissions.allowedTools,
           disallowedTools: claudePermissions.disallowedTools,
           skipPermissions: claudePermissions.skipPermissions,
+          permissionPromptTimeoutMs: claudePermissions.permissionPromptTimeoutMs,
         },
         projectSortOrder,
         cursorPermissions: {
@@ -254,6 +259,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
   }, [
     claudePermissions.allowedTools,
     claudePermissions.disallowedTools,
+    claudePermissions.permissionPromptTimeoutMs,
     claudePermissions.skipPermissions,
     codexPermissionMode,
     cursorPermissions.allowedCommands,

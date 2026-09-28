@@ -47,6 +47,10 @@ export default function AgentCategoryContentSection({
           onSkipPermissionsChange={(value) => {
             onClaudePermissionsChange({ ...claudePermissions, skipPermissions: value });
           }}
+          permissionPromptTimeoutMs={claudePermissions.permissionPromptTimeoutMs}
+          onPermissionPromptTimeoutMsChange={(value) => {
+            onClaudePermissionsChange({ ...claudePermissions, permissionPromptTimeoutMs: value });
+          }}
           allowedTools={claudePermissions.allowedTools}
           onAllowedToolsChange={(value) => {
             onClaudePermissionsChange({ ...claudePermissions, allowedTools: value });

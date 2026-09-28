@@ -371,6 +371,19 @@
       "claudeDescription": "--dangerously-skip-permissions bayrağının eşdeğeri",
       "cursorDescription": "Cursor CLI'daki -f bayrağının eşdeğeri"
     },
+    "promptTimeout": {
+      "title": "İzin istemi zaman aşımı",
+      "description": "Yanıtlanmamış bir izin isteminin, araç çağrısı reddedilmeden önce ne kadar bekleyeceği. Claude Code'un kendisi süresiz bekler.",
+      "options": {
+        "never": "Asla — yanıtımı bekle",
+        "oneMinute": "1 dakika",
+        "fiveMinutes": "5 dakika",
+        "fifteenMinutes": "15 dakika",
+        "thirtyMinutes": "30 dakika",
+        "oneHour": "1 saat",
+        "custom": "Özel ({{duration}})"
+      }
+    },
     "allowedTools": {
       "title": "İzin Verilen Araçlar",
       "description": "İzin istemeden otomatik olarak izin verilen araçlar",

@@ -370,6 +370,19 @@
       "claudeDescription": "Entspricht dem Flag --dangerously-skip-permissions",
       "cursorDescription": "Entspricht dem Flag -f in der Cursor CLI"
     },
+    "promptTimeout": {
+      "title": "Zeitlimit für Berechtigungsaufforderungen",
+      "description": "Wie lange eine unbeantwortete Berechtigungsaufforderung wartet, bevor der Werkzeugaufruf abgelehnt wird. Claude Code selbst wartet unbegrenzt.",
+      "options": {
+        "never": "Nie – auf meine Antwort warten",
+        "oneMinute": "1 Minute",
+        "fiveMinutes": "5 Minuten",
+        "fifteenMinutes": "15 Minuten",
+        "thirtyMinutes": "30 Minuten",
+        "oneHour": "1 Stunde",
+        "custom": "Benutzerdefiniert ({{duration}})"
+      }
+    },
     "allowedTools": {
       "title": "Erlaubte Werkzeuge",
       "description": "Werkzeuge, die automatisch ohne Berechtigungsaufforderung erlaubt werden",

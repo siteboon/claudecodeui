@@ -250,3 +250,22 @@ export const getQuickSettingsTabId = (tab: QuickSettingsTab): string => `quick-s
 
 /** DOM id of the tabpanel a quick settings tab controls; pairs with `getQuickSettingsTabId`. */
 export const getQuickSettingsTabPanelId = (tab: QuickSettingsTab): string => `quick-settings-tabpanel-${tab}`;
+
+// ---------------------------
+
+//----------------- CLAUDE PERMISSION PROMPT TIMEOUT ------------
+
+/**
+ * Reads the `permissionPromptTimeoutMs` stored in the `claudePermissions`
+ * preference as milliseconds, where 0 means an unanswered permission prompt
+ * waits for the user indefinitely (the default).
+ *
+ * Anything that is not a positive whole number (absent because an older client
+ * saved the preference, or malformed) reads as 0, which is also how the server
+ * interprets it. Used by the settings controller and the chat's Claude settings
+ * reader, so the Settings panel and the chat's "grant permission" action
+ * round-trip the same value instead of one of them dropping it.
+ */
+export function readPermissionPromptTimeoutMs(value: unknown): number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : 0;
+}

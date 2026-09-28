@@ -416,6 +416,19 @@
       "claudeDescription": "Setara dengan flag --dangerously-skip-permissions",
       "cursorDescription": "Setara dengan flag -f di Cursor CLI"
     },
+    "promptTimeout": {
+      "title": "Batas waktu prompt izin",
+      "description": "Berapa lama prompt izin yang belum dijawab menunggu sebelum pemanggilan tool ditolak. Claude Code sendiri menunggu tanpa batas waktu.",
+      "options": {
+        "never": "Tidak pernah — tunggu jawaban saya",
+        "oneMinute": "1 menit",
+        "fiveMinutes": "5 menit",
+        "fifteenMinutes": "15 menit",
+        "thirtyMinutes": "30 menit",
+        "oneHour": "1 jam",
+        "custom": "Kustom ({{duration}})"
+      }
+    },
     "allowedTools": {
       "title": "Tool yang Diizinkan",
       "description": "Tool yang otomatis diizinkan tanpa meminta persetujuan",

@@ -403,11 +403,13 @@ export type ChatMessage = {
   [key: string]: unknown;
 };
 
-/** The user's locally persisted Claude preferences (allowed and disallowed tool lists, permission skipping and project sort order) read from and written back to browser storage. */
+/** The user's locally persisted Claude preferences (allowed and disallowed tool lists, permission skipping, the permission prompt timeout and project sort order) read from and written back to browser storage. */
 export type ClaudeSettings = {
   allowedTools: string[];
   disallowedTools: string[];
   skipPermissions: boolean;
+  /** Milliseconds an unanswered permission prompt waits before its tool call is denied; 0 waits for the user (see ClaudePermissionsState). */
+  permissionPromptTimeoutMs: number;
   projectSortOrder: string;
   lastUpdated?: string;
   [key: string]: unknown;
@@ -1373,11 +1375,13 @@ export type AgentSettingsProject = {
   path?: string;
 };
 
-/** Claude's persisted permission settings: the allowed and disallowed tool patterns and whether permission prompts are skipped; read and written as one unit by the settings controller. */
+/** Claude's persisted permission settings (the `claudePermissions` preference): the allowed and disallowed tool patterns, whether permission prompts are skipped, and how long an unanswered prompt waits; read and written as one unit by the settings controller and the chat's grant-permission action, and sent to the server as `toolsSettings` with every Claude run. Every writer must carry all fields, or saving one setting silently resets another. */
 export type ClaudePermissionsState = {
   allowedTools: string[];
   disallowedTools: string[];
   skipPermissions: boolean;
+  /** Milliseconds an unanswered permission prompt waits before the tool call is denied; 0 (the default) waits until the user answers, like the Claude Code CLI. */
+  permissionPromptTimeoutMs: number;
 };
 
 /** The user's notification settings, grouped into delivery channels (in-app, web push, desktop, sound) and the events that trigger them; mirrors the payload of the notification preferences API. */

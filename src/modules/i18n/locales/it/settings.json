@@ -370,6 +370,19 @@
       "claudeDescription": "Equivalente al flag --dangerously-skip-permissions",
       "cursorDescription": "Equivalente al flag -f in Cursor CLI"
     },
+    "promptTimeout": {
+      "title": "Timeout delle richieste di permesso",
+      "description": "Quanto attende una richiesta di permesso senza risposta prima che la chiamata allo strumento venga negata. Claude Code di per sé attende a tempo indeterminato.",
+      "options": {
+        "never": "Mai — attendi la mia risposta",
+        "oneMinute": "1 minuto",
+        "fiveMinutes": "5 minuti",
+        "fifteenMinutes": "15 minuti",
+        "thirtyMinutes": "30 minuti",
+        "oneHour": "1 ora",
+        "custom": "Personalizzato ({{duration}})"
+      }
+    },
     "allowedTools": {
       "title": "Strumenti consentiti",
       "description": "Strumenti automaticamente consentiti senza richiedere permesso",

@@ -389,6 +389,19 @@
       "claudeDescription": "Odpovídá přepínači --dangerously-skip-permissions",
       "cursorDescription": "Odpovídá přepínači -f v Cursor CLI"
     },
+    "promptTimeout": {
+      "title": "Časový limit dotazů na oprávnění",
+      "description": "Jak dlouho nezodpovězený dotaz na oprávnění čeká, než je volání nástroje zamítnuto. Samotný Claude Code čeká neomezeně dlouho.",
+      "options": {
+        "never": "Nikdy – čekat na mou odpověď",
+        "oneMinute": "1 minuta",
+        "fiveMinutes": "5 minut",
+        "fifteenMinutes": "15 minut",
+        "thirtyMinutes": "30 minut",
+        "oneHour": "1 hodina",
+        "custom": "Vlastní ({{duration}})"
+      }
+    },
     "allowedTools": {
       "title": "Povolené nástroje",
       "description": "Nástroje, které se automaticky povolí bez dotazu na oprávnění",
