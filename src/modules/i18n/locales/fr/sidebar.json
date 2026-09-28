@@ -32,7 +32,13 @@
     "loadingSessions": "Chargement des sessions...",
     "unnamed": "Sans nom",
     "loading": "Chargement...",
-    "showMore": "Afficher plus de sessions"
+    "showMore": "Afficher plus de sessions",
+    "select": "Sélectionner",
+    "selectAll": "Tout sélectionner",
+    "selectAllLoaded": "Sélectionner les chargées",
+    "clearSelection": "Tout désélectionner",
+    "deleteSelected_one": "Supprimer {{count}} session",
+    "deleteSelected_other": "Supprimer {{count}} sessions"
   },
   "tooltips": {
     "viewEnvironments": "Voir les environnements",
@@ -114,7 +120,9 @@
     "restoreProjectError": "Erreur lors de la restauration du projet. Veuillez réessayer.",
     "restoreSessionFailed": "Échec de la restauration de la session. Veuillez réessayer.",
     "restoreSessionError": "Erreur lors de la restauration de la session. Veuillez réessayer.",
-    "forkSessionError": "Impossible de dupliquer cette session. Veuillez réessayer."
+    "forkSessionError": "Impossible de dupliquer cette session. Veuillez réessayer.",
+    "deleteSessionsPartialFailure_one": "{{count}} session sur {{total}} n'a pas pu être supprimée. Veuillez réessayer.",
+    "deleteSessionsPartialFailure_other": "{{count}} sessions sur {{total}} n'ont pas pu être supprimées. Veuillez réessayer."
   },
   "version": {
     "updateAvailable": "Mise à jour disponible",
@@ -149,6 +157,15 @@
     "deleteSessionPermanently": "Supprimer définitivement",
     "deleteAllData": "Supprimer toutes les données définitivement",
     "allConversationsDeleted": "Le projet sera retiré de la barre latérale. Vos fichiers, mémoires et données de session seront conservés.",
-    "cannotUndo": "Vous pourrez rajouter le projet ultérieurement."
+    "cannotUndo": "Vous pourrez rajouter le projet ultérieurement.",
+    "confirmDeleteSessions": "Que souhaitez-vous faire avec",
+    "deleteSessions_one": "Supprimer {{count}} session",
+    "deleteSessions_other": "Supprimer {{count}} sessions",
+    "selectedSessions_one": "{{count}} session sélectionnée",
+    "selectedSessions_other": "{{count}} sessions sélectionnées",
+    "archiveSessions_one": "Archiver {{count}} session",
+    "archiveSessions_other": "Archiver {{count}} sessions",
+    "archiveSessionsNotice_one": "L'archivage retire la session de la liste active tout en conservant son historique.",
+    "archiveSessionsNotice_other": "L'archivage retire les sessions de la liste active tout en conservant leur historique."
   }
 }
