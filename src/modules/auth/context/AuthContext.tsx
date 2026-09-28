@@ -73,6 +73,11 @@ async function parseJsonSafely<T>(response: Response): Promise<T | null> {
   }
 }
 
+/**
+ * Extracts readable text from structured or legacy authentication API errors.
+ * Returns the fallback when no nonblank string is available, so forms never
+ * receive an error object as a React child.
+ */
 function resolveApiErrorMessage(payload: ApiErrorPayload | null, fallback: string): string {
   const error = payload?.error;
   // AppError responses wrap the readable text in error.message. Never pass

@@ -35,6 +35,7 @@ vi.mock('@/shared/userSettings', () => ({
   resetUserPreferences: vi.fn(),
 }));
 
+/** Creates a JSON API response with the supplied body and HTTP status for auth mocks. */
 const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
   headers: { 'Content-Type': 'application/json' },
@@ -47,6 +48,10 @@ beforeEach(() => {
   requests.status.mockResolvedValue(jsonResponse({ needsSetup: false }));
 });
 
+/**
+ * Renders the selected auth form, submits test credentials, and waits for its
+ * error alert so callers can assert the message and retry behavior.
+ */
 async function submitForm(mode: 'login' | 'register' = 'login') {
   render(
     <AuthProvider>
