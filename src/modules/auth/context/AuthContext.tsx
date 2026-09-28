@@ -65,6 +65,13 @@ type AuthProviderProps = {
   children: ReactNode;
 };
 
+/**
+ * Reads an authentication response as JSON without propagating parsing errors.
+ *
+ * @param response - API response whose body should contain JSON.
+ * @returns The parsed payload, or null so callers can use a readable fallback
+ * when the server returns an empty, malformed, or non-JSON response.
+ */
 async function parseJsonSafely<T>(response: Response): Promise<T | null> {
   try {
     return (await response.json()) as T;
