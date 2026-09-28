@@ -25,10 +25,12 @@ let pollTimer: ReturnType<typeof setInterval> | null = null;
  * across whole runs meant such a turn stopped every other session's scheduled
  * and queued messages until someone answered it.
  *
- * A session with an entry here is busy for later polls: its scheduled messages
- * that come due stay pending and its queued turn stays in the draft, so neither
- * is claimed and then left waiting in memory, where it can no longer be seen,
- * cancelled or edited, and where a restart would lose it.
+ * Nothing is claimed and then left waiting in memory, where it could no longer
+ * be seen, cancelled or edited, and where a restart would lose it. A session
+ * with an entry here is busy for later polls: its scheduled messages that come
+ * due stay pending and its queued turn stays in the draft. A scheduled message
+ * lined up behind the session's turn within one poll is claimed only when its
+ * own turn comes (see startDueScheduledMessages).
  */
 const sessionTurnTails = new Map<string, Promise<void>>();
 
@@ -189,20 +191,27 @@ async function sendClaimedMessage(
 }
 
 /**
- * Claims every message whose time has come and starts sending it, without
- * waiting for the runs. Returns one promise per message that settles with its
- * run.
+ * Starts sending every message whose time has come, without waiting for the
+ * runs. Returns one promise per message that settles with its run.
  */
 function startDueScheduledMessages(runtime: ProviderRuntimeGateway, now: Date): Promise<void>[] {
-  // Claimed before any of them runs, so a long turn cannot let the next poll
-  // pick the same message up again. Sessions the dispatcher is still sending
-  // to are skipped; their messages stay pending until a later poll.
-  const due = scheduledMessagesDb.claimDue(now, new Set(sessionTurnTails.keys()));
+  // Sessions the dispatcher is still sending to are skipped; their messages
+  // stay pending until a later poll.
+  const due = scheduledMessagesDb.listDue(now, new Set(sessionTurnTails.keys()));
 
   // In session order: a session can only have one run at a time, and two due
   // messages for the same session must not race each other into it. Different
   // sessions go side by side, so one that is stuck cannot hold up the rest.
-  return due.map((row) => sendInSessionOrder(row.session_id, () => sendClaimedMessage(row, runtime)));
+  return due.map((row) => sendInSessionOrder(row.session_id, async () => {
+    // Claimed only when its turn comes, which for the first message of a
+    // session is straight away. One lined up behind an earlier turn that is
+    // still waiting (an unanswered permission prompt) stays pending until
+    // then: listed, cancellable, and kept across a restart. A claim that
+    // fails means it was cancelled meanwhile, so it is skipped.
+    if (scheduledMessagesDb.claim(row.id)) {
+      await sendClaimedMessage(row, runtime);
+    }
+  }));
 }
 
 /**
@@ -241,7 +250,7 @@ export function initializeScheduledMessageDispatcher(runtime: ProviderRuntimeGat
     // A pass only claims and starts turns; it never waits for them, so a turn
     // that stays open (an unanswered permission prompt waits indefinitely)
     // holds up its own session and nothing else. Overlap within a session is
-    // ruled out by sendInSessionOrder, and each claim is transactional.
+    // ruled out by sendInSessionOrder, and each claim is atomic.
     // Scheduled messages start first because they are due at a time the user
     // picked: a queued turn for the same session then finds the session taken
     // and waits for a later poll. The other way round, the due message would

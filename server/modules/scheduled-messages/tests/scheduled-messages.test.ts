@@ -418,6 +418,7 @@ test('a turn that never ends holds up only its own session within a pass', async
         'the same session\'s next message waits for the held turn',
       );
       assert.deepEqual(aborts, [], 'nothing interrupted the held turn');
+      assert.equal(statusOf(userId, 'next in the same session'), 'pending', 'nor is it marked sent before it goes');
     } finally {
       await releaseAndDrain(release);
     }
@@ -539,64 +540,85 @@ test('a queued turn is not sent into a session the dispatcher is still sending t
   });
 });
 
-test('a message that comes due behind its session\'s waiting turn can still be cancelled', async (t: TestContext) => {
-  await withIsolatedDatabase(async (userId) => {
-    scheduleDue(userId, SESSION_ID, HELD);
+/**
+ * How a message ends up waiting behind its session's held turn: due in the same
+ * poll as that turn (the server was down or the machine asleep past both, or
+ * the two were scheduled close together), or coming due in a later poll while
+ * the held turn is already waiting.
+ */
+const ARRIVALS = ['in the same poll', 'in a later poll'] as const;
 
-    const { runtime, runs, aborts, release } = createHeldRuntime();
-    t.mock.timers.enable({ apis: ['setInterval'] });
-    try {
-      initializeScheduledMessageDispatcher(runtime);
-      await waitUntil(() => runs.length === 1, 'the held turn starts');
-      const later = scheduleDue(userId, SESSION_ID, 'due later');
-      t.mock.timers.tick(30_000);
-      await settle();
+/**
+ * Starts the dispatcher on a held turn with a message due behind it in the
+ * same session, and returns that message once it is lined up.
+ */
+async function startBehindHeldTurn(
+  t: TestContext,
+  userId: number,
+  arrival: typeof ARRIVALS[number],
+  { runtime, runs }: ReturnType<typeof createHeldRuntime>,
+) {
+  scheduleDue(userId, SESSION_ID, HELD, 2);
+  const sameArrival = arrival === 'in the same poll' ? scheduleDue(userId, SESSION_ID, 'due later', 1) : null;
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  initializeScheduledMessageDispatcher(runtime);
+  await waitUntil(() => runs.length === 1, 'the held turn starts');
+  const later = sameArrival ?? scheduleDue(userId, SESSION_ID, 'due later');
+  if (!sameArrival) {
+    t.mock.timers.tick(30_000);
+  }
+  await settle();
+  return later;
+}
 
-      // Still listed as waiting to go, which is what the composer shows and
-      // what lets the user take it back.
-      assert.deepEqual(scheduledMessagesService.listPending(userId).map((message) => message.content), ['due later']);
-      scheduledMessagesService.cancel(userId, later.id);
+for (const arrival of ARRIVALS) {
+  test(`a message that comes due behind its session's waiting turn ${arrival} can still be cancelled`, async (t: TestContext) => {
+    await withIsolatedDatabase(async (userId) => {
+      const held = createHeldRuntime();
+      const { runs, aborts, release } = held;
+      try {
+        const later = await startBehindHeldTurn(t, userId, arrival, held);
 
-      release();
-      await settle();
-      t.mock.timers.tick(30_000);
-      await settle();
-      assert.deepEqual(commandsRun(runs), [HELD], 'a cancelled message never fires');
-      assert.deepEqual(aborts, []);
-      assert.equal(statusOf(userId, 'due later'), 'cancelled');
-    } finally {
-      await releaseAndDrain(release);
-    }
+        // Still listed as waiting to go, which is what the composer shows and
+        // what lets the user take it back.
+        assert.equal(statusOf(userId, 'due later'), 'pending', 'it is not marked sent before it goes');
+        assert.deepEqual(scheduledMessagesService.listPending(userId).map((message) => message.content), ['due later']);
+        scheduledMessagesService.cancel(userId, later.id);
+
+        release();
+        await settle();
+        t.mock.timers.tick(30_000);
+        await settle();
+        assert.deepEqual(commandsRun(runs), [HELD], 'a cancelled message never fires');
+        assert.deepEqual(aborts, []);
+        assert.equal(statusOf(userId, 'due later'), 'cancelled');
+      } finally {
+        await releaseAndDrain(release);
+      }
+    });
   });
-});
 
-test('a message that comes due behind its session\'s waiting turn is not lost to a restart', async (t: TestContext) => {
-  await withIsolatedDatabase(async (userId) => {
-    scheduleDue(userId, SESSION_ID, HELD);
+  test(`a message that comes due behind its session's waiting turn ${arrival} is not lost to a restart`, async (t: TestContext) => {
+    await withIsolatedDatabase(async (userId) => {
+      const held = createHeldRuntime();
+      try {
+        await startBehindHeldTurn(t, userId, arrival, held);
 
-    const { runtime, runs, release } = createHeldRuntime();
-    t.mock.timers.enable({ apis: ['setInterval'] });
-    try {
-      initializeScheduledMessageDispatcher(runtime);
-      await waitUntil(() => runs.length === 1, 'the held turn starts');
-      scheduleDue(userId, SESSION_ID, 'due later');
-      t.mock.timers.tick(30_000);
-      await settle();
-
-      // The server goes down with the held turn still open. Nothing about the
-      // session survives in memory, so the new process's first poll finds only
-      // what the database still has pending.
-      closeScheduledMessageDispatcher();
-      assert.deepEqual(scheduledMessagesDb.claimDue(new Date()).map((row) => row.content), ['due later']);
-    } finally {
-      await releaseAndDrain(release);
-    }
+        // The server goes down with the held turn still open. Nothing about the
+        // session survives in memory, so the new process's first poll finds
+        // only what the database still has pending.
+        closeScheduledMessageDispatcher();
+        assert.deepEqual(scheduledMessagesDb.listDue(new Date()).map((row) => row.content), ['due later']);
+      } finally {
+        await releaseAndDrain(held.release);
+      }
+    });
   });
-});
+}
 
 test('a turn lined up behind another keeps its session taken once the first one ends', async (t: TestContext) => {
   await withIsolatedDatabase(async (userId) => {
-    // Due in the same pass, so both are claimed together and sent in order.
+    // Due in the same pass, so the second is lined up behind the first.
     scheduleDue(userId, SESSION_ID, 'first', 2);
     scheduleDue(userId, SESSION_ID, 'second', 1);
 

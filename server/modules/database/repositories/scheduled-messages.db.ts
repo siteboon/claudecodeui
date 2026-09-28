@@ -68,43 +68,49 @@ export const scheduledMessagesDb = {
   },
 
   /**
-   * Claims every message whose time has passed, marking them in the same
-   * statement that selects them.
+   * Every pending message whose time has passed, oldest first, leaving out the
+   * sessions in `busySessionIds` (the dispatcher is still sending an earlier
+   * turn into them).
    *
-   * Claiming is what makes a missed schedule work: the server can be down at
-   * the moment a message was due, and the next poll after it starts picks the
-   * message up instead of skipping it. Doing it in one transaction is what
-   * stops two overlapping polls from sending the same message twice.
-   *
-   * Messages for a session in `busySessionIds` are left pending, not claimed:
-   * the dispatcher is still sending an earlier turn into that session, and a
-   * claimed row reads as sent. Left pending, the message stays listed and
-   * cancellable, survives a restart, and is claimed by the first poll after
-   * the session frees up.
+   * Listing does not claim: the dispatcher claims each message with `claim`
+   * only when its turn to be sent comes. A due message that is still waiting,
+   * behind an earlier one for its session or for a busy session to free up,
+   * therefore stays pending: listed and cancellable in the composer, and still
+   * here for the first poll after a restart. That is also what makes a missed
+   * schedule work: the server can be down at the moment a message was due, and
+   * the first poll after it starts finds the message instead of skipping it.
    */
-  claimDue(now: Date, busySessionIds: ReadonlySet<string> = new Set()): ScheduledMessageRow[] {
-    const db = getConnection();
-    const nowIso = now.toISOString();
+  listDue(now: Date, busySessionIds: ReadonlySet<string> = new Set()): ScheduledMessageRow[] {
+    return (
+      getConnection()
+        .prepare(
+          `SELECT ${COLUMNS} FROM scheduled_messages
+           WHERE status = 'pending' AND scheduled_for <= ?
+           ORDER BY scheduled_for ASC`
+        )
+        .all(now.toISOString()) as ScheduledMessageRow[]
+    ).filter((row) => !busySessionIds.has(row.session_id));
+  },
 
-    return db.transaction(() => {
-      const due = (
-        db
-          .prepare(
-            `SELECT ${COLUMNS} FROM scheduled_messages
-             WHERE status = 'pending' AND scheduled_for <= ?
-             ORDER BY scheduled_for ASC`
-          )
-          .all(nowIso) as ScheduledMessageRow[]
-      ).filter((row) => !busySessionIds.has(row.session_id));
+  /**
+   * Marks a pending message as sent, right before it is sent. Returns false
+   * when it is no longer pending: it was cancelled while it waited, or another
+   * pass claimed it first.
+   *
+   * The status check and the update are one statement, which SQLite applies
+   * atomically, so two overlapping passes cannot both claim (and send) the same
+   * message, and a cancel that lands first always wins.
+   */
+  claim(id: string): boolean {
+    const result = getConnection()
+      .prepare(
+        `UPDATE scheduled_messages
+         SET status = 'sent', updated_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND status = 'pending'`
+      )
+      .run(id);
 
-      for (const row of due) {
-        db.prepare(
-          `UPDATE scheduled_messages SET status = 'sent', updated_at = CURRENT_TIMESTAMP WHERE id = ?`
-        ).run(row.id);
-      }
-
-      return due;
-    })();
+    return result.changes > 0;
   },
 
   markFailed(id: string, reason: string): void {
