@@ -149,7 +149,8 @@
       "title": "Mengganti pesan sebelumnya",
       "filesNotReverted": "file yang sudah diubah agen tidak dikembalikan",
       "cancel": "Batal"
-    }
+    },
+    "notConnected": "Tidak terhubung ke server, jadi pesan Anda tidak terkirim. Sedang menyambung ulang — kirim lagi sebentar lagi."
   },
   "providerSelection": {
     "title": "Pilih Asisten AI",

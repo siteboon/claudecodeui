@@ -10,7 +10,12 @@ type ServerEventListener = (event: ServerEvent) => void;
 
 type WebSocketContextType = {
   ws: WebSocket | null;
-  sendMessage: (message: unknown) => void;
+  /**
+   * Sends one frame on the chat socket. Returns false when the socket is not
+   * open and the frame was NOT sent, so callers that carry user input can keep
+   * it instead of treating it as delivered.
+   */
+  sendMessage: (message: unknown) => boolean;
   /**
    * Subscribes to every websocket frame. Returns an unsubscribe function.
    *
@@ -21,6 +26,13 @@ type WebSocketContextType = {
    */
   subscribe: (listener: ServerEventListener) => () => void;
   isConnected: boolean;
+  /**
+   * Skips the rest of the reconnect delay when the socket has dropped and a
+   * reconnect is waiting; does nothing otherwise. For callers that refuse a
+   * send while disconnected without calling `sendMessage`, so the user's
+   * attempt still brings the socket back straight away.
+   */
+  reconnectNow: () => void;
 };
 
 const WebSocketContext = createContext<WebSocketContextType | null>(null);
@@ -111,6 +123,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
 
         // Attempt to reconnect after 3 seconds
         reconnectTimeoutRef.current = setTimeout(() => {
+          reconnectTimeoutRef.current = null;
           if (unmountedRef.current) return; // Prevent reconnection if unmounted
           connect();
         }, 3000);
@@ -124,6 +137,13 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       console.error('Error creating WebSocket connection:', error);
     }
   }, [dispatch, isAuthLoading, token, user]); // reconnect with current authentication state
+
+  // Latest `connect` for the stable `reconnectNow`, which may cut a pending
+  // reconnect delay short.
+  const connectRef = useRef(connect);
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
 
   // Declared after `connect` so the effect body does not reference it before
   // initialization. `connect` is memoized on [dispatch, isAuthLoading, token,
@@ -143,6 +163,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       unmountedRef.current = true;
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
       }
       const activeSocket = wsRef.current;
       if (activeSocket) {
@@ -158,14 +179,28 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     };
   }, [connect, isAuthLoading, user]); // reconnect after authentication or token refresh
 
+  // The socket is gone and a reconnect is waiting out its delay. Someone is
+  // trying to reach the server right now (typically a phone whose tab was just
+  // brought back), so reconnect immediately instead.
+  const reconnectNow = useCallback(() => {
+    if (wsRef.current || !reconnectTimeoutRef.current || unmountedRef.current) {
+      return;
+    }
+    clearTimeout(reconnectTimeoutRef.current);
+    reconnectTimeoutRef.current = null;
+    connectRef.current();
+  }, []);
+
   const sendMessage = useCallback((message: unknown) => {
     const socket = wsRef.current;
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(message));
-    } else {
-      console.warn('WebSocket not connected');
+      return true;
     }
-  }, []);
+    console.warn('WebSocket not connected');
+    reconnectNow();
+    return false;
+  }, [reconnectNow]);
 
   const subscribe = useCallback((listener: ServerEventListener) => {
     listenersRef.current.add(listener);
@@ -179,8 +214,9 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     ws: wsRef.current,
     sendMessage,
     subscribe,
-    isConnected
-  }), [sendMessage, subscribe, isConnected]);
+    isConnected,
+    reconnectNow,
+  }), [sendMessage, subscribe, isConnected, reconnectNow]);
 
   return value;
 };
