@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 
-import { DarkModeToggle } from '@/shared/ui';
-import type { CodeEditorSettingsState, ProjectSortOrder } from '@/shared/types';
+import { useTheme } from '@/shared/context/ThemeContext';
+import type { CodeEditorSettingsState, ProjectSortOrder, ThemeMode } from '@/shared/types';
 import { LanguageSelector } from '@/modules/i18n';
 import SettingsCard from '@/modules/settings/SettingsCard';
 import SettingsRow from '@/modules/settings/SettingsRow';
@@ -29,16 +29,26 @@ export default function AppearanceSettingsTab({
   onCodeEditorFontSizeChange,
 }: AppearanceSettingsTabProps) {
   const { t } = useTranslation('settings');
+  const { themeMode, setThemeMode } = useTheme();
 
   return (
     <div className="space-y-8">
-      <SettingsSection title={t('appearanceSettings.darkMode.label')}>
+      <SettingsSection title={t('appearanceSettings.theme.label')}>
         <SettingsCard>
           <SettingsRow
-            label={t('appearanceSettings.darkMode.label')}
-            description={t('appearanceSettings.darkMode.description')}
+            label={t('appearanceSettings.theme.label')}
+            description={t('appearanceSettings.theme.description')}
           >
-            <DarkModeToggle ariaLabel={t('appearanceSettings.darkMode.label')} />
+            <select
+              value={themeMode}
+              onChange={(event) => setThemeMode(event.target.value as ThemeMode)}
+              aria-label={t('appearanceSettings.theme.label')}
+              className="w-full touch-manipulation rounded-lg border border-input bg-card p-2.5 text-sm text-foreground focus:border-primary focus:ring-1 focus:ring-primary sm:w-36"
+            >
+              <option value="light">{t('appearanceSettings.theme.light')}</option>
+              <option value="dark">{t('appearanceSettings.theme.dark')}</option>
+              <option value="system">{t('appearanceSettings.theme.system')}</option>
+            </select>
           </SettingsRow>
         </SettingsCard>
       </SettingsSection>
