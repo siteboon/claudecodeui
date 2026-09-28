@@ -198,6 +198,30 @@ test('the composer settings it was scheduled with travel with it', async () => {
   });
 });
 
+test('turns sent from the timer are not held for async hooks, whatever they were stored with', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    // The dispatcher awaits each run before sending the next, so a run held
+    // open after its result would hold up every later message too.
+    scheduledMessagesService.schedule({
+      userId,
+      sessionId: SESSION_ID,
+      content: 'scheduled',
+      options: { holdForAsyncHooks: true },
+      scheduledFor: new Date(Date.now() - 1_000).toISOString(),
+    });
+    const runs: RunCall[] = [];
+    await dispatchDueScheduledMessages(createRuntime(runs));
+
+    sessionDraftsDb.saveDraft(userId, SESSION_ID, {
+      text: '',
+      queuedMessage: { content: 'queued', options: { holdForAsyncHooks: true }, attachments: [] },
+    });
+    await dispatchQueuedMessages(createRuntime(runs));
+
+    assert.deepEqual(runs.map((run) => [run.command, run.options.holdForAsyncHooks]), [['scheduled', false], ['queued', false]]);
+  });
+});
+
 test('a provider failure is recorded on the message instead of vanishing', async () => {
   await withIsolatedDatabase(async (userId) => {
     scheduledMessagesService.schedule({

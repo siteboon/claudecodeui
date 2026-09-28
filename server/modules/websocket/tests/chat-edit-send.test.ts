@@ -147,6 +147,22 @@ test('an edit resumes through the turn before the one being replaced', async () 
     // Inclusive of the row it names, so this is the last turn KEPT.
     assert.equal(runs[0].options.resumeAnchorId, 'e-a1');
     assert.equal(runs[0].options.resumeFromScratch, false);
+    assert.equal(runs[0].options.holdForAsyncHooks, true);
+  });
+});
+
+test('a turn a client sends asks the runtime to let async hooks finish, whatever the client asks', async () => {
+  await withGateway('claude', async ({ socket, runs }) => {
+    socket.emit('message', JSON.stringify({
+      type: 'chat.send',
+      sessionId: SESSION_ID,
+      content: 'a new turn',
+      options: { holdForAsyncHooks: false },
+    }));
+    await settle();
+
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0].options.holdForAsyncHooks, true);
   });
 });
 
