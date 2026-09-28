@@ -255,5 +255,10 @@
     "failed": "Nicht gesendet – {{reason}}",
     "cancel": "Geplante Nachricht abbrechen",
     "dismiss": "Fehlerhinweis ausblenden"
+  },
+  "modelLibrary": {
+    "effortLevels": "Reasoning-Stufen",
+    "effortLevelsHint": "Wähle die Reasoning-Effort-Stufen, die dieses Modell akzeptiert. Ohne Auswahl lässt sich im Composer für dieses Modell keine Stufe wählen.",
+    "effortSummary": "Reasoning: {{levels}}"
   }
 }

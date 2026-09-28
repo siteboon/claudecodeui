@@ -242,5 +242,10 @@
     "failed": "未送信 — {{reason}}",
     "cancel": "予約を取り消す",
     "dismiss": "失敗の通知を閉じる"
+  },
+  "modelLibrary": {
+    "effortLevels": "推論レベル",
+    "effortLevelsHint": "このモデルが受け付ける推論エフォートのレベルを選択してください。何も選択しない場合、コンポーザーではこのモデルのレベルを選べません。",
+    "effortSummary": "推論: {{levels}}"
   }
 }

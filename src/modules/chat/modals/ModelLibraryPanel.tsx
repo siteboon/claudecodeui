@@ -13,6 +13,7 @@ import {
 
 import { Badge, Button, Input, LLMProviderLogo } from '@/shared/ui';
 import type {
+  CustomProviderModelInput,
   LLMProvider,
   ProviderModelActions,
   ProviderModelOption,
@@ -52,6 +53,9 @@ export default function ModelLibraryPanel({
   const [editing, setEditing] = useState<ProviderModelOption | null>(null);
   const [model, setModel] = useState('');
   const [modelId, setModelId] = useState('');
+  // Effort levels ticked in the form; they become the custom model's declared
+  // levels, which is what makes the composer offer Reasoning for it.
+  const [effortLevels, setEffortLevels] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [deletingRecordId, setDeletingRecordId] = useState<number | null>(null);
   const [confirmDeleteRecordId, setConfirmDeleteRecordId] = useState<number | null>(null);
@@ -74,11 +78,18 @@ export default function ModelLibraryPanel({
     () => options.filter((option) => !option.isCustom),
     [options],
   );
+  // Levels a custom model of this provider may declare, weakest first, exactly
+  // as the server validates them. They come with the catalog rather than from
+  // its built-in models, whose effort metadata depends on which upstream
+  // providers this machine has connected (OpenCode). Empty for providers
+  // without effort support, which hides the section entirely.
+  const providerEffortLevels = providerModelCatalog[selectedProvider]?.EFFORT_LEVELS ?? [];
 
   const resetForm = () => {
     setEditing(null);
     setModel('');
     setModelId('');
+    setEffortLevels([]);
     setError(null);
   };
 
@@ -93,9 +104,38 @@ export default function ModelLibraryPanel({
     setEditing(option);
     setModel(option.label);
     setModelId(option.value);
+    setEffortLevels(option.effort?.values.map((level) => level.value) ?? []);
     setConfirmDeleteRecordId(null);
     setNotice(null);
     setError(null);
+  };
+
+  const toggleEffortLevel = (level: string) => {
+    setEffortLevels((current) => (
+      current.includes(level) ? current.filter((value) => value !== level) : [...current, level]
+    ));
+  };
+
+  /**
+   * Effort part of the save payload. Omitted for providers without effort
+   * support; otherwise the ticked levels in display order, or `null` to clear
+   * them. A default set earlier (e.g. through the API) survives while its
+   * level stays ticked.
+   */
+  const buildEffortInput = (): CustomProviderModelInput['effort'] => {
+    if (providerEffortLevels.length === 0) {
+      return undefined;
+    }
+
+    const values = providerEffortLevels.filter((level) => effortLevels.includes(level));
+    if (values.length === 0) {
+      return null;
+    }
+
+    const previousDefault = editing?.effort?.default;
+    return previousDefault && values.includes(previousDefault)
+      ? { values, default: previousDefault }
+      : { values };
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -111,6 +151,7 @@ export default function ModelLibraryPanel({
       return;
     }
 
+    const effort = buildEffortInput();
     setSaving(true);
     setError(null);
     setNotice(null);
@@ -119,12 +160,14 @@ export default function ModelLibraryPanel({
         await actions.update(selectedProvider, editing, {
           model: normalizedModel,
           id: normalizedId,
+          ...(effort === undefined ? {} : { effort }),
         });
         setNotice(`${normalizedModel} was updated.`);
       } else {
         await actions.create(selectedProvider, {
           model: normalizedModel,
           id: normalizedId,
+          ...(effort === undefined ? {} : { effort }),
         });
         setNotice(`${normalizedModel} was added.`);
       }
@@ -262,6 +305,37 @@ export default function ModelLibraryPanel({
             Use the exact identifier accepted by the provider CLI. IDs cannot contain spaces.
           </p>
 
+          {providerEffortLevels.length > 0 && (
+            <fieldset className="mt-4">
+              <legend className="text-xs font-semibold text-foreground">
+                {t('chat:modelLibrary.effortLevels')}
+              </legend>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {providerEffortLevels.map((level) => {
+                  const selected = effortLevels.includes(level);
+                  return (
+                    <button
+                      key={level}
+                      type="button"
+                      onClick={() => toggleEffortLevel(level)}
+                      aria-pressed={selected}
+                      className={`rounded-lg border px-2.5 py-1 font-mono text-[11px] transition-colors ${
+                        selected
+                          ? 'border-primary/40 bg-primary/10 text-foreground'
+                          : 'border-border/70 bg-background text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {level}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
+                {t('chat:modelLibrary.effortLevelsHint')}
+              </p>
+            </fieldset>
+          )}
+
           {error && (
             <div role="alert" className="mt-3 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
               {error}
@@ -309,6 +383,13 @@ export default function ModelLibraryPanel({
                             <Badge className="rounded-full px-2 py-0 text-[9px]">Custom</Badge>
                           </div>
                           <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">{option.value}</p>
+                          {option.effort && option.effort.values.length > 0 && (
+                            <p className="mt-0.5 text-[11px] text-muted-foreground">
+                              {t('chat:modelLibrary.effortSummary', {
+                                levels: option.effort.values.map((level) => level.value).join(' · '),
+                              })}
+                            </p>
+                          )}
                         </div>
                         {!confirming && (
                           <div className="flex shrink-0 items-center gap-1">
