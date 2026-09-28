@@ -1,13 +1,18 @@
 import assert from 'node:assert/strict';
+import { once } from 'node:events';
 import { mkdtemp, rm } from 'node:fs/promises';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+import { WebSocket } from 'ws';
+
 import { closeConnection, initializeDatabase, scheduledMessagesDb, sessionDraftsDb, sessionsDb, userDb } from '@/modules/database/index.js';
 import { dispatchDueScheduledMessages, dispatchQueuedMessages } from '@/modules/scheduled-messages/services/scheduled-message-dispatcher.service.js';
 import { scheduledMessagesService } from '@/modules/scheduled-messages/services/scheduled-messages.service.js';
-import { chatRunRegistry } from '@/modules/websocket/index.js';
+import { chatRunRegistry, createWebSocketServer } from '@/modules/websocket/index.js';
 
 const SESSION_ID = 'scheduled-session';
 
@@ -51,6 +56,69 @@ function createRuntime(runs: RunCall[], behaviour: 'ok' | 'throw' = 'ok', aborts
       return true;
     },
   } as never;
+}
+
+/**
+ * Opens the Shell tab on the session through the websocket gateway, the way
+ * the browser does, with a fake PTY standing in for `claude --resume`. The
+ * callback gets a function that makes that CLI exit, as `/exit` would, and
+ * one that leaves the tab (its socket closes, the CLI stays up).
+ */
+async function withSessionOpenInShell(
+  runTest: (exitShellCli: () => void, leaveShell: () => Promise<void>) => Promise<void>,
+): Promise<void> {
+  let exitListener: ((event: { exitCode: number }) => void) | null = null;
+  const fakePty = {
+    onData: () => ({ dispose: () => undefined }),
+    onExit: (listener: (event: { exitCode: number }) => void) => {
+      exitListener = listener;
+      return { dispose: () => undefined };
+    },
+    write() {},
+    resize() {},
+    kill() {},
+  };
+  const exitShellCli = () => exitListener?.({ exitCode: 0 });
+
+  const server = http.createServer();
+  const gateway = createWebSocketServer(server, {
+    verifyClient: { isPlatform: true, authenticateWebSocket: () => ({ id: 1, username: 'scheduler' }) },
+    chat: { runtime: createRuntime([]) },
+    shell: { resolveProviderSessionId: () => 'provider-sid', spawnPty: () => fakePty as never },
+    getPluginPort: () => null,
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const { port } = server.address() as AddressInfo;
+  const socket = new WebSocket(`ws://127.0.0.1:${port}/shell`);
+  const leaveShell = async () => {
+    socket.close();
+    await once(socket, 'close');
+    // The server's close handler runs on its own side of the socket.
+    await new Promise((resolve) => { setTimeout(resolve, 50); });
+  };
+
+  try {
+    await once(socket, 'open');
+    const answered = once(socket, 'message');
+    socket.send(JSON.stringify({
+      type: 'init',
+      projectPath: tmpdir(),
+      sessionId: SESSION_ID,
+      hasSession: true,
+      provider: 'claude',
+    }));
+    await answered;
+    await runTest(exitShellCli, leaveShell);
+  } finally {
+    exitShellCli();
+    if (socket.readyState !== WebSocket.CLOSED) {
+      socket.close();
+      await once(socket, 'close');
+    }
+    gateway.close();
+    await new Promise((resolve) => { server.close(resolve); });
+  }
 }
 
 test('a message due in the past is sent on the next pass, not skipped', async () => {
@@ -114,6 +182,72 @@ test('a queued message stays pending while its session is busy', async () => {
     assert.deepEqual(sessionDraftsDb.getDrafts(userId)[0]?.queuedMessage, {
       content: 'send after this run',
     });
+  });
+});
+
+test('a queued message stays pending while its session is open in the Shell', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    sessionDraftsDb.saveDraft(userId, SESSION_ID, {
+      text: '',
+      queuedMessage: { content: 'send after the Shell exits' },
+    });
+
+    const runs: RunCall[] = [];
+    await withSessionOpenInShell(async (exitShellCli) => {
+      // The send is refused because the Shell's CLI has the session, and the
+      // claimed turn is put back for a later pass rather than dropped.
+      await dispatchQueuedMessages(createRuntime(runs));
+      assert.equal(runs.length, 0);
+      assert.deepEqual(sessionDraftsDb.getDrafts(userId)[0]?.queuedMessage, {
+        content: 'send after the Shell exits',
+      });
+
+      exitShellCli();
+      assert.equal(await dispatchQueuedMessages(createRuntime(runs)), 1);
+    });
+
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0].command, 'send after the Shell exits');
+  });
+});
+
+test('a queued message is sent, not held, once a Shell that was only opened has been left', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    sessionDraftsDb.saveDraft(userId, SESSION_ID, {
+      text: '',
+      queuedMessage: { content: 'after a look at the Shell' },
+    });
+
+    const runs: RunCall[] = [];
+    await withSessionOpenInShell(async (_exitShellCli, leaveShell) => {
+      // Nothing was typed into it, so it is not the user's CLI to protect.
+      await leaveShell();
+      assert.equal(await dispatchQueuedMessages(createRuntime(runs)), 1);
+    });
+
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0].command, 'after a look at the Shell');
+  });
+});
+
+test('a due message is recorded as failed, not sent, while its session is open in the Shell', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    scheduledMessagesService.schedule({
+      userId,
+      sessionId: SESSION_ID,
+      content: 'would be a second writer',
+      scheduledFor: new Date(Date.now() - 1_000).toISOString(),
+    });
+
+    const runs: RunCall[] = [];
+    await withSessionOpenInShell(async () => {
+      assert.equal(await dispatchDueScheduledMessages(createRuntime(runs)), 1);
+    });
+
+    assert.equal(runs.length, 0);
+    const row = scheduledMessagesDb.listForSession(userId, SESSION_ID)[0];
+    assert.equal(row.status, 'failed');
+    assert.match(row.failure_reason ?? '', /open in the Shell tab/);
   });
 });
 
