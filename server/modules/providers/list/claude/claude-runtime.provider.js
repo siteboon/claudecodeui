@@ -13,9 +13,6 @@
  */
 
 import crypto from 'crypto';
-import { promises as fs } from 'fs';
-import os from 'os';
-import path from 'path';
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
 
@@ -289,6 +286,11 @@ function mapCliOptionsToSDK(options = {}) {
     preset: 'claude_code'
   };
 
+  // With these sources the CLI loads the user's MCP servers on its own (user
+  // and local scope from ~/.claude.json, project scope from .mcp.json). Never
+  // pass them as `sdkOptions.mcpServers`: the SDK serializes that into a
+  // `--mcp-config <json>` argument, exposing every server's env and header
+  // secrets to any local user through `ps` or /proc/<pid>/cmdline.
   sdkOptions.settingSources = ['project', 'user', 'local'];
 
   // The SDK resumes with the provider-native session id, never the app id.
@@ -799,63 +801,6 @@ function createHeldPromptStream(messages) {
 }
 
 /**
- * Loads MCP server configurations from ~/.claude.json
- * @param {string} cwd - Current working directory for project-specific configs
- * @returns {Object|null} MCP servers object or null if none found
- */
-async function loadMcpConfig(cwd) {
-  try {
-    const claudeConfigPath = path.join(os.homedir(), '.claude.json');
-
-    // Check if config file exists
-    try {
-      await fs.access(claudeConfigPath);
-    } catch (error) {
-      // File doesn't exist, return null
-      // No config file
-      return null;
-    }
-
-    // Read and parse config file
-    let claudeConfig;
-    try {
-      const configContent = await fs.readFile(claudeConfigPath, 'utf8');
-      claudeConfig = JSON.parse(configContent);
-    } catch (error) {
-      console.error('Failed to parse ~/.claude.json:', error.message);
-      return null;
-    }
-
-    // Extract MCP servers (merge global and project-specific)
-    let mcpServers = {};
-
-    // Add global MCP servers
-    if (claudeConfig.mcpServers && typeof claudeConfig.mcpServers === 'object') {
-      mcpServers = { ...claudeConfig.mcpServers };
-      // Global MCP servers loaded
-    }
-
-    // Add/override with project-specific MCP servers
-    if (claudeConfig.claudeProjects && cwd) {
-      const projectConfig = claudeConfig.claudeProjects[cwd];
-      if (projectConfig && projectConfig.mcpServers && typeof projectConfig.mcpServers === 'object') {
-        mcpServers = { ...mcpServers, ...projectConfig.mcpServers };
-        // Project MCP servers merged
-      }
-    }
-
-    // Return null if no servers found
-    if (Object.keys(mcpServers).length === 0) {
-      return null;
-    }
-    return mcpServers;
-  } catch (error) {
-    console.error('Error loading MCP config:', error.message);
-    return null;
-  }
-}
-
-/**
  * Executes a Claude query using the SDK
  * @param {string} command - User prompt/command
  * @param {Object} options - Query options
@@ -946,11 +891,6 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       model: resolvedModel || options.model,
       effortModels,
     });
-
-    const mcpServers = await loadMcpConfig(options.cwd);
-    if (mcpServers) {
-      sdkOptions.mcpServers = mcpServers;
-    }
 
     // Every turn uses streaming input so stdin stays open past the turn's
     // `result`. The message list is reusable, but each query attempt needs its
