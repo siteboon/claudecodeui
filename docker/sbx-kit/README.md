@@ -36,6 +36,28 @@ existing account's settings. To go back to the historical ask-every-time
 default, remove the `CLOUDCLI_DEFAULT_CLAUDE_SKIP_PERMISSIONS` line from
 `spec.yaml`'s `environment.variables`.
 
+## Auto-created admin account
+
+The kit also sets `CLOUDCLI_AUTO_CREATE_ADMIN=true`. At boot, if no user
+exists yet, the server creates one (username `admin`) with a randomly
+generated password and prints it to stdout once. `ccui-sbx` reads it back
+out of the sandbox and shows it in its startup summary — no need to open
+the web UI and fill in the setup form before you can sign in. Like the
+permissions default above, this never touches an existing account; a
+sandbox that already had a user before this run simply won't print (or
+find) a password.
+
+This is meant for disposable, single-user dev sandboxes: the password is
+printed once to a log a container operator can read, which trades a bit of
+that for "nobody has to be watching a browser at the right moment." It is
+not a production security posture — don't set `CLOUDCLI_AUTO_CREATE_ADMIN`
+outside a throwaway sandbox. To turn it off, remove the
+`CLOUDCLI_AUTO_CREATE_ADMIN` line from `spec.yaml`'s `environment.variables`
+and go back to registering manually through the web UI. `CLOUDCLI_ADMIN_USERNAME`
+and `CLOUDCLI_ADMIN_PASSWORD` (set directly on the server process, not
+currently exposed via this kit) override the generated username/password
+if you need a fixed value instead.
+
 ## Usage
 
 ### Option A: `ccui-sbx` launcher (recommended)
@@ -48,12 +70,17 @@ argument is forwarded to `sbx run` untouched, so it takes all the normal
 It creates the sandbox **headless** (`--detached`) by default: the claude
 TUI never takes over your terminal, so the actual published ports (which
 can differ from 3001/5173 if those are already busy — see below) stay
-visible in a summary printed once the sandbox is up:
+visible in a summary printed once the sandbox is up. On a fresh sandbox it
+waits (up to ~60s) for first-time setup — `npm install` plus the native
+module rebuild — to finish and print the generated admin password before
+showing that summary:
 
 ```
 ── ccui-sbx: 'ccui-claudecodeui' is running headless ──
   Web UI / API:  http://127.0.0.1:49158
   Vite (HMR):    http://127.0.0.1:49159
+
+  Admin login:   admin / 3f1a9c2e8b7d4f0a1e6c5b3a9d8f7e2c
 
   Attach to the claude agent:   sbx run --name ccui-claudecodeui
   Tail the dev server logs:    sbx exec ccui-claudecodeui bash -lc 'tail -f /tmp/claudecodeui-dev.log'

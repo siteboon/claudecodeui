@@ -176,6 +176,31 @@ if [ -z "$server_url$client_url" ]; then
   echo "  (couldn't resolve the published ports automatically — run: sbx ports $sbx_name)"
 fi
 
+# The kit sets CLOUDCLI_AUTO_CREATE_ADMIN=true, so a fresh sandbox's server
+# prints a one-time "CLOUDCLI_ADMIN_PASSWORD=..." line to its own stdout —
+# but commands.startup runs in the background, so that output only ever
+# lands in /tmp/claudecodeui-dev.log, never this terminal. Poll for it:
+# first boot has to wait out `npm install` + a native-module rebuild, and a
+# sandbox that already had a user before this run never prints the line at
+# all, which is expected, not an error.
+admin_password=""
+if [ "${CCUI_SBX_NO_KIT:-0}" != "1" ]; then
+  echo
+  echo "  Waiting for first-time setup (installing dependencies)..."
+  for _ in $(seq 1 30); do
+    admin_password="$(sbx exec "$sbx_name" bash -lc 'grep -m1 "^CLOUDCLI_ADMIN_PASSWORD=" /tmp/claudecodeui-dev.log 2>/dev/null | cut -d= -f2-' 2>/dev/null || true)"
+    [ -n "$admin_password" ] && break
+    sleep 2
+  done
+fi
+
+echo
+if [ -n "$admin_password" ]; then
+  echo "  Admin login:   admin / $admin_password"
+else
+  echo "  (no auto-created admin found — sandbox may already have a user, or is still starting: sbx exec $sbx_name bash -lc 'tail -f /tmp/claudecodeui-dev.log')"
+fi
+
 echo
 echo "  Attach to the claude agent:   sbx run --name $sbx_name"
 echo "  Tail the dev server logs:    sbx exec $sbx_name bash -lc 'tail -f /tmp/claudecodeui-dev.log'"

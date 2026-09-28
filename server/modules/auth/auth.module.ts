@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 
 import { getConnection, userDb, userPreferencesDb } from '@/modules/database/index.js';
@@ -5,6 +6,7 @@ import { getConnection, userDb, userPreferencesDb } from '@/modules/database/ind
 import { authenticateToken, generateToken } from './auth.middleware.js';
 import { createAuthRouter } from './auth.routes.js';
 import { createAuthService } from './auth.service.js';
+import { autoProvisionAdminUser } from './auto-provision-admin.js';
 
 type BcryptAdapter = {
   hash(password: string, saltRounds: number): Promise<string>;
@@ -48,3 +50,24 @@ const authService = createAuthService({
 
 /** Auth router assembled for the server entrypoint. */
 export const authRoutes = createAuthRouter(authService, authenticateToken);
+
+/**
+ * Called once at server boot. Only acts when CLOUDCLI_AUTO_CREATE_ADMIN is
+ * set and no user exists yet — the sbx kit's disposable sandboxes turn this
+ * on so a freshly created sandbox has a ready-to-use account instead of
+ * requiring a human to complete the SetupForm before anyone can sign in.
+ */
+export async function autoProvisionAdminUserIfConfigured() {
+  return autoProvisionAdminUser(
+    {
+      hasUsers: () => userDb.hasUsers(),
+      register: (username, password) => authService.register(username, password),
+      generatePassword: () => crypto.randomBytes(16).toString('hex'),
+    },
+    {
+      enabled: process.env.CLOUDCLI_AUTO_CREATE_ADMIN === 'true',
+      username: process.env.CLOUDCLI_ADMIN_USERNAME || 'admin',
+      password: process.env.CLOUDCLI_ADMIN_PASSWORD || undefined,
+    },
+  );
+}

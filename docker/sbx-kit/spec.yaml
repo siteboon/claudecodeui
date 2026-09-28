@@ -18,6 +18,13 @@ environment:
     # --dangerously-skip-permissions. Only affects account creation; existing
     # accounts and their settings are never touched.
     CLOUDCLI_DEFAULT_CLAUDE_SKIP_PERMISSIONS: "true"
+    # Auto-creates the sandbox's one user (username "admin") with a randomly
+    # generated password at boot, instead of requiring a human to open the
+    # web UI and complete the setup form before anyone can sign in. The
+    # server prints the generated password to stdout once, which
+    # `ccui-sbx` surfaces in its startup summary. Only fires when no user
+    # exists yet — never touches an existing account.
+    CLOUDCLI_AUTO_CREATE_ADMIN: "true"
 
 commands:
   install:

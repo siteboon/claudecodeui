@@ -24,6 +24,7 @@ import {
     authenticateToken,
     authenticateWebSocket,
     authRoutes,
+    autoProvisionAdminUserIfConfigured,
     validateApiKey,
 } from './modules/auth/index.js';
 import { taskmasterRoutes } from './modules/taskmaster/index.js';
@@ -333,6 +334,31 @@ async function startServer() {
     try {
         // Initialize authentication database
         await initializeDatabase();
+
+        // Opt-in, off by default: only sandboxes/deployments that set
+        // CLOUDCLI_AUTO_CREATE_ADMIN act here, and only when no user exists
+        // yet, so this never touches an established account. A failure
+        // (e.g. a too-short CLOUDCLI_ADMIN_PASSWORD override) only warns —
+        // the normal SetupForm first-run flow still works either way.
+        const provisionedAdmin = await autoProvisionAdminUserIfConfigured().catch((error) => {
+            console.warn('[WARN] Could not auto-provision admin user:', getErrorMessage(error));
+            return null;
+        });
+        if (provisionedAdmin) {
+            console.log('');
+            console.log(terminalTextStyles.dim('═'.repeat(63)));
+            console.log(`  ${terminalTextStyles.bright('CloudCLI: admin account created')}`);
+            console.log(terminalTextStyles.dim('═'.repeat(63)));
+            console.log(`  Username: ${terminalTextStyles.bright(provisionedAdmin.username)}`);
+            console.log(`  Password: ${terminalTextStyles.bright(provisionedAdmin.password)}`);
+            console.log('  (Shown once. Log in now and store it somewhere safe.)');
+            console.log('');
+            // Fixed-format lines, not just for humans: the sbx-kit launcher
+            // greps these out of the dev-server log to surface them once
+            // the sandbox is up.
+            console.log(`CLOUDCLI_ADMIN_USERNAME=${provisionedAdmin.username}`);
+            console.log(`CLOUDCLI_ADMIN_PASSWORD=${provisionedAdmin.password}`);
+        }
 
         // Configure Web Push (VAPID keys)
         configureWebPush();

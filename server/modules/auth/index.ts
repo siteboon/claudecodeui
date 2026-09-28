@@ -1,5 +1,5 @@
 // authRoutes: used by the server entrypoint to mount public authentication endpoints.
-export { authRoutes } from './auth.module.js';
+export { authRoutes, autoProvisionAdminUserIfConfigured } from './auth.module.js';
 
 // authenticateToken: used by the server entrypoint to protect authenticated API modules.
 export { authenticateToken } from './auth.middleware.js';
