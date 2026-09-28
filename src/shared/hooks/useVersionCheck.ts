@@ -3,6 +3,25 @@ import { useState, useEffect } from 'react';
 import { APP_VERSION } from '@/shared/constants';
 import type { InstallMode, ReleaseInfo } from '@/shared/types';
 
+// GET /health .updateCheckDisabled ──→ gate ──┐
+//                                             ├── latest > APP_VERSION? ──→ updateAvailable
+// api.github.com releases/latest .tag_name ───┘                             "Update available"
+//
+// APP_VERSION comes from @/shared/constants, which reads the __APP_VERSION__
+// define (vite.config.js) — it is frozen into the bundle at build time, which is
+// why the opt-out travels over /health rather than a VITE_ variable.
+//
+// The gate only suppresses the GitHub poll (CLOUDCLI_DISABLE_UPDATE_CHECK /
+// NO_UPDATE_NOTIFIER on the server). `restartRequired` makes no network call and
+// is never suppressed. If `/health` fails or times out we fail open into the
+// pre-flag behavior rather than muting update checks forever.
+
+// Generous on purpose: this only has to break a connection a proxy is holding
+// open. A tighter budget makes a cold or slow-but-healthy server look dead, and
+// the bare catch below would then leave installMode at its 'git' default, which
+// is what decides the upgrade command shown to the user.
+const HEALTH_REQUEST_TIMEOUT_MS = 15000;
+
 /**
  * Compare two semantic version strings
  * Works only with numeric versions separated by dots (e.g. "1.2.3")
@@ -30,11 +49,13 @@ export const useVersionCheck = (owner: string, repo: string) => {
   const [installMode, setInstallMode] = useState<InstallMode>('git');
   const [runningVersion, setRunningVersion] = useState<string | null>(null);
   const [restartRequired, setRestartRequired] = useState(false);
+  const [healthChecked, setHealthChecked] = useState(false);
+  const [updateCheckDisabled, setUpdateCheckDisabled] = useState(false);
 
   useEffect(() => {
     const fetchHealth = async () => {
       try {
-        const response = await fetch('/health');
+        const response = await fetch('/health', { signal: AbortSignal.timeout(HEALTH_REQUEST_TIMEOUT_MS) });
         const data = await response.json();
         if (data.installMode === 'npm' || data.installMode === 'git') {
           setInstallMode(data.installMode);
@@ -48,14 +69,21 @@ export const useVersionCheck = (owner: string, repo: string) => {
           setRunningVersion(data.version);
           setRestartRequired(data.version !== APP_VERSION);
         }
+        setUpdateCheckDisabled(data.updateCheckDisabled === true);
       } catch {
         // Default to git / no restart hint on error
+      } finally {
+        // Set on both paths: a broken or hung /health must fail open into the
+        // pre-flag behavior, never silently mute update checks forever.
+        setHealthChecked(true);
       }
     };
     fetchHealth();
   }, []);
 
   useEffect(() => {
+    if (!healthChecked || updateCheckDisabled) return;
+
     const checkVersion = async () => {
       try {
         const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases/latest`);
@@ -93,7 +121,7 @@ export const useVersionCheck = (owner: string, repo: string) => {
     checkVersion();
     const interval = setInterval(checkVersion, 5 * 60 * 1000); // Check every 5 minutes
     return () => clearInterval(interval);
-  }, [owner, repo]);
+  }, [owner, repo, healthChecked, updateCheckDisabled]);
 
   return { updateAvailable, latestVersion, currentVersion: APP_VERSION, releaseInfo, installMode, runningVersion, restartRequired };
 };
