@@ -11,6 +11,7 @@ import {
   SUPERSEDED_PROVIDER_SESSIONS_TABLE_SCHEMA_SQL,
   SCHEDULED_MESSAGES_TABLE_SCHEMA_SQL,
   SESSIONS_TABLE_SCHEMA_SQL,
+  UNRECORDED_PROMPTS_TABLE_SCHEMA_SQL,
   USER_PREFERENCES_TABLE_SCHEMA_SQL,
   USER_NOTIFICATION_PREFERENCES_TABLE_SCHEMA_SQL,
   VAPID_KEYS_TABLE_SCHEMA_SQL,
@@ -521,6 +522,9 @@ export const runMigrations = (db: Database) => {
     addForkedFromSessionIdColumn(db);
     ensureProjectsForSessionPaths(db);
     db.exec(SCHEDULED_MESSAGES_TABLE_SCHEMA_SQL);
+    // Created after the sessions rebuild above, like scheduled_messages, because
+    // it references sessions(session_id).
+    db.exec(UNRECORDED_PROMPTS_TABLE_SCHEMA_SQL);
 
     db.exec('CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_provider_session_id ON sessions(provider_session_id)');
@@ -529,6 +533,7 @@ export const runMigrations = (db: Database) => {
     // The due-message poll runs on a timer; without this it table-scans.
     db.exec('CREATE INDEX IF NOT EXISTS idx_scheduled_messages_due ON scheduled_messages(status, scheduled_for)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_scheduled_messages_session ON scheduled_messages(session_id)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_unrecorded_prompts_session ON unrecorded_prompts(session_id, provider_session_id)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_is_archived ON sessions(isArchived)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_projects_is_starred ON projects(isStarred)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_projects_is_archived ON projects(isArchived)');

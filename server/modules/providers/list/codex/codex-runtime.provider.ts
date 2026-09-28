@@ -11,6 +11,8 @@
  * - codexRuntime.abort(sessionId) - Cancel an active session
  */
 
+import fsp from 'node:fs/promises';
+
 import { Codex } from '@openai/codex-sdk';
 import type { ModelReasoningEffort, Thread, ThreadOptions } from '@openai/codex-sdk';
 
@@ -21,7 +23,10 @@ import {
   createCompleteMessage,
   createNormalizedMessage,
 } from '@/shared/index.js';
+import { unrecordedPromptsDb } from '@/modules/database/index.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
+import { readCodexRunPrompt } from '@/modules/providers/list/codex/codex-sessions.provider.js';
+import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import type { AnyRecord, ProviderRuntimeContext, ProviderRuntimeWriter } from '@/shared/index.js';
 
 type ActiveCodexSession = {
@@ -222,6 +227,79 @@ function transformCodexEvent(event: AnyRecord): AnyRecord {
   }
 }
 
+/** Where a resumed thread's rollout ended when a run started. */
+type RolloutEnd = { filePath: string; size: number };
+
+/** The prompt one run handed to Codex, as its history row would show it. */
+type SubmittedPrompt = { text: string; imagePaths: string[]; submittedAt: string };
+
+/**
+ * Marks where the session's rollout ends before a resumed run writes to it, so
+ * the rows that run adds can be told apart afterwards. Null when the session
+ * has no indexed rollout yet, or the context cannot say where it is.
+ */
+async function markRolloutEnd(context: ProviderRuntimeContext, sessionId: string): Promise<RolloutEnd | null> {
+  const filePath = context.resolveTranscriptPath?.(sessionId);
+  if (!filePath) {
+    return null;
+  }
+
+  try {
+    return { filePath, size: (await fsp.stat(filePath)).size };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Keeps the prompt of a resumed run that Codex never wrote to its rollout.
+ *
+ * A resumed turn that has to compact the thread before it starts (near the
+ * context limit, or after a model switch) and whose compaction request fails —
+ * a 429 at the usage limit, for one — leaves only `task_started` and
+ * `task_complete{error}` in the rollout: codex-cli records the prompt once the
+ * turn itself begins. History is rebuilt from the rollout, so without this
+ * copy the prompt disappears on reload and on every other device. A new
+ * thread needs no check: Codex records its first prompt however that turn ends.
+ *
+ * Called once the run's event stream has ended — the SDK waits for the Codex
+ * process to exit before it ends the stream or throws its exit error — so the
+ * rollout is final, and before the run reports `complete`, so the session's
+ * next run cannot have added rows yet.
+ */
+async function keepUnrecordedPrompt(
+  rolloutEnd: RolloutEnd | null,
+  prompt: SubmittedPrompt | null,
+  sessionId: string | undefined,
+  providerSessionId: string | null,
+): Promise<void> {
+  if (!rolloutEnd || !prompt || !sessionId || !providerSessionId) {
+    return;
+  }
+
+  try {
+    const run = await readCodexRunPrompt(rolloutEnd.filePath, rolloutEnd.size);
+    if (!run || run.promptRecorded) {
+      return;
+    }
+
+    unrecordedPromptsDb.add({
+      sessionId,
+      provider: 'codex',
+      providerSessionId,
+      turnId: run.turnId,
+      text: prompt.text,
+      imagePaths: prompt.imagePaths,
+      submittedAt: prompt.submittedAt,
+    });
+    // Cached history is validated against the rollout's size and mtime, which
+    // this copy does not change.
+    sessionHistoryCache.invalidate(sessionId);
+  } catch (error) {
+    console.warn('[Codex] Could not check whether the rollout recorded the prompt:', error);
+  }
+}
+
 /**
  * Map permission mode to Codex SDK options
  * @param {string} permissionMode - 'default', 'acceptEdits', or 'bypassPermissions'
@@ -302,6 +380,9 @@ async function queryCodex(
   // stderr dump of unrelated CLI log lines, so the thrown wrapper is dropped
   // when the stream already reported the failure.
   let errorSurfaced = false;
+  // Only set for a resumed run; see keepUnrecordedPrompt.
+  let rolloutEnd: RolloutEnd | null = null;
+  let submittedPrompt: SubmittedPrompt | null = null;
   const abortController = new AbortController();
   // Session-map key: the app session id when the caller supplied one, else
   // the provider-native thread id once captured (legacy/direct API callers).
@@ -352,6 +433,16 @@ async function queryCodex(
     const turnInput = normalizedImages.length > 0
       ? buildCodexInputItems(promptWithImageFallback, normalizedImages, workingDirectory)
       : promptWithFiles;
+    if (sessionId && providerSessionId) {
+      rolloutEnd = await markRolloutEnd(context, sessionId);
+    }
+    submittedPrompt = {
+      text: promptWithImageFallback,
+      imagePaths: Array.isArray(turnInput)
+        ? turnInput.flatMap((item) => (item.type === 'local_image' ? [item.path] : []))
+        : [],
+      submittedAt: new Date().toISOString(),
+    };
     const streamedTurn = await thread.runStreamed(turnInput, {
       signal: abortController.signal
     });
@@ -437,6 +528,7 @@ async function queryCodex(
     const runSession = activeCodexSessions.get(sessionKey() || '');
     const runAborted = runSession?.status === 'aborted' || abortController.signal.aborted;
     if (!runAborted) {
+      await keepUnrecordedPrompt(rolloutEnd, submittedPrompt, sessionId, providerSessionId);
       sendMessage(ws, createCompleteMessage({
         provider: 'codex',
         sessionId: capturedSessionId || sessionId || null,
@@ -474,6 +566,7 @@ async function queryCodex(
 
         sendMessage(ws, createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'codex' }));
       }
+      await keepUnrecordedPrompt(rolloutEnd, submittedPrompt, sessionId, providerSessionId);
       sendMessage(ws, createCompleteMessage({
         provider: 'codex',
         sessionId: capturedSessionId || sessionId || null,

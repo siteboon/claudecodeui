@@ -23,7 +23,9 @@ import type { FetchHistoryResult } from '@/shared/types.js';
  * status from that, so a session's entry is also dropped explicitly when its
  * process starts or ends (`invalidate`) — otherwise a page read while the
  * process was up would keep reporting `running` after it had gone, until the
- * next row happened to land in the file.
+ * next row happened to land in the file. Codex's runtime invalidates for a
+ * similar reason after it keeps a prompt the rollout never recorded: that
+ * prompt lives in the app DB, so the file's stat does not change.
  *
  * Only history readers that read `jsonl_path` itself may use this cache —
  * callers pass `transcriptPath: null` for providers whose messages live
@@ -62,6 +64,10 @@ export function createSessionHistoryCache(
 ) {
   const entries = new Map<string, CacheEntry>();
   const pendingLoads = new Map<string, Promise<FetchHistoryResult>>();
+  // Loads that were already running when their session was invalidated. They
+  // may have read state from before the change that prompted the invalidation,
+  // which the file's stat cannot show, so their result is never cached.
+  const staleLoads = new WeakSet<Promise<FetchHistoryResult>>();
 
   function evictOverBudget(): void {
     let totalBytes = 0;
@@ -121,28 +127,41 @@ export function createSessionHistoryCache(
         return pending;
       }
 
-      const load = loadFull().then((full) => {
-        entries.delete(sessionId);
-        entries.set(sessionId, {
-          transcriptPath,
-          mtimeMs: stat.mtimeMs,
-          size: stat.size,
-          full,
-        });
-        evictOverBudget();
+      const load: Promise<FetchHistoryResult> = loadFull().then((full) => {
+        if (!staleLoads.has(load)) {
+          entries.delete(sessionId);
+          entries.set(sessionId, {
+            transcriptPath,
+            mtimeMs: stat.mtimeMs,
+            size: stat.size,
+            full,
+          });
+          evictOverBudget();
+        }
         return full;
       });
       pendingLoads.set(sessionId, load);
       try {
         return await load;
       } finally {
-        pendingLoads.delete(sessionId);
+        if (pendingLoads.get(sessionId) === load) {
+          pendingLoads.delete(sessionId);
+        }
       }
     },
 
-    /** Forgets a session's entry so the next read re-parses its transcript. */
+    /**
+     * Forgets a session's entry so the next read re-parses its transcript. A
+     * load already in flight still answers the requests that joined it, but
+     * later requests start a fresh one and its result is not cached.
+     */
     invalidate(sessionId: string): void {
       entries.delete(sessionId);
+      const pending = pendingLoads.get(sessionId);
+      if (pending) {
+        staleLoads.add(pending);
+        pendingLoads.delete(sessionId);
+      }
     },
   };
 }

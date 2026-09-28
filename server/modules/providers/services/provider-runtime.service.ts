@@ -1,3 +1,4 @@
+import { sessionsDb } from '@/modules/database/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
@@ -15,6 +16,7 @@ type ProviderRuntimeServiceDependencies = {
   listProviders(): IProvider[];
   resolveProvider(provider: string): IProvider;
   resolveProviderSessionId(sessionId: string | null | undefined): string | null;
+  resolveTranscriptPath(sessionId: string): string | null;
   resolveResumeModel(
     provider: LLMProvider,
     sessionId: string | undefined,
@@ -27,6 +29,7 @@ const defaultDependencies: ProviderRuntimeServiceDependencies = {
   listProviders: () => providerRegistry.listProviders(),
   resolveProvider: (provider) => providerRegistry.resolveProvider(provider),
   resolveProviderSessionId: (sessionId) => sessionsService.resolveProviderSessionId(sessionId),
+  resolveTranscriptPath: (sessionId) => sessionsDb.getSessionById(sessionId)?.jsonl_path ?? null,
   resolveResumeModel: (provider, sessionId, requestedModel) =>
     providerModelsService.resolveResumeModel(provider, sessionId, requestedModel),
   getProviderModels: (provider) => providerModelsService.getProviderModels(provider),
@@ -48,6 +51,7 @@ export function createProviderRuntimeService(
     provider: IProvider,
   ): ProviderRuntimeContext => ({
     resolveProviderSessionId: dependencies.resolveProviderSessionId,
+    resolveTranscriptPath: dependencies.resolveTranscriptPath,
     resolveResumeModel: (sessionId, requestedModel) =>
       dependencies.resolveResumeModel(provider.id, sessionId, requestedModel),
     getProviderModels: async () => dependencies.getProviderModels(provider.id),

@@ -163,3 +163,107 @@ test('invalidating a session re-parses its unchanged transcript on the next read
     assert.equal(second?.messages[0]?.content, 'load-2');
   });
 });
+
+type GatedLoader = {
+  loadFull: () => Promise<FetchHistoryResult>;
+  /** Resolves when load N (1-based) has been started. */
+  started: (load: number) => Promise<void>;
+  /** Lets gated load N finish, failing it when `fail` is set. */
+  finish: (load: number, fail?: boolean) => void;
+  loads: () => number;
+};
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve: (value: T) => void = () => {};
+  const promise = new Promise<T>((settle) => { resolve = settle; });
+  return { promise, resolve };
+}
+
+/** Loads 1 and 2 wait until finished by hand; any later load answers at once. */
+function gatedLoader(): GatedLoader {
+  let loads = 0;
+  const starts = [0, 1].map(() => deferred<void>());
+  const gates = [0, 1].map(() => deferred<boolean>());
+  return {
+    loadFull: async () => {
+      loads += 1;
+      const load = loads;
+      if (load <= gates.length) {
+        starts[load - 1].resolve();
+        if (await gates[load - 1].promise) {
+          throw new Error(`load-${load} failed`);
+        }
+      }
+      return historyResult(`load-${load}`);
+    },
+    started: (load) => starts[load - 1].promise,
+    finish: (load, fail = false) => gates[load - 1].resolve(fail),
+    loads: () => loads,
+  };
+}
+
+/** Waits for `promise`, but gives up after `ms` so a regression fails instead of hanging. */
+async function within(promise: Promise<void>, ms: number): Promise<void> {
+  let timer: NodeJS.Timeout | undefined;
+  await Promise.race([promise, new Promise<void>((resolve) => { timer = setTimeout(resolve, ms); })]);
+  clearTimeout(timer);
+}
+
+async function settleIo(): Promise<void> {
+  for (let round = 0; round < 30; round += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+}
+
+test('a request after invalidate starts its own load, and the stale load does not overwrite it', async () => {
+  await withTranscriptFile(async (transcriptPath) => {
+    const cache = createSessionHistoryCache();
+    const loader = gatedLoader();
+    const read = () => cache.getFullHistory({ sessionId: 's1', transcriptPath, loadFull: loader.loadFull });
+
+    // Codex's runtime stores a prompt the rollout lacks and then invalidates,
+    // without touching the file: a load that read the store before that write
+    // has the same stat as one that read it after.
+    const staleRequest = read();
+    await loader.started(1);
+    cache.invalidate('s1');
+    const freshRequest = read();
+
+    await within(loader.started(2), 5000);
+    assert.equal(loader.loads(), 2, 'the request after invalidate joined the stale load');
+
+    loader.finish(2);
+    assert.equal((await freshRequest)?.messages[0]?.content, 'load-2');
+    // The stale load finishes last, after the fresh result is cached.
+    loader.finish(1);
+    assert.equal((await staleRequest)?.messages[0]?.content, 'load-1');
+
+    assert.equal((await read())?.messages[0]?.content, 'load-2');
+    assert.equal(loader.loads(), 2);
+  });
+});
+
+test('a stale load that fails does not drop the fresh load other requests can join', async () => {
+  await withTranscriptFile(async (transcriptPath) => {
+    const cache = createSessionHistoryCache();
+    const loader = gatedLoader();
+    const read = () => cache.getFullHistory({ sessionId: 's1', transcriptPath, loadFull: loader.loadFull });
+
+    const staleRequest = read();
+    await loader.started(1);
+    cache.invalidate('s1');
+    const freshRequest = read();
+    await within(loader.started(2), 5000);
+
+    loader.finish(1, true);
+    await assert.rejects(staleRequest, /load-1 failed/);
+
+    const laterRequest = read();
+    await settleIo();
+    loader.finish(2);
+
+    assert.equal((await freshRequest)?.messages[0]?.content, 'load-2');
+    assert.equal((await laterRequest)?.messages[0]?.content, 'load-2');
+    assert.equal(loader.loads(), 2);
+  });
+});
