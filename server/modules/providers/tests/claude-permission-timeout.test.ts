@@ -219,3 +219,24 @@ test('a timeout beyond what a Node timer can hold is clamped instead of firing a
     assert.deepEqual(prompt.decision, { behavior: 'allow', updatedInput: BASH_INPUT });
   });
 });
+
+test('stopping the run retracts a prompt that has no timeout', async (t: TestContext) => {
+  // With no timeout, aborting the run (Stop, or a scheduled message that
+  // interrupts it) is what clears an unanswered prompt; without it the prompt
+  // would stay pending, and be replayed to every tab that subscribes, forever.
+  await withPromptRun(undefined, async ({ canUseTool, sent }) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const controller = new AbortController();
+    const prompt = track(canUseTool('Bash', BASH_INPUT, { signal: controller.signal }));
+    await flush();
+    assert.equal(prompt.decision, null);
+
+    controller.abort();
+    await flush();
+    assert.deepEqual(prompt.decision, { behavior: 'deny', message: 'Permission request cancelled' });
+    const [cancelled] = cancellations(sent);
+    assert.equal(cancelled?.reason, 'cancelled');
+    assert.equal(cancelled?.requestId, requestIdFor(sent, 'Bash'), 'the cancellation retracts that prompt');
+    t.mock.timers.reset();
+  });
+});

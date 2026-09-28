@@ -72,6 +72,11 @@ const MAX_PERMISSION_PROMPT_TIMEOUT_MS = 2 ** 31 - 1;
  * whichever client version saved it and is replayed from queued and scheduled
  * message snapshots.
  *
+ * Waiting has a cost: until the prompt is answered or the run is stopped, the
+ * run keeps its CLI process alive and its session busy, and a scheduled or
+ * queued turn nobody is watching waits the same way. The Settings timeout is
+ * how a user bounds unattended runs.
+ *
  * Used by queryClaudeSDK once per run; exported for the provider tests that pin
  * the mapping.
  * @param {unknown} value - `toolsSettings.permissionPromptTimeoutMs` as received
