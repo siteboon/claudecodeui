@@ -1110,14 +1110,19 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     // native-command list per-machine accurate; the static table in
     // native-commands is only the fallback until this lands. The capture is
     // generation-guarded: two sessions in one workspace race their writes, and
-    // the SDK does not order initializationResult() against stream messages —
-    // only the newest attempt for a workspace may record, everything older is
-    // dropped wherever it finally settles.
+    // only the newest attempt for a workspace may record.
     const recordNativeCatalogue = beginNativeCommandsCapture('claude', options.cwd ?? '');
+    // The SDK does not order initializationResult() against stream messages.
+    // If a commands_changed push lands while the initialization promise is
+    // still pending, the stream already holds the newer catalogue — the
+    // initialization result must not overwrite it when it finally settles.
+    let streamCatalogueArrived = false;
     if (typeof queryInstance.initializationResult === 'function') {
       void Promise.resolve(queryInstance.initializationResult())
         .then((initialization) => {
-          recordNativeCatalogue(initialization?.commands ?? []);
+          if (!streamCatalogueArrived) {
+            recordNativeCatalogue(initialization?.commands ?? []);
+          }
         })
         .catch(() => {
           // A CLI that declines the control request leaves the fallback table
@@ -1132,6 +1137,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       // on the fly) arrives as a full replacement, not a delta — the protocol
       // is explicit that clients must replace their cached list.
       if (message.type === 'system' && message.subtype === 'commands_changed') {
+        streamCatalogueArrived = true;
         recordNativeCatalogue(message.commands ?? []);
       }
 
