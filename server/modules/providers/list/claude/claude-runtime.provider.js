@@ -220,6 +220,32 @@ function matchesToolPermission(entry, toolName, input) {
   return false;
 }
 
+/**
+ * The SDK reports every spawn failure as "native binary not found", including
+ * the ENOENT raised when the working directory is gone (a project folder that
+ * was renamed or moved). Checking up front names the real cause instead.
+ * Other stat failures are left to the SDK so they are not mislabelled here.
+ */
+async function assertWorkingDirectoryExists(cwd) {
+  if (!cwd) {
+    return;
+  }
+
+  let stats;
+  try {
+    stats = await fs.stat(cwd);
+  } catch (error) {
+    if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') {
+      throw new Error(`The project folder does not exist: ${cwd}. If it was moved or renamed, open the project from its new location.`);
+    }
+    return;
+  }
+
+  if (!stats.isDirectory()) {
+    throw new Error(`The project path is not a folder: ${cwd}.`);
+  }
+}
+
 function mapCliOptionsToSDK(options = {}) {
   const { providerSessionId, cwd, toolsSettings, permissionMode, effort, resumeAnchorId, resumeFromScratch } = options;
 
@@ -932,6 +958,8 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   let queryInstance = null;
 
   try {
+    await assertWorkingDirectoryExists(options.cwd);
+
     const resolvedModel = await context.resolveResumeModel(sessionId, options.model);
     let effortModels = CLAUDE_PREDEFINED_MODELS;
     try {
