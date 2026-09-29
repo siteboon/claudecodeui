@@ -486,21 +486,24 @@ router.post("/list", async (req, res) => {
     // them; the frontend inserts them into the input instead of executing,
     // which is what keeps them out of the resubmission loop described on the
     // native-commands module. The catalogue is workspace-scoped: project
-    // skills and plugins make it differ per directory. A native command whose
-    // name collides with a server built-in (/status on Codex, /help on
-    // OpenCode) is dropped in favor of the built-in — two same-name entries
-    // would make keyboard submit ambiguous, and the built-in already works
-    // identically for every provider.
-    const builtinNames = new Set(builtInCommands.map((cmd) => cmd.name));
-    const nativeCommands = getNativeCommands(nativeProvider, projectPath).filter(
-      (cmd) => !builtinNames.has(cmd.name),
-    );
+    // skills and plugins make it differ per directory.
+    //
+    // A name collision is resolved in favor of the CLI's own command, not the
+    // built-in: /status on Codex reports session configuration and token
+    // usage, and a user typing it in a Codex session expects exactly that —
+    // dropping the native entry in favor of the server's application status
+    // would advertise a command that can never be invoked. Hiding the
+    // colliding built-in (instead of the native) also keeps one entry per
+    // name, so the composer's submit path stays unambiguous.
+    const nativeCommands = getNativeCommands(nativeProvider, projectPath);
+    const nativeNames = new Set(nativeCommands.map((cmd) => cmd.name));
+    const scopedBuiltInCommands = builtInCommands.filter((cmd) => !nativeNames.has(cmd.name));
 
     res.json({
-      builtIn: builtInCommands,
+      builtIn: scopedBuiltInCommands,
       native: nativeCommands,
       custom: customCommands,
-      count: allCommands.length,
+      count: scopedBuiltInCommands.length + customCommands.length,
     });
   } catch (error) {
     console.error("Error listing commands:", error);
