@@ -183,18 +183,24 @@ fi
 # first boot has to wait out `npm install` + a native-module rebuild, and a
 # sandbox that already had a user before this run never prints the line at
 # all, which is expected, not an error.
+#
+# `npm run dev` runs both processes through `concurrently`, which prefixes
+# every line with "[0] "/"[1] " — so the marker line actually lands as
+# "[0] CLOUDCLI_ADMIN_PASSWORD=...", not at the start of the line. `grep -o`
+# extracts just the "KEY=value" match itself regardless of what precedes
+# it, so `cut`'s first "=" is always the marker's own, not part of a prefix.
 admin_username=""
 admin_password=""
 if [ "${CCUI_SBX_NO_KIT:-0}" != "1" ]; then
   echo
   echo "  Waiting for first-time setup (installing dependencies)..."
   for _ in $(seq 1 30); do
-    admin_password="$(sbx exec "$sbx_name" bash -lc 'grep -m1 "^CLOUDCLI_ADMIN_PASSWORD=" /tmp/claudecodeui-dev.log 2>/dev/null | cut -d= -f2-' 2>/dev/null || true)"
+    admin_password="$(sbx exec "$sbx_name" bash -lc 'grep -m1 -o "CLOUDCLI_ADMIN_PASSWORD=.*" /tmp/claudecodeui-dev.log 2>/dev/null | cut -d= -f2-' 2>/dev/null || true)"
     [ -n "$admin_password" ] && break
     sleep 2
   done
   if [ -n "$admin_password" ]; then
-    admin_username="$(sbx exec "$sbx_name" bash -lc 'grep -m1 "^CLOUDCLI_ADMIN_USERNAME=" /tmp/claudecodeui-dev.log 2>/dev/null | cut -d= -f2-' 2>/dev/null || true)"
+    admin_username="$(sbx exec "$sbx_name" bash -lc 'grep -m1 -o "CLOUDCLI_ADMIN_USERNAME=.*" /tmp/claudecodeui-dev.log 2>/dev/null | cut -d= -f2-' 2>/dev/null || true)"
   fi
 fi
 
