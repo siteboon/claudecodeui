@@ -4,6 +4,7 @@ import path from "path";
 import express from "express";
 
 import { parseFrontMatter } from "../../shared/frontmatter.js";
+import { getNativeCommands } from "../../shared/native-commands.js";
 
 type CommandsRouterDependencies = {
   fileSystem: typeof import('node:fs/promises');
@@ -445,7 +446,11 @@ Custom commands can be created in:
  */
 router.post("/list", async (req, res) => {
   try {
-    const { projectPath } = req.body;
+    const { projectPath, provider } = req.body;
+    // Native commands are provider-specific: a Codex session must not be
+    // shown `/compact` any more than a Claude session Codex's `/approvals`.
+    // Anything unknown falls back to claude, matching readModelProvider.
+    const nativeProvider = MODEL_PROVIDERS.includes(provider) ? provider : "claude";
     const allCommands = [...builtInCommands];
 
     // Scan project-level commands (.claude/commands/)
@@ -477,10 +482,28 @@ router.post("/list", async (req, res) => {
     // Sort commands alphabetically by name
     customCommands.sort((a, b) => a.name.localeCompare(b.name));
 
+    // CLI-native commands ride along so the composer's slash menu can list
+    // them; the frontend inserts them into the input instead of executing,
+    // which is what keeps them out of the resubmission loop described on the
+    // native-commands module. The catalogue is workspace-scoped: project
+    // skills and plugins make it differ per directory.
+    //
+    // A name collision is resolved in favor of the CLI's own command, not the
+    // built-in: /status on Codex reports session configuration and token
+    // usage, and a user typing it in a Codex session expects exactly that —
+    // dropping the native entry in favor of the server's application status
+    // would advertise a command that can never be invoked. Hiding the
+    // colliding built-in (instead of the native) also keeps one entry per
+    // name, so the composer's submit path stays unambiguous.
+    const nativeCommands = getNativeCommands(nativeProvider, projectPath);
+    const nativeNames = new Set(nativeCommands.map((cmd) => cmd.name));
+    const scopedBuiltInCommands = builtInCommands.filter((cmd) => !nativeNames.has(cmd.name));
+
     res.json({
-      builtIn: builtInCommands,
+      builtIn: scopedBuiltInCommands,
+      native: nativeCommands,
       custom: customCommands,
-      count: allCommands.length,
+      count: scopedBuiltInCommands.length + customCommands.length,
     });
   } catch (error) {
     console.error("Error listing commands:", error);

@@ -668,6 +668,86 @@ test('a live SDK tool result caps the strings inside its structured output', () 
   assert.match(forwarded?.originalFile ?? '', /… 10000 more characters$/);
 });
 
+test('/context normalizes to one user command row and one assistant table row', () => {
+  // Real row shapes pulled from a live transcript (2.1.280): `/compact`'s
+  // stdout lands as an ordinary `user` row (handled by the
+  // parseLocalCommandPayload/`<local-command-stdout>` branch above), but
+  // `/context`'s answer is a `system`/`local_command` row with the wrapped
+  // markdown on `content` directly — no `message` field at all, so nothing
+  // above matched it and the row was silently dropped, leaving the command
+  // line with no reply on reload. The branch is generic on subtype, not on
+  // the command name, so it covers any result-only native command.
+  const provider = new ClaudeSessionsProvider();
+
+  const [commandRow] = provider.normalizeMessage({
+    type: 'user',
+    session_id: SESSION_ID,
+    uuid: 'context-command',
+    message: {
+      role: 'user',
+      content: '<command-name>/context</command-name>\n            <command-message>context</command-message>\n            <command-args></command-args>',
+    },
+  }, SESSION_ID);
+
+  assert.equal(commandRow?.kind, 'text');
+  assert.equal(commandRow?.role, 'user');
+  assert.equal(commandRow?.content, '/context');
+
+  const [stdoutRow, ...restStdoutRows] = provider.normalizeMessage({
+    type: 'system',
+    subtype: 'local_command',
+    session_id: SESSION_ID,
+    uuid: 'context-stdout',
+    content: '<local-command-stdout>## Context Usage\n\n**Tokens:** 14.1k / 1m (1%)</local-command-stdout>',
+  }, SESSION_ID);
+
+  assert.equal(restStdoutRows.length, 0, 'exactly one row for the stdout');
+  assert.equal(stdoutRow?.kind, 'text');
+  assert.equal(stdoutRow?.role, 'assistant');
+  assert.equal(stdoutRow?.content, '## Context Usage\n\n**Tokens:** 14.1k / 1m (1%)');
+});
+
+test('a system/local_command echo row (no stdout tag) becomes a user command row, not an assistant reply', () => {
+  // Real row shape pulled from a live transcript: the command ECHO itself
+  // (not its answer) is sometimes written as a `system`/`local_command` row
+  // carrying the same `<command-name>` payload the `user`-row branch parses,
+  // rather than as a `user` row. Before the fix, the `?? raw.content`
+  // fallback treated any row without a `<local-command-stdout>` tag as
+  // assistant text, so this echo rendered as a Claude reply with raw
+  // `<command-name>` tags visible in the bubble.
+  const provider = new ClaudeSessionsProvider();
+
+  const [echoRow, ...restEchoRows] = provider.normalizeMessage({
+    type: 'system',
+    subtype: 'local_command',
+    session_id: SESSION_ID,
+    uuid: 'btw-echo',
+    content: '<command-name>/btw</command-name>\n  <command-message>btw</command-message>\n  <command-args></command-args>',
+  }, SESSION_ID);
+
+  assert.equal(restEchoRows.length, 0, 'exactly one row for the echo');
+  assert.equal(echoRow?.role, 'user', 'must not be labeled as an assistant reply');
+  assert.equal(echoRow?.kind, 'text');
+  assert.equal(echoRow?.content, '/btw');
+});
+
+test('a system row with no local_command subtype and no message is dropped, not surfaced as text', () => {
+  // Negative control for the branch above: it must key off both `type` and
+  // `subtype`, not just "system row with a string `content`" — otherwise an
+  // unrelated system row (e.g. a raw status ping) would start rendering as
+  // assistant chat.
+  const provider = new ClaudeSessionsProvider();
+  const normalized = provider.normalizeMessage({
+    type: 'system',
+    subtype: 'status',
+    session_id: SESSION_ID,
+    uuid: 'unrelated-status',
+    content: '<local-command-stdout>should not surface</local-command-stdout>',
+  }, SESSION_ID);
+
+  assert.deepEqual(normalized, []);
+});
+
 const WORKFLOW_SESSION_ID = 'claude-workflow-session';
 const WORKFLOW_TOOL_USE_ID = 'toolu_workflow_1';
 const WORKFLOW_RUN_ID = 'wf_16fbf852-274';
