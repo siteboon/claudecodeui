@@ -13,6 +13,7 @@ import {
   readObjectRecord,
   readJsonRecord,
   readOptionalString,
+  resolveOpenCodeSessionTable,
   sliceTailPage,
   unwrapJsonStringLiteral,
 } from '@/shared/utils.js';
@@ -26,6 +27,15 @@ type OpenCodeHistoryRow = {
   part_id: string | null;
   part_time_created: number | null;
   part_data: string | null;
+};
+
+// OpenCode 2.x `session_message` row: `type` is `user`, `assistant`, `idle`,
+// `compaction`, ...; `data` is the message JSON (user text or assistant content[]).
+type OpenCodeV2MessageRow = {
+  id: string;
+  type: string;
+  time_created: number | null;
+  data: string | null;
 };
 
 type OpenCodeTokenTotals = {
@@ -117,7 +127,8 @@ const readOpenCodeSessionColumnTokenUsage = (
   db: Database.Database,
   sessionId: string,
 ): AnyRecord | undefined => {
-  const columns = db.prepare('PRAGMA table_info(session)').all() as { name: string }[];
+  const sessionTable = resolveOpenCodeSessionTable(db);
+  const columns = db.prepare(`PRAGMA table_info(${sessionTable})`).all() as { name: string }[];
   const columnNames = new Set(columns.map((column) => column.name));
   const requiredColumns = ['tokens_input', 'tokens_output', 'tokens_reasoning', 'tokens_cache_read', 'tokens_cache_write'];
   if (!requiredColumns.every((column) => columnNames.has(column))) {
@@ -131,7 +142,7 @@ const readOpenCodeSessionColumnTokenUsage = (
       tokens_reasoning AS reasoningTokens,
       tokens_cache_read AS cacheReadTokens,
       tokens_cache_write AS cacheWriteTokens
-    FROM session
+    FROM ${sessionTable}
     WHERE id = ?
   `).get(sessionId) as OpenCodeTokenTotals | undefined;
 
@@ -158,7 +169,8 @@ const aggregateOpenCodeSessionTokenUsage = (
   sessionId: string,
 ): AnyRecord | undefined => {
   const sessionColumnUsage = readOpenCodeSessionColumnTokenUsage(db, sessionId);
-  if (sessionColumnUsage) {
+  // OpenCode 2.x always keeps the session-level counters and has no `message` table.
+  if (sessionColumnUsage || resolveOpenCodeSessionTable(db) === 'session_v2') {
     return sessionColumnUsage;
   }
 
@@ -211,8 +223,14 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
     const type = readOptionalString(raw.type) ?? readOptionalString(raw.event);
     const eventSessionId = readOptionalString(raw.sessionID) ?? readOptionalString(raw.sessionId) ?? sessionId;
     const timestamp = normalizeProviderTimestamp(raw.time ?? raw.timestamp);
+    // `opencode run --format json` nests each event's payload under `part`:
+    // text in `part.text`, tool name and call state in `part.tool` / `part.state`.
+    const part = readObjectRecord(raw.part);
+    const partState = readObjectRecord(part?.state);
+    const partStatus = readOptionalString(partState?.status);
     const baseId = readOptionalString(raw.id)
       ?? readOptionalString(raw.messageID)
+      ?? readOptionalString(part?.id)
       ?? generateMessageId('opencode');
 
     if (type === 'text') {
@@ -222,7 +240,7 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
         return [];
       }
 
-      const content = extractText(raw.text ?? raw.delta ?? raw.message);
+      const content = extractText(raw.text ?? raw.delta ?? part?.text ?? raw.message);
       if (!content.trim()) {
         return [];
       }
@@ -238,7 +256,7 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
     }
 
     if (type === 'reasoning') {
-      const content = extractText(raw.text ?? raw.delta ?? raw.message);
+      const content = extractText(raw.text ?? raw.delta ?? part?.text ?? raw.message);
       if (!content.trim()) {
         return [];
       }
@@ -254,8 +272,15 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
     }
 
     if (type === 'tool_use') {
-      const toolName = readOptionalString(raw.tool) ?? readOptionalString(raw.name) ?? 'Tool';
-      const toolId = readOptionalString(raw.callID) ?? readOptionalString(raw.toolCallId) ?? baseId;
+      const toolName = readOptionalString(raw.tool)
+        ?? readOptionalString(raw.name)
+        ?? readOptionalString(part?.tool)
+        ?? 'Tool';
+      const toolId = readOptionalString(raw.callID)
+        ?? readOptionalString(raw.toolCallId)
+        ?? readOptionalString(part?.callID)
+        ?? readOptionalString(part?.id)
+        ?? baseId;
       const toolMessage = createNormalizedMessage({
         id: baseId,
         sessionId: eventSessionId,
@@ -263,14 +288,16 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
         provider: PROVIDER,
         kind: 'tool_use',
         toolName,
-        toolInput: raw.input ?? raw.arguments ?? {},
+        toolInput: raw.input ?? raw.arguments ?? partState?.input ?? {},
         toolId,
       });
 
-      if (raw.output !== undefined || raw.error !== undefined) {
+      const toolOutput = raw.output ?? (partStatus === 'completed' ? partState?.output : undefined);
+      const toolError = raw.error ?? (partStatus === 'error' ? (partState?.error ?? 'Tool failed') : undefined);
+      if (toolOutput !== undefined || toolError !== undefined) {
         toolMessage.toolResult = {
-          content: formatToolContent(raw.output ?? raw.error),
-          isError: raw.error !== undefined,
+          content: formatToolContent(toolOutput ?? toolError),
+          isError: toolError !== undefined,
         };
       }
 
@@ -318,6 +345,29 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
     }
 
     try {
+      if (resolveOpenCodeSessionTable(db) === 'session_v2') {
+        const v2Rows = db.prepare(`
+          SELECT id, type, time_created, data
+          FROM session_message
+          WHERE session_id = ?
+          ORDER BY seq
+        `).all(providerSessionId) as OpenCodeV2MessageRow[];
+
+        const normalized = this.normalizeV2HistoryRows(v2Rows, sessionId);
+        const normalizedOffset = Math.max(0, offset);
+        const normalizedLimit = limit === null ? null : Math.max(0, limit);
+        const { page, hasMore } = sliceTailPage(normalized, normalizedLimit, normalizedOffset);
+
+        return {
+          messages: page,
+          total: normalized.length,
+          hasMore,
+          offset: normalizedOffset,
+          limit: normalizedLimit,
+          tokenUsage: readOpenCodeSessionColumnTokenUsage(db, providerSessionId),
+        };
+      }
+
       const rows = db.prepare(`
         SELECT
           m.id AS message_id,
@@ -361,6 +411,121 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
     } finally {
       db.close();
     }
+  }
+
+  /**
+   * Normalizes OpenCode 2.x `session_message` rows. User rows carry the prompt in
+   * `data.text`; assistant rows carry `data.content[]` items of type `reasoning`,
+   * `text` or `tool` (tool results live in `state.content[]`). Other row types
+   * (`idle`, `compaction`, `model-switched`, ...) are bookkeeping and skipped.
+   */
+  private normalizeV2HistoryRows(rows: OpenCodeV2MessageRow[], sessionId: string): NormalizedMessage[] {
+    const normalized: NormalizedMessage[] = [];
+
+    for (const row of rows) {
+      const data = readJsonRecord(row.data) ?? {};
+      const timestamp = normalizeProviderTimestamp(readObjectRecord(data.time)?.created ?? row.time_created);
+
+      if (row.type === 'user') {
+        // User prompts sent with attachments carry an <images_input> path
+        // list; strip it for display and surface the paths as images.
+        const parsedImages = parseImagesInputTag(extractText(data.text));
+        const parsedFiles = parseFilesInputTag(parsedImages.text);
+        if (
+          parsedFiles.text.trim()
+          || parsedImages.attachments.length > 0
+          || parsedFiles.attachments.length > 0
+        ) {
+          normalized.push(createNormalizedMessage({
+            id: row.id,
+            sessionId,
+            timestamp,
+            provider: PROVIDER,
+            kind: 'text',
+            role: 'user',
+            content: parsedFiles.text,
+            images: parsedImages.attachments.length > 0 ? parsedImages.attachments : undefined,
+            files: parsedFiles.attachments.length > 0 ? parsedFiles.attachments : undefined,
+          }));
+        }
+        continue;
+      }
+
+      if (row.type !== 'assistant') {
+        continue;
+      }
+
+      const contentItems = Array.isArray(data.content) ? data.content : [];
+      contentItems.forEach((item, index) => {
+        const contentPart = readObjectRecord(item) ?? {};
+        const partType = readOptionalString(contentPart.type);
+        const baseId = `${row.id}_${index}`;
+
+        if (partType === 'text' || partType === 'reasoning') {
+          const content = extractText(contentPart);
+          if (content.trim()) {
+            normalized.push(createNormalizedMessage({
+              id: baseId,
+              sessionId,
+              timestamp,
+              provider: PROVIDER,
+              kind: partType === 'text' ? 'text' : 'thinking',
+              role: partType === 'text' ? 'assistant' : undefined,
+              content,
+            }));
+          }
+          return;
+        }
+
+        if (partType === 'tool') {
+          const state = readObjectRecord(contentPart.state) ?? {};
+          const status = readOptionalString(state.status);
+          const toolMessage = createNormalizedMessage({
+            id: baseId,
+            sessionId,
+            timestamp,
+            provider: PROVIDER,
+            kind: 'tool_use',
+            toolName: readOptionalString(contentPart.name) ?? readOptionalString(contentPart.tool) ?? 'Tool',
+            toolInput: state.input ?? {},
+            toolId: readOptionalString(contentPart.id) ?? baseId,
+          });
+
+          if (status === 'completed' || status === 'error') {
+            const resultText = Array.isArray(state.content)
+              ? state.content.map((entry) => extractText(entry)).filter(Boolean).join('\n')
+              : undefined;
+            toolMessage.toolResult = {
+              content: formatToolContent(resultText ?? state.output ?? state.error),
+              isError: status === 'error',
+            };
+          }
+
+          normalized.push(toolMessage);
+        }
+      });
+
+      if (data.error != null) {
+        normalized.push(createNormalizedMessage({
+          id: `${row.id}_error`,
+          sessionId,
+          timestamp,
+          provider: PROVIDER,
+          kind: 'error',
+          content: formatToolContent(data.error),
+        }));
+      }
+
+      normalized.push(createNormalizedMessage({
+        id: `${row.id}_end`,
+        sessionId,
+        timestamp,
+        provider: PROVIDER,
+        kind: 'stream_end',
+      }));
+    }
+
+    return normalized;
   }
 
   private normalizeHistoryRows(rows: OpenCodeHistoryRow[], sessionId: string): NormalizedMessage[] {
