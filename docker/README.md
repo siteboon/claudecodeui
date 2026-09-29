@@ -140,6 +140,7 @@ host Node/native-module mismatches), use the `claudecodeui-dev` kit in
 [`docker/sbx-kit/`](sbx-kit/):
 
 ```bash
+mkdir -p ~/.local/bin
 ln -sf "$(pwd)/docker/sbx-kit/bin/ccui-sbx" ~/.local/bin/ccui-sbx  # one-time install
 ccui-sbx .   # launches claude + the kit + both ports, forwards any sbx run flag
 ```

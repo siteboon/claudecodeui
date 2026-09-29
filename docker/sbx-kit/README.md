@@ -51,13 +51,13 @@ can differ from 3001/5173 if those are already busy — see below) stay
 visible in a summary printed once the sandbox is up:
 
 ```
-── ccui-sbx: 'ccui-claudecodeui' is running headless ──
+── ccui-sbx: 'ccui-claudecodeui-3514440038' is running headless ──
   Web UI / API:  http://127.0.0.1:49158
   Vite (HMR):    http://127.0.0.1:49159
 
-  Attach to the claude agent:   sbx run --name ccui-claudecodeui
-  Tail the dev server logs:    sbx exec ccui-claudecodeui bash -lc 'tail -f /tmp/claudecodeui-dev.log'
-  Stop it:                     sbx stop ccui-claudecodeui
+  Attach to the claude agent:   sbx run --name ccui-claudecodeui-3514440038
+  Tail the dev server logs:    sbx exec ccui-claudecodeui-3514440038 bash -lc 'tail -f /tmp/claudecodeui-dev.log'
+  Stop it:                     sbx stop ccui-claudecodeui-3514440038
 ```
 
 Set `CCUI_SBX_ATTACH=1` to get the old behavior instead: attach to the

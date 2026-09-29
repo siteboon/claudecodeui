@@ -134,7 +134,12 @@ done
 
 name_flags=()
 if [ -z "$sbx_name" ]; then
-  sbx_name="ccui-$(basename "$PWD")"
+  # basename alone collides for two different checkouts that happen to share
+  # a directory name (e.g. ~/repos/claudecodeui and ~/other/claudecodeui) —
+  # fold in a short checksum of the full path so each gets a distinct,
+  # still-deterministic default name.
+  path_hash="$(printf '%s' "$PWD" | cksum | cut -d' ' -f1)"
+  sbx_name="ccui-$(basename "$PWD")-$path_hash"
   name_flags=(--name "$sbx_name")
 fi
 
