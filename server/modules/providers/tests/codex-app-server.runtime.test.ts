@@ -273,7 +273,7 @@ test('starts/resumes a thread, submits a turn, and normalizes completed items', 
   assert.equal(threadStart.method, 'thread/start');
   assert.equal((threadStart.params as AnyRecord).cwd, 'C:\\workspace');
   assert.equal((threadStart.params as AnyRecord).sandbox, 'workspace-write');
-  assert.equal((threadStart.params as AnyRecord).approvalPolicy, 'untrusted');
+  assert.equal((threadStart.params as AnyRecord).approvalPolicy, 'on-request');
   const turnStart = await harness.nextRequest();
   assert.equal(turnStart.method, 'turn/start');
   assert.deepEqual((turnStart.params as AnyRecord).input, [{
@@ -615,6 +615,126 @@ for (const failSetup of [false, true]) {
     assert.deepEqual(await replacement.nextRequest(), { method: 'initialized' });
   });
 }
+
+for (const sessionId of ['new-app', 'resume-app']) {
+  for (const permissionMode of ['default', undefined, null, 'acceptEdits', 'bypassPermissions']) {
+    test(`maps ${String(permissionMode)} approval policy consistently for ${sessionId}`, async () => {
+      const harness = createHarness();
+      const runtime = createRuntime(harness.process);
+      const runPromise = runtime.run('Check approval', { sessionId, permissionMode }, createWriter().writer, context);
+      await harness.nextRequest();
+      await harness.nextRequest();
+      const threadRequest = await harness.nextRequest();
+      assert.equal(threadRequest.method, sessionId === 'resume-app' ? 'thread/resume' : 'thread/start');
+      assert.equal((threadRequest.params as AnyRecord).approvalPolicy,
+        permissionMode === 'acceptEdits' || permissionMode === 'bypassPermissions' ? 'never' : 'on-request');
+      assert.equal((threadRequest.params as AnyRecord).sandbox,
+        permissionMode === 'bypassPermissions' ? 'danger-full-access' : 'workspace-write');
+      await harness.nextRequest();
+      harness.notify('turn/completed', {
+        threadId: sessionId === 'resume-app' ? 'thread-existing' : 'thread-new',
+        turnId: 'turn-1', turn: { id: 'turn-1', status: 'completed' },
+      });
+      await runPromise;
+    });
+  }
+}
+
+const threadOperations = [
+  { method: 'thread/read', invoke: (runtime: ReturnType<typeof createCodexAppServerRuntime>) => runtime.readThread('thread-source') },
+  { method: 'thread/list', invoke: (runtime: ReturnType<typeof createCodexAppServerRuntime>) => runtime.listThreads() },
+  { method: 'thread/name/set', invoke: (runtime: ReturnType<typeof createCodexAppServerRuntime>) => runtime.setThreadName('thread-source', 'New name') },
+  { method: 'thread/fork', invoke: (runtime: ReturnType<typeof createCodexAppServerRuntime>) => runtime.forkThread({ threadId: 'thread-source', cwd: '/tmp' }) },
+];
+
+for (const operation of threadOperations) {
+  for (const pauseAtInitialize of [false, true]) {
+    test(`protects ${operation.method} during ${pauseAtInitialize ? 'initialization' : 'its RPC'} and releases after success`, async (testContext) => {
+      const directory = await mkdtemp(path.join(os.tmpdir(), 'codex-busy-operation-'));
+      testContext.after(() => rm(directory, { recursive: true, force: true }));
+      const transcriptPath = path.join(directory, 'fork.jsonl');
+      await writeFile(transcriptPath, '');
+      const harness = createHarness(pauseAtInitialize ? { pauseAt: 'initialize' } : {});
+      const replacement = createHarness();
+      let spawnCount = 0;
+      const runtime = createCodexAppServerRuntime({ managerOptions: {
+        shutdownGracePeriodMs: 1,
+        spawn: () => (spawnCount++ === 0 ? harness.process : replacement.process) as unknown as CodexAppServerProcess,
+      } });
+      const result = operation.invoke(runtime);
+      void result.catch(() => {});
+      const initialize = await harness.nextRequest();
+      if (pauseAtInitialize) {
+        await assert.rejects(runtime.restart(), { code: 'CODEX_APP_SERVER_BUSY', statusCode: 409 });
+        harness.respondWithResult(initialize, {});
+      }
+      await harness.nextRequest();
+      const request = await harness.nextRequest();
+      assert.equal(request.method, operation.method);
+      await assert.rejects(runtime.restart(), { code: 'CODEX_APP_SERVER_BUSY', statusCode: 409 });
+      assert.equal(harness.process.stdin.writableEnded, false);
+      harness.respondWithResult(request, { thread: { id: 'thread-forked', path: transcriptPath } });
+      await result;
+      await runtime.restart();
+      assert.equal(spawnCount, 2);
+    });
+  }
+
+  test(`releases the restart guard when ${operation.method} fails`, async () => {
+    const harness = createHarness();
+    const replacement = createHarness();
+    let spawnCount = 0;
+    const runtime = createCodexAppServerRuntime({ managerOptions: {
+      shutdownGracePeriodMs: 1,
+      spawn: () => (spawnCount++ === 0 ? harness.process : replacement.process) as unknown as CodexAppServerProcess,
+    } });
+    const rejected = assert.rejects(operation.invoke(runtime), /Operation failed/);
+    await harness.nextRequest();
+    await harness.nextRequest();
+    harness.respondWithError(await harness.nextRequest(), -32000, 'Operation failed');
+    await rejected;
+    await runtime.restart();
+    assert.equal(spawnCount, 2);
+  });
+}
+
+test('keeps the restart guard until every concurrent thread operation finishes', async () => {
+  const harness = createHarness();
+  const replacement = createHarness();
+  let spawnCount = 0;
+  const runtime = createCodexAppServerRuntime({ managerOptions: {
+    shutdownGracePeriodMs: 1,
+    spawn: () => (spawnCount++ === 0 ? harness.process : replacement.process) as unknown as CodexAppServerProcess,
+  } });
+  const read = runtime.readThread('thread-source');
+  const list = runtime.listThreads();
+  await harness.nextRequest();
+  await harness.nextRequest();
+  const readRequest = await harness.nextRequest();
+  const listRequest = await harness.nextRequest();
+  harness.respondWithResult(readRequest, {});
+  await read;
+  await assert.rejects(runtime.restart(), { code: 'CODEX_APP_SERVER_BUSY' });
+  harness.respondWithResult(listRequest, {});
+  await list;
+  await runtime.restart();
+  assert.equal(spawnCount, 2);
+});
+
+test('releases the thread-operation guard after initialization fails', async () => {
+  const harness = createHarness({ pauseAt: 'initialize' });
+  const replacement = createHarness();
+  let spawnCount = 0;
+  const runtime = createCodexAppServerRuntime({ managerOptions: {
+    shutdownGracePeriodMs: 1,
+    spawn: () => (spawnCount++ === 0 ? harness.process : replacement.process) as unknown as CodexAppServerProcess,
+  } });
+  const rejected = assert.rejects(runtime.readThread('thread-source'), /Initialization failed/);
+  harness.respondWithError(await harness.nextRequest(), -32000, 'Initialization failed');
+  await rejected;
+  await runtime.restart();
+  assert.equal(spawnCount, 2);
+});
 
 test('refuses to restart while an app-server turn is active', async () => {
   const harness = createHarness();

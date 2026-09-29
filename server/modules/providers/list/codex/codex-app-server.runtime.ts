@@ -141,7 +141,7 @@ const readErrorMessage = (value: unknown, fallback = 'Codex turn failed'): strin
 
 function mapPermissionMode(permissionMode: unknown): {
   sandbox: 'workspace-write' | 'danger-full-access';
-  approvalPolicy: 'never' | 'untrusted';
+  approvalPolicy: 'never' | 'on-request';
 } {
   switch (permissionMode) {
     case 'acceptEdits':
@@ -151,7 +151,7 @@ function mapPermissionMode(permissionMode: unknown): {
     case 'default':
     case undefined:
     case null:
-      return { sandbox: 'workspace-write', approvalPolicy: 'untrusted' };
+      return { sandbox: 'workspace-write', approvalPolicy: 'on-request' };
     default:
       throw new Error(`Unsupported Codex permission mode: ${String(permissionMode)}`);
   }
@@ -460,6 +460,7 @@ export class CodexAppServerRuntime {
   private readonly runsBySession = new Map<string, AppServerRun>();
   private readonly pendingApprovals = new Map<string, PendingCodexApproval>();
   private inFlightRuns = 0;
+  private inFlightOperations = 0;
 
   constructor(options: CodexAppServerRuntimeOptions = {}) {
     this.manager = new CodexAppServerProcessManager({
@@ -615,12 +616,12 @@ export class CodexAppServerRuntime {
 
   /**
    * Restarts the owned process so Codex reloads config.toml and auth.json.
-   * Active app-server turns are preserved by rejecting the administrative
-   * action instead of terminating work that is still producing output.
+   * Active app-server runs and thread operations are preserved by rejecting
+   * the administrative action instead of closing their shared transport.
    */
   async restart(): Promise<void> {
-    if (this.inFlightRuns > 0 || this.runsByThread.size > 0) {
-      throw new AppError('Wait for active Codex app-server runs to finish before restarting.', {
+    if (this.inFlightRuns > 0 || this.inFlightOperations > 0 || this.runsByThread.size > 0) {
+      throw new AppError('Wait for active Codex app-server operations to finish before restarting.', {
         code: 'CODEX_APP_SERVER_BUSY',
         statusCode: 409,
       });
@@ -629,52 +630,69 @@ export class CodexAppServerRuntime {
     await this.manager.restart();
   }
 
+  private async withAppServerOperation<TResult>(operation: () => Promise<TResult>): Promise<TResult> {
+    this.inFlightOperations += 1;
+    try {
+      return await operation();
+    } finally {
+      this.inFlightOperations -= 1;
+    }
+  }
+
   /** Reads one persisted provider thread through the owned app-server process. */
   async readThread(threadId: string, includeTurns = true): Promise<unknown> {
-    await this.manager.start();
-    return this.manager.request('thread/read', { threadId, includeTurns });
+    return this.withAppServerOperation(async () => {
+      await this.manager.start();
+      return this.manager.request('thread/read', { threadId, includeTurns });
+    });
   }
 
   /** Lists one page of persisted provider threads through the owned process. */
   async listThreads(params: AnyRecord = {}): Promise<unknown> {
-    await this.manager.start();
-    return this.manager.request('thread/list', params);
+    return this.withAppServerOperation(async () => {
+      await this.manager.start();
+      return this.manager.request('thread/list', params);
+    });
   }
 
   /** Forks persisted history into a distinct Codex thread. */
   async forkThread(input: CodexThreadForkInput): Promise<CodexThreadFork> {
-    await this.manager.start();
-    const result = await this.manager.request('thread/fork', compactRecord({
-      threadId: input.threadId,
-      lastTurnId: input.lastTurnId,
-      cwd: input.cwd,
-    }));
-    const forkedThreadId = readThreadId(result);
-    const forkedThread = readNestedRecord(readRecord(result) ?? {}, 'thread');
-    const forkedPath = readString(forkedThread?.path);
-    if (!forkedThreadId || forkedThreadId === input.threadId || !forkedPath) {
-      throw new AppError('Codex reported a fork without a distinct thread id or transcript path.', {
-        code: 'FORK_FAILED',
-        statusCode: 502,
-      });
-    }
+    return this.withAppServerOperation(async () => {
+      await this.manager.start();
+      const result = await this.manager.request('thread/fork', compactRecord({
+        threadId: input.threadId,
+        lastTurnId: input.lastTurnId,
+        cwd: input.cwd,
+      }));
+      const forkedThreadId = readThreadId(result);
+      const forkedThread = readNestedRecord(readRecord(result) ?? {}, 'thread');
+      const forkedPath = readString(forkedThread?.path);
+      if (!forkedThreadId || forkedThreadId === input.threadId || !forkedPath) {
+        throw new AppError('Codex reported a fork without a distinct thread id or transcript path.', {
+          code: 'FORK_FAILED',
+          statusCode: 502,
+        });
+      }
 
-    try {
-      await stat(forkedPath);
-    } catch {
-      throw new AppError('Codex reported a fork but wrote no transcript for it.', {
-        code: 'FORK_FAILED',
-        statusCode: 502,
-      });
-    }
+      try {
+        await stat(forkedPath);
+      } catch {
+        throw new AppError('Codex reported a fork but wrote no transcript for it.', {
+          code: 'FORK_FAILED',
+          statusCode: 502,
+        });
+      }
 
-    return { threadId: forkedThreadId, path: forkedPath };
+      return { threadId: forkedThreadId, path: forkedPath };
+    });
   }
 
   /** Updates Codex's provider-owned display name for one persisted thread. */
   async setThreadName(threadId: string, name: string): Promise<void> {
-    await this.manager.start();
-    await this.manager.request('thread/name/set', { threadId, name });
+    return this.withAppServerOperation(async () => {
+      await this.manager.start();
+      await this.manager.request('thread/name/set', { threadId, name });
+    });
   }
 
   private createRun(

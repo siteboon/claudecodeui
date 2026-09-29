@@ -30,6 +30,9 @@ non-browser callers can pass `codexRuntimeMode=sdk` or `codexRuntimeMode=app-ser
 to the session messages endpoint, or omit it to use the server default.
 Only SDK JSONL history uses the file-stat cache; app-server history is read
 directly so switching modes cannot reuse history from the other runtime.
+The browser also rebuilds the session's persisted-message cache when the runtime
+changes, restarts pagination at the newest page, and ignores late responses from
+the old reader. In-progress streamed messages are preserved.
 Background session indexing always scans JSONL files so it never starts the
 managed app-server process. The process starts lazily when app-server chat or
 history, forking, message editing, or a manual restart needs it.
@@ -37,7 +40,12 @@ history, forking, message editing, or a manual restart needs it.
 The Codex settings panel can restart the managed process after `config.toml` or
 `auth.json` changes. Restart waits for the process to stop, performs a fresh
 initialize handshake, and refuses to interrupt an in-flight app-server request,
-including process startup, model lookup, thread setup, and active turns.
+including process startup, model lookup, thread setup, active turns, history
+reads, thread listing, forks, and name updates.
+
+Both runtimes use `on-request` approvals with the workspace-write sandbox in
+the default permission mode. App-server supports interactive approval prompts;
+the SDK integration cannot approve those requests interactively.
 
 App-server RPC requests have a 30-second default deadline, including thread
 forks and initialization. A stalled initialization stops the child process;

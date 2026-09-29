@@ -11,7 +11,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { api } from '@/shared/api';
 import { readUserPreference } from '@/shared/userSettings';
-import type { LLMProvider, NormalizedMessage } from '@/shared/types';
+import type { CodexRuntimeMode, LLMProvider, NormalizedMessage } from '@/shared/types';
 import { removeOptimisticUserEchoes } from '@/modules/chat/utils/sessionMessageReconciliation';
 import {
   hasReachedCachedTailTimeBoundary,
@@ -31,6 +31,8 @@ import type { SessionMessagesRequestOptions } from '@/modules/chat/utils/session
 export type SessionStatus = 'idle' | 'loading' | 'streaming' | 'error';
 
 export type SessionSlot = {
+  /** Pins history reads to one runtime; changing it requires a fresh persisted cache. */
+  historyRuntimeMode: CodexRuntimeMode;
   serverMessages: NormalizedMessage[];
   realtimeMessages: NormalizedMessage[];
   merged: NormalizedMessage[];
@@ -55,6 +57,7 @@ const SESSION_HISTORY_REQUEST_TIMEOUT_MS = 30_000;
 
 function createEmptySlot(): SessionSlot {
   return {
+    historyRuntimeMode: readHistoryRuntimeMode(),
     serverMessages: EMPTY,
     realtimeMessages: EMPTY,
     merged: EMPTY,
@@ -95,14 +98,19 @@ function enqueueHistoryMutation<T>(
   return result;
 }
 
+function readHistoryRuntimeMode(): CodexRuntimeMode {
+  const settings = readUserPreference<{ runtimeMode?: unknown }>('codexPermissions', {});
+  return settings?.runtimeMode === 'sdk' ? 'sdk' : 'app-server';
+}
+
 async function requestSessionHistoryPage(
   sessionId: string,
   options: SessionMessagesRequestOptions,
+  runtimeMode: CodexRuntimeMode,
 ): Promise<SessionHistoryPage> {
-  const settings = readUserPreference<{ runtimeMode?: unknown }>('codexPermissions', {});
   const response = await api.providers.sessionMessages(sessionId, {
     ...options,
-    codexRuntimeMode: settings?.runtimeMode === 'sdk' ? 'sdk' : 'app-server',
+    codexRuntimeMode: runtimeMode,
   }, {
     signal: AbortSignal.timeout(SESSION_HISTORY_REQUEST_TIMEOUT_MS),
   });
@@ -440,7 +448,10 @@ async function refreshLatestSlotFromServer(
   const latestPage = await requestSessionHistoryPage(sessionId, {
     limit,
     offset: 0,
-  });
+  }, slot.historyRuntimeMode);
+  if (!canRequest()) {
+    return { applied: false, changed: false, deferred: true };
+  }
 
   let nextServerMessages: NormalizedMessage[] | null = null;
   let nextHasMore = previousHasMore;
@@ -476,7 +487,10 @@ async function refreshLatestSlotFromServer(
         return { applied: false, changed: false, deferred: true };
       }
 
-      const bridgePage = await requestSessionHistoryPage(sessionId, bridgeRequest);
+      const bridgePage = await requestSessionHistoryPage(sessionId, bridgeRequest, slot.historyRuntimeMode);
+      if (!canRequest()) {
+        return { applied: false, changed: false, deferred: true };
+      }
       if (bridgePage.total !== latestPage.total) {
         console.warn(`[SessionStore] History changed while bridging ${sessionId}; retaining cached suffix.`);
         return { applied: false, changed: false, deferred: false };
@@ -579,6 +593,23 @@ export function useSessionStore() {
     return store.get(sessionId)!;
   }, []);
 
+  const getHistorySlot = useCallback((sessionId: string) => {
+    const slot = getSlot(sessionId);
+    if (slot.historyRuntimeMode === readHistoryRuntimeMode()) {
+      return { slot, modeChanged: false };
+    }
+    const replacement = createEmptySlot();
+    replacement.realtimeMessages = slot.realtimeMessages;
+    recomputeMergedIfNeeded(replacement);
+    storeRef.current.set(sessionId, replacement);
+    notify(sessionId);
+    return { slot: replacement, modeChanged: true };
+  }, [getSlot, notify]);
+
+  const isCurrentHistorySlot = useCallback((sessionId: string, slot: SessionSlot) => (
+    storeRef.current.get(sessionId) === slot && slot.historyRuntimeMode === readHistoryRuntimeMode()
+  ), []);
+
   /**
    * Fetch messages from the provider sessions endpoint and populate serverMessages.
    *
@@ -593,12 +624,14 @@ export function useSessionStore() {
       canRequest?: CanRequestHistory;
     } = {},
   ) => {
-    const slot = getSlot(sessionId);
+    const { slot, modeChanged } = getHistorySlot(sessionId);
     slot.status = 'loading';
     notify(sessionId);
 
     return enqueueHistoryMutation(slot, async () => {
-      const { canRequest = () => true, ...requestOptions } = opts;
+      const { canRequest: callerCanRequest = () => true, ...requestOptions } = opts;
+      const canRequest = () => callerCanRequest() && isCurrentHistorySlot(sessionId, slot);
+      if (modeChanged) requestOptions.offset = 0;
       if (!canRequest()) {
         slot.status = 'idle';
         notify(sessionId);
@@ -606,7 +639,12 @@ export function useSessionStore() {
       }
 
       try {
-        const data = await requestSessionHistoryPage(sessionId, requestOptions);
+        const data = await requestSessionHistoryPage(sessionId, requestOptions, slot.historyRuntimeMode);
+        if (!canRequest()) {
+          slot.status = 'idle';
+          notify(sessionId);
+          return null;
+        }
         slot.serverMessages = data.messages;
         slot.total = data.total;
         slot.hasMore = data.hasMore;
@@ -625,13 +663,18 @@ export function useSessionStore() {
         notify(sessionId);
         return slot;
       } catch (error) {
+        if (!isCurrentHistorySlot(sessionId, slot)) {
+          slot.status = 'idle';
+          notify(sessionId);
+          return null;
+        }
         console.error(`[SessionStore] fetch failed for ${sessionId}:`, error);
         slot.status = 'error';
         notify(sessionId);
         return slot;
       }
     });
-  }, [getSlot, notify]);
+  }, [getHistorySlot, isCurrentHistorySlot, notify]);
 
   /**
    * Load older (paginated) messages and prepend to serverMessages.
@@ -643,14 +686,21 @@ export function useSessionStore() {
       canRequest?: CanRequestHistory;
     } = {},
   ) => {
-    const slot = getSlot(sessionId);
+    const { slot, modeChanged } = getHistorySlot(sessionId);
     return enqueueHistoryMutation(slot, async () => {
       let prependedCount = 0;
       let changed = false;
-      const canRequest = opts.canRequest ?? (() => true);
-      if (!slot.hasMore || !canRequest()) return { slot, prependedCount };
+      const canRequest = () => (opts.canRequest?.() ?? true) && isCurrentHistorySlot(sessionId, slot);
+      if (!canRequest()) return { slot, prependedCount };
 
       try {
+        if (modeChanged || slot.fetchedAt === 0) {
+          const result = await refreshLatestSlotFromServer(
+            sessionId, slot, opts.limit ?? SESSION_MESSAGES_PAGE_SIZE, canRequest,
+          );
+          if (result.changed) notify(sessionId);
+          return { slot, prependedCount };
+        }
         // A tail-relative offset can shift while JSONL is still growing. One
         // bounded latest-page reconciliation realigns the cache, after which
         // the older-page request is retried once with the new raw-row offset.
@@ -662,7 +712,8 @@ export function useSessionStore() {
           const data = await requestSessionHistoryPage(sessionId, {
             limit: opts.limit ?? SESSION_MESSAGES_PAGE_SIZE,
             offset: slot.offset,
-          });
+          }, slot.historyRuntimeMode);
+          if (!canRequest()) break;
           const olderMerge = mergeOlderServerPage(cachedMessages, data.messages);
           const shiftedWhileFetching = (
             data.total !== expectedTotal
@@ -704,7 +755,7 @@ export function useSessionStore() {
         return { slot, prependedCount };
       }
     });
-  }, [getSlot, notify]);
+  }, [getHistorySlot, isCurrentHistorySlot, notify]);
 
   /**
    * Append a realtime (WebSocket) message to the correct session slot.
@@ -780,7 +831,8 @@ export function useSessionStore() {
       canRequest?: CanRequestHistory;
     } = {},
   ) => {
-    const slot = getSlot(sessionId);
+    const { slot } = getHistorySlot(sessionId);
+    const canRequest = () => (opts.canRequest?.() ?? true) && isCurrentHistorySlot(sessionId, slot);
 
     return enqueueHistoryMutation(slot, async () => {
       try {
@@ -788,7 +840,7 @@ export function useSessionStore() {
           sessionId,
           slot,
           opts.limit ?? SESSION_MESSAGES_PAGE_SIZE,
-          opts.canRequest,
+          canRequest,
         );
         if (result.changed) notify(sessionId);
         return { slot, ...result };
@@ -797,7 +849,7 @@ export function useSessionStore() {
         return { slot, applied: false, changed: false, deferred: false };
       }
     });
-  }, [getSlot, notify]);
+  }, [getHistorySlot, isCurrentHistorySlot, notify]);
 
   /**
    * Check if a session's data is stale (>30s old).
@@ -805,7 +857,7 @@ export function useSessionStore() {
   const isStale = useCallback((sessionId: string) => {
     const slot = storeRef.current.get(sessionId);
     if (!slot) return true;
-    return Date.now() - slot.fetchedAt > STALE_THRESHOLD_MS;
+    return slot.historyRuntimeMode !== readHistoryRuntimeMode() || Date.now() - slot.fetchedAt > STALE_THRESHOLD_MS;
   }, []);
 
   /**
