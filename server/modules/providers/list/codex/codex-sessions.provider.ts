@@ -26,6 +26,13 @@ import {
   truncateSubagentActivity,
 } from '@/shared/utils.js';
 
+import { readCodexRuntimeMode, resolveCodexRuntimeMode, type CodexRuntimeMode } from './codex-app-server.config.js';
+import {
+  codexAppServerRuntime,
+  transformCodexAppServerItem,
+  type CodexAppServerRuntime,
+} from './codex-app-server.runtime.js';
+
 const PROVIDER = 'codex';
 
 /**
@@ -53,8 +60,20 @@ type CodexHistoryResult = {
   tokenUsage?: unknown;
 };
 
+type CodexSessionsProviderOptions = {
+  appServer?: Pick<CodexAppServerRuntime, 'readThread'>;
+  readRuntimeMode?: () => CodexRuntimeMode;
+};
+
 function readNonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function timestampFromSeconds(value: unknown, fallback?: unknown): string {
+  const seconds = Number(value ?? fallback);
+  return Number.isFinite(seconds) && seconds >= 0
+    ? new Date(seconds * 1_000).toISOString()
+    : new Date().toISOString();
 }
 
 function isVisibleCodexUserMessage(payload: AnyRecord | null | undefined): boolean {
@@ -695,9 +714,14 @@ type CodexFileChange = {
 export function unifiedDiffToTexts(unifiedDiff: string): { oldText: string; newText: string } {
   const oldLines: string[] = [];
   const newLines: string[] = [];
+  let inHunk = !/^@@/m.test(unifiedDiff);
 
   for (const line of unifiedDiff.split('\n')) {
-    if (line.startsWith('@@') || line.startsWith('\\ No newline')) {
+    if (line.startsWith('@@')) {
+      inHunk = true;
+      continue;
+    }
+    if (!inHunk || line.startsWith('\\ No newline')) {
       continue;
     }
     if (line.startsWith('+')) {
@@ -1853,6 +1877,14 @@ async function attachCodexSubagentTranscripts(
 }
 
 export class CodexSessionsProvider implements IProviderSessions {
+  private readonly appServer: Pick<CodexAppServerRuntime, 'readThread'>;
+  private readonly readRuntimeMode: () => CodexRuntimeMode;
+
+  constructor(options: CodexSessionsProviderOptions = {}) {
+    this.appServer = options.appServer ?? codexAppServerRuntime;
+    this.readRuntimeMode = options.readRuntimeMode ?? (() => readCodexRuntimeMode());
+  }
+
   /**
    * Resolves the last turn to keep when the turn `anchorId` names is replaced.
    *
@@ -2069,7 +2101,7 @@ export class CodexSessionsProvider implements IProviderSessions {
       return [];
     }
 
-    if (raw.message?.role) {
+    if (raw.message?.role && raw.type !== 'item') {
       return this.normalizeHistoryEntry(raw, sessionId);
     }
 
@@ -2082,6 +2114,8 @@ export class CodexSessionsProvider implements IProviderSessions {
       const itemId = readNonEmptyString(raw.itemId as string | undefined) ?? baseId;
 
       switch (raw.itemType) {
+        case 'user_message':
+          return this.normalizeHistoryEntry(raw, sessionId);
         case 'agent_message': {
           const cited = readCodexMemoryCitations(String(raw.message?.content || ''));
           const text = cited.text;
@@ -2113,6 +2147,15 @@ export class CodexSessionsProvider implements IProviderSessions {
           })];
         }
         case 'reasoning':
+          return [createNormalizedMessage({
+            id: itemId,
+            sessionId,
+            timestamp: ts,
+            provider: PROVIDER,
+            kind: 'thinking',
+            content: raw.message?.content || '',
+          })];
+        case 'plan':
           return [createNormalizedMessage({
             id: itemId,
             sessionId,
@@ -2155,17 +2198,30 @@ export class CodexSessionsProvider implements IProviderSessions {
         case 'file_change': {
           // One row per file so each change gets the same diff view as an Edit.
           const changes = Array.isArray(raw.changes) ? raw.changes : [];
-          return changes.map((change: AnyRecord, index: number) => createNormalizedMessage({
-            id: `${itemId}_${index}`,
-            sessionId,
-            timestamp: ts,
-            provider: PROVIDER,
-            kind: 'tool_use',
-            toolName: change?.kind === 'add' ? 'Write' : 'Edit',
-            toolInput: { file_path: change?.path, old_string: '', new_string: '' },
-            toolId: `${itemId}_${index}`,
-            status: raw.status,
-          }));
+          return changes.map((change: AnyRecord, index: number) => {
+            const diff = typeof change?.diff === 'string' ? change.diff : '';
+            const { oldText, newText } = change?.kind === 'add'
+              ? { oldText: '', newText: diff }
+              : change?.kind === 'delete'
+                ? { oldText: diff, newText: '' }
+                : unifiedDiffToTexts(diff);
+            return createNormalizedMessage({
+              id: `${itemId}_${index}`,
+              sessionId,
+              timestamp: ts,
+              provider: PROVIDER,
+              kind: 'tool_use',
+              toolName: change?.kind === 'add' ? 'Write' : 'Edit',
+              toolInput: {
+                file_path: change?.path,
+                old_string: oldText,
+                new_string: newText,
+                ...(change?.kind === 'delete' ? { deleted: true } : {}),
+              },
+              toolId: `${itemId}_${index}`,
+              status: raw.status,
+            });
+          });
         }
         case 'mcp_tool_call': {
           const toolName = raw.server ? `mcp__${String(raw.server)}__${String(raw.tool ?? 'tool')}` : String(raw.tool || 'MCP');
@@ -2196,6 +2252,52 @@ export class CodexSessionsProvider implements IProviderSessions {
             isError: Boolean(raw.error) || raw.status === 'failed',
           })];
         }
+        case 'dynamic_tool_call': {
+          const toolUse = createNormalizedMessage({
+            id: itemId,
+            sessionId,
+            timestamp: ts,
+            provider: PROVIDER,
+            kind: 'tool_use',
+            toolName: [raw.namespace, raw.tool].filter(Boolean).join('.') || 'DynamicTool',
+            toolInput: raw.arguments,
+            toolId: itemId,
+            status: raw.status,
+          });
+          if (raw.status === 'in_progress') {
+            return [toolUse];
+          }
+          return [toolUse, createNormalizedMessage({
+            id: `${itemId}_result`,
+            sessionId,
+            timestamp: ts,
+            provider: PROVIDER,
+            kind: 'tool_result',
+            toolId: itemId,
+            content: typeof raw.result === 'string' ? raw.result : JSON.stringify(raw.result ?? ''),
+            isError: raw.success === false || raw.status === 'failed',
+          })];
+        }
+        case 'collab_agent_tool_call':
+          if (raw.tool !== 'spawnAgent') {
+            return [];
+          }
+          return [createNormalizedMessage({
+            id: itemId,
+            sessionId,
+            timestamp: ts,
+            provider: PROVIDER,
+            kind: 'tool_use',
+            toolName: 'Task',
+            toolInput: {
+              subagent_type: 'Codex',
+              description: raw.prompt || 'Codex sub-agent',
+              model: raw.model,
+              reasoning_effort: raw.reasoningEffort,
+            },
+            toolId: itemId,
+            status: raw.status,
+          })];
         case 'web_search':
           return [createNormalizedMessage({
             id: itemId,
@@ -2225,6 +2327,37 @@ export class CodexSessionsProvider implements IProviderSessions {
             },
             toolId: itemId,
           })];
+        case 'image_view':
+          return [createNormalizedMessage({
+            id: itemId,
+            sessionId,
+            timestamp: ts,
+            provider: PROVIDER,
+            kind: 'tool_use',
+            toolName: 'ImageView',
+            toolInput: { path: raw.path },
+            toolId: itemId,
+            status: raw.status,
+          })];
+        case 'image_generation':
+          return [createNormalizedMessage({
+            id: itemId,
+            sessionId,
+            timestamp: ts,
+            provider: PROVIDER,
+            kind: 'tool_use',
+            toolName: 'ImageGeneration',
+            toolInput: raw.item,
+            toolId: itemId,
+            status: raw.item?.status,
+          })];
+        case 'hook_prompt':
+        case 'sub_agent_activity':
+        case 'sleep':
+        case 'entered_review_mode':
+        case 'exited_review_mode':
+        case 'context_compaction':
+          return [];
         case 'error':
           return [createNormalizedMessage({
             id: itemId,
@@ -2271,15 +2404,95 @@ export class CodexSessionsProvider implements IProviderSessions {
     return [];
   }
 
-  /**
-   * Loads Codex JSONL history and keeps token usage metadata when the
-   * transcript reported it.
-   */
-  async fetchHistory(
+  private paginateHistory(
+    normalized: NormalizedMessage[],
+    limit: number | null,
+    offset: number,
+    tokenUsage?: unknown,
+  ): FetchHistoryResult {
+    const toolResultMap = new Map<string, NormalizedMessage>();
+    for (const message of normalized) {
+      if (message.kind === 'tool_result' && message.toolId) {
+        toolResultMap.set(message.toolId, message);
+      }
+    }
+    for (const message of normalized) {
+      if (message.kind === 'tool_use' && message.toolId) {
+        const toolResult = toolResultMap.get(message.toolId);
+        if (toolResult) {
+          message.toolResult = { content: toolResult.content, isError: toolResult.isError };
+        }
+      }
+    }
+
+    const transcript = prepareTranscriptMessages(normalized);
+    const normalizedOffset = Math.max(0, offset);
+    const normalizedLimit = limit === null ? null : Math.max(0, limit);
+    const { page, hasMore } = sliceTailPage(transcript, normalizedLimit, normalizedOffset);
+    return {
+      messages: page,
+      total: transcript.length,
+      hasMore,
+      offset: normalizedOffset,
+      limit: normalizedLimit,
+      ...(tokenUsage === undefined ? {} : { tokenUsage }),
+    };
+  }
+
+  private async fetchAppServerHistory(
     sessionId: string,
-    options: FetchHistoryOptions = {},
+    providerSessionId: string,
+    limit: number | null,
+    offset: number,
   ): Promise<FetchHistoryResult> {
-    const { limit = null, offset = 0 } = options;
+    const response = readObjectRecord(await this.appServer.readThread(providerSessionId, true));
+    const thread = readObjectRecord(response?.thread);
+    if (!thread || !Array.isArray(thread.turns)) {
+      throw new Error('thread/read did not return a thread with turns');
+    }
+
+    const normalized: NormalizedMessage[] = [];
+    for (const rawTurn of thread.turns) {
+      const turn = readObjectRecord(rawTurn);
+      if (!turn || turn.itemsView !== 'full' || !Array.isArray(turn.items)) {
+        throw new Error('thread/read returned an incomplete turn item view');
+      }
+
+      const timestamp = timestampFromSeconds(turn.startedAt, thread.createdAt);
+      let hasUserMessage = false;
+      for (const rawItem of turn.items) {
+        const item = readObjectRecord(rawItem);
+        if (!item) {
+          continue;
+        }
+        const transformed = transformCodexAppServerItem(item);
+        transformed.timestamp = timestamp;
+        if (!hasUserMessage && transformed.itemType === 'user_message') {
+          transformed.turnId = readNonEmptyString(turn.id);
+          hasUserMessage = true;
+        }
+        normalized.push(...this.normalizeMessage(transformed, sessionId));
+      }
+
+      if (turn.status === 'failed') {
+        const error = readObjectRecord(turn.error);
+        normalized.push(...this.normalizeMessage({
+          type: 'turn_failed',
+          uuid: `${String(turn.id || 'turn')}-error`,
+          timestamp: timestampFromSeconds(turn.completedAt, turn.startedAt),
+          error: { message: typeof error?.message === 'string' ? error.message : 'Turn failed' },
+        }, sessionId));
+      }
+    }
+
+    return this.paginateHistory(normalized, limit, offset);
+  }
+
+  private async fetchJsonlHistory(
+    sessionId: string,
+    limit: number | null,
+    offset: number,
+  ): Promise<FetchHistoryResult> {
 
     let result: CodexHistoryResult;
     try {
@@ -2295,36 +2508,28 @@ export class CodexSessionsProvider implements IProviderSessions {
       normalized.push(...this.normalizeHistoryEntry(raw, sessionId));
     }
 
-    const toolResultMap = new Map<string, NormalizedMessage>();
-    for (const msg of normalized) {
-      if (msg.kind === 'tool_result' && msg.toolId) {
-        toolResultMap.set(msg.toolId, msg);
+    return this.paginateHistory(normalized, limit, offset, result.tokenUsage);
+  }
+
+  /** Loads history from the explicitly selected Codex runtime. */
+  async fetchHistory(
+    sessionId: string,
+    options: FetchHistoryOptions = {},
+  ): Promise<FetchHistoryResult> {
+    const { limit = null, offset = 0 } = options;
+    const runtimeMode = resolveCodexRuntimeMode(options.codexRuntimeMode ?? this.readRuntimeMode());
+    if (runtimeMode === 'app-server') {
+      if (!options.providerSessionId) {
+        return this.paginateHistory([], limit, offset);
       }
-    }
-    for (const msg of normalized) {
-      if (msg.kind === 'tool_use' && msg.toolId && toolResultMap.has(msg.toolId)) {
-        const toolResult = toolResultMap.get(msg.toolId);
-        if (toolResult) {
-          msg.toolResult = { content: toolResult.content, isError: toolResult.isError };
-        }
-      }
+      return this.fetchAppServerHistory(
+        sessionId,
+        options.providerSessionId,
+        limit,
+        offset,
+      );
     }
 
-    // Everything the transcript draws, and nothing else — so a page of N rows
-    // is N rows the user sees, and `total` counts the same thing.
-    const transcript = prepareTranscriptMessages(normalized);
-    const total = transcript.length;
-    const normalizedOffset = Math.max(0, offset);
-    const normalizedLimit = limit === null ? null : Math.max(0, limit);
-    const { page, hasMore } = sliceTailPage(transcript, normalizedLimit, normalizedOffset);
-
-    return {
-      messages: page,
-      total,
-      hasMore,
-      offset: normalizedOffset,
-      limit: normalizedLimit,
-      tokenUsage: result.tokenUsage,
-    };
+    return this.fetchJsonlHistory(sessionId, limit, offset);
   }
 }

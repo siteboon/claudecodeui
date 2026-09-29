@@ -49,6 +49,13 @@ Current provider ids in this repo are:
 Those ids are mirrored in backend unions and frontend provider constants. If
 adding a new provider, update every place that hardcodes this list.
 
+## Codex Runtime Selection
+
+Codex uses the app-server runtime by default. Runtime selection is documented in
+[`docs/codex-app-server-rollout.md`](../../../docs/codex-app-server-rollout.md).
+The direct `@openai/codex-sdk` path remains available through the explicit
+`CLOUDCLI_CODEX_RUNTIME_MODE=sdk` setting or the Codex settings panel.
+
 ## Current File Layout
 
 Each provider lives under its own folder in `server/modules/providers/list/`:
@@ -376,5 +383,3 @@ alongside the implementation.
 - Forgetting that Claude plugin skills are discovered differently from normal
   user/project skill folders.
 - Assuming one provider's MCP config file format works for the others.
-
-

@@ -19,14 +19,17 @@ type ParsedSession = {
 };
 
 /**
- * Session indexer for Codex transcript artifacts.
+ * File-backed session indexer used by CodexProvider during startup scans and
+ * filesystem watcher refreshes.
  */
 export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
   private readonly provider = 'codex' as const;
   private readonly codexHome = path.join(os.homedir(), '.codex');
 
   /**
-   * Scans ~/.codex/sessions and upserts discovered sessions into DB.
+   * Scans ~/.codex/sessions without starting a provider runtime. Keeping
+   * indexing file-backed lets app-server remain lazy until a user operation
+   * actually needs it.
    */
   async synchronize(since?: Date): Promise<number> {
     const nameMap = await buildLookupMap(path.join(this.codexHome, 'session_index.jsonl'), 'id', 'thread_name');

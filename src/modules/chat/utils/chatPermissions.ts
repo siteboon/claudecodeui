@@ -1,7 +1,7 @@
 import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult } from '@/shared/types';
 import { getClaudeSettings, saveClaudePermissions } from '@/modules/chat/utils/chatStorage';
 
-export function buildClaudeToolPermissionEntry(toolName?: string, toolInput?: unknown) {
+export function buildToolPermissionEntry(toolName?: string, toolInput?: unknown) {
   if (!toolName) return null;
   if (toolName !== 'Bash') return toolName;
 
@@ -28,6 +28,8 @@ export function buildClaudeToolPermissionEntry(toolName?: string, toolInput?: un
   return `Bash(${tokens[0]}:*)`;
 }
 
+export const buildClaudeToolPermissionEntry = buildToolPermissionEntry;
+
 export function formatToolInputForDisplay(input: unknown) {
   if (input === undefined || input === null) return '';
   if (typeof input === 'string') return input;
@@ -46,7 +48,7 @@ export function getClaudePermissionSuggestion(
   if (!message?.toolResult?.isError) return null;
 
   const toolName = message?.toolName;
-  const entry = buildClaudeToolPermissionEntry(toolName, message.toolInput);
+  const entry = buildToolPermissionEntry(toolName, message.toolInput);
   if (!entry) return null;
 
   const settings = getClaudeSettings();

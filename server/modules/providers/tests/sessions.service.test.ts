@@ -7,9 +7,10 @@ import test from 'node:test';
 import { closeConnection, initializeDatabase, projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
+import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import { chatRunRegistry } from '@/modules/websocket/index.js';
 import type { IProvider } from '@/shared/interfaces.js';
-import type { BackgroundTaskSummary } from '@/shared/types.js';
+import type { BackgroundTaskSummary, FetchHistoryOptions } from '@/shared/types.js';
 
 async function withIsolatedDatabase(runTest: () => void | Promise<void>): Promise<void> {
   const previousDatabasePath = process.env.DATABASE_PATH;
@@ -194,6 +195,35 @@ test('history pages are sliced from the cached full transcript and see appended 
   } finally {
     await rm(transcriptDirectory, { recursive: true, force: true });
   }
+});
+
+test('Codex history passes runtime selection through without sharing SDK and app-server cache entries', { concurrency: false }, async () => {
+  await withIsolatedDatabase(async () => {
+    const sessionId = 'codex-runtime-history-cache';
+    const transcriptPath = path.join(path.dirname(process.env.DATABASE_PATH!), 'history.jsonl');
+    await writeFile(transcriptPath, '{}\n');
+    sessionsDb.createSession(sessionId, 'codex', '/tmp/runtime-history', 'History',
+      '2026-09-28T00:00:00.000Z', '2026-09-28T00:00:00.000Z', transcriptPath);
+    const provider = providerRegistry.resolveProvider('codex');
+    const originalFetchHistory = provider.sessions.fetchHistory;
+    const calls: FetchHistoryOptions[] = [];
+    provider.sessions.fetchHistory = async (_sessionId, options = {}) => {
+      calls.push(options);
+      return { messages: [], total: 0, hasMore: false, offset: 0, limit: null,
+        tokenUsage: options.codexRuntimeMode };
+    };
+    try {
+      for (const codexRuntimeMode of ['sdk', 'app-server', 'sdk', 'app-server'] as const) {
+        const history = await sessionsService.fetchHistory(sessionId, { codexRuntimeMode });
+        assert.equal(history.tokenUsage, codexRuntimeMode);
+      }
+      assert.deepEqual(calls.map((options) => options.codexRuntimeMode), ['sdk', 'app-server', 'app-server']);
+      assert.ok(calls.every((options) => options.providerSessionId === sessionId));
+    } finally {
+      provider.sessions.fetchHistory = originalFetchHistory;
+      sessionHistoryCache.invalidate(sessionId);
+    }
+  });
 });
 
 /**
