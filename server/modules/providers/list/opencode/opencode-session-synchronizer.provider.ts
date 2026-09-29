@@ -11,6 +11,7 @@ import {
   normalizeSessionName,
   readJsonRecord,
   readOptionalString,
+  resolveOpenCodeSessionTable,
   unwrapJsonStringLiteral,
 } from '@/shared/utils.js';
 
@@ -31,6 +32,8 @@ type SynchronizeRowsResult = {
 type OpenCodeChildSessionRow = {
   id: string;
 };
+
+type OpenCodeSessionTable = ReturnType<typeof resolveOpenCodeSessionTable>;
 
 /**
  * Session indexer for OpenCode's SQLite-backed session store.
@@ -72,8 +75,9 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
 
     const db = new Database(dbPath, { readonly: true, fileMustExist: true });
     try {
+      const sessionTable = resolveOpenCodeSessionTable(db);
       if (pruneChildSessions) {
-        this.pruneChildSessions(db);
+        this.pruneChildSessions(db, sessionTable);
         this.childSessionsReconciled = true;
       }
 
@@ -88,7 +92,7 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
           s.time_created AS time_created,
           s.time_updated AS time_updated,
           p.worktree AS worktree
-        FROM session s
+        FROM ${sessionTable} s
         LEFT JOIN project p ON p.id = s.project_id
         WHERE s.time_archived IS NULL
           AND s.parent_id IS NULL
@@ -100,7 +104,7 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
       let processed = 0;
       let firstSessionId: string | null = null;
       for (const row of rows) {
-        const indexedSessionId = this.upsertSession(db, row);
+        const indexedSessionId = this.upsertSession(db, row, sessionTable);
         if (!indexedSessionId) {
           continue;
         }
@@ -121,10 +125,10 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
     }
   }
 
-  private pruneChildSessions(db: Database.Database): void {
+  private pruneChildSessions(db: Database.Database, sessionTable: OpenCodeSessionTable): void {
     const childSessions = db.prepare(`
       SELECT id
-      FROM session
+      FROM ${sessionTable}
       WHERE parent_id IS NOT NULL
     `).all() as OpenCodeChildSessionRow[];
 
@@ -133,12 +137,19 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
     }
   }
 
-  private upsertSession(db: Database.Database, row: OpenCodeSessionRow): string | null {
+  private upsertSession(
+    db: Database.Database,
+    row: OpenCodeSessionRow,
+    sessionTable: OpenCodeSessionTable,
+  ): string | null {
     const sessionId = readOptionalString(row.id);
-    const projectPath = readOptionalString(row.directory) ?? readOptionalString(row.worktree);
-    if (!sessionId || !projectPath) {
+    const rawProjectPath = readOptionalString(row.directory) ?? readOptionalString(row.worktree);
+    if (!sessionId || !rawProjectPath) {
       return null;
     }
+    // OpenCode 2.x records Windows directories with forward slashes
+    // (`D:/work/app`); normalize so they group with the app's `D:\work\app` projects.
+    const projectPath = process.platform === 'win32' ? path.normalize(rawProjectPath) : rawProjectPath;
 
     const fallbackTitle = 'Untitled OpenCode Session';
     const pendingAppSession = sessionsDb.getSessionByProviderSessionId(sessionId)
@@ -162,7 +173,7 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
     if (existingName && existingName !== fallbackTitle) {
       nextName = existingName;
     } else {
-      nextName = readOptionalString(row.title) ?? this.readFirstUserText(db, sessionId);
+      nextName = readOptionalString(row.title) ?? this.readFirstUserText(db, sessionId, sessionTable);
     }
 
     // OpenCode stores every session in one shared sqlite database, so jsonl_path
@@ -180,8 +191,26 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
     );
   }
 
-  private readFirstUserText(db: Database.Database, sessionId: string): string | undefined {
+  private readFirstUserText(
+    db: Database.Database,
+    sessionId: string,
+    sessionTable: OpenCodeSessionTable,
+  ): string | undefined {
     try {
+      if (sessionTable === 'session_v2') {
+        // OpenCode 2.x keeps one `session_message` row per message; user rows
+        // carry their prompt in `data.text`.
+        const row = db.prepare(`
+          SELECT data
+          FROM session_message
+          WHERE session_id = ? AND type = 'user'
+          ORDER BY seq
+          LIMIT 1
+        `).get(sessionId) as { data: string | null } | undefined;
+        const text = readOptionalString(readJsonRecord(row?.data)?.text);
+        return text === undefined ? undefined : unwrapJsonStringLiteral(text);
+      }
+
       const row = db.prepare(`
         SELECT p.data AS data
         FROM message m

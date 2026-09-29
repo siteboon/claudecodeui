@@ -1015,6 +1015,29 @@ export function getOpenCodeDatabasePath(): string {
 }
 
 /**
+ * Names the table that holds OpenCode session rows in an open `opencode.db`.
+ *
+ * OpenCode 2.x moved sessions from `session` to `session_v2` (same `id`,
+ * `project_id`, `parent_id`, `directory`, `title`, `model`, `agent`, `time_*`
+ * and `tokens_*` columns) and messages from `message` + `part` to
+ * `session_message`. Readers that only need session columns can interpolate the
+ * returned name into their SQL; readers of message content must branch on
+ * `'session_v2'` because the message layout changed too. The name is one of two
+ * fixed literals, so interpolating it into SQL is safe.
+ *
+ * Used by the OpenCode runtime (token usage), sessions reader (history), models
+ * adapter (session model lookup) and synchronizer (session indexing).
+ */
+export function resolveOpenCodeSessionTable(
+  db: { prepare(sql: string): { get(...params: unknown[]): unknown } },
+): 'session' | 'session_v2' {
+  const hasV2Table = db
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'session_v2'")
+    .get();
+  return hasV2Table ? 'session_v2' : 'session';
+}
+
+/**
  * Decodes an OpenCode text payload that was persisted as a JSON string literal.
  *
  * OpenCode can store the first user prompt (and other text parts) as `"hello"`
