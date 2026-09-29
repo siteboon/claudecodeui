@@ -347,14 +347,25 @@ export function useSlashCommands({
 
       if (event.key === 'Tab' || event.key === 'Enter') {
         event.preventDefault();
-        // A refresh may have shrunk the list under the stored index — resolve
-        // the command defensively and fall back to the first row.
-        const selectedCommand =
-          selectedCommandIndex >= 0 ? filteredCommands[selectedCommandIndex] : undefined;
-        if (selectedCommand) {
-          selectCommandFromKeyboard(selectedCommand);
-        } else if (filteredCommands.length > 0) {
-          selectCommandFromKeyboard(filteredCommands[0]);
+        // Until the user arrows through the menu nothing is highlighted, so
+        // both keys act on the first match — the entry the menu renders at
+        // the top. A refresh may have shrunk the list under the stored
+        // index, so the lookup resolves defensively and falls back to the
+        // first row.
+        const targetCommand =
+          filteredCommands[selectedCommandIndex >= 0 ? selectedCommandIndex : 0] ??
+          filteredCommands[0];
+        if (!targetCommand) {
+          return true;
+        }
+
+        // Tab is completion, not submission: it only writes "<name> " into the
+        // input and closes the menu, so an argument can still be typed before
+        // Enter runs the command. Enter keeps executing the highlighted entry.
+        if (event.key === 'Tab') {
+          insertCommandIntoInput(targetCommand);
+        } else {
+          selectCommandFromKeyboard(targetCommand);
         }
         return true;
       }
@@ -367,7 +378,14 @@ export function useSlashCommands({
 
       return false;
     },
-    [showCommandMenu, filteredCommands, resetCommandMenuState, selectCommandFromKeyboard, selectedCommandIndex],
+    [
+      showCommandMenu,
+      filteredCommands,
+      insertCommandIntoInput,
+      resetCommandMenuState,
+      selectCommandFromKeyboard,
+      selectedCommandIndex,
+    ],
   );
 
   useEffect(
