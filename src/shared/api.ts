@@ -293,6 +293,10 @@ export const api = {
   browseFilesystem: (dirPath: string | null = null) =>
     get(`/api/file-tree/browse-filesystem${query({ path: dirPath })}`),
 
+  // Bounded recursive folder search rooted at the browsed directory
+  searchFilesystem: (searchQuery: string, rootPath?: string | null) =>
+    get(`/api/file-tree/search-filesystem${query({ query: searchQuery, root: rootPath })}`),
+
   createFolder: (folderPath: string) => post('/api/file-tree/create-folder', { path: folderPath }),
 
   // Git endpoints. The `project` param carries the DB projectId post-migration.

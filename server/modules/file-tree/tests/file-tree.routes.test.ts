@@ -15,6 +15,7 @@ function createFakeServices(overrides: Partial<FileTreeServices> = {}): FileTree
 
   return {
     browseWorkspace: unexpectedOperation,
+    searchWorkspaceFolders: unexpectedOperation,
     createWorkspaceFolder: unexpectedOperation,
     readTextFile: unexpectedOperation,
     openFile: unexpectedOperation,
@@ -93,6 +94,54 @@ test('project files route requests gitignore filtering when explicitly enabled',
   });
 
   assert.deepEqual(inputs, [['project-1', { respectGitignore: true }]]);
+});
+
+test('search route forwards the query and workspace root to the service', async () => {
+  const inputs: Parameters<FileTreeServices['searchWorkspaceFolders']>[] = [];
+  const services = createFakeServices({
+    searchWorkspaceFolders: async (...input) => {
+      inputs.push(input);
+      return {
+        query: input[0],
+        root: input[1],
+        results: [{ path: '/work/projects/demo', name: 'demo', type: 'directory' as const }],
+      };
+    },
+  });
+
+  await withFileTreeServer(services, async (baseUrl) => {
+    const response = await fetch(
+      `${baseUrl}/api/file-tree/search-filesystem?query=${encodeURIComponent('proj')}&root=${encodeURIComponent('~')}`,
+    );
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      query: 'proj',
+      root: '~',
+      results: [{ path: '/work/projects/demo', name: 'demo', type: 'directory' }],
+    });
+  });
+
+  assert.deepEqual(inputs, [['proj', '~']]);
+});
+
+test('search route passes an empty query through as an empty one', async () => {
+  const inputs: Parameters<FileTreeServices['searchWorkspaceFolders']>[] = [];
+  const services = createFakeServices({
+    searchWorkspaceFolders: async (...input) => {
+      inputs.push(input);
+      return { query: input[0], root: null, results: [] };
+    },
+  });
+
+  await withFileTreeServer(services, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/file-tree/search-filesystem`);
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { query: '', root: null, results: [] });
+  });
+
+  assert.deepEqual(inputs, [['', null]]);
 });
 
 test('create route parses the transport payload before invoking the service', async () => {
