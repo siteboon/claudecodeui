@@ -157,6 +157,28 @@ function mapPermissionMode(permissionMode: unknown): {
   }
 }
 
+function buildTurnSandboxPolicy(
+  sandbox: ReturnType<typeof mapPermissionMode>['sandbox'],
+  threadResult: unknown,
+): AnyRecord {
+  if (sandbox === 'danger-full-access') {
+    return { type: 'dangerFullAccess' };
+  }
+
+  const currentSandbox = readNestedRecord(readRecord(threadResult) ?? {}, 'sandbox');
+  if (currentSandbox?.type === 'workspaceWrite') {
+    return currentSandbox;
+  }
+
+  return {
+    type: 'workspaceWrite',
+    writableRoots: [],
+    networkAccess: false,
+    excludeTmpdirEnvVar: false,
+    excludeSlashTmp: false,
+  };
+}
+
 function readTokenBudget(value: unknown): AnyRecord | null {
   const record = readRecord(value);
   const usage = readNestedRecord(record ?? {}, 'usage')
@@ -533,6 +555,8 @@ export class CodexAppServerRuntime {
         threadId,
         input: buildTurnInput(command, options, workingDirectory),
         cwd: workingDirectory,
+        approvalPolicy: permission.approvalPolicy,
+        sandboxPolicy: buildTurnSandboxPolicy(permission.sandbox, threadResult),
         ...(resolvedModel ? { model: resolvedModel } : {}),
         ...(resolvedEffort ? { effort: resolvedEffort } : {}),
       } satisfies AnyRecord;

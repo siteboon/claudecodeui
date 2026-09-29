@@ -56,6 +56,13 @@ Codex uses the app-server runtime by default. Runtime selection is documented in
 The direct `@openai/codex-sdk` path remains available through the explicit
 `CLOUDCLI_CODEX_RUNTIME_MODE=sdk` setting or the Codex settings panel.
 
+Permission selection must be sent on every `turn/start` as `approvalPolicy` and
+`sandboxPolicy`, not just on `thread/start` or `thread/resume`. An already-loaded
+thread, including a newly forked thread, can retain its existing permissions
+when resumed even if the resume request supplies different settings. Explicit
+turn overrides apply both permission increases and decreases. Workspace-mode
+turns preserve the returned workspace sandbox configuration when available.
+
 ## Current File Layout
 
 Each provider lives under its own folder in `server/modules/providers/list/`:

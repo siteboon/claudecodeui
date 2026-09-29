@@ -41,6 +41,7 @@ type RuntimeHarness = {
 
 function createHarness(options: {
   failThreadStart?: boolean;
+  sandbox?: AnyRecord;
   pauseAt?: 'initialize' | 'thread/start' | 'thread/resume';
 } = {}): RuntimeHarness {
   const process = new FakeAppServerProcess();
@@ -82,13 +83,16 @@ function createHarness(options: {
         if (!options.failThreadStart) {
           process.stdout.write(JSON.stringify({
             id: request.id,
-            result: { thread: { id: 'thread-new' } },
+            result: { thread: { id: 'thread-new' }, sandbox: options.sandbox },
           }) + '\n');
         }
       } else if (request.method === 'thread/resume') {
         process.stdout.write(JSON.stringify({
           id: request.id,
-          result: { thread: { id: request.params && (request.params as AnyRecord).threadId } },
+          result: {
+            thread: { id: request.params && (request.params as AnyRecord).threadId },
+            sandbox: options.sandbox,
+          },
         }) + '\n');
       } else if (request.method === 'turn/start') {
         process.stdout.write(JSON.stringify({
@@ -454,6 +458,80 @@ test('routes turnId-only notifications to the matching run when multiple threads
 
   harness.notify('turn/completed', { turnId: 'turn-1', turn: { status: 'completed' } });
   assert.deepEqual(await firstRun, { status: 'completed' });
+});
+
+for (const sessionId of ['app-new', 'resume-app']) {
+  for (const permissionMode of ['default', 'acceptEdits', 'bypassPermissions']) {
+    test(`applies ${permissionMode} permissions to each turn for ${sessionId}`, async (testContext) => {
+      const workspacePolicy = {
+        type: 'workspaceWrite',
+        writableRoots: [],
+        networkAccess: false,
+        excludeTmpdirEnvVar: false,
+        excludeSlashTmp: false,
+      };
+      const fullAccess = permissionMode === 'bypassPermissions';
+      const expectedPolicy = fullAccess ? { type: 'dangerFullAccess' } : workspacePolicy;
+      const harness = createHarness({
+        sandbox: sessionId === 'resume-app'
+          ? fullAccess ? workspacePolicy : { type: 'dangerFullAccess' }
+          : expectedPolicy,
+      });
+      const runtime = createRuntime(harness.process);
+      testContext.after(() => { harness.process.kill(); });
+      const output = createWriter();
+      const runPromise = runtime.run('Check permissions', {
+        sessionId,
+        permissionMode,
+        cwd: '/workspace/demo',
+      }, output.writer, context);
+
+      await harness.nextRequest();
+      await harness.nextRequest();
+      const threadRequest = await harness.nextRequest();
+      assert.equal(threadRequest.method, sessionId === 'resume-app' ? 'thread/resume' : 'thread/start');
+      const turnRequest = await harness.nextRequest();
+      assert.equal(turnRequest.method, 'turn/start');
+      assert.equal((turnRequest.params as AnyRecord).approvalPolicy, permissionMode === 'default' ? 'on-request' : 'never');
+      assert.deepEqual((turnRequest.params as AnyRecord).sandboxPolicy, expectedPolicy);
+
+      harness.notify('turn/completed', {
+        threadId: sessionId === 'resume-app' ? 'thread-existing' : 'thread-new',
+        turn: { id: 'turn-1', status: 'completed' },
+      });
+      assert.deepEqual(await runPromise, { status: 'completed' });
+    });
+  }
+}
+
+test('preserves configured workspace sandbox details when applying turn permissions', async (testContext) => {
+  const workspacePolicy = {
+    type: 'workspaceWrite',
+    writableRoots: ['/workspace/shared'],
+    networkAccess: true,
+    excludeTmpdirEnvVar: true,
+    excludeSlashTmp: true,
+  };
+  const harness = createHarness({ sandbox: workspacePolicy });
+  const runtime = createRuntime(harness.process);
+  testContext.after(() => { harness.process.kill(); });
+  const output = createWriter();
+  const runPromise = runtime.run('Check permissions', {
+    sessionId: 'resume-app',
+    permissionMode: 'acceptEdits',
+  }, output.writer, context);
+
+  await harness.nextRequest();
+  await harness.nextRequest();
+  await harness.nextRequest();
+  const turnRequest = await harness.nextRequest();
+  assert.deepEqual((turnRequest.params as AnyRecord).sandboxPolicy, workspacePolicy);
+
+  harness.notify('turn/completed', {
+    threadId: 'thread-existing',
+    turn: { id: 'turn-1', status: 'completed' },
+  });
+  assert.deepEqual(await runPromise, { status: 'completed' });
 });
 
 test('maps a failed turn to an error and one unsuccessful complete event', async () => {
