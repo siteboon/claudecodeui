@@ -343,6 +343,43 @@ export function truncateNestedOutput(value: unknown): unknown {
   return truncated;
 }
 
+/**
+ * Empties the base64 payload of every image part in an MCP content array.
+ *
+ * The transcript draws only a result's text parts, so an image's data is never
+ * shown — yet it is almost always the one string that pushes a result past the
+ * cap. Truncating it there cuts the serialized array mid-string, the client can
+ * no longer parse the parts, and it falls back to showing the raw base64 as
+ * text. Emptying the payload first keeps the array whole and small.
+ */
+function omitImageData(value: unknown): unknown {
+  if (!Array.isArray(value)) {
+    return value;
+  }
+
+  return value.map((part) => {
+    const record = readObjectRecord(part);
+    const source = readObjectRecord(record?.source);
+    if (record?.type !== 'image' || typeof source?.data !== 'string') {
+      return part;
+    }
+    return { ...record, source: { ...source, data: '' } };
+  });
+}
+
+function omitImageDataFromSerialized(content: string): string {
+  // Only an oversized result is worth parsing; a small one is shown as it is.
+  if (content.length <= MAX_TOOL_RESULT_CONTENT || !content.startsWith('[')) {
+    return content;
+  }
+
+  try {
+    return JSON.stringify(omitImageData(JSON.parse(content)));
+  } catch {
+    return content;
+  }
+}
+
 function capToolResult(message: NormalizedMessage): void {
   const result = message.toolResult;
   if (!result) {
@@ -350,10 +387,10 @@ function capToolResult(message: NormalizedMessage): void {
   }
 
   if (typeof result.content === 'string') {
-    result.content = truncateOutput(result.content);
+    result.content = truncateOutput(omitImageDataFromSerialized(result.content));
   }
   if (result.toolUseResult !== undefined) {
-    result.toolUseResult = truncateNestedOutput(result.toolUseResult);
+    result.toolUseResult = truncateNestedOutput(omitImageData(result.toolUseResult));
   }
 }
 
