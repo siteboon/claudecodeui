@@ -13,7 +13,11 @@ import type {
 import { PaperclipIcon, MessageSquareIcon, XIcon, Loader2, ArrowUpIcon, PencilIcon } from 'lucide-react';
 
 import { useVoiceInput } from '@/modules/chat/hooks/useVoiceInput';
-import { useVoiceAvailable } from '@/modules/chat/hooks/useVoiceAvailable';
+import { stopSpeechForUserAction } from '@/modules/chat/voice/autoSpeak';
+import ComposerVoiceStatus from '@/modules/chat/voice/ComposerVoiceStatus';
+import { VOICE_NS } from '@/modules/chat/voice/voiceI18n';
+import { useVoiceStatus } from '@/modules/chat/voice/voiceState';
+import { announceVoice } from '@/modules/chat/voice/voiceUiStore';
 import type { QueuedDraft, ScheduledMessage, SlashCommand,SessionActivity,PendingPermissionRequest,PermissionMode,ProviderModelOption } from '@/shared/types';
 import {
   PromptInput,
@@ -101,7 +105,7 @@ type ChatComposerProps = {
   renderInputWithMentions: (text: string) => ReactNode;
   textareaRef: RefObject<HTMLTextAreaElement>;
   input: string;
-  onVoiceTranscript?: (text: string, send?: boolean) => void;
+  onVoiceTranscript?: (text: string, send?: boolean, origin?: string | null) => void;
   onInputChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
   onTextareaClick: (event: MouseEvent<HTMLTextAreaElement>) => void;
   onTextareaKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
@@ -188,6 +192,7 @@ export default function ChatComposer({
   sendByCtrlEnter,
 }: ChatComposerProps) {
   const { t } = useTranslation('chat');
+  const { t: tVoice } = useTranslation(VOICE_NS);
   const fileDropdownRef = useRef<HTMLDivElement | null>(null);
   const selectedFileRef = useRef<HTMLDivElement | null>(null);
   const commandMenuPosition = useMemo(() => {
@@ -223,7 +228,10 @@ export default function ChatComposer({
 
   // Voice state is hosted here (not in the mic button) so the main Send button can stop
   // recording and send the transcript in one tap, the way the mic button drops it in the box.
-  const voiceAvailable = useVoiceAvailable();
+  // `off` = upstream's voice toggle is off: no voice UI at all. `unavailable` renders
+  // the controls disabled with an explanation instead of hiding them.
+  const voiceStatus = useVoiceStatus();
+  const voiceAvailable = voiceStatus === 'available';
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const voiceErrorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleVoiceError = useCallback((msg: string) => {
@@ -235,7 +243,14 @@ export default function ChatComposer({
     if (voiceErrorTimer.current) clearTimeout(voiceErrorTimer.current);
   }, []);
   const noopTranscript = useCallback(() => {}, []);
-  const { state: voiceState, toggle: voiceToggle, stop: voiceStop } = useVoiceInput(
+  const {
+    state: voiceState,
+    toggle: voiceToggle,
+    stop: voiceStop,
+    canRetry: voiceCanRetry,
+    retry: voiceRetry,
+    startedAt: voiceStartedAt,
+  } = useVoiceInput(
     onVoiceTranscript ?? noopTranscript,
     handleVoiceError,
   );
@@ -260,7 +275,11 @@ export default function ChatComposer({
     : sendByCtrlEnter
       ? t('input.hintText.ctrlEnter')
       : t('input.hintText.enter');
-  const submitAriaLabel = canQueueDraft
+  const submitAriaLabel = isRecording
+    ? isLoading
+      ? tVoice('dictation.sendKeepsDraft')
+      : tVoice('dictation.sendStopsRecording')
+    : canQueueDraft
     ? hasQueuedDraft
       ? t('input.queue.update', { defaultValue: 'Update queued message' })
       : t('input.queue.sendNext', { defaultValue: 'Queue next message' })
@@ -439,8 +458,19 @@ export default function ChatComposer({
               <PaperclipIcon />
             </PromptInputButton>
 
-            {onVoiceTranscript && voiceAvailable && (
-              <VoiceInputButton state={voiceState} onToggle={voiceToggle} errorMsg={voiceError} />
+            {onVoiceTranscript && voiceStatus !== 'off' && (
+              <>
+                <VoiceInputButton
+                  state={voiceState}
+                  onToggle={voiceToggle}
+                  errorMsg={voiceError}
+                  disabled={!voiceAvailable}
+                  startedAt={voiceStartedAt}
+                  canRetry={voiceCanRetry}
+                  onRetry={voiceRetry}
+                />
+                <ComposerVoiceStatus status={voiceStatus} />
+              </>
             )}
 
             <TokenUsageSummary usage={tokenBudget} onClick={onShowTokenUsage} />
@@ -497,18 +527,24 @@ export default function ChatComposer({
 
             <PromptInputSubmit
               onClick={
-                canQueueDraft
+                // Recording comes first: Send stops the recording and never aborts a
+                // running turn. During a turn the transcript waits in the box as an
+                // editable draft for the builder to confirm; with no turn running it
+                // is sent as before.
+                isRecording
                   ? (e: MouseEvent<HTMLButtonElement>) => {
                       e.preventDefault();
-                      onSubmit(e);
+                      stopSpeechForUserAction();
+                      if (isLoading) announceVoice('dictation.awaitingConfirmation');
+                      voiceStop({ send: !isLoading });
                     }
-                  : isLoading
-                    ? onAbortSession
-                    : isRecording
-                      ? (e: MouseEvent<HTMLButtonElement>) => {
-                          e.preventDefault();
-                          voiceStop({ send: true });
-                        }
+                  : canQueueDraft
+                    ? (e: MouseEvent<HTMLButtonElement>) => {
+                        e.preventDefault();
+                        onSubmit(e);
+                      }
+                    : isLoading
+                      ? onAbortSession
                       : undefined
               }
               disabled={
@@ -526,7 +562,7 @@ export default function ChatComposer({
             >
               {isTranscribing ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
-              ) : canQueueDraft ? (
+              ) : canQueueDraft || (isRecording && isLoading) ? (
                 <ArrowUpIcon className="h-4 w-4" />
               ) : undefined}
             </PromptInputSubmit>

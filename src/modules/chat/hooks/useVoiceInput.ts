@@ -2,6 +2,20 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { transcribeVoice } from '@/shared/api';
 import type { VoiceInputState } from '@/shared/types';
+import { voicePlayer } from '@/modules/chat/utils/voicePlayer';
+import { currentDictationScope, MAX_RECORDING_MS } from '@/modules/chat/voice/dictation';
+import { announceVoice } from '@/modules/chat/voice/voiceUiStore';
+import {
+  classifyMicError,
+  micErrorKey,
+  voiceErrorFromException,
+  voiceErrorFromResponse,
+  voiceErrorKey,
+  VoiceRequestError,
+} from '@/modules/chat/voice/voiceErrors';
+
+// A recording that failed to transcribe is kept for exactly one retry.
+type Clip = { blob: Blob; filename: string; send: boolean; origin: string | null };
 
 // Mobile-safe recording: iOS Safari 18.4+ supports webm/opus; older iOS needs mp4.
 const MIME_CANDIDATES = [
@@ -28,9 +42,12 @@ function pickMime(): string {
  * Push-to-talk dictation. Records the mic, uploads to /api/voice/transcribe
  * (an OpenAI-compatible speech-to-text backend via the Express proxy), and
  * returns the transcript through onTranscript.
+ *
+ * `onError` receives a translation key in the `voice` namespace, never raw text.
+ * The transcript carries the composer scope the recording STARTED in.
  */
 export function useVoiceInput(
-  onTranscript: (text: string, send?: boolean) => void,
+  onTranscript: (text: string, send?: boolean, origin?: string | null) => void,
   onError?: (msg: string) => void,
 ) {
   const [state, setState] = useState<VoiceInputState>('idle');
@@ -41,6 +58,48 @@ export function useVoiceInput(
   const startingRef = useRef(false);
   // Whether the in-progress stop should auto-send the transcript (vs just fill the box).
   const sendRef = useRef(false);
+  const originRef = useRef<string | null>(null);
+  const failedClipRef = useRef<Clip | null>(null);
+  const autoStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [canRetry, setCanRetry] = useState(false);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+
+  const clearAutoStop = () => {
+    if (autoStopTimerRef.current) clearTimeout(autoStopTimerRef.current);
+    autoStopTimerRef.current = null;
+  };
+
+  const transcribe = useCallback(async (clip: Clip, isRetry: boolean) => {
+    setState('transcribing');
+    try {
+      const res = await transcribeVoice(clip.blob, clip.filename);
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new VoiceRequestError(voiceErrorFromResponse(res.status, body));
+      }
+      const data = await res.json();
+      if (cancelledRef.current) return;
+      failedClipRef.current = null;
+      setCanRetry(false);
+      const text = String(data?.text || '').trim();
+      if (text) onTranscript(text, clip.send, clip.origin);
+      else onError?.('dictation.noSpeech');
+    } catch (e) {
+      if (cancelledRef.current) return;
+      if (isRetry) {
+        failedClipRef.current = null;
+        setCanRetry(false);
+        onError?.('dictation.failedDiscarded');
+      } else {
+        failedClipRef.current = { ...clip, send: false };
+        setCanRetry(true);
+        onError?.(voiceErrorKey(voiceErrorFromException(e)));
+        announceVoice('dictation.failedWithRetry');
+      }
+    } finally {
+      if (!cancelledRef.current) setState('idle');
+    }
+  }, [onTranscript, onError]);
 
   const stopTracks = () => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -53,6 +112,7 @@ export function useVoiceInput(
     return () => {
       cancelledRef.current = true;
       startingRef.current = false;
+      clearAutoStop();
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
       recorderRef.current = null;
@@ -62,6 +122,12 @@ export function useVoiceInput(
   const start = useCallback(async () => {
     if (startingRef.current || (recorderRef.current && recorderRef.current.state !== 'inactive')) return;
     startingRef.current = true;
+    // Silence a reply before the mic opens: it stops the audio and keeps it out of the clip.
+    voicePlayer.stop();
+    // A new recording replaces a clip kept for retry.
+    failedClipRef.current = null;
+    setCanRetry(false);
+    originRef.current = currentDictationScope();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true },
@@ -82,6 +148,8 @@ export function useVoiceInput(
 
       rec.onstop = async () => {
         stopTracks();
+        clearAutoStop();
+        setStartedAt(null);
         if (cancelledRef.current) return;
         // Capture and clear the send intent for this stop before any async work.
         const shouldSend = sendRef.current;
@@ -90,44 +158,35 @@ export function useVoiceInput(
         const blob = new Blob(chunksRef.current, { type });
         if (blob.size < 800) {
           setState('idle');
-          onError?.('Recording too short');
+          onError?.('dictation.tooShort');
           return;
         }
-        setState('transcribing');
-        try {
-          const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm';
-          const res = await transcribeVoice(blob, `recording.${ext}`);
-          if (!res.ok) throw new Error(`transcribe ${res.status}`);
-          const data = await res.json();
-          if (cancelledRef.current) return;
-          const text = String(data?.text || '').trim();
-          if (text) onTranscript(text, shouldSend);
-          else onError?.('No speech detected');
-        } catch (e) {
-          if (!cancelledRef.current) {
-            onError?.(`Transcription failed: ${e instanceof Error ? e.message : String(e)}`);
-          }
-        } finally {
-          if (!cancelledRef.current) setState('idle');
-        }
+        const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm';
+        await transcribe({ blob, filename: `recording.${ext}`, send: shouldSend, origin: originRef.current }, false);
       };
 
       rec.start();
       setState('recording');
+      setStartedAt(Date.now());
+      announceVoice('dictation.recording');
+      // A forgotten open mic stops itself; the transcript fills the box, never sends.
+      autoStopTimerRef.current = setTimeout(() => {
+        if (rec.state !== 'inactive') {
+          sendRef.current = false;
+          rec.stop();
+          announceVoice('dictation.autoStopped');
+        }
+      }, MAX_RECORDING_MS);
     } catch (e) {
       recorderRef.current = null;
       stopTracks();
       if (cancelledRef.current) return;
-      const err = e as { name?: string; message?: string };
-      let msg = `Mic error: ${err?.message || e}`;
-      if (err?.name === 'NotAllowedError') msg = 'Microphone access denied.';
-      else if (err?.name === 'NotFoundError') msg = 'No microphone found.';
-      onError?.(msg);
+      onError?.(micErrorKey(classifyMicError(e)));
       setState('idle');
     } finally {
       startingRef.current = false;
     }
-  }, [onTranscript, onError]);
+  }, [onError, transcribe]);
 
   // Stop recording. Pass { send: true } to auto-send the transcript once it's ready.
   // Guard on the recorder's own state (not React state) so a double tap, or the mic
@@ -145,5 +204,12 @@ export function useVoiceInput(
     else if (state === 'idle') start();
   }, [state, start, stop]);
 
-  return { state, toggle, stop };
+  // Re-sends the kept clip - the same bytes - once. A second failure discards it.
+  const retry = useCallback(() => {
+    const clip = failedClipRef.current;
+    if (!clip || state !== 'idle') return;
+    void transcribe(clip, true);
+  }, [state, transcribe]);
+
+  return { state, toggle, stop, canRetry, retry, startedAt };
 }
