@@ -29,6 +29,7 @@ import {
   CLAUDE_ULTRACODE_EFFORT
 } from '@/modules/providers/list/claude/claude-models.provider.js';
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
+import { buildSpokenLineContract } from '@/modules/providers/list/claude/claude-voice-mode.js';
 import {
   createNotificationEvent,
   notifyBackgroundWorkCompleted,
@@ -288,6 +289,13 @@ function mapCliOptionsToSDK(options = {}) {
     type: 'preset',
     preset: 'claude_code'
   };
+
+  // Voice mode (off unless the composer sends it): ask for a closing <spoken>
+  // line the client can read aloud.
+  const spokenLineContract = buildSpokenLineContract(options.voiceMode);
+  if (spokenLineContract) {
+    sdkOptions.systemPrompt.append = spokenLineContract;
+  }
 
   sdkOptions.settingSources = ['project', 'user', 'local'];
 
@@ -1469,6 +1477,7 @@ export const claudeRuntime = {
 
 // Export public API
 export {
+  mapCliOptionsToSDK,
   queryClaudeSDK,
   abortClaudeSDKSession,
   listClaudeSDKBackgroundWork,

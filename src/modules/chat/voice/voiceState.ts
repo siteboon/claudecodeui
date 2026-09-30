@@ -1,5 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 
+import { i18n } from '@/modules/i18n';
 import { api } from '@/shared/api';
 import { useUiPreferences } from '@/shared/context/UiPreferencesContext';
 import { readStoredUiPreferences } from '@/shared/uiPreferences';
@@ -77,6 +78,16 @@ export function isVoiceConfigured(): boolean {
 /** Auto-speak may fire: the preference is on and voice is configured (KTD8). */
 export function isAutoSpeakActive(): boolean {
   return readStoredUiPreferences().autoSpeak === true && isVoiceConfigured();
+}
+
+/**
+ * The `voiceMode` option for `chat.send`: present only while auto-speak may
+ * fire, so the server asks Claude for a closing `<spoken>` line in the UI
+ * language. With auto-speak off the send options are exactly as before.
+ */
+export function voiceModeSendOption(): { voiceMode?: { language: string } } {
+  if (!isAutoSpeakActive()) return {};
+  return { voiceMode: { language: i18n.resolvedLanguage || i18n.language || 'en' } };
 }
 
 // --- the hook the controls use ----------------------------------------------

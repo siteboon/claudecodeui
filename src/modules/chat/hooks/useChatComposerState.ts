@@ -24,6 +24,7 @@ import {
 } from '@/modules/chat/voice/autoSpeak';
 import { appendTranscript, registerComposerScope } from '@/modules/chat/voice/dictation';
 import { announceVoice, clearVoiceAnnouncement } from '@/modules/chat/voice/voiceUiStore';
+import { voiceModeSendOption } from '@/modules/chat/voice/voiceState';
 import type { CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
 import { grantClaudeToolPermission } from '@/modules/chat/utils/chatPermissions';
 import {
@@ -655,6 +656,7 @@ export function useChatComposerState({
       toolsSettings,
       skipPermissions: toolsSettings?.skipPermissions || false,
       sessionSummary: getNotificationSessionSummary(selectedSession, currentInput),
+      ...voiceModeSendOption(),
     };
   }, [
     currentProviderEffort,
