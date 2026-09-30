@@ -7,6 +7,7 @@ import { playChatCompletionSound, playNotificationSound } from '@/shared/utils';
 import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
 import { normalizedToChatMessages } from '@/modules/chat/hooks/useChatMessages';
 import { collectRunningBackgroundTasks } from '@/modules/chat/utils/backgroundTasks';
+import { observeVoiceFrame, speakFinishedTurn } from '@/modules/chat/voice/autoSpeak';
 
 const isActionablePermissionRequest = (request: { toolName?: unknown } | null | undefined): boolean => {
   return request?.toolName !== 'ExitPlanMode' && request?.toolName !== 'exit_plan_mode';
@@ -122,6 +123,7 @@ export function useChatRealtimeHandlers({
           lastSeqRef.current.set(sid, msg.seq);
         }
       }
+      observeVoiceFrame(msg, sid);
 
       switch (msg.kind) {
         case 'websocket_reconnected':
@@ -265,6 +267,8 @@ export function useChatRealtimeHandlers({
             sessionStore.finalizeStreaming(sid);
           }
           accumulatedStreamRef.current = '';
+          // Auto-speak decides on the finalized reply (see voice/shouldSpeak).
+          speakFinishedTurn(msg, sid, activeViewSessionId, sessionStore.getMessages);
 
           // `complete` is the unified terminal event — every provider run ends
           // with exactly one, regardless of success, failure, or abort. The
