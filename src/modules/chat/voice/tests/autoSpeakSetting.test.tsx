@@ -37,7 +37,7 @@ beforeEach(async () => {
   await voiceI18n.changeLanguage('cs');
 });
 
-describe('the autoSpeak preference (KTD8)', () => {
+describe('the autoSpeak preference', () => {
   test('on a fresh container autoSpeak reads off', () => {
     expect(readStoredUiPreferences().autoSpeak).toBe(false);
   });

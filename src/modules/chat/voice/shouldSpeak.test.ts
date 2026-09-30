@@ -19,7 +19,7 @@ const OWN_ACTIVE: SpeakContext = {
 
 const complete = (extra: Record<string, unknown> = {}) => ({ kind: 'complete', sessionId: 's1', seq: 9, success: true, aborted: false, ...extra });
 
-describe('shouldSpeak (KTD4)', () => {
+describe('shouldSpeak', () => {
   test('true for the one own, successful, active case', () => {
     expect(shouldSpeak(complete(), OWN_ACTIVE)).toBe(true);
     expect(decideSpeech(complete(), OWN_ACTIVE)).toEqual({ action: 'speak', reason: 'own_success' });

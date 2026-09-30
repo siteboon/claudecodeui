@@ -9,14 +9,14 @@ import type { ChatMessage, DiffLine } from '@/shared/types';
 import { resetUserPreferences } from '@/shared/userSettings';
 
 /**
- * R16: a builder with upstream's voice toggle off sees the SAME DOM and the SAME
- * network activity as before the voice overlay.
+ * With the voice toggle off, a user sees the SAME DOM and the SAME network
+ * activity as before the voice changes.
  *
- * The expected file was written by running THIS test on the pinned tree after the
- * Czech overlay and BEFORE the voice overlay (the fork's `post-czech-base`), so
- * it records upstream's behaviour, not the overlay's opinion of it. This test
- * imports only upstream modules and the composer fixture, so it runs on both
- * trees unchanged; regenerate it only on the base tree, never on the overlay.
+ * The expected file was written by running THIS test on a tree WITHOUT the
+ * voice changes, so it records the existing behaviour, not the voice code's
+ * opinion of it. The test imports only existing modules and the composer
+ * fixture, so it runs on both trees unchanged; regenerate it only on a tree
+ * without the voice changes.
  */
 
 const createDiff = (): DiffLine[] => [];
@@ -45,7 +45,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test('voice off: the reply and the composer render and fetch exactly what they did before the overlay', async () => {
+test('voice off: the reply and the composer render and fetch exactly what they did before the voice changes', async () => {
   const message = render(
     <UiPreferencesProvider>
       <MessageComponent message={REPLY} prevMessage={null} createDiff={createDiff} provider="claude" />

@@ -75,7 +75,7 @@ export function isVoiceConfigured(): boolean {
   return hasDirectBackend() || lastHealth === true;
 }
 
-/** Auto-speak may fire: the preference is on and voice is configured (KTD8). */
+/** Auto-speak may fire: the preference is on and voice is configured. */
 export function isAutoSpeakActive(): boolean {
   return readStoredUiPreferences().autoSpeak === true && isVoiceConfigured();
 }

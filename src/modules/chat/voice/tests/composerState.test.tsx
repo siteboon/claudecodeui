@@ -67,7 +67,7 @@ beforeEach(() => {
   installAudioFakes();
 });
 
-describe('transcript placement (U8)', () => {
+describe('transcript placement', () => {
   test('a transcript appends to the end and never overwrites typed text', async () => {
     const view = renderComposer({ id: 'session-a' });
     await act(async () => view.result.current.setInput('Napsaný začátek'));
@@ -91,7 +91,7 @@ describe('transcript placement (U8)', () => {
   });
 });
 
-describe('Send and authorship (U7)', () => {
+describe('Send and authorship', () => {
   test('Send stops playback before the prompt goes out, and counts the prompt as this page\'s', async () => {
     const order: string[] = [];
     const stop = vi.spyOn(voicePlayer, 'stop').mockImplementation(() => {

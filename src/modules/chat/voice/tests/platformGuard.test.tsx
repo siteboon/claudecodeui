@@ -5,8 +5,8 @@ import { resetUserPreferences } from '@/shared/userSettings';
 import { readVoiceConfig, voiceConfigHeaders, VOICE_CONFIG_DEFAULTS } from '@/shared/voiceConfig';
 
 /**
- * KTD7: in platform mode, voice settings typed in the browser - including ones
- * stored before the overlay existed - must not open a direct path to a vendor
+ * In platform mode, voice settings typed in the browser - including ones
+ * stored before platform mode was switched on - must not open a direct path to a vendor
  * or ride along as `x-voice-*` override headers. (The settings tab half is in
  * `modules/settings/tests/voiceSettingsPlatformMode.test.tsx`.)
  */

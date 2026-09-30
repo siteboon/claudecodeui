@@ -62,7 +62,7 @@ async function startRecording() {
   await screen.findByRole('button', { name: 'Stop recording' });
 }
 
-describe('dictation in the composer (U8)', () => {
+describe('dictation in the composer', () => {
   test('pressing the mic during playback stops audio before the microphone is requested', async () => {
     render(<Composer />);
     const stop = vi.spyOn(voicePlayer, 'stop');
@@ -231,7 +231,7 @@ describe('dictation in the composer (U8)', () => {
   });
 });
 
-describe('playback control in the composer (U7)', () => {
+describe('playback control in the composer', () => {
   test('the stop control appears while speech loads and while it plays, stops both, and is absent otherwise', async () => {
     render(<Composer />);
     await micButton();
@@ -297,7 +297,7 @@ describe('playback control in the composer (U7)', () => {
   });
 });
 
-describe('error copy (U8, KTD9)', () => {
+describe('error copy', () => {
   const codeKeys = [...SERVICE_ERROR_CODES.map((c) => `errors.${c}`), 'errors.network', 'errors.generic'];
   const micKeys = ['dictation.policyBlocked', 'dictation.denied', 'dictation.busy', 'dictation.notFound', 'dictation.tooShort', 'dictation.noSpeech'];
 

@@ -146,7 +146,7 @@ export function noteDraftGone(sessionId: string | null | undefined): void {
   reconcileDraftGone(sessionId, now());
 }
 
-// R13: switching auto-speak off abandons an in-flight request and stops playback.
+// Switching auto-speak off abandons an in-flight request and stops playback.
 const autoSpeakPreferenceOn = () => {
   const preferences = readStoredUiPreferences();
   return preferences.autoSpeak === true && preferences.voiceEnabled === true;

@@ -267,7 +267,7 @@ export function useChatRealtimeHandlers({
             sessionStore.finalizeStreaming(sid);
           }
           accumulatedStreamRef.current = '';
-          // Auto-speak decides on the finalized reply (voice overlay, KTD4).
+          // Auto-speak decides on the finalized reply (see voice/shouldSpeak).
           speakFinishedTurn(msg, sid, activeViewSessionId, sessionStore.getMessages);
 
           // `complete` is the unified terminal event — every provider run ends

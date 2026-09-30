@@ -28,7 +28,7 @@ export function appendTranscript(base: string, text: string): string {
   return /\s$/.test(base) ? `${base}${addition}` : `${base} ${addition}`;
 }
 
-/** A recording stops by itself after this long (R3). */
+/** A recording stops by itself after this long. */
 export const MAX_RECORDING_MS = 5 * 60 * 1000;
 
 /** `m:ss` for the visible recording indicator. */

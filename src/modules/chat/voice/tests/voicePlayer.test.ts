@@ -26,7 +26,7 @@ beforeEach(() => {
   h.tts.mockImplementation(async () => fakeResponse(200, ''));
 });
 
-describe('voicePlayer (U7, KTD9)', () => {
+describe('voicePlayer', () => {
   test('a refused play() marks the reply blocked and keeps its audio; the replay makes no second request', async () => {
     media.refuseNextPlay('NotAllowedError');
     const id = voicePlayer.speak(line(), always);

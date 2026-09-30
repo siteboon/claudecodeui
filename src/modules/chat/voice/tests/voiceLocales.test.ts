@@ -8,7 +8,7 @@ import enVoice from '@/modules/chat/voice/locales/en/voice.json';
 import { SERVICE_ERROR_CODES } from '@/modules/chat/voice/voiceErrors';
 
 /**
- * The voice overlay's own coverage check: every `voice` key the code asks for
+ * The voice module's own coverage check: every `voice` key the code asks for
  * exists in BOTH languages, the two files carry the same keys, and the Czech copy
  * is actually Czech. A missing `cs` key fails here - i18next would otherwise fall
  * back to English without a sound.
@@ -64,7 +64,7 @@ function keysUsedInCode(): Set<string> {
   for (const file of sourceFiles()) {
     const text = fs.readFileSync(file, 'utf8');
     for (const shape of shapes) for (const match of text.matchAll(shape)) used.add(match[1]);
-    // Inside the overlay's own components `t` is the voice translator.
+    // Inside the voice module's own components `t` is the voice translator.
     if (file.includes(`${path.sep}voice${path.sep}`) && text.includes('useTranslation(VOICE_NS)')) {
       for (const match of text.matchAll(/\bt\(\s*'([a-zA-Z]+\.[a-zA-Z_]+)'/g)) used.add(match[1]);
     }

@@ -6,9 +6,9 @@ import { UiPreferencesProvider } from '@/shared/context/UiPreferencesContext';
 import { resetUserPreferences, writeUserPreference } from '@/shared/userSettings';
 
 /**
- * Voice overlay, KTD7: in platform mode the workspace's voice service is the only
- * backend, so the Voice tab offers no Base URL or API key field - not even when
- * this browser still holds values typed before the overlay existed.
+ * In platform mode the workspace's voice service is the only backend, so the
+ * Voice tab offers no Base URL or API key field - not even when this browser
+ * still holds values typed earlier.
  */
 
 beforeEach(() => {

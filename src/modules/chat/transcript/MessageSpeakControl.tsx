@@ -17,7 +17,7 @@ const MessageSpeakControl = ({ content }: { content: string }) => {
   const { t } = useTranslation('chat');
   const { t: tVoice } = useTranslation(VOICE_NS);
   const available = useVoiceAvailable();
-  // Reads only the reply's spoken line (OQ1): the same text, and so the same player
+  // Reads only the reply's spoken line: the same text, and so the same player
   // id, as auto-speak - this control shows and stops an automatic playback too.
   const spoken = extractSpokenLine(content);
   const line = spoken.status === 'valid' ? spoken.line : '';

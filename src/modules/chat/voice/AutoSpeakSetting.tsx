@@ -8,7 +8,7 @@ import { VOICE_NS } from '@/modules/chat/voice/voiceI18n';
 import { useVoiceStatus } from '@/modules/chat/voice/voiceState';
 
 /**
- * The `autoSpeak` preference (KTD8): off by default, and disabled with a plain
+ * The `autoSpeak` preference: off by default, and disabled with a plain
  * explanation while voice is off or not set up in this workspace - never hidden
  * in the Settings tab, so the builder learns why it cannot be switched on.
  *

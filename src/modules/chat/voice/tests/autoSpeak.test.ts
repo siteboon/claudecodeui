@@ -92,7 +92,7 @@ beforeEach(async () => {
   resetAutoSpeak(() => clock);
 });
 
-describe('auto-speak (U7)', () => {
+describe('auto-speak', () => {
   test('an own, successful, active turn speaks its spoken line once', async () => {
     noteOwnPromptSent('s1');
     runTurn('s1', { spoken: 'Hotovo, tlačítko už funguje.' });

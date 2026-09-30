@@ -3,11 +3,10 @@ import csVoice from '@/modules/chat/voice/locales/cs/voice.json';
 import enVoice from '@/modules/chat/voice/locales/en/voice.json';
 
 /**
- * The voice overlay's own `voice` namespace, registered from here rather than
- * from `modules/i18n/config.ts`: the overlay then needs no anchor in the file
- * the Czech overlay also patches, and removing either overlay cannot take the
- * other's strings with it. Every overlay component imports this module (or one
- * that does) before calling `useTranslation(VOICE_NS)`.
+ * The voice module's own `voice` namespace, registered from here rather than
+ * from `modules/i18n/config.ts`, so the module carries its strings with it.
+ * Every voice component imports this module (or one that does) before calling
+ * `useTranslation(VOICE_NS)`.
  */
 export const VOICE_NS = 'voice';
 

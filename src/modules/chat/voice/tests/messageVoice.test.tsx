@@ -78,7 +78,7 @@ beforeEach(async () => {
   await voiceI18n.changeLanguage('cs');
 });
 
-describe('the <spoken> block in the transcript (R10)', () => {
+describe('the <spoken> block in the transcript', () => {
   test('a reply with a block shows no tag and no block text, whether or not voice is on', () => {
     const { container } = render(<Message content={REPLY} />);
     expect(container.textContent).toContain('Upravil jsem komponentu');
@@ -104,7 +104,7 @@ describe('the <spoken> block in the transcript (R10)', () => {
   });
 });
 
-describe('the message\'s voice controls (U7)', () => {
+describe('the message\'s voice controls', () => {
   test('a missing block shows "bez hlasového shrnutí" on the message, only while auto-speak is on', async () => {
     await setUiPreferences({ voiceEnabled: true, autoSpeak: true });
     await checkVoiceHealth();
@@ -136,7 +136,7 @@ describe('the message\'s voice controls (U7)', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: /Přehrát odpověď/ })).toBeNull());
   });
 
-  test('the manual read-aloud control reads the spoken block only (OQ1), never code or the body', async () => {
+  test('the manual read-aloud control reads the spoken block only, never code or the body', async () => {
     await setUiPreferences({ voiceEnabled: true, autoSpeak: false });
     // A line no earlier test fetched: the player caches audio by text for the page's life.
     render(<Message content={'Dlouhá odpověď s kódem.\n\n```ts\nconst a = 1;\n```\n<spoken>Opraveno, můžete pokračovat.</spoken>'} />);

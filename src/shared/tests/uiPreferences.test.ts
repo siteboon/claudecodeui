@@ -37,7 +37,7 @@ test('a fresh install gets the documented defaults', () => {
     sendByCtrlEnter: false,
     sidebarVisible: true,
     voiceEnabled: false,
-    // Auto-speak is off on a fresh container (voice overlay, KTD8).
+    // Auto-speak is off on a fresh install.
     autoSpeak: false,
   });
 });

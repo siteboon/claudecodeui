@@ -1,7 +1,7 @@
 import { vi } from 'vitest';
 
 /**
- * Shared fakes for the voice overlay's tests. Browser media APIs are not in
+ * Shared fakes for the voice module's tests. Browser media APIs are not in
  * jsdom, so the tests install small, explicit fakes and assert on what the code
  * asked of them.
  */

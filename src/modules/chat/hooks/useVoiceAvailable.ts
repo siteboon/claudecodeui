@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { useUiPreferences } from '@/shared/context/UiPreferencesContext';
 import { readVoiceConfig, VOICE_CONFIG_SYNC_EVENT } from '@/shared/voiceConfig';
-// The health check lives with the voice overlay, which remembers the last answer
+// The health check lives in the voice module, which remembers the last answer
 // so the socket handler can read it synchronously when a turn completes.
 import { checkVoiceHealth } from '@/modules/chat/voice/voiceState';
 
