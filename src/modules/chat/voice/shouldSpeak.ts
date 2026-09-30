@@ -21,7 +21,7 @@ export type VoiceFrame = {
   kind?: string;
   sessionId?: string;
   seq?: number;
-  role?: string;
+  role?: unknown;
   aborted?: unknown;
   success?: unknown;
   [key: string]: unknown;

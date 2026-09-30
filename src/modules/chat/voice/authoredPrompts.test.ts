@@ -39,6 +39,12 @@ describe('authoredPrompts', () => {
     expect(authoredCount('s1')).toBe(1);
   });
 
+  test('a new draft after the previous one was dispatched counts again', () => {
+    noteDraftQueued('s1', 1);
+    noteDraftQueued('s1', 2); // a run started since: the first draft went out
+    expect(authoredCount('s1')).toBe(2);
+  });
+
   test('a draft queued and edited back leaves no count a scheduled run could spend', () => {
     noteDraftQueued('s1', 1);
     withdrawDraft('s1');

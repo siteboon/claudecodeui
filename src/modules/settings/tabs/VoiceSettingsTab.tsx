@@ -5,6 +5,7 @@ import SettingsSection from '@/modules/settings/SettingsSection';
 import SettingsToggle from '@/modules/settings/SettingsToggle';
 import { useUiPreferences, useSetUiPreference } from '@/shared/context/UiPreferencesContext';
 import { useVoiceConfig } from '@/modules/settings/hooks/useVoiceConfig';
+import { AutoSpeakSetting, isVoicePlatformMode, VOICE_NS } from '@/modules/chat';
 
 const inputClass =
   'w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring';
@@ -21,6 +22,10 @@ function Field({ label, ...props }: { label: string } & InputHTMLAttributes<HTML
 /** Rendered by Settings for the "voice" tab, covering speech-to-text provider credentials. */
 export default function VoiceSettingsTab() {
   const { t } = useTranslation('settings');
+  const { t: tVoice } = useTranslation(VOICE_NS);
+  // Platform mode: the workspace's voice service is the only backend, so the
+  // browser-side backend fields (Base URL, API key, models) are not rendered.
+  const platformManaged = isVoicePlatformMode();
   const preferences = useUiPreferences();
   const setPreference = useSetUiPreference();
   const { config, update } = useVoiceConfig();
@@ -40,9 +45,14 @@ export default function VoiceSettingsTab() {
             ariaLabel={t('voiceSettings.enable')}
           />
         </div>
+        <AutoSpeakSetting variant="settings" />
       </SettingsSection>
 
-      {voiceEnabled && (
+      {voiceEnabled && platformManaged && (
+        <p className="text-xs text-muted-foreground">{tVoice('settings.platformManaged')}</p>
+      )}
+
+      {voiceEnabled && !platformManaged && (
         <SettingsSection title={t('voiceSettings.backendTitle')} description={t('voiceSettings.backendDescription')}>
           <div className="space-y-4">
             <Field

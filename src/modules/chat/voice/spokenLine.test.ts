@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
 
-import { extractSpokenLine, stripSpokenBlocks } from '@/modules/chat/voice/spokenLine';
+import { extractSpokenLine, stripSpokenBlocks, type SpokenLineResult } from '@/modules/chat/voice/spokenLine';
+
+const reasonOf = (result: SpokenLineResult) => (result.status === 'rejected' ? result.reason : null);
 
 describe('extractSpokenLine', () => {
   test('extracts a trailing block', () => {
@@ -23,24 +25,24 @@ describe('extractSpokenLine', () => {
   });
 
   test('rejects a block with a fenced code fragment', () => {
-    expect(extractSpokenLine('<spoken>Spusť ```npm test``` znovu.</spoken>').reason).toBe('code');
-    expect(extractSpokenLine('<spoken>Spusť `npm test` znovu.</spoken>').reason).toBe('code');
+    expect(reasonOf(extractSpokenLine('<spoken>Spusť ```npm test``` znovu.</spoken>'))).toBe('code');
+    expect(reasonOf(extractSpokenLine('<spoken>Spusť `npm test` znovu.</spoken>'))).toBe('code');
   });
 
   test('rejects a path', () => {
-    expect(extractSpokenLine('<spoken>Změnil jsem src/app.ts.</spoken>').reason).toBe('path');
-    expect(extractSpokenLine('<spoken>Soubor C:\\temp je pryč.</spoken>').reason).toBe('path');
-    expect(extractSpokenLine('<spoken>Upravil jsem index.tsx podle zadání.</spoken>').reason).toBe('path');
+    expect(reasonOf(extractSpokenLine('<spoken>Změnil jsem src/app.ts.</spoken>'))).toBe('path');
+    expect(reasonOf(extractSpokenLine('<spoken>Soubor C:\\temp je pryč.</spoken>'))).toBe('path');
+    expect(reasonOf(extractSpokenLine('<spoken>Upravil jsem index.tsx podle zadání.</spoken>'))).toBe('path');
   });
 
   test('rejects a digit sequence', () => {
-    expect(extractSpokenLine('<spoken>Prošlo 42 testů.</spoken>').reason).toBe('digits');
+    expect(reasonOf(extractSpokenLine('<spoken>Prošlo 42 testů.</spoken>'))).toBe('digits');
     expect(extractSpokenLine('<spoken>Prošlo dvaačtyřicet testů.</spoken>').status).toBe('valid');
   });
 
   test('rejects an empty and an overlong block', () => {
-    expect(extractSpokenLine('<spoken>   </spoken>').reason).toBe('empty');
-    expect(extractSpokenLine(`<spoken>${'slovo '.repeat(80)}</spoken>`).reason).toBe('too_long');
+    expect(reasonOf(extractSpokenLine('<spoken>   </spoken>'))).toBe('empty');
+    expect(reasonOf(extractSpokenLine(`<spoken>${'slovo '.repeat(80)}</spoken>`))).toBe('too_long');
   });
 
   test('returns none for a reply without a block', () => {

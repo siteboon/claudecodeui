@@ -1,27 +1,13 @@
 import { useEffect, useState } from 'react';
 
-import { api } from '@/shared/api';
 import { useUiPreferences } from '@/shared/context/UiPreferencesContext';
 import { readVoiceConfig, VOICE_CONFIG_SYNC_EVENT } from '@/shared/voiceConfig';
+// The health check lives with the voice overlay, which remembers the last answer
+// so the socket handler can read it synchronously when a turn completes.
+import { checkVoiceHealth } from '@/modules/chat/voice/voiceState';
 
 // Voice UI is gated on the `voiceEnabled` UI preference (toggled in Quick Settings /
 // the Settings modal) and a configured voice backend.
-let healthRequest: Promise<boolean> | null = null;
-
-function checkVoiceHealth(): Promise<boolean> {
-  if (healthRequest) return healthRequest;
-  const request = api.voice.health()
-    .then(async (response) => {
-      if (!response.ok) throw new Error(`Voice health check failed (${response.status})`);
-      const data = await response.json();
-      return data?.configured === true;
-    })
-    .finally(() => {
-      healthRequest = null;
-    });
-  healthRequest = request;
-  return request;
-}
 
 export function useVoiceAvailable(): boolean {
   // Read through the shared preferences owner. This used to re-parse the

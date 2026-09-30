@@ -33,7 +33,11 @@ export function notePromptSent(sessionId: SessionId): void {
 
 /** A draft queued (or updated) by this page while a turn runs. */
 export function noteDraftQueued(sessionId: SessionId, runStartsNow: number): void {
-  if (!sessionId || queuedDrafts.has(sessionId)) return;
+  if (!sessionId) return;
+  const existing = queuedDrafts.get(sessionId);
+  // Updating the same queued draft is not a second prompt. A marker from before a
+  // run started belongs to a draft the server already dispatched.
+  if (existing && runStartsNow <= existing.runStartsAtQueue) return;
   queuedDrafts.set(sessionId, { runStartsAtQueue: runStartsNow });
   add(sessionId, 1);
 }
