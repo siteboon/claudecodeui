@@ -17,6 +17,7 @@ import { checkVoiceHealth, resetVoiceHealth } from '@/modules/chat/voice/voiceSt
 import { messageKeyOf, resetVoiceUiStore, voiceNoteFor } from '@/modules/chat/voice/voiceUiStore';
 import { fakeResponse, installAudioFakes, setUiPreferences } from '@/modules/chat/voice/tests/kit';
 import { resetUserPreferences } from '@/shared/userSettings';
+import type * as SharedApi from '@/shared/api';
 
 const h = vi.hoisted(() => ({
   tts: vi.fn(),
@@ -24,7 +25,7 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock('@/shared/api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/shared/api')>();
+  const actual = await importOriginal<typeof SharedApi>();
   return {
     ...actual,
     api: {

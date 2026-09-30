@@ -2,11 +2,12 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { voicePlayer } from '@/modules/chat/utils/voicePlayer';
 import { fakeResponse, installAudioFakes } from '@/modules/chat/voice/tests/kit';
+import type * as SharedApi from '@/shared/api';
 
 const h = vi.hoisted(() => ({ tts: vi.fn() }));
 
 vi.mock('@/shared/api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/shared/api')>();
+  const actual = await importOriginal<typeof SharedApi>();
   return { ...actual, synthesizeVoice: (text: string, signal: AbortSignal) => h.tts(text, signal) };
 });
 

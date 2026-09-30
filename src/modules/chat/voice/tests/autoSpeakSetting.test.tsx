@@ -9,11 +9,12 @@ import { fakeResponse, setUiPreferences } from '@/modules/chat/voice/tests/kit';
 import { UiPreferencesProvider } from '@/shared/context/UiPreferencesContext';
 import { readStoredUiPreferences } from '@/shared/uiPreferences';
 import { resetUserPreferences } from '@/shared/userSettings';
+import type * as SharedApi from '@/shared/api';
 
 const h = vi.hoisted(() => ({ health: vi.fn() }));
 
 vi.mock('@/shared/api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/shared/api')>();
+  const actual = await importOriginal<typeof SharedApi>();
   return {
     ...actual,
     api: {

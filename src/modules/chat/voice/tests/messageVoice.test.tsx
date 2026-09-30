@@ -13,11 +13,12 @@ import { fakeResponse, installAudioFakes, setUiPreferences } from '@/modules/cha
 import { UiPreferencesProvider } from '@/shared/context/UiPreferencesContext';
 import type { ChatMessage, DiffLine } from '@/shared/types';
 import { resetUserPreferences } from '@/shared/userSettings';
+import type * as SharedApi from '@/shared/api';
 
 const h = vi.hoisted(() => ({ health: vi.fn(), tts: vi.fn() }));
 
 vi.mock('@/shared/api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/shared/api')>();
+  const actual = await importOriginal<typeof SharedApi>();
   return {
     ...actual,
     api: {

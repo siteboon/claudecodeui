@@ -1,17 +1,14 @@
-import { render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
-import VoiceSettingsTab from '@/modules/settings/tabs/VoiceSettingsTab';
 import { synthesizeVoice, transcribeVoice } from '@/shared/api';
-import { UiPreferencesProvider } from '@/shared/context/UiPreferencesContext';
-import { resetUserPreferences, writeUserPreference } from '@/shared/userSettings';
+import { resetUserPreferences } from '@/shared/userSettings';
 import { readVoiceConfig, voiceConfigHeaders, VOICE_CONFIG_DEFAULTS } from '@/shared/voiceConfig';
 
 /**
  * KTD7: in platform mode, voice settings typed in the browser - including ones
  * stored before the overlay existed - must not open a direct path to a vendor
- * or ride along as `x-voice-*` override headers, and the settings tab must not
- * offer them.
+ * or ride along as `x-voice-*` override headers. (The settings tab half is in
+ * `modules/settings/tests/voiceSettingsPlatformMode.test.tsx`.)
  */
 
 const VENDOR = 'https://vendor.example/v1';
@@ -66,15 +63,6 @@ describe('platform mode', () => {
       expect(call.url.startsWith(VENDOR)).toBe(false);
       expect(Object.keys(call.headers).filter((k) => k.startsWith('x-voice-'))).toEqual([]);
     }
-  });
-
-  test('the settings tab renders no Base URL or API key field', () => {
-    vi.stubEnv('VITE_IS_PLATFORM', 'true');
-    writeUserPreference('uiPreferences', { voiceEnabled: true });
-    render(<UiPreferencesProvider><VoiceSettingsTab /></UiPreferencesProvider>);
-    expect(screen.queryByPlaceholderText('https://api.openai.com/v1')).toBeNull();
-    expect(screen.queryByPlaceholderText('sk-…')).toBeNull();
-    expect(document.body.textContent).not.toContain('sk-builder-typed');
   });
 
   test('outside platform mode the upstream behaviour is unchanged', async () => {
