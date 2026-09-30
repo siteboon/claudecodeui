@@ -70,7 +70,7 @@ export default function ComposerVoiceStatus({ status }: { status: VoiceStatus })
       )}
 
       {announcement && VISIBLE_KEYS.has(announcement.key) && (
-        <span className="max-w-[16rem] truncate text-[11px] text-muted-foreground">{liveText}</span>
+        <span className="max-w-64 truncate text-[11px] text-muted-foreground">{liveText}</span>
       )}
 
       <span className="sr-only" role="status" aria-live="polite">

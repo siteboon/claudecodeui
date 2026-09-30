@@ -25,11 +25,11 @@ function useElapsed(startedAt: number | null | undefined): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!startedAt) return undefined;
-    setNow(Date.now());
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [startedAt]);
-  return startedAt ? now - startedAt : 0;
+  // `now` may predate a recording that just started; clamp until the first tick.
+  return startedAt ? Math.max(0, now - startedAt) : 0;
 }
 
 // Rendered by chat's ChatComposer next to the send button.

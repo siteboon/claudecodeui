@@ -1,5 +1,4 @@
 import { i18n } from '@/modules/i18n';
-
 import csVoice from '@/modules/chat/voice/locales/cs/voice.json';
 import enVoice from '@/modules/chat/voice/locales/en/voice.json';
 
