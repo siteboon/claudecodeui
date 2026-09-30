@@ -4,6 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+import Database from 'better-sqlite3';
+
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import { AntigravitySessionSynchronizer } from '@/modules/providers/list/antigravity/antigravity-session-synchronizer.provider.js';
 import { AntigravitySessionsProvider } from '@/modules/providers/list/antigravity/antigravity-sessions.provider.js';
@@ -75,6 +77,19 @@ const writeAntigravityTranscript = async (
   await writeFile(transcriptPath, `${lines.map((line) => JSON.stringify(line)).join('\n')}\n`, 'utf8');
   return transcriptPath;
 };
+
+function encodeWireField(field: number, value: Buffer): Buffer {
+  const encodeVarint = (number: number): number[] => {
+    const bytes: number[] = [];
+    do {
+      const byte = number % 128;
+      number = Math.floor(number / 128);
+      bytes.push(number ? byte | 0x80 : byte);
+    } while (number);
+    return bytes;
+  };
+  return Buffer.concat([Buffer.from(encodeVarint(field * 8 + 2)), Buffer.from(encodeVarint(value.length)), value]);
+}
 
 test('Antigravity synchronizer indexes transcript rows from history metadata', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'antigravity-session-sync-'));
@@ -178,6 +193,77 @@ test('Antigravity history reader skips a partially written JSONL line', async ()
     assert.equal(history.offset, 1);
     assert.equal(history.limit, 1);
   } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('Antigravity history restores clipped assistant text and hides the wait control marker', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'antigravity-native-history-'));
+  const restoreHomeDir = patchHomeDir(tempRoot);
+  const providerSessionId = 'agy-session-native';
+  try {
+    const transcriptPath = await writeAntigravityTranscript(tempRoot, providerSessionId);
+    const fullContent = 'Intro\n```python\nprint("hello")\n```\nOutro';
+    await appendFile(transcriptPath, [
+      JSON.stringify({
+        step_index: 2,
+        source: 'MODEL',
+        type: 'PLANNER_RESPONSE',
+        content: 'Intro\n```python\n<truncated 22 bytes>\nOutro',
+        truncated_fields: ['content'],
+      }),
+      JSON.stringify({
+        step_index: 3,
+        source: 'MODEL',
+        type: 'PLANNER_RESPONSE',
+        content: '<WAITING_FOR_EVENTS>\n</WAITING_FOR_EVENTS>',
+      }),
+    ].join('\n') + '\n');
+
+    const conversationsDir = path.join(tempRoot, '.gemini', 'antigravity-cli', 'conversations');
+    await mkdir(conversationsDir, { recursive: true });
+    const db = new Database(path.join(conversationsDir, `${providerSessionId}.db`));
+    try {
+      db.exec('CREATE TABLE steps (idx INTEGER PRIMARY KEY, step_type INTEGER, step_payload BLOB)');
+      db.prepare('INSERT INTO steps (idx, step_type, step_payload) VALUES (?, ?, ?)').run(
+        2,
+        15,
+        encodeWireField(20, encodeWireField(1, Buffer.from(fullContent))),
+      );
+      db.prepare('INSERT INTO steps (idx, step_type, step_payload) VALUES (?, ?, ?)').run(
+        4,
+        17,
+        encodeWireField(24, encodeWireField(3, encodeWireField(1, Buffer.from('Individual quota reached.')))),
+      );
+    } finally {
+      db.close();
+    }
+
+    const history = await new AntigravitySessionsProvider().fetchHistory('app-session-native', {
+      providerSessionId,
+      jsonlPath: transcriptPath,
+    });
+    assert.equal(history.total, 4);
+    assert.equal(history.messages[2]?.content, fullContent);
+    assert.equal(history.messages.some((message) => message.content?.includes('WAITING_FOR_EVENTS')), false);
+    assert.equal(history.messages[3]?.kind, 'error');
+    assert.equal(history.messages[3]?.content, 'Individual quota reached.');
+
+    const mismatchedDb = new Database(path.join(conversationsDir, `${providerSessionId}.db`));
+    try {
+      mismatchedDb.prepare('UPDATE steps SET step_payload = ? WHERE idx = 2').run(
+        encodeWireField(20, encodeWireField(1, Buffer.from('A different response'))),
+      );
+    } finally {
+      mismatchedDb.close();
+    }
+    const fallback = await new AntigravitySessionsProvider().fetchHistory('app-session-native', {
+      providerSessionId,
+      jsonlPath: transcriptPath,
+    });
+    assert.match(fallback.messages[2]?.content ?? '', /<truncated 22 bytes>/);
+  } finally {
+    restoreHomeDir();
     await rm(tempRoot, { recursive: true, force: true });
   }
 });

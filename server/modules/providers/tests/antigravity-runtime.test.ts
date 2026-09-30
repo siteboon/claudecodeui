@@ -148,6 +148,32 @@ test('Antigravity streams stdout before exit and captures a new provider session
   assert.equal(capturedCwd, '/workspace');
 });
 
+test('Antigravity hides wait markers split across stdout chunks', async () => {
+  const child = createFakeProcess();
+  const runtime = createAntigravityRuntime({
+    spawnProcess: () => {
+      queueMicrotask(() => {
+        child.stdout.write('Before\n<WAITING_FOR_E');
+        child.stdout.write('VENTS>\n</WAITING_');
+        child.stdout.end('FOR_EVENTS>\nAfter');
+        child.emit('close', 0, null);
+      });
+      return child as never;
+    },
+    readConversationDbFiles: async () => [],
+  });
+  const { writer, messages } = createWriter();
+  await runtime.run('Hi', {}, writer, createRuntimeContext());
+
+  const text = messages
+    .filter((message) => message.kind === 'stream_delta')
+    .map((message) => String(message.content))
+    .join('');
+  assert.match(text, /Before[\s\S]*After/);
+  assert.equal(text.includes('WAITING_FOR_EVENTS'), false);
+  assert.equal(messages.filter((message) => message.kind === 'complete').length, 1);
+});
+
 test('Antigravity runtime uses the configured AGY executable', { concurrency: false }, async () => {
   const previousPath = process.env.AGY_CLI_PATH;
   const child = createFakeProcess();

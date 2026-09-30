@@ -114,6 +114,33 @@ function sendAntigravityText(
   }
 }
 
+const AGY_CONTROL_MARKERS = ['<WAITING_FOR_EVENTS>', '</WAITING_FOR_EVENTS>'] as const;
+
+/** Keeps split AGY control tags out of the text stream while forwarding ordinary text immediately. */
+function createAntigravityStdoutFilter(sendVisibleText: (text: string) => void) {
+  let pending = '';
+  return {
+    write(chunk: string) {
+      pending += chunk;
+      for (const marker of AGY_CONTROL_MARKERS) pending = pending.replaceAll(marker, '');
+
+      let heldLength = 0;
+      for (const marker of AGY_CONTROL_MARKERS) {
+        for (let length = 1; length < marker.length; length += 1) {
+          if (pending.endsWith(marker.slice(0, length))) heldLength = Math.max(heldLength, length);
+        }
+      }
+      const visible = pending.slice(0, pending.length - heldLength);
+      pending = pending.slice(visible.length);
+      if (visible) sendVisibleText(visible);
+    },
+    finish() {
+      // Only a partial control tag can remain after write() has emitted the visible prefix.
+      pending = '';
+    },
+  };
+}
+
 /**
  * Maps CloudCLI permission modes to the Antigravity CLI flags consumed by the
  * runtime adapter. Exported for the Providers module runtime tests.
@@ -231,6 +258,9 @@ async function runAntigravity(
     let settled = false;
     let completeSent = false;
     let spawnError: Error | null = null;
+    const stdoutFilter = createAntigravityStdoutFilter((text) => {
+      sendAntigravityText(writer, context, text, providerSessionId ?? fallbackSessionId);
+    });
 
     const settle = (error?: Error) => {
       if (settled) {
@@ -251,14 +281,7 @@ async function runAntigravity(
 
     antigravityProcess.stdout?.on('data', (data: Buffer | string) => {
       const text = data.toString();
-      if (text) {
-        sendAntigravityText(
-          writer,
-          context,
-          text,
-          providerSessionId ?? fallbackSessionId,
-        );
-      }
+      if (text) stdoutFilter.write(text);
     });
 
     antigravityProcess.stderr?.on('data', (data: Buffer | string) => {
@@ -266,6 +289,7 @@ async function runAntigravity(
     });
 
     antigravityProcess.once('close', async (code) => {
+      stdoutFilter.finish();
       activeProcesses.delete(processKey);
       if (spawnError) {
         return;
