@@ -74,6 +74,16 @@ describe('stripSpokenBlocks', () => {
     expect(stripSpokenBlocks(reply)).toBe(reply);
   });
 
+  test('a tag mentioned in inline code or in a sentence is text, not a block', () => {
+    const mention = 'Použij značku `<spoken>` na konci odpovědi, pak pokračuj.';
+    expect(stripSpokenBlocks(mention)).toBe(mention);
+    expect(stripSpokenBlocks(mention, { streaming: true })).toBe(mention);
+    const quoted = 'Blok vypadá takto: `<spoken>Hotovo.</spoken>` a patří na konec.';
+    expect(stripSpokenBlocks(quoted)).toBe(quoted);
+    const sentence = 'Značku <spoken> píšu jen na konec.';
+    expect(stripSpokenBlocks(sentence)).toBe(sentence);
+  });
+
   test('a block quoted inside a code fence is left alone', () => {
     const reply = 'Příklad:\n```\n<spoken>ukázka</spoken>\n```\nKonec.';
     expect(stripSpokenBlocks(reply)).toBe(reply);

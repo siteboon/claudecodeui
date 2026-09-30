@@ -3,12 +3,15 @@ import {
   consumeAuthored,
   noteDraftQueued,
   notePromptSent,
+  noteRunStarted,
   reconcileDraftGone,
   withdrawDraft,
+  withdrawPrompt,
 } from '@/modules/chat/voice/authoredPrompts';
 import { playFailureCue } from '@/modules/chat/voice/failureCue';
 import { decideSpeech, isLateError, VoiceRunTracker, type VoiceFrame } from '@/modules/chat/voice/shouldSpeak';
 import { extractSpokenLine } from '@/modules/chat/voice/spokenLine';
+import { voiceErrorKey } from '@/modules/chat/voice/voiceErrors';
 import { isAutoSpeakActive, isVoiceConfigured } from '@/modules/chat/voice/voiceState';
 import { announceVoice, clearVoiceNote, messageKeyOf, setVoiceNote } from '@/modules/chat/voice/voiceUiStore';
 import { readStoredUiPreferences } from '@/shared/uiPreferences';
@@ -30,6 +33,9 @@ let now: () => number = () => Date.now();
 /** Every live frame, before the handler routes it. Handles the late post-turn error. */
 export function observeVoiceFrame(frame: VoiceFrame, sessionId: string | null): void {
   const { runStarted } = tracker.observe(frame, sessionId);
+  if (runStarted) noteRunStarted(sessionId, now());
+  // A rejected send never starts its run, so no `complete` would spend its count.
+  if (frame.kind === 'protocol_error') withdrawPrompt(sessionId);
   if (isLateError(frame, sessionId, lastSpoken, now(), runStarted)) {
     lastSpoken = null;
     voicePlayer.stop();
@@ -91,6 +97,21 @@ export function speakFinishedTurn(
   const voiceId = voicePlayer.speak(spoken.line, isAutoSpeakActive);
   setVoiceNote(sessionId, { kind: 'spoken', messageKey, line: spoken.line, voiceId });
   lastSpoken = { sessionId, at: now() };
+  announceOutcome(voiceId);
+}
+
+/**
+ * An ear-only builder must hear about what the screen shows: a refused play()
+ * (the replay control) or a failed request (its plain copy), through the live region.
+ */
+function announceOutcome(id: string): void {
+  const unsubscribe = voicePlayer.subscribe(() => {
+    const snap = voicePlayer.getSnapshot(id);
+    if (voicePlayer.isBlocked(id)) announceVoice('playback.replayBlocked');
+    else if (snap.error) announceVoice(voiceErrorKey(snap.error));
+    else if (snap.state === 'loading' || (snap.state === 'idle' && voicePlayer.current().id === id)) return;
+    unsubscribe();
+  });
 }
 
 /** Mic press or Send: silence any reply first (also keeps it out of a new recording). */
@@ -114,7 +135,7 @@ export function noteOwnPromptSent(sessionId: string | null | undefined): void {
 }
 
 export function noteOwnDraftQueued(sessionId: string | null | undefined): void {
-  if (sessionId) noteDraftQueued(sessionId, tracker.runStarts(sessionId));
+  noteDraftQueued(sessionId);
 }
 
 export function noteOwnDraftWithdrawn(sessionId: string | null | undefined): void {
@@ -122,7 +143,7 @@ export function noteOwnDraftWithdrawn(sessionId: string | null | undefined): voi
 }
 
 export function noteDraftGone(sessionId: string | null | undefined): void {
-  if (sessionId) reconcileDraftGone(sessionId, tracker.runStarts(sessionId));
+  reconcileDraftGone(sessionId, now());
 }
 
 // R13: switching auto-speak off abandons an in-flight request and stops playback.

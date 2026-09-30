@@ -14,7 +14,7 @@ import {
 import { resetAuthoredPrompts } from '@/modules/chat/voice/authoredPrompts';
 import { playFailureCue } from '@/modules/chat/voice/failureCue';
 import { checkVoiceHealth, resetVoiceHealth } from '@/modules/chat/voice/voiceState';
-import { messageKeyOf, resetVoiceUiStore, voiceNoteFor } from '@/modules/chat/voice/voiceUiStore';
+import { messageKeyOf, resetVoiceUiStore, voiceAnnouncement, voiceNoteFor } from '@/modules/chat/voice/voiceUiStore';
 import { fakeResponse, installAudioFakes, setUiPreferences } from '@/modules/chat/voice/tests/kit';
 import { resetUserPreferences } from '@/shared/userSettings';
 import type * as SharedApi from '@/shared/api';
@@ -40,6 +40,7 @@ vi.mock('@/shared/api', async (importOriginal) => {
 vi.mock('@/modules/chat/voice/failureCue', () => ({ playFailureCue: vi.fn(async () => 'cue') }));
 
 let clock = 0;
+let media: ReturnType<typeof installAudioFakes>;
 let lineNo = 0;
 const uniqueLine = () => `Hotovo, krok ${['jedna', 'dva', 'tři', 'čtyři', 'pět', 'šest', 'sedm', 'osm'][lineNo++ % 8]} ${'a'.repeat(lineNo)}.`;
 
@@ -79,7 +80,7 @@ beforeEach(async () => {
   resetVoiceHealth();
   clock = 1_000;
   resetAutoSpeak(() => clock);
-  installAudioFakes();
+  media = installAudioFakes();
   voicePlayer.stop();
   h.tts.mockReset();
   h.tts.mockImplementation(async () => fakeResponse(200, ''));
@@ -150,11 +151,44 @@ describe('auto-speak (U7)', () => {
       noteOwnDraftQueued('s1');
       if (how === 'removed on another device') noteDraftGone('s1');
       else noteOwnDraftWithdrawn('s1');
-      runTurn('s1', { seq: 7 });
+      runTurn('s1', { seq: 7 }); // the turn that was running ends
+      clock += 11_000;
+      runTurn('s1', { seq: 3 }); // later, a scheduled run starts and ends in the session
       await flush();
       expect(h.tts).not.toHaveBeenCalled();
     });
   }
+
+  test('a turn started elsewhere cannot spend the count of a draft this page queued meanwhile', async () => {
+    observeVoiceFrame({ kind: 'status', seq: 1, sessionId: 's1' }, 's1'); // a phone's turn runs
+    noteOwnDraftQueued('s1');
+    runTurn('s1', { seq: 6, spoken: 'Telefon hotovo.' }); // the phone's turn ends: silent here
+    runTurn('s1', { seq: 6, spoken: 'Diktát hotovo.' }); // this page's draft, dispatched: spoken
+    await flush();
+    expect(h.tts.mock.calls.map((c) => c[0])).toEqual(['Diktát hotovo.']);
+  });
+
+  test('a send the server rejected (protocol_error) leaves no count a later turn could spend', async () => {
+    noteOwnPromptSent('s1');
+    observeVoiceFrame({ kind: 'protocol_error', sessionId: 's1' }, 's1');
+    runTurn('s1'); // a scheduled run in the same session
+    await flush();
+    expect(h.tts).not.toHaveBeenCalled();
+  });
+
+  test('a failed auto-speak request is announced in its plain copy, a refused play() as the replay hint', async () => {
+    h.tts.mockImplementationOnce(async () => fakeResponse(502, { error: '{"code":"cap_daily"}' }));
+    noteOwnPromptSent('s1');
+    runTurn('s1');
+    await flush();
+    expect(voiceAnnouncement()?.key).toBe('errors.cap_daily');
+
+    media.refuseNextPlay('NotAllowedError');
+    noteOwnPromptSent('s1');
+    runTurn('s1');
+    await flush();
+    expect(voiceAnnouncement()?.key).toBe('playback.replayBlocked');
+  });
 
   test('aborted: silent, no cue; success false or an error after the last text: the local cue, no speech', async () => {
     noteOwnPromptSent('s1');

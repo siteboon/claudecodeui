@@ -90,6 +90,24 @@ describe('dictation in the composer (U8)', () => {
     );
   });
 
+  test('a second Send while the dictation is still transcribing does nothing - it never aborts the turn', async () => {
+    const onAbortSession = vi.fn();
+    let finish: (value: Response) => void = () => undefined;
+    h.transcribe.mockImplementationOnce(() => new Promise<Response>((resolve) => { finish = resolve; }));
+    render(<Composer isLoading onAbortSession={onAbortSession} />);
+    await startRecording();
+    fireEvent.click(screen.getByRole('button', { name: 'Stop recording and keep the text for later' }));
+    // Both the mic and Send say so while transcribing; neither may do anything.
+    const busy = await screen.findAllByRole('button', { name: 'Transcribing…' });
+    expect(busy.length).toBe(2);
+    for (const button of busy) {
+      expect((button as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(button);
+    }
+    expect(onAbortSession).not.toHaveBeenCalled();
+    await act(async () => finish(fakeResponse(200, { text: 'ahoj' })));
+  });
+
   test('recording with no turn running: Send keeps upstream stop-transcribe-send', async () => {
     const onVoiceTranscript = vi.fn();
     render(<Composer onVoiceTranscript={onVoiceTranscript} />);

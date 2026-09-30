@@ -36,7 +36,20 @@ const hasCode = (line: string) => line.includes('`');
 const hasPath = (line: string) => /[\\/]/.test(line) || /\b[\w-]+\.[A-Za-z][A-Za-z0-9]{0,4}\b/.test(line);
 const hasDigits = (line: string) => /\d/.test(line);
 
-/** Character ranges of fenced code blocks, so a block quoted inside one is left alone. */
+/**
+ * Character ranges of code - fenced blocks and inline `code` spans - so a tag
+ * quoted inside code (a builder discussing the contract) is left alone.
+ */
+function codeRanges(text: string): Array<[number, number]> {
+  const fenced = fencedRanges(text);
+  const ranges = [...fenced];
+  for (const match of text.matchAll(/`[^`\n]+`/g)) {
+    const start = match.index ?? 0;
+    if (!fenced.some(([a, b]) => start >= a && start <= b)) ranges.push([start, start + match[0].length]);
+  }
+  return ranges;
+}
+
 function fencedRanges(text: string): Array<[number, number]> {
   const ranges: Array<[number, number]> = [];
   let offset = 0;
@@ -60,7 +73,7 @@ const insideAny = (at: number, ranges: Array<[number, number]>) => ranges.some((
 
 /** Every complete block outside fenced code: [start, end, inner text]. */
 function findBlocks(text: string): Array<{ start: number; end: number; inner: string }> {
-  const ranges = fencedRanges(text);
+  const ranges = codeRanges(text);
   const blocks: Array<{ start: number; end: number; inner: string }> = [];
   for (const match of text.matchAll(BLOCK_RE)) {
     const start = match.index ?? 0;
@@ -111,9 +124,12 @@ export function stripSpokenBlocks(text: string, options: { streaming?: boolean }
   }
 
   // An opening tag that never closed (the model is still writing it, or stopped
-  // mid-block): hide it and everything after it, unless it sits in a code fence.
+  // mid-block): hide it and everything after it - but only where the contract puts
+  // the block, at the start of a line, and never inside code. A tag mentioned in a
+  // sentence is text.
   const lastOpen = out.lastIndexOf(OPEN);
-  if (lastOpen !== -1 && !out.includes(CLOSE, lastOpen) && !insideAny(lastOpen, fencedRanges(out))) {
+  const startsLine = lastOpen !== -1 && /(^|\n)[ \t]*$/.test(out.slice(0, lastOpen));
+  if (lastOpen !== -1 && startsLine && !out.includes(CLOSE, lastOpen) && !insideAny(lastOpen, codeRanges(out))) {
     out = out.slice(0, lastOpen);
     changed = true;
   } else if (options.streaming) {

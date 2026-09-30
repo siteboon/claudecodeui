@@ -229,7 +229,8 @@ export default function ChatComposer({
   // Voice state is hosted here (not in the mic button) so the main Send button can stop
   // recording and send the transcript in one tap, the way the mic button drops it in the box.
   // `off` = upstream's voice toggle is off: no voice UI at all. `unavailable` renders
-  // the controls disabled with an explanation instead of hiding them.
+  // the controls disabled with an explanation instead of hiding them; nothing is
+  // shown while the first health check is still out (`checking`), as upstream does.
   const voiceStatus = useVoiceStatus();
   const voiceAvailable = voiceStatus === 'available';
   const [voiceError, setVoiceError] = useState<string | null>(null);
@@ -275,7 +276,9 @@ export default function ChatComposer({
     : sendByCtrlEnter
       ? t('input.hintText.ctrlEnter')
       : t('input.hintText.enter');
-  const submitAriaLabel = isRecording
+  const submitAriaLabel = isTranscribing
+    ? tVoice('dictation.transcribing')
+    : isRecording
     ? isLoading
       ? tVoice('dictation.sendKeepsDraft')
       : tVoice('dictation.sendStopsRecording')
@@ -458,7 +461,7 @@ export default function ChatComposer({
               <PaperclipIcon />
             </PromptInputButton>
 
-            {onVoiceTranscript && voiceStatus !== 'off' && (
+            {onVoiceTranscript && (voiceStatus === 'available' || voiceStatus === 'unavailable') && (
               <>
                 <VoiceInputButton
                   state={voiceState}
@@ -531,7 +534,11 @@ export default function ChatComposer({
                 // running turn. During a turn the transcript waits in the box as an
                 // editable draft for the builder to confirm; with no turn running it
                 // is sent as before.
-                isRecording
+                // While a dictation is transcribing Send does nothing: with an empty box
+                // it would otherwise fall through to aborting the running turn.
+                isTranscribing
+                  ? (e: MouseEvent<HTMLButtonElement>) => e.preventDefault()
+                  : isRecording
                   ? (e: MouseEvent<HTMLButtonElement>) => {
                       e.preventDefault();
                       stopSpeechForUserAction();
@@ -548,7 +555,9 @@ export default function ChatComposer({
                       : undefined
               }
               disabled={
-                isLoading
+                isTranscribing
+                  ? true
+                  : isLoading
                   ? false
                   : isRecording
                     ? false

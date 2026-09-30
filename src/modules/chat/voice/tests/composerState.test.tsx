@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
 import { voicePlayer } from '@/modules/chat/utils/voicePlayer';
-import { authoredCount, resetAuthoredPrompts } from '@/modules/chat/voice/authoredPrompts';
+import { authoredCount, isDraftArmed, resetAuthoredPrompts } from '@/modules/chat/voice/authoredPrompts';
 import { currentDictationScope } from '@/modules/chat/voice/dictation';
 import { installAudioFakes } from '@/modules/chat/voice/tests/kit';
 import { readDraftText, resetChatDrafts } from '@/shared/chatDrafts';
@@ -105,19 +105,20 @@ describe('Send and authorship (U7)', () => {
     expect(authoredCount('session-a')).toBe(1);
   });
 
-  test('a draft queued during a running turn counts; editing it back or deleting it withdraws the count', async () => {
+  test('a draft queued during a running turn is armed as this page\'s; editing it back or deleting it disarms it', async () => {
     const view = renderComposer({ id: 'session-a' }, { isLoading: true });
     await act(async () => view.result.current.setInput('Další krok'));
     await act(async () => view.result.current.handleSubmit(submitEvent()));
     expect(view.result.current.queuedDraft?.content).toBe('Další krok');
-    expect(authoredCount('session-a')).toBe(1);
+    expect(isDraftArmed('session-a')).toBe(true);
+    expect(authoredCount('session-a')).toBe(0); // counted only when its own run starts
 
     await act(async () => view.result.current.editQueuedDraft());
-    expect(authoredCount('session-a')).toBe(0);
+    expect(isDraftArmed('session-a')).toBe(false);
 
     await act(async () => view.result.current.handleSubmit(submitEvent()));
-    expect(authoredCount('session-a')).toBe(1);
+    expect(isDraftArmed('session-a')).toBe(true);
     await act(async () => view.result.current.deleteQueuedDraft());
-    expect(authoredCount('session-a')).toBe(0);
+    expect(isDraftArmed('session-a')).toBe(false);
   });
 });

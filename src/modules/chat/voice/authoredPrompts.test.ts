@@ -3,11 +3,15 @@ import { beforeEach, describe, expect, test } from 'vitest';
 import {
   authoredCount,
   consumeAuthored,
+  DRAFT_DISPATCH_GRACE_MS,
+  isDraftArmed,
   noteDraftQueued,
   notePromptSent,
+  noteRunStarted,
   reconcileDraftGone,
   resetAuthoredPrompts,
   withdrawDraft,
+  withdrawPrompt,
 } from '@/modules/chat/voice/authoredPrompts';
 
 beforeEach(() => resetAuthoredPrompts());
@@ -25,61 +29,63 @@ describe('authoredPrompts', () => {
     expect(consumeAuthored('s1')).toBe(false);
   });
 
-  test('a queued draft counts, so the dictated follow-up it becomes is spoken', () => {
-    notePromptSent('s1'); // the running turn
-    noteDraftQueued('s1', 1); // follow-up queued while it runs
-    expect(consumeAuthored('s1')).toBe(true); // running turn completes
-    expect(consumeAuthored('s1')).toBe(true); // dispatched draft completes
+  test('a send the server rejected leaves no count behind', () => {
+    notePromptSent('s1');
+    withdrawPrompt('s1');
     expect(consumeAuthored('s1')).toBe(false);
-  });
-
-  test('updating a queued draft does not count it twice', () => {
-    noteDraftQueued('s1', 0);
-    noteDraftQueued('s1', 0);
-    expect(authoredCount('s1')).toBe(1);
-  });
-
-  test('a new draft after the previous one was dispatched counts again', () => {
-    noteDraftQueued('s1', 1);
-    noteDraftQueued('s1', 2); // a run started since: the first draft went out
-    expect(authoredCount('s1')).toBe(2);
-  });
-
-  test('a draft queued and edited back leaves no count a scheduled run could spend', () => {
-    noteDraftQueued('s1', 1);
-    withdrawDraft('s1');
-    expect(consumeAuthored('s1')).toBe(false);
-  });
-
-  test('a draft queued and deleted leaves no count', () => {
-    noteDraftQueued('s1', 1);
-    withdrawDraft('s1');
-    withdrawDraft('s1'); // a second withdraw of the same draft changes nothing
+    withdrawPrompt('s1'); // never below zero
     expect(authoredCount('s1')).toBe(0);
   });
 
-  test('a draft removed on another device (gone, no run started) leaves no count', () => {
-    noteDraftQueued('s1', 1);
-    reconcileDraftGone('s1', 1);
+  test('a queued draft counts once its own run starts, so the dictated follow-up is spoken', () => {
+    notePromptSent('s1'); // the running turn
+    noteDraftQueued('s1'); // follow-up queued while it runs
+    expect(consumeAuthored('s1')).toBe(true); // running turn completes
+    noteRunStarted('s1', 0); // the server dispatches the draft
+    expect(consumeAuthored('s1')).toBe(true); // the draft's run completes
     expect(consumeAuthored('s1')).toBe(false);
   });
 
-  test('a draft the server dispatched (gone, a run started) keeps its count', () => {
-    noteDraftQueued('s1', 1);
-    reconcileDraftGone('s1', 2);
-    expect(consumeAuthored('s1')).toBe(true);
+  test('a turn started elsewhere cannot spend the draft\'s count', () => {
+    noteDraftQueued('s1'); // queued while a phone's turn runs
+    expect(consumeAuthored('s1')).toBe(false); // the phone's turn completes: silent
+    noteRunStarted('s1', 0);
+    expect(consumeAuthored('s1')).toBe(true); // this page's draft: spoken
   });
 
-  test('withdrawing a draft this page did not queue changes nothing', () => {
-    notePromptSent('s1');
-    withdrawDraft('s1');
-    reconcileDraftGone('s1', 5);
+  test('updating a queued draft does not count it twice', () => {
+    noteDraftQueued('s1');
+    noteDraftQueued('s1');
+    noteRunStarted('s1', 0);
     expect(authoredCount('s1')).toBe(1);
+  });
+
+  test('a draft queued and edited back or deleted leaves nothing a scheduled run could spend', () => {
+    noteDraftQueued('s1');
+    withdrawDraft('s1');
+    noteRunStarted('s1', 0);
+    expect(consumeAuthored('s1')).toBe(false);
+  });
+
+  test('a draft removed on another device (gone, no run within the grace) leaves nothing', () => {
+    noteDraftQueued('s1');
+    reconcileDraftGone('s1', 1_000);
+    noteRunStarted('s1', 1_000 + DRAFT_DISPATCH_GRACE_MS + 1);
+    expect(consumeAuthored('s1')).toBe(false);
+    expect(isDraftArmed('s1')).toBe(false);
+  });
+
+  test('a draft the server claimed a moment before its run\'s first frame still counts', () => {
+    noteDraftQueued('s1');
+    reconcileDraftGone('s1', 1_000);
+    noteRunStarted('s1', 3_000);
+    expect(consumeAuthored('s1')).toBe(true);
   });
 
   test('ignores a missing session id', () => {
     notePromptSent(null);
-    noteDraftQueued(undefined, 0);
+    noteDraftQueued(undefined);
+    noteRunStarted(null, 0);
     expect(consumeAuthored(null)).toBe(false);
   });
 });

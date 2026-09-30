@@ -81,6 +81,8 @@ const subscribeAnnouncements = (listener: () => void) => {
   };
 };
 
+export const voiceAnnouncement = (): Announcement | null => announcement;
+
 export function useVoiceAnnouncement(): Announcement | null {
   return useSyncExternalStore(subscribeAnnouncements, () => announcement, () => announcement);
 }
