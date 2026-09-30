@@ -123,7 +123,11 @@
       "ctrlEnter": "Ctrl+Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands",
       "enter": "Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands",
       "queue": "Enter to queue your next message",
-      "updateQueued": "Enter to update queued message"
+      "updateQueued": "Enter to update queued message",
+      "sendModes": "Enter · after turn — Ctrl+Enter · after next tool call — Ctrl+Shift+Enter · now",
+      "sendModesCtrlEnter": "Ctrl+Enter · after turn — Ctrl+Shift+Enter · after next tool call — Ctrl+Alt+Enter · now",
+      "sendModesNoSteer": "Enter · after turn — Ctrl+Shift+Enter · now",
+      "sendModesNoSteerCtrlEnter": "Ctrl+Enter · after turn — Ctrl+Alt+Enter · now"
     },
     "clickToChangeMode": "Click to change permission mode (or press Tab in input)",
     "showAllCommands": "Show all commands",
@@ -136,6 +140,12 @@
       "willSend": "Will send when this finishes",
       "edit": "Edit queued message",
       "delete": "Delete queued message"
+    },
+    "sendMode": {
+      "menuLabel": "Send mode",
+      "queue": "After turn",
+      "steer": "After next tool call",
+      "interrupt": "Now"
     }
   },
   "composer": {

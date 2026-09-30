@@ -21,6 +21,7 @@ import { useScheduledMessages } from '@/modules/chat/composer/useScheduledMessag
 import { useChatSessionState } from '@/modules/chat/hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '@/modules/chat/hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
+import type { ComposerSendMode } from '@/modules/chat/hooks/useChatComposerState';
 import { useSessionStore } from '@/modules/chat/hooks/useSessionStore';
 import {
   useProcessingSessions,
@@ -217,6 +218,13 @@ function ChatInterface({
     queuedDraft,
     editQueuedDraft,
     deleteQueuedDraft,
+    sendQueuedDraft,
+    sendMode,
+    setSendMode,
+    canSteer,
+    handleSteerAcked,
+    handleSteerRejected,
+    handleSteerSettled,
     handleVoiceTranscript,
     handleInputChange,
     handleKeyDown,
@@ -262,6 +270,17 @@ function ChatInterface({
     resolvePermissionModeForProvider,
   });
 
+  // Threads the composer's chosen send mode (queue/steer/interrupt) through to
+  // `handleSubmit`'s `queuedSubmission` slot, which the direct-form `onSubmit`
+  // prop never needs to fill in.
+  const handleSubmitWithMode = useCallback(
+    (
+      event: Parameters<typeof handleSubmit>[0],
+      submitOptions?: { mode?: ComposerSendMode },
+    ) => handleSubmit(event, undefined, submitOptions),
+    [handleSubmit],
+  );
+
   // On WebSocket reconnect, request a bounded persisted-tail sync (deferred
   // while Chat is hidden), then re-subscribe — the
   // `chat_subscribed` ack restores or clears the activity indicator, replays
@@ -295,6 +314,9 @@ function ChatInterface({
     onSessionProcessing,
     onSessionIdle,
     onSessionBackground,
+    onSteerAcked: handleSteerAcked,
+    onSteerRejected: handleSteerRejected,
+    onSteerSettled: handleSteerSettled,
     getSessionActivity,
     onWebSocketReconnect: handleWebSocketReconnect,
     requestLatestMessages,
@@ -560,11 +582,15 @@ function ChatInterface({
           onToggleCommandMenu={handleToggleCommandMenu}
           hasInput={Boolean(input.trim())}
           onClearInput={handleClearInput}
-          onSubmit={handleSubmit}
+          onSubmit={handleSubmitWithMode}
           isDragActive={isDragActive}
           queuedDraft={queuedDraft}
           onEditQueuedDraft={editQueuedDraft}
           onDeleteQueuedDraft={deleteQueuedDraft}
+          onSendQueuedDraft={sendQueuedDraft}
+          sendMode={sendMode}
+          onSelectSendMode={setSendMode}
+          canSteer={canSteer}
           attachedFiles={attachedFiles}
           onRemoveAttachment={(index) =>
             setAttachedFiles((previous) =>

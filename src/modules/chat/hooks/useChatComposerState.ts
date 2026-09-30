@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '@/shared/api';
 import { PROVIDER_PERMISSION_PREFERENCE_KEYS } from '@/shared/constants';
 import { readUserPreference } from '@/shared/userSettings';
+import { providerCanSteer } from '@/shared/utils';
 import type { CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
 import { grantClaudeToolPermission } from '@/modules/chat/utils/chatPermissions';
 import {
@@ -74,6 +75,15 @@ type MentionableFile = {
   path: string;
 };
 
+/** One outstanding `chat.steer` send, queued per-session in `pendingSteerRef`. */
+type PendingSteer = {
+  sessionId: string;
+  content: string;
+  attachments: File[];
+  uploadedAttachments: unknown[];
+  options: QueuedSendOptions;
+};
+
 type CommandExecutionResult = {
   type: 'builtin' | 'custom';
   action?: string;
@@ -94,6 +104,45 @@ const createFakeSubmitEvent = () => {
 
 const MAX_ATTACHMENT_COUNT = 10;
 const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024;
+
+/**
+ * How the composer's Send action behaves while a turn is already in flight.
+ * `queue` (the pre-existing behaviour) waits for the turn to finish; `steer`
+ * folds the message into the running turn at its next tool boundary via
+ * `chat.steer`; `interrupt` aborts the running turn and starts a new one via
+ * `chat.send` with `options.interrupt: true`. Idle sends are unaffected by
+ * this and always behave like `queue`'s direct-send fallback.
+ */
+export type ComposerSendMode = 'queue' | 'steer' | 'interrupt';
+
+const SEND_MODE_STORAGE_KEY = 'chat.composerSendMode';
+
+/**
+ * Persisted directly in localStorage rather than through the shared
+ * `uiPreferences` blob: that blob is a closed set of booleans owned entirely
+ * by `uiPreferencesReducer` (shared/uiPreferences.ts), and any consumer that
+ * changes one of ITS preferences re-serializes the whole blob from reducer
+ * state alone — silently dropping an extra string field stashed inside it.
+ * A dedicated key sidesteps that without editing shared preference code.
+ */
+const readStoredSendMode = (): ComposerSendMode => {
+  try {
+    const raw = typeof localStorage === 'undefined' ? null : localStorage.getItem(SEND_MODE_STORAGE_KEY);
+    return raw === 'steer' || raw === 'interrupt' ? raw : 'queue';
+  } catch {
+    return 'queue';
+  }
+};
+
+const writeStoredSendMode = (mode: ComposerSendMode): void => {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(SEND_MODE_STORAGE_KEY, mode);
+    }
+  } catch {
+    // Best-effort only: the in-memory sendMode state still drives this session.
+  }
+};
 
 const isImageAttachment = (attachment: ChatAttachment) => {
   if (attachment.mimeType?.startsWith('image/')) return true;
@@ -193,6 +242,11 @@ export function useChatComposerState({
   setPendingPermissionRequests,
 }: UseChatComposerStateArgs) {
   const { t } = useTranslation('chat');
+  // Only `claude` supports `chat.steer` server-side (see providerCanSteer).
+  // Gates every steer entry point below: the persisted/keyboard send mode,
+  // handleSubmit's own steer branch, and the composer/queued-card UI passed
+  // back to the caller.
+  const canSteer = providerCanSteer(provider);
   // The composer text together with the chat scope it belongs to. They are one
   // state rather than a value plus a ref because they have to move in lockstep:
   // on a session switch there is one commit where the scope has already changed
@@ -312,6 +366,37 @@ export function useChatComposerState({
   // while `queuedDraft` still holds the old session's draft; the persistence
   // effect must not write across that gap.
   const queuedDraftSessionRef = useRef<string | null>(sessionKey);
+  // Mirrors `queuedDraft` for handleSteerRejected's merge below, which needs
+  // its current in-memory File[] list but must not itself change identity on
+  // every queue/edit/clear — it is a dependency of the websocket subscription
+  // effect in useChatRealtimeHandlers, and `queuedDraft` changes far more
+  // often than that effect should tear down and resubscribe.
+  const queuedDraftRef = useRef(queuedDraft);
+  useEffect(() => {
+    queuedDraftRef.current = queuedDraft;
+  }, [queuedDraft]);
+
+  // The last mode the user picked (keyboard shortcut or split-button menu),
+  // shown as the split button's primary action and persisted across reloads.
+  const [rawSendMode, setSendModeState] = useState<ComposerSendMode>(() => readStoredSendMode());
+  const setSendMode = useCallback((mode: ComposerSendMode) => {
+    setSendModeState(mode);
+    writeStoredSendMode(mode);
+  }, []);
+  // A `steer` choice persisted from a session on a different provider (or
+  // from before this provider lost steer support) must not carry over to one
+  // that can't fold messages into a running turn — every attempt there would
+  // get STEER_UNSUPPORTED. Falls back to `queue`; `interrupt` is unaffected,
+  // since aborting-and-resending works for every provider.
+  const sendMode = !canSteer && rawSendMode === 'steer' ? 'queue' : rawSendMode;
+
+  // A `chat.steer` sent but not yet acked or rejected by the server. Each
+  // session keeps its own FIFO queue (not a single slot) because a second
+  // steer can be sent for the same session before the first one's ack or
+  // rejection comes back; `chat_steered`/`STEER_UNSUPPORTED`/`RUN_IN_PROGRESS`
+  // always resolve the OLDEST outstanding steer for that session, mirroring
+  // the order the server folds them in.
+  const pendingSteerRef = useRef<Map<string, PendingSteer[]>>(new Map());
 
   const handleBuiltInCommand = useCallback(
     (result: CommandExecutionResult) => {
@@ -666,11 +751,46 @@ export function useChatComposerState({
     async (
       event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
       queuedSubmission?: QueuedDraft,
+      submitOptions?: { mode?: ComposerSendMode },
     ) => {
       event.preventDefault();
+      const requestedMode: ComposerSendMode = submitOptions?.mode ?? 'queue';
+      // A `steer` request against a provider that can't fold into a running
+      // turn (see `canSteer`) falls back to the ordinary queue path instead
+      // of firing a `chat.steer` the server always rejects — this is the
+      // same fallback the composer's own mode picker/shortcuts apply before
+      // ever calling handleSubmit, kept here too since a caller can also
+      // pass `{ mode: 'steer' }` directly (e.g. a replayed queued submission).
+      const mode: ComposerSendMode = requestedMode === 'steer' && !canSteer ? 'queue' : requestedMode;
       const currentInput = queuedSubmission?.content ?? inputValueRef.current;
       const currentAttachments = queuedSubmission?.attachments ?? attachedFiles;
       const previouslyUploadedAttachments = queuedSubmission?.uploadedAttachments ?? [];
+
+      // `sendQueuedDraft` clears the persisted queued draft BEFORE calling
+      // handleSubmit (so a second "Send now" click can't fire twice against
+      // the same text while this call is still in flight) — which means any
+      // early return below that received a `queuedSubmission` must put it
+      // back, or the draft just vanishes. Reuses the same persistence calls
+      // the ordinary queue path uses (~L863 below).
+      const restoreQueuedSubmission = (submission: QueuedDraft) => {
+        const targetKey = queuedDraftSessionRef.current ?? sessionKey;
+        if (!targetKey) {
+          return;
+        }
+        writeQueuedMessage(targetKey, {
+          content: submission.content,
+          options: submission.options,
+          attachments: submission.uploadedAttachments,
+        });
+        // Same guard the ordinary queue path uses below: only attach the
+        // restored draft to this composer's own UI state when it is still
+        // showing the session the draft belongs to.
+        if (sessionKeyRef.current === targetKey) {
+          queuedDraftSessionRef.current = targetKey;
+          setQueuedDraft(submission);
+        }
+      };
+
       if (
         (
           !currentInput.trim()
@@ -679,13 +799,105 @@ export function useChatComposerState({
         )
         || !selectedProject
       ) {
+        if (queuedSubmission) {
+          restoreQueuedSubmission(queuedSubmission);
+        }
         return;
       }
 
-      // A turn is already in flight: stash this message instead of sending it.
-      // Upload attached files now so the queued record contains durable image
-      // descriptors that can be sent even if another session is open later.
-      if (isLoading) {
+      // A turn is already in flight: fold the message into it (steer), stop it
+      // and start a new one (interrupt falls through to the direct-send path
+      // below instead), or stash it for after (queue — the pre-existing
+      // behaviour). Idle sends always fall through unconditionally.
+      if (isLoading && mode !== 'interrupt') {
+        if (mode === 'steer') {
+          const steerSessionId = sessionKey;
+          if (!steerSessionId) {
+            return;
+          }
+
+          const steerOptions = queuedSubmission?.options ?? buildSendOptions(currentInput);
+          let steerUploadedAttachments = previouslyUploadedAttachments;
+          const needsSteerUpload = steerUploadedAttachments.length === 0 && currentAttachments.length > 0;
+
+          // Clear the composer now, before the upload below, not after it —
+          // otherwise a second steer submitted while the first one's
+          // attachments are still uploading fires against the same text and
+          // files a second time. Restored below only if the upload fails.
+          //
+          // Only when this steer came FROM the live composer: a steer
+          // replayed from a queued draft (`queuedSubmission` set, via
+          // `sendQueuedDraft('steer')`) never put its content in the
+          // composer in the first place, so clearing here would wipe
+          // whatever the user is currently typing instead.
+          if (!queuedSubmission) {
+            setInput('');
+            inputValueRef.current = '';
+            setAttachedFiles([]);
+            setFileErrors(new Map());
+            setIsTextareaExpanded(false);
+            if (textareaRef.current) {
+              textareaRef.current.style.height = 'auto';
+            }
+            if (draftScopeRef.current) {
+              writeDraftText(draftScopeRef.current, '');
+            }
+          }
+
+          if (needsSteerUpload) {
+            try {
+              steerUploadedAttachments = await uploadAttachmentFiles(currentAttachments);
+            } catch (error) {
+              const message = error instanceof Error ? error.message : 'Unknown error';
+              console.error('Steer file upload failed:', error);
+              // Put the composer back the way the user left it instead of
+              // silently dropping their text and attachments.
+              if (queuedSubmission) {
+                restoreQueuedSubmission(queuedSubmission);
+              } else {
+                setInput(currentInput);
+                inputValueRef.current = currentInput;
+                setAttachedFiles(currentAttachments);
+              }
+              addMessage({
+                type: 'error',
+                content: `Failed to upload files: ${message}`,
+                timestamp: new Date(),
+              });
+              return;
+            }
+          }
+
+          // Remembered until the server acks (`chat_steered`, dropped) or
+          // rejects (`STEER_UNSUPPORTED`/`RUN_IN_PROGRESS`, silently
+          // re-queued) — see handleSteerAcked/handleSteerRejected below.
+          // Appended, not overwritten: a second steer can be sent for this
+          // session before the first one's ack/rejection comes back.
+          const pendingSteer: PendingSteer = {
+            sessionId: steerSessionId,
+            content: currentInput,
+            attachments: currentAttachments,
+            uploadedAttachments: steerUploadedAttachments,
+            options: steerOptions,
+          };
+          const existingPendingSteers = pendingSteerRef.current.get(steerSessionId) ?? [];
+          pendingSteerRef.current.set(steerSessionId, [...existingPendingSteers, pendingSteer]);
+
+          sendMessage({
+            type: 'chat.steer',
+            sessionId: steerSessionId,
+            content: currentInput,
+            options: {
+              ...steerOptions,
+              attachments: steerUploadedAttachments,
+            },
+          });
+
+          recordSentMessage(currentInput, steerSessionId);
+          resetCommandMenuState();
+          return;
+        }
+
         // A run can restart in the tiny gap between scheduling and flushing a
         // queued submission. Put the same durable draft back without uploading
         // its files again.
@@ -758,9 +970,14 @@ export function useChatComposerState({
 
       // Intercept slash commands only when "/" is the first input character.
       // Also accept exact "help" as a convenience alias for users who expect CLI-style help.
+      // Skipped entirely for a replayed `queuedSubmission`: it was composed
+      // and queued as a plain chat message while a turn was busy, so
+      // reinterpreting it as a command now — instead of sending it, or
+      // losing it if nothing matched cleanly — would surprise whoever queued
+      // it. Falls through to the ordinary send path below unchanged.
       const commandInput = currentInput.trimEnd();
       const isHelpAlias = commandInput.trim().toLowerCase() === 'help';
-      if (commandInput.startsWith('/') || isHelpAlias) {
+      if (!queuedSubmission && (commandInput.startsWith('/') || isHelpAlias)) {
         const firstSpace = commandInput.indexOf(' ');
         const commandName = isHelpAlias
           ? '/help'
@@ -869,8 +1086,12 @@ export function useChatComposerState({
       // under: the agents, workflows and commands it still has going are
       // stopped, or finish where nothing is listening. Sending is the user's
       // call, but not one to make for them.
+      //
+      // A replayed interrupt-mode `queuedSubmission` already cleared this
+      // with the user in `sendQueuedDraft`, before it cleared the draft —
+      // asking again here would double-prompt for the same background work.
       const backgroundActivity = processingSessionsRef.current?.get(targetSessionId);
-      if (backgroundActivity?.background) {
+      if (backgroundActivity?.background && !(queuedSubmission && mode === 'interrupt')) {
         const work = ownBackgroundTasks(backgroundActivity.tasks ?? [])
           .map((task) => `• ${describeBackgroundTask(task, t)}`)
           .join('\n');
@@ -879,6 +1100,9 @@ export function useChatComposerState({
           defaultValue: 'This session still has background work running:\n{{work}}\n\nA new message starts a new turn, which stops that work; anything it has not reported yet is lost. Send anyway?',
         }));
         if (!confirmed) {
+          if (queuedSubmission) {
+            restoreQueuedSubmission(queuedSubmission);
+          }
           return;
         }
       }
@@ -922,6 +1146,7 @@ export function useChatComposerState({
         options: {
           ...(queuedSubmission?.options ?? buildSendOptions(messageContent)),
           attachments: uploadedAttachments,
+          ...(mode === 'interrupt' ? { interrupt: true } : {}),
         },
       });
       setEditingAnchorId(null);
@@ -950,6 +1175,7 @@ export function useChatComposerState({
       selectedSession,
       attachedFiles,
       buildSendOptions,
+      canSteer,
       currentSessionId,
       editingAnchorId,
       executeCommand,
@@ -1009,6 +1235,174 @@ export function useChatComposerState({
   const deleteQueuedDraft = useCallback(() => {
     setQueuedDraft(null);
   }, []);
+
+  /**
+   * Dispatches the already-queued draft immediately, by steering it into the
+   * running turn or interrupting that turn to send it now. Clears the queue
+   * (locally and on the server) FIRST, so the server's own dispatcher never
+   * races this and double-sends the same text once the turn ends.
+   */
+  const sendQueuedDraft = useCallback((mode: 'steer' | 'interrupt') => {
+    const draft = queuedDraft;
+    if (!draft) {
+      return;
+    }
+    const targetKey = queuedDraftSessionRef.current ?? sessionKey;
+
+    // Interrupt mode can hit the same "background work still running" gate
+    // handleSubmit itself guards — replacing the turn stops anything that
+    // hasn't reported back yet. Ask BEFORE clearing the draft below: a
+    // cancelled confirm used to arrive after the draft was already gone,
+    // losing it for nothing. handleSubmit's own copy of this gate is skipped
+    // for this exact replay (queuedSubmission + mode 'interrupt') so the user
+    // is only asked once.
+    if (mode === 'interrupt' && targetKey) {
+      const backgroundActivity = processingSessionsRef.current?.get(targetKey);
+      if (backgroundActivity?.background) {
+        const work = ownBackgroundTasks(backgroundActivity.tasks ?? [])
+          .map((task) => `• ${describeBackgroundTask(task, t)}`)
+          .join('\n');
+        const confirmed = window.confirm(t('claudeStatus.backgroundTask.sendAnyway', {
+          work,
+          defaultValue: 'This session still has background work running:\n{{work}}\n\nA new message starts a new turn, which stops that work; anything it has not reported yet is lost. Send anyway?',
+        }));
+        if (!confirmed) {
+          return;
+        }
+      }
+    }
+
+    if (targetKey) {
+      clearQueuedMessage(targetKey);
+    }
+    setQueuedDraft(null);
+    void handleSubmit(createFakeSubmitEvent(), draft, { mode });
+  }, [queuedDraft, sessionKey, handleSubmit, t]);
+
+  /**
+   * Pops the oldest outstanding steer for `sessionId` off its FIFO queue and
+   * returns it, or `null` when none is pending. Shared by the ack and
+   * rejection handlers, which both resolve exactly one queued steer per
+   * server response — never the whole queue at once, since only one steer at
+   * a time is actually in flight to the server.
+   */
+  const shiftPendingSteer = useCallback((sessionId: string): PendingSteer | null => {
+    const queue = pendingSteerRef.current.get(sessionId);
+    if (!queue || queue.length === 0) {
+      return null;
+    }
+    const [oldest, ...rest] = queue;
+    if (rest.length > 0) {
+      pendingSteerRef.current.set(sessionId, rest);
+    } else {
+      pendingSteerRef.current.delete(sessionId);
+    }
+    return oldest;
+  }, []);
+
+  /**
+   * `chat_steered` ack: either a real fold (a `uuid` — the running turn
+   * absorbed the message, nothing left to reconcile) or the server's
+   * fallback (`fallback: true`, no `uuid` — nothing was running, so it
+   * dispatched an ordinary run instead; see chat-websocket.service.ts's
+   * `handleChatSteer`). Either way the bubble itself is NOT added here: the
+   * server echoes the same message back on the run stream in both cases
+   * (`steered: true` for a fold, `steered: false` for the fallback's own
+   * run — see handleChatSteer), and `useChatRealtimeHandlers` renders it
+   * from there like any other run message. The fallback case still needs
+   * something a real fold doesn't: nothing marked this session processing
+   * yet (a fold rides an already-processing session; the fallback started a
+   * turn on what was, until now, an idle one), so the Stop button/spinner
+   * would otherwise never show for it.
+   */
+  const handleSteerAcked = useCallback((sessionId: string, _uuid?: string, fallback?: boolean) => {
+    shiftPendingSteer(sessionId);
+    if (fallback) {
+      onSessionProcessing?.(sessionId, { statusText: null, canInterrupt: true });
+    }
+  }, [shiftPendingSteer, onSessionProcessing]);
+
+  /**
+   * A session's turn ended — drop whatever `chat.steer` it still has
+   * outstanding. The turn a pending steer was pushed at cannot fold it (or
+   * fall back for it) after the fact, so a late ack/rejection arriving for
+   * it must not be allowed to act on a session that has already moved on to
+   * a different turn.
+   */
+  const handleSteerSettled = useCallback((sessionId: string) => {
+    pendingSteerRef.current.delete(sessionId);
+  }, []);
+
+  /**
+   * `STEER_UNSUPPORTED` or `RUN_IN_PROGRESS`: the server could not fold the
+   * message into the running turn. Silently falls back to an ordinary queued
+   * draft — no error row, and the session is NOT marked idle, because its
+   * turn is still running.
+   *
+   * Only true when a pending steer for this session was actually consumed.
+   * An ordinary `chat.send` refused with the same `RUN_IN_PROGRESS` code
+   * (second tab, stale idle state, no steer in flight) must NOT be silently
+   * swallowed — the caller falls through to its normal error-row + idle
+   * handling when this returns false.
+   */
+  const handleSteerRejected = useCallback((sessionId: string, _code?: string): boolean => {
+    const pending = shiftPendingSteer(sessionId);
+    if (!pending) {
+      return false;
+    }
+
+    // The queue is one slot per session (writeQueuedMessage/setQueuedDraft
+    // replace it) — a message already sitting there (queued while this steer
+    // was in flight, or left behind by an earlier rejected steer for the
+    // same session; see pendingSteerRef's FIFO note above `shiftPendingSteer`)
+    // must be merged into, not overwritten, or it silently vanishes.
+    // `readQueuedMessage` reads the same synchronous in-memory store
+    // `writeQueuedMessage` writes below, so it is authoritative regardless of
+    // whether this session's queued draft is currently mounted in this
+    // composer.
+    const existingStored = readQueuedMessage(sessionId);
+    const existingContent = existingStored?.content?.trim() ? existingStored : null;
+    const hasExistingContent = existingContent !== null;
+    const mergedContent = existingContent
+      ? `${existingContent.content}\n\n${pending.content}`
+      : pending.content;
+    // The earlier queued message's options (model/effort/permission mode/…)
+    // win: it was composed first, so re-picking the later steer's options
+    // would silently change what the earlier text sends under.
+    const mergedOptions = existingContent
+      ? existingContent.options ?? pending.options
+      : pending.options;
+    const mergedUploadedAttachments = existingContent
+      ? [...(existingContent.attachments ?? []), ...pending.uploadedAttachments]
+      : pending.uploadedAttachments;
+
+    writeQueuedMessage(sessionId, {
+      content: mergedContent,
+      options: mergedOptions,
+      attachments: mergedUploadedAttachments,
+    });
+    // Only attach the re-queued draft to this composer's own UI state when
+    // it is still showing the session the steer was rejected for — the same
+    // guard the ordinary queue path uses (see the `sessionKeyRef.current !==
+    // queuedSessionKey` check above) to avoid a session switch racing the
+    // rejection and stamping the wrong session's composer.
+    if (sessionKeyRef.current === sessionId) {
+      // In-memory File objects, merged in the same order: the previously
+      // queued draft's own File list — only meaningful when it's this same
+      // mounted session's queuedDraft — followed by this steer's.
+      const priorFiles = hasExistingContent && queuedDraftSessionRef.current === sessionId
+        ? queuedDraftRef.current?.attachments ?? []
+        : [];
+      queuedDraftSessionRef.current = sessionId;
+      setQueuedDraft({
+        content: mergedContent,
+        attachments: [...priorFiles, ...pending.attachments],
+        uploadedAttachments: mergedUploadedAttachments,
+        options: mergedOptions,
+      });
+    }
+    return true;
+  }, [shiftPendingSteer]);
 
   // A voice transcript either fills the input (to edit before sending) or, when the
   // user tapped "stop and send", is submitted straight away. Mirror the value into
@@ -1159,6 +1553,59 @@ export function useChatComposerState({
           return;
         }
 
+        // While a turn is in flight the modifier combo picks the send mode
+        // instead of just submitting: Enter alone always stays "after turn"
+        // (the pre-existing queue behaviour); which combo maps to steer vs.
+        // interrupt swaps once `sendByCtrlEnter` claims plain Ctrl+Enter as
+        // the idle send key. Shift+Enter (no other modifier) is left alone in
+        // both cases so it still inserts a newline.
+        if (isLoading) {
+          // A shortcut that maps to 'steer' on a provider that can't fold
+          // into a running turn (see `canSteer`) falls back to 'queue'
+          // instead — handleSubmit would silently do the same, but
+          // resolving here too keeps the persisted last-used mode itself
+          // from being stamped 'steer' for a provider that will never honor
+          // it.
+          const resolveMode = (requested: ComposerSendMode): ComposerSendMode =>
+            requested === 'steer' && !canSteer ? 'queue' : requested;
+
+          if (!sendByCtrlEnter) {
+            if (event.ctrlKey || event.metaKey) {
+              event.preventDefault();
+              const mode = resolveMode(event.shiftKey ? 'interrupt' : 'steer');
+              setSendMode(mode);
+              handleSubmit(event, undefined, { mode });
+              return;
+            }
+            if (!event.shiftKey) {
+              event.preventDefault();
+              setSendMode('queue');
+              handleSubmit(event, undefined, { mode: 'queue' });
+            }
+            return;
+          }
+
+          if ((event.ctrlKey || event.metaKey) && event.altKey && !event.shiftKey) {
+            event.preventDefault();
+            setSendMode('interrupt');
+            handleSubmit(event, undefined, { mode: 'interrupt' });
+            return;
+          }
+          if ((event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey) {
+            event.preventDefault();
+            const mode = resolveMode('steer');
+            setSendMode(mode);
+            handleSubmit(event, undefined, { mode });
+            return;
+          }
+          if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey) {
+            event.preventDefault();
+            setSendMode('queue');
+            handleSubmit(event, undefined, { mode: 'queue' });
+          }
+          return;
+        }
+
         if ((event.ctrlKey || event.metaKey) && !event.shiftKey) {
           event.preventDefault();
           handleSubmit(event);
@@ -1169,12 +1616,15 @@ export function useChatComposerState({
       }
     },
     [
+      canSteer,
       cyclePermissionMode,
       handleCommandMenuKeyDown,
       handleFileMentionsKeyDown,
       handleHistoryKeyDown,
       handleSubmit,
+      isLoading,
       sendByCtrlEnter,
+      setSendMode,
       showCommandMenu,
       showFileDropdown,
     ],
@@ -1324,6 +1774,13 @@ export function useChatComposerState({
     queuedDraft,
     editQueuedDraft,
     deleteQueuedDraft,
+    sendQueuedDraft,
+    sendMode,
+    setSendMode,
+    canSteer,
+    handleSteerAcked,
+    handleSteerRejected,
+    handleSteerSettled,
     handleVoiceTranscript,
     handleInputChange,
     handleKeyDown,

@@ -1,7 +1,7 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
-import type { Project, ProjectSession, QuickSettingsTab, SlashCommand } from '@/shared/types';
+import type { LLMProvider, Project, ProjectSession, QuickSettingsTab, SlashCommand } from '@/shared/types';
 
 //----------------- DEPLOYMENT MODE ------------
 
@@ -10,6 +10,23 @@ import type { Project, ProjectSession, QuickSettingsTab, SlashCommand } from '@/
  * Read it to hide or gate features that only exist in one of the two deployments.
  */
 export const IS_PLATFORM = import.meta.env?.VITE_IS_PLATFORM === 'true';
+
+// ---------------------------
+
+//----------------- CHAT PROVIDER CAPABILITIES ------------
+
+/**
+ * Only the `claude` runtime implements `steer` (see
+ * provider-runtime.service.ts's `canSteer`, which checks for a
+ * `runtime.steer` function on the resolved provider) — Codex/Cursor/OpenCode
+ * reject every `chat.steer` frame with `STEER_UNSUPPORTED`. Used by the chat
+ * composer (useChatComposerState, ComposerSendModeMenu, QueuedMessageCard) to
+ * mirror that server-side check so the UI never offers a send mode the
+ * server will always refuse.
+ */
+export function providerCanSteer(provider: LLMProvider): boolean {
+  return provider === 'claude';
+}
 
 // ---------------------------
 
