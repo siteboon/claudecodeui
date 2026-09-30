@@ -144,14 +144,14 @@ CloudCLI UI adalah lapisan UI open source yang menjadi dasar CloudCLI Cloud. And
 
 ## Konfigurasi Keamanan & Tools
 
-**🔒 Pemberitahuan Penting**: Semua tools Claude Code **dinonaktifkan secara default**. Ini mencegah operasi yang berpotensi berbahaya berjalan secara otomatis.
+**🔒 Pemberitahuan Penting**: Tools Claude Code tersedia secara default. Pengaturan tools dan mode izin menentukan tools yang dapat digunakan serta apakah suatu operasi memerlukan persetujuan atau dibatasi.
 
-### Mengaktifkan Tools
+### Mengatur Tools dan Izin
 
-Untuk menggunakan seluruh fungsi Claude Code, Anda perlu mengaktifkan tools secara manual:
+Gunakan Pengaturan Tools untuk membatasi tools yang dapat digunakan. Permintaan API non-interaktif menggunakan `bypassPermissions`, sehingga tools yang tersedia dapat berjalan tanpa persetujuan interaktif:
 
 1. **Buka Pengaturan Tools** - Klik ikon roda gigi di sidebar
-2. **Aktifkan Secara Selektif** - Aktifkan hanya tools yang Anda perlukan
+2. **Batasi Secara Selektif** - Izinkan hanya tools yang Anda perlukan
 3. **Terapkan Pengaturan** - Preferensi Anda disimpan secara lokal
 
 <div align="center">
@@ -161,7 +161,7 @@ Untuk menggunakan seluruh fungsi Claude Code, Anda perlu mengaktifkan tools seca
 
 </div>
 
-**Pendekatan yang direkomendasikan**: Mulailah dengan tools dasar yang diaktifkan, lalu tambahkan sesuai kebutuhan. Anda selalu dapat menyesuaikan pengaturan ini nanti.
+**Pendekatan yang direkomendasikan**: Batasi tools sesuai kebutuhan dan gunakan mode izin yang sesuai dengan tingkat akses yang Anda inginkan. Anda selalu dapat menyesuaikan pengaturan ini nanti.
 
 ---
 
