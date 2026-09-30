@@ -1,6 +1,7 @@
 import {
   Bell,
   Bot,
+  CircleUserRound,
   GitBranch,
   Info,
   KeyRound,
@@ -55,6 +56,7 @@ type SettingsMainTabMeta = {
  * the command palette turns each entry into an "open settings" command, so both stay in sync.
  */
 export const SETTINGS_MAIN_TABS: SettingsMainTabMeta[] = [
+  { id: 'account', label: 'Account', keywords: 'account password logout profile', icon: CircleUserRound },
   { id: 'agents', label: 'Agents', keywords: 'agents subagents claude code', icon: Bot },
   { id: 'appearance', label: 'Appearance', keywords: 'appearance theme dark light language', icon: Palette },
   { id: 'git', label: 'Git', keywords: 'git github commits', icon: GitBranch },
