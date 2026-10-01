@@ -337,8 +337,11 @@
   "misc": {
     "errorTitle": "Something went wrong",
     "errorDescription": "An error occurred while loading the chat interface.",
+    "appErrorTitle": "Something went wrong",
+    "appErrorDescription": "The app hit an unexpected error and couldn't continue. Reloading usually fixes this.",
     "errorDetails": "Error Details",
     "tryAgain": "Try Again",
+    "reloadApp": "Reload",
     "projectFallback": "Project",
     "openMenu": "Open menu",
     "noProjectSelected": "No Project Selected",
