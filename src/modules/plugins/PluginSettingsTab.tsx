@@ -36,6 +36,7 @@ const GITHUB_ISSUES_BOARD_PLUGIN_URL = 'https://github.com/szmidtpiotr/claude-gi
 const CLAUDE_USAGE_PLUGIN_URL = 'https://github.com/HandyS11/cloudcli-plugin-claude-usage';
 const CODEX_USAGE_PLUGIN_URL = 'https://github.com/dongwook-chan/cloudcli-plugin-codex-usage';
 const GLM_USAGE_PLUGIN_URL = 'https://github.com/realjustinwu/CloudCLI-GLM-Usage';
+const AGENT_MONITOR_PLUGIN_URL = 'https://github.com/notetook/cloudcli-plugin-agent-monitor';
 
 type PluginRecommendation = {
   id: string;
@@ -144,6 +145,14 @@ const UNOFFICIAL_PLUGIN_RECOMMENDATIONS: PluginRecommendation[] = [
     repoUrl: GLM_USAGE_PLUGIN_URL,
     installedNames: ['glm-usage'],
     icon: BarChart3,
+    source: 'unofficial',
+  },
+  {
+    id: 'agent-monitor',
+    translationKey: 'agentMonitorPlugin',
+    repoUrl: AGENT_MONITOR_PLUGIN_URL,
+    installedNames: ['agent-monitor'],
+    icon: Activity,
     source: 'unofficial',
   },
 ];
