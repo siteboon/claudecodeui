@@ -32,7 +32,13 @@
     "loadingSessions": "Cargando sesiones...",
     "unnamed": "Sin nombre",
     "loading": "Cargando...",
-    "showMore": "Mostrar más sesiones"
+    "showMore": "Mostrar más sesiones",
+    "select": "Seleccionar",
+    "selectAll": "Seleccionar todo",
+    "selectAllLoaded": "Seleccionar las cargadas",
+    "clearSelection": "Quitar selección",
+    "deleteSelected_one": "Eliminar {{count}} sesión",
+    "deleteSelected_other": "Eliminar {{count}} sesiones"
   },
   "tooltips": {
     "viewEnvironments": "Ver entornos",
@@ -114,7 +120,9 @@
     "restoreProjectError": "Error al restaurar el proyecto. Inténtalo de nuevo.",
     "restoreSessionFailed": "No se pudo restaurar la sesión. Inténtalo de nuevo.",
     "restoreSessionError": "Error al restaurar la sesión. Inténtalo de nuevo.",
-    "forkSessionError": "No se pudo bifurcar esta sesión. Inténtalo de nuevo."
+    "forkSessionError": "No se pudo bifurcar esta sesión. Inténtalo de nuevo.",
+    "deleteSessionsPartialFailure_one": "No se pudo eliminar {{count}} sesión de {{total}}. Inténtalo de nuevo.",
+    "deleteSessionsPartialFailure_other": "No se pudieron eliminar {{count}} de {{total}} sesiones. Inténtalo de nuevo."
   },
   "version": {
     "updateAvailable": "Actualización disponible",
@@ -149,6 +157,15 @@
     "deleteSessionPermanently": "Eliminar permanentemente",
     "deleteAllData": "Eliminar todos los datos permanentemente",
     "allConversationsDeleted": "El proyecto se quitará de la barra lateral. Tus archivos, memorias y datos de sesión se conservarán.",
-    "cannotUndo": "Puedes volver a añadir el proyecto más tarde."
+    "cannotUndo": "Puedes volver a añadir el proyecto más tarde.",
+    "confirmDeleteSessions": "¿Qué quieres hacer con",
+    "deleteSessions_one": "Eliminar {{count}} sesión",
+    "deleteSessions_other": "Eliminar {{count}} sesiones",
+    "selectedSessions_one": "{{count}} sesión seleccionada",
+    "selectedSessions_other": "{{count}} sesiones seleccionadas",
+    "archiveSessions_one": "Archivar {{count}} sesión",
+    "archiveSessions_other": "Archivar {{count}} sesiones",
+    "archiveSessionsNotice_one": "Archivar mantiene la sesión fuera de la lista activa y conserva su historial.",
+    "archiveSessionsNotice_other": "Archivar mantiene las sesiones fuera de la lista activa y conserva su historial."
   }
 }

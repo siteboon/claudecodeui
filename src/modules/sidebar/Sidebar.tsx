@@ -125,6 +125,12 @@ function Sidebar({
     saveProjectName,
     showDeleteSessionConfirmation,
     confirmDeleteSession,
+    sessionSelection,
+    setProjectSessionSelection,
+    toggleSessionSelected,
+    cancelSessionSelection,
+    showDeleteSelectedSessionsConfirmation,
+    confirmDeleteSessions,
     requestProjectDelete,
     confirmDeleteProject,
     handleProjectSelect,
@@ -145,6 +151,7 @@ function Sidebar({
     selectedProject,
     selectedSession,
     activeSessions,
+    backgroundSessionIds,
     isLoading,
     isMobile,
     t,
@@ -221,6 +228,11 @@ function Sidebar({
     onStartEditingSession: startEditingSession,
     onCancelEditingSession: cancelRename,
     onSaveEditingSession: handleSaveSessionName,
+    sessionSelection,
+    onSetSessionSelection: setProjectSessionSelection,
+    onToggleSessionSelected: toggleSessionSelected,
+    onCancelSessionSelection: cancelSessionSelection,
+    onDeleteSelectedSessions: showDeleteSelectedSessionsConfirmation,
     t,
   };
 
@@ -238,6 +250,7 @@ function Sidebar({
         onCancelDeletion={() => setPendingDeletion(null)}
         onConfirmDeleteProject={confirmDeleteProject}
         onConfirmDeleteSession={confirmDeleteSession}
+        onConfirmDeleteSessions={confirmDeleteSessions}
         showVersionModal={showVersionModal}
         onCloseVersionModal={() => setShowVersionModal(false)}
         releaseInfo={releaseInfo}
