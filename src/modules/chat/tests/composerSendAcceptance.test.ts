@@ -103,10 +103,14 @@ const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => 
   if (url.endsWith('/api/providers/sessions') && init?.method === 'POST') {
     return json({ success: true, data: { sessionId: NEW_SESSION_ID, sessionName: 'hello' } }, 201);
   }
-  if (url.includes(`/api/providers/sessions/${NEW_SESSION_ID}/unsent`) && init?.method === 'DELETE') {
-    return discardOutcome === 'error'
+  const unsentSessionId = /\/api\/providers\/sessions\/([^/?]+)\/unsent/.exec(url)?.[1];
+  if (unsentSessionId && init?.method === 'DELETE') {
+    // Like the server: a session that already holds a conversation is never
+    // deleted, so asking about one answers that its turn was admitted.
+    const outcome = unsentSessionId === NEW_SESSION_ID ? discardOutcome : 'kept';
+    return outcome === 'error'
       ? json({ success: false, error: 'Database is locked' }, 500)
-      : json({ success: true, data: { sessionId: NEW_SESSION_ID, outcome: discardOutcome } });
+      : json({ success: true, data: { sessionId: unsentSessionId, outcome } });
   }
   if (url.endsWith('/api/assets/files') && init?.method === 'POST') {
     return json({ attachments: [{ name: 'screenshot.png', path: '/uploads/screenshot.png', mimeType: 'image/png' }] });
@@ -117,6 +121,11 @@ const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => 
 const callsTo = (fragment: string, method: string) => fetchMock.mock.calls.filter(
   ([input, init]) => String(input).includes(fragment) && init?.method === method,
 );
+
+/** Every DELETE the composer made, whatever it was for. */
+const deleteRequests = () => fetchMock.mock.calls
+  .filter(([, init]) => init?.method === 'DELETE')
+  .map(([input]) => String(input));
 
 /** What a test can change between renders: the open chat and whether it is running a turn. */
 type ComposerProps = { session: ProjectSession | null; isLoading?: boolean };
@@ -248,6 +257,23 @@ test('a first message whose acknowledgement was lost is treated as sent once the
   assert.equal(view.result.current.input, '');
   assert.equal(added.filter((message) => message.type === 'user').length, 1);
   assert.equal(view.result.current.sendError, null);
+});
+
+test('a message to an open chat that never reaches the server keeps the draft and deletes nothing', async () => {
+  const { view, processing, added } = renderComposer(SESSION);
+  await typeMessage(view, 'hello');
+
+  await settle(await startSubmit(view), ACCEPTANCE_TIMEOUT_MS);
+
+  // Only a session made for this very message may be given up. Asking the
+  // server about an existing one would also answer `kept` — it has a
+  // conversation — and pass the lost message off as sent.
+  assert.deepEqual(deleteRequests(), [], 'the conversation is not offered up for deletion');
+  assert.equal(view.result.current.input, 'hello', 'the message is still in the composer');
+  assert.equal(readDraftText(SESSION.id), 'hello', 'and in its saved draft');
+  assert.match(view.result.current.sendError ?? '', /not confirm/i);
+  assert.deepEqual(processing, []);
+  assert.equal(added.some((message) => message.type === 'user'), false);
 });
 
 test('retrying an unconfirmed message reuses its request id, so the server can tell it is the same turn', async () => {
@@ -467,4 +493,52 @@ test('a send shows as pending until the server answers, and its notice can be di
   await act(async () => { view.result.current.dismissSendError(); });
   assert.equal(view.result.current.sendError, null);
   assert.equal(view.result.current.input, 'hello', 'the draft the notice was about stays');
+});
+
+test('an acknowledgement that comes in after its send gave up does not confirm the next message', async () => {
+  // The first attempt was admitted, but its acknowledgement is late.
+  delivery = 'admit';
+  const { view, processing, added } = renderComposer(SESSION);
+  await typeMessage(view, 'hello');
+  await settle(await startSubmit(view), ACCEPTANCE_TIMEOUT_MS);
+
+  // The user rewrites the message and sends that instead: a different turn.
+  await typeMessage(view, 'hello, said differently');
+  const second = await startSubmit(view);
+  assert.notEqual(frames[1]?.clientRequestId, frames[0]?.clientRequestId);
+
+  await act(async () => {
+    acknowledge(frames[0]);
+    await vi.advanceTimersByTimeAsync(1_000);
+  });
+
+  assert.equal(view.result.current.isSendPending, true, 'the second message still waits for its own answer');
+  assert.equal(view.result.current.input, 'hello, said differently');
+  assert.deepEqual(processing, []);
+  assert.equal(added.some((message) => message.type === 'user'), false);
+
+  acknowledge(frames[1]);
+  await settle(second);
+  assert.equal(view.result.current.input, '');
+  assert.deepEqual(added.filter((message) => message.type === 'user').map((message) => message.content), [
+    'hello, said differently',
+  ]);
+});
+
+test('a send stops listening for its acknowledgement once it is answered or gives up', async () => {
+  const { view } = renderComposer(SESSION);
+  assert.equal(listeners.size, 0, 'nothing listens before a message is sent');
+
+  const answers = [
+    { answer: 'ack', advanceMs: 0 },
+    { answer: 'reject', advanceMs: 0 },
+    { answer: 'swallow', advanceMs: ACCEPTANCE_TIMEOUT_MS },
+  ] as const;
+  for (const { answer, advanceMs } of answers) {
+    delivery = answer;
+    await typeMessage(view, `message answered with ${answer}`);
+    await settle(await startSubmit(view), advanceMs);
+    assert.equal(listeners.size, 0, `no listener is left behind after "${answer}"`);
+  }
+  assert.equal(frames.length, answers.length);
 });
