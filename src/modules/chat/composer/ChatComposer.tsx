@@ -10,7 +10,7 @@ import type {
   RefObject,
   TouchEvent,
 } from 'react';
-import { PaperclipIcon, MessageSquareIcon, XIcon, Loader2, ArrowUpIcon, PencilIcon } from 'lucide-react';
+import { PaperclipIcon, MessageSquareIcon, XIcon, Loader2, ArrowUpIcon, PencilIcon, AlertCircleIcon } from 'lucide-react';
 
 import { useVoiceInput } from '@/modules/chat/hooks/useVoiceInput';
 import { useVoiceAvailable } from '@/modules/chat/hooks/useVoiceAvailable';
@@ -70,6 +70,8 @@ type ChatComposerProps = {
   hasInput: boolean;
   onClearInput: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement> | MouseEvent<HTMLButtonElement> | TouchEvent<HTMLButtonElement>) => void;
+  /** Why the last send did not go out; the message is still in the input to send again. */
+  sendError: string | null;
   isDragActive: boolean;
   queuedDraft: QueuedDraft | null;
   /** Set while the composer is replacing an already-sent message. */
@@ -145,6 +147,7 @@ export default function ChatComposer({
   hasInput,
   onClearInput,
   onSubmit,
+  sendError,
   isDragActive,
   queuedDraft,
   isEditingSentMessage,
@@ -306,6 +309,16 @@ export default function ChatComposer({
           >
             {t('composer.editing.cancel')}
           </button>
+        </div>
+      )}
+
+      {sendError && (
+        <div
+          role="alert"
+          className="mx-auto mb-2 flex max-w-[54.25rem] items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-foreground"
+        >
+          <AlertCircleIcon className="h-3.5 w-3.5 shrink-0 text-red-500" />
+          <span className="min-w-0 flex-1">{sendError}</span>
         </div>
       )}
 
