@@ -1,4 +1,4 @@
-import { type MutableRefObject, useCallback, useState } from 'react';
+import { type MutableRefObject, useCallback, useEffect, useRef, useState } from 'react';
 import {
   Clipboard,
   ArrowDownToLine,
@@ -12,9 +12,15 @@ import type { Terminal } from '@xterm/xterm';
 
 import { sendSocketMessage } from '@/modules/shell/utils/socket';
 
+type ModifierKey = 'ctrl' | 'alt';
+// `armed` applies to the next character only; `locked` to every character
+// until the modifier is tapped again.
+type ModifierState = 'off' | 'armed' | 'locked';
+type Modifiers = Record<ModifierKey, ModifierState>;
+
 type Shortcut =
   | { type: 'key'; id: string; label: string; sequence: string }
-  | { type: 'modifier'; id: string; label: string; modifier: 'ctrl' | 'alt' }
+  | { type: 'modifier'; id: string; label: string; modifier: ModifierKey }
   | { type: 'arrow'; id: string; sequence: string; icon: 'up' | 'down' | 'left' | 'right' };
 
 const MOBILE_KEYS: Shortcut[] = [
@@ -40,14 +46,35 @@ const ARROW_ICONS = {
 type TerminalShortcutsPanelProps = {
   wsRef: MutableRefObject<WebSocket | null>;
   terminalRef: MutableRefObject<Terminal | null>;
+  // Lets the bar's CTRL/ALT rewrite what the terminal itself sends, which is
+  // where characters typed on the on-screen keyboard go. Without it the
+  // modifiers only reach the bar's own keys.
+  inputTransformRef?: MutableRefObject<((data: string) => string) | null>;
   isConnected: boolean;
   bottomOffset?: string;
 };
+
+const MODIFIERS_OFF: Modifiers = { ctrl: 'off', alt: 'off' };
+// A second tap on an armed modifier within this window locks it, so a chord
+// that repeats - Claude Code's double Ctrl+C to exit - can be typed at all.
+const DOUBLE_TAP_MS = 500;
+const MODIFIER_HINTS: Record<ModifierKey, string> = {
+  ctrl: 'Ctrl: applies to the next key, double-tap to lock',
+  alt: 'Alt: applies to the next key, double-tap to lock',
+};
+
+// Ctrl+letter and Ctrl+@[\]^_ become C0 control characters, as a hardware
+// keyboard sends them; anything else passes through unchanged.
+function toControlCharacter(char: string): string {
+  const code = char.toUpperCase().charCodeAt(0);
+  return code >= 64 && code <= 95 ? String.fromCharCode(code - 64) : char;
+}
 
 const preventFocusSteal = (e: React.PointerEvent) => e.preventDefault();
 
 const KEY_BTN =
   'shrink-0 rounded-md border border-gray-600 bg-gray-700 px-2.5 py-1.5 text-xs font-medium text-gray-100 transition-colors select-none active:bg-blue-600 active:text-white active:border-blue-600 disabled:cursor-not-allowed disabled:opacity-40';
+const KEY_BTN_LOCKED = 'ring-2 ring-inset ring-white/80';
 const KEY_BTN_ACTIVE =
   'shrink-0 rounded-md border border-blue-500 bg-blue-600 px-2.5 py-1.5 text-xs font-medium text-white transition-colors select-none disabled:cursor-not-allowed disabled:opacity-40';
 const ICON_BTN =
@@ -57,12 +84,78 @@ const ICON_BTN =
 export default function TerminalShortcutsPanel({
   wsRef,
   terminalRef,
+  inputTransformRef,
   isConnected,
   bottomOffset = 'bottom-0',
 }: TerminalShortcutsPanelProps) {
   const { t } = useTranslation('settings');
-  const [ctrlActive, setCtrlActive] = useState(false);
-  const [altActive, setAltActive] = useState(false);
+  // Drives how the CTRL/ALT buttons render. The ref mirrors it and is what the
+  // terminal's input handler reads, since several characters can arrive
+  // between two renders.
+  const [modifiers, setModifiers] = useState<Modifiers>(MODIFIERS_OFF);
+  const modifiersRef = useRef<Modifiers>(MODIFIERS_OFF);
+  const armedAtRef = useRef<Record<ModifierKey, number>>({ ctrl: 0, alt: 0 });
+
+  const updateModifiers = useCallback((next: Modifiers) => {
+    modifiersRef.current = next;
+    setModifiers(next);
+  }, []);
+
+  // Applies the held modifiers to a single typed character and releases the
+  // ones that were only armed. Pastes and escape sequences pass through.
+  const applyModifiers = useCallback(
+    (data: string): string => {
+      const current = modifiersRef.current;
+      if (data.length !== 1 || (current.ctrl === 'off' && current.alt === 'off')) {
+        return data;
+      }
+
+      let result = current.ctrl === 'off' ? data : toControlCharacter(data);
+      if (current.alt !== 'off') {
+        result = '\x1b' + result;
+      }
+
+      updateModifiers({
+        ctrl: current.ctrl === 'armed' ? 'off' : current.ctrl,
+        alt: current.alt === 'armed' ? 'off' : current.alt,
+      });
+      return result;
+    },
+    [updateModifiers],
+  );
+
+  const tapModifier = useCallback(
+    (key: ModifierKey) => {
+      const now = performance.now();
+      const current = modifiersRef.current[key];
+      let next: ModifierState;
+      if (current === 'locked') {
+        next = 'off';
+      } else if (current === 'armed') {
+        next = now - armedAtRef.current[key] < DOUBLE_TAP_MS ? 'locked' : 'off';
+      } else {
+        next = 'armed';
+        armedAtRef.current[key] = now;
+      }
+      updateModifiers({ ...modifiersRef.current, [key]: next });
+    },
+    [updateModifiers],
+  );
+
+  // Characters from the on-screen keyboard never pass through this bar's
+  // buttons; they reach the terminal directly, so the modifiers are applied
+  // there.
+  useEffect(() => {
+    if (!inputTransformRef) {
+      return undefined;
+    }
+    inputTransformRef.current = applyModifiers;
+    return () => {
+      if (inputTransformRef.current === applyModifiers) {
+        inputTransformRef.current = null;
+      }
+    };
+  }, [applyModifiers, inputTransformRef]);
 
   const sendInput = useCallback(
     (data: string) => {
@@ -92,21 +185,9 @@ export default function TerminalShortcutsPanel({
 
   const handleKeyPress = useCallback(
     (seq: string) => {
-      let finalSeq = seq;
-      if (ctrlActive && seq.length === 1) {
-        const code = seq.toLowerCase().charCodeAt(0);
-        if (code >= 97 && code <= 122) {
-          finalSeq = String.fromCharCode(code - 96);
-        }
-        setCtrlActive(false);
-      }
-      if (altActive && seq.length === 1) {
-        finalSeq = '\x1b' + finalSeq;
-        setAltActive(false);
-      }
-      sendInput(finalSeq);
+      sendInput(applyModifiers(seq));
     },
-    [ctrlActive, altActive, sendInput],
+    [applyModifiers, sendInput],
   );
 
   return (
@@ -128,19 +209,27 @@ export default function TerminalShortcutsPanel({
 
         {MOBILE_KEYS.map((key) => {
           if (key.type === 'modifier') {
-            const isActive = key.modifier === 'ctrl' ? ctrlActive : altActive;
-            const toggle =
-              key.modifier === 'ctrl'
-                ? () => setCtrlActive((v) => !v)
-                : () => setAltActive((v) => !v);
+            const state = modifiers[key.modifier];
+            const hint = t(`terminalShortcuts.${key.modifier}`, {
+              defaultValue: MODIFIER_HINTS[key.modifier],
+            });
             return (
               <button
                 type="button"
                 key={key.id}
                 onPointerDown={preventFocusSteal}
-                onClick={toggle}
+                onClick={() => tapModifier(key.modifier)}
                 disabled={!isConnected}
-                className={isActive ? KEY_BTN_ACTIVE : KEY_BTN}
+                className={
+                  state === 'off'
+                    ? KEY_BTN
+                    : state === 'locked'
+                      ? `${KEY_BTN_ACTIVE} ${KEY_BTN_LOCKED}`
+                      : KEY_BTN_ACTIVE
+                }
+                aria-pressed={state !== 'off'}
+                title={hint}
+                aria-label={hint}
               >
                 {key.label}
               </button>
