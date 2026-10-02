@@ -105,8 +105,10 @@ const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => 
   }
   const unsentSessionId = /\/api\/providers\/sessions\/([^/?]+)\/unsent/.exec(url)?.[1];
   if (unsentSessionId && init?.method === 'DELETE') {
-    // Like the server: a session that already holds a conversation is never
-    // deleted, so asking about one answers that its turn was admitted.
+    // Answers `kept` for every session but the new one, as the server does for
+    // a session with history. The server would delete an existing row with no
+    // transcript, no provider id and no admitted turn, which is why the composer
+    // must never ask about an existing session (tests assert no DELETE at all).
     const outcome = unsentSessionId === NEW_SESSION_ID ? discardOutcome : 'kept';
     return outcome === 'error'
       ? json({ success: false, error: 'Database is locked' }, 500)

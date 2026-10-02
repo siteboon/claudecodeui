@@ -241,6 +241,10 @@ test('a retry of a tagged edit is acknowledged after the rewind took its anchor 
     // replaced is gone from the transcript its anchor is looked up in. A
     // retry of the same frame (its acknowledgement was lost) is that edit,
     // not a new one whose message vanished.
+    //
+    // The stub stands in for that fork: it cuts the transcript back to the
+    // turn before the edited one, which leaves the anchor lookup in the same
+    // state the real fork does (asserted below before the retry is sent).
     const realRewind = sessionsService.rewindSessionForEdit;
     sessionsService.rewindSessionForEdit = async (sessionId: string) => {
       const transcriptPath = sessionsDb.getSessionById(sessionId)?.jsonl_path;
