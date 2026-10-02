@@ -730,6 +730,30 @@ export const sessionsService = {
   },
 
   /**
+   * Deletes a session the composer allocated for a first message the server
+   * never confirmed — unless a turn was admitted for it after all, in which
+   * case only the acknowledgement was lost and the session is kept.
+   *
+   * The check and the delete run in one synchronous step, and so does the
+   * `chat.send` handler's lookup-and-admit, so a late frame either lands
+   * before this (and the session is kept) or after it (and is refused with
+   * SESSION_NOT_FOUND). A session with provider history is always kept.
+   */
+  discardUnsentSession(sessionId: string): { sessionId: string; outcome: 'discarded' | 'kept' } {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session) {
+      return { sessionId, outcome: 'discarded' };
+    }
+
+    if (session.provider_session_id || session.jsonl_path || chatRunRegistry.hasAdmittedTurn(sessionId)) {
+      return { sessionId, outcome: 'kept' };
+    }
+
+    sessionsDb.deleteSessionById(sessionId);
+    return { sessionId, outcome: 'discarded' };
+  },
+
+  /**
    * Restores one archived session back into the active sidebar lists.
    */
   restoreSessionById(sessionId: string): { sessionId: string; isArchived: false } {

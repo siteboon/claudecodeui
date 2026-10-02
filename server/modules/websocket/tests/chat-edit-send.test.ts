@@ -185,6 +185,30 @@ test('every subscribed client is told to drop the superseded turns', async () =>
   });
 });
 
+test('a tagged edit is acknowledged before its truncation, and a retry of it is not run again', async () => {
+  await withGateway('claude', async ({ socket, runs }) => {
+    const frame = JSON.stringify({
+      type: 'chat.edit-send',
+      sessionId: SESSION_ID,
+      anchorId: 'e-u2',
+      content: 'replacement',
+      clientRequestId: 'edit-request-1',
+    });
+    socket.emit('message', frame);
+    await settle();
+    socket.emit('message', frame);
+    await settle();
+
+    assert.equal(runs.length, 1, 'the edit ran once');
+    const kinds = socket.frames.map((candidate) => candidate.kind);
+    assert.ok(
+      kinds.indexOf('chat_send_accepted') < kinds.indexOf('history_truncated'),
+      'the composer hears the edit was admitted before the transcript is cut',
+    );
+    assert.equal(kinds.filter((kind) => kind === 'chat_send_accepted').length, 2);
+  });
+});
+
 test('an edit without an anchor is refused', async () => {
   await withGateway('claude', async ({ socket, runs }) => {
     socket.emit('message', JSON.stringify({
