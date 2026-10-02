@@ -148,7 +148,11 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
           // badge marks errors and the output expands via the chevron.
           defaultOpen={false}
         />
-        <BashEditDiff toolUseResult={toolResult?.toolUseResult} onFileOpen={onFileOpen} />
+        <BashEditDiff
+          toolUseResult={toolResult?.toolUseResult}
+          onFileOpen={onFileOpen}
+          projectRoot={selectedProject?.fullPath}
+        />
       </>
     );
   }

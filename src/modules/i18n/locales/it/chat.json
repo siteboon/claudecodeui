@@ -63,7 +63,15 @@
     "filesNotShown_one": "{{count}} file modificato (binario, solo modalità o troppo grande da mostrare)",
     "filesNotShown_other": "{{count}} file modificati (binari, solo modalità o troppo grandi da mostrare)",
     "filesUnavailable_one": "{{count}} file modificato (diff non disponibile)",
-    "filesUnavailable_other": "{{count}} file modificati (diff non disponibile)"
+    "filesUnavailable_other": "{{count}} file modificati (diff non disponibile)",
+    "filesChanged_one": "{{count}} file modificato",
+    "filesChanged_other": "{{count}} file modificati",
+    "morePaths_one": "+{{count}} altro",
+    "morePaths_other": "+{{count}} altri",
+    "diffUnavailable": "(diff dei file non disponibile per questo comando)",
+    "partUnavailable": "(parte del diff non è disponibile)",
+    "skipped": "(diff dei file saltato per questo comando git)",
+    "shared": "(un altro comando è stato eseguito contemporaneamente in questo repository; una modifica fatta da uno dei due può comparire sotto entrambi i risultati)"
   },
   "thinking": {
     "title": "Sto pensando...",

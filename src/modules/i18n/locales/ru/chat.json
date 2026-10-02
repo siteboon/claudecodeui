@@ -71,7 +71,19 @@
     "filesUnavailable_one": "{{count}} файл изменён (diff недоступен)",
     "filesUnavailable_few": "{{count}} файла изменены (diff недоступен)",
     "filesUnavailable_many": "{{count}} файлов изменено (diff недоступен)",
-    "filesUnavailable_other": "{{count}} файла изменено (diff недоступен)"
+    "filesUnavailable_other": "{{count}} файла изменено (diff недоступен)",
+    "filesChanged_one": "{{count}} файл изменён",
+    "filesChanged_few": "{{count}} файла изменены",
+    "filesChanged_many": "{{count}} файлов изменено",
+    "filesChanged_other": "{{count}} файла изменено",
+    "morePaths_one": "+ещё {{count}}",
+    "morePaths_few": "+ещё {{count}}",
+    "morePaths_many": "+ещё {{count}}",
+    "morePaths_other": "+ещё {{count}}",
+    "diffUnavailable": "(diff файлов недоступен для этой команды)",
+    "partUnavailable": "(часть diff недоступна)",
+    "skipped": "(diff файлов пропущен для этой команды git)",
+    "shared": "(в этом репозитории одновременно выполнялась другая команда; изменение, сделанное любой из них, может отображаться под любым из результатов)"
   },
   "thinking": {
     "title": "Думаю...",

@@ -74,7 +74,11 @@ const NO_DIFF = { stdout: 'hello', stderr: '', interrupted: false, isImage: fals
 
 const renderBash = (
   toolUseResult: unknown,
-  { command = "sed -i 's/two/TWO/' g.txt", onFileOpen }: { command?: string; onFileOpen?: (path: string) => void } = {},
+  {
+    command = "sed -i 's/two/TWO/' g.txt",
+    onFileOpen,
+    projectRoot,
+  }: { command?: string; onFileOpen?: (path: string) => void; projectRoot?: string } = {},
 ) =>
   render(
     <ToolRenderer
@@ -84,8 +88,18 @@ const renderBash = (
       toolId="toolu_1"
       mode="input"
       onFileOpen={onFileOpen}
+      selectedProject={projectRoot ? { projectId: 'p1', displayName: 'repo', fullPath: projectRoot } : null}
     />,
   );
+
+const textOf = (toolUseResult: unknown) => renderBash(toolUseResult).container.textContent ?? '';
+
+// Every note under the file blocks, in order.
+const noteTexts = (container: HTMLElement) =>
+  Array.from(container.querySelectorAll('.border-transparent.text-\\[11px\\]')).map((note) => note.textContent);
+
+// The per-file blocks' collapsible roots.
+const fileSections = (container: HTMLElement) => Array.from(container.querySelectorAll('.group\\/section'));
 
 const diffLineTexts = (container: HTMLElement) =>
   Array.from(container.querySelectorAll('.font-mono.text-\\[11px\\] > div'))
@@ -143,6 +157,53 @@ describe('what a Bash command changed', () => {
     expect(container.querySelectorAll('[aria-label="0 lines added, 1 removed"]')).toHaveLength(1);
   });
 
+  it('numbers the missing side of a created or deleted file from 0, as git does', () => {
+    // 2.1.280 wrote oldStart 1 for the created h.txt and newStart 1 for the deleted keep.txt.
+    const rows = diffLineTexts(renderBash(CREATED_AND_DELETED).container);
+
+    expect(rows).toContain('@@ -0,0 +1,2 @@');
+    expect(rows).toContain('@@ -1,1 +0,0 @@');
+    expect(rows.filter((row) => row?.startsWith('@@'))).toHaveLength(2);
+  });
+
+  it('keeps every file block collapsed until it is opened, like an Edit row', () => {
+    const { container } = renderBash(CREATED_AND_DELETED);
+    const sections = fileSections(container);
+
+    expect(sections).toHaveLength(3);
+    expect(sections.map((section) => section.getAttribute('data-state'))).toEqual(['closed', 'closed', 'closed']);
+  });
+
+  it('sets every file name in mono, including a deleted one that cannot be opened', () => {
+    const { getByText } = renderBash(CREATED_AND_DELETED, { onFileOpen: vi.fn() });
+
+    expect(getByText('h.txt').className).toContain('font-mono');
+    expect(getByText('keep.txt').tagName).toBe('SPAN');
+    expect(getByText('keep.txt').className).toContain('font-mono');
+  });
+
+  it('marks "\\ No newline at end of file" as a note on the line above, not a change', () => {
+    const { container } = renderBash({
+      bashEditDiff: {
+        files: [{
+          filePath: '/repo/bin.dat',
+          hunks: [{ oldStart: 0, oldLines: 0, newStart: 1, newLines: 1, lines: ['+data', '\\ No newline at end of file'] }],
+          created: true,
+        }],
+        moreFiles: 0,
+      },
+    });
+    const rows = Array.from(container.querySelectorAll('.font-mono.text-\\[11px\\] > div'));
+    const marker = rows.find((row) => row.textContent === '\\ No newline at end of file');
+
+    expect(marker).toBeDefined();
+    // No gutter sign and no red/green: it is one plain, italic row.
+    expect(marker?.children).toHaveLength(0);
+    expect(marker?.className).toContain('italic');
+    expect(marker?.className).not.toMatch(/red|green/);
+    expect(container.querySelectorAll('[aria-label="1 lines added, 0 removed"]')).toHaveLength(1);
+  });
+
   it('counts the files the CLI changed but did not diff', () => {
     const tooLarge = renderBash(ONLY_TOO_LARGE).container.textContent ?? '';
     expect(tooLarge).toContain('1 file changed (binary, mode only or too large to show)');
@@ -159,12 +220,87 @@ describe('what a Bash command changed', () => {
     expect(unavailable).toContain('2 files changed (diff unavailable)');
   });
 
+  it('names the files it counted but did not diff', () => {
+    // The real record for `seq 1 3000 > big.txt`, inside the project and outside it.
+    expect(noteTexts(renderBash(ONLY_TOO_LARGE, { projectRoot: '/repo' }).container)).toEqual([
+      '1 file changed (binary, mode only or too large to show)big.txt',
+    ]);
+    const { getByText } = renderBash(ONLY_TOO_LARGE);
+    expect(getByText('/repo/big.txt').getAttribute('title')).toBe('/repo/big.txt');
+
+    // Diffed files are not repeated, and a long list stops at ten names.
+    const undiffed = Array.from({ length: 13 }, (_, index) => `/repo/assets/img${index + 1}.png`);
+    const { container } = renderBash({
+      bashEditDiff: {
+        ...TWO_FILES_CHANGED.bashEditDiff,
+        moreFiles: 13,
+        changedFiles: ['/repo/f.txt', '/repo/g.txt', ...undiffed],
+      },
+    }, { projectRoot: '/repo/' });
+    const [note] = noteTexts(container);
+    expect(note).toBe(
+      `… 13 more files changed${undiffed.slice(0, 10).map((path) => path.slice('/repo/'.length)).join(', ')} +3 more`,
+    );
+  });
+
+  it('says when the CLI skipped the command or could not diff it', () => {
+    // The CLI does not diff a lone branch-switching or tree-rewriting git command.
+    const skipped = renderBash({ bashEditDiff: { files: [], moreFiles: 0, skipped: true } }, { command: 'git stash' });
+    expect(noteTexts(skipped.container)).toEqual(['(file diff skipped for this git command)']);
+    expect(fileSections(skipped.container)).toHaveLength(0);
+
+    // What the CLI records when its snapshot fails.
+    expect(noteTexts(renderBash({ bashEditDiff: { files: [], moreFiles: 0, unavailable: true } }).container))
+      .toEqual(['(file diff unavailable for this command)']);
+
+    // Some files diffed, others too large or unreadable to snapshot.
+    const partial = renderBash({
+      bashEditDiff: {
+        ...TWO_FILES_CHANGED.bashEditDiff,
+        moreFiles: 1,
+        changedFiles: ['/repo/f.txt', '/repo/g.txt', '/repo/huge.log'],
+        unavailable: true,
+      },
+    }, { projectRoot: '/repo' });
+    expect(fileSections(partial.container)).toHaveLength(2);
+    expect(noteTexts(partial.container)).toEqual(['… 1 more file changed (part of the diff is unavailable)huge.log']);
+    expect(noteTexts(renderBash({ bashEditDiff: { ...TWO_FILES_CHANGED.bashEditDiff, unavailable: true } }).container))
+      .toEqual(['(part of the diff is unavailable)']);
+  });
+
+  it('warns when another command changed the repository at the same time', () => {
+    const caveat =
+      '(another command ran in this repository at the same time; a change made by either may show under either result)';
+
+    expect(noteTexts(renderBash({ bashEditDiff: { ...TWO_FILES_CHANGED.bashEditDiff, shared: true } }).container))
+      .toEqual([caveat]);
+    expect(noteTexts(renderBash({ bashEditDiff: { files: [], moreFiles: 0, shared: true } }).container))
+      .toEqual([caveat]);
+
+    // Without a diff the CLI cannot say why these files have none, so neither does the note.
+    const sharedOnly = textOf({ bashEditDiff: { files: [], moreFiles: 2, changedFiles: ['/repo/a', '/repo/b'], shared: true } });
+    expect(sharedOnly).toContain('2 files changed');
+    expect(sharedOnly).not.toContain('binary, mode only or too large to show');
+    expect(sharedOnly).toContain(caveat);
+  });
+
+  it('draws at most 20 file blocks and counts the rest', () => {
+    const files = Array.from({ length: 25 }, (_, index) => ({
+      filePath: `/repo/file${index + 1}.txt`,
+      hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, lines: ['-a', '+b'] }],
+    }));
+    const { container } = renderBash({ bashEditDiff: { files, moreFiles: 0 } });
+
+    expect(fileSections(container)).toHaveLength(20);
+    expect(container.textContent).toContain('file20.txt');
+    expect(container.textContent).not.toContain('file21.txt');
+    expect(noteTexts(container)).toEqual(['… 5 more files changed']);
+  });
+
   it('draws nothing extra when the result has no usable diff', () => {
     const bare = renderBash(undefined).container.innerHTML;
 
     expect(renderBash(NO_DIFF).container.innerHTML).toBe(bare);
-    // The CLI marks branch-switching git commands as skipped rather than diffing them.
-    expect(renderBash({ bashEditDiff: { files: [], moreFiles: 0, skipped: true } }).container.innerHTML).toBe(bare);
     expect(renderBash({ bashEditDiff: { files: [], moreFiles: 0 } }).container.innerHTML).toBe(bare);
     // Untrusted JSON of the wrong shape is ignored rather than crashing the row.
     expect(renderBash({ bashEditDiff: 'nope' }).container.innerHTML).toBe(bare);

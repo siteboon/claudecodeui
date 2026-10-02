@@ -1,4 +1,5 @@
 import { Fragment, useMemo } from 'react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/shared/utils';
@@ -26,8 +27,14 @@ type BashEditDiffData = {
   files: BashEditDiffFile[];
   /** Changed files with no diff to draw: the CLI's own count plus any dropped by MAX_RENDERED_FILES. */
   moreFiles: number;
-  /** The CLI could not diff part of the change, so `moreFiles` is all it can say about it. */
+  /** The paths behind `moreFiles`: `changedFiles` entries that have no block of their own. */
+  undiffedPaths: string[];
+  /** The CLI could not diff all or part of the change. */
   unavailable: boolean;
+  /** Another command changed the repository while this one ran, so either may own a change. */
+  shared: boolean;
+  /** A lone tree-rewriting git command (checkout, stash, pull, reset…) the CLI does not diff. */
+  skipped: boolean;
 };
 
 // Claude Code itself stops at 5 files and 400 lines per file. These bounds sit
@@ -36,6 +43,8 @@ type BashEditDiffData = {
 // filling the transcript (the CLI's own terminal view stops at 40 lines).
 const MAX_RENDERED_FILES = 20;
 const MAX_RENDERED_LINES_PER_FILE = 200;
+// The CLI keeps up to 200 changed paths; the note names this many and counts the rest.
+const MAX_LISTED_UNDIFFED_PATHS = 10;
 
 // The Edit diff viewer's colours (ToolDiffViewer), so a change made through Bash
 // reads the same as one made through Edit.
@@ -97,10 +106,9 @@ function readFile(value: unknown): BashEditDiffFile | null {
  *
  * The value arrives as untrusted JSON, from the transcript on disk or the live
  * SDK frame, so anything that does not have the documented shape is dropped
- * rather than drawn. Returns null when there is nothing to show — no field, a
- * `skipped` diff (the CLI does not diff branch-switching git commands), or a
- * diff with no files at all — so a Bash row without one renders exactly as it
- * did before.
+ * rather than drawn. Returns null when there is nothing to show — no field, or
+ * a diff with no files and no flag to explain — so a Bash row without one
+ * renders exactly as it did before.
  */
 function readBashEditDiff(toolUseResult: unknown): BashEditDiffData | null {
   if (!isRecord(toolUseResult)) {
@@ -108,8 +116,14 @@ function readBashEditDiff(toolUseResult: unknown): BashEditDiffData | null {
   }
 
   const diff = toolUseResult.bashEditDiff;
-  if (!isRecord(diff) || diff.skipped === true) {
+  if (!isRecord(diff)) {
     return null;
+  }
+
+  // The CLI records `{ files: [], moreFiles: 0, skipped: true }` and nothing
+  // else for the git commands it does not diff, and prints only that it skipped.
+  if (diff.skipped === true) {
+    return { files: [], moreFiles: 0, undiffedPaths: [], unavailable: false, shared: false, skipped: true };
   }
 
   const files: BashEditDiffFile[] = [];
@@ -127,11 +141,20 @@ function readBashEditDiff(toolUseResult: unknown): BashEditDiffData | null {
   }
 
   const moreFiles = readCount(diff.moreFiles) + droppedFiles;
-  if (files.length === 0 && moreFiles === 0) {
+  const unavailable = diff.unavailable === true;
+  const shared = diff.shared === true;
+  if (files.length === 0 && moreFiles === 0 && !unavailable && !shared) {
     return null;
   }
 
-  return { files, moreFiles, unavailable: diff.unavailable === true };
+  const diffedPaths = new Set(files.map((file) => file.filePath));
+  const undiffedPaths = moreFiles > 0 && Array.isArray(diff.changedFiles)
+    ? [...new Set(diff.changedFiles.filter(
+      (path): path is string => typeof path === 'string' && path !== '' && !diffedPaths.has(path),
+    ))]
+    : [];
+
+  return { files, moreFiles, undiffedPaths, unavailable, shared, skipped: false };
 }
 
 /**
@@ -169,6 +192,35 @@ function prepareFileDiff(file: BashEditDiffFile): {
   }
 
   return { stats: { added, removed }, hunks, hiddenLines };
+}
+
+/**
+ * The `@@ -a,b +c,d @@` line for a hunk. The side a created or deleted file
+ * does not have starts at 0 in git's output, but the CLI writes 1 there in some
+ * builds (2.1.280) and 0 in others, so that side is printed as git would.
+ */
+function formatHunkHeader(hunk: BashEditDiffHunk, file: BashEditDiffFile): string {
+  const oldStart = file.created && hunk.oldLines === 0 ? 0 : hunk.oldStart;
+  const newStart = file.deleted && hunk.newLines === 0 ? 0 : hunk.newStart;
+  return `@@ -${oldStart},${hunk.oldLines} +${newStart},${hunk.newLines} @@`;
+}
+
+/** Shows a path relative to the project when it lies inside it, as the repository itself names it. */
+function toProjectPath(filePath: string, projectRoot?: string): string {
+  const root = projectRoot?.replace(/[\\/]+$/, '');
+  if (root && (filePath.startsWith(`${root}/`) || filePath.startsWith(`${root}\\`))) {
+    return filePath.slice(root.length + 1);
+  }
+  return filePath;
+}
+
+function BashEditDiffNote({ children }: { children: ReactNode }) {
+  return (
+    // The transparent border lines the note up with the file blocks' headers.
+    <div className="border-l-2 border-transparent py-0.5 pl-3 text-[11px] text-muted-foreground">
+      {children}
+    </div>
+  );
 }
 
 function BashEditDiffLine({ line }: { line: string }) {
@@ -217,6 +269,9 @@ function BashEditDiffFileSection({ file, onFileOpen }: BashEditDiffFileSectionPr
     <CollapsibleDisplay
       toolName={action}
       title={fileName}
+      // A file name is mono whether or not it can be opened, so a deleted one
+      // matches the others in the list.
+      titleClassName="font-mono"
       toolCategory="edit"
       badge={stats.added > 0 || stats.removed > 0 ? <DiffStatsBadge stats={stats} /> : undefined}
       onTitleClick={openFile}
@@ -232,7 +287,7 @@ function BashEditDiffFileSection({ file, onFileOpen }: BashEditDiffFileSectionPr
           {hunks.map((hunk, hunkIndex) => (
             <Fragment key={hunkIndex}>
               <div className="select-none bg-gray-50/80 px-2 text-gray-500 dark:bg-gray-800/40 dark:text-gray-400">
-                {`@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`}
+                {formatHunkHeader(hunk, file)}
               </div>
               {hunk.lines.map((line, lineIndex) => (
                 <BashEditDiffLine key={lineIndex} line={line} />
@@ -259,17 +314,19 @@ type BashEditDiffProps = {
   /** The Bash result's structured output; anything without a usable `bashEditDiff` draws nothing. */
   toolUseResult: unknown;
   onFileOpen?: (filePath: string) => void;
+  /** The project's directory, so the files listed without a diff read as repository paths. */
+  projectRoot?: string;
 };
 
 /**
  * What a Bash command changed on disk, one collapsible block per file in the
- * same shape as an Edit row, plus a line for the files the CLI did not diff.
+ * same shape as an Edit row, plus the CLI's notes on what it could not diff.
  *
  * Rendered by chat's ToolRenderer under the Bash command row, so a change made
  * through `sed -i`, a heredoc or a formatter is as reviewable as one made
  * through Edit. Draws nothing when the result carries no diff.
  */
-export function BashEditDiff({ toolUseResult, onFileOpen }: BashEditDiffProps) {
+export function BashEditDiff({ toolUseResult, onFileOpen, projectRoot }: BashEditDiffProps) {
   const { t } = useTranslation('chat');
   const diff = useMemo(() => readBashEditDiff(toolUseResult), [toolUseResult]);
 
@@ -277,16 +334,45 @@ export function BashEditDiff({ toolUseResult, onFileOpen }: BashEditDiffProps) {
     return null;
   }
 
+  // The notes below follow the CLI's own wording and order (Claude Code 2.1.280).
+  if (diff.skipped) {
+    return (
+      <div className="mt-1">
+        <BashEditDiffNote>{t('bashEditDiff.skipped')}</BashEditDiffNote>
+      </div>
+    );
+  }
+
+  const hasFiles = diff.files.length > 0;
   let moreFilesNote: string | null = null;
   if (diff.moreFiles > 0) {
-    if (diff.files.length > 0) {
+    if (hasFiles) {
       moreFilesNote = t('bashEditDiff.moreFiles', { count: diff.moreFiles });
     } else if (diff.unavailable) {
       moreFilesNote = t('bashEditDiff.filesUnavailable', { count: diff.moreFiles });
+    } else if (diff.shared) {
+      // With another command writing at the same time, the CLI does not know
+      // why these files have no diff, so the note does not guess.
+      moreFilesNote = t('bashEditDiff.filesChanged', { count: diff.moreFiles });
     } else {
       moreFilesNote = t('bashEditDiff.filesNotShown', { count: diff.moreFiles });
     }
   }
+
+  let unavailableNote: string | null = null;
+  if (diff.unavailable && hasFiles) {
+    unavailableNote = t('bashEditDiff.partUnavailable');
+  } else if (diff.unavailable && !moreFilesNote) {
+    unavailableNote = t('bashEditDiff.diffUnavailable');
+  }
+  // The partial-diff note qualifies the more-files line, so it joins it there.
+  if (moreFilesNote && unavailableNote) {
+    moreFilesNote = `${moreFilesNote} ${unavailableNote}`;
+    unavailableNote = null;
+  }
+
+  const listedPaths = diff.undiffedPaths.slice(0, MAX_LISTED_UNDIFFED_PATHS);
+  const unlistedPaths = diff.undiffedPaths.length - listedPaths.length;
 
   return (
     <div className="mt-1">
@@ -294,11 +380,23 @@ export function BashEditDiff({ toolUseResult, onFileOpen }: BashEditDiffProps) {
         <BashEditDiffFileSection key={`${index}:${file.filePath}`} file={file} onFileOpen={onFileOpen} />
       ))}
       {moreFilesNote && (
-        // The transparent border lines the note up with the file blocks' headers.
-        <div className="border-l-2 border-transparent py-0.5 pl-3 text-[11px] text-muted-foreground">
+        <BashEditDiffNote>
           {moreFilesNote}
-        </div>
+          {listedPaths.length > 0 && (
+            <div className="break-all">
+              {listedPaths.map((path, index) => (
+                <Fragment key={path}>
+                  {index > 0 && ', '}
+                  <span className="font-mono" title={path}>{toProjectPath(path, projectRoot)}</span>
+                </Fragment>
+              ))}
+              {unlistedPaths > 0 && ` ${t('bashEditDiff.morePaths', { count: unlistedPaths })}`}
+            </div>
+          )}
+        </BashEditDiffNote>
       )}
+      {unavailableNote && <BashEditDiffNote>{unavailableNote}</BashEditDiffNote>}
+      {diff.shared && <BashEditDiffNote>{t('bashEditDiff.shared')}</BashEditDiffNote>}
     </div>
   );
 }
