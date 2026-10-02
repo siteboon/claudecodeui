@@ -270,6 +270,9 @@ export function useChatComposerState({
   // Set while a sent turn waits for its acknowledgement, so a second Enter in
   // that window does not send the same message twice.
   const awaitingAcceptanceRef = useRef(false);
+  // The same, for the render: the send button shows that a message is on its
+  // way instead of looking idle while the server has not answered yet.
+  const [isSendPending, setIsSendPending] = useState(false);
   // The last turn the server did not confirm. Sending the same message again
   // reuses its session, request id and uploaded files, so a retry of a turn
   // that was admitted after all (only its acknowledgement was lost) is not
@@ -978,6 +981,7 @@ export function useChatComposerState({
         // admitted the turn.
         const clientRequestId = retriedSend?.clientRequestId ?? createClientRequestId();
         awaitingAcceptanceRef.current = true;
+        setIsSendPending(true);
         let failure: string | null = null;
         // Whether sending this message again reuses this attempt (see
         // `unconfirmedSendRef`).
@@ -1015,6 +1019,7 @@ export function useChatComposerState({
           }
         } finally {
           awaitingAcceptanceRef.current = false;
+          setIsSendPending(false);
         }
 
         if (failure) {
@@ -1138,6 +1143,11 @@ export function useChatComposerState({
       clearInterval(timer);
     };
   }, [queuedDraft, sessionKey]);
+
+  // The draft the notice is about stays in the composer either way.
+  const dismissSendError = useCallback(() => {
+    setSendFailure(null);
+  }, []);
 
   const editQueuedDraft = useCallback(() => {
     if (!queuedDraft) {
@@ -1466,6 +1476,8 @@ export function useChatComposerState({
     openAttachmentPicker: open,
     handleSubmit,
     sendError,
+    dismissSendError,
+    isSendPending,
     queuedDraft,
     editQueuedDraft,
     deleteQueuedDraft,

@@ -435,3 +435,18 @@ test('retrying a message with a file does not upload the file again', async () =
   assert.deepEqual(frames[1]?.options.attachments, frames[0]?.options.attachments);
   assert.deepEqual(view.result.current.attachedFiles, []);
 });
+
+test('a send shows as pending until the server answers, and its notice can be dismissed', async () => {
+  const { view } = renderComposer(SESSION);
+  await typeMessage(view, 'hello');
+
+  const pending = await startSubmit(view);
+  assert.equal(view.result.current.isSendPending, true, 'the composer does not look idle while it waits');
+  await settle(pending, ACCEPTANCE_TIMEOUT_MS);
+  assert.equal(view.result.current.isSendPending, false);
+  assert.ok(view.result.current.sendError);
+
+  await act(async () => { view.result.current.dismissSendError(); });
+  assert.equal(view.result.current.sendError, null);
+  assert.equal(view.result.current.input, 'hello', 'the draft the notice was about stays');
+});

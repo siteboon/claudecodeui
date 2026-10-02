@@ -72,6 +72,9 @@ type ChatComposerProps = {
   onSubmit: (event: FormEvent<HTMLFormElement> | MouseEvent<HTMLButtonElement> | TouchEvent<HTMLButtonElement>) => void;
   /** Why the last send did not go out; the message is still in the input to send again. */
   sendError: string | null;
+  onDismissSendError: () => void;
+  /** Set while a sent message waits for the server to confirm it. */
+  isSendPending: boolean;
   isDragActive: boolean;
   queuedDraft: QueuedDraft | null;
   /** Set while the composer is replacing an already-sent message. */
@@ -148,6 +151,8 @@ export default function ChatComposer({
   onClearInput,
   onSubmit,
   sendError,
+  onDismissSendError,
+  isSendPending,
   isDragActive,
   queuedDraft,
   isEditingSentMessage,
@@ -319,6 +324,15 @@ export default function ChatComposer({
         >
           <AlertCircleIcon className="h-3.5 w-3.5 shrink-0 text-red-500" />
           <span className="min-w-0 flex-1">{sendError}</span>
+          <button
+            type="button"
+            onClick={onDismissSendError}
+            className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
+            title={t('schedule.dismiss')}
+            aria-label={t('schedule.dismiss')}
+          >
+            <XIcon className="h-3.5 w-3.5" />
+          </button>
         </div>
       )}
 
@@ -529,7 +543,7 @@ export default function ChatComposer({
                   ? false
                   : isRecording
                     ? false
-                    : isTranscribing
+                    : isTranscribing || isSendPending
                       ? true
                       : !input.trim() && attachedFiles.length === 0
               }
@@ -537,7 +551,7 @@ export default function ChatComposer({
               title={submitAriaLabel}
               className="h-10 w-10 sm:h-10 sm:w-10"
             >
-              {isTranscribing ? (
+              {isTranscribing || (isSendPending && !isLoading) ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : canQueueDraft ? (
                 <ArrowUpIcon className="h-4 w-4" />
