@@ -164,7 +164,6 @@ CloudCLI, kendi frontend UI'sı ve isteğe bağlı Node.js arka ucu olan özel s
 |---|---|
 | **[Project Stats](https://github.com/cloudcli-ai/cloudcli-plugin-starter)** | Mevcut projen için dosya sayıları, kod satırları, dosya türü dağılımı, en büyük dosyalar ve son değiştirilen dosyaları gösterir |
 | **[Web Terminal](https://github.com/cloudcli-ai/cloudcli-plugin-terminal)** | Çoklu sekme destekli tam xterm.js terminali |
-| **[Claude Watch](https://github.com/satsuki19980613/cloudcli-claude-watch)** | Uzun süren Claude Code oturumlarını takılmalara karşı izler ve süreç kontrolleri sunar |
 | **[CloudCLI Scheduler](https://github.com/grostim/cloudcli-cron)** | Çalışma alanı kapsamlı zamanlanmış prompt'lar oluşturur ve bunları Codex veya Claude Code gibi yerel CLI'larla çalıştırır |
 | **[PRISM CloudCLI](https://github.com/jakeefr/cloudcli-plugin-prism)** | CloudCLI içinde Claude Code oturum zekası ve token tüketimi görünürlüğü sağlar |
 | **[Sessions](https://github.com/strykereye2/cloudcli-plugin-session-manager)** | Aktif Claude Code oturumlarını görüntülemeni, yönetmeni ve sonlandırmanı sağlar |

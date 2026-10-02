@@ -159,7 +159,6 @@ CloudCLI にはプラグインシステムがあり、独自のフロントエ�
 |---|---|
 | **[Project Stats](https://github.com/cloudcli-ai/cloudcli-plugin-starter)** | 現在のプロジェクトについて、ファイル数、コード行数、ファイル種別の内訳、最大ファイル、最近変更されたファイルを表示 |
 | **[Web Terminal](https://github.com/cloudcli-ai/cloudcli-plugin-terminal)** | 複数タブに対応した本格的な xterm.js ターミナル |
-| **[Claude Watch](https://github.com/satsuki19980613/cloudcli-claude-watch)** | 長時間実行中の Claude Code セッションのハングを監視し、プロセス操作を提供 |
 | **[CloudCLI Scheduler](https://github.com/grostim/cloudcli-cron)** | ワークスペース単位のスケジュール済みプロンプトを作成し、Codex、Claude Code などのローカル CLI で実行 |
 | **[PRISM CloudCLI](https://github.com/jakeefr/cloudcli-plugin-prism)** | CloudCLI 内で Claude Code のセッション分析を行い、トークン消費の可視化も提供 |
 | **[Sessions](https://github.com/strykereye2/cloudcli-plugin-session-manager)** | アクティブな Claude Code セッションを表示、管理、終了 |
