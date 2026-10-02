@@ -234,6 +234,55 @@ test('two copies of a tagged edit that arrive together run it once', async () =>
   });
 });
 
+test('a retry of a tagged edit is acknowledged after the rewind took its anchor out of the transcript', async () => {
+  await withGateway('codex', async ({ socket, runs }) => {
+    // A Codex edit forks the thread at the turn before the edited one and
+    // moves the session onto the fork, so once the edit ran, the turn it
+    // replaced is gone from the transcript its anchor is looked up in. A
+    // retry of the same frame (its acknowledgement was lost) is that edit,
+    // not a new one whose message vanished.
+    const realRewind = sessionsService.rewindSessionForEdit;
+    sessionsService.rewindSessionForEdit = async (sessionId: string) => {
+      const transcriptPath = sessionsDb.getSessionById(sessionId)?.jsonl_path;
+      assert.ok(transcriptPath);
+      const keptRows = CODEX_TRANSCRIPT_ROWS.slice(0, 3);
+      await writeFile(transcriptPath, `${keptRows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+    };
+    const frame = JSON.stringify({
+      type: 'chat.edit-send',
+      sessionId: SESSION_ID,
+      anchorId: 'turn-b',
+      content: 'a better second prompt',
+      clientRequestId: 'edit-request-1',
+    });
+
+    try {
+      socket.emit('message', frame);
+      await settle();
+      const anchor = await sessionsService.resolveEditAnchor(SESSION_ID, 'turn-b');
+      assert.equal(anchor?.found, false, 'the edited turn is no longer in the transcript');
+
+      socket.emit('message', frame);
+      await settle();
+    } finally {
+      sessionsService.rewindSessionForEdit = realRewind;
+    }
+
+    assert.equal(runs.length, 1, 'the edit ran once');
+    assert.deepEqual(
+      socket.frames
+        .filter((candidate) => candidate.kind === 'chat_send_accepted')
+        .map((acceptance) => acceptance.duplicate ?? false),
+      [false, true],
+    );
+    assert.equal(
+      socket.frames.some((candidate) => candidate.kind === 'protocol_error'),
+      false,
+      'the retry is not refused for an anchor its own first copy removed',
+    );
+  }, CODEX_TRANSCRIPT_ROWS);
+});
+
 test('an edit without an anchor is refused', async () => {
   await withGateway('claude', async ({ socket, runs }) => {
     socket.emit('message', JSON.stringify({

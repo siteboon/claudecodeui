@@ -122,6 +122,28 @@ test('discarding an unsent session deletes it only when no turn was ever admitte
   });
 });
 
+test('discarding keeps a session with a transcript even when its provider id is its own id', async () => {
+  // A conversation started in the provider CLI is indexed under the provider
+  // id for both columns, so only its transcript shows that it has history.
+  await withProviderServer(async (baseUrl, workspacePath) => {
+    sessionsDb.createSession(
+      'from-the-cli',
+      'claude',
+      workspacePath,
+      'Started in the CLI',
+      undefined,
+      undefined,
+      path.join(workspacePath, 'from-the-cli.jsonl'),
+    );
+
+    const response = await fetch(`${baseUrl}/api/providers/sessions/from-the-cli/unsent`, { method: 'DELETE' });
+
+    assert.equal(response.status, 200);
+    assert.equal(((await response.json()) as { data: { outcome: string } }).data.outcome, 'kept');
+    assert.ok(sessionsDb.getSessionById('from-the-cli'));
+  });
+});
+
 test('conversation search streams title matches before transcript results', async () => {
   await withProviderServer(async (baseUrl, workspacePath) => {
     sessionsDb.createAppSession(

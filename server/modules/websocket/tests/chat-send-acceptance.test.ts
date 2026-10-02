@@ -191,6 +191,23 @@ test('a chat.send without a request id is neither acknowledged nor deduplicated'
   });
 });
 
+test('a request id longer than 128 characters counts as absent', async () => {
+  await withGateway(async ({ socket, runs, send }) => {
+    const longestId = 'r'.repeat(128);
+    const oversizedId = 'r'.repeat(129);
+    await send({ type: 'chat.send', sessionId: SESSION_ID, content: 'tagged', clientRequestId: longestId });
+    await send({ type: 'chat.send', sessionId: SESSION_ID, content: 'oversized', clientRequestId: oversizedId });
+    await send({ type: 'chat.send', sessionId: SESSION_ID, content: 'oversized', clientRequestId: oversizedId });
+    await send({ type: 'chat.send', sessionId: 'no-such-session', content: 'oversized', clientRequestId: oversizedId });
+
+    assert.deepEqual(runs, ['tagged', 'oversized', 'oversized'], 'frames with an oversized id are not deduplicated');
+    assert.deepEqual(acceptances(socket).map((frame) => frame.clientRequestId), [longestId]);
+    const notFound = socket.frames.find((frame) => frame.code === 'SESSION_NOT_FOUND');
+    assert.ok(notFound);
+    assert.equal('clientRequestId' in notFound, false, 'an oversized id is not echoed');
+  });
+});
+
 test('a send that arrives after its unsent session was discarded is refused', async () => {
   await withGateway(async ({ socket, runs, send }) => {
     sessionsDb.deleteSessionById(SESSION_ID);
