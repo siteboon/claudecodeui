@@ -8,6 +8,7 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
+/** Renders the key bar with the given placement and returns its outer wrapper. */
 function renderPanel(placement: 'inline' | 'floating') {
   const { container } = render(
     <TerminalShortcutsPanel
