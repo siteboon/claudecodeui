@@ -48,6 +48,14 @@ describe('TerminalShortcutsPanel placement', () => {
     expect(document.documentElement.style.getPropertyValue('--keyboard-height')).toBe('300px');
   });
 
+  it('picks up a keyboard that is already open when it mounts', () => {
+    const visualViewport = Object.assign(new EventTarget(), { height: window.innerHeight - 250 });
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: visualViewport });
+    renderPanel('floating');
+
+    expect(document.documentElement.style.getPropertyValue('--keyboard-height')).toBe('250px');
+  });
+
   it('floats over the bottom of the screen and is lifted by the keyboard height', () => {
     const panel = renderPanel('floating');
 

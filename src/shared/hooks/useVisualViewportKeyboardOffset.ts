@@ -22,6 +22,8 @@ export function useVisualViewportKeyboardOffset() {
       document.documentElement.style.setProperty('--keyboard-height', `${keyboardHeight}px`);
     };
 
+    // The keyboard may already be open on mount (e.g. a modal opened while typing).
+    updateKeyboardHeight();
     visualViewport.addEventListener('resize', updateKeyboardHeight);
     return () => visualViewport.removeEventListener('resize', updateKeyboardHeight);
   }, []);
