@@ -60,6 +60,28 @@
     "viewFullOutput_other": "Zobrazit celý výstup ({{count}} znaků)",
     "contentDisplayed": "Obsah souboru je zobrazen výše v zobrazení rozdílů"
   },
+  "bashEditDiff": {
+    "created": "Vytvořeno",
+    "updated": "Upraveno",
+    "deleted": "Smazáno",
+    "emptyFile": "Prázdný soubor",
+    "moreLines_one": "… a {{count}} další řádek",
+    "moreLines_few": "… a {{count}} další řádky",
+    "moreLines_many": "… a {{count}} dalšího řádku",
+    "moreLines_other": "… a {{count}} dalších řádků",
+    "moreFiles_one": "… a {{count}} další změněný soubor",
+    "moreFiles_few": "… a {{count}} další změněné soubory",
+    "moreFiles_many": "… a {{count}} dalšího změněného souboru",
+    "moreFiles_other": "… a {{count}} dalších změněných souborů",
+    "filesNotShown_one": "Změněn {{count}} soubor (binární, jen změna režimu nebo příliš velký k zobrazení)",
+    "filesNotShown_few": "Změněny {{count}} soubory (binární, jen změna režimu nebo příliš velké k zobrazení)",
+    "filesNotShown_many": "Změněno {{count}} souboru (binární, jen změna režimu nebo příliš velké k zobrazení)",
+    "filesNotShown_other": "Změněno {{count}} souborů (binární, jen změna režimu nebo příliš velké k zobrazení)",
+    "filesUnavailable_one": "Změněn {{count}} soubor (diff není k dispozici)",
+    "filesUnavailable_few": "Změněny {{count}} soubory (diff není k dispozici)",
+    "filesUnavailable_many": "Změněno {{count}} souboru (diff není k dispozici)",
+    "filesUnavailable_other": "Změněno {{count}} souborů (diff není k dispozici)"
+  },
   "interactive": {
     "title": "Interaktivní prompt",
     "waiting": "Čeká se na vaši odpověď v CLI",

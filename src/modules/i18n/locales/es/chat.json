@@ -52,6 +52,20 @@
     "viewFullOutput": "Ver salida completa ({{count}} caracteres)",
     "contentDisplayed": "El contenido del archivo se muestra en la vista de diff de arriba"
   },
+  "bashEditDiff": {
+    "created": "Creado",
+    "updated": "Actualizado",
+    "deleted": "Eliminado",
+    "emptyFile": "Archivo vacío",
+    "moreLines_one": "… {{count}} línea más",
+    "moreLines_other": "… {{count}} líneas más",
+    "moreFiles_one": "… {{count}} archivo más modificado",
+    "moreFiles_other": "… {{count}} archivos más modificados",
+    "filesNotShown_one": "{{count}} archivo modificado (binario, solo de modo o demasiado grande para mostrar)",
+    "filesNotShown_other": "{{count}} archivos modificados (binarios, solo de modo o demasiado grandes para mostrar)",
+    "filesUnavailable_one": "{{count}} archivo modificado (diff no disponible)",
+    "filesUnavailable_other": "{{count}} archivos modificados (diff no disponible)"
+  },
   "thinking": {
     "title": "Pensando...",
     "emoji": "💭 Pensando..."

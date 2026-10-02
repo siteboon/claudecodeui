@@ -51,6 +51,20 @@
     "viewFullOutput": "Tam çıktıyı göster ({{count}} karakter)",
     "contentDisplayed": "Dosya içeriği yukarıdaki diff görünümünde gösteriliyor"
   },
+  "bashEditDiff": {
+    "created": "Oluşturuldu",
+    "updated": "Güncellendi",
+    "deleted": "Silindi",
+    "emptyFile": "Boş dosya",
+    "moreLines_one": "… {{count}} satır daha",
+    "moreLines_other": "… {{count}} satır daha",
+    "moreFiles_one": "… {{count}} dosya daha değişti",
+    "moreFiles_other": "… {{count}} dosya daha değişti",
+    "filesNotShown_one": "{{count}} dosya değişti (ikili, yalnızca mod veya gösterilemeyecek kadar büyük)",
+    "filesNotShown_other": "{{count}} dosya değişti (ikili, yalnızca mod veya gösterilemeyecek kadar büyük)",
+    "filesUnavailable_one": "{{count}} dosya değişti (diff kullanılamıyor)",
+    "filesUnavailable_other": "{{count}} dosya değişti (diff kullanılamıyor)"
+  },
   "thinking": {
     "title": "Düşünüyor...",
     "emoji": "💭 Düşünüyor..."

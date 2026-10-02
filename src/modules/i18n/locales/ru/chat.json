@@ -51,6 +51,28 @@
     "viewFullOutput": "Просмотр полного вывода ({{count}} символов)",
     "contentDisplayed": "Содержимое файла отображено в представлении различий выше"
   },
+  "bashEditDiff": {
+    "created": "Создан",
+    "updated": "Изменён",
+    "deleted": "Удалён",
+    "emptyFile": "Пустой файл",
+    "moreLines_one": "… ещё {{count}} строка",
+    "moreLines_few": "… ещё {{count}} строки",
+    "moreLines_many": "… ещё {{count}} строк",
+    "moreLines_other": "… ещё {{count}} строки",
+    "moreFiles_one": "… ещё {{count}} файл изменён",
+    "moreFiles_few": "… ещё {{count}} файла изменены",
+    "moreFiles_many": "… ещё {{count}} файлов изменено",
+    "moreFiles_other": "… ещё {{count}} файла изменено",
+    "filesNotShown_one": "{{count}} файл изменён (двоичный, только режим или слишком большой для показа)",
+    "filesNotShown_few": "{{count}} файла изменены (двоичные, только режим или слишком большие для показа)",
+    "filesNotShown_many": "{{count}} файлов изменено (двоичные, только режим или слишком большие для показа)",
+    "filesNotShown_other": "{{count}} файла изменено (двоичные, только режим или слишком большие для показа)",
+    "filesUnavailable_one": "{{count}} файл изменён (diff недоступен)",
+    "filesUnavailable_few": "{{count}} файла изменены (diff недоступен)",
+    "filesUnavailable_many": "{{count}} файлов изменено (diff недоступен)",
+    "filesUnavailable_other": "{{count}} файла изменено (diff недоступен)"
+  },
   "thinking": {
     "title": "Думаю...",
     "emoji": "💭 Думаю..."

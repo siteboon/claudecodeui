@@ -52,6 +52,16 @@
     "viewFullOutput": "查看完整输出（{{count}} 个字符）",
     "contentDisplayed": "文件内容显示在上面的差异视图中"
   },
+  "bashEditDiff": {
+    "created": "已创建",
+    "updated": "已更新",
+    "deleted": "已删除",
+    "emptyFile": "空文件",
+    "moreLines_other": "… 还有 {{count}} 行",
+    "moreFiles_other": "… 另有 {{count}} 个文件已更改",
+    "filesNotShown_other": "{{count}} 个文件已更改（二进制、仅模式变更或过大无法显示）",
+    "filesUnavailable_other": "{{count}} 个文件已更改（无法获取差异）"
+  },
   "thinking": {
     "title": "思考中...",
     "emoji": "💭 思考中..."

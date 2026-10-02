@@ -51,6 +51,16 @@
     "viewFullOutput": "查看完整輸出（{{count}} 個字元）",
     "contentDisplayed": "檔案內容顯示在上方的差異檢視中"
   },
+  "bashEditDiff": {
+    "created": "已建立",
+    "updated": "已更新",
+    "deleted": "已刪除",
+    "emptyFile": "空白檔案",
+    "moreLines_other": "… 還有 {{count}} 行",
+    "moreFiles_other": "… 另有 {{count}} 個檔案已變更",
+    "filesNotShown_other": "{{count}} 個檔案已變更（二進位、僅模式變更或過大無法顯示）",
+    "filesUnavailable_other": "{{count}} 個檔案已變更（無法取得差異）"
+  },
   "thinking": {
     "title": "思考中...",
     "emoji": "💭 思考中..."

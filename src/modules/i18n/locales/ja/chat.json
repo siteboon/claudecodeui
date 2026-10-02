@@ -51,6 +51,16 @@
     "viewFullOutput": "全出力を表示（{{count}}文字）",
     "contentDisplayed": "ファイルの内容は上の差分ビューに表示されています"
   },
+  "bashEditDiff": {
+    "created": "作成",
+    "updated": "更新",
+    "deleted": "削除",
+    "emptyFile": "空のファイル",
+    "moreLines_other": "… 他 {{count}} 行",
+    "moreFiles_other": "… 他 {{count}} 個のファイルが変更されました",
+    "filesNotShown_other": "{{count}} 個のファイルが変更されました（バイナリ、モードのみ、または大きすぎて表示できません）",
+    "filesUnavailable_other": "{{count}} 個のファイルが変更されました（差分を取得できません）"
+  },
   "thinking": {
     "title": "思考中...",
     "emoji": "💭 思考中..."

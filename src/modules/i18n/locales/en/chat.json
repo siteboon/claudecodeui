@@ -52,6 +52,20 @@
     "viewFullOutput": "View full output ({{count}} chars)",
     "contentDisplayed": "The file content is displayed in the diff view above"
   },
+  "bashEditDiff": {
+    "created": "Created",
+    "updated": "Updated",
+    "deleted": "Deleted",
+    "emptyFile": "Empty file",
+    "moreLines_one": "… {{count}} more line",
+    "moreLines_other": "… {{count}} more lines",
+    "moreFiles_one": "… {{count}} more file changed",
+    "moreFiles_other": "… {{count}} more files changed",
+    "filesNotShown_one": "{{count}} file changed (binary, mode only or too large to show)",
+    "filesNotShown_other": "{{count}} files changed (binary, mode only or too large to show)",
+    "filesUnavailable_one": "{{count}} file changed (diff unavailable)",
+    "filesUnavailable_other": "{{count}} files changed (diff unavailable)"
+  },
   "interactive": {
     "title": "Interactive Prompt",
     "waiting": "Waiting for your response in the CLI",
