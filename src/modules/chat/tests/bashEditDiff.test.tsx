@@ -302,9 +302,27 @@ describe('what a Bash command changed', () => {
     expect(sharedOnly).not.toContain('binary, mode only or too large to show');
     expect(sharedOnly).toContain(caveat);
 
-    // A command the CLI could not diff at all gets only that note, as in the CLI.
+    // A command the CLI could not diff at all gets only that note, as in the CLI,
+    // whether or not it counted files.
     expect(noteTexts(renderBash({ bashEditDiff: { files: [], moreFiles: 0, unavailable: true, shared: true } }).container))
       .toEqual(['(file diff unavailable for this command)']);
+    expect(noteTexts(renderBash({
+      bashEditDiff: { files: [], moreFiles: 2, changedFiles: ['/repo/a', '/repo/b'], unavailable: true, shared: true },
+    }, { projectRoot: '/repo' }).container)).toEqual(['2 files changed (diff unavailable)a, b']);
+
+    // With some files diffed, the caveat still follows the partial-diff note.
+    expect(noteTexts(renderBash({
+      bashEditDiff: {
+        ...TWO_FILES_CHANGED.bashEditDiff,
+        moreFiles: 1,
+        changedFiles: ['/repo/f.txt', '/repo/g.txt', '/repo/huge.log'],
+        unavailable: true,
+        shared: true,
+      },
+    }, { projectRoot: '/repo' }).container)).toEqual([
+      '… 1 more file changed (part of the diff is unavailable)huge.log',
+      caveat,
+    ]);
   });
 
   it('draws at most 20 file blocks and counts the rest', () => {
