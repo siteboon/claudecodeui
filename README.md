@@ -142,6 +142,12 @@ CloudCLI UI is the open source UI layer that powers CloudCLI Cloud. You can self
 
 ---
 
+## Deployment session recovery
+
+For self-hosted deployments that restart CloudCLI during an agent turn, see
+[Deployment session recovery](docs/deployment-recovery.md) to capture active
+sessions and automatically send `continue` after the new server is healthy.
+
 ## Security & Tools Configuration
 
 **🔒 Important Notice**: All Claude Code tools are **disabled by default**. This prevents potentially harmful operations from running automatically.
