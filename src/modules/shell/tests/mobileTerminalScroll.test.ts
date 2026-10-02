@@ -8,8 +8,12 @@ type ScreenState = {
   bufferType: 'normal' | 'alternate';
 };
 
-// Only the surface the touch layer reads: the rendered element tree, the
-// mouse-tracking mode, the active buffer and the event subscriptions.
+/**
+ * A stand-in terminal with only the surface the touch layer reads: the
+ * rendered element tree, the mouse-tracking mode, the active buffer and the
+ * event subscriptions. `wheels` collects the deltaY of every wheel event the
+ * screen receives.
+ */
 function createTerminal({ mouseTrackingMode, bufferType }: ScreenState) {
   const element = document.createElement('div');
   element.className = 'xterm';
@@ -45,7 +49,10 @@ function createTerminal({ mouseTrackingMode, bufferType }: ScreenState) {
   return { terminal, container, element, wheels };
 }
 
-// `clientY` lists the fingers still on the screen: one number per finger.
+/**
+ * Dispatches a synthetic touch event. `clientY` lists the fingers still on the
+ * screen, one number per finger; `null` means none.
+ */
 function touch(target: HTMLElement, type: string, clientY: number | number[] | null): Event {
   const event = new Event(type, { bubbles: true, cancelable: true });
   const fingers = clientY === null ? [] : Array.isArray(clientY) ? clientY : [clientY];
@@ -74,7 +81,7 @@ describe('mobile terminal scrolling', () => {
     document.body.replaceChildren();
   });
 
-  // Runs queued animation frames, 16 ms apart, until the glide stops.
+  /** Runs queued animation frames, 16 ms apart, until the glide stops. */
   function runFrames(limit = 500) {
     for (let i = 0; i < limit && frames.length > 0; i++) {
       const callback = frames.shift()!;
@@ -83,6 +90,7 @@ describe('mobile terminal scrolling', () => {
     }
   }
 
+  /** A one-finger drag through `ys`, 16 ms per step, then lift; returns the move events. */
   function drag(element: HTMLElement, ys: number[]) {
     touch(element, 'touchstart', ys[0]);
     const moves = ys.slice(1).map((y) => {

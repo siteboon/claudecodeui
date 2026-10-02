@@ -337,6 +337,11 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     }, LONG_PRESS_MS);
   };
 
+  /**
+   * Routes a moving touch: pinch zoom, selection drag, or scrolling. Scrolling
+   * is left to xterm on a plain shell and sent as wheel events while a
+   * full-screen app owns it.
+   */
   private onTerminalTouchMove = (event: TouchEvent): void => {
     if (event.touches.length === 2 && this.isPinching) {
       event.preventDefault();
@@ -392,6 +397,10 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     }
   };
 
+  /**
+   * Finishes a gesture: ends a pinch (handing over to any finger still down),
+   * settles a selection tap, or starts the fling inertia after a scroll.
+   */
   private onTerminalTouchEnd = (event: TouchEvent): void => {
     if (this.isPinching) {
       this.endPinchZoom();
@@ -788,6 +797,11 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     this.lastScrollTouchTime = now;
   }
 
+  /**
+   * Whether the app in the terminal scrolls itself: mouse reporting is on, or
+   * the alternate screen (which has no scrollback) is active. xterm's own
+   * touch scrolling does nothing in either case.
+   */
   private appOwnsScrolling(): boolean {
     return (
       this.terminal.modes.mouseTrackingMode !== 'none' ||
@@ -795,6 +809,10 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     );
   }
 
+  /**
+   * Sends a pixel-mode wheel event to the terminal at the last touch point,
+   * for xterm to forward to the app like a real wheel.
+   */
   private dispatchWheel(deltaY: number): void {
     const screen = this.getTerminalScreenElement();
     if (!screen || deltaY === 0) {
@@ -832,6 +850,10 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     this.startInertia(this.scrollVelocity);
   }
 
+  /**
+   * Keeps scrolling with friction after a flick, by moving the viewport or,
+   * while an app owns scrolling, by sending decaying wheel events.
+   */
   private startInertia(initialVelocity: number): void {
     const viewport = this.getViewportElement();
     if (!viewport) {
