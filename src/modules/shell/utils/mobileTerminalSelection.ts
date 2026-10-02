@@ -52,6 +52,13 @@ const SCROLL_INERTIA_FRICTION = 0.95; // velocity multiplier per ~16ms frame
 const SCROLL_INERTIA_MIN_VELOCITY = 0.02; // px/ms below which coasting stops
 const SCROLL_INERTIA_MAX_VELOCITY = 5; // px/ms cap to avoid runaway flings
 const SCROLL_INERTIA_MAX_IDLE_MS = 90; // ignore a flick if the finger paused before lifting
+// Full-screen TUIs (Claude Code, vim, less) run on the alternate screen, usually
+// with mouse reporting on. xterm skips its own touch scrolling while mouse
+// events are active, and the alternate screen has no scrollback to move anyway:
+// such apps scroll themselves when the terminal forwards the wheel. So while an
+// app owns scrolling, the drag and its inertia are sent as wheel events, which
+// xterm forwards like a real wheel (SGR 64/65, or arrow keys without mouse
+// reporting).
 
 type ContextMenuItem = {
   label: string;
@@ -117,6 +124,7 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
 
   private viewportElement: HTMLElement | null = null;
   private lastScrollTouchY: number | null = null;
+  private lastScrollTouchX = 0;
   private lastScrollTouchTime = 0;
   private scrollVelocity = 0;
   private inertiaFrame: number | null = null;
@@ -370,9 +378,18 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
       return;
     }
 
-    // Plain one-finger scrolling: xterm moves the viewport itself; we only
-    // record the finger velocity so we can add inertia when the touch ends.
+    // One-finger scrolling. On a plain shell xterm moves the viewport itself
+    // and we only record the finger velocity so we can add inertia when the
+    // touch ends.
+    const previousY = this.lastScrollTouchY ?? touchStart.clientY;
     this.recordScrollSample(touch);
+
+    if (this.appOwnsScrolling()) {
+      // xterm does not scroll here at all; drive the app with wheel events and
+      // keep the page from scrolling or rubber-banding under the finger.
+      event.preventDefault();
+      this.dispatchWheel(previousY - touch.clientY);
+    }
   };
 
   private onTerminalTouchEnd = (event: TouchEvent): void => {
@@ -761,7 +778,35 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     }
 
     this.lastScrollTouchY = touch.clientY;
+    this.lastScrollTouchX = touch.clientX;
     this.lastScrollTouchTime = now;
+  }
+
+  private appOwnsScrolling(): boolean {
+    return (
+      this.terminal.modes.mouseTrackingMode !== 'none' ||
+      this.terminal.buffer.active.type === 'alternate'
+    );
+  }
+
+  private dispatchWheel(deltaY: number): void {
+    const screen = this.getTerminalScreenElement();
+    if (!screen || deltaY === 0) {
+      return;
+    }
+
+    // Dispatched on the screen so it bubbles to xterm's wheel listener with
+    // coordinates inside the grid, which mouse reporting encodes.
+    screen.dispatchEvent(
+      new WheelEvent('wheel', {
+        deltaY,
+        deltaMode: WheelEvent.DOM_DELTA_PIXEL,
+        clientX: this.lastScrollTouchX,
+        clientY: this.lastScrollTouchY ?? 0,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
   }
 
   private maybeStartInertia(): void {
@@ -789,6 +834,8 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
 
     this.cancelInertia();
 
+    // Checked once, when the finger lifts, like the drag that started it.
+    const scrollsApp = this.appOwnsScrolling();
     let velocity = clamp(
       initialVelocity,
       -SCROLL_INERTIA_MAX_VELOCITY,
@@ -803,6 +850,14 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
 
       if (Math.abs(velocity) < SCROLL_INERTIA_MIN_VELOCITY) {
         this.inertiaFrame = null;
+        return;
+      }
+
+      if (scrollsApp) {
+        // The app's scroll position is not observable, so the glide simply
+        // decays to a stop.
+        this.dispatchWheel(velocity * dt);
+        this.inertiaFrame = window.requestAnimationFrame(step);
         return;
       }
 
