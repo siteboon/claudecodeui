@@ -37,6 +37,8 @@ type BashEditDiffData = {
 const MAX_RENDERED_FILES = 20;
 const MAX_RENDERED_LINES_PER_FILE = 200;
 
+// The Edit diff viewer's colours (ToolDiffViewer), so a change made through Bash
+// reads the same as one made through Edit.
 const LINE_CLASSES = {
   added: {
     gutter: 'bg-green-50 text-green-400 dark:bg-green-950/30 dark:text-green-500',
@@ -287,12 +289,15 @@ export function BashEditDiff({ toolUseResult, onFileOpen }: BashEditDiffProps) {
   }
 
   return (
-    <div className="mt-1" data-bash-edit-diff="">
+    <div className="mt-1">
       {diff.files.map((file, index) => (
         <BashEditDiffFileSection key={`${index}:${file.filePath}`} file={file} onFileOpen={onFileOpen} />
       ))}
       {moreFilesNote && (
-        <div className="py-0.5 pl-[14px] text-[11px] text-muted-foreground">{moreFilesNote}</div>
+        // The transparent border lines the note up with the file blocks' headers.
+        <div className="border-l-2 border-transparent py-0.5 pl-3 text-[11px] text-muted-foreground">
+          {moreFilesNote}
+        </div>
       )}
     </div>
   );

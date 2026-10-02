@@ -11,8 +11,9 @@ type DiffStatsBadgeProps = {
  * for commit stats.
  *
  * Rendered by chat's ToolRenderer in the collapsible header of every Edit,
- * Write and ApplyPatch, and by ToolGroupContainer as the total for a collapsed
- * run of them — so the size of a change is readable without expanding it.
+ * Write and ApplyPatch, by BashEditDiff for each file a Bash command changed,
+ * and by ToolGroupContainer as the total for a collapsed run of edits — so the
+ * size of a change is readable without expanding it.
  *
  * A side with no lines is omitted rather than shown as `+0`: a new file reads
  * `+40`, and a deletion reads `-40`.

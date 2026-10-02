@@ -32,7 +32,8 @@ const borderColorMap: Record<string, string> = {
 
 /**
  * Rendered by chat's ToolRenderer for tools configured to show their input and
- * result inside an expandable, category-coloured section.
+ * result inside an expandable, category-coloured section, and by BashEditDiff
+ * for each file a Bash command changed, so those read like the Edit rows.
  */
 export const CollapsibleDisplay: React.FC<CollapsibleDisplayProps> = ({
   toolName,
