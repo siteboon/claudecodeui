@@ -745,7 +745,12 @@ export const sessionsService = {
       return { sessionId, outcome: 'discarded' };
     }
 
-    if (session.provider_session_id || session.jsonl_path || chatRunRegistry.hasAdmittedTurn(sessionId)) {
+    // Every server start backfills a missing provider id with the row's own
+    // id (see addProviderSessionIdMapping), so only a different id, or a
+    // transcript, shows that a provider ever ran for this session.
+    const hasProviderHistory = Boolean(session.jsonl_path)
+      || Boolean(session.provider_session_id && session.provider_session_id !== session.session_id);
+    if (hasProviderHistory || chatRunRegistry.hasAdmittedTurn(sessionId)) {
       return { sessionId, outcome: 'kept' };
     }
 

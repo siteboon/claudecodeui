@@ -99,9 +99,15 @@ test('discarding an unsent session deletes it only when no turn was ever admitte
       sessionsDb.createAppSession('has-history', 'claude', workspacePath, 'Has history');
       chatRunRegistry.recordAdmittedRequest('ack-lost', 'request-1');
       sessionsDb.assignProviderSessionId('has-history', 'provider-session-1');
+      // What the startup migration leaves on a row that never got a provider id.
+      sessionsDb.createAppSession('backfilled', 'claude', workspacePath, 'Backfilled');
+      sessionsDb.assignProviderSessionId('backfilled', 'backfilled');
 
       assert.equal(await discard('never-sent'), 'discarded');
       assert.equal(sessionsDb.getSessionById('never-sent'), null);
+
+      assert.equal(await discard('backfilled'), 'discarded', 'its own id is not provider history');
+      assert.equal(sessionsDb.getSessionById('backfilled'), null);
 
       assert.equal(await discard('ack-lost'), 'kept');
       assert.ok(sessionsDb.getSessionById('ack-lost'));
