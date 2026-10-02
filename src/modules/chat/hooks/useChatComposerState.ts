@@ -271,12 +271,14 @@ export function useChatComposerState({
   // that window does not send the same message twice.
   const awaitingAcceptanceRef = useRef(false);
   // The last turn the server did not confirm. Sending the same message again
-  // reuses its session and request id, so a retry of a turn that was admitted
-  // after all (only its acknowledgement was lost) is not run a second time.
+  // reuses its session, request id and uploaded files, so a retry of a turn
+  // that was admitted after all (only its acknowledgement was lost) is not
+  // run a second time.
   const unconfirmedSendRef = useRef<{
     target: string;
     content: string;
     attachments: File[];
+    uploadedAttachments: unknown[];
     anchorId: string | null;
     sessionId: string;
     sessionName: string | null;
@@ -713,10 +715,25 @@ export function useChatComposerState({
         return;
       }
 
+      // Sending again what the server did not confirm reuses that attempt's
+      // session (a new chat's row, when it was not discarded) and request id.
+      // Matched before the queue below: that turn may be running already, with
+      // only its acknowledgement lost, and a queued copy would run it twice.
+      const existingSessionId = selectedSession?.id || currentSessionId || null;
+      const sendTarget = existingSessionId ?? `project:${selectedProject.projectId}:${provider}`;
+      const unconfirmedSend = unconfirmedSendRef.current;
+      const retriedSend = unconfirmedSend
+        && unconfirmedSend.target === sendTarget
+        && unconfirmedSend.content === currentInput
+        && unconfirmedSend.attachments === currentAttachments
+        && unconfirmedSend.anchorId === editingAnchorId
+        ? unconfirmedSend
+        : null;
+
       // A turn is already in flight: stash this message instead of sending it.
       // Upload attached files now so the queued record contains durable image
       // descriptors that can be sent even if another session is open later.
-      if (isLoading) {
+      if (isLoading && !retriedSend) {
         // A run can restart in the tiny gap between scheduling and flushing a
         // queued submission. Put the same durable draft back without uploading
         // its files again.
@@ -772,6 +789,8 @@ export function useChatComposerState({
 
         queuedDraftSessionRef.current = queuedSessionKey;
         setQueuedDraft(durableDraft);
+        // A notice about an earlier attempt no longer describes what is in the composer.
+        setSendFailure(null);
         setInput('');
         inputValueRef.current = '';
         setAttachedFiles([]);
@@ -833,7 +852,7 @@ export function useChatComposerState({
 
       const messageContent = currentInput;
 
-      let uploadedAttachments = previouslyUploadedAttachments;
+      let uploadedAttachments = retriedSend?.uploadedAttachments ?? previouslyUploadedAttachments;
       if (uploadedAttachments.length === 0 && currentAttachments.length > 0) {
         try {
           uploadedAttachments = await uploadAttachmentFiles(currentAttachments);
@@ -851,19 +870,6 @@ export function useChatComposerState({
 
       const resolvedProjectPath = selectedProject.fullPath || selectedProject.path || '';
       const sessionSummary = getNotificationSessionSummary(selectedSession, currentInput);
-
-      // Sending again what the server did not confirm reuses that attempt's
-      // session (a new chat's row, when it was not discarded) and request id.
-      const existingSessionId = selectedSession?.id || currentSessionId || null;
-      const sendTarget = existingSessionId ?? `project:${selectedProject.projectId}:${provider}`;
-      const unconfirmedSend = unconfirmedSendRef.current;
-      const retriedSend = unconfirmedSend
-        && unconfirmedSend.target === sendTarget
-        && unconfirmedSend.content === messageContent
-        && unconfirmedSend.attachments === currentAttachments
-        && unconfirmedSend.anchorId === editingAnchorId
-        ? unconfirmedSend
-        : null;
 
       // The conversation always has a stable backend-allocated session id
       // BEFORE the first websocket send: brand-new chats allocate one here
@@ -960,6 +966,9 @@ export function useChatComposerState({
         },
       };
 
+      // Set when the server answers that it had already admitted this turn: an
+      // earlier attempt started it, and its own run events report its state.
+      let acceptedAsDuplicate = false;
       if (!subscribe) {
         sendMessage(frame);
       } else {
@@ -970,13 +979,21 @@ export function useChatComposerState({
         const clientRequestId = retriedSend?.clientRequestId ?? createClientRequestId();
         awaitingAcceptanceRef.current = true;
         let failure: string | null = null;
-        let keepUnsentSession = true;
+        // Whether sending this message again reuses this attempt (see
+        // `unconfirmedSendRef`).
+        let reuseAttemptOnRetry = true;
         try {
           const outcome = await sendChatTurnAwaitingAcceptance({ frame, clientRequestId, sendMessage, subscribe });
           if (outcome.status === 'rejected') {
             failure = t('composer.sendRefused', { error: outcome.error });
+            // Refused means not admitted, so sending it again is a new turn,
+            // one that queues behind a running turn like any other. A new
+            // chat's session is still reused unless it is discarded below.
+            reuseAttemptOnRetry = !existingSessionId;
           } else if (outcome.status === 'unconfirmed') {
             failure = t('composer.sendNotConfirmed');
+          } else {
+            acceptedAsDuplicate = outcome.duplicate;
           }
 
           // A brand-new session must not outlive a first message that never
@@ -990,7 +1007,7 @@ export function useChatComposerState({
               if (body?.data?.outcome === 'kept') {
                 failure = null;
               } else if (body?.data?.outcome === 'discarded') {
-                keepUnsentSession = false;
+                reuseAttemptOnRetry = false;
               }
             } catch (error) {
               console.error('Failed to discard the unsent session:', error);
@@ -1001,11 +1018,12 @@ export function useChatComposerState({
         }
 
         if (failure) {
-          unconfirmedSendRef.current = keepUnsentSession
+          unconfirmedSendRef.current = reuseAttemptOnRetry
             ? {
                 target: sendTarget,
                 content: messageContent,
                 attachments: currentAttachments,
+                uploadedAttachments,
                 anchorId: editingAnchorId,
                 sessionId: targetSessionId,
                 sessionName: createdSessionName,
@@ -1030,10 +1048,12 @@ export function useChatComposerState({
       // Mark this request as processing in the per-session activity map (the
       // single source of truth the indicator derives from). The id is always
       // concrete at this point — no pending placeholder exists anymore.
-      onSessionProcessing?.(targetSessionId, {
-        statusText: null,
-        canInterrupt: true,
-      });
+      if (!acceptedAsDuplicate) {
+        onSessionProcessing?.(targetSessionId, {
+          statusText: null,
+          canInterrupt: true,
+        });
+      }
 
       setIsUserScrolledUp(false);
       setTimeout(() => scrollToBottom(), 100);

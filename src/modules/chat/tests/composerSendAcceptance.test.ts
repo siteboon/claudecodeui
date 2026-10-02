@@ -5,7 +5,7 @@ import { afterEach, beforeEach, test, vi } from 'vitest';
 
 import '@/modules/i18n';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
-import { readDraftText, resetChatDrafts, writeDraftText } from '@/shared/chatDrafts';
+import { readDraftText, readQueuedMessage, resetChatDrafts, writeDraftText } from '@/shared/chatDrafts';
 import type { ChatMessage, PermissionMode, Project, ProjectSession, ServerEvent } from '@/shared/types';
 
 /**
@@ -331,4 +331,107 @@ test('a file attached while a message waits for its acknowledgement stays attach
 
   assert.equal(view.result.current.input, '', 'the sent text is consumed');
   assert.deepEqual(view.result.current.attachedFiles, [screenshot], 'the file attached since is not');
+});
+
+test('retrying a message whose turn is already running sends it again instead of queueing a copy', async () => {
+  // The turn was admitted, but its acknowledgement never came back.
+  delivery = 'admit';
+  const { view, processing, added } = renderComposer(SESSION);
+  await typeMessage(view, 'hello');
+  await settle(await startSubmit(view), ACCEPTANCE_TIMEOUT_MS);
+  assert.match(view.result.current.sendError ?? '', /not confirm/i);
+
+  // Its run shows the session as busy, which is when Enter would queue.
+  await act(async () => { view.rerender({ session: SESSION, isLoading: true }); });
+  delivery = 'ack';
+  await settle(await startSubmit(view));
+
+  assert.equal(frames.length, 2, 'sent again, not queued');
+  assert.equal(frames[1]?.clientRequestId, frames[0]?.clientRequestId, 'as the same turn, so the server does not run it twice');
+  assert.equal(readQueuedMessage(SESSION.id), null, 'no copy is left to run after it');
+  assert.equal(view.result.current.input, '');
+  assert.equal(view.result.current.sendError, null);
+  assert.equal(added.filter((message) => message.type === 'user').length, 1);
+  // The run was started by the first attempt and reports its own progress;
+  // the composer marking it again would leave a finished run spinning.
+  assert.deepEqual(processing, []);
+});
+
+test('a retry refused because another turn is running is queued by the next send', async () => {
+  const { view } = renderComposer(SESSION);
+  await typeMessage(view, 'hello');
+  await settle(await startSubmit(view), ACCEPTANCE_TIMEOUT_MS);
+
+  await act(async () => { view.rerender({ session: SESSION, isLoading: true }); });
+  delivery = 'reject';
+  await settle(await startSubmit(view));
+  assert.match(view.result.current.sendError ?? '', /already has a run in progress/);
+  assert.equal(view.result.current.input, 'hello');
+
+  // Refused means never admitted: the message now waits its turn like any other.
+  await act(async () => { await view.result.current.handleSubmit(submitEvent); });
+
+  assert.equal(frames.length, 2);
+  assert.equal(readQueuedMessage(SESSION.id)?.content, 'hello');
+  assert.equal(view.result.current.input, '');
+  assert.equal(view.result.current.sendError, null, 'the notice about the refused attempt is gone');
+});
+
+test('a reconnect while a message waits gives up on its acknowledgement at once', async () => {
+  delivery = 'admit';
+  const { view } = renderComposer(SESSION);
+  await typeMessage(view, 'hello');
+
+  const pending = await startSubmit(view);
+  // The acknowledgement would have gone to the socket that was replaced.
+  await act(async () => {
+    emit({ kind: 'websocket_reconnected' });
+    await vi.advanceTimersByTimeAsync(1_000);
+  });
+
+  assert.match(view.result.current.sendError ?? '', /not confirm/i, 'reported well before the timeout');
+  assert.equal(view.result.current.input, 'hello');
+  await settle(pending, ACCEPTANCE_TIMEOUT_MS);
+});
+
+test('a retry after the empty session could not be discarded reuses that session', async () => {
+  discardOutcome = 'error';
+  const { view, established } = renderComposer(null);
+  await typeMessage(view, 'hello');
+  await settle(await startSubmit(view), ACCEPTANCE_TIMEOUT_MS);
+
+  delivery = 'ack';
+  await settle(await startSubmit(view));
+
+  assert.equal(callsTo('/api/providers/sessions', 'POST').length, 1, 'no second session is allocated');
+  assert.equal(frames[1]?.sessionId, NEW_SESSION_ID);
+  assert.equal(frames[1]?.clientRequestId, frames[0]?.clientRequestId);
+  assert.deepEqual(established, [NEW_SESSION_ID]);
+});
+
+test('a retry after the empty session was discarded starts over as a new turn', async () => {
+  const { view } = renderComposer(null);
+  await typeMessage(view, 'hello');
+  await settle(await startSubmit(view), ACCEPTANCE_TIMEOUT_MS);
+
+  delivery = 'ack';
+  await settle(await startSubmit(view));
+
+  assert.equal(callsTo('/api/providers/sessions', 'POST').length, 2, 'the deleted session is not reused');
+  assert.notEqual(frames[1]?.clientRequestId, frames[0]?.clientRequestId);
+});
+
+test('retrying a message with a file does not upload the file again', async () => {
+  const { view } = renderComposer(SESSION);
+  const screenshot = new File(['png'], 'screenshot.png', { type: 'image/png' });
+  await act(async () => { view.result.current.setAttachedFiles([screenshot]); });
+  await typeMessage(view, 'look');
+  await settle(await startSubmit(view), ACCEPTANCE_TIMEOUT_MS);
+
+  delivery = 'ack';
+  await settle(await startSubmit(view));
+
+  assert.equal(callsTo('/api/assets/files', 'POST').length, 1);
+  assert.deepEqual(frames[1]?.options.attachments, frames[0]?.options.attachments);
+  assert.deepEqual(view.result.current.attachedFiles, []);
 });

@@ -8,12 +8,13 @@ import type { ServerEvent } from '@/shared/types';
 const CHAT_SEND_ACCEPTANCE_TIMEOUT_MS = 10_000;
 
 /**
- * What became of a turn the composer sent: admitted by the server, refused by
- * it (with its reason), or never confirmed either way — the frame or its
- * acknowledgement was lost, or the socket was replaced while waiting.
+ * What became of a turn the composer sent: admitted by the server (or found
+ * already admitted, when an earlier attempt's acknowledgement was lost),
+ * refused by it (with its reason), or never confirmed either way — the frame
+ * or its acknowledgement was lost, or the socket was replaced while waiting.
  */
-export type ChatSendOutcome =
-  | { status: 'accepted' }
+type ChatSendOutcome =
+  | { status: 'accepted'; duplicate: boolean }
   | { status: 'rejected'; error: string }
   | { status: 'unconfirmed' };
 
@@ -66,7 +67,7 @@ export function sendChatTurnAwaitingAcceptance({
       } else if (event.clientRequestId !== clientRequestId) {
         return;
       } else if (event.kind === 'chat_send_accepted') {
-        settle({ status: 'accepted' });
+        settle({ status: 'accepted', duplicate: event.duplicate === true });
       } else if (event.kind === 'protocol_error') {
         settle({ status: 'rejected', error: String(event.error || event.code || 'Request failed') });
       }
