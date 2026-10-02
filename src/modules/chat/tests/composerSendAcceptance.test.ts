@@ -310,12 +310,30 @@ test('text typed while a message waits for its acknowledgement is kept when the 
 
   assert.deepEqual(established, [NEW_SESSION_ID], 'the message did go out');
   assert.deepEqual(added.filter((message) => message.type === 'user').map((message) => message.content), ['hello']);
-  assert.equal(view.result.current.input, 'hello -- and also please check the tests', 'what was typed since is still there');
   assert.equal(
-    readDraftText(`project:${PROJECT.projectId}`),
+    readDraftText(NEW_SESSION_ID),
     'hello -- and also please check the tests',
-    'and so is its saved draft',
+    'what was typed since is the draft of the session the composer now opens',
   );
+  assert.equal(readDraftText(`project:${PROJECT.projectId}`), '', 'and is not left behind in the new-chat composer');
+
+  // Opening the new session, as `onSessionEstablished` does, brings it back.
+  await act(async () => { view.rerender({ session: { id: NEW_SESSION_ID } }); });
+  assert.equal(view.result.current.input, 'hello -- and also please check the tests');
+});
+
+test('text typed into an open chat while its message waits for the acknowledgement is kept', async () => {
+  delivery = 'admit';
+  const { view } = renderComposer(SESSION);
+  await typeMessage(view, 'hello');
+
+  const pending = await startSubmit(view);
+  await typeMessage(view, 'hello -- and also please check the tests');
+  acknowledge(frames[0]);
+  await settle(pending);
+
+  assert.equal(view.result.current.input, 'hello -- and also please check the tests');
+  assert.equal(readDraftText(SESSION.id), 'hello -- and also please check the tests');
 });
 
 test('a file attached while a message waits for its acknowledgement stays attached', async () => {

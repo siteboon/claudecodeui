@@ -1041,6 +1041,23 @@ export function useChatComposerState({
         unconfirmedSendRef.current = null;
       }
 
+      // Only what was sent is consumed. Text typed or files attached while it
+      // waited for its acknowledgement are the next message, and a composer
+      // that moved to another chat meanwhile shows that chat's draft.
+      const composerShowsSendScope = draftScopeRef.current === sendScope;
+      const sentTextIsStillDrafted = composerShowsSendScope
+        ? inputValueRef.current === currentInput
+        : sendScope !== null && readDraftText(sendScope) === currentInput;
+      // A new chat's composer is about to become the new session's, so text
+      // typed since goes along as that session's draft rather than staying
+      // behind in the new-chat composer.
+      const draftCarriedToNewSession = !existingSessionId && composerShowsSendScope && !sentTextIsStillDrafted
+        ? inputValueRef.current
+        : '';
+      if (draftCarriedToNewSession) {
+        writeDraftText(targetSessionId, draftCarriedToNewSession);
+      }
+
       if (!existingSessionId) {
         onSessionEstablished?.(targetSessionId, {
           provider,
@@ -1069,13 +1086,6 @@ export function useChatComposerState({
       // navigated to. Queued drafts were recorded when they were queued; the
       // consecutive-duplicate check keeps this second call a no-op.
       recordSentMessage(currentInput, targetSessionId);
-      // Only what was sent is consumed. Text typed or files attached while it
-      // waited for its acknowledgement are the next message, and a composer
-      // that moved to another chat meanwhile shows that chat's draft.
-      const composerShowsSendScope = draftScopeRef.current === sendScope;
-      const sentTextIsStillDrafted = composerShowsSendScope
-        ? inputValueRef.current === currentInput
-        : sendScope !== null && readDraftText(sendScope) === currentInput;
       if (composerShowsSendScope && sentTextIsStillDrafted) {
         setInput('');
         inputValueRef.current = '';
@@ -1090,7 +1100,7 @@ export function useChatComposerState({
       // Attaching a file makes a new list, so this lets go of the sent files only.
       setAttachedFiles((attached) => (attached === currentAttachments ? [] : attached));
 
-      if (sendScope && sentTextIsStillDrafted) {
+      if (sendScope && (sentTextIsStillDrafted || draftCarriedToNewSession)) {
         writeDraftText(sendScope, '');
       }
     },
