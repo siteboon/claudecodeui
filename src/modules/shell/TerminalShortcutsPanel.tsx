@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import type { Terminal } from '@xterm/xterm';
 
 import { sendSocketMessage } from '@/modules/shell/utils/socket';
+import { useVisualViewportKeyboardOffset } from '@/shared/hooks/useVisualViewportKeyboardOffset';
 
 type Shortcut =
   | { type: 'key'; id: string; label: string; sequence: string }
@@ -41,7 +42,9 @@ type TerminalShortcutsPanelProps = {
   wsRef: MutableRefObject<WebSocket | null>;
   terminalRef: MutableRefObject<Terminal | null>;
   isConnected: boolean;
-  bottomOffset?: string;
+  // `inline` takes its own row below the terminal; `floating` (the default)
+  // overlays the bottom of the screen for layouts that have no row to give it.
+  placement?: 'inline' | 'floating';
 };
 
 const preventFocusSteal = (e: React.PointerEvent) => e.preventDefault();
@@ -50,6 +53,16 @@ const KEY_BTN =
   'shrink-0 rounded-md border border-gray-600 bg-gray-700 px-2.5 py-1.5 text-xs font-medium text-gray-100 transition-colors select-none active:bg-blue-600 active:text-white active:border-blue-600 disabled:cursor-not-allowed disabled:opacity-40';
 const KEY_BTN_ACTIVE =
   'shrink-0 rounded-md border border-blue-500 bg-blue-600 px-2.5 py-1.5 text-xs font-medium text-white transition-colors select-none disabled:cursor-not-allowed disabled:opacity-40';
+// Inline, the bar is a flex row of the Shell column: the terminal shrinks to
+// make room for it instead of being covered, and it rides inside the workspace
+// shell, whose bottom tracks --keyboard-height, so it sits above the iOS
+// keyboard. A fixed overlay cannot get there: iOS does not shrink the layout
+// viewport for the keyboard (interactive-widget is Chromium-only).
+const PANEL_INLINE = 'shrink-0 px-2 md:hidden';
+// Floating, it is lifted over the keyboard explicitly.
+const PANEL_FLOATING = 'pointer-events-none fixed inset-x-0 bottom-0 z-20 px-2 md:hidden';
+const PANEL_FLOATING_STYLE = { transform: 'translateY(calc(-1 * var(--keyboard-height, 0px)))' };
+
 const ICON_BTN =
   'shrink-0 rounded-md border border-gray-600 bg-gray-700 p-1.5 text-gray-100 transition-colors select-none active:bg-blue-600 active:text-white active:border-blue-600 disabled:cursor-not-allowed disabled:opacity-40';
 
@@ -58,7 +71,7 @@ export default function TerminalShortcutsPanel({
   wsRef,
   terminalRef,
   isConnected,
-  bottomOffset = 'bottom-0',
+  placement = 'floating',
 }: TerminalShortcutsPanelProps) {
   const { t } = useTranslation('settings');
   const [ctrlActive, setCtrlActive] = useState(false);
@@ -109,8 +122,16 @@ export default function TerminalShortcutsPanel({
     [ctrlActive, altActive, sendInput],
   );
 
+  // The floating bar is lifted by --keyboard-height. The workspace keeps it up
+  // to date, but the bar can also be open without the workspace mounted (the
+  // provider-login modal during onboarding), so it maintains it as well.
+  useVisualViewportKeyboardOffset();
+
   return (
-    <div className={`pointer-events-none fixed inset-x-0 ${bottomOffset} z-20 px-2 md:hidden`}>
+    <div
+      className={placement === 'inline' ? PANEL_INLINE : PANEL_FLOATING}
+      style={placement === 'floating' ? PANEL_FLOATING_STYLE : undefined}
+    >
       <div className="pointer-events-auto flex items-center gap-1 overflow-x-auto rounded-lg border border-gray-700/80 bg-gray-900/95 px-1.5 py-1.5 shadow-lg backdrop-blur-sm [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <button
           type="button"
