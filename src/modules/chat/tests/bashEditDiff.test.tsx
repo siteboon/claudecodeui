@@ -214,10 +214,9 @@ describe('what a Bash command changed', () => {
     }).container.textContent ?? '';
     expect(withMore).toContain('… 3 more files changed');
 
-    const unavailable = renderBash({
-      bashEditDiff: { files: [], moreFiles: 2, unavailable: true },
-    }).container.textContent ?? '';
-    expect(unavailable).toContain('2 files changed (diff unavailable)');
+    // One note, not the count plus a second "unavailable" line.
+    expect(noteTexts(renderBash({ bashEditDiff: { files: [], moreFiles: 2, unavailable: true } }).container))
+      .toEqual(['2 files changed (diff unavailable)']);
   });
 
   it('names the files it counted but did not diff', () => {
@@ -241,6 +240,26 @@ describe('what a Bash command changed', () => {
     expect(note).toBe(
       `… 13 more files changed${undiffed.slice(0, 10).map((path) => path.slice('/repo/'.length)).join(', ')} +3 more`,
     );
+
+    // A path the CLI lists twice is named once.
+    expect(noteTexts(renderBash({
+      bashEditDiff: { ...ONLY_TOO_LARGE.bashEditDiff, changedFiles: ['/repo/big.txt', '/repo/big.txt'] },
+    }, { projectRoot: '/repo' }).container)).toEqual([
+      '1 file changed (binary, mode only or too large to show)big.txt',
+    ]);
+
+    // Past 200 changed files the CLI stops listing names but keeps counting,
+    // so "+N more" comes from the count, not from the names it got.
+    const truncated = Array.from({ length: 198 }, (_, index) => `/repo/src/file${index + 1}.ts`);
+    const [formatted] = noteTexts(renderBash({
+      bashEditDiff: {
+        ...TWO_FILES_CHANGED.bashEditDiff,
+        moreFiles: 295,
+        changedFiles: ['/repo/f.txt', '/repo/g.txt', ...truncated],
+      },
+    }, { projectRoot: '/repo' }).container);
+    expect(formatted).toMatch(/^… 295 more files changed/);
+    expect(formatted).toMatch(/ \+285 more$/);
   });
 
   it('says when the CLI skipped the command or could not diff it', () => {
@@ -282,6 +301,10 @@ describe('what a Bash command changed', () => {
     expect(sharedOnly).toContain('2 files changed');
     expect(sharedOnly).not.toContain('binary, mode only or too large to show');
     expect(sharedOnly).toContain(caveat);
+
+    // A command the CLI could not diff at all gets only that note, as in the CLI.
+    expect(noteTexts(renderBash({ bashEditDiff: { files: [], moreFiles: 0, unavailable: true, shared: true } }).container))
+      .toEqual(['(file diff unavailable for this command)']);
   });
 
   it('draws at most 20 file blocks and counts the rest', () => {

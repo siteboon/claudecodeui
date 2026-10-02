@@ -372,7 +372,10 @@ export function BashEditDiff({ toolUseResult, onFileOpen, projectRoot }: BashEdi
   }
 
   const listedPaths = diff.undiffedPaths.slice(0, MAX_LISTED_UNDIFFED_PATHS);
-  const unlistedPaths = diff.undiffedPaths.length - listedPaths.length;
+  // The CLI stops changedFiles at 200 names but keeps counting in moreFiles.
+  const unlistedPaths = Math.max(diff.moreFiles, diff.undiffedPaths.length) - listedPaths.length;
+  // Like the CLI, a command it could not diff at all gets only that note.
+  const showSharedCaveat = diff.shared && !(diff.unavailable && !hasFiles);
 
   return (
     <div className="mt-1">
@@ -397,7 +400,7 @@ export function BashEditDiff({ toolUseResult, onFileOpen, projectRoot }: BashEdi
         </BashEditDiffNote>
       )}
       {unavailableNote && <BashEditDiffNote>{unavailableNote}</BashEditDiffNote>}
-      {diff.shared && <BashEditDiffNote>{t('bashEditDiff.shared')}</BashEditDiffNote>}
+      {showSharedCaveat && <BashEditDiffNote>{t('bashEditDiff.shared')}</BashEditDiffNote>}
     </div>
   );
 }
