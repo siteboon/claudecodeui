@@ -11,6 +11,9 @@ const runningPlugins = new Map();
 // Map<pluginName, Promise<port>> — in-flight start operations
 const startingPlugins = new Map();
 
+// LANG, LANGUAGE and every LC_* category (LC_ALL, LC_CTYPE, LC_TIME, ...).
+const LOCALE_VARIABLE = /^(LANG|LANGUAGE|LC_[A-Z]+)$/;
+
 /**
  * Build the environment handed to a plugin server subprocess.
  *
@@ -21,6 +24,11 @@ const startingPlugins = new Map();
  * site-packages and fails to import; SystemRoot, PATHEXT and TEMP are needed to
  * resolve system DLLs, executable extensions and a temp directory. None of
  * these carry secrets, so the ones that are set get passed straight through.
+ *
+ * The locale (LANG, LANGUAGE, LC_*) is passed through on every platform for the
+ * same reason. Without it a plugin server, and any shell or CLI it spawns,
+ * runs in the C locale: readline, python, less and gettext then treat UTF-8 as
+ * single bytes, so a web terminal turns Cyrillic or CJK input into garbage.
  */
 function buildPluginEnv(name) {
   const env = {
@@ -29,6 +37,12 @@ function buildPluginEnv(name) {
     NODE_ENV: process.env.NODE_ENV || 'production',
     PLUGIN_NAME: name,
   };
+
+  for (const [key, value] of Object.entries(process.env)) {
+    if (LOCALE_VARIABLE.test(key) && value !== undefined) {
+      env[key] = value;
+    }
+  }
 
   if (process.platform === 'win32') {
     const WINDOWS_ESSENTIALS = [
