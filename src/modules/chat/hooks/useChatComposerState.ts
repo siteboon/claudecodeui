@@ -826,6 +826,10 @@ export function useChatComposerState({
         return;
       }
       setSendFailure(null);
+      // The composer scope this message was typed in. Sending can take a
+      // while (uploads, a new session, the server's acknowledgement), and
+      // only this scope's draft is the one the send consumes or keeps.
+      const sendScope = draftScopeRef.current;
 
       const messageContent = currentInput;
 
@@ -1008,7 +1012,7 @@ export function useChatComposerState({
                 clientRequestId,
               }
             : null;
-          setSendFailure({ scope: draftScopeRef.current, message: failure });
+          setSendFailure({ scope: sendScope, message: failure });
           return;
         }
         unconfirmedSendRef.current = null;
@@ -1040,19 +1044,22 @@ export function useChatComposerState({
       // navigated to. Queued drafts were recorded when they were queued; the
       // consecutive-duplicate check keeps this second call a no-op.
       recordSentMessage(currentInput, targetSessionId);
-      setInput('');
-      inputValueRef.current = '';
-      resetCommandMenuState();
-      setAttachedFiles([]);
-      setFileErrors(new Map());
-      setIsTextareaExpanded(false);
+      // A composer that moved to another chat meanwhile holds that chat's draft.
+      if (draftScopeRef.current === sendScope) {
+        setInput('');
+        inputValueRef.current = '';
+        resetCommandMenuState();
+        setAttachedFiles([]);
+        setFileErrors(new Map());
+        setIsTextareaExpanded(false);
 
-      if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto';
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+        }
       }
 
-      if (draftScopeRef.current) {
-        writeDraftText(draftScopeRef.current, '');
+      if (sendScope) {
+        writeDraftText(sendScope, '');
       }
     },
     [

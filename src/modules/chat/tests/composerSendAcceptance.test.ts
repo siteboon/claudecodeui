@@ -5,7 +5,7 @@ import { afterEach, beforeEach, test, vi } from 'vitest';
 
 import '@/modules/i18n';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
-import { readDraftText, resetChatDrafts } from '@/shared/chatDrafts';
+import { readDraftText, resetChatDrafts, writeDraftText } from '@/shared/chatDrafts';
 import type { ChatMessage, PermissionMode, Project, ProjectSession, ServerEvent } from '@/shared/types';
 
 /**
@@ -87,10 +87,10 @@ const renderComposer = (selectedSession: ProjectSession | null) => {
   const established: string[] = [];
   const processing: Array<string | null | undefined> = [];
   const added: ChatMessage[] = [];
-  const view = renderHook(() => useChatComposerState({
+  const view = renderHook(({ session }: { session: ProjectSession | null }) => useChatComposerState({
     selectedProject: PROJECT,
-    selectedSession,
-    currentSessionId: selectedSession?.id ?? null,
+    selectedSession: session,
+    currentSessionId: session?.id ?? null,
     provider: 'claude',
     permissionMode: 'default',
     cyclePermissionMode: () => undefined,
@@ -108,7 +108,7 @@ const renderComposer = (selectedSession: ProjectSession | null) => {
     addMessage: (message) => { added.push(message); },
     setIsUserScrolledUp: () => undefined,
     setPendingPermissionRequests: () => undefined,
-  }));
+  }), { initialProps: { session: selectedSession } });
   return { view, established, processing, added };
 };
 
@@ -239,4 +239,21 @@ test('a message the server refuses keeps the draft and reports why at once', asy
   assert.equal(view.result.current.input, 'hello');
   assert.deepEqual(processing, []);
   assert.match(view.result.current.sendError ?? '', /already has a run in progress/);
+});
+
+test('a send confirmed after the user opened another chat leaves that chat\'s draft alone', async () => {
+  discardOutcome = 'kept';
+  writeDraftText('session-b', 'draft for B');
+  const { view, established } = renderComposer(null);
+  await typeMessage(view, 'hello');
+
+  const pending = await startSubmit(view);
+  // While the first message is still unconfirmed, the user opens session B.
+  await act(async () => { view.rerender({ session: { id: 'session-b' } }); });
+  await settle(pending, ACCEPTANCE_TIMEOUT_MS);
+
+  assert.deepEqual(established, [NEW_SESSION_ID], 'the message did go out');
+  assert.equal(readDraftText(`project:${PROJECT.projectId}`), '', 'the draft it was sent from is consumed');
+  assert.equal(readDraftText('session-b'), 'draft for B');
+  assert.equal(view.result.current.input, 'draft for B');
 });
