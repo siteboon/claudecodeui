@@ -119,6 +119,9 @@ type UseShellTerminalOptions = {
   minimal: boolean;
   isRestarting: boolean;
   closeSocket: () => void;
+  // Rewrites typed input before it is sent, e.g. to apply the key bar's
+  // CTRL/ALT; read on every keystroke so it can change without a remount.
+  inputTransformRef?: MutableRefObject<((data: string) => string) | null>;
 };
 
 type UseShellTerminalResult = {
@@ -127,6 +130,11 @@ type UseShellTerminalResult = {
   disposeTerminal: () => void;
 };
 
+/**
+ * Creates the xterm instance for a Shell, wires its input, clipboard, resize
+ * and mobile touch handling to the socket, and disposes it on teardown. Typed
+ * input passes through `inputTransformRef` when one is set.
+ */
 export function useShellTerminal({
   terminalContainerRef,
   terminalRef,
@@ -136,6 +144,7 @@ export function useShellTerminal({
   minimal,
   isRestarting,
   closeSocket,
+  inputTransformRef,
 }: UseShellTerminalOptions): UseShellTerminalResult {
   const [isInitialized, setIsInitialized] = useState(false);
   const resizeTimeoutRef = useRef<number | null>(null);
@@ -309,9 +318,10 @@ export function useShellTerminal({
     setIsInitialized(true);
 
     const dataSubscription = nextTerminal.onData((data) => {
+      const transform = inputTransformRef?.current;
       sendSocketMessage(wsRef.current, {
         type: 'input',
-        data,
+        data: transform ? transform(data) : data,
       });
     });
 
@@ -353,6 +363,7 @@ export function useShellTerminal({
     closeSocket,
     disposeTerminal,
     fitAddonRef,
+    inputTransformRef,
     isRestarting,
     hasSelectedProject,
     minimal,
