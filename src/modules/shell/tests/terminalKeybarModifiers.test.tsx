@@ -28,14 +28,18 @@ function renderPanel() {
     send: (payload: string) => sent.push(JSON.parse(payload).data),
   } as unknown as WebSocket;
   const inputTransformRef: MutableRefObject<Transform | null> = { current: null };
-  const { unmount } = render(
+  /** The key bar as Shell renders it, connected or not. */
+  const panel = (isConnected: boolean) => (
     <TerminalShortcutsPanel
       wsRef={{ current: socket }}
       terminalRef={{ current: null as Terminal | null }}
       inputTransformRef={inputTransformRef}
-      isConnected
-    />,
+      isConnected={isConnected}
+    />
   );
+  const { rerender, unmount } = render(panel(true));
+  /** Re-renders the bar with the given connection state. */
+  const setConnected = (isConnected: boolean) => rerender(panel(isConnected));
   /** What the terminal does with a character typed on the on-screen keyboard. */
   const type = (data: string) => {
     let out = data;
@@ -44,7 +48,7 @@ function renderPanel() {
     });
     return out;
   };
-  return { inputTransformRef, type, unmount };
+  return { inputTransformRef, setConnected, type, unmount };
 }
 
 const BUTTON_NAMES = { CTRL: /^Ctrl:/, ALT: /^Alt:/, Tab: 'Tab' } as const;
@@ -141,6 +145,19 @@ describe('TerminalShortcutsPanel modifiers', () => {
     tap('ALT');
     tap('Tab', 1000);
     expect(sent).toEqual(['\x1b\t']);
+  });
+
+  it('releases armed and locked modifiers when the connection drops, e.g. on a restart or session switch', () => {
+    const { setConnected, type } = renderPanel();
+
+    tap('CTRL');
+    tap('CTRL', 200);
+    tap('ALT', 1000);
+    setConnected(false);
+    setConnected(true);
+
+    expect(ctrlButton().getAttribute('aria-pressed')).toBe('false');
+    expect(type('c')).toBe('c');
   });
 
   it('stops rewriting input once unmounted', () => {

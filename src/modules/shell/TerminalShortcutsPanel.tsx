@@ -155,6 +155,14 @@ export default function TerminalShortcutsPanel({
     [updateModifiers],
   );
 
+  // Restarts and session or project switches all drop the connection. A
+  // modifier left on would otherwise rewrite input to the new process.
+  useEffect(() => {
+    if (!isConnected) {
+      updateModifiers(MODIFIERS_OFF);
+    }
+  }, [isConnected, updateModifiers]);
+
   // Characters from the on-screen keyboard never pass through this bar's
   // buttons; they reach the terminal directly, so the modifiers are applied
   // there.
