@@ -1,0 +1,32 @@
+name: Plugin catalog
+
+# Fails when a recommended plugin repo is deleted or made private,
+# so the Settings > Plugins list never offers an install that cannot work.
+on:
+  pull_request:
+    paths:
+      - 'src/modules/plugins/PluginSettingsTab.tsx'
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check that every recommended plugin repo exists
+        env:
+          GIT_TERMINAL_PROMPT: '0'
+        run: |
+          failed=0
+          for url in $(grep -oE "https://github\.com/[^']+" src/modules/plugins/PluginSettingsTab.tsx | sort -u); do
+            if git ls-remote "$url" HEAD > /dev/null 2>&1; then
+              echo "ok      $url"
+            else
+              echo "::error::Plugin repo not reachable: $url"
+              failed=1
+            fi
+          done
+          exit $failed
