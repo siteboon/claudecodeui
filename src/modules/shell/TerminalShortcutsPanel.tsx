@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import type { Terminal } from '@xterm/xterm';
 
 import { sendSocketMessage } from '@/modules/shell/utils/socket';
+import { useVisualViewportKeyboardOffset } from '@/shared/hooks/useVisualViewportKeyboardOffset';
 
 type Shortcut =
   | { type: 'key'; id: string; label: string; sequence: string }
@@ -120,6 +121,11 @@ export default function TerminalShortcutsPanel({
     },
     [ctrlActive, altActive, sendInput],
   );
+
+  // The floating bar is lifted by --keyboard-height. The workspace keeps it up
+  // to date, but the bar can also be open without the workspace mounted (the
+  // provider-login modal during onboarding), so it maintains it as well.
+  useVisualViewportKeyboardOffset();
 
   return (
     <div

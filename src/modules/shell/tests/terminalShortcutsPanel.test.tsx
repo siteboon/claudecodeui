@@ -1,6 +1,6 @@
-import { render } from '@testing-library/react';
 import type { Terminal } from '@xterm/xterm';
-import { describe, expect, it, vi } from 'vitest';
+import { act, render } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import TerminalShortcutsPanel from '@/modules/shell/TerminalShortcutsPanel';
 
@@ -28,6 +28,24 @@ describe('TerminalShortcutsPanel placement', () => {
     expect(panel.className).not.toMatch(/\bfixed\b/);
     expect(panel.className).toMatch(/\bshrink-0\b/);
     expect(panel.style.transform).toBe('');
+  });
+
+  afterEach(() => {
+    Reflect.deleteProperty(window, 'visualViewport');
+    document.documentElement.style.removeProperty('--keyboard-height');
+  });
+
+  it('tracks the keyboard height itself, for when no workspace is mounted (onboarding)', () => {
+    const visualViewport = Object.assign(new EventTarget(), { height: window.innerHeight });
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: visualViewport });
+    renderPanel('floating');
+
+    act(() => {
+      visualViewport.height = window.innerHeight - 300;
+      visualViewport.dispatchEvent(new Event('resize'));
+    });
+
+    expect(document.documentElement.style.getPropertyValue('--keyboard-height')).toBe('300px');
   });
 
   it('floats over the bottom of the screen and is lifted by the keyboard height', () => {
