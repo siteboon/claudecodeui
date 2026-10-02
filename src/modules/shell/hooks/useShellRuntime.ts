@@ -32,6 +32,10 @@ type UseShellRuntimeResult = {
   disconnectFromShell: (options?: { suppressAutoConnect?: boolean }) => void;
 };
 
+/**
+ * Combines the Shell's terminal and its socket connection, and restarts or
+ * disconnects them when the project, session or restart state changes.
+ */
 export function useShellRuntime({
   selectedProject,
   selectedSession,

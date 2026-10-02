@@ -16,6 +16,11 @@ type Transform = (data: string) => string;
 let now = 0;
 let sent: string[] = [];
 
+/**
+ * Renders the key bar with a socket that records what the bar sends, and
+ * returns `type`, which feeds a character through the bar's input transform
+ * the way the terminal does for the on-screen keyboard.
+ */
 function renderPanel() {
   sent = [];
   const socket = {
@@ -31,7 +36,7 @@ function renderPanel() {
       isConnected
     />,
   );
-  // What the terminal does with a character typed on the on-screen keyboard.
+  /** What the terminal does with a character typed on the on-screen keyboard. */
   const type = (data: string) => {
     let out = data;
     act(() => {
@@ -44,12 +49,13 @@ function renderPanel() {
 
 const BUTTON_NAMES = { CTRL: /^Ctrl:/, ALT: /^Alt:/, Tab: 'Tab' } as const;
 
-// Taps a key bar button `afterMs` after the previous tap.
+/** Taps a key bar button `afterMs` after the previous tap. */
 function tap(label: keyof typeof BUTTON_NAMES, afterMs = 100) {
   now += afterMs;
   fireEvent.click(screen.getByRole('button', { name: BUTTON_NAMES[label] }));
 }
 
+/** The key bar's CTRL button. */
 function ctrlButton() {
   return screen.getByRole('button', { name: /^Ctrl:/ });
 }

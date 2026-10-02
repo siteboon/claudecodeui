@@ -63,9 +63,11 @@ const MODIFIER_HINTS: Record<ModifierKey, string> = {
   alt: 'Alt: applies to the next key, double-tap to lock',
 };
 
-// Ctrl+letter and Ctrl+@[\]^_ become C0 control characters, as a hardware
-// keyboard sends them; anything else passes through unchanged. ASCII only:
-// toUpperCase() can expand other letters into ones that would map (ß → SS).
+/**
+ * Ctrl+letter and Ctrl+@[\]^_ become C0 control characters, as a hardware
+ * keyboard sends them; anything else passes through unchanged. ASCII only:
+ * toUpperCase() can expand other letters into ones that would map (ß → SS).
+ */
 function toControlCharacter(char: string): string {
   if (char.charCodeAt(0) > 0x7e) {
     return char;
@@ -100,13 +102,16 @@ export default function TerminalShortcutsPanel({
   const modifiersRef = useRef<Modifiers>(MODIFIERS_OFF);
   const armedAtRef = useRef<Record<ModifierKey, number>>({ ctrl: 0, alt: 0 });
 
+  /** Sets the modifier state, keeping the ref and the rendered state in step. */
   const updateModifiers = useCallback((next: Modifiers) => {
     modifiersRef.current = next;
     setModifiers(next);
   }, []);
 
-  // Applies the held modifiers to a single typed character and releases the
-  // ones that were only armed. Pastes and escape sequences pass through.
+  /**
+   * Applies the held modifiers to a single typed character and releases the
+   * ones that were only armed. Pastes and escape sequences pass through.
+   */
   const applyModifiers = useCallback(
     (data: string): string => {
       const current = modifiersRef.current;
@@ -128,6 +133,10 @@ export default function TerminalShortcutsPanel({
     [updateModifiers],
   );
 
+  /**
+   * A tap on CTRL/ALT: off → armed; armed → locked when it comes within
+   * DOUBLE_TAP_MS of arming, otherwise off; locked → off.
+   */
   const tapModifier = useCallback(
     (key: ModifierKey) => {
       const now = performance.now();
@@ -187,6 +196,7 @@ export default function TerminalShortcutsPanel({
     }
   }, [sendInput]);
 
+  /** Sends one of the bar's own keys, with any held modifiers applied. */
   const handleKeyPress = useCallback(
     (seq: string) => {
       sendInput(applyModifiers(seq));

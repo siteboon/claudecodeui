@@ -130,6 +130,11 @@ type UseShellTerminalResult = {
   disposeTerminal: () => void;
 };
 
+/**
+ * Creates the xterm instance for a Shell, wires its input, clipboard, resize
+ * and mobile touch handling to the socket, and disposes it on teardown. Typed
+ * input passes through `inputTransformRef` when one is set.
+ */
 export function useShellTerminal({
   terminalContainerRef,
   terminalRef,
