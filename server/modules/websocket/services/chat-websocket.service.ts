@@ -120,18 +120,24 @@ function sendJson(ws: WebSocket, payload: unknown): void {
  * Protocol errors deliberately use their own `kind` (instead of the provider
  * `error` message kind) so the frontend can distinguish "your request was
  * invalid" from "the model run produced an error" without inspecting text.
+ *
+ * A refused `chat.send` or `chat.edit-send` echoes the frame's
+ * `clientRequestId`, so the composer waiting on that turn learns at once that
+ * it was not admitted instead of waiting out its acknowledgement timeout.
  */
 function sendProtocolError(
   ws: WebSocket,
   code: string,
   error: string,
-  sessionId?: string
+  sessionId?: string,
+  clientRequestId?: string | null,
 ): void {
   sendJson(ws, {
     kind: 'protocol_error',
     code,
     error,
     sessionId: sessionId ?? null,
+    ...(clientRequestId ? { clientRequestId } : {}),
     timestamp: new Date().toISOString(),
   });
 }
@@ -139,6 +145,52 @@ function sendProtocolError(
 function readRequiredSessionId(data: AnyRecord): string | null {
   const sessionId = typeof data.sessionId === 'string' ? data.sessionId.trim() : '';
   return sessionId.length > 0 ? sessionId : null;
+}
+
+/** Longest `clientRequestId` accepted; the composer sends a UUID. */
+const MAX_CLIENT_REQUEST_ID_LENGTH = 128;
+
+/**
+ * Reads the optional id a client tags a `chat.send`/`chat.edit-send` with.
+ * Frames without one (older clients, plugins) get no acknowledgement and no
+ * deduplication, exactly as before; an unusable value counts as absent.
+ */
+function readClientRequestId(data: AnyRecord): string | null {
+  const clientRequestId = typeof data.clientRequestId === 'string' ? data.clientRequestId.trim() : '';
+  return clientRequestId.length > 0 && clientRequestId.length <= MAX_CLIENT_REQUEST_ID_LENGTH
+    ? clientRequestId
+    : null;
+}
+
+/**
+ * Tells the requesting socket that its turn was admitted. `WebSocket.send()`
+ * on the browser side only queues a frame, so this is the composer's only
+ * proof that the message reached the server: it keeps the draft until then.
+ * Sent to that socket alone and never sequenced or replayed.
+ *
+ * `duplicate` marks the answer to a retry of a turn an earlier frame already
+ * started, so the composer does not show a new run starting for it.
+ */
+function sendChatSendAccepted(ws: WebSocket, sessionId: string, clientRequestId: string, duplicate = false): void {
+  sendJson(ws, {
+    kind: 'chat_send_accepted',
+    sessionId,
+    clientRequestId,
+    ...(duplicate ? { duplicate: true } : {}),
+    timestamp: new Date().toISOString(),
+  });
+}
+
+/**
+ * Re-acknowledges a frame whose turn was already admitted — the client lost
+ * the first acknowledgement and sent it again — instead of running it twice.
+ */
+function acknowledgeDuplicateSend(ws: WebSocket, sessionId: string, clientRequestId: string | null): boolean {
+  if (!clientRequestId || !chatRunRegistry.wasRequestAdmitted(sessionId, clientRequestId)) {
+    return false;
+  }
+  sendChatSendAccepted(ws, sessionId, clientRequestId, true);
+  return true;
 }
 
 /**
@@ -176,9 +228,10 @@ function resolveSendTarget(
   dependencies: ChatWebSocketDependencies,
   frameName: string,
 ): ResolvedSendTarget | null {
+  const clientRequestId = readClientRequestId(data);
   const sessionId = readRequiredSessionId(data);
   if (!sessionId) {
-    sendProtocolError(ws, 'SESSION_ID_REQUIRED', `${frameName} requires a sessionId.`);
+    sendProtocolError(ws, 'SESSION_ID_REQUIRED', `${frameName} requires a sessionId.`, undefined, clientRequestId);
     return null;
   }
 
@@ -188,14 +241,15 @@ function resolveSendTarget(
       ws,
       'SESSION_NOT_FOUND',
       `Session "${sessionId}" was not found. Create it via POST /api/providers/sessions first.`,
-      sessionId
+      sessionId,
+      clientRequestId
     );
     return null;
   }
 
   const provider = session.provider as LLMProvider;
   if (!dependencies.runtime.hasRuntime(provider)) {
-    sendProtocolError(ws, 'UNSUPPORTED_PROVIDER', `Provider "${provider}" is not available.`, sessionId);
+    sendProtocolError(ws, 'UNSUPPORTED_PROVIDER', `Provider "${provider}" is not available.`, sessionId, clientRequestId);
     return null;
   }
 
@@ -219,6 +273,15 @@ async function dispatchRun(
   beforeRun?: (run: NonNullable<ReturnType<typeof chatRunRegistry.startRun>>) => void | Promise<void>,
 ): Promise<{ started: boolean; error: string | null }> {
   const provider = session.provider as LLMProvider;
+  const clientRequestId = readClientRequestId(data);
+
+  // A retry of a turn that was already admitted is acknowledged again: not
+  // run twice, and not refused as RUN_IN_PROGRESS while that turn is going.
+  // Checked here, right before admission, because an edit reads the
+  // transcript first and a second copy can arrive while the first one waits.
+  if (ws && acknowledgeDuplicateSend(ws, sessionId, clientRequestId)) {
+    return { started: false, error: null };
+  }
 
   const run = chatRunRegistry.startRun({
     appSessionId: sessionId,
@@ -234,10 +297,19 @@ async function dispatchRun(
         ws,
         'RUN_IN_PROGRESS',
         `Session "${sessionId}" already has a run in progress.`,
-        sessionId
+        sessionId,
+        clientRequestId
       );
     }
     return { started: false, error: 'A run is already in progress for this session.' };
+  }
+
+  // Acknowledged the moment the run is admitted, not when it ends: the
+  // composer holds the user's draft until it hears this. Recorded first, so a
+  // retry of the same frame is re-acknowledged instead of run again.
+  if (ws && clientRequestId) {
+    chatRunRegistry.recordAdmittedRequest(sessionId, clientRequestId);
+    sendChatSendAccepted(ws, sessionId, clientRequestId);
   }
 
   const clientOptions = (data.options ?? {}) as AnyRecord;
@@ -321,14 +393,17 @@ async function handleChatEditSend(
   dependencies: ChatWebSocketDependencies
 ): Promise<void> {
   const resolved = resolveSendTarget(ws, data, dependencies, 'chat.edit-send');
-  if (!resolved) {
+  const clientRequestId = readClientRequestId(data);
+  // Checked before the anchor: once the edit ran, the message it replaced is
+  // gone from the transcript, and a retry would be refused for that instead.
+  if (!resolved || acknowledgeDuplicateSend(ws, resolved.sessionId, clientRequestId)) {
     return;
   }
 
   const { sessionId, session, provider } = resolved;
   const anchorId = typeof data.anchorId === 'string' ? data.anchorId.trim() : '';
   if (!anchorId) {
-    sendProtocolError(ws, 'ANCHOR_REQUIRED', 'chat.edit-send requires the anchorId of the message being replaced.', sessionId);
+    sendProtocolError(ws, 'ANCHOR_REQUIRED', 'chat.edit-send requires the anchorId of the message being replaced.', sessionId, clientRequestId);
     return;
   }
 
@@ -340,18 +415,19 @@ async function handleChatEditSend(
         ws,
         'EDIT_NOT_SUPPORTED',
         `Provider "${provider}" cannot replace an already-sent message.`,
-        sessionId
+        sessionId,
+        clientRequestId
       );
       return;
     }
     if (!anchor.found) {
-      sendProtocolError(ws, 'ANCHOR_NOT_FOUND', 'That message is no longer in the transcript.', sessionId);
+      sendProtocolError(ws, 'ANCHOR_NOT_FOUND', 'That message is no longer in the transcript.', sessionId, clientRequestId);
       return;
     }
     resumeThroughId = anchor.resumeThroughId;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    sendProtocolError(ws, 'ANCHOR_LOOKUP_FAILED', `Could not read the transcript: ${message}`, sessionId);
+    sendProtocolError(ws, 'ANCHOR_LOOKUP_FAILED', `Could not read the transcript: ${message}`, sessionId, clientRequestId);
     return;
   }
 
@@ -578,7 +654,8 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  * Handles authenticated chat websocket messages used by the main chat panel.
  *
  * Inbound protocol (client to server):
- * - `chat.send`                { sessionId, content, options? }
+ * - `chat.send`                { sessionId, content, options?, clientRequestId? }
+ * - `chat.edit-send`           { sessionId, anchorId, content, options?, clientRequestId? }
  * - `chat.abort`               { sessionId }
  * - `chat.stop-task`           { sessionId, taskId }
  * - `chat.subscribe`           { sessions: [{ sessionId, lastSeq? }] }
@@ -586,8 +663,8 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  *
  * Outbound protocol (server to client): every frame is `kind`-based — either
  * a provider `NormalizedMessage` (with `seq`) or a gateway event
- * (`chat_subscribed`, `session_upserted`, `loading_progress`,
- * `protocol_error`).
+ * (`chat_subscribed`, `chat_send_accepted`, `session_upserted`,
+ * `loading_progress`, `protocol_error`).
  */
 /**
  * Runs a turn for a session with no client attached.

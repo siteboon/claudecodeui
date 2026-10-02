@@ -60,6 +60,36 @@ const MAX_BUFFERED_EVENTS_PER_RUN = 5000;
 const runs = new Map<string, ChatRun>();
 
 /**
+ * How long an admitted client request id is remembered. A client that never
+ * received the acknowledgement for a turn sends the same frame again, and
+ * that retry must be acknowledged rather than run a second time.
+ */
+const ADMITTED_REQUEST_RETENTION_MS = 30 * 60 * 1000;
+
+/** Upper bound on remembered request ids, so a flood of sends cannot grow memory without limit. */
+const MAX_ADMITTED_REQUESTS = 1000;
+
+/**
+ * Client request ids of recently admitted turns, keyed by app session id and
+ * request id together, with when each was admitted. Map order is admission
+ * order, so the oldest entries are always at the front.
+ */
+const admittedRequests = new Map<string, { appSessionId: string; admittedAt: number }>();
+
+function admittedRequestKey(appSessionId: string, clientRequestId: string): string {
+  return `${appSessionId}\n${clientRequestId}`;
+}
+
+function pruneAdmittedRequests(now: number): void {
+  for (const [key, entry] of admittedRequests) {
+    if (admittedRequests.size <= MAX_ADMITTED_REQUESTS && now - entry.admittedAt < ADMITTED_REQUEST_RETENTION_MS) {
+      return;
+    }
+    admittedRequests.delete(key);
+  }
+}
+
+/**
  * Answers whether a completed run must stay registered a while longer. Set by
  * the composition root to the provider runtimes' background-work check: a
  * session whose turn ended but whose agents, workflows or commands are still
@@ -326,9 +356,48 @@ export const chatRunRegistry = {
   },
 
   /**
-   * Test-only escape hatch: clears every tracked run.
+   * Remembers that the turn a client tagged with `clientRequestId` was
+   * admitted, so a retry of the same frame is recognized as a duplicate.
+   */
+  recordAdmittedRequest(appSessionId: string, clientRequestId: string): void {
+    const now = Date.now();
+    const key = admittedRequestKey(appSessionId, clientRequestId);
+    // Re-inserted rather than updated in place, which keeps the map in admission order.
+    admittedRequests.delete(key);
+    admittedRequests.set(key, { appSessionId, admittedAt: now });
+    pruneAdmittedRequests(now);
+  },
+
+  /** Whether the turn a client tagged with `clientRequestId` was already admitted for this session. */
+  wasRequestAdmitted(appSessionId: string, clientRequestId: string): boolean {
+    const entry = admittedRequests.get(admittedRequestKey(appSessionId, clientRequestId));
+    return Boolean(entry && Date.now() - entry.admittedAt < ADMITTED_REQUEST_RETENTION_MS);
+  },
+
+  /**
+   * Whether this process admitted any turn for the session: one running now,
+   * one finished but still retained, or a remembered client request. Used by
+   * the providers module before it discards a session whose first message the
+   * client could not confirm.
+   */
+  hasAdmittedTurn(appSessionId: string): boolean {
+    if (runs.has(appSessionId)) {
+      return true;
+    }
+    const now = Date.now();
+    for (const entry of admittedRequests.values()) {
+      if (entry.appSessionId === appSessionId && now - entry.admittedAt < ADMITTED_REQUEST_RETENTION_MS) {
+        return true;
+      }
+    }
+    return false;
+  },
+
+  /**
+   * Test-only escape hatch: clears every tracked run and remembered request.
    */
   clearAll(): void {
     runs.clear();
+    admittedRequests.clear();
   },
 };

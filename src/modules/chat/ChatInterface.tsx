@@ -214,6 +214,9 @@ function ChatInterface({
     isDragActive,
     openAttachmentPicker,
     handleSubmit,
+    sendError,
+    dismissSendError,
+    isSendPending,
     queuedDraft,
     editQueuedDraft,
     deleteQueuedDraft,
@@ -250,6 +253,7 @@ function ChatInterface({
     canAbortSession,
     tokenBudget,
     sendMessage,
+    subscribe,
     sendByCtrlEnter,
     onSessionProcessing,
     onSessionEstablished: handleSessionEstablished,
@@ -561,6 +565,9 @@ function ChatInterface({
           hasInput={Boolean(input.trim())}
           onClearInput={handleClearInput}
           onSubmit={handleSubmit}
+          sendError={sendError}
+          onDismissSendError={dismissSendError}
+          isSendPending={isSendPending}
           isDragActive={isDragActive}
           queuedDraft={queuedDraft}
           onEditQueuedDraft={editQueuedDraft}

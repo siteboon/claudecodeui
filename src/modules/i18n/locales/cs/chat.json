@@ -147,6 +147,8 @@
     }
   },
   "composer": {
+    "sendNotConfirmed": "Server nepotvrdil přijetí vaší zprávy, takže možná nebyla odeslána. Zpráva zůstala zde — odešlete ji znovu.",
+    "sendRefused": "Zpráva nebyla odeslána: {{error}}",
     "reasoning": "Uvažování",
     "model": "Model",
     "effortDefault": "Výchozí",
