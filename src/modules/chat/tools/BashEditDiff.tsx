@@ -383,7 +383,8 @@ export function BashEditDiff({ toolUseResult, onFileOpen, projectRoot }: BashEdi
         <BashEditDiffNote>
           {moreFilesNote}
           {listedPaths.length > 0 && (
-            <div className="break-all">
+            // Wraps between names, and inside a name only when it is longer than the line.
+            <div className="break-words">
               {listedPaths.map((path, index) => (
                 <Fragment key={path}>
                   {index > 0 && ', '}
