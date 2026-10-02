@@ -25,14 +25,24 @@ const SESSION: ProjectSession = { id: 'session-1' };
 const NEW_SESSION_ID = 'new-session';
 const ACCEPTANCE_TIMEOUT_MS = 10_000;
 
-type Frame = { type: string; sessionId: string; content: string; clientRequestId?: string };
+type Frame = {
+  type: string;
+  sessionId: string;
+  content: string;
+  clientRequestId?: string;
+  options: { attachments: unknown[] };
+};
 
-/** What the fake socket does with the next `chat.send`. */
-type Delivery = 'swallow' | 'ack' | 'reject';
+/**
+ * What the fake socket does with the next `chat.send`: lose it, admit and
+ * acknowledge it, admit it but lose the acknowledgement, or refuse it.
+ */
+type Delivery = 'swallow' | 'ack' | 'admit' | 'reject';
 
 let delivery: Delivery = 'swallow';
-let discardOutcome: 'discarded' | 'kept' = 'discarded';
+let discardOutcome: 'discarded' | 'kept' | 'error' = 'discarded';
 let frames: Frame[] = [];
+let admittedRequestIds = new Set<string>();
 const listeners = new Set<(event: ServerEvent) => void>();
 
 const subscribe = (listener: (event: ServerEvent) => void) => {
@@ -40,19 +50,39 @@ const subscribe = (listener: (event: ServerEvent) => void) => {
   return () => { listeners.delete(listener); };
 };
 
+const emit = (event: ServerEvent) => {
+  for (const listener of [...listeners]) listener(event);
+};
+
 const deliverLater = (event: ServerEvent) => {
   // A server frame always arrives in a later task than the send that caused it.
-  queueMicrotask(() => {
-    for (const listener of [...listeners]) listener(event);
-  });
+  queueMicrotask(() => emit(event));
+};
+
+/** The acknowledgement the server sends for `frame`, delivered whenever a test decides. */
+const acknowledge = (frame: Frame | undefined) => {
+  assert.ok(frame);
+  emit({ kind: 'chat_send_accepted', sessionId: frame.sessionId, clientRequestId: frame.clientRequestId });
 };
 
 const sendMessage = (message: unknown) => {
   const frame = message as Frame;
   if (frame.type !== 'chat.send' && frame.type !== 'chat.edit-send') return;
   frames.push(frame);
+  const requestId = frame.clientRequestId ?? '';
+  // Like the server: a request it already admitted is acknowledged again, as
+  // a duplicate, rather than run a second time.
+  const duplicate = admittedRequestIds.has(requestId);
+  if (delivery === 'ack' || delivery === 'admit') {
+    admittedRequestIds.add(requestId);
+  }
   if (delivery === 'ack') {
-    deliverLater({ kind: 'chat_send_accepted', sessionId: frame.sessionId, clientRequestId: frame.clientRequestId });
+    deliverLater({
+      kind: 'chat_send_accepted',
+      sessionId: frame.sessionId,
+      clientRequestId: frame.clientRequestId,
+      ...(duplicate ? { duplicate: true } : {}),
+    });
   } else if (delivery === 'reject') {
     deliverLater({
       kind: 'protocol_error',
@@ -74,7 +104,12 @@ const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => 
     return json({ success: true, data: { sessionId: NEW_SESSION_ID, sessionName: 'hello' } }, 201);
   }
   if (url.includes(`/api/providers/sessions/${NEW_SESSION_ID}/unsent`) && init?.method === 'DELETE') {
-    return json({ success: true, data: { sessionId: NEW_SESSION_ID, outcome: discardOutcome } });
+    return discardOutcome === 'error'
+      ? json({ success: false, error: 'Database is locked' }, 500)
+      : json({ success: true, data: { sessionId: NEW_SESSION_ID, outcome: discardOutcome } });
+  }
+  if (url.endsWith('/api/assets/files') && init?.method === 'POST') {
+    return json({ attachments: [{ name: 'screenshot.png', path: '/uploads/screenshot.png', mimeType: 'image/png' }] });
   }
   return json([]);
 });
@@ -83,11 +118,15 @@ const callsTo = (fragment: string, method: string) => fetchMock.mock.calls.filte
   ([input, init]) => String(input).includes(fragment) && init?.method === method,
 );
 
+/** What a test can change between renders: the open chat and whether it is running a turn. */
+type ComposerProps = { session: ProjectSession | null; isLoading?: boolean };
+
 const renderComposer = (selectedSession: ProjectSession | null) => {
   const established: string[] = [];
   const processing: Array<string | null | undefined> = [];
   const added: ChatMessage[] = [];
-  const view = renderHook(({ session }: { session: ProjectSession | null }) => useChatComposerState({
+  const initialProps: ComposerProps = { session: selectedSession };
+  const view = renderHook(({ session, isLoading = false }: ComposerProps) => useChatComposerState({
     selectedProject: PROJECT,
     selectedSession: session,
     currentSessionId: session?.id ?? null,
@@ -97,7 +136,7 @@ const renderComposer = (selectedSession: ProjectSession | null) => {
     resolvePermissionModeForProvider: () => 'default' as PermissionMode,
     currentProviderModel: 'test-model',
     currentProviderEffort: 'medium',
-    isLoading: false,
+    isLoading,
     canAbortSession: false,
     tokenBudget: null,
     sendMessage,
@@ -108,7 +147,7 @@ const renderComposer = (selectedSession: ProjectSession | null) => {
     addMessage: (message) => { added.push(message); },
     setIsUserScrolledUp: () => undefined,
     setPendingPermissionRequests: () => undefined,
-  }), { initialProps: { session: selectedSession } });
+  }), { initialProps });
   return { view, established, processing, added };
 };
 
@@ -144,6 +183,7 @@ beforeEach(() => {
   delivery = 'swallow';
   discardOutcome = 'discarded';
   frames = [];
+  admittedRequestIds = new Set();
   listeners.clear();
   localStorage.clear();
   resetChatDrafts();
@@ -256,4 +296,39 @@ test('a send confirmed after the user opened another chat leaves that chat\'s dr
   assert.equal(readDraftText(`project:${PROJECT.projectId}`), '', 'the draft it was sent from is consumed');
   assert.equal(readDraftText('session-b'), 'draft for B');
   assert.equal(view.result.current.input, 'draft for B');
+});
+
+test('text typed while a message waits for its acknowledgement is kept when the message goes out', async () => {
+  discardOutcome = 'kept';
+  const { view, established, added } = renderComposer(null);
+  await typeMessage(view, 'hello');
+
+  const pending = await startSubmit(view);
+  // Nothing looks sent yet, so the user goes on typing.
+  await typeMessage(view, 'hello -- and also please check the tests');
+  await settle(pending, ACCEPTANCE_TIMEOUT_MS);
+
+  assert.deepEqual(established, [NEW_SESSION_ID], 'the message did go out');
+  assert.deepEqual(added.filter((message) => message.type === 'user').map((message) => message.content), ['hello']);
+  assert.equal(view.result.current.input, 'hello -- and also please check the tests', 'what was typed since is still there');
+  assert.equal(
+    readDraftText(`project:${PROJECT.projectId}`),
+    'hello -- and also please check the tests',
+    'and so is its saved draft',
+  );
+});
+
+test('a file attached while a message waits for its acknowledgement stays attached', async () => {
+  delivery = 'admit';
+  const { view } = renderComposer(SESSION);
+  await typeMessage(view, 'hello');
+
+  const pending = await startSubmit(view);
+  const screenshot = new File(['png'], 'screenshot.png', { type: 'image/png' });
+  await act(async () => { view.result.current.setAttachedFiles([screenshot]); });
+  acknowledge(frames[0]);
+  await settle(pending);
+
+  assert.equal(view.result.current.input, '', 'the sent text is consumed');
+  assert.deepEqual(view.result.current.attachedFiles, [screenshot], 'the file attached since is not');
 });

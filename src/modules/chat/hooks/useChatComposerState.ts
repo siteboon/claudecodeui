@@ -1044,12 +1044,17 @@ export function useChatComposerState({
       // navigated to. Queued drafts were recorded when they were queued; the
       // consecutive-duplicate check keeps this second call a no-op.
       recordSentMessage(currentInput, targetSessionId);
-      // A composer that moved to another chat meanwhile holds that chat's draft.
-      if (draftScopeRef.current === sendScope) {
+      // Only what was sent is consumed. Text typed or files attached while it
+      // waited for its acknowledgement are the next message, and a composer
+      // that moved to another chat meanwhile shows that chat's draft.
+      const composerShowsSendScope = draftScopeRef.current === sendScope;
+      const sentTextIsStillDrafted = composerShowsSendScope
+        ? inputValueRef.current === currentInput
+        : sendScope !== null && readDraftText(sendScope) === currentInput;
+      if (composerShowsSendScope && sentTextIsStillDrafted) {
         setInput('');
         inputValueRef.current = '';
         resetCommandMenuState();
-        setAttachedFiles([]);
         setFileErrors(new Map());
         setIsTextareaExpanded(false);
 
@@ -1057,8 +1062,10 @@ export function useChatComposerState({
           textareaRef.current.style.height = 'auto';
         }
       }
+      // Attaching a file makes a new list, so this lets go of the sent files only.
+      setAttachedFiles((attached) => (attached === currentAttachments ? [] : attached));
 
-      if (sendScope) {
+      if (sendScope && sentTextIsStillDrafted) {
         writeDraftText(sendScope, '');
       }
     },
