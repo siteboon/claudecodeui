@@ -395,6 +395,12 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
   private onTerminalTouchEnd = (event: TouchEvent): void => {
     if (this.isPinching) {
       this.endPinchZoom();
+      // A finger left on the screen carries on as a fresh one-finger gesture:
+      // measured from where it is now, not from where the first finger started
+      // before the pinch, which would turn its first move into a large jump.
+      this.resetScrollTracking();
+      this.touchStart =
+        event.touches.length === 1 ? this.toTouchCoords(event.touches[0]) : null;
       return;
     }
 

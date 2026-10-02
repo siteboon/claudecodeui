@@ -32,6 +32,8 @@ function createTerminal({ mouseTrackingMode, bufferType }: ScreenState) {
     modes: { mouseTrackingMode },
     buffer: { active: { type: bufferType } },
     hasSelection: () => false,
+    // Pinch zoom resizes the font and repaints.
+    refresh: () => {},
     onSelectionChange: subscription,
     onResize: subscription,
     onScroll: subscription,
@@ -43,9 +45,11 @@ function createTerminal({ mouseTrackingMode, bufferType }: ScreenState) {
   return { terminal, container, element, wheels };
 }
 
-function touch(target: HTMLElement, type: string, clientY: number | null): Event {
+// `clientY` lists the fingers still on the screen: one number per finger.
+function touch(target: HTMLElement, type: string, clientY: number | number[] | null): Event {
   const event = new Event(type, { bubbles: true, cancelable: true });
-  const touches = clientY === null ? [] : [{ clientX: 100, clientY }];
+  const fingers = clientY === null ? [] : Array.isArray(clientY) ? clientY : [clientY];
+  const touches = fingers.map((y, i) => ({ clientX: 100 + i * 50, clientY: y }));
   Object.defineProperty(event, 'touches', { value: touches });
   target.dispatchEvent(event);
   return event;
@@ -132,6 +136,26 @@ describe('mobile terminal scrolling', () => {
     expect(glide.length).toBeGreaterThan(5);
     expect(glide.every((delta) => delta > 0)).toBe(true);
     expect(glide[glide.length - 1]).toBeLessThan(glide[0]);
+    manager?.dispose();
+  });
+
+  it('measures a finger left over from a pinch from where it is, not where the gesture began', () => {
+    const { terminal, container, element, wheels } = createTerminal({
+      mouseTrackingMode: 'any',
+      bufferType: 'alternate',
+    });
+    const manager = installMobileTerminalSelection(terminal, container);
+
+    touch(element, 'touchstart', 300);
+    touch(element, 'touchstart', [300, 200]);
+    touch(element, 'touchmove', [320, 180]);
+    // One finger lifts; the other stays put at y=100 and then moves.
+    touch(element, 'touchend', [100]);
+    wheels.length = 0;
+    now += 16;
+    touch(element, 'touchmove', 90);
+
+    expect(wheels).toEqual([10]);
     manager?.dispose();
   });
 
