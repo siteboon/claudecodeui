@@ -209,6 +209,31 @@ test('a tagged edit is acknowledged before its truncation, and a retry of it is 
   });
 });
 
+test('two copies of a tagged edit that arrive together run it once', async () => {
+  await withGateway('claude', async ({ socket, runs }) => {
+    holdTheNextRun();
+    const frame = JSON.stringify({
+      type: 'chat.edit-send',
+      sessionId: SESSION_ID,
+      anchorId: 'e-u2',
+      content: 'replacement',
+      clientRequestId: 'edit-request-1',
+    });
+    // Both copies are past the duplicate check while they read the transcript.
+    socket.emit('message', frame);
+    socket.emit('message', frame);
+    await settle();
+
+    assert.equal(runs.length, 1, 'the edit ran once');
+    assert.equal(socket.frames.filter((candidate) => candidate.kind === 'chat_send_accepted').length, 2);
+    assert.equal(
+      socket.frames.some((candidate) => candidate.kind === 'protocol_error'),
+      false,
+      'the second copy is not reported as refused while the edit it repeats is running',
+    );
+  });
+});
+
 test('an edit without an anchor is refused', async () => {
   await withGateway('claude', async ({ socket, runs }) => {
     socket.emit('message', JSON.stringify({

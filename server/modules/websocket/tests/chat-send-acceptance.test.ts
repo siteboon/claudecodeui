@@ -137,7 +137,11 @@ test('a retry of an admitted frame is acknowledged again without starting a seco
     await send(frame);
 
     assert.deepEqual(runs, ['hello'], 'the turn ran once');
-    assert.equal(acceptances(socket).length, 3, 'every copy of the frame was acknowledged');
+    assert.deepEqual(
+      acceptances(socket).map((acceptance) => acceptance.duplicate ?? false),
+      [false, true, true],
+      'every copy of the frame was acknowledged, the retries as duplicates of a turn already started',
+    );
     assert.equal(socket.frames.some((candidate) => candidate.kind === 'protocol_error'), false);
   });
 });

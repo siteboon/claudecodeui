@@ -331,6 +331,25 @@ test('admitted request ids are remembered per session until their retention laps
   }
 });
 
+test('a session with a run has an admitted turn even when no request id was sent', async () => {
+  await withIsolatedDatabase(() => {
+    // Older clients and scheduled turns send no request id; the run alone
+    // shows the session must not be discarded as never used.
+    sessionsDb.createAppSession('untagged-run', 'claude', '/workspace/demo');
+    const run = chatRunRegistry.startRun({
+      appSessionId: 'untagged-run',
+      provider: 'claude',
+      providerSessionId: null,
+      connection: null,
+      userId: 'user-1',
+    });
+    assert.ok(run);
+
+    assert.equal(chatRunRegistry.hasAdmittedTurn('untagged-run'), true);
+    assert.equal(chatRunRegistry.hasAdmittedTurn('other-session'), false);
+  });
+});
+
 test('remembered request ids are capped, dropping the oldest first', () => {
   try {
     for (let index = 0; index <= 1000; index += 1) {

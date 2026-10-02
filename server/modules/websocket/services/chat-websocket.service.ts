@@ -167,12 +167,16 @@ function readClientRequestId(data: AnyRecord): string | null {
  * on the browser side only queues a frame, so this is the composer's only
  * proof that the message reached the server: it keeps the draft until then.
  * Sent to that socket alone and never sequenced or replayed.
+ *
+ * `duplicate` marks the answer to a retry of a turn an earlier frame already
+ * started, so the composer does not show a new run starting for it.
  */
-function sendChatSendAccepted(ws: WebSocket, sessionId: string, clientRequestId: string): void {
+function sendChatSendAccepted(ws: WebSocket, sessionId: string, clientRequestId: string, duplicate = false): void {
   sendJson(ws, {
     kind: 'chat_send_accepted',
     sessionId,
     clientRequestId,
+    ...(duplicate ? { duplicate: true } : {}),
     timestamp: new Date().toISOString(),
   });
 }
@@ -185,7 +189,7 @@ function acknowledgeDuplicateSend(ws: WebSocket, sessionId: string, clientReques
   if (!clientRequestId || !chatRunRegistry.wasRequestAdmitted(sessionId, clientRequestId)) {
     return false;
   }
-  sendChatSendAccepted(ws, sessionId, clientRequestId);
+  sendChatSendAccepted(ws, sessionId, clientRequestId, true);
   return true;
 }
 
@@ -201,7 +205,7 @@ async function handleChatSend(
   dependencies: ChatWebSocketDependencies
 ): Promise<void> {
   const resolved = resolveSendTarget(ws, data, dependencies, 'chat.send');
-  if (!resolved || acknowledgeDuplicateSend(ws, resolved.sessionId, readClientRequestId(data))) {
+  if (!resolved) {
     return;
   }
 
@@ -270,6 +274,14 @@ async function dispatchRun(
 ): Promise<{ started: boolean; error: string | null }> {
   const provider = session.provider as LLMProvider;
   const clientRequestId = readClientRequestId(data);
+
+  // A retry of a turn that was already admitted is acknowledged again: not
+  // run twice, and not refused as RUN_IN_PROGRESS while that turn is going.
+  // Checked here, right before admission, because an edit reads the
+  // transcript first and a second copy can arrive while the first one waits.
+  if (ws && acknowledgeDuplicateSend(ws, sessionId, clientRequestId)) {
+    return { started: false, error: null };
+  }
 
   const run = chatRunRegistry.startRun({
     appSessionId: sessionId,
