@@ -82,6 +82,16 @@ describe('TerminalShortcutsPanel modifiers', () => {
     expect(type('d')).toBe('\x1b\x04');
   });
 
+  it('leaves non-ASCII characters alone under CTRL', () => {
+    const { type } = renderPanel();
+
+    // 'ß'.toUpperCase() is 'SS', which must not turn into ^S.
+    tap('CTRL');
+    expect(type('ß')).toBe('ß');
+    tap('CTRL', 1000);
+    expect(type('ж')).toBe('ж');
+  });
+
   it('locks a modifier on a double tap until it is tapped again', () => {
     const { type } = renderPanel();
 

@@ -64,8 +64,12 @@ const MODIFIER_HINTS: Record<ModifierKey, string> = {
 };
 
 // Ctrl+letter and Ctrl+@[\]^_ become C0 control characters, as a hardware
-// keyboard sends them; anything else passes through unchanged.
+// keyboard sends them; anything else passes through unchanged. ASCII only:
+// toUpperCase() can expand other letters into ones that would map (ß → SS).
 function toControlCharacter(char: string): string {
+  if (char.charCodeAt(0) > 0x7e) {
+    return char;
+  }
   const code = char.toUpperCase().charCodeAt(0);
   return code >= 64 && code <= 95 ? String.fromCharCode(code - 64) : char;
 }
