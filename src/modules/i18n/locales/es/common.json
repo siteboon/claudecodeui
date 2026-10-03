@@ -33,7 +33,8 @@
     "failed": "Falló",
     "pending": "Pendiente",
     "completed": "Completado",
-    "inProgress": "En curso"
+    "inProgress": "En curso",
+    "reconnecting": "Reconectando..."
   },
   "messages": {
     "savedSuccessfully": "Guardado correctamente",

@@ -33,7 +33,8 @@
     "failed": "Не удалось",
     "pending": "Ожидание",
     "completed": "Завершено",
-    "inProgress": "В процессе"
+    "inProgress": "В процессе",
+    "reconnecting": "Переподключение..."
   },
   "messages": {
     "savedSuccessfully": "Успешно сохранено",

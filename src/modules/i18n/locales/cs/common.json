@@ -34,7 +34,8 @@
     "failed": "Selhalo",
     "pending": "Čeká",
     "completed": "Dokončeno",
-    "inProgress": "Probíhá"
+    "inProgress": "Probíhá",
+    "reconnecting": "Obnovování připojení..."
   },
   "messages": {
     "savedSuccessfully": "Uloženo",

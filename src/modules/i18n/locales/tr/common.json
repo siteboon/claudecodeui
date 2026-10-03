@@ -33,7 +33,8 @@
     "failed": "Başarısız",
     "pending": "Beklemede",
     "completed": "Tamamlandı",
-    "inProgress": "Sürüyor"
+    "inProgress": "Sürüyor",
+    "reconnecting": "Yeniden bağlanıyor..."
   },
   "messages": {
     "savedSuccessfully": "Başarıyla kaydedildi",

@@ -33,7 +33,8 @@
     "failed": "Gagal",
     "pending": "Menunggu",
     "completed": "Selesai",
-    "inProgress": "Sedang Berjalan"
+    "inProgress": "Sedang Berjalan",
+    "reconnecting": "Menyambungkan ulang..."
   },
   "messages": {
     "savedSuccessfully": "Berhasil disimpan",
