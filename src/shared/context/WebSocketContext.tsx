@@ -9,8 +9,9 @@ import type { ServerEvent } from '@/shared/types';
 type ServerEventListener = (event: ServerEvent) => void;
 
 /**
- * Where the chat socket stands. `connecting` covers the first handshake after
- * sign-in, `disconnected` a socket that closed on its own (it dropped, or an
+ * Where the chat socket stands. `connecting` covers a handshake the provider
+ * started on purpose (after sign-in, or with a refreshed token) and the time
+ * signed out; `disconnected` a socket that closed on its own (it dropped, or an
  * attempt failed) until a reconnect opens again.
  */
 type ConnectionStatus = 'connecting' | 'connected' | 'disconnected';
@@ -32,7 +33,8 @@ type WebSocketContextType = {
    * Lets the UI tell a lost connection (`disconnected`, reconnecting every few
    * seconds) apart from the first handshake (`connecting`), so it can show the
    * former without flashing on every page load. A socket the provider replaces
-   * on purpose, such as on a token refresh, never reports `disconnected`.
+   * on purpose, such as on a token refresh, reports `connecting` until the new
+   * one opens, never `disconnected`.
    */
   connectionStatus: ConnectionStatus;
 };
@@ -72,7 +74,6 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   // Three values rather than a boolean: a first handshake still in flight must
   // not read as a lost connection, or every page load would flash the indicator.
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
-  const isConnected = connectionStatus === 'connected';
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { isLoading: isAuthLoading, token, user } = useAuth();
 
@@ -176,6 +177,11 @@ const useWebSocketProviderState = (): WebSocketContextType => {
         activeSocket.close();
         wsRef.current = null;
       }
+      // What comes next is a socket with a refreshed token, or none after a
+      // sign-out or session expiry. Either way it starts from a fresh
+      // handshake: the socket closed here is no longer live, and a drop seen
+      // before must not show as "Reconnecting" after the next sign-in.
+      setConnectionStatus('connecting');
     };
   }, [connect, isAuthLoading, user]); // reconnect after authentication or token refresh
 
@@ -200,9 +206,9 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     ws: wsRef.current,
     sendMessage,
     subscribe,
-    isConnected,
+    isConnected: connectionStatus === 'connected',
     connectionStatus,
-  }), [sendMessage, subscribe, isConnected, connectionStatus]);
+  }), [sendMessage, subscribe, connectionStatus]);
 
   return value;
 };
