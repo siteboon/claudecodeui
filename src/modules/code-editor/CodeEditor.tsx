@@ -71,6 +71,8 @@ export default function CodeEditor({
     previewKind,
     fileProjectId,
     hasUnsavedChanges,
+    needsOutsideConfirm,
+    confirmOutsideFile,
     handleSave,
     handleDownload,
   } = useCodeEditorDocument({
@@ -256,7 +258,27 @@ export default function CodeEditor({
           fullscreen: t('actions.fullscreen', 'Fullscreen'),
           exitFullscreen: t('actions.exitFullscreen', 'Exit fullscreen'),
           close: t('actions.close', 'Close'),
+          outsideTitle: t('outsideProject.title', 'This file is outside the project'),
+          outsideMessage: t('outsideProject.message', 'It can be opened read-only. Changes cannot be saved from here.'),
+          outsideConfirm: t('outsideProject.confirm', 'Open read-only'),
         }}
+      />
+    );
+  }
+
+  // A text file outside the project waits for the user to confirm opening it.
+  if (needsOutsideConfirm) {
+    return (
+      <CodeEditorBinaryFile
+        file={file}
+        isSidebar={isSidebar}
+        isFullscreen={isFullscreen}
+        onClose={onClose}
+        onToggleFullscreen={() => setIsFullscreen((previous) => !previous)}
+        title={t('outsideProject.title', 'This file is outside the project')}
+        message={t('outsideProject.message', 'It can be opened read-only. Changes cannot be saved from here.')}
+        detail={file.path}
+        action={{ label: t('outsideProject.confirm', 'Open read-only'), onClick: confirmOutsideFile }}
       />
     );
   }

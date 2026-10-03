@@ -3,6 +3,12 @@ import { useEffect, useState } from 'react';
 import { api } from '@/shared/api';
 import type { CodeEditorFile,PreviewKind } from '@/shared/types';
 import { getPreviewMimeType } from '@/modules/code-editor/utils/previewableFile';
+import {
+  approveOutsideFile,
+  isOutsideFileApproved,
+  OUTSIDE_PROJECT_CONFIRM,
+  readFileTreeErrorCode,
+} from '@/modules/code-editor/utils/outsideProjectFiles';
 
 type CodeEditorMediaPreviewProps = {
   file: CodeEditorFile;
@@ -21,6 +27,9 @@ type CodeEditorMediaPreviewProps = {
     fullscreen: string;
     exitFullscreen: string;
     close: string;
+    outsideTitle: string;
+    outsideMessage: string;
+    outsideConfirm: string;
   };
 };
 
@@ -52,6 +61,9 @@ export default function CodeEditorMediaPreview({
   // this so a blob from a previously-opened file can never show under the new
   // file (the editor reuses this component instance across files).
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  // The file is outside the project and waits for the user to confirm opening it.
+  const [needsOutsideConfirm, setNeedsOutsideConfirm] = useState(false);
+  const [reloadToken, setReloadToken] = useState(0);
   const sourceKey = `${projectId ?? ''}:${file.path}:${kind}`;
 
   useEffect(() => {
@@ -71,13 +83,23 @@ export default function CodeEditorMediaPreview({
         setLoading(true);
         setError(null);
         setUrl(null);
+        setNeedsOutsideConfirm(false);
 
         // The content endpoint requires the auth header, so we fetch the bytes
         // ourselves and hand the media element a blob URL instead of a bare src.
         // Fetching a blob (rather than streaming) also lets <video>/<audio> seek.
-        const response = await api.readFileBlob(projectId, file.path, { signal: controller.signal });
+        const response = await api.readFileBlob(
+          projectId,
+          file.path,
+          { signal: controller.signal },
+          isOutsideFileApproved(file.path),
+        );
 
         if (!response.ok) {
+          if (response.status === 403 && (await readFileTreeErrorCode(response)) === OUTSIDE_PROJECT_CONFIRM) {
+            setNeedsOutsideConfirm(true);
+            return;
+          }
           throw new Error(`Request failed with status ${response.status}`);
         }
 
@@ -136,7 +158,7 @@ export default function CodeEditorMediaPreview({
         URL.revokeObjectURL(objectUrl);
       }
     };
-  }, [file.path, file.name, projectId, kind, sourceKey, labels.error]);
+  }, [file.path, file.name, projectId, kind, sourceKey, labels.error, reloadToken]);
 
   // Only expose the blob once it matches the file currently being shown, so a
   // stale URL from the previous file is never rendered during a switch.
@@ -194,7 +216,25 @@ export default function CodeEditorMediaPreview({
 
       {!loading && currentUrl && renderMedia()}
 
-      {!loading && !currentUrl && (
+      {!loading && !currentUrl && needsOutsideConfirm && (
+        <div className="flex max-w-md flex-col items-center gap-3 p-8 text-center text-muted-foreground">
+          <p className="text-sm font-medium text-foreground">{labels.outsideTitle}</p>
+          <p className="break-all font-mono text-xs">{file.path}</p>
+          <p className="text-sm">{labels.outsideMessage}</p>
+          <button
+            type="button"
+            onClick={() => {
+              approveOutsideFile(file.path);
+              setReloadToken((token) => token + 1);
+            }}
+            className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            {labels.outsideConfirm}
+          </button>
+        </div>
+      )}
+
+      {!loading && !currentUrl && !needsOutsideConfirm && (
         <div className="flex flex-col items-center gap-3 p-8 text-center text-muted-foreground">
           <p className="text-sm">{error || labels.error}</p>
           <p className="break-all text-xs">{file.path}</p>

@@ -1,3 +1,4 @@
+import os from 'node:os';
 import path from 'node:path';
 
 import ignore from 'ignore';
@@ -51,6 +52,24 @@ function includeEntryByFallbackDirectoryNames(entryPath: string, isDirectory: bo
 
 function createFileTreeError(message: string, statusCode: number, code: string): AppError {
   return new AppError(message, { statusCode, code });
+}
+
+type ReadOptions = { allowOutside?: boolean };
+
+/**
+ * Never served by the viewer, even after confirmation. Both the login's passwd
+ * home and $HOME are covered, since a service can run with HOME pointed elsewhere.
+ */
+const CREDENTIAL_DIR_NAMES = ['.ssh', '.gnupg', '.aws', '.kube', '.docker', '.cloudcli',
+  path.join('.config', 'cloudcli'), path.join('.config', 'slack-mcp'), path.join('.config', 'gh')];
+const CREDENTIAL_DIRS = [...new Set([os.homedir(), os.userInfo().homedir])]
+  .flatMap((home) => CREDENTIAL_DIR_NAMES.map((dir) => path.join(home, dir) + path.sep));
+const CREDENTIAL_FILE_PATTERN = /^(\.env(\..*)?|\.netrc|\.pgpass|id_[a-z0-9_]+|.*\.(pem|key|p12|pfx)|credentials(\.json)?)$/i;
+
+function isCredentialPath(realPath: string): boolean {
+  return CREDENTIAL_DIRS.some((dir) => realPath.startsWith(dir))
+    || realPath.split(path.sep).some((segment) => segment === '.ssh' || segment === '.gnupg')
+    || CREDENTIAL_FILE_PATTERN.test(path.basename(realPath));
 }
 
 function readErrorCode(error: unknown): string | null {
@@ -346,7 +365,11 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
    * writing endpoints keep using `resolvePathInsideProject` alone, so nothing
    * outside the project can be changed.
    */
-  async function resolveReadablePath(projectRoot: string, targetPath: string): Promise<string> {
+  async function resolveReadablePath(
+    projectRoot: string,
+    targetPath: string,
+    options: ReadOptions = {},
+  ): Promise<string> {
     if (path.isAbsolute(targetPath)) {
       const readOnlyPath = await dependencies.workspace.resolveReadOnlyRootPath(targetPath);
       if (readOnlyPath) {
@@ -354,7 +377,35 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       }
     }
 
-    return resolvePathInsideProject(projectRoot, targetPath);
+    try {
+      return resolvePathInsideProject(projectRoot, targetPath);
+    } catch (error) {
+      if (!path.isAbsolute(targetPath) || readErrorCode(error) !== 'PATH_OUTSIDE_PROJECT') {
+        throw error;
+      }
+    }
+
+    // Anything else on disk can be read after the user confirms it in the
+    // viewer; the client asks first and retries with `allowOutside`. The same
+    // login already has a shell, so this is a guard against surprise, not a
+    // permission boundary. Credential stores stay refused either way.
+    let realPath: string;
+    try {
+      realPath = await fileSystem.realpath(targetPath);
+    } catch {
+      throw createFileTreeError('File not found', 404, 'FILE_NOT_FOUND');
+    }
+    if (isCredentialPath(realPath)) {
+      throw createFileTreeError('This file is in a credentials folder and cannot be opened here', 403, 'PATH_PROTECTED');
+    }
+    if (!options.allowOutside) {
+      throw createFileTreeError(
+        'This file is outside the project. Confirm to open it read-only.',
+        403,
+        'OUTSIDE_PROJECT_CONFIRM',
+      );
+    }
+    return realPath;
   }
 
   async function cleanupTemporaryFiles(files: FileTreeUploadedFile[]): Promise<void> {
@@ -448,9 +499,9 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       return { success: true, path: targetPath };
     },
 
-    async readTextFile(projectId, filePath) {
+    async readTextFile(projectId, filePath, options) {
       const projectRoot = await resolveProjectRoot(projectId);
-      const resolvedPath = await resolveReadablePath(projectRoot, filePath);
+      const resolvedPath = await resolveReadablePath(projectRoot, filePath, options);
       try {
         const content = await fileSystem.readTextFile(resolvedPath);
         return { content, path: resolvedPath };
@@ -463,9 +514,9 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       }
     },
 
-    async openFile(projectId, filePath) {
+    async openFile(projectId, filePath, options) {
       const projectRoot = await resolveProjectRoot(projectId);
-      const resolvedPath = await resolveReadablePath(projectRoot, filePath);
+      const resolvedPath = await resolveReadablePath(projectRoot, filePath, options);
       try {
         await fileSystem.access(resolvedPath);
       } catch {
