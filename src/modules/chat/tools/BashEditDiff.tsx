@@ -88,9 +88,15 @@ function readFile(value: unknown): BashEditDiffFile | null {
     return null;
   }
 
-  const hunks = Array.isArray(value.hunks)
-    ? value.hunks.map(readHunk).filter((hunk): hunk is BashEditDiffHunk => hunk !== null)
-    : [];
+  // An empty list is a real empty file; a missing list, or one with nothing
+  // readable in it, says nothing about the file, so it is not drawn as empty.
+  if (!Array.isArray(value.hunks)) {
+    return null;
+  }
+  const hunks = value.hunks.map(readHunk).filter((hunk): hunk is BashEditDiffHunk => hunk !== null);
+  if (value.hunks.length > 0 && hunks.length === 0) {
+    return null;
+  }
 
   return {
     filePath: value.filePath,

@@ -348,6 +348,11 @@ describe('what a Bash command changed', () => {
     expect(renderBash({ bashEditDiff: { files: 'nope', moreFiles: 'many' } }).container.innerHTML).toBe(bare);
     expect(renderBash({ bashEditDiff: { files: [{ filePath: 42, hunks: [] }, null], moreFiles: -1 } }).container.innerHTML)
       .toBe(bare);
+    // A file whose hunks are missing or unreadable is not passed off as an empty file.
+    for (const hunks of [undefined, 'nope', [{ oldStart: 1 }, null]]) {
+      expect(renderBash({ bashEditDiff: { files: [{ filePath: '/repo/f.txt', hunks }], moreFiles: 0 } }).container.innerHTML)
+        .toBe(bare);
+    }
   });
 
   it('caps a long file and says how many lines it left out, while counting them all', () => {
