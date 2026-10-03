@@ -1,6 +1,6 @@
 import type { DragEvent, ReactNode, RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronRight, Folder, FolderOpen, Upload } from 'lucide-react';
+import { ChevronRight, Folder, FolderOpen, Loader2, Upload } from 'lucide-react';
 
 import { cn } from '@/shared/utils';
 import type { FileTreeNode as FileTreeNodeType, FileTreeViewMode } from '@/shared/types';
@@ -103,7 +103,10 @@ export default function FileTreeNode({
   const { t } = useTranslation();
   const isDirectory = item.type === 'directory';
   const isOpen = isDirectory && expandedDirs.has(item.path);
-  const hasChildren = Boolean(isDirectory && item.children && item.children.length > 0);
+  const hasLoadedChildren = Boolean(isDirectory && item.children && item.children.length > 0);
+  // The server sends `childrenLoaded: false` for a directory it has not listed;
+  // opening it triggers the fetch, so show a placeholder row until it lands.
+  const isLoadingChildren = isDirectory && isOpen && item.childrenLoaded === false;
   const isRenaming = renamingItem?.path === item.path;
   const dragTargetPath = isDirectory ? item.path : getParentDirectoryPath(item.path);
   const isDropTarget = isDirectory && dropTarget === item.path;
@@ -243,7 +246,17 @@ export default function FileTreeNode({
         rowContent
       )}
 
-      {isDirectory && isOpen && hasChildren && (
+      {isLoadingChildren && (
+        <div
+          className="flex items-center gap-1.5 py-[3px] text-xs text-muted-foreground"
+          style={{ paddingLeft: `${(level + 1) * 16 + 22}px` }}
+        >
+          <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+          <span>{t('fileTree.loadingFolder', 'Loading folder...')}</span>
+        </div>
+      )}
+
+      {isDirectory && isOpen && hasLoadedChildren && (
         <div className="relative">
           <span
             className="absolute bottom-0 top-0 border-l border-border/40"
