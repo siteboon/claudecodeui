@@ -21,11 +21,17 @@ const startingPlugins = new Map();
  * site-packages and fails to import; SystemRoot, PATHEXT and TEMP are needed to
  * resolve system DLLs, executable extensions and a temp directory. None of
  * these carry secrets, so the ones that are set get passed straight through.
+ * USER/LOGNAME are needed on macOS/Linux for any child that reads the login
+ * keychain (e.g. a `claude` CLI spawned by cloudcli-cron) - without them the
+ * keychain lookup silently fails and the CLI reports "Not logged in" even
+ * though the account is authenticated.
  */
 function buildPluginEnv(name) {
   const env = {
     PATH: process.env.PATH,
     HOME: process.env.HOME,
+    USER: process.env.USER,
+    LOGNAME: process.env.LOGNAME,
     NODE_ENV: process.env.NODE_ENV || 'production',
     PLUGIN_NAME: name,
   };
