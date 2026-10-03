@@ -203,6 +203,58 @@ test('listRunningRuns returns only currently running app sessions', async () => 
   });
 });
 
+test('drain blocks new runs and resolves after active runs complete', async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createAppSession('app-run-drain', 'codex', '/workspace/demo');
+    sessionsDb.createAppSession('app-run-rejected', 'claude', '/workspace/demo');
+    const connection = new FakeConnection();
+    const activeRun = chatRunRegistry.startRun({
+      appSessionId: 'app-run-drain',
+      provider: 'codex',
+      providerSessionId: null,
+      connection,
+      userId: null,
+    });
+    assert.ok(activeRun);
+
+    const drainPromise = chatRunRegistry.drain(1_000);
+    assert.equal(chatRunRegistry.isDraining(), true);
+    assert.equal(chatRunRegistry.startRun({
+      appSessionId: 'app-run-rejected',
+      provider: 'claude',
+      providerSessionId: null,
+      connection,
+      userId: null,
+    }), null);
+
+    activeRun.writer.send({
+      kind: 'complete',
+      provider: 'codex',
+      sessionId: 'native-drain',
+      exitCode: 0,
+    });
+
+    assert.equal(await drainPromise, true);
+  });
+});
+
+test('drain stops waiting when its timeout expires', async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createAppSession('app-run-timeout', 'claude', '/workspace/demo');
+    const activeRun = chatRunRegistry.startRun({
+      appSessionId: 'app-run-timeout',
+      provider: 'claude',
+      providerSessionId: null,
+      connection: new FakeConnection(),
+      userId: null,
+    });
+    assert.ok(activeRun);
+
+    assert.equal(await chatRunRegistry.drain(5), false);
+    assert.equal(chatRunRegistry.isProcessing('app-run-timeout'), true);
+  });
+});
+
 test('replayEvents returns only events after the requested seq', async () => {
   await withIsolatedDatabase(() => {
     sessionsDb.createAppSession('app-run-4', 'claude', '/workspace/demo');
