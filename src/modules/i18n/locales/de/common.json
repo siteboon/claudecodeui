@@ -34,7 +34,8 @@
     "pending": "Ausstehend",
     "completed": "Abgeschlossen",
     "inProgress": "In Bearbeitung",
-    "reconnecting": "Verbindung wird hergestellt..."
+    "reconnecting": "Wird neu verbunden...",
+    "chatConnectionLost": "Chat-Verbindung unterbrochen. Wird neu verbunden..."
   },
   "messages": {
     "savedSuccessfully": "Erfolgreich gespeichert",

@@ -34,7 +34,8 @@
     "pending": "Ожидание",
     "completed": "Завершено",
     "inProgress": "В процессе",
-    "reconnecting": "Переподключение..."
+    "reconnecting": "Переподключение...",
+    "chatConnectionLost": "Соединение чата потеряно. Переподключение..."
   },
   "messages": {
     "savedSuccessfully": "Успешно сохранено",

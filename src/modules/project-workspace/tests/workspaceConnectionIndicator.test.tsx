@@ -94,6 +94,11 @@ const latestSocket = () => FakeWebSocket.instances[FakeWebSocket.instances.lengt
 // A boolean, not the element: a failed assertion on a jsdom node makes node:assert
 // inspect the whole DOM tree, which can exhaust the worker's memory.
 const isIndicatorShown = () => screen.queryByText('Reconnecting...') !== null;
+// What a screen reader is told, or null when the header has no polite live region.
+const liveRegionText = () => {
+  const region = document.querySelector('header [role="status"][aria-live="polite"]');
+  return region === null ? null : (region.textContent ?? '');
+};
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -119,6 +124,9 @@ test('the header shows nothing during the first handshake or while connected', (
 
   act(() => latestSocket().serverOpens());
   assert.equal(isIndicatorShown(), false);
+  // The live region is already there, empty, before anything goes wrong: one
+  // inserted together with its text is not reliably announced.
+  assert.equal(liveRegionText(), '', 'an empty polite live region is mounted while connected');
 });
 
 test('the header says it is reconnecting while the chat socket is down, and clears once it is back', () => {
@@ -127,8 +135,7 @@ test('the header says it is reconnecting while the chat socket is down, and clea
 
   act(() => latestSocket().serverDrops());
   assert.equal(isIndicatorShown(), true, 'a dropped socket is shown');
-  const liveRegion = screen.getByText('Reconnecting...').closest('[role="status"]');
-  assert.equal(liveRegion?.getAttribute('aria-live'), 'polite');
+  assert.equal(liveRegionText(), 'Chat connection lost. Reconnecting...', 'and announced, naming the chat connection');
 
   // Still down while the retry handshakes, and on another tab too.
   act(() => { vi.advanceTimersByTime(3000); });
@@ -137,6 +144,7 @@ test('the header says it is reconnecting while the chat socket is down, and clea
 
   act(() => latestSocket().serverOpens());
   assert.equal(isIndicatorShown(), false, 'the indicator clears once the socket reopens');
+  assert.equal(liveRegionText(), '');
 });
 
 test('a first connection that fails is shown too', () => {

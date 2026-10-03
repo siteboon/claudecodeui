@@ -34,7 +34,8 @@
     "pending": "Pending",
     "completed": "Completed",
     "inProgress": "In Progress",
-    "reconnecting": "Reconnecting..."
+    "reconnecting": "Reconnecting...",
+    "chatConnectionLost": "Chat connection lost. Reconnecting..."
   },
   "messages": {
     "savedSuccessfully": "Saved successfully",

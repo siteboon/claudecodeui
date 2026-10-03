@@ -34,7 +34,8 @@
     "pending": "Menunggu",
     "completed": "Selesai",
     "inProgress": "Sedang Berjalan",
-    "reconnecting": "Menyambungkan ulang..."
+    "reconnecting": "Menyambungkan ulang...",
+    "chatConnectionLost": "Koneksi chat terputus. Menyambungkan ulang..."
   },
   "messages": {
     "savedSuccessfully": "Berhasil disimpan",

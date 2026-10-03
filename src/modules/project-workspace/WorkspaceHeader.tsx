@@ -5,9 +5,9 @@ import { useTranslation } from 'react-i18next';
 import type { AppTab, Project, ProjectSession } from '@/shared/types';
 import { cn } from '@/shared/utils';
 import MobileMenuButton from '@/modules/project-workspace/MobileMenuButton';
+import WorkspaceConnectionStatus from '@/modules/project-workspace/WorkspaceConnectionStatus';
 import WorkspaceTabs from '@/modules/project-workspace/WorkspaceTabs';
 import WorkspaceTitle from '@/modules/project-workspace/WorkspaceTitle';
-import WorkspaceConnectionStatus from '@/modules/project-workspace/WorkspaceConnectionStatus';
 
 type WorkspaceHeaderProps = {
   activeTab: AppTab;

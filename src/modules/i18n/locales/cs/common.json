@@ -35,7 +35,8 @@
     "pending": "Čeká",
     "completed": "Dokončeno",
     "inProgress": "Probíhá",
-    "reconnecting": "Obnovování připojení..."
+    "reconnecting": "Obnovování připojení...",
+    "chatConnectionLost": "Spojení chatu bylo přerušeno. Obnovování připojení..."
   },
   "messages": {
     "savedSuccessfully": "Uloženo",
