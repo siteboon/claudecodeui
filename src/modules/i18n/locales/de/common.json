@@ -34,7 +34,7 @@
     "pending": "Ausstehend",
     "completed": "Abgeschlossen",
     "inProgress": "In Bearbeitung",
-    "reconnecting": "Verbindung wird wiederhergestellt..."
+    "reconnecting": "Verbindung wird hergestellt..."
   },
   "messages": {
     "savedSuccessfully": "Erfolgreich gespeichert",
