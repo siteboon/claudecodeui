@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '@/shared/api';
 import type { PendingPermissionRequest, PermissionMode,
@@ -490,7 +490,14 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     ? getSessionSelectionKey(selectedSessionProvider, selectedSessionId)
     : null;
   const selectedSessionKeyRef = useRef<string | null>(selectedSessionKey);
-  selectedSessionKeyRef.current = selectedSessionKey;
+  useLayoutEffect(() => {
+    if (selectedSessionKeyRef.current !== selectedSessionKey) {
+      // Returning to a session must not revive mutations from its earlier visit.
+      selectedSessionKeyRef.current = selectedSessionKey;
+      sessionModelMutationIdRef.current += 1;
+      sessionEffortMutationIdRef.current += 1;
+    }
+  }, [selectedSessionKey]);
 
   const activeSessionSelection = sessionSelection
     && selectedSessionId
