@@ -51,6 +51,28 @@
     "viewFullOutput": "Tam çıktıyı göster ({{count}} karakter)",
     "contentDisplayed": "Dosya içeriği yukarıdaki diff görünümünde gösteriliyor"
   },
+  "bashEditDiff": {
+    "created": "Oluşturuldu",
+    "updated": "Güncellendi",
+    "deleted": "Silindi",
+    "emptyFile": "Boş dosya",
+    "moreLines_one": "… {{count}} satır daha",
+    "moreLines_other": "… {{count}} satır daha",
+    "moreFiles_one": "… {{count}} dosya daha değişti",
+    "moreFiles_other": "… {{count}} dosya daha değişti",
+    "filesNotShown_one": "{{count}} dosya değişti (ikili, yalnızca mod veya gösterilemeyecek kadar büyük)",
+    "filesNotShown_other": "{{count}} dosya değişti (ikili, yalnızca mod veya gösterilemeyecek kadar büyük)",
+    "filesUnavailable_one": "{{count}} dosya değişti (diff kullanılamıyor)",
+    "filesUnavailable_other": "{{count}} dosya değişti (diff kullanılamıyor)",
+    "filesChanged_one": "{{count}} dosya değişti",
+    "filesChanged_other": "{{count}} dosya değişti",
+    "morePaths_one": "+{{count}} daha",
+    "morePaths_other": "+{{count}} daha",
+    "diffUnavailable": "(bu komut için dosya diff'i kullanılamıyor)",
+    "partUnavailable": "(diff'in bir kısmı kullanılamıyor)",
+    "skipped": "(bu git komutu için dosya diff'i atlandı)",
+    "shared": "(bu depoda aynı anda başka bir komut çalıştı; ikisinden birinin yaptığı bir değişiklik her iki sonuçta da görünebilir)"
+  },
   "thinking": {
     "title": "Düşünüyor...",
     "emoji": "💭 Düşünüyor..."

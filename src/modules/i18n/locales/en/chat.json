@@ -52,6 +52,28 @@
     "viewFullOutput": "View full output ({{count}} chars)",
     "contentDisplayed": "The file content is displayed in the diff view above"
   },
+  "bashEditDiff": {
+    "created": "Created",
+    "updated": "Updated",
+    "deleted": "Deleted",
+    "emptyFile": "Empty file",
+    "moreLines_one": "… {{count}} more line",
+    "moreLines_other": "… {{count}} more lines",
+    "moreFiles_one": "… {{count}} more file changed",
+    "moreFiles_other": "… {{count}} more files changed",
+    "filesNotShown_one": "{{count}} file changed (binary, mode only or too large to show)",
+    "filesNotShown_other": "{{count}} files changed (binary, mode only or too large to show)",
+    "filesUnavailable_one": "{{count}} file changed (diff unavailable)",
+    "filesUnavailable_other": "{{count}} files changed (diff unavailable)",
+    "filesChanged_one": "{{count}} file changed",
+    "filesChanged_other": "{{count}} files changed",
+    "morePaths_one": "+{{count}} more",
+    "morePaths_other": "+{{count}} more",
+    "diffUnavailable": "(file diff unavailable for this command)",
+    "partUnavailable": "(part of the diff is unavailable)",
+    "skipped": "(file diff skipped for this git command)",
+    "shared": "(another command ran in this repository at the same time; a change made by either may show under either result)"
+  },
   "interactive": {
     "title": "Interactive Prompt",
     "waiting": "Waiting for your response in the CLI",

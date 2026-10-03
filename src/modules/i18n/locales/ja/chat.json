@@ -51,6 +51,22 @@
     "viewFullOutput": "全出力を表示（{{count}}文字）",
     "contentDisplayed": "ファイルの内容は上の差分ビューに表示されています"
   },
+  "bashEditDiff": {
+    "created": "作成",
+    "updated": "更新",
+    "deleted": "削除",
+    "emptyFile": "空のファイル",
+    "moreLines_other": "… 他 {{count}} 行",
+    "moreFiles_other": "… 他 {{count}} 個のファイルが変更されました",
+    "filesNotShown_other": "{{count}} 個のファイルが変更されました（バイナリ、モードのみ、または大きすぎて表示できません）",
+    "filesUnavailable_other": "{{count}} 個のファイルが変更されました（差分を取得できません）",
+    "filesChanged_other": "{{count}} 個のファイルが変更されました",
+    "morePaths_other": "他 {{count}} 件",
+    "diffUnavailable": "（このコマンドのファイル差分は取得できません）",
+    "partUnavailable": "（差分の一部を取得できません）",
+    "skipped": "（この git コマンドではファイル差分をスキップしました）",
+    "shared": "（このリポジトリで別のコマンドが同時に実行されました。どちらかによる変更が、どちらの結果にも表示される可能性があります）"
+  },
   "thinking": {
     "title": "思考中...",
     "emoji": "💭 思考中..."
