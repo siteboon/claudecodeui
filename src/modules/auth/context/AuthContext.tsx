@@ -24,17 +24,26 @@ const AUTH_ERROR_MESSAGES = {
   sessionExpired: 'errors.sessionExpired',
 } as const;
 
-type AuthActionResult = { success: true } | { success: false; error: string };
+type AuthActionResult =
+  | { success: true }
+  | { success: false; error: string; totpRequired?: boolean };
+
+type StructuredErrorObject = {
+  code?: string;
+  message?: string;
+  details?: { totpRequired?: boolean };
+};
 
 type AuthSessionPayload = {
   token?: string;
   user?: AuthUser;
-  error?: string;
+  error?: string | StructuredErrorObject;
   message?: string;
 };
 
 type AuthStatusPayload = {
   needsSetup?: boolean;
+  totpEnabled?: boolean;
 };
 
 type AuthUserPayload = {
@@ -46,7 +55,7 @@ type OnboardingStatusPayload = {
 };
 
 type ApiErrorPayload = {
-  error?: string;
+  error?: string | StructuredErrorObject;
   message?: string;
 };
 
@@ -55,9 +64,10 @@ type AuthContextValue = {
   token: string | null;
   isLoading: boolean;
   needsSetup: boolean;
+  totpEnabled: boolean;
   hasCompletedOnboarding: boolean;
   error: string | null;
-  login: (username: string, password: string) => Promise<AuthActionResult>;
+  login: (username: string, password: string, totpCode?: string) => Promise<AuthActionResult>;
   register: (username: string, password: string) => Promise<AuthActionResult>;
   logout: () => void;
   refreshOnboardingStatus: () => Promise<void>;
@@ -80,7 +90,15 @@ function resolveApiErrorMessage(payload: ApiErrorPayload | null, fallback: strin
     return fallback;
   }
 
-  return payload.error ?? payload.message ?? fallback;
+  if (typeof payload.error === 'string' && payload.error) {
+    return payload.error;
+  }
+
+  if (payload.error && typeof payload.error === 'object' && typeof payload.error.message === 'string') {
+    return payload.error.message;
+  }
+
+  return payload.message ?? fallback;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -111,6 +129,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [token, setToken] = useState<string | null>(() => readStoredToken());
   const [isLoading, setIsLoading] = useState(true);
   const [needsSetup, setNeedsSetup] = useState(false);
+  const [totpEnabled, setTotpEnabled] = useState(false);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -217,6 +236,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const statusResponse = await api.auth.status();
       const statusPayload = await parseJsonSafely<AuthStatusPayload>(statusResponse);
 
+      setTotpEnabled(Boolean(statusPayload?.totpEnabled));
+
       if (statusPayload?.needsSetup) {
         setNeedsSetup(true);
         return;
@@ -315,16 +336,26 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [checkOnboardingStatus]);
 
   const login = useCallback<AuthContextValue['login']>(
-    async (username, password) => {
+    async (username, password, totpCode) => {
       try {
         setError(null);
-        const response = await api.auth.login(username, password);
+        const response = await api.auth.login(username, password, totpCode);
         const payload = await parseJsonSafely<AuthSessionPayload>(response);
 
         if (!response.ok || !payload?.token || !payload.user) {
           const message = resolveApiErrorMessage(payload, t(AUTH_ERROR_MESSAGES.loginFailed));
+          const errorObj =
+            payload?.error && typeof payload.error === 'object' ? payload.error : null;
+          const totpRequired = Boolean(
+            errorObj?.details?.totpRequired ||
+              errorObj?.code === 'AUTH_TOTP_REQUIRED' ||
+              errorObj?.code === 'AUTH_TOTP_INVALID',
+          );
+          if (totpRequired) {
+            setTotpEnabled(true);
+          }
           setError(message);
-          return { success: false, error: message };
+          return { success: false, error: message, totpRequired };
         }
 
         await publishSession(payload.user, payload.token);
@@ -374,6 +405,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       token,
       isLoading,
       needsSetup,
+      totpEnabled,
       hasCompletedOnboarding,
       error,
       login,
@@ -388,6 +420,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       login,
       logout,
       needsSetup,
+      totpEnabled,
       refreshOnboardingStatus,
       register,
       token,

@@ -13,6 +13,7 @@ import GitSettingsTab from '@/modules/settings/tabs/git-settings/GitSettingsTab'
 import BrowserUseSettingsTab from '@/modules/settings/tabs/browser-use-settings/BrowserUseSettingsTab';
 import NotificationsSettingsTab from '@/modules/settings/tabs/NotificationsSettingsTab';
 import TasksSettingsTab from '@/modules/settings/tabs/tasks-settings/TasksSettingsTab';
+import SecuritySettingsTab from '@/modules/settings/tabs/SecuritySettingsTab';
 import { PluginSettingsTab } from '@/modules/plugins';
 import AboutTab from '@/modules/settings/tabs/AboutTab';
 import { useSettingsController } from '@/modules/settings/hooks/useSettingsController';
@@ -269,6 +270,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
               )}
 
               {activeTab === 'api' && <CredentialsSettingsTab />}
+
+              {activeTab === 'security' && <SecuritySettingsTab />}
 
               {activeTab === 'voice' && <VoiceSettingsTab />}
 

@@ -28,6 +28,7 @@ export function useWebPush(): WebPushState {
       || Boolean((window as any).cloudcliDesktopNotifications)
       || !('Notification' in window)
       || !('serviceWorker' in navigator)
+      || !navigator.serviceWorker
     ) {
       return 'unsupported';
     }
@@ -38,7 +39,7 @@ export function useWebPush(): WebPushState {
 
   // Check existing subscription on mount
   useEffect(() => {
-    if (permission === 'unsupported') return;
+    if (permission === 'unsupported' || !navigator.serviceWorker) return;
 
     navigator.serviceWorker.ready.then((registration) => {
       registration.pushManager.getSubscription().then((sub) => {

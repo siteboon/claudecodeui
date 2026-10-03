@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Loader2, Lock, User } from 'lucide-react';
+import { Loader2, Lock, Shield, User } from 'lucide-react';
 
 import { useAuth } from '@/modules/auth/context/AuthContext';
 import AuthErrorAlert from '@/modules/auth/AuthErrorAlert';
@@ -11,26 +11,31 @@ import AuthScreenLayout from '@/modules/auth/AuthScreenLayout';
 type LoginFormState = {
   username: string;
   password: string;
+  totpCode: string;
 };
 
 const initialState: LoginFormState = {
   username: '',
   password: '',
+  totpCode: '',
 };
 
 /**
  * Login form component.
  * Rendered by the auth module's ProtectedRoute when no user session exists.
  * Handles credential input with browser autofill support (`autocomplete`
- * attributes) so that password managers can offer to fill saved credentials.
+ * attributes) and optional RFC 6238 TOTP 2FA verification when enabled in Settings.
  */
 export default function LoginForm() {
   const { t } = useTranslation('auth');
-  const { error: sessionError, login } = useAuth();
+  const { error: sessionError, login, totpEnabled } = useAuth();
 
   const [formState, setFormState] = useState<LoginFormState>(initialState);
   const [errorMessage, setErrorMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [totpPrompted, setTotpPrompted] = useState(false);
+
+  const showTotpInput = totpEnabled || totpPrompted;
 
   const updateField = useCallback((field: keyof LoginFormState, value: string) => {
     setFormState((previous) => ({ ...previous, [field]: value }));
@@ -48,13 +53,20 @@ export default function LoginForm() {
       }
 
       setIsSubmitting(true);
-      const result = await login(formState.username.trim(), formState.password);
+      const result = await login(
+        formState.username.trim(),
+        formState.password,
+        formState.totpCode.trim() || undefined,
+      );
       if (!result.success) {
+        if (result.totpRequired) {
+          setTotpPrompted(true);
+        }
         setErrorMessage(result.error);
       }
       setIsSubmitting(false);
     },
-    [formState.password, formState.username, login, t],
+    [formState.password, formState.totpCode, formState.username, login, t],
   );
 
   return (
@@ -86,6 +98,22 @@ export default function LoginForm() {
           autoComplete="current-password"
           icon={Lock}
         />
+
+        {showTotpInput && (
+          <AuthInputField
+            id="totpCode"
+            label={t('login.totpCode', { defaultValue: '2FA Authentication Code (TOTP)' })}
+            value={formState.totpCode}
+            onChange={(value) => updateField('totpCode', value)}
+            placeholder={t('login.placeholders.totpCode', {
+              defaultValue: '6-digit code or backup recovery code',
+            })}
+            isDisabled={isSubmitting}
+            autoComplete="one-time-code"
+            required={false}
+            icon={Shield}
+          />
+        )}
 
         <AuthErrorAlert errorMessage={errorMessage || sessionError || ''} />
 

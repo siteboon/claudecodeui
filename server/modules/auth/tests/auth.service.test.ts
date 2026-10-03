@@ -4,6 +4,7 @@ import test from 'node:test';
 import { AppError } from '@/shared/utils.js';
 
 import { createAuthService } from '../auth.service.js';
+import { generateTotpSecret, getCurrentTotpCode, verifyTotpCode } from '../security.js';
 
 type AuthDependencies = Parameters<typeof createAuthService>[0];
 
@@ -92,4 +93,13 @@ test('refreshSession issues a replacement token for the authenticated user', () 
 
   assert.deepEqual(result, { token: 'replacement-token' });
   assert.deepEqual(tokenUser, { id: 7, username: 'alice' });
+});
+
+test('RFC 6238 TOTP secret generation and code verification succeeds for valid code and rejects invalid code', () => {
+  const secret = generateTotpSecret(20);
+  const currentCode = getCurrentTotpCode(secret);
+
+  assert.match(currentCode, /^\d{6}$/);
+  assert.equal(verifyTotpCode(secret, currentCode), true);
+  assert.equal(verifyTotpCode(secret, '000000'), currentCode === '000000');
 });

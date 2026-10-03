@@ -3,7 +3,8 @@ import jwt from 'jsonwebtoken';
 
 import { IS_PLATFORM } from '@/shared/utils.js';
 
-import { userDb, appConfigDb } from '../database/index.js';
+import { getConnection, userDb, appConfigDb } from '../database/index.js';
+import { extractRequestMeta, logAuditEvent } from './security.js';
 
 // Use env var if set, otherwise auto-generate a unique secret per installation
 const JWT_SECRET = process.env.JWT_SECRET || appConfigDb.getOrCreateJwtSecret();
@@ -14,9 +15,16 @@ const validateApiKey = (req, res, next) => {
   if (!process.env.API_KEY) {
     return next();
   }
-  
+
   const apiKey = req.headers['x-api-key'];
   if (apiKey !== process.env.API_KEY) {
+    logAuditEvent(getConnection(), {
+      eventType: 'API_KEY_INVALID',
+      severity: 'WARN',
+      ...extractRequestMeta(req),
+      statusCode: 401,
+      details: { reason: 'Invalid X-API-Key header' },
+    });
     return res.status(401).json({ error: 'Invalid API key' });
   }
   next();
@@ -24,7 +32,7 @@ const validateApiKey = (req, res, next) => {
 
 // JWT authentication middleware
 const authenticateToken = async (req, res, next) => {
-  // Platform mode:  use single database user
+  // Platform mode: use single database user
   if (IS_PLATFORM) {
     try {
       const user = userDb.getFirstUser();
@@ -49,6 +57,13 @@ const authenticateToken = async (req, res, next) => {
   }
 
   if (!token) {
+    logAuditEvent(getConnection(), {
+      eventType: 'API_UNAUTHORIZED_ACCESS',
+      severity: 'WARN',
+      ...extractRequestMeta(req),
+      statusCode: 401,
+      details: { reason: 'Missing JWT bearer token' },
+    });
     res.setHeader('X-Auth-Error', 'invalid-token');
     return res.status(401).json({
       error: 'Access denied. No token provided.',
@@ -62,6 +77,13 @@ const authenticateToken = async (req, res, next) => {
     // Verify user still exists and is active
     const user = userDb.getUserById(decoded.userId);
     if (!user) {
+      logAuditEvent(getConnection(), {
+        eventType: 'API_TOKEN_USER_NOT_FOUND',
+        severity: 'WARN',
+        ...extractRequestMeta(req),
+        statusCode: 401,
+        details: { decodedUserId: decoded.userId },
+      });
       res.setHeader('X-Auth-Error', 'invalid-token');
       return res.status(401).json({
         error: 'Invalid token. User not found.',
@@ -83,6 +105,13 @@ const authenticateToken = async (req, res, next) => {
     next();
   } catch (error) {
     if (error instanceof jwt.TokenExpiredError) {
+      logAuditEvent(getConnection(), {
+        eventType: 'AUTH_SESSION_EXPIRED',
+        severity: 'INFO',
+        ...extractRequestMeta(req),
+        statusCode: 401,
+        details: { reason: 'JWT token expired' },
+      });
       res.setHeader('X-Auth-Error', 'session-expired');
       return res.status(401).json({
         error: 'Session expired. Please log in again.',
@@ -94,6 +123,13 @@ const authenticateToken = async (req, res, next) => {
       'Token verification failed:',
       error instanceof Error ? error.message : String(error),
     );
+    logAuditEvent(getConnection(), {
+      eventType: 'API_INVALID_TOKEN',
+      severity: 'WARN',
+      ...extractRequestMeta(req),
+      statusCode: 401,
+      details: { reason: error instanceof Error ? error.message : String(error) },
+    });
     res.setHeader('X-Auth-Error', 'invalid-token');
     return res.status(401).json({
       error: 'Invalid token',
@@ -107,10 +143,10 @@ const generateToken = (user) => {
   return jwt.sign(
     {
       userId: user.id,
-      username: user.username
+      username: user.username,
     },
     JWT_SECRET,
-    { expiresIn: '7d' }
+    { expiresIn: '7d' },
   );
 };
 
@@ -159,5 +195,5 @@ export {
   authenticateToken,
   generateToken,
   authenticateWebSocket,
-  JWT_SECRET
+  JWT_SECRET,
 };
