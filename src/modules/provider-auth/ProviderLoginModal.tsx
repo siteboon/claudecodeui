@@ -30,6 +30,12 @@ type ProviderLoginModalProps = {
   isAuthenticated?: boolean;
 };
 
+// `/login` needs no permission flags. `--dangerously-skip-permissions` used to
+// ride along here, but it does not skip the folder-trust prompt, it adds a
+// bypass-mode warning prompt, and a server running as root could not log in
+// at all: Claude Code exits on that flag for root.
+const CLAUDE_LOGIN_COMMAND = 'claude /login';
+
 const getProviderCommand = ({
   provider,
   customCommand,
@@ -44,7 +50,7 @@ const getProviderCommand = ({
   }
 
   if (provider === 'claude') {
-    return 'claude --dangerously-skip-permissions /login';
+    return CLAUDE_LOGIN_COMMAND;
   }
 
   if (provider === 'cursor') {
@@ -59,7 +65,7 @@ const getProviderCommand = ({
     return 'opencode auth login';
   }
 
-  return 'claude --dangerously-skip-permissions /login';
+  return CLAUDE_LOGIN_COMMAND;
 };
 
 const getProviderTitle = (provider: LLMProvider) => {

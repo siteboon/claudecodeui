@@ -37,7 +37,12 @@ import {
   notifyUserIfEnabled
 } from '@/modules/notifications/index.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
-import { createCompleteMessage, createNormalizedMessage } from '@/shared/utils.js';
+import {
+  CLAUDE_ROOT_BYPASS_NOTICE,
+  createCompleteMessage,
+  createNormalizedMessage,
+  isClaudeBypassRefusedAsRoot
+} from '@/shared/utils.js';
 
 const activeSessions = new Map();
 // Outstanding background tasks per live session, keyed like activeSessions. An
@@ -946,6 +951,19 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       model: resolvedModel || options.model,
       effortModels,
     });
+
+    // As root (outside a deliberate sandbox) the CLI exits with code 1 on
+    // bypassPermissions before the turn starts. Run the turn in the mode the
+    // composer picked, or the default mode, and say why bypass was not applied.
+    if (sdkOptions.permissionMode === 'bypassPermissions' && isClaudeBypassRefusedAsRoot()) {
+      const requestedMode = options.permissionMode;
+      if (requestedMode && requestedMode !== 'default' && requestedMode !== 'bypassPermissions') {
+        sdkOptions.permissionMode = requestedMode;
+      } else {
+        delete sdkOptions.permissionMode;
+      }
+      ws.send(createNormalizedMessage({ kind: 'error', content: CLAUDE_ROOT_BYPASS_NOTICE, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+    }
 
     const mcpServers = await loadMcpConfig(options.cwd);
     if (mcpServers) {

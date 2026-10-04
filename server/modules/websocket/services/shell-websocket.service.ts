@@ -5,7 +5,12 @@ import path from 'node:path';
 import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
-import { parseIncomingJsonObject, stripAnsiSequences } from '@/shared/utils.js';
+import {
+  CLAUDE_ROOT_BYPASS_NOTICE,
+  isClaudeBypassRefusedAsRoot,
+  parseIncomingJsonObject,
+  stripAnsiSequences,
+} from '@/shared/utils.js';
 
 type ShellIncomingMessage = {
   type?: string;
@@ -214,8 +219,9 @@ function buildShellCommand(
 
   // Launching with the flag is what unlocks "bypass permissions" in the CLI's
   // shift+tab permission-mode cycle; it cannot be enabled from inside a
-  // session started without it.
-  const bypassFlag = readBoolean(message.bypassPermissions)
+  // session started without it. As root the CLI exits on the flag instead, so
+  // it is left off there and the session starts in the normal mode.
+  const bypassFlag = readBoolean(message.bypassPermissions) && !isClaudeBypassRefusedAsRoot()
     ? ' --dangerously-skip-permissions'
     : '';
   const command = initialCommand || `claude${bypassFlag}`;
@@ -542,6 +548,10 @@ export function handleShellConnection(
           welcomeMsg = hasSession && resumeSessionId
             ? `\x1b[36mResuming ${providerName} session ${resumeSessionId} in: ${projectPath}\x1b[0m\r\n`
             : `\x1b[36mStarting new ${providerName} session in: ${projectPath}\x1b[0m\r\n`;
+          // buildShellCommand dropped the requested bypass flag; say why.
+          if (providerName === 'Claude' && readBoolean(data.bypassPermissions) && isClaudeBypassRefusedAsRoot()) {
+            welcomeMsg += `\x1b[33m${CLAUDE_ROOT_BYPASS_NOTICE}\x1b[0m\r\n`;
+          }
         }
 
         ws.send(

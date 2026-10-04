@@ -41,6 +41,52 @@ import type {
 export const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
 
 // ---------------------------
+//----------------- CLAUDE CODE ROOT GUARD UTILITIES ------------
+/**
+ * Whether Claude Code would refuse to start in bypass-permissions mode if this
+ * server launched it now.
+ *
+ * Claude Code enforces this itself at startup: launched with
+ * `--dangerously-skip-permissions` or `--permission-mode bypassPermissions` as
+ * root, it prints "--dangerously-skip-permissions cannot be used with
+ * root/sudo privileges for security reasons" and exits with code 1, unless
+ * `IS_SANDBOX=1` or a truthy `CLAUDE_CODE_BUBBLEWRAP` (`1`, `true`, `yes`,
+ * `on`) marks a deliberate sandbox. The CLI inherits this server's uid and
+ * environment, so the same test predicts its answer. It is evaluated on every
+ * call so it follows the environment the CLI is actually launched with.
+ *
+ * Callers only use it to launch without the bypass instead of passing a flag
+ * the CLI will exit on. Never use it to set the sandbox variables: the CLI's
+ * guard stays the authority on whether bypass is safe.
+ *
+ * Used by the websocket module (Shell tab launches) and the providers module
+ * (Claude chat turns).
+ */
+export function isClaudeBypassRefusedAsRoot(): boolean {
+  if (typeof process.getuid !== 'function' || process.getuid() !== 0) {
+    return false;
+  }
+
+  if (process.env.IS_SANDBOX === '1') {
+    return false;
+  }
+
+  const bubblewrap = (process.env.CLAUDE_CODE_BUBBLEWRAP ?? '').trim().toLowerCase();
+  return !['1', 'true', 'yes', 'on'].includes(bubblewrap);
+}
+
+/**
+ * Tells the user why a requested Claude bypass-permissions launch ran in the
+ * normal permission mode instead, whenever `isClaudeBypassRefusedAsRoot()`
+ * holds. Shown in the Shell tab's terminal and as a chat error row, so it is
+ * written for both.
+ */
+export const CLAUDE_ROOT_BYPASS_NOTICE =
+  'Bypass permissions was not applied: CloudCLI is running as root, and Claude Code refuses to skip '
+  + 'permission prompts for root, so this session keeps them. Run CloudCLI as a non-root user to use '
+  + 'bypass mode.';
+
+// ---------------------------
 //----------------- NORMALIZED MESSAGE HELPER INPUT TYPES ------------
 /**
  * Input payload accepted by `createNormalizedMessage`.
@@ -139,7 +185,8 @@ export const WORKSPACES_ROOT = process.env.WORKSPACES_ROOT || os.homedir();
  * System-critical paths that must never be used as workspace roots.
  *
  * The validation helper blocks these values directly and also blocks paths
- * nested under them (with explicit allow-list exceptions where necessary).
+ * nested under them (with explicit allow-list exceptions where necessary, and
+ * never inside the server user's own home, see `isInsideServerHomeDirectory`).
  */
 export const FORBIDDEN_WORKSPACE_PATHS = [
   // Unix
@@ -304,11 +351,43 @@ export function normalizeProjectPath(inputPath: string): string {
 }
 
 /**
+ * Home directory of the user this server runs as, resolved once at startup
+ * like `WORKSPACES_ROOT`. See `isInsideServerHomeDirectory`.
+ */
+const SERVER_HOME_DIRECTORY = normalizeProjectPath(os.homedir());
+
+/**
+ * Whether a normalized absolute path is the server user's own home directory
+ * or lies inside it.
+ *
+ * `validateWorkspacePath` exempts that home from `FORBIDDEN_WORKSPACE_PATHS`.
+ * A server started as root has `/root` as its home, `/root` is on the
+ * forbidden list, and the default `WORKSPACES_ROOT` is that same home, so
+ * without the exemption a root server with default config has no valid
+ * workspace location at all. A server running as any other user keeps `/root`
+ * forbidden, because it is not that user's home.
+ *
+ * A home that is a filesystem root (some service accounts use `/`) matches
+ * only itself, because the prefix compare appends a separator, and the root
+ * is rejected separately, so such a home cannot switch the forbidden list off.
+ */
+function isInsideServerHomeDirectory(normalizedPath: string): boolean {
+  // An empty HOME makes `os.homedir()` return '', and '' + separator would
+  // prefix-match every absolute path.
+  if (!SERVER_HOME_DIRECTORY) {
+    return false;
+  }
+
+  return normalizedPath === SERVER_HOME_DIRECTORY
+    || normalizedPath.startsWith(`${SERVER_HOME_DIRECTORY}${path.sep}`);
+}
+
+/**
  * Validates that a user-supplied workspace path is safe to use.
  *
  * Call this before any filesystem mutation that creates or registers projects.
  * The function resolves symlinks, enforces `WORKSPACES_ROOT` containment, and
- * blocks known system directories.
+ * blocks known system directories outside the server user's own home.
  */
 export async function validateWorkspacePath(requestedPath: string): Promise<WorkspacePathValidationResult> {
   try {
@@ -322,15 +401,18 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
 
     const absolutePath = path.resolve(normalizedRequestedPath);
     const normalizedPath = normalizeProjectPath(absolutePath);
+    // The server user's own home is never a system directory to that user
+    // (e.g. `/root` for a server started as root).
+    const forbiddenPaths = isInsideServerHomeDirectory(normalizedPath) ? [] : FORBIDDEN_WORKSPACE_PATHS;
 
-    if (FORBIDDEN_WORKSPACE_PATHS.includes(normalizedPath) || normalizedPath === '/') {
+    if (forbiddenPaths.includes(normalizedPath) || normalizedPath === '/') {
       return {
         valid: false,
         error: 'Cannot use system-critical directories as workspace locations',
       };
     }
 
-    for (const forbiddenPath of FORBIDDEN_WORKSPACE_PATHS) {
+    for (const forbiddenPath of forbiddenPaths) {
       const normalizedForbiddenPath = normalizeProjectPath(forbiddenPath);
       if (
         normalizedPath === normalizedForbiddenPath
