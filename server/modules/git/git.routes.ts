@@ -5,6 +5,7 @@ import express from 'express';
 
 import type { ProviderRunFunction } from '@/shared/types.js';
 import {
+  ALLOWED_PATHS,
   AppError,
   PATH_NOT_ALLOWED_MESSAGE,
   assertPathAllowed,
@@ -40,7 +41,7 @@ const COMMIT_DIFF_CHARACTER_LIMIT = 500_000;
 // fall through to each route's own error. A no-op when ALLOWED_PATHS is unset.
 router.use(async (req, res, next) => {
   const projectId = req.query.project ?? req.body?.project;
-  if (typeof projectId !== 'string' || !projectId) {
+  if (ALLOWED_PATHS.length === 0 || typeof projectId !== 'string' || !projectId) {
     next();
     return;
   }

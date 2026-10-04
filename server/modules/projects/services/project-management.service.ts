@@ -7,7 +7,13 @@ import type {
   ProjectRepositoryRow,
   WorkspacePathValidationResult,
 } from '@/shared/types.js';
-import { AppError, assertPathAllowed, normalizeProjectPath, validateWorkspacePath } from '@/shared/utils.js';
+import {
+  ALLOWED_PATHS,
+  AppError,
+  assertPathAllowed,
+  normalizeProjectPath,
+  validateWorkspacePath,
+} from '@/shared/utils.js';
 
 type CreateProjectInput = {
   projectPath: string;
@@ -152,6 +158,10 @@ export function updateProjectDisplayName(projectId: string, newDisplayName: unkn
  * Used by the Projects router for every `:projectId` route.
  */
 export async function assertProjectAccessAllowed(projectId: string): Promise<void> {
+  if (ALLOWED_PATHS.length === 0) {
+    return;
+  }
+
   const projectPath = projectsDb.getProjectPathById(projectId);
   if (projectPath) {
     await assertPathAllowed(projectPath);

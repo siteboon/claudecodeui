@@ -14,7 +14,7 @@ import path from 'path';
 import express from 'express';
 
 import { WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
-import { PATH_NOT_ALLOWED_MESSAGE, isPathAllowed } from '@/shared/utils.js';
+import { ALLOWED_PATHS, PATH_NOT_ALLOWED_MESSAGE, isPathAllowed } from '@/shared/utils.js';
 
 import type { createTaskmasterService } from './taskmaster.service.js';
 // cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution — required
@@ -86,6 +86,11 @@ export function createTaskmasterRouter(dependencies: TaskmasterRouterDependencie
     // outside ALLOWED_PATHS (a no-op when it is unset); unknown ids still
     // reach each route's own 404.
     router.param('projectId', async (req, res, next, projectId) => {
+        if (ALLOWED_PATHS.length === 0) {
+            next();
+            return;
+        }
+
         try {
             const projectPath = await resolveProjectPathFromId(projectId);
             if (projectPath && !(await isPathAllowed(projectPath))) {
