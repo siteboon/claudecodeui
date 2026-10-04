@@ -15,12 +15,17 @@ import type { GitCommandResult } from '@/shared/types.js';
 // imports below. Only the repository and one worktree folder are allowed;
 // worktrees otherwise live next to the repository. `linkedWorktreePath` is an
 // allowed worktree of a main repository outside the allowed directories.
+// `deniedRepositoryRoot` is outside too, but its sibling worktrees folder is
+// allowed, so only the check on the main repository can refuse a new worktree.
 const fixtureRoot = await realpath(await mkdtemp(path.join(os.tmpdir(), 'worktree-allowed-')));
 const repositoryRoot = path.join(fixtureRoot, 'repo');
 const allowedWorktreePath = path.join(fixtureRoot, 'repo-worktrees', 'allowed-branch');
 const outsideWorktreePath = path.join(fixtureRoot, 'elsewhere', 'existing');
 const outsideRepositoryRoot = path.join(fixtureRoot, 'outside-repo');
 const linkedWorktreePath = path.join(fixtureRoot, 'linked');
+const deniedRepositoryRoot = path.join(fixtureRoot, 'denied-repo');
+const deniedRepositoryWorktreesPath = path.join(fixtureRoot, 'denied-repo-worktrees');
+const deniedRepositoryLinkedWorktreePath = path.join(deniedRepositoryWorktreesPath, 'existing');
 await mkdir(repositoryRoot, { recursive: true });
 await mkdir(outsideRepositoryRoot, { recursive: true });
 
@@ -28,7 +33,12 @@ const previousEnvironment = {
   ALLOWED_PATHS: process.env.ALLOWED_PATHS,
   DATABASE_PATH: process.env.DATABASE_PATH,
 };
-process.env.ALLOWED_PATHS = `${repositoryRoot},${allowedWorktreePath},${linkedWorktreePath}`;
+process.env.ALLOWED_PATHS = [
+  repositoryRoot,
+  allowedWorktreePath,
+  linkedWorktreePath,
+  deniedRepositoryWorktreesPath,
+].join(',');
 process.env.DATABASE_PATH = path.join(fixtureRoot, 'auth.db');
 
 const { createWorktree } = await import('@/modules/worktrees/services/worktree-create.service.js');
@@ -70,6 +80,11 @@ const PORCELAIN = buildPorcelain([
 const OUTSIDE_MAIN_PORCELAIN = buildPorcelain([
   { path: outsideRepositoryRoot, branch: 'main' },
   { path: linkedWorktreePath, branch: 'linked-branch' },
+]);
+
+const DENIED_MAIN_PORCELAIN = buildPorcelain([
+  { path: deniedRepositoryRoot, branch: 'main' },
+  { path: deniedRepositoryLinkedWorktreePath, branch: 'existing-branch' },
 ]);
 
 function createFakeRunner(porcelain = PORCELAIN) {
@@ -186,6 +201,22 @@ test('an allowed worktree whose main repository is outside ALLOWED_PATHS cannot 
     isPathNotAllowedError,
   );
   assert.ok(ranOnlyWorktreeList(removeRunner.calls));
+});
+
+test('a new worktree in an allowed folder is refused when its main repository is outside ALLOWED_PATHS', async () => {
+  const { calls, runGit } = createFakeRunner(DENIED_MAIN_PORCELAIN);
+
+  // The new folder (`denied-repo-worktrees/feature-new`) is allowed, but git
+  // would record the branch and the worktree in the main repository.
+  await assert.rejects(
+    createWorktree(
+      { projectPath: deniedRepositoryLinkedWorktreePath, branch: 'feature/new' },
+      { runGit, fileSystem: { pathExists: async () => false } },
+    ),
+    isPathNotAllowedError,
+  );
+  // No `git branch --list` and no `git worktree add`.
+  assert.ok(ranOnlyWorktreeList(calls));
 });
 
 test('the Worktrees API refuses a project registered outside ALLOWED_PATHS', async () => {
