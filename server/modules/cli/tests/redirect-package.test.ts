@@ -197,6 +197,7 @@ test('redirect bin still finds the CLI when an exports map hides package.json', 
 
 test('redirect bin explains how to install the CLI when @cloudcli-ai/cloudcli is missing', async () => {
   await withFixture(async (fixtureRoot) => {
+    // Assumes @cloudcli-ai/cloudcli can't be resolved from os.tmpdir()'s parent folders or Node's global folders.
     const shimDirectory = await installHoisted(fixtureRoot, null);
 
     const run = runShimBin(shimDirectory, ['--version']);
