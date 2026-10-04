@@ -71,14 +71,11 @@ export default function PermissionRequestsBanner({
           : alreadyAllowed
             ? 'Allow (saved)'
             : 'Allow & remember';
-        const matchingRequestIds = permissionEntry
+        const matchingRequestIds = !isCodexRequest && permissionEntry
           ? pendingPermissionRequests
               .filter(
                 (item) =>
                   item.provider === request.provider
-                  && (!isCodexRequest || (request.sessionId
-                    ? item.sessionId === request.sessionId
-                    : item.requestId === request.requestId))
                   && buildToolPermissionEntry(item.toolName, formatToolInputForDisplay(item.input)) === permissionEntry,
               )
               .map((item) => item.requestId)

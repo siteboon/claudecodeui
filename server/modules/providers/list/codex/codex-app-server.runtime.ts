@@ -5,21 +5,21 @@ import {
   appendFilesInputTag,
   buildCodexInputItems,
   normalizeImageDescriptors,
-} from '@/shared/image-attachments.js';
+  AppError,
+  createCompleteMessage,
+  createNormalizedMessage,
+  readObjectRecord,
+} from '@/shared/index.js';
 import type {
   AnyRecord,
   ProviderPermissionDecision,
   ProviderRuntimeContext,
   ProviderRuntimeWriter,
-} from '@/shared/types.js';
-import {
-  AppError,
-  createCompleteMessage,
-  createNormalizedMessage,
-  readObjectRecord,
-} from '@/shared/utils.js';
+} from '@/shared/index.js';
 import {
   createNotificationEvent,
+  notifyRunFailed,
+  notifyRunStopped,
   notifyUserIfEnabled,
 } from '@/modules/notifications/index.js';
 
@@ -37,6 +37,7 @@ type AppServerRuntimeResult = {
 
 type AppServerRun = {
   appSessionId: string | null;
+  sessionSummary: string | null;
   threadId: string;
   turnId: string | null;
   writer: ProviderRuntimeWriter;
@@ -480,6 +481,7 @@ export class CodexAppServerRuntime {
   private readonly manager: CodexAppServerProcessManager;
   private readonly runsByThread = new Map<string, AppServerRun>();
   private readonly runsBySession = new Map<string, AppServerRun>();
+  private readonly pendingRunSetups = new Map<string, { abortRequested: boolean }>();
   private readonly pendingApprovals = new Map<string, PendingCodexApproval>();
   private inFlightRuns = 0;
   private inFlightOperations = 0;
@@ -499,6 +501,24 @@ export class CodexAppServerRuntime {
     writer: ProviderRuntimeWriter,
     context: ProviderRuntimeContext,
   ): Promise<unknown> {
+    const sessionId = readString(options.sessionId);
+    const sessionSummary = readString(options.sessionSummary);
+    if (sessionId && (
+      this.pendingRunSetups.has(sessionId)
+      || this.runsBySession.get(sessionId)?.terminal === false
+    )) {
+      throw new CodexAppServerPreTurnError(`Codex session "${sessionId}" already has an active run`);
+    }
+
+    const setup = { abortRequested: false };
+    if (sessionId) {
+      this.pendingRunSetups.set(sessionId, setup);
+    }
+    const checkSetupAbort = () => {
+      if (setup.abortRequested) {
+        throw new Error('Codex run aborted during setup');
+      }
+    };
     this.inFlightRuns += 1;
     let run: AppServerRun | null = null;
     let threadId: string | null = null;
@@ -506,15 +526,17 @@ export class CodexAppServerRuntime {
 
     try {
       await this.manager.start();
+      checkSetupAbort();
 
-      const sessionId = readString(options.sessionId);
       const providerSessionId = context.resolveProviderSessionId(sessionId);
       const resolvedModel = await context.resolveResumeModel(sessionId ?? undefined, readString(options.model));
+      checkSetupAbort();
       const workingDirectory = readString(options.cwd)
         ?? readString(options.projectPath)
         ?? process.cwd();
       const permission = mapPermissionMode(options.permissionMode);
       const catalog = await context.getProviderModels();
+      checkSetupAbort();
       const selectedModel = catalog.OPTIONS.find((option) => option.value === resolvedModel);
       const allowedEfforts = selectedModel?.effort?.values?.map((value) => value.value) ?? [];
       const effort = readString(options.effort);
@@ -536,6 +558,7 @@ export class CodexAppServerRuntime {
         })
         : await this.manager.request('thread/start', threadParams);
       threadId = readThreadId(threadResult);
+      checkSetupAbort();
       if (!threadId) {
         throw new CodexAppServerPreTurnError('Codex app-server did not return a thread id', threadResult);
       }
@@ -550,7 +573,11 @@ export class CodexAppServerRuntime {
         }));
       }
 
-      run = this.createRun(sessionId, threadId, writer, context);
+      checkSetupAbort();
+      run = this.createRun(sessionId, threadId, writer, context, sessionSummary);
+      if (sessionId) {
+        this.pendingRunSetups.delete(sessionId);
+      }
       const turnParams = {
         threadId,
         input: buildTurnInput(command, options, workingDirectory),
@@ -573,6 +600,16 @@ export class CodexAppServerRuntime {
 
       return await run.completion;
     } catch (error) {
+      if (!run && setup.abortRequested) {
+        writer.send(createCompleteMessage({
+          provider: 'codex',
+          sessionId: threadId ?? sessionId,
+          actualSessionId: threadId,
+          exitCode: 0,
+          aborted: true,
+        }));
+        return { status: 'interrupted' };
+      }
       if (run?.turnAccepted) {
         this.failRun(run, error instanceof Error ? error.message : String(error));
         return await run.completion;
@@ -587,8 +624,12 @@ export class CodexAppServerRuntime {
       if (threadId && providerThreadCreated) {
         writer.setSessionId?.(threadId);
       }
+      this.notifyRunOutcome('failed', writer, sessionId ?? threadId, sessionSummary, normalized.message);
       throw normalized;
     } finally {
+      if (sessionId && this.pendingRunSetups.get(sessionId) === setup) {
+        this.pendingRunSetups.delete(sessionId);
+      }
       this.inFlightRuns -= 1;
       if (run) {
         this.removeRun(run);
@@ -597,9 +638,13 @@ export class CodexAppServerRuntime {
   }
 
   async abort(sessionId: string): Promise<boolean> {
+    const setup = this.pendingRunSetups.get(sessionId);
+    if (setup) {
+      setup.abortRequested = true;
+    }
     const run = this.runsBySession.get(sessionId);
     if (!run || run.terminal) {
-      return false;
+      return Boolean(setup);
     }
 
     run.abortRequested = true;
@@ -724,6 +769,7 @@ export class CodexAppServerRuntime {
     threadId: string,
     writer: ProviderRuntimeWriter,
     context: ProviderRuntimeContext,
+    sessionSummary: string | null,
   ): AppServerRun {
     const existing = this.runsByThread.get(threadId)
       ?? (appSessionId ? this.runsBySession.get(appSessionId) : undefined);
@@ -737,6 +783,7 @@ export class CodexAppServerRuntime {
     });
     const run: AppServerRun = {
       appSessionId,
+      sessionSummary,
       threadId,
       turnId: null,
       writer,
@@ -1024,6 +1071,33 @@ export class CodexAppServerRuntime {
       aborted: status === 'interrupted' || run.abortRequested,
     }));
     run.resolveCompletion({ status, ...(error ? { error } : {}) });
+    if (!run.abortRequested || status === 'failed') {
+      this.notifyRunOutcome(status, run.writer, run.appSessionId ?? run.threadId, run.sessionSummary, error);
+    }
+  }
+
+  private notifyRunOutcome(
+    status: AppServerRuntimeResult['status'],
+    writer: ProviderRuntimeWriter,
+    sessionId: string | null,
+    sessionSummary: string | null,
+    error?: string,
+  ): void {
+    const notification = {
+      userId: writer.userId ?? null,
+      provider: 'codex',
+      sessionId,
+      sessionName: sessionSummary,
+    };
+    try {
+      if (status === 'failed') {
+        notifyRunFailed({ ...notification, error });
+      } else if (status === 'completed') {
+        notifyRunStopped(notification);
+      }
+    } catch (notificationError) {
+      console.warn('[Codex app-server] Run notification failed:', notificationError);
+    }
   }
 
   private failRun(run: AppServerRun, message: string): void {

@@ -14,7 +14,7 @@ function createRequest(
   return { requestId, sessionId, provider, toolName: 'Bash', input: { command: 'npm test' } };
 }
 
-test('Allow for session excludes stale sessions and other providers after a session switch', () => {
+test('Allow for session approves only the selected Codex request, not matching prefixes or sessions', () => {
   const handlePermissionDecision = vi.fn();
   const handleGrantToolPermission = vi.fn(() => ({ success: true }));
   const staleRequest = createRequest('stale', 'session-old');
@@ -30,6 +30,7 @@ test('Allow for session excludes stale sessions and other providers after a sess
       pendingPermissionRequests={[
         createRequest('active', 'session-new'),
         createRequest('same-session', 'session-new'),
+        { ...createRequest('unreviewed-command', 'session-new'), input: { command: 'npm exec unreviewed-command' } },
         staleRequest,
         createRequest('other-provider', 'session-new', 'claude'),
         { ...createRequest('other-tool', 'session-new'), input: { command: 'git status' } },
@@ -42,7 +43,7 @@ test('Allow for session excludes stale sessions and other providers after a sess
   fireEvent.click(screen.getAllByRole('button', { name: 'Allow for session' })[0]);
 
   assert.deepEqual(handlePermissionDecision.mock.calls, [[
-    ['active', 'same-session'],
+    ['active'],
     { allow: true, rememberEntry: 'Bash(npm:*)' },
   ]]);
   assert.equal(handleGrantToolPermission.mock.calls.length, 0);
@@ -76,6 +77,7 @@ test('remembering a Claude rule does not approve matching Codex requests', () =>
     <PermissionRequestsBanner
       pendingPermissionRequests={[
         createRequest('claude', 'session-1', 'claude'),
+        createRequest('second-claude', 'session-1', 'claude'),
         createRequest('codex', 'session-1'),
       ]}
       handlePermissionDecision={handlePermissionDecision}
@@ -83,8 +85,30 @@ test('remembering a Claude rule does not approve matching Codex requests', () =>
     />,
   );
 
-  fireEvent.click(screen.getByRole('button', { name: 'Allow & remember' }));
+  fireEvent.click(screen.getAllByRole('button', { name: 'Allow & remember' })[0]);
 
-  assert.deepEqual(handlePermissionDecision.mock.calls[0]?.[0], ['claude']);
+  assert.deepEqual(handlePermissionDecision.mock.calls[0]?.[0], ['claude', 'second-claude']);
   assert.deepEqual(handleGrantToolPermission.mock.calls, [[{ entry: 'Bash(npm:*)', toolName: 'Bash' }]]);
 });
+
+for (const action of ['Allow once', 'Deny']) {
+  test(`${action} affects only the selected Codex request`, () => {
+    const handlePermissionDecision = vi.fn();
+    render(
+      <PermissionRequestsBanner
+        pendingPermissionRequests={[
+          createRequest('selected', 'session-1'),
+          createRequest('unreviewed', 'session-1'),
+        ]}
+        handlePermissionDecision={handlePermissionDecision}
+        handleGrantToolPermission={() => ({ success: true })}
+      />,
+    );
+
+    fireEvent.click(screen.getAllByRole('button', { name: action })[0]);
+
+    assert.equal(handlePermissionDecision.mock.calls.length, 1);
+    assert.equal(handlePermissionDecision.mock.calls[0]?.[0], 'selected');
+    assert.equal(handlePermissionDecision.mock.calls[0]?.[1].allow, action === 'Allow once');
+  });
+}

@@ -63,6 +63,16 @@ when resumed even if the resume request supplies different settings. Explicit
 turn overrides apply both permission increases and decreases. Workspace-mode
 turns preserve the returned workspace sandbox configuration when available.
 
+Stop requests received during initialization, model lookup, or thread setup are
+remembered per app session. Setup ends with an aborted completion rather than
+submitting a turn, even if the pending setup request subsequently fails.
+
+Completed and failed runs use the shared notification service with the app
+session id and session summary, respecting the user's notification preferences.
+Interrupted or explicitly aborted runs do not send a successful-run notification.
+Codex approval actions target only the selected request; session-level approval
+scope is handled by Codex rather than by batching matching command prefixes.
+
 ## Current File Layout
 
 Each provider lives under its own folder in `server/modules/providers/list/`:
