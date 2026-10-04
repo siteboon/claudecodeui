@@ -10,6 +10,11 @@ type CursorLoginStatus = {
   error?: string;
 };
 
+// `cursor-agent status` reads the stored tokens and then confirms them with a request to
+// Cursor's API, so it costs the CLI's startup (3-6 s on a busy host even when logged out)
+// plus a network round trip. A 5 s cap reported fresh logins as "Command timeout" (#551).
+const STATUS_TIMEOUT_MS = 20_000;
+
 export class CursorProviderAuth implements IProviderAuth {
   /**
    * Checks whether the cursor-agent CLI is available on this host.
@@ -71,7 +76,7 @@ export class CursorProviderAuth implements IProviderAuth {
             error: 'Command timeout',
           });
         }
-      }, 5000);
+      }, STATUS_TIMEOUT_MS);
 
       try {
         childProcess = spawn('cursor-agent', ['status']);
