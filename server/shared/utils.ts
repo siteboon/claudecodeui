@@ -1074,10 +1074,9 @@ export function sanitizeLeafDirectoryName(inputName: string, label = 'directory 
  * The Claude, Codex and Cursor session synchronizers call this to find
  * transcript artifacts under provider home directories, with the
  * `scan_state.last_scanned_at` cursor as `lastScanAt` on incremental scans.
- * Pass `lastScanAt` to include only files created or
- * modified after the previous scan, or pass `null` to perform a full rescan.
- * Missing directories are treated as empty because not every provider exists
- * on every machine.
+ * Pass `lastScanAt` to include only files created or modified after the
+ * previous scan, or pass `null` to perform a full rescan. Missing directories
+ * are treated as empty because not every provider exists on every machine.
  *
  * Modification time matters as much as creation time: a provider CLI creates a
  * transcript before it writes the first indexable record, so a scan can find a
