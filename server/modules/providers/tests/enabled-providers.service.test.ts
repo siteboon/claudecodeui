@@ -104,8 +104,11 @@ test('a misconfigured value is reported once, not on every request', (t) => {
 });
 
 test('callers cannot change the cached list', (t) => {
-  const first = readWithValue(t, 'claude,codex').providers;
-  first.push('cursor');
+  // The first read parses the value; the second is served from the cache, so
+  // that is the result a caller could corrupt it through.
+  readWithValue(t, 'claude,codex');
+  const cached = readWithValue(t, 'claude,codex').providers;
+  cached.push('cursor');
 
   assert.deepEqual(readWithValue(t, 'claude,codex').providers, ['claude', 'codex']);
 });
