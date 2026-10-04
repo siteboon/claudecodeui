@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { AlertTriangle, Plus, Shield, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+import ClaudeSettingsFileRules from '@/modules/settings/tabs/agents-settings/sections/content/ClaudeSettingsFileRules';
 import { Button, Input } from '@/shared/ui';
 import type { CodexPermissionMode } from '@/shared/types';
 
@@ -244,6 +245,8 @@ function ClaudePermissions({
           )}
         </div>
       </div>
+
+      <ClaudeSettingsFileRules />
 
       <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
         <h4 className="mb-2 font-medium text-blue-900 dark:text-blue-100">
