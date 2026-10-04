@@ -163,6 +163,20 @@ To use Claude Code's full functionality, you'll need to manually enable tools:
 
 **Recommended approach**: Start with basic tools enabled and add more as needed. You can always adjust these settings later.
 
+### Single Sign-On with CAS (optional)
+
+Self-hosted instances can add a **Sign in with CAS** button to the login page, for organizations that use a [CAS](https://apereo.github.io/cas/) server. It is off unless all three required variables are set, and password login keeps working:
+
+| Variable | Description |
+|---|---|
+| `CAS_SERVER_URL` | Base URL of the CAS server, e.g. `https://cas.example.edu/cas` |
+| `CAS_SERVICE_URL` | Public URL of this server's callback, e.g. `https://cloudcli.example.com/api/auth/cas/callback`. Register it with your CAS server. |
+| `CAS_ALLOWED_USERS` | Comma-separated CAS user names allowed to sign in (exact, case-sensitive) |
+| `CAS_VERSION` | Optional: `3.0` (default) or `2.0` |
+| `CAS_LOGIN_LABEL` | Optional: custom button text |
+
+Signing in gives shell access to the machine, so CAS never admits every CAS user: only names in `CAS_ALLOWED_USERS` get in, and they all sign in as the instance's single account. On a fresh install, the first allowed CAS sign-in creates that account; it has no usable password, so it is reached through CAS only. Signing out of CloudCLI does not end your CAS session. If a variable is missing or invalid, the server logs why and leaves CAS off.
+
 ---
 
 ## Plugins

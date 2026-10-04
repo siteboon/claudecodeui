@@ -35,7 +35,27 @@ type AuthSessionPayload = {
 
 type AuthStatusPayload = {
   needsSetup?: boolean;
+  cas?: { enabled?: boolean; loginLabel?: string | null };
 };
+
+/** CAS single sign-on as offered by the server; `label` overrides the default button text. */
+type CasLoginOption = {
+  label: string | null;
+};
+
+// The CAS callback returns to the SPA with `#cas_code=<one-time code>` or
+// `#cas_error=<reason>`; each server reason maps to a fixed message.
+const CAS_REDIRECT_ERROR_MESSAGES: Record<string, string | undefined> = {
+  ticket_rejected: 'login.cas.errors.ticketRejected',
+  user_not_allowed: 'login.cas.errors.userNotAllowed',
+  server_unreachable: 'login.cas.errors.serverUnreachable',
+  sign_in_failed: 'login.cas.errors.signInFailed',
+};
+
+type CasRedirectOutcome =
+  | { kind: 'none' }
+  | { kind: 'session'; user: AuthUser; token: string }
+  | { kind: 'error'; messageKey: string };
 
 type AuthUserPayload = {
   user?: AuthUser;
@@ -57,6 +77,8 @@ type AuthContextValue = {
   needsSetup: boolean;
   hasCompletedOnboarding: boolean;
   error: string | null;
+  casLogin: CasLoginOption | null;
+  casLoginError: string | null;
   login: (username: string, password: string) => Promise<AuthActionResult>;
   register: (username: string, password: string) => Promise<AuthActionResult>;
   logout: () => void;
@@ -81,6 +103,44 @@ function resolveApiErrorMessage(payload: ApiErrorPayload | null, fallback: strin
   }
 
   return payload.error ?? payload.message ?? fallback;
+}
+
+/**
+ * Reads the outcome a CAS callback left in the URL fragment, removes it from
+ * the address bar (and so from history) before anything else, and exchanges a
+ * one-time code for a session.
+ */
+async function consumeCasRedirect(): Promise<CasRedirectOutcome> {
+  const fragment = new URLSearchParams(window.location.hash.slice(1));
+  const code = fragment.get('cas_code');
+  const reason = fragment.get('cas_error');
+  if (code === null && reason === null) {
+    return { kind: 'none' };
+  }
+
+  window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}`);
+
+  if (code === null) {
+    return {
+      kind: 'error',
+      messageKey: CAS_REDIRECT_ERROR_MESSAGES[reason ?? ''] ?? 'login.cas.errors.signInFailed',
+    };
+  }
+
+  try {
+    const response = await api.auth.casExchange(code);
+    const payload = await parseJsonSafely<AuthSessionPayload>(response);
+    if (response.ok && payload?.token && payload.user) {
+      return { kind: 'session', user: payload.user, token: payload.token };
+    }
+    return {
+      kind: 'error',
+      messageKey: response.status === 401 ? 'login.cas.errors.codeExpired' : 'login.cas.errors.signInFailed',
+    };
+  } catch (caughtError) {
+    console.error('[Auth] CAS code exchange failed:', caughtError);
+    return { kind: 'error', messageKey: AUTH_ERROR_MESSAGES.networkError };
+  }
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -113,6 +173,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [needsSetup, setNeedsSetup] = useState(false);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Whether /api/auth/status offers CAS sign-in; drives the login screens' CAS button.
+  const [casLogin, setCasLogin] = useState<CasLoginOption | null>(null);
+  // Why the last CAS round trip failed. Kept apart from `error` because the
+  // session-expired notices fired while signed out would otherwise replace it.
+  const [casLoginError, setCasLoginError] = useState<string | null>(null);
+  // The CAS fragment is single-use, but StrictMode runs the startup check twice
+  // in development, so both runs share one consume-and-exchange attempt.
+  const casRedirectRef = useRef<Promise<CasRedirectOutcome> | null>(null);
 
   const clearSession = useCallback(() => {
     setUser(null);
@@ -209,6 +277,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
     tRef.current = t;
   }, [t]);
 
+  // ProtectedRoute shows the workspace as soon as there is a user, so the
+  // onboarding status is settled before the user is published; otherwise a
+  // user who still has to onboard would see the workspace mount for a whole
+  // round trip before Onboarding replaced it. The token is stored first
+  // because that request reads it from storage.
+  const publishSession = useCallback(async (nextUser: AuthUser, nextToken: string) => {
+    persistToken(nextToken);
+    await checkOnboardingStatus();
+    setUser(nextUser);
+    setToken(nextToken);
+    setNeedsSetup(false);
+  }, [checkOnboardingStatus]);
+
   const checkAuthStatus = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -216,6 +297,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       const statusResponse = await api.auth.status();
       const statusPayload = await parseJsonSafely<AuthStatusPayload>(statusResponse);
+      setCasLogin(statusPayload?.cas?.enabled ? { label: statusPayload.cas.loginLabel || null } : null);
+
+      casRedirectRef.current ??= consumeCasRedirect();
+      const casRedirect = await casRedirectRef.current;
+      if (casRedirect.kind === 'session') {
+        await publishSession(casRedirect.user, casRedirect.token);
+        return;
+      }
+      if (casRedirect.kind === 'error') {
+        setCasLoginError(tRef.current(casRedirect.messageKey));
+      }
 
       if (statusPayload?.needsSetup) {
         setNeedsSetup(true);
@@ -252,7 +344,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [checkOnboardingStatus, clearSession]);
+  }, [checkOnboardingStatus, clearSession, publishSession]);
 
   useEffect(() => {
     if (IS_PLATFORM) {
@@ -300,19 +392,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [refreshSession, token, user]);
-
-  // ProtectedRoute shows the workspace as soon as there is a user, so the
-  // onboarding status is settled before the user is published; otherwise a
-  // user who still has to onboard would see the workspace mount for a whole
-  // round trip before Onboarding replaced it. The token is stored first
-  // because that request reads it from storage.
-  const publishSession = useCallback(async (nextUser: AuthUser, nextToken: string) => {
-    persistToken(nextToken);
-    await checkOnboardingStatus();
-    setUser(nextUser);
-    setToken(nextToken);
-    setNeedsSetup(false);
-  }, [checkOnboardingStatus]);
 
   const login = useCallback<AuthContextValue['login']>(
     async (username, password) => {
@@ -376,12 +455,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
       needsSetup,
       hasCompletedOnboarding,
       error,
+      casLogin,
+      casLoginError,
       login,
       register,
       logout,
       refreshOnboardingStatus,
     }),
     [
+      casLogin,
+      casLoginError,
       error,
       hasCompletedOnboarding,
       isLoading,

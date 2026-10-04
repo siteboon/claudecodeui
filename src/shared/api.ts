@@ -146,6 +146,14 @@ export const sessionMessagesUrl = (
     : `${base}${query({ limit, offset: offset ?? 0 })}`;
 };
 
+/**
+ * Starts a CAS single sign-on round trip. This is a navigation target for the
+ * login screen's "Sign in with CAS" link, not a fetch: the server redirects
+ * the browser to the CAS server and later back to `returnTo` (an SPA path).
+ */
+export const casLoginUrl = (returnTo: string): string =>
+  `/api/auth/cas/login${query({ returnTo })}`;
+
 const fileContentPath = (projectId: string, filePath: string) =>
   `/api/file-tree/projects/${projectId}/files/content${query({ path: filePath })}`;
 
@@ -169,6 +177,12 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
+    }),
+    // Trades the one-time code from a CAS callback for a session token.
+    casExchange: (code: string) => fetch('/api/auth/cas/exchange', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
     }),
     refresh: () => post('/api/auth/refresh'),
     user: () => get('/api/auth/user'),

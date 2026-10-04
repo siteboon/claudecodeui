@@ -7,6 +7,7 @@ import { useAuth } from '@/modules/auth/context/AuthContext';
 import AuthErrorAlert from '@/modules/auth/AuthErrorAlert';
 import AuthInputField from '@/modules/auth/AuthInputField';
 import AuthScreenLayout from '@/modules/auth/AuthScreenLayout';
+import CasSignInButton from '@/modules/auth/CasSignInButton';
 
 type LoginFormState = {
   username: string;
@@ -26,7 +27,7 @@ const initialState: LoginFormState = {
  */
 export default function LoginForm() {
   const { t } = useTranslation('auth');
-  const { error: sessionError, login } = useAuth();
+  const { error: sessionError, casLogin, casLoginError, login } = useAuth();
 
   const [formState, setFormState] = useState<LoginFormState>(initialState);
   const [errorMessage, setErrorMessage] = useState('');
@@ -87,7 +88,7 @@ export default function LoginForm() {
           icon={Lock}
         />
 
-        <AuthErrorAlert errorMessage={errorMessage || sessionError || ''} />
+        <AuthErrorAlert errorMessage={errorMessage || casLoginError || sessionError || ''} />
 
         <button
           type="submit"
@@ -104,6 +105,8 @@ export default function LoginForm() {
           )}
         </button>
       </form>
+
+      {casLogin && <CasSignInButton label={casLogin.label} isDisabled={isSubmitting} />}
     </AuthScreenLayout>
   );
 }

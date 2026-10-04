@@ -7,6 +7,7 @@ import { useAuth } from '@/modules/auth/context/AuthContext';
 import AuthErrorAlert from '@/modules/auth/AuthErrorAlert';
 import AuthInputField from '@/modules/auth/AuthInputField';
 import AuthScreenLayout from '@/modules/auth/AuthScreenLayout';
+import CasSignInButton from '@/modules/auth/CasSignInButton';
 
 type SetupFormState = {
   username: string;
@@ -54,7 +55,7 @@ function validateSetupForm(formState: SetupFormState, t: (key: string) => string
  */
 export default function SetupForm() {
   const { t } = useTranslation('auth');
-  const { register } = useAuth();
+  const { casLogin, casLoginError, register } = useAuth();
 
   const [formState, setFormState] = useState<SetupFormState>(initialState);
   const [errorMessage, setErrorMessage] = useState('');
@@ -135,7 +136,7 @@ export default function SetupForm() {
           {t('register.hint')}
         </p>
 
-        <AuthErrorAlert errorMessage={errorMessage} />
+        <AuthErrorAlert errorMessage={errorMessage || casLoginError || ''} />
 
         <button
           type="submit"
@@ -152,6 +153,9 @@ export default function SetupForm() {
           )}
         </button>
       </form>
+
+      {/* With CAS, the first allowlisted sign-in creates this account instead. */}
+      {casLogin && <CasSignInButton label={casLogin.label} isDisabled={isSubmitting} />}
     </AuthScreenLayout>
   );
 }
