@@ -57,10 +57,11 @@ const renderAgentsTab = async (serverList: string[]) => {
 
 const AGENT_NAMES = ['Claude', 'Cursor', 'Codex', 'OpenCode'];
 
-/** Provider tabs in the selector, by their visible name. */
-const listedAgents = () => AGENT_NAMES.filter((name) => (
-  screen.queryAllByRole('button').some((button) => button.textContent?.trim() === name)
-));
+/** Provider tabs in the selector, by their visible name, in rendered order. */
+const listedAgents = () => screen
+  .queryAllByRole('button')
+  .map((button) => button.textContent?.trim() ?? '')
+  .filter((name) => AGENT_NAMES.includes(name));
 
 /** The account panel heads itself with the selected provider's name. */
 const selectedAgent = () => AGENT_NAMES.find((name) => (
@@ -79,6 +80,7 @@ test('every provider is listed, Claude first and selected, when all are enabled'
 });
 
 test('only the enabled providers are listed and the first enabled one is selected', async () => {
+  // Listed in the built-in order; the configured order only picks the default.
   await renderAgentsTab(['codex', 'claude']);
 
   assert.deepEqual(listedAgents(), ['Claude', 'Codex']);

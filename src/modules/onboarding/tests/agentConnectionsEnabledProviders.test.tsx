@@ -41,7 +41,11 @@ const renderStep = async (serverList: string[]) => {
 };
 
 const CARD_TITLES = ['Claude Code', 'Cursor', 'OpenAI Codex', 'OpenCode'];
-const listedCards = () => CARD_TITLES.filter((title) => screen.queryByText(title) !== null);
+
+/** Card titles in the order they are rendered. */
+const listedCards = () => screen
+  .queryAllByText((content) => CARD_TITLES.includes(content.trim()))
+  .map((element) => element.textContent?.trim());
 
 beforeEach(() => {
   vi.resetModules();
@@ -53,7 +57,8 @@ test('every provider is offered when the server enables all of them', async () =
   assert.deepEqual(listedCards(), CARD_TITLES);
 });
 
-test('only the enabled providers are offered', async () => {
+test('only the enabled providers are offered, in the built-in order', async () => {
+  // The configured order only picks the default provider; the cards keep theirs.
   await renderStep(['codex', 'claude']);
 
   assert.deepEqual(listedCards(), ['Claude Code', 'OpenAI Codex']);
