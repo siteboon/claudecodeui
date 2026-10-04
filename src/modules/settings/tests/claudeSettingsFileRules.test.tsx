@@ -12,13 +12,12 @@ import type { ClaudeSettingsPermissionSource } from '@/shared/types';
 
 const claudeSettingsPermissions = vi.fn<() => Promise<Response>>();
 
-vi.mock('@/shared/api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/shared/api')>();
-  return {
-    ...actual,
-    api: { ...actual.api, providers: { ...actual.api.providers, claudeSettingsPermissions: () => claudeSettingsPermissions() } },
-  };
-});
+// Only the endpoint is stubbed; `readApiJson` stays real so the panel parses
+// the same envelope the server sends.
+vi.mock('@/shared/api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  api: { providers: { claudeSettingsPermissions: () => claudeSettingsPermissions() } },
+}));
 
 const source = (overrides: Partial<ClaudeSettingsPermissionSource>): ClaudeSettingsPermissionSource => ({
   scope: 'user',
