@@ -139,7 +139,10 @@ test('redirect bin accepts a string bin and keeps the exit code the CLI sets', a
   });
 });
 
-test('redirect bin can be loaded with require(), as process managers such as pm2 may do', async () => {
+// require(esm) is unflagged from Node 20.19 / 22.12; on older builds a plain require() of any ESM bin fails.
+test('redirect bin can be loaded with a plain require()', {
+  skip: process.features.require_module ? false : 'this Node build cannot require() ES modules',
+}, async () => {
   await withFixture(async (fixtureRoot) => {
     const shimDirectory = await installHoisted(fixtureRoot, {
       packageJson: { bin: { cloudcli: 'cli.js' } },
@@ -148,7 +151,7 @@ test('redirect bin can be loaded with require(), as process managers such as pm2
     const binPath = JSON.stringify(path.join(shimDirectory, 'bin.js'));
 
     // require(esm) refuses a module graph with top-level await (ERR_REQUIRE_ASYNC_MODULE). The argv splice makes
-    // process.argv look like `node bin.js start`, the way a process manager sets it before loading the script.
+    // process.argv look like `node bin.js start`, as a CommonJS wrapper that loads the script would set it.
     const run = runNode(
       [
         '--input-type=commonjs',

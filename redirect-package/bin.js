@@ -48,8 +48,8 @@ try {
   process.exit(1);
 }
 
-// No top-level await: require(esm) refuses graphs that use it, and process managers may require() a bin. Exit
-// explicitly on failure, since a manager's IPC channel or a handle the CLI opened would keep the process alive.
+// No top-level await: require(esm) refuses graphs that use it, and a CommonJS wrapper may require() this bin. Exit
+// explicitly on failure, since an IPC channel or a handle the CLI opened would keep the process alive.
 import(pathToFileURL(cliPath).href).catch((error) => {
   console.error(error);
   process.exit(1);
