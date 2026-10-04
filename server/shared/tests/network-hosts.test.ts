@@ -10,21 +10,20 @@ import { getConnectableHost, getListenHost } from '../../../shared/networkHosts.
 /**
  * HOST unset (issue #399) has to make the backend and the Vite dev server accept IPv4 and IPv6
  * connections on every interface, falling back to IPv4 when the machine has no IPv6. Explicit HOST
- * values are honored exactly: the desktop app passes 127.0.0.1 or 0.0.0.0, and the docker sandbox
- * docs rely on 0.0.0.0.
+ * values are honored exactly; the desktop app, for one, passes 127.0.0.1 or 0.0.0.0.
  *
  * The socket tests listen the way startServer() in server/index.ts does:
  * `server.listen(port, getListenHost(process.env.HOST))`.
  */
 
-async function startServer(host: string | undefined): Promise<http.Server> {
+async function startHttpServer(host: string | undefined): Promise<http.Server> {
   const server = http.createServer((_request, response) => response.end('ok'));
   server.listen(0, host);
   await once(server, 'listening');
   return server;
 }
 
-async function stopServer(server: http.Server): Promise<void> {
+async function stopHttpServer(server: http.Server): Promise<void> {
   server.close();
   await once(server, 'close');
 }
@@ -47,7 +46,7 @@ function requestStatus(address: string, port: number): Promise<number | string> 
 
 async function canListenOn(host: string): Promise<boolean> {
   try {
-    await stopServer(await startServer(host));
+    await stopHttpServer(await startHttpServer(host));
     return true;
   } catch {
     return false;
@@ -80,22 +79,22 @@ test('never turns a wildcard listen host into a browser URL host', () => {
 });
 
 test('HOST unset accepts IPv4 and IPv6 loopback connections', { skip: IPV6_LOOPBACK_SKIP }, async () => {
-  const server = await startServer(getListenHost(undefined));
+  const server = await startHttpServer(getListenHost(undefined));
   try {
-    assert.equal((server.address() as AddressInfo).address, '::');
     assert.equal(await requestStatus('127.0.0.1', getPort(server)), 200);
     assert.equal(await requestStatus('::1', getPort(server)), 200);
+    assert.equal((server.address() as AddressInfo).address, '::');
   } finally {
-    await stopServer(server);
+    await stopHttpServer(server);
   }
 });
 
 test('HOST unset accepts IPv4 connections on non-loopback interfaces', { skip: LAN_IPV4_SKIP }, async () => {
-  const server = await startServer(getListenHost(undefined));
+  const server = await startHttpServer(getListenHost(undefined));
   try {
     assert.equal(await requestStatus(LAN_IPV4_ADDRESS as string, getPort(server)), 200);
   } finally {
-    await stopServer(server);
+    await stopHttpServer(server);
   }
 });
 
@@ -123,7 +122,7 @@ test('HOST unset falls back to IPv4 when IPv6 is unavailable', async (t) => {
   tcpPrototype.bind6 = () => -os.constants.errno.EAFNOSUPPORT;
   let server: http.Server;
   try {
-    server = await startServer(getListenHost(undefined));
+    server = await startHttpServer(getListenHost(undefined));
   } finally {
     tcpPrototype.bind6 = originalBind6;
   }
@@ -131,32 +130,32 @@ test('HOST unset falls back to IPv4 when IPv6 is unavailable', async (t) => {
     assert.equal((server.address() as AddressInfo).address, '0.0.0.0');
     assert.equal(await requestStatus('127.0.0.1', getPort(server)), 200);
   } finally {
-    await stopServer(server);
+    await stopHttpServer(server);
   }
 });
 
 test('HOST=0.0.0.0 stays IPv4-only', { skip: IPV6_LOOPBACK_SKIP }, async () => {
-  const server = await startServer(getListenHost('0.0.0.0'));
+  const server = await startHttpServer(getListenHost('0.0.0.0'));
   try {
     assert.equal(await requestStatus('127.0.0.1', getPort(server)), 200);
     assert.equal(await requestStatus('::1', getPort(server)), 'ECONNREFUSED');
   } finally {
-    await stopServer(server);
+    await stopHttpServer(server);
   }
 });
 
 test('HOST=:: accepts IPv4 and IPv6 loopback connections', { skip: IPV6_LOOPBACK_SKIP }, async () => {
-  const server = await startServer(getListenHost('::'));
+  const server = await startHttpServer(getListenHost('::'));
   try {
     assert.equal(await requestStatus('127.0.0.1', getPort(server)), 200);
     assert.equal(await requestStatus('::1', getPort(server)), 200);
   } finally {
-    await stopServer(server);
+    await stopHttpServer(server);
   }
 });
 
 test('HOST=127.0.0.1 stays on the IPv4 loopback', async (t) => {
-  const server = await startServer(getListenHost('127.0.0.1'));
+  const server = await startHttpServer(getListenHost('127.0.0.1'));
   try {
     assert.equal((server.address() as AddressInfo).address, '127.0.0.1');
     assert.equal(await requestStatus('127.0.0.1', getPort(server)), 200);
@@ -169,6 +168,6 @@ test('HOST=127.0.0.1 stays on the IPv4 loopback', async (t) => {
       t.diagnostic('no non-loopback IPv4 address to check');
     }
   } finally {
-    await stopServer(server);
+    await stopHttpServer(server);
   }
 });
