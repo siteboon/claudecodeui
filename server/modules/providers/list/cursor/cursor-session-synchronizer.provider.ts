@@ -41,6 +41,10 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
 
   /**
    * Scans Cursor chats and upserts discovered sessions into DB.
+   *
+   * An incremental scan (`since` set) skips transcripts already indexed at
+   * their current mtime: re-upserting one would re-activate an archived
+   * project for nothing.
    */
   async synchronize(since?: Date): Promise<number> {
     const projectsDir = path.join(this.cursorHome, 'projects');
@@ -54,12 +58,22 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
     );
 
     for (const filePath of files) {
+      // Stat before parsing so `updated_at` never covers writes this pass did
+      // not read; the skip below relies on that.
+      const timestamps = await readFileTimestamps(filePath);
+      if (
+        since
+        && timestamps.updatedAt
+        && sessionsDb.isTranscriptUnchangedSinceIndexed(filePath, timestamps.updatedAt)
+      ) {
+        continue;
+      }
+
       const parsed = await this.processSessionFile(filePath);
       if (!parsed) {
         continue;
       }
 
-      const timestamps = await readFileTimestamps(filePath);
       sessionsDb.createSession(
         parsed.sessionId,
         this.provider,
@@ -83,12 +97,13 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
       return null;
     }
 
+    // Stat before parsing, as in `synchronize()`.
+    const timestamps = await readFileTimestamps(filePath);
     const parsed = await this.processSessionFile(filePath);
     if (!parsed) {
       return null;
     }
 
-    const timestamps = await readFileTimestamps(filePath);
     return sessionsDb.createSession(
       parsed.sessionId,
       this.provider,

@@ -193,6 +193,10 @@ Command forms currently used by the providers are:
   The cursor also moves past artifacts that indexed nothing yet (an empty
   transcript, no `cwd` record so far), and only their later writes, which
   bump the modification time, bring them back into an incremental scan.
+- On an incremental scan, skip a transcript that is already indexed at its
+  current mtime (`sessionsDb.isTranscriptUnchangedSinceIndexed(...)`), and
+  read that mtime before parsing. Upserting a session re-activates its
+  project, so re-indexing an unchanged transcript undoes a project archive.
 - Implement `synchronizeFile(filePath)` for single-file watcher updates.
 - Use the existing helpers when they fit:
   - `buildLookupMap(...)`

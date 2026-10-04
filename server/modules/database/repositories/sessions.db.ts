@@ -722,4 +722,33 @@ export const sessionsDb = {
       )
       .all() as Array<{ session_id: string; jsonl_path: string }>;
   },
+
+  /**
+   * Returns true when a session row already points at `jsonlPath` and its
+   * `updated_at` is at or after `modifiedAt`, the transcript's current mtime:
+   * nothing has been written to the file since it was last indexed.
+   *
+   * The Claude, Codex and Cursor synchronizers call this on incremental scans
+   * to skip such transcripts, which the watcher has usually indexed already.
+   * Re-indexing one is not harmless: `createSession` re-activates the
+   * session's project, so it would undo a project archive made since the
+   * watcher indexed the file. "Newer than the row" is the same julianday
+   * comparison `createSession` uses for a session's own archive flag, and it
+   * accepts both ISO and SQLite `CURRENT_TIMESTAMP` values.
+   *
+   * Callers must read `modifiedAt` before parsing a transcript, so that
+   * `updated_at` never covers writes the indexer did not read.
+   */
+  isTranscriptUnchangedSinceIndexed(jsonlPath: string, modifiedAt: string): boolean {
+    const db = getConnection();
+    const row = db
+      .prepare(
+        `SELECT 1 AS found FROM sessions
+         WHERE jsonl_path = ? AND julianday(updated_at) >= julianday(?)
+         LIMIT 1`
+      )
+      .get(jsonlPath, modifiedAt) as { found: number } | undefined;
+
+    return Boolean(row);
+  },
 };

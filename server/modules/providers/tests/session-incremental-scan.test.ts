@@ -4,7 +4,13 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { closeConnection, initializeDatabase, scanStateDb, sessionsDb } from '@/modules/database/index.js';
+import {
+  closeConnection,
+  initializeDatabase,
+  projectsDb,
+  scanStateDb,
+  sessionsDb,
+} from '@/modules/database/index.js';
 
 // Each provider synchronizer resolves `os.homedir()` when the registry module is
 // first imported, so HOME has to point at an empty fixture home *before* that
@@ -131,5 +137,96 @@ test('an incremental scan skips transcripts untouched since the previous scan', 
     const secondScan = await sessionSynchronizerService.synchronizeSessions();
     assert.deepEqual(secondScan.failures, []);
     assert.equal(secondScan.processedByProvider.claude, 0);
+  });
+});
+
+test('an incremental scan re-indexes a transcript written since it was indexed', async () => {
+  await withIsolatedDatabase(async () => {
+    const sessionId = '7f0e7d4e-0000-4000-8000-000000000003';
+    const projectDirectory = path.join(fixtureHome, '.claude', 'projects', '-tmp-offline-title');
+    await mkdir(projectDirectory, { recursive: true });
+    const transcriptPath = path.join(projectDirectory, `${sessionId}.jsonl`);
+    await writeFile(transcriptPath, claudeRecord(sessionId, '/tmp/offline-title'));
+    const { mtime } = await stat(transcriptPath);
+
+    await waitUntilCursorCanPass(mtime);
+    const firstScan = await sessionSynchronizerService.synchronizeSessions();
+    assert.equal(firstScan.processedByProvider.claude, 1);
+    assert.equal(sessionsDb.getSessionById(sessionId)?.custom_name, 'Untitled Claude Session');
+
+    // Claude Code titles the session while no watcher sees it (server down).
+    await appendFile(
+      transcriptPath,
+      `${JSON.stringify({ type: 'ai-title', sessionId, aiTitle: 'Offline title' })}\n`,
+    );
+
+    const nextScan = await sessionSynchronizerService.synchronizeSessions();
+
+    assert.deepEqual(nextScan.failures, []);
+    assert.equal(nextScan.processedByProvider.claude, 1);
+    assert.equal(sessionsDb.getSessionById(sessionId)?.custom_name, 'Offline title');
+  });
+});
+
+test('continuing a session and then archiving its project survives the next scan', async () => {
+  await withIsolatedDatabase(async () => {
+    const sessionId = '7f0e7d4e-0000-4000-8000-000000000004';
+    const projectPath = '/tmp/continued-project';
+    const projectDirectory = path.join(fixtureHome, '.claude', 'projects', '-tmp-continued-project');
+    await mkdir(projectDirectory, { recursive: true });
+    const transcriptPath = path.join(projectDirectory, `${sessionId}.jsonl`);
+    await writeFile(transcriptPath, claudeRecord(sessionId, projectPath));
+    const { mtime } = await stat(transcriptPath);
+
+    // Page load: the projects fetch indexes the session and moves the cursor.
+    await waitUntilCursorCanPass(mtime);
+    const firstScan = await sessionSynchronizerService.synchronizeSessions();
+    assert.equal(firstScan.processedByProvider.claude, 1);
+
+    // The user continues the session, the watcher indexes the append, and the
+    // user then archives the project.
+    await appendFile(transcriptPath, claudeRecord(sessionId, projectPath));
+    const watcherUpdate = await sessionSynchronizerService.synchronizeProviderFile('claude', transcriptPath);
+    assert.equal(watcherUpdate.indexed, true);
+    const project = projectsDb.getProjectPath(projectPath);
+    assert.ok(project);
+    projectsDb.updateProjectIsArchivedById(project.project_id, true);
+
+    // Opening the Archived view (or a reload or restart) scans again. The
+    // append is past the cursor but already indexed, so it is not upserted
+    // again, and upserting is what re-activates a project.
+    const nextScan = await sessionSynchronizerService.synchronizeSessions();
+
+    assert.deepEqual(nextScan.failures, []);
+    assert.equal(nextScan.processedByProvider.claude, 0);
+    assert.equal(projectsDb.getProjectPath(projectPath)?.isArchived, 1);
+  });
+});
+
+test('a session the watcher indexed since the last scan keeps its archived project archived', async () => {
+  await withIsolatedDatabase(async () => {
+    const firstScan = await sessionSynchronizerService.synchronizeSessions();
+    assert.deepEqual(firstScan.failures, []);
+    // Create the transcript in a later second than the cursor, so its birthtime
+    // alone puts it in range of the next scan.
+    await waitUntilCursorCanPass(new Date());
+
+    const sessionId = '7f0e7d4e-0000-4000-8000-000000000005';
+    const projectPath = '/tmp/new-archived-project';
+    const projectDirectory = path.join(fixtureHome, '.claude', 'projects', '-tmp-new-archived-project');
+    await mkdir(projectDirectory, { recursive: true });
+    const transcriptPath = path.join(projectDirectory, `${sessionId}.jsonl`);
+    await writeFile(transcriptPath, claudeRecord(sessionId, projectPath));
+    const watcherAdd = await sessionSynchronizerService.synchronizeProviderFile('claude', transcriptPath);
+    assert.equal(watcherAdd.indexed, true);
+    const project = projectsDb.getProjectPath(projectPath);
+    assert.ok(project);
+    projectsDb.updateProjectIsArchivedById(project.project_id, true);
+
+    const nextScan = await sessionSynchronizerService.synchronizeSessions();
+
+    assert.deepEqual(nextScan.failures, []);
+    assert.equal(nextScan.processedByProvider.claude, 0);
+    assert.equal(projectsDb.getProjectPath(projectPath)?.isArchived, 1);
   });
 });

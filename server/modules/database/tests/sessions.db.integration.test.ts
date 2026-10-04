@@ -166,3 +166,43 @@ test('recent sessions are globally ordered, paginated, and limited to visible co
     );
   });
 });
+
+test('isTranscriptUnchangedSinceIndexed compares the transcript mtime with the indexed row', async () => {
+  await withIsolatedDatabase(() => {
+    const jsonlPath = '/transcripts/indexed.jsonl';
+    sessionsDb.createSession(
+      'session-indexed',
+      'claude',
+      '/workspace/demo-project',
+      'Indexed',
+      '2026-07-18T09:00:00.000Z',
+      '2026-07-18T10:00:00.123Z',
+      jsonlPath,
+    );
+
+    assert.equal(sessionsDb.isTranscriptUnchangedSinceIndexed(jsonlPath, '2026-07-18T10:00:00.123Z'), true);
+    assert.equal(sessionsDb.isTranscriptUnchangedSinceIndexed(jsonlPath, '2026-07-18T09:59:59.000Z'), true);
+    assert.equal(
+      sessionsDb.isTranscriptUnchangedSinceIndexed(jsonlPath, '2026-07-18T10:00:00.124Z'),
+      false,
+      'a write 1 ms after the indexed mtime counts as a change',
+    );
+    assert.equal(
+      sessionsDb.isTranscriptUnchangedSinceIndexed('/transcripts/never-indexed.jsonl', '2020-01-01T00:00:00.000Z'),
+      false,
+    );
+
+    // Rows stamped by SQLite itself hold "YYYY-MM-DD HH:MM:SS" UTC values.
+    const touchedPath = '/transcripts/sqlite-stamped.jsonl';
+    sessionsDb.createSession('session-sqlite-stamped', 'claude', '/workspace/demo-project', 'Stamped', undefined, undefined, touchedPath);
+    const minute = 60_000;
+    assert.equal(
+      sessionsDb.isTranscriptUnchangedSinceIndexed(touchedPath, new Date(Date.now() - minute).toISOString()),
+      true,
+    );
+    assert.equal(
+      sessionsDb.isTranscriptUnchangedSinceIndexed(touchedPath, new Date(Date.now() + minute).toISOString()),
+      false,
+    );
+  });
+});
