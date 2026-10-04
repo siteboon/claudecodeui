@@ -160,10 +160,10 @@ export const api = {
   // Auth endpoints (no token required)
   auth: {
     status: () => fetch('/api/auth/status'),
-    login: (username: string, password: string) => fetch('/api/auth/login', {
+    login: (username: string, password: string, totpCode?: string) => fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password, ...(totpCode ? { totpCode } : {}) }),
     }),
     register: (username: string, password: string) => fetch('/api/auth/register', {
       method: 'POST',
@@ -172,6 +172,11 @@ export const api = {
     }),
     refresh: () => post('/api/auth/refresh'),
     user: () => get('/api/auth/user'),
+    totpStatus: () => get('/api/auth/security/totp-status'),
+    totpSetup: (code?: string) =>
+      post('/api/auth/security/totp-setup', code ? { code } : {}),
+    totpToggle: (enabled: boolean, code?: string) =>
+      post('/api/auth/security/totp-toggle', { enabled, ...(code ? { code } : {}) }),
   },
 
   // Protected endpoints
