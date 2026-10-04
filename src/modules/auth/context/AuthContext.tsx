@@ -6,6 +6,8 @@ import { IS_PLATFORM } from '@/shared/utils';
 import { api } from '@/shared/api';
 import { AUTH_SESSION_EXPIRED_EVENT, AUTH_TOKEN_REFRESHED_EVENT, getAuthTokenRefreshDelay, isValidRefreshedToken, storeAuthToken } from '@/shared/authToken';
 import { hydrateChatDrafts, resetChatDrafts } from '@/shared/chatDrafts';
+import { hydrateEnabledProviders } from '@/shared/enabledProviders';
+import { reconcileSelectedProvider } from '@/shared/selectedProvider';
 import { hydrateUserPreferences, resetUserPreferences } from '@/shared/userSettings';
 /** The signed-in account held by AuthContext - a required `username` plus an optional id and any additional fields the auth API returns - and should be read through `useAuth()` rather than re-derived from raw auth responses. */
 type AuthUser = {
@@ -95,6 +97,13 @@ const clearStoredToken = () => {
   localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
 };
 
+// Loaded alongside the onboarding status, before the app is shown, so a
+// provider disabled by VITE_ENABLED_PROVIDERS is never painted and then pulled.
+const loadEnabledProviders = async () => {
+  await hydrateEnabledProviders();
+  reconcileSelectedProvider();
+};
+
 export function useAuth(): AuthContextValue {
   const context = useContext(AuthContext);
   if (!context) {
@@ -132,7 +141,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (!userKey) {
       return;
     }
-    void hydrateUserPreferences();
+    // The stored provider is checked again once the server's copy arrives,
+    // since it may name a provider the server no longer enables.
+    void hydrateUserPreferences().then(reconcileSelectedProvider);
     void hydrateChatDrafts();
   }, [userKey]);
 
@@ -245,7 +256,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       setUser(userPayload.user);
-      await checkOnboardingStatus();
+      await Promise.all([checkOnboardingStatus(), loadEnabledProviders()]);
     } catch (caughtError) {
       console.error('[Auth] Auth status check failed:', caughtError);
       setError(tRef.current(AUTH_ERROR_MESSAGES.authStatusCheckFailed));
@@ -258,7 +269,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (IS_PLATFORM) {
       setUser({ username: 'platform-user' });
       setNeedsSetup(false);
-      void checkOnboardingStatus().finally(() => {
+      void Promise.all([checkOnboardingStatus(), loadEnabledProviders()]).finally(() => {
         setIsLoading(false);
       });
       return;
@@ -308,7 +319,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // because that request reads it from storage.
   const publishSession = useCallback(async (nextUser: AuthUser, nextToken: string) => {
     persistToken(nextToken);
-    await checkOnboardingStatus();
+    await Promise.all([checkOnboardingStatus(), loadEnabledProviders()]);
     setUser(nextUser);
     setToken(nextToken);
     setNeedsSetup(false);

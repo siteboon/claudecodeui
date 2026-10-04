@@ -1,4 +1,5 @@
 import type { LLMProvider } from '@/shared/types';
+import { readEnabledProviders } from '@/shared/enabledProviders';
 import { readUserPreference, writeUserPreference } from '@/shared/userSettings';
 
 /**
@@ -14,17 +15,31 @@ import { readUserPreference, writeUserPreference } from '@/shared/userSettings';
  * The value now lives in `auth.db` through the preference store, which notifies
  * its subscribers synchronously — including in the tab that wrote — so the
  * choice both reaches every reader at once and follows the user between devices.
+ *
+ * A stored provider the server no longer enables (VITE_ENABLED_PROVIDERS) reads
+ * as the first enabled one, which is also the default when nothing is stored.
  */
 
-const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode'];
-
-const DEFAULT_PROVIDER: LLMProvider = 'claude';
-
 export function readSelectedProvider(): LLMProvider {
+  const enabledProviders = readEnabledProviders();
   const stored = readUserPreference<string | null>('selectedProvider', null);
-  return PROVIDERS.includes(stored as LLMProvider) ? (stored as LLMProvider) : DEFAULT_PROVIDER;
+  return enabledProviders.includes(stored as LLMProvider) ? (stored as LLMProvider) : enabledProviders[0];
 }
 
 export function writeSelectedProvider(provider: LLMProvider): void {
   writeUserPreference('selectedProvider', provider);
+}
+
+/**
+ * Used by the auth module after the enabled providers and the user's
+ * preferences load: rewrites a stored provider that is no longer enabled to the
+ * one it now reads as, so the copy in `auth.db` agrees with what every reader
+ * sees. Nothing is written when nothing is stored.
+ */
+export function reconcileSelectedProvider(): void {
+  const stored = readUserPreference<string | null>('selectedProvider', null);
+  const selectedProvider = readSelectedProvider();
+  if (stored !== null && stored !== selectedProvider) {
+    writeSelectedProvider(selectedProvider);
+  }
 }

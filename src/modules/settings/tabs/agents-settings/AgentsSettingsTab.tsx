@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import type { AgentCategory, AgentContextByProvider, AgentProvider, AgentSettingsProject, ClaudePermissionsState, CodexPermissionMode, CursorPermissionsState, ProviderAuthStatus } from '@/shared/types';
+import { useEnabledProviders } from '@/shared/hooks/useEnabledProviders';
 import AgentCategoryContentSection from '@/modules/settings/tabs/agents-settings/sections/AgentCategoryContentSection';
 import AgentCategoryTabsSection from '@/modules/settings/tabs/agents-settings/sections/AgentCategoryTabsSection';
 import AgentSelectorSection from '@/modules/settings/tabs/agents-settings/sections/AgentSelectorSection';
@@ -31,7 +32,10 @@ export default function AgentsSettingsTab({
   onCodexPermissionModeChange,
   projects,
 }: AgentsSettingsTabProps) {
-  const [selectedAgent, setSelectedAgent] = useState<AgentProvider>('claude');
+  const enabledProviders = useEnabledProviders();
+  // Opens on the default provider: the first one the server enables, which is
+  // Claude unless VITE_ENABLED_PROVIDERS says otherwise.
+  const [selectedAgent, setSelectedAgent] = useState<AgentProvider>(() => enabledProviders[0]);
   const [selectedCategory, setSelectedCategory] = useState<AgentCategory>('account');
   const visibleCategories = useMemo<AgentCategory[]>(() => (
     selectedAgent === 'opencode'
@@ -40,8 +44,9 @@ export default function AgentsSettingsTab({
   ), [selectedAgent]);
 
   const visibleAgents = useMemo<AgentProvider[]>(() => {
-    return ['claude', 'cursor', 'codex', 'opencode'];
-  }, []);
+    const agents: AgentProvider[] = ['claude', 'cursor', 'codex', 'opencode'];
+    return agents.filter((agent) => enabledProviders.includes(agent));
+  }, [enabledProviders]);
 
   const agentContextById = useMemo<AgentContextByProvider>(() => ({
     claude: {
@@ -67,6 +72,12 @@ export default function AgentsSettingsTab({
     providerAuthStatus.cursor,
     providerAuthStatus.opencode,
   ]);
+
+  useEffect(() => {
+    if (!visibleAgents.includes(selectedAgent)) {
+      setSelectedAgent(enabledProviders[0]);
+    }
+  }, [enabledProviders, selectedAgent, visibleAgents]);
 
   useEffect(() => {
     if (!visibleCategories.includes(selectedCategory)) {

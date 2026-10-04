@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 
 import { Badge, Button, Input, LLMProviderLogo } from '@/shared/ui';
+import { useEnabledProviders } from '@/shared/hooks/useEnabledProviders';
 import type {
   LLMProvider,
   ProviderModelActions,
@@ -57,6 +58,16 @@ export default function ModelLibraryPanel({
   const [confirmDeleteRecordId, setConfirmDeleteRecordId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const enabledProviders = useEnabledProviders();
+  // The providers the server enables, plus the one this panel was opened for:
+  // `/model` in a session made with a since-disabled provider still manages
+  // that provider's models.
+  const visibleProviders = useMemo(
+    () => PROVIDERS.filter((provider) => (
+      enabledProviders.includes(provider.id) || provider.id === initialProvider
+    )),
+    [enabledProviders, initialProvider],
+  );
 
   useEffect(() => {
     setSelectedProvider(initialProvider);
@@ -183,7 +194,7 @@ export default function ModelLibraryPanel({
       </div>
 
       <div className="scrollbar-thin flex shrink-0 gap-1 overflow-x-auto rounded-xl border border-border/70 bg-muted/25 p-1">
-        {PROVIDERS.map((provider) => {
+        {visibleProviders.map((provider) => {
           const selected = provider.id === selectedProvider;
           return (
             <button

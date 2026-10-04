@@ -11,6 +11,7 @@ import type { PendingPermissionRequest, PermissionMode,
   ProviderModelsDefinition } from '@/shared/types';
 import { DEFAULT_EFFORT_VALUE } from '@/shared/constants';
 import { readSelectedProvider, writeSelectedProvider } from '@/shared/selectedProvider';
+import { useEnabledProviders } from '@/shared/hooks/useEnabledProviders';
 
 const FALLBACK_PROVIDER_EFFORT_VALUES: Partial<Record<LLMProvider, readonly string[]>> = {
   // Superset used only before the model catalog loads; `ultracode` belongs to the
@@ -131,6 +132,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   // storage per render because switching it has to reset the model menu, the
   // permission mode and the session in one commit.
   const [provider, setProvider] = useState<LLMProvider>(readSelectedProvider);
+  const enabledProviders = useEnabledProviders();
   // Every provider's chosen model, not just the active one: switching provider
   // must restore the model that provider was last used with, and the catalogue
   // that validates them arrives asynchronously per provider.
@@ -430,6 +432,21 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     setProvider(selectedSession.__provider);
     writeSelectedProvider(selectedSession.__provider);
   }, [provider, selectedSession]);
+
+  // A session made with a provider the server has since disabled
+  // (VITE_ENABLED_PROVIDERS) can still be continued, but a new chat never
+  // starts on one: once no session is open, a disabled provider carried over
+  // from that session gives way to the stored choice, or else the first enabled
+  // provider, and storage is updated to match.
+  useEffect(() => {
+    if (selectedSession?.__provider || enabledProviders.includes(provider)) {
+      return;
+    }
+
+    const fallbackProvider = readSelectedProvider();
+    setProvider(fallbackProvider);
+    writeSelectedProvider(fallbackProvider);
+  }, [enabledProviders, provider, selectedSession?.__provider]);
 
   // Permission prompts belong to a session, not to the transient provider
   // selection that is synchronized after navigation.
