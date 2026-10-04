@@ -13,6 +13,7 @@ type AuthInputFieldProps = {
   type?: 'text' | 'password' | 'email';
   name?: string;
   autoComplete?: string;
+  required?: boolean;
   icon?: ComponentType<{ className?: string }>;
 };
 
@@ -33,6 +34,7 @@ export default function AuthInputField({
   type = 'text',
   name,
   autoComplete,
+  required = true,
   icon: Icon,
 }: AuthInputFieldProps) {
   const { t } = useTranslation('auth');
@@ -61,7 +63,7 @@ export default function AuthInputField({
             Icon ? 'pl-10' : 'pl-3.5'
           } ${isPasswordField ? 'pr-11' : 'pr-3.5'}`}
           placeholder={placeholder}
-          required
+          required={required}
           disabled={isDisabled}
         />
         {isPasswordField && (

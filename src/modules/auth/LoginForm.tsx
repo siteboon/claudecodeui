@@ -1,36 +1,44 @@
 import { useCallback, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Loader2, Lock, User } from 'lucide-react';
+import { Loader2, Lock, Shield, User } from 'lucide-react';
 
 import { useAuth } from '@/modules/auth/context/AuthContext';
 import AuthErrorAlert from '@/modules/auth/AuthErrorAlert';
 import AuthInputField from '@/modules/auth/AuthInputField';
 import AuthScreenLayout from '@/modules/auth/AuthScreenLayout';
+import TotpEnrollmentStep from '@/modules/auth/TotpEnrollmentStep';
 
 type LoginFormState = {
   username: string;
   password: string;
+  totpCode: string;
 };
 
 const initialState: LoginFormState = {
   username: '',
   password: '',
+  totpCode: '',
 };
 
 /**
  * Login form component.
  * Rendered by the auth module's ProtectedRoute when no user session exists.
- * Handles credential input with browser autofill support (`autocomplete`
- * attributes) so that password managers can offer to fill saved credentials.
+ * Supports optional TOTP 2FA linking when signing in with username and password,
+ * and enforces 6-digit TOTP verification when 2FA is already enabled on the account.
  */
 export default function LoginForm() {
   const { t } = useTranslation('auth');
-  const { error: sessionError, login } = useAuth();
+  const { error: sessionError, login, totpEnabled, completeDeferredSession } = useAuth();
 
   const [formState, setFormState] = useState<LoginFormState>(initialState);
+  const [enrollTotpOnLogin, setEnrollTotpOnLogin] = useState(false);
+  const [showTotpEnrollmentStep, setShowTotpEnrollmentStep] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [totpPrompted, setTotpPrompted] = useState(false);
+
+  const showTotpInput = totpEnabled || totpPrompted;
 
   const updateField = useCallback((field: keyof LoginFormState, value: string) => {
     setFormState((previous) => ({ ...previous, [field]: value }));
@@ -41,21 +49,61 @@ export default function LoginForm() {
       event.preventDefault();
       setErrorMessage('');
 
-      // Keep form validation local so each auth screen owns its own UI feedback.
       if (!formState.username.trim() || !formState.password) {
         setErrorMessage(t('login.errors.requiredFields'));
         return;
       }
 
       setIsSubmitting(true);
-      const result = await login(formState.username.trim(), formState.password);
+      const shouldDeferForTotpSetup = !showTotpInput && enrollTotpOnLogin;
+      const result = await login(
+        formState.username.trim(),
+        formState.password,
+        formState.totpCode.trim() || undefined,
+        { deferPublish: shouldDeferForTotpSetup },
+      );
+
       if (!result.success) {
+        if (result.totpRequired) {
+          setTotpPrompted(true);
+        }
         setErrorMessage(result.error);
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (shouldDeferForTotpSetup) {
+        setShowTotpEnrollmentStep(true);
       }
       setIsSubmitting(false);
     },
-    [formState.password, formState.username, login, t],
+    [
+      enrollTotpOnLogin,
+      formState.password,
+      formState.totpCode,
+      formState.username,
+      login,
+      showTotpInput,
+      t,
+    ],
   );
+
+  if (showTotpEnrollmentStep) {
+    return (
+      <AuthScreenLayout
+        title={t('totp.setupTitle', { defaultValue: 'Link Two-Factor Authentication' })}
+        description={t('totp.setupDescription', {
+          defaultValue: 'Scan the QR code with your authenticator app and enter the 6-digit code.',
+        })}
+        footerText={t('login.footerText')}
+      >
+        <TotpEnrollmentStep
+          onComplete={completeDeferredSession}
+          onSkip={completeDeferredSession}
+        />
+      </AuthScreenLayout>
+    );
+  }
 
   return (
     <AuthScreenLayout
@@ -86,6 +134,38 @@ export default function LoginForm() {
           autoComplete="current-password"
           icon={Lock}
         />
+
+        {showTotpInput ? (
+          <AuthInputField
+            id="totpCode"
+            label={t('login.totpCode', { defaultValue: '2FA Authentication Code (TOTP)' })}
+            value={formState.totpCode}
+            onChange={(value) => updateField('totpCode', value)}
+            placeholder={t('login.placeholders.totpCode', {
+              defaultValue: '6-digit code or backup recovery code',
+            })}
+            isDisabled={isSubmitting}
+            autoComplete="one-time-code"
+            required={false}
+            icon={Shield}
+          />
+        ) : (
+          <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-muted/30 px-3.5 py-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/50">
+            <input
+              type="checkbox"
+              checked={enrollTotpOnLogin}
+              onChange={(event) => setEnrollTotpOnLogin(event.target.checked)}
+              disabled={isSubmitting}
+              className="h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
+            />
+            <Shield className="h-3.5 w-3.5 text-primary" />
+            <span>
+              {t('login.linkTotpOptional', {
+                defaultValue: 'Set up Two-Factor Authentication (TOTP) after sign-in (Optional)',
+              })}
+            </span>
+          </label>
+        )}
 
         <AuthErrorAlert errorMessage={errorMessage || sessionError || ''} />
 

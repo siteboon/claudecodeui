@@ -4,9 +4,16 @@ import type { ReactNode } from 'react';
 
 import { IS_PLATFORM } from '@/shared/utils';
 import { api } from '@/shared/api';
-import { AUTH_SESSION_EXPIRED_EVENT, AUTH_TOKEN_REFRESHED_EVENT, getAuthTokenRefreshDelay, isValidRefreshedToken, storeAuthToken } from '@/shared/authToken';
+import {
+  AUTH_SESSION_EXPIRED_EVENT,
+  AUTH_TOKEN_REFRESHED_EVENT,
+  getAuthTokenRefreshDelay,
+  isValidRefreshedToken,
+  storeAuthToken,
+} from '@/shared/authToken';
 import { hydrateChatDrafts, resetChatDrafts } from '@/shared/chatDrafts';
 import { hydrateUserPreferences, resetUserPreferences } from '@/shared/userSettings';
+
 /** The signed-in account held by AuthContext - a required `username` plus an optional id and any additional fields the auth API returns - and should be read through `useAuth()` rather than re-derived from raw auth responses. */
 type AuthUser = {
   id?: number | string;
@@ -24,17 +31,30 @@ const AUTH_ERROR_MESSAGES = {
   sessionExpired: 'errors.sessionExpired',
 } as const;
 
-type AuthActionResult = { success: true } | { success: false; error: string };
+type AuthActionResult =
+  | { success: true }
+  | { success: false; error: string; totpRequired?: boolean };
+
+type AuthActionOptions = {
+  deferPublish?: boolean;
+};
+
+type StructuredErrorObject = {
+  code?: string;
+  message?: string;
+  details?: { totpRequired?: boolean };
+};
 
 type AuthSessionPayload = {
   token?: string;
   user?: AuthUser;
-  error?: string;
+  error?: string | StructuredErrorObject;
   message?: string;
 };
 
 type AuthStatusPayload = {
   needsSetup?: boolean;
+  totpEnabled?: boolean;
 };
 
 type AuthUserPayload = {
@@ -46,7 +66,7 @@ type OnboardingStatusPayload = {
 };
 
 type ApiErrorPayload = {
-  error?: string;
+  error?: string | StructuredErrorObject;
   message?: string;
 };
 
@@ -55,10 +75,21 @@ type AuthContextValue = {
   token: string | null;
   isLoading: boolean;
   needsSetup: boolean;
+  totpEnabled: boolean;
   hasCompletedOnboarding: boolean;
   error: string | null;
-  login: (username: string, password: string) => Promise<AuthActionResult>;
-  register: (username: string, password: string) => Promise<AuthActionResult>;
+  login: (
+    username: string,
+    password: string,
+    totpCode?: string,
+    options?: AuthActionOptions,
+  ) => Promise<AuthActionResult>;
+  register: (
+    username: string,
+    password: string,
+    options?: AuthActionOptions,
+  ) => Promise<AuthActionResult>;
+  completeDeferredSession: () => Promise<void>;
   logout: () => void;
   refreshOnboardingStatus: () => Promise<void>;
 };
@@ -67,6 +98,9 @@ type AuthProviderProps = {
   children: ReactNode;
 };
 
+/**
+ * Parses a fetch Response as JSON, returning null if parsing fails.
+ */
 async function parseJsonSafely<T>(response: Response): Promise<T | null> {
   try {
     return (await response.json()) as T;
@@ -75,26 +109,54 @@ async function parseJsonSafely<T>(response: Response): Promise<T | null> {
   }
 }
 
+/**
+ * Extracts a human-readable error message from either a legacy string envelope
+ * or a structured AppError response object.
+ */
 function resolveApiErrorMessage(payload: ApiErrorPayload | null, fallback: string): string {
   if (!payload) {
     return fallback;
   }
 
-  return payload.error ?? payload.message ?? fallback;
+  if (typeof payload.error === 'string' && payload.error) {
+    return payload.error;
+  }
+
+  if (
+    payload.error &&
+    typeof payload.error === 'object' &&
+    typeof payload.error.message === 'string'
+  ) {
+    return payload.error.message;
+  }
+
+  return payload.message ?? fallback;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+/**
+ * Reads the persisted JWT token from localStorage.
+ */
 const readStoredToken = (): string | null => localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
 
+/**
+ * Persists a JWT token to localStorage.
+ */
 const persistToken = (token: string) => {
   storeAuthToken(token);
 };
 
+/**
+ * Removes the stored JWT token from localStorage.
+ */
 const clearStoredToken = () => {
   localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
 };
 
+/**
+ * Hook returning the active authentication context value.
+ */
 export function useAuth(): AuthContextValue {
   const context = useContext(AuthContext);
   if (!context) {
@@ -111,22 +173,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [token, setToken] = useState<string | null>(() => readStoredToken());
   const [isLoading, setIsLoading] = useState(true);
   const [needsSetup, setNeedsSetup] = useState(false);
+  const [totpEnabled, setTotpEnabled] = useState(false);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const deferredSessionRef = useRef<{ user: AuthUser; token: string } | null>(null);
 
   const clearSession = useCallback(() => {
+    deferredSessionRef.current = null;
     setUser(null);
     setToken(null);
     clearStoredToken();
-    // Otherwise the next person to sign in on this device would start out
-    // looking at the previous user's theme, language, permissions and drafts.
     resetUserPreferences();
     resetChatDrafts();
   }, []);
 
-  // Preferences live in auth.db, so they can only be fetched once there is a
-  // user to fetch them for. Until this resolves, every reader falls back to the
-  // localStorage mirror of the last known server state.
   const userKey = user ? String(user.id ?? user.username) : null;
   useEffect(() => {
     if (!userKey) {
@@ -147,7 +207,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setHasCompletedOnboarding(Boolean(payload?.hasCompletedOnboarding));
     } catch (caughtError) {
       console.error('Error checking onboarding status:', caughtError);
-      // Fail open to avoid blocking access on transient onboarding status errors.
       setHasCompletedOnboarding(true);
     }
   }, []);
@@ -173,8 +232,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
         persistToken(payload.token);
       }
     } catch (caughtError) {
-      // A transient network failure must not sign the user out. Focus/visibility
-      // and the next scheduled refresh will retry while the token remains valid.
       console.warn('[Auth] Session refresh failed:', caughtError);
     }
   }, [token, user]);
@@ -199,11 +256,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     };
   }, [clearSession, t]);
 
-  // The startup check below needs `t` only for its failure message.
-  // react-i18next gives `t` a new identity on every language change, so
-  // depending on it would re-run that check - and swap the whole app for the
-  // loading screen - whenever the language changes, including when sign-in
-  // adopts the language saved on another device.
   const tRef = useRef(t);
   useEffect(() => {
     tRef.current = t;
@@ -217,6 +269,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const statusResponse = await api.auth.status();
       const statusPayload = await parseJsonSafely<AuthStatusPayload>(statusResponse);
 
+      setTotpEnabled(Boolean(statusPayload?.totpEnabled));
+
       if (statusPayload?.needsSetup) {
         setNeedsSetup(true);
         return;
@@ -224,10 +278,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       setNeedsSetup(false);
 
-      // Read the stored token instead of depending on `token` state: this
-      // bootstrap flips `isLoading`, which swaps the whole app for the loading
-      // screen, so it must run once on mount and not again on every
-      // X-Refreshed-Token rotation (each one remounted the workspace, #1269).
       if (!readStoredToken()) {
         return;
       }
@@ -285,9 +335,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     };
 
     const refreshDelay = getAuthTokenRefreshDelay(token);
-    const refreshTimer = refreshDelay === null
-      ? null
-      : window.setTimeout(() => void refreshSession(), refreshDelay);
+    const refreshTimer =
+      refreshDelay === null
+        ? null
+        : window.setTimeout(() => void refreshSession(), refreshDelay);
 
     window.addEventListener('focus', refreshIfNeeded);
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -301,30 +352,53 @@ export function AuthProvider({ children }: AuthProviderProps) {
     };
   }, [refreshSession, token, user]);
 
-  // ProtectedRoute shows the workspace as soon as there is a user, so the
-  // onboarding status is settled before the user is published; otherwise a
-  // user who still has to onboard would see the workspace mount for a whole
-  // round trip before Onboarding replaced it. The token is stored first
-  // because that request reads it from storage.
-  const publishSession = useCallback(async (nextUser: AuthUser, nextToken: string) => {
-    persistToken(nextToken);
-    await checkOnboardingStatus();
-    setUser(nextUser);
-    setToken(nextToken);
-    setNeedsSetup(false);
-  }, [checkOnboardingStatus]);
+  const publishSession = useCallback(
+    async (nextUser: AuthUser, nextToken: string) => {
+      persistToken(nextToken);
+      await checkOnboardingStatus();
+      setUser(nextUser);
+      setToken(nextToken);
+      setNeedsSetup(false);
+    },
+    [checkOnboardingStatus],
+  );
+
+  const completeDeferredSession = useCallback(async () => {
+    const pending = deferredSessionRef.current;
+    if (!pending) {
+      return;
+    }
+    deferredSessionRef.current = null;
+    await publishSession(pending.user, pending.token);
+  }, [publishSession]);
 
   const login = useCallback<AuthContextValue['login']>(
-    async (username, password) => {
+    async (username, password, totpCode, options) => {
       try {
         setError(null);
-        const response = await api.auth.login(username, password);
+        const response = await api.auth.login(username, password, totpCode);
         const payload = await parseJsonSafely<AuthSessionPayload>(response);
 
         if (!response.ok || !payload?.token || !payload.user) {
           const message = resolveApiErrorMessage(payload, t(AUTH_ERROR_MESSAGES.loginFailed));
+          const errorObj =
+            payload?.error && typeof payload.error === 'object' ? payload.error : null;
+          const totpRequired = Boolean(
+            errorObj?.details?.totpRequired ||
+              errorObj?.code === 'AUTH_TOTP_REQUIRED' ||
+              errorObj?.code === 'AUTH_TOTP_INVALID',
+          );
+          if (totpRequired) {
+            setTotpEnabled(true);
+          }
           setError(message);
-          return { success: false, error: message };
+          return { success: false, error: message, totpRequired };
+        }
+
+        if (options?.deferPublish) {
+          persistToken(payload.token);
+          deferredSessionRef.current = { user: payload.user, token: payload.token };
+          return { success: true };
         }
 
         await publishSession(payload.user, payload.token);
@@ -339,16 +413,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
   );
 
   const register = useCallback<AuthContextValue['register']>(
-    async (username, password) => {
+    async (username, password, options) => {
       try {
         setError(null);
         const response = await api.auth.register(username, password);
         const payload = await parseJsonSafely<AuthSessionPayload>(response);
 
         if (!response.ok || !payload?.token || !payload.user) {
-          const message = resolveApiErrorMessage(payload, t(AUTH_ERROR_MESSAGES.registrationFailed));
+          const message = resolveApiErrorMessage(
+            payload,
+            t(AUTH_ERROR_MESSAGES.registrationFailed),
+          );
           setError(message);
           return { success: false, error: message };
+        }
+
+        if (options?.deferPublish) {
+          persistToken(payload.token);
+          deferredSessionRef.current = { user: payload.user, token: payload.token };
+          return { success: true };
         }
 
         await publishSession(payload.user, payload.token);
@@ -363,8 +446,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
   );
 
   const logout = useCallback(() => {
-    // JWT logout is client-side: the server endpoint does not maintain a
-    // revocation list, so clearing the session is the complete operation.
     clearSession();
   }, [clearSession]);
 
@@ -374,20 +455,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
       token,
       isLoading,
       needsSetup,
+      totpEnabled,
       hasCompletedOnboarding,
       error,
       login,
       register,
+      completeDeferredSession,
       logout,
       refreshOnboardingStatus,
     }),
     [
+      completeDeferredSession,
       error,
       hasCompletedOnboarding,
       isLoading,
       login,
       logout,
       needsSetup,
+      totpEnabled,
       refreshOnboardingStatus,
       register,
       token,

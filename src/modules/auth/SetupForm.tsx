@@ -1,12 +1,13 @@
 import { useCallback, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Loader2, Lock, ShieldCheck, User } from 'lucide-react';
+import { Loader2, Lock, Shield, ShieldCheck, User } from 'lucide-react';
 
 import { useAuth } from '@/modules/auth/context/AuthContext';
 import AuthErrorAlert from '@/modules/auth/AuthErrorAlert';
 import AuthInputField from '@/modules/auth/AuthInputField';
 import AuthScreenLayout from '@/modules/auth/AuthScreenLayout';
+import TotpEnrollmentStep from '@/modules/auth/TotpEnrollmentStep';
 
 type SetupFormState = {
   username: string;
@@ -48,15 +49,15 @@ function validateSetupForm(formState: SetupFormState, t: (key: string) => string
 /**
  * Account setup / registration form.
  * Rendered by the auth module's ProtectedRoute when the server reports that no account exists yet.
- * Uses `autoComplete="new-password"` on password fields so that password
- * managers recognise this as a registration flow and offer to save the new
- * credentials after submission.
+ * Allows optional RFC 6238 TOTP 2FA linking immediately upon account creation.
  */
 export default function SetupForm() {
   const { t } = useTranslation('auth');
-  const { register } = useAuth();
+  const { register, completeDeferredSession } = useAuth();
 
   const [formState, setFormState] = useState<SetupFormState>(initialState);
+  const [setupTotpOnCreate, setSetupTotpOnCreate] = useState(false);
+  const [showTotpStep, setShowTotpStep] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -76,14 +77,39 @@ export default function SetupForm() {
       }
 
       setIsSubmitting(true);
-      const result = await register(formState.username.trim(), formState.password);
+      const result = await register(formState.username.trim(), formState.password, {
+        deferPublish: setupTotpOnCreate,
+      });
       if (!result.success) {
         setErrorMessage(result.error);
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (setupTotpOnCreate) {
+        setShowTotpStep(true);
       }
       setIsSubmitting(false);
     },
-    [formState, register, t],
+    [formState, register, setupTotpOnCreate, t],
   );
+
+  if (showTotpStep) {
+    return (
+      <AuthScreenLayout
+        title={t('totp.setupTitle', { defaultValue: 'Link Two-Factor Authentication' })}
+        description={t('totp.setupDescription', {
+          defaultValue: 'Scan the QR code with your authenticator app and enter the 6-digit code.',
+        })}
+        footerText={t('register.footerText')}
+      >
+        <TotpEnrollmentStep
+          onComplete={completeDeferredSession}
+          onSkip={completeDeferredSession}
+        />
+      </AuthScreenLayout>
+    );
+  }
 
   return (
     <AuthScreenLayout
@@ -129,6 +155,22 @@ export default function SetupForm() {
           autoComplete="new-password"
           icon={ShieldCheck}
         />
+
+        <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-muted/30 px-3.5 py-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/50">
+          <input
+            type="checkbox"
+            checked={setupTotpOnCreate}
+            onChange={(event) => setSetupTotpOnCreate(event.target.checked)}
+            disabled={isSubmitting}
+            className="h-4 w-4 rounded border-border text-primary focus:ring-primary/40"
+          />
+          <Shield className="h-3.5 w-3.5 text-primary" />
+          <span>
+            {t('register.linkTotpOptional', {
+              defaultValue: 'Also set up Two-Factor Authentication (TOTP) now (Optional)',
+            })}
+          </span>
+        </label>
 
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <ShieldCheck className="h-3.5 w-3.5" />

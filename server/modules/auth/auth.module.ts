@@ -18,6 +18,7 @@ const bcrypt = require('bcrypt') as BcryptAdapter;
 const databaseConnection = getConnection();
 
 const authService = createAuthService({
+  db: databaseConnection,
   users: {
     hasUsers: () => userDb.hasUsers(),
     createUser: (username, passwordHash) => userDb.createUser(username, passwordHash),
