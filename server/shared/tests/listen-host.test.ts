@@ -33,9 +33,9 @@ function getPort(server: http.Server): number {
 }
 
 // Resolves with the HTTP status, or with the error code (e.g. ECONNREFUSED) when the connection fails.
-function requestStatus(address: string, port: number): Promise<number | string> {
+function requestStatus(address: string, port: number, timeoutMs = 2000): Promise<number | string> {
   return new Promise((resolve) => {
-    const request = http.get({ host: address, port, path: '/', agent: false, timeout: 2000 }, (response) => {
+    const request = http.get({ host: address, port, path: '/', agent: false, timeout: timeoutMs }, (response) => {
       response.resume();
       resolve(response.statusCode ?? 0);
     });
@@ -43,6 +43,10 @@ function requestStatus(address: string, port: number): Promise<number | string> 
     request.on('error', (error: NodeJS.ErrnoException) => resolve(error.code ?? error.message));
   });
 }
+
+// Windows retries a refused connection for about 2 s before it reports ECONNREFUSED, which races the
+// default timeout above, so the refusal checks wait longer. Elsewhere the refusal comes back at once.
+const REFUSED_TIMEOUT_MS = 10_000;
 
 async function canListenOn(host: string): Promise<boolean> {
   try {
@@ -182,7 +186,7 @@ test('HOST=0.0.0.0 stays IPv4-only', { skip: IPV6_LOOPBACK_SKIP }, async () => {
   const server = await startHttpServer(getListenHost('0.0.0.0'));
   try {
     assert.equal(await requestStatus('127.0.0.1', getPort(server)), 200);
-    assert.equal(await requestStatus('::1', getPort(server)), 'ECONNREFUSED');
+    assert.equal(await requestStatus('::1', getPort(server), REFUSED_TIMEOUT_MS), 'ECONNREFUSED');
   } finally {
     await stopHttpServer(server);
   }
@@ -204,10 +208,10 @@ test('HOST=127.0.0.1 stays on the IPv4 loopback', async (t) => {
     assert.equal((server.address() as AddressInfo).address, '127.0.0.1');
     assert.equal(await requestStatus('127.0.0.1', getPort(server)), 200);
     if (!IPV6_LOOPBACK_SKIP) {
-      assert.equal(await requestStatus('::1', getPort(server)), 'ECONNREFUSED');
+      assert.equal(await requestStatus('::1', getPort(server), REFUSED_TIMEOUT_MS), 'ECONNREFUSED');
     }
     if (LAN_IPV4_ADDRESS) {
-      assert.equal(await requestStatus(LAN_IPV4_ADDRESS, getPort(server)), 'ECONNREFUSED');
+      assert.equal(await requestStatus(LAN_IPV4_ADDRESS, getPort(server), REFUSED_TIMEOUT_MS), 'ECONNREFUSED');
     } else {
       t.diagnostic('no non-loopback IPv4 address to check');
     }
