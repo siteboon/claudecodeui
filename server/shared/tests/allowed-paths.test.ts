@@ -56,10 +56,16 @@ test('entries are trimmed, normalized, de-duplicated, and expand a leading ~', (
 });
 
 test('quotes kept from a .env value are dropped around the value and each entry', () => {
+  // ALLOWED_PATHS="/srv/a,/srv/b"
   assert.deepEqual(parseAllowedPaths('"/srv/a,/srv/b"'), ['/srv/a', '/srv/b']);
+  // ALLOWED_PATHS="/srv/a","/srv/b"
+  assert.deepEqual(parseAllowedPaths('"/srv/a","/srv/b"'), ['/srv/a', '/srv/b']);
+  // ALLOWED_PATHS='/srv/a', "/srv/b"
   assert.deepEqual(parseAllowedPaths("'/srv/a', \"/srv/b\""), ['/srv/a', '/srv/b']);
-  // An unmatched quote is part of the path, as before.
-  assert.deepEqual(parseAllowedPaths('/srv/a"'), ['/srv/a"']);
+  // ALLOWED_PATHS=/srv/a,/srv/b
+  assert.deepEqual(parseAllowedPaths('/srv/a,/srv/b'), ['/srv/a', '/srv/b']);
+  // A quote inside an entry is part of the path.
+  assert.deepEqual(parseAllowedPaths('/srv/it"s'), ['/srv/it"s']);
 });
 
 test('startup warnings name missing entries and entries outside an explicit workspace root', async () => {

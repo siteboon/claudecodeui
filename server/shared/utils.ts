@@ -468,23 +468,22 @@ export const PATH_NOT_ALLOWED_MESSAGE = 'Access denied: the path is outside the 
 // treated like a loop and refused.
 const MAXIMUM_DANGLING_SYMLINK_HOPS = 40;
 
-// `.env` values keep their quotes (see load-env.ts), so `ALLOWED_PATHS="/a,/b"`
-// arrives quoted; one matching pair around the value or an entry is dropped.
-function stripMatchingQuotes(value: string): string {
-  const trimmedValue = value.trim();
-  const firstCharacter = trimmedValue[0];
-  return trimmedValue.length >= 2
-    && (firstCharacter === '"' || firstCharacter === "'")
-    && trimmedValue.endsWith(firstCharacter)
-    ? trimmedValue.slice(1, -1).trim()
-    : trimmedValue;
+// `.env` values keep their quotes (see load-env.ts), so `ALLOWED_PATHS` may
+// arrive as `"/a,/b"`, `"/a","/b"` or `'/a', "/b"`. The value is split on
+// commas first and then each entry loses one leading and one trailing quote
+// (`"` or `'`), which handles all three forms. A directory whose name really
+// starts or ends with a quote character can therefore not be listed; that is
+// not a realistic concern.
+function stripEntryQuotes(entry: string): string {
+  return entry.trim().replace(/^["']/, '').replace(/["']$/, '').trim();
 }
 
 /**
  * Parses an `ALLOWED_PATHS` value into the absolute directories it allows.
  *
- * Entries are comma-separated. One pair of matching quotes around the whole
- * value or around an entry is dropped. Each entry is trimmed, empty entries
+ * Entries are comma-separated. One leading and one trailing quote is dropped
+ * from each entry, so quotes around the whole value or around each entry both
+ * work (see `stripEntryQuotes`). Each entry is trimmed, empty entries
  * are dropped, a leading `~` is expanded to `homeDirectory`, and the result is
  * resolved to a normalized absolute path (a relative entry resolves against
  * the server's working directory). Duplicates are removed. Symlinks are not
@@ -499,9 +498,9 @@ export function parseAllowedPaths(rawValue: string | undefined, homeDirectory: s
     return [];
   }
 
-  const allowedPaths = stripMatchingQuotes(rawValue)
+  const allowedPaths = rawValue
     .split(',')
-    .map(stripMatchingQuotes)
+    .map(stripEntryQuotes)
     .filter(Boolean)
     .map((entry) => {
       let expandedEntry = entry;
