@@ -39,7 +39,7 @@ vi.mock('@/modules/chat', () => ({
   getClaudeSettings: () => ({ skipPermissions: true }),
 }));
 
-const project = { name: 'demo', displayName: 'demo', fullPath: '/srv/demo', path: '/srv/demo' } as Project;
+const project: Project = { projectId: 'demo', displayName: 'demo', fullPath: '/srv/demo', path: '/srv/demo' };
 
 describe('the Shell root bypass banner', () => {
   afterEach(async () => {
