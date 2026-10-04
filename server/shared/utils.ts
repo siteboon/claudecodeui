@@ -380,7 +380,10 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
     ) {
       return {
         valid: false,
-        error: `Workspace path must be within the allowed workspace root: ${WORKSPACES_ROOT}`,
+        // The root defaults to the home directory, so without naming the
+        // setting this reads like a fixed limit of the app.
+        error: `Workspace path must be within the allowed workspace root: ${WORKSPACES_ROOT}. `
+          + 'To change the root, set the WORKSPACES_ROOT environment variable and restart the server.',
       };
     }
 
