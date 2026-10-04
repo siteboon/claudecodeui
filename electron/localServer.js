@@ -28,14 +28,6 @@ const LOCAL_SERVER_PORT_ENV_KEYS = [
 
 function requestJson(url, timeoutMs = HEALTH_TIMEOUT_MS) {
   return new Promise((resolve) => {
-    // The desktop window only loads plain http:// loopback servers. A server started with
-    // SSL_CERT/SSL_KEY advertises an https:// URL (e.g. in local-server.json); http.get() throws on
-    // it, so treat it as "not a usable server" and let the app start its own HTTP server.
-    if (new URL(url).protocol !== 'http:') {
-      resolve({ ok: false, json: null });
-      return;
-    }
-
     const req = http.get(url, { timeout: timeoutMs }, (res) => {
       let body = '';
 
@@ -475,6 +467,14 @@ export class LocalServerController {
     if (!forceOwnServer) {
       const candidateUrls = await getExistingServerCandidateUrls(defaultUrl);
       for (const candidateUrl of candidateUrls) {
+        // A server started with SSL_CERT/SSL_KEY advertises an https:// URL (e.g. in
+        // local-server.json). The desktop window only loads plain http:// loopback servers and
+        // http.get() throws on https://, so skip it: a later candidate or the app's own HTTP
+        // server is used instead.
+        if (new URL(candidateUrl).protocol !== 'http:') {
+          this.appendStartupLog(`Skipping ${candidateUrl}: the desktop app only uses http:// local servers`);
+          continue;
+        }
         if (await isCloudCliServer(candidateUrl)) {
           const displayUrl = getDisplayUrl(candidateUrl);
           this.localServerPort = getPortFromUrl(candidateUrl);

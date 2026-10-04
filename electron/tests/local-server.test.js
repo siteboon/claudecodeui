@@ -124,5 +124,6 @@ test('an https:// URL in local-server.json does not stop the desktop app from fi
     // https:// marker, which the desktop window cannot load.
     const url = await controller.ensureLocalServer();
     assert.match(url, /^http:\/\/localhost:\d+$/);
+    assert.ok(controller.getStartupLogs().some((line) => line.includes('Skipping https://localhost:3443')));
   });
 });
