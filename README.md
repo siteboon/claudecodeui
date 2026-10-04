@@ -165,7 +165,7 @@ To use Claude Code's full functionality, you'll need to manually enable tools:
 
 ### Restricting file system access
 
-Set `ALLOWED_PATHS` (comma-separated directories) to limit what the web UI and the API can reach. When it is set, only projects inside those directories appear in the sidebar, the folder picker and file browser stay inside them, new workspaces can only be created inside them, and API requests for any other path answer `403`. Symlinks are resolved before the check.
+Set `ALLOWED_PATHS` (comma-separated directories) to limit what the web UI and the API can reach. When it is set, only projects inside those directories appear in the sidebar, the folder picker and file browser stay inside them, new workspaces can only be created inside them, and the project, file, Git, TaskMaster, worktree, session, command, MCP and skills APIs answer `403` for paths outside them. Symlinks are resolved before the check, and the startup log warns about entries that do not exist.
 
 | `WORKSPACES_ROOT` | `ALLOWED_PATHS` | Accessible |
 |---|---|---|
@@ -174,9 +174,9 @@ Set `ALLOWED_PATHS` (comma-separated directories) to limit what the web UI and t
 | `/home/user` | `/home/user/proj1,/home/user/proj2` | only `proj1` and `proj2` |
 | unset | `/srv/work` | only `/srv/work` |
 
-Without `ALLOWED_PATHS`, projects that already exist elsewhere (for example from your Claude Code history) stay listed and browsable; with it, they are hidden and refused too. With `WORKSPACES_ROOT` also set, a path has to satisfy both.
+Without `ALLOWED_PATHS`, projects that already exist elsewhere (for example from your Claude Code history) stay listed and browsable; with it, they are hidden and refused too. With `WORKSPACES_ROOT` also set, a path has to satisfy both. The Git panel and worktrees need the whole repository inside an allowed directory, so allowing only one package of a larger repository leaves Git unavailable there.
 
-This is not a sandbox: the AI agents and the Shell tab run as your OS user and can still reach any file that user can. See [`.env.example`](.env.example) for details.
+This is not a sandbox: the AI agents, chat and scheduled runs, the TaskMaster CLI, plugin backends and the Shell tab run as your OS user and can still reach any file that user can. See [`.env.example`](.env.example) for details.
 
 ---
 
