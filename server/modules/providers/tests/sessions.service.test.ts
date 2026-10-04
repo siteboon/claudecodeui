@@ -4,12 +4,17 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { closeConnection, initializeDatabase, projectsDb, sessionsDb } from '@/modules/database/index.js';
-import { providerRegistry } from '@/modules/providers/provider.registry.js';
-import { sessionsService } from '@/modules/providers/services/sessions.service.js';
-import { chatRunRegistry } from '@/modules/websocket/index.js';
 import type { IProvider } from '@/shared/interfaces.js';
 import type { BackgroundTaskSummary } from '@/shared/types.js';
+
+// ALLOWED_PATHS is read when the shared utils module is first evaluated. These
+// tests cover the unrestricted behaviour, so a value exported in the shell
+// that runs them must not leak in.
+delete process.env.ALLOWED_PATHS;
+const { closeConnection, initializeDatabase, projectsDb, sessionsDb } = await import('@/modules/database/index.js');
+const { providerRegistry } = await import('@/modules/providers/provider.registry.js');
+const { sessionsService } = await import('@/modules/providers/services/sessions.service.js');
+const { chatRunRegistry } = await import('@/modules/websocket/index.js');
 
 async function withIsolatedDatabase(runTest: () => void | Promise<void>): Promise<void> {
   const previousDatabasePath = process.env.DATABASE_PATH;

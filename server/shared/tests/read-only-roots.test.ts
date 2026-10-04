@@ -24,6 +24,8 @@ const previousUserProfile = process.env.USERPROFILE;
 process.env.HOME = fixtureHome;
 process.env.USERPROFILE = fixtureHome;
 
+// ALLOWED_PATHS would also gate the read-only roots; these tests run without it.
+delete process.env.ALLOWED_PATHS;
 const { resolvePathUnderRoots, resolveReadOnlyRootPath, validateWorkspacePath } = await import('@/shared/utils.js');
 
 after(async () => {

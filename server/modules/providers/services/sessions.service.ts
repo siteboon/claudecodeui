@@ -612,15 +612,6 @@ export const sessionsService = {
   },
 
   /**
-   * Resolves one session (by app id, falling back to the provider-native id)
-   * to its metadata plus the owning project.
-   *
-   * This backs deep links like `/session/:sessionId`: the frontend's paginated
-   * project payloads only carry each project's first session page, so a
-   * session opened directly by URL may not be present client-side at all —
-   * this lookup is the authoritative way to learn which project owns it.
-   */
-  /**
    * Refuses (403) a session recorded in a project outside ALLOWED_PATHS. Used
    * by the provider routes for every `:sessionId` route; a session without a
    * row or a project passes, and so does everything when the variable is unset.
@@ -637,6 +628,15 @@ export const sessionsService = {
     }
   },
 
+  /**
+   * Resolves one session (by app id, falling back to the provider-native id)
+   * to its metadata plus the owning project.
+   *
+   * This backs deep links like `/session/:sessionId`: the frontend's paginated
+   * project payloads only carry each project's first session page, so a
+   * session opened directly by URL may not be present client-side at all —
+   * this lookup is the authoritative way to learn which project owns it.
+   */
   getSessionDetailsById(sessionId: string): SessionDetails {
     const session =
       sessionsDb.getSessionById(sessionId) ?? sessionsDb.getSessionByProviderSessionId(sessionId);

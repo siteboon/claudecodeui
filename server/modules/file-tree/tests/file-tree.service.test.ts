@@ -7,7 +7,6 @@ import { Readable } from 'node:stream';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { createFileTreeService } from '@/modules/file-tree/file-tree.service.js';
 import type {
   FileTreeDirectoryEntry,
   FileTreeFileSystem,
@@ -15,7 +14,13 @@ import type {
   FileTreeServices,
   FileTreeStats,
 } from '@/shared/types.js';
-import { AppError, resolveReadOnlyRootPath, validateWorkspacePath } from '@/shared/utils.js';
+
+// ALLOWED_PATHS is read when the shared utils module is first evaluated. These
+// tests cover the unrestricted behaviour, so a value exported in the shell
+// that runs them must not leak in.
+delete process.env.ALLOWED_PATHS;
+const { createFileTreeService } = await import('@/modules/file-tree/file-tree.service.js');
+const { AppError, resolveReadOnlyRootPath, validateWorkspacePath } = await import('@/shared/utils.js');
 
 const testDirectory = path.dirname(fileURLToPath(import.meta.url));
 
