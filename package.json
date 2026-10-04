@@ -11,6 +11,7 @@
   "files": [
     "electron/",
     "server/",
+    "!server/**/tests/fixtures/",
     "shared/",
     "public/api-docs.html",
     "dist/",
