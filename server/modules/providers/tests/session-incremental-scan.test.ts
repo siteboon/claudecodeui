@@ -256,8 +256,8 @@ for (const fixture of FILE_PROVIDER_FIXTURES) {
       const nextScan = await sessionSynchronizerService.synchronizeSessions();
 
       assert.deepEqual(nextScan.failures, []);
+      assert.equal(projectsDb.getProjectPath(projectPath)?.isArchived, 1, 'the project must stay archived');
       assert.equal(nextScan.processedByProvider[fixture.provider], 0);
-      assert.equal(projectsDb.getProjectPath(projectPath)?.isArchived, 1);
     });
   });
 }
@@ -285,7 +285,7 @@ test('a session the watcher indexed since the last scan keeps its archived proje
     const nextScan = await sessionSynchronizerService.synchronizeSessions();
 
     assert.deepEqual(nextScan.failures, []);
+    assert.equal(projectsDb.getProjectPath(projectPath)?.isArchived, 1, 'the project must stay archived');
     assert.equal(nextScan.processedByProvider.claude, 0);
-    assert.equal(projectsDb.getProjectPath(projectPath)?.isArchived, 1);
   });
 });
