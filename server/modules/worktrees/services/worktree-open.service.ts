@@ -7,7 +7,7 @@ import type {
   WorktreeProjectGateway,
   WorktreeProjectView,
 } from '@/shared/types.js';
-import { AppError, normalizeProjectPath } from '@/shared/utils.js';
+import { AppError, assertPathAllowed, normalizeProjectPath } from '@/shared/utils.js';
 import {
   findWorktreeEntryByPath,
   listWorktreePorcelainEntries,
@@ -48,6 +48,7 @@ export async function openWorktreeAsProject(
   const entry = findWorktreeEntryByPath(entries, input.worktreePath);
 
   const normalizedWorktreePath = normalizeProjectPath(entry.path);
+  await assertPathAllowed(normalizedWorktreePath);
   const repoName = path.basename(entries[0].path);
   // "repo · branch" keeps worktree projects visually grouped next to their
   // parent repository in the sidebar.

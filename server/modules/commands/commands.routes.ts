@@ -4,6 +4,7 @@ import path from "path";
 import express from "express";
 
 import { parseFrontMatter } from "../../shared/frontmatter.js";
+import { PATH_NOT_ALLOWED_MESSAGE, isPathAllowed } from "../../shared/utils.js";
 
 type CommandsRouterDependencies = {
   fileSystem: typeof import('node:fs/promises');
@@ -440,12 +441,24 @@ Custom commands can be created in:
 };
 
 /**
+ * Whether a client-supplied project path lies outside ALLOWED_PATHS. Both
+ * routes read project files (`.claude/commands`, `CLAUDE.md`) from it, so such
+ * a path is refused; always false when ALLOWED_PATHS is unset.
+ */
+async function isProjectPathRefused(projectPath) {
+  return typeof projectPath === "string" && projectPath.length > 0 && !(await isPathAllowed(projectPath));
+}
+
+/**
  * POST /api/commands/list
  * List all available commands from project and user directories
  */
 router.post("/list", async (req, res) => {
   try {
     const { projectPath } = req.body;
+    if (await isProjectPathRefused(projectPath)) {
+      return res.status(403).json({ error: "Access denied", message: PATH_NOT_ALLOWED_MESSAGE });
+    }
     const allCommands = [...builtInCommands];
 
     // Scan project-level commands (.claude/commands/)
@@ -505,6 +518,10 @@ router.post("/execute", async (req, res) => {
       return res.status(400).json({
         error: "Command name is required",
       });
+    }
+
+    if (await isProjectPathRefused(context?.projectPath)) {
+      return res.status(403).json({ error: "Access denied", message: PATH_NOT_ALLOWED_MESSAGE });
     }
 
     // Handle built-in commands

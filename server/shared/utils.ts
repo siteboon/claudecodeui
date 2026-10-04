@@ -136,6 +136,14 @@ export function getGitErrorDetails(error: unknown): string {
 export const WORKSPACES_ROOT = process.env.WORKSPACES_ROOT || os.homedir();
 
 /**
+ * Whether `WORKSPACES_ROOT` was set explicitly rather than defaulting to the
+ * home directory. With `ALLOWED_PATHS` set, an explicit root still has to
+ * contain every workspace (both checks apply), while the home-directory
+ * default gives way so an allowed directory outside the home directory works.
+ */
+const IS_WORKSPACES_ROOT_CONFIGURED = Boolean(process.env.WORKSPACES_ROOT);
+
+/**
  * System-critical paths that must never be used as workspace roots.
  *
  * The validation helper blocks these values directly and also blocks paths
@@ -191,6 +199,9 @@ export const FORBIDDEN_WORKSPACE_PATHS = [
  * separately by `validateWorkspacePath` — the temp directories are on
  * `FORBIDDEN_WORKSPACE_PATHS`; the Claude projects directory is not, it is
  * simply wherever `WORKSPACES_ROOT` puts it.
+ *
+ * `ALLOWED_PATHS` outranks this list: when it is set, a read-only root is only
+ * readable where it also lies inside an allowed directory.
  */
 const READ_ONLY_ROOTS = [...new Set([
   '/tmp',
@@ -239,10 +250,11 @@ export async function resolvePathUnderRoots(targetPath: string, roots: string[])
 
 /**
  * Resolves a path that is readable because it lives under a read-only root,
- * or `null` when it does not.
+ * or `null` when it does not (or when `ALLOWED_PATHS` excludes it).
  */
-export function resolveReadOnlyRootPath(targetPath: string): Promise<string | null> {
-  return resolvePathUnderRoots(targetPath, READ_ONLY_ROOTS);
+export async function resolveReadOnlyRootPath(targetPath: string): Promise<string | null> {
+  const resolvedPath = await resolvePathUnderRoots(targetPath, READ_ONLY_ROOTS);
+  return resolvedPath && await isPathAllowed(resolvedPath) ? resolvedPath : null;
 }
 
 function stripWindowsLongPathPrefix(inputPath: string): string {
@@ -308,7 +320,9 @@ export function normalizeProjectPath(inputPath: string): string {
  *
  * Call this before any filesystem mutation that creates or registers projects.
  * The function resolves symlinks, enforces `WORKSPACES_ROOT` containment, and
- * blocks known system directories.
+ * blocks known system directories. When `ALLOWED_PATHS` is set the path must
+ * also lie inside an allowed directory; the root containment then only applies
+ * if `WORKSPACES_ROOT` was configured explicitly.
  */
 export async function validateWorkspacePath(requestedPath: string): Promise<WorkspacePathValidationResult> {
   try {
@@ -373,6 +387,25 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
       }
     }
 
+    if (ALLOWED_PATHS.length > 0) {
+      if (!(await isPathAllowed(absolutePath))) {
+        return {
+          valid: false,
+          error: PATH_NOT_ALLOWED_MESSAGE,
+          errorCode: 'PATH_NOT_ALLOWED',
+        };
+      }
+
+      // The home-directory default gives way to ALLOWED_PATHS; an explicitly
+      // configured WORKSPACES_ROOT is still enforced below.
+      if (!IS_WORKSPACES_ROOT_CONFIGURED) {
+        return {
+          valid: true,
+          resolvedPath,
+        };
+      }
+    }
+
     const resolvedWorkspaceRoot = normalizeProjectPath(await realpath(WORKSPACES_ROOT));
     if (
       !resolvedPath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)
@@ -418,6 +451,247 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
       error: `Path validation failed: ${(error as Error).message}`,
     };
   }
+}
+
+// ---------------------------
+//----------------- ALLOWED PATHS (ALLOWED_PATHS) UTILITIES ------------
+/**
+ * User-facing message for a path refused because it lies outside
+ * `ALLOWED_PATHS`. Used here and by the File Tree module, which builds its own
+ * 403 errors around injected path checks, so every refusal reads the same.
+ */
+export const PATH_NOT_ALLOWED_MESSAGE = 'Access denied: the path is outside the directories allowed by ALLOWED_PATHS';
+
+// Bounds how many dangling symlinks one check follows; a longer chain is
+// treated like a loop and refused.
+const MAXIMUM_DANGLING_SYMLINK_HOPS = 40;
+
+/**
+ * Parses an `ALLOWED_PATHS` value into the absolute directories it allows.
+ *
+ * Entries are comma-separated. Each one is trimmed, empty entries are dropped,
+ * a leading `~` is expanded to `homeDirectory`, and the result is resolved to
+ * a normalized absolute path (a relative entry resolves against the server's
+ * working directory). Duplicates are removed. Symlinks are not resolved here
+ * because an allowed directory may not exist yet when the server starts;
+ * `isPathAllowed` resolves both sides on every check instead.
+ *
+ * Used to build `ALLOWED_PATHS` and by the shared tests. An empty result means
+ * "no restriction".
+ */
+export function parseAllowedPaths(rawValue: string | undefined, homeDirectory: string = os.homedir()): string[] {
+  if (typeof rawValue !== 'string') {
+    return [];
+  }
+
+  const allowedPaths = rawValue
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      let expandedEntry = entry;
+      if (entry === '~') {
+        expandedEntry = homeDirectory;
+      } else if (entry.startsWith('~/') || entry.startsWith('~\\')) {
+        expandedEntry = path.join(homeDirectory, entry.slice(2));
+      }
+      return normalizeProjectPath(path.resolve(expandedEntry));
+    });
+
+  return [...new Set(allowedPaths)];
+}
+
+/**
+ * Directories the UI and the API may touch, parsed once from the
+ * comma-separated `ALLOWED_PATHS` environment variable. Empty when it is unset
+ * or blank, which leaves every path check unrestricted.
+ *
+ * Consumed here by `validateWorkspacePath`, `resolveReadOnlyRootPath` and
+ * `isPathAllowed`, and by the File Tree module, whose folder picker opens at
+ * the first entry when the workspace root is not on the way to any of them.
+ * Environment variables must be loaded before this module is evaluated.
+ */
+export const ALLOWED_PATHS: readonly string[] = Object.freeze(parseAllowedPaths(process.env.ALLOWED_PATHS));
+
+function isSameOrNestedPath(candidatePath: string, parentPath: string): boolean {
+  if (candidatePath === parentPath) {
+    return true;
+  }
+
+  // Compared on a separator boundary so `/a/proj1` never admits `/a/proj10`.
+  const parentWithSeparator = parentPath.endsWith(path.sep) ? parentPath : `${parentPath}${path.sep}`;
+  return candidatePath.startsWith(parentWithSeparator);
+}
+
+/**
+ * Resolves `absolutePath` through every symlink to where it lands on disk.
+ *
+ * A path that does not exist yet (a workspace about to be created, a file
+ * about to be written) resolves through its nearest existing ancestor with the
+ * missing tail appended. A dangling symlink is followed to its target, because
+ * writing through it would create the file there. Errors other than a missing
+ * path (permission denied, a symlink loop) are thrown so callers fail closed.
+ */
+async function resolveRealPathOrNearestAncestor(absolutePath: string): Promise<string> {
+  const missingSegments: string[] = [];
+  let currentPath = absolutePath;
+  let danglingSymlinkHops = 0;
+
+  for (;;) {
+    try {
+      return normalizeProjectPath(path.join(await realpath(currentPath), ...missingSegments));
+    } catch (error) {
+      const errorCode = (error as NodeJS.ErrnoException).code;
+      if (errorCode !== 'ENOENT' && errorCode !== 'ENOTDIR') {
+        throw error;
+      }
+    }
+
+    let isDanglingSymlink = false;
+    try {
+      isDanglingSymlink = (await lstat(currentPath)).isSymbolicLink();
+    } catch (error) {
+      const errorCode = (error as NodeJS.ErrnoException).code;
+      if (errorCode !== 'ENOENT' && errorCode !== 'ENOTDIR') {
+        throw error;
+      }
+    }
+
+    if (isDanglingSymlink) {
+      danglingSymlinkHops += 1;
+      if (danglingSymlinkHops > MAXIMUM_DANGLING_SYMLINK_HOPS) {
+        throw new Error(`Too many dangling symlinks while resolving ${absolutePath}`);
+      }
+      currentPath = path.resolve(path.dirname(currentPath), await readlink(currentPath));
+      continue;
+    }
+
+    const parentPath = path.dirname(currentPath);
+    if (parentPath === currentPath) {
+      return normalizeProjectPath(path.join(currentPath, ...missingSegments));
+    }
+    missingSegments.unshift(path.basename(currentPath));
+    currentPath = parentPath;
+  }
+}
+
+/**
+ * Reports whether `targetPath` lies inside one of `allowedPaths` (by default
+ * the configured `ALLOWED_PATHS`). Always `true` when the list is empty, so an
+ * unset `ALLOWED_PATHS` changes nothing.
+ *
+ * `..` segments are collapsed the way `path.resolve` collapses them for the
+ * path the caller then uses; after that both sides are compared as real paths
+ * (see `resolveRealPathOrNearestAncestor`), so a symlink inside an allowed
+ * directory that points elsewhere is judged by its target. A path that cannot
+ * be resolved is refused, and an allowed entry that cannot be resolved is
+ * skipped.
+ *
+ * Used by `validateWorkspacePath`, `resolveReadOnlyRootPath` and
+ * `assertPathAllowed`, by the Projects module to hide projects outside the
+ * allowed directories, by the File Tree module for its folder picker and
+ * per-file checks, and by the Git, Taskmaster, Worktrees, Commands, Providers
+ * and Agent modules to refuse projects and workspace paths outside them.
+ */
+export async function isPathAllowed(
+  targetPath: string,
+  allowedPaths: readonly string[] = ALLOWED_PATHS,
+): Promise<boolean> {
+  if (allowedPaths.length === 0) {
+    return true;
+  }
+
+  const normalizedTargetPath = normalizeProjectPath(targetPath);
+  if (!normalizedTargetPath) {
+    return false;
+  }
+
+  let resolvedTargetPath: string;
+  try {
+    resolvedTargetPath = await resolveRealPathOrNearestAncestor(path.resolve(normalizedTargetPath));
+  } catch {
+    return false;
+  }
+
+  for (const allowedPath of allowedPaths) {
+    try {
+      if (isSameOrNestedPath(resolvedTargetPath, await resolveRealPathOrNearestAncestor(allowedPath))) {
+        return true;
+      }
+    } catch {
+      // An allowed entry that cannot be resolved admits nothing.
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Throws a 403 `AppError` (code `PATH_NOT_ALLOWED`) when `targetPath` lies
+ * outside `ALLOWED_PATHS`; does nothing when it is inside or the variable is
+ * unset.
+ *
+ * Used by the Projects, File Tree, Taskmaster, Worktrees, Commands, Providers
+ * and Agent modules, whose routes answer with the error's status and message.
+ */
+export async function assertPathAllowed(targetPath: string): Promise<void> {
+  if (!(await isPathAllowed(targetPath))) {
+    throw new AppError(PATH_NOT_ALLOWED_MESSAGE, {
+      code: 'PATH_NOT_ALLOWED',
+      statusCode: 403,
+    });
+  }
+}
+
+/**
+ * Lists the children of `directoryPath` that lead toward an allowed directory
+ * when `directoryPath` is a strict ancestor of one or more of `allowedPaths`
+ * (by default `ALLOWED_PATHS`), or returns `null` when it is not an ancestor or
+ * the list is empty.
+ *
+ * The File Tree folder picker uses this so a user can walk from the workspace
+ * root (or `/`) down to every allowed directory without seeing anything else:
+ * an ancestor lists only the next path component of each allowed directory
+ * below it. The returned paths are real paths and may not exist; callers keep
+ * only existing directories.
+ */
+export async function listAllowedPathChildren(
+  directoryPath: string,
+  allowedPaths: readonly string[] = ALLOWED_PATHS,
+): Promise<string[] | null> {
+  const normalizedDirectoryPath = normalizeProjectPath(directoryPath);
+  if (allowedPaths.length === 0 || !normalizedDirectoryPath) {
+    return null;
+  }
+
+  let resolvedDirectoryPath: string;
+  try {
+    resolvedDirectoryPath = await resolveRealPathOrNearestAncestor(path.resolve(normalizedDirectoryPath));
+  } catch {
+    return null;
+  }
+
+  const childPaths = new Set<string>();
+  for (const allowedPath of allowedPaths) {
+    let resolvedAllowedPath: string;
+    try {
+      resolvedAllowedPath = await resolveRealPathOrNearestAncestor(allowedPath);
+    } catch {
+      continue;
+    }
+
+    if (
+      resolvedAllowedPath === resolvedDirectoryPath
+      || !isSameOrNestedPath(resolvedAllowedPath, resolvedDirectoryPath)
+    ) {
+      continue;
+    }
+
+    const [nextSegment] = path.relative(resolvedDirectoryPath, resolvedAllowedPath).split(path.sep);
+    childPaths.add(path.join(resolvedDirectoryPath, nextSegment));
+  }
+
+  return childPaths.size > 0 ? [...childPaths] : null;
 }
 
 // ---------------------------

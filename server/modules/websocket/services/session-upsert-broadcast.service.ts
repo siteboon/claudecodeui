@@ -4,6 +4,7 @@ import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { generateDisplayName } from '@/modules/projects/index.js';
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
 import type { SessionUpsertedEvent } from '@/shared/types.js';
+import { isPathAllowed } from '@/shared/utils.js';
 
 /**
  * The single producer of the `session_upserted` delta.
@@ -32,6 +33,12 @@ async function buildSessionUpsertedEvent(
   }
 
   const projectPath = row.project_path;
+  // The sidebar adds a project it has not seen from this event, so a session
+  // in a project outside ALLOWED_PATHS is never announced (no-op when unset).
+  if (projectPath && !(await isPathAllowed(projectPath))) {
+    return null;
+  }
+
   const project = projectPath ? projectsDb.getProjectPath(projectPath) : null;
   const displayName = project?.custom_project_name?.trim()
     ? project.custom_project_name

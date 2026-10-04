@@ -14,7 +14,14 @@ import type {
   FileTreeProjectGateway,
   FileTreeWorkspaceGateway,
 } from '@/shared/types.js';
-import { WORKSPACES_ROOT, resolveReadOnlyRootPath, validateWorkspacePath } from '@/shared/utils.js';
+import {
+  ALLOWED_PATHS,
+  WORKSPACES_ROOT,
+  isPathAllowed,
+  listAllowedPathChildren,
+  resolveReadOnlyRootPath,
+  validateWorkspacePath,
+} from '@/shared/utils.js';
 
 const MAXIMUM_UPLOAD_SIZE_MEGABYTES = 200;
 const MAXIMUM_UPLOAD_SIZE_BYTES = MAXIMUM_UPLOAD_SIZE_MEGABYTES * 1024 * 1024;
@@ -67,13 +74,17 @@ const fileTreeProjects: FileTreeProjectGateway = {
 
 /**
  * Workspace-policy boundary used only by File Tree production composition.
- * Keeping both the configured root and symlink-aware validator together makes
- * the path policy explicit for every service instance.
+ * Keeping the configured root, the symlink-aware validator and the
+ * ALLOWED_PATHS checks together makes the path policy explicit for every
+ * service instance.
  */
 const fileTreeWorkspace: FileTreeWorkspaceGateway = {
   rootPath: WORKSPACES_ROOT,
   validatePath: (candidatePath) => validateWorkspacePath(candidatePath),
   resolveReadOnlyRootPath: (candidatePath) => resolveReadOnlyRootPath(candidatePath),
+  allowedPaths: ALLOWED_PATHS,
+  isPathAllowed: (candidatePath) => isPathAllowed(candidatePath),
+  listAllowedPathChildren: (directoryPath) => listAllowedPathChildren(directoryPath),
 };
 
 const fileTreeLogger: FileTreeLogger = {

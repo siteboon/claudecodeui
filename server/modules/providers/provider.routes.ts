@@ -17,7 +17,7 @@ import type {
   ProviderSkillCreateInput,
   UpsertProviderMcpServerInput,
 } from '@/shared/types.js';
-import { AppError, asyncHandler, createApiSuccessResponse } from '@/shared/utils.js';
+import { AppError, assertPathAllowed, asyncHandler, createApiSuccessResponse } from '@/shared/utils.js';
 
 const router = express.Router();
 
@@ -760,6 +760,11 @@ router.post(
     const provider = parseProvider(body.provider);
     const projectPath = typeof body.projectPath === 'string' ? body.projectPath : '';
     const initialMessage = typeof body.initialMessage === 'string' ? body.initialMessage : '';
+    // A new chat is bound to its project directory, which must lie inside
+    // ALLOWED_PATHS (a no-op when it is unset).
+    if (projectPath.trim()) {
+      await assertPathAllowed(projectPath.trim());
+    }
     const result = sessionsService.createAppSession(provider, projectPath, initialMessage);
     res.status(201).json(createApiSuccessResponse(result));
   }),

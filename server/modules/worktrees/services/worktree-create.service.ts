@@ -6,7 +6,7 @@ import type {
   GitCommandRunner,
   WorktreeFileSystem,
 } from '@/shared/types.js';
-import { AppError, normalizeProjectPath } from '@/shared/utils.js';
+import { AppError, assertPathAllowed, normalizeProjectPath } from '@/shared/utils.js';
 import {
   listWorktreePorcelainEntries,
   validateWorktreeBranchName,
@@ -74,6 +74,10 @@ export async function createWorktree(
       statusCode: 409,
     });
   }
+
+  // The sibling folder is outside the repository, so an allowed project does
+  // not imply an allowed worktree; refuse before git writes anything there.
+  await assertPathAllowed(worktreePath);
 
   const { stdout: branchListOutput } = await runGit(
     ['branch', '--list', branch, '--format=%(refname:short)'],

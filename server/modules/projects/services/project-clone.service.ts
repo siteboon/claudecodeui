@@ -253,9 +253,10 @@ export async function startCloneProject(
 
   const pathValidation = await dependencies.validatePath(normalizedWorkspacePath);
   if (!pathValidation.valid || !pathValidation.resolvedPath) {
+    const isOutsideAllowedPaths = pathValidation.errorCode === 'PATH_NOT_ALLOWED';
     throw new AppError(pathValidation.error || 'Invalid workspace path', {
-      code: 'INVALID_PROJECT_PATH',
-      statusCode: 400,
+      code: isOutsideAllowedPaths ? 'PATH_NOT_ALLOWED' : 'INVALID_PROJECT_PATH',
+      statusCode: isOutsideAllowedPaths ? 403 : 400,
     });
   }
 

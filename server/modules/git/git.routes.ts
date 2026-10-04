@@ -4,7 +4,13 @@ import path from 'path';
 import express from 'express';
 
 import type { ProviderRunFunction } from '@/shared/types.js';
-import { AppError, getGitErrorDetails } from '@/shared/utils.js';
+import {
+  AppError,
+  PATH_NOT_ALLOWED_MESSAGE,
+  assertPathAllowed,
+  getGitErrorDetails,
+  isPathAllowed,
+} from '@/shared/utils.js';
 
 // cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
 import { parseGitLogWithStats, parseGitStatusOutput } from './git-parsing.service.js';
@@ -28,6 +34,28 @@ const queryClaudeSDK = dependencies.queryClaude;
 const spawnCursor = dependencies.queryCursor;
 const router = express.Router();
 const COMMIT_DIFF_CHARACTER_LIMIT = 500_000;
+
+// Every Git route names its project by `project` (query or body). A project
+// outside ALLOWED_PATHS is refused before any git command runs; unknown ids
+// fall through to each route's own error. A no-op when ALLOWED_PATHS is unset.
+router.use(async (req, res, next) => {
+  const projectId = req.query.project ?? req.body?.project;
+  if (typeof projectId !== 'string' || !projectId) {
+    next();
+    return;
+  }
+
+  try {
+    const projectPath = await projectsDb.getProjectPathById(projectId);
+    if (projectPath && !(await isPathAllowed(projectPath))) {
+      res.status(403).json({ error: PATH_NOT_ALLOWED_MESSAGE });
+      return;
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
 
 function spawnAsync(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -436,6 +464,9 @@ router.get('/diff', async (req, res) => {
     if (isUntracked) {
       // For untracked files, show the entire file content as additions
       const filePath = path.join(repositoryRootPath, repositoryRelativeFilePath);
+      // Read with fs, so a symlink (or a repository root above the project)
+      // must not reach outside ALLOWED_PATHS.
+      await assertPathAllowed(filePath);
       const stats = await fs.stat(filePath);
 
       if (stats.isDirectory()) {
@@ -483,6 +514,9 @@ router.get('/diff', async (req, res) => {
     res.json({ diff });
   } catch (error) {
     console.error('Git diff error:', error);
+    if (error instanceof AppError && error.code === 'PATH_NOT_ALLOWED') {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
     res.json({ error: error.message });
   }
 });
@@ -530,6 +564,7 @@ router.get('/file-with-diff', async (req, res) => {
     } else {
       // Get current file content
       const filePath = path.join(repositoryRootPath, repositoryRelativeFilePath);
+      await assertPathAllowed(filePath);
       const stats = await fs.stat(filePath);
 
       if (stats.isDirectory()) {
@@ -563,6 +598,9 @@ router.get('/file-with-diff', async (req, res) => {
     });
   } catch (error) {
     console.error('Git file-with-diff error:', error);
+    if (error instanceof AppError && error.code === 'PATH_NOT_ALLOWED') {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
     res.json({ error: error.message });
   }
 });
@@ -1085,6 +1123,7 @@ router.post('/generate-commit-message', async (req, res) => {
         try {
           const { repositoryRelativeFilePath } = await resolveRepositoryFilePath(projectPath, file);
           const filePath = path.join(repositoryRootPath, repositoryRelativeFilePath);
+          await assertPathAllowed(filePath);
           const stats = await fs.stat(filePath);
 
           if (!stats.isDirectory()) {
@@ -1617,6 +1656,7 @@ router.post('/discard', async (req, res) => {
     if (status === '??') {
       // Untracked file or directory - delete it
       const filePath = path.join(repositoryRootPath, repositoryRelativeFilePath);
+      await assertPathAllowed(filePath);
       const stats = await fs.stat(filePath);
 
       if (stats.isDirectory()) {
@@ -1635,7 +1675,7 @@ router.post('/discard', async (req, res) => {
     res.json({ success: true, message: `Changes discarded for ${repositoryRelativeFilePath}` });
   } catch (error) {
     console.error('Git discard error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(error instanceof AppError && error.code === 'PATH_NOT_ALLOWED' ? error.statusCode : 500).json({ error: error.message });
   }
 });
 
@@ -1674,6 +1714,7 @@ router.post('/delete-untracked', async (req, res) => {
 
     // Delete the untracked file or directory
     const filePath = path.join(repositoryRootPath, repositoryRelativeFilePath);
+    await assertPathAllowed(filePath);
     const stats = await fs.stat(filePath);
 
     if (stats.isDirectory()) {
@@ -1686,7 +1727,7 @@ router.post('/delete-untracked', async (req, res) => {
     }
   } catch (error) {
     console.error('Git delete untracked error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(error instanceof AppError && error.code === 'PATH_NOT_ALLOWED' ? error.statusCode : 500).json({ error: error.message });
   }
 });
 
