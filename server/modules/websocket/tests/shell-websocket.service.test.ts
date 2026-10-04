@@ -233,29 +233,42 @@ test('a missing project directory is reported as an error frame and starts no pt
   );
 });
 
-test('reattaching from a differently sized terminal resizes the pty after the replay', () => {
+/**
+ * One plain-shell PTY whose fake reports the size it was spawned with, like
+ * node-pty's `cols`/`rows`, plus an init payload builder for that PTY's key.
+ */
+function createReattachHarness(sessionLabel: string) {
   const pty = createFakePty();
   const dependencies = {
     resolveProviderSessionId: () => null,
-    spawnPty: (_shell: string, _args: string | string[], options: { cols: number; rows: number }) => {
-      pty.cols = options.cols;
-      pty.rows = options.rows;
+    spawnPty: (_shell: string, _args: string | string[], options: { cols?: number; rows?: number }) => {
+      pty.cols = options.cols ?? 80;
+      pty.rows = options.rows ?? 24;
       return pty as never;
     },
   };
-  const initMessage = {
-    type: 'init',
-    projectPath: process.cwd(),
-    sessionId: `reattach-resize-${Date.now()}`,
-    hasSession: false,
-    provider: 'plain-shell',
-    isPlainShell: true,
-    initialCommand: 'test-command',
-  };
+  const sessionId = `${sessionLabel}-${Date.now()}`;
+  const initMessage = (size: { cols?: number; rows?: number }) =>
+    JSON.stringify({
+      type: 'init',
+      projectPath: process.cwd(),
+      sessionId,
+      hasSession: false,
+      provider: 'plain-shell',
+      isPlainShell: true,
+      initialCommand: 'test-command',
+      ...size,
+    });
+
+  return { pty, dependencies, initMessage };
+}
+
+test('reattaching from a differently sized terminal resizes the pty after the replay', () => {
+  const { pty, dependencies, initMessage } = createReattachHarness('reattach-resize');
 
   const firstSocket = createFakeSocket();
   handleShellConnection(firstSocket as never, dependencies);
-  firstSocket.emit('message', JSON.stringify({ ...initMessage, cols: 140, rows: 48 }));
+  firstSocket.emit('message', initMessage({ cols: 140, rows: 48 }));
   pty.emitData('frame drawn at 140 columns');
   firstSocket.emit('close');
 
@@ -268,7 +281,7 @@ test('reattaching from a differently sized terminal resizes the pty after the re
     recordResize(cols, rows);
   };
   handleShellConnection(replacementSocket as never, dependencies);
-  replacementSocket.emit('message', JSON.stringify({ ...initMessage, cols: 97, rows: 48 }));
+  replacementSocket.emit('message', initMessage({ cols: 97, rows: 48 }));
 
   assert.deepEqual(pty.resizes, [[97, 48]]);
   // The redraw the resize triggers must land on top of the replayed history.
@@ -283,33 +296,16 @@ test('reattaching from a differently sized terminal resizes the pty after the re
 });
 
 test('reattaching with the same size or without a usable size leaves the pty size alone', () => {
-  const pty = createFakePty();
-  const dependencies = {
-    resolveProviderSessionId: () => null,
-    spawnPty: (_shell: string, _args: string | string[], options: { cols: number; rows: number }) => {
-      pty.cols = options.cols;
-      pty.rows = options.rows;
-      return pty as never;
-    },
-  };
-  const initMessage = {
-    type: 'init',
-    projectPath: process.cwd(),
-    sessionId: `reattach-same-size-${Date.now()}`,
-    hasSession: false,
-    provider: 'plain-shell',
-    isPlainShell: true,
-    initialCommand: 'test-command',
-  };
+  const { pty, dependencies, initMessage } = createReattachHarness('reattach-same-size');
 
   const firstSocket = createFakeSocket();
   handleShellConnection(firstSocket as never, dependencies);
-  firstSocket.emit('message', JSON.stringify({ ...initMessage, cols: 120, rows: 40 }));
+  firstSocket.emit('message', initMessage({ cols: 120, rows: 40 }));
 
   for (const size of [{ cols: 120, rows: 40 }, {}, { cols: 0, rows: 40 }, { cols: 99.5, rows: 40 }]) {
     const socket = createFakeSocket();
     handleShellConnection(socket as never, dependencies);
-    socket.emit('message', JSON.stringify({ ...initMessage, ...size }));
+    socket.emit('message', initMessage(size));
   }
 
   assert.deepEqual(pty.resizes, []);
