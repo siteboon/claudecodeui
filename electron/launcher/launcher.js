@@ -740,7 +740,8 @@ window.__MOCK_STATE__ = {
   }
 
   function renderBody(state) {
-    var section = CC.ui.section || ((CC.connected(state) || CC.authState(state) === 'expired') ? 'cloud' : 'local');
+    var defaultSection = (state.servers || []).length ? 'servers' : 'local';
+    var section = CC.ui.section || ((CC.connected(state) || CC.authState(state) === 'expired') ? 'cloud' : defaultSection);
     CC.ui.section = section;
     var nav = '<div class="sb"><div class="sb-grp"><div class="lbl">Launcher</div>' +
       navItem('local', 'terminal', 'Local servers', state.localServerRunning ? 'on' : 'idle', section) +

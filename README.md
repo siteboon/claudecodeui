@@ -113,7 +113,7 @@ CloudCLI Desktop is an optional native companion for CloudCLI Cloud and Local Cl
 - **[Windows](https://cloudcli.ai/download/windows)**
 - **[Download page](https://cloudcli.ai/download)** · **[GitHub Releases and checksums](https://github.com/siteboon/claudecodeui/releases)**
 
-Use it to open CloudCLI Cloud environments, switch between local and remote workspaces, and copy mobile/browser URLs. To work locally, choose **Local CloudCLI** in the desktop app; it will use your running local server or start one for you.
+Use it to open CloudCLI Cloud environments, switch between local and remote workspaces, and copy mobile/browser URLs. To work locally, choose **Local CloudCLI** in the desktop app; it will use your running local server or start one for you. To use a CloudCLI server running on another computer, such as a home server, choose **Remote servers** and enter its address (for example `http://192.168.1.20:3001`).
 
 
 ---
