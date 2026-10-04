@@ -23,6 +23,7 @@ const ALL_PROVIDERS = ['claude', 'codex', 'cursor', 'opencode'];
 let serverProviders: string[] = ALL_PROVIDERS;
 let storedServerProvider: string | null = null;
 let savedPreferences: Array<Record<string, unknown>> = [];
+let preferencesDelayMs = 0;
 
 const stubServer = () => {
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
@@ -30,6 +31,9 @@ const stubServer = () => {
       // Slower than everything else in the bootstrap, so an app that does not
       // wait for it would render first.
       await new Promise((resolve) => setTimeout(resolve, 30));
+    }
+    if (url === '/api/user/preferences' && init?.method !== 'PATCH' && preferencesDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, preferencesDelayMs));
     }
     if (url === '/api/user/preferences' && init?.method === 'PATCH') {
       savedPreferences.push(JSON.parse(String(init.body)) as Record<string, unknown>);
@@ -76,6 +80,7 @@ beforeEach(async () => {
   resetUserPreferences();
   savedPreferences = [];
   storedServerProvider = null;
+  preferencesDelayMs = 0;
   firstPaint = null;
   stubServer();
   // The store is a module singleton: put it back to "every provider" first.
@@ -99,19 +104,23 @@ test('the app is first shown with the server list and its default provider alrea
   assert.deepEqual(firstPaint, { enabled: ['codex', 'claude'], selected: 'codex' });
 });
 
-test('a stored provider the server disabled is rewritten once the preferences load', async () => {
-  serverProviders = ['claude'];
-  storedServerProvider = 'cursor';
+// The two requests race: the preferences may land before or after the list.
+for (const [order, delayMs] of [['before', 0], ['after', 100]] as const) {
+  test(`a stored provider the server disabled is rewritten when the preferences load ${order} the list`, async () => {
+    serverProviders = ['claude'];
+    storedServerProvider = 'cursor';
+    preferencesDelayMs = delayMs;
 
-  render(<AuthProvider><Gate /></AuthProvider>);
-  await screen.findByText('workspace');
+    render(<AuthProvider><Gate /></AuthProvider>);
+    await screen.findByText('workspace');
 
-  await waitFor(() => {
-    assert.equal(readUserPreference('selectedProvider', null), 'claude');
+    await waitFor(() => {
+      assert.equal(readUserPreference('selectedProvider', null), 'claude');
+    });
+    // ...and the rewrite reaches the server, past the preference store's debounce.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    });
+    assert.ok(savedPreferences.some((update) => update.selectedProvider === 'claude'));
   });
-  // ...and the rewrite reaches the server, past the preference store's debounce.
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  });
-  assert.ok(savedPreferences.some((update) => update.selectedProvider === 'claude'));
-});
+}

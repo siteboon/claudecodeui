@@ -34,7 +34,8 @@ export default function AgentsSettingsTab({
 }: AgentsSettingsTabProps) {
   const enabledProviders = useEnabledProviders();
   // Opens on the default provider: the first one the server enables, which is
-  // Claude unless VITE_ENABLED_PROVIDERS says otherwise.
+  // Claude unless VITE_ENABLED_PROVIDERS says otherwise. The list is loaded
+  // before the app is shown, so it cannot change under an open tab.
   const [selectedAgent, setSelectedAgent] = useState<AgentProvider>(() => enabledProviders[0]);
   const [selectedCategory, setSelectedCategory] = useState<AgentCategory>('account');
   const visibleCategories = useMemo<AgentCategory[]>(() => (
@@ -72,12 +73,6 @@ export default function AgentsSettingsTab({
     providerAuthStatus.cursor,
     providerAuthStatus.opencode,
   ]);
-
-  useEffect(() => {
-    if (!visibleAgents.includes(selectedAgent)) {
-      setSelectedAgent(enabledProviders[0]);
-    }
-  }, [enabledProviders, selectedAgent, visibleAgents]);
 
   useEffect(() => {
     if (!visibleCategories.includes(selectedCategory)) {
