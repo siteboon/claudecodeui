@@ -272,7 +272,7 @@ test('reattaching from a differently sized terminal resizes the pty after the re
   pty.emitData('frame drawn at 140 columns');
   firstSocket.emit('close');
 
-  // The Shell tab remounts with a fresh terminal after the window got narrower.
+  // The Shell tab remounts with a fresh terminal after the window got smaller.
   const replacementSocket = createFakeSocket();
   let framesSentBeforeResize = -1;
   const recordResize = pty.resize.bind(pty);
@@ -281,9 +281,9 @@ test('reattaching from a differently sized terminal resizes the pty after the re
     recordResize(cols, rows);
   };
   handleShellConnection(replacementSocket as never, dependencies);
-  replacementSocket.emit('message', initMessage({ cols: 97, rows: 48 }));
+  replacementSocket.emit('message', initMessage({ cols: 97, rows: 40 }));
 
-  assert.deepEqual(pty.resizes, [[97, 48]]);
+  assert.deepEqual(pty.resizes, [[97, 40]]);
   // The redraw the resize triggers must land on top of the replayed history.
   assert.equal(framesSentBeforeResize, replacementSocket.frames.length);
   const replayedOutput = replacementSocket.frames
@@ -302,7 +302,15 @@ test('reattaching with the same size or without a usable size leaves the pty siz
   handleShellConnection(firstSocket as never, dependencies);
   firstSocket.emit('message', initMessage({ cols: 120, rows: 40 }));
 
-  for (const size of [{ cols: 120, rows: 40 }, {}, { cols: 0, rows: 40 }, { cols: 99.5, rows: 40 }]) {
+  const unusableOrSameSizes = [
+    { cols: 120, rows: 40 },
+    {},
+    { cols: 0, rows: 40 },
+    { cols: 120, rows: 0 },
+    { cols: 99.5, rows: 40 },
+    { cols: 120, rows: 39.5 },
+  ];
+  for (const size of unusableOrSameSizes) {
     const socket = createFakeSocket();
     handleShellConnection(socket as never, dependencies);
     socket.emit('message', initMessage(size));
@@ -311,6 +319,22 @@ test('reattaching with the same size or without a usable size leaves the pty siz
   assert.deepEqual(pty.resizes, []);
   assert.equal(pty.cols, 120);
   assert.equal(pty.rows, 40);
+
+  pty.emitExit();
+});
+
+test('reattaching from a terminal that only differs in height resizes the pty', () => {
+  const { pty, dependencies, initMessage } = createReattachHarness('reattach-height-only');
+
+  const firstSocket = createFakeSocket();
+  handleShellConnection(firstSocket as never, dependencies);
+  firstSocket.emit('message', initMessage({ cols: 120, rows: 40 }));
+
+  const replacementSocket = createFakeSocket();
+  handleShellConnection(replacementSocket as never, dependencies);
+  replacementSocket.emit('message', initMessage({ cols: 120, rows: 30 }));
+
+  assert.deepEqual(pty.resizes, [[120, 30]]);
 
   pty.emitExit();
 });
