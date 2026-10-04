@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 
 import type { WebSocket } from 'ws';
@@ -19,7 +20,7 @@ import type {
   ProviderPermissionDecision,
   ProviderRuntimeWriter,
 } from '@/shared/types.js';
-import { parseIncomingJsonObject } from '@/shared/utils.js';
+import { createNormalizedMessage, parseIncomingJsonObject } from '@/shared/utils.js';
 
 /**
  * Trust boundary for client-supplied image attachments: chat.send options come
@@ -203,6 +204,46 @@ function resolveSendTarget(
 }
 
 /**
+ * Returns the error to show when a turn's working directory is not a folder on
+ * this machine, or null when the turn can start there.
+ *
+ * Every provider CLI is spawned with that directory as its cwd, and Node
+ * reports a missing cwd as `spawn ENOENT` — the same code as a missing
+ * executable. The Claude SDK turns it into "Claude Code native binary not
+ * found", the other runtimes into "spawn <cli> ENOENT", and users go off to
+ * reinstall a CLI that is fine. The real cause is a session whose folder only
+ * exists somewhere else (created inside WSL or on another computer) or that
+ * was moved or deleted, so that is what the error says.
+ *
+ * Synchronous on purpose, like the Shell tab's own project-path check: the
+ * runtime still starts in the same tick as before, so nothing that races a
+ * send (an abort, a second frame) sees a new window.
+ */
+function describeMissingWorkingDirectory(workingDirectory: unknown): string | null {
+  // Without a directory the runtimes fall back to the server's own cwd.
+  if (typeof workingDirectory !== 'string' || !workingDirectory.trim()) {
+    return null;
+  }
+
+  try {
+    if (fs.statSync(workingDirectory).isDirectory()) {
+      return null;
+    }
+  } catch (error) {
+    // Only "nothing there" is diagnosed here; anything else (e.g. EACCES) is
+    // left for the runtime to report as it always has.
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== 'ENOENT' && code !== 'ENOTDIR') {
+      return null;
+    }
+  }
+
+  return `Project folder "${workingDirectory}" was not found on this machine. The session may have been `
+    + 'created in WSL or on another computer, or the folder was moved or deleted. Restore the folder, '
+    + 'or continue the session where the folder exists.';
+}
+
+/**
  * Registers the run and hands the turn to the provider runtime.
  *
  * `extraRuntimeOptions` is how an edited message asks the provider to resume
@@ -284,6 +325,16 @@ async function dispatchRun(
 
   let failure: string | null = null;
   try {
+    // Checked before `beforeRun` so an edit does not truncate or rewind a
+    // conversation whose turn cannot start. Reported through the run like any
+    // runtime error; the `finally` below emits the terminal `complete`.
+    const missingDirectoryError = describeMissingWorkingDirectory(runtimeOptions.cwd || runtimeOptions.projectPath);
+    if (missingDirectoryError) {
+      console.warn('[Chat] Working directory is missing; not starting the provider', { sessionId, provider });
+      run.writer.send(createNormalizedMessage({ kind: 'error', content: missingDirectoryError, sessionId, provider }));
+      return { started: true, error: missingDirectoryError };
+    }
+
     // Runs only now that the session is reserved, because an edit rewinds the
     // conversation here and a rewind for a run that was never admitted cannot
     // be taken back. Inside the try so a rewind that throws still releases the
