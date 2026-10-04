@@ -225,6 +225,7 @@ test('CAS is disabled with a warning when the service URL is missing or not the 
     'https://cloudcli.example.com/',
     'https://cloudcli.example.com/api/auth/cas/callback?x=1',
     'https://cloudcli.example.com/api/auth/cas/callback#x',
+    'https://cloudcli.example.com/api/auth/cas/callback?',
   ]) {
     const result = readCasConfig({ ...VALID_ENV, CAS_SERVICE_URL: serviceUrl }, { isPlatform: false });
     assert.equal(result.config, null, String(serviceUrl));
@@ -235,7 +236,9 @@ test('CAS is disabled with a warning when the service URL is missing or not the 
 test('CAS is disabled in platform mode and for an invalid server URL or version', () => {
   assert.match(readCasConfig(VALID_ENV, { isPlatform: true }).warnings[0], /platform mode/);
   assert.equal(readCasConfig(VALID_ENV, { isPlatform: true }).config, null);
-  assert.equal(readCasConfig({ ...VALID_ENV, CAS_SERVER_URL: 'cas.example.edu' }, { isPlatform: false }).config, null);
+  for (const serverUrl of ['cas.example.edu', 'ftp://cas.example.edu/cas', 'https://cas.example.edu/cas?x=1']) {
+    assert.equal(readCasConfig({ ...VALID_ENV, CAS_SERVER_URL: serverUrl }, { isPlatform: false }).config, null);
+  }
   const badVersion = readCasConfig({ ...VALID_ENV, CAS_VERSION: '1.0' }, { isPlatform: false });
   assert.equal(badVersion.config, null);
   assert.match(badVersion.warnings[0], /CAS_VERSION must be 2.0 or 3.0/);

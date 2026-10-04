@@ -125,7 +125,7 @@ export function readCasConfig(
   }
 
   const serverUrl = parseHttpUrl(serverUrlInput);
-  if (!serverUrl || serverUrl.search || serverUrl.hash) {
+  if (!serverUrl || /[?#]/.test(serverUrlInput)) {
     return disabled(`CAS_SERVER_URL must be an http(s) URL without query or fragment, e.g. https://cas.example.edu/cas.`);
   }
 
@@ -148,8 +148,7 @@ export function readCasConfig(
   const serviceUrl = parseHttpUrl(serviceUrlInput);
   if (
     !serviceUrl
-    || serviceUrl.search
-    || serviceUrl.hash
+    || /[?#]/.test(serviceUrlInput)
     || !serviceUrl.pathname.endsWith(CALLBACK_PATH_SUFFIX)
   ) {
     return disabled(
@@ -239,7 +238,8 @@ function describeError(error: unknown): string {
 }
 
 /**
- * Creates the CAS sign-in service around explicit persistence, crypto,
+ * Used by the auth module's composition root to build the CAS sign-in service
+ * (consumed by the auth routes) around explicit persistence, crypto,
  * transaction, token and clock dependencies.
  */
 export function createCasService(dependencies: CasDependencies) {
