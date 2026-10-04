@@ -689,6 +689,57 @@ svg {
   white-space: nowrap;
 }
 
+.srv-form {
+  display: flex;
+  gap: 8px;
+}
+
+.cc-input {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 11px;
+  border-radius: 9px;
+  border: 1px solid var(--b);
+  background: var(--s2);
+  color: var(--tx);
+  font-size: 13px;
+  outline: none;
+}
+
+.cc-input::placeholder {
+  color: var(--tx3);
+}
+
+.cc-input:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-faint);
+}
+
+.cc-form-msg {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--tx2);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.cc-form-msg.progress {
+  color: var(--brand-2);
+}
+
+.cc-form-msg.error {
+  color: var(--err);
+}
+
+.srv-list {
+  max-width: 620px;
+}
+
+.srv-list-h {
+  margin: 18px 0 8px;
+}
+
 .empty {
   border: 1px dashed var(--b);
   border-radius: 12px;

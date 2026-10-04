@@ -1,5 +1,7 @@
 import { BrowserView, dialog } from 'electron';
 
+import { classifyServerNavigation } from './servers.js';
+
 const TARGET_LOAD_TIMEOUT_MS = 20000;
 
 function escapeHtml(value) {
@@ -37,6 +39,14 @@ function isHttpUrl(url) {
     return parsed.protocol === 'http:' || parsed.protocol === 'https:';
   } catch {
     return false;
+  }
+}
+
+function getOrigin(url) {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
   }
 }
 
@@ -80,11 +90,30 @@ export class ViewHost {
     this.tabViews = new Map();
   }
 
-  configureChildWebContents(webContents) {
-    webContents.setWindowOpenHandler(({ url }) => {
+  configureChildWebContents(webContents, { serverOrigin } = {}) {
+    // A self-hosted server tab (serverOrigin set, null if unknown) shows an origin the user
+    // typed in: it stays on that origin, and only http(s) links are handed to the default browser.
+    const isServerTab = serverOrigin !== undefined;
+    const openExternal = (url) => {
       void this.openExternalUrl(url).catch((error) => this.showError('Could not open external link', error));
+    };
+
+    webContents.setWindowOpenHandler(({ url }) => {
+      if (!isServerTab || classifyServerNavigation(url, serverOrigin) !== 'block') {
+        openExternal(url);
+      }
       return { action: 'deny' };
     });
+
+    if (isServerTab) {
+      webContents.on('will-navigate', (event, legacyUrl) => {
+        const url = event.url || legacyUrl;
+        const decision = classifyServerNavigation(url, serverOrigin);
+        if (decision === 'allow') return;
+        event.preventDefault();
+        if (decision === 'external') openExternal(url);
+      });
+    }
 
     // A page can block unloading (the code editor does while it has unsaved
     // edits). Electron then cancels the reload or navigation without asking,
@@ -219,19 +248,21 @@ export class ViewHost {
     });
   }
 
-  getOrCreateTabView(tabId) {
+  getOrCreateTabView(tabId, target) {
     let view = this.tabViews.get(tabId);
     if (view) return view;
 
+    // Server tabs get no preload, so pages from a user-entered origin have no desktop bridge.
+    const isServerTab = target?.kind === 'server';
     view = new BrowserView({
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
-        preload: this.getPreloadPath(),
+        ...(isServerTab ? {} : { preload: this.getPreloadPath() }),
       },
     });
-    this.configureChildWebContents(view.webContents);
+    this.configureChildWebContents(view.webContents, isServerTab ? { serverOrigin: getOrigin(target.url) } : {});
     this.tabViews.set(tabId, view);
     return view;
   }
@@ -262,7 +293,7 @@ export class ViewHost {
   }
 
   async showTabPlaceholder(tabId, target, message) {
-    const view = this.getOrCreateTabView(tabId);
+    const view = this.getOrCreateTabView(tabId, target);
     this.attach(view);
     const html = buildPlaceholderHtml(target.name || this.appName, message);
     await view.webContents.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
@@ -271,7 +302,7 @@ export class ViewHost {
   }
 
   async showLocalStartupTarget(tabId, target, logs) {
-    const view = this.getOrCreateTabView(tabId);
+    const view = this.getOrCreateTabView(tabId, target);
     if (view.__cloudcliLoadingUrl) return;
     this.attach(view);
     const html = buildPlaceholderHtml(target.name || this.appName, 'Starting Local CloudCLI...', logs);
@@ -286,7 +317,7 @@ export class ViewHost {
     if (!isHttpUrl(loadUrl)) {
       throw new Error(`Refusing to load unsupported app URL: ${loadUrl}`);
     }
-    const view = this.getOrCreateTabView(tabId);
+    const view = this.getOrCreateTabView(tabId, target);
     this.attach(view);
     if (target.forceLoad || view.__cloudcliLoadedUrl !== target.url) {
       view.__cloudcliLoadingUrl = loadUrl;

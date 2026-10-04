@@ -20,6 +20,14 @@ function isAllowedPermissionOrigin(sourceUrl, controlPlaneUrl) {
   }
 }
 
+function isSavedServerOrigin(sourceUrl, serverOrigins) {
+  try {
+    return serverOrigins.includes(new URL(sourceUrl).origin);
+  } catch {
+    return false;
+  }
+}
+
 function getWebContentsProcessId(contents) {
   return {
     osProcessId: typeof contents.getOSProcessId === 'function' ? contents.getOSProcessId() : null,
@@ -39,6 +47,7 @@ export class DesktopWindowManager {
     getRemoteEnvironmentMenuItems,
     getCloudState,
     getLocalState,
+    getServerOrigins = () => [],
     actions,
     tabs,
   }) {
@@ -52,6 +61,7 @@ export class DesktopWindowManager {
     this.getRemoteEnvironmentMenuItems = getRemoteEnvironmentMenuItems;
     this.getCloudState = getCloudState;
     this.getLocalState = getLocalState;
+    this.getServerOrigins = getServerOrigins;
     this.actions = actions;
     this.tabs = tabs;
 
@@ -681,7 +691,10 @@ export class DesktopWindowManager {
     const isAllowedPermission = (webContents, permission) => {
       const sourceUrl = webContents.getURL();
       const allowedPermissions = new Set(['clipboard-read', 'media', 'notifications']);
-      return isAllowedPermissionOrigin(sourceUrl, this.getCloudState().controlPlaneUrl) && allowedPermissions.has(permission);
+      // Saved self-hosted servers get the same short list as Local CloudCLI and cloud environments.
+      const isAllowedOrigin = isAllowedPermissionOrigin(sourceUrl, this.getCloudState().controlPlaneUrl)
+        || isSavedServerOrigin(sourceUrl, this.getServerOrigins());
+      return isAllowedOrigin && allowedPermissions.has(permission);
     };
 
     session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, session, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, net, session, shell } from 'electron';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,6 +7,7 @@ import { CloudController } from './cloud.js';
 import { DesktopWindowManager } from './desktopWindow.js';
 import { DesktopNotificationsController } from './desktopNotifications.js';
 import { LocalServerController } from './localServer.js';
+import { ServersController } from './servers.js';
 import { TabsController } from './tabs.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -29,6 +30,7 @@ let activeTarget = { kind: 'launcher', name: APP_NAME, url: null };
 let desktopWindow = null;
 let localServer = null;
 let cloud = null;
+let servers = null;
 let desktopNotifications = null;
 let isQuitting = false;
 let isRefreshingCloud = false;
@@ -63,6 +65,10 @@ function getSettingsPath() {
 
 function getDesktopNotificationsSettingsPath() {
   return path.join(app.getPath('userData'), 'desktop-notifications-settings.json');
+}
+
+function getServersStorePath() {
+  return path.join(app.getPath('userData'), 'desktop-servers.json');
 }
 
 function getRunningEnvironmentUrls() {
@@ -128,6 +134,7 @@ function getDesktopState() {
     tabs: tabs.getSerializableTabs(),
     activeTabId: tabs.activeTabId,
     environments: cloud.getEnvironments().map(serializeEnvironment),
+    servers: servers.getServers(),
     desktopNotifications: desktopNotifications?.getState() || { enabled: false, supported: false, connectedCount: 0, targetCount: 0 },
   };
 }
@@ -386,7 +393,8 @@ async function showEnvironmentPicker() {
     }
   }
 
-  const choices = ['Local CloudCLI', ...environments.map((environment) => {
+  const savedServers = servers.getServers();
+  const choices = ['Local CloudCLI', ...savedServers.map((server) => server.name), ...environments.map((environment) => {
     const status = environment.status === 'running' ? '' : ` (${environment.status})`;
     return `${environment.name || environment.subdomain}${status}`;
   })];
@@ -403,7 +411,8 @@ async function showEnvironmentPicker() {
 
   if (response.response === choices.length) return getDesktopState();
   if (response.response === 0) return openLocalInDesktop();
-  return openEnvironmentInDesktop(environments[response.response - 1]);
+  if (response.response <= savedServers.length) return openServerInDesktop(savedServers[response.response - 1]);
+  return openEnvironmentInDesktop(environments[response.response - 1 - savedServers.length]);
 }
 
 async function startEnvironment(environment) {
@@ -628,6 +637,57 @@ async function openEnvironmentInDesktop(environment) {
   return getDesktopState();
 }
 
+function getServerTarget(server) {
+  return {
+    kind: 'server',
+    id: server.id,
+    name: server.name,
+    url: server.url,
+  };
+}
+
+async function openServerInDesktop(server) {
+  const target = getServerTarget(server);
+  const tabId = tabs.getTabIdForTarget(target);
+  if (!tabs.getTab(tabId)) {
+    await desktopWindow.showTabPlaceholder(target, `Opening ${target.name}...`);
+    tabs.upsertTarget(target);
+    desktopWindow.emitDesktopState();
+  }
+
+  try {
+    await desktopWindow.showTarget(target);
+  } catch (error) {
+    // Another open of the same tab replaced this load; that one reports its own result.
+    if (isExpectedNavigationAbort(error)) return getDesktopState();
+    // Drop the tab that never loaded so the launcher, which shows this error, is visible again.
+    await desktopWindow.closeDesktopTab(tabId);
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Could not open ${target.name}: ${message}`);
+  }
+  return getDesktopState();
+}
+
+async function connectServer(address) {
+  return openServerInDesktop(await servers.addServer(address));
+}
+
+async function removeServer(serverId) {
+  const server = servers.findServer(serverId);
+  if (!server) return getDesktopState();
+  await desktopWindow.closeDesktopTab(tabs.getTabIdForTarget(getServerTarget(server)));
+  await servers.removeServer(serverId);
+  return getDesktopState();
+}
+
+function findSavedServer(serverId) {
+  const server = servers.findServer(serverId);
+  if (!server) {
+    throw new Error('Server not found. It may have been removed.');
+  }
+  return server;
+}
+
 function findEnvironmentByUrl(environmentUrl) {
   const targetOrigin = (() => {
     try {
@@ -741,6 +801,9 @@ function registerIpcHandlers() {
     }
     return openEnvironmentInDesktop(environment);
   });
+  ipcMain.handle('cloudcli-desktop:connect-server', async (_event, address) => connectServer(address));
+  ipcMain.handle('cloudcli-desktop:open-server', async (_event, serverId) => openServerInDesktop(findSavedServer(serverId)));
+  ipcMain.handle('cloudcli-desktop:remove-server', async (_event, serverId) => removeServer(serverId));
   ipcMain.handle('cloudcli-desktop:open-local', async () => openLocalInDesktop());
   ipcMain.handle('cloudcli-desktop:open-local-web-ui', async () => openLocalWebUi());
   ipcMain.handle('cloudcli-desktop:refresh-environments', async () => {
@@ -829,6 +892,7 @@ async function createDesktopWindow() {
     getRemoteEnvironmentMenuItems,
     getCloudState,
     getLocalState,
+    getServerOrigins: () => servers.getOrigins(),
     tabs,
     actions: {
       copyDiagnostics,
@@ -911,6 +975,12 @@ async function bootstrap() {
     callbackUrl: CALLBACK_URL,
     onChange: syncDesktopState,
   });
+  servers = new ServersController({
+    storePath: getServersStorePath(),
+    // Chromium's network stack, so the check sees the same proxy and certificates as the tab.
+    fetchImpl: (url, options) => net.fetch(url, options),
+    onChange: syncDesktopState,
+  });
   desktopNotifications = new DesktopNotificationsController({
     settingsPath: getDesktopNotificationsSettingsPath(),
     appVersion: app.getVersion(),
@@ -927,6 +997,7 @@ async function bootstrap() {
 
   await localServer.loadDesktopSettings();
   await cloud.loadCloudAccount();
+  await servers.load();
   await desktopNotifications.loadSettings();
 
   registerProtocolHandler();

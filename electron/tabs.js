@@ -14,6 +14,7 @@ export class TabsController {
   getTabIdForTarget(target) {
     if (target.kind === 'launcher') return 'home';
     if (target.kind === 'remote' && target.id) return `remote:${target.id}`;
+    if (target.kind === 'server' && target.id) return `server:${target.id}`;
     return target.kind;
   }
 

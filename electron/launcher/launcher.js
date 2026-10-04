@@ -14,6 +14,9 @@ window.__MOCK_STATE__ = {
     { id: 'env-data', name: 'data-pipeline', subdomain: 'data-pipeline', access_url: 'https://data-pipeline.cloudcli.ai', status: 'stopped', region: 'fra1', agent: 'Cursor' },
     { id: 'env-ml', name: 'ml-trainer', subdomain: 'ml-trainer', access_url: 'https://ml-trainer.cloudcli.ai', status: 'paused', region: 'iad1', agent: 'OpenCode' },
   ],
+  servers: [
+    { id: 'srv-home', name: '192.168.1.20:3001', url: 'http://192.168.1.20:3001' },
+  ],
 };
 
 (function cloudCliLauncher() {
@@ -73,6 +76,17 @@ window.__MOCK_STATE__ = {
       mockState.desktopSettings[key] = key === 'themeMode' ? value : !!value;
       return Promise.resolve(clone(mockState));
     },
+    connectServer: function (address) {
+      var url = /:\/\//.test(address) ? address : 'http://' + address;
+      var server = { id: 'srv-' + Date.now(), name: url.replace(/^[a-z]+:\/\//i, '').replace(/\/.*$/, ''), url: url.replace(/\/+$/, '') };
+      mockState.servers = (mockState.servers || []).concat([server]);
+      return Promise.resolve(clone(mockState));
+    },
+    openServer: function () { return Promise.resolve(clone(mockState)); },
+    removeServer: function (id) {
+      mockState.servers = (mockState.servers || []).filter(function (server) { return server.id !== id; });
+      return Promise.resolve(clone(mockState));
+    },
     openEnvironment: function (id) {
       var env = (mockState.environments || []).filter(function (item) { return item.id === id; })[0];
       if (env) {
@@ -102,6 +116,7 @@ window.__MOCK_STATE__ = {
     phone: '<rect x="7" y="2" width="10" height="20" rx="2"/><line x1="11" y1="18" x2="13" y2="18"/>',
     x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
     logOut: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
+    server: '<rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><line x1="6" y1="7" x2="6.01" y2="7"/><line x1="6" y1="17" x2="6.01" y2="17"/>',
   };
   var FILLED = { play: true };
 
@@ -153,7 +168,9 @@ window.__MOCK_STATE__ = {
   }
 
   function errMsg(error) {
-    return error && error.message ? error.message : String(error);
+    var message = error && error.message ? error.message : String(error);
+    // ipcRenderer.invoke wraps main-process errors as "Error invoking remote method '<channel>': Error: <message>".
+    return message.replace(/^Error invoking remote method '[^']*': (?:Error: )?/, '');
   }
 
   function resolveTheme(state) {
@@ -172,6 +189,8 @@ window.__MOCK_STATE__ = {
     accountLabel: accountLabel,
     localUrl: localUrl,
     envCount: envCount,
+    errMsg: errMsg,
+    bridge: bridge,
     version: VERSION,
     logoUrl: LOGO_URL,
     platform: 'win',
@@ -494,10 +513,18 @@ window.__MOCK_STATE__ = {
     var titlebar = (CC._reg.titlebar || CC.titlebar)(state);
     var statusbar = (CC._reg.statusbar || CC.statusbar)(state);
     var body = CC._reg.renderBody ? CC._reg.renderBody(state) : '';
+    var focused = document.activeElement;
+    var focusedId = focused && focused.id && app.contains(focused) ? focused.id : null;
+    var selection = focusedId && typeof focused.selectionStart === 'number' ? [focused.selectionStart, focused.selectionEnd] : null;
     if (CC.modalMode) {
       app.innerHTML = '';
     } else {
       app.innerHTML = titlebar + '<div class="cc-body ' + (CC._reg.bodyClass || '') + '">' + body + '</div>' + statusbar;
+    }
+    var refocus = focusedId ? document.getElementById(focusedId) : null;
+    if (refocus) {
+      refocus.focus();
+      if (selection && refocus.setSelectionRange) refocus.setSelectionRange(selection[0], selection[1]);
     }
     if (CC._reg.afterRender) CC._reg.afterRender(state);
   };
@@ -620,6 +647,7 @@ window.__MOCK_STATE__ = {
 
 (function sidebarApp() {
   var CC = window.CC;
+  var bridge = CC.bridge;
 
   function navItem(id, iconName, label, meta, selected) {
     return '<button class="sb-item' + (selected === id ? ' active' : '') + '" data-cc-nav="' + id + '">' +
@@ -641,6 +669,57 @@ window.__MOCK_STATE__ = {
       '<span class="badge ' + meta.cls + '">' + meta.label + '</span>' +
       '<button class="btn sm" data-cc-action="env-row-menu" data-cc-environment-id="' + environment.id + '">Open environment in...</button>' +
       '<button class="btn sm ' + (environment.status === 'running' ? 'pri' : '') + '">' + CC.icon(meta.busy ? 'refresh' : (environment.status === 'running' ? 'arrow' : 'play'), 14) + meta.open + '</button></div>';
+  }
+
+  function hasOpenTab(state, tabId) {
+    return (state.tabs || []).some(function (tab) { return tab.id === tabId; });
+  }
+
+  function serverRow(state, server) {
+    var isOpen = hasOpenTab(state, 'server:' + server.id);
+    return '<div class="env" data-cc-server="' + CC.esc(server.id) + '"><span class="dot" style="background:' + (isOpen ? 'var(--ok)' : 'var(--tx3)') + '"></span>' +
+      '<div class="env-i"><div class="env-n">' + CC.esc(server.name) + '</div><div class="env-u mono">' + CC.esc(server.url) + '</div></div>' +
+      '<button class="btn sm" data-cc-server-remove="' + CC.esc(server.id) + '" title="Remove this saved server">Remove</button>' +
+      '<button class="btn sm pri">' + CC.icon('arrow', 14) + 'Open</button></div>';
+  }
+
+  function serversPane(state) {
+    var notice = CC.ui.serverNotice;
+    var savedServers = state.servers || [];
+    var form = '<form class="card" data-cc-server-form>' +
+      '<div><div class="card-t">Connect to a server</div><div class="card-sub">Enter the address you would open in a browser, like http://192.168.1.20:3001 or https://cloudcli.example.com.</div></div>' +
+      '<div class="srv-form"><input id="cc-server-address" class="cc-input mono" type="text" placeholder="http://192.168.1.20:3001" autocomplete="off" spellcheck="false" aria-label="Server address" value="' + CC.esc(CC.ui.serverAddress || '') + '">' +
+      '<button class="btn pri" type="submit"' + (CC.ui.serverBusy ? ' disabled' : '') + '>' + CC.icon('server', 14) + 'Connect</button></div>' +
+      (notice ? '<div class="cc-form-msg ' + CC.esc(notice.tone) + '">' + CC.esc(notice.msg) + '</div>' : '') +
+      '</form>';
+    var list = savedServers.length
+      ? '<div class="srv-list"><div class="lbl srv-list-h">Saved servers</div>' + savedServers.map(function (server) { return serverRow(state, server); }).join('') + '</div>'
+      : '';
+    return '<div class="pane-h"><div><h2 class="pane-title">Remote servers</h2><p class="pane-sub">Open a CloudCLI server running on another computer, such as a home server or a VPS.</p></div></div>' +
+      form + list;
+  }
+
+  function runServerAction(progressMsg, action) {
+    if (CC.ui.serverBusy) return;
+    CC.ui.serverBusy = true;
+    CC.ui.serverNotice = { msg: progressMsg, tone: 'progress' };
+    CC.render(CC.state);
+    Promise.resolve()
+      .then(action)
+      .then(function () {
+        CC.ui.serverBusy = false;
+        CC.ui.serverNotice = null;
+        return CC.refresh();
+      })
+      .catch(function (error) {
+        CC.ui.serverBusy = false;
+        CC.ui.serverNotice = { msg: CC.errMsg(error), tone: 'error' };
+        CC.render(CC.state);
+      });
+  }
+
+  function findServer(id) {
+    return (CC.state.servers || []).filter(function (server) { return server.id === id; })[0] || null;
   }
 
   function cloudPane(state) {
@@ -665,18 +744,52 @@ window.__MOCK_STATE__ = {
     CC.ui.section = section;
     var nav = '<div class="sb"><div class="sb-grp"><div class="lbl">Launcher</div>' +
       navItem('local', 'terminal', 'Local servers', state.localServerRunning ? 'on' : 'idle', section) +
+      navItem('servers', 'server', 'Remote servers', (state.servers || []).length, section) +
       navItem('cloud', 'cloud', 'Cloud environments', (state.environments || []).length, section) +
       '</div></div>';
-    return nav + '<div class="sb-main">' + (section === 'local' ? localPane(state) : cloudPane(state)) + '</div>';
+    var pane = section === 'local' ? localPane(state) : (section === 'servers' ? serversPane(state) : cloudPane(state));
+    return nav + '<div class="sb-main">' + pane + '</div>';
   }
 
   function onClick(event) {
+    var removeButton = event.target.closest('[data-cc-server-remove]');
+    if (removeButton) {
+      var removeId = removeButton.getAttribute('data-cc-server-remove');
+      var removed = findServer(removeId);
+      runServerAction('Removing ' + (removed ? removed.name : 'server') + '...', function () { return bridge.removeServer(removeId); });
+      return true;
+    }
+    var serverRowNode = event.target.closest('[data-cc-server]');
+    if (serverRowNode) {
+      var openId = serverRowNode.getAttribute('data-cc-server');
+      var opened = findServer(openId);
+      runServerAction('Opening ' + (opened ? opened.name : 'server') + '...', function () { return bridge.openServer(openId); });
+      return true;
+    }
     var nav = event.target.closest('[data-cc-nav]');
     if (!nav) return false;
     CC.ui.section = nav.getAttribute('data-cc-nav');
     CC.render(CC.state);
     return true;
   }
+
+  document.addEventListener('input', function (event) {
+    if (event.target && event.target.id === 'cc-server-address') {
+      CC.ui.serverAddress = event.target.value;
+    }
+  });
+
+  document.addEventListener('submit', function (event) {
+    if (!event.target.closest('[data-cc-server-form]')) return;
+    event.preventDefault();
+    var address = (CC.ui.serverAddress || '').trim();
+    runServerAction('Connecting to ' + (address || 'server') + '...', function () {
+      return bridge.connectServer(address).then(function (state) {
+        CC.ui.serverAddress = '';
+        return state;
+      });
+    });
+  });
 
   CC.register({
     bodyClass: 'v-sidebar',
