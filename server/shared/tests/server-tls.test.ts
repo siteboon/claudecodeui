@@ -200,7 +200,13 @@ test('never echoes a key pasted as its bare base64 body instead of a path', asyn
   for (const privateKey of keys) {
     // Single-line secret stores keep keys like this: the PEM body without its BEGIN/END lines.
     const bodyLines = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString().trim().split('\n').slice(1, -1);
-    const bodies = [bodyLines.join(''), bodyLines.join(' '), bodyLines.join('\r'), bodyLines.join('\\n')];
+    const bodies = [
+      bodyLines.join(''),
+      bodyLines.join(' '),
+      bodyLines.join('\r'),
+      bodyLines.join('\\n'),
+      bodyLines.join('\\r\\n'),
+    ];
     for (const body of bodies) {
       const warnings = [
         getWarning(resolveServerTls({ SSL_KEY: body })),
@@ -214,7 +220,8 @@ test('never echoes a key pasted as its bare base64 body instead of a path', asyn
   }
 
   // Only a setting that could not be read is held back: an existing key file named without a '.'
-  // is still used, and a missing short path is still named.
+  // is still used, and a missing short path is still named (the setting is checked, not the
+  // resolved path, which can be long and have no '.').
   await withTempDir(async (directory) => {
     const keyWithoutExtension = path.join(directory, 'cloudcli-private-key-without-extension');
     fs.copyFileSync(KEY_PATH, keyWithoutExtension);
@@ -223,6 +230,10 @@ test('never echoes a key pasted as its bare base64 body instead of a path', asyn
   assert.equal(
     getWarning(resolveServerTls({ SSL_CERT: CERT_PATH, SSL_KEY: 'missing-key' })),
     `SSL_KEY file ${path.resolve('missing-key')} could not be read: ENOENT: no such file or directory`,
+  );
+  assert.equal(
+    getWarning(resolveServerTls({ SSL_CERT: 'missing-cert', SSL_KEY: KEY_PATH })),
+    `SSL_CERT file ${path.resolve('missing-cert')} could not be read: ENOENT: no such file or directory`,
   );
   // A long missing path without a '.' (a Docker secret here) gets the same text, which must not
   // claim that the value is key data.
