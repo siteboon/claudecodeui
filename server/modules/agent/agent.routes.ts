@@ -899,7 +899,9 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
     // The run registers its directory as a project, so it must lie inside
     // ALLOWED_PATHS: the given path, or for a clone without one the default
     // destination under ~/.claude/external-projects. A no-op when unset.
-    const requestedProjectPath = projectPath
+    // Checked before the try below, so only a string is resolved here; any
+    // other value still fails inside it as before.
+    const requestedProjectPath = typeof projectPath === 'string' && projectPath
       ? path.resolve(projectPath)
       : path.join(os.homedir(), '.claude', 'external-projects');
     if (!(await isPathAllowed(requestedProjectPath))) {
