@@ -338,3 +338,20 @@ test('reattaching from a terminal that only differs in height resizes the pty', 
 
   pty.emitExit();
 });
+
+test('reattaching from a terminal that only differs in width resizes the pty', () => {
+  const { pty, dependencies, initMessage } = createReattachHarness('reattach-width-only');
+
+  const firstSocket = createFakeSocket();
+  handleShellConnection(firstSocket as never, dependencies);
+  firstSocket.emit('message', initMessage({ cols: 140, rows: 48 }));
+
+  // A narrower window keeps the terminal height: the case from the issue's repro.
+  const replacementSocket = createFakeSocket();
+  handleShellConnection(replacementSocket as never, dependencies);
+  replacementSocket.emit('message', initMessage({ cols: 97, rows: 48 }));
+
+  assert.deepEqual(pty.resizes, [[97, 48]]);
+
+  pty.emitExit();
+});
