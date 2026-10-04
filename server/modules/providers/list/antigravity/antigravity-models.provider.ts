@@ -1,15 +1,15 @@
-import type { IProviderModels } from '@/shared/interfaces.js';
 import type {
+  IProviderModels,
   ProviderCurrentActiveModel,
   ProviderModelsDefinition,
-} from '@/shared/types.js';
+} from '@/shared/index.js';
 import {
   buildDefaultProviderCurrentActiveModel,
   resolveConfiguredCliExecutable,
   runProviderCliCommand,
-} from '@/shared/utils.js';
+} from '@/shared/index.js';
 
-/** Fallback model catalog returned when the Antigravity CLI cannot be queried. */
+/** Used by AntigravityProviderModels and its tests when live discovery is unavailable; not an entitlement check. */
 export const ANTIGRAVITY_FALLBACK_MODELS: ProviderModelsDefinition = {
   OPTIONS: [
     {
@@ -25,6 +25,36 @@ export const ANTIGRAVITY_FALLBACK_MODELS: ProviderModelsDefinition = {
     {
       value: 'gemini-3.8-flash-low',
       label: 'Gemini 3.8 Flash (Low)',
+      description: 'Antigravity CLI model',
+    },
+    {
+      value: 'gemini-3.7-flash-high',
+      label: 'Gemini 3.7 Flash (High)',
+      description: 'Antigravity CLI model',
+    },
+    {
+      value: 'gemini-3.7-flash-medium',
+      label: 'Gemini 3.7 Flash (Medium)',
+      description: 'Antigravity CLI model',
+    },
+    {
+      value: 'gemini-3.7-flash-low',
+      label: 'Gemini 3.7 Flash (Low)',
+      description: 'Antigravity CLI model',
+    },
+    {
+      value: 'gemini-3.6-flash-high',
+      label: 'Gemini 3.6 Flash (High)',
+      description: 'Antigravity CLI model',
+    },
+    {
+      value: 'gemini-3.6-flash-medium',
+      label: 'Gemini 3.6 Flash (Medium)',
+      description: 'Antigravity CLI model',
+    },
+    {
+      value: 'gemini-3.6-flash-low',
+      label: 'Gemini 3.6 Flash (Low)',
       description: 'Antigravity CLI model',
     },
     {
@@ -58,7 +88,7 @@ export const ANTIGRAVITY_FALLBACK_MODELS: ProviderModelsDefinition = {
 
 const MODELS_TIMEOUT_MS = 20_000;
 
-/** Parses the line-oriented model list returned by `agy models`. */
+/** Used by AntigravityProviderModels and its tests to preserve the native account-specific model list. */
 export const parseAntigravityModelsStdout = (stdout: string): ProviderModelsDefinition => {
   const models = stdout
     .split(/\r?\n/)
@@ -83,7 +113,7 @@ export const parseAntigravityModelsStdout = (stdout: string): ProviderModelsDefi
   };
 };
 
-/** Antigravity model discovery adapter used by provider model services. */
+/** Used by AntigravityProvider to query the current account's native model catalog. */
 export class AntigravityProviderModels implements IProviderModels {
   /** Queries `agy models`, falling back to a stable catalog on probe failures. */
   async getSupportedModels(): Promise<ProviderModelsDefinition> {

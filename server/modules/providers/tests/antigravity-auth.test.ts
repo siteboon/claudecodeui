@@ -12,14 +12,20 @@ const findEnvKey = (name: string) =>
 async function createFakeAntigravityExecutable(binDir: string) {
   const scriptPath = path.join(binDir, 'agy.js');
   await writeFile(scriptPath, `
+const fs = require('node:fs');
 const command = process.argv[2];
 if (command === '--version') {
   console.log('1.2.3');
   process.exit(0);
 }
 if (command === 'models') {
-  console.log('Gemini Test Model');
-  process.exit(0);
+  const statePath = ${JSON.stringify(path.join(binDir, 'model-probe.json'))};
+  const state = fs.existsSync(statePath)
+    ? JSON.parse(fs.readFileSync(statePath, 'utf8'))
+    : { stdout: 'gemini-test\\tGemini Test Model\\n', exitCode: 0 };
+  if (state.stdout) process.stdout.write(state.stdout);
+  if (state.stderr) process.stderr.write(state.stderr);
+  process.exit(state.exitCode);
 }
 process.exit(1);
 `, 'utf8');
@@ -87,6 +93,43 @@ test('Antigravity auth uses AGY_CLI_PATH for installation and model probes', { c
       process.env.AGY_CLI_PATH = previousAgyCliPath;
     }
 
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('Antigravity auth recovers from eligibility failures and rejects an empty model probe', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'antigravity-eligibility-'));
+  const previousPath = process.env.AGY_CLI_PATH;
+
+  try {
+    await createFakeAntigravityExecutable(tempRoot);
+    process.env.AGY_CLI_PATH = path.join(tempRoot, process.platform === 'win32' ? 'agy.cmd' : 'agy');
+    const statePath = path.join(tempRoot, 'model-probe.json');
+    const adapter = new AntigravityProviderAuth();
+    for (const probe of [
+      { stdout: '', stderr: 'Account ineligible: Your current account is not eligible for Antigravity.', exitCode: 1 },
+      { stdout: 'Account ineligible: Verify your account.', stderr: '', exitCode: 0 },
+    ]) {
+      await writeFile(statePath, JSON.stringify(probe), 'utf8');
+      const status = await adapter.getStatus();
+      assert.equal(status.installed, true);
+      assert.equal(status.authenticated, false);
+      assert.match(status.error!, /account is not eligible/i);
+    }
+
+    await writeFile(statePath, JSON.stringify({ stdout: '', exitCode: 0 }), 'utf8');
+    assert.equal((await adapter.getStatus()).authenticated, false);
+
+    await writeFile(statePath, JSON.stringify({
+      stdout: 'gemini-3.8-flash-low\tGemini 3.8 Flash (Low)\n', exitCode: 0,
+    }), 'utf8');
+    const recovered = await adapter.getStatus();
+    assert.equal(recovered.authenticated, true);
+    assert.equal(recovered.method, 'agy');
+    assert.equal(recovered.error, undefined);
+  } finally {
+    if (previousPath === undefined) delete process.env.AGY_CLI_PATH;
+    else process.env.AGY_CLI_PATH = previousPath;
     await rm(tempRoot, { recursive: true, force: true });
   }
 });

@@ -47,6 +47,16 @@ Current provider ids in this repo are:
 - `opencode`
 - `antigravity`
 
+Antigravity model discovery queries `agy models` on every backend catalog read,
+so account changes and subscription changes use the CLI's current model list.
+The fallback catalog is used only when discovery fails or returns no models;
+it is not evidence of account-specific model entitlement. Authentication status
+also retries the CLI probe on each read, reports account eligibility failures
+separately from missing authentication, and requires a nonempty model list.
+Antigravity plan quotas and shared model-group windows remain owned by the
+native CLI and external usage integrations; this provider does not infer them
+from a subscription name or from session token usage.
+
 Those ids are mirrored in backend unions and frontend provider constants. If
 adding a new provider, update every place that hardcodes this list.
 

@@ -1,11 +1,10 @@
-import type { IProviderAuth } from '@/shared/interfaces.js';
-import type { ProviderAuthStatus } from '@/shared/types.js';
-import { resolveConfiguredCliExecutable, runProviderCliCommand } from '@/shared/utils.js';
+import type { IProviderAuth, ProviderAuthStatus } from '@/shared/index.js';
+import { resolveConfiguredCliExecutable, runProviderCliCommand } from '@/shared/index.js';
 
 const antigravityExecutable = () =>
   resolveConfiguredCliExecutable(process.env.AGY_CLI_PATH, 'agy');
 
-/** Antigravity installation and authentication probe used by provider routes. */
+/** Used by AntigravityProvider to report installation and usable account status. */
 export class AntigravityProviderAuth implements IProviderAuth {
   /** Checks whether the AGY executable can be invoked without blocking Node.js. */
   private async checkInstalled(): Promise<boolean> {
@@ -32,7 +31,13 @@ export class AntigravityProviderAuth implements IProviderAuth {
     const modelsResult = await runProviderCliCommand(antigravityExecutable(), ['models'], {
       timeoutMs: 10_000,
     });
-    const authenticated = !modelsResult.error && modelsResult.exitCode === 0;
+    const eligibilityFailure = /account ineligible|not eligible for antigravity|eligibility check failed/i.test(
+      `${modelsResult.stdout ?? ''}\n${modelsResult.stderr ?? ''}`,
+    );
+    const authenticated = !modelsResult.error
+      && modelsResult.exitCode === 0
+      && Boolean(modelsResult.stdout?.trim())
+      && !eligibilityFailure;
 
     return {
       installed,
@@ -40,7 +45,11 @@ export class AntigravityProviderAuth implements IProviderAuth {
       authenticated,
       email: authenticated ? 'Authenticated' : null,
       method: authenticated ? 'agy' : null,
-      error: authenticated ? undefined : 'Antigravity CLI is not authenticated',
+      error: authenticated
+        ? undefined
+        : eligibilityFailure
+          ? 'Antigravity account is not eligible. Verify the account in Antigravity and retry.'
+          : 'Antigravity CLI is not authenticated',
     };
   }
 }
