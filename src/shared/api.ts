@@ -376,6 +376,8 @@ export const api = {
   // Provider (coding agent) endpoints — models, capabilities, sessions, MCP, skills.
   providers: {
     capabilities: () => get('/api/providers/capabilities'),
+    // The providers the UI offers for new chats (VITE_ENABLED_PROVIDERS on the server).
+    enabled: () => get('/api/providers/enabled'),
     authStatus: (provider: string) =>
       get(`/api/providers/${encodeURIComponent(provider)}/auth/status`),
 

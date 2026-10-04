@@ -25,6 +25,7 @@ import {
 import ModelGroupList, { type ModelGroup } from "@/modules/chat/composer/ModelGroupList";
 import ModelLibraryPanel from "@/modules/chat/modals/ModelLibraryPanel";
 import { writeSelectedProvider } from '@/shared/selectedProvider';
+import { useEnabledProviders } from '@/shared/hooks/useEnabledProviders';
 
 const PROVIDER_META: { id: LLMProvider; name: string }[] = [
   { id: "claude", name: "Anthropic" },
@@ -106,6 +107,9 @@ export default function ProviderSelectionEmptyState({
   const [modelLibraryOpen, setModelLibraryOpen] = useState(false);
 
   const [modelSearch, setModelSearch] = useState("");
+  // The providers the server offers for new chats (VITE_ENABLED_PROVIDERS):
+  // the picker lists a model group only for these.
+  const enabledProviders = useEnabledProviders();
 
   /**
    * Opens and closes the picker, clearing the search on the way out.
@@ -121,15 +125,20 @@ export default function ProviderSelectionEmptyState({
     }
   }, []);
 
-  /** One collapsible branch per provider, in the order the picker lists them. */
+  /**
+   * One collapsible branch per provider the server enables, in the order the
+   * picker lists them.
+   */
   const visibleProviderGroups = useMemo<ModelGroup[]>(
-    () => PROVIDER_META.map((meta) => ({
-      key: meta.id,
-      provider: meta.id,
-      name: meta.name,
-      models: providerModelCatalog[meta.id]?.OPTIONS ?? [],
-    })),
-    [providerModelCatalog],
+    () => PROVIDER_META
+      .filter((meta) => enabledProviders.includes(meta.id))
+      .map((meta) => ({
+        key: meta.id,
+        provider: meta.id,
+        name: meta.name,
+        models: providerModelCatalog[meta.id]?.OPTIONS ?? [],
+      })),
+    [enabledProviders, providerModelCatalog],
   );
 
   const nextTaskPrompt = t("tasks.nextTaskPrompt", {

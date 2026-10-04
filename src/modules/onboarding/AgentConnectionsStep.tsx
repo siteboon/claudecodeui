@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 
 import type { LLMProvider, ProviderAuthStatusMap } from '@/shared/types';
+import { useEnabledProviders } from '@/shared/hooks/useEnabledProviders';
 import AgentConnectionCard from '@/modules/onboarding/AgentConnectionCard';
 
 type AgentConnectionsStepProps = {
@@ -39,12 +40,15 @@ const providerCards = [
   },
 ];
 
-/** Rendered by Onboarding as its second step, listing every CLI provider the user can log into. */
+/** Rendered by Onboarding as its second step, listing every enabled CLI provider the user can log into. */
 export default function AgentConnectionsStep({
   providerStatuses,
   onOpenProviderLogin,
 }: AgentConnectionsStepProps) {
   const { t } = useTranslation('auth');
+  // The providers the server offers (VITE_ENABLED_PROVIDERS): onboarding asks
+  // the user to connect only these.
+  const enabledProviders = useEnabledProviders();
   return (
     <div className="space-y-4">
       <div className="text-center">
@@ -55,7 +59,7 @@ export default function AgentConnectionsStep({
       </div>
 
       <div className="-mr-1 max-h-[38vh] space-y-2 overflow-y-auto pr-1">
-        {providerCards.map((providerCard) => (
+        {providerCards.filter((providerCard) => enabledProviders.includes(providerCard.provider)).map((providerCard) => (
           <AgentConnectionCard
             key={providerCard.provider}
             provider={providerCard.provider}

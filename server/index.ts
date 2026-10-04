@@ -12,6 +12,7 @@ import cors from 'cors';
 import { AppError, findApplicationRoot, getModuleDirectory, IS_PLATFORM, terminalTextStyles } from '@/shared/utils.js';
 import {
     closeSessionsWatcher,
+    enabledProvidersService,
     initializeSessionsWatcher,
     providerRuntimeService,
 } from '@/modules/providers/index.js';
@@ -343,6 +344,9 @@ async function startServer() {
 
         // Log Claude implementation mode
         console.log(`${terminalTextStyles.info('[INFO]')} Using Claude Agents SDK for Claude integration`);
+        // Parsed now so a typo in VITE_ENABLED_PROVIDERS shows up at startup,
+        // not on the first page load.
+        enabledProvidersService.getEnabledProviders();
         console.log('');
 
         if (isProduction) {

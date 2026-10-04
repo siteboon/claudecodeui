@@ -1,6 +1,7 @@
 import express, { type Request, type Response } from 'express';
 
 import { providerAuthService } from '@/modules/providers/services/provider-auth.service.js';
+import { enabledProvidersService } from '@/modules/providers/services/enabled-providers.service.js';
 import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
 import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
 import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
@@ -732,6 +733,17 @@ router.get(
   asyncHandler(async (_req: Request, res: Response) => {
     res.json(createApiSuccessResponse({
       providers: providerCapabilitiesService.listAllProviderCapabilities(),
+    }));
+  }),
+);
+
+// The providers the UI lists for new chats (VITE_ENABLED_PROVIDERS), first one
+// being the default. Every provider when the variable is unset.
+router.get(
+  '/enabled',
+  asyncHandler(async (_req: Request, res: Response) => {
+    res.json(createApiSuccessResponse({
+      providers: enabledProvidersService.getEnabledProviders(),
     }));
   }),
 );
