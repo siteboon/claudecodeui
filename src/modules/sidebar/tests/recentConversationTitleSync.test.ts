@@ -52,6 +52,7 @@ const renderController = (initialProjects: Project[]) => renderHook(
     selectedProject: null,
     selectedSession: null,
     activeSessions: new Set<string>(),
+    backgroundSessionIds: new Set<string>(),
     isLoading: false,
     isMobile: false,
     t,
