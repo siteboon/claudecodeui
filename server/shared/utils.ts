@@ -1074,7 +1074,7 @@ export function sanitizeLeafDirectoryName(inputName: string, label = 'directory 
  * The Claude, Codex and Cursor session synchronizers call this to find
  * transcript artifacts under provider home directories, with the
  * `scan_state.last_scanned_at` cursor as `lastScanAt` on incremental scans.
- * Pass `lastScanAt` to include only files created or modified after the
+ * Pass `lastScanAt` to include only files created or modified since the
  * previous scan, or pass `null` to perform a full rescan. Missing directories
  * are treated as empty because not every provider exists on every machine.
  *
@@ -1085,6 +1085,12 @@ export function sanitizeLeafDirectoryName(inputName: string, label = 'directory 
  * filter never looked at it again. The write that completes the file bumps its
  * `mtime` and brings it back into the next incremental scan. Files untouched
  * since `lastScanAt` stay skipped, so incremental scans remain incremental.
+ *
+ * Times equal to `lastScanAt` count as new. The cursor is stored in whole
+ * seconds, and a filesystem with 1-second timestamps (HFS+, some network
+ * mounts) stamps a write made in the cursor's own second with exactly that
+ * value. Callers skip files they already indexed at their current mtime, so
+ * the overlap costs a lookup, not a re-parse.
  */
 export async function findFilesRecursivelyCreatedOrModifiedAfter(
   rootDir: string,
@@ -1112,7 +1118,7 @@ export async function findFilesRecursivelyCreatedOrModifiedAfter(
       }
 
       const fileStat = await stat(fullPath);
-      if (fileStat.birthtime > lastScanAt || fileStat.mtime > lastScanAt) {
+      if (fileStat.birthtime >= lastScanAt || fileStat.mtime >= lastScanAt) {
         fileList.push(fullPath);
       }
     }

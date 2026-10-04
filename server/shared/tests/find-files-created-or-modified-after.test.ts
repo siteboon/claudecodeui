@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -42,7 +42,7 @@ test('an incremental scan includes a file created before the cursor but modified
   });
 });
 
-test('an incremental scan still includes a file created after the cursor whose mtime is older', async () => {
+test('an incremental scan still includes a file created after the cursor whose mtime is older', async (t) => {
   await withFixtureTree(async (root) => {
     // A copy that preserved its source's mtime (`cp -p`, archive restores) is
     // only recognisably new by its birthtime.
@@ -50,10 +50,28 @@ test('an incremental scan still includes a file created after the cursor whose m
     const copied = await writeFixtureFile(root, '-project/copied.jsonl', '{}\n');
     const preservedMtime = new Date('2020-01-01T00:00:00.000Z');
     await utimes(copied, preservedMtime, preservedMtime);
+    if ((await stat(copied)).birthtimeMs === 0) {
+      t.skip('this filesystem does not report file creation times');
+      return;
+    }
 
     const files = await findFilesRecursivelyCreatedOrModifiedAfter(root, '.jsonl', cursor);
 
     assert.deepEqual(relativeSorted(root, files), [path.join('-project', 'copied.jsonl')]);
+  });
+});
+
+test('an incremental scan includes a file whose mtime equals the cursor', async () => {
+  await withFixtureTree(async (root) => {
+    // The cursor is stored in whole seconds; a filesystem with 1-second
+    // timestamps stamps a write made in that same second with exactly it.
+    const cursor = new Date((Math.floor(Date.now() / 1000) + 60) * 1000);
+    const sameSecond = await writeFixtureFile(root, '-project/same-second.jsonl', '{}\n');
+    await utimes(sameSecond, cursor, cursor);
+
+    const files = await findFilesRecursivelyCreatedOrModifiedAfter(root, '.jsonl', cursor);
+
+    assert.deepEqual(relativeSorted(root, files), [path.join('-project', 'same-second.jsonl')]);
   });
 });
 
