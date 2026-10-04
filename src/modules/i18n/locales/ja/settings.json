@@ -385,7 +385,7 @@
     },
     "settingsFiles": {
       "title": "Claude 設定ファイルのルール",
-      "description": "Claude CLI は上のリストに加えてこれらのルールも適用し、拒否ルールはどこで設定されていても優先されます。ここでは読み取り専用です。編集はファイルで行ってください。",
+      "description": "Claude CLI は上のリストに加えてこれらのルールも適用します。拒否ルールはどこで設定されていても優先されますが、「許可されたツール」で既に許可されているツールには、確認ルールがあっても確認は求められません。ここでは読み取り専用です。編集はファイルで行ってください。",
       "sources": {
         "user": "ユーザー設定",
         "managed": "管理対象の設定（管理者）"
@@ -400,7 +400,7 @@
       "empty": "このファイルには権限ルールがありません。",
       "loading": "ルールを読み込み中…",
       "loadFailed": "Claude 設定ファイルのルールを読み込めませんでした。",
-      "projectNote": "プロジェクト内の .claude/settings.json と .claude/settings.local.json も、そのプロジェクトのチャットに適用されます。"
+      "projectNote": "プロジェクト内の .claude/settings.json と .claude/settings.local.json も、そのプロジェクトのチャットに適用されます。ただし、フォルダーが信頼されるまで Claude CLI は .claude/settings.json の許可ルールを無視します。そのフォルダーで Claude Code を一度対話モードで起動し、信頼ダイアログを承認してください。"
     },
     "allowedCommands": {
       "title": "許可されたシェルコマンド",

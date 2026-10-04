@@ -32,7 +32,7 @@ function SettingsFileCard({ source }: { source: ClaudeSettingsPermissionSource }
       )}
 
       {RULE_GROUPS.filter(({ key }) => source[key].length > 0).map(({ key, chipClassName }) => (
-        <div key={key} className="space-y-1">
+        <div key={key} className="space-y-1" data-testid={`claude-settings-file-${source.scope}-${key}`}>
           <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {t(`permissions.settingsFiles.groups.${key}`)}
           </div>

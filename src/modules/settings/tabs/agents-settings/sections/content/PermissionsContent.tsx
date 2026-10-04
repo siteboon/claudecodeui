@@ -246,8 +246,6 @@ function ClaudePermissions({
         </div>
       </div>
 
-      <ClaudeSettingsFileRules />
-
       <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
         <h4 className="mb-2 font-medium text-blue-900 dark:text-blue-100">
           {t('permissions.toolExamples.title')}
@@ -259,6 +257,9 @@ function ClaudePermissions({
           <li><code className="rounded bg-blue-100 px-1 dark:bg-blue-800">"Bash(rm:*)"</code> {t('permissions.toolExamples.bashRm')}</li>
         </ul>
       </div>
+
+      {/* Below the examples, so they stay next to the two inputs whose syntax they explain. */}
+      <ClaudeSettingsFileRules />
 
     </div>
   );

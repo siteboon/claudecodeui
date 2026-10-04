@@ -35,6 +35,16 @@ const respondWith = (sources: ClaudeSettingsPermissionSource[]) => {
   );
 };
 
+// The label and the rules of one Allow/Ask/Deny group, so a rule shown under
+// the wrong label (a deny rule presented as allowed) fails the test.
+const ruleGroup = (scope: ClaudeSettingsPermissionSource['scope'], key: 'allow' | 'ask' | 'deny') => {
+  const group = screen.getByTestId(`claude-settings-file-${scope}-${key}`);
+  return {
+    label: group.firstElementChild?.textContent,
+    rules: within(group).getAllByRole('listitem').map((item) => item.textContent),
+  };
+};
+
 const renderClaudePermissions = () => render(
   <PermissionsContent
     agent="claude"
@@ -58,25 +68,27 @@ describe('Claude permissions: rules from the Claude settings files', () => {
       source({ scope: 'managed', path: '/etc/claude-code/managed-settings.json', status: 'missing' }),
     ]);
     renderClaudePermissions();
+    // Until the server answers, the panel says it is loading rather than "no rules".
+    expect(screen.getByText('Loading rules…')).toBeTruthy();
 
     const card = await screen.findByTestId('claude-settings-file-user');
+    expect(screen.queryByText('Loading rules…')).toBeNull();
     expect(within(card).getByText('Your settings')).toBeTruthy();
     expect(within(card).getByText('/home/me/.claude/settings.json')).toBeTruthy();
-    expect(within(card).getByText('Allow')).toBeTruthy();
-    expect(within(card).getByText('Bash(npm run test:*)')).toBeTruthy();
-    expect(within(card).getByText('WebFetch')).toBeTruthy();
-    expect(within(card).getByText('Ask')).toBeTruthy();
-    expect(within(card).getByText('Bash(git push:*)')).toBeTruthy();
-    expect(within(card).getByText('Deny')).toBeTruthy();
-    expect(within(card).getByText('Bash(rm:*)')).toBeTruthy();
+    expect(ruleGroup('user', 'allow')).toEqual({ label: 'Allow', rules: ['Bash(npm run test:*)', 'WebFetch'] });
+    expect(ruleGroup('user', 'ask')).toEqual({ label: 'Ask', rules: ['Bash(git push:*)'] });
+    expect(ruleGroup('user', 'deny')).toEqual({ label: 'Deny', rules: ['Bash(rm:*)'] });
     // Read-only: no remove buttons inside the file card.
     expect(within(card).queryByRole('button')).toBeNull();
 
     const section = screen.getByTestId('claude-settings-file-rules');
     expect(section.textContent).toContain('Rules from Claude settings files');
     expect(section.textContent).toContain('on top of the lists above');
+    expect(section.textContent).toContain('an ask rule does not prompt for a tool that Allowed Tools already allows');
     expect(section.textContent).toContain('edit them in the files');
     expect(section.textContent).toContain('.claude/settings.local.json also apply to chats in that project');
+    // The CLI drops a project's shared allow rules until the folder is trusted.
+    expect(section.textContent).toContain('ignores allow rules in .claude/settings.json until the folder is trusted');
     // A managed file that does not exist is the normal case and stays hidden.
     expect(screen.queryByTestId('claude-settings-file-managed')).toBeNull();
     // The UI's own list is still there and unchanged.
@@ -92,7 +104,8 @@ describe('Claude permissions: rules from the Claude settings files', () => {
 
     const managed = await screen.findByTestId('claude-settings-file-managed');
     expect(within(managed).getByText('Managed settings (administrator)')).toBeTruthy();
-    expect(within(managed).getByText('WebSearch')).toBeTruthy();
+    expect(ruleGroup('managed', 'deny')).toEqual({ label: 'Deny', rules: ['WebSearch'] });
+    expect(within(managed).queryByText('Allow')).toBeNull();
     expect(within(screen.getByTestId('claude-settings-file-user')).getByText('File not found, so it adds no rules.')).toBeTruthy();
   });
 
@@ -111,6 +124,17 @@ describe('Claude permissions: rules from the Claude settings files', () => {
 
     const card = await screen.findByTestId('claude-settings-file-user');
     expect(card.textContent).toContain('No permission rules in this file.');
+  });
+
+  it('shows the load hint when the server answers with an error envelope', async () => {
+    claudeSettingsPermissions.mockResolvedValue(
+      new Response(JSON.stringify({ success: false, error: { message: 'boom' } }), { status: 500 }),
+    );
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    renderClaudePermissions();
+
+    expect(await screen.findByText('Could not load the rules from the Claude settings files.')).toBeTruthy();
+    expect(screen.queryByTestId('claude-settings-file-user')).toBeNull();
   });
 
   it('keeps the panel usable and shows a short hint when the rules cannot be loaded', async () => {

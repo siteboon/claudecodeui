@@ -386,7 +386,7 @@
     },
     "settingsFiles": {
       "title": "Claude ayar dosyalarındaki kurallar",
-      "description": "Claude CLI bu kuralları yukarıdaki listelere ek olarak da uygular ve bir reddetme kuralı nerede tanımlanmış olursa olsun önceliklidir. Burada salt okunurdur; dosyalarda düzenleyin.",
+      "description": "Claude CLI bu kuralları yukarıdaki listelere ek olarak da uygular. Bir reddetme kuralı nerede tanımlanmış olursa olsun önceliklidir, ancak bir sorma kuralı İzin Verilen Araçlar listesinde zaten bulunan bir araç için onay istemez. Kurallar burada salt okunurdur; dosyalarda düzenleyin.",
       "sources": {
         "user": "Ayarlarınız",
         "managed": "Yönetilen ayarlar (yönetici)"
@@ -401,7 +401,7 @@
       "empty": "Bu dosyada izin kuralı yok.",
       "loading": "Kurallar yükleniyor…",
       "loadFailed": "Claude ayar dosyalarındaki kurallar yüklenemedi.",
-      "projectNote": "Bir projenin kendi .claude/settings.json ve .claude/settings.local.json dosyaları da o projedeki sohbetlere uygulanır."
+      "projectNote": "Bir projenin kendi .claude/settings.json ve .claude/settings.local.json dosyaları da o projedeki sohbetlere uygulanır. Claude CLI, klasöre güvenilene kadar .claude/settings.json içindeki izin kurallarını yok sayar: Claude Code'u orada bir kez etkileşimli olarak çalıştırın ve güven iletişim kutusunu kabul edin."
     },
     "allowedCommands": {
       "title": "İzin Verilen Shell Komutları",

@@ -385,7 +385,7 @@
     },
     "settingsFiles": {
       "title": "Regeln aus den Claude-Einstellungsdateien",
-      "description": "Die Claude CLI wendet diese Regeln zusätzlich zu den Listen oben an, und eine Verbotsregel hat immer Vorrang, egal wo sie steht. Hier sind sie nur lesbar; bearbeite sie in den Dateien.",
+      "description": "Die Claude CLI wendet diese Regeln zusätzlich zu den Listen oben an. Eine Verbotsregel hat immer Vorrang, egal wo sie steht, aber eine Nachfrage-Regel fragt nicht nach, wenn das Werkzeug schon unter Erlaubte Werkzeuge steht. Hier sind die Regeln nur lesbar; bearbeite sie in den Dateien.",
       "sources": {
         "user": "Deine Einstellungen",
         "managed": "Verwaltete Einstellungen (Administrator)"
@@ -400,7 +400,7 @@
       "empty": "Keine Berechtigungsregeln in dieser Datei.",
       "loading": "Regeln werden geladen…",
       "loadFailed": "Die Regeln aus den Claude-Einstellungsdateien konnten nicht geladen werden.",
-      "projectNote": "Die eigene .claude/settings.json und .claude/settings.local.json eines Projekts gelten zusätzlich für Chats in diesem Projekt."
+      "projectNote": "Die eigene .claude/settings.json und .claude/settings.local.json eines Projekts gelten zusätzlich für Chats in diesem Projekt. Erlaubnisregeln aus .claude/settings.json ignoriert die Claude CLI, bis du dem Ordner vertraust: Starte Claude Code dort einmal interaktiv und bestätige den Vertrauensdialog."
     },
     "allowedCommands": {
       "title": "Erlaubte Shell-Befehle",
