@@ -22,6 +22,18 @@ type ParsedProviderList = {
 };
 
 /**
+ * Drops one pair of matching surrounding quotes, single or double.
+ * server/load-env.ts copies `.env` values verbatim, so without this
+ * `VITE_ENABLED_PROVIDERS="claude,codex"` would name the unknown ids `"claude`
+ * and `codex"` and enable every provider instead.
+ */
+function stripSurroundingQuotes(rawValue: string): string {
+  const value = rawValue.trim();
+  const isQuoted = value.length >= 2 && (value[0] === '"' || value[0] === "'") && value.at(-1) === value[0];
+  return isQuoted ? value.slice(1, -1) : value;
+}
+
+/**
  * Splits a comma-separated provider list. Ids are trimmed and
  * case-insensitive, and a repeated id keeps the place of its first occurrence.
  */
@@ -32,7 +44,7 @@ function parseProviderList(
   const listedProviders: LLMProvider[] = [];
   const unknownIds: string[] = [];
 
-  for (const entry of (rawValue ?? '').split(',')) {
+  for (const entry of stripSurroundingQuotes(rawValue ?? '').split(',')) {
     const id = entry.trim().toLowerCase();
     if (!id) {
       continue;

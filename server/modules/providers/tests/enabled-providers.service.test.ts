@@ -59,6 +59,18 @@ test('ids are trimmed, case-insensitive, de-duplicated and keep their listed ord
   assert.deepEqual(warnings, []);
 });
 
+test('a quoted value from .env is read without its quotes', (t) => {
+  // server/load-env.ts keeps quotes, so `VITE_ENABLED_PROVIDERS="claude,codex"`
+  // in .env arrives quoted; read as ids, the quotes would enable every provider.
+  const doubleQuoted = readWithValue(t, '"claude,codex"');
+  assert.deepEqual(doubleQuoted.providers, ['claude', 'codex']);
+  assert.deepEqual(doubleQuoted.warnings, []);
+
+  const singleQuoted = readWithValue(t, " ' codex ' ");
+  assert.deepEqual(singleQuoted.providers, ['codex']);
+  assert.deepEqual(singleQuoted.warnings, []);
+});
+
 test('unknown ids are dropped and named in one warning', (t) => {
   const { providers, warnings } = readWithValue(t, 'foo,cursor,Bar,foo');
 
