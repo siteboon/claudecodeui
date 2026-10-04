@@ -94,6 +94,7 @@
           "src/shared/api.ts",
           "src/shared/uiPreferences.ts",
           "src/shared/selectedProvider.ts",
+          "src/shared/enabledProviders.ts",
           "src/shared/authToken.ts",
           "src/shared/voiceConfig.ts",
           "src/shared/codeEditorSettings.ts",
