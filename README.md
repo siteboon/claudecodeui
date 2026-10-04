@@ -165,7 +165,7 @@ To use Claude Code's full functionality, you'll need to manually enable tools:
 
 ### Restricting file system access
 
-Set `ALLOWED_PATHS` (comma-separated directories) to limit what the web UI and the API can reach. When it is set, only projects inside those directories appear in the sidebar, the folder picker and file browser stay inside them, new workspaces can only be created inside them, and the project, file, Git, TaskMaster, worktree, session, command, MCP and skills APIs answer `403` for paths outside them. Symlinks are resolved before the check, and the startup log warns about entries that do not exist.
+Set `ALLOWED_PATHS` (comma-separated directories) to limit what the web UI and the API can reach. When it is set, only projects inside those directories appear in the sidebar, the folder picker and file browser stay inside them, new workspaces can only be created inside them, and the project, file, Git, TaskMaster, worktree, session, command, MCP and skills APIs answer `403` for paths outside them. Symlinks are resolved before the check, and the startup log warns about entries that do not exist and about a value that names no directory at all (which leaves access unrestricted).
 
 | `WORKSPACES_ROOT` | `ALLOWED_PATHS` | Accessible |
 |---|---|---|

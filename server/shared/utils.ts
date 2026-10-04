@@ -490,8 +490,8 @@ function stripEntryQuotes(entry: string): string {
  * resolved here because an allowed directory may not exist yet when the
  * server starts; `isPathAllowed` resolves both sides on every check instead.
  *
- * Used to build `ALLOWED_PATHS` and by the shared tests. An empty result means
- * "no restriction".
+ * Used to build `ALLOWED_PATHS`, by `findEmptyAllowedPathsWarning` and by the
+ * shared tests. An empty result means "no restriction".
  */
 export function parseAllowedPaths(rawValue: string | undefined, homeDirectory: string = os.homedir()): string[] {
   if (typeof rawValue !== 'string') {
