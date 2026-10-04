@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -29,20 +29,54 @@ import { connectedClients } from '@/modules/websocket/services/websocket-state.s
 
 const SESSION_ID = 'wsl-session';
 
-function createFakeSocket() {
-  const socket = new EventEmitter() as EventEmitter & {
-    readyState: number;
-    OPEN: number;
-    frames: Array<Record<string, unknown>>;
-    send: (data: string) => void;
-    close: () => void;
-  };
+type FakeSocket = EventEmitter & {
+  readyState: number;
+  OPEN: number;
+  frames: Array<Record<string, unknown>>;
+  send: (data: string) => void;
+  close: () => void;
+};
+
+function createFakeSocket(): FakeSocket {
+  const socket = new EventEmitter() as FakeSocket;
   socket.readyState = 1;
   socket.OPEN = 1;
   socket.frames = [];
-  socket.send = (data: string) => socket.frames.push(JSON.parse(data) as Record<string, unknown>);
+  socket.send = (data: string) => {
+    const frame = JSON.parse(data) as Record<string, unknown>;
+    socket.frames.push(frame);
+    socket.emit('test:frame', frame);
+  };
   socket.close = () => {};
   return socket;
+}
+
+/**
+ * Resolves once the run's terminal `complete` frame reached the socket. Every
+ * turn ends with one: the gateway emits it for a turn it stops, and for a
+ * runtime that returns without its own. The handler is async and the socket
+ * listener does not await it, so this is how a test knows the turn is over.
+ * Gives up after `timeoutMs`, so a turn that never ends fails the test instead
+ * of hanging it.
+ */
+function waitForComplete(socket: FakeSocket, timeoutMs = 5000): Promise<void> {
+  if (socket.frames.some((frame) => frame.kind === 'complete')) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve, reject) => {
+    const onFrame = (frame: Record<string, unknown>) => {
+      if (frame.kind === 'complete') {
+        clearTimeout(timer);
+        socket.off('test:frame', onFrame);
+        resolve();
+      }
+    };
+    const timer = setTimeout(() => {
+      socket.off('test:frame', onFrame);
+      reject(new Error(`No complete frame within ${timeoutMs} ms`));
+    }, timeoutMs);
+    socket.on('test:frame', onFrame);
+  });
 }
 
 type RunCall = { provider: string; options: Record<string, unknown> };
@@ -107,9 +141,6 @@ async function withSession(
   }
 }
 
-/** The handler is async and the socket listener does not await it. */
-const settle = () => new Promise((resolve) => { setTimeout(resolve, 30); });
-
 const missingFolder = async (tempDirectory: string) => path.join(tempDirectory, 'home', 'nobody', 'wsl-project');
 
 /** Sends one chat frame for the session and returns what the gateway did with it. */
@@ -118,7 +149,7 @@ async function send(options?: Record<string, unknown>) {
   const runs: RunCall[] = [];
   handleChatConnection(socket as never, { user: { id: 1 } } as never, { runtime: runtime(runs) });
   socket.emit('message', JSON.stringify({ type: 'chat.send', sessionId: SESSION_ID, content: 'hello', options }));
-  await settle();
+  await waitForComplete(socket);
   return { socket, runs, error: socket.frames.find((frame) => frame.kind === 'error') };
 }
 
@@ -232,7 +263,7 @@ test('an edit in a missing folder neither truncates the chat nor rewinds the con
         anchorId: 'turn-b',
         content: 'a better second prompt',
       }));
-      await settle();
+      await waitForComplete(socket);
     } finally {
       sessionsService.rewindSessionForEdit = realRewind;
     }
@@ -277,6 +308,27 @@ const directoryCases: Array<{
     provider: 'cursor',
     options: () => ({ cwd: '' }),
     blocked: true,
+  },
+  {
+    // The runtimes test truthiness, not trimmed text, so they would spawn in
+    // this path and fail with ENOENT. It is checked like any other path.
+    name: 'a whitespace-only options.cwd is checked as a path, as the runtimes use it',
+    pickProjectPath: async (tempDirectory) => tempDirectory,
+    options: () => ({ cwd: '  ' }),
+    blocked: true,
+  },
+  {
+    // A link is followed, like spawn follows it: a project folder that is a
+    // symlink to a real folder (or a Windows junction) is a folder.
+    name: 'a project folder that is a symlink to a real folder still runs',
+    pickProjectPath: async (tempDirectory) => {
+      const realFolder = path.join(tempDirectory, 'real-project');
+      const linkedFolder = path.join(tempDirectory, 'linked-project');
+      await mkdir(realFolder);
+      await symlink(realFolder, linkedFolder, 'junction');
+      return linkedFolder;
+    },
+    blocked: false,
   },
   {
     name: 'a session without a project path still runs',
