@@ -10,7 +10,8 @@ import type { ChatMessage, NormalizedMessage } from '@/shared/types';
 // When the server runs as root, Claude Code refuses bypass-permissions mode,
 // so the turn runs with approvals and the server adds an error row saying why
 // (#641). The row's text is the English fallback; `noticeCode` is what lets
-// the reader see it in their own language.
+// the reader see it in their own language, and drawn as a note rather than
+// as an Error, since the turn itself goes on.
 const ENGLISH_FALLBACK = 'Bypass permissions was not applied (server text)';
 
 const noticeRow: NormalizedMessage = {
@@ -23,10 +24,10 @@ const noticeRow: NormalizedMessage = {
   noticeCode: 'claude_bypass_refused_as_root',
 };
 
-const renderMessage = (message: ChatMessage) =>
+const renderMessage = (message: ChatMessage, prevMessage: ChatMessage | null = null) =>
   render(
     <UiPreferencesProvider>
-      <MessageComponent message={message} prevMessage={null} createDiff={() => []} provider="claude" />
+      <MessageComponent message={message} prevMessage={prevMessage} createDiff={() => []} provider="claude" />
     </UiPreferencesProvider>,
   );
 
@@ -46,6 +47,28 @@ describe('the root bypass notice in the transcript', () => {
     expect(screen.queryByText(ENGLISH_FALLBACK)).toBeNull();
   });
 
+  it('is drawn as a note, without the Error header and badge', () => {
+    const [message] = normalizedToChatMessages([noticeRow]);
+
+    renderMessage(message!);
+
+    expect(screen.getByText(/^Bypass permissions was not applied: CloudCLI is running as root/)).toBeTruthy();
+    expect(screen.queryByText('Error')).toBeNull();
+    expect(screen.queryByText('!')).toBeNull();
+  });
+
+  it('does not swallow the header of an error that follows it', () => {
+    const [notice, error] = normalizedToChatMessages([
+      noticeRow,
+      { ...noticeRow, id: 'error-1', content: 'Claude Code process exited with code 1', noticeCode: undefined },
+    ]);
+
+    renderMessage(error!, notice!);
+
+    expect(screen.getByText('Error')).toBeTruthy();
+    expect(screen.getByText('Claude Code process exited with code 1')).toBeTruthy();
+  });
+
   it('leaves other error rows as the server wrote them', () => {
     const [message] = normalizedToChatMessages([
       { ...noticeRow, id: 'error-1', content: 'Claude Code process exited with code 1', noticeCode: undefined },
@@ -53,6 +76,7 @@ describe('the root bypass notice in the transcript', () => {
 
     renderMessage(message!);
 
+    expect(screen.getByText('Error')).toBeTruthy();
     expect(screen.getByText('Claude Code process exited with code 1')).toBeTruthy();
   });
 });

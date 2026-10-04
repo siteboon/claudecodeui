@@ -54,7 +54,8 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
     ((prevMessage.type === 'assistant') ||
       (prevMessage.type === 'user') ||
       (prevMessage.type === 'tool') ||
-      (prevMessage.type === 'error'));
+      // A notice draws no header, so an error right after it needs its own.
+      (prevMessage.type === 'error' && !prevMessage.noticeCode));
   const messageRef = useRef<HTMLDivElement | null>(null);
   const userCopyContent = String(message.content || '');
   const formattedMessageContent = useMemo(
@@ -203,6 +204,15 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
           <div className="flex items-center gap-2 py-0.5">
             <span className={`inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${message.taskNotificationStatus === 'completed' ? 'bg-green-400 dark:bg-green-500' : 'bg-amber-400 dark:bg-amber-500'}`} />
             <span className="text-xs text-gray-500 dark:text-gray-400">{message.content}</span>
+          </div>
+        </div>
+      ) : message.type === 'error' && message.noticeCode ? (
+        /* An app notice on an error row, e.g. bypass not applied as root: the
+           turn itself went on, so it is a compact note, not an Error row */
+        <div className="w-full">
+          <div className="flex items-start gap-2 py-0.5">
+            <span className="mt-[5px] inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full bg-amber-400 dark:bg-amber-500" />
+            <span className="text-xs text-gray-500 dark:text-gray-400">{formattedMessageContent}</span>
           </div>
         </div>
       ) : (
