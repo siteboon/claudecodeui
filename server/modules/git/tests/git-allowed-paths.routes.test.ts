@@ -179,6 +179,22 @@ test('an allowed id in the query does not let the body name an outside project',
   assert.deepEqual(callsOutsideAllowedPaths(calls), []);
 });
 
+test('an unknown id in the query does not stop the body id from being checked', async () => {
+  const calls: GitCall[] = [];
+
+  await withGitServer(calls, async (baseUrl) => {
+    const commit = await postJson(`${baseUrl}/api/git/commit?project=unknown`, {
+      project: 'outside',
+      message: 'm',
+      files: ['secret.txt'],
+    });
+    assert.equal(commit.status, 403);
+    assert.deepEqual(await commit.json(), { error: PATH_NOT_ALLOWED_MESSAGE });
+  });
+
+  assert.deepEqual(callsOutsideAllowedPaths(calls), []);
+});
+
 test('an array project id is refused instead of skipping the check', async () => {
   const calls: GitCall[] = [];
 
