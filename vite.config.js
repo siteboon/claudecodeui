@@ -2,7 +2,7 @@ import { createRequire } from 'node:module'
 import { fileURLToPath, URL } from 'node:url'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
-import { getConnectableHost, getListenHost, normalizeLoopbackHost } from './shared/networkHosts.js'
+import { getConnectableHost, getListenHost, getViteListenHost } from './shared/networkHosts.js'
 
 // The client shows the installed package version so it can be compared against the
 // version the server process is actually running. Reading package.json here and
@@ -14,11 +14,9 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
   const configuredHost = getListenHost(env.HOST)
-  // HOST unset: `true` makes Vite listen without a host, so like the backend it accepts IPv4 and
-  // IPv6 on every interface. Any other HOST is used as is ('0.0.0.0' = every IPv4 interface only),
-  // except that loopback addresses become 'localhost'. Browser URLs and proxy targets use
-  // 'localhost' for wildcard and loopback hosts.
-  const host = configuredHost === undefined ? true : normalizeLoopbackHost(configuredHost)
+  // HOST unset: like the backend, Vite accepts IPv4 and IPv6 on every interface. Browser URLs and
+  // proxy targets use 'localhost' for wildcard and loopback hosts.
+  const host = getViteListenHost(configuredHost)
   
   const proxyHost = getConnectableHost(configuredHost)
   // TODO: Remove support for legacy PORT variables in all locations in a future major release, leaving only SERVER_PORT.

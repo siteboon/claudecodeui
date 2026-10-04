@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import test from 'node:test';
 
-import { getConnectableHost, getListenHost } from '../../../shared/networkHosts.js';
+import { getConnectableHost, getListenHost, getViteListenHost } from '../../../shared/networkHosts.js';
 
 /**
  * HOST unset (issue #399) has to make the backend and the Vite dev server accept IPv4 and IPv6
@@ -76,6 +76,50 @@ test('never turns a wildcard listen host into a browser URL host', () => {
   assert.equal(getConnectableHost(getListenHost(undefined)), 'localhost');
   assert.equal(getConnectableHost(getListenHost('::')), 'localhost');
   assert.equal(getConnectableHost(getListenHost('0.0.0.0')), 'localhost');
+});
+
+test('lets Vite leave the listen host out when HOST is unset or empty', () => {
+  // `true`, not '::' or '0.0.0.0': only a listen() without a host is dual-stack with an IPv4 fallback.
+  assert.equal(getViteListenHost(undefined), true);
+  assert.equal(getViteListenHost(''), true);
+});
+
+test('passes an explicit HOST to Vite, with loopback addresses as localhost', () => {
+  for (const host of ['0.0.0.0', '::', '192.168.1.20', 'my-host.lan']) {
+    assert.equal(getViteListenHost(host), host);
+  }
+  for (const host of ['127.0.0.1', '::1', 'localhost']) {
+    assert.equal(getViteListenHost(host), 'localhost');
+  }
+});
+
+type ViteConfigFactory = (env: { mode: string; command: string }) => { server: { host?: unknown } };
+
+// Runs vite.config.js with a HOST value and returns the `server.host` it gives Vite. The config is
+// imported through a runtime URL so tsc does not pull it (and Vite's types) into the server build.
+async function getViteConfigHost(host: string): Promise<unknown> {
+  const viteConfigUrl = new URL('../../../vite.config.js', import.meta.url).href;
+  const { default: createViteConfig } = (await import(viteConfigUrl)) as { default: ViteConfigFactory };
+  const previousHost = process.env.HOST;
+  process.env.HOST = host;
+  try {
+    return createViteConfig({ mode: 'test', command: 'serve' }).server.host;
+  } finally {
+    if (previousHost === undefined) {
+      delete process.env.HOST;
+    } else {
+      process.env.HOST = previousHost;
+    }
+  }
+}
+
+test('vite.config.js hands Vite the listen host for HOST', async () => {
+  // Vite prefers process.env over .env files, so an empty HOST stands in for an unset one even
+  // when a local .env sets HOST.
+  assert.equal(await getViteConfigHost(''), true);
+  assert.equal(await getViteConfigHost('0.0.0.0'), '0.0.0.0');
+  assert.equal(await getViteConfigHost('::'), '::');
+  assert.equal(await getViteConfigHost('127.0.0.1'), 'localhost');
 });
 
 test('HOST unset accepts IPv4 and IPv6 loopback connections', { skip: IPV6_LOOPBACK_SKIP }, async () => {
