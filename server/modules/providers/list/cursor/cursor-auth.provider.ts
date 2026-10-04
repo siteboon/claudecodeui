@@ -10,9 +10,10 @@ type CursorLoginStatus = {
   error?: string;
 };
 
-// `cursor-agent status` reads the stored tokens and then confirms them with a request to
-// Cursor's API, so it costs the CLI's startup (3-6 s on a busy host even when logged out)
-// plus a network round trip. A 5 s cap reported fresh logins as "Command timeout" (#551).
+// `cursor-agent status` decides "logged in" from the locally stored tokens, then fetches the
+// account details from Cursor's API. That request cannot change the verdict (on failure the CLI
+// still reports logged in), it only adds a network round trip to the CLI's startup (3-6 s on a
+// busy host even when logged out). A 5 s cap reported fresh logins as "Command timeout" (#551).
 const STATUS_TIMEOUT_MS = 20_000;
 
 export class CursorProviderAuth implements IProviderAuth {
@@ -117,8 +118,10 @@ export class CursorProviderAuth implements IProviderAuth {
             return;
           }
 
+          // e.g. "Logged in (unable to fetch user details)" when the account request failed.
+          // There is no email to show, so the UI uses its own fallback label.
           if (stdout.includes('Logged in')) {
-            resolve({ authenticated: true, email: 'Logged in', method: 'cli' });
+            resolve({ authenticated: true, email: null, method: 'cli' });
             return;
           }
 
