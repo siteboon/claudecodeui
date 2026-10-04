@@ -2,8 +2,9 @@ import { Bell, BellOff, BellRing, Loader2, Play, Volume2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/shared/ui';
-import { playChatCompletionSound } from '@/shared/utils';
+import { IS_PLATFORM, playChatCompletionSound } from '@/shared/utils';
 import type { NotificationPreferencesState } from '@/shared/types';
+import KeepAwakeSettingsCard from '@/modules/settings/tabs/KeepAwakeSettingsCard';
 
 type NotificationsSettingsTabProps = {
   notificationPreferences: NotificationPreferencesState;
@@ -25,7 +26,7 @@ type NotificationsSettingsTabProps = {
   onDisableDesktopNotifications?: () => void;
 };
 
-/** Rendered by Settings for the "notifications" tab, covering notification channels and events. */
+/** Rendered by Settings for the "notifications" tab, covering notification channels, events and keeping the computer awake during runs. */
 export default function NotificationsSettingsTab({
   notificationPreferences,
   onNotificationPreferencesChange,
@@ -256,6 +257,9 @@ export default function NotificationsSettingsTab({
           </label>
         </div>
       </div>
+
+      {/* Hosted instances run in the cloud: there is no computer of the user's to keep awake. */}
+      {!IS_PLATFORM && <KeepAwakeSettingsCard />}
     </div>
   );
 }

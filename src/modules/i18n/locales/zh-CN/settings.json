@@ -167,6 +167,13 @@
       "error": "运行失败"
     }
   },
+  "keepAwake": {
+    "title": "智能体工作时保持此电脑唤醒",
+    "description": "在智能体工作期间，阻止运行 CloudCLI 的电脑自行进入睡眠，以免长时间运行被中断。屏幕仍可能关闭，合上笔记本电脑的盖子仍可能使其进入睡眠。",
+    "unsupported": "此电脑上不可用。在 Linux 上需要 systemd（systemd-inhibit）。",
+    "loadFailed": "无法加载此设置。",
+    "saveFailed": "无法保存此设置，请重试。"
+  },
   "appearanceSettings": {
     "darkMode": {
       "label": "深色模式",

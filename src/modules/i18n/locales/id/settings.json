@@ -167,6 +167,13 @@
       "error": "Proses gagal"
     }
   },
+  "keepAwake": {
+    "title": "Jaga komputer ini tetap aktif saat agen bekerja",
+    "description": "Mencegah komputer yang menjalankan CloudCLI masuk ke mode tidur dengan sendirinya selama agen bekerja, sehingga proses yang panjang tidak terputus. Layar tetap bisa mati, dan menutup layar laptop tetap bisa membuatnya masuk ke mode tidur.",
+    "unsupported": "Tidak tersedia di komputer ini. Di Linux, fitur ini memerlukan systemd (systemd-inhibit).",
+    "loadFailed": "Gagal memuat pengaturan ini.",
+    "saveFailed": "Gagal menyimpan pengaturan ini. Silakan coba lagi."
+  },
   "appearanceSettings": {
     "darkMode": {
       "label": "Mode Gelap",

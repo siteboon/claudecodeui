@@ -141,6 +141,13 @@
       "error": "Exécution échouée"
     }
   },
+  "keepAwake": {
+    "title": "Garder cet ordinateur éveillé pendant que les agents travaillent",
+    "description": "Empêche l'ordinateur qui exécute CloudCLI de se mettre en veille de lui-même pendant qu'un agent travaille, afin que les longues exécutions ne soient pas interrompues. L'écran peut quand même s'éteindre, et fermer le capot d'un ordinateur portable peut toujours le mettre en veille.",
+    "unsupported": "Non disponible sur cet ordinateur. Sous Linux, systemd (systemd-inhibit) est nécessaire.",
+    "loadFailed": "Impossible de charger ce paramètre.",
+    "saveFailed": "Impossible d'enregistrer ce paramètre. Veuillez réessayer."
+  },
   "appearanceSettings": {
     "darkMode": {
       "label": "Mode sombre",

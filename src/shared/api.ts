@@ -566,6 +566,9 @@ export const api = {
 
   system: {
     update: () => post('/api/system/update'),
+    // Whether the computer running the server is kept awake while agents work.
+    keepAwake: () => get('/api/system/keep-awake'),
+    saveKeepAwake: (enabled: boolean) => put('/api/system/keep-awake', { enabled }),
   },
 };
 

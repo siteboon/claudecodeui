@@ -167,6 +167,13 @@
       "error": "실행 실패"
     }
   },
+  "keepAwake": {
+    "title": "에이전트가 작업하는 동안 이 컴퓨터를 깨어 있게 유지",
+    "description": "에이전트가 작업하는 동안 CloudCLI가 실행 중인 컴퓨터가 저절로 절전 모드로 전환되지 않도록 하여 긴 실행이 중단되지 않게 합니다. 화면은 꺼질 수 있으며, 노트북 덮개를 닫으면 여전히 절전 모드로 전환될 수 있습니다.",
+    "unsupported": "이 컴퓨터에서는 사용할 수 없습니다. Linux에서는 systemd(systemd-inhibit)가 필요합니다.",
+    "loadFailed": "이 설정을 불러오지 못했습니다.",
+    "saveFailed": "이 설정을 저장하지 못했습니다. 다시 시도해 주세요."
+  },
   "appearanceSettings": {
     "darkMode": {
       "label": "다크 모드",

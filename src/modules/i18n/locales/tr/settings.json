@@ -142,6 +142,13 @@
       "error": "Çalıştırma başarısız"
     }
   },
+  "keepAwake": {
+    "title": "Ajanlar çalışırken bu bilgisayarı uyanık tut",
+    "description": "Bir ajan çalışırken CloudCLI çalıştıran bilgisayarın kendiliğinden uyku moduna geçmesini önler; böylece uzun çalıştırmalar yarıda kesilmez. Ekran yine de kapanabilir ve dizüstü bilgisayarın kapağını kapatmak onu yine de uyku moduna geçirebilir.",
+    "unsupported": "Bu bilgisayarda kullanılamaz. Linux'ta systemd (systemd-inhibit) gerekir.",
+    "loadFailed": "Bu ayar yüklenemedi.",
+    "saveFailed": "Bu ayar kaydedilemedi. Lütfen tekrar deneyin."
+  },
   "appearanceSettings": {
     "darkMode": {
       "label": "Koyu Mod",

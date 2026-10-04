@@ -147,6 +147,13 @@
       "error": "Běh selhal"
     }
   },
+  "keepAwake": {
+    "title": "Nenechat tento počítač usnout, když agenti pracují",
+    "description": "Zabrání tomu, aby počítač, na kterém běží CloudCLI, sám usnul, dokud pracuje agent, takže dlouhé běhy nebudou přerušeny. Obrazovka se přesto může vypnout a zavření víka notebooku ho stále může uspat.",
+    "unsupported": "Na tomto počítači není k dispozici. V Linuxu je potřeba systemd (systemd-inhibit).",
+    "loadFailed": "Toto nastavení se nepodařilo načíst.",
+    "saveFailed": "Toto nastavení se nepodařilo uložit. Zkuste to prosím znovu."
+  },
   "appearanceSettings": {
     "darkMode": {
       "label": "Tmavý režim",

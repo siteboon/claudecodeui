@@ -141,6 +141,13 @@
       "error": "Esecuzione fallita"
     }
   },
+  "keepAwake": {
+    "title": "Mantieni attivo questo computer mentre gli agenti lavorano",
+    "description": "Impedisce al computer su cui è in esecuzione CloudCLI di andare in stop da solo mentre un agente sta lavorando, così le esecuzioni lunghe non vengono interrotte. Lo schermo può comunque spegnersi, e chiudere il coperchio di un portatile può comunque metterlo in stop.",
+    "unsupported": "Non disponibile su questo computer. Su Linux è necessario systemd (systemd-inhibit).",
+    "loadFailed": "Impossibile caricare questa impostazione.",
+    "saveFailed": "Impossibile salvare questa impostazione. Riprova."
+  },
   "appearanceSettings": {
     "darkMode": {
       "label": "Modalità scura",

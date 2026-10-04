@@ -167,6 +167,13 @@
       "error": "Ejecución fallida"
     }
   },
+  "keepAwake": {
+    "title": "Mantener este equipo despierto mientras trabajan los agentes",
+    "description": "Evita que el equipo en el que se ejecuta CloudCLI entre en suspensión por sí solo mientras un agente está trabajando, para que las ejecuciones largas no se interrumpan. La pantalla puede apagarse igualmente, y cerrar la tapa de un portátil todavía puede suspenderlo.",
+    "unsupported": "No disponible en este equipo. En Linux se necesita systemd (systemd-inhibit).",
+    "loadFailed": "No se pudo cargar este ajuste.",
+    "saveFailed": "No se pudo guardar este ajuste. Inténtalo de nuevo."
+  },
   "appearanceSettings": {
     "darkMode": {
       "label": "Modo oscuro",
