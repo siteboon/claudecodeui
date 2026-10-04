@@ -182,6 +182,32 @@ test('reconciling rewrites a disabled stored provider so storage agrees', async 
   assert.equal(readUserPreference('selectedProvider', null), 'codex');
 });
 
+test('with every provider enabled, reconciling writes nothing, even for an unknown id', async () => {
+  // An unset VITE_ENABLED_PROVIDERS must leave auth.db exactly as before the
+  // setting existed: an unknown id already reads as claude and is not rewritten.
+  const {
+    hydrateEnabledProviders,
+    readSelectedProvider,
+    readUserPreference,
+    reconcileSelectedProvider,
+    subscribeToUserPreferences,
+    writeUserPreference,
+  } = await loadStores();
+  await hydrateEnabledProviders();
+  writeUserPreference('selectedProvider', 'gemini');
+  let writes = 0;
+  const unsubscribe = subscribeToUserPreferences(() => {
+    writes += 1;
+  });
+
+  reconcileSelectedProvider();
+  unsubscribe();
+
+  assert.equal(writes, 0);
+  assert.equal(readUserPreference('selectedProvider', null), 'gemini');
+  assert.equal(readSelectedProvider(), 'claude');
+});
+
 test('reconciling leaves an enabled or absent stored provider alone', async () => {
   const {
     hydrateEnabledProviders,

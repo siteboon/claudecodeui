@@ -57,12 +57,13 @@ export function readNewChatProvider(preferred: LLMProvider | null = null): LLMPr
  * Used by the auth module after the enabled providers and the user's
  * preferences load: rewrites a stored provider that is no longer enabled to the
  * one a new chat starts on, so the copy in `auth.db` agrees with what the app
- * opens on. Nothing is written when nothing is stored.
+ * opens on. Only a provider the server disabled is rewritten: nothing stored,
+ * or an id that names no provider, already reads as the default, so with every
+ * provider enabled nothing is ever written, as before the setting existed.
  */
 export function reconcileSelectedProvider(): void {
   const stored = readUserPreference<string | null>('selectedProvider', null);
-  const newChatProvider = readNewChatProvider();
-  if (stored !== null && stored !== newChatProvider) {
-    writeSelectedProvider(newChatProvider);
+  if (isKnownProvider(stored) && !readEnabledProviders().includes(stored)) {
+    writeSelectedProvider(readNewChatProvider());
   }
 }
