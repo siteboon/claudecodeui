@@ -138,8 +138,8 @@ export function resolveServerTls(env) {
   } catch (error) {
     if (looksLikeEncodedData(certSetting)) {
       return httpFallback(
-        'SSL_CERT does not name a readable file and looks like encoded key or certificate data, '
-          + 'so it is not shown. Set it to the path of the certificate file.',
+        'SSL_CERT does not name a readable file (value not shown because it may contain key or '
+          + 'certificate data). Set it to the path of the certificate file.',
       );
     }
     return httpFallback(`SSL_CERT file ${certPath} could not be read: ${describeReadError(error)}`);
@@ -151,7 +151,7 @@ export function resolveServerTls(env) {
   } catch (error) {
     if (looksLikeEncodedData(keySetting)) {
       return httpFallback(
-        'SSL_KEY does not name a readable file and looks like encoded key data, so it is not shown. '
+        'SSL_KEY does not name a readable file (value not shown because it may contain key data). '
           + 'Set it to the path of the private key file.',
       );
     }

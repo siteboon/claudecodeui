@@ -188,10 +188,10 @@ test('never echoes PEM text that was put into SSL_CERT or SSL_KEY instead of a p
 });
 
 test('never echoes a key pasted as its bare base64 body instead of a path', async () => {
-  const keyWarningText = 'SSL_KEY does not name a readable file and looks like encoded key data, so it is not shown. '
+  const keyWarningText = 'SSL_KEY does not name a readable file (value not shown because it may contain key data). '
     + 'Set it to the path of the private key file.';
-  const certWarningText = 'SSL_CERT does not name a readable file and looks like encoded key or certificate data, '
-    + 'so it is not shown. Set it to the path of the certificate file.';
+  const certWarningText = 'SSL_CERT does not name a readable file (value not shown because it may contain key or '
+    + 'certificate data). Set it to the path of the certificate file.';
 
   const keys = [
     generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey,
@@ -223,6 +223,12 @@ test('never echoes a key pasted as its bare base64 body instead of a path', asyn
   assert.equal(
     getWarning(resolveServerTls({ SSL_CERT: CERT_PATH, SSL_KEY: 'missing-key' })),
     `SSL_KEY file ${path.resolve('missing-key')} could not be read: ENOENT: no such file or directory`,
+  );
+  // A long missing path without a '.' (a Docker secret here) gets the same text, which must not
+  // claim that the value is key data.
+  assert.equal(
+    getWarning(resolveServerTls({ SSL_CERT: CERT_PATH, SSL_KEY: '/run/secrets/cloudcli_tls_private_key_production' })),
+    keyWarningText,
   );
 });
 
