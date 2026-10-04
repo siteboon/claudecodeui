@@ -12,6 +12,7 @@ const {
   ALLOWED_PATHS,
   filterByAllowedPaths,
   findAllowedPathsWarnings,
+  findEmptyAllowedPathsWarning,
   isPathAllowed,
   listAllowedPathChildren,
   parseAllowedPaths,
@@ -66,6 +67,20 @@ test('quotes kept from a .env value are dropped around the value and each entry'
   assert.deepEqual(parseAllowedPaths('/srv/a,/srv/b'), ['/srv/a', '/srv/b']);
   // A quote inside an entry is part of the path.
   assert.deepEqual(parseAllowedPaths('/srv/it"s'), ['/srv/it"s']);
+  // Whitespace inside the quotes is trimmed too.
+  assert.deepEqual(parseAllowedPaths('" /srv/a , /srv/b "'), ['/srv/a', '/srv/b']);
+});
+
+test('a value that is set but names no directory is reported, since it leaves access unrestricted', () => {
+  assert.equal(findEmptyAllowedPathsWarning(undefined), null);
+  assert.equal(findEmptyAllowedPathsWarning(''), null);
+  assert.equal(findEmptyAllowedPathsWarning('   '), null);
+  assert.equal(findEmptyAllowedPathsWarning('/srv/a'), null);
+
+  for (const rawValue of ['"', ',', '""', '" , "']) {
+    assert.deepEqual(parseAllowedPaths(rawValue), []);
+    assert.match(findEmptyAllowedPathsWarning(rawValue) ?? '', /names no directory, so file access is not restricted/);
+  }
 });
 
 test('startup warnings name missing entries and entries outside an explicit workspace root', async () => {

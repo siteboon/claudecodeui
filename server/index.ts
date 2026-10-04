@@ -13,6 +13,7 @@ import {
     ALLOWED_PATHS,
     AppError,
     findAllowedPathsWarnings,
+    findEmptyAllowedPathsWarning,
     findApplicationRoot,
     getModuleDirectory,
     IS_PLATFORM,
@@ -377,6 +378,10 @@ async function startServer() {
                 for (const warning of await findAllowedPathsWarnings()) {
                     console.log(`${terminalTextStyles.warn('[WARN]')} ${warning}`);
                 }
+            }
+            const emptyAllowedPathsWarning = findEmptyAllowedPathsWarning();
+            if (emptyAllowedPathsWarning) {
+                console.log(`${terminalTextStyles.warn('[WARN]')} ${emptyAllowedPathsWarning}`);
             }
             console.log(`${terminalTextStyles.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
             console.log('');

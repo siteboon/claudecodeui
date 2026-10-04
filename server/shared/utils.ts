@@ -785,6 +785,22 @@ export async function findAllowedPathsWarnings(
   return warnings;
 }
 
+/**
+ * Describes an `ALLOWED_PATHS` value that is set but names no directory once
+ * parsed (only commas or quotes, e.g. a broken `.env` line), which leaves
+ * every path unrestricted just like an unset variable. Null when the value is
+ * unset, blank, or names at least one directory.
+ *
+ * Used by the server entrypoint, which prints it as a startup warning so such
+ * a value does not lift the restriction silently.
+ */
+export function findEmptyAllowedPathsWarning(rawValue: string | undefined = process.env.ALLOWED_PATHS): string | null {
+  if (typeof rawValue !== 'string' || rawValue.trim() === '' || parseAllowedPaths(rawValue).length > 0) {
+    return null;
+  }
+  return `ALLOWED_PATHS is set to ${JSON.stringify(rawValue)} but names no directory, so file access is not restricted`;
+}
+
 // ---------------------------
 //----------------- NORMALIZED PROVIDER MESSAGE UTILITIES ------------
 /**
