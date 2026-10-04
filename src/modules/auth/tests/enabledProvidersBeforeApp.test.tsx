@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useEffect, useState } from 'react';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 
@@ -42,13 +42,15 @@ const stubServer = () => {
       ? { needsSetup: false }
       : url === '/api/auth/user'
         ? { user: { id: 1, username: 'triage' } }
-        : url === '/api/user/onboarding-status'
-          ? { hasCompletedOnboarding: true }
-          : url === '/api/providers/enabled'
-            ? { success: true, data: { providers: serverProviders } }
-            : url === '/api/user/preferences'
-              ? { preferences: storedServerProvider ? { selectedProvider: storedServerProvider } : {} }
-              : {};
+        : url === '/api/auth/login'
+          ? { token: 'fresh-token', user: { id: 1, username: 'triage' } }
+          : url === '/api/user/onboarding-status'
+            ? { hasCompletedOnboarding: true }
+            : url === '/api/providers/enabled'
+              ? { success: true, data: { providers: serverProviders } }
+              : url === '/api/user/preferences'
+                ? { preferences: storedServerProvider ? { selectedProvider: storedServerProvider } : {} }
+                : {};
     return new Response(JSON.stringify(body), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -68,11 +70,14 @@ function Workspace() {
 }
 
 function Gate() {
-  const { isLoading, user } = useAuth();
+  const { isLoading, user, login } = useAuth();
   if (isLoading) {
     return <div>loading</div>;
   }
-  return user ? <Workspace /> : <div>login</div>;
+  if (!user) {
+    return <button type="button" onClick={() => void login('triage', 'triage-pass')}>login</button>;
+  }
+  return <Workspace />;
 }
 
 beforeEach(async () => {
@@ -93,12 +98,26 @@ afterEach(() => {
   cleanup();
   resetUserPreferences();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 test('the app is first shown with the server list and its default provider already applied', async () => {
   serverProviders = ['codex', 'claude'];
 
   render(<AuthProvider><Gate /></AuthProvider>);
+  await screen.findByText('workspace');
+
+  assert.deepEqual(firstPaint, { enabled: ['codex', 'claude'], selected: 'codex' });
+});
+
+test('signing in loads the server list before the app is shown', async () => {
+  // No stored token: the startup check stops at the login screen, so only the
+  // sign-in path can load the list.
+  localStorage.removeItem('auth-token');
+  serverProviders = ['codex', 'claude'];
+
+  render(<AuthProvider><Gate /></AuthProvider>);
+  fireEvent.click(await screen.findByText('login'));
   await screen.findByText('workspace');
 
   assert.deepEqual(firstPaint, { enabled: ['codex', 'claude'], selected: 'codex' });
@@ -124,3 +143,32 @@ for (const [order, delayMs] of [['before', 0], ['after', 100]] as const) {
     assert.ok(savedPreferences.some((update) => update.selectedProvider === 'claude'));
   });
 }
+
+test('in platform mode the app is first shown with the server list applied', async () => {
+  // Platform mode has its own startup branch with no sign-in. IS_PLATFORM is
+  // read at module scope, so fresh copies of the modules load with it on.
+  vi.stubEnv('VITE_IS_PLATFORM', 'true');
+  vi.resetModules();
+  const platformAuth = await import('@/modules/auth/context/AuthContext');
+  const platformList = await import('@/shared/enabledProviders');
+  serverProviders = ['codex', 'claude'];
+  let shownWith: readonly string[] | null = null;
+
+  function PlatformWorkspace() {
+    const [seen] = useState(platformList.readEnabledProviders);
+    useEffect(() => {
+      shownWith ??= seen;
+    }, [seen]);
+    return <div>workspace</div>;
+  }
+
+  function PlatformGate() {
+    const { isLoading } = platformAuth.useAuth();
+    return isLoading ? <div>loading</div> : <PlatformWorkspace />;
+  }
+
+  render(<platformAuth.AuthProvider><PlatformGate /></platformAuth.AuthProvider>);
+  await screen.findByText('workspace');
+
+  assert.deepEqual(shownWith, ['codex', 'claude']);
+});
