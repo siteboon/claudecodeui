@@ -177,11 +177,13 @@ export function createKeepAwakeService(dependencies: KeepAwakeDependencies) {
     // The helper must never keep the server process alive on its own.
     startedHelper.unref();
 
-    startedHelper.once('error', (error) => {
+    // `on`, not `once`: a failed kill() can emit a second 'error' later, and an
+    // unhandled one would take the whole server down.
+    startedHelper.on('error', (error) => {
       if (helper === startedHelper) {
         helper = null;
       }
-      dependencies.logWarn(`[KeepAwake] Could not start ${command}: ${error.message}`);
+      dependencies.logWarn(`[KeepAwake] ${command} failed: ${error.message}`);
     });
     startedHelper.once('exit', (code, signal) => {
       if (helper !== startedHelper) {

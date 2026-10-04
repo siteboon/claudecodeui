@@ -199,7 +199,7 @@ test('a helper missing at spawn time or exiting on its own is dropped and retrie
   const releaseFirst = service.acquire();
   spawnCalls[0].helper.emit('error', new Error('spawn caffeinate ENOENT'));
   assert.equal(service.getStatus().active, false);
-  assert.match(warnings[0], /Could not start caffeinate: spawn caffeinate ENOENT/);
+  assert.match(warnings[0], /caffeinate failed: spawn caffeinate ENOENT/);
 
   const releaseSecond = service.acquire();
   assert.equal(spawnCalls.length, 2);
@@ -211,6 +211,17 @@ test('a helper missing at spawn time or exiting on its own is dropped and retrie
   // A run is still in progress, so the helper is started again.
   assert.equal(spawnCalls.length, 3);
   releaseSecond();
+});
+
+test('a helper that errors again after it was stopped cannot crash the server', () => {
+  const { service, spawnCalls, warnings } = createHarness({ platform: 'win32' });
+  service.initialize();
+
+  service.acquire()();
+  // child.kill() reports a signal it could not deliver as an 'error' event.
+  assert.doesNotThrow(() => spawnCalls[0].helper.emit('error', new Error('kill EPERM')));
+  assert.doesNotThrow(() => spawnCalls[0].helper.emit('error', new Error('kill EPERM')));
+  assert.equal(warnings.length, 2);
 });
 
 test('a helper exiting after it was stopped is not reported as a failure', () => {
