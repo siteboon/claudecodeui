@@ -10,7 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import tls from 'node:tls';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import express from 'express';
 import { WebSocket } from 'ws';
@@ -28,7 +28,9 @@ import { createServerForTls, resolveServerTls } from '../../../shared/serverTls.
  * 127.0.0.1) and its key, valid until 2126.
  */
 
-const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
+const TEST_DIRECTORY = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(TEST_DIRECTORY, '../../..');
+const FIXTURES = path.join(TEST_DIRECTORY, 'fixtures');
 const CERT_PATH = path.join(FIXTURES, 'test-only-tls-cert.pem');
 const KEY_PATH = path.join(FIXTURES, 'test-only-tls-key.pem');
 const CERT_HOSTNAME = 'cloudcli-test.invalid';
@@ -89,8 +91,9 @@ test('falls back to HTTP and names the variable and path of a file that cannot b
   await withTempDir(async (directory) => {
     const missingCert = path.join(directory, 'missing-cert.pem');
     const certWarning = getWarning(resolveServerTls({ SSL_CERT: missingCert, SSL_KEY: KEY_PATH }));
-    assert.match(certWarning, /^SSL_CERT file .* could not be read: ENOENT/);
-    assert.ok(certWarning.includes(missingCert));
+    assert.match(certWarning, /^SSL_CERT file .* could not be read: ENOENT: no such file or directory$/);
+    // Named once: the fs message, which repeats the path, is cut down to its code and description.
+    assert.equal(certWarning.split(missingCert).length - 1, 1);
 
     const missingKey = path.join(directory, 'missing-key.pem');
     const keyWarning = getWarning(resolveServerTls({ SSL_CERT: CERT_PATH, SSL_KEY: missingKey }));
@@ -140,11 +143,101 @@ test('falls back to HTTP when the key does not belong to the certificate, withou
   });
 });
 
-test('stays on HTTP without a warning when the desktop app disables SSL for its own server', () => {
-  assert.deepEqual(
-    resolveServerTls({ SSL_CERT: CERT_PATH, SSL_KEY: KEY_PATH, CLOUDCLI_DISABLE_SSL: '1' }),
-    { protocol: 'http', warning: null },
-  );
+test('falls back to HTTP when the key is a different type than the certificate', async () => {
+  await withTempDir(async (directory) => {
+    // OpenSSL accepts an RSA key next to an EC certificate, and every handshake then fails.
+    const rsaKeyPath = path.join(directory, 'rsa-key.pem');
+    await writeFile(
+      rsaKeyPath,
+      generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs8', format: 'pem' }),
+    );
+
+    const warning = getWarning(resolveServerTls({ SSL_CERT: CERT_PATH, SSL_KEY: rsaKeyPath }));
+    assert.equal(
+      warning,
+      `SSL_KEY file ${rsaKeyPath} does not match SSL_CERT file ${CERT_PATH}: `
+        + "the certificate's key type is ec, the private key's is rsa",
+    );
+  });
+});
+
+test('never echoes PEM text that was put into SSL_CERT or SSL_KEY instead of a path', () => {
+  const keyPem = fs.readFileSync(KEY_PATH, 'utf8');
+  const keyPemBase64 = Buffer.from(keyPem.slice(keyPem.indexOf('-----BEGIN'))).toString('base64');
+
+  const keyCases = [
+    { SSL_KEY: keyPem },
+    { SSL_CERT: CERT_PATH, SSL_KEY: keyPem },
+    { SSL_CERT: CERT_PATH, SSL_KEY: keyPem.replaceAll('\n', '\\n') },
+    { SSL_CERT: CERT_PATH, SSL_KEY: keyPemBase64 },
+  ];
+  for (const env of keyCases) {
+    // The whole message is fixed text: no part of the key can be in it.
+    const warning = getWarning(resolveServerTls(env));
+    assert.equal(warning, 'SSL_KEY holds PEM text, not a file path. Set it to the path of the private key file.');
+  }
+
+  const certWarning = getWarning(resolveServerTls({ SSL_CERT: fs.readFileSync(CERT_PATH, 'utf8'), SSL_KEY: keyPem }));
+  assert.equal(certWarning, 'SSL_CERT holds PEM text, not a file path. Set it to the path of the certificate file.');
+});
+
+test('drops quotes around SSL_CERT/SSL_KEY like Vite does for .env values', () => {
+  const result = resolveServerTls({ SSL_CERT: `"${CERT_PATH}"`, SSL_KEY: ` '${KEY_PATH}' ` });
+
+  assert.ok(result.protocol === 'https');
+  assert.equal(result.certPath, CERT_PATH);
+  assert.equal(result.keyPath, KEY_PATH);
+});
+
+test('stays on HTTP when the desktop app disables SSL for its own server, and says why', () => {
+  const warning = getWarning(resolveServerTls({ SSL_CERT: CERT_PATH, SSL_KEY: KEY_PATH, CLOUDCLI_DISABLE_SSL: '1' }));
+  assert.match(warning, /^SSL_CERT\/SSL_KEY are ignored because CLOUDCLI_DISABLE_SSL=1 /);
+
+  assert.deepEqual(resolveServerTls({ CLOUDCLI_DISABLE_SSL: '1' }), { protocol: 'http', warning: null });
+  // Only the exact value the desktop app writes turns HTTPS off.
+  assert.equal(resolveServerTls({ SSL_CERT: CERT_PATH, SSL_KEY: KEY_PATH, CLOUDCLI_DISABLE_SSL: '0' }).protocol, 'https');
+});
+
+/** Evaluates the real vite.config.js the way `vite` does for `npm run dev`. */
+async function loadViteServerConfig(env: Record<string, string>) {
+  const previous = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
+  Object.assign(process.env, env);
+  try {
+    const { default: defineViteConfig } = await import(pathToFileURL(path.join(REPO_ROOT, 'vite.config.js')).href);
+    const config = await defineViteConfig({ command: 'serve', mode: 'development', isSsrBuild: false, isPreview: false });
+    return config.server as {
+      https?: { cert: Buffer; key: Buffer };
+      proxy: Record<string, { target: string; secure?: boolean; ws?: boolean }>;
+    };
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+}
+
+test('the Vite dev server serves HTTPS and proxies to https/wss exactly when the backend does', async () => {
+  // Explicit values (empty = unset) win over any .env file in the checkout, as they do for Vite.
+  const httpsConfig = await loadViteServerConfig({ SSL_CERT: CERT_PATH, SSL_KEY: KEY_PATH, SERVER_PORT: '3443' });
+  assert.deepEqual(httpsConfig.https, { cert: fs.readFileSync(CERT_PATH), key: fs.readFileSync(KEY_PATH) });
+  assert.match(httpsConfig.proxy['/api'].target, /^https:\/\/[^/]+:3443$/);
+  for (const socketPath of ['/ws', '/shell', '/plugin-ws']) {
+    assert.match(httpsConfig.proxy[socketPath].target, /^wss:\/\/[^/]+:3443$/);
+    assert.equal(httpsConfig.proxy[socketPath].ws, true);
+  }
+  for (const proxyPath of ['/api', '/ws', '/shell', '/plugin-ws']) {
+    assert.equal(httpsConfig.proxy[proxyPath].secure, false);
+  }
+
+  // A broken pair makes the backend fall back to HTTP, so Vite must too.
+  const brokenConfig = await loadViteServerConfig({ SSL_CERT: CERT_PATH, SSL_KEY: '', SERVER_PORT: '3443' });
+  assert.equal(brokenConfig.https, undefined);
+  assert.match(brokenConfig.proxy['/api'].target, /^http:\/\/[^/]+:3443$/);
+  assert.match(brokenConfig.proxy['/ws'].target, /^ws:\/\/[^/]+:3443$/);
 });
 
 /** Mirrors server/index.ts: one server carries both HTTP routes and the WebSocket gateway. */

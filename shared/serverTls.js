@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
@@ -32,16 +33,55 @@ function describeError(error) {
 }
 
 /**
+ * fs messages end with the path ("ENOENT: no such file or directory, open '<path>'"). The warning
+ * names the path already, so keep only the code and its description.
+ *
+ * @param {unknown} error
+ * @returns {string}
+ */
+function describeReadError(error) {
+  const code = /** @type {NodeJS.ErrnoException} */ (error)?.code;
+  return typeof code === 'string' ? describeError(error).split(', ')[0] : describeError(error);
+}
+
+/**
+ * Reads one SSL_* variable. One pair of surrounding quotes is dropped because Vite's loadEnv strips
+ * them from .env values while server/load-env.ts keeps them, and both must pick the same file.
+ *
+ * @param {Record<string, string | undefined>} env
+ * @param {'SSL_CERT' | 'SSL_KEY'} name
+ * @returns {string}
+ */
+function readPathSetting(env, name) {
+  const value = env[name]?.trim() || '';
+  const isQuoted = value.length >= 2 && (value[0] === '"' || value[0] === "'") && value.at(-1) === value[0];
+  return isQuoted ? value.slice(1, -1).trim() : value;
+}
+
+/**
+ * SSL_CERT/SSL_KEY take file paths, but secrets are often pasted in as PEM text (or base64 of it).
+ * Such a value must never reach a log line: for SSL_KEY it is the private key itself.
+ *
+ * @param {string} value
+ * @returns {boolean}
+ */
+function looksLikePemText(value) {
+  return value.includes('\n') || value.includes('-----BEGIN') || value.startsWith('LS0tLS1CRUdJT');
+}
+
+/**
  * Decides whether the backend, and the Vite dev server in front of it, serve HTTPS.
  * Used by server/index.ts, vite.config.js, the browser-use module (its loopback MCP URL) and
  * `cloudcli status`, so they all agree on the protocol.
  *
  * - Neither SSL_CERT nor SSL_KEY set: plain HTTP with no warning (the default).
- * - Both set, both files readable and the pair loads into a TLS context: HTTPS.
+ * - Both set, both files readable, and the key loads with the certificate and belongs to it: HTTPS.
  * - Anything else (only one variable set, a missing or unreadable file, a file that is not PEM,
  *   a passphrase-protected key, or a key that does not belong to the certificate): plain HTTP and
  *   a warning that names the variable, the path and the reason. The warning never contains file
- *   contents.
+ *   contents, and a variable that holds PEM text instead of a path is named but not echoed.
+ * - CLOUDCLI_DISABLE_SSL=1 (set by the desktop app for its own server): plain HTTP, with a
+ *   warning only if SSL_CERT/SSL_KEY are set, so the user sees why they were ignored.
  *
  * Relative paths resolve against the current working directory.
  *
@@ -49,14 +89,22 @@ function describeError(error) {
  * @returns {ServerTls}
  */
 export function resolveServerTls(env) {
-  if (env[DISABLE_SSL_ENV_KEY] === '1') {
-    return { protocol: 'http', warning: null };
-  }
-
-  const certSetting = env.SSL_CERT?.trim() || '';
-  const keySetting = env.SSL_KEY?.trim() || '';
+  const certSetting = readPathSetting(env, 'SSL_CERT');
+  const keySetting = readPathSetting(env, 'SSL_KEY');
   if (!certSetting && !keySetting) {
     return { protocol: 'http', warning: null };
+  }
+  if (env[DISABLE_SSL_ENV_KEY] === '1') {
+    return httpFallback(
+      `SSL_CERT/SSL_KEY are ignored because ${DISABLE_SSL_ENV_KEY}=1 (the desktop app sets it for the server it starts).`,
+    );
+  }
+  // Checked before any message below echoes a setting.
+  if (looksLikePemText(certSetting)) {
+    return httpFallback('SSL_CERT holds PEM text, not a file path. Set it to the path of the certificate file.');
+  }
+  if (looksLikePemText(keySetting)) {
+    return httpFallback('SSL_KEY holds PEM text, not a file path. Set it to the path of the private key file.');
   }
   if (!certSetting) {
     return httpFallback(`SSL_CERT is not set (SSL_KEY=${keySetting}). HTTPS needs both SSL_CERT and SSL_KEY.`);
@@ -72,18 +120,17 @@ export function resolveServerTls(env) {
   try {
     cert = fs.readFileSync(certPath);
   } catch (error) {
-    return httpFallback(`SSL_CERT file ${certPath} could not be read: ${describeError(error)}`);
+    return httpFallback(`SSL_CERT file ${certPath} could not be read: ${describeReadError(error)}`);
   }
 
   let key;
   try {
     key = fs.readFileSync(keyPath);
   } catch (error) {
-    return httpFallback(`SSL_KEY file ${keyPath} could not be read: ${describeError(error)}`);
+    return httpFallback(`SSL_KEY file ${keyPath} could not be read: ${describeReadError(error)}`);
   }
 
-  // Load each file on its own first so the warning can say which one is broken; the last step
-  // catches a key that does not belong to the certificate.
+  // Load each file on its own first so the warning can say which one is broken, then the pair.
   try {
     tls.createSecureContext({ cert });
   } catch (error) {
@@ -100,6 +147,24 @@ export function resolveServerTls(env) {
     tls.createSecureContext({ cert, key });
   } catch (error) {
     return httpFallback(`SSL_KEY file ${keyPath} does not match SSL_CERT file ${certPath}: ${describeError(error)}`);
+  }
+  // OpenSSL only compares a key with the certificate when both are the same type, so an RSA key
+  // next to an ECDSA certificate (or the reverse) loads above and then fails every handshake.
+  // X509Certificate reads the first certificate in the file, which is the one TLS serves.
+  try {
+    const certificate = new crypto.X509Certificate(cert);
+    const privateKey = crypto.createPrivateKey(key);
+    if (!certificate.checkPrivateKey(privateKey)) {
+      const certKeyType = certificate.publicKey.asymmetricKeyType;
+      const reason = certKeyType === privateKey.asymmetricKeyType
+        ? 'the private key does not belong to the certificate'
+        : `the certificate's key type is ${certKeyType}, the private key's is ${privateKey.asymmetricKeyType}`;
+      return httpFallback(`SSL_KEY file ${keyPath} does not match SSL_CERT file ${certPath}: ${reason}`);
+    }
+  } catch (error) {
+    return httpFallback(
+      `SSL_KEY file ${keyPath} could not be checked against SSL_CERT file ${certPath}: ${describeError(error)}`,
+    );
   }
 
   return { protocol: 'https', certPath, keyPath, cert, key };
