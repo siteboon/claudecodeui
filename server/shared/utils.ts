@@ -457,8 +457,9 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
 //----------------- ALLOWED PATHS (ALLOWED_PATHS) UTILITIES ------------
 /**
  * User-facing message for a path refused because it lies outside
- * `ALLOWED_PATHS`. Used here and by the File Tree module, which builds its own
- * 403 errors around injected path checks, so every refusal reads the same.
+ * `ALLOWED_PATHS`. Used here and by the File Tree, Git, Taskmaster, Commands
+ * and Agent modules, which answer their own 403s, so every refusal reads the
+ * same.
  */
 export const PATH_NOT_ALLOWED_MESSAGE = 'Access denied: the path is outside the directories allowed by ALLOWED_PATHS';
 
@@ -506,10 +507,13 @@ export function parseAllowedPaths(rawValue: string | undefined, homeDirectory: s
  * comma-separated `ALLOWED_PATHS` environment variable. Empty when it is unset
  * or blank, which leaves every path check unrestricted.
  *
- * Consumed here by `validateWorkspacePath`, `resolveReadOnlyRootPath` and
- * `isPathAllowed`, and by the File Tree module, whose folder picker opens at
- * the first entry when the workspace root is not on the way to any of them.
- * Environment variables must be loaded before this module is evaluated.
+ * Consumed here by `validateWorkspacePath`, `filterByAllowedPaths` and
+ * `isPathAllowed`; by the File Tree module, whose folder picker opens at the
+ * first entry when the workspace root is not on the way to any of them; by the
+ * Projects, Git, Taskmaster and Providers modules to skip their per-request
+ * project lookups when it is empty; and by the server entrypoint, which logs
+ * it at startup. Environment variables must be loaded before this module is
+ * evaluated.
  */
 export const ALLOWED_PATHS: readonly string[] = Object.freeze(parseAllowedPaths(process.env.ALLOWED_PATHS));
 
@@ -587,11 +591,11 @@ async function resolveRealPathOrNearestAncestor(absolutePath: string): Promise<s
  * be resolved is refused, and an allowed entry that cannot be resolved is
  * skipped.
  *
- * Used by `validateWorkspacePath`, `resolveReadOnlyRootPath` and
- * `assertPathAllowed`, by the Projects module to hide projects outside the
- * allowed directories, by the File Tree module for its folder picker and
- * per-file checks, and by the Git, Taskmaster, Worktrees, Commands, Providers
- * and Agent modules to refuse projects and workspace paths outside them.
+ * Used here by `validateWorkspacePath`, `resolveReadOnlyRootPath`,
+ * `filterByAllowedPaths` and `assertPathAllowed`; by the File Tree module for
+ * its folder picker and per-file checks; by the Git, Taskmaster, Commands and
+ * Agent routes to refuse projects and paths outside the allowed directories;
+ * and by the WebSocket module so it never announces a session outside them.
  */
 export async function isPathAllowed(
   targetPath: string,
@@ -666,8 +670,8 @@ export async function filterByAllowedPaths<TItem>(
  * outside `ALLOWED_PATHS`; does nothing when it is inside or the variable is
  * unset.
  *
- * Used by the Projects, File Tree, Taskmaster, Worktrees, Commands, Providers
- * and Agent modules, whose routes answer with the error's status and message.
+ * Used by the Projects, Git, Worktrees and Providers modules, whose routes
+ * answer with the error's status and message.
  */
 export async function assertPathAllowed(targetPath: string): Promise<void> {
   if (!(await isPathAllowed(targetPath))) {
