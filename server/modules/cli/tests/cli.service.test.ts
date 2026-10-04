@@ -110,6 +110,6 @@ test('status warns that the server will use plain HTTP when the SSL setup is inc
   assert.equal(await harness.service.run(['status']), 0);
 
   const output = harness.logMessages.join('\n');
-  assert.match(output, /HTTPS: .*\[WARN\] Off, the server will use plain HTTP\. SSL_KEY is not set/);
+  assert.match(output, /HTTPS: .*\[WARN\] Off, the server will use plain HTTP\. SSL_CERT is set but SSL_KEY is not\./);
   assert.match(output, /Access the UI at http:\/\/localhost:3001/);
 });

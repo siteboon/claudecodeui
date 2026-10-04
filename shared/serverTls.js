@@ -70,6 +70,20 @@ function looksLikePemText(value) {
 }
 
 /**
+ * Single-line secret stores often hold a key as its bare base64 body, without the BEGIN/END lines,
+ * which looksLikePemText() does not catch. Only asked once reading the setting as a file has
+ * failed, so a real path is never refused. Base64 has no '.', which almost every real path has; a
+ * missing path of 40+ characters without one is held back too, which only costs the path in the
+ * warning.
+ *
+ * @param {string} value
+ * @returns {boolean}
+ */
+function looksLikeEncodedData(value) {
+  return /^[A-Za-z0-9+/=_-]{40,}$/.test(value.replace(/\s|\\[nr]/g, ''));
+}
+
+/**
  * Decides whether the backend, and the Vite dev server in front of it, serve HTTPS.
  * Used by server/index.ts, vite.config.js, the browser-use module (its loopback MCP URL) and
  * `cloudcli status`, so they all agree on the protocol.
@@ -79,7 +93,8 @@ function looksLikePemText(value) {
  * - Anything else (only one variable set, a missing or unreadable file, a file that is not PEM,
  *   a passphrase-protected key, or a key that does not belong to the certificate): plain HTTP and
  *   a warning that names the variable, the path and the reason. The warning never contains file
- *   contents, and a variable that holds PEM text instead of a path is named but not echoed.
+ *   contents, and a variable that holds PEM text or encoded key data instead of a path is named
+ *   but not echoed.
  * - CLOUDCLI_DISABLE_SSL=1 (set by the desktop app for its own server): plain HTTP, with a
  *   warning only if SSL_CERT/SSL_KEY are set, so the user sees why they were ignored.
  *
@@ -106,11 +121,12 @@ export function resolveServerTls(env) {
   if (looksLikePemText(keySetting)) {
     return httpFallback('SSL_KEY holds PEM text, not a file path. Set it to the path of the private key file.');
   }
+  // The value that is set is not echoed: it has not been read as a file yet, so it may be key data.
   if (!certSetting) {
-    return httpFallback(`SSL_CERT is not set (SSL_KEY=${keySetting}). HTTPS needs both SSL_CERT and SSL_KEY.`);
+    return httpFallback('SSL_KEY is set but SSL_CERT is not. HTTPS needs both SSL_CERT and SSL_KEY.');
   }
   if (!keySetting) {
-    return httpFallback(`SSL_KEY is not set (SSL_CERT=${certSetting}). HTTPS needs both SSL_CERT and SSL_KEY.`);
+    return httpFallback('SSL_CERT is set but SSL_KEY is not. HTTPS needs both SSL_CERT and SSL_KEY.');
   }
 
   const certPath = path.resolve(certSetting);
@@ -120,6 +136,12 @@ export function resolveServerTls(env) {
   try {
     cert = fs.readFileSync(certPath);
   } catch (error) {
+    if (looksLikeEncodedData(certSetting)) {
+      return httpFallback(
+        'SSL_CERT does not name a readable file and looks like encoded key or certificate data, '
+          + 'so it is not shown. Set it to the path of the certificate file.',
+      );
+    }
     return httpFallback(`SSL_CERT file ${certPath} could not be read: ${describeReadError(error)}`);
   }
 
@@ -127,6 +149,12 @@ export function resolveServerTls(env) {
   try {
     key = fs.readFileSync(keyPath);
   } catch (error) {
+    if (looksLikeEncodedData(keySetting)) {
+      return httpFallback(
+        'SSL_KEY does not name a readable file and looks like encoded key data, so it is not shown. '
+          + 'Set it to the path of the private key file.',
+      );
+    }
     return httpFallback(`SSL_KEY file ${keyPath} could not be read: ${describeReadError(error)}`);
   }
 

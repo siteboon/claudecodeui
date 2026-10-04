@@ -78,13 +78,15 @@ test('resolves relative SSL_CERT/SSL_KEY paths against the working directory', (
 });
 
 test('falls back to HTTP and names the missing variable when only one is set', () => {
-  const onlyCert = getWarning(resolveServerTls({ SSL_CERT: CERT_PATH }));
-  assert.match(onlyCert, /^SSL_KEY is not set/);
-  assert.ok(onlyCert.includes(CERT_PATH));
-
-  const onlyKey = getWarning(resolveServerTls({ SSL_KEY: KEY_PATH }));
-  assert.match(onlyKey, /^SSL_CERT is not set/);
-  assert.ok(onlyKey.includes(KEY_PATH));
+  // Fixed text: the value that is set has not been read as a file yet and may be key data.
+  assert.equal(
+    getWarning(resolveServerTls({ SSL_CERT: CERT_PATH })),
+    'SSL_CERT is set but SSL_KEY is not. HTTPS needs both SSL_CERT and SSL_KEY.',
+  );
+  assert.equal(
+    getWarning(resolveServerTls({ SSL_KEY: KEY_PATH })),
+    'SSL_KEY is set but SSL_CERT is not. HTTPS needs both SSL_CERT and SSL_KEY.',
+  );
 });
 
 test('falls back to HTTP and names the variable and path of a file that cannot be read', async () => {
@@ -165,11 +167,15 @@ test('never echoes PEM text that was put into SSL_CERT or SSL_KEY instead of a p
   const keyPem = fs.readFileSync(KEY_PATH, 'utf8');
   const keyPemBase64 = Buffer.from(keyPem.slice(keyPem.indexOf('-----BEGIN'))).toString('base64');
 
+  // The body lines alone, still on separate lines but without the BEGIN/END lines.
+  const keyBodyLines = keyPem.slice(keyPem.indexOf('-----BEGIN')).trim().split('\n').slice(1, -1).join('\n');
+
   const keyCases = [
     { SSL_KEY: keyPem },
     { SSL_CERT: CERT_PATH, SSL_KEY: keyPem },
     { SSL_CERT: CERT_PATH, SSL_KEY: keyPem.replaceAll('\n', '\\n') },
     { SSL_CERT: CERT_PATH, SSL_KEY: keyPemBase64 },
+    { SSL_CERT: CERT_PATH, SSL_KEY: keyBodyLines },
   ];
   for (const env of keyCases) {
     // The whole message is fixed text: no part of the key can be in it.
@@ -179,6 +185,45 @@ test('never echoes PEM text that was put into SSL_CERT or SSL_KEY instead of a p
 
   const certWarning = getWarning(resolveServerTls({ SSL_CERT: fs.readFileSync(CERT_PATH, 'utf8'), SSL_KEY: keyPem }));
   assert.equal(certWarning, 'SSL_CERT holds PEM text, not a file path. Set it to the path of the certificate file.');
+});
+
+test('never echoes a key pasted as its bare base64 body instead of a path', async () => {
+  const keyWarningText = 'SSL_KEY does not name a readable file and looks like encoded key data, so it is not shown. '
+    + 'Set it to the path of the private key file.';
+  const certWarningText = 'SSL_CERT does not name a readable file and looks like encoded key or certificate data, '
+    + 'so it is not shown. Set it to the path of the certificate file.';
+
+  const keys = [
+    generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey,
+    generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey,
+  ];
+  for (const privateKey of keys) {
+    // Single-line secret stores keep keys like this: the PEM body without its BEGIN/END lines.
+    const bodyLines = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString().trim().split('\n').slice(1, -1);
+    const bodies = [bodyLines.join(''), bodyLines.join(' '), bodyLines.join('\r'), bodyLines.join('\\n')];
+    for (const body of bodies) {
+      const warnings = [
+        getWarning(resolveServerTls({ SSL_KEY: body })),
+        getWarning(resolveServerTls({ SSL_CERT: CERT_PATH, SSL_KEY: body })),
+        getWarning(resolveServerTls({ SSL_CERT: body, SSL_KEY: KEY_PATH })),
+      ];
+      assert.equal(warnings[0], 'SSL_KEY is set but SSL_CERT is not. HTTPS needs both SSL_CERT and SSL_KEY.');
+      assert.equal(warnings[1], keyWarningText);
+      assert.equal(warnings[2], certWarningText);
+    }
+  }
+
+  // Only a setting that could not be read is held back: an existing key file named without a '.'
+  // is still used, and a missing short path is still named.
+  await withTempDir(async (directory) => {
+    const keyWithoutExtension = path.join(directory, 'cloudcli-private-key-without-extension');
+    fs.copyFileSync(KEY_PATH, keyWithoutExtension);
+    assert.equal(resolveServerTls({ SSL_CERT: CERT_PATH, SSL_KEY: keyWithoutExtension }).protocol, 'https');
+  });
+  assert.equal(
+    getWarning(resolveServerTls({ SSL_CERT: CERT_PATH, SSL_KEY: 'missing-key' })),
+    `SSL_KEY file ${path.resolve('missing-key')} could not be read: ENOENT: no such file or directory`,
+  );
 });
 
 test('drops quotes around SSL_CERT/SSL_KEY like Vite does for .env values', () => {
