@@ -155,3 +155,12 @@ test('create route rejects invalid entry types without calling the service', asy
 
   assert.equal(createCalled, false);
 });
+
+test('upload limits route reports the limits the upload route enforces', async () => {
+  await withFileTreeServer(createFakeServices(), async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/file-tree/upload-limits`);
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { maximumFileSizeMegabytes: 200, maximumFileCount: 20 });
+  });
+});

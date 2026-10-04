@@ -223,6 +223,7 @@ export default function FileTree({ selectedProject, onFileOpen, revealDirectory 
         operationLoading={operationLoading}
         isUploading={upload.uploadProgress?.status === 'uploading'}
         uploadProgress={upload.uploadProgress?.progress ?? null}
+        maxUploadSizeLabel={upload.maxUploadSizeLabel}
       />
 
       <FileTreeUploadProgress upload={upload.uploadProgress} />

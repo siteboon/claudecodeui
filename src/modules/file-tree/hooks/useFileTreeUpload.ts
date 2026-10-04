@@ -5,7 +5,6 @@ import { IS_PLATFORM } from '@/shared/utils';
 import type { FileTreeUploadProgressState, Project } from '@/shared/types';
 import { api } from '@/shared/api';
 import { expireAuthSession, getStoredAuthToken, storeAuthToken } from '@/shared/authToken';
-import { MAX_FILE_UPLOAD_SIZE_BYTES, MAX_FILE_UPLOAD_SIZE_LABEL } from '@/shared/constants';
 
 type UseFileTreeUploadOptions = {
   selectedProject: Project | null;
@@ -22,7 +21,20 @@ type UploadResponse = {
   requestedFileCount?: number;
 };
 
-const MAX_FILE_UPLOAD_COUNT = 20;
+type FileUploadLimits = {
+  maximumFileSizeMegabytes: number;
+  maximumFileCount: number;
+};
+
+// What the upload endpoint enforces unless the server sets `UPLOAD_MAX_FILE_SIZE_MB`.
+// Used until the server reports its own limits, and kept if that request fails; the
+// server rejects anything over its real limit either way.
+const DEFAULT_FILE_UPLOAD_LIMITS: FileUploadLimits = {
+  maximumFileSizeMegabytes: 200,
+  maximumFileCount: 20,
+};
+
+const BYTES_PER_MEGABYTE = 1024 * 1024;
 
 const COMPLETE_PROGRESS_CLEAR_DELAY_MS = 1400;
 const ERROR_PROGRESS_CLEAR_DELAY_MS = 3200;
@@ -39,14 +51,34 @@ const getFileDisplayName = (file: File) => {
   return relativePath.split(/[\\/]/).pop() || file.name;
 };
 
-const validateFilesForUpload = (files: File[]): string | null => {
-  if (files.length > MAX_FILE_UPLOAD_COUNT) {
-    return `You can upload up to ${MAX_FILE_UPLOAD_COUNT} files at once.`;
+// Same "200MB" form as the server's "File too large. Maximum size is 200MB." error.
+const formatUploadSizeLabel = (megabytes: number) => `${megabytes}MB`;
+
+const readPositiveInteger = (value: unknown, fallback: number) =>
+  typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : fallback;
+
+const parseFileUploadLimits = (payload: unknown): FileUploadLimits => {
+  const limits = typeof payload === 'object' && payload !== null
+    ? payload as Partial<Record<keyof FileUploadLimits, unknown>>
+    : {};
+  return {
+    maximumFileSizeMegabytes: readPositiveInteger(
+      limits.maximumFileSizeMegabytes,
+      DEFAULT_FILE_UPLOAD_LIMITS.maximumFileSizeMegabytes,
+    ),
+    maximumFileCount: readPositiveInteger(limits.maximumFileCount, DEFAULT_FILE_UPLOAD_LIMITS.maximumFileCount),
+  };
+};
+
+const validateFilesForUpload = (files: File[], limits: FileUploadLimits): string | null => {
+  if (files.length > limits.maximumFileCount) {
+    return `You can upload up to ${limits.maximumFileCount} files at once.`;
   }
 
-  const oversizedFile = files.find((file) => file.size > MAX_FILE_UPLOAD_SIZE_BYTES);
+  const maximumFileSizeBytes = limits.maximumFileSizeMegabytes * BYTES_PER_MEGABYTE;
+  const oversizedFile = files.find((file) => file.size > maximumFileSizeBytes);
   if (oversizedFile) {
-    return `${getFileDisplayName(oversizedFile)} is larger than ${MAX_FILE_UPLOAD_SIZE_LABEL}.`;
+    return `${getFileDisplayName(oversizedFile)} is larger than ${formatUploadSizeLabel(limits.maximumFileSizeMegabytes)}.`;
   }
 
   return null;
@@ -244,6 +276,10 @@ export const useFileTreeUpload = ({
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [operationLoading, setOperationLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<FileTreeUploadProgressState | null>(null);
+  // The size cap is server configuration (`UPLOAD_MAX_FILE_SIZE_MB`) that the prebuilt
+  // client cannot know, so it is fetched on mount; it drives the pre-flight check and
+  // the header's "max N each" label.
+  const [uploadLimits, setUploadLimits] = useState<FileUploadLimits>(DEFAULT_FILE_UPLOAD_LIMITS);
   const treeRef = useRef<HTMLDivElement>(null);
   const clearProgressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -266,6 +302,32 @@ export const useFileTreeUpload = ({
   );
 
   useEffect(() => clearProgressTimer, [clearProgressTimer]);
+
+  // Fetched on every mount (the tree mounts when the Files tab opens), so a server
+  // restarted with a new limit is picked up without reloading the page.
+  useEffect(() => {
+    let active = true;
+
+    const loadUploadLimits = async () => {
+      try {
+        const response = await api.fileUploadLimits();
+        if (!response.ok) {
+          return;
+        }
+        const limits = parseFileUploadLimits(await response.json());
+        if (active) {
+          setUploadLimits(limits);
+        }
+      } catch {
+        // Keep the defaults; the server still enforces its real limit on upload.
+      }
+    };
+
+    void loadUploadLimits();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const setUploadError = useCallback(
     (message: string, fileCount: number, targetPath = '', fileName?: string, progress = 0) => {
@@ -298,7 +360,7 @@ export const useFileTreeUpload = ({
         return;
       }
 
-      const validationError = validateFilesForUpload(files);
+      const validationError = validateFilesForUpload(files, uploadLimits);
       if (validationError) {
         showToast(validationError, 'error');
         setUploadError(validationError, files.length, targetPath, fileName);
@@ -365,6 +427,7 @@ export const useFileTreeUpload = ({
       selectedProject,
       setUploadError,
       showToast,
+      uploadLimits,
     ],
   );
 
@@ -432,6 +495,7 @@ export const useFileTreeUpload = ({
     dropTarget,
     operationLoading,
     uploadProgress,
+    maxUploadSizeLabel: formatUploadSizeLabel(uploadLimits.maximumFileSizeMegabytes),
     treeRef,
     uploadFiles,
     handleFileSelect,

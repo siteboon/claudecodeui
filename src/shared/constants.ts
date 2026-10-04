@@ -78,19 +78,6 @@ export const DEFAULT_EFFORT_VALUE = 'default';
 
 // ---------------------------
 
-//----------------- FILE UPLOAD LIMITS ------------
-
-/** Largest single file the upload endpoint accepts, in megabytes. Source of truth for the two derived limits below. */
-export const MAX_FILE_UPLOAD_SIZE_MB = 200;
-
-/** `MAX_FILE_UPLOAD_SIZE_MB` in bytes, for comparing against `File.size` before uploading. */
-export const MAX_FILE_UPLOAD_SIZE_BYTES = MAX_FILE_UPLOAD_SIZE_MB * 1024 * 1024;
-
-/** Human-readable form of the size limit, shown in the file tree header and in upload errors. */
-export const MAX_FILE_UPLOAD_SIZE_LABEL = `${MAX_FILE_UPLOAD_SIZE_MB}MB`;
-
-// ---------------------------
-
 //----------------- GIT CHANGE GROUPS ------------
 
 /** Shape of one entry in `FILE_STATUS_GROUPS`; only that constant needs it. */

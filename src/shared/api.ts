@@ -288,6 +288,8 @@ export const api = {
   // Uploads with a progress bar go through XMLHttpRequest, which needs the URL.
   uploadFilesUrl: (projectId: string) =>
     `/api/file-tree/projects/${encodeURIComponent(projectId)}/files/upload`,
+  // Per-file size cap (server-configurable) and per-request file count the upload endpoint enforces.
+  fileUploadLimits: () => get('/api/file-tree/upload-limits'),
 
   // Browse filesystem for project suggestions
   browseFilesystem: (dirPath: string | null = null) =>

@@ -5,7 +5,6 @@ import { useTranslation } from 'react-i18next';
 
 import { Button, Input } from '@/shared/ui';
 import { cn } from '@/shared/utils';
-import { MAX_FILE_UPLOAD_SIZE_LABEL } from '@/shared/constants';
 import type { FileTreeViewMode } from '@/shared/types';
 
 type FileTreeHeaderProps = {
@@ -24,6 +23,8 @@ type FileTreeHeaderProps = {
   operationLoading?: boolean;
   isUploading?: boolean;
   uploadProgress?: number | null;
+  // Per-file size limit the server reported, e.g. "200MB"
+  maxUploadSizeLabel: string;
 };
 
 /** Rendered by FileTree to host the search box, view-mode switch and the create/upload/refresh/collapse actions. */
@@ -41,6 +42,7 @@ export default function FileTreeHeader({
   operationLoading,
   isUploading,
   uploadProgress,
+  maxUploadSizeLabel,
 }: FileTreeHeaderProps) {
   const { t } = useTranslation();
   const uploadInputRef = useRef<HTMLInputElement>(null);
@@ -80,11 +82,11 @@ export default function FileTreeHeader({
                   isUploading
                     ? t('fileTree.uploadingFiles', 'Uploading files')
                     : t('fileTree.uploadFiles', 'Upload files (max {{size}} each)', {
-                        size: MAX_FILE_UPLOAD_SIZE_LABEL,
+                        size: maxUploadSizeLabel,
                       })
                 }
                 aria-label={t('fileTree.uploadFiles', 'Upload files (max {{size}} each)', {
-                  size: MAX_FILE_UPLOAD_SIZE_LABEL,
+                  size: maxUploadSizeLabel,
                 })}
                 disabled={operationLoading}
               >

@@ -210,6 +210,15 @@ export function createFileTreeRouter(
     }));
   }, logger));
 
+  // The size cap comes from the server's environment, so the prebuilt client
+  // asks for it here instead of baking a number into its bundle.
+  router.get('/upload-limits', (_request, response) => {
+    response.json({
+      maximumFileSizeMegabytes: uploadLimits.maximumFileSizeMegabytes,
+      maximumFileCount: uploadLimits.maximumFileCount,
+    });
+  });
+
   const uploadHandler = createRouteHandler(async (request, response) => {
     const uploadedRequest = request as UploadedRequest;
     const body = readBody(request);

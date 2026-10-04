@@ -16,9 +16,35 @@ import type {
 } from '@/shared/types.js';
 import { WORKSPACES_ROOT, resolveReadOnlyRootPath, validateWorkspacePath } from '@/shared/utils.js';
 
-const MAXIMUM_UPLOAD_SIZE_MEGABYTES = 200;
-const MAXIMUM_UPLOAD_SIZE_BYTES = MAXIMUM_UPLOAD_SIZE_MEGABYTES * 1024 * 1024;
+const DEFAULT_MAXIMUM_UPLOAD_SIZE_MEGABYTES = 200;
+const BYTES_PER_MEGABYTE = 1024 * 1024;
 const MAXIMUM_UPLOAD_FILE_COUNT = 20;
+
+/**
+ * Reads the per-file upload cap from `UPLOAD_MAX_FILE_SIZE_MB`, falling back to
+ * 200 MB when it is unset, empty or not a whole number of megabytes. Exported
+ * for the File Tree module tests; production reads it once below.
+ */
+export function readMaximumUploadSizeMegabytes(environment: NodeJS.ProcessEnv = process.env): number {
+  const configuredValue = environment.UPLOAD_MAX_FILE_SIZE_MB?.trim();
+  if (!configuredValue) {
+    return DEFAULT_MAXIMUM_UPLOAD_SIZE_MEGABYTES;
+  }
+
+  // Digits only: `parseInt` would read "1GB" as 1 and quietly shrink the cap to 1 MB.
+  const configuredMegabytes = /^\d+$/.test(configuredValue) ? Number(configuredValue) : Number.NaN;
+  if (configuredMegabytes > 0 && Number.isSafeInteger(configuredMegabytes * BYTES_PER_MEGABYTE)) {
+    return configuredMegabytes;
+  }
+
+  console.warn(
+    `[WARN] Ignoring UPLOAD_MAX_FILE_SIZE_MB="${configuredValue}": expected a whole number of megabytes. `
+    + `Using ${DEFAULT_MAXIMUM_UPLOAD_SIZE_MEGABYTES}MB.`,
+  );
+  return DEFAULT_MAXIMUM_UPLOAD_SIZE_MEGABYTES;
+}
+
+const maximumUploadSizeMegabytes = readMaximumUploadSizeMegabytes();
 
 function readFileSystemConcurrency(): number {
   const configuredConcurrency = Number.parseInt(process.env.FS_CONCURRENCY ?? '', 10);
@@ -97,7 +123,7 @@ const fileUploadMiddleware = multer({
     },
   }),
   limits: {
-    fileSize: MAXIMUM_UPLOAD_SIZE_BYTES,
+    fileSize: maximumUploadSizeMegabytes * BYTES_PER_MEGABYTE,
     files: MAXIMUM_UPLOAD_FILE_COUNT,
   },
 }).array('files', MAXIMUM_UPLOAD_FILE_COUNT);
@@ -110,7 +136,7 @@ export const fileTreeRoutes = createFileTreeRouter(
   fileTreeServices,
   fileUploadMiddleware,
   {
-    maximumFileSizeMegabytes: MAXIMUM_UPLOAD_SIZE_MEGABYTES,
+    maximumFileSizeMegabytes: maximumUploadSizeMegabytes,
     maximumFileCount: MAXIMUM_UPLOAD_FILE_COUNT,
   },
   fileTreeLogger,
