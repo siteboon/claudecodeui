@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { WebSocket } from 'ws';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { notifyRunFailed } from '@/modules/notifications/index.js';
 import { providerModelsService, sessionsService } from '@/modules/providers/index.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
@@ -207,21 +208,24 @@ function resolveSendTarget(
  * Returns the error to show when a turn's working directory is not a folder on
  * this machine, or null when the turn can start there.
  *
- * Every provider CLI is spawned with that directory as its cwd, and Node
- * reports a missing cwd as `spawn ENOENT` — the same code as a missing
- * executable. The Claude SDK turns it into "Claude Code native binary not
- * found", the other runtimes into "spawn <cli> ENOENT", and users go off to
- * reinstall a CLI that is fine. The real cause is a session whose folder only
- * exists somewhere else (created inside WSL or on another computer) or that
- * was moved or deleted, so that is what the error says.
+ * Every runtime runs its CLI in that directory (as the spawn cwd, or through
+ * `--cd` for Codex), and none of them names the folder when it is missing.
+ * Node reports a missing spawn cwd as ENOENT, the same code as a missing
+ * executable, so the Claude SDK says "Claude Code native binary not found" (or
+ * "exists but failed to launch"). OpenCode shows "spawn opencode ENOENT", Codex
+ * "No such file or directory", and Cursor exits with no message at all. Users
+ * then reinstall a CLI that is fine. The real cause is a session whose folder
+ * only exists somewhere else (created inside WSL or on another computer) or
+ * that was moved or deleted, so that is what the error says.
  *
  * Synchronous on purpose, like the Shell tab's own project-path check: the
  * runtime still starts in the same tick as before, so nothing that races a
  * send (an abort, a second frame) sees a new window.
  */
 function describeMissingWorkingDirectory(workingDirectory: unknown): string | null {
-  // Without a directory the runtimes fall back to the server's own cwd.
-  if (typeof workingDirectory !== 'string' || !workingDirectory.trim()) {
+  // Without a directory the runtimes fall back to the server's own cwd. Only
+  // an empty value counts, because that is the runtimes' own truthiness test.
+  if (typeof workingDirectory !== 'string' || !workingDirectory) {
     return null;
   }
 
@@ -326,12 +330,22 @@ async function dispatchRun(
   let failure: string | null = null;
   try {
     // Checked before `beforeRun` so an edit does not truncate or rewind a
-    // conversation whose turn cannot start. Reported through the run like any
-    // runtime error; the `finally` below emits the terminal `complete`.
+    // conversation whose turn cannot start. Reported the way a runtime reports
+    // its own failure: an error in the chat, plus the "run failed"
+    // notification, because a queued or scheduled turn often fails while
+    // nobody is watching. The `finally` below emits the terminal `complete`.
+    // `cwd || projectPath` is the directory Codex, Cursor and OpenCode pick.
     const missingDirectoryError = describeMissingWorkingDirectory(runtimeOptions.cwd || runtimeOptions.projectPath);
     if (missingDirectoryError) {
       console.warn('[Chat] Working directory is missing; not starting the provider', { sessionId, provider });
       run.writer.send(createNormalizedMessage({ kind: 'error', content: missingDirectoryError, sessionId, provider }));
+      notifyRunFailed({
+        userId,
+        provider,
+        sessionId,
+        sessionName: clientOptions.sessionSummary,
+        error: missingDirectoryError,
+      });
       return { started: true, error: missingDirectoryError };
     }
 

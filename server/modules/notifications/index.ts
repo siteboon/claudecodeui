@@ -5,7 +5,7 @@ export {
   createNotificationEvent,
   // Used by provider runtimes and Settings to deliver events through enabled channels.
   notifyUserIfEnabled,
-  // Used by provider runtimes to report failed agent runs.
+  // Used by provider runtimes and the WebSocket chat gateway to report failed agent runs.
   notifyRunFailed,
   // Used by provider runtimes to report stopped or completed agent runs.
   notifyRunStopped,

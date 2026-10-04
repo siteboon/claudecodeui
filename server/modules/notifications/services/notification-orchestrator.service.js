@@ -283,6 +283,16 @@ function notifyBackgroundWorkCompleted({ userId, provider, sessionId = null, ses
   });
 }
 
+/**
+ * Reports a failed agent run through every channel the user enabled.
+ *
+ * @param {object} input
+ * @param {string | number | null} input.userId - Owner of the run; nothing is sent without one.
+ * @param {string} input.provider - Provider whose run failed.
+ * @param {string | null} [input.sessionId] - App session id the notification opens.
+ * @param {unknown} input.error - Error or message text; repeats of the same text are deduplicated.
+ * @param {string | null} [input.sessionName] - Session title; looked up from the session when absent.
+ */
 function notifyRunFailed({ userId, provider, sessionId = null, error, sessionName = null }) {
   const errorMessage = normalizeErrorMessage(error);
 
