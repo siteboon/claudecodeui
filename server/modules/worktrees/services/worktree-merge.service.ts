@@ -42,8 +42,11 @@ export async function mergeWorktree(
   const { removeWorktree, runGit } = dependencies;
   const entries = await listWorktreePorcelainEntries(input.projectPath, runGit);
   const entry = findWorktreeEntryByPath(entries, input.worktreePath);
-  await assertPathAllowed(entry.path);
   const repositoryRoot = entries[0].path;
+  // The merge checks out into the main worktree, so both must be inside
+  // ALLOWED_PATHS.
+  await assertPathAllowed(entry.path);
+  await assertPathAllowed(repositoryRoot);
   const targetBranch = entries[0].branch;
 
   if (entry.path === repositoryRoot) {

@@ -50,6 +50,9 @@ export async function createWorktree(
 
   const entries = await listWorktreePorcelainEntries(input.projectPath, runGit);
   const repositoryRoot = entries[0].path;
+  // Git records the branch and the new worktree in the main repository, so it
+  // must be inside ALLOWED_PATHS too, not just the project that asked.
+  await assertPathAllowed(repositoryRoot);
 
   const checkedOutElsewhere = entries.find((entry) => entry.branch === branch);
   if (checkedOutElsewhere) {
