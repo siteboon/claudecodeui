@@ -96,6 +96,13 @@ test('conversation search fails with an actionable error when rg is not on PATH 
         titleResultBatches.push(titleResults);
       }),
       (error: Error) => {
+        // Also reached on supported platforms whose bundled binary was never
+        // installed, so the message must not claim the platform has no build.
+        const platformLabel = `${process.platform}-${process.arch}`;
+        assert.match(
+          error.message,
+          new RegExp(`@vscode/ripgrep could not provide a ripgrep binary for ${platformLabel} `),
+        );
         assert.match(error.message, /no `rg` executable was found on PATH/);
         assert.match(error.message, /pkg install ripgrep/);
         assert.equal((error.cause as NodeJS.ErrnoException | undefined)?.code, 'ENOENT');

@@ -97,10 +97,10 @@ const MAX_MATCHES_PER_SESSION = 2;
 const RIPGREP_FILE_CHUNK_SIZE = 40;
 const RIPGREP_CHUNK_CONCURRENCY = 6;
 /**
- * Spawned when @vscode/ripgrep has no binary for this machine. The bare name is
- * looked up on PATH at every spawn (cross-spawn adds PATHEXT on Windows), so a
- * ripgrep installed later, e.g. `pkg install ripgrep` on Termux, is picked up
- * without restarting the server.
+ * Spawned when @vscode/ripgrep cannot provide a binary on this machine. The
+ * bare name is looked up on PATH at every spawn (cross-spawn adds PATHEXT on
+ * Windows), so a ripgrep installed later, e.g. `pkg install ripgrep` on Termux,
+ * is picked up without restarting the server.
  */
 const RIPGREP_PATH_COMMAND = 'rg';
 const UNKNOWN_PROJECT_KEY = '__unknown_project__';
@@ -669,11 +669,14 @@ function getRipgrepCommand(): Promise<string> {
   return ripgrepCommandPromise;
 }
 
+// Worded for both reasons the bundled binary can be missing: no build for this
+// platform (e.g. android-arm64), or a supported platform whose binary was never
+// installed (failed 1.17.x postinstall download, 1.18 installed with --omit=optional).
 function createRipgrepUnavailableError(cause: unknown): Error {
   return new Error(
-    'Conversation search needs ripgrep, but @vscode/ripgrep has no binary for '
-      + `${process.platform}-${process.arch} and no \`rg\` executable was found on PATH. `
-      + 'Install ripgrep (Termux: `pkg install ripgrep`; other systems: '
+    'Conversation search needs ripgrep, but @vscode/ripgrep could not provide a ripgrep '
+      + `binary for ${process.platform}-${process.arch} and no \`rg\` executable was found `
+      + 'on PATH. Install ripgrep (Termux: `pkg install ripgrep`; other systems: '
       + 'https://github.com/BurntSushi/ripgrep#installation) and search again.',
     { cause },
   );
