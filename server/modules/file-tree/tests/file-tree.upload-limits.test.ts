@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,11 +12,17 @@ import express from 'express';
 // directory once, when it is first imported, so both have to be in place before
 // that import. A 1 MB cap keeps the over-limit upload below small; the private
 // temp directory lets the test see whether a rejected upload leaves a file behind.
-const uploadTemporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'file-tree-upload-limits-'));
+// An upload the cap fails to stop reaches the project lookup, so DATABASE_PATH
+// points at a throwaway file instead of whatever database the shell names.
+const fixtureDirectory = await mkdtemp(path.join(os.tmpdir(), 'file-tree-upload-limits-'));
+const uploadTemporaryDirectory = path.join(fixtureDirectory, 'uploads');
+await mkdir(uploadTemporaryDirectory);
 const previousUploadLimit = process.env.UPLOAD_MAX_FILE_SIZE_MB;
 const previousTemporaryDirectory = process.env.TMPDIR;
+const previousDatabasePath = process.env.DATABASE_PATH;
 process.env.UPLOAD_MAX_FILE_SIZE_MB = '1';
 process.env.TMPDIR = uploadTemporaryDirectory;
+process.env.DATABASE_PATH = path.join(fixtureDirectory, 'auth.db');
 
 const { fileTreeRoutes, readMaximumUploadSizeMegabytes } = await import(
   '@/modules/file-tree/file-tree.module.js'
@@ -34,7 +40,12 @@ if (previousUploadLimit === undefined) {
 }
 
 test.after(async () => {
-  await rm(uploadTemporaryDirectory, { recursive: true, force: true });
+  if (previousDatabasePath === undefined) {
+    delete process.env.DATABASE_PATH;
+  } else {
+    process.env.DATABASE_PATH = previousDatabasePath;
+  }
+  await rm(fixtureDirectory, { recursive: true, force: true });
 });
 
 async function withFileTreeServer(run: (baseUrl: string) => Promise<void>): Promise<void> {
