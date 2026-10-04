@@ -46,11 +46,15 @@ after(() => {
 
 const loadSearchService = () => import('@/modules/providers/services/session-conversations-search.service.js');
 
-// First in the file, so these concurrent searches make the process's first lookup.
+// First in the file, so these concurrent searches make the process's first
+// lookup. An `rg` is on PATH too, so that lookup has to choose between them.
 test('conversation search looks up the ripgrep binary once per process, even for concurrent searches', async () => {
   const { searchConversations } = await loadSearchService();
 
-  await withSearchFixture(async () => {
+  await withSearchFixture(async ({ binDir, tempDirectory }) => {
+    const pathRipgrepLogPath = path.join(tempDirectory, 'path-rg-invocations.log');
+    await createFakeRipgrepExecutable(binDir, pathRipgrepLogPath);
+
     const results = await Promise.all([
       searchConversations('release planning'),
       searchConversations('planning'),
@@ -60,6 +64,8 @@ test('conversation search looks up the ripgrep binary once per process, even for
     // Three ripgrep runs (one per query word) and any from other tests share
     // a single lookup.
     assert.equal(countBundledRipgrepLookups(), 1);
+    assert.equal((await readRipgrepSearchPatterns(bundledRipgrepLogPath)).length, 3);
+    assert.deepEqual(await readRipgrepSearchPatterns(pathRipgrepLogPath), []);
   });
 });
 
