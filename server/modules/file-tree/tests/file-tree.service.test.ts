@@ -21,6 +21,7 @@ import type {
 delete process.env.ALLOWED_PATHS;
 const { createFileTreeService } = await import('@/modules/file-tree/file-tree.service.js');
 const { AppError, resolveReadOnlyRootPath, validateWorkspacePath } = await import('@/shared/utils.js');
+type AppError = InstanceType<typeof AppError>;
 
 const testDirectory = path.dirname(fileURLToPath(import.meta.url));
 
