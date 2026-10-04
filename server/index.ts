@@ -4,7 +4,6 @@ import './load-env.js';
 import fs, { promises as fsPromises } from 'fs';
 import path from 'path';
 import os from 'os';
-import http from 'http';
 
 import express, { type NextFunction, type Request, type Response } from 'express';
 import cors from 'cors';
@@ -18,6 +17,7 @@ import {
 import { chatRunRegistry, createWebSocketServer } from '@/modules/websocket/index.js';
 
 import { getConnectableHost } from '../shared/networkHosts.js';
+import { createServerForTls, resolveServerTls } from '../shared/serverTls.js';
 
 import { createGitModule } from './modules/git/index.js';
 import {
@@ -81,8 +81,13 @@ const systemRoutes = createSystemModule({
 });
 console.log('SERVER_PORT from env:', process.env.SERVER_PORT);
 
+// SSL_CERT/SSL_KEY switch this server, and every WebSocket path on it, to HTTPS on SERVER_PORT.
+// A broken configuration falls back to plain HTTP; startServer() logs the reason.
+const serverTls = resolveServerTls(process.env);
+const SERVER_PROTOCOL = serverTls.protocol;
+
 const app = express();
-const server = http.createServer(app);
+const server = createServerForTls(serverTls, app);
 const queryClaude = providerRuntimeService.getRunner('claude');
 const queryCursor = providerRuntimeService.getRunner('cursor');
 const queryCodex = providerRuntimeService.getRunner('codex');
@@ -300,7 +305,7 @@ async function writeLocalServerMarker() {
         pid: process.pid,
         host: HOST,
         port: Number.parseInt(String(SERVER_PORT), 10),
-        url: `http://${DISPLAY_HOST}:${SERVER_PORT}`,
+        url: `${SERVER_PROTOCOL}://${DISPLAY_HOST}:${SERVER_PORT}`,
         installMode,
         appRoot: APP_ROOT,
         updatedAt: new Date().toISOString(),
@@ -345,11 +350,18 @@ async function startServer() {
         console.log(`${terminalTextStyles.info('[INFO]')} Using Claude Agents SDK for Claude integration`);
         console.log('');
 
-        if (isProduction) {
-            console.log(`${terminalTextStyles.info('[INFO]')} To run in production mode, go to http://${DISPLAY_HOST}:${SERVER_PORT}`);
+        if (serverTls.protocol === 'https') {
+            console.log(`${terminalTextStyles.info('[INFO]')} HTTPS enabled with SSL_CERT=${serverTls.certPath} SSL_KEY=${serverTls.keyPath}`);
+        } else if (serverTls.warning) {
+            console.warn(`${terminalTextStyles.warn('[WARN]')} HTTPS is off, serving plain HTTP. ${serverTls.warning}`);
         }
 
-        console.log(`${terminalTextStyles.info('[INFO]')} To run in development mode with hot-module replacement, go to http://${DISPLAY_HOST}:${VITE_PORT}`);
+        if (isProduction) {
+            console.log(`${terminalTextStyles.info('[INFO]')} To run in production mode, go to ${SERVER_PROTOCOL}://${DISPLAY_HOST}:${SERVER_PORT}`);
+        }
+
+        // vite.config.js applies the same SSL_CERT/SSL_KEY rule, so the dev server uses this protocol too.
+        console.log(`${terminalTextStyles.info('[INFO]')} To run in development mode with hot-module replacement, go to ${SERVER_PROTOCOL}://${DISPLAY_HOST}:${VITE_PORT}`);
    
         server.listen(SERVER_PORT, HOST, async () => {
             const appInstallPath = APP_ROOT;
@@ -362,7 +374,7 @@ async function startServer() {
             console.log(`  ${terminalTextStyles.bright('CloudCLI Server - Ready')}`);
             console.log(terminalTextStyles.dim('═'.repeat(63)));
             console.log('');
-            console.log(`${terminalTextStyles.info('[INFO]')} Server URL:  ${terminalTextStyles.bright('http://' + DISPLAY_HOST + ':' + SERVER_PORT)}`);
+            console.log(`${terminalTextStyles.info('[INFO]')} Server URL:  ${terminalTextStyles.bright(SERVER_PROTOCOL + '://' + DISPLAY_HOST + ':' + SERVER_PORT)}`);
             console.log(`${terminalTextStyles.info('[INFO]')} Installed at: ${terminalTextStyles.dim(appInstallPath)}`);
             console.log(`${terminalTextStyles.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
             console.log('');

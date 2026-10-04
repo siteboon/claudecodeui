@@ -28,6 +28,14 @@ const LOCAL_SERVER_PORT_ENV_KEYS = [
 
 function requestJson(url, timeoutMs = HEALTH_TIMEOUT_MS) {
   return new Promise((resolve) => {
+    // The desktop window only loads plain http:// loopback servers. A server started with
+    // SSL_CERT/SSL_KEY advertises an https:// URL (e.g. in local-server.json); http.get() throws on
+    // it, so treat it as "not a usable server" and let the app start its own HTTP server.
+    if (new URL(url).protocol !== 'http:') {
+      resolve({ ok: false, json: null });
+      return;
+    }
+
     const req = http.get(url, { timeout: timeoutMs }, (res) => {
       let body = '';
 
@@ -413,6 +421,10 @@ export class LocalServerController {
         ...runtime.env,
         HOST: bindHost,
         SERVER_PORT: String(port),
+        // Keep this server on plain HTTP even if SSL_CERT/SSL_KEY are set in the user's shell or
+        // .env: the window, health checks and share links all use http://. Read by
+        // resolveServerTls() in shared/serverTls.js (not imported: shared/ is not packaged here).
+        CLOUDCLI_DISABLE_SSL: '1',
         PATH: getDesktopPath(),
       },
       stdio: ['ignore', 'pipe', 'pipe'],

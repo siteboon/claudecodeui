@@ -10,6 +10,9 @@ import type {
 } from '@/shared/types.js';
 import { terminalTextStyles } from '@/shared/utils.js';
 
+// The SSL_CERT/SSL_KEY rule the server itself applies, outside server/ so vite.config.js shares it.
+import { resolveServerTls } from '../../../shared/serverTls.js';
+
 type CliServiceDependencies = {
   applicationRoot: string;
   defaultDatabasePath: string;
@@ -83,6 +86,8 @@ function showStatus(dependencies: CliServiceDependencies): void {
   const databaseExists = fileSystem.pathExists(databasePath);
   const claudeProjectsPath = path.join(dependencies.homeDirectory, '.claude', 'projects');
   const environmentFilePath = path.join(dependencies.applicationRoot, '.env');
+  // Same check the server runs at startup, so status reports the protocol it will really use.
+  const serverTls = resolveServerTls(environment);
 
   output.log(`\n${terminalTextStyles.bright('CloudCLI UI - Status')}\n`);
   output.log(terminalTextStyles.dim('═'.repeat(60)));
@@ -106,6 +111,13 @@ function showStatus(dependencies: CliServiceDependencies): void {
   output.log(`       DATABASE_PATH: ${terminalTextStyles.dim(environment.DATABASE_PATH || '(using default location)')}`);
   output.log(`       CLAUDE_CLI_PATH: ${terminalTextStyles.dim(environment.CLAUDE_CLI_PATH || 'claude (default)')}`);
   output.log(`       CONTEXT_WINDOW: ${terminalTextStyles.dim(environment.CONTEXT_WINDOW || '160000 (default)')}`);
+  if (serverTls.protocol === 'https') {
+    output.log(`       HTTPS: ${terminalTextStyles.ok(`[OK] SSL_CERT=${serverTls.certPath} SSL_KEY=${serverTls.keyPath}`)}`);
+  } else if (serverTls.warning) {
+    output.log(`       HTTPS: ${terminalTextStyles.warn(`[WARN] Off, the server will use plain HTTP. ${serverTls.warning}`)}`);
+  } else {
+    output.log(`       HTTPS: ${terminalTextStyles.dim('off (set SSL_CERT and SSL_KEY to enable)')}`);
+  }
   output.log(`\n${terminalTextStyles.info('[INFO]')} Claude Projects Folder:`);
   output.log(`       ${terminalTextStyles.dim(claudeProjectsPath)}`);
   output.log(`       Status: ${fileSystem.pathExists(claudeProjectsPath)
@@ -121,7 +133,7 @@ function showStatus(dependencies: CliServiceDependencies): void {
   output.log(`      ${terminalTextStyles.dim('>')} Use ${terminalTextStyles.bright('cloudcli --port 8080')} to run on a custom port`);
   output.log(`      ${terminalTextStyles.dim('>')} Use ${terminalTextStyles.bright('cloudcli --database-path /path/to/db')} for custom database`);
   output.log(`      ${terminalTextStyles.dim('>')} Run ${terminalTextStyles.bright('cloudcli help')} for all options`);
-  output.log(`      ${terminalTextStyles.dim('>')} Access the UI at http://localhost:${environment.SERVER_PORT || environment.PORT || '3001'}\n`);
+  output.log(`      ${terminalTextStyles.dim('>')} Access the UI at ${serverTls.protocol}://localhost:${environment.SERVER_PORT || environment.PORT || '3001'}\n`);
 }
 
 function showHelp(dependencies: CliServiceDependencies): void {
@@ -161,6 +173,8 @@ Environment Variables:
   DATABASE_PATH       Set custom database location
   CLAUDE_CLI_PATH     Set custom Claude CLI path
   CONTEXT_WINDOW      Set context window size (default: 160000)
+  SSL_CERT            PEM certificate file; with SSL_KEY, serve HTTPS
+  SSL_KEY             PEM private key file for SSL_CERT
 
 Documentation:
   ${dependencies.packageMetadata.homepage || 'https://github.com/siteboon/claudecodeui'}
