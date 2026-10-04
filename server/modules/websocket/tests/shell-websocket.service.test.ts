@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
+import test, { mock } from 'node:test';
 
 import { WebSocket } from 'ws';
 
@@ -12,11 +12,38 @@ import { CLAUDE_ROOT_BYPASS_NOTICE, CLAUDE_ROOT_BYPASS_NOTICE_CODE } from '@/sha
 
 const SANDBOX_ENV_KEYS = ['IS_SANDBOX', 'CLAUDE_CODE_BUBBLEWRAP'] as const;
 
+/** Claude Code's system-wide managed settings directory, which its root guard also reads. */
+const MANAGED_SETTINGS_DIR = process.platform === 'darwin' ? '/Library/Application Support/ClaudeCode' : '/etc/claude-code';
+
+/**
+ * Shows the root guard no managed settings, so a machine whose managed
+ * settings mark a sandbox cannot flip the "as root" cases. Undone by
+ * `mock.restoreAll()`.
+ */
+function hideHostManagedSettings(): void {
+  const isManaged = (target: unknown) => String(target).startsWith(`${MANAGED_SETTINGS_DIR}${path.sep}`);
+  const missing = () => Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
+  const { readFileSync, readdirSync } = fs;
+  mock.method(fs, 'readFileSync', ((file: fs.PathOrFileDescriptor, options?: unknown) => {
+    if (isManaged(file)) {
+      throw missing();
+    }
+    return readFileSync(file, options as never);
+  }) as never);
+  mock.method(fs, 'readdirSync', ((directory: fs.PathLike, options?: unknown) => {
+    if (isManaged(directory)) {
+      throw missing();
+    }
+    return readdirSync(directory, options as never);
+  }) as never);
+}
+
 /**
  * Runs `body` as if the server process had `uid`, with Claude Code's sandbox
- * markers (`IS_SANDBOX`, `CLAUDE_CODE_BUBBLEWRAP`) set only as given and an
+ * markers (`IS_SANDBOX`, `CLAUDE_CODE_BUBBLEWRAP`) set only as given, an
  * empty HOME holding only `userSettingsEnv` as `~/.claude/settings.json`'s
- * `env`, so the bypass tests do not depend on who runs the suite.
+ * `env`, and no managed settings, so the bypass tests do not depend on who
+ * runs the suite or on which machine.
  */
 function withProcessIdentity(
   uid: number,
@@ -35,6 +62,7 @@ function withProcessIdentity(
   }
   process.env.HOME = home;
   delete process.env.CLAUDE_CONFIG_DIR;
+  hideHostManagedSettings();
   process.getuid = () => uid;
   for (const key of SANDBOX_ENV_KEYS) {
     if (sandboxEnv[key] === undefined) {
@@ -47,6 +75,7 @@ function withProcessIdentity(
   try {
     body();
   } finally {
+    mock.restoreAll();
     process.getuid = originalGetuid;
     for (const [key, value] of Object.entries(originalEnv)) {
       if (value === undefined) {

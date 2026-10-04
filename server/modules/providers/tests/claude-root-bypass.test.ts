@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
+import test, { mock } from 'node:test';
 
 import { ClaudeSessionsProvider } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import { CLAUDE_PREDEFINED_MODELS } from '@/modules/providers/list/claude/claude-models.provider.js';
@@ -22,6 +22,32 @@ import { CLAUDE_ROOT_BYPASS_NOTICE, CLAUDE_ROOT_BYPASS_NOTICE_CODE } from '@/sha
 
 const SANDBOX_ENV_KEYS = ['IS_SANDBOX', 'CLAUDE_CODE_BUBBLEWRAP'] as const;
 type SandboxEnv = Partial<Record<(typeof SANDBOX_ENV_KEYS)[number], string>>;
+
+/** Claude Code's system-wide managed settings directory, which its root guard also reads. */
+const MANAGED_SETTINGS_DIR = process.platform === 'darwin' ? '/Library/Application Support/ClaudeCode' : '/etc/claude-code';
+
+/**
+ * Shows the root guard no managed settings, so a machine whose managed
+ * settings mark a sandbox cannot flip the "as root" cases. Undone by
+ * `mock.restoreAll()`.
+ */
+function hideHostManagedSettings(): void {
+  const isManaged = (target: unknown) => String(target).startsWith(`${MANAGED_SETTINGS_DIR}${path.sep}`);
+  const missing = () => Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
+  const { readFileSync, readdirSync } = fs;
+  mock.method(fs, 'readFileSync', ((file: fs.PathOrFileDescriptor, options?: unknown) => {
+    if (isManaged(file)) {
+      throw missing();
+    }
+    return readFileSync(file, options as never);
+  }) as never);
+  mock.method(fs, 'readdirSync', ((directory: fs.PathLike, options?: unknown) => {
+    if (isManaged(directory)) {
+      throw missing();
+    }
+    return readdirSync(directory, options as never);
+  }) as never);
+}
 
 type TurnOutcome = {
   launchedMode: unknown;
@@ -50,7 +76,7 @@ function standInCliRefusesBypass(): boolean {
     CLAUDE_CODE_BUBBLEWRAP: process.env.CLAUDE_CODE_BUBBLEWRAP,
   };
   try {
-    const settings = JSON.parse(readFileSync(path.join(os.homedir(), '.claude', 'settings.json'), 'utf8'));
+    const settings = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude', 'settings.json'), 'utf8'));
     Object.assign(markers, settings?.env ?? {});
   } catch {
     // No user settings.
@@ -85,6 +111,8 @@ async function runTurnAs(
     await mkdir(path.join(cwd, '.claude'), { recursive: true });
     await writeFile(path.join(cwd, '.claude', 'settings.json'), JSON.stringify({ env: settings.projectEnv }));
   }
+  // The machine's managed settings are kept out of the guard the same way.
+  hideHostManagedSettings();
   process.getuid = () => uid;
   for (const key of SANDBOX_ENV_KEYS) {
     if (sandboxEnv[key] === undefined) {
@@ -140,6 +168,7 @@ async function runTurnAs(
     const writer = { send: (message: NormalizedMessage) => { sent.push(message); }, userId: null };
     await queryClaudeSDK('hello', { sessionId: `app-root-bypass-${Date.now()}-${Math.random()}`, cwd, ...options }, writer as never, context);
   } finally {
+    mock.restoreAll();
     process.getuid = originalGetuid;
     for (const [key, value] of Object.entries(originalEnv)) {
       if (value === undefined) {
