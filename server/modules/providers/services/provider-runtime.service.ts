@@ -1,6 +1,7 @@
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
+import { keepAwakeService } from '@/modules/system/index.js';
 import type { IProvider } from '@/shared/interfaces.js';
 import type {
   AnyRecord,
@@ -21,6 +22,8 @@ type ProviderRuntimeServiceDependencies = {
     requestedModel?: string | null,
   ): Promise<string | undefined>;
   getProviderModels: typeof providerModelsService.getProviderModels;
+  /** Takes a keep-awake hold for one run; the returned function releases it. */
+  holdKeepAwake(): () => void;
 };
 
 const defaultDependencies: ProviderRuntimeServiceDependencies = {
@@ -30,6 +33,7 @@ const defaultDependencies: ProviderRuntimeServiceDependencies = {
   resolveResumeModel: (provider, sessionId, requestedModel) =>
     providerModelsService.resolveResumeModel(provider, sessionId, requestedModel),
   getProviderModels: (provider) => providerModelsService.getProviderModels(provider),
+  holdKeepAwake: () => keepAwakeService.acquire(),
 };
 
 /**
@@ -62,14 +66,24 @@ export function createProviderRuntimeService(
     },
   });
 
-  const run = (
+  const run = async (
     providerName: LLMProvider,
     command: string,
     options: AnyRecord,
     writer: ProviderRuntimeWriter,
   ): Promise<unknown> => {
     const provider = dependencies.resolveProvider(providerName);
-    return provider.runtime.run(command, options, writer, createRuntimeContext(provider));
+    // Every run passes through here: chat sends and edits, scheduled messages,
+    // the external agent API and commit-message generation. A runtime's
+    // promise settles once its work is over, whether it completed, failed or
+    // was aborted (Claude's only after the background work it waits for), so
+    // the computer is kept awake for exactly that long.
+    const releaseKeepAwake = dependencies.holdKeepAwake();
+    try {
+      return await provider.runtime.run(command, options, writer, createRuntimeContext(provider));
+    } finally {
+      releaseKeepAwake();
+    }
   };
 
   return {

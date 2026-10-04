@@ -29,7 +29,7 @@ import {
 import { taskmasterRoutes } from './modules/taskmaster/index.js';
 import { commandsRoutes } from './modules/commands/index.js';
 import { settingsRoutes } from './modules/settings/index.js';
-import { createSystemModule } from './modules/system/index.js';
+import { createSystemModule, keepAwakeService } from './modules/system/index.js';
 import { createAgentModule } from './modules/agent/index.js';
 import projectModuleRoutes from './modules/projects/projects.routes.js';
 import notificationRoutes from './modules/notifications/notifications.routes.js';
@@ -334,6 +334,10 @@ async function startServer() {
         // Initialize authentication database
         await initializeDatabase();
 
+        // Reads the saved "keep this computer awake while agents work" choice
+        // before any run can start.
+        keepAwakeService.initialize();
+
         // Configure Web Push (VAPID keys)
         configureWebPush();
 
@@ -383,6 +387,7 @@ async function startServer() {
         closeScheduledMessageDispatcher();
         // Clean up plugin processes on shutdown
         const shutdownRuntimeServices = async () => {
+            keepAwakeService.shutdown();
             try {
                 await browserUseService.stopAllSessions();
             } catch (err) {

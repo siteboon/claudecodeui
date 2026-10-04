@@ -44,7 +44,10 @@ function createProvider(id: LLMProvider, runtime: IProviderRuntime): IProvider {
   } as unknown as IProvider;
 }
 
-function createService(providers: IProvider[]) {
+function createService(
+  providers: IProvider[],
+  overrides: NonNullable<Parameters<typeof createProviderRuntimeService>[0]> = {},
+) {
   const providerMap = new Map(providers.map((provider) => [provider.id, provider]));
   return createProviderRuntimeService({
     listProviders: () => providers,
@@ -65,6 +68,7 @@ function createService(providers: IProvider[]) {
         DEFAULT: 'default-model',
       };
     },
+    ...overrides,
   });
 }
 
@@ -135,4 +139,47 @@ test('routes permission decisions through provider-owned runtime capabilities', 
   assert.deepEqual(service.getPendingApprovalsForSession('session-1'), [
     { requestId: 'request-1', sessionId: 'session-1' },
   ]);
+});
+
+test('holds the computer awake for exactly as long as each run is in progress', async () => {
+  const events: string[] = [];
+  let holdCount = 0;
+  const holdKeepAwake = () => {
+    const hold = ++holdCount;
+    events.push(`hold ${hold}`);
+    return () => {
+      events.push(`release ${hold}`);
+    };
+  };
+  let finishRun: (value: unknown) => void = () => undefined;
+  const runtime = createRuntime({
+    run(command) {
+      events.push(`run ${command}`);
+      if (command === 'fails') {
+        return Promise.reject(new Error('CLI exited with code 1'));
+      }
+      if (command === 'throws') {
+        throw new Error('spawn failed');
+      }
+      return new Promise((resolve) => {
+        finishRun = resolve;
+      });
+    },
+  });
+  const service = createService([createProvider('claude', runtime)], { holdKeepAwake });
+  const writer = { send() {} };
+
+  const pending = service.run('claude', 'long', {}, writer);
+  await Promise.resolve();
+  assert.deepEqual(events, ['hold 1', 'run long']);
+
+  finishRun('complete');
+  assert.equal(await pending, 'complete');
+  assert.deepEqual(events, ['hold 1', 'run long', 'release 1']);
+
+  // Failed runs (the promise rejects, or the runtime throws before returning
+  // one) release their hold as well.
+  await assert.rejects(service.getRunner('claude')('fails', {}, writer), /code 1/);
+  await assert.rejects(service.run('claude', 'throws', {}, writer), /spawn failed/);
+  assert.deepEqual(events.slice(3), ['hold 2', 'run fails', 'release 2', 'hold 3', 'run throws', 'release 3']);
 });
