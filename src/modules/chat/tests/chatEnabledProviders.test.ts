@@ -104,6 +104,40 @@ test('while that session is open, every reader of the stored provider sees it', 
   assert.equal(reader.result.current, 'claude');
 });
 
+test('a reconcile after the preferences load keeps that session in storage', async () => {
+  // AuthContext reconciles once the user's preferences arrive; when that is
+  // after the session opened, readers must still follow the session.
+  const { result, rerender, unmount, readStoredProvider } = await renderProviderState(['codex'], {
+    session: claudeSession,
+  });
+  const { reconcileSelectedProvider, writeSelectedProvider } = await import('@/shared/selectedProvider');
+
+  act(() => {
+    reconcileSelectedProvider();
+  });
+  assert.equal(result.current.provider, 'claude');
+  assert.equal(readStoredProvider(), 'claude');
+
+  // Once the session is left, or the chat view is gone, a disabled provider
+  // is reconciled away again.
+  act(() => {
+    rerender({ selectedSession: null });
+  });
+  act(() => {
+    writeSelectedProvider('claude');
+    reconcileSelectedProvider();
+  });
+  assert.equal(readStoredProvider(), 'codex');
+
+  act(() => {
+    rerender({ selectedSession: claudeSession });
+  });
+  unmount();
+  writeSelectedProvider('claude');
+  reconcileSelectedProvider();
+  assert.equal(readStoredProvider(), 'codex');
+});
+
 test('leaving that session for a new chat returns to the last enabled provider', async () => {
   // Not to the first enabled one: the user was on claude before opening it.
   const { result, rerender, readStoredProvider } = await renderProviderState(['codex', 'claude'], {

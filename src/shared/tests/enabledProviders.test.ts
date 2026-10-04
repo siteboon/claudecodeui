@@ -182,6 +182,29 @@ test('reconciling rewrites a disabled stored provider so storage agrees', async 
   assert.equal(readUserPreference('selectedProvider', null), 'codex');
 });
 
+test('reconciling keeps the provider of the open session, even when disabled', async () => {
+  // The auth module reconciles again once the user's preferences load, which
+  // can be after a session made with a since-disabled provider was opened.
+  const {
+    hydrateEnabledProviders,
+    readUserPreference,
+    reconcileSelectedProvider,
+    setOpenSessionProvider,
+    writeSelectedProvider,
+  } = await loadStores();
+  respondWith(['codex']);
+  await hydrateEnabledProviders();
+  writeSelectedProvider('claude');
+  setOpenSessionProvider('claude');
+
+  reconcileSelectedProvider();
+  assert.equal(readUserPreference('selectedProvider', null), 'claude');
+
+  setOpenSessionProvider(null);
+  reconcileSelectedProvider();
+  assert.equal(readUserPreference('selectedProvider', null), 'codex');
+});
+
 test('with every provider enabled, reconciling writes nothing, even for an unknown id', async () => {
   // An unset VITE_ENABLED_PROVIDERS must leave auth.db exactly as before the
   // setting existed: an unknown id already reads as claude and is not rewritten.

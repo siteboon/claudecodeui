@@ -10,7 +10,12 @@ import type { PendingPermissionRequest, PermissionMode,
   ProviderModelOption,
   ProviderModelsDefinition } from '@/shared/types';
 import { DEFAULT_EFFORT_VALUE } from '@/shared/constants';
-import { readNewChatProvider, readSelectedProvider, writeSelectedProvider } from '@/shared/selectedProvider';
+import {
+  readNewChatProvider,
+  readSelectedProvider,
+  setOpenSessionProvider,
+  writeSelectedProvider,
+} from '@/shared/selectedProvider';
 import { useEnabledProviders } from '@/shared/hooks/useEnabledProviders';
 
 const FALLBACK_PROVIDER_EFFORT_VALUES: Partial<Record<LLMProvider, readonly string[]>> = {
@@ -429,6 +434,13 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     );
     setPermissionMode(savedMode ?? getDefaultPermissionModeForProvider(provider));
   }, [selectedSession?.id, provider, getDefaultPermissionModeForProvider, getPermissionModesForProvider]);
+
+  // Tells the auth module's late reconcile (after the user's preferences load)
+  // which provider the open session uses, so it keeps that one in storage.
+  useEffect(() => {
+    setOpenSessionProvider(selectedSession?.__provider ?? null);
+    return () => setOpenSessionProvider(null);
+  }, [selectedSession?.__provider]);
 
   // The provider follows the open session and is stored, so every other reader
   // (git panel, quick settings, message tags) agrees with it. That holds for a

@@ -29,6 +29,19 @@ const isKnownProvider = (value: unknown): value is LLMProvider => (
   ALL_PROVIDERS.includes(value as LLMProvider)
 );
 
+// The provider of the session the chat view has open, or null on the new-chat
+// state. reconcileSelectedProvider() can run after the user's preferences load,
+// which may be after such a session was opened, so it must leave this one alone.
+let openSessionProvider: LLMProvider | null = null;
+
+/**
+ * Used by the chat module: records the provider of the open session (null when
+ * none is open), so a late reconcile does not move storage off that session.
+ */
+export function setOpenSessionProvider(provider: LLMProvider | null): void {
+  openSessionProvider = provider;
+}
+
 export function readSelectedProvider(): LLMProvider {
   const stored = readUserPreference<string | null>('selectedProvider', null);
   return isKnownProvider(stored) ? stored : readEnabledProviders()[0];
@@ -59,11 +72,12 @@ export function readNewChatProvider(preferred: LLMProvider | null = null): LLMPr
  * one a new chat starts on, so the copy in `auth.db` agrees with what the app
  * opens on. Only a provider the server disabled is rewritten: nothing stored,
  * or an id that names no provider, already reads as the default, so with every
- * provider enabled nothing is ever written, as before the setting existed.
+ * provider enabled nothing is ever written, as before the setting existed. The
+ * provider of an open session is kept, since every reader follows that session.
  */
 export function reconcileSelectedProvider(): void {
   const stored = readUserPreference<string | null>('selectedProvider', null);
-  if (isKnownProvider(stored) && !readEnabledProviders().includes(stored)) {
+  if (isKnownProvider(stored) && !readEnabledProviders().includes(stored) && stored !== openSessionProvider) {
     writeSelectedProvider(readNewChatProvider());
   }
 }
