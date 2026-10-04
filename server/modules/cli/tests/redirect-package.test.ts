@@ -139,6 +139,48 @@ test('redirect bin accepts a string bin and keeps the exit code the CLI sets', a
   });
 });
 
+test('redirect bin can be loaded with require(), as process managers such as pm2 may do', async () => {
+  await withFixture(async (fixtureRoot) => {
+    const shimDirectory = await installHoisted(fixtureRoot, {
+      packageJson: { bin: { cloudcli: 'cli.js' } },
+      files: { 'cli.js': FAKE_CLI_SOURCE },
+    });
+    const binPath = JSON.stringify(path.join(shimDirectory, 'bin.js'));
+
+    // require(esm) refuses a module graph with top-level await (ERR_REQUIRE_ASYNC_MODULE). The argv splice makes
+    // process.argv look like `node bin.js start`, the way a process manager sets it before loading the script.
+    const run = runNode(
+      [
+        '--input-type=commonjs',
+        '--eval',
+        `process.argv.splice(1, 0, ${binPath}); require(${binPath});`,
+        '--',
+        'start',
+      ],
+      fixtureRoot,
+    );
+
+    assert.doesNotMatch(run.stderr, /ERR_REQUIRE_ASYNC_MODULE/);
+    assert.deepEqual(readForwardedArguments(run), ['start']);
+    assert.equal(run.status, 0, run.stderr);
+  });
+});
+
+test('redirect bin prints the error and exits non-zero when the CLI fails to load', async () => {
+  await withFixture(async (fixtureRoot) => {
+    const shimDirectory = await installHoisted(fixtureRoot, {
+      packageJson: { bin: { cloudcli: 'cli.js' } },
+      // The open interval would keep the process alive if the failure only set process.exitCode.
+      files: { 'cli.js': "setInterval(() => {}, 60_000);\nthrow new Error('fake cloudcli failed to load');\n" },
+    });
+
+    const run = runShimBin(shimDirectory, ['--version']);
+
+    assert.equal(run.status, 1, run.stderr);
+    assert.match(run.stderr, /fake cloudcli failed to load/);
+  });
+});
+
 test('redirect bin still finds the CLI when an exports map hides package.json', async () => {
   await withFixture(async (fixtureRoot) => {
     const shimDirectory = await installHoisted(fixtureRoot, {
