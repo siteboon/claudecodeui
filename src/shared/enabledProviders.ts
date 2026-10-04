@@ -20,6 +20,8 @@ import type { LLMProvider } from '@/shared/types';
 // request must leave the UI as it was before this setting existed.
 let enabledProviders: readonly LLMProvider[] = ALL_PROVIDERS;
 
+// Components reading the list through useEnabledProviders. The list arrives
+// after the first module load, so they must be told to re-render when it does.
 const listeners = new Set<() => void>();
 
 /**

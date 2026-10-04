@@ -32,6 +32,8 @@ export default function AgentsSettingsTab({
   onCodexPermissionModeChange,
   projects,
 }: AgentsSettingsTabProps) {
+  // The providers the server offers (VITE_ENABLED_PROVIDERS); only these get a
+  // tab here.
   const enabledProviders = useEnabledProviders();
   // Opens on the default provider: the first one the server enables, which is
   // Claude unless VITE_ENABLED_PROVIDERS says otherwise. The list is loaded

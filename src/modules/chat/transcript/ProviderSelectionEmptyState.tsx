@@ -107,6 +107,8 @@ export default function ProviderSelectionEmptyState({
   const [modelLibraryOpen, setModelLibraryOpen] = useState(false);
 
   const [modelSearch, setModelSearch] = useState("");
+  // The providers the server offers for new chats (VITE_ENABLED_PROVIDERS):
+  // the picker lists a model group only for these.
   const enabledProviders = useEnabledProviders();
 
   /**

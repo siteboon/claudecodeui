@@ -58,10 +58,10 @@ export default function ModelLibraryPanel({
   const [confirmDeleteRecordId, setConfirmDeleteRecordId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // The provider tabs: the providers the server enables, plus the one this
+  // panel was opened for, since `/model` in a session made with a
+  // since-disabled provider still manages that provider's models.
   const enabledProviders = useEnabledProviders();
-  // The providers the server enables, plus the one this panel was opened for:
-  // `/model` in a session made with a since-disabled provider still manages
-  // that provider's models.
   const visibleProviders = useMemo(
     () => PROVIDERS.filter((provider) => (
       enabledProviders.includes(provider.id) || provider.id === initialProvider

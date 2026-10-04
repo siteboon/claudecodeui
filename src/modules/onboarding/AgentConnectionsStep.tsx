@@ -46,6 +46,8 @@ export default function AgentConnectionsStep({
   onOpenProviderLogin,
 }: AgentConnectionsStepProps) {
   const { t } = useTranslation('auth');
+  // The providers the server offers (VITE_ENABLED_PROVIDERS): onboarding asks
+  // the user to connect only these.
   const enabledProviders = useEnabledProviders();
   return (
     <div className="space-y-4">
