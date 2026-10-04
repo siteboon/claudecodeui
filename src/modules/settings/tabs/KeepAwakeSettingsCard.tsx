@@ -63,8 +63,9 @@ export default function KeepAwakeSettingsCard() {
     <div className="space-y-2 rounded-lg border border-border bg-card p-4">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1 space-y-1">
-          <div className="flex items-center gap-2">
-            <Coffee className="h-4 w-4 flex-shrink-0 text-blue-600" />
+          {/* Top-aligned so the icon stays on the first line when the title wraps on phones. */}
+          <div className="flex items-start gap-2">
+            <Coffee className="mt-1 h-4 w-4 flex-shrink-0 text-blue-600" />
             <h4 className="font-medium text-foreground">{t('keepAwake.title')}</h4>
           </div>
           <p className="text-sm text-muted-foreground">{t('keepAwake.description')}</p>
