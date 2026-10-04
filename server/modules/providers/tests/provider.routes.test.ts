@@ -175,6 +175,29 @@ test('reasoning effort is persisted and returned with the active session model',
   });
 });
 
+test('the enabled-providers route reports VITE_ENABLED_PROVIDERS in its listed order', async (t) => {
+  // The UI lists only these and starts a new chat on the first (#349).
+  const previousValue = process.env.VITE_ENABLED_PROVIDERS;
+  process.env.VITE_ENABLED_PROVIDERS = 'Codex, claude';
+  t.after(() => {
+    if (previousValue === undefined) {
+      delete process.env.VITE_ENABLED_PROVIDERS;
+    } else {
+      process.env.VITE_ENABLED_PROVIDERS = previousValue;
+    }
+  });
+  t.mock.method(console, 'log', () => {});
+
+  await withProviderServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/providers/enabled`);
+    const payload = await response.json() as { success: boolean; data: { providers: string[] } };
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.success, true);
+    assert.deepEqual(payload.data.providers, ['codex', 'claude']);
+  });
+});
+
 test('model routes expose immutable defaults and full custom model CRUD', async () => {
   await withProviderServer(async (baseUrl) => {
     const initialResponse = await fetch(`${baseUrl}/api/providers/codex/models`);
