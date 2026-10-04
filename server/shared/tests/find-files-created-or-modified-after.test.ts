@@ -50,8 +50,11 @@ test('an incremental scan still includes a file created after the cursor whose m
     const copied = await writeFixtureFile(root, '-project/copied.jsonl', '{}\n');
     const preservedMtime = new Date('2020-01-01T00:00:00.000Z');
     await utimes(copied, preservedMtime, preservedMtime);
-    if ((await stat(copied)).birthtimeMs === 0) {
-      t.skip('this filesystem does not report file creation times');
+    // Some filesystems report no creation time (birthtimeMs 0), and HFS+/APFS
+    // move it back when utimes() sets an mtime older than it.
+    const { birthtime, birthtimeMs } = await stat(copied);
+    if (birthtimeMs === 0 || birthtime < cursor) {
+      t.skip('this filesystem did not keep a creation time after the cursor');
       return;
     }
 
