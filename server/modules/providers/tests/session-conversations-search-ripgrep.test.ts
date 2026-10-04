@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { register } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
+import {
+  createFakeRipgrepExecutable,
+  readRipgrepSearchPatterns,
+  withSearchFixture,
+} from '@/modules/providers/tests/session-conversations-search-ripgrep.fixture.js';
 
 // @vscode/ripgrep 1.18+ exports `rgPath` but throws while evaluating it when npm
 // installed no `@vscode/ripgrep-<platform>-<arch>` package, and none is published
@@ -27,100 +31,6 @@ export async function resolve(specifier, context, nextResolve) {
 `)}`);
 
 const loadSearchService = () => import('@/modules/providers/services/session-conversations-search.service.js');
-
-const findEnvKey = (name: string) =>
-  Object.keys(process.env).find((key) => key.toLowerCase() === name.toLowerCase()) || name;
-
-/**
- * Writes an `rg` stand-in that supports the `--files-with-matches` call the
- * search service makes and appends every invocation's arguments to `logPath`.
- */
-async function createFakeRipgrepExecutable(binDir: string, logPath: string): Promise<void> {
-  const scriptPath = path.join(binDir, 'rg.cjs');
-  await writeFile(scriptPath, `
-const fs = require('node:fs');
-const args = process.argv.slice(2);
-fs.appendFileSync(${JSON.stringify(logPath)}, JSON.stringify(args) + '\\n');
-const [pattern, ...files] = args.slice(args.indexOf('--') + 1);
-const matches = files.filter((file) =>
-  fs.readFileSync(file, 'utf8').toLowerCase().includes(pattern.toLowerCase()));
-if (matches.length > 0) {
-  process.stdout.write(matches.join('\\n') + '\\n');
-}
-process.exitCode = matches.length > 0 ? 0 : 1;
-`, 'utf8');
-
-  if (process.platform === 'win32') {
-    await writeFile(
-      path.join(binDir, 'rg.cmd'),
-      `@echo off\r\n"${process.execPath}" "%~dp0rg.cjs" %*\r\n`,
-      'utf8',
-    );
-    return;
-  }
-
-  const commandPath = path.join(binDir, 'rg');
-  // Absolute paths only: PATH holds nothing but `binDir`, so `dirname` and
-  // `node` would not resolve inside the wrapper.
-  await writeFile(commandPath, `#!/bin/sh\nexec "${process.execPath}" "${scriptPath}" "$@"\n`, 'utf8');
-  await chmod(commandPath, 0o755);
-}
-
-/**
- * Runs `run` against a fresh database holding one Codex session whose title and
- * transcript both mention "release planning", with PATH set to `binDir` only.
- */
-async function withSearchFixture(
-  run: (paths: { binDir: string; tempDirectory: string }) => Promise<void>,
-): Promise<void> {
-  const previousDatabasePath = process.env.DATABASE_PATH;
-  const pathKey = findEnvKey('PATH');
-  const previousPath = process.env[pathKey];
-  const tempDirectory = await mkdtemp(path.join(os.tmpdir(), 'conversation-search-ripgrep-'));
-  const binDir = path.join(tempDirectory, 'bin');
-  const workspacePath = path.join(tempDirectory, 'workspace');
-  await mkdir(binDir);
-  await mkdir(workspacePath);
-
-  closeConnection();
-  process.env.DATABASE_PATH = path.join(tempDirectory, 'auth.db');
-  await writeFile(process.env.DATABASE_PATH, '');
-  await initializeDatabase();
-
-  const transcriptPath = path.join(tempDirectory, 'codex-search.jsonl');
-  await writeFile(transcriptPath, `${JSON.stringify({
-    type: 'event_msg',
-    timestamp: '2026-10-04T09:00:00.000Z',
-    payload: {
-      type: 'user_message',
-      kind: 'plain',
-      message: 'Release planning happens on Termux too.',
-    },
-  })}\n`);
-  sessionsDb.createSession(
-    'transcript-session',
-    'codex',
-    workspacePath,
-    'Release planning notes',
-    undefined,
-    undefined,
-    transcriptPath,
-  );
-
-  try {
-    process.env[pathKey] = binDir;
-    await run({ binDir, tempDirectory });
-  } finally {
-    process.env[pathKey] = previousPath;
-    closeConnection();
-    if (previousDatabasePath === undefined) {
-      delete process.env.DATABASE_PATH;
-    } else {
-      process.env.DATABASE_PATH = previousDatabasePath;
-    }
-    await rm(tempDirectory, { recursive: true, force: true });
-  }
-}
 
 test('search service loads when @vscode/ripgrep throws at import for a missing platform package', async () => {
   await assert.rejects(import('@vscode/ripgrep'), { message: MISSING_PLATFORM_PACKAGE_MESSAGE });
@@ -171,14 +81,7 @@ test('conversation search uses rg from PATH when no bundled binary is available'
       ['transcript-session'],
     );
     // One PATH `rg` pass per query word, as with the bundled binary.
-    const searchedPatterns = (await readFile(invocationLogPath, 'utf8'))
-      .trim()
-      .split('\n')
-      .map((line) => {
-        const args = JSON.parse(line) as string[];
-        return args[args.indexOf('--') + 1];
-      });
-    assert.deepEqual(searchedPatterns, ['release', 'planning']);
+    assert.deepEqual(await readRipgrepSearchPatterns(invocationLogPath), ['release', 'planning']);
   });
 });
 
