@@ -382,6 +382,8 @@ export type ChatMessage = {
   isCompactSummary?: boolean;
   /** Set on the row that stands in for a compaction, so it is drawn as one. */
   compact?: CompactionInfo;
+  /** An error row that is an app notice, drawn from its translation instead of `content`. */
+  noticeCode?: string;
   /** The summary that compaction produced, folded into the row above rather than left loose. */
   compactSummary?: string;
   isSubagentContainer?: boolean;
@@ -553,6 +555,8 @@ export type NormalizedMessage = {
   /** A `tool_result` row's structured output — a launch acknowledgement's task id and metadata, a search's file list. */
   toolUseResult?: unknown;
   isError?: boolean;
+  /** Set on an `error` row that is an app notice the client translates itself; `content` is the English fallback. */
+  noticeCode?: string;
   text?: string;
   tokens?: number;
   canInterrupt?: boolean;

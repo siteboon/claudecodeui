@@ -513,6 +513,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           type: 'error',
           content: msg.content || 'Unknown error',
           timestamp: msg.timestamp,
+          noticeCode: msg.noticeCode,
           ...sharedMetadata,
         });
         break;

@@ -80,7 +80,8 @@
     "addTo": "Přidá {{entry}} mezi povolené nástroje.",
     "retry": "Oprávnění uloženo. Pro použití nástroje zopakujte požadavek.",
     "error": "Oprávnění se nepodařilo aktualizovat. Zkuste to prosím znovu.",
-    "openSettings": "Otevřít nastavení"
+    "openSettings": "Otevřít nastavení",
+    "bypassRefusedAsRoot": "Obcházení oprávnění nebylo použito: CloudCLI běží jako root a Claude Code pro roota odmítá přeskakovat dotazy na oprávnění, takže v této relaci zůstávají. Chcete-li režim obcházení používat, spusťte CloudCLI jako uživatel bez práv roota."
   },
   "todo": {
     "updated": "Seznam úkolů byl aktualizován",

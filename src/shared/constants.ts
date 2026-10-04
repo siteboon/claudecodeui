@@ -218,3 +218,16 @@ export const PROVIDER_PERMISSION_PREFERENCE_KEYS: Record<LLMProvider, UserPrefer
   codex: 'codexPermissions',
   opencode: 'opencodePermissions',
 };
+
+// ---------------------------
+
+//----------------- CLAUDE ROOT BYPASS NOTICE ------------
+
+/**
+ * Sent by the server when it started Claude without a requested
+ * bypass-permissions launch because Claude Code refuses that as root: the
+ * Shell tab's `notice` frame carries it as `code`, a chat error row as
+ * `noticeCode`. Both draw the `permissions.bypassRefusedAsRoot` translation.
+ * Must stay identical to the server's `CLAUDE_ROOT_BYPASS_NOTICE_CODE`.
+ */
+export const CLAUDE_ROOT_BYPASS_NOTICE_CODE = 'claude_bypass_refused_as_root';

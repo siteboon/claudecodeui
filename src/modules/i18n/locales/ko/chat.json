@@ -65,7 +65,8 @@
     "addTo": "{{entry}}을(를) 허용된 도구에 추가합니다.",
     "retry": "권한이 저장되었습니다. 도구를 사용하려면 요청을 재시도하세요.",
     "error": "권한을 업데이트할 수 없습니다. 다시 시도해주세요.",
-    "openSettings": "설정 열기"
+    "openSettings": "설정 열기",
+    "bypassRefusedAsRoot": "권한 우회가 적용되지 않았습니다: CloudCLI가 root로 실행 중이며 Claude Code는 root에 대해 권한 확인 건너뛰기를 거부하므로 이 세션에서는 권한 확인이 유지됩니다. 우회 모드를 사용하려면 CloudCLI를 root가 아닌 사용자로 실행하세요."
   },
   "todo": {
     "updated": "Todo 리스트가 업데이트되었습니다",

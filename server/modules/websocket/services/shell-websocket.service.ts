@@ -7,6 +7,7 @@ import { WebSocket, type RawData } from 'ws';
 
 import {
   CLAUDE_ROOT_BYPASS_NOTICE,
+  CLAUDE_ROOT_BYPASS_NOTICE_CODE,
   isClaudeBypassRefusedAsRoot,
   parseIncomingJsonObject,
   stripAnsiSequences,
@@ -34,6 +35,8 @@ type PtySessionEntry = {
   timeoutId: NodeJS.Timeout | null;
   projectPath: string;
   sessionId: string | null;
+  /** Claude was started without the requested bypass flag (root); told again to a reconnecting client. */
+  claudeBypassRefusedAsRoot: boolean;
 };
 
 const ptySessionsMap = new Map<string, PtySessionEntry>();
@@ -175,10 +178,13 @@ function resolveResumeSessionId(
 
 /**
  * Resolves provider command line for plain shell and agent-backed shell modes.
+ * `claudeBypassRefusedAsRoot` drops a requested Claude bypass flag that the
+ * CLI would exit on.
  */
 function buildShellCommand(
   message: ShellIncomingMessage,
-  dependencies: ShellWebSocketDependencies
+  dependencies: ShellWebSocketDependencies,
+  claudeBypassRefusedAsRoot: boolean
 ): string {
   const hasSession = readBoolean(message.hasSession);
   const initialCommand = readString(message.initialCommand);
@@ -221,7 +227,7 @@ function buildShellCommand(
   // shift+tab permission-mode cycle; it cannot be enabled from inside a
   // session started without it. As root the CLI exits on the flag instead, so
   // it is left off there and the session starts in the normal mode.
-  const bypassFlag = readBoolean(message.bypassPermissions) && !isClaudeBypassRefusedAsRoot()
+  const bypassFlag = readBoolean(message.bypassPermissions) && !claudeBypassRefusedAsRoot
     ? ' --dangerously-skip-permissions'
     : '';
   const command = initialCommand || `claude${bypassFlag}`;
@@ -365,6 +371,9 @@ export function handleShellConnection(
               data: '\x1b[36m[Reconnected to existing session]\x1b[0m\r\n',
             })
           );
+          if (existingSession.claudeBypassRefusedAsRoot) {
+            ws.send(JSON.stringify({ type: 'notice', code: CLAUDE_ROOT_BYPASS_NOTICE_CODE }));
+          }
 
           if (existingSession.buffer.length > 0) {
             existingSession.buffer.forEach((bufferedData) => {
@@ -398,7 +407,13 @@ export function handleShellConnection(
           return;
         }
 
-        const shellCommand = buildShellCommand(data, dependencies);
+        // Claude Code exits on its bypass flag as root outside a sandbox.
+        // Decided once so the command and the notice below agree.
+        const launchesClaude =
+          !isPlainShell && provider !== 'cursor' && provider !== 'codex' && provider !== 'opencode';
+        const claudeBypassRefusedAsRoot =
+          launchesClaude && readBoolean(data.bypassPermissions) && isClaudeBypassRefusedAsRoot();
+        const shellCommand = buildShellCommand(data, dependencies, claudeBypassRefusedAsRoot);
         const resumeSessionId = resolveResumeSessionId(data, dependencies);
         const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
         const shellArgs =
@@ -428,6 +443,7 @@ export function handleShellConnection(
           timeoutId: null,
           projectPath,
           sessionId,
+          claudeBypassRefusedAsRoot,
         });
 
         shellProcess.onData((chunk) => {
@@ -548,8 +564,11 @@ export function handleShellConnection(
           welcomeMsg = hasSession && resumeSessionId
             ? `\x1b[36mResuming ${providerName} session ${resumeSessionId} in: ${projectPath}\x1b[0m\r\n`
             : `\x1b[36mStarting new ${providerName} session in: ${projectPath}\x1b[0m\r\n`;
-          // buildShellCommand dropped the requested bypass flag; say why.
-          if (providerName === 'Claude' && readBoolean(data.bypassPermissions) && isClaudeBypassRefusedAsRoot()) {
+          // buildShellCommand dropped the requested bypass flag. This line is
+          // only readable once the CLI exits: its full-screen UI clears the
+          // terminal at startup. The `notice` frame below is what the Shell
+          // shows meanwhile.
+          if (claudeBypassRefusedAsRoot) {
             welcomeMsg += `\x1b[33m${CLAUDE_ROOT_BYPASS_NOTICE}\x1b[0m\r\n`;
           }
         }
@@ -560,6 +579,9 @@ export function handleShellConnection(
             data: welcomeMsg,
           })
         );
+        if (claudeBypassRefusedAsRoot) {
+          ws.send(JSON.stringify({ type: 'notice', code: CLAUDE_ROOT_BYPASS_NOTICE_CODE }));
+        }
         return;
       }
 

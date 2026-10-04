@@ -65,7 +65,8 @@
     "addTo": "Ajoute {{entry}} aux outils autorisés.",
     "retry": "Permission enregistrée. Relancez la requête pour utiliser l'outil.",
     "error": "Impossible de mettre à jour les permissions. Veuillez réessayer.",
-    "openSettings": "Ouvrir les paramètres"
+    "openSettings": "Ouvrir les paramètres",
+    "bypassRefusedAsRoot": "Le contournement des permissions n'a pas été appliqué : CloudCLI s'exécute en tant que root et Claude Code refuse d'ignorer les demandes de permission pour root, cette session les conserve donc. Exécutez CloudCLI avec un utilisateur non root pour utiliser le mode de contournement."
   },
   "todo": {
     "updated": "La liste de tâches a été mise à jour avec succès",

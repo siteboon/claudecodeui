@@ -42,6 +42,46 @@ export const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
 
 // ---------------------------
 //----------------- CLAUDE CODE ROOT GUARD UTILITIES ------------
+/** The sandbox markers Claude Code's root guard reads; see `isClaudeBypassRefusedAsRoot`. */
+const CLAUDE_SANDBOX_ENV_KEYS = ['IS_SANDBOX', 'CLAUDE_CODE_BUBBLEWRAP'] as const;
+
+/**
+ * Settings files whose `env` block Claude Code copies into its own
+ * environment before its root guard runs, lowest precedence first: the global
+ * config (`~/.claude.json`), the user settings (`~/.claude/settings.json`,
+ * both under `CLAUDE_CONFIG_DIR` when set), then the managed settings file and
+ * its `managed-settings.d` drop-ins. Project and local `.claude/settings*.json`
+ * files are applied only after the guard, so they cannot mark a sandbox for it.
+ */
+function listClaudeGuardSettingsFiles(): string[] {
+  const configDirOverride = process.env.CLAUDE_CONFIG_DIR;
+  const claudeConfigDir = configDirOverride || path.join(os.homedir(), '.claude');
+  // The CLI still prefers a legacy `.config.json` over `.claude.json` when one exists.
+  const legacyGlobalConfig = path.join(claudeConfigDir, '.config.json');
+  const globalConfig = fs.existsSync(legacyGlobalConfig)
+    ? legacyGlobalConfig
+    : path.join(configDirOverride || os.homedir(), '.claude.json');
+
+  const managedDir = process.platform === 'darwin' ? '/Library/Application Support/ClaudeCode' : '/etc/claude-code';
+  const dropInDir = path.join(managedDir, 'managed-settings.d');
+  let dropIns: string[] = [];
+  try {
+    dropIns = fs.readdirSync(dropInDir)
+      .filter((name) => name.endsWith('.json') && !name.startsWith('.'))
+      .sort()
+      .map((name) => path.join(dropInDir, name));
+  } catch {
+    // No drop-in directory.
+  }
+
+  return [
+    globalConfig,
+    path.join(claudeConfigDir, 'settings.json'),
+    path.join(managedDir, 'managed-settings.json'),
+    ...dropIns,
+  ];
+}
+
 /**
  * Whether Claude Code would refuse to start in bypass-permissions mode if this
  * server launched it now.
@@ -52,8 +92,10 @@ export const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
  * root/sudo privileges for security reasons" and exits with code 1, unless
  * `IS_SANDBOX=1` or a truthy `CLAUDE_CODE_BUBBLEWRAP` (`1`, `true`, `yes`,
  * `on`) marks a deliberate sandbox. The CLI inherits this server's uid and
- * environment, so the same test predicts its answer. It is evaluated on every
- * call so it follows the environment the CLI is actually launched with.
+ * environment, then overlays the `env` blocks of the settings files listed by
+ * `listClaudeGuardSettingsFiles` before the guard runs, so this replays the
+ * same overlay. It is evaluated on every call so it follows the environment
+ * and settings the CLI is actually launched with.
  *
  * Callers only use it to launch without the bypass instead of passing a flag
  * the CLI will exit on. Never use it to set the sandbox variables: the CLI's
@@ -67,24 +109,57 @@ export function isClaudeBypassRefusedAsRoot(): boolean {
     return false;
   }
 
-  if (process.env.IS_SANDBOX === '1') {
+  const markers: Record<string, string | undefined> = {
+    IS_SANDBOX: process.env.IS_SANDBOX,
+    CLAUDE_CODE_BUBBLEWRAP: process.env.CLAUDE_CODE_BUBBLEWRAP,
+  };
+  for (const settingsFile of listClaudeGuardSettingsFiles()) {
+    let env: unknown;
+    try {
+      env = (JSON.parse(fs.readFileSync(settingsFile, 'utf8')) as { env?: unknown } | null)?.env;
+    } catch {
+      continue;
+    }
+
+    for (const key of CLAUDE_SANDBOX_ENV_KEYS) {
+      const value = (env as Record<string, unknown> | null | undefined)?.[key];
+      // Like the CLI: strings are kept, numbers and booleans are stringified,
+      // other values are dropped, and a later file wins even with ''.
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        markers[key] = String(value);
+      }
+    }
+  }
+
+  if (markers.IS_SANDBOX === '1') {
     return false;
   }
 
-  const bubblewrap = (process.env.CLAUDE_CODE_BUBBLEWRAP ?? '').trim().toLowerCase();
+  const bubblewrap = (markers.CLAUDE_CODE_BUBBLEWRAP ?? '').trim().toLowerCase();
   return !['1', 'true', 'yes', 'on'].includes(bubblewrap);
 }
 
 /**
  * Tells the user why a requested Claude bypass-permissions launch ran in the
  * normal permission mode instead, whenever `isClaudeBypassRefusedAsRoot()`
- * holds. Shown in the Shell tab's terminal and as a chat error row, so it is
- * written for both.
+ * holds. English fallback for clients that do not localize
+ * `CLAUDE_ROOT_BYPASS_NOTICE_CODE`; written for both the Shell tab's terminal
+ * and a chat error row.
  */
 export const CLAUDE_ROOT_BYPASS_NOTICE =
   'Bypass permissions was not applied: CloudCLI is running as root, and Claude Code refuses to skip '
   + 'permission prompts for root, so this session keeps them. Run CloudCLI as a non-root user to use '
   + 'bypass mode.';
+
+/**
+ * Identifies `CLAUDE_ROOT_BYPASS_NOTICE` to the client, which shows its own
+ * translation: as the Shell tab's `notice` frame `code` (the Claude TUI clears
+ * the terminal, so the notice has to be drawn outside it) and as a chat error
+ * row's `noticeCode`. The frontend's copy of this value must stay identical.
+ *
+ * Used by the websocket module (Shell tab) and the providers module (chat).
+ */
+export const CLAUDE_ROOT_BYPASS_NOTICE_CODE = 'claude_bypass_refused_as_root';
 
 // ---------------------------
 //----------------- NORMALIZED MESSAGE HELPER INPUT TYPES ------------

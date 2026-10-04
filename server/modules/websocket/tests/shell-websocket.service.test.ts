@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -7,22 +8,33 @@ import test from 'node:test';
 import { WebSocket } from 'ws';
 
 import { handleShellConnection } from '@/modules/websocket/services/shell-websocket.service.js';
-import { CLAUDE_ROOT_BYPASS_NOTICE } from '@/shared/utils.js';
+import { CLAUDE_ROOT_BYPASS_NOTICE, CLAUDE_ROOT_BYPASS_NOTICE_CODE } from '@/shared/utils.js';
 
 const SANDBOX_ENV_KEYS = ['IS_SANDBOX', 'CLAUDE_CODE_BUBBLEWRAP'] as const;
 
 /**
  * Runs `body` as if the server process had `uid`, with Claude Code's sandbox
- * markers (`IS_SANDBOX`, `CLAUDE_CODE_BUBBLEWRAP`) set only as given, so the
- * bypass tests do not depend on who runs the suite.
+ * markers (`IS_SANDBOX`, `CLAUDE_CODE_BUBBLEWRAP`) set only as given and an
+ * empty HOME holding only `userSettingsEnv` as `~/.claude/settings.json`'s
+ * `env`, so the bypass tests do not depend on who runs the suite.
  */
 function withProcessIdentity(
   uid: number,
   sandboxEnv: Partial<Record<(typeof SANDBOX_ENV_KEYS)[number], string>>,
   body: () => void,
+  userSettingsEnv?: Record<string, string>,
 ): void {
   const originalGetuid = process.getuid;
-  const originalEnv = Object.fromEntries(SANDBOX_ENV_KEYS.map((key) => [key, process.env[key]]));
+  const originalEnv = Object.fromEntries(
+    [...SANDBOX_ENV_KEYS, 'HOME', 'CLAUDE_CONFIG_DIR'].map((key) => [key, process.env[key]]),
+  );
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-bypass-home-'));
+  if (userSettingsEnv) {
+    fs.mkdirSync(path.join(home, '.claude'));
+    fs.writeFileSync(path.join(home, '.claude', 'settings.json'), JSON.stringify({ env: userSettingsEnv }));
+  }
+  process.env.HOME = home;
+  delete process.env.CLAUDE_CONFIG_DIR;
   process.getuid = () => uid;
   for (const key of SANDBOX_ENV_KEYS) {
     if (sandboxEnv[key] === undefined) {
@@ -36,18 +48,32 @@ function withProcessIdentity(
     body();
   } finally {
     process.getuid = originalGetuid;
-    for (const key of SANDBOX_ENV_KEYS) {
-      if (originalEnv[key] === undefined) {
+    for (const [key, value] of Object.entries(originalEnv)) {
+      if (value === undefined) {
         delete process.env[key];
       } else {
-        process.env[key] = originalEnv[key];
+        process.env[key] = value;
       }
     }
+    fs.rmSync(home, { recursive: true, force: true });
   }
 }
 
-/** Starts a claude shell with bypass requested and returns the command it spawned plus the text it printed. */
-function launchClaudeShellWithBypass(options: { resumeSessionId?: string } = {}): { command: string; output: string } {
+type ShellLaunch = {
+  command: string;
+  output: string;
+  /** `notice` frames, which the Shell draws outside the terminal. */
+  notices: unknown[];
+  /** Opens a second socket onto the same PTY session and returns its `notice` frames. */
+  reconnectNotices: () => unknown[];
+};
+
+const NOTICE_FRAME = { type: 'notice', code: CLAUDE_ROOT_BYPASS_NOTICE_CODE };
+
+/** Starts a claude shell (bypass requested unless told otherwise) and returns what it spawned and sent. */
+function launchClaudeShellWithBypass(
+  options: { resumeSessionId?: string; bypassPermissions?: boolean; provider?: string } = {},
+): ShellLaunch {
   const spawnedCommands: string[] = [];
   const dependencies = {
     resolveProviderSessionId: () => options.resumeSessionId ?? null,
@@ -57,27 +83,33 @@ function launchClaudeShellWithBypass(options: { resumeSessionId?: string } = {})
     },
   };
 
+  const initMessage = JSON.stringify({
+    type: 'init',
+    projectPath: process.cwd(),
+    sessionId: `bypass-identity-${Date.now()}-${Math.random()}`,
+    hasSession: Boolean(options.resumeSessionId),
+    provider: options.provider ?? 'claude',
+    bypassPermissions: options.bypassPermissions ?? true,
+  });
   const socket = createFakeSocket();
   handleShellConnection(socket as never, dependencies);
-  socket.emit(
-    'message',
-    JSON.stringify({
-      type: 'init',
-      projectPath: process.cwd(),
-      sessionId: `bypass-identity-${Date.now()}-${Math.random()}`,
-      hasSession: Boolean(options.resumeSessionId),
-      provider: 'claude',
-      bypassPermissions: true,
-    })
-  );
+  socket.emit('message', initMessage);
 
   assert.equal(spawnedCommands.length, 1);
-  const output = socket.frames
-    .map((frame) => JSON.parse(frame) as { type?: string; data?: string })
+  const frames = socket.frames.map((frame) => JSON.parse(frame) as { type?: string; data?: string });
+  const output = frames
     .filter((frame) => frame.type === 'output')
     .map((frame) => frame.data ?? '')
     .join('');
-  return { command: spawnedCommands[0], output };
+  const noticesOf = (sent: Array<{ type?: string }>) => sent.filter((frame) => frame.type === 'notice');
+  const reconnectNotices = () => {
+    const replacement = createFakeSocket();
+    handleShellConnection(replacement as never, dependencies);
+    replacement.emit('message', initMessage);
+    assert.equal(spawnedCommands.length, 1, 'a reconnect must reuse the running PTY');
+    return noticesOf(replacement.frames.map((frame) => JSON.parse(frame) as { type?: string }));
+  };
+  return { command: spawnedCommands[0], output, notices: noticesOf(frames), reconnectNotices };
 }
 
 function createFakeSocket() {
@@ -272,22 +304,53 @@ test('as root, a bypass launch starts claude without the flag and says why', () 
   const fresh = launchClaudeShellWithBypass();
   assert.equal(fresh.command, 'claude');
   assert.ok(fresh.output.includes(CLAUDE_ROOT_BYPASS_NOTICE), fresh.output);
+  // The CLI's full-screen UI clears the terminal, so the Shell is also told
+  // outside it, and told again when it reattaches to the running session.
+  assert.deepEqual(fresh.notices, [NOTICE_FRAME]);
+  assert.deepEqual(fresh.reconnectNotices(), [NOTICE_FRAME]);
 
   if (os.platform() !== 'win32') {
     const resumed = launchClaudeShellWithBypass({ resumeSessionId: 'resumed-as-root' });
     assert.equal(resumed.command, 'claude --resume "resumed-as-root" || claude');
     assert.ok(resumed.output.includes(CLAUDE_ROOT_BYPASS_NOTICE), resumed.output);
+    assert.deepEqual(resumed.notices, [NOTICE_FRAME]);
   }
 }));
 
+test('as root, a launch that did not ask for bypass gets no notice', () => withProcessIdentity(0, {}, () => {
+  const launch = launchClaudeShellWithBypass({ bypassPermissions: false });
+  assert.equal(launch.command, 'claude');
+  assert.ok(!launch.output.includes(CLAUDE_ROOT_BYPASS_NOTICE), launch.output);
+  assert.deepEqual(launch.notices, []);
+  assert.deepEqual(launch.reconnectNotices(), []);
+
+  // Other agents' shells never carry the Claude flag, so nothing was dropped.
+  const cursor = launchClaudeShellWithBypass({ provider: 'cursor' });
+  assert.equal(cursor.command, 'cursor-agent');
+  assert.deepEqual(cursor.notices, []);
+}));
+
 test('as root inside a sandbox Claude Code accepts, the bypass flag is kept', () => {
-  for (const sandboxEnv of [{ IS_SANDBOX: '1' }, { CLAUDE_CODE_BUBBLEWRAP: '1' }, { CLAUDE_CODE_BUBBLEWRAP: ' Yes ' }]) {
+  for (const sandboxEnv of [
+    { IS_SANDBOX: '1' },
+    { CLAUDE_CODE_BUBBLEWRAP: '1' },
+    { CLAUDE_CODE_BUBBLEWRAP: ' Yes ' },
+    { CLAUDE_CODE_BUBBLEWRAP: 'on' },
+  ]) {
     withProcessIdentity(0, sandboxEnv, () => {
       const launch = launchClaudeShellWithBypass();
       assert.equal(launch.command, 'claude --dangerously-skip-permissions', JSON.stringify(sandboxEnv));
       assert.ok(!launch.output.includes(CLAUDE_ROOT_BYPASS_NOTICE));
+      assert.deepEqual(launch.notices, []);
     });
   }
+
+  // Claude Code also reads the markers from the env block of its user settings.
+  withProcessIdentity(0, {}, () => {
+    const launch = launchClaudeShellWithBypass();
+    assert.equal(launch.command, 'claude --dangerously-skip-permissions');
+    assert.deepEqual(launch.notices, []);
+  }, { IS_SANDBOX: '1' });
 
   // Only the exact values the CLI honours count as a sandbox.
   for (const sandboxEnv of [{ IS_SANDBOX: 'true' }, { CLAUDE_CODE_BUBBLEWRAP: '0' }]) {
@@ -301,6 +364,7 @@ test('a non-root server keeps the bypass flag and prints no notice', () => withP
   const launch = launchClaudeShellWithBypass();
   assert.equal(launch.command, 'claude --dangerously-skip-permissions');
   assert.ok(!launch.output.includes(CLAUDE_ROOT_BYPASS_NOTICE));
+  assert.deepEqual(launch.notices, []);
 }));
 
 test('a missing project directory is reported as an error frame and starts no pty', () => {

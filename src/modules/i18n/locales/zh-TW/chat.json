@@ -64,7 +64,8 @@
     "addTo": "將 {{entry}} 加入允許的工具。",
     "retry": "權限已儲存。重試請求以使用該工具。",
     "error": "無法更新權限。請重試。",
-    "openSettings": "開啟設定"
+    "openSettings": "開啟設定",
+    "bypassRefusedAsRoot": "未套用權限繞過：CloudCLI 正以 root 身分執行，而 Claude Code 拒絕為 root 略過權限確認，因此本工作階段仍會要求確認。如需使用繞過模式，請以非 root 使用者執行 CloudCLI。"
   },
   "todo": {
     "updated": "待辦清單已成功更新",

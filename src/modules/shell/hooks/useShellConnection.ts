@@ -4,7 +4,7 @@ import type { FitAddon } from '@xterm/addon-fit';
 import type { Terminal } from '@xterm/xterm';
 
 import type { Project, ProjectSession } from '@/shared/types';
-import { TERMINAL_INIT_DELAY_MS } from '@/shared/constants';
+import { CLAUDE_ROOT_BYPASS_NOTICE_CODE, TERMINAL_INIT_DELAY_MS } from '@/shared/constants';
 import { getShellWebSocketUrl, parseShellMessage, sendSocketMessage } from '@/modules/shell/utils/socket';
 import { readSelectedProvider } from '@/shared/selectedProvider';
 
@@ -32,6 +32,7 @@ type UseShellConnectionOptions = {
 type UseShellConnectionResult = {
   isConnected: boolean;
   isConnecting: boolean;
+  isBypassRefusedAsRoot: boolean;
   closeSocket: () => void;
   connectToShell: (options?: { forceRestart?: boolean }) => void;
   disconnectFromShell: (options?: { suppressAutoConnect?: boolean }) => void;
@@ -55,6 +56,10 @@ export function useShellConnection({
 }: UseShellConnectionOptions): UseShellConnectionResult {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  // The server started Claude without the requested bypass flag because the
+  // CLI refuses it as root. Its full-screen UI clears the terminal, so the
+  // Shell has to say so outside it; cleared with each connection.
+  const [isBypassRefusedAsRoot, setIsBypassRefusedAsRoot] = useState(false);
   const connectingRef = useRef(false);
   const forceRestartOnInitRef = useRef(false);
   const suppressAutoConnectRef = useRef(false);
@@ -113,6 +118,10 @@ export function useShellConnection({
         terminalRef.current?.write(`\r\n\x1b[31m${detail}\x1b[0m\r\n`);
         return;
       }
+
+      if (message.type === 'notice' && message.code === CLAUDE_ROOT_BYPASS_NOTICE_CODE) {
+        setIsBypassRefusedAsRoot(true);
+      }
     },
     [handleProcessCompletion, onOutputRef, terminalRef],
   );
@@ -132,6 +141,7 @@ export function useShellConnection({
         }
 
         connectingRef.current = true;
+        setIsBypassRefusedAsRoot(false);
 
         const socket = new WebSocket(wsUrl);
         wsRef.current = socket;
@@ -179,6 +189,7 @@ export function useShellConnection({
         socket.onclose = () => {
           setIsConnected(false);
           setIsConnecting(false);
+          setIsBypassRefusedAsRoot(false);
           connectingRef.current = false;
           clearTerminalScreen();
         };
@@ -232,6 +243,7 @@ export function useShellConnection({
     clearTerminalScreen();
     setIsConnected(false);
     setIsConnecting(false);
+    setIsBypassRefusedAsRoot(false);
     connectingRef.current = false;
     forceRestartOnInitRef.current = false;
   }, [clearTerminalScreen, closeSocket]);
@@ -253,6 +265,7 @@ export function useShellConnection({
   return {
     isConnected,
     isConnecting,
+    isBypassRefusedAsRoot,
     closeSocket,
     connectToShell,
     disconnectFromShell,

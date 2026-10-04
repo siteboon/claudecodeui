@@ -34,6 +34,9 @@ type ShellIncomingMessage =
   // rejected, so this is the only signal that the terminal will never start.
   | { type: 'error'; message?: string }
   | { type: 'auth_url'; url?: string }
+  // Something the server did differently from what was asked, e.g. starting
+  // Claude without the requested bypass flag; shown outside the terminal.
+  | { type: 'notice'; code?: string }
   | { type: string; [key: string]: unknown };
 
 export function getShellWebSocketUrl(): string | null {

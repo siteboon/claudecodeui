@@ -64,7 +64,8 @@
     "addTo": "{{entry}}を許可されたツールに追加します。",
     "retry": "権限を保存しました。ツールを使用するにはリクエストを再試行してください。",
     "error": "権限を更新できませんでした。もう一度お試しください。",
-    "openSettings": "設定を開く"
+    "openSettings": "設定を開く",
+    "bypassRefusedAsRoot": "権限バイパスは適用されませんでした: CloudCLI が root で実行されており、Claude Code は root での権限確認のスキップを拒否するため、このセッションでは確認が続きます。バイパスモードを使うには、CloudCLI を root 以外のユーザーで実行してください。"
   },
   "todo": {
     "updated": "Todoリストを更新しました",

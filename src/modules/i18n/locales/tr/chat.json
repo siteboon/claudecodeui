@@ -64,7 +64,8 @@
     "addTo": "{{entry}} İzin Verilen Araçlar listesine ekleniyor.",
     "retry": "İzin kaydedildi. Aracı kullanmak için isteği tekrar dene.",
     "error": "İzinler güncellenemedi. Lütfen tekrar dene.",
-    "openSettings": "Ayarları aç"
+    "openSettings": "Ayarları aç",
+    "bypassRefusedAsRoot": "İzin atlama uygulanmadı: CloudCLI root olarak çalışıyor ve Claude Code root için izin istemlerini atlamayı reddediyor, bu yüzden bu oturumda istemler sürüyor. Atlama modunu kullanmak için CloudCLI'yi root olmayan bir kullanıcıyla çalıştırın."
   },
   "todo": {
     "updated": "Yapılacaklar listesi başarıyla güncellendi",

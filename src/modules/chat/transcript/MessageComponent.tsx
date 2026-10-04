@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { GitBranchIcon, PencilIcon } from 'lucide-react';
 
 import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider,DiffLine,Project } from '@/shared/types';
+import { CLAUDE_ROOT_BYPASS_NOTICE_CODE } from '@/shared/constants';
 import { formatUsageLimitText, stripProposedPlanEnvelope } from '@/modules/chat/utils/chatFormatting';
 import { ToolRenderer, ToolErrorDisplay, SubagentPanel, WorkflowPanel, shouldHideToolResult } from '@/modules/chat/tools';
 import { LLMProviderLogo } from '@/shared/ui';
@@ -58,12 +59,16 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
   const userCopyContent = String(message.content || '');
   const formattedMessageContent = useMemo(
     () => {
+      // The server's text is only the English fallback for this notice.
+      if (message.type === 'error' && message.noticeCode === CLAUDE_ROOT_BYPASS_NOTICE_CODE) {
+        return t('permissions.bypassRefusedAsRoot');
+      }
       const content = formatUsageLimitText(String(message.content || ''));
       return provider === 'codex' && message.type === 'assistant' && !message.isThinking
         ? stripProposedPlanEnvelope(content)
         : content;
     },
-    [message.content, message.isThinking, message.type, provider]
+    [message.content, message.isThinking, message.noticeCode, message.type, provider, t]
   );
   const assistantCopyContent = message.isToolUse
     ? String(message.displayText || message.content || '')

@@ -337,6 +337,12 @@ export type NormalizedMessage = {
     toolUseResult?: unknown;
   };
   isError?: boolean;
+  /**
+   * Set on an `error` row that is an app notice rather than a failure, naming
+   * it so the client can show its own translation instead of `content` (today
+   * only `CLAUDE_ROOT_BYPASS_NOTICE_CODE`).
+   */
+  noticeCode?: string;
   text?: string;
   tokens?: number;
   canInterrupt?: boolean;

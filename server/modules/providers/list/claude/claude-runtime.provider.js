@@ -39,6 +39,7 @@ import {
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import {
   CLAUDE_ROOT_BYPASS_NOTICE,
+  CLAUDE_ROOT_BYPASS_NOTICE_CODE,
   createCompleteMessage,
   createNormalizedMessage,
   isClaudeBypassRefusedAsRoot
@@ -955,6 +956,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     // As root (outside a deliberate sandbox) the CLI exits with code 1 on
     // bypassPermissions before the turn starts. Run the turn in the mode the
     // composer picked, or the default mode, and say why bypass was not applied.
+    let rootBypassNoticePending = false;
     if (sdkOptions.permissionMode === 'bypassPermissions' && isClaudeBypassRefusedAsRoot()) {
       const requestedMode = options.permissionMode;
       if (requestedMode && requestedMode !== 'default' && requestedMode !== 'bypassPermissions') {
@@ -962,8 +964,19 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       } else {
         delete sdkOptions.permissionMode;
       }
-      ws.send(createNormalizedMessage({ kind: 'error', content: CLAUDE_ROOT_BYPASS_NOTICE, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+      rootBypassNoticePending = true;
     }
+    // Sent once the CLI has recorded the prompt: before its first non-system
+    // message, or its first approval request if that wins the race. Sent any
+    // earlier, the row sorts above the user's own message in the merged
+    // history, and a client still subscribing to a new session gets it twice.
+    const sendRootBypassNotice = () => {
+      if (!rootBypassNoticePending) {
+        return;
+      }
+      rootBypassNoticePending = false;
+      ws.send(createNormalizedMessage({ kind: 'error', content: CLAUDE_ROOT_BYPASS_NOTICE, noticeCode: CLAUDE_ROOT_BYPASS_NOTICE_CODE, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+    };
 
     const mcpServers = await loadMcpConfig(options.cwd);
     if (mcpServers) {
@@ -1026,6 +1039,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       }
 
       const requestId = createRequestId();
+      sendRootBypassNotice();
       ws.send(createNormalizedMessage({ kind: 'permission_request', requestId, toolName, input, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
       emitNotification(createNotificationEvent({
         provider: 'claude',
@@ -1134,6 +1148,10 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         }
       } else {
         // session_id already captured
+      }
+
+      if (message.type !== 'system') {
+        sendRootBypassNotice();
       }
 
       // Transform and normalize message via adapter

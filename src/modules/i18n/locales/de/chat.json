@@ -64,7 +64,8 @@
     "addTo": "Fügt {{entry}} zu erlaubten Werkzeugen hinzu.",
     "retry": "Berechtigung gespeichert. Wiederhole die Anfrage, um das Werkzeug zu verwenden.",
     "error": "Berechtigungen konnten nicht aktualisiert werden. Bitte erneut versuchen.",
-    "openSettings": "Einstellungen öffnen"
+    "openSettings": "Einstellungen öffnen",
+    "bypassRefusedAsRoot": "Berechtigungen umgehen wurde nicht angewendet: CloudCLI läuft als root, und Claude Code überspringt Berechtigungsabfragen für root nicht, daher bleiben sie in dieser Sitzung aktiv. Führe CloudCLI als Benutzer ohne root-Rechte aus, um den Bypass-Modus zu nutzen."
   },
   "todo": {
     "updated": "Aufgabenliste wurde erfolgreich aktualisiert",

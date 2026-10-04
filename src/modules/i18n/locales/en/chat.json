@@ -72,7 +72,8 @@
     "addTo": "Adds {{entry}} to Allowed Tools.",
     "retry": "Permission saved. Retry the request to use the tool.",
     "error": "Unable to update permissions. Please try again.",
-    "openSettings": "Open settings"
+    "openSettings": "Open settings",
+    "bypassRefusedAsRoot": "Bypass permissions was not applied: CloudCLI is running as root, and Claude Code refuses to skip permission prompts for root, so this session keeps them. Run CloudCLI as a non-root user to use bypass mode."
   },
   "todo": {
     "updated": "Todo list has been updated successfully",

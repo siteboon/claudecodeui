@@ -134,3 +134,47 @@ describe('shell socket error frames', () => {
     expect(write).toHaveBeenCalledWith('hello');
   });
 });
+
+// The server sends this when it started Claude without the requested bypass
+// flag (#641: Claude Code exits on it as root). The CLI's full-screen UI clears
+// the terminal at startup, so the hook surfaces it for the Shell to draw.
+describe('shell notice frames', () => {
+  beforeEach(() => {
+    FakeSocket.last = null;
+    vi.stubGlobal('WebSocket', FakeSocket);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('reports a refused bypass launch outside the terminal until the socket closes', () => {
+    const { view, write, socket } = renderConnection();
+    expect(view.result.current.isBypassRefusedAsRoot).toBe(false);
+
+    act(() => {
+      socket.onmessage?.({
+        data: JSON.stringify({ type: 'notice', code: 'claude_bypass_refused_as_root' }),
+      });
+    });
+
+    expect(view.result.current.isBypassRefusedAsRoot).toBe(true);
+    expect(write).not.toHaveBeenCalled();
+
+    act(() => {
+      socket.onclose?.();
+    });
+
+    expect(view.result.current.isBypassRefusedAsRoot).toBe(false);
+  });
+
+  it('ignores notices it does not know', () => {
+    const { view, socket } = renderConnection();
+
+    act(() => {
+      socket.onmessage?.({ data: JSON.stringify({ type: 'notice', code: 'something_else' }) });
+    });
+
+    expect(view.result.current.isBypassRefusedAsRoot).toBe(false);
+  });
+});

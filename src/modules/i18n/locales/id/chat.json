@@ -72,7 +72,8 @@
     "addTo": "Menambahkan {{entry}} ke Tool yang Diizinkan.",
     "retry": "Izin disimpan. Coba lagi permintaan untuk menggunakan tool.",
     "error": "Tidak dapat memperbarui izin. Silakan coba lagi.",
-    "openSettings": "Buka pengaturan"
+    "openSettings": "Buka pengaturan",
+    "bypassRefusedAsRoot": "Bypass izin tidak diterapkan: CloudCLI berjalan sebagai root, dan Claude Code menolak melewati permintaan izin untuk root, jadi sesi ini tetap memintanya. Jalankan CloudCLI sebagai pengguna non-root untuk memakai mode bypass."
   },
   "todo": {
     "updated": "Daftar tugas berhasil diperbarui",

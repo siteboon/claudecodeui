@@ -67,6 +67,7 @@ export default function Shell({
     isConnected,
     isInitialized,
     isConnecting,
+    isBypassRefusedAsRoot,
     connectToShell,
     disconnectFromShell,
   } = useShellRuntime({
@@ -320,6 +321,15 @@ export default function Shell({
           bypassPermissions ? 'shell.actions.bypassOnTitle' : 'shell.actions.bypassOffTitle',
         )}
       />
+
+      {isBypassRefusedAsRoot && (
+        <div
+          role="status"
+          className="flex-shrink-0 border-b border-amber-500/40 bg-amber-500/10 px-4 py-2 text-xs text-amber-200"
+        >
+          {t('permissions.bypassRefusedAsRoot')}
+        </div>
+      )}
 
       <div className="relative flex-1 overflow-hidden p-2">
         <div

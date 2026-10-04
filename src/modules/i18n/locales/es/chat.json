@@ -65,7 +65,8 @@
     "addTo": "Añade {{entry}} a las herramientas permitidas.",
     "retry": "Permiso guardado. Reintenta la solicitud para usar la herramienta.",
     "error": "No se pudieron actualizar los permisos. Inténtalo de nuevo.",
-    "openSettings": "Abrir ajustes"
+    "openSettings": "Abrir ajustes",
+    "bypassRefusedAsRoot": "No se aplicó la omisión de permisos: CloudCLI se está ejecutando como root y Claude Code se niega a omitir las solicitudes de permiso para root, así que esta sesión las mantiene. Ejecuta CloudCLI con un usuario que no sea root para usar el modo de omisión."
   },
   "todo": {
     "updated": "La lista de pendientes se actualizó correctamente",

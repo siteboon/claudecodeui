@@ -36,4 +36,10 @@ test('a home that is the filesystem root does not exempt the system directories'
 
   const nested = await validateWorkspacePath('/etc/app');
   assert.equal(nested.error, 'Cannot create workspace in system directory: /etc');
+
+  // `/` is this home itself, so the exemption covers it; only the explicit
+  // filesystem-root check keeps it out.
+  const filesystemRoot = await validateWorkspacePath('/');
+  assert.equal(filesystemRoot.valid, false);
+  assert.equal(filesystemRoot.error, 'Cannot use system-critical directories as workspace locations');
 });
