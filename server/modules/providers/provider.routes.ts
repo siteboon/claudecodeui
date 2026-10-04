@@ -21,6 +21,14 @@ import { AppError, assertPathAllowed, asyncHandler, createApiSuccessResponse } f
 
 const router = express.Router();
 
+// Every `:sessionId` route is refused with 403 when the session belongs to a
+// project outside ALLOWED_PATHS (a no-op when it is unset).
+router.param('sessionId', (_req, _res, next, sessionId: unknown) => {
+  void sessionsService
+    .assertSessionAccessAllowed(typeof sessionId === 'string' ? sessionId : '')
+    .then(() => next(), next);
+});
+
 const readPathParam = (value: unknown, name: string): string => {
   if (typeof value === 'string') {
     return value;
@@ -783,7 +791,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const limit = parseBoundedIntegerQuery(req.query.limit, 'limit', 40, 1, 100);
     const offset = parseBoundedIntegerQuery(req.query.offset, 'offset', 0, 0);
-    const page = sessionsService.listRecentSessions(limit, offset);
+    const page = await sessionsService.listRecentSessions(limit, offset);
     res.json(createApiSuccessResponse(page));
   }),
 );
@@ -791,7 +799,7 @@ router.get(
 router.get(
   '/sessions/archived',
   asyncHandler(async (_req: Request, res: Response) => {
-    const sessions = sessionsService.listArchivedSessions();
+    const sessions = await sessionsService.listArchivedSessions();
     res.json(createApiSuccessResponse({ sessions }));
   }),
 );

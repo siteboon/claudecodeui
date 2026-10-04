@@ -5,7 +5,7 @@ import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { sessionSynchronizerService } from '@/modules/providers/index.js';
 import { WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
 import type { RealtimeClientConnection } from '@/shared/types.js';
-import { AppError, isPathAllowed } from '@/shared/utils.js';
+import { AppError, filterByAllowedPaths } from '@/shared/utils.js';
 
 type SessionSummary = {
   id: string;
@@ -75,16 +75,6 @@ export type ProjectSessionsPageApiView = {
 
 const DEFAULT_PROJECT_SESSIONS_PAGE_SIZE = 20;
 const MAX_PROJECT_SESSIONS_PAGE_SIZE = 200;
-
-/**
- * Keeps only the project rows whose directory lies inside `ALLOWED_PATHS` (all
- * of them when it is unset), so the sidebar never lists a project outside the
- * allowed directories or reads its `package.json` for a display name.
- */
-async function filterAllowedProjectRows<TRow extends { project_path: string }>(rows: TRow[]): Promise<TRow[]> {
-  const allowedFlags = await Promise.all(rows.map((row) => isPathAllowed(row.project_path)));
-  return rows.filter((_row, index) => allowedFlags[index]);
-}
 
 /**
  * Generate better display name from path.
@@ -194,12 +184,14 @@ export async function getProjectsWithSessions(
     await sessionSynchronizerService.synchronizeSessions();
   }
 
-  const projectRows = await filterAllowedProjectRows(projectsDb.getProjectPaths() as Array<{
+  // Projects outside ALLOWED_PATHS are left out before any of them is read
+  // (a no-op when it is unset).
+  const projectRows = await filterByAllowedPaths(projectsDb.getProjectPaths() as Array<{
     project_id: string;
     project_path: string;
     custom_project_name?: string | null;
     isStarred?: number;
-  }>);
+  }>, (row) => row.project_path);
   const totalProjects = projectRows.length;
   const projects: ProjectListItem[] = [];
   let processedProjects = 0;
@@ -262,12 +254,12 @@ export async function getArchivedProjectsWithSessions(
     await sessionSynchronizerService.synchronizeSessions();
   }
 
-  const projectRows = await filterAllowedProjectRows(projectsDb.getArchivedProjectPaths() as Array<{
+  const projectRows = await filterByAllowedPaths(projectsDb.getArchivedProjectPaths() as Array<{
     project_id: string;
     project_path: string;
     custom_project_name?: string | null;
     isStarred?: number;
-  }>);
+  }>, (row) => row.project_path);
 
   const archivedProjects: ArchivedProjectListItem[] = [];
 

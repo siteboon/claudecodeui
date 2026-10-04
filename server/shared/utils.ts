@@ -627,6 +627,41 @@ export async function isPathAllowed(
 }
 
 /**
+ * Keeps the items whose path (read with `readPath`) lies inside
+ * `ALLOWED_PATHS`, checking each distinct path once. Items without a path are
+ * kept. Returns an unfiltered copy when `ALLOWED_PATHS` is unset.
+ *
+ * Used by the Projects module for the project lists and by the Providers
+ * module for the recent, archived and searched session lists, so a project
+ * outside the allowed directories and its conversations never show up.
+ */
+export async function filterByAllowedPaths<TItem>(
+  items: readonly TItem[],
+  readPath: (item: TItem) => string | null | undefined,
+): Promise<TItem[]> {
+  if (ALLOWED_PATHS.length === 0) {
+    return [...items];
+  }
+
+  const decisionsByPath = new Map<string, Promise<boolean>>();
+  const allowedFlags = await Promise.all(items.map((item) => {
+    const itemPath = readPath(item)?.trim();
+    if (!itemPath) {
+      return true;
+    }
+
+    let decision = decisionsByPath.get(itemPath);
+    if (!decision) {
+      decision = isPathAllowed(itemPath);
+      decisionsByPath.set(itemPath, decision);
+    }
+    return decision;
+  }));
+
+  return items.filter((_item, index) => allowedFlags[index]);
+}
+
+/**
  * Throws a 403 `AppError` (code `PATH_NOT_ALLOWED`) when `targetPath` lies
  * outside `ALLOWED_PATHS`; does nothing when it is inside or the variable is
  * unset.

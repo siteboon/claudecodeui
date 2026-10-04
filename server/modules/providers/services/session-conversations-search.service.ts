@@ -5,7 +5,7 @@ import readline from 'node:readline';
 import { spawn } from 'cross-spawn';
 import { rgPath } from '@vscode/ripgrep';
 
-import { stripAnsiSequences } from '@/shared/utils.js';
+import { filterByAllowedPaths, stripAnsiSequences } from '@/shared/utils.js';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 
 type AnyRecord = Record<string, any>;
@@ -1168,7 +1168,12 @@ export async function searchConversations(
     return { results: [], titleResults: [], totalMatches: 0, query: safeQuery };
   }
 
-  const activeSessions = sessionsDb.getAllSessions();
+  // Sessions of projects outside ALLOWED_PATHS are neither title-matched nor
+  // scanned (a no-op when it is unset).
+  const activeSessions = await filterByAllowedPaths(
+    sessionsDb.getAllSessions(),
+    (session) => session.project_path,
+  );
   const titleResults = findSessionTitleResults(activeSessions, safeQuery, safeLimit);
   onTitleResults?.(titleResults);
 
