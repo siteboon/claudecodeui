@@ -35,14 +35,19 @@ const queryClaudeSDK = dependencies.queryClaude;
 const spawnCursor = dependencies.queryCursor;
 const router = express.Router();
 const COMMIT_DIFF_CHARACTER_LIMIT = 500_000;
+// Shown by the Git panel when the project itself is allowed but its repository
+// is not, so the refusal does not read as if the project folder were outside.
+const GIT_REPOSITORY_NOT_ALLOWED_MESSAGE =
+  'The Git repository that contains this project is outside the directories allowed by ALLOWED_PATHS';
 
 // Every Git route names its project by `project`, read from the query or the
 // body depending on the route. With ALLOWED_PATHS set, both places are checked
 // and a non-string id (`project[]=`) is refused, so neither a query/body
 // mismatch nor an array can name a project the check did not see. A project
 // outside ALLOWED_PATHS, or inside it but in a repository that is not (see
-// `isGitRepositoryAllowed`), is refused before any route runs; unknown ids
-// fall through to each route's own error. A no-op when ALLOWED_PATHS is unset.
+// `isGitRepositoryAllowed`), is refused with a 403 naming which of the two is
+// outside, before any route runs; unknown ids fall through to each route's own
+// error. A no-op when ALLOWED_PATHS is unset.
 router.use(async (req, res, next) => {
   if (ALLOWED_PATHS.length === 0) {
     next();
@@ -59,8 +64,15 @@ router.use(async (req, res, next) => {
   try {
     for (const projectId of new Set(projectIds)) {
       const projectPath = await projectsDb.getProjectPathById(projectId);
-      if (projectPath && !(await isGitRepositoryAllowed(projectPath))) {
+      if (!projectPath) {
+        continue;
+      }
+      if (!(await isPathAllowed(projectPath))) {
         res.status(403).json({ error: PATH_NOT_ALLOWED_MESSAGE });
+        return;
+      }
+      if (!(await isGitRepositoryAllowed(projectPath))) {
+        res.status(403).json({ error: GIT_REPOSITORY_NOT_ALLOWED_MESSAGE });
         return;
       }
     }
@@ -71,19 +83,16 @@ router.use(async (req, res, next) => {
 });
 
 /**
- * Whether git may work on `projectPath` under ALLOWED_PATHS. Git commands run
- * at the repository root and read the repository's git directory, so when the
- * project sits in a repository that starts above the allowed directory (a
- * monorepo package), or whose git directory lives elsewhere (a linked worktree
- * or `--separate-git-dir`), both have to be allowed too; otherwise status,
- * diff and discard would reach files outside it. A directory that is not in a
- * repository yet only needs the project itself to be allowed.
+ * Whether the repository of an allowed `projectPath` is allowed too; the
+ * caller checks the project itself first. Git commands run at the repository
+ * root and read the repository's git directory, so when the project sits in a
+ * repository that starts above the allowed directory (a monorepo package), or
+ * whose git directory lives elsewhere (a linked worktree or
+ * `--separate-git-dir`), both have to be allowed too; otherwise status, diff
+ * and discard would reach files outside it. A directory that is not in a
+ * repository yet has nothing more to check.
  */
 async function isGitRepositoryAllowed(projectPath) {
-  if (!(await isPathAllowed(projectPath))) {
-    return false;
-  }
-
   let repositoryPaths;
   try {
     const { stdout } = await spawnAsync('git', ['rev-parse', '--show-toplevel', '--git-common-dir'], { cwd: projectPath });

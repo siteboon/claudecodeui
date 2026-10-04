@@ -35,6 +35,9 @@ const previousAllowedPaths = process.env.ALLOWED_PATHS;
 process.env.ALLOWED_PATHS = `${allowedDirectory},${monorepoPackagePath}`;
 
 const { createGitRouter } = await import('@/modules/git/git.routes.js');
+const { PATH_NOT_ALLOWED_MESSAGE } = await import('@/shared/utils.js');
+const GIT_REPOSITORY_NOT_ALLOWED_MESSAGE =
+  'The Git repository that contains this project is outside the directories allowed by ALLOWED_PATHS';
 
 after(async () => {
   if (previousAllowedPaths === undefined) {
@@ -137,6 +140,7 @@ test('a project outside ALLOWED_PATHS is refused with 403 before any git command
   await withGitServer(calls, async (baseUrl) => {
     const status = await fetch(`${baseUrl}/api/git/status?project=outside`);
     assert.equal(status.status, 403);
+    assert.deepEqual(await status.json(), { error: PATH_NOT_ALLOWED_MESSAGE });
 
     const discard = await postJson(`${baseUrl}/api/git/discard`, { project: 'outside', file: 'secret.txt' });
     assert.equal(discard.status, 403);
@@ -193,14 +197,19 @@ test('a repository whose root or git directory is outside ALLOWED_PATHS is refus
   const calls: GitCall[] = [];
 
   await withGitServer(calls, async (baseUrl) => {
+    // The project folder itself is allowed, so the Git panel names the
+    // repository instead of saying the project is outside ALLOWED_PATHS.
     const status = await fetch(`${baseUrl}/api/git/status?project=mono`);
     assert.equal(status.status, 403);
+    assert.deepEqual(await status.json(), { error: GIT_REPOSITORY_NOT_ALLOWED_MESSAGE });
 
     const discard = await postJson(`${baseUrl}/api/git/discard`, { project: 'mono', file: 'secrets.env' });
     assert.equal(discard.status, 403);
+    assert.deepEqual(await discard.json(), { error: GIT_REPOSITORY_NOT_ALLOWED_MESSAGE });
 
     const linkedStatus = await fetch(`${baseUrl}/api/git/status?project=linked`);
     assert.equal(linkedStatus.status, 403);
+    assert.deepEqual(await linkedStatus.json(), { error: GIT_REPOSITORY_NOT_ALLOWED_MESSAGE });
   });
 
   // Only the repository lookups ran; no status, diff or restore.
