@@ -607,10 +607,10 @@ async function resolveRealPathOrNearestAncestor(absolutePath: string): Promise<s
  *
  * Used here by `validateWorkspacePath`, `resolveReadOnlyRootPath`,
  * `filterByAllowedPaths`, `assertPathAllowed` and `findAllowedPathsWarnings`;
- * by the File Tree module for
- * its folder picker and per-file checks; by the Git, Taskmaster, Commands and
- * Agent routes to refuse projects and paths outside the allowed directories;
- * and by the WebSocket module so it never announces a session outside them.
+ * by the File Tree module for its folder picker and per-file checks; by the
+ * Git, Taskmaster, Commands and Agent routes to refuse projects and paths
+ * outside the allowed directories; and by the WebSocket module so it never
+ * announces a session outside them.
  */
 export async function isPathAllowed(
   targetPath: string,
