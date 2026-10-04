@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import { once } from 'node:events';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -108,22 +110,29 @@ test('the server the desktop app starts stays on HTTP when SSL_CERT/SSL_KEY are 
   });
 });
 
-test('an https:// URL in local-server.json does not stop the desktop app from finding a server', { timeout: 40_000 }, async () => {
+test('an https:// URL in local-server.json does not stop the desktop app from finding a server', { timeout: 40_000 }, async (t) => {
   delete process.env.ELECTRON_FORCE_OWN_SERVER;
-  process.env.ELECTRON_SERVER_ENTRY = FAKE_SERVER_ENTRY;
-  process.env.ELECTRON_NODE_PATH = process.execPath;
   await mkdir(path.join(homeDirectory, '.cloudcli'), { recursive: true });
   await writeFile(
     path.join(homeDirectory, '.cloudcli', 'local-server.json'),
     JSON.stringify({ pid: 1, host: '0.0.0.0', port: 3443, url: 'https://localhost:3443' }),
   );
+  // The next candidate after the marker: a plain HTTP CloudCLI server on a free port, so discovery
+  // never reaches the default port 3001, where another server may be running.
+  const httpServer = http.createServer((_req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ status: 'ok', installMode: 'test' }));
+  });
+  httpServer.listen(0, '127.0.0.1');
+  await once(httpServer, 'listening');
+  t.after(() => new Promise((resolve) => httpServer.close(resolve)));
+  const httpPort = httpServer.address().port;
+  process.env.CLOUDCLI_SERVER_PORT = String(httpPort);
   const controller = createController();
 
   await withStartedServer(controller, async () => {
-    // Either an existing http:// server on the default port or the app's own server; never the
-    // https:// marker, which the desktop window cannot load.
     const url = await controller.ensureLocalServer();
-    assert.match(url, /^http:\/\/localhost:\d+$/);
+    assert.equal(url, `http://localhost:${httpPort}`);
     assert.ok(controller.getStartupLogs().some((line) => line.includes('Skipping https://localhost:3443')));
   });
 });
