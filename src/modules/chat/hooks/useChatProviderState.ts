@@ -10,7 +10,7 @@ import type { PendingPermissionRequest, PermissionMode,
   ProviderModelOption,
   ProviderModelsDefinition } from '@/shared/types';
 import { DEFAULT_EFFORT_VALUE } from '@/shared/constants';
-import { readSelectedProvider, writeSelectedProvider } from '@/shared/selectedProvider';
+import { readNewChatProvider, readSelectedProvider, writeSelectedProvider } from '@/shared/selectedProvider';
 import { useEnabledProviders } from '@/shared/hooks/useEnabledProviders';
 
 const FALLBACK_PROVIDER_EFFORT_VALUES: Partial<Record<LLMProvider, readonly string[]>> = {
@@ -132,7 +132,13 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   // storage per render because switching it has to reset the model menu, the
   // permission mode and the session in one commit.
   const [provider, setProvider] = useState<LLMProvider>(readSelectedProvider);
+  // The providers a new chat may start on (VITE_ENABLED_PROVIDERS). A session
+  // made with any other provider keeps it; only the new-chat state falls back.
   const enabledProviders = useEnabledProviders();
+  // The last enabled provider the composer held, so leaving a session made
+  // with a since-disabled provider returns to it rather than to the first
+  // enabled one. In memory only: meanwhile storage holds the session's provider.
+  const lastEnabledProviderRef = useRef<LLMProvider | null>(null);
   // Every provider's chosen model, not just the active one: switching provider
   // must restore the model that provider was last used with, and the catalogue
   // that validates them arrives asynchronously per provider.
@@ -424,29 +430,27 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     setPermissionMode(savedMode ?? getDefaultPermissionModeForProvider(provider));
   }, [selectedSession?.id, provider, getDefaultPermissionModeForProvider, getPermissionModesForProvider]);
 
+  // The provider follows the open session and is stored, so every other reader
+  // (git panel, quick settings, message tags) agrees with it. That holds for a
+  // session made with a provider VITE_ENABLED_PROVIDERS has since disabled too,
+  // since such a session can still be continued. With no session open, the
+  // provider is the one a new chat starts on, so a disabled one carried over
+  // from a session gives way and storage is corrected.
   useEffect(() => {
-    if (!selectedSession?.__provider || selectedSession.__provider === provider) {
+    const isEnabled = enabledProviders.includes(provider);
+    if (isEnabled) {
+      lastEnabledProviderRef.current = provider;
+    }
+
+    const nextProvider = selectedSession?.__provider
+      || (isEnabled ? provider : readNewChatProvider(lastEnabledProviderRef.current));
+    if (nextProvider === provider) {
       return;
     }
 
-    setProvider(selectedSession.__provider);
-    writeSelectedProvider(selectedSession.__provider);
-  }, [provider, selectedSession]);
-
-  // A session made with a provider the server has since disabled
-  // (VITE_ENABLED_PROVIDERS) can still be continued, but a new chat never
-  // starts on one: once no session is open, a disabled provider carried over
-  // from that session gives way to the stored choice, or else the first enabled
-  // provider, and storage is updated to match.
-  useEffect(() => {
-    if (selectedSession?.__provider || enabledProviders.includes(provider)) {
-      return;
-    }
-
-    const fallbackProvider = readSelectedProvider();
-    setProvider(fallbackProvider);
-    writeSelectedProvider(fallbackProvider);
-  }, [enabledProviders, provider, selectedSession?.__provider]);
+    setProvider(nextProvider);
+    writeSelectedProvider(nextProvider);
+  }, [enabledProviders, provider, selectedSession]);
 
   // Permission prompts belong to a session, not to the transient provider
   // selection that is synchronized after navigation.

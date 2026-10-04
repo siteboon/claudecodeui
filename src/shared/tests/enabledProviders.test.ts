@@ -134,14 +134,36 @@ test('a stored provider that is still enabled is kept', async () => {
   assert.equal(readSelectedProvider(), 'claude');
 });
 
-test('a stored provider the server disabled reads as the first enabled one', async () => {
-  const { hydrateEnabledProviders, readSelectedProvider, writeSelectedProvider } = await loadStores();
+test('a stored provider the server disabled still reads as stored, but no new chat starts on it', async () => {
+  // Chat stores the open session's provider, and a session made with a
+  // since-disabled provider is still open-able: its readers must agree with it.
+  const {
+    hydrateEnabledProviders,
+    readNewChatProvider,
+    readSelectedProvider,
+    writeSelectedProvider,
+  } = await loadStores();
   respondWith(['claude']);
   writeSelectedProvider('cursor');
 
   await hydrateEnabledProviders();
 
-  assert.equal(readSelectedProvider(), 'claude');
+  assert.equal(readSelectedProvider(), 'cursor');
+  assert.equal(readNewChatProvider(), 'claude');
+});
+
+test('a new chat prefers the stored provider, then the given one, then the first enabled', async () => {
+  const { hydrateEnabledProviders, readNewChatProvider, writeSelectedProvider } = await loadStores();
+  respondWith(['codex', 'claude']);
+  await hydrateEnabledProviders();
+
+  writeSelectedProvider('claude');
+  assert.equal(readNewChatProvider('codex'), 'claude');
+
+  writeSelectedProvider('cursor');
+  assert.equal(readNewChatProvider('claude'), 'claude');
+  assert.equal(readNewChatProvider('opencode'), 'codex');
+  assert.equal(readNewChatProvider(), 'codex');
 });
 
 test('reconciling rewrites a disabled stored provider so storage agrees', async () => {

@@ -1,4 +1,5 @@
 import type { LLMProvider } from '@/shared/types';
+import { ALL_PROVIDERS } from '@/shared/constants';
 import { readEnabledProviders } from '@/shared/enabledProviders';
 import { readUserPreference, writeUserPreference } from '@/shared/userSettings';
 
@@ -16,14 +17,21 @@ import { readUserPreference, writeUserPreference } from '@/shared/userSettings';
  * its subscribers synchronously — including in the tab that wrote — so the
  * choice both reaches every reader at once and follows the user between devices.
  *
- * A stored provider the server no longer enables (VITE_ENABLED_PROVIDERS) reads
- * as the first enabled one, which is also the default when nothing is stored.
+ * Chat stores the open session's provider here, so a provider the server no
+ * longer enables (VITE_ENABLED_PROVIDERS) still reads as stored: while a session
+ * made with one is open, every reader must agree with that session. Only a new
+ * chat is held to the enabled providers, through readNewChatProvider(). Nothing
+ * stored, or an id that names no provider, reads as the default: the first
+ * enabled provider.
  */
 
+const isKnownProvider = (value: unknown): value is LLMProvider => (
+  ALL_PROVIDERS.includes(value as LLMProvider)
+);
+
 export function readSelectedProvider(): LLMProvider {
-  const enabledProviders = readEnabledProviders();
   const stored = readUserPreference<string | null>('selectedProvider', null);
-  return enabledProviders.includes(stored as LLMProvider) ? (stored as LLMProvider) : enabledProviders[0];
+  return isKnownProvider(stored) ? stored : readEnabledProviders()[0];
 }
 
 export function writeSelectedProvider(provider: LLMProvider): void {
@@ -31,15 +39,30 @@ export function writeSelectedProvider(provider: LLMProvider): void {
 }
 
 /**
+ * Used by the chat module once no session is open, and by
+ * reconcileSelectedProvider: the provider a new chat starts on. That is the
+ * stored provider when the server enables it, else `preferred` when the server
+ * enables that, else the first enabled provider.
+ */
+export function readNewChatProvider(preferred: LLMProvider | null = null): LLMProvider {
+  const enabledProviders = readEnabledProviders();
+  const selectedProvider = readSelectedProvider();
+  if (enabledProviders.includes(selectedProvider)) {
+    return selectedProvider;
+  }
+  return preferred && enabledProviders.includes(preferred) ? preferred : enabledProviders[0];
+}
+
+/**
  * Used by the auth module after the enabled providers and the user's
  * preferences load: rewrites a stored provider that is no longer enabled to the
- * one it now reads as, so the copy in `auth.db` agrees with what every reader
- * sees. Nothing is written when nothing is stored.
+ * one a new chat starts on, so the copy in `auth.db` agrees with what the app
+ * opens on. Nothing is written when nothing is stored.
  */
 export function reconcileSelectedProvider(): void {
   const stored = readUserPreference<string | null>('selectedProvider', null);
-  const selectedProvider = readSelectedProvider();
-  if (stored !== null && stored !== selectedProvider) {
-    writeSelectedProvider(selectedProvider);
+  const newChatProvider = readNewChatProvider();
+  if (stored !== null && stored !== newChatProvider) {
+    writeSelectedProvider(newChatProvider);
   }
 }

@@ -202,6 +202,18 @@ export const CODE_EDITOR_DEFAULTS = {
 
 // ---------------------------
 
+//----------------- KNOWN PROVIDERS ------------
+
+/**
+ * Every provider the app knows, Claude first since it is the default when
+ * VITE_ENABLED_PROVIDERS is unset. The enabled-providers store offers this list
+ * until the server answers, and the selected-provider store uses it to tell a
+ * known provider from a stored id that names none.
+ */
+export const ALL_PROVIDERS: readonly LLMProvider[] = ['claude', 'codex', 'cursor', 'opencode'];
+
+// ---------------------------
+
 //----------------- PROVIDER TOOL SETTINGS STORAGE ------------
 
 /**

@@ -1,4 +1,5 @@
 import { api } from '@/shared/api';
+import { ALL_PROVIDERS } from '@/shared/constants';
 import type { LLMProvider } from '@/shared/types';
 
 /**
@@ -14,9 +15,6 @@ import type { LLMProvider } from '@/shared/types';
  * Only lists for new work are filtered. Sessions made with a provider that has
  * since been disabled stay visible and can still be continued.
  */
-
-/** Every provider, Claude first since it is the default when nothing is configured. */
-const ALL_PROVIDERS: readonly LLMProvider[] = ['claude', 'codex', 'cursor', 'opencode'];
 
 // Every provider until the server answers, and whenever it cannot: a failed
 // request must leave the UI as it was before this setting existed.

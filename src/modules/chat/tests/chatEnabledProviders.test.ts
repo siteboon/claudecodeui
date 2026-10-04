@@ -37,6 +37,7 @@ vi.mock('@/shared/api', () => ({
 }));
 
 const cursorSession = { id: 'cursor-session', __provider: 'cursor' } as ProjectSession;
+const claudeSession = { id: 'claude-session', __provider: 'claude' } as ProjectSession;
 
 /** Loads fresh stores, applies the server's list, then mounts the hook. */
 const renderProviderState = async (
@@ -86,6 +87,41 @@ test('a session made with a disabled provider keeps its provider', async () => {
   const { result } = await renderProviderState(['claude'], { session: cursorSession });
 
   assert.equal(result.current.provider, 'cursor');
+});
+
+test('while that session is open, every reader of the stored provider sees it', async () => {
+  // The git panel's commit message, the quick-settings slash commands and the
+  // tag on locally added messages all read the stored provider. The server
+  // generates commit messages only with claude or cursor, so a Claude session
+  // in a codex-only setup must not read as codex.
+  const { result } = await renderProviderState(['codex'], { session: claudeSession });
+  const { readSelectedProvider } = await import('@/shared/selectedProvider');
+  const { useSelectedProvider } = await import('@/shared/hooks/useSelectedProvider');
+  const reader = renderHook(() => useSelectedProvider());
+
+  assert.equal(result.current.provider, 'claude');
+  assert.equal(readSelectedProvider(), 'claude');
+  assert.equal(reader.result.current, 'claude');
+});
+
+test('leaving that session for a new chat returns to the last enabled provider', async () => {
+  // Not to the first enabled one: the user was on claude before opening it.
+  const { result, rerender, readStoredProvider } = await renderProviderState(['codex', 'claude'], {
+    storedProvider: 'claude',
+  });
+  assert.equal(result.current.provider, 'claude');
+
+  act(() => {
+    rerender({ selectedSession: cursorSession });
+  });
+  assert.equal(result.current.provider, 'cursor');
+
+  act(() => {
+    rerender({ selectedSession: null });
+  });
+
+  assert.equal(result.current.provider, 'claude');
+  assert.equal(readStoredProvider(), 'claude');
 });
 
 test('leaving that session for a new chat falls back and updates storage', async () => {
