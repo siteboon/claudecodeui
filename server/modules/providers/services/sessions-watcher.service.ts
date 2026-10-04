@@ -2,7 +2,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { promises as fsPromises } from 'node:fs';
 
-import chokidar, { type FSWatcher } from 'chokidar';
+import chokidar, { type ChokidarOptions, type FSWatcher } from 'chokidar';
 
 import { sessionSynchronizerService } from '@/modules/providers/services/session-synchronizer.service.js';
 import { broadcastSessionUpsertedBatch } from '@/modules/websocket/index.js';
@@ -51,7 +51,7 @@ const WATCHER_IGNORED_FILE_SUFFIXES = ['.tmp', '.swp'];
  * directory that itself sits under, say, `/srv/build/` never gets its whole
  * watch root ignored.
  *
- * Exported for tests; `initializeSessionsWatcher()` is the only runtime caller.
+ * Exported for tests; `createSessionsWatcherOptions()` is the only runtime caller.
  */
 export function createWatcherIgnoredPredicate(rootPath: string): (watchedPath: string) => boolean {
   return (watchedPath) => {
@@ -68,6 +68,25 @@ export function createWatcherIgnoredPredicate(rootPath: string): (watchedPath: s
     const fileName = segments[segments.length - 1] ?? '';
     return WATCHER_IGNORED_FILE_NAMES.has(fileName)
       || WATCHER_IGNORED_FILE_SUFFIXES.some((suffix) => fileName.endsWith(suffix));
+  };
+}
+
+/**
+ * Builds the chokidar options for one provider watch root.
+ *
+ * Exported for tests, so they exercise the options the watchers really run
+ * with; `initializeSessionsWatcher()` is the only runtime caller.
+ */
+export function createSessionsWatcherOptions(rootPath: string): ChokidarOptions {
+  return {
+    ignored: createWatcherIgnoredPredicate(rootPath),
+    persistent: true,
+    ignoreInitial: true,
+    followSymlinks: false,
+    depth: 6,
+    usePolling: true,
+    interval: 6_000,
+    binaryInterval: 6_000,
   };
 }
 
@@ -238,16 +257,7 @@ export async function initializeSessionsWatcher(): Promise<void> {
     try {
       await fsPromises.mkdir(rootPath, { recursive: true });
 
-      const watcher = chokidar.watch(rootPath, {
-        ignored: createWatcherIgnoredPredicate(rootPath),
-        persistent: true,
-        ignoreInitial: true,
-        followSymlinks: false,
-        depth: 6,
-        usePolling: true,
-        interval: 6_000,
-        binaryInterval: 6_000,
-      });
+      const watcher = chokidar.watch(rootPath, createSessionsWatcherOptions(rootPath));
 
       watcher
         .on('add', (filePath: string) => {

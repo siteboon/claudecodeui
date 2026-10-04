@@ -14,7 +14,7 @@ const previousUserProfile = process.env.USERPROFILE;
 process.env.HOME = fixtureHome;
 process.env.USERPROFILE = fixtureHome;
 
-const { createWatcherIgnoredPredicate } = await import(
+const { createSessionsWatcherOptions, createWatcherIgnoredPredicate } = await import(
   '@/modules/providers/services/sessions-watcher.service.js'
 );
 
@@ -59,16 +59,19 @@ test('the watcher ignore predicate only matches segments below the root', () => 
   assert.equal(isIgnored(root), false);
   assert.equal(isIgnored(path.join(root, '-repo', 'session.jsonl')), false);
   assert.equal(isIgnored(path.dirname(root)), false, 'paths outside the root are left to chokidar');
+  assert.equal(
+    isIgnored(path.join(path.dirname(root), 'build', 'output.jsonl')),
+    false,
+    'an ignored name outside the root does not count',
+  );
 });
 
-test('chokidar polling honours the predicate: subagent files raise no events, transcripts still do', async () => {
+test('the session watcher options keep subagent files silent while transcripts still raise events', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'sessions-watcher-root-'));
   const events: string[] = [];
+  // The options the watchers run with, polling faster so the test stays quick.
   const watcher = chokidar.watch(root, {
-    ignored: createWatcherIgnoredPredicate(root),
-    ignoreInitial: true,
-    depth: 6,
-    usePolling: true,
+    ...createSessionsWatcherOptions(root),
     interval: 50,
     binaryInterval: 50,
   });
