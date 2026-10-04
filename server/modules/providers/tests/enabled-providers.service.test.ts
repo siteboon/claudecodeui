@@ -69,6 +69,11 @@ test('a quoted value from .env is read without its quotes', (t) => {
   const singleQuoted = readWithValue(t, " ' codex ' ");
   assert.deepEqual(singleQuoted.providers, ['codex']);
   assert.deepEqual(singleQuoted.warnings, []);
+
+  // Only a matching pair is a quoted value; anything else is read as written.
+  const mismatched = readWithValue(t, `"claude,codex'`);
+  assert.deepEqual(mismatched.providers, ALL_PROVIDERS);
+  assert.equal(mismatched.warnings.length, 1);
 });
 
 test('unknown ids are dropped and named in one warning', (t) => {
