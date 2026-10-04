@@ -50,15 +50,17 @@ type BrowserUseApiResult = { success?: boolean; data?: unknown; error?: string }
 type BrowserUseApiResponse = { ok: boolean; status: number; data: BrowserUseApiResult };
 
 // fetch() cannot take a per-request CA, so the HTTPS case uses node:https. It trusts the public
-// roots plus the server's own certificate (a self-signed certificate is its own root), and skips
-// only the hostname check on loopback: the certificate names the public host, while this call
-// goes to 127.0.0.1.
+// roots plus the server's own certificate, and skips only the hostname check on loopback: the
+// certificate names the public host, while this call goes to 127.0.0.1.
+// allowPartialTrustChain lets that certificate be the trust anchor even when it is not
+// self-signed, e.g. a leaf from mkcert or a corporate CA whose root is not in the file.
 function postJsonOverHttps(url: URL, headers: Record<string, string>, body: string): Promise<BrowserUseApiResponse> {
   return new Promise((resolve, reject) => {
     const request = https.request(url, {
       method: 'POST',
       headers: { ...headers, 'Content-Length': String(Buffer.byteLength(body)) },
       ca: apiCaCertPath ? [...tls.rootCertificates, fs.readFileSync(apiCaCertPath, 'utf8')] : undefined,
+      allowPartialTrustChain: true,
       checkServerIdentity: LOOPBACK_HOSTNAMES.has(url.hostname) ? () => undefined : tls.checkServerIdentity,
       signal: AbortSignal.timeout(API_TIMEOUT_MS),
     }, (response) => {
