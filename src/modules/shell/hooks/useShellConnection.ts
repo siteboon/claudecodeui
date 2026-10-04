@@ -141,7 +141,6 @@ export function useShellConnection({
         }
 
         connectingRef.current = true;
-        setIsBypassRefusedAsRoot(false);
 
         const socket = new WebSocket(wsUrl);
         wsRef.current = socket;

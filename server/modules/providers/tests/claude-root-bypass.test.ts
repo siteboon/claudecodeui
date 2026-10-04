@@ -26,6 +26,8 @@ type SandboxEnv = Partial<Record<(typeof SANDBOX_ENV_KEYS)[number], string>>;
 type TurnOutcome = {
   launchedMode: unknown;
   sent: NormalizedMessage[];
+  /** When the stand-in CLI, having recorded the prompt, began its first reply. */
+  replyStartedAt: number;
 };
 
 type TurnSetup = {
@@ -94,6 +96,7 @@ async function runTurnAs(
 
   const sent: NormalizedMessage[] = [];
   let launchedMode: unknown;
+  let replyStartedAt = Number.NaN;
   const sessions = new ClaudeSessionsProvider({ getLiveRunStartTime: () => null });
   const context: ProviderRuntimeContext = {
     resolveProviderSessionId: () => null,
@@ -118,6 +121,9 @@ async function runTurnAs(
           const { canUseTool } = sdkOptions as { canUseTool: (...args: unknown[]) => Promise<unknown> };
           await canUseTool('Bash', { command: 'ls' }, { signal: AbortSignal.abort() });
         }
+        // The real CLI records the prompt between its init and its first reply.
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        replyStartedAt = Date.now();
         yield {
           type: 'assistant',
           session_id: 'native-root-bypass',
@@ -144,7 +150,7 @@ async function runTurnAs(
     await rm(home, { recursive: true, force: true });
   }
 
-  return { launchedMode, sent };
+  return { launchedMode, sent, replyStartedAt };
 }
 
 const skipPermissionsSetting = { toolsSettings: { allowedTools: [], disallowedTools: [], skipPermissions: true } };
@@ -201,10 +207,12 @@ test('plan mode is untouched as root', async () => {
 });
 
 test('the notice waits until the CLI has started, then comes before its first reply', async () => {
-  const { sent } = await runTurnAs(0, {}, skipPermissionsSetting);
+  const { sent, replyStartedAt } = await runTurnAs(0, {}, skipPermissionsSetting);
 
   const kinds = sent.map((message) => message.kind);
   const noticeIndex = sent.findIndex((message) => message.kind === 'error');
+  // Not at init: the merged history would sort it above the prompt row.
+  assert.ok(Date.parse(sent[noticeIndex]?.timestamp ?? '') >= replyStartedAt, sent[noticeIndex]?.timestamp);
   const sessionCreatedIndex = kinds.indexOf('session_created');
   const firstReplyIndex = sent.findIndex((message) => message.kind === 'text');
   assert.ok(sessionCreatedIndex >= 0 && sessionCreatedIndex < noticeIndex, kinds.join(','));

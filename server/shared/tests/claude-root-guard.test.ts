@@ -205,11 +205,19 @@ test('managed settings and their drop-ins apply last, drop-ins in name order', {
       managedFiles: {
         'managed-settings.d/10-lockdown.json': { env: { IS_SANDBOX: '0' } },
         'managed-settings.d/20-sandbox.json': { env: { IS_SANDBOX: '1' } },
-        'managed-settings.d/.hidden.json': { env: { IS_SANDBOX: '0' } },
-        'managed-settings.d/notes.txt': { env: { IS_SANDBOX: '0' } },
       },
     }),
     false,
+  );
+  // Only visible `.json` drop-ins are read.
+  assert.equal(
+    refusedWith({
+      managedFiles: {
+        'managed-settings.d/.hidden.json': { env: { IS_SANDBOX: '1' } },
+        'managed-settings.d/notes.txt': { env: { IS_SANDBOX: '1' } },
+      },
+    }),
+    true,
   );
 });
 

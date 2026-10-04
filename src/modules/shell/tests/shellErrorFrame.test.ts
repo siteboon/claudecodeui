@@ -168,6 +168,21 @@ describe('shell notice frames', () => {
     expect(view.result.current.isBypassRefusedAsRoot).toBe(false);
   });
 
+  it('is cleared when the user disconnects', () => {
+    const { view, socket } = renderConnection();
+
+    act(() => {
+      socket.onmessage?.({
+        data: JSON.stringify({ type: 'notice', code: 'claude_bypass_refused_as_root' }),
+      });
+    });
+    act(() => {
+      view.result.current.disconnectFromShell();
+    });
+
+    expect(view.result.current.isBypassRefusedAsRoot).toBe(false);
+  });
+
   it('ignores notices it does not know', () => {
     const { view, socket } = renderConnection();
 
