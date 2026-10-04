@@ -127,6 +127,8 @@ async function runTurnAs(
         yield {
           type: 'assistant',
           session_id: 'native-root-bypass',
+          // The CLI stamps its stream messages; the merged history sorts by that.
+          timestamp: new Date(replyStartedAt).toISOString(),
           message: { role: 'assistant', content: [{ type: 'text', text: 'first reply' }] },
         };
       })();
@@ -211,13 +213,17 @@ test('the notice waits until the CLI has started, then comes before its first re
 
   const kinds = sent.map((message) => message.kind);
   const noticeIndex = sent.findIndex((message) => message.kind === 'error');
-  // Not at init: the merged history would sort it above the prompt row.
-  assert.ok(Date.parse(sent[noticeIndex]?.timestamp ?? '') >= replyStartedAt, sent[noticeIndex]?.timestamp);
   const sessionCreatedIndex = kinds.indexOf('session_created');
   const firstReplyIndex = sent.findIndex((message) => message.kind === 'text');
   assert.ok(sessionCreatedIndex >= 0 && sessionCreatedIndex < noticeIndex, kinds.join(','));
   assert.ok(noticeIndex < firstReplyIndex, kinds.join(','));
   assert.equal(sent[noticeIndex]?.noticeCode, CLAUDE_ROOT_BYPASS_NOTICE_CODE);
+
+  // Stamped just ahead of the reply, not at init: the merged history sorts by
+  // timestamp, and the prompt row is recorded between the two.
+  const noticeTime = Date.parse(sent[noticeIndex]?.timestamp ?? '');
+  assert.equal(noticeTime, replyStartedAt - 1, sent[noticeIndex]?.timestamp);
+  assert.ok(noticeTime < Date.parse(sent[firstReplyIndex]?.timestamp ?? ''));
 });
 
 test('as root, a sandbox marked only in ~/.claude/settings.json keeps bypass', async () => {

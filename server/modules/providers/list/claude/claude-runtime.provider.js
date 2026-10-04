@@ -970,12 +970,16 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     // message, or its first approval request if that wins the race. Sent any
     // earlier, the row sorts above the user's own message in the merged
     // history, and a client still subscribing to a new session gets it twice.
-    const sendRootBypassNotice = () => {
+    // Stamped just ahead of that message's own timestamp, because the merged
+    // history orders rows by the CLI's timestamps.
+    const sendRootBypassNotice = (nextMessageTimestamp) => {
       if (!rootBypassNoticePending) {
         return;
       }
       rootBypassNoticePending = false;
-      ws.send(createNormalizedMessage({ kind: 'error', content: CLAUDE_ROOT_BYPASS_NOTICE, noticeCode: CLAUDE_ROOT_BYPASS_NOTICE_CODE, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+      const nextMessageTime = Date.parse(nextMessageTimestamp ?? '');
+      const timestamp = Number.isFinite(nextMessageTime) ? new Date(nextMessageTime - 1).toISOString() : undefined;
+      ws.send(createNormalizedMessage({ kind: 'error', content: CLAUDE_ROOT_BYPASS_NOTICE, noticeCode: CLAUDE_ROOT_BYPASS_NOTICE_CODE, timestamp, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
     };
 
     const mcpServers = await loadMcpConfig(options.cwd);
@@ -1151,7 +1155,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       }
 
       if (message.type !== 'system') {
-        sendRootBypassNotice();
+        sendRootBypassNotice(message.timestamp);
       }
 
       // Transform and normalize message via adapter
