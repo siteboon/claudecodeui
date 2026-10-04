@@ -36,27 +36,71 @@ const spawnCursor = dependencies.queryCursor;
 const router = express.Router();
 const COMMIT_DIFF_CHARACTER_LIMIT = 500_000;
 
-// Every Git route names its project by `project` (query or body). A project
-// outside ALLOWED_PATHS is refused before any git command runs; unknown ids
+// Every Git route names its project by `project`, read from the query or the
+// body depending on the route. With ALLOWED_PATHS set, both places are checked
+// and a non-string id (`project[]=`) is refused, so neither a query/body
+// mismatch nor an array can name a project the check did not see. A project
+// outside ALLOWED_PATHS, or inside it but in a repository that is not (see
+// `isGitRepositoryAllowed`), is refused before any route runs; unknown ids
 // fall through to each route's own error. A no-op when ALLOWED_PATHS is unset.
 router.use(async (req, res, next) => {
-  const projectId = req.query.project ?? req.body?.project;
-  if (ALLOWED_PATHS.length === 0 || typeof projectId !== 'string' || !projectId) {
+  if (ALLOWED_PATHS.length === 0) {
     next();
     return;
   }
 
+  const projectIds = [req.query.project, req.body?.project]
+    .filter((projectId) => projectId !== undefined && projectId !== null && projectId !== '');
+  if (projectIds.some((projectId) => typeof projectId !== 'string')) {
+    res.status(400).json({ error: 'Project id must be a string' });
+    return;
+  }
+
   try {
-    const projectPath = await projectsDb.getProjectPathById(projectId);
-    if (projectPath && !(await isPathAllowed(projectPath))) {
-      res.status(403).json({ error: PATH_NOT_ALLOWED_MESSAGE });
-      return;
+    for (const projectId of new Set(projectIds)) {
+      const projectPath = await projectsDb.getProjectPathById(projectId);
+      if (projectPath && !(await isGitRepositoryAllowed(projectPath))) {
+        res.status(403).json({ error: PATH_NOT_ALLOWED_MESSAGE });
+        return;
+      }
     }
     next();
   } catch (error) {
     next(error);
   }
 });
+
+/**
+ * Whether git may work on `projectPath` under ALLOWED_PATHS. Git commands run
+ * at the repository root and read the repository's git directory, so when the
+ * project sits in a repository that starts above the allowed directory (a
+ * monorepo package), or whose git directory lives elsewhere (a linked worktree
+ * or `--separate-git-dir`), both have to be allowed too; otherwise status,
+ * diff and discard would reach files outside it. A directory that is not in a
+ * repository yet only needs the project itself to be allowed.
+ */
+async function isGitRepositoryAllowed(projectPath) {
+  if (!(await isPathAllowed(projectPath))) {
+    return false;
+  }
+
+  let repositoryPaths;
+  try {
+    const { stdout } = await spawnAsync('git', ['rev-parse', '--show-toplevel', '--git-common-dir'], { cwd: projectPath });
+    // `--git-common-dir` may be relative to the working directory.
+    repositoryPaths = stdout.split('\n').map((line) => line.trim()).filter(Boolean)
+      .map((repositoryPath) => path.resolve(projectPath, repositoryPath));
+  } catch {
+    return true;
+  }
+
+  for (const repositoryPath of repositoryPaths) {
+    if (!(await isPathAllowed(repositoryPath))) {
+      return false;
+    }
+  }
+  return true;
+}
 
 function spawnAsync(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -164,6 +208,9 @@ async function getActualProjectPath(projectId) {
   if (!projectPath) {
     throw new Error(`Unable to resolve project path for "${projectId}"`);
   }
+  // Backstop for the router-level check: refuse the exact project a route is
+  // about to run git in, whatever request field it came from.
+  await assertPathAllowed(projectPath);
   return validateProjectPath(projectPath);
 }
 
@@ -837,8 +884,9 @@ router.get('/branches', async (req, res) => {
 });
 
 // Shared error shaping for the two compare routes: service AppErrors (unknown
-// ref, no merge base) keep their status/code; anything else follows the
-// module's GET convention of a 200 with `error`/`details`.
+// ref, no merge base, a path outside ALLOWED_PATHS) keep their status/code;
+// anything else follows the module's GET convention of a 200 with
+// `error`/`details`.
 function sendBranchDiffError(res, error, context) {
   if (error instanceof AppError) {
     return res.status(error.statusCode).json({ error: error.message, code: error.code, details: error.details });
@@ -919,7 +967,12 @@ router.get('/branch-diff/file', async (req, res) => {
       file: repositoryRelativeFilePath,
       oldPath: repositoryRelativeOldPath,
       runCommand: spawnAsync,
-      readFile: (absolutePath) => fs.readFile(absolutePath, 'utf-8'),
+      // Untracked files are read with fs, so a symlink must not reach
+      // outside ALLOWED_PATHS.
+      readFile: async (absolutePath) => {
+        await assertPathAllowed(absolutePath);
+        return fs.readFile(absolutePath, 'utf-8');
+      },
     });
     res.json({ diff: stripDiffHeaders(diff) });
   } catch (error) {
