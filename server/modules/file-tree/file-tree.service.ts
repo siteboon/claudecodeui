@@ -408,6 +408,37 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
     return { path: resolvedPath, suggestions };
   }
 
+  /**
+   * Where the folder picker opens when `~` leads to no allowed directory: the
+   * first allowed directory that exists, or, when none exists yet (a typo, a
+   * folder still to be created), the nearest existing folder above the first
+   * one, so the picker shows a real place instead of an error.
+   */
+  async function findPickerStartPath(allowedPaths: readonly string[]): Promise<string> {
+    for (const allowedPath of allowedPaths) {
+      try {
+        if ((await fileSystem.stat(allowedPath)).isDirectory()) {
+          return allowedPath;
+        }
+      } catch {
+        // Not there (yet); try the next entry.
+      }
+    }
+
+    let candidatePath = path.resolve(allowedPaths[0]);
+    while (path.dirname(candidatePath) !== candidatePath) {
+      candidatePath = path.dirname(candidatePath);
+      try {
+        if ((await fileSystem.stat(candidatePath)).isDirectory()) {
+          return candidatePath;
+        }
+      } catch {
+        // Keep climbing.
+      }
+    }
+    return candidatePath;
+  }
+
   async function cleanupTemporaryFiles(files: FileTreeUploadedFile[]): Promise<void> {
     await Promise.all(files.map(async (file) => {
       try {
@@ -426,16 +457,20 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       let targetPath = path.resolve(requestedPath);
 
       if (dependencies.workspace.allowedPaths.length > 0 && !(await dependencies.workspace.isPathAllowed(targetPath))) {
-        const allowedChildPaths = await dependencies.workspace.listAllowedPathChildren(targetPath);
-        if (allowedChildPaths) {
-          return browseAllowedPathAncestor(targetPath, allowedChildPaths);
-        }
+        let allowedChildPaths = await dependencies.workspace.listAllowedPathChildren(targetPath);
 
         // The picker opens at `~`; when the workspace root is neither inside
-        // an allowed directory nor on the way to one, open the first allowed
+        // an allowed directory nor on the way to one, open at an allowed
         // directory instead of an error.
-        if (!inputPath || inputPath === '~') {
-          targetPath = path.resolve(dependencies.workspace.allowedPaths[0]);
+        if (!allowedChildPaths && (!inputPath || inputPath === '~')) {
+          targetPath = await findPickerStartPath(dependencies.workspace.allowedPaths);
+          allowedChildPaths = await dependencies.workspace.isPathAllowed(targetPath)
+            ? null
+            : await dependencies.workspace.listAllowedPathChildren(targetPath);
+        }
+
+        if (allowedChildPaths) {
+          return browseAllowedPathAncestor(targetPath, allowedChildPaths);
         }
       }
 

@@ -140,6 +140,7 @@ export const WORKSPACES_ROOT = process.env.WORKSPACES_ROOT || os.homedir();
  * home directory. With `ALLOWED_PATHS` set, an explicit root still has to
  * contain every workspace (both checks apply), while the home-directory
  * default gives way so an allowed directory outside the home directory works.
+ * `findAllowedPathsWarnings` uses it to flag allowed entries outside the root.
  */
 const IS_WORKSPACES_ROOT_CONFIGURED = Boolean(process.env.WORKSPACES_ROOT);
 
@@ -467,15 +468,28 @@ export const PATH_NOT_ALLOWED_MESSAGE = 'Access denied: the path is outside the 
 // treated like a loop and refused.
 const MAXIMUM_DANGLING_SYMLINK_HOPS = 40;
 
+// `.env` values keep their quotes (see load-env.ts), so `ALLOWED_PATHS="/a,/b"`
+// arrives quoted; one matching pair around the value or an entry is dropped.
+function stripMatchingQuotes(value: string): string {
+  const trimmedValue = value.trim();
+  const firstCharacter = trimmedValue[0];
+  return trimmedValue.length >= 2
+    && (firstCharacter === '"' || firstCharacter === "'")
+    && trimmedValue.endsWith(firstCharacter)
+    ? trimmedValue.slice(1, -1).trim()
+    : trimmedValue;
+}
+
 /**
  * Parses an `ALLOWED_PATHS` value into the absolute directories it allows.
  *
- * Entries are comma-separated. Each one is trimmed, empty entries are dropped,
- * a leading `~` is expanded to `homeDirectory`, and the result is resolved to
- * a normalized absolute path (a relative entry resolves against the server's
- * working directory). Duplicates are removed. Symlinks are not resolved here
- * because an allowed directory may not exist yet when the server starts;
- * `isPathAllowed` resolves both sides on every check instead.
+ * Entries are comma-separated. One pair of matching quotes around the whole
+ * value or around an entry is dropped. Each entry is trimmed, empty entries
+ * are dropped, a leading `~` is expanded to `homeDirectory`, and the result is
+ * resolved to a normalized absolute path (a relative entry resolves against
+ * the server's working directory). Duplicates are removed. Symlinks are not
+ * resolved here because an allowed directory may not exist yet when the
+ * server starts; `isPathAllowed` resolves both sides on every check instead.
  *
  * Used to build `ALLOWED_PATHS` and by the shared tests. An empty result means
  * "no restriction".
@@ -485,9 +499,9 @@ export function parseAllowedPaths(rawValue: string | undefined, homeDirectory: s
     return [];
   }
 
-  const allowedPaths = rawValue
+  const allowedPaths = stripMatchingQuotes(rawValue)
     .split(',')
-    .map((entry) => entry.trim())
+    .map(stripMatchingQuotes)
     .filter(Boolean)
     .map((entry) => {
       let expandedEntry = entry;
@@ -592,7 +606,8 @@ async function resolveRealPathOrNearestAncestor(absolutePath: string): Promise<s
  * skipped.
  *
  * Used here by `validateWorkspacePath`, `resolveReadOnlyRootPath`,
- * `filterByAllowedPaths` and `assertPathAllowed`; by the File Tree module for
+ * `filterByAllowedPaths`, `assertPathAllowed` and `findAllowedPathsWarnings`;
+ * by the File Tree module for
  * its folder picker and per-file checks; by the Git, Taskmaster, Commands and
  * Agent routes to refuse projects and paths outside the allowed directories;
  * and by the WebSocket module so it never announces a session outside them.
@@ -731,6 +746,44 @@ export async function listAllowedPathChildren(
   }
 
   return childPaths.size > 0 ? [...childPaths] : null;
+}
+
+/**
+ * Describes the `ALLOWED_PATHS` entries that cannot work as configured, one
+ * message each: an entry that does not exist (yet) or is not a directory, and,
+ * when `WORKSPACES_ROOT` is set explicitly (`configuredWorkspacesRoot`), an
+ * entry that is neither inside nor above it, where no workspace can be
+ * created or browsed because both checks apply. Empty when the list is empty
+ * or every entry is usable.
+ *
+ * Used by the server entrypoint, which prints each message as a startup
+ * warning so a mistyped entry does not fail silently.
+ */
+export async function findAllowedPathsWarnings(
+  allowedPaths: readonly string[] = ALLOWED_PATHS,
+  configuredWorkspacesRoot: string | null = IS_WORKSPACES_ROOT_CONFIGURED ? WORKSPACES_ROOT : null,
+): Promise<string[]> {
+  const warnings: string[] = [];
+  for (const allowedPath of allowedPaths) {
+    let isDirectory = false;
+    try {
+      isDirectory = (await stat(allowedPath)).isDirectory();
+    } catch {
+      // Reported below like any other missing directory.
+    }
+    if (!isDirectory) {
+      warnings.push(`ALLOWED_PATHS entry ${allowedPath} does not exist or is not a directory; nothing can be opened there until it does`);
+    }
+
+    if (
+      configuredWorkspacesRoot
+      && !(await isPathAllowed(allowedPath, [configuredWorkspacesRoot]))
+      && !(await isPathAllowed(configuredWorkspacesRoot, [allowedPath]))
+    ) {
+      warnings.push(`ALLOWED_PATHS entry ${allowedPath} is outside WORKSPACES_ROOT (${configuredWorkspacesRoot}); paths must satisfy both, so no workspace can be created there`);
+    }
+  }
+  return warnings;
 }
 
 // ---------------------------

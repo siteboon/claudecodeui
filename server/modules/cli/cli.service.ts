@@ -106,6 +106,8 @@ function showStatus(dependencies: CliServiceDependencies): void {
   output.log(`       DATABASE_PATH: ${terminalTextStyles.dim(environment.DATABASE_PATH || '(using default location)')}`);
   output.log(`       CLAUDE_CLI_PATH: ${terminalTextStyles.dim(environment.CLAUDE_CLI_PATH || 'claude (default)')}`);
   output.log(`       CONTEXT_WINDOW: ${terminalTextStyles.dim(environment.CONTEXT_WINDOW || '160000 (default)')}`);
+  output.log(`       WORKSPACES_ROOT: ${terminalTextStyles.dim(environment.WORKSPACES_ROOT || `${dependencies.homeDirectory} (default)`)}`);
+  output.log(`       ALLOWED_PATHS: ${terminalTextStyles.dim(environment.ALLOWED_PATHS || '(not set: no restriction)')}`);
   output.log(`\n${terminalTextStyles.info('[INFO]')} Claude Projects Folder:`);
   output.log(`       ${terminalTextStyles.dim(claudeProjectsPath)}`);
   output.log(`       Status: ${fileSystem.pathExists(claudeProjectsPath)

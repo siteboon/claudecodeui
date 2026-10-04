@@ -19,6 +19,10 @@ const secretFilePath = path.join(outsideProjectRoot, 'secret.txt');
 await fsPromises.mkdir(insideProjectRoot, { recursive: true });
 await fsPromises.mkdir(outsideProjectRoot, { recursive: true });
 await fsPromises.mkdir(path.join(workDirectory, 'allowed10'), { recursive: true });
+// An existing folder whose allowed child was mistyped and never existed.
+const serviceDirectory = path.join(fixtureRoot, 'srv');
+const missingAllowedDirectory = path.join(serviceDirectory, 'specifc');
+await fsPromises.mkdir(serviceDirectory, { recursive: true });
 await fsPromises.writeFile(path.join(insideProjectRoot, 'inside.txt'), 'inside', 'utf8');
 await fsPromises.writeFile(secretFilePath, 'secret', 'utf8');
 // A link inside the allowed project that points at the outside project.
@@ -39,7 +43,7 @@ after(async () => {
  * helpers bound to an explicit list, so the test does not depend on the
  * environment the suite runs in.
  */
-function createService(rootPath: string): FileTreeServices {
+function createService(rootPath: string, allowedPathList: string[] = allowedPaths): FileTreeServices {
   return createFileTreeService({
     fileSystem: {
       access: (candidatePath) => fsPromises.access(candidatePath),
@@ -67,13 +71,13 @@ function createService(rootPath: string): FileTreeServices {
       rootPath,
       // Stands in for `validateWorkspacePath`, whose ALLOWED_PATHS check is
       // covered by the shared tests; only the allowed-paths outcome matters here.
-      validatePath: async (candidatePath) => (await isPathAllowed(candidatePath, allowedPaths)
+      validatePath: async (candidatePath) => (await isPathAllowed(candidatePath, allowedPathList)
         ? { valid: true, resolvedPath: candidatePath }
         : { valid: false, error: 'outside ALLOWED_PATHS', errorCode: 'PATH_NOT_ALLOWED' }),
       resolveReadOnlyRootPath: async () => null,
-      allowedPaths,
-      isPathAllowed: (candidatePath) => isPathAllowed(candidatePath, allowedPaths),
-      listAllowedPathChildren: (directoryPath) => listAllowedPathChildren(directoryPath, allowedPaths),
+      allowedPaths: allowedPathList,
+      isPathAllowed: (candidatePath) => isPathAllowed(candidatePath, allowedPathList),
+      listAllowedPathChildren: (directoryPath) => listAllowedPathChildren(directoryPath, allowedPathList),
     },
     resolveMimeType: () => 'text/plain',
     fileSystemConcurrency: 4,
@@ -212,6 +216,16 @@ test('the folder picker opens at the first allowed directory when the root does 
   const listing = await service.browseWorkspace('~');
   assert.equal(listing.path, allowedDirectory);
   assert.deepEqual(listing.suggestions.map((suggestion) => suggestion.name), ['proj-in']);
+});
+
+test('the folder picker skips an allowed directory that does not exist instead of opening at an error', async () => {
+  // A missing first entry: the picker opens at the next one that exists.
+  const skipping = createService(outsideDirectory, [missingAllowedDirectory, allowedDirectory]);
+  assert.equal((await skipping.browseWorkspace('~')).path, allowedDirectory);
+
+  // Nothing exists yet: it opens at the nearest existing folder above it.
+  const onlyMissing = createService(outsideDirectory, [missingAllowedDirectory]);
+  assert.deepEqual(await onlyMissing.browseWorkspace('~'), { path: serviceDirectory, suggestions: [] });
 });
 
 test('a workspace folder can only be created inside ALLOWED_PATHS', async () => {

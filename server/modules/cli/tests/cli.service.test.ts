@@ -86,3 +86,18 @@ test('returns a failure code for an unknown command without exiting the process'
   assert.equal(exitCode, 1);
   assert.match(harness.errorMessages[0], /Unknown command: unknown/);
 });
+
+test('status shows the file system access settings', async () => {
+  const harness = createHarness();
+
+  assert.equal(await harness.service.run(['status']), 0);
+  assert.ok(harness.logMessages.some((message) => message.includes('WORKSPACES_ROOT') && message.includes('/home/user (default)')));
+  assert.ok(harness.logMessages.some((message) => message.includes('ALLOWED_PATHS') && message.includes('no restriction')));
+
+  harness.logMessages.length = 0;
+  harness.environment.WORKSPACES_ROOT = '/srv';
+  harness.environment.ALLOWED_PATHS = '/srv/a,/srv/b';
+  assert.equal(await harness.service.run(['status']), 0);
+  assert.ok(harness.logMessages.some((message) => message.includes('WORKSPACES_ROOT') && message.includes('/srv')));
+  assert.ok(harness.logMessages.some((message) => message.includes('ALLOWED_PATHS') && message.includes('/srv/a,/srv/b')));
+});

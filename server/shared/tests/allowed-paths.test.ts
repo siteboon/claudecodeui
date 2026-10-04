@@ -11,6 +11,7 @@ delete process.env.ALLOWED_PATHS;
 const {
   ALLOWED_PATHS,
   filterByAllowedPaths,
+  findAllowedPathsWarnings,
   isPathAllowed,
   listAllowedPathChildren,
   parseAllowedPaths,
@@ -52,6 +53,33 @@ test('entries are trimmed, normalized, de-duplicated, and expand a leading ~', (
   );
   // A relative entry resolves against the server's working directory.
   assert.deepEqual(parseAllowedPaths('relative/dir'), [path.resolve('relative/dir')]);
+});
+
+test('quotes kept from a .env value are dropped around the value and each entry', () => {
+  assert.deepEqual(parseAllowedPaths('"/srv/a,/srv/b"'), ['/srv/a', '/srv/b']);
+  assert.deepEqual(parseAllowedPaths("'/srv/a', \"/srv/b\""), ['/srv/a', '/srv/b']);
+  // An unmatched quote is part of the path, as before.
+  assert.deepEqual(parseAllowedPaths('/srv/a"'), ['/srv/a"']);
+});
+
+test('startup warnings name missing entries and entries outside an explicit workspace root', async () => {
+  const missingDirectory = path.join(fixtureRoot, 'work', 'proj3');
+  const filePath = path.join(outsideDirectory, 'secret.txt');
+
+  assert.deepEqual(await findAllowedPathsWarnings([]), []);
+  assert.deepEqual(await findAllowedPathsWarnings([allowedDirectory], null), []);
+
+  const warnings = await findAllowedPathsWarnings([allowedDirectory, missingDirectory, filePath], null);
+  assert.equal(warnings.length, 2);
+  assert.match(warnings[0], new RegExp(`${missingDirectory} does not exist`));
+  assert.match(warnings[1], new RegExp(`${filePath} does not exist or is not a directory`));
+
+  // Inside or above the explicit root is fine; beside it nothing can be created.
+  const workRoot = path.join(fixtureRoot, 'work');
+  assert.deepEqual(await findAllowedPathsWarnings([allowedDirectory, fixtureRoot], workRoot), []);
+  const outsideRootWarnings = await findAllowedPathsWarnings([outsideDirectory], workRoot);
+  assert.equal(outsideRootWarnings.length, 1);
+  assert.match(outsideRootWarnings[0], /is outside WORKSPACES_ROOT/);
 });
 
 test('every path is allowed when the list is empty', async () => {

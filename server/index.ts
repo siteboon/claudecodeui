@@ -12,6 +12,7 @@ import cors from 'cors';
 import {
     ALLOWED_PATHS,
     AppError,
+    findAllowedPathsWarnings,
     findApplicationRoot,
     getModuleDirectory,
     IS_PLATFORM,
@@ -373,6 +374,9 @@ async function startServer() {
             console.log(`${terminalTextStyles.info('[INFO]')} Installed at: ${terminalTextStyles.dim(appInstallPath)}`);
             if (ALLOWED_PATHS.length > 0) {
                 console.log(`${terminalTextStyles.info('[INFO]')} File access limited to (ALLOWED_PATHS): ${terminalTextStyles.dim(ALLOWED_PATHS.join(', '))}`);
+                for (const warning of await findAllowedPathsWarnings()) {
+                    console.log(`${terminalTextStyles.warn('[WARN]')} ${warning}`);
+                }
             }
             console.log(`${terminalTextStyles.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
             console.log('');
