@@ -688,21 +688,23 @@ export class DesktopWindowManager {
   }
 
   configurePermissions() {
-    const isAllowedPermission = (webContents, permission) => {
+    const isAllowedPermission = (webContents, permission, mediaTypes = []) => {
       const sourceUrl = webContents.getURL();
       const allowedPermissions = new Set(['clipboard-read', 'media', 'notifications']);
-      // Saved self-hosted servers get the same short list as Local CloudCLI and cloud environments.
-      const isAllowedOrigin = isAllowedPermissionOrigin(sourceUrl, this.getCloudState().controlPlaneUrl)
-        || isSavedServerOrigin(sourceUrl, this.getServerOrigins());
-      return isAllowedOrigin && allowedPermissions.has(permission);
+      if (!allowedPermissions.has(permission)) return false;
+      if (isAllowedPermissionOrigin(sourceUrl, this.getCloudState().controlPlaneUrl)) return true;
+      // A saved self-hosted server is an origin the user typed in. It gets the same short list as
+      // Local CloudCLI and cloud environments, minus the camera: the web UI only records audio.
+      return isSavedServerOrigin(sourceUrl, this.getServerOrigins())
+        && !(permission === 'media' && mediaTypes.includes('video'));
     };
 
-    session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
-      callback(isAllowedPermission(webContents, permission));
+    session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+      callback(isAllowedPermission(webContents, permission, details?.mediaTypes || []));
     });
-    session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
+    session.defaultSession.setPermissionCheckHandler((webContents, permission, _requestingOrigin, details) => {
       if (!webContents) return false;
-      return isAllowedPermission(webContents, permission);
+      return isAllowedPermission(webContents, permission, details?.mediaType ? [details.mediaType] : []);
     });
   }
 

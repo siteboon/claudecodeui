@@ -7,7 +7,9 @@ import path from 'node:path';
 
 const PROBE_PATH = '/api/auth/status';
 const PROBE_TIMEOUT_MS = 8000;
-const SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:\/\//i;
+// Input that starts with a scheme ("https://", a mistyped "http:/", "mailto:") as opposed to a
+// bare host[:port]: in "localhost:3001" the colon is followed by a port number.
+const SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:(?!\d|$)/i;
 
 function isWebProtocol(protocol) {
   return protocol === 'http:' || protocol === 'https:';
@@ -130,6 +132,7 @@ export class ServersController {
     this.probeTimeoutMs = probeTimeoutMs;
     this.onChange = onChange;
     this.servers = [];
+    this.pendingChange = Promise.resolve();
   }
 
   getServers() {
@@ -162,25 +165,42 @@ export class ServersController {
     this.onChange?.();
   }
 
+  /**
+   * Runs `apply(savedServers)` -> { servers, result } and saves the new list. Changes run one at
+   * a time, so overlapping adds and removes build on each other instead of overwriting each other.
+   */
+  updateServers(apply) {
+    const run = this.pendingChange.then(async () => {
+      const { servers, result } = apply(this.servers);
+      if (servers !== this.servers) await this.save(servers);
+      return result;
+    });
+    this.pendingChange = run.catch(() => {});
+    return run;
+  }
+
   /** Validates, probes and saves an address. Adding a saved address again returns the saved entry. */
   async addServer(address) {
     const { url, name } = normalizeServerUrl(address);
-    const findSaved = () => this.servers.find((server) => server.url === url) || null;
-    if (findSaved()) return findSaved();
+    const findSaved = (servers) => servers.find((server) => server.url === url) || null;
+    const saved = findSaved(this.servers);
+    if (saved) return saved;
 
     await probeServer(url, { fetchImpl: this.fetchImpl, timeoutMs: this.probeTimeoutMs });
-    // The same address may have been saved while the probe was in flight.
-    if (findSaved()) return findSaved();
-
-    const server = { id: crypto.randomUUID(), name, url, addedAt: new Date().toISOString() };
-    await this.save([...this.servers, server]);
-    return server;
+    return this.updateServers((servers) => {
+      // The same address may have been saved while the probe was in flight.
+      const savedMeanwhile = findSaved(servers);
+      if (savedMeanwhile) return { servers, result: savedMeanwhile };
+      const server = { id: crypto.randomUUID(), name, url, addedAt: new Date().toISOString() };
+      return { servers: [...servers, server], result: server };
+    });
   }
 
   async removeServer(serverId) {
-    const server = this.findServer(serverId);
-    if (!server) return null;
-    await this.save(this.servers.filter((item) => item.id !== serverId));
-    return server;
+    return this.updateServers((servers) => {
+      const server = servers.find((item) => item.id === serverId);
+      if (!server) return { servers, result: null };
+      return { servers: servers.filter((item) => item.id !== serverId), result: server };
+    });
   }
 }

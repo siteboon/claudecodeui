@@ -30,16 +30,17 @@ describe('normalizeServerUrl', () => {
       name: 'cloudcli.example.com',
     });
     assert.equal(normalizeServerUrl('http://example.com/').url, 'http://example.com');
+    assert.equal(normalizeServerUrl('http:/192.168.1.20:3001').url, 'http://192.168.1.20:3001', 'one slash typed');
+    assert.equal(normalizeServerUrl('cloudcli.local:').url, 'http://cloudcli.local');
   });
 
   it('rejects empty input, other schemes, embedded credentials and malformed addresses', () => {
     assert.throws(() => normalizeServerUrl('   '), /Enter the address/);
-    for (const address of ['file:///etc/passwd', 'ftp://example.com', 'ws://example.com:3001', 'javascript://example.com/%0Aalert(1)']) {
+    for (const address of ['file:///etc/passwd', 'ftp://example.com', 'ws://example.com:3001', 'javascript://example.com/%0Aalert(1)', 'javascript:alert(1)', 'mailto:a@example.com']) {
       assert.throws(() => normalizeServerUrl(address), /Only http:\/\/ and https:\/\//, address);
     }
     assert.throws(() => normalizeServerUrl('https://user:secret@example.com'), /Remove the username and password/);
     assert.throws(() => normalizeServerUrl('192.168.1.20:99999'), /not a valid server address/);
-    assert.throws(() => normalizeServerUrl('javascript:alert(1)'), /not a valid server address/);
     assert.throws(() => normalizeServerUrl('http://exa mple.com'), /not a valid server address/);
   });
 });
@@ -87,6 +88,11 @@ describe('probeServer', () => {
       if (req.url === '/stall/api/auth/status') {
         return; // never answers
       }
+      if (req.url === '/broken/api/auth/status') {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ needsSetup: false, isAuthenticated: false }));
+        return;
+      }
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Not found' }));
     });
@@ -107,9 +113,11 @@ describe('probeServer', () => {
   it('reports a server that answers but is not CloudCLI', async () => {
     await assert.rejects(probeServer(`${baseUrl}/html`), /responded, but it does not look like a CloudCLI server/);
     await assert.rejects(probeServer(`${baseUrl}/missing`), /responded with HTTP 404, but it does not look like a CloudCLI server/);
+    await assert.rejects(probeServer(`${baseUrl}/broken`), /responded with HTTP 500/, 'an error status fails even with a CloudCLI body');
   });
 
-  it('reports an unreachable or silent server', async () => {
+  // Fails instead of hanging if the probe stops aborting a silent server.
+  it('reports an unreachable or silent server', { timeout: 5000 }, async () => {
     const closed = http.createServer();
     await new Promise((resolve) => closed.listen(0, '127.0.0.1', resolve));
     const closedUrl = `http://127.0.0.1:${closed.address().port}`;
@@ -196,6 +204,43 @@ describe('ServersController', () => {
     const reloaded = new ServersController({ storePath });
     await reloaded.load();
     assert.equal(reloaded.findServer(server.id), null);
+  });
+
+  it('uses the origin of a server behind a path prefix for permissions', async () => {
+    const controller = new ServersController({ storePath: path.join(tmpDir, 'prefixed.json'), fetchImpl: cloudCliFetch });
+    await controller.load();
+    await controller.addServer('https://cloudcli.example.com/cloudcli/');
+    assert.equal(controller.getServers()[0].url, 'https://cloudcli.example.com/cloudcli');
+    assert.deepEqual(controller.getOrigins(), ['https://cloudcli.example.com']);
+  });
+
+  it('keeps every entry when adds and removes overlap', async () => {
+    const concurrentStore = path.join(tmpDir, 'concurrent.json');
+    // Every probe answers after the same delay, so the adds are all in flight at once.
+    const slowFetch = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return cloudCliFetch();
+    };
+    const controller = new ServersController({ storePath: concurrentStore, fetchImpl: slowFetch });
+    await controller.load();
+
+    const [first, second, sameAsFirst] = await Promise.all([
+      controller.addServer('10.0.0.1:3001'),
+      controller.addServer('10.0.0.2:3001'),
+      controller.addServer('http://10.0.0.1:3001/'),
+    ]);
+    assert.equal(sameAsFirst.id, first.id, 'the same address added twice at once is saved once');
+    const urls = ['http://10.0.0.1:3001', 'http://10.0.0.2:3001'];
+    assert.deepEqual(controller.getServers().map((server) => server.url), urls);
+
+    const reloaded = new ServersController({ storePath: concurrentStore });
+    await reloaded.load();
+    assert.deepEqual(reloaded.getServers().map((server) => server.url), urls);
+
+    await Promise.all([controller.removeServer(first.id), controller.removeServer(second.id), controller.addServer('10.0.0.3:3001')]);
+    await reloaded.load();
+    assert.deepEqual(reloaded.getServers().map((server) => server.url), ['http://10.0.0.3:3001']);
+    assert.deepEqual(controller.getServers(), reloaded.getServers());
   });
 
   it('drops unreadable or unsafe entries from the store file', async () => {

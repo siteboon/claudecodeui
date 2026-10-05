@@ -139,6 +139,16 @@ function getDesktopState() {
   };
 }
 
+// Local and cloud tab pages also call get-state, through the notifications bridge. They only
+// need the notification settings; the saved server addresses are for the launcher (file:).
+function getDesktopStateForSender(event) {
+  const state = getDesktopState();
+  const senderUrl = event.senderFrame?.url || event.sender.getURL();
+  if (senderUrl.startsWith('file:')) return state;
+  const { servers: _savedServers, ...pageState } = state;
+  return pageState;
+}
+
 async function openExternalUrl(url) {
   if (String(url).startsWith(CALLBACK_PROTOCOL + "://")) {
     await handleDeepLink(url);
@@ -654,16 +664,19 @@ async function openServerInDesktop(server) {
     tabs.upsertTarget(target);
     desktopWindow.emitDesktopState();
   }
+  const tab = tabs.getTab(tabId);
 
   try {
     await desktopWindow.showTarget(target);
   } catch (error) {
     // Another open of the same tab replaced this load; that one reports its own result.
     if (isExpectedNavigationAbort(error)) return getDesktopState();
+    // The user closed the tab (and maybe opened it again) while it loaded, which failed this load.
+    if (tabs.getTab(tabId) !== tab) return getDesktopState();
     // Drop the tab that never loaded so the launcher, which shows this error, is visible again.
     await desktopWindow.closeDesktopTab(tabId);
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Could not open ${target.name}: ${message}`);
+    const reason = error?.code || (error instanceof Error ? error.message : String(error)).replace(/\.$/, '');
+    throw new Error(`Could not open ${target.name} (${reason}). Check that the server is running and reachable from this computer.`);
   }
   return getDesktopState();
 }
@@ -791,7 +804,7 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('cloudcli-desktop:copy-local-web-url', async () => copyLocalWebUrl());
-  ipcMain.handle('cloudcli-desktop:get-state', () => getDesktopState());
+  ipcMain.handle('cloudcli-desktop:get-state', (event) => getDesktopStateForSender(event));
   ipcMain.handle('cloudcli-desktop:open-cloud-dashboard', async () => openCloudDashboard());
   ipcMain.handle('cloudcli-desktop:run-active-environment-action', async (_event, action) => runActiveEnvironmentAction(action));
   ipcMain.handle('cloudcli-desktop:open-environment', async (_event, environmentId) => {
@@ -817,9 +830,9 @@ function registerIpcHandlers() {
     await desktopWindow.showLauncher();
     return getDesktopState();
   });
-  ipcMain.handle('cloudcli-desktop:update-desktop-notifications', async (_event, settings) => {
+  ipcMain.handle('cloudcli-desktop:update-desktop-notifications', async (event, settings) => {
     await desktopNotifications?.saveSettings(settings);
-    return getDesktopState();
+    return getDesktopStateForSender(event);
   });
   ipcMain.handle('cloudcli-desktop:show-desktop-settings', async () => desktopWindow.showDesktopSettings());
   ipcMain.handle('cloudcli-desktop:show-local-settings', async () => desktopWindow.showLocalSettings());

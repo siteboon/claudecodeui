@@ -10,6 +10,7 @@
   },
   "files": [
     "electron/",
+    "!electron/**/*.test.js",
     "server/",
     "shared/",
     "public/api-docs.html",
@@ -50,7 +51,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p server/tsconfig.json",
     "test": "tsx --tsconfig server/tsconfig.json --test \"server/**/*.test.ts\" \"server/**/*.test.js\"",
     "test:client": "vitest run",
-    "test:desktop": "node --test \"electron/**/*.test.js\"",
+    "test:desktop": "node --test --experimental-test-module-mocks \"electron/**/*.test.js\"",
     "lint": "oxlint src/ server/",
     "lint:server": "oxlint server/",
     "lint:client": "oxlint src/",
@@ -75,6 +76,7 @@
     },
     "files": [
       "electron/",
+      "!electron/**/*.test.js",
       "public/",
       "dist/",
       "dist-server/",
@@ -101,6 +103,7 @@
       "extendInfo": {
         "CFBundleName": "CloudCLI",
         "CFBundleDisplayName": "CloudCLI",
+        "NSLocalNetworkUsageDescription": "CloudCLI connects to CloudCLI servers on your local network that you add in the launcher.",
         "CFBundleURLTypes": [
           {
             "CFBundleURLName": "CloudCLI",

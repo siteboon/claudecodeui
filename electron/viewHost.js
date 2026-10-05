@@ -92,14 +92,15 @@ export class ViewHost {
 
   configureChildWebContents(webContents, { serverOrigin } = {}) {
     // A self-hosted server tab (serverOrigin set, null if unknown) shows an origin the user
-    // typed in: it stays on that origin, and only http(s) links are handed to the default browser.
+    // typed in: navigations the page starts stay on that origin, and only http(s) links are
+    // handed to the default browser. Server redirects are followed (the tab has no preload).
     const isServerTab = serverOrigin !== undefined;
     const openExternal = (url) => {
       void this.openExternalUrl(url).catch((error) => this.showError('Could not open external link', error));
     };
 
     webContents.setWindowOpenHandler(({ url }) => {
-      if (!isServerTab || classifyServerNavigation(url, serverOrigin) !== 'block') {
+      if (!isServerTab || isHttpUrl(url)) {
         openExternal(url);
       }
       return { action: 'deny' };
