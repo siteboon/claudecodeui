@@ -8,7 +8,7 @@ import type {
   CliPackageMetadata,
   SandboxCommandService,
 } from '@/shared/types.js';
-import { terminalTextStyles } from '@/shared/utils.js';
+import { readUploadMaxFileSizeMegabytes, terminalTextStyles } from '@/shared/utils.js';
 
 type CliServiceDependencies = {
   applicationRoot: string;
@@ -77,6 +77,15 @@ function isNewerVersion(candidateVersion: string, currentVersion: string): boole
   return false;
 }
 
+// Prints the cap the server will actually enforce, so a typo such as "1GB" shows up here.
+function formatUploadSizeLimitStatus(environment: CliEnvironment): string {
+  const { megabytes, configuredValue, warning } = readUploadMaxFileSizeMegabytes(environment);
+  if (warning) {
+    return `${configuredValue} (invalid, using ${megabytes})`;
+  }
+  return configuredValue === null ? `${megabytes} (default)` : String(megabytes);
+}
+
 function showStatus(dependencies: CliServiceDependencies): void {
   const { environment, fileSystem, output } = dependencies;
   const databasePath = environment.DATABASE_PATH || dependencies.defaultDatabasePath;
@@ -106,7 +115,7 @@ function showStatus(dependencies: CliServiceDependencies): void {
   output.log(`       DATABASE_PATH: ${terminalTextStyles.dim(environment.DATABASE_PATH || '(using default location)')}`);
   output.log(`       CLAUDE_CLI_PATH: ${terminalTextStyles.dim(environment.CLAUDE_CLI_PATH || 'claude (default)')}`);
   output.log(`       CONTEXT_WINDOW: ${terminalTextStyles.dim(environment.CONTEXT_WINDOW || '160000 (default)')}`);
-  output.log(`       UPLOAD_MAX_FILE_SIZE_MB: ${terminalTextStyles.dim(environment.UPLOAD_MAX_FILE_SIZE_MB || '200 (default)')}`);
+  output.log(`       UPLOAD_MAX_FILE_SIZE_MB: ${terminalTextStyles.dim(formatUploadSizeLimitStatus(environment))}`);
   output.log(`\n${terminalTextStyles.info('[INFO]')} Claude Projects Folder:`);
   output.log(`       ${terminalTextStyles.dim(claudeProjectsPath)}`);
   output.log(`       Status: ${fileSystem.pathExists(claudeProjectsPath)

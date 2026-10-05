@@ -70,6 +70,17 @@ const parseFileUploadLimits = (payload: unknown): FileUploadLimits => {
   };
 };
 
+// Null when the server cannot report its limits: an older server without the
+// endpoint, a network error, or a reply that is not JSON.
+const fetchFileUploadLimits = async (): Promise<FileUploadLimits | null> => {
+  try {
+    const response = await api.fileUploadLimits();
+    return response.ok ? parseFileUploadLimits(await response.json()) : null;
+  } catch {
+    return null;
+  }
+};
+
 const validateFilesForUpload = (files: File[], limits: FileUploadLimits): string | null => {
   if (files.length > limits.maximumFileCount) {
     return `You can upload up to ${limits.maximumFileCount} files at once.`;
@@ -277,9 +288,14 @@ export const useFileTreeUpload = ({
   const [operationLoading, setOperationLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<FileTreeUploadProgressState | null>(null);
   // The size cap is server configuration (`UPLOAD_MAX_FILE_SIZE_MB`) that the prebuilt
-  // client cannot know, so it is fetched on mount; it drives the pre-flight check and
-  // the header's "max N each" label.
+  // client cannot know, so it is fetched on mount; this copy drives the header's
+  // "max N each" label.
   const [uploadLimits, setUploadLimits] = useState<FileUploadLimits>(DEFAULT_FILE_UPLOAD_LIMITS);
+  // The latest limits request (null result = failed). The pre-flight check reads it
+  // instead of the state above so it can wait for a request still in flight.
+  const uploadLimitsRequestRef = useRef<Promise<FileUploadLimits | null> | null>(null);
+  // Lets a limits reply that arrives after the Files tab closed skip the state update.
+  const isMountedRef = useRef(false);
   const treeRef = useRef<HTMLDivElement>(null);
   const clearProgressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -303,31 +319,34 @@ export const useFileTreeUpload = ({
 
   useEffect(() => clearProgressTimer, [clearProgressTimer]);
 
+  const requestUploadLimits = useCallback(() => {
+    const request = fetchFileUploadLimits().then((limits) => {
+      if (limits && isMountedRef.current) {
+        setUploadLimits(limits);
+      }
+      return limits;
+    });
+    uploadLimitsRequestRef.current = request;
+    return request;
+  }, []);
+
   // Fetched on every mount (the tree mounts when the Files tab opens), so a server
   // restarted with a new limit is picked up without reloading the page.
   useEffect(() => {
-    let active = true;
-
-    const loadUploadLimits = async () => {
-      try {
-        const response = await api.fileUploadLimits();
-        if (!response.ok) {
-          return;
-        }
-        const limits = parseFileUploadLimits(await response.json());
-        if (active) {
-          setUploadLimits(limits);
-        }
-      } catch {
-        // Keep the defaults; the server still enforces its real limit on upload.
-      }
-    };
-
-    void loadUploadLimits();
+    isMountedRef.current = true;
+    void requestUploadLimits();
     return () => {
-      active = false;
+      isMountedRef.current = false;
     };
-  }, []);
+  }, [requestUploadLimits]);
+
+  // A file picked while the limits are still loading waits for them, and one picked
+  // after the request failed retries it once, so a raised server cap is not refused
+  // against the default. The default stays in force if the server still cannot say.
+  const resolveUploadLimits = useCallback(async () => {
+    const limits = await (uploadLimitsRequestRef.current ?? requestUploadLimits());
+    return limits ?? (await requestUploadLimits()) ?? DEFAULT_FILE_UPLOAD_LIMITS;
+  }, [requestUploadLimits]);
 
   const setUploadError = useCallback(
     (message: string, fileCount: number, targetPath = '', fileName?: string, progress = 0) => {
@@ -360,7 +379,7 @@ export const useFileTreeUpload = ({
         return;
       }
 
-      const validationError = validateFilesForUpload(files, uploadLimits);
+      const validationError = validateFilesForUpload(files, await resolveUploadLimits());
       if (validationError) {
         showToast(validationError, 'error');
         setUploadError(validationError, files.length, targetPath, fileName);
@@ -423,11 +442,11 @@ export const useFileTreeUpload = ({
     [
       clearProgressTimer,
       onRefresh,
+      resolveUploadLimits,
       scheduleProgressClear,
       selectedProject,
       setUploadError,
       showToast,
-      uploadLimits,
     ],
   );
 

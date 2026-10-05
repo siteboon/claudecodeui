@@ -14,37 +14,23 @@ import type {
   FileTreeProjectGateway,
   FileTreeWorkspaceGateway,
 } from '@/shared/types.js';
-import { WORKSPACES_ROOT, resolveReadOnlyRootPath, validateWorkspacePath } from '@/shared/utils.js';
+import {
+  WORKSPACES_ROOT,
+  readUploadMaxFileSizeMegabytes,
+  resolveReadOnlyRootPath,
+  validateWorkspacePath,
+} from '@/shared/utils.js';
 
-const DEFAULT_MAXIMUM_UPLOAD_SIZE_MEGABYTES = 200;
 const BYTES_PER_MEGABYTE = 1024 * 1024;
 const MAXIMUM_UPLOAD_FILE_COUNT = 20;
 
-/**
- * Reads the per-file upload cap from `UPLOAD_MAX_FILE_SIZE_MB`, falling back to
- * 200 MB when it is unset, empty or not a whole number of megabytes. Exported
- * for the File Tree module tests; production reads it once below.
- */
-export function readMaximumUploadSizeMegabytes(environment: NodeJS.ProcessEnv = process.env): number {
-  const configuredValue = environment.UPLOAD_MAX_FILE_SIZE_MB?.trim();
-  if (!configuredValue) {
-    return DEFAULT_MAXIMUM_UPLOAD_SIZE_MEGABYTES;
-  }
-
-  // Digits only: `parseInt` would read "1GB" as 1 and quietly shrink the cap to 1 MB.
-  const configuredMegabytes = /^\d+$/.test(configuredValue) ? Number(configuredValue) : Number.NaN;
-  if (configuredMegabytes > 0 && Number.isSafeInteger(configuredMegabytes * BYTES_PER_MEGABYTE)) {
-    return configuredMegabytes;
-  }
-
-  console.warn(
-    `[WARN] Ignoring UPLOAD_MAX_FILE_SIZE_MB="${configuredValue}": expected a whole number of megabytes. `
-    + `Using ${DEFAULT_MAXIMUM_UPLOAD_SIZE_MEGABYTES}MB.`,
-  );
-  return DEFAULT_MAXIMUM_UPLOAD_SIZE_MEGABYTES;
+// Read once at startup from `UPLOAD_MAX_FILE_SIZE_MB` (200 MB unless set); it feeds
+// both multer's byte limit and the router's 400 message and `/upload-limits` reply.
+const uploadSizeLimit = readUploadMaxFileSizeMegabytes(process.env);
+if (uploadSizeLimit.warning) {
+  console.warn(uploadSizeLimit.warning);
 }
-
-const maximumUploadSizeMegabytes = readMaximumUploadSizeMegabytes();
+const maximumUploadSizeMegabytes = uploadSizeLimit.megabytes;
 
 function readFileSystemConcurrency(): number {
   const configuredConcurrency = Number.parseInt(process.env.FS_CONCURRENCY ?? '', 10);

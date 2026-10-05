@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { CliEnvironment, CliOutput } from '@/shared/types.js';
+import { stripAnsiSequences } from '@/shared/utils.js';
 
 import { createCliService } from '../cli.service.js';
 
@@ -85,4 +86,19 @@ test('returns a failure code for an unknown command without exiting the process'
 
   assert.equal(exitCode, 1);
   assert.match(harness.errorMessages[0], /Unknown command: unknown/);
+});
+
+test('status prints the upload size cap the server will enforce', async () => {
+  const uploadLimitLine = async (value?: string) => {
+    const harness = createHarness();
+    if (value !== undefined) {
+      harness.environment.UPLOAD_MAX_FILE_SIZE_MB = value;
+    }
+    assert.equal(await harness.service.run(['status']), 0);
+    return stripAnsiSequences(harness.logMessages.find((line) => line.includes('UPLOAD_MAX_FILE_SIZE_MB')) ?? '').trim();
+  };
+
+  assert.equal(await uploadLimitLine(), 'UPLOAD_MAX_FILE_SIZE_MB: 200 (default)');
+  assert.equal(await uploadLimitLine(' 300 '), 'UPLOAD_MAX_FILE_SIZE_MB: 300');
+  assert.equal(await uploadLimitLine('1GB'), 'UPLOAD_MAX_FILE_SIZE_MB: 1GB (invalid, using 200)');
 });

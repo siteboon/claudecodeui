@@ -41,6 +41,49 @@ import type {
 export const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
 
 // ---------------------------
+//----------------- UPLOAD SIZE LIMIT UTILITIES ------------
+const DEFAULT_UPLOAD_MAX_FILE_SIZE_MEGABYTES = 200;
+
+// The largest megabyte count whose byte count (x 1024 x 1024) is still a safe integer: 8589934591.
+const LARGEST_UPLOAD_MAX_FILE_SIZE_MEGABYTES = Math.floor(Number.MAX_SAFE_INTEGER / (1024 * 1024));
+
+/**
+ * Reads `UPLOAD_MAX_FILE_SIZE_MB`, the per-file cap of the Files panel upload in
+ * whole megabytes (1 MB = 1024 x 1024 bytes). The File Tree module enforces
+ * `megabytes` and logs `warning` at startup; `cloudcli status` prints the same
+ * effective value, so both always agree.
+ *
+ * - Unset or blank: `megabytes` is the 200 MB default and `configuredValue` is null.
+ * - Digits only, from 1 to 8589934591, surrounding whitespace ignored: that number.
+ * - Anything else, e.g. `0`, `1.5`, `1GB` or `"300"` (the `.env` loader keeps
+ *   quotes): the 200 MB default plus a `warning` naming the ignored value.
+ *   `parseInt` is avoided on purpose: it reads "1GB" as 1 and would quietly shrink the cap.
+ */
+export function readUploadMaxFileSizeMegabytes(environment: Record<string, string | undefined>): {
+  megabytes: number;
+  configuredValue: string | null;
+  warning: string | null;
+} {
+  const configuredValue = environment.UPLOAD_MAX_FILE_SIZE_MB?.trim() || null;
+  if (configuredValue === null) {
+    return { megabytes: DEFAULT_UPLOAD_MAX_FILE_SIZE_MEGABYTES, configuredValue, warning: null };
+  }
+
+  const configuredMegabytes = /^\d+$/.test(configuredValue) ? Number(configuredValue) : Number.NaN;
+  if (configuredMegabytes >= 1 && configuredMegabytes <= LARGEST_UPLOAD_MAX_FILE_SIZE_MEGABYTES) {
+    return { megabytes: configuredMegabytes, configuredValue, warning: null };
+  }
+
+  return {
+    megabytes: DEFAULT_UPLOAD_MAX_FILE_SIZE_MEGABYTES,
+    configuredValue,
+    warning: `[WARN] Ignoring UPLOAD_MAX_FILE_SIZE_MB="${configuredValue}": expected a positive whole number `
+      + `of megabytes (digits only, no quotes or units, at most ${LARGEST_UPLOAD_MAX_FILE_SIZE_MEGABYTES}). `
+      + `Using ${DEFAULT_UPLOAD_MAX_FILE_SIZE_MEGABYTES}MB.`,
+  };
+}
+
+// ---------------------------
 //----------------- NORMALIZED MESSAGE HELPER INPUT TYPES ------------
 /**
  * Input payload accepted by `createNormalizedMessage`.
