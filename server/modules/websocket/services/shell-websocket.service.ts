@@ -372,6 +372,23 @@ export function handleShellConnection(
           }
 
           existingSession.ws = ws;
+
+          // The PTY still has the size of the terminal that started it, but this
+          // client's terminal is new and may differ (window resized while the
+          // Shell tab was closed, another device). Its earlier resize messages
+          // arrived before this init and were dropped, so match the PTY to it
+          // here. The resize also makes TUIs repaint after the replay above.
+          const clientCols = readNumber(data.cols, 0);
+          const clientRows = readNumber(data.rows, 0);
+          if (
+            Number.isInteger(clientCols) &&
+            Number.isInteger(clientRows) &&
+            clientCols > 0 &&
+            clientRows > 0 &&
+            (existingSession.pty.cols !== clientCols || existingSession.pty.rows !== clientRows)
+          ) {
+            existingSession.pty.resize(clientCols, clientRows);
+          }
           return;
         }
 

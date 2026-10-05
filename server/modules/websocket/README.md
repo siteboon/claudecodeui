@@ -163,7 +163,7 @@ stateDiagram-v2
   ValidateInit --> SpawnNewPTY: valid path + valid sessionId
   ValidateInit --> EmitError: invalid payload/path/sessionId
 
-  ReconnectExisting --> Running: attach ws, replay buffer
+  ReconnectExisting --> Running: attach ws, replay buffer, resize pty to init cols/rows if different
   SpawnNewPTY --> Running: pty.spawn + wire onData/onExit
 
   Running --> Running: input -> pty.write
@@ -191,9 +191,13 @@ Path must exist and be a directory; `sessionId` must match safe pattern.
 Provider-specific command construction with resume semantics.
 5. PTY output buffering:
 Stores up to 5000 chunks for replay on reconnect.
-6. URL detection:
+6. Reattach resize:
+On reconnect, after the replay, the PTY is resized to the new terminal's `init` cols/rows when they are valid and
+differ. Its earlier `resize` messages arrive before `init` and are dropped, so this keeps TUIs from drawing at the old
+terminal's size.
+7. URL detection:
 Strips ANSI, accumulates text buffer, extracts URLs, emits `auth_url` once per normalized URL, supports `autoOpen`.
-7. Close behavior:
+8. Close behavior:
 Socket disconnect does not instantly kill PTY; session is kept alive and terminated on timeout.
 
 ## `/plugin-ws/:pluginName` Proxy Flow

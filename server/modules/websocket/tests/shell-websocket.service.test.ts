@@ -26,6 +26,9 @@ function createFakePty() {
 
   return {
     killed: false,
+    cols: 80,
+    rows: 24,
+    resizes: [] as Array<[number, number]>,
     onData(listener: (data: string) => void) {
       dataListener = listener;
       return { dispose: () => undefined };
@@ -41,7 +44,11 @@ function createFakePty() {
       exitListener?.({ exitCode: 0 });
     },
     write() {},
-    resize() {},
+    resize(cols: number, rows: number) {
+      this.cols = cols;
+      this.rows = rows;
+      this.resizes.push([cols, rows]);
+    },
     kill() {
       this.killed = true;
     },
@@ -224,4 +231,127 @@ test('a missing project directory is reported as an error frame and starts no pt
     socket.frames.map((frame) => JSON.parse(frame) as Record<string, unknown>),
     [{ type: 'error', message: 'Invalid project path' }]
   );
+});
+
+/**
+ * One plain-shell PTY whose fake reports the size it was spawned with, like
+ * node-pty's `cols`/`rows`, plus an init payload builder for that PTY's key.
+ */
+function createReattachHarness(sessionLabel: string) {
+  const pty = createFakePty();
+  const dependencies = {
+    resolveProviderSessionId: () => null,
+    spawnPty: (_shell: string, _args: string | string[], options: { cols?: number; rows?: number }) => {
+      pty.cols = options.cols ?? 80;
+      pty.rows = options.rows ?? 24;
+      return pty as never;
+    },
+  };
+  const sessionId = `${sessionLabel}-${Date.now()}`;
+  const initMessage = (size: { cols?: number; rows?: number }) =>
+    JSON.stringify({
+      type: 'init',
+      projectPath: process.cwd(),
+      sessionId,
+      hasSession: false,
+      provider: 'plain-shell',
+      isPlainShell: true,
+      initialCommand: 'test-command',
+      ...size,
+    });
+
+  return { pty, dependencies, initMessage };
+}
+
+test('reattaching from a differently sized terminal resizes the pty after the replay', () => {
+  const { pty, dependencies, initMessage } = createReattachHarness('reattach-resize');
+
+  const firstSocket = createFakeSocket();
+  handleShellConnection(firstSocket as never, dependencies);
+  firstSocket.emit('message', initMessage({ cols: 140, rows: 48 }));
+  pty.emitData('frame drawn at 140 columns');
+  firstSocket.emit('close');
+
+  // The Shell tab remounts with a fresh terminal after the window got smaller.
+  const replacementSocket = createFakeSocket();
+  let framesSentBeforeResize = -1;
+  const recordResize = pty.resize.bind(pty);
+  pty.resize = (cols: number, rows: number) => {
+    framesSentBeforeResize = replacementSocket.frames.length;
+    recordResize(cols, rows);
+  };
+  handleShellConnection(replacementSocket as never, dependencies);
+  replacementSocket.emit('message', initMessage({ cols: 97, rows: 40 }));
+
+  assert.deepEqual(pty.resizes, [[97, 40]]);
+  // The redraw the resize triggers must land on top of the replayed history.
+  assert.equal(framesSentBeforeResize, replacementSocket.frames.length);
+  const replayedOutput = replacementSocket.frames
+    .map((frame) => (JSON.parse(frame) as { data?: string }).data ?? '')
+    .join('');
+  assert.match(replayedOutput, /Reconnected to existing session/);
+  assert.match(replayedOutput, /frame drawn at 140 columns/);
+
+  pty.emitExit();
+});
+
+test('reattaching with the same size or without a usable size leaves the pty size alone', () => {
+  const { pty, dependencies, initMessage } = createReattachHarness('reattach-same-size');
+
+  const firstSocket = createFakeSocket();
+  handleShellConnection(firstSocket as never, dependencies);
+  firstSocket.emit('message', initMessage({ cols: 120, rows: 40 }));
+
+  const unusableOrSameSizes = [
+    { cols: 120, rows: 40 },
+    {},
+    { cols: 0, rows: 40 },
+    { cols: 120, rows: 0 },
+    { cols: 99.5, rows: 40 },
+    { cols: 120, rows: 39.5 },
+  ];
+  for (const size of unusableOrSameSizes) {
+    const socket = createFakeSocket();
+    handleShellConnection(socket as never, dependencies);
+    socket.emit('message', initMessage(size));
+  }
+
+  assert.deepEqual(pty.resizes, []);
+  assert.equal(pty.cols, 120);
+  assert.equal(pty.rows, 40);
+
+  pty.emitExit();
+});
+
+test('reattaching from a terminal that only differs in height resizes the pty', () => {
+  const { pty, dependencies, initMessage } = createReattachHarness('reattach-height-only');
+
+  const firstSocket = createFakeSocket();
+  handleShellConnection(firstSocket as never, dependencies);
+  firstSocket.emit('message', initMessage({ cols: 120, rows: 40 }));
+
+  const replacementSocket = createFakeSocket();
+  handleShellConnection(replacementSocket as never, dependencies);
+  replacementSocket.emit('message', initMessage({ cols: 120, rows: 30 }));
+
+  assert.deepEqual(pty.resizes, [[120, 30]]);
+
+  pty.emitExit();
+});
+
+test('reattaching from a terminal that only differs in width resizes the pty', () => {
+  const { pty, dependencies, initMessage } = createReattachHarness('reattach-width-only');
+
+  const firstSocket = createFakeSocket();
+  handleShellConnection(firstSocket as never, dependencies);
+  firstSocket.emit('message', initMessage({ cols: 140, rows: 48 }));
+
+  // A narrower window keeps the terminal height: the case from the issue's repro.
+  const replacementSocket = createFakeSocket();
+  handleShellConnection(replacementSocket as never, dependencies);
+  replacementSocket.emit('message', initMessage({ cols: 97, rows: 48 }));
+
+  assert.deepEqual(pty.resizes, [[97, 48]]);
+
+  pty.emitExit();
 });
