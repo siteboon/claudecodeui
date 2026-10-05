@@ -747,8 +747,13 @@ export const sessionsService = {
 
   /**
    * Renames one session by id without requiring the caller to pass provider.
+   *
+   * The new name is also handed to the provider, so its own CLI lists the
+   * session under it too. That part is best effort: the database row is the
+   * name CloudCLI shows, and a transcript that cannot be written does not fail
+   * the rename.
    */
-  renameSessionById(sessionId: string, summary: string): { sessionId: string; summary: string } {
+  async renameSessionById(sessionId: string, summary: string): Promise<{ sessionId: string; summary: string }> {
     const session = sessionsDb.getSessionById(sessionId);
     if (!session) {
       throw new AppError(`Session "${sessionId}" was not found.`, {
@@ -758,6 +763,17 @@ export const sessionsService = {
     }
 
     sessionsDb.updateSessionCustomName(sessionId, summary);
+
+    // Looked up rather than resolved, which throws: a row of a provider
+    // CloudCLI no longer ships (Gemini, say) still renames, with no one to tell.
+    const provider = providerRegistry.listProviders().find(({ id }) => id === session.provider);
+    try {
+      await provider?.sessions.renameSession?.(sessionId, summary);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[sessions] Renamed session "${sessionId}", but not in its provider transcript:`, message);
+    }
+
     return { sessionId, summary };
   },
 };
