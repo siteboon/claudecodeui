@@ -5,9 +5,13 @@ import { scan } from 'react-scan'
 import App from '@/App'
 import '@/index.css'
 import 'katex/dist/katex.min.css'
+import { initializeChatBodyFontSize } from '@/shared/utils'
 
 // Initialize i18n
 import '@/modules/i18n'
+
+// Restore the reading size before React paints chat content.
+initializeChatBodyFontSize()
 
 // React Scan is a render-diagnostics overlay, and an expensive one: measured on
 // this app it roughly halves the dev frame rate, adds ~14 MB of heap and injects
