@@ -1,4 +1,5 @@
 import { factorySpace } from 'micromark-factory-space';
+import type { Nodes, Root } from 'mdast';
 import type {} from 'micromark-extension-math';
 import { markdownLineEnding } from 'micromark-util-character';
 import type {
@@ -12,6 +13,7 @@ import type {
   TokenizeContext,
 } from 'micromark-util-types';
 import remarkMath from 'remark-math';
+import type { Parser } from 'unified';
 
 // The delimiter state machines are adapted from micromark-extension-math-extended.
 // Its MIT copyright and permission notice are preserved in the repository NOTICE.
@@ -28,6 +30,7 @@ type RemarkParserData = {
 
 type RemarkProcessor = {
   data: () => RemarkParserData;
+  parser?: Parser<Root>;
 };
 
 const nonLazyContinuation: Construct = {
@@ -58,11 +61,146 @@ function remarkLatexDelimiters(this: RemarkProcessor): void {
   const data = this.data();
   const extensions = data.micromarkExtensions || (data.micromarkExtensions = []);
   extensions.push(latexMathSyntax);
+
+  const parser = this.parser;
+  if (parser) {
+    this.parser = (source, file) => {
+      const prepared = protectLatexTableMath(source);
+      const tree = parser(prepared.source, file);
+      if (prepared.marker) {
+        restoreMathPipes(tree, prepared.marker);
+      }
+      return preserveIncompleteMathTables(tree, source, prepared.incompleteOffsets) as Root;
+    };
+  }
+}
+
+/** Masks pipes before GFM splits cells, without changing source offsets or TeX semantics. */
+function protectLatexTableMath(source: string): {
+  source: string;
+  marker?: string;
+  incompleteOffsets: number[];
+} {
+  const incompleteOffsets: number[] = [];
+  const pipeOffsets: number[] = [];
+  if (!source.includes('\\(') || !source.includes('|')) {
+    return { source, incompleteOffsets };
+  }
+
+  for (const match of source.matchAll(/[^\r\n]*(?:\r\n|\r|\n|$)/g)) {
+    const line = match[0].replace(/[\r\n]+$/, '');
+    const lineOffset = match.index!;
+    if (!line.includes('\\(')) {
+      continue;
+    }
+
+    const backticks = [...line.matchAll(/`+/g)];
+    for (let index = 0; index < line.length;) {
+      if (line[index] === '`') {
+        let openingEnd = index + 1;
+        while (line[openingEnd] === '`') {
+          openingEnd += 1;
+        }
+        const closing = backticks.find((run) => run.index! >= openingEnd && run[0].length === openingEnd - index);
+        index = closing ? closing.index! + closing[0].length : openingEnd;
+      } else if (line[index] === '\\' && line[index + 1] === '(') {
+        const start = index;
+        let end = index + 2;
+        while (end < line.length) {
+          if (line[end] === '\\') {
+            if (line[end + 1] === ')' || line[end + 1] === '(') {
+              break;
+            }
+            end += 2;
+          } else {
+            end += 1;
+          }
+        }
+        if (line[end] !== '\\' || line[end + 1] !== ')') {
+          incompleteOffsets.push(lineOffset + start);
+          break;
+        }
+        for (let offset = start + 2; offset < end; offset += 1) {
+          if (line[offset] === '|') {
+            pipeOffsets.push(lineOffset + offset);
+          }
+        }
+        index = end + 2;
+      } else {
+        index += line[index] === '\\' ? 2 : 1;
+      }
+    }
+  }
+
+  if (pipeOffsets.length === 0) {
+    return { source, incompleteOffsets };
+  }
+  const usedCharacters = new Set(source);
+  let markerCode = 0xe000;
+  while (markerCode <= 0xf8ff && usedCharacters.has(String.fromCharCode(markerCode))) {
+    markerCode += 1;
+  }
+  if (markerCode > 0xf8ff) {
+    return { source, incompleteOffsets: [...incompleteOffsets, ...pipeOffsets] };
+  }
+  const marker = String.fromCharCode(markerCode);
+  const parts: string[] = [];
+  let start = 0;
+  for (const offset of pipeOffsets) {
+    parts.push(source.slice(start, offset), marker);
+    start = offset + 1;
+  }
+  parts.push(source.slice(start));
+  return { source: parts.join(''), marker, incompleteOffsets };
+}
+
+/** Restores parser-only markers in both MDAST values and remark-math's HAST children. */
+function restoreMathPipes(value: unknown, marker: string): void {
+  if (!value || typeof value !== 'object') {
+    return;
+  }
+  const record = value as Record<string, unknown>;
+  for (const [key, child] of Object.entries(record)) {
+    if (typeof child === 'string') {
+      record[key] = child.split(marker).join('|');
+    } else {
+      restoreMathPipes(child, marker);
+    }
+  }
+}
+
+/** Keeps ambiguous, unfinished tables literal instead of losing excess cells during streaming. */
+function preserveIncompleteMathTables(node: Nodes, source: string, incompleteOffsets: number[]): Nodes {
+  if (incompleteOffsets.length === 0) {
+    return node;
+  }
+  const start = node.position?.start.offset;
+  const end = node.position?.end.offset;
+  if ((node.type === 'table' || node.type === 'paragraph') && start !== undefined && end !== undefined
+    && incompleteOffsets.some((offset) => offset >= start && offset < end)) {
+    const original = source.slice(start, end);
+    const hasTableDelimiter = original.split(/\r\n|\r|\n/).some((line) => {
+      const content = line.replace(/^\s*(?:>\s*)*/, '').trim();
+      return content.includes('|') && content.replace(/^\||\|$/g, '').split('|')
+        .every((cell) => /^:?-+:?$/.test(cell.trim()));
+    });
+    if (node.type === 'table' || hasTableDelimiter) {
+      return { type: 'code', value: original, position: node.position };
+    }
+  }
+  if ('children' in node) {
+    node.children = node.children.map((child) => (
+      preserveIncompleteMathTables(child, source, incompleteOffsets)
+    )) as typeof node.children;
+  }
+  return node;
 }
 
 /**
  * Used by chat and code-editor Markdown renderers to support `$$`, `\(...)`, and
- * `\[...]` without replacing or forking `remark-math`.
+ * `\[...]` without replacing or forking `remark-math`. Complete inline TeX keeps
+ * its pipes inside table cells; tables with incomplete TeX stay literal until
+ * a later render supplies the closing delimiter. Stored Markdown is unchanged.
  */
 export const MARKDOWN_MATH_REMARK_PLUGINS = [
   remarkLatexDelimiters,

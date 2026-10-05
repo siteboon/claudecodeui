@@ -80,6 +80,8 @@ const FIXTURES: Array<[string, string]> = [
   ['bullet list', 'Items:\n\n- alpha\n\n- beta\n\n- gamma'],
   ['blockquote', '> quoted line\n\n> continued quote\n\nAfter'],
   ['table', '| a | b |\n| - | - |\n| 1 | 2 |\n\nAfter the table'],
+  ['table with TeX pipes', 'Intro.\n\n| Formula | Note |\n| - | - |\n| \\(P(A|B)\\) | preserved |\n\nAfter the table'],
+  ['table with incomplete TeX', 'Intro.\n\n| Formula | Note |\n| - | - |\n| \\(P(A|B) | preserved |\n\nAfter the table'],
   ['link reference definition', 'See [the docs][x] for more information.\n\n[x]: https://example.com'],
   ['footnote', 'A claim that needs a source[^1].\n\n[^1]: The source of the claim.'],
   ['tab indented code', 'Paragraph:\n\n\tline one\n\n\tline two'],
