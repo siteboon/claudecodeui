@@ -874,6 +874,9 @@ export class CodexAppServerRuntime {
         return;
       }
       case 'error': {
+        if (params.willRetry === true) {
+          return;
+        }
         const message = readErrorMessage(params, 'Codex app-server error');
         run.lastError = message;
         this.emitNormalized(run, {

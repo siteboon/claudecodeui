@@ -544,7 +544,42 @@ test('preserves configured workspace sandbox details when applying turn permissi
   assert.deepEqual(await runPromise, { status: 'completed' });
 });
 
-test('maps a failed turn to an error and one unsuccessful complete event', async () => {
+for (const willRetry of [true, false, undefined]) {
+  test(`only suppresses error notifications with explicit willRetry=true: ${String(willRetry)}`, async (testContext) => {
+    const harness = createHarness();
+    const runtime = createRuntime(harness.process);
+    const output = createWriter();
+    testContext.after(() => { harness.process.kill(); });
+    const runPromise = runtime.run('Handle a connection error', { sessionId: 'resume-app' }, output.writer, context);
+    let request = await harness.nextRequest();
+    while (request.method !== 'turn/start') {
+      request = await harness.nextRequest();
+    }
+
+    harness.notify('error', {
+      threadId: 'thread-existing',
+      turnId: 'turn-1',
+      error: { message: 'Connection interrupted' },
+      ...(willRetry === undefined ? {} : { willRetry }),
+    });
+
+    const errors = output.messages.filter((message) => message.kind === 'error');
+    assert.equal(errors.length, willRetry === true ? 0 : 1);
+    if (willRetry !== true) {
+      assert.equal(errors[0]?.content, 'Connection interrupted');
+    }
+    assert.equal(output.messages.some((message) => message.kind === 'complete'), false);
+
+    harness.notify('turn/completed', {
+      threadId: 'thread-existing',
+      turn: { id: 'turn-1', status: 'completed' },
+    });
+    assert.deepEqual(await runPromise, { status: 'completed' });
+    assert.equal(output.messages.at(-1)?.success, true);
+  });
+}
+
+test('maps a failed turn to an error and one unsuccessful complete event after retryable errors', async () => {
   const harness = createHarness();
   const runtime = createRuntime(harness.process);
   const output = createWriter();
@@ -556,6 +591,14 @@ test('maps a failed turn to an error and one unsuccessful complete event', async
   assert.equal(resume.method, 'thread/resume');
   assert.equal((resume.params as AnyRecord).threadId, 'thread-existing');
   await harness.nextRequest();
+
+  harness.notify('error', {
+    threadId: 'thread-existing',
+    turnId: 'turn-1',
+    willRetry: true,
+    error: { message: 'Retrying connection' },
+  });
+  assert.equal(output.messages.some((message) => message.kind === 'error'), false);
 
   harness.notify('turn/completed', {
     threadId: 'thread-existing',
