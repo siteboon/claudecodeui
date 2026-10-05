@@ -26,7 +26,8 @@ import {
 } from '@/shared/image-attachments.js';
 import {
   CLAUDE_PREDEFINED_MODELS,
-  CLAUDE_ULTRACODE_EFFORT
+  CLAUDE_ULTRACODE_EFFORT,
+  hasClaudeCodeModelSetting
 } from '@/modules/providers/list/claude/claude-models.provider.js';
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
 import {
@@ -276,10 +277,20 @@ function mapCliOptionsToSDK(options = {}) {
 
   sdkOptions.disallowedTools = settings.disallowedTools || [];
 
-  sdkOptions.model = options.model || CLAUDE_PREDEFINED_MODELS.DEFAULT;
+  const selectedModel = options.model || CLAUDE_PREDEFINED_MODELS.DEFAULT;
 
+  // `--model default` pins the CLI's built-in default, which outranks a model the
+  // user configured for Claude Code itself (ANTHROPIC_MODEL or a settings `model`).
+  // The caller sets `useClaudeCodeModel` when "Default" meets such a setting, and the
+  // flag is left off so the CLI picks that model, on resume too. With nothing
+  // configured the flag stays: a resume without it keeps the session's last model.
+  if (!options.useClaudeCodeModel) {
+    sdkOptions.model = selectedModel;
+  }
+
+  // Effort is validated against the option the user picked, even when no model flag is sent.
   applyClaudeEffort(sdkOptions, resolveClaudeEffort(
-    sdkOptions.model,
+    selectedModel,
     effort,
     options.effortModels || CLAUDE_PREDEFINED_MODELS,
   ));
@@ -940,11 +951,15 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       console.warn('[Claude SDK] Unable to load provider models for effort validation:', error);
     }
 
+    const selectedModel = resolvedModel || options.model || CLAUDE_PREDEFINED_MODELS.DEFAULT;
     const sdkOptions = mapCliOptionsToSDK({
       ...options,
       providerSessionId,
-      model: resolvedModel || options.model,
+      model: selectedModel,
       effortModels,
+      // "Default" means whatever Claude Code would run here (issue #1096).
+      useClaudeCodeModel: selectedModel === CLAUDE_PREDEFINED_MODELS.DEFAULT
+        && await hasClaudeCodeModelSetting(options.cwd),
     });
 
     const mcpServers = await loadMcpConfig(options.cwd);
