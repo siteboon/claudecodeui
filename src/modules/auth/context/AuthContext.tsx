@@ -176,10 +176,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Whether /api/auth/status offers CAS sign-in; drives the login screens' CAS button.
   const [casLogin, setCasLogin] = useState<CasLoginOption | null>(null);
   // Why the last CAS round trip failed. Kept apart from `error` because the
-  // session-expired notices fired while signed out would otherwise replace it.
+  // session-expired notices fired while signed out would otherwise replace it;
+  // any successful sign-in clears it.
   const [casLoginError, setCasLoginError] = useState<string | null>(null);
-  // The CAS fragment is single-use, but StrictMode runs the startup check twice
-  // in development, so both runs share one consume-and-exchange attempt.
+  // StrictMode runs the startup check twice in development. The fragment is
+  // stripped synchronously, so the code is exchanged once either way; sharing
+  // the attempt makes the second run wait for its outcome instead of finishing
+  // first and flashing the login form while the exchange is still in flight.
+  // The startup check runs only on mount, so the outcome is never replayed later.
   const casRedirectRef = useRef<Promise<CasRedirectOutcome> | null>(null);
 
   const clearSession = useCallback(() => {
@@ -288,6 +292,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setUser(nextUser);
     setToken(nextToken);
     setNeedsSetup(false);
+    // A failed CAS attempt from earlier in this page's life must not greet the
+    // user again after they sign out or their session expires.
+    setCasLoginError(null);
   }, [checkOnboardingStatus]);
 
   const checkAuthStatus = useCallback(async () => {

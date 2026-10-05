@@ -25,9 +25,13 @@ export default function CasSignInButton({ label, isDisabled }: CasSignInButtonPr
         <span aria-hidden className="h-px flex-1 bg-border" />
       </div>
 
+      {/* While the password form submits, the link must not navigate away by
+          mouse or keyboard, so it also leaves the tab order and ignores clicks. */}
       <a
         href={casLoginUrl(returnTo)}
         aria-disabled={isDisabled}
+        tabIndex={isDisabled ? -1 : undefined}
+        onClick={isDisabled ? (event) => event.preventDefault() : undefined}
         className={`flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-2.5 text-center font-medium text-foreground transition-colors duration-200 hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2 focus:ring-offset-card ${isDisabled ? 'pointer-events-none opacity-60' : ''}`}
       >
         <KeyRound className="h-4 w-4 flex-shrink-0" />

@@ -175,7 +175,10 @@ Self-hosted instances can add a **Sign in with CAS** button to the login page, f
 | `CAS_VERSION` | Optional: `3.0` (default) or `2.0` |
 | `CAS_LOGIN_LABEL` | Optional: custom button text |
 
-Signing in gives shell access to the machine, so CAS never admits every CAS user: only names in `CAS_ALLOWED_USERS` get in, and they all sign in as the instance's single account. On a fresh install, the first allowed CAS sign-in creates that account; it has no usable password, so it is reached through CAS only. Signing out of CloudCLI does not end your CAS session. If a variable is missing or invalid, the server logs why and leaves CAS off.
+Signing in gives shell access to the machine, so CAS never admits every CAS user: only names in `CAS_ALLOWED_USERS` get in, and they all sign in as the instance's single account. Signing out of CloudCLI does not end your CAS session. If a variable is missing or invalid, the server logs why and leaves CAS off.
+
+- **User names must match exactly.** Many CAS servers return the name exactly as the user typed it, so `Alice` is refused when only `alice` is allowed. The server log shows the exact name it refused. Either list that form too, or have your CAS server normalize the case of user names.
+- **An account created through CAS has no password.** On a fresh install, the first allowed CAS sign-in creates the account with an unusable random password, and CloudCLI has no way to set one later. If CAS is later removed, misconfigured or unreachable, nobody can sign in. To get back in, fix the CAS settings, or stop CloudCLI and delete its auth database (`cloudcli status` shows where it is) to set up a new account. Deleting the database also removes the settings stored in it.
 
 ---
 

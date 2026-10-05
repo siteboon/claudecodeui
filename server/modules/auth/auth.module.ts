@@ -19,19 +19,27 @@ const require = createRequire(import.meta.url);
 const bcrypt = require('bcrypt') as BcryptAdapter;
 const databaseConnection = getConnection();
 
+// Shared by the password and CAS services so both read, create and update
+// accounts the same way and hash passwords with the same cost.
+const users = {
+  hasUsers: () => userDb.hasUsers(),
+  getFirstUser: () => userDb.getFirstUser(),
+  getUserById: (userId: number) => userDb.getUserById(userId),
+  getUserByUsername: (username: string) => userDb.getUserByUsername(username),
+  createUser: (username: string, passwordHash: string) => userDb.createUser(username, passwordHash),
+  updateLastLogin: (userId: number) => userDb.updateLastLogin(userId),
+};
+const transaction = {
+  begin: () => databaseConnection.prepare('BEGIN').run(),
+  commit: () => databaseConnection.prepare('COMMIT').run(),
+  rollback: () => databaseConnection.prepare('ROLLBACK').run(),
+};
+const hashPassword = (password: string) => bcrypt.hash(password, 12);
+
 const authService = createAuthService({
-  users: {
-    hasUsers: () => userDb.hasUsers(),
-    createUser: (username, passwordHash) => userDb.createUser(username, passwordHash),
-    getUserByUsername: (username) => userDb.getUserByUsername(username),
-    updateLastLogin: (userId) => userDb.updateLastLogin(userId),
-  },
-  transaction: {
-    begin: () => databaseConnection.prepare('BEGIN').run(),
-    commit: () => databaseConnection.prepare('COMMIT').run(),
-    rollback: () => databaseConnection.prepare('ROLLBACK').run(),
-  },
-  hashPassword: (password) => bcrypt.hash(password, 12),
+  users,
+  transaction,
+  hashPassword,
   comparePassword: (password, passwordHash) => bcrypt.compare(password, passwordHash),
   generateToken,
 });
@@ -44,23 +52,7 @@ for (const warning of casSettings.warnings) {
 }
 
 const casService = casSettings.config
-  ? createCasService({
-    config: casSettings.config,
-    users: {
-      hasUsers: () => userDb.hasUsers(),
-      getFirstUser: () => userDb.getFirstUser(),
-      getUserById: (userId) => userDb.getUserById(userId),
-      createUser: (username, passwordHash) => userDb.createUser(username, passwordHash),
-      updateLastLogin: (userId) => userDb.updateLastLogin(userId),
-    },
-    transaction: {
-      begin: () => databaseConnection.prepare('BEGIN').run(),
-      commit: () => databaseConnection.prepare('COMMIT').run(),
-      rollback: () => databaseConnection.prepare('ROLLBACK').run(),
-    },
-    hashPassword: (password) => bcrypt.hash(password, 12),
-    generateToken,
-  })
+  ? createCasService({ config: casSettings.config, users, transaction, hashPassword, generateToken })
   : null;
 if (casSettings.config) {
   console.log(`[CAS] CAS sign-in enabled for ${casSettings.config.allowedUsers.size} allowed user(s)`);

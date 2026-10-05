@@ -74,6 +74,8 @@ type CasDependencies = {
   generateToken(user: CasLocalUser): string;
   now?: () => number;
   logger?: CasLogger;
+  /** How long to wait for the CAS server's validation response; tests shorten it. */
+  validationTimeoutMs?: number;
 };
 
 /**
@@ -246,6 +248,7 @@ export function createCasService(dependencies: CasDependencies) {
   const { config } = dependencies;
   const now = dependencies.now ?? Date.now;
   const logger = dependencies.logger ?? console;
+  const validationTimeoutMs = dependencies.validationTimeoutMs ?? VALIDATION_TIMEOUT_MS;
   // One-time codes handed to the SPA after a successful callback. They live
   // only in memory: a restart simply makes the user click "Sign in" again.
   const pendingCodes = new Map<string, { userId: number; expiresAt: number }>();
@@ -269,9 +272,10 @@ export function createCasService(dependencies: CasDependencies) {
     try {
       response = await fetch(validateUrl, {
         headers: { Accept: 'application/xml, text/xml' },
-        // A redirect would forward the ticket to wherever it points.
-        redirect: 'error',
-        signal: AbortSignal.timeout(VALIDATION_TIMEOUT_MS),
+        // Never followed: a redirect would forward the ticket to wherever it
+        // points. 'manual' hands back the 3xx itself so it can be logged as such.
+        redirect: 'manual',
+        signal: AbortSignal.timeout(validationTimeoutMs),
       });
       if (response.ok) {
         body = await readBodyWithLimit(response, MAX_VALIDATION_RESPONSE_BYTES);
@@ -283,6 +287,12 @@ export function createCasService(dependencies: CasDependencies) {
       throw new CasServerUnreachableError(describeError(error));
     }
 
+    if (response.status >= 300 && response.status < 400) {
+      // The Location is not logged: a redirected query string still carries the ticket.
+      throw new CasServerUnreachableError(
+        `HTTP ${response.status} redirect refused; set CAS_SERVER_URL to the URL the CAS server answers on without redirecting, e.g. https`,
+      );
+    }
     if (!response.ok) {
       throw new CasServerUnreachableError(`HTTP ${response.status}`);
     }

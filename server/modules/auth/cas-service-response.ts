@@ -32,11 +32,13 @@ const PREDEFINED_ENTITIES: Record<string, string> = {
   apos: "'",
 };
 
-// A qualified XML name (`cas:user`, `serviceResponse`), captured whole.
-const NAME_PATTERN = '[A-Za-z_][\\w.-]*(?::[A-Za-z_][\\w.-]*)?';
-const START_TAG = new RegExp(`<(${NAME_PATTERN})((?:\\s+${NAME_PATTERN}\\s*=\\s*(?:"[^"<]*"|'[^'<]*'))*)\\s*(/?)>`, 'y');
-const END_TAG = new RegExp(`</(${NAME_PATTERN})\\s*>`, 'y');
-const ATTRIBUTE = new RegExp(`(${NAME_PATTERN})\\s*=\\s*(?:"([^"<]*)"|'([^'<]*)')`, 'g');
+// A qualified XML name (`cas:user`, `serviceResponse`), captured whole. Names
+// may use any Unicode letter, as released attributes such as <cas:prénom> do.
+const NAME_PART = '[\\p{L}_][\\p{L}\\p{M}\\p{N}_.-]*';
+const NAME_PATTERN = `${NAME_PART}(?::${NAME_PART})?`;
+const START_TAG = new RegExp(`<(${NAME_PATTERN})((?:\\s+${NAME_PATTERN}\\s*=\\s*(?:"[^"<]*"|'[^'<]*'))*)\\s*(/?)>`, 'yu');
+const END_TAG = new RegExp(`</(${NAME_PATTERN})\\s*>`, 'yu');
+const ATTRIBUTE = new RegExp(`(${NAME_PATTERN})\\s*=\\s*(?:"([^"<]*)"|'([^'<]*)')`, 'gu');
 
 function localNameOf(qualifiedName: string): string {
   const separatorIndex = qualifiedName.indexOf(':');
