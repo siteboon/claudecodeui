@@ -216,7 +216,8 @@
   },
   "message": {
     "editAndResend": "Modifier et renvoyer",
-    "forkFromHere": "Dupliquer à partir d’ici"
+    "forkFromHere": "Dupliquer à partir d’ici",
+    "answeredBy": "Répondu par {{model}}"
   },
   "composer": {
     "editing": {

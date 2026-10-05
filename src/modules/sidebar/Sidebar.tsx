@@ -7,7 +7,7 @@ import { useUiPreferences, useSetUiPreference } from '@/shared/context/UiPrefere
 import { useSidebarController } from '@/modules/sidebar/hooks/useSidebarController';
 import { useTaskMaster, useTasksSettings } from '@/modules/task-master';
 import { usePaletteOps } from '@/modules/command-palette';
-import { useBusySessionIdSet } from '@/shared/context/SessionProtectionContext';
+import { useBackgroundSessionIdSet, useBusySessionIdSet } from '@/shared/context/SessionProtectionContext';
 import type { LLMProvider, LoadingProgress, MCPServerStatus, Project, ProjectSession, SidebarProjectListProps } from '@/shared/types';
 import SidebarCollapsed from '@/modules/sidebar/SidebarCollapsed';
 import SidebarContent from '@/modules/sidebar/SidebarContent';
@@ -77,10 +77,11 @@ function Sidebar({
   // Only membership is rendered here, so subscribing to the full activity map
   // would re-render the whole tree on every provider status frame.
   const activeSessions = useBusySessionIdSet();
+  const backgroundSessionIds = useBackgroundSessionIdSet();
 
   const {
     isSidebarCollapsed,
-    expandedProjects,
+    isProjectExpanded,
     activeRename,
     showNewProject,
     initialSessionsLoaded,
@@ -124,6 +125,12 @@ function Sidebar({
     saveProjectName,
     showDeleteSessionConfirmation,
     confirmDeleteSession,
+    sessionSelection,
+    setProjectSessionSelection,
+    toggleSessionSelected,
+    cancelSessionSelection,
+    showDeleteSelectedSessionsConfirmation,
+    confirmDeleteSessions,
     requestProjectDelete,
     confirmDeleteProject,
     handleProjectSelect,
@@ -144,6 +151,7 @@ function Sidebar({
     selectedProject,
     selectedSession,
     activeSessions,
+    backgroundSessionIds,
     isLoading,
     isMobile,
     t,
@@ -191,7 +199,7 @@ function Sidebar({
     selectedSession,
     isLoading,
     loadingProgress,
-    expandedProjects,
+    isProjectExpanded,
     activeRename,
     initialSessionsLoaded,
     currentTime,
@@ -201,8 +209,8 @@ function Sidebar({
     getProjectSessions,
     loadingMoreProjects,
     activeSessions,
+    backgroundSessionIds,
     attentionSessionIds,
-    forceExpanded: searchMode === 'running',
     isProjectStarred,
     onRenameDraftChange: updateRenameDraft,
     onToggleProject: toggleProject,
@@ -220,6 +228,11 @@ function Sidebar({
     onStartEditingSession: startEditingSession,
     onCancelEditingSession: cancelRename,
     onSaveEditingSession: handleSaveSessionName,
+    sessionSelection,
+    onSetSessionSelection: setProjectSessionSelection,
+    onToggleSessionSelected: toggleSessionSelected,
+    onCancelSessionSelection: cancelSessionSelection,
+    onDeleteSelectedSessions: showDeleteSelectedSessionsConfirmation,
     t,
   };
 
@@ -237,6 +250,7 @@ function Sidebar({
         onCancelDeletion={() => setPendingDeletion(null)}
         onConfirmDeleteProject={confirmDeleteProject}
         onConfirmDeleteSession={confirmDeleteSession}
+        onConfirmDeleteSessions={confirmDeleteSessions}
         showVersionModal={showVersionModal}
         onCloseVersionModal={() => setShowVersionModal(false)}
         releaseInfo={releaseInfo}

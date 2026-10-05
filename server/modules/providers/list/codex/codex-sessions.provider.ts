@@ -220,6 +220,39 @@ function extractCodexTextContent(content: unknown): string {
     .join('\n');
 }
 
+/** Reads image inputs from a typed UserMessage item. */
+function extractCodexTypedUserImages(
+  content: unknown,
+): Array<{ path?: string; data?: string }> | undefined {
+  if (!Array.isArray(content)) {
+    return undefined;
+  }
+
+  const attachments: Array<{ path?: string; data?: string }> = [];
+  for (const rawEntry of content) {
+    const entry = readObjectRecord(rawEntry);
+    if (!entry) {
+      continue;
+    }
+
+    const value = entry.type === 'local_image'
+      ? readNonEmptyString(entry.path)
+      : entry.type === 'image'
+        ? readNonEmptyString(entry.image_url)
+        : undefined;
+    if (!value) {
+      continue;
+    }
+    if (value.startsWith('data:')) {
+      attachments.push({ data: value });
+    } else {
+      attachments.push(...toImageAttachments([value]));
+    }
+  }
+
+  return attachments.length > 0 ? attachments : undefined;
+}
+
 /**
  * Reads the markdown out of Codex's `<proposed_plan>` envelope.
  *
@@ -1309,6 +1342,36 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
 
       if (payload.type === 'context_compacted') {
         messages.push({ type: 'status_note', timestamp, content: 'Context compacted' });
+        continue;
+      }
+
+      // Paginated rollouts carry user prompts as `item_completed` /
+      // `UserMessage`; wire `response_item` user rows are internal, not prompts.
+      if (payload.type === 'item_completed') {
+        const item = readObjectRecord(payload.item);
+        if (item?.type === 'UserMessage') {
+          const content = extractCodexTextContent(item.content);
+          const images = extractCodexTypedUserImages(item.content);
+          if (content.trim() || images?.length) {
+            // Only the first prompt of a turn is anchored, matching the legacy
+            // `user_message` branch below: a turn can hold several prompts and
+            // the edit cut is per turn.
+            const turnId = readNonEmptyString(payload.turn_id)
+              ?? turns.getCurrentTurnId();
+            const isFirstPromptOfTurn = Boolean(turnId) && !anchoredTurnIds.has(turnId as string);
+            if (isFirstPromptOfTurn) {
+              anchoredTurnIds.add(turnId as string);
+            }
+            const row: AnyRecord = {
+              type: 'user',
+              timestamp,
+              message: { role: 'user', content },
+              ...(images ? { images } : {}),
+              ...(isFirstPromptOfTurn ? { turnId } : {}),
+            };
+            messages.push(row);
+          }
+        }
         continue;
       }
 

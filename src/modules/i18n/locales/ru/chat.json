@@ -214,7 +214,8 @@
   },
   "message": {
     "editAndResend": "Изменить и отправить снова",
-    "forkFromHere": "Ответвить отсюда"
+    "forkFromHere": "Ответвить отсюда",
+    "answeredBy": "Ответил {{model}}"
   },
   "composer": {
     "editing": {

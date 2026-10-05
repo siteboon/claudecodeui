@@ -203,10 +203,19 @@ export const api = {
     post('/api/projects/migrate-legacy-stars', { projectIds }),
   toggleProjectStar: (projectId: string) =>
     post(`/api/projects/${encodeURIComponent(projectId)}/toggle-star`),
+  // A clone is two requests: the details (GitHub token included) go in this
+  // POST body, and the returned `cloneId` is all the progress stream's URL
+  // carries — URLs land in access logs, proxy logs and browser history.
+  startProjectClone: (cloneRequest: {
+    path: string;
+    githubUrl: string;
+    githubTokenId: number | null;
+    newGithubToken: string | null;
+  }) => post('/api/projects/clone', cloneRequest),
   // EventSource cannot send an Authorization header, so the token rides along as
   // a query parameter on the streaming endpoints below.
-  cloneProjectProgressUrl: (params: Record<string, QueryValue>) =>
-    `/api/projects/clone-progress${query({ ...params, token: getStoredAuthToken() })}`,
+  cloneProjectProgressUrl: ({ cloneId }: { cloneId: string }) =>
+    `/api/projects/clone-progress${query({ cloneId, token: getStoredAuthToken() })}`,
   searchConversationsUrl: (searchQuery: string, limit = 50) =>
     `/api/providers/search/sessions${query({
       q: searchQuery,
@@ -238,6 +247,10 @@ export const api = {
     post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/fork`, body),
   renameSession: (sessionId: string, summary: string) =>
     put(`/api/providers/sessions/${sessionId}`, { summary }),
+  // What one agent of a workflow run did, read from its transcript on demand
+  // when its row in the workflow card is opened.
+  workflowAgentActivity: (sessionId: string, runId: string, agentId: string) =>
+    get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/workflows/${encodeURIComponent(runId)}/agents/${encodeURIComponent(agentId)}`),
 
   // Scheduled messages: send a message to a session at a future time.
   scheduledMessages: {
@@ -294,6 +307,16 @@ export const api = {
       get(`/api/git/file-with-diff${query({ project: projectId, file: filePath })}`),
     branches: (projectId: string, options: ApiRequestOptions = {}) =>
       get(`/api/git/branches${query({ project: projectId })}`, options),
+    branchDiff: (projectId: string, base: string, options: ApiRequestOptions = {}) =>
+      get(`/api/git/branch-diff${query({ project: projectId, base })}`, options),
+    // `oldPath` is the pre-rename path of a renamed file so the server can diff the rename itself.
+    branchDiffFile: (
+      projectId: string,
+      base: string,
+      filePath: string,
+      oldPath?: string,
+      options: ApiRequestOptions = {},
+    ) => get(`/api/git/branch-diff/file${query({ project: projectId, base, file: filePath, oldPath })}`, options),
     remoteStatus: (projectId: string) =>
       get(`/api/git/remote-status${query({ project: projectId })}`),
     commits: (

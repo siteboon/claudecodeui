@@ -101,6 +101,28 @@ import itCodeEditor from '@/modules/i18n/locales/it/codeEditor.json';
 // oxlint-disable-next-line importx/order
 import itTasks from '@/modules/i18n/locales/it/tasks.json';
 
+import idCommon from '@/modules/i18n/locales/id/common.json';
+import idSettings from '@/modules/i18n/locales/id/settings.json';
+import idAuth from '@/modules/i18n/locales/id/auth.json';
+import idSidebar from '@/modules/i18n/locales/id/sidebar.json';
+import idChat from '@/modules/i18n/locales/id/chat.json';
+import idCodeEditor from '@/modules/i18n/locales/id/codeEditor.json';
+// oxlint-disable-next-line importx/order
+import idTasks from '@/modules/i18n/locales/id/tasks.json';
+// oxlint-disable-next-line importx/order
+import idGit from '@/modules/i18n/locales/id/git.json';
+
+import csCommon from '@/modules/i18n/locales/cs/common.json';
+import csSettings from '@/modules/i18n/locales/cs/settings.json';
+import csAuth from '@/modules/i18n/locales/cs/auth.json';
+import csSidebar from '@/modules/i18n/locales/cs/sidebar.json';
+import csChat from '@/modules/i18n/locales/cs/chat.json';
+import csCodeEditor from '@/modules/i18n/locales/cs/codeEditor.json';
+// oxlint-disable-next-line importx/order
+import csTasks from '@/modules/i18n/locales/cs/tasks.json';
+// oxlint-disable-next-line importx/order
+import csGit from '@/modules/i18n/locales/cs/git.json';
+
 import zhTWCommon from '@/modules/i18n/locales/zh-TW/common.json';
 import zhTWSettings from '@/modules/i18n/locales/zh-TW/settings.json';
 import zhTWAuth from '@/modules/i18n/locales/zh-TW/auth.json';
@@ -226,6 +248,26 @@ git: enGit,
         chat: itChat,
         codeEditor: itCodeEditor,
         tasks: itTasks,
+      },
+      id: {
+        common: idCommon,
+        settings: idSettings,
+        auth: idAuth,
+        sidebar: idSidebar,
+        chat: idChat,
+        codeEditor: idCodeEditor,
+        tasks: idTasks,
+        git: idGit,
+      },
+      cs: {
+        common: csCommon,
+        settings: csSettings,
+        auth: csAuth,
+        sidebar: csSidebar,
+        chat: csChat,
+        codeEditor: csCodeEditor,
+        tasks: csTasks,
+        git: csGit,
       },
       'zh-TW': {
         common: zhTWCommon,

@@ -1,5 +1,6 @@
 import { memo, useState } from 'react';
-import { Check, Edit2, Loader2, MoreHorizontal, Trash2, X } from 'lucide-react';
+import type { KeyboardEvent } from 'react';
+import { Check, CheckSquare, Edit2, Loader2, MoreHorizontal, Square, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { Badge, Dialog, DialogContent, DialogTitle, LLMProviderLogo, Tooltip, buttonVariants } from '@/shared/ui';
@@ -15,6 +16,8 @@ type SidebarSessionItemProps = {
   session: SessionWithProvider;
   selectedSession: ProjectSession | null;
   isProcessing: boolean;
+  /** The session's turn has ended but the agents, workflows or commands it launched still run. */
+  hasBackgroundWork: boolean;
   needsAttention: boolean;
   currentTime: Date;
   /** Resolved for this row, so a keystroke elsewhere does not invalidate it. */
@@ -29,6 +32,12 @@ type SidebarSessionItemProps = {
   onDeleteSession: (sessionId: string, sessionTitle: string) => void;
   /** Branches this session into an independent one; absent when its provider cannot. */
   onForkSession?: (session: SessionWithProvider) => void;
+  /** This project's list is in bulk-selection mode: the row acts as a checkbox and hides its options. */
+  isSelecting: boolean;
+  /** Ticked for the pending bulk delete. Resolved by the list, which never ticks a running row. */
+  isChecked: boolean;
+  /** Takes the owning projectId so this memoized row binds itself without the list making a closure per row. */
+  onToggleSessionSelected: (projectId: string, sessionId: string) => void;
   t: TFunction;
 };
 
@@ -38,6 +47,7 @@ function SidebarSessionItem({
   session,
   selectedSession,
   isProcessing,
+  hasBackgroundWork,
   needsAttention,
   currentTime,
   isEditing,
@@ -50,6 +60,9 @@ function SidebarSessionItem({
   onSessionSelect,
   onDeleteSession,
   onForkSession,
+  isSelecting,
+  isChecked,
+  onToggleSessionSelected,
   t,
 }: SidebarSessionItemProps) {
   const isCompact = useCompactSidebar();
@@ -58,7 +71,15 @@ function SidebarSessionItem({
   const compactSessionAge = formatCompactAge(sessionView.sessionTime, currentTime);
   const [isMobileOptionsOpen, setIsMobileOptionsOpen] = useState(false);
   const showAttentionIndicator = needsAttention && !isSelected;
-  const showRecentIndicator = !showAttentionIndicator && !isProcessing && sessionView.isActive;
+  // Background work takes the recent-activity dot's place: the session is
+  // still doing something, which says more than that it was touched lately.
+  const showBackgroundIndicator = !showAttentionIndicator && hasBackgroundWork;
+  const showRecentIndicator = !showAttentionIndicator && !showBackgroundIndicator && !isProcessing && sessionView.isActive;
+  const indicatorLabel = showAttentionIndicator
+    ? t('tooltips.attentionRequiredIndicator', { defaultValue: 'Session needs attention' })
+    : showBackgroundIndicator
+      ? t('tooltips.backgroundWorkIndicator', { defaultValue: 'Background work running' })
+      : t('tooltips.activeSessionIndicator');
   const providerLabel = PROVIDER_LABELS[session.__provider];
 
   // The desktop controls live in SessionOptions, which owns the rename panel and
@@ -82,6 +103,33 @@ function SidebarSessionItem({
     onDeleteSession(session.id, sessionView.sessionName);
   };
 
+  // A running session cannot be deleted, so it cannot be ticked either; the row
+  // still renders, locked, instead of disappearing from the list mid-selection.
+  const isSelectable = isSelecting && !isProcessing;
+  const toggleSelected = () => {
+    onToggleSessionSelected(project.projectId, session.id);
+  };
+  // Space activates neither the desktop anchor nor the compact div, and Enter
+  // only the anchor, so both keys are handled here and tick either row alike.
+  const handleSelectionKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (!isSelectable || (event.key !== ' ' && event.key !== 'Enter')) {
+      return;
+    }
+    event.preventDefault();
+    toggleSelected();
+  };
+  const SelectionIcon = isChecked ? CheckSquare : Square;
+  const selectionIcon = isSelecting ? (
+    <SelectionIcon
+      className={cn(
+        'h-4 w-4 flex-shrink-0',
+        isChecked ? 'text-primary' : 'text-muted-foreground',
+        !isSelectable && 'opacity-40',
+      )}
+      aria-hidden="true"
+    />
+  ) : null;
+
   const setMobileOptionsOpen = (open: boolean) => {
     setIsMobileOptionsOpen(open);
     setOptionsOpen(open);
@@ -101,22 +149,19 @@ function SidebarSessionItem({
 
   return (
     <div className="group relative">
-      {(showAttentionIndicator || showRecentIndicator) && (
+      {(showAttentionIndicator || showBackgroundIndicator || showRecentIndicator) && (
         <div className="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 transform">
-          <Tooltip
-            content={showAttentionIndicator
-              ? t('tooltips.attentionRequiredIndicator', { defaultValue: 'Session needs attention' })
-              : t('tooltips.activeSessionIndicator')}
-            position="right"
-          >
+          <Tooltip content={indicatorLabel} position="right">
             <div
               role="status"
-              aria-label={showAttentionIndicator
-                ? t('tooltips.attentionRequiredIndicator', { defaultValue: 'Session needs attention' })
-                : t('tooltips.activeSessionIndicator')}
+              aria-label={indicatorLabel}
               className={cn(
                 'h-2 w-2 animate-pulse rounded-full',
-                showAttentionIndicator ? 'bg-amber-500' : 'bg-green-500',
+                showAttentionIndicator
+                  ? 'bg-amber-500'
+                  : showBackgroundIndicator
+                    ? 'bg-purple-500 dark:bg-purple-400'
+                    : 'bg-green-500',
               )}
             />
           </Tooltip>
@@ -126,6 +171,10 @@ function SidebarSessionItem({
       {isCompact && (
       <div>
         <div
+          role={isSelecting ? 'checkbox' : undefined}
+          aria-checked={isSelecting ? isChecked : undefined}
+          aria-disabled={isSelecting && !isSelectable ? true : undefined}
+          tabIndex={isSelecting ? 0 : undefined}
           className={cn(
             'p-2 mx-3 my-0.5 rounded-md bg-card border active:scale-[0.98] transition-all duration-150 relative',
             isSelected ? 'bg-primary/5 border-primary/20' : '',
@@ -134,10 +183,13 @@ function SidebarSessionItem({
               : !isSelected && sessionView.isActive
               ? 'border-green-500/30 bg-green-50/5 dark:bg-green-900/5'
               : 'border-border/30',
+            isChecked && 'border-primary/40 bg-primary/10',
           )}
-          onClick={selectMobileSession}
+          onClick={isSelecting ? (isSelectable ? toggleSelected : undefined) : selectMobileSession}
+          onKeyDown={isSelecting ? handleSelectionKeyDown : undefined}
         >
           <div className="flex items-center gap-2">
+            {selectionIcon}
             <div
               className={cn(
                 'w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0',
@@ -176,19 +228,21 @@ function SidebarSessionItem({
               </div>
             </div>
 
-            <button
-              type="button"
-              aria-label={`Session options for ${sessionView.sessionName}`}
-              aria-haspopup="dialog"
-              aria-expanded={isMobileOptionsOpen}
-              className="ml-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted active:scale-95"
-              onClick={(event) => {
-                event.stopPropagation();
-                setMobileOptionsOpen(true);
-              }}
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </button>
+            {!isSelecting && (
+              <button
+                type="button"
+                aria-label={`Session options for ${sessionView.sessionName}`}
+                aria-haspopup="dialog"
+                aria-expanded={isMobileOptionsOpen}
+                className="ml-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted active:scale-95"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setMobileOptionsOpen(true);
+                }}
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -327,25 +381,40 @@ function SidebarSessionItem({
       <div>
         <a
           href={`/session/${session.id}`}
+          role={isSelecting ? 'checkbox' : undefined}
+          aria-checked={isSelecting ? isChecked : undefined}
+          aria-disabled={isSelecting && !isSelectable ? true : undefined}
           className={cn(
             buttonVariants({ variant: 'ghost' }),
-            'h-auto w-full justify-start rounded-md border bg-card p-2 pr-11 text-left font-normal transition-all duration-150',
+            'h-auto w-full justify-start rounded-md border bg-card p-2 text-left font-normal transition-all duration-150',
+            isSelecting ? 'pr-2' : 'pr-11',
             isSelected ? 'border-primary/20 bg-primary/5' : 'border-border/30',
             !isSelected && isProcessing
               ? 'border-border/60 bg-muted/20 hover:bg-muted/25'
               : !isSelected && sessionView.isActive
                 ? 'border-green-500/30 bg-green-50/5 hover:bg-green-50/10 dark:bg-green-900/5 dark:hover:bg-green-900/10'
                 : 'hover:bg-accent/50',
+            isChecked && 'border-primary/40 bg-primary/10',
           )}
           // Left-click keeps in-app navigation; Ctrl/Cmd/middle-click and the
           // native right-click menu use the href to open a new tab/window.
+          // While selecting, every click ticks the row instead.
           onClick={(event) => {
+            if (isSelecting) {
+              event.preventDefault();
+              if (isSelectable) {
+                toggleSelected();
+              }
+              return;
+            }
             if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
             event.preventDefault();
             onSessionSelect(session, project.projectId);
           }}
+          onKeyDown={isSelecting ? handleSelectionKeyDown : undefined}
         >
           <div className="flex w-full min-w-0 items-center gap-2">
+            {selectionIcon}
             <div
               className={cn(
                 'flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md',
@@ -366,7 +435,7 @@ function SidebarSessionItem({
                   <span
                     className={cn(
                       'ml-auto flex-shrink-0 transition-opacity duration-200',
-                      isEditing ? 'opacity-0' : 'group-hover:opacity-0',
+                      isEditing ? 'opacity-0' : !isSelecting && 'group-hover:opacity-0',
                     )}
                   >
                     <Tooltip content={t('tooltips.processingSessionIndicator', 'Processing session')} position="top">
@@ -379,7 +448,7 @@ function SidebarSessionItem({
                   <span
                     className={cn(
                       'ml-auto flex-shrink-0 text-[11px] text-muted-foreground transition-opacity duration-200',
-                      isEditing ? 'opacity-0' : 'group-hover:opacity-0',
+                      isEditing ? 'opacity-0' : !isSelecting && 'group-hover:opacity-0',
                     )}
                   >
                     {compactSessionAge}
@@ -393,23 +462,25 @@ function SidebarSessionItem({
           </div>
         </a>
 
-        <SessionOptions
-          className="absolute right-2 top-1/2 -translate-y-1/2 transform transition-all duration-200"
-          sessionId={session.id}
-          sessionName={sessionView.sessionName}
-          provider={session.__provider}
-          projectId={project.projectId}
-          isProcessing={isProcessing}
-          isEditing={isEditing}
-          renameDraft={renameDraft}
-          onRenameDraftChange={onRenameDraftChange}
-          onStartEditingSession={onStartEditingSession}
-          onCancelEditingSession={onCancelEditingSession}
-          onSaveEditingSession={onSaveEditingSession}
-          onDeleteSession={onDeleteSession}
-          onFork={onForkSession ? () => onForkSession(session) : undefined}
-          t={t}
-        />
+        {!isSelecting && (
+          <SessionOptions
+            className="absolute right-2 top-1/2 -translate-y-1/2 transform transition-all duration-200"
+            sessionId={session.id}
+            sessionName={sessionView.sessionName}
+            provider={session.__provider}
+            projectId={project.projectId}
+            isProcessing={isProcessing}
+            isEditing={isEditing}
+            renameDraft={renameDraft}
+            onRenameDraftChange={onRenameDraftChange}
+            onStartEditingSession={onStartEditingSession}
+            onCancelEditingSession={onCancelEditingSession}
+            onSaveEditingSession={onSaveEditingSession}
+            onDeleteSession={onDeleteSession}
+            onFork={onForkSession ? () => onForkSession(session) : undefined}
+            t={t}
+          />
+        )}
       </div>
       )}
     </div>

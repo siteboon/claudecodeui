@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import test from 'node:test';
 
 import { Codex } from '@openai/codex-sdk';
@@ -55,4 +56,39 @@ for (const resumed of [false, true]) {
       assert.ok(!messages.some((message: any) => message.kind === 'error'));
     });
   }
+}
+
+for (const command of ['', '  \n\t']) {
+  test(`Codex supplies a prompt for an image-only turn (${JSON.stringify(command)})`, async (t) => {
+    let capturedPrompt: unknown;
+    const imagePath = path.join(process.cwd(), 'public', 'favicon.png');
+    const thread = {
+      id: 'native-thread',
+      async runStreamed(prompt: unknown) {
+        capturedPrompt = prompt;
+        return { events: (async function* () {
+          yield { type: 'thread.started', thread_id: 'native-thread' };
+        })() };
+      },
+    } as unknown as Thread;
+
+    t.mock.method(Codex.prototype, 'startThread', () => thread);
+    const context: ProviderRuntimeContext = {
+      resolveProviderSessionId: () => null,
+      resolveResumeModel: async () => 'test-model',
+      getProviderModels: async () => ({ OPTIONS: [], DEFAULT: 'test-model' }),
+      normalizeMessage: () => [],
+      isProviderInstalled: async () => true,
+    };
+
+    await codexRuntime.run(command, {
+      cwd: process.cwd(),
+      images: [{ path: imagePath, mimeType: 'image/png' }],
+    }, { isWebSocketWriter: true, send: () => {} }, context);
+
+    assert.deepEqual(capturedPrompt, [
+      { type: 'text', text: 'Please analyze the attached image(s).' },
+      { type: 'local_image', path: imagePath },
+    ]);
+  });
 }
