@@ -491,6 +491,55 @@ async function readTranscriptRows(jsonlPath: string, providerSessionId: string):
   return rows;
 }
 
+/**
+ * Appends the row the Claude CLI writes for `/rename` to a transcript:
+ * `{"type":"custom-title","customTitle":…,"sessionId":…}`, those three keys in
+ * that order, as the CLI and the SDK's `renameSession()` write it. The CLI's
+ * `--resume` picker and the title it restores on resume both take the last
+ * such row. It has no `uuid`, so it is not part of the conversation and does
+ * not move the point `--resume` continues from.
+ */
+async function appendClaudeCustomTitle(jsonlPath: string, providerSessionId: string, title: string): Promise<void> {
+  const row = `${JSON.stringify({ type: 'custom-title', customTitle: title, sessionId: providerSessionId })}\n`;
+
+  let handle: fsp.FileHandle;
+  try {
+    // No O_CREAT: a transcript that is gone stays gone, rather than coming back
+    // holding nothing but a title.
+    handle = await fsp.open(jsonlPath, fs.constants.O_RDWR | fs.constants.O_APPEND);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return;
+    }
+    throw error;
+  }
+
+  try {
+    const before = await handle.stat();
+    if (before.size === 0) {
+      return;
+    }
+
+    // A writer that stopped mid-row leaves no newline at the end; start a new
+    // line, as the CLI does, so the title is not glued onto that partial row.
+    const lastByte = Buffer.alloc(1);
+    await handle.read(lastByte, 0, 1, before.size - 1);
+    const payload = lastByte[0] === 0x0a ? row : `\n${row}`;
+    await handle.write(payload);
+
+    // A rename is not activity. The sidebar orders sessions by when their
+    // transcript last changed, and a newer transcript un-archives a session on
+    // its next sync, so the file keeps its old time — unless something else
+    // appended meanwhile, which is activity.
+    const after = await handle.stat();
+    if (after.size === before.size + Buffer.byteLength(payload)) {
+      await handle.utimes(before.atime, before.mtime);
+    }
+  } finally {
+    await handle.close();
+  }
+}
+
 /** True for a row the user typed, as opposed to a tool result or an injected note. */
 function isUserPromptRow(row: AnyRecord): boolean {
   if (row.type !== 'user' || row.isMeta === true || row.isCompactSummary === true) {
@@ -1663,6 +1712,29 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     }
 
     return { found: true, resumeThroughId: null };
+  }
+
+  /**
+   * Writes a sidebar rename into the session's transcript as the CLI's own
+   * `/rename` row, so `claude --resume` lists the session under the new name
+   * and a resumed CLI carries that name forward.
+   *
+   * A session that has not run yet, or whose transcript is gone, has nowhere
+   * to record it. Neither has a row whose path is not `<provider id>.jsonl` —
+   * the only file the CLI reads a session's title from.
+   */
+  async renameSession(sessionId: string, title: string): Promise<void> {
+    const session = sessionsDb.getSessionById(sessionId);
+    const jsonlPath = session?.jsonl_path;
+    const providerSessionId = session?.provider_session_id;
+    if (!jsonlPath || !providerSessionId || !title.trim()) {
+      return;
+    }
+    if (path.basename(jsonlPath) !== `${providerSessionId}.jsonl`) {
+      return;
+    }
+
+    await appendClaudeCustomTitle(jsonlPath, providerSessionId, title);
   }
 
   /**

@@ -233,6 +233,21 @@ export interface IProviderSessions {
   rewindSession?(sessionId: string, keepThroughId: string | null): Promise<void>;
 
   /**
+   * Records a title the user gave the session in CloudCLI where the provider's
+   * own CLI reads it, so the CLI lists the session under the same name as the
+   * sidebar.
+   *
+   * Called after the database row is already renamed, so the rename stands
+   * whatever happens here. Resolves without writing when the session has no
+   * provider file to record it in; rejects only when writing one fails, which
+   * the caller logs.
+   *
+   * Implemented only by providers whose CLI keeps a user-set title in a file
+   * CloudCLI can append to; its absence leaves the title in CloudCLI alone.
+   */
+  renameSession?(sessionId: string, title: string): Promise<void>;
+
+  /**
    * Reads what one agent of a workflow run did, from the transcript the run
    * wrote for it, with the status its journal gives it. Returns `null` when the
    * run left no transcript for that agent.
