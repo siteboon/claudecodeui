@@ -6,7 +6,10 @@ import test from 'node:test';
 
 import { WebSocket } from 'ws';
 
-import { handleShellConnection } from '@/modules/websocket/services/shell-websocket.service.js';
+import {
+  handleShellConnection,
+  resolvePtySessionTimeout,
+} from '@/modules/websocket/services/shell-websocket.service.js';
 
 function createFakeSocket() {
   const socket = new EventEmitter() as EventEmitter & {
@@ -224,4 +227,54 @@ test('a missing project directory is reported as an error frame and starts no pt
     socket.frames.map((frame) => JSON.parse(frame) as Record<string, unknown>),
     [{ type: 'error', message: 'Invalid project path' }]
   );
+});
+
+test('a detached terminal is only reaped once its process has been silent for the timeout', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const minutes = (count: number) => count * 60 * 1000;
+  const pty = createFakePty();
+  const socket = createFakeSocket();
+
+  handleShellConnection(socket as never, {
+    resolveProviderSessionId: () => null,
+    spawnPty: () => pty as never,
+  });
+  socket.emit(
+    'message',
+    JSON.stringify({
+      type: 'init',
+      projectPath: process.cwd(),
+      sessionId: `detached-working-${Date.now()}`,
+      hasSession: false,
+      provider: 'plain-shell',
+      isPlainShell: true,
+      initialCommand: 'test-command',
+    })
+  );
+
+  // The browser is closed while the agent is in the middle of a task.
+  socket.emit('close');
+  t.mock.timers.tick(minutes(20));
+  pty.emitData('still working');
+  t.mock.timers.tick(minutes(20));
+
+  // 40 minutes after the detach, but only 20 since the last output.
+  assert.equal(pty.killed, false);
+
+  t.mock.timers.tick(minutes(10));
+  assert.equal(pty.killed, true);
+
+  pty.emitExit();
+});
+
+test('PTY_SESSION_TIMEOUT_MS falls back to 30 minutes unless it is a usable delay', () => {
+  const thirtyMinutes = 30 * 60 * 1000;
+
+  assert.equal(resolvePtySessionTimeout(undefined), thirtyMinutes);
+  assert.equal(resolvePtySessionTimeout(''), thirtyMinutes);
+  assert.equal(resolvePtySessionTimeout('never'), thirtyMinutes);
+  assert.equal(resolvePtySessionTimeout('-5'), thirtyMinutes);
+  assert.equal(resolvePtySessionTimeout('7200000'), 7200000);
+  // Node runs a timer with a longer delay immediately.
+  assert.equal(resolvePtySessionTimeout('99999999999'), 2 ** 31 - 1);
 });

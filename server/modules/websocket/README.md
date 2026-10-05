@@ -173,7 +173,8 @@ stateDiagram-v2
   Running --> Detached: ws close
 
   Detached --> Running: reconnect before timeout
-  Detached --> Killed: timeout reached -> pty.kill
+  Detached --> Detached: output keeps the timeout from elapsing
+  Detached --> Killed: silent for the timeout -> pty.kill
   Exited --> [*]
   Killed --> [*]
   EmitError --> WaitingInit
@@ -194,7 +195,7 @@ Stores up to 5000 chunks for replay on reconnect.
 6. URL detection:
 Strips ANSI, accumulates text buffer, extracts URLs, emits `auth_url` once per normalized URL, supports `autoOpen`.
 7. Close behavior:
-Socket disconnect does not instantly kill PTY; session is kept alive and terminated on timeout.
+Socket disconnect does not instantly kill PTY; the session is kept alive and terminated once its process has printed nothing for the timeout (30 minutes, or `PTY_SESSION_TIMEOUT_MS`), so an agent still working with the browser closed runs to completion.
 
 ## `/plugin-ws/:pluginName` Proxy Flow
 
