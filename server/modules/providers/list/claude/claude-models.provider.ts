@@ -1,4 +1,6 @@
 import { readFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import type { IProviderModels } from '@/shared/interfaces.js';
@@ -10,6 +12,9 @@ import type {
 import {
   buildDefaultProviderCurrentActiveModel,
   isPlaceholderProviderModel,
+  readJsonConfig,
+  readObjectRecord,
+  readOptionalString,
   stripAnsiSequences,
 } from '@/shared/utils.js';
 
@@ -31,7 +36,7 @@ export const CLAUDE_PREDEFINED_MODELS: ProviderModelsDefinition = {
     {
       value: 'default',
       label: 'Default (recommended)',
-      description: 'Use the recommended model for your Claude account and deployment.',
+      description: 'Use the model set in your Claude Code settings, otherwise the recommended model for your account.',
       effort: {
         default: 'high',
         values: [
@@ -171,6 +176,61 @@ export const findClaudeModelOption = (model: string | undefined | null): Provide
 
   return CLAUDE_PREDEFINED_MODELS.OPTIONS.find((option) => option.value === normalizedModel) ?? null;
 };
+
+/** A configured model only counts when it names something other than the CLI default. */
+const isConfiguredModelValue = (value: unknown): boolean => {
+  const model = readOptionalString(value);
+  return model !== undefined && model.toLowerCase() !== CLAUDE_PREDEFINED_MODELS.DEFAULT;
+};
+
+/**
+ * Reports whether the user picked a main-loop model for Claude Code itself:
+ * `ANTHROPIC_MODEL` in the environment the CLI inherits, or `model` /
+ * `env.ANTHROPIC_MODEL` in a settings file the runtime lets it load for `cwd`
+ * (user, project and local, the runtime's `settingSources`).
+ *
+ * Used by the Claude runtime (claude-runtime.provider.js) to decide how to run
+ * the "Default" option. `--model default` pins the CLI's built-in default and
+ * outranks such a setting, so when one exists the runtime leaves the flag off.
+ * Only presence matters here: the CLI still applies its own precedence between
+ * the sources. An unreadable or malformed settings file counts as unset.
+ */
+export const hasClaudeCodeModelSetting = async (
+  cwd?: string | null,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<boolean> => {
+  if (isConfiguredModelValue(env.ANTHROPIC_MODEL)) {
+    return true;
+  }
+
+  const userConfigDir = readOptionalString(env.CLAUDE_CONFIG_DIR) ?? path.join(os.homedir(), '.claude');
+  const settingsPaths = [path.join(userConfigDir, 'settings.json')];
+  if (cwd) {
+    settingsPaths.push(
+      path.join(cwd, '.claude', 'settings.json'),
+      path.join(cwd, '.claude', 'settings.local.json'),
+    );
+  }
+
+  for (const settingsPath of settingsPaths) {
+    let settings: Record<string, unknown>;
+    try {
+      settings = await readJsonConfig(settingsPath);
+    } catch {
+      continue;
+    }
+
+    if (
+      isConfiguredModelValue(settings.model)
+      || isConfiguredModelValue(readObjectRecord(settings.env)?.ANTHROPIC_MODEL)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 type ClaudeInitEvent = {
   sessionId?: string;
   session_id?: string;
