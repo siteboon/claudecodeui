@@ -27,12 +27,26 @@ type PtySessionEntry = {
   ws: WebSocket | null;
   buffer: string[];
   timeoutId: NodeJS.Timeout | null;
+  lastOutputAt: number;
   projectPath: string;
   sessionId: string | null;
 };
 
 const ptySessionsMap = new Map<string, PtySessionEntry>();
-const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
+const DEFAULT_PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
+// setTimeout fires immediately for a longer delay, which would kill the PTY on detach.
+const MAX_TIMER_DELAY = 2 ** 31 - 1;
+
+/**
+ * Reads how long a detached PTY may stay silent before it is killed, from
+ * PTY_SESSION_TIMEOUT_MS. Anything but a positive number keeps the default.
+ */
+export function resolvePtySessionTimeout(value: string | undefined): number {
+  const timeout = Number(value);
+  return timeout > 0 ? Math.min(timeout, MAX_TIMER_DELAY) : DEFAULT_PTY_SESSION_TIMEOUT;
+}
+
+const PTY_SESSION_TIMEOUT = resolvePtySessionTimeout(process.env.PTY_SESSION_TIMEOUT_MS);
 const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
 const TRAILING_URL_PUNCTUATION_REGEX = /[)\]}>.,;:!?]+$/;
 
@@ -420,6 +434,7 @@ export function handleShellConnection(
           ws,
           buffer: [],
           timeoutId: null,
+          lastOutputAt: Date.now(),
           projectPath,
           sessionId,
         });
@@ -434,6 +449,7 @@ export function handleShellConnection(
             return;
           }
 
+          session.lastOutputAt = Date.now();
           if (session.buffer.length < 5000) {
             session.buffer.push(chunk);
           } else {
@@ -599,16 +615,25 @@ export function handleShellConnection(
     if (session.timeoutId) {
       clearTimeout(session.timeoutId);
     }
-    session.timeoutId = setTimeout(() => {
+    const reapWhenSilent = () => {
       // A reconnect may win just as this timer becomes runnable. Re-check the
       // active socket so a queued cleanup can never kill a reattached PTY.
       if (ptySessionsMap.get(ptySessionKey as string) !== session || session.ws !== null) {
         return;
       }
 
+      // Output since the detach means an agent is still working with nobody
+      // watching: wait for it to fall silent instead of killing it mid-task.
+      const silentFor = Date.now() - session.lastOutputAt;
+      if (silentFor < PTY_SESSION_TIMEOUT) {
+        session.timeoutId = setTimeout(reapWhenSilent, PTY_SESSION_TIMEOUT - silentFor);
+        return;
+      }
+
       session.pty.kill();
       ptySessionsMap.delete(ptySessionKey as string);
-    }, PTY_SESSION_TIMEOUT);
+    };
+    session.timeoutId = setTimeout(reapWhenSilent, PTY_SESSION_TIMEOUT);
   });
 
   ws.on('error', (error) => {
