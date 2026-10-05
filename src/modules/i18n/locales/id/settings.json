@@ -168,9 +168,9 @@
     }
   },
   "keepAwake": {
-    "title": "Jaga komputer ini tetap aktif saat agen bekerja",
-    "description": "Mencegah komputer yang menjalankan CloudCLI masuk ke mode tidur dengan sendirinya selama agen bekerja, sehingga proses yang panjang tidak terputus. Layar tetap bisa mati, dan menutup layar laptop tetap bisa membuatnya masuk ke mode tidur.",
-    "unsupported": "Tidak tersedia di komputer ini. Di Linux, fitur ini memerlukan systemd (systemd-inhibit).",
+    "title": "Jaga komputer CloudCLI tetap aktif saat agen bekerja",
+    "description": "Mencegah komputer yang menjalankan CloudCLI masuk ke mode tidur dengan sendirinya selama agen bekerja, termasuk saat agen menunggu jawaban Anda atau persetujuan tool, sehingga proses yang panjang tidak terputus. Menutup layar laptop tetap bisa membuatnya masuk ke mode tidur.",
+    "unsupported": "Tidak tersedia di komputer yang menjalankan CloudCLI. Di Linux, fitur ini memerlukan systemd (systemd-inhibit); WSL tidak didukung.",
     "loadFailed": "Gagal memuat pengaturan ini.",
     "saveFailed": "Gagal menyimpan pengaturan ini. Silakan coba lagi."
   },

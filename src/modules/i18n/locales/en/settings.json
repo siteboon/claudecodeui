@@ -168,9 +168,9 @@
     }
   },
   "keepAwake": {
-    "title": "Keep this computer awake while agents work",
-    "description": "Stops the computer running CloudCLI from going to sleep on its own while an agent is working, so long runs are not cut off. The screen can still turn off, and closing a laptop's lid can still put it to sleep.",
-    "unsupported": "Not available on this computer. On Linux, this needs systemd (systemd-inhibit).",
+    "title": "Keep the CloudCLI computer awake while agents work",
+    "description": "Stops the computer running CloudCLI from going to sleep on its own while an agent is working, including while it waits for your answer or a tool approval, so long runs are not cut off. Closing a laptop's lid can still put it to sleep.",
+    "unsupported": "Not available on the computer running CloudCLI. Linux needs systemd (systemd-inhibit); WSL is not supported.",
     "loadFailed": "Could not load this setting.",
     "saveFailed": "Could not save this setting. Please try again."
   },

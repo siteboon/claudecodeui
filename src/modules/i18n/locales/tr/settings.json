@@ -143,9 +143,9 @@
     }
   },
   "keepAwake": {
-    "title": "Ajanlar çalışırken bu bilgisayarı uyanık tut",
-    "description": "Bir ajan çalışırken CloudCLI çalıştıran bilgisayarın kendiliğinden uyku moduna geçmesini önler; böylece uzun çalıştırmalar yarıda kesilmez. Ekran yine de kapanabilir ve dizüstü bilgisayarın kapağını kapatmak onu yine de uyku moduna geçirebilir.",
-    "unsupported": "Bu bilgisayarda kullanılamaz. Linux'ta systemd (systemd-inhibit) gerekir.",
+    "title": "Ajanlar çalışırken CloudCLI bilgisayarını uyanık tut",
+    "description": "Bir ajan çalışırken, yanıtınızı veya bir araç onayını beklediği sırada da dahil olmak üzere, CloudCLI çalıştıran bilgisayarın kendiliğinden uyku moduna geçmesini önler; böylece uzun çalıştırmalar yarıda kesilmez. Dizüstü bilgisayarın kapağını kapatmak onu yine de uyku moduna geçirebilir.",
+    "unsupported": "CloudCLI çalıştıran bilgisayarda kullanılamaz. Linux'ta systemd (systemd-inhibit) gerekir; WSL desteklenmez.",
     "loadFailed": "Bu ayar yüklenemedi.",
     "saveFailed": "Bu ayar kaydedilemedi. Lütfen tekrar deneyin."
   },

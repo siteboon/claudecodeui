@@ -142,9 +142,9 @@
     }
   },
   "keepAwake": {
-    "title": "Mantieni attivo questo computer mentre gli agenti lavorano",
-    "description": "Impedisce al computer su cui è in esecuzione CloudCLI di andare in stop da solo mentre un agente sta lavorando, così le esecuzioni lunghe non vengono interrotte. Lo schermo può comunque spegnersi, e chiudere il coperchio di un portatile può comunque metterlo in stop.",
-    "unsupported": "Non disponibile su questo computer. Su Linux è necessario systemd (systemd-inhibit).",
+    "title": "Mantieni attivo il computer che esegue CloudCLI mentre gli agenti lavorano",
+    "description": "Impedisce al computer su cui è in esecuzione CloudCLI di andare in stop da solo mentre un agente sta lavorando, anche mentre attende una tua risposta o l'approvazione di uno strumento, così le esecuzioni lunghe non vengono interrotte. Chiudere il coperchio di un portatile può comunque metterlo in stop.",
+    "unsupported": "Non disponibile sul computer che esegue CloudCLI. Su Linux è necessario systemd (systemd-inhibit); WSL non è supportato.",
     "loadFailed": "Impossibile caricare questa impostazione.",
     "saveFailed": "Impossibile salvare questa impostazione. Riprova."
   },

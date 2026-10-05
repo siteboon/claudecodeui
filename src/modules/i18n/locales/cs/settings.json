@@ -148,9 +148,9 @@
     }
   },
   "keepAwake": {
-    "title": "Nenechat tento počítač usnout, když agenti pracují",
-    "description": "Zabrání tomu, aby počítač, na kterém běží CloudCLI, sám usnul, dokud pracuje agent, takže dlouhé běhy nebudou přerušeny. Obrazovka se přesto může vypnout a zavření víka notebooku ho stále může uspat.",
-    "unsupported": "Na tomto počítači není k dispozici. V Linuxu je potřeba systemd (systemd-inhibit).",
+    "title": "Nenechat počítač s CloudCLI usnout, když agenti pracují",
+    "description": "Zabrání tomu, aby počítač, na kterém běží CloudCLI, sám usnul, dokud pracuje agent – i když čeká na vaši odpověď nebo schválení nástroje –, takže dlouhé běhy nebudou přerušeny. Zavření víka notebooku ho přesto může uspat.",
+    "unsupported": "Na počítači, na kterém běží CloudCLI, není k dispozici. Linux vyžaduje systemd (systemd-inhibit); WSL není podporováno.",
     "loadFailed": "Toto nastavení se nepodařilo načíst.",
     "saveFailed": "Toto nastavení se nepodařilo uložit. Zkuste to prosím znovu."
   },

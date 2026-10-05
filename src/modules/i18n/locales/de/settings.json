@@ -142,9 +142,9 @@
     }
   },
   "keepAwake": {
-    "title": "Computer wach halten, während Agenten arbeiten",
-    "description": "Verhindert, dass der Computer, auf dem CloudCLI läuft, von selbst in den Ruhezustand wechselt, solange ein Agent arbeitet – so werden lange Läufe nicht abgebrochen. Der Bildschirm kann sich trotzdem ausschalten, und das Zuklappen eines Laptops kann ihn weiterhin in den Ruhezustand versetzen.",
-    "unsupported": "Auf diesem Computer nicht verfügbar. Unter Linux wird systemd (systemd-inhibit) benötigt.",
+    "title": "CloudCLI-Computer wach halten, während Agenten arbeiten",
+    "description": "Verhindert, dass der Computer, auf dem CloudCLI läuft, von selbst in den Ruhezustand wechselt, solange ein Agent arbeitet – auch während er auf deine Antwort oder die Freigabe eines Tools wartet –, damit lange Läufe nicht abgebrochen werden. Das Zuklappen eines Laptops kann ihn trotzdem in den Ruhezustand versetzen.",
+    "unsupported": "Auf dem Computer, auf dem CloudCLI läuft, nicht verfügbar. Unter Linux wird systemd (systemd-inhibit) benötigt; WSL wird nicht unterstützt.",
     "loadFailed": "Diese Einstellung konnte nicht geladen werden.",
     "saveFailed": "Diese Einstellung konnte nicht gespeichert werden. Bitte versuche es erneut."
   },

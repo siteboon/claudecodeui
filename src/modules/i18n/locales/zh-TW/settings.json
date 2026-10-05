@@ -143,9 +143,9 @@
     }
   },
   "keepAwake": {
-    "title": "智慧代理工作時讓這台電腦保持喚醒",
-    "description": "在智慧代理工作期間，防止執行 CloudCLI 的電腦自行進入睡眠，以免長時間執行被中斷。螢幕仍可能關閉，闔上筆電上蓋仍可能使其進入睡眠。",
-    "unsupported": "這台電腦無法使用此功能。在 Linux 上需要 systemd（systemd-inhibit）。",
+    "title": "智慧代理工作時讓執行 CloudCLI 的電腦保持喚醒",
+    "description": "在智慧代理工作期間（包括等待您回覆或核准工具時），防止執行 CloudCLI 的電腦自行進入睡眠，以免長時間執行被中斷。闔上筆電上蓋仍可能使其進入睡眠。",
+    "unsupported": "執行 CloudCLI 的電腦無法使用此功能。在 Linux 上需要 systemd（systemd-inhibit）；不支援 WSL。",
     "loadFailed": "無法載入此設定。",
     "saveFailed": "無法儲存此設定，請再試一次。"
   },

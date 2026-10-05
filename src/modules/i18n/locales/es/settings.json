@@ -168,9 +168,9 @@
     }
   },
   "keepAwake": {
-    "title": "Mantener este equipo despierto mientras trabajan los agentes",
-    "description": "Evita que el equipo en el que se ejecuta CloudCLI entre en suspensión por sí solo mientras un agente está trabajando, para que las ejecuciones largas no se interrumpan. La pantalla puede apagarse igualmente, y cerrar la tapa de un portátil todavía puede suspenderlo.",
-    "unsupported": "No disponible en este equipo. En Linux se necesita systemd (systemd-inhibit).",
+    "title": "Mantener despierto el equipo de CloudCLI mientras trabajan los agentes",
+    "description": "Evita que el equipo en el que se ejecuta CloudCLI entre en suspensión por sí solo mientras un agente está trabajando, incluso mientras espera tu respuesta o la aprobación de una herramienta, para que las ejecuciones largas no se interrumpan. Cerrar la tapa de un portátil todavía puede suspenderlo.",
+    "unsupported": "No disponible en el equipo en el que se ejecuta CloudCLI. En Linux se necesita systemd (systemd-inhibit); WSL no es compatible.",
     "loadFailed": "No se pudo cargar este ajuste.",
     "saveFailed": "No se pudo guardar este ajuste. Inténtalo de nuevo."
   },
