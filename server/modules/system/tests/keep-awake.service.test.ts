@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import type { ChildProcess, SpawnOptions } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import test from 'node:test';
+import { afterEach, test } from 'node:test';
 
 import { createKeepAwakeService } from '../keep-awake.service.js';
 
@@ -19,6 +19,16 @@ type SpawnCall = { command: string; args: string[]; options: SpawnOptions; helpe
 
 const SERVER_PID = 4242;
 
+// Every hold a test takes, released after it so no lapse timer outlives the
+// test even if it were ever left ref'd (see the unref test below).
+const takenHolds: Array<() => void> = [];
+
+afterEach(() => {
+  for (const release of takenHolds.splice(0)) {
+    release();
+  }
+});
+
 function createHarness(overrides: Partial<KeepAwakeDependencies> = {}, savedEnabled = true) {
   const spawnCalls: SpawnCall[] = [];
   const killedGroups: number[] = [];
@@ -30,6 +40,7 @@ function createHarness(overrides: Partial<KeepAwakeDependencies> = {}, savedEnab
     platform: 'darwin',
     serverPid: SERVER_PID,
     isPlatform: false,
+    isWsl: () => false,
     commandExists: () => true,
     spawnProcess(command, args, options) {
       const helper = new EventEmitter() as FakeHelper;
@@ -60,7 +71,15 @@ function createHarness(overrides: Partial<KeepAwakeDependencies> = {}, savedEnab
     ...overrides,
   };
 
-  const service = createKeepAwakeService(dependencies);
+  const createdService = createKeepAwakeService(dependencies);
+  const service: typeof createdService = {
+    ...createdService,
+    acquire() {
+      const release = createdService.acquire();
+      takenHolds.push(release);
+      return release;
+    },
+  };
   return { service, spawnCalls, killedGroups, savedValues, warnings };
 }
 
@@ -149,6 +168,19 @@ test('Linux without systemd-inhibit is reported unsupported and spawns nothing',
   assert.deepEqual(service.getStatus(), { enabled: true, supported: false, active: false });
 });
 
+test('Linux inside WSL is reported unsupported, because Windows would still sleep', () => {
+  const { service, spawnCalls } = createHarness({
+    platform: 'linux',
+    isWsl: () => true,
+    commandExists: () => true,
+  });
+  service.initialize();
+  service.acquire();
+
+  assert.equal(spawnCalls.length, 0);
+  assert.deepEqual(service.getStatus(), { enabled: true, supported: false, active: false });
+});
+
 test('Windows holds SetThreadExecutionState in PowerShell until the server pid exits', () => {
   const { service, spawnCalls, killedGroups } = createHarness({ platform: 'win32' });
   service.initialize();
@@ -224,6 +256,20 @@ test('a helper that errors again after it was stopped cannot crash the server', 
   assert.equal(warnings.length, 2);
 });
 
+test('a helper whose process group cannot be signalled is stopped directly', () => {
+  const { service, spawnCalls } = createHarness({
+    platform: 'linux',
+    killProcessGroup() {
+      throw new Error('kill ESRCH');
+    },
+  });
+  service.initialize();
+
+  service.acquire()();
+  assert.equal(spawnCalls[0].helper.killCount, 1);
+  assert.equal(service.getStatus().active, false);
+});
+
 test('a helper exiting after it was stopped is not reported as a failure', () => {
   const { service, spawnCalls, warnings } = createHarness();
   service.initialize();
@@ -291,6 +337,16 @@ test('a hold that is never released lapses instead of keeping the computer awake
   // The run settling later is a harmless no-op.
   release();
   assert.equal(spawnCalls.length, 1);
+});
+
+test('the lapse timer of a hold in progress never keeps the server process alive', () => {
+  const refTimeouts = () => process.getActiveResourcesInfo().filter((resource) => resource === 'Timeout').length;
+  const { service } = createHarness();
+  service.initialize();
+
+  const before = refTimeouts();
+  service.acquire();
+  assert.equal(refTimeouts(), before);
 });
 
 test('a released hold cancels its lapse timer', (t) => {

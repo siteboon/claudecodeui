@@ -20,6 +20,7 @@ async function withSystemServer(
     platform: 'darwin',
     serverPid: 1,
     isPlatform: false,
+    isWsl: () => false,
     commandExists: () => true,
     spawnProcess: () => Object.assign(new EventEmitter(), { pid: 2, kill: () => true, unref: () => undefined }) as unknown as ChildProcess,
     killProcessGroup: () => undefined,

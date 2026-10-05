@@ -22,6 +22,11 @@ type KeepAwakeDependencies = {
   serverPid: number;
   /** Hosted instances run in the cloud, where there is no machine of the user's to keep awake. */
   isPlatform: boolean;
+  /**
+   * Linux running inside WSL. An inhibitor there only keeps the WSL VM awake;
+   * the Windows host still sleeps on its own schedule.
+   */
+  isWsl(): boolean;
   commandExists(command: string): boolean;
   spawnProcess(command: string, args: string[], options: SpawnOptions): ChildProcess;
   /** Signals a helper's whole process group, which on Linux also holds its watchdog. */
@@ -65,7 +70,9 @@ function resolveKeepAwakeCommand(dependencies: KeepAwakeDependencies): KeepAwake
       return { command: 'caffeinate', args: ['-i', '-w', serverPid] };
 
     case 'linux':
-      if (!dependencies.commandExists('systemd-inhibit')) {
+      // WSL distros often ship systemd-inhibit too, but holding it would
+      // report the computer as kept awake while Windows can still sleep.
+      if (dependencies.isWsl() || !dependencies.commandExists('systemd-inhibit')) {
         return null;
       }
       // The inhibitor lasts as long as the command it runs. That command
@@ -119,6 +126,10 @@ function buildWindowsKeepAwakeScript(serverPid: string): string {
  * first hold is taken and stops when the last is released, when the setting is
  * switched off, and on shutdown. Nothing is ever spawned while the setting is
  * off, and a helper that cannot start only logs — it never fails a run.
+ *
+ * Used by the system module to build its keepAwakeService singleton with the
+ * real OS adapters, and by the system tests, which inject fakes for the
+ * platform, the spawned helper and the saved setting.
  */
 export function createKeepAwakeService(dependencies: KeepAwakeDependencies) {
   const maxHoldMs = dependencies.maxHoldMs ?? MAX_HOLD_MS;

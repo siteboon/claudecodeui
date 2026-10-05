@@ -5,7 +5,10 @@ import { AppError, createApiSuccessResponse } from '@/shared/utils.js';
 import type { createKeepAwakeService } from './keep-awake.service.js';
 import type { createSystemUpdateService } from './system.service.js';
 
-/** Creates thin system routes that delegate update execution and keep-awake settings to their services. */
+/**
+ * Creates thin system routes that delegate update execution and keep-awake settings to their services.
+ * Used by the system module to mount them, and by the keep-awake route tests with a fake-backed service.
+ */
 export function createSystemRouter(
   systemUpdateService: ReturnType<typeof createSystemUpdateService>,
   keepAwakeService: ReturnType<typeof createKeepAwakeService>,

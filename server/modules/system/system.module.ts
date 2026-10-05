@@ -87,12 +87,17 @@ function isCommandOnPath(command: string): boolean {
  *
  * Used by the providers module's runtime service, which holds it for the length
  * of every provider run, and by the server entrypoint, which loads the saved
- * setting at startup and releases the hold on shutdown.
+ * setting at startup and releases the hold on shutdown. The system tests also
+ * drive it on Linux to check these real adapters against real processes.
  */
 export const keepAwakeService = createKeepAwakeService({
   platform: process.platform,
   serverPid: process.pid,
   isPlatform: IS_PLATFORM,
+  // Microsoft's WSL kernels name themselves in their release ("...-Microsoft" on
+  // WSL 1, "...-microsoft-standard-WSL2" on WSL 2), even under services that do
+  // not get WSL's environment variables.
+  isWsl: () => /microsoft/i.test(os.release()),
   commandExists: isCommandOnPath,
   spawnProcess: (command, args, options) => spawnChildProcess(command, args, options),
   killProcessGroup: (pid) => {
