@@ -123,6 +123,17 @@ import csTasks from '@/modules/i18n/locales/cs/tasks.json';
 // oxlint-disable-next-line importx/order
 import csGit from '@/modules/i18n/locales/cs/git.json';
 
+import heCommon from '@/modules/i18n/locales/he/common.json';
+import heSettings from '@/modules/i18n/locales/he/settings.json';
+import heAuth from '@/modules/i18n/locales/he/auth.json';
+import heSidebar from '@/modules/i18n/locales/he/sidebar.json';
+import heChat from '@/modules/i18n/locales/he/chat.json';
+import heCodeEditor from '@/modules/i18n/locales/he/codeEditor.json';
+// oxlint-disable-next-line importx/order
+import heTasks from '@/modules/i18n/locales/he/tasks.json';
+// oxlint-disable-next-line importx/order
+import heGit from '@/modules/i18n/locales/he/git.json';
+
 import zhTWCommon from '@/modules/i18n/locales/zh-TW/common.json';
 import zhTWSettings from '@/modules/i18n/locales/zh-TW/settings.json';
 import zhTWAuth from '@/modules/i18n/locales/zh-TW/auth.json';
@@ -268,6 +279,16 @@ git: enGit,
         codeEditor: csCodeEditor,
         tasks: csTasks,
         git: csGit,
+      },
+      he: {
+        common: heCommon,
+        settings: heSettings,
+        auth: heAuth,
+        sidebar: heSidebar,
+        chat: heChat,
+        codeEditor: heCodeEditor,
+        tasks: heTasks,
+        git: heGit,
       },
       'zh-TW': {
         common: zhTWCommon,
