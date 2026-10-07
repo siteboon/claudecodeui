@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api, readApiJson } from '@/shared/api';
 import type { CodeEditorFile } from '@/shared/types';
@@ -18,8 +18,21 @@ const getErrorMessage = (error: unknown) => {
   return String(error);
 };
 
+// CodeMirror reports its document with LF line endings whatever the file used,
+// so a CRLF file would look edited from the first keystroke (and stay "edited"
+// after an undo) unless both sides of the comparison are normalised.
+const normalizeLineEndings = (text: string) => text.replace(/\r\n?/g, '\n');
+
+const differsFromSaved = (text: string, saved: string) => (
+  text !== saved && normalizeLineEndings(text) !== normalizeLineEndings(saved)
+);
+
 export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocumentParams) => {
   const [content, setContentState] = useState('');
+  // The text as last loaded from disk or written back by a save. The buffer is
+  // compared against it to tell whether closing, switching files or reloading
+  // would discard edits; nothing else in the app knows that baseline.
+  const [savedContent, setSavedContentState] = useState('');
   // True when a reload was asked for and refused because the buffer had unsaved
   // changes. The editor turns it into a visible notice with a way out, so a
   // refused reload never looks like a reload that happened.
@@ -44,12 +57,10 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
   const fileDiffNewString = file.diffInfo?.new_string;
   const fileDiffOldString = file.diffInfo?.old_string;
 
-  // The live buffer and the text it was last read from (or written to) disk as.
-  // They differ exactly when the document has unsaved changes. Refs, not state:
-  // the load effect has to read them without depending on them, or it would
-  // re-read the file on every keystroke.
+  // Mirrors of the buffer and the saved baseline. The load effect has to read
+  // them without depending on them, or it would re-read the file on every keystroke.
   const contentRef = useRef('');
-  const diskContentRef = useRef('');
+  const savedContentRef = useRef('');
   // Which document the current buffer belongs to. A reload only has to protect
   // unsaved changes when the same document is being read again; opening a
   // different file has always replaced the buffer.
@@ -58,10 +69,15 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
   // is already open must show that edit, not reuse the plain buffer.
   const diffKey = file.diffInfo ? JSON.stringify([fileDiffOldString, fileDiffNewString]) : '';
   const documentKey = `${fileProjectId ?? ''}::${filePath}::${diffKey}`;
-  // Identifies the newest load. `api.readFile` cannot be aborted, so a read that
-  // was superseded may still resolve; only the current one may touch the buffer,
-  // or an older file's text could land under the newer path and be saved there.
-  const latestLoadIdRef = useRef(0);
+  // Counts the loads this editor has performed. `api.readFile` cannot be
+  // aborted, so a read or save still in flight when a newer load starts must not
+  // land on the new buffer, baseline or save state.
+  const loadGenerationRef = useRef(0);
+
+  const setSavedContent = useCallback((text: string) => {
+    savedContentRef.current = text;
+    setSavedContentState(text);
+  }, []);
 
   const setContent = useCallback((nextContent: string) => {
     contentRef.current = nextContent;
@@ -75,10 +91,10 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
   // buffer clean: nothing to protect from the next reload.
   const setLoadedContent = useCallback((nextContent: string) => {
     contentRef.current = nextContent;
-    diskContentRef.current = nextContent;
     setContentState(nextContent);
+    setSavedContent(nextContent);
     setUnsavedChangesBlockedReload(false);
-  }, []);
+  }, [setSavedContent]);
 
   useEffect(() => {
     // Re-opening a file is a request to see what is on disk now, so this effect
@@ -87,7 +103,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     // reference again used to change none of the dependencies, and the pane kept
     // showing the version from the first open even after the file had changed.
     const isSameDocument = loadedDocumentKeyRef.current === documentKey;
-    const hasUnsavedChanges = contentRef.current !== diskContentRef.current;
+    const hasUnsavedChanges = differsFromSaved(contentRef.current, savedContentRef.current);
 
     // Re-reading here would silently throw away someone's edits. Refuse, and say
     // so; `reloadDiscardingChanges` is the deliberate way through.
@@ -101,20 +117,19 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
       // Until the new document arrives the buffer still holds the previous one,
       // whose edits were already given up by opening another file. Treat it as
       // clean so opening the new one again meanwhile is not refused.
-      diskContentRef.current = contentRef.current;
-      // A save still in flight belongs to the previous document.
-      setSaving(false);
-      setSaveError(null);
+      setSavedContent(contentRef.current);
     }
     loadedDocumentKeyRef.current = documentKey;
-    latestLoadIdRef.current += 1;
-    const loadId = latestLoadIdRef.current;
-    const isCurrentLoad = () => latestLoadIdRef.current === loadId;
+    const loadGeneration = ++loadGenerationRef.current;
+    const isStaleLoad = () => loadGenerationRef.current !== loadGeneration;
 
     const loadFileContent = async () => {
       try {
         setLoading(true);
         setIsBinary(false);
+        // Any save still in flight or failed belongs to the previous load.
+        setSaving(false);
+        setSaveError(null);
 
         // Natively previewable media (image/pdf/audio/video) is rendered by
         // CodeEditorMediaPreview, so there is nothing to read as text here.
@@ -150,12 +165,12 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
         // pane — a directory, a path outside the project root, a missing file.
         // The bare status showed all of those as an opaque "403 Forbidden".
         const data = await readApiJson<{ content: string }>(response);
-        if (!isCurrentLoad()) {
+        if (isStaleLoad()) {
           return;
         }
         setLoadedContent(data.content);
       } catch (error) {
-        if (!isCurrentLoad()) {
+        if (isStaleLoad()) {
           return;
         }
         const message = getErrorMessage(error);
@@ -165,14 +180,14 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
         // editor must not report the message it just wrote as unsaved work.
         setLoadedContent(`// Error loading file: ${message}\n// File: ${fileName}\n// Path: ${filePath}`);
       } finally {
-        if (isCurrentLoad()) {
+        if (!isStaleLoad()) {
           setLoading(false);
         }
       }
     };
 
     loadFileContent();
-  }, [documentKey, file, fileDiffNewString, fileDiffOldString, fileName, filePath, fileProjectId, reloadCount, setLoadedContent]);
+  }, [documentKey, file, fileDiffNewString, fileDiffOldString, fileName, filePath, fileProjectId, reloadCount, setLoadedContent, setSavedContent]);
 
   // Asks for the file to be read again. Unsaved changes still win: the request
   // comes back as the notice rather than as a silent overwrite.
@@ -183,7 +198,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
   // The way out of that notice, taken by hand: the unsaved buffer is dropped on
   // purpose, so the guard above has nothing left to protect.
   const reloadDiscardingChanges = useCallback(() => {
-    contentRef.current = diskContentRef.current;
+    contentRef.current = savedContentRef.current;
     setReloadCount((previous) => previous + 1);
   }, []);
 
@@ -194,10 +209,8 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
       return;
     }
 
-    // Another document may load while the write is in flight; it then owns the
-    // baseline, the notice and the save state, so a late answer must not touch them.
-    const saveLoadId = latestLoadIdRef.current;
-    const isStaleSave = () => latestLoadIdRef.current !== saveLoadId;
+    const saveGeneration = loadGenerationRef.current;
+    const isStaleSave = () => loadGenerationRef.current !== saveGeneration;
 
     setSaving(true);
     setSaveError(null);
@@ -223,13 +236,15 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
 
       await response.json();
 
+      // Another load started while this write was in flight: it owns the
+      // buffer, the baseline, the notice and the save state now.
       if (isStaleSave()) {
         return;
       }
 
-      // What was saved is now what is on disk, which makes the buffer clean and
-      // the next reload harmless.
-      diskContentRef.current = content;
+      // Baseline is the text that was actually sent: anything typed while the
+      // request was in flight is still unsaved. It also makes the next reload harmless.
+      setSavedContent(content);
       setUnsavedChangesBlockedReload(false);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
@@ -244,7 +259,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
         setSaving(false);
       }
     }
-  }, [content, filePath, fileProjectId, previewKind, fileName]);
+  }, [content, filePath, fileProjectId, previewKind, fileName, setSavedContent]);
 
   const handleDownload = useCallback(() => {
     const blob = new Blob([content], { type: 'text/plain' });
@@ -261,6 +276,24 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     URL.revokeObjectURL(url);
   }, [content, file.name]);
 
+  // The baseline only changes on load and save, so it is not re-normalised on
+  // every keystroke.
+  const normalizedSavedContent = useMemo(() => normalizeLineEndings(savedContent), [savedContent]);
+
+  // Preview and binary files have no editable buffer, and while a file loads
+  // the buffer still belongs to the previous one. Memoised so renders that do
+  // not change the buffer (a save's spinner and tick) skip the comparison.
+  const hasUnsavedChanges = useMemo(
+    () => (
+      !loading
+      && !previewKind
+      && !isBinary
+      && content !== savedContent
+      && normalizeLineEndings(content) !== normalizedSavedContent
+    ),
+    [content, isBinary, loading, normalizedSavedContent, previewKind, savedContent],
+  );
+
   return {
     content,
     setContent,
@@ -274,6 +307,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     isBinary,
     previewKind,
     fileProjectId,
+    hasUnsavedChanges,
     handleSave,
     handleDownload,
   };

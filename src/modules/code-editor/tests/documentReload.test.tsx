@@ -250,6 +250,7 @@ test('the header offers the reload', () => {
       markdownPreview={false}
       saving={false}
       saveSuccess={false}
+      hasUnsavedChanges={false}
       onToggleMarkdownPreview={() => undefined}
       onOpenHtmlPreview={() => undefined}
       onOpenSettings={() => undefined}
@@ -274,6 +275,7 @@ test('the header offers the reload', () => {
         fullscreen: 'Fullscreen',
         exitFullscreen: 'Exit fullscreen',
         close: 'Close',
+        unsavedChanges: 'Unsaved changes',
       }}
     />,
   );
