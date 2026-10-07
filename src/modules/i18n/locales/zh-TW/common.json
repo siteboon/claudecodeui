@@ -33,7 +33,9 @@
     "failed": "失敗",
     "pending": "待處理",
     "completed": "已完成",
-    "inProgress": "進行中"
+    "inProgress": "進行中",
+    "reconnecting": "正在重新連線...",
+    "chatConnectionLost": "聊天連線已中斷，正在重新連線..."
   },
   "messages": {
     "savedSuccessfully": "儲存成功",
