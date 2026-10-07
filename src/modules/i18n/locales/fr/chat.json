@@ -182,7 +182,8 @@
     "status": {
       "newSession": "Nouvelle session",
       "initializing": "Initialisation...",
-      "restarting": "Redémarrage..."
+      "restarting": "Redémarrage...",
+      "themeRestartHint": "Redémarrez pour appliquer le nouveau thème à Claude Code"
     },
     "actions": {
       "disconnect": "Déconnecter",
@@ -280,5 +281,10 @@
     "failed": "Non envoyé — {{reason}}",
     "cancel": "Annuler le message programmé",
     "dismiss": "Masquer l'avis d'échec"
+  },
+  "modelLibrary": {
+    "effortLevels": "Niveaux de raisonnement",
+    "effortLevelsHint": "Sélectionnez les niveaux d'effort de raisonnement acceptés par ce modèle. Sans sélection, aucun niveau ne pourra être choisi pour ce modèle dans le compositeur.",
+    "effortSummary": "Raisonnement : {{levels}}"
   }
 }

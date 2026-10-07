@@ -1,0 +1,382 @@
+{
+  "codeBlock": {
+    "copy": "העתקה",
+    "copied": "הועתק",
+    "copyCode": "העתקת קוד"
+  },
+  "copyMessage": {
+    "copy": "העתקת הודעה",
+    "copied": "ההודעה הועתקה",
+    "selectFormat": "בחירת פורמט העתקה",
+    "copyAsMarkdown": "העתקה כ-Markdown",
+    "copyAsText": "העתקה כטקסט",
+    "markdownShort": "MD",
+    "textShort": "TXT"
+  },
+  "messageTypes": {
+    "user": "U",
+    "error": "שגיאה",
+    "tool": "כלי",
+    "claude": "Claude",
+    "cursor": "Cursor",
+    "codex": "Codex",
+    "opencode": "OpenCode"
+  },
+  "tools": {
+    "settings": "הגדרות כלים",
+    "error": "שגיאת כלי",
+    "result": "תוצאת כלי",
+    "viewParams": "הצגת פרמטרי קלט",
+    "viewRawParams": "הצגת פרמטרים גולמיים",
+    "viewDiff": "הצגת diff העריכה עבור",
+    "creatingFile": "יצירת קובץ חדש:",
+    "updatingTodo": "עדכון רשימת המשימות",
+    "read": "קריאה",
+    "readFile": "קריאת קובץ",
+    "updateTodo": "עדכון רשימת משימות",
+    "readTodo": "קריאת רשימת משימות",
+    "searchResults": "תוצאות"
+  },
+  "search": {
+    "found_one": "נמצא {{type}} אחד",
+    "found_two": "נמצאו {{count}} {{type}}",
+    "found_other": "נמצאו {{count}} {{type}}",
+    "file": "קובץ",
+    "files": "קבצים",
+    "pattern": "תבנית:",
+    "in": "ב:"
+  },
+  "fileOperations": {
+    "updated": "הקובץ עודכן בהצלחה",
+    "created": "הקובץ נוצר בהצלחה",
+    "written": "הקובץ נכתב בהצלחה",
+    "diff": "Diff",
+    "newFile": "קובץ חדש",
+    "viewContent": "הצגת תוכן הקובץ",
+    "viewFullOutput_one": "הצגת הפלט המלא (תו אחד)",
+    "viewFullOutput_two": "הצגת הפלט המלא (שני תווים)",
+    "viewFullOutput_other": "הצגת הפלט המלא ({{count}} תווים)",
+    "contentDisplayed": "תוכן הקובץ מוצג בתצוגת ה-diff למעלה"
+  },
+  "interactive": {
+    "title": "פרומפט אינטראקטיבי",
+    "waiting": "ממתין לתשובה ב-CLI",
+    "instruction": "יש לבחור אפשרות בטרמינל שבו Claude רץ.",
+    "selectedOption": "✓ Claude בחר באפשרות {{number}}",
+    "instructionDetail": "ב-CLI בוחרים באפשרות הזו באופן אינטראקטיבי בעזרת מקשי החיצים או בהקלדת המספר."
+  },
+  "thinking": {
+    "title": "חושב…",
+    "emoji": "💭 חושב…"
+  },
+  "json": {
+    "response": "תגובת JSON"
+  },
+  "permissions": {
+    "grant": "מתן הרשאה ל-{{tool}}",
+    "added": "ההרשאה נוספה",
+    "addTo": "מוסיף את {{entry}} לכלים המורשים.",
+    "retry": "ההרשאה נשמרה. יש לנסות שוב את הבקשה כדי להשתמש בכלי.",
+    "error": "לא ניתן לעדכן את ההרשאות. יש לנסות שוב.",
+    "openSettings": "פתיחת ההגדרות"
+  },
+  "todo": {
+    "updated": "רשימת המשימות עודכנה בהצלחה",
+    "current": "רשימת המשימות הנוכחית"
+  },
+  "plan": {
+    "viewPlan": "📋 הצגת תוכנית המימוש",
+    "title": "תוכנית מימוש"
+  },
+  "usageLimit": {
+    "resetAt": "מגבלת השימוש של Claude מוצתה. המגבלה תתאפס ב-**{{time}} {{timezone}}** - {{date}}"
+  },
+  "codex": {
+    "permissionMode": "מצב הרשאות",
+    "modes": {
+      "default": "מצב ברירת מחדל",
+      "auto": "מצב אוטומטי",
+      "acceptEdits": "אישור עריכות",
+      "bypassPermissions": "עקיפת הרשאות",
+      "plan": "מצב תכנון"
+    },
+    "descriptions": {
+      "default": "רק פקודות מהימנות (ls, cat, grep, git status וכו') רצות אוטומטית. פקודות אחרות מדולגות. אפשר לכתוב לסביבת העבודה.",
+      "auto": "מסווג מבוסס מודל מחליט בכל קריאה לכלי אם לאשר או לדחות. בלי התערבות, אבל בטוח יותר מעקיפת הרשאות — עדיין יש דחיות.",
+      "acceptEdits": "כל הפקודות רצות אוטומטית בתוך סביבת העבודה. מצב אוטומטי מלא עם הרצה בסביבה מבודדת.",
+      "bypassPermissions": "גישה מלאה למערכת בלי הגבלות. כל הפקודות רצות אוטומטית עם גישה מלאה לדיסק ולרשת. יש להשתמש בזהירות.",
+      "plan": "מצב תכנון - לא מורצות פקודות"
+    },
+    "technicalDetails": "פרטים טכניים"
+  },
+  "voice": {
+    "input": "קלט קולי",
+    "stopRecording": "עצירת הקלטה",
+    "transcribing": "מתמלל…",
+    "speak": "הקראה",
+    "stopSpeaking": "עצירה",
+    "loading": "טוען…"
+  },
+  "input": {
+    "placeholder": "/ לפקודות, @ לקבצים, או כל שאלה ל-{{provider}}…",
+    "placeholderDefault": "הקלדת הודעה…",
+    "disabled": "הקלט מושבת",
+    "attachFiles": "צירוף קבצים",
+    "attachImages": "צירוף תמונות",
+    "send": "שליחה",
+    "stop": "עצירה",
+    "hintText": {
+      "ctrlEnter": "Ctrl+Enter לשליחה • Shift+Enter לשורה חדשה • Tab להחלפת מצב • / לפקודות סלאש",
+      "enter": "Enter לשליחה • Shift+Enter לשורה חדשה • Tab להחלפת מצב • / לפקודות סלאש",
+      "queue": "Enter להוספת ההודעה הבאה לתור",
+      "updateQueued": "Enter לעדכון ההודעה שבתור"
+    },
+    "clickToChangeMode": "לחיצה להחלפת מצב ההרשאות (או Tab בשדה הקלט)",
+    "showAllCommands": "הצגת כל הפקודות",
+    "clearInput": "ניקוי הקלט",
+    "scrollToBottom": "גלילה לסוף",
+    "queue": {
+      "sendNext": "הוספת ההודעה הבאה לתור",
+      "update": "עדכון ההודעה שבתור",
+      "label": "בתור",
+      "willSend": "תישלח כשזה יסתיים",
+      "edit": "עריכת ההודעה שבתור",
+      "delete": "מחיקת ההודעה שבתור"
+    }
+  },
+  "composer": {
+    "reasoning": "חשיבה",
+    "model": "מודל",
+    "effortDefault": "ברירת מחדל",
+    "loadingModels": "טוען מודלים…",
+    "modelMenu": "בחירת מודל ורמת חשיבה",
+    "permissionHeading": "איך לאשר פעולות של {{provider}}?",
+    "editing": {
+      "title": "החלפת הודעה קודמת",
+      "filesNotReverted": "קבצים שהסוכן כבר שינה לא משוחזרים",
+      "cancel": "ביטול"
+    }
+  },
+  "providerSelection": {
+    "title": "בחירת עוזר AI",
+    "description": "יש לבחור ספק כדי להתחיל שיחה חדשה",
+    "selectModel": "בחירת מודל",
+    "providerInfo": {
+      "anthropic": "מאת Anthropic",
+      "openai": "מאת OpenAI",
+      "cursorEditor": "עורך קוד AI",
+      "google": "מאת Google"
+    },
+    "readyPrompt": {
+      "claude": "Claude מוכן לשימוש עם {{model}}. אפשר להתחיל להקליד הודעה למטה.",
+      "cursor": "Cursor מוכן לשימוש עם {{model}}. אפשר להתחיל להקליד הודעה למטה.",
+      "codex": "Codex מוכן לשימוש עם {{model}}. אפשר להתחיל להקליד הודעה למטה.",
+      "opencode": "OpenCode מוכן לשימוש עם {{model}}. אפשר להתחיל להקליד הודעה למטה.",
+      "default": "יש לבחור ספק למעלה כדי להתחיל"
+    },
+    "pressToSearch": "<kbd>{{shortcut}}</kbd> לחיפוש סשנים, קבצים ו-commits",
+    "chooseModel": "בחירת מודל",
+    "chooseModelDescription": "מודלים מובנים ומותאמים אישית ברשימה אחת",
+    "addModel": "הוספת מודל",
+    "searchModels": "חיפוש מודלים…",
+    "manageModels": "ניהול מודלים",
+    "noModelsFound": "לא נמצאו מודלים.",
+    "loadingModels": "טוען מודלים…",
+    "clickToChange": "לחיצה להחלפת המודל"
+  },
+  "session": {
+    "continue": {
+      "title": "המשך השיחה",
+      "description": "אפשר לשאול שאלות על הקוד, לבקש שינויים או לקבל עזרה במשימות פיתוח"
+    },
+    "loading": {
+      "olderMessages": "טוען הודעות ישנות…",
+      "sessionMessages": "טוען את הודעות הסשן…"
+    },
+    "messages": {
+      "showingOf": "מוצגות {{shown}} מתוך {{total}} הודעות",
+      "scrollToLoad": "גלילה למעלה לטעינת הודעות נוספות",
+      "showingLast_one": "מוצגת ההודעה האחרונה (סך הכול {{total}})",
+      "showingLast_two": "מוצגות שתי ההודעות האחרונות (סך הכול {{total}})",
+      "showingLast_other": "מוצגות {{count}} ההודעות האחרונות (סך הכול {{total}})",
+      "loadEarlier": "טעינת הודעות קודמות",
+      "loadAll": "טעינת כל ההודעות",
+      "loadingAll": "טוען את כל ההודעות…",
+      "allLoaded": "כל ההודעות נטענו",
+      "perfWarning": "כל ההודעות נטענו — הגלילה עלולה להיות איטית יותר. לחיצה על \"גלילה לסוף\" תשחזר את הביצועים."
+    }
+  },
+  "shell": {
+    "selectProject": {
+      "title": "בחירת פרויקט",
+      "description": "יש לבחור פרויקט כדי לפתוח shell אינטראקטיבי בתיקייה שלו"
+    },
+    "status": {
+      "newSession": "סשן חדש",
+      "initializing": "מאתחל…",
+      "restarting": "מפעיל מחדש…"
+    },
+    "actions": {
+      "disconnect": "ניתוק",
+      "disconnectTitle": "ניתוק מה-shell",
+      "restart": "הפעלה מחדש",
+      "restartTitle": "הפעלה מחדש של ה-shell",
+      "connect": "המשך ב-shell",
+      "connectTitle": "התחברות ל-shell",
+      "bypass": "עקיפה",
+      "bypassOnTitle": "עקיפת הרשאות פעילה — לחיצה לכיבוי (מפעיל מחדש את ה-CLI)",
+      "bypassOffTitle": "עקיפת הרשאות כבויה — לחיצה להפעלה (מפעיל מחדש את ה-CLI)"
+    },
+    "loading": "טוען טרמינל…",
+    "connecting": "מתחבר ל-shell…",
+    "startSession": "התחלת סשן Claude חדש",
+    "resumeSession": "המשך סשן: {{displayName}}…",
+    "runCommand": "הרצת {{command}} ב-{{projectName}}",
+    "startCli": "מפעיל את Claude CLI ב-{{projectName}}",
+    "defaultCommand": "פקודה"
+  },
+  "claudeStatus": {
+    "actions": {
+      "thinking": "חושב",
+      "processing": "מעבד",
+      "analyzing": "מנתח",
+      "working": "עובד",
+      "computing": "מחשב",
+      "reasoning": "חושב לעומק"
+    },
+    "state": {
+      "live": "פעיל",
+      "paused": "מושהה"
+    },
+    "elapsed": {
+      "seconds_one": "{{count}} ש'",
+      "seconds_two": "{{count}} ש'",
+      "seconds_other": "{{count}} ש'",
+      "minutesSeconds": "{{minutes}} ד' {{seconds}} ש'",
+      "label": "עברו {{time}}",
+      "startingNow": "מתחיל עכשיו"
+    },
+    "stop": "עצירה",
+    "backgroundWork": "עבודה ברקע",
+    "backgroundTask": {
+      "workflow": "תהליך עבודה {{name}}",
+      "agent": "סוכן {{description}}",
+      "command": "פקודה {{description}}",
+      "count_one": "משימה אחת",
+      "count_two": "שתי משימות",
+      "count_other": "{{count}} משימות",
+      "sendAnyway": "בסשן הזה עדיין רצה עבודה ברקע:\n{{work}}\n\nהודעה חדשה פותחת תור חדש, וזה עוצר את העבודה הזו; כל מה שעוד לא דווח ממנה יאבד. לשלוח בכל זאת?"
+    },
+    "controls": {
+      "stopGeneration": "עצירת היצירה",
+      "pressEscToStop": "Esc לעצירה בכל רגע"
+    },
+    "providers": {
+      "assistant": "עוזר"
+    }
+  },
+  "projectSelection": {
+    "startChatWithProvider": "יש לבחור פרויקט כדי להתחיל צ'אט עם {{provider}}"
+  },
+  "tasks": {
+    "nextTaskPrompt": "להתחיל את המשימה הבאה"
+  },
+  "message": {
+    "editAndResend": "עריכה ושליחה מחדש",
+    "forkFromHere": "פיצול מכאן",
+    "answeredBy": "נענה על ידי {{model}}"
+  },
+  "export": {
+    "trigger": "ייצוא השיחה",
+    "heading": "ייצוא בתור",
+    "untitled": "שיחה",
+    "html": {
+      "label": "דף אינטרנט (.html)",
+      "description": "עצמאי, נראה כמו האפליקציה, אפשר להדפיס ל-PDF."
+    },
+    "markdown": {
+      "label": "Markdown (.md)",
+      "description": "טקסט פשוט עם קריאות לכלים ו-diffs."
+    },
+    "json": {
+      "label": "JSON (.json)",
+      "description": "כל ההודעות, בלי עיצוב, לשימוש בכלים."
+    }
+  },
+  "schedule": {
+    "trigger": "תזמון ההודעה",
+    "heading": "שליחה מאוחר יותר",
+    "customLabel": "או בחירת שעה",
+    "confirm": "תזמון",
+    "in": {
+      "15": "בעוד 15 דקות",
+      "60": "בעוד שעה",
+      "480": "בעוד 8 שעות",
+      "1440": "מחר"
+    },
+    "pending": "מתוזמנת ל-{{when}}",
+    "failed": "לא נשלחה — {{reason}}",
+    "cancel": "ביטול ההודעה המתוזמנת",
+    "dismiss": "סגירת הודעת הכישלון"
+  },
+  "misc": {
+    "copyToClipboard": "העתקה ללוח",
+    "copyCommand": "העתקת הפקודה",
+    "runningTask": "משימה פועלת",
+    "userAskedRevise": "המשתמש ביקש לשנות את התוכנית",
+    "typeAnswer": "הקלדת תשובה…",
+    "skipOne": "דילוג",
+    "skipAll": "דילוג על הכול",
+    "exportChat": "ייצוא הצ'אט",
+    "closeImagePreview": "סגירת תצוגה מקדימה של תמונה",
+    "availableCommands": "פקודות זמינות",
+    "filterCommands": "סינון פקודות…",
+    "closeModal": "סגירת חלון תוצאת הפקודה",
+    "noDescription": "אין תיאור.",
+    "modelChangeFailed": "לא ניתן להחליף את המודל כרגע.",
+    "choiceSavedHint": "הבחירה נשמרת לסשן הזה והופכת לברירת המחדל לצ'אטים חדשים.",
+    "docsSearchSubtitle": "חיפוש פקודות מובנות, תחביר ושימוש בפקודות בלי לצאת מהצ'אט.",
+    "enterModelInfo": "יש להזין גם שם מודל וגם מזהה מודל.",
+    "modelSaveFailed": "לא ניתן לשמור את המודל.",
+    "modelDeleteFailed": "לא ניתן למחוק את המודל.",
+    "cancelEditing": "ביטול העריכה",
+    "userDeniedTool": "המשתמש דחה את השימוש בכלי",
+    "showTokenUsage": "הצגת השימוש בטוקנים",
+    "fallbackCommands": {
+      "models": "עיון במודלים הזמינים לספק הפעיל.",
+      "cost": "סקירת השימוש בטוקנים בסשן הפעיל.",
+      "status": "בדיקת מצב הסביבה, הגרסה, הספק וזמן הריצה.",
+      "memory": "פתיחת קובץ הזיכרון CLAUDE.md של הפרויקט.",
+      "config": "פתיחת ההגדרות והתצורה.",
+      "help": "הצגת תיעוד הפקודות והתחביר."
+    },
+    "modalMeta": {
+      "helpEyebrow": "מרכז פקודות",
+      "helpTitle": "עזרה וקיצורים",
+      "helpSubtitle": "חיפוש פקודות מובנות, תחביר ושימוש בפקודות בלי לצאת מהצ'אט.",
+      "modelsEyebrow": "בחירת מודל",
+      "modelsTitle": "בחירת מודל",
+      "modelsSubtitle": "בחירת המודל שהספק הזה ישתמש בו.",
+      "costEyebrow": "נתוני סשן",
+      "costTitle": "שימוש בטוקנים",
+      "costSubtitle": "מספר טוקני הקלט, הפלט והסך הכול בסשן הזה.",
+      "statusEyebrow": "תקינות זמן ריצה",
+      "statusTitle": "מצב המערכת",
+      "statusSubtitle": "פרטי גרסה, ספק, זמן ריצה וסביבה במקום אחד.",
+      "commandResult": "תוצאת הפקודה"
+    },
+    "choiceSavedSession": "הבחירה נשמרת לסשן הזה והופכת לברירת המחדל לצ'אטים חדשים.",
+    "choiceSavedDefault": "הבחירה הופכת למודל ברירת המחדל לצ'אטים חדשים.",
+    "tokensUsed_one": "נוצל טוקן אחד",
+    "tokensUsed_two": "נוצלו שני טוקנים",
+    "tokensUsed_other": "נוצלו {{count}} טוקנים",
+    "compacted": "נדחס",
+    "compactionSummary": "סיכום מלא",
+    "expandImage": "הגדלת {{name}}",
+    "tokensLabel_one": "טוקן",
+    "tokensLabel_two": "טוקנים",
+    "tokensLabel_other": "טוקנים",
+    "escClosesModal": "Esc סוגר את החלון.",
+    "close": "סגירה"
+  }
+}

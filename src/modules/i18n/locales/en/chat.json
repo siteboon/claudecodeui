@@ -228,7 +228,8 @@
     "status": {
       "newSession": "New Session",
       "initializing": "Initializing...",
-      "restarting": "Restarting..."
+      "restarting": "Restarting...",
+      "themeRestartHint": "Restart to apply the new theme to Claude Code"
     },
     "actions": {
       "disconnect": "Disconnect",
@@ -386,5 +387,10 @@
     "tokensLabel_other": "tokens",
     "escClosesModal": "Esc closes the modal.",
     "close": "Close"
+  },
+  "modelLibrary": {
+    "effortLevels": "Reasoning levels",
+    "effortLevelsHint": "Select the reasoning-effort levels this model accepts. If none are selected, no effort level can be chosen for this model in the composer.",
+    "effortSummary": "Reasoning: {{levels}}"
   }
 }

@@ -167,7 +167,8 @@
     "status": {
       "newSession": "新しいセッション",
       "initializing": "初期化中...",
-      "restarting": "再起動中..."
+      "restarting": "再起動中...",
+      "themeRestartHint": "再起動すると Claude Code に新しいテーマが適用されます"
     },
     "actions": {
       "disconnect": "切断",
@@ -259,5 +260,10 @@
     "failed": "未送信 — {{reason}}",
     "cancel": "予約を取り消す",
     "dismiss": "失敗の通知を閉じる"
+  },
+  "modelLibrary": {
+    "effortLevels": "推論レベル",
+    "effortLevelsHint": "このモデルが受け付ける推論エフォートのレベルを選択してください。何も選択しない場合、コンポーザーではこのモデルのレベルを選べません。",
+    "effortSummary": "推論: {{levels}}"
   }
 }

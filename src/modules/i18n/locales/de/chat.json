@@ -180,7 +180,8 @@
     "status": {
       "newSession": "Neue Sitzung",
       "initializing": "Wird initialisiert...",
-      "restarting": "Wird neu gestartet..."
+      "restarting": "Wird neu gestartet...",
+      "themeRestartHint": "Neu starten, um das neue Design in Claude Code zu übernehmen"
     },
     "actions": {
       "disconnect": "Trennen",
@@ -278,5 +279,10 @@
     "failed": "Nicht gesendet – {{reason}}",
     "cancel": "Geplante Nachricht abbrechen",
     "dismiss": "Fehlerhinweis ausblenden"
+  },
+  "modelLibrary": {
+    "effortLevels": "Reasoning-Stufen",
+    "effortLevelsHint": "Wähle die Reasoning-Effort-Stufen, die dieses Modell akzeptiert. Ohne Auswahl lässt sich im Composer für dieses Modell keine Stufe wählen.",
+    "effortSummary": "Reasoning: {{levels}}"
   }
 }
