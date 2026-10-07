@@ -215,7 +215,8 @@
   },
   "message": {
     "editAndResend": "Modifica e reinvia",
-    "forkFromHere": "Dirama da qui"
+    "forkFromHere": "Dirama da qui",
+    "answeredBy": "Risposto da {{model}}"
   },
   "composer": {
     "editing": {
