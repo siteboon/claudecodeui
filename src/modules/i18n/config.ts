@@ -143,6 +143,17 @@ import zhTWCodeEditor from '@/modules/i18n/locales/zh-TW/codeEditor.json';
 // oxlint-disable-next-line importx/order
 import zhTWTasks from '@/modules/i18n/locales/zh-TW/tasks.json';
 
+import ptBRCommon from '@/modules/i18n/locales/pt-BR/common.json';
+import ptBRSettings from '@/modules/i18n/locales/pt-BR/settings.json';
+import ptBRAuth from '@/modules/i18n/locales/pt-BR/auth.json';
+import ptBRSidebar from '@/modules/i18n/locales/pt-BR/sidebar.json';
+import ptBRChat from '@/modules/i18n/locales/pt-BR/chat.json';
+import ptBRCodeEditor from '@/modules/i18n/locales/pt-BR/codeEditor.json';
+// oxlint-disable-next-line importx/order
+import ptBRTasks from '@/modules/i18n/locales/pt-BR/tasks.json';
+// oxlint-disable-next-line importx/order
+import ptBRGit from '@/modules/i18n/locales/pt-BR/git.json';
+
 // Import supported languages configuration
 import { languages } from '@/modules/i18n/languages';
 import {
@@ -298,6 +309,16 @@ git: enGit,
         chat: zhTWChat,
         codeEditor: zhTWCodeEditor,
         tasks: zhTWTasks,
+      },
+      'pt-BR': {
+        common: ptBRCommon,
+        settings: ptBRSettings,
+        auth: ptBRAuth,
+        sidebar: ptBRSidebar,
+        chat: ptBRChat,
+        codeEditor: ptBRCodeEditor,
+        tasks: ptBRTasks,
+        git: ptBRGit,
       },
     },
 
