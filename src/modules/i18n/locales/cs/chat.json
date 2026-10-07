@@ -1,0 +1,388 @@
+{
+  "codeBlock": {
+    "copy": "Kopírovat",
+    "copied": "Zkopírováno",
+    "copyCode": "Kopírovat kód"
+  },
+  "copyMessage": {
+    "copy": "Kopírovat zprávu",
+    "copied": "Zpráva zkopírována",
+    "selectFormat": "Vyberte formát kopírování",
+    "copyAsMarkdown": "Kopírovat jako Markdown",
+    "copyAsText": "Kopírovat jako text",
+    "markdownShort": "MD",
+    "textShort": "TXT"
+  },
+  "messageTypes": {
+    "user": "U",
+    "error": "Chyba",
+    "tool": "Nástroj",
+    "claude": "Claude",
+    "cursor": "Cursor",
+    "codex": "Codex",
+    "opencode": "OpenCode"
+  },
+  "tools": {
+    "settings": "Nastavení nástroje",
+    "error": "Chyba nástroje",
+    "result": "Výsledek nástroje",
+    "viewParams": "Zobrazit vstupní parametry",
+    "viewRawParams": "Zobrazit nezpracované parametry",
+    "viewDiff": "Zobrazit rozdíly úprav souboru",
+    "creatingFile": "Vytváření nového souboru:",
+    "updatingTodo": "Aktualizace seznamu úkolů",
+    "read": "Čtení",
+    "readFile": "Čtení souboru",
+    "updateTodo": "Aktualizace seznamu úkolů",
+    "readTodo": "Čtení seznamu úkolů",
+    "searchResults": "výsledky"
+  },
+  "search": {
+    "found_one": "Nalezeno ({{type}}): {{count}}",
+    "found_few": "Nalezeno ({{type}}): {{count}}",
+    "found_many": "Nalezeno ({{type}}): {{count}}",
+    "found_other": "Nalezeno ({{type}}): {{count}}",
+    "file": "soubor",
+    "files": "soubory",
+    "pattern": "vzor:",
+    "in": "v:"
+  },
+  "fileOperations": {
+    "updated": "Soubor aktualizován",
+    "created": "Soubor vytvořen",
+    "written": "Soubor zapsán",
+    "diff": "Rozdíly",
+    "newFile": "Nový soubor",
+    "viewContent": "Zobrazit obsah souboru",
+    "viewFullOutput_one": "Zobrazit celý výstup ({{count}} znak)",
+    "viewFullOutput_few": "Zobrazit celý výstup ({{count}} znaky)",
+    "viewFullOutput_many": "Zobrazit celý výstup ({{count}} znaku)",
+    "viewFullOutput_other": "Zobrazit celý výstup ({{count}} znaků)",
+    "contentDisplayed": "Obsah souboru je zobrazen výše v zobrazení rozdílů"
+  },
+  "interactive": {
+    "title": "Interaktivní prompt",
+    "waiting": "Čeká se na vaši odpověď v CLI",
+    "instruction": "Vyberte prosím možnost v terminálu, kde běží Claude.",
+    "selectedOption": "✓ Claude vybral možnost {{number}}",
+    "instructionDetail": "V CLI byste tuto možnost vybrali interaktivně pomocí šipek nebo zadáním čísla."
+  },
+  "thinking": {
+    "title": "Přemýšlí...",
+    "emoji": "💭 Přemýšlí..."
+  },
+  "json": {
+    "response": "Odpověď JSON"
+  },
+  "permissions": {
+    "grant": "Udělit oprávnění pro nástroj {{tool}}",
+    "added": "Oprávnění přidáno",
+    "addTo": "Přidá {{entry}} mezi povolené nástroje.",
+    "retry": "Oprávnění uloženo. Pro použití nástroje zopakujte požadavek.",
+    "error": "Oprávnění se nepodařilo aktualizovat. Zkuste to prosím znovu.",
+    "openSettings": "Otevřít nastavení"
+  },
+  "todo": {
+    "updated": "Seznam úkolů byl aktualizován",
+    "current": "Aktuální seznam úkolů"
+  },
+  "plan": {
+    "viewPlan": "📋 Zobrazit plán implementace",
+    "title": "Plán implementace"
+  },
+  "usageLimit": {
+    "resetAt": "Byl dosažen limit využití Claude. Limit se obnoví v **{{time}} {{timezone}}** – {{date}}"
+  },
+  "codex": {
+    "permissionMode": "Režim oprávnění",
+    "modes": {
+      "default": "Výchozí režim",
+      "auto": "Automatický režim",
+      "acceptEdits": "Přijímat úpravy",
+      "bypassPermissions": "Obejít oprávnění",
+      "plan": "Režim plánování"
+    },
+    "descriptions": {
+      "default": "Automaticky se spouštějí jen důvěryhodné příkazy (ls, cat, grep, git status atd.). Ostatní příkazy se přeskočí. Může zapisovat do pracovního prostoru.",
+      "auto": "O schválení nebo zamítnutí každého volání nástroje rozhoduje klasifikátor založený na modelu. Bez vašich zásahů, ale bezpečnější než režim Obejít oprávnění – k zamítnutím stále dochází.",
+      "acceptEdits": "Všechny příkazy se v pracovním prostoru spouštějí automaticky. Plně automatický režim se spouštěním v sandboxu.",
+      "bypassPermissions": "Plný přístup k systému bez omezení. Všechny příkazy se spouštějí automaticky s plným přístupem k disku a síti. Používejte opatrně.",
+      "plan": "Režim plánování – nespouštějí se žádné příkazy"
+    },
+    "technicalDetails": "Technické podrobnosti"
+  },
+  "voice": {
+    "input": "Hlasový vstup",
+    "stopRecording": "Zastavit nahrávání",
+    "transcribing": "Přepisování…",
+    "speak": "Přečíst nahlas",
+    "stopSpeaking": "Zastavit",
+    "loading": "Načítání…"
+  },
+  "input": {
+    "placeholder": "Napište / pro příkazy, @ pro soubory nebo dotaz, na který odpoví {{provider}}...",
+    "placeholderDefault": "Napište zprávu...",
+    "disabled": "Vstup je vypnutý",
+    "attachFiles": "Přiložit soubory",
+    "attachImages": "Přiložit obrázky",
+    "send": "Odeslat",
+    "stop": "Zastavit",
+    "hintText": {
+      "ctrlEnter": "Ctrl+Enter pro odeslání • Shift+Enter pro nový řádek • Tab pro změnu režimu • / pro příkazy s lomítkem",
+      "enter": "Enter pro odeslání • Shift+Enter pro nový řádek • Tab pro změnu režimu • / pro příkazy s lomítkem",
+      "queue": "Enter pro zařazení další zprávy do fronty",
+      "updateQueued": "Enter pro aktualizaci zprávy ve frontě"
+    },
+    "clickToChangeMode": "Kliknutím změníte režim oprávnění (nebo stiskněte Tab ve vstupním poli)",
+    "showAllCommands": "Zobrazit všechny příkazy",
+    "clearInput": "Vymazat vstup",
+    "scrollToBottom": "Posunout na konec",
+    "queue": {
+      "sendNext": "Zařadit další zprávu do fronty",
+      "update": "Aktualizovat zprávu ve frontě",
+      "label": "Ve frontě",
+      "willSend": "Odešle se po dokončení",
+      "edit": "Upravit zprávu ve frontě",
+      "delete": "Smazat zprávu ve frontě"
+    }
+  },
+  "composer": {
+    "reasoning": "Uvažování",
+    "model": "Model",
+    "effortDefault": "Výchozí",
+    "loadingModels": "Načítání modelů…",
+    "modelMenu": "Vyberte model a úroveň uvažování",
+    "permissionHeading": "Jak schvalovat akce, které provádí {{provider}}?",
+    "editing": {
+      "title": "Nahrazení dřívější zprávy",
+      "filesNotReverted": "soubory, které agent už změnil, se nevrátí do původního stavu",
+      "cancel": "Zrušit"
+    }
+  },
+  "providerSelection": {
+    "title": "Vyberte AI asistenta",
+    "description": "Vyberte provider a zahajte novou konverzaci",
+    "selectModel": "Vyberte model",
+    "providerInfo": {
+      "anthropic": "od společnosti Anthropic",
+      "openai": "od společnosti OpenAI",
+      "cursorEditor": "AI editor kódu",
+      "google": "od společnosti Google"
+    },
+    "readyPrompt": {
+      "claude": "Claude s modelem {{model}} je připraven. Začněte psát zprávu níže.",
+      "cursor": "Cursor s modelem {{model}} je připraven. Začněte psát zprávu níže.",
+      "codex": "Codex s modelem {{model}} je připraven. Začněte psát zprávu níže.",
+      "opencode": "OpenCode s modelem {{model}} je připraven. Začněte psát zprávu níže.",
+      "default": "Začněte výběrem provideru výše"
+    },
+    "pressToSearch": "Stiskněte <kbd>{{shortcut}}</kbd> pro hledání v relacích, souborech a commitech",
+    "chooseModel": "Vyberte model",
+    "chooseModelDescription": "Vestavěné i vlastní modely v jednom seznamu",
+    "addModel": "Přidat model",
+    "searchModels": "Hledat modely...",
+    "manageModels": "Spravovat modely",
+    "noModelsFound": "Nenalezeny žádné modely.",
+    "loadingModels": "Načítání modelů…",
+    "clickToChange": "Kliknutím změníte model"
+  },
+  "session": {
+    "continue": {
+      "title": "Pokračujte v konverzaci",
+      "description": "Ptejte se na svůj kód, požádejte o změny nebo o pomoc s vývojovými úkoly"
+    },
+    "loading": {
+      "olderMessages": "Načítání starších zpráv...",
+      "sessionMessages": "Načítání zpráv relace..."
+    },
+    "messages": {
+      "showingOf": "Zobrazené zprávy: {{shown}} z {{total}}",
+      "scrollToLoad": "Posunutím nahoru načtete další",
+      "showingLast_one": "Zobrazena poslední {{count}} zpráva (celkem {{total}})",
+      "showingLast_few": "Zobrazeny poslední {{count}} zprávy (celkem {{total}})",
+      "showingLast_many": "Zobrazeno posledních {{count}} zprávy (celkem {{total}})",
+      "showingLast_other": "Zobrazeno posledních {{count}} zpráv (celkem {{total}})",
+      "loadEarlier": "Načíst starší zprávy",
+      "loadAll": "Načíst všechny zprávy",
+      "loadingAll": "Načítání všech zpráv...",
+      "allLoaded": "Všechny zprávy načteny",
+      "perfWarning": "Všechny zprávy načteny – posouvání může být pomalejší. Výkon obnovíte kliknutím na „Posunout na konec“."
+    }
+  },
+  "shell": {
+    "selectProject": {
+      "title": "Vyberte projekt",
+      "description": "Vyberte projekt a otevřete v jeho adresáři interaktivní shell"
+    },
+    "status": {
+      "newSession": "Nová relace",
+      "initializing": "Inicializace...",
+      "restarting": "Restartování..."
+    },
+    "actions": {
+      "disconnect": "Odpojit",
+      "disconnectTitle": "Odpojit od shellu",
+      "restart": "Restartovat",
+      "restartTitle": "Restartovat shell",
+      "connect": "Pokračovat v Shellu",
+      "connectTitle": "Připojit k shellu",
+      "bypass": "Obejít",
+      "bypassOnTitle": "Obcházení oprávnění je zapnuté – kliknutím ho vypnete (restartuje CLI)",
+      "bypassOffTitle": "Obcházení oprávnění je vypnuté – kliknutím ho zapnete (restartuje CLI)"
+    },
+    "loading": "Načítání terminálu...",
+    "connecting": "Připojování k shellu...",
+    "startSession": "Zahájit novou relaci Claude",
+    "resumeSession": "Pokračovat v relaci: {{displayName}}...",
+    "runCommand": "Spustit {{command}} v projektu {{projectName}}",
+    "startCli": "Spouštění Claude CLI v projektu {{projectName}}",
+    "defaultCommand": "příkaz"
+  },
+  "claudeStatus": {
+    "actions": {
+      "thinking": "Přemýšlí",
+      "processing": "Zpracovává",
+      "analyzing": "Analyzuje",
+      "working": "Pracuje",
+      "computing": "Počítá",
+      "reasoning": "Uvažuje"
+    },
+    "state": {
+      "live": "Živě",
+      "paused": "Pozastaveno"
+    },
+    "elapsed": {
+      "seconds_one": "{{count}} s",
+      "seconds_few": "{{count}} s",
+      "seconds_many": "{{count}} s",
+      "seconds_other": "{{count}} s",
+      "minutesSeconds": "{{minutes}} min {{seconds}} s",
+      "label": "Uplynulo: {{time}}",
+      "startingNow": "Právě začíná"
+    },
+    "stop": "Zastavit",
+    "backgroundWork": "Práce na pozadí",
+    "backgroundTask": {
+      "workflow": "Pracovní postup {{name}}",
+      "agent": "Agent {{description}}",
+      "command": "Příkaz {{description}}",
+      "count_one": "{{count}} úloha",
+      "count_few": "{{count}} úlohy",
+      "count_many": "{{count}} úlohy",
+      "count_other": "{{count}} úloh",
+      "sendAnyway": "V této relaci stále běží práce na pozadí:\n{{work}}\n\nNová zpráva zahájí nové kolo, které tuto práci zastaví; cokoli, co zatím nenahlásila, se ztratí. Přesto odeslat?"
+    },
+    "controls": {
+      "stopGeneration": "Zastavit generování",
+      "pressEscToStop": "Zastavíte kdykoli klávesou Esc"
+    },
+    "providers": {
+      "assistant": "Asistent"
+    }
+  },
+  "projectSelection": {
+    "startChatWithProvider": "Vyberte projekt a zahajte konverzaci ({{provider}})"
+  },
+  "tasks": {
+    "nextTaskPrompt": "Začněte další úkol"
+  },
+  "message": {
+    "editAndResend": "Upravit a znovu odeslat",
+    "forkFromHere": "Rozvětvit odsud"
+  },
+  "export": {
+    "trigger": "Exportovat konverzaci",
+    "heading": "Exportovat jako",
+    "untitled": "Konverzace",
+    "html": {
+      "label": "Webová stránka (.html)",
+      "description": "Samostatný soubor, vypadá jako aplikace, lze vytisknout do PDF."
+    },
+    "markdown": {
+      "label": "Markdown (.md)",
+      "description": "Prostý text s voláními nástrojů a rozdíly."
+    },
+    "json": {
+      "label": "JSON (.json)",
+      "description": "Všechny zprávy bez formátování, pro další nástroje."
+    }
+  },
+  "schedule": {
+    "trigger": "Naplánovat tuto zprávu",
+    "heading": "Odeslat později",
+    "customLabel": "Nebo vyberte čas",
+    "confirm": "Naplánovat",
+    "in": {
+      "15": "Za 15 minut",
+      "60": "Za hodinu",
+      "480": "Za 8 hodin",
+      "1440": "Zítra"
+    },
+    "pending": "Naplánováno na {{when}}",
+    "failed": "Neodesláno – {{reason}}",
+    "cancel": "Zrušit naplánovanou zprávu",
+    "dismiss": "Zavřít oznámení o chybě"
+  },
+  "misc": {
+    "copyToClipboard": "Kopírovat do schránky",
+    "copyCommand": "Kopírovat příkaz",
+    "runningTask": "Probíhající úkol",
+    "userAskedRevise": "Uživatel požádal o úpravu plánu",
+    "typeAnswer": "Napište odpověď...",
+    "skipOne": "Přeskočit",
+    "skipAll": "Přeskočit vše",
+    "exportChat": "Exportovat konverzaci",
+    "closeImagePreview": "Zavřít náhled obrázku",
+    "availableCommands": "Dostupné příkazy",
+    "filterCommands": "Filtrovat příkazy...",
+    "closeModal": "Zavřít okno s výsledkem příkazu",
+    "noDescription": "Popis není k dispozici.",
+    "modelChangeFailed": "Model se teď nepodařilo změnit.",
+    "choiceSavedHint": "Vaše volba se uloží pro tuto relaci a stane se výchozí pro nové konverzace.",
+    "docsSearchSubtitle": "Prohledávejte vestavěné příkazy, vzory syntaxe a použití příkazů, aniž byste opustili konverzaci.",
+    "enterModelInfo": "Zadejte název modelu i ID modelu.",
+    "modelSaveFailed": "Model se nepodařilo uložit.",
+    "modelDeleteFailed": "Model se nepodařilo smazat.",
+    "cancelEditing": "Zrušit úpravy",
+    "userDeniedTool": "Uživatel zamítl použití nástroje",
+    "showTokenUsage": "Zobrazit využití tokenů",
+    "fallbackCommands": {
+      "models": "Procházet dostupné modely aktivního provideru.",
+      "cost": "Zkontrolovat využití tokenů v aktivní relaci.",
+      "status": "Zkontrolovat běhové prostředí, verzi, provider a stav prostředí.",
+      "memory": "Otevřít paměťový soubor projektu CLAUDE.md.",
+      "config": "Otevřít nastavení a konfiguraci.",
+      "help": "Zobrazit dokumentaci a syntaxi příkazů."
+    },
+    "modalMeta": {
+      "helpEyebrow": "Centrum příkazů",
+      "helpTitle": "Nápověda a zkratky",
+      "helpSubtitle": "Prohledávejte vestavěné příkazy, vzory syntaxe a použití příkazů, aniž byste opustili konverzaci.",
+      "modelsEyebrow": "Výběr modelu",
+      "modelsTitle": "Vyberte model",
+      "modelsSubtitle": "Vyberte model, který má tento provider používat.",
+      "costEyebrow": "Telemetrie relace",
+      "costTitle": "Využití tokenů",
+      "costSubtitle": "Počty vstupních, výstupních a celkových tokenů v této relaci.",
+      "statusEyebrow": "Stav běhového prostředí",
+      "statusTitle": "Stav systému",
+      "statusSubtitle": "Verze, provider, běhové prostředí a podrobnosti o prostředí na jednom místě.",
+      "commandResult": "Výsledek příkazu"
+    },
+    "choiceSavedSession": "Vaše volba se uloží pro tuto relaci a stane se výchozí pro nové konverzace.",
+    "choiceSavedDefault": "Vaše volba se stane výchozím modelem pro nové konverzace.",
+    "tokensUsed_one": "Využit {{count}} token",
+    "tokensUsed_few": "Využity {{count}} tokeny",
+    "tokensUsed_many": "Využito {{count}} tokenu",
+    "tokensUsed_other": "Využito {{count}} tokenů",
+    "compacted": "Zkomprimováno",
+    "compactionSummary": "úplné shrnutí",
+    "expandImage": "Zvětšit obrázek {{name}}",
+    "tokensLabel_one": "token",
+    "tokensLabel_few": "tokeny",
+    "tokensLabel_many": "tokenu",
+    "tokensLabel_other": "tokenů",
+    "escClosesModal": "Esc zavře okno.",
+    "close": "Zavřít"
+  }
+}

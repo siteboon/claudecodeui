@@ -158,7 +158,8 @@
     "status": {
       "newSession": "Neue Sitzung",
       "initializing": "Wird initialisiert...",
-      "restarting": "Wird neu gestartet..."
+      "restarting": "Wird neu gestartet...",
+      "themeRestartHint": "Neu starten, um das neue Design in Claude Code zu übernehmen"
     },
     "actions": {
       "disconnect": "Trennen",
@@ -214,7 +215,8 @@
   },
   "message": {
     "editAndResend": "Bearbeiten und erneut senden",
-    "forkFromHere": "Ab hier verzweigen"
+    "forkFromHere": "Ab hier verzweigen",
+    "answeredBy": "Beantwortet von {{model}}"
   },
   "composer": {
     "editing": {

@@ -4,7 +4,7 @@ import { readSelectedProvider } from '@/shared/selectedProvider';
 import { subscribeToUserPreferences } from '@/shared/userSettings';
 import type { LLMProvider } from '@/shared/types';
 
-/** Used by the git panel to attribute a generated commit message to a provider. */
+/** Used by the git-panel module (to attribute a generated commit message to a provider) and the quick-settings-panel module (to list the provider's slash commands). */
 export function useSelectedProvider(): LLMProvider {
   // Mirrors the stored selection so the panel re-renders when it changes.
   // Reading storage during render would not, and this value decides which

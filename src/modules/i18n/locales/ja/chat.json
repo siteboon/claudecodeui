@@ -151,7 +151,8 @@
     "status": {
       "newSession": "新しいセッション",
       "initializing": "初期化中...",
-      "restarting": "再起動中..."
+      "restarting": "再起動中...",
+      "themeRestartHint": "再起動すると Claude Code に新しいテーマが適用されます"
     },
     "actions": {
       "disconnect": "切断",
@@ -201,7 +202,8 @@
   },
   "message": {
     "editAndResend": "編集して再送信",
-    "forkFromHere": "ここから分岐"
+    "forkFromHere": "ここから分岐",
+    "answeredBy": "{{model}} が回答"
   },
   "composer": {
     "editing": {
