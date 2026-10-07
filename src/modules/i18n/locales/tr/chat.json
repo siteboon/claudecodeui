@@ -158,7 +158,8 @@
     "status": {
       "newSession": "Yeni Oturum",
       "initializing": "Başlatılıyor...",
-      "restarting": "Yeniden başlatılıyor..."
+      "restarting": "Yeniden başlatılıyor...",
+      "themeRestartHint": "Yeni temayı Claude Code'a uygulamak için yeniden başlatın"
     },
     "actions": {
       "disconnect": "Bağlantıyı Kes",
@@ -214,7 +215,8 @@
   },
   "message": {
     "editAndResend": "Düzenle ve yeniden gönder",
-    "forkFromHere": "Buradan çatalla"
+    "forkFromHere": "Buradan çatalla",
+    "answeredBy": "{{model}} tarafından yanıtlandı"
   },
   "composer": {
     "editing": {

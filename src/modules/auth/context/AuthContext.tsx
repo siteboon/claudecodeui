@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ReactNode } from 'react';
 
@@ -99,12 +99,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const setSession = useCallback((nextUser: AuthUser, nextToken: string) => {
-    setUser(nextUser);
-    setToken(nextToken);
-    persistToken(nextToken);
-  }, []);
-
   const clearSession = useCallback(() => {
     setUser(null);
     setToken(null);
@@ -190,6 +184,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
     };
   }, [clearSession, t]);
 
+  // The startup check below needs `t` only for its failure message.
+  // react-i18next gives `t` a new identity on every language change, so
+  // depending on it would re-run that check - and swap the whole app for the
+  // loading screen - whenever the language changes, including when sign-in
+  // adopts the language saved on another device.
+  const tRef = useRef(t);
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
+
   const checkAuthStatus = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -205,7 +209,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       setNeedsSetup(false);
 
-      if (!token) {
+      // Read the stored token instead of depending on `token` state: this
+      // bootstrap flips `isLoading`, which swaps the whole app for the loading
+      // screen, so it must run once on mount and not again on every
+      // X-Refreshed-Token rotation (each one remounted the workspace, #1269).
+      if (!readStoredToken()) {
         return;
       }
 
@@ -225,11 +233,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       await checkOnboardingStatus();
     } catch (caughtError) {
       console.error('[Auth] Auth status check failed:', caughtError);
-      setError(t(AUTH_ERROR_MESSAGES.authStatusCheckFailed));
+      setError(tRef.current(AUTH_ERROR_MESSAGES.authStatusCheckFailed));
     } finally {
       setIsLoading(false);
     }
-  }, [checkOnboardingStatus, clearSession, t, token]);
+  }, [checkOnboardingStatus, clearSession]);
 
   useEffect(() => {
     if (IS_PLATFORM) {
@@ -278,6 +286,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
     };
   }, [refreshSession, token, user]);
 
+  // ProtectedRoute shows the workspace as soon as there is a user, so the
+  // onboarding status is settled before the user is published; otherwise a
+  // user who still has to onboard would see the workspace mount for a whole
+  // round trip before Onboarding replaced it. The token is stored first
+  // because that request reads it from storage.
+  const publishSession = useCallback(async (nextUser: AuthUser, nextToken: string) => {
+    persistToken(nextToken);
+    await checkOnboardingStatus();
+    setUser(nextUser);
+    setToken(nextToken);
+    setNeedsSetup(false);
+  }, [checkOnboardingStatus]);
+
   const login = useCallback<AuthContextValue['login']>(
     async (username, password) => {
       try {
@@ -293,9 +314,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           return { success: false, error: message };
         }
 
-        setSession(payload.user, payload.token);
-        setNeedsSetup(false);
-        await checkOnboardingStatus();
+        await publishSession(payload.user, payload.token);
         return { success: true };
       } catch (caughtError) {
         console.error('Login error:', caughtError);
@@ -303,7 +322,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return { success: false, error: t(AUTH_ERROR_MESSAGES.networkError) };
       }
     },
-    [checkOnboardingStatus, setSession, t],
+    [publishSession, t],
   );
 
   const register = useCallback<AuthContextValue['register']>(
@@ -319,9 +338,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           return { success: false, error: message };
         }
 
-        setSession(payload.user, payload.token);
-        setNeedsSetup(false);
-        await checkOnboardingStatus();
+        await publishSession(payload.user, payload.token);
         return { success: true };
       } catch (caughtError) {
         console.error('Registration error:', caughtError);
@@ -329,7 +346,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return { success: false, error: t(AUTH_ERROR_MESSAGES.networkError) };
       }
     },
-    [checkOnboardingStatus, setSession, t],
+    [publishSession, t],
   );
 
   const logout = useCallback(() => {

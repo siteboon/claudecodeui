@@ -32,5 +32,9 @@
   "binaryFile": {
     "title": "バイナリファイル",
     "message": "ファイル \"{{fileName}}\" はバイナリファイルのため、テキストエディタで表示できません。"
+  },
+  "unsavedChanges": {
+    "confirmClose": "保存されていない変更があります。このファイルを閉じて変更を破棄しますか？",
+    "indicator": "未保存の変更"
   }
 }

@@ -39,5 +39,9 @@
     "loading": "Cargando vista previa...",
     "error": "No se puede mostrar este archivo.",
     "openInNewTab": "Abrir en una pestaña nueva"
+  },
+  "unsavedChanges": {
+    "confirmClose": "Tienes cambios sin guardar. ¿Cerrar este archivo y descartarlos?",
+    "indicator": "Cambios sin guardar"
   }
 }
