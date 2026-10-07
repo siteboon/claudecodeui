@@ -51,6 +51,28 @@
     "viewFullOutput": "Vollständige Ausgabe anzeigen ({{count}} Zeichen)",
     "contentDisplayed": "Der Dateiinhalt wird in der Diff-Ansicht oben angezeigt"
   },
+  "bashEditDiff": {
+    "created": "Erstellt",
+    "updated": "Aktualisiert",
+    "deleted": "Gelöscht",
+    "emptyFile": "Leere Datei",
+    "moreLines_one": "… {{count}} weitere Zeile",
+    "moreLines_other": "… {{count}} weitere Zeilen",
+    "moreFiles_one": "… {{count}} weitere Datei geändert",
+    "moreFiles_other": "… {{count}} weitere Dateien geändert",
+    "filesNotShown_one": "{{count}} Datei geändert (binär, nur Modus oder zu groß für die Anzeige)",
+    "filesNotShown_other": "{{count}} Dateien geändert (binär, nur Modus oder zu groß für die Anzeige)",
+    "filesUnavailable_one": "{{count}} Datei geändert (Diff nicht verfügbar)",
+    "filesUnavailable_other": "{{count}} Dateien geändert (Diff nicht verfügbar)",
+    "filesChanged_one": "{{count}} Datei geändert",
+    "filesChanged_other": "{{count}} Dateien geändert",
+    "morePaths_one": "+{{count}} weitere",
+    "morePaths_other": "+{{count}} weitere",
+    "diffUnavailable": "(Datei-Diff für diesen Befehl nicht verfügbar)",
+    "partUnavailable": "(ein Teil des Diffs ist nicht verfügbar)",
+    "skipped": "(Datei-Diff für diesen Git-Befehl übersprungen)",
+    "shared": "(gleichzeitig lief ein anderer Befehl in diesem Repository; eine Änderung durch einen der beiden kann unter beiden Ergebnissen erscheinen)"
+  },
   "thinking": {
     "title": "Denkt nach...",
     "emoji": "💭 Denkt nach..."
@@ -158,7 +180,8 @@
     "status": {
       "newSession": "Neue Sitzung",
       "initializing": "Wird initialisiert...",
-      "restarting": "Wird neu gestartet..."
+      "restarting": "Wird neu gestartet...",
+      "themeRestartHint": "Neu starten, um das neue Design in Claude Code zu übernehmen"
     },
     "actions": {
       "disconnect": "Trennen",
@@ -256,5 +279,10 @@
     "failed": "Nicht gesendet – {{reason}}",
     "cancel": "Geplante Nachricht abbrechen",
     "dismiss": "Fehlerhinweis ausblenden"
+  },
+  "modelLibrary": {
+    "effortLevels": "Reasoning-Stufen",
+    "effortLevelsHint": "Wähle die Reasoning-Effort-Stufen, die dieses Modell akzeptiert. Ohne Auswahl lässt sich im Composer für dieses Modell keine Stufe wählen.",
+    "effortSummary": "Reasoning: {{levels}}"
   }
 }

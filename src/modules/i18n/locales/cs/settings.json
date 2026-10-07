@@ -402,6 +402,25 @@
       "placeholder": "např. \"Bash(rm:*)\"",
       "empty": "Nejsou nastaveny žádné blokované nástroje"
     },
+    "settingsFiles": {
+      "title": "Pravidla ze souborů nastavení Claude",
+      "description": "Claude CLI uplatňuje tato pravidla navíc k seznamům výše. Zakazující pravidlo má vždy přednost, ať je nastavené kdekoli, ale pravidlo „Zeptat se“ se neptá na nástroj, který už povolují „Povolené nástroje“. Zde jsou pravidla jen pro čtení; upravte je přímo v souborech.",
+      "sources": {
+        "user": "Vaše nastavení",
+        "managed": "Spravované nastavení (správce)"
+      },
+      "groups": {
+        "allow": "Povolit",
+        "ask": "Zeptat se",
+        "deny": "Zakázat"
+      },
+      "missing": "Soubor nebyl nalezen, takže nepřidává žádná pravidla.",
+      "invalid": "Tento soubor nelze přečíst. Zkontrolujte, že jde o platný JSON.",
+      "empty": "V tomto souboru nejsou žádná pravidla oprávnění.",
+      "loading": "Načítání pravidel…",
+      "loadFailed": "Pravidla ze souborů nastavení Claude se nepodařilo načíst.",
+      "projectNote": "Vlastní soubory projektu .claude/settings.json a .claude/settings.local.json platí také pro chaty v tomto projektu. Povolující pravidla z .claude/settings.json Claude CLI ignoruje, dokud složce nedůvěřujete: jednou v ní interaktivně spusťte Claude Code a potvrďte dialog důvěry."
+    },
     "allowedCommands": {
       "title": "Povolené příkazy shellu",
       "description": "Příkazy shellu, které se automaticky povolí bez dotazu",

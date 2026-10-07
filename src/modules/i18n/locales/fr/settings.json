@@ -386,6 +386,25 @@
       "placeholder": "ex. : \"Bash(rm:*)\"",
       "empty": "Aucun outil bloqué configuré"
     },
+    "settingsFiles": {
+      "title": "Règles des fichiers de paramètres Claude",
+      "description": "La CLI Claude applique aussi ces règles, en plus des listes ci-dessus. Une règle de refus l'emporte où qu'elle soit définie, mais une règle « Demander » ne demande pas de confirmation pour un outil déjà présent dans « Outils autorisés ». Ces règles sont en lecture seule ici ; modifiez-les dans les fichiers.",
+      "sources": {
+        "user": "Vos paramètres",
+        "managed": "Paramètres gérés (administrateur)"
+      },
+      "groups": {
+        "allow": "Autoriser",
+        "ask": "Demander",
+        "deny": "Refuser"
+      },
+      "missing": "Fichier introuvable, il n'ajoute donc aucune règle.",
+      "invalid": "Ce fichier n'a pas pu être lu. Vérifiez qu'il s'agit d'un JSON valide.",
+      "empty": "Aucune règle de permission dans ce fichier.",
+      "loading": "Chargement des règles…",
+      "loadFailed": "Impossible de charger les règles des fichiers de paramètres Claude.",
+      "projectNote": "Les fichiers .claude/settings.json et .claude/settings.local.json d'un projet s'appliquent aussi aux discussions de ce projet. La CLI Claude ignore les règles d'autorisation de .claude/settings.json tant que le dossier n'est pas approuvé : lancez une fois Claude Code en mode interactif dans ce dossier et acceptez la boîte de dialogue de confiance."
+    },
     "allowedCommands": {
       "title": "Commandes shell autorisées",
       "description": "Commandes shell automatiquement autorisées sans demande",
