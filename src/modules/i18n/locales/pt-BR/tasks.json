@@ -5,7 +5,7 @@
     "whatIsTitle": "🎯 O que é o TaskMaster?",
     "features": {
       "aiPowered": "Gerenciamento de tarefas com IA: divida projetos complexos em subtarefas gerenciáveis",
-      "prdTemplates": "Modelos de PRD: gere tarefas a partir de Documentos de Requisitos do Produto",
+      "prdTemplates": "Modelos de PRD: gere tarefas a partir de documentos de requisitos do produto",
       "dependencyTracking": "Rastreamento de dependências: entenda relacionamentos e ordem de execução das tarefas",
       "progressVisualization": "Visualização de progresso: quadros Kanban e análises detalhadas de tarefas",
       "cliIntegration": "Integração CLI: use comandos taskmaster para fluxos de trabalho avançados"
@@ -17,7 +17,7 @@
     "subtitle": "O TaskMaster foi inicializado! Aqui está o que fazer a seguir:",
     "steps": {
       "createPRD": {
-        "title": "Criar um Documento de Requisitos do Produto (PRD)",
+        "title": "Criar um documento de requisitos do produto (PRD)",
         "description": "Discuta a ideia do seu projeto e crie um PRD que descreva o que você quer construir.",
         "addButton": "Adicionar PRD",
         "existingPRDs": "PRDs existentes:"
@@ -57,7 +57,7 @@
     "proTips": {
       "title": "💡 Dicas avançadas",
       "search": "Use a barra de pesquisa para encontrar tarefas específicas rapidamente",
-      "views": "Alterne entre visualizações Kanban, Lista e Grade usando os seletores de visualização",
+      "views": "Alterne entre visualizações Kanban, lista e grade usando os seletores de visualização",
       "filters": "Use filtros para focar em status ou prioridades específicas de tarefas",
       "details": "Clique em qualquer tarefa para ver informações detalhadas e gerenciar subtarefas"
     },
@@ -95,8 +95,8 @@
   },
   "views": {
     "kanban": "Visualização Kanban",
-    "list": "Visualização Lista",
-    "grid": "Visualização Grade"
+    "list": "Visualização em lista",
+    "grid": "Visualização em grade"
   },
   "kanban": {
     "pending": "📋 A fazer",
@@ -148,7 +148,7 @@
     "whatIsTaskmaster": "O que é o TaskMaster?",
     "detailAiPowered": "- Gerenciamento de tarefas com IA, com dependências e subtarefas.",
     "detailPrdDriven": "- Geração de tarefas orientada por PRD para inicialização mais rápida do projeto.",
-    "detailKanbanList": "- Visualizações Kanban e Lista para execução diária.",
+    "detailKanbanList": "- Visualizações Kanban e lista para execução diária.",
     "startTask": "Iniciar tarefa",
     "viewTaskDetails": "Ver detalhes da tarefa",
     "viewAllTasks": "Ver todas as tarefas",

@@ -21,7 +21,7 @@
     "chat": "Chat",
     "shell": "Shell",
     "files": "Arquivos",
-    "git": "Controle de Origem",
+    "git": "Controle de origem",
     "tasks": "Tarefas",
     "browser": "Navegador",
     "computer": "Computador"
@@ -179,7 +179,7 @@
       "tokenHelp": "Este token será usado apenas para esta operação",
       "publicRepoInfo": "Repositórios públicos não exigem autenticação. Você pode pular o token se estiver clonando um repositório público.",
       "noTokensHelp": "Nenhum token salvo disponível. Você pode adicionar tokens em Configurações → Chaves de API para reutilização mais fácil.",
-      "optionalTokenPublic": "Token GitHub (Opcional para Repositórios Públicos)",
+      "optionalTokenPublic": "Token GitHub (opcional para repositórios públicos)",
       "tokenPublicPlaceholder": "«redacted:ghp_…» (deixe vazio para repositórios públicos)"
     },
     "step3": {
@@ -279,7 +279,8 @@
     "unknownError": "Erro desconhecido",
     "refreshNow": "Atualizando a janela agora...",
     "refreshIn_one": "Isso atualizará a janela em {{count}} segundo. Se a atualização não for aplicada, REINICIE o ambiente.",
-    "refreshIn_other": "Isso atualizará a janela em {{count}} segundos. Se a atualização não for aplicada, REINICIE o ambiente."
+    "refreshIn_other": "Isso atualizará a janela em {{count}} segundos. Se a atualização não for aplicada, REINICIE o ambiente.",
+    "refreshIn_many": "Isso atualizará a janela em {{count}} segundos. Se a atualização não for aplicada, REINICIE o ambiente."
   },
   "commandPalette": {
     "title": "Paleta de comandos",
@@ -308,10 +309,10 @@
     "openSettings": "Abrir configurações",
     "toggleTheme": "Alternar tema",
     "navChat": "Ir para Chat",
-    "navFiles": "Ir para Arquivos",
+    "navFiles": "Ir para arquivos",
     "navShell": "Ir para Shell",
     "navGit": "Ir para Git",
-    "navTasks": "Ir para Tarefas",
+    "navTasks": "Ir para tarefas",
     "gitFetch": "Git: Fetch",
     "gitPull": "Git: Pull",
     "gitPush": "Git: Push",
@@ -367,9 +368,11 @@
     "agents": "Agentes",
     "agentsFinished_one": "{{finished}} de {{count}} agente concluído",
     "agentsFinished_other": "{{finished}} de {{count}} agentes concluídos",
+    "agentsFinished_many": "{{finished}} de {{count}} agentes concluídos",
     "agentsFailed": "{{count}} falharam",
     "agentsProgress_one": "{{finished}}/{{count}} agente",
     "agentsProgress_other": "{{finished}}/{{count}} agentes",
+    "agentsProgress_many": "{{finished}}/{{count}} agentes",
     "agentStatus": {
       "queued": "na fila",
       "running": "em execução",
@@ -380,6 +383,7 @@
     "agentTokens": "{{tokens}} tokens",
     "agentToolCalls_one": "{{count}} chamada de ferramenta",
     "agentToolCalls_other": "{{count}} chamadas de ferramenta",
+    "agentToolCalls_many": "{{count}} de chamadas de ferramenta",
     "agentTimelineLoading": "Lendo os passos do agente…",
     "agentTimelineEmpty": "Nada registrado ainda",
     "agentTimelineUnavailable": "Passos indisponíveis: {{reason}}",

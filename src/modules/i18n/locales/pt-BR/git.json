@@ -20,14 +20,14 @@
   "confirm": {
     "cancel": "Cancelar",
     "title": {
-      "discard": "Descartar Alterações",
-      "delete": "Excluir Arquivo",
-      "commit": "Confirmar Ação",
+      "discard": "Descartar alterações",
+      "delete": "Excluir arquivo",
+      "commit": "Confirmar ação",
       "pull": "Confirmar Pull",
       "push": "Confirmar Push",
-      "publish": "Publicar Branch",
-      "revertLocalCommit": "Reverter Commit Local",
-      "deleteBranch": "Excluir Branch"
+      "publish": "Publicar branch",
+      "revertLocalCommit": "Reverter commit local",
+      "deleteBranch": "Excluir branch"
     },
     "action": {
       "discard": "Descartar",
@@ -36,7 +36,7 @@
       "pull": "Pull",
       "push": "Push",
       "publish": "Publicar",
-      "revertLocalCommit": "Reverter Commit",
+      "revertLocalCommit": "Reverter commit",
       "deleteBranch": "Excluir"
     }
   },
@@ -49,8 +49,10 @@
   "header": {
     "confirmPull_one": "Fazer pull de {{count}} commit de {{remote}}?",
     "confirmPull_other": "Fazer pull de {{count}} commits de {{remote}}?",
+    "confirmPull_many": "Fazer pull de {{count}} commits de {{remote}}?",
     "confirmPush_one": "Fazer push de {{count}} commit para {{remote}}?",
     "confirmPush_other": "Fazer push de {{count}} commits para {{remote}}?",
+    "confirmPush_many": "Fazer push de {{count}} commits para {{remote}}?",
     "confirmPublish": "Publicar branch \"{{branch}}\" em {{remote}}?",
     "confirmRevert": "Reverter o último commit local? Isso remove o commit, mas mantém as alterações preparadas.",
     "aheadTitle": "{{n}} à frente",
@@ -104,14 +106,14 @@
     "confirmDiscard": "Descartar todas as alterações em \"{{path}}\"? Esta ação não pode ser desfeita.",
     "noCommitsTitle": "Nenhum commit ainda",
     "noCommitsDescription": "Este repositório ainda não tem commits. Crie seu primeiro commit para começar a rastrear alterações.",
-    "creatingInitial": "Criando Commit Inicial...",
-    "createInitial": "Criar Commit Inicial",
+    "creatingInitial": "Criando commit inicial...",
+    "createInitial": "Criar commit inicial",
     "noChanges": "Nenhuma alteração detectada",
     "stagedCount": "Preparados ({{n}})",
-    "unstageAll": "Despreparar Todos",
+    "unstageAll": "Despreparar todos",
     "noStagedFiles": "Nenhum arquivo preparado",
     "changesCount": "Alterações ({{n}})",
-    "stageAll": "Preparar Todos",
+    "stageAll": "Preparar todos",
     "allStaged": "Todas as alterações preparadas"
   },
   "compare": {
@@ -121,6 +123,7 @@
     "noBranches": "Nenhum branch disponível",
     "summary_one": "{{count}} arquivo alterado vs <ref>{{base}}</ref>",
     "summary_other": "{{count}} arquivos alterados vs <ref>{{base}}</ref>",
+    "summary_many": "{{count}} de arquivos alterados vs <ref>{{base}}</ref>",
     "mergeBase": "base de merge {{sha}}",
     "mergeBaseTitle": "Base de merge de {{base}} e HEAD: {{sha}}",
     "refresh": "Atualizar comparação",
@@ -134,12 +137,15 @@
   "composer": {
     "confirmCommit_one": "Commitar {{count}} arquivo com a mensagem: \"{{message}}\"?",
     "confirmCommit_other": "Commitar {{count}} arquivos com a mensagem: \"{{message}}\"?",
+    "confirmCommit_many": "Commitar {{count}} de arquivos com a mensagem: \"{{message}}\"?",
     "commitFiles_one": "Commitar {{count}} arquivo",
     "commitFiles_other": "Commitar {{count}} arquivos",
-    "title": "Commitar Alterações",
+    "commitFiles_many": "Commitar {{count}} de arquivos",
+    "title": "Commitar alterações",
     "placeholder": "Mensagem (Ctrl+Enter para commit)",
     "filesSelected_one": "{{count}} arquivo selecionado",
     "filesSelected_other": "{{count}} arquivos selecionados",
+    "filesSelected_many": "{{count}} de arquivos selecionados",
     "committing": "Commitando...",
     "commit": "Commit"
   },
@@ -164,10 +170,11 @@
     "none": "Nenhum",
     "deselectAll": "Desselecionar tudo",
     "selectedOfFiles_one": "{{selected}} de {{count}} arquivo selecionado",
-    "selectedOfFiles_other": "{{selected}} de {{count}} arquivos selecionados"
+    "selectedOfFiles_other": "{{selected}} de {{count}} arquivos selecionados",
+    "selectedOfFiles_many": "{{selected}} de {{count}} arquivos selecionados"
   },
   "legend": {
-    "title": "Guia de Status de Arquivo"
+    "title": "Guia de status de arquivo"
   },
   "history": {
     "noCommits": "Nenhum commit encontrado",
@@ -176,24 +183,26 @@
     "files": "Arquivos",
     "added": "Adicionado",
     "removed": "Removido",
-    "changedFiles": "Arquivos Alterados"
+    "changedFiles": "Arquivos alterados"
   },
   "newBranch": {
-    "title": "Criar Novo Branch",
-    "nameLabel": "Nome do Branch",
+    "title": "Criar novo branch",
+    "nameLabel": "Nome do branch",
     "createdFrom": "Isto criará um novo branch a partir do branch atual ({{branch}})",
     "creating": "Criando...",
-    "create": "Criar Branch"
+    "create": "Criar branch"
   },
   "merge": {
     "defaultSquash": "Squash merge do branch '{{branch}}'",
     "defaultMerge": "Merge do branch '{{branch}}'",
     "commitsCount_one": "{{count}} commit",
     "commitsCount_other": "{{count}} commits",
+    "commitsCount_many": "{{count}} de commits",
     "title": "Merge Worktree",
     "squashLabel": "Squash commits",
     "squashDesc_one": "Combinar todos {{count}} commit em um único commit no {{branch}}",
     "squashDesc_other": "Combinar todos {{count}} commits em um único commit no {{branch}}",
+    "squashDesc_many": "Combinar todos os {{count}} de commits em um único commit no {{branch}}",
     "messageLabel": "Mensagem do commit",
     "cleanupLabel": "Limpar após merge",
     "cleanupDesc": "Remover o worktree e excluir seu branch após o merge",
@@ -202,7 +211,7 @@
     "merge": "Merge"
   },
   "newWorktree": {
-    "title": "Novo Worktree",
+    "title": "Novo worktree",
     "description": "Faça checkout de um branch em sua própria pasta e trabalhe nele em paralelo.",
     "branchLabel": "Branch",
     "existingBranchNote": "Branch existente — será feito checkout como está.",
@@ -210,13 +219,14 @@
     "willBeCreatedIn": "Será criado em",
     "openAfterCreate": "Mudar para o worktree após criá-lo",
     "creating": "Criando...",
-    "create": "Criar Worktree"
+    "create": "Criar worktree"
   },
   "remove": {
-    "title": "Remover Worktree",
+    "title": "Remover worktree",
     "detachedHead": "HEAD destacado",
     "uncommittedWarning_one": "Este worktree tem {{count}} alteração não commitada que será perdida.",
     "uncommittedWarning_other": "Este worktree tem {{count}} alterações não commitadas que serão perdidas.",
+    "uncommittedWarning_many": "Este worktree tem {{count}} de alterações não commitadas que serão perdidas.",
     "alsoDeleteBranch": "Também excluir branch",
     "discardChanges": "Descartar alterações não commitadas",
     "removing": "Removendo...",
@@ -231,6 +241,7 @@
     "locked": "bloqueado",
     "changeCount_one": "● {{count}} alteração",
     "changeCount_other": "● {{count}} alterações",
+    "changeCount_many": "● {{count}} de alterações",
     "switchTo": "Mudar para {{name}}",
     "open": "Abrir",
     "nothingToMerge": "Nada para fazer merge — nenhum commit à frente do branch base",
@@ -239,6 +250,7 @@
     "noWorktrees": "Nenhum worktree",
     "count_one": "{{count}} worktree",
     "count_other": "{{count}} worktrees",
+    "count_many": "{{count}} de worktrees",
     "refreshTitle": "Atualizar worktrees",
     "newWorktree": "Novo worktree",
     "dismiss": "Dispensar",

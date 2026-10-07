@@ -346,7 +346,7 @@
     },
     "apiDocsLink": "Documentação da API",
     "documentation": {
-      "title": "Documentação da API Externa",
+      "title": "Documentação da API externa",
       "description": "Aprenda como usar a API externa para disparar sessões do Claude/Cursor a partir dos seus aplicativos.",
       "viewLink": "Ver documentação da API →"
     },
@@ -444,7 +444,7 @@
     },
     "settingsFiles": {
       "title": "Regras dos arquivos de configuração do Claude",
-      "description": "O CLI do Claude também aplica estas regras, além das listas acima. Uma regra deny vence onde quer que seja definida, mas uma regra ask não solicita permissão para uma ferramenta que Ferramentas permitidas já permite. As regras são somente leitura aqui; edite-as nos arquivos.",
+      "description": "O CLI do Claude também aplica estas regras, além das listas acima. Uma regra deny vence onde quer que seja definida, mas uma regra ask não solicita permissão para uma ferramenta que ferramentas permitidas já permite. As regras são somente leitura aqui; edite-as nos arquivos.",
       "sources": {
         "user": "Suas configurações",
         "managed": "Configurações gerenciadas (administrador)"
@@ -586,7 +586,7 @@
       "unofficialDescription": "Plugins e integrações não oficiais de outros usuários. Revise o código-fonte antes de instalar."
     },
     "starterPlugin": {
-      "name": "Estatísticas do Projeto",
+      "name": "Estatísticas do projeto",
       "badge": "inicial",
       "description": "Contagem de arquivos, linhas de código, detalhamento por tipo de arquivo e atividade recente do seu projeto.",
       "install": "Instalar"
@@ -598,7 +598,7 @@
       "install": "Instalar"
     },
     "scheduledPromptPlugin": {
-      "name": "Prompts Agendados",
+      "name": "Prompts agendados",
       "badge": "não oficial",
       "description": "Agende prompts de espaço de trabalho, revise histórico de execuções e gerencie tarefas locais recorrentes.",
       "install": "Instalar"
@@ -622,13 +622,13 @@
       "install": "Instalar"
     },
     "tokenCostCalculatorPlugin": {
-      "name": "Calculadora de Custo de Tokens",
+      "name": "Calculadora de custo de tokens",
       "badge": "não oficial",
       "description": "Calcule custos de API a partir de preços de modelos e uso de tokens, com suporte a preços predefinidos de modelos.",
       "install": "Instalar"
     },
     "taskQueuePlugin": {
-      "name": "Fila de Tarefas",
+      "name": "Fila de tarefas",
       "badge": "não oficial",
       "description": "Dashboard de fila de tarefas para visualizar, filtrar e iniciar tarefas de agentes.",
       "install": "Instalar"
@@ -658,7 +658,7 @@
       "install": "Instalar"
     },
     "agentMonitorPlugin": {
-      "name": "Monitor de Agentes",
+      "name": "Monitor de agentes",
       "badge": "não oficial",
       "description": "Veja subagentes e shells em segundo plano que continuam rodando após o fim de um chat e pare-os.",
       "install": "Instalar"
@@ -685,6 +685,7 @@
     "footerHint": "Uploads de pasta mantêm o nome da pasta selecionada; arquivos autônomos usam o `name` no `SKILL.md`.",
     "installWithCount_one": "Instalar {{count}} Skill",
     "installWithCount_other": "Instalar {{count}} Skills",
+    "installWithCount_many": "Instalar {{count}} de Skills",
     "installPlain": "Instalar Skill",
     "loading": "Carregando skills do {{provider}}…",
     "emptyTitle": "Nenhuma skill descoberta ainda",
@@ -693,6 +694,7 @@
     "noMatchDescription": "Tente um comando, nome, escopo, projeto ou caminho de origem diferente.",
     "count_one": "{{count}} skill",
     "count_other": "{{count}} skills",
+    "count_many": "{{count}} de skills",
     "noDescription": "Nenhuma descrição fornecida no front matter da skill.",
     "pluginBadge": "Plugin: {{name}}",
     "projectBadge": "Projeto: {{name}}",
@@ -705,6 +707,7 @@
       "readyToInstall": "Pronto para instalar",
       "filesCount_one": "{{count}} arquivo",
       "filesCount_other": "{{count}} arquivos",
+      "filesCount_many": "{{count}} de arquivos",
       "markdownFile": "Arquivo Markdown",
       "removeFile": "Remover {{name}}",
       "hideInstallLocation": "Ocultar local de instalação",
@@ -824,7 +827,7 @@
     "configEnvVars": "Vars de ambiente"
   },
   "mcpTeamCard": {
-    "title": "Configs MCP da Equipe",
+    "title": "Configs MCP da equipe",
     "description": "Compartilhe configurações de servidores MCP com sua equipe. Todos ficam em sincronia automaticamente.",
     "proLink": "Disponível com CloudCLI Pro"
   },
@@ -843,13 +846,13 @@
     "tagline": "Interface de assistente de codificação com IA de código aberto",
     "starOnGitHub": "Dar estrela no GitHub",
     "docs": "Docs",
-    "hostedTitle": "Experimente CloudCLI Hospedado",
+    "hostedTitle": "Experimente o CloudCLI hospedado",
     "hostedDescription": "Colaboração em equipe, configs MCP compartilhados, sincronização de configurações entre ambientes e infraestrutura gerenciada.",
     "learnMore": "Saiba mais",
     "proFeaturesTitle": "Recursos do CloudCLI Pro",
-    "syncSettingsTitle": "Sincronizar Configurações",
+    "syncSettingsTitle": "Sincronizar configurações",
     "syncSettingsDescription": "Mantenha suas preferências, configs MCP e tema em sincronia em todos os seus ambientes.",
-    "teamManagementTitle": "Gerenciamento de Equipe",
+    "teamManagementTitle": "Gerenciamento de equipe",
     "teamManagementDescription": "Múltiplos usuários, acesso baseado em funções e projetos compartilhados para sua equipe.",
     "licensed": "Licenciado sob AGPL-3.0",
     "proCta": "Disponível com CloudCLI Pro"

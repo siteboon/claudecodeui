@@ -28,7 +28,7 @@
     "viewRawParams": "Ver parâmetros brutos",
     "viewDiff": "Ver diff de edição para",
     "creatingFile": "Criando novo arquivo:",
-    "updatingTodo": "Atualizando Lista de Tarefas",
+    "updatingTodo": "Atualizando lista de tarefas",
     "read": "Ler",
     "readFile": "Ler arquivo",
     "updateTodo": "Atualizar lista de tarefas",
@@ -59,23 +59,29 @@
     "emptyFile": "Arquivo vazio",
     "moreLines_one": "… {{count}} linha adicional",
     "moreLines_other": "… {{count}} linhas adicionais",
+    "moreLines_many": "… {{count}} de linhas adicionais",
     "moreFiles_one": "… {{count}} arquivo alterado",
     "moreFiles_other": "… {{count}} arquivos alterados",
+    "moreFiles_many": "… {{count}} de arquivos alterados",
     "filesNotShown_one": "{{count}} arquivo alterado (binário, apenas modo ou grande demais para exibir)",
     "filesNotShown_other": "{{count}} arquivos alterados (binário, apenas modo ou grande demais para exibir)",
+    "filesNotShown_many": "{{count}} de arquivos alterados (binário, apenas modo ou grande demais para exibir)",
     "filesUnavailable_one": "{{count}} arquivo alterado (diff indisponível)",
     "filesUnavailable_other": "{{count}} arquivos alterados (diff indisponível)",
+    "filesUnavailable_many": "{{count}} de arquivos alterados (diff indisponível)",
     "filesChanged_one": "{{count}} arquivo alterado",
     "filesChanged_other": "{{count}} arquivos alterados",
+    "filesChanged_many": "{{count}} de arquivos alterados",
     "morePaths_one": "+{{count}} mais",
     "morePaths_other": "+{{count}} mais",
+    "morePaths_many": "+{{count}} mais",
     "diffUnavailable": "(diff do arquivo indisponível para este comando)",
     "partUnavailable": "(parte do diff está indisponível)",
     "skipped": "(diff do arquivo ignorado para este comando git)",
     "shared": "(outro comando rodou neste repositório ao mesmo tempo; uma alteração feita por qualquer um pode aparecer sob qualquer resultado)"
   },
   "interactive": {
-    "title": "Prompt Interativo",
+    "title": "Prompt interativo",
     "waiting": "Aguardando sua resposta no CLI",
     "instruction": "Selecione uma opção no seu terminal onde o Claude está rodando.",
     "selectedOption": "✓ O Claude selecionou a opção {{number}}",
@@ -91,18 +97,18 @@
   "permissions": {
     "grant": "Conceder permissão para {{tool}}",
     "added": "Permissão adicionada",
-    "addTo": "Adiciona {{entry}} às Tools Permitidas.",
+    "addTo": "Adiciona {{entry}} às Tools permitidas.",
     "retry": "Permissão salva. Tente a solicitação novamente para usar a tool.",
     "error": "Não foi possível atualizar as permissões. Tente novamente.",
     "openSettings": "Abrir configurações"
   },
   "todo": {
     "updated": "A lista de tarefas foi atualizada com sucesso",
-    "current": "Lista de Tarefas Atual"
+    "current": "Lista de tarefas atual"
   },
   "plan": {
     "viewPlan": "📋 Ver plano de implementação",
-    "title": "Plano de Implementação"
+    "title": "Plano de implementação"
   },
   "usageLimit": {
     "resetAt": "Limite de uso do Claude atingido. Seu limite será reiniciado em **{{time}} {{timezone}}** - {{date}}"
@@ -110,11 +116,11 @@
   "codex": {
     "permissionMode": "Modo de permissão",
     "modes": {
-      "default": "Modo Padrão",
-      "auto": "Modo Automático",
+      "default": "Modo padrão",
+      "auto": "Modo automático",
       "acceptEdits": "Aceitar edições",
       "bypassPermissions": "Ignorar permissões",
-      "plan": "Modo Planejamento"
+      "plan": "Modo planejamento"
     },
     "descriptions": {
       "default": "Apenas comandos confiáveis (ls, cat, grep, git status, etc.) rodam automaticamente. Outros comandos são ignorados. Pode gravar no espaço de trabalho.",
@@ -174,13 +180,13 @@
     }
   },
   "providerSelection": {
-    "title": "Escolha Seu Assistente de IA",
+    "title": "Escolha seu assistente de IA",
     "description": "Selecione um provedor para iniciar uma nova conversa",
-    "selectModel": "Selecionar Modelo",
+    "selectModel": "Selecionar modelo",
     "providerInfo": {
       "anthropic": "da Anthropic",
       "openai": "da OpenAI",
-      "cursorEditor": "Editor de Código IA",
+      "cursorEditor": "Editor de código IA",
       "google": "do Google"
     },
     "readyPrompt": {
@@ -222,7 +228,7 @@
   },
   "shell": {
     "selectProject": {
-      "title": "Selecionar um Projeto",
+      "title": "Selecionar um projeto",
       "description": "Escolha um projeto para abrir um shell interativo naquele diretório"
     },
     "status": {
@@ -279,7 +285,7 @@
       "sendAnyway": "Esta sessão ainda tem trabalho em segundo plano rodando:\n{{work}}\n\nUma nova mensagem inicia um novo turno, que interrompe esse trabalho; o que ele ainda não reportou é perdido. Enviar mesmo assim?"
     },
     "controls": {
-      "stopGeneration": "Parar Geração",
+      "stopGeneration": "Parar geração",
       "pressEscToStop": "Pressione Esc a qualquer momento para parar"
     },
     "providers": {
@@ -363,28 +369,30 @@
     },
     "modalMeta": {
       "helpEyebrow": "Central de comandos",
-      "helpTitle": "Ajuda e Atalhos",
+      "helpTitle": "Ajuda e atalhos",
       "helpSubtitle": "Pesquise built-ins, padrões de sintaxe e uso de comandos sem sair do chat.",
       "modelsEyebrow": "Seleção de modelo",
-      "modelsTitle": "Escolher um Modelo",
+      "modelsTitle": "Escolher um modelo",
       "modelsSubtitle": "Escolha o modelo que este provedor deve usar.",
       "costEyebrow": "Telemetria da sessão",
       "costTitle": "Uso de Tokens",
       "costSubtitle": "Contagens de tokens de entrada, saída e total para esta sessão.",
       "statusEyebrow": "Saúde do runtime",
-      "statusTitle": "Status do Sistema",
+      "statusTitle": "Status do sistema",
       "statusSubtitle": "Versão, provedor, runtime e detalhes do ambiente em um só lugar.",
-      "commandResult": "Resultado do Comando"
+      "commandResult": "Resultado do comando"
     },
     "choiceSavedSession": "Sua escolha é salva para esta sessão e vira o padrão para novos chats.",
     "choiceSavedDefault": "Sua escolha vira o modelo padrão para novos chats.",
     "tokensUsed_one": "{{count}} token usado",
     "tokensUsed_other": "{{count}} tokens usados",
+    "tokensUsed_many": "{{count}} de tokens usados",
     "compacted": "Compactado",
     "compactionSummary": "resumo completo",
     "expandImage": "Expandir {{name}}",
     "tokensLabel_one": "token",
     "tokensLabel_other": "tokens",
+    "tokensLabel_many": "tokens",
     "escClosesModal": "Esc fecha o modal.",
     "close": "Fechar"
   },

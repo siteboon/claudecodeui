@@ -38,7 +38,8 @@
     "selectAllLoaded": "Selecionar tudo carregado",
     "clearSelection": "Limpar",
     "deleteSelected_one": "Excluir {{count}} sessão",
-    "deleteSelected_other": "Excluir {{count}} sessões"
+    "deleteSelected_other": "Excluir {{count}} sessões",
+    "deleteSelected_many": "Excluir {{count}} de sessões"
   },
   "tooltips": {
     "viewEnvironments": "Ver ambientes",
@@ -123,7 +124,8 @@
     "restoreSessionError": "Erro ao restaurar sessão. Tente novamente.",
     "forkSessionError": "Não foi possível fazer fork desta sessão. Tente novamente.",
     "deleteSessionsPartialFailure_one": "{{count}} sessão de {{total}} não pôde ser excluída. Tente novamente.",
-    "deleteSessionsPartialFailure_other": "{{count}} de {{total}} sessões não puderam ser excluídas. Tente novamente."
+    "deleteSessionsPartialFailure_other": "{{count}} de {{total}} sessões não puderam ser excluídas. Tente novamente.",
+    "deleteSessionsPartialFailure_many": "{{count}} de {{total}} sessões não puderam ser excluídas. Tente novamente."
   },
   "version": {
     "updateAvailable": "Atualização disponível",
@@ -141,8 +143,10 @@
     "tryDifferentQuery": "Tente uma consulta de pesquisa diferente",
     "matches_one": "{{count}} correspondência",
     "matches_other": "{{count}} correspondências",
+    "matches_many": "{{count}} de correspondências",
     "projectsScanned_one": "{{count}} projeto verificado",
-    "projectsScanned_other": "{{count}} projetos verificados"
+    "projectsScanned_other": "{{count}} projetos verificados",
+    "projectsScanned_many": "{{count}} de projetos verificados"
   },
   "recent": {
     "title": "Conversas recentes",
@@ -158,6 +162,7 @@
     "confirmDelete": "O que você gostaria de fazer com",
     "sessionCount_one": "Este projeto contém {{count}} conversa.",
     "sessionCount_other": "Este projeto contém {{count}} conversas.",
+    "sessionCount_many": "Este projeto contém {{count}} de conversas.",
     "removeFromSidebar": "Remover apenas da barra lateral",
     "archiveProject": "Arquivar projeto",
     "archiveSession": "Arquivar sessão",
@@ -168,13 +173,17 @@
     "allConversationsDeleted": "O projeto será removido da barra lateral. Seus arquivos, memórias e dados de sessão serão preservados.",
     "cannotUndo": "Você pode adicionar o projeto novamente mais tarde.",
     "confirmDeleteSessions": "O que você gostaria de fazer com",
-    "deleteSessions_one": "Excluir {{count}} Sessão",
-    "deleteSessions_other": "Excluir {{count}} Sessões",
+    "deleteSessions_one": "Excluir {{count}} sessão",
+    "deleteSessions_other": "Excluir {{count}} sessões",
+    "deleteSessions_many": "Excluir {{count}} de sessões",
     "selectedSessions_one": "{{count}} sessão selecionada",
     "selectedSessions_other": "{{count}} sessões selecionadas",
+    "selectedSessions_many": "{{count}} de sessões selecionadas",
     "archiveSessions_one": "Arquivar {{count}} sessão",
     "archiveSessions_other": "Arquivar {{count}} sessões",
+    "archiveSessions_many": "Arquivar {{count}} de sessões",
     "archiveSessionsNotice_one": "Arquivar mantém a sessão fora da lista ativa preservando seu histórico.",
-    "archiveSessionsNotice_other": "Arquivar mantém as sessões fora da lista ativa preservando seu histórico."
+    "archiveSessionsNotice_other": "Arquivar mantém as sessões fora da lista ativa preservando seu histórico.",
+    "archiveSessionsNotice_many": "Arquivar mantém as sessões fora da lista ativa preservando seu histórico."
   }
 }
