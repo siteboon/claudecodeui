@@ -52,6 +52,22 @@
     "viewFullOutput": "전체 출력 보기 ({{count}}자)",
     "contentDisplayed": "파일 내용이 위의 Diff 보기에 표시됩니다"
   },
+  "bashEditDiff": {
+    "created": "생성됨",
+    "updated": "수정됨",
+    "deleted": "삭제됨",
+    "emptyFile": "빈 파일",
+    "moreLines_other": "… {{count}}줄 더 있음",
+    "moreFiles_other": "… 파일 {{count}}개 더 변경됨",
+    "filesNotShown_other": "파일 {{count}}개 변경됨 (바이너리, 모드만 변경 또는 너무 커서 표시할 수 없음)",
+    "filesUnavailable_other": "파일 {{count}}개 변경됨 (diff를 사용할 수 없음)",
+    "filesChanged_other": "파일 {{count}}개 변경됨",
+    "morePaths_other": "+{{count}}개 더",
+    "diffUnavailable": "(이 명령의 파일 diff를 사용할 수 없음)",
+    "partUnavailable": "(diff 일부를 사용할 수 없음)",
+    "skipped": "(이 git 명령은 파일 diff를 건너뜀)",
+    "shared": "(이 저장소에서 다른 명령이 동시에 실행되었습니다. 어느 쪽이 변경했든 두 결과 모두에 표시될 수 있습니다)"
+  },
   "thinking": {
     "title": "생각 중...",
     "emoji": "💭 생각 중..."
