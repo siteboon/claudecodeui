@@ -280,6 +280,13 @@ async function dispatchRun(
     sessionId,
     cwd: clientOptions.cwd ?? session.project_path ?? undefined,
     projectPath: session.project_path ?? clientOptions.projectPath,
+    // Lets the Claude runtime keep its CLI up for a while after a turn a client
+    // sent, so async hooks still running at the end finish as they do on the
+    // Shell page (the client gets its `complete` at once; other runtimes ignore
+    // this). Detached turns do not opt in: the scheduled-message dispatcher
+    // awaits each run before it sends the next. Set after the client's options
+    // so a sent or stored option cannot turn it on.
+    holdForAsyncHooks: ws !== null,
   };
 
   let failure: string | null = null;
