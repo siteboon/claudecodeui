@@ -194,7 +194,8 @@
     "status": {
       "newSession": "新工作階段",
       "initializing": "初始化中...",
-      "restarting": "重新啟動中..."
+      "restarting": "重新啟動中...",
+      "themeRestartHint": "重新啟動以將新的佈景主題套用到 Claude Code"
     },
     "actions": {
       "disconnect": "中斷連線",
