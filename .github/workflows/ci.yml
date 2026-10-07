@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+# A newer push to a PR supersedes the run still in progress. Pushes to main are
+# never cancelled, so every merged commit keeps a result of its own.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    name: Typecheck, lint, test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # @vscode/ripgrep downloads its binary from GitHub releases at install time and
+      # uses GITHUB_TOKEN to avoid API rate limits. No check here launches Electron.
+      - name: Install dependencies
+        id: install
+        run: npm ci
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+
+      # Once dependencies are installed, every check runs even when an earlier one
+      # failed, so a single push reports all of its failures.
+      - name: Typecheck
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run typecheck
+
+      - name: Lint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run lint
+
+      - name: Client tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run test:client
+
+      - name: Server tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm test
+
+      - name: Build
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run build
+
+      # The platform build is a separate compilation: IS_PLATFORM is resolved at
+      # build time and changes the auth and websocket paths, so the default build
+      # alone does not exercise it.
+      - name: Build client (platform mode)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run build:client
+        env:
+          VITE_IS_PLATFORM: "true"
