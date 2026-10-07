@@ -65,6 +65,8 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
   // unsaved changes when the same document is being read again; opening a
   // different file has always replaced the buffer.
   const loadedDocumentKeyRef = useRef<string | null>(null);
+  // The open request the current buffer came from, to tell a new open from a reload.
+  const loadedFileRef = useRef<CodeEditorFile | null>(null);
   // A diff payload is its own document: the chat opening an edit on a file that
   // is already open must show that edit, not reuse the plain buffer.
   const diffKey = file.diffInfo ? JSON.stringify([fileDiffOldString, fileDiffNewString]) : '';
@@ -104,10 +106,13 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     // showing the version from the first open even after the file had changed.
     const isSameDocument = loadedDocumentKeyRef.current === documentKey;
     const hasUnsavedChanges = differsFromSaved(contentRef.current, savedContentRef.current);
+    // The editor sidebar asks before a new open with an edit to show replaces a
+    // dirty buffer, so that answer is already given.
+    const discardConfirmed = file !== loadedFileRef.current && Boolean(file.diffInfo);
 
     // Re-reading here would silently throw away someone's edits. Refuse, and say
     // so; `reloadDiscardingChanges` is the deliberate way through.
-    if (isSameDocument && hasUnsavedChanges) {
+    if (isSameDocument && hasUnsavedChanges && !discardConfirmed) {
       setUnsavedChangesBlockedReload(true);
       return;
     }
@@ -120,6 +125,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
       setSavedContent(contentRef.current);
     }
     loadedDocumentKeyRef.current = documentKey;
+    loadedFileRef.current = file;
     const loadGeneration = ++loadGenerationRef.current;
     const isStaleLoad = () => loadGenerationRef.current !== loadGeneration;
 

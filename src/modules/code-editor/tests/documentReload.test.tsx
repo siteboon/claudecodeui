@@ -217,6 +217,44 @@ test('opening the same file with an edit to show counts as another document', as
   assert.equal(result.current.unsavedChangesBlockedReload, false);
 });
 
+// The editor sidebar already asked before replacing a dirty buffer with an
+// edit to show, so a "yes" there must not end in a refused reload here.
+test('opening the same edit again shows it, since the sidebar already asked', async () => {
+  const openSameEdit = (): CodeEditorFile => ({
+    ...openSameFile(),
+    diffInfo: { old_string: 'first version', new_string: 'edited by the agent' },
+  });
+  const { result, rerender } = renderHook(
+    ({ file }: { file: CodeEditorFile }) => useCodeEditorDocument({ file }),
+    { initialProps: { file: openSameEdit() } },
+  );
+  await waitFor(() => assert.equal(result.current.content, 'edited by the agent'));
+
+  act(() => result.current.setContent('work in progress'));
+  rerender({ file: openSameEdit() });
+
+  await waitFor(() => assert.equal(result.current.content, 'edited by the agent'));
+  assert.equal(result.current.unsavedChangesBlockedReload, false);
+});
+
+test('the reload action still keeps unsaved changes on an edit', async () => {
+  const { result } = renderHook(
+    ({ file }: { file: CodeEditorFile }) => useCodeEditorDocument({ file }),
+    {
+      initialProps: {
+        file: { ...openSameFile(), diffInfo: { old_string: 'first version', new_string: 'edited by the agent' } },
+      },
+    },
+  );
+  await waitFor(() => assert.equal(result.current.content, 'edited by the agent'));
+
+  act(() => result.current.setContent('work in progress'));
+  act(() => result.current.reload());
+
+  await waitFor(() => assert.equal(result.current.unsavedChangesBlockedReload, true));
+  assert.equal(result.current.content, 'work in progress');
+});
+
 test('opening a file again while its first read is still out is not refused', async () => {
   const pendingReads = new Map<string, (content: string) => void>();
   const { result, rerender } = renderDocument();
