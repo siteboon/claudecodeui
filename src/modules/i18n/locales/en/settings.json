@@ -657,6 +657,12 @@
       "description": "Track live GLM/Zhipu coding-plan quotas and 30-day token history.",
       "install": "Install"
     },
+    "agentMonitorPlugin": {
+      "name": "Agent Monitor",
+      "badge": "unofficial",
+      "description": "See background subagents and shells that keep running after a chat ends, and stop them.",
+      "install": "Install"
+    },
     "morePlugins": "More",
     "enable": "Enable",
     "disable": "Disable",
