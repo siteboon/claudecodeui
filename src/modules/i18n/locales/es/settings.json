@@ -573,12 +573,6 @@
       "description": "Programa prompts del espacio de trabajo, revisa el historial de ejecuciones y gestiona tareas locales recurrentes.",
       "install": "Instalar"
     },
-    "claudeWatchPlugin": {
-      "name": "Claude Watch",
-      "badge": "no oficial",
-      "description": "Vigila sesiones largas de Claude Code por si se cuelgan y expone controles del proceso.",
-      "install": "Instalar"
-    },
     "prismCloudCLI": {
       "name": "PRISM CloudCLI",
       "badge": "no oficial",

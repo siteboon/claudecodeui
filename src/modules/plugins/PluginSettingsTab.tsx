@@ -27,7 +27,6 @@ import PluginIcon from '@/modules/plugins/PluginIcon';
 const STARTER_PLUGIN_URL = 'https://github.com/cloudcli-ai/cloudcli-plugin-starter';
 const TERMINAL_PLUGIN_URL = 'https://github.com/cloudcli-ai/cloudcli-plugin-terminal';
 const SCHEDULED_PROMPT_PLUGIN_URL = 'https://github.com/grostim/cloudcli-cron';
-const CLAUDE_WATCH_PLUGIN_URL = 'https://github.com/satsuki19980613/cloudcli-claude-watch';
 const PRISM_CLOUDCLI_PLUGIN_URL = 'https://github.com/jakeefr/cloudcli-plugin-prism';
 const SESSION_MANAGER_PLUGIN_URL = 'https://github.com/strykereye2/cloudcli-plugin-session-manager';
 const TOKEN_COST_CALCULATOR_PLUGIN_URL = 'https://github.com/NightmareAway/cloudcli-plugin-token-cost-calculator';
@@ -66,14 +65,6 @@ const OFFICIAL_PLUGIN_RECOMMENDATIONS: PluginRecommendation[] = [
 ];
 
 const UNOFFICIAL_PLUGIN_RECOMMENDATIONS: PluginRecommendation[] = [
-  {
-    id: 'cloudcli-claude-watch',
-    translationKey: 'claudeWatchPlugin',
-    repoUrl: CLAUDE_WATCH_PLUGIN_URL,
-    installedNames: ['cloudcli-claude-watch'],
-    icon: Activity,
-    source: 'unofficial',
-  },
   {
     id: 'workspace-scheduled-prompts',
     translationKey: 'scheduledPromptPlugin',

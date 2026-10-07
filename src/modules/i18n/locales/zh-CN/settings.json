@@ -573,12 +573,6 @@
       "description": "安排工作区提示、查看运行历史并管理定期本地任务。",
       "install": "安装"
     },
-    "claudeWatchPlugin": {
-      "name": "Claude Watch",
-      "badge": "非官方",
-      "description": "监控长时间运行的 Claude Code 会话，检测挂起并暴露进程控制。",
-      "install": "安装"
-    },
     "prismCloudCLI": {
       "name": "PRISM CloudCLI",
       "badge": "非官方",

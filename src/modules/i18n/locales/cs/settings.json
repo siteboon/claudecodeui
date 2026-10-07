@@ -569,12 +569,6 @@
       "description": "Plánujte prompty v pracovním prostoru, procházejte historii běhů a spravujte opakované lokální úkoly.",
       "install": "Instalovat"
     },
-    "claudeWatchPlugin": {
-      "name": "Claude Watch",
-      "badge": "neoficiální",
-      "description": "Hlídá dlouho běžící relace Claude Code, zda nezamrzly, a zpřístupňuje ovládání procesů.",
-      "install": "Instalovat"
-    },
     "prismCloudCLI": {
       "name": "PRISM CloudCLI",
       "badge": "neoficiální",
