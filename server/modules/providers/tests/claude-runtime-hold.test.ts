@@ -121,6 +121,25 @@ const taskNotification = (taskId: string, toolUseId: string, status: string) => 
   type: 'system', subtype: 'task_notification', session_id: NATIVE_ID, task_id: taskId, tool_use_id: toolUseId, status, summary: `Task ${taskId} ${status}`, output_file: '',
 });
 const result = () => ({ type: 'result', subtype: 'success', session_id: NATIVE_ID, result: 'launched', duration_ms: 1, num_turns: 1 });
+const assistantText = (text: string) => ({
+  type: 'assistant', session_id: NATIVE_ID, parent_tool_use_id: null,
+  message: { role: 'assistant', content: [{ type: 'text', text }] },
+});
+// What a resumed CLI emits before it reads the new prompt when the transcript
+// holds a task notification it has not delivered yet: a turn of its own, with
+// no model call, stamped with the origin (captured from claude 2.1.280).
+const notificationTurnResult = (extra: Record<string, unknown> = {}) => ({
+  type: 'result', subtype: 'success', session_id: NATIVE_ID, result: '', duration_ms: 1, num_turns: 0,
+  origin: { kind: 'task-notification' }, ...extra,
+});
+
+// Polls instead of a fixed settle so a loaded machine cannot fail a positive check.
+async function settleUntil(condition: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 200 && !condition(); attempt += 1) {
+    await settle();
+  }
+  assert.ok(condition(), 'condition never became true');
+}
 
 test('stopping the last outstanding task releases the held process', async () => {
   await withRun(async ({ script, sent, done }) => {
@@ -167,6 +186,53 @@ test('a task that reported completed keeps the hold for the turn that relays its
     script.emit(result());
     await settle();
     assert.equal(script.released(), true, 'the follow-up turn\'s result ends the hold');
+  });
+});
+
+test('a notification the resumed CLI works through before the prompt does not end the turn', async () => {
+  await withRun(async ({ script, sent }) => {
+    // The next message after a held run resumes the session in a new process,
+    // which first reports the old process's background shell as stopped and
+    // closes that out as a turn of its own — before reading the prompt.
+    script.emit(taskNotification('old1', 'toolu_old', 'stopped'));
+    script.emit(init());
+    script.emit(notificationTurnResult());
+    script.emit(init());
+    script.emit(assistantText('Here is the answer'));
+    await settleUntil(() => sent.some((message) => message.kind === 'text'));
+
+    assert.equal(sent.filter((message) => message.kind === 'complete').length, 0, 'the reply is still streaming');
+    assert.equal(script.released(), false, 'stdin stays open while the prompt\'s turn runs');
+
+    script.emit(result());
+    await settleUntil(() => sent.some((message) => message.kind === 'complete'));
+    assert.equal(sent.filter((message) => message.kind === 'complete').length, 1);
+    await settleUntil(() => script.released());
+  });
+});
+
+test('background work a turn starts after a drained notification is held', async () => {
+  await withRun(async ({ script, sent }) => {
+    script.emit(taskNotification('old1', 'toolu_old', 'stopped'));
+    script.emit(init());
+    script.emit(notificationTurnResult());
+    // "The dev server died, restart it."
+    script.emit(init());
+    script.emit(toolUse('toolu_dev', 'Bash', { command: 'npm run dev', run_in_background: true }));
+    script.emit(taskStarted('b1', 'toolu_dev', 'local_bash'));
+    script.emit(ack('toolu_dev', 'Command running in background with ID: b1.', { backgroundTaskId: 'b1' }));
+    script.emit(result());
+    await settleUntil(() => sent.some((message) => message.kind === 'complete'));
+    await settle();
+
+    assert.equal(sent.filter((message) => message.kind === 'complete').length, 1);
+    assert.equal(script.released(), false, 'the restarted dev server outlives the turn that started it');
+
+    // Its report comes back in a turn with the same origin, now after this
+    // turn completed: that one still ends the hold.
+    script.emit(taskNotification('b1', 'toolu_dev', 'completed'));
+    script.emit(notificationTurnResult({ num_turns: 1, result: 'The dev server exited.' }));
+    await settleUntil(() => script.released());
   });
 });
 
