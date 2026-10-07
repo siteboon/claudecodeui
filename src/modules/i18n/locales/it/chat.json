@@ -158,7 +158,8 @@
     "status": {
       "newSession": "Nuova sessione",
       "initializing": "Inizializzazione...",
-      "restarting": "Riavvio..."
+      "restarting": "Riavvio...",
+      "themeRestartHint": "Riavvia per applicare il nuovo tema a Claude Code"
     },
     "actions": {
       "disconnect": "Disconnetti",
@@ -214,7 +215,8 @@
   },
   "message": {
     "editAndResend": "Modifica e reinvia",
-    "forkFromHere": "Dirama da qui"
+    "forkFromHere": "Dirama da qui",
+    "answeredBy": "Risposto da {{model}}"
   },
   "composer": {
     "editing": {

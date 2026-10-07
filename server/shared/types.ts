@@ -329,6 +329,15 @@ export type NormalizedMessage = {
   role?: 'user' | 'assistant';
   content?: string;
   /**
+   * The model that produced this assistant message, as the provider reported
+   * it on the transcript row (today: Claude's `message.model`, e.g.
+   * `claude-opus-5`). Absent on user turns — no provider records which model a
+   * request went out with — and absent when the provider named a placeholder
+   * such as `<synthetic>`, so a locally-fabricated notice is never labelled
+   * with a model it did not run on.
+   */
+  model?: string;
+  /**
    * Optional display-oriented metadata used by providers that need to expose
    * richer transcript artifacts without introducing a brand-new message kind.
    *
@@ -862,6 +871,29 @@ export type UpsertProviderMcpServerInput = {
 // ---------------------------
 //----------------- PROVIDER AUTH TYPES ------------
 /**
+ * Records that an API-key style credential is taking precedence over a
+ * still-valid subscription login in `~/.claude/.credentials.json`.
+ *
+ * Claude Code always prefers `ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_API_KEY` over
+ * the OAuth login written by `claude /login`, so when both exist every request
+ * is billed to the key (pay-as-you-go) rather than the subscription — usually
+ * without the user realising it. The Claude auth provider fills this in so the
+ * settings UI can say which variable won and where it was found; the fix
+ * differs per source (unset the variable and restart the server for
+ * `process_env`, edit the `env` block of `~/.claude/settings.json` for
+ * `settings_file`). It is never set when the login in the credentials file is
+ * missing or expired, because then nothing is being bypassed.
+ */
+export type ProviderAuthSubscriptionOverride = {
+  /** The environment variable Claude Code is using instead of the login. */
+  variable: 'ANTHROPIC_API_KEY' | 'ANTHROPIC_AUTH_TOKEN';
+  /** Where that variable was found: the server process env or the settings.json env block. */
+  source: 'process_env' | 'settings_file';
+  /** Email recorded in the credentials file for the bypassed login, when known. */
+  subscriptionEmail: string | null;
+};
+
+/**
  * Authentication status result returned by provider health checks.
  *
  * This shape is consumed by settings/status endpoints to report installation and
@@ -874,6 +906,12 @@ export type ProviderAuthStatus = {
   email: string | null;
   method: string | null;
   error?: string;
+  /**
+   * Present only when `method` is `api_key` and a valid subscription login is
+   * being bypassed; see ProviderAuthSubscriptionOverride. Omitted otherwise so
+   * existing consumers that never look for it are unaffected.
+   */
+  subscriptionOverride?: ProviderAuthSubscriptionOverride;
 };
 
 // ---------------------------
@@ -957,12 +995,13 @@ export type WorkspacePathValidationResult = {
 };
 
 // ---------------------------
-//----------------- GIT WORKTREE MANAGEMENT ------------
+//----------------- GIT COMMAND EXECUTION AND WORKTREE MANAGEMENT ------------
 /**
  * Captured output of one completed `git` invocation.
  *
- * Returned by `GitCommandRunner` implementations so worktree services can read
- * both streams without caring about process plumbing.
+ * Returned by `GitCommandRunner` and `GitProcessRunner` implementations so the
+ * git and worktree services can read both streams without caring about
+ * process plumbing.
  */
 export type GitCommandResult = {
   stdout: string;
@@ -978,6 +1017,20 @@ export type GitCommandResult = {
  * exit code.
  */
 export type GitCommandRunner = (args: string[], cwd: string) => Promise<GitCommandResult>;
+
+/**
+ * Executes `command args...` inside `options.cwd` and resolves with the captured output.
+ *
+ * This is the `spawnAsync` shape the Git routes module injects into its typed
+ * services (branch deletion, branch compare) so their tests can substitute a
+ * fake runner. Like `GitCommandRunner`, the promise must reject on a non-zero
+ * exit code, with `stderr` attached to the error when available.
+ */
+export type GitProcessRunner = (
+  command: string,
+  args: string[],
+  options: { cwd: string },
+) => Promise<GitCommandResult>;
 
 /**
  * One entry parsed from `git worktree list --porcelain`.

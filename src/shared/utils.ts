@@ -1,7 +1,7 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
-import type { Project, ProjectSession } from '@/shared/types';
+import type { Project, ProjectSession, QuickSettingsTab, SlashCommand } from '@/shared/types';
 
 //----------------- DEPLOYMENT MODE ------------
 
@@ -197,15 +197,19 @@ export const playChatCompletionSound = (options = {}): Promise<void> => playNoti
 const DEFAULT_PAGE_TITLE = 'CloudCLI UI';
 
 /**
- * Resolves the human-readable label for a session, accounting for Cursor sessions that
- * carry a `name` instead of the summary the other providers return.
+ * Resolves the human-readable label for a session: the persisted `summary` (the custom
+ * name the sessions API returns for every provider, Cursor included), else the `name` a
+ * Cursor session object may carry locally, else the provider's placeholder. Reads the
+ * same fields in the same order as the sidebar row, so the header, document title and
+ * sidebar never disagree about a session's name.
  */
 export const getSessionTitle = (session: ProjectSession): string => {
+  const title = (session.summary as string) || (session.name as string);
   if (session.__provider === 'cursor') {
-    return (session.name as string) || 'Untitled Session';
+    return title || 'Untitled Session';
   }
 
-  return (session.summary as string) || 'New Session';
+  return title || 'New Session';
 };
 
 /**
@@ -223,3 +227,26 @@ export const getPageTitle = (
   const displayName = selectedProject?.displayName?.trim();
   return displayName ? `${displayName} - ${DEFAULT_PAGE_TITLE}` : DEFAULT_PAGE_TITLE;
 };
+
+// ---------------------------
+
+//----------------- SLASH COMMANDS ------------
+
+/**
+ * Whether a slash command is a provider skill (as opposed to a built-in or a
+ * custom `.md` command). Skills are mapped with `type: 'skill'`; the metadata
+ * check catches entries that only carry the skill marker there. Used wherever
+ * commands are grouped or executed differently by kind.
+ */
+export const isSkillCommand = (command: SlashCommand): boolean =>
+  command.type === 'skill' || command.metadata?.type === 'skill';
+
+// ---------------------------
+
+//----------------- QUICK SETTINGS PANEL ------------
+
+/** DOM id of a quick settings tab button; pairs with `getQuickSettingsTabPanelId` for aria-controls / aria-labelledby. */
+export const getQuickSettingsTabId = (tab: QuickSettingsTab): string => `quick-settings-tab-${tab}`;
+
+/** DOM id of the tabpanel a quick settings tab controls; pairs with `getQuickSettingsTabId`. */
+export const getQuickSettingsTabPanelId = (tab: QuickSettingsTab): string => `quick-settings-tabpanel-${tab}`;

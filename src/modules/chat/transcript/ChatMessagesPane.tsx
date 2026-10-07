@@ -84,6 +84,16 @@ type ChatMessagesPaneProps = {
 };
 
 /**
+ * Keys for the rows inside a collapsed tool group. They only have to be unique
+ * among that group's own rows (ToolGroupContainer disambiguates repeats), so
+ * they do not depend on the pane's per-render key map — and being a module
+ * function, the prop keeps its identity, which is what lets
+ * memo(ToolGroupContainer) skip a group on a stream tick that did not touch it.
+ */
+const getGroupedMessageKey = (message: ChatMessage): string =>
+  getIntrinsicMessageKey(message) ?? 'message-generated';
+
+/**
  * Rendered by chat's ChatInterface as the scrolling transcript: the message
  * list and tool groups, the export menu, the provider empty state and the
  * load-all-history overlay.
@@ -308,7 +318,7 @@ function ChatMessagesPane({
                       group={item}
                       prevMessage={groupPrevMessage}
                       createDiff={createDiff}
-                      getMessageKey={getMessageKey}
+                      getMessageKey={getGroupedMessageKey}
                       onFileOpen={onFileOpen}
                       onShowSettings={onShowSettings}
                       onGrantToolPermission={onGrantToolPermission}

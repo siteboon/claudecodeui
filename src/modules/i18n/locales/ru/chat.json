@@ -158,7 +158,8 @@
     "status": {
       "newSession": "Новый сеанс",
       "initializing": "Инициализация...",
-      "restarting": "Перезапуск..."
+      "restarting": "Перезапуск...",
+      "themeRestartHint": "Перезапустите, чтобы применить новую тему к Claude Code"
     },
     "actions": {
       "disconnect": "Отключиться",
@@ -214,7 +215,8 @@
   },
   "message": {
     "editAndResend": "Изменить и отправить снова",
-    "forkFromHere": "Ответвить отсюда"
+    "forkFromHere": "Ответвить отсюда",
+    "answeredBy": "Ответил {{model}}"
   },
   "composer": {
     "editing": {

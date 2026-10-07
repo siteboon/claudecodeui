@@ -373,6 +373,12 @@ export type ChatMessage = {
    * already-sent one, naming the anchor it replaces. Local to this client.
    */
   replacesAnchorId?: string;
+  /**
+   * The model that produced this assistant turn, as the provider reported it
+   * on the transcript row. Absent on user turns and on rows the provider
+   * fabricated locally, so the footer shows nothing rather than guessing.
+   */
+  model?: string;
   isThinking?: boolean;
   isStreaming?: boolean;
   isToolUse?: boolean;
@@ -528,6 +534,13 @@ export type NormalizedMessage = {
   // kind-specific fields (flat for simplicity)
   role?: 'user' | 'assistant';
   content?: string;
+  /**
+   * The model that answered this turn, as the backend read it off the
+   * provider's own record of the row (today: Claude's `message.model`). Never
+   * set on a user turn — no provider records which model a request went out
+   * with — and never a placeholder the provider synthesized.
+   */
+  model?: string;
   /**
    * Mirrors optional transcript metadata from the server.
    *
@@ -966,11 +979,11 @@ type FileDiffInfo = {
 export type FileOpenHandler = (filePath: string, diffInfo?: FileDiffInfo) => void;
 
 
-/** Which tab the git panel is showing (changes, history, branches or worktrees), driving both the tab bar and which data its controller loads. */
-export type GitPanelView = 'changes' | 'history' | 'branches' | 'worktrees';
+/** Which tab the git panel is showing (changes, compare, history, branches or worktrees), driving both the tab bar and which data its controller loads. */
+export type GitPanelView = 'changes' | 'compare' | 'history' | 'branches' | 'worktrees';
 
-/** Single-letter git status of a changed file (M, A, D or U), used to pick its label, badge styling and change group. */
-export type FileStatusCode = 'M' | 'A' | 'D' | 'U';
+/** Single-letter git status of a changed file (M, A, D, R or U), used to pick its label and badge styling; the Changes tab groups only M/A/D/U, while R (renamed) appears in the Compare tab. */
+export type FileStatusCode = 'M' | 'A' | 'D' | 'R' | 'U';
 
 /** The git action a confirmation dialog is guarding, selecting that dialog's title, action label and colour scheme. */
 export type ConfirmActionType = 'discard' | 'delete' | 'commit' | 'pull' | 'push' | 'publish' | 'revertLocalCommit' | 'deleteBranch';
@@ -1045,6 +1058,26 @@ export type GitApiErrorResponse = {
 export type GitOperationResponse = GitApiErrorResponse & {
   success?: boolean;
   output?: string;
+};
+
+/** Response of the single-file diff endpoints (`/diff`, `/branch-diff/file`): the shared error fields plus the unified `diff` text with its headers stripped. */
+export type GitFileDiffResponse = GitApiErrorResponse & {
+  diff?: string;
+};
+
+/** One file the working copy changed relative to the compare base's merge base, as listed by the branch-diff endpoint; `oldPath` is only set for renames. */
+export type GitBranchDiffFile = {
+  path: string;
+  oldPath?: string;
+  status: FileStatusCode;
+};
+
+/** Payload of the branch-diff endpoint: the requested `base`, the merge-base sha it resolved to and the changed `files`, or the shared error fields plus a stable `code` (e.g. `GIT_NO_MERGE_BASE`) when the base cannot be compared. */
+export type GitBranchDiffResponse = GitApiErrorResponse & {
+  base?: string;
+  mergeBase?: string;
+  files?: GitBranchDiffFile[];
+  code?: string;
 };
 
 /** One git worktree as reported by the worktrees API, including its branch, ahead/behind counts and the linked project used to open it. */
@@ -1280,13 +1313,21 @@ export type ProjectWorkspaceShellProps = RealtimeProps & {
 
 //----------------- PROVIDER AUTHENTICATION ------------
 
-/** Sign-in state of one LLM provider CLI - whether it is authenticated, the account email and method, plus in-flight loading and error state - polled by the provider-auth module and rendered by the settings and onboarding account views. */
+/** Reported by the server when an ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN is taking precedence over a still-valid `claude /login` subscription, so every request is billed pay-as-you-go to the key; says which variable won, where it was found (the fix differs: restart after unsetting a process env var, or edit the `env` block of ~/.claude/settings.json) and the bypassed account's email when the credentials file records one. Rendered as a warning by the settings account view. */
+export type ProviderAuthSubscriptionOverride = {
+  variable: 'ANTHROPIC_API_KEY' | 'ANTHROPIC_AUTH_TOKEN';
+  source: 'process_env' | 'settings_file';
+  subscriptionEmail: string | null;
+};
+
+/** Sign-in state of one LLM provider CLI - whether it is authenticated, the account email and method, plus in-flight loading and error state - polled by the provider-auth module and rendered by the settings and onboarding account views. `subscriptionOverride` is only present when an API key is bypassing a valid subscription login. */
 export type ProviderAuthStatus = {
   authenticated: boolean;
   email: string | null;
   method: string | null;
   error: string | null;
   loading: boolean;
+  subscriptionOverride?: ProviderAuthSubscriptionOverride;
 };
 
 /** The authentication state of every CLI provider at once, keyed by LLMProvider, so onboarding and settings can render each provider's connected, loading and error state from one object returned by useProviderAuthStatus. */
@@ -1306,6 +1347,8 @@ export type PreferenceToggleKey =
 /** The full set of quick settings booleans keyed by PreferenceToggleKey, held together so the panel can read every toggle from one object. */
 export type QuickSettingsPreferences = Record<PreferenceToggleKey, boolean>;
 
+/** Which content area the quick settings panel is showing: 'settings' (preference toggles) or 'commands' (slash-command list); persisted with the pin state and used by the tab bar and the panel view. */
+export type QuickSettingsTab = 'settings' | 'commands';
 
 /** Inline style for the quick settings drag handle, produced by the drag hook from the stored handle position and applied by the handle component. */
 export type QuickSettingsHandleStyle = CSSProperties;
@@ -1478,8 +1521,28 @@ export type SidebarProjectListProps = SessionRowActions & {
   onDeleteProject: (project: Project) => void;
   onSessionSelect: (session: SessionWithProvider, projectName: string) => void;
   onNewSession: (project: Project) => void;
+  /** The project whose session list is in bulk-selection mode and the rows ticked in it, or null while no list is selecting. */
+  sessionSelection: SidebarSessionSelection | null;
+  /** Enters bulk-selection mode for one project, or replaces its ticked rows (used by "Select all" and "Clear"). */
+  onSetSessionSelection: (selection: SidebarSessionSelection) => void;
+  /** Ticks or unticks one row; takes the owning projectId so a memoized row can bind itself without a per-row closure. */
+  onToggleSessionSelected: (projectId: string, sessionId: string) => void;
+  /** Leaves bulk-selection mode, discarding the ticked rows. */
+  onCancelSessionSelection: () => void;
+  /** Opens the bulk delete confirmation for the ids the list resolved as still deletable. */
+  onDeleteSelectedSessions: (sessionIds: string[]) => void;
   t: TFunction;
 };
+
+/**
+ * The colour theme the user selected, persisted as the `theme` preference.
+ *
+ * `light` and `dark` pin the appearance; `system` follows the operating
+ * system's light/dark setting and keeps following it while the app is open.
+ * `system` is the default, and is also what an unrecognised stored value
+ * resolves to.
+ */
+export type ThemeMode = 'light' | 'dark' | 'system';
 
 /** The ordering applied to the project list, either alphabetically by name or by most recent activity, persisted alongside the user's appearance settings. */
 export type ProjectSortOrder = 'name' | 'date';
@@ -1534,11 +1597,23 @@ export type ActiveSidebarRename =
  * The sidebar's pending delete confirmation. One value rather than a pair of
  * nullable states, so a project dialog and a session dialog cannot both be
  * open — they are portalled at the same z-index and would stack. The project
- * variant carries the session count the dialog warns with.
+ * variant carries the session count the dialog warns with, and the `sessions`
+ * variant the ids of a bulk delete, resolved when the dialog was opened.
  */
 export type PendingSidebarDeletion =
   | { kind: 'project'; project: Project; sessionCount: number }
-  | { kind: 'session'; sessionId: string; sessionTitle: string; isArchived: boolean };
+  | { kind: 'session'; sessionId: string; sessionTitle: string; isArchived: boolean }
+  | { kind: 'sessions'; sessionIds: string[] };
+
+/**
+ * The sessions ticked for a bulk action, scoped to the one project whose list
+ * is in selection mode. Scoping it keeps a delete from mixing rows of two
+ * projects, and lets every other project row be handed a constant `null`.
+ */
+export type SidebarSessionSelection = {
+  projectId: string;
+  sessionIds: ReadonlySet<string>;
+};
 
 /** Whether a TaskMaster MCP server is present and configured for a project, or null while that status is still unknown. */
 export type MCPServerStatus = {

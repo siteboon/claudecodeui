@@ -1,0 +1,44 @@
+{
+  "toolbar": {
+    "changes": "změn",
+    "previousChange": "Předchozí změna",
+    "nextChange": "Další změna",
+    "hideDiff": "Skrýt zvýraznění rozdílů",
+    "showDiff": "Zobrazit zvýraznění rozdílů",
+    "settings": "Nastavení editoru",
+    "collapse": "Sbalit editor",
+    "expand": "Rozbalit editor na celou šířku"
+  },
+  "loading": "Načítání souboru {{fileName}}...",
+  "header": {
+    "showingChanges": "Zobrazeny změny"
+  },
+  "actions": {
+    "copyPath": "Kopírovat cestu k souboru",
+    "pathCopied": "Cesta k souboru zkopírována",
+    "download": "Stáhnout soubor",
+    "save": "Uložit",
+    "saving": "Ukládání...",
+    "saved": "Uloženo",
+    "exitFullscreen": "Ukončit celou obrazovku",
+    "fullscreen": "Celá obrazovka",
+    "close": "Zavřít",
+    "previewMarkdown": "Náhled Markdownu",
+    "editMarkdown": "Upravit Markdown",
+    "previewHtml": "Otevřít náhled HTML na nové kartě"
+  },
+  "footer": {
+    "lines": "Řádky:",
+    "characters": "Znaky:",
+    "shortcuts": "Stiskněte Ctrl+S pro uložení • Esc pro zavření"
+  },
+  "binaryFile": {
+    "title": "Binární soubor",
+    "message": "Soubor „{{fileName}}“ nelze zobrazit v textovém editoru, protože je binární."
+  },
+  "filePreview": {
+    "loading": "Načítání náhledu...",
+    "error": "Tento soubor nelze zobrazit.",
+    "openInNewTab": "Otevřít na nové kartě"
+  }
+}

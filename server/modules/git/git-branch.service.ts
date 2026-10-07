@@ -1,21 +1,11 @@
+import type { GitProcessRunner } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
-
-type GitCommandResult = {
-  stdout: string;
-  stderr: string;
-};
-
-type GitCommandRunner = (
-  command: string,
-  args: string[],
-  options: { cwd: string },
-) => Promise<GitCommandResult>;
 
 type DeleteLocalBranchInput = {
   projectPath: string;
   branch: string;
   force: boolean;
-  runCommand: GitCommandRunner;
+  runCommand: GitProcessRunner;
 };
 
 /** Used by the Git routes module to safely delete a non-current local branch. */
