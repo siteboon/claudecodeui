@@ -412,6 +412,25 @@
       "placeholder": "p. ej., \"Bash(rm:*)\"",
       "empty": "No hay herramientas bloqueadas configuradas"
     },
+    "settingsFiles": {
+      "title": "Reglas de los archivos de configuración de Claude",
+      "description": "La CLI de Claude también aplica estas reglas, además de las listas de arriba. Una regla de denegación prevalece donde sea que esté definida, pero una regla de preguntar no pide confirmación para una herramienta que ya está en Herramientas permitidas. Aquí las reglas son de solo lectura; edítalas en los archivos.",
+      "sources": {
+        "user": "Tu configuración",
+        "managed": "Configuración administrada (administrador)"
+      },
+      "groups": {
+        "allow": "Permitir",
+        "ask": "Preguntar",
+        "deny": "Denegar"
+      },
+      "missing": "Archivo no encontrado, así que no añade reglas.",
+      "invalid": "No se pudo leer este archivo. Comprueba que sea JSON válido.",
+      "empty": "No hay reglas de permisos en este archivo.",
+      "loading": "Cargando reglas…",
+      "loadFailed": "No se pudieron cargar las reglas de los archivos de configuración de Claude.",
+      "projectNote": "Los archivos .claude/settings.json y .claude/settings.local.json propios de un proyecto también se aplican a los chats de ese proyecto. La CLI de Claude ignora las reglas de permitir de .claude/settings.json hasta que confíes en la carpeta: ejecuta Claude Code allí una vez en modo interactivo y acepta el diálogo de confianza."
+    },
     "allowedCommands": {
       "title": "Comandos de shell permitidos",
       "description": "Comandos de shell que se permiten automáticamente sin preguntar",

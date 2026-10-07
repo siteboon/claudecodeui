@@ -383,6 +383,25 @@
       "placeholder": "es. \"Bash(rm:*)\"",
       "empty": "Nessuno strumento bloccato configurato"
     },
+    "settingsFiles": {
+      "title": "Regole dai file di impostazioni di Claude",
+      "description": "La CLI di Claude applica anche queste regole, oltre agli elenchi sopra. Una regola di divieto prevale ovunque sia impostata, ma una regola di richiesta non chiede conferma per uno strumento già presente in Strumenti consentiti. Qui le regole sono di sola lettura; modificale nei file.",
+      "sources": {
+        "user": "Le tue impostazioni",
+        "managed": "Impostazioni gestite (amministratore)"
+      },
+      "groups": {
+        "allow": "Consenti",
+        "ask": "Chiedi",
+        "deny": "Nega"
+      },
+      "missing": "File non trovato, quindi non aggiunge regole.",
+      "invalid": "Impossibile leggere questo file. Verifica che sia un JSON valido.",
+      "empty": "Nessuna regola di autorizzazione in questo file.",
+      "loading": "Caricamento regole…",
+      "loadFailed": "Impossibile caricare le regole dai file di impostazioni di Claude.",
+      "projectNote": "I file .claude/settings.json e .claude/settings.local.json di un progetto si applicano anche alle chat di quel progetto. La CLI di Claude ignora le regole di consenso in .claude/settings.json finché la cartella non è considerata attendibile: avvia una volta Claude Code in modalità interattiva in quella cartella e accetta la finestra di dialogo sull'attendibilità."
+    },
     "allowedCommands": {
       "title": "Comandi shell consentiti",
       "description": "Comandi shell automaticamente consentiti senza richiedere permesso",

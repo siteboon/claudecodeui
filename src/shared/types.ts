@@ -1393,6 +1393,16 @@ export type ClaudePermissionsState = {
   skipPermissions: boolean;
 };
 
+/** One of the Claude CLI's own settings files (the user's ~/.claude/settings.json or the administrator-managed file) and the permission rules it adds on top of ClaudePermissionsState; served read-only by the server, never edited in the app. `missing` and `invalid` files carry empty rule lists. */
+export type ClaudeSettingsPermissionSource = {
+  scope: 'user' | 'managed';
+  path: string;
+  status: 'ok' | 'missing' | 'invalid';
+  allow: string[];
+  deny: string[];
+  ask: string[];
+};
+
 /** The user's notification settings, grouped into delivery channels (in-app, web push, desktop, sound) and the events that trigger them; mirrors the payload of the notification preferences API. */
 export type NotificationPreferencesState = {
   channels: {

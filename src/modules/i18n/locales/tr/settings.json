@@ -384,6 +384,25 @@
       "placeholder": "ör. \"Bash(rm:*)\"",
       "empty": "Engellenen araç yapılandırılmamış"
     },
+    "settingsFiles": {
+      "title": "Claude ayar dosyalarındaki kurallar",
+      "description": "Claude CLI bu kuralları yukarıdaki listelere ek olarak da uygular. Bir reddetme kuralı nerede tanımlanmış olursa olsun önceliklidir, ancak bir sorma kuralı İzin Verilen Araçlar listesinde zaten bulunan bir araç için onay istemez. Kurallar burada salt okunurdur; dosyalarda düzenleyin.",
+      "sources": {
+        "user": "Ayarlarınız",
+        "managed": "Yönetilen ayarlar (yönetici)"
+      },
+      "groups": {
+        "allow": "İzin ver",
+        "ask": "Sor",
+        "deny": "Reddet"
+      },
+      "missing": "Dosya bulunamadı, bu yüzden kural eklemiyor.",
+      "invalid": "Bu dosya okunamadı. Geçerli bir JSON olduğundan emin olun.",
+      "empty": "Bu dosyada izin kuralı yok.",
+      "loading": "Kurallar yükleniyor…",
+      "loadFailed": "Claude ayar dosyalarındaki kurallar yüklenemedi.",
+      "projectNote": "Bir projenin kendi .claude/settings.json ve .claude/settings.local.json dosyaları da o projedeki sohbetlere uygulanır. Claude CLI, klasöre güvenilene kadar .claude/settings.json içindeki izin kurallarını yok sayar: Claude Code'u orada bir kez etkileşimli olarak çalıştırın ve güven iletişim kutusunu kabul edin."
+    },
     "allowedCommands": {
       "title": "İzin Verilen Shell Komutları",
       "description": "İzin istemeden otomatik olarak izin verilen shell komutları",

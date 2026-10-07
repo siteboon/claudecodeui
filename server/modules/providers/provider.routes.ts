@@ -1,6 +1,7 @@
 import express, { type Request, type Response } from 'express';
 
 import { providerAuthService } from '@/modules/providers/services/provider-auth.service.js';
+import { claudeSettingsPermissionsService } from '@/modules/providers/services/claude-settings-permissions.service.js';
 import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
 import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
 import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
@@ -817,6 +818,15 @@ router.get(
     res.json(createApiSuccessResponse(
       providerCapabilitiesService.getProviderCapabilities(provider),
     ));
+  }),
+);
+
+// Read-only: the rules Claude's own settings files add on top of the UI's lists.
+router.get(
+  '/claude/settings-permissions',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const sources = await claudeSettingsPermissionsService.listRuleSources();
+    res.json(createApiSuccessResponse({ sources }));
   }),
 );
 
