@@ -569,6 +569,14 @@ The parts worth knowing:
   close cannot detach the socket that replaced it*.
 - **Provider auth URLs are detected in the output stream** and forwarded as
   `type: 'auth_url'`, deduplicated per connection (`:459-475`).
+- **The app theme reaches the Claude CLI at launch.** `init` may carry
+  `colorScheme: 'light' | 'dark'`. The server then sets `COLORFGBG`, and in a light tab
+  it starts `claude` with `--settings <file>` (a file under `~/.cloudcli` holding the
+  light variant of the user's own dark theme) when that theme is a dark one. When the
+  CLI's colours follow the app theme, the server sends `type: 'claude_theme'` with the
+  scheme the CLI was launched in. It sends it again on reattach, so the Shell can offer
+  a restart after a theme toggle. Clients that send no `colorScheme` get the old launch
+  and no frame.
 
 The client is `useShellConnection.ts:127` via `getShellWebSocketUrl`
 (`src/modules/shell/utils/socket.ts:39-53`), which builds the URL the same way the chat one

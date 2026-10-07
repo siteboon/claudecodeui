@@ -230,3 +230,46 @@ test('consecutive workflow launches keep their own cards instead of folding into
   assert.equal(items.length, 2);
   assert.ok(items.every((item) => !isToolGroupItem(item)));
 });
+
+/**
+ * Grouping re-runs on every 100ms stream tick over a fresh array. The group
+ * objects it hands back are props of the memoized ToolGroupContainer, so a run
+ * whose rows did not change has to come back as the very same object — or
+ * every collapsed group in the transcript re-renders ten times a second.
+ */
+test('an unchanged run comes back as the same group object', () => {
+  const first = toolMessage('Read', { file_path: '/a.ts' });
+  const second = toolMessage('Read', { file_path: '/b.ts' });
+  const tail = textMessage('done');
+
+  const [groupA] = groupConsecutiveTools([first, second, tail]);
+  // A later tick: same rows, new array, plus a row appended after the run.
+  const [groupB] = groupConsecutiveTools([first, second, tail, textMessage('more')]);
+
+  assert.ok(isToolGroupItem(groupA) && isToolGroupItem(groupB));
+  assert.equal(groupB, groupA, 'the group object must survive a stream tick');
+  assert.equal(groupB.messages, groupA.messages, 'and so must its messages array');
+});
+
+test('a run that grew, changed rows, or changed showThinking is rebuilt', () => {
+  const first = toolMessage('Read', { file_path: '/a.ts' });
+  const second = toolMessage('Read', { file_path: '/b.ts' });
+
+  const [initial] = groupConsecutiveTools([first, second]);
+  assert.ok(isToolGroupItem(initial));
+
+  const [grown] = groupConsecutiveTools([first, second, toolMessage('Read', { file_path: '/c.ts' })]);
+  assert.ok(isToolGroupItem(grown));
+  assert.notEqual(grown, initial);
+  assert.equal(grown.preview, '/a.ts, /b.ts, +1 more');
+
+  // A tool result arriving re-projects the row into a new object.
+  const [replaced] = groupConsecutiveTools([first, { ...second, toolResult: { content: 'ok' } }]);
+  assert.ok(isToolGroupItem(replaced));
+  assert.notEqual(replaced, initial);
+
+  // Hidden reasoning both joins runs and changes what the preview names.
+  const [rehidden] = groupConsecutiveTools([first, thinkingMessage(), second], false);
+  assert.ok(isToolGroupItem(rehidden));
+  assert.notEqual(rehidden, initial);
+});
