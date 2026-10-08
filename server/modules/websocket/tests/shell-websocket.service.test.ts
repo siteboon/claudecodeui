@@ -16,7 +16,10 @@ test('Chat waits for the retained Codex terminal writer to exit', async () => {
     resolveProviderSessionId: () => 'provider-thread',
     spawnPty: (_shell, args) => {
       const command = Array.isArray(args) ? args[args.length - 1] : args;
-      assert.match(command, /@openai\/codex\/bin\/codex\.js/);
+      assert.match(
+        command,
+        /^codex --disable daemon_auto_start resume "provider-thread"$/,
+      );
       assert.doesNotMatch(command, /\|\| codex/);
       return terminal as never;
     },
@@ -26,12 +29,42 @@ test('Chat waits for the retained Codex terminal writer to exit', async () => {
   }));
   let released = false;
   const handoff = releaseCodexShellSession(sessionId).then(() => { released = true; });
-  assert.equal(terminal.killed, true);
+  assert.equal(terminal.killed, false);
   await Promise.resolve();
   assert.equal(released, false);
   terminal.emitExit();
   await handoff;
   assert.equal(released, true);
+});
+
+test('Chat asks Codex Shell to quit before forcing its PTY closed', async () => {
+  const terminal = createFakePty();
+  const originalKill = terminal.kill.bind(terminal);
+  let writerLocked = true;
+  terminal.write = (data: string) => {
+    if (data.includes('/quit')) {
+      writerLocked = false;
+      queueMicrotask(() => terminal.emitExit());
+    }
+  };
+  terminal.kill = () => {
+    originalKill();
+    queueMicrotask(() => terminal.emitExit());
+  };
+  const socket = createFakeSocket();
+  const sessionId = `codex-graceful-handoff-${Date.now()}`;
+  handleShellConnection(socket as never, {
+    resolveProviderSessionId: () => 'provider-thread',
+    spawnPty: () => terminal as never,
+  });
+  socket.emit('message', JSON.stringify({
+    type: 'init', projectPath: process.cwd(), sessionId, provider: 'codex', hasSession: true,
+  }));
+
+  await releaseCodexShellSession(sessionId);
+
+  assert.equal(writerLocked, false);
+  assert.equal(terminal.killed, false);
 });
 
 function createFakeSocket() {
@@ -66,7 +99,7 @@ function createFakePty() {
     emitExit() {
       exitListener?.({ exitCode: 0 });
     },
-    write() {},
+    write(_data: string) {},
     resize() {},
     kill() {
       this.killed = true;

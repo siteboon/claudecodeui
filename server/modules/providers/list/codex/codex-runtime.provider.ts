@@ -29,6 +29,7 @@ type ActiveCodexSession = {
   codex: Codex;
   status: 'running' | 'aborted' | 'completed';
   abortController: AbortController;
+  finished: Promise<void>;
   startedAt: string;
 };
 
@@ -299,6 +300,10 @@ async function queryCodex(
   // when the stream already reported the failure.
   let errorSurfaced = false;
   const abortController = new AbortController();
+  let resolveFinished: () => void = () => undefined;
+  const finished = new Promise<void>((resolve) => {
+    resolveFinished = resolve;
+  });
   // Session-map key: the app session id when the caller supplied one, else
   // the provider-native thread id once captured (legacy/direct API callers).
   const sessionKey = () => sessionId || capturedSessionId || null;
@@ -330,6 +335,7 @@ async function queryCodex(
         codex,
         status: 'running',
         abortController,
+        finished,
         startedAt: new Date().toISOString()
       });
     };
@@ -490,6 +496,7 @@ async function queryCodex(
         session.status = session.status === 'aborted' ? 'aborted' : 'completed';
       }
     }
+    resolveFinished();
   }
 }
 
@@ -498,7 +505,7 @@ async function queryCodex(
  * @param {string} sessionId - Session ID to abort
  * @returns {boolean} - Whether abort was successful
  */
-function abortCodexSession(sessionId: string) {
+async function abortCodexSession(sessionId: string): Promise<boolean> {
   const session = activeCodexSessions.get(sessionId);
 
   if (!session) {
@@ -512,6 +519,10 @@ function abortCodexSession(sessionId: string) {
     console.warn(`[Codex] Failed to abort session ${sessionId}:`, error);
   }
 
+  // AbortController only requests termination. Wait until the SDK's stream
+  // has unwound and its child process has exited before another surface can
+  // resume this single-writer thread.
+  await session.finished;
   return true;
 }
 

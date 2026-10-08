@@ -1,12 +1,12 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
 import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
 import { parseIncomingJsonObject } from '@/shared/utils.js';
+
 import { chatRunRegistry } from './chat-run-registry.service.js';
 
 type ShellIncomingMessage = {
@@ -36,24 +36,47 @@ type PtySessionEntry = {
 
 const ptySessionsMap = new Map<string, PtySessionEntry>();
 const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
+const CODEX_GRACEFUL_EXIT_DELAY_MS = 50;
+const CODEX_FORCE_EXIT_TIMEOUT_MS = 1500;
+const CODEX_EXIT_TIMEOUT_MS = 5000;
+
+function forceClosePty(terminal: IPty): void {
+  if (os.platform() !== 'win32' && Number.isInteger(terminal.pid) && terminal.pid > 0) {
+    try {
+      process.kill(-terminal.pid, 'SIGHUP');
+      return;
+    } catch {
+      // Fall back when the PTY pid is not also its process-group id.
+    }
+  }
+  terminal.kill();
+}
 
 /** Used by Chat to release a Codex terminal's exclusive session writer. */
 export async function releaseCodexShellSession(sessionId: string): Promise<void> {
   for (const [key, session] of ptySessionsMap) {
     if (session.provider !== 'codex' || session.sessionId !== sessionId) continue;
     await new Promise<void>((resolve, reject) => {
+      let quitTimer: NodeJS.Timeout | undefined;
+      let forceTimer: NodeJS.Timeout | undefined;
       const timeout = setTimeout(() => {
+        if (quitTimer) clearTimeout(quitTimer);
+        if (forceTimer) clearTimeout(forceTimer);
         listener.dispose();
         reject(new Error('Codex terminal is still closing. Please retry in a moment.'));
-      }, 5000);
+      }, CODEX_EXIT_TIMEOUT_MS);
       const listener = session.pty.onExit(() => {
         clearTimeout(timeout);
+        if (quitTimer) clearTimeout(quitTimer);
+        if (forceTimer) clearTimeout(forceTimer);
         listener.dispose();
         resolve();
       });
       if (session.timeoutId) clearTimeout(session.timeoutId);
       ptySessionsMap.delete(key);
-      session.pty.kill();
+      session.pty.write('\x03');
+      quitTimer = setTimeout(() => session.pty.write('/quit\r'), CODEX_GRACEFUL_EXIT_DELAY_MS);
+      forceTimer = setTimeout(() => forceClosePty(session.pty), CODEX_FORCE_EXIT_TIMEOUT_MS);
     });
   }
 }
@@ -225,16 +248,14 @@ function buildShellCommand(
   }
 
   if (provider === 'codex') {
-    const codexPackage = createRequire(import.meta.url).resolve('@openai/codex/package.json');
-    const codexEntry = path.join(path.dirname(codexPackage), 'bin', 'codex.js');
-    const codexCommand = `"${process.execPath}" "${codexEntry}"`;
+    const codexTuiCommand = 'codex --disable daemon_auto_start';
     if (resumeSessionId) {
       if (os.platform() === 'win32') {
-        return `& ${codexCommand} resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { & ${codexCommand} }`;
+        return `& ${codexTuiCommand} resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { & ${codexTuiCommand} }`;
       }
-      return `${codexCommand} resume "${resumeSessionId}"`;
+      return `${codexTuiCommand} resume "${resumeSessionId}"`;
     }
-    return os.platform() === 'win32' ? `& ${codexCommand}` : codexCommand;
+    return os.platform() === 'win32' ? `& ${codexTuiCommand}` : codexTuiCommand;
   }
 
   if (provider === 'opencode') {

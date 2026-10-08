@@ -7,6 +7,51 @@ import type { Thread, ThreadOptions } from '@openai/codex-sdk';
 import { codexRuntime } from '@/modules/providers/list/codex/codex-runtime.provider.js';
 import type { ProviderRuntimeContext } from '@/shared/index.js';
 
+test('Codex abort waits for the SDK run to release its thread writer', async (t) => {
+  let releaseWriter: (() => void) | undefined;
+  let streamStarted: (() => void) | undefined;
+  const started = new Promise<void>((resolve) => { streamStarted = resolve; });
+  const writerReleased = new Promise<void>((resolve) => { releaseWriter = resolve; });
+  const thread = {
+    id: 'native-thread',
+    async runStreamed() {
+      return { events: (async function* () {
+        yield { type: 'thread.started', thread_id: 'native-thread' };
+        streamStarted?.();
+        await writerReleased;
+      })() };
+    },
+  } as unknown as Thread;
+  t.mock.method(Codex.prototype, 'resumeThread', () => thread);
+
+  const context: ProviderRuntimeContext = {
+    resolveProviderSessionId: () => 'native-thread',
+    resolveResumeModel: async () => 'test-model',
+    getProviderModels: async () => ({ OPTIONS: [], DEFAULT: 'test-model' }),
+    normalizeMessage: () => [],
+    isProviderInstalled: async () => true,
+  };
+  const run = codexRuntime.run(
+    'test',
+    { sessionId: 'app-session' },
+    { isWebSocketWriter: true, send: () => undefined },
+    context,
+  );
+  await started;
+
+  let abortFinished = false;
+  const abort = Promise.resolve(codexRuntime.abort('app-session')).then((result) => {
+    abortFinished = true;
+    return result;
+  });
+  await Promise.resolve();
+  assert.equal(abortFinished, false);
+
+  releaseWriter?.();
+  assert.equal(await abort, true);
+  await run;
+});
+
 for (const resumed of [false, true]) {
   for (const permissionMode of [undefined, 'default', 'unknown', 'acceptEdits', 'bypassPermissions']) {
     test(`Codex ${resumed ? 'resumes' : 'starts'} with supported permissions (${permissionMode ?? 'omitted'})`, async (t) => {

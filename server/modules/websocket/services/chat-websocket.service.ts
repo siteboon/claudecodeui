@@ -1,5 +1,4 @@
 import path from 'node:path';
-import { releaseCodexShellSession } from './shell-websocket.service.js';
 
 import type { WebSocket } from 'ws';
 
@@ -21,6 +20,8 @@ import type {
   ProviderRuntimeWriter,
 } from '@/shared/types.js';
 import { parseIncomingJsonObject } from '@/shared/utils.js';
+
+import { releaseCodexShellSession } from './shell-websocket.service.js';
 
 /**
  * Trust boundary for client-supplied image attachments: chat.send options come
