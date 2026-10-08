@@ -11,6 +11,9 @@ import { appConfigDb } from '@/modules/database/index.js';
 import { providerMcpService } from '@/modules/providers/index.js';
 import { getModuleDirectory } from '@/shared/utils.js';
 
+// The SSL_CERT/SSL_KEY rule is shared with server/index.ts and vite.config.js, outside server/.
+import { resolveServerTls } from '../../../shared/serverTls.js';
+
 import { getBrowserUseRuntime } from './browser-use-runtime.js';
 
 const require = createRequire(import.meta.url);
@@ -161,9 +164,18 @@ function getMcpCommand(): { command: string; args: string[] } {
   };
 }
 
-function getMcpApiUrl(): string {
+// Where the MCP subprocess reaches this server. With SSL_CERT/SSL_KEY in effect the server only
+// speaks HTTPS, so the MCP gets an https:// URL plus the certificate to trust for it.
+function getMcpApiEnv(): Record<string, string> {
   const port = process.env.SERVER_PORT || process.env.PORT || '3001';
-  return `http://127.0.0.1:${port}/api/browser-use-mcp`;
+  const serverTls = resolveServerTls(process.env);
+  if (serverTls.protocol === 'https') {
+    return {
+      CLOUDCLI_BROWSER_USE_API_URL: `https://127.0.0.1:${port}/api/browser-use-mcp`,
+      CLOUDCLI_BROWSER_USE_API_CA_CERT: serverTls.certPath,
+    };
+  }
+  return { CLOUDCLI_BROWSER_USE_API_URL: `http://127.0.0.1:${port}/api/browser-use-mcp` };
 }
 
 async function removeMcpServerFromAllProviders(name: string) {
@@ -466,7 +478,7 @@ export const browserUseService = {
       args,
       env: {
         CLOUDCLI_BROWSER_USE_MCP_TOKEN: getOrCreateMcpToken(),
-        CLOUDCLI_BROWSER_USE_API_URL: getMcpApiUrl(),
+        ...getMcpApiEnv(),
       },
     });
     return { name: MCP_SERVER_NAME, command, args, results };

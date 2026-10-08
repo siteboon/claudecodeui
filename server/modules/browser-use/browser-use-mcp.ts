@@ -3,6 +3,10 @@
 // eslint-disable-next-line boundaries/no-unknown
 import '../../load-env.js';
 
+import fs from 'node:fs';
+import https from 'node:https';
+import tls from 'node:tls';
+
 type JsonRpcRequest = {
   jsonrpc: '2.0';
   id?: string | number | null;
@@ -37,25 +41,79 @@ const readNumber = (value: unknown): number | undefined =>
 
 const apiUrl = (process.env.CLOUDCLI_BROWSER_USE_API_URL || 'http://127.0.0.1:3001/api/browser-use-mcp').replace(/\/$/, '');
 const apiToken = process.env.CLOUDCLI_BROWSER_USE_MCP_TOKEN || '';
+// Set by the server next to an https:// API URL when it runs with SSL_CERT/SSL_KEY.
+const apiCaCertPath = process.env.CLOUDCLI_BROWSER_USE_API_CA_CERT || '';
 const API_TIMEOUT_MS = Number.parseInt(process.env.CLOUDCLI_BROWSER_USE_API_TIMEOUT_MS || '60000', 10);
+const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', 'localhost', '[::1]']);
+
+type BrowserUseApiResult = { success?: boolean; data?: unknown; error?: string };
+type BrowserUseApiResponse = { ok: boolean; status: number; data: BrowserUseApiResult };
+
+// fetch() cannot take a per-request CA, so the HTTPS case uses node:https. It trusts the public
+// roots plus the server's own certificate, and skips only the hostname check on loopback: the
+// certificate names the public host, while this call goes to 127.0.0.1.
+// allowPartialTrustChain lets that certificate be the trust anchor even when it is not
+// self-signed, e.g. a leaf from mkcert or a corporate CA whose root is not in the file.
+function postJsonOverHttps(url: URL, headers: Record<string, string>, body: string): Promise<BrowserUseApiResponse> {
+  return new Promise((resolve, reject) => {
+    const request = https.request(url, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Length': String(Buffer.byteLength(body)) },
+      ca: apiCaCertPath ? [...tls.rootCertificates, fs.readFileSync(apiCaCertPath, 'utf8')] : undefined,
+      allowPartialTrustChain: true,
+      checkServerIdentity: LOOPBACK_HOSTNAMES.has(url.hostname) ? () => undefined : tls.checkServerIdentity,
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
+    }, (response) => {
+      let raw = '';
+      response.setEncoding('utf8');
+      response.on('data', (chunk: string) => {
+        raw += chunk;
+      });
+      response.on('end', () => {
+        try {
+          const status = response.statusCode ?? 0;
+          resolve({ ok: status >= 200 && status < 300, status, data: JSON.parse(raw) as BrowserUseApiResult });
+        } catch (error) {
+          reject(error);
+        }
+      });
+      response.on('error', reject);
+    });
+    request.on('error', reject);
+    request.end(body);
+  });
+}
+
+async function postJson(url: URL, headers: Record<string, string>, body: string): Promise<BrowserUseApiResponse> {
+  if (url.protocol === 'https:') {
+    return postJsonOverHttps(url, headers, body);
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers,
+    body,
+    signal: AbortSignal.timeout(API_TIMEOUT_MS),
+  });
+  const data = await response.json() as BrowserUseApiResult;
+  return { ok: response.ok, status: response.status, data };
+}
 
 async function callBrowserUseApi(toolName: string, input: Record<string, unknown>) {
   if (!apiToken) {
     throw new Error('CLOUDCLI_BROWSER_USE_MCP_TOKEN is not configured.');
   }
 
-  const response = await fetch(`${apiUrl}/tools/${encodeURIComponent(toolName)}`, {
-    method: 'POST',
-    headers: {
+  const { ok, status, data } = await postJson(
+    new URL(`${apiUrl}/tools/${encodeURIComponent(toolName)}`),
+    {
       Authorization: `Bearer ${apiToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(input),
-    signal: AbortSignal.timeout(API_TIMEOUT_MS),
-  });
-  const data = await response.json() as { success?: boolean; data?: unknown; error?: string };
-  if (!response.ok || data.success === false) {
-    throw new Error(data.error || `Browser API request failed (${response.status})`);
+    JSON.stringify(input),
+  );
+  if (!ok || data.success === false) {
+    throw new Error(data.error || `Browser API request failed (${status})`);
   }
   return data.data;
 }

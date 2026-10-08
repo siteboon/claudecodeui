@@ -413,6 +413,10 @@ export class LocalServerController {
         ...runtime.env,
         HOST: bindHost,
         SERVER_PORT: String(port),
+        // Keep this server on plain HTTP even if SSL_CERT/SSL_KEY are set in the user's shell or
+        // .env: the window, health checks and share links all use http://. Read by
+        // resolveServerTls() in shared/serverTls.js (not imported: shared/ is not packaged here).
+        CLOUDCLI_DISABLE_SSL: '1',
         PATH: getDesktopPath(),
       },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -463,6 +467,14 @@ export class LocalServerController {
     if (!forceOwnServer) {
       const candidateUrls = await getExistingServerCandidateUrls(defaultUrl);
       for (const candidateUrl of candidateUrls) {
+        // A server started with SSL_CERT/SSL_KEY advertises an https:// URL (e.g. in
+        // local-server.json). The desktop window only loads plain http:// loopback servers and
+        // http.get() throws on https://, so skip it: a later candidate or the app's own HTTP
+        // server is used instead.
+        if (new URL(candidateUrl).protocol !== 'http:') {
+          this.appendStartupLog(`Skipping ${candidateUrl}: the desktop app only uses http:// local servers`);
+          continue;
+        }
         if (await isCloudCliServer(candidateUrl)) {
           const displayUrl = getDisplayUrl(candidateUrl);
           this.localServerPort = getPortFromUrl(candidateUrl);
