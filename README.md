@@ -267,3 +267,4 @@ CloudCLI UI - (https://cloudcli.ai).
 <div align="center">
  <strong>Made with care for the Claude Code, Cursor and Codex community.</strong>
 </div>
+Local fix (2026-10-08): Codex Chat releases its retained Shell writer before resuming. Stop an active Chat response before opening Shell.

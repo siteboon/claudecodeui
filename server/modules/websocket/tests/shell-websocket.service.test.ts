@@ -6,7 +6,28 @@ import test from 'node:test';
 
 import { WebSocket } from 'ws';
 
-import { handleShellConnection } from '@/modules/websocket/services/shell-websocket.service.js';
+import { handleShellConnection, releaseCodexShellSession } from '@/modules/websocket/services/shell-websocket.service.js';
+
+test('Chat waits for the retained Codex terminal writer to exit', async () => {
+  const terminal = createFakePty();
+  const socket = createFakeSocket();
+  const sessionId = `codex-handoff-${Date.now()}`;
+  handleShellConnection(socket as never, {
+    resolveProviderSessionId: () => 'provider-thread',
+    spawnPty: () => terminal as never,
+  });
+  socket.emit('message', JSON.stringify({
+    type: 'init', projectPath: process.cwd(), sessionId, provider: 'codex', hasSession: true,
+  }));
+  let released = false;
+  const handoff = releaseCodexShellSession(sessionId).then(() => { released = true; });
+  assert.equal(terminal.killed, true);
+  await Promise.resolve();
+  assert.equal(released, false);
+  terminal.emitExit();
+  await handoff;
+  assert.equal(released, true);
+});
 
 function createFakeSocket() {
   const socket = new EventEmitter() as EventEmitter & {

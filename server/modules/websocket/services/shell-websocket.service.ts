@@ -6,6 +6,7 @@ import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
 import { parseIncomingJsonObject } from '@/shared/utils.js';
+import { chatRunRegistry } from './chat-run-registry.service.js';
 
 type ShellIncomingMessage = {
   type?: string;
@@ -29,10 +30,32 @@ type PtySessionEntry = {
   timeoutId: NodeJS.Timeout | null;
   projectPath: string;
   sessionId: string | null;
+  provider: string;
 };
 
 const ptySessionsMap = new Map<string, PtySessionEntry>();
 const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
+
+/** Used by Chat to release a Codex terminal's exclusive session writer. */
+export async function releaseCodexShellSession(sessionId: string): Promise<void> {
+  for (const [key, session] of ptySessionsMap) {
+    if (session.provider !== 'codex' || session.sessionId !== sessionId) continue;
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        listener.dispose();
+        reject(new Error('Codex terminal is still closing. Please retry in a moment.'));
+      }, 5000);
+      const listener = session.pty.onExit(() => {
+        clearTimeout(timeout);
+        listener.dispose();
+        resolve();
+      });
+      if (session.timeoutId) clearTimeout(session.timeoutId);
+      ptySessionsMap.delete(key);
+      session.pty.kill();
+    });
+  }
+}
 const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
 const ANSI_ESCAPE_SEQUENCE_REGEX = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1B\\))/g;
 const TRAILING_URL_PUNCTUATION_REGEX = /[)\]}>.,;:!?]+$/;
@@ -316,6 +339,10 @@ export function handleShellConnection(
         const sessionId = readString(data.sessionId) || null;
         const hasSession = readBoolean(data.hasSession);
         const provider = readString(data.provider, 'claude');
+        if (provider === 'codex' && sessionId && chatRunRegistry.getRun(sessionId)?.status === 'running') {
+          ws.send(JSON.stringify({ type: 'error', message: 'Stop the active Codex chat response before opening its terminal.' }));
+          return;
+        }
         const initialCommand = readString(data.initialCommand);
         const forceRestart = readBoolean(data.forceRestart);
         const isPlainShell =
@@ -427,6 +454,7 @@ export function handleShellConnection(
           timeoutId: null,
           projectPath,
           sessionId,
+          provider,
         });
 
         shellProcess.onData((chunk) => {

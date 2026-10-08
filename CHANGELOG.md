@@ -1,5 +1,9 @@
 # Changelog
 
+## Local fixes - 2026-10-08
+
+- Wait for the retained Codex Shell writer to exit before starting Chat; prevent Shell from resuming an active Chat run.
+
 All notable changes to CloudCLI UI will be documented in this file.
 
 

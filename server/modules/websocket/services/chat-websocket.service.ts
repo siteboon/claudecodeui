@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { releaseCodexShellSession } from './shell-websocket.service.js';
 
 import type { WebSocket } from 'ws';
 
@@ -286,6 +287,7 @@ async function dispatchRun(
     // be taken back. Inside the try so a rewind that throws still releases the
     // run instead of leaving the session processing forever.
     await beforeRun?.(run);
+    if (provider === 'codex') await releaseCodexShellSession(sessionId);
     await dependencies.runtime.run(provider, command, runtimeOptions, run.writer);
   } catch (error) {
     failure = error instanceof Error ? error.message : String(error);
