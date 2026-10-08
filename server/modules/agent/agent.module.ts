@@ -9,9 +9,12 @@ import {
   apiKeysDb,
   githubTokensDb,
   projectsDb,
+  sessionsDb,
   userDb,
 } from '@/modules/database/index.js';
-import { providerModelsService } from '@/modules/providers/index.js';
+import { providerModelsService, sessionsService } from '@/modules/providers/index.js';
+import { chatRunRegistry } from '@/modules/websocket/index.js';
+import type { LLMProvider } from '@/shared/types.js';
 import { IS_PLATFORM } from '@/shared/utils.js';
 
 import { createAgentRouter } from './agent.routes.js';
@@ -46,6 +49,13 @@ export function createAgentModule(externalDependencies: AgentExternalDependencie
         projectsDb.createProjectPath(projectPath, customName),
     },
     models: providerModelsService,
+    sessions: {
+      getSessionById: (sessionId) => sessionsDb.getSessionById(sessionId),
+      getSessionByProviderSessionId: (providerSessionId) => sessionsDb.getSessionByProviderSessionId(providerSessionId),
+      createAppSession: (provider, projectPath, initialMessage) =>
+        sessionsService.createAppSession(provider as LLMProvider, projectPath, initialMessage),
+    },
+    runs: chatRunRegistry,
     GithubClient: Octokit,
     ...externalDependencies,
   });

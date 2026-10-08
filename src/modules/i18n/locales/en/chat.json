@@ -52,6 +52,28 @@
     "viewFullOutput": "View full output ({{count}} chars)",
     "contentDisplayed": "The file content is displayed in the diff view above"
   },
+  "bashEditDiff": {
+    "created": "Created",
+    "updated": "Updated",
+    "deleted": "Deleted",
+    "emptyFile": "Empty file",
+    "moreLines_one": "… {{count}} more line",
+    "moreLines_other": "… {{count}} more lines",
+    "moreFiles_one": "… {{count}} more file changed",
+    "moreFiles_other": "… {{count}} more files changed",
+    "filesNotShown_one": "{{count}} file changed (binary, mode only or too large to show)",
+    "filesNotShown_other": "{{count}} files changed (binary, mode only or too large to show)",
+    "filesUnavailable_one": "{{count}} file changed (diff unavailable)",
+    "filesUnavailable_other": "{{count}} files changed (diff unavailable)",
+    "filesChanged_one": "{{count}} file changed",
+    "filesChanged_other": "{{count}} files changed",
+    "morePaths_one": "+{{count}} more",
+    "morePaths_other": "+{{count}} more",
+    "diffUnavailable": "(file diff unavailable for this command)",
+    "partUnavailable": "(part of the diff is unavailable)",
+    "skipped": "(file diff skipped for this git command)",
+    "shared": "(another command ran in this repository at the same time; a change made by either may show under either result)"
+  },
   "interactive": {
     "title": "Interactive Prompt",
     "waiting": "Waiting for your response in the CLI",
@@ -206,7 +228,8 @@
     "status": {
       "newSession": "New Session",
       "initializing": "Initializing...",
-      "restarting": "Restarting..."
+      "restarting": "Restarting...",
+      "themeRestartHint": "Restart to apply the new theme to Claude Code"
     },
     "actions": {
       "disconnect": "Disconnect",
@@ -247,6 +270,14 @@
       "startingNow": "Starting now"
     },
     "stop": "Stop",
+    "backgroundWork": "Background work",
+    "backgroundTask": {
+      "workflow": "Workflow {{name}}",
+      "agent": "Agent {{description}}",
+      "command": "Command {{description}}",
+      "count": "{{count}} tasks",
+      "sendAnyway": "This session still has background work running:\n{{work}}\n\nA new message starts a new turn, which stops that work; anything it has not reported yet is lost. Send anyway?"
+    },
     "controls": {
       "stopGeneration": "Stop Generation",
       "pressEscToStop": "Press Esc anytime to stop"
@@ -263,7 +294,8 @@
   },
   "message": {
     "editAndResend": "Edit and resend",
-    "forkFromHere": "Fork from here"
+    "forkFromHere": "Fork from here",
+    "answeredBy": "Answered by {{model}}"
   },
   "export": {
     "trigger": "Export conversation",
@@ -348,10 +380,17 @@
     "choiceSavedDefault": "Your choice becomes the default model for new chats.",
     "tokensUsed_one": "{{count}} token used",
     "tokensUsed_other": "{{count}} tokens used",
+    "compacted": "Compacted",
+    "compactionSummary": "full summary",
     "expandImage": "Expand {{name}}",
     "tokensLabel_one": "token",
     "tokensLabel_other": "tokens",
     "escClosesModal": "Esc closes the modal.",
     "close": "Close"
+  },
+  "modelLibrary": {
+    "effortLevels": "Reasoning levels",
+    "effortLevelsHint": "Select the reasoning-effort levels this model accepts. If none are selected, no effort level can be chosen for this model in the composer.",
+    "effortSummary": "Reasoning: {{levels}}"
   }
 }

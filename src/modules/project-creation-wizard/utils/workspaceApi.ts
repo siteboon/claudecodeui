@@ -144,26 +144,42 @@ export const createProjectRequest = async (payload: CreateProjectPayload) => {
   return data.project;
 };
 
-const buildCloneProgressUrl = ({
+type StartCloneResponse = {
+  cloneId?: string;
+  error?: string | CreateProjectApiError;
+};
+
+// Submits the clone details — token included — in a request body and returns
+// the id the progress stream is opened with, so the token never enters a URL.
+const startClone = async ({
   workspacePath,
   githubUrl,
   tokenMode,
   selectedGithubToken,
   newGithubToken,
-}: CloneWorkspaceParams) =>
-  api.cloneProjectProgressUrl({
+}: CloneWorkspaceParams) => {
+  const response = await api.startProjectClone({
     path: workspacePath.trim(),
     githubUrl: githubUrl.trim(),
-    githubTokenId: tokenMode === 'stored' ? selectedGithubToken : null,
+    githubTokenId: tokenMode === 'stored' && selectedGithubToken ? Number(selectedGithubToken) : null,
     newGithubToken: tokenMode === 'new' ? newGithubToken.trim() : null,
   });
+  const data = await parseJson<StartCloneResponse>(response);
 
-export const cloneWorkspaceWithProgress = (
-  params: CloneWorkspaceParams,
+  if (!response.ok || !data.cloneId) {
+    const errorMessage = typeof data.error === 'string' ? data.error : data.error?.message;
+    throw new Error(errorMessage || 'Failed to start clone');
+  }
+
+  return data.cloneId;
+};
+
+const streamCloneProgress = (
+  cloneId: string,
   handlers: CloneProgressHandlers,
 ) =>
   new Promise<Record<string, unknown> | undefined>((resolve, reject) => {
-    const eventSource = new EventSource(buildCloneProgressUrl(params));
+    const eventSource = new EventSource(api.cloneProjectProgressUrl({ cloneId }));
     let settled = false;
 
     const settle = (callback: () => void) => {
@@ -201,3 +217,8 @@ export const cloneWorkspaceWithProgress = (
       settle(() => reject(new Error('Connection lost during clone')));
     };
   });
+
+export const cloneWorkspaceWithProgress = async (
+  params: CloneWorkspaceParams,
+  handlers: CloneProgressHandlers,
+) => streamCloneProgress(await startClone(params), handlers);

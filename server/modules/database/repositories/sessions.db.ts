@@ -695,6 +695,14 @@ export const sessionsDb = {
     return db.prepare('DELETE FROM sessions WHERE session_id = ?').run(sessionId).changes > 0;
   },
 
+  /** Used by the OpenCode synchronizer to remove indexed child sessions by their native id. */
+  deleteSessionByProviderSessionId(providerSessionId: string, provider: string): boolean {
+    const db = getConnection();
+    return db
+      .prepare('DELETE FROM sessions WHERE provider_session_id = ? AND provider = ?')
+      .run(providerSessionId, provider).changes > 0;
+  },
+
   /**
    * Lists every indexed session that claims a transcript file on disk.
    *
