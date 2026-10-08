@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '@/shared/api';
 import { PROVIDER_PERMISSION_PREFERENCE_KEYS } from '@/shared/constants';
 import { readUserPreference } from '@/shared/userSettings';
-import type { CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
+import type { CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,ServerEvent,SlashCommand } from '@/shared/types';
 import { grantClaudeToolPermission } from '@/modules/chat/utils/chatPermissions';
 import {
   clearQueuedMessage,
@@ -28,6 +28,7 @@ import {
 } from '@/shared/chatDrafts';
 import { escapeRegExp } from '@/modules/chat/utils/chatFormatting';
 import { describeBackgroundTask, ownBackgroundTasks } from '@/modules/chat/utils/backgroundTasks';
+import { createClientRequestId, sendChatTurnAwaitingAcceptance } from '@/modules/chat/utils/chatSendAcceptance';
 import { useFileMentions } from '@/modules/chat/hooks/useFileMentions';
 import { useInputHistory } from '@/modules/chat/hooks/useInputHistory';
 import { useSlashCommands } from '@/modules/chat/hooks/useSlashCommands';
@@ -51,6 +52,14 @@ type UseChatComposerStateArgs = {
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
   sendMessage: (message: unknown) => void;
+  /**
+   * Server frames from the chat socket. When given, a turn counts as sent only
+   * once the server acknowledges it: until then the draft stays in the
+   * composer, and a turn that is refused or never confirmed is reported here
+   * instead of vanishing. Without it, handing the frame to `sendMessage` is
+   * taken as delivery, as before.
+   */
+  subscribe?: (listener: (event: ServerEvent) => void) => () => void;
   sendByCtrlEnter?: boolean;
   onSessionProcessing?: MarkSessionProcessing;
   /**
@@ -182,6 +191,7 @@ export function useChatComposerState({
   canAbortSession,
   tokenBudget,
   sendMessage,
+  subscribe,
   sendByCtrlEnter,
   onSessionProcessing,
   onSessionEstablished,
@@ -251,6 +261,32 @@ export function useChatComposerState({
   const draftScope = sessionKey ?? (selectedProjectId ? `project:${selectedProjectId}` : null);
   const draftScopeRef = useRef(draftScope);
   draftScopeRef.current = draftScope;
+  // Why the last send did not go out, with the chat scope (see `draftScope`) it
+  // belongs to. Shown at the composer, next to the draft that was kept for a
+  // retry, rather than as a transcript row: a new chat has no session to hold
+  // one. Cleared by the next send.
+  const [sendFailure, setSendFailure] = useState<{ scope: string | null; message: string } | null>(null);
+  const sendError = sendFailure && sendFailure.scope === draftScope ? sendFailure.message : null;
+  // Set while a sent turn waits for its acknowledgement, so a second Enter in
+  // that window does not send the same message twice.
+  const awaitingAcceptanceRef = useRef(false);
+  // The same, for the render: the send button shows that a message is on its
+  // way instead of looking idle while the server has not answered yet.
+  const [isSendPending, setIsSendPending] = useState(false);
+  // The last turn the server did not confirm. Sending the same message again
+  // reuses its session, request id and uploaded files, so a retry of a turn
+  // that was admitted after all (only its acknowledgement was lost) is not
+  // run a second time.
+  const unconfirmedSendRef = useRef<{
+    target: string;
+    content: string;
+    attachments: File[];
+    uploadedAttachments: unknown[];
+    anchorId: string | null;
+    sessionId: string;
+    sessionName: string | null;
+    clientRequestId: string;
+  } | null>(null);
   // Composition is tracked on `window` in the capture phase rather than on the textarea, so a
   // composition that starts in one field and ends after focus moves still closes cleanly.
   const isComposingRef = useRef(false);
@@ -682,10 +718,25 @@ export function useChatComposerState({
         return;
       }
 
+      // Sending again what the server did not confirm reuses that attempt's
+      // session (a new chat's row, when it was not discarded) and request id.
+      // Matched before the queue below: that turn may be running already, with
+      // only its acknowledgement lost, and a queued copy would run it twice.
+      const existingSessionId = selectedSession?.id || currentSessionId || null;
+      const sendTarget = existingSessionId ?? `project:${selectedProject.projectId}:${provider}`;
+      const unconfirmedSend = unconfirmedSendRef.current;
+      const retriedSend = unconfirmedSend
+        && unconfirmedSend.target === sendTarget
+        && unconfirmedSend.content === currentInput
+        && unconfirmedSend.attachments === currentAttachments
+        && unconfirmedSend.anchorId === editingAnchorId
+        ? unconfirmedSend
+        : null;
+
       // A turn is already in flight: stash this message instead of sending it.
       // Upload attached files now so the queued record contains durable image
       // descriptors that can be sent even if another session is open later.
-      if (isLoading) {
+      if (isLoading && !retriedSend) {
         // A run can restart in the tiny gap between scheduling and flushing a
         // queued submission. Put the same durable draft back without uploading
         // its files again.
@@ -741,6 +792,8 @@ export function useChatComposerState({
 
         queuedDraftSessionRef.current = queuedSessionKey;
         setQueuedDraft(durableDraft);
+        // A notice about an earlier attempt no longer describes what is in the composer.
+        setSendFailure(null);
         setInput('');
         inputValueRef.current = '';
         setAttachedFiles([]);
@@ -791,9 +844,18 @@ export function useChatComposerState({
         }
       }
 
+      if (awaitingAcceptanceRef.current) {
+        return;
+      }
+      setSendFailure(null);
+      // The composer scope this message was typed in. Sending can take a
+      // while (uploads, a new session, the server's acknowledgement), and
+      // only this scope's draft is the one the send consumes or keeps.
+      const sendScope = draftScopeRef.current;
+
       const messageContent = currentInput;
 
-      let uploadedAttachments = previouslyUploadedAttachments;
+      let uploadedAttachments = retriedSend?.uploadedAttachments ?? previouslyUploadedAttachments;
       if (uploadedAttachments.length === 0 && currentAttachments.length > 0) {
         try {
           uploadedAttachments = await uploadAttachmentFiles(currentAttachments);
@@ -816,9 +878,9 @@ export function useChatComposerState({
       // BEFORE the first websocket send: brand-new chats allocate one here
       // via the session gateway. There is no client-visible session-id
       // handoff later — this id stays valid for the conversation's lifetime.
-      let targetSessionId = selectedSession?.id || currentSessionId || null;
+      let targetSessionId = existingSessionId ?? retriedSend?.sessionId ?? null;
+      let createdSessionName = retriedSend?.sessionName ?? sessionSummary;
       if (!targetSessionId) {
-        let createdSessionName = sessionSummary;
         try {
           const response = await api.providers.createSession({
             provider,
@@ -857,12 +919,6 @@ export function useChatComposerState({
           });
           return;
         }
-
-        onSessionEstablished?.(targetSessionId, {
-          provider,
-          project: selectedProject,
-          summary: createdSessionName,
-        });
       }
 
       // A new turn replaces the CLI process a session's background work runs
@@ -896,22 +952,10 @@ export function useChatComposerState({
         ...(editingAnchorId ? { replacesAnchorId: editingAnchorId } : {}),
       };
 
-      addMessage(userMessage);
-      // Mark this request as processing in the per-session activity map (the
-      // single source of truth the indicator derives from). The id is always
-      // concrete at this point — no pending placeholder exists anymore.
-      onSessionProcessing?.(targetSessionId, {
-        statusText: null,
-        canInterrupt: true,
-      });
-
-      setIsUserScrolledUp(false);
-      setTimeout(() => scrollToBottom(), 100);
-
       // One message shape for every provider. The backend resolves the
       // provider, project path, and provider-native resume id from the
       // session row; `options` only carries composer-level preferences.
-      sendMessage({
+      const frame = {
         // Replacing an already-sent message is its own frame: it changes the
         // shape of the conversation, so it gets validated separately and can
         // report why it was refused.
@@ -923,7 +967,118 @@ export function useChatComposerState({
           ...(queuedSubmission?.options ?? buildSendOptions(messageContent)),
           attachments: uploadedAttachments,
         },
-      });
+      };
+
+      // Set when the server answers that it had already admitted this turn: an
+      // earlier attempt started it, and its own run events report its state.
+      let acceptedAsDuplicate = false;
+      if (!subscribe) {
+        sendMessage(frame);
+      } else {
+        // `WebSocket.send()` returns once the frame is queued, not delivered,
+        // so nothing below — clearing the draft, opening a new session,
+        // drawing the message as sent — happens until the server says it
+        // admitted the turn.
+        const clientRequestId = retriedSend?.clientRequestId ?? createClientRequestId();
+        awaitingAcceptanceRef.current = true;
+        setIsSendPending(true);
+        let failure: string | null = null;
+        // Whether sending this message again reuses this attempt (see
+        // `unconfirmedSendRef`).
+        let reuseAttemptOnRetry = true;
+        try {
+          const outcome = await sendChatTurnAwaitingAcceptance({ frame, clientRequestId, sendMessage, subscribe });
+          if (outcome.status === 'rejected') {
+            failure = t('composer.sendRefused', { error: outcome.error });
+            // Refused means not admitted, so sending it again is a new turn,
+            // one that queues behind a running turn like any other. A new
+            // chat's session is still reused unless it is discarded below.
+            reuseAttemptOnRetry = !existingSessionId;
+          } else if (outcome.status === 'unconfirmed') {
+            failure = t('composer.sendNotConfirmed');
+          } else {
+            acceptedAsDuplicate = outcome.duplicate;
+          }
+
+          // A brand-new session must not outlive a first message that never
+          // arrived. The server deletes it only if no turn was admitted for
+          // it; if one was, only the acknowledgement got lost and the message
+          // did go out.
+          if (failure && !existingSessionId) {
+            try {
+              const response = await api.providers.discardUnsentSession(targetSessionId);
+              const body = response.ok ? await response.json() : null;
+              if (body?.data?.outcome === 'kept') {
+                failure = null;
+              } else if (body?.data?.outcome === 'discarded') {
+                reuseAttemptOnRetry = false;
+              }
+            } catch (error) {
+              console.error('Failed to discard the unsent session:', error);
+            }
+          }
+        } finally {
+          awaitingAcceptanceRef.current = false;
+          setIsSendPending(false);
+        }
+
+        if (failure) {
+          unconfirmedSendRef.current = reuseAttemptOnRetry
+            ? {
+                target: sendTarget,
+                content: messageContent,
+                attachments: currentAttachments,
+                uploadedAttachments,
+                anchorId: editingAnchorId,
+                sessionId: targetSessionId,
+                sessionName: createdSessionName,
+                clientRequestId,
+              }
+            : null;
+          setSendFailure({ scope: sendScope, message: failure });
+          return;
+        }
+        unconfirmedSendRef.current = null;
+      }
+
+      // Only what was sent is consumed. Text typed or files attached while it
+      // waited for its acknowledgement are the next message, and a composer
+      // that moved to another chat meanwhile shows that chat's draft.
+      const composerShowsSendScope = draftScopeRef.current === sendScope;
+      const sentTextIsStillDrafted = composerShowsSendScope
+        ? inputValueRef.current === currentInput
+        : sendScope !== null && readDraftText(sendScope) === currentInput;
+      // A new chat's composer is about to become the new session's, so text
+      // typed since goes along as that session's draft rather than staying
+      // behind in the new-chat composer.
+      const draftCarriedToNewSession = !existingSessionId && composerShowsSendScope && !sentTextIsStillDrafted
+        ? inputValueRef.current
+        : '';
+      if (draftCarriedToNewSession) {
+        writeDraftText(targetSessionId, draftCarriedToNewSession);
+      }
+
+      if (!existingSessionId) {
+        onSessionEstablished?.(targetSessionId, {
+          provider,
+          project: selectedProject,
+          summary: createdSessionName,
+        });
+      }
+
+      addMessage(userMessage);
+      // Mark this request as processing in the per-session activity map (the
+      // single source of truth the indicator derives from). The id is always
+      // concrete at this point — no pending placeholder exists anymore.
+      if (!acceptedAsDuplicate) {
+        onSessionProcessing?.(targetSessionId, {
+          statusText: null,
+          canInterrupt: true,
+        });
+      }
+
+      setIsUserScrolledUp(false);
+      setTimeout(() => scrollToBottom(), 100);
       setEditingAnchorId(null);
 
       // Recorded under the (possibly just-allocated) session id, so the first
@@ -931,19 +1086,22 @@ export function useChatComposerState({
       // navigated to. Queued drafts were recorded when they were queued; the
       // consecutive-duplicate check keeps this second call a no-op.
       recordSentMessage(currentInput, targetSessionId);
-      setInput('');
-      inputValueRef.current = '';
-      resetCommandMenuState();
-      setAttachedFiles([]);
-      setFileErrors(new Map());
-      setIsTextareaExpanded(false);
+      if (composerShowsSendScope && sentTextIsStillDrafted) {
+        setInput('');
+        inputValueRef.current = '';
+        resetCommandMenuState();
+        setFileErrors(new Map());
+        setIsTextareaExpanded(false);
 
-      if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto';
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+        }
       }
+      // Attaching a file makes a new list, so this lets go of the sent files only.
+      setAttachedFiles((attached) => (attached === currentAttachments ? [] : attached));
 
-      if (draftScopeRef.current) {
-        writeDraftText(draftScopeRef.current, '');
+      if (sendScope && (sentTextIsStillDrafted || draftCarriedToNewSession)) {
+        writeDraftText(sendScope, '');
       }
     },
     [
@@ -963,6 +1121,7 @@ export function useChatComposerState({
       selectedProject,
       sendMessage,
       sessionKey,
+      subscribe,
       addMessage,
       setIsUserScrolledUp,
       slashCommands,
@@ -1022,6 +1181,11 @@ export function useChatComposerState({
       clearInterval(timer);
     };
   }, [queuedDraft, sessionKey]);
+
+  // The draft the notice is about stays in the composer either way.
+  const dismissSendError = useCallback(() => {
+    setSendFailure(null);
+  }, []);
 
   const editQueuedDraft = useCallback(() => {
     if (!queuedDraft) {
@@ -1349,6 +1513,9 @@ export function useChatComposerState({
     isDragActive,
     openAttachmentPicker: open,
     handleSubmit,
+    sendError,
+    dismissSendError,
+    isSendPending,
     queuedDraft,
     editQueuedDraft,
     deleteQueuedDraft,

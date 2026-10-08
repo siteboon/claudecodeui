@@ -255,9 +255,9 @@ export type SessionActivitySnapshot = {
 /**
  * One frame received from the chat websocket. The server guarantees every
  * frame carries a `kind` (provider message kinds plus gateway kinds such as
- * `chat_subscribed`, `session_upserted`, `loading_progress`,
- * `protocol_error`). The synthetic `websocket_reconnected` kind is injected
- * client-side when the socket re-opens after a drop.
+ * `chat_subscribed`, `chat_send_accepted`, `session_upserted`,
+ * `loading_progress`, `protocol_error`). The synthetic `websocket_reconnected`
+ * kind is injected client-side when the socket re-opens after a drop.
  */
 export type ServerEvent = {
   kind?: string;

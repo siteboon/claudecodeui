@@ -256,6 +256,8 @@
     "answeredBy": "{{model}}이(가) 응답함"
   },
   "composer": {
+    "sendNotConfirmed": "서버가 메시지 수신을 확인하지 않아 전송되지 않았을 수 있습니다. 메시지는 그대로 남아 있으니 다시 보내 재시도하세요.",
+    "sendRefused": "메시지가 전송되지 않았습니다: {{error}}",
     "editing": {
       "title": "이전 메시지를 교체하는 중",
       "filesNotReverted": "이미 변경된 파일은 되돌리지 않습니다",

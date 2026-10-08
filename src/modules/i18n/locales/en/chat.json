@@ -161,6 +161,8 @@
     }
   },
   "composer": {
+    "sendNotConfirmed": "The server did not confirm your message, so it may not have been sent. It is still here — send it again to retry.",
+    "sendRefused": "Your message was not sent: {{error}}",
     "reasoning": "Reasoning",
     "model": "Model",
     "effortDefault": "Default",

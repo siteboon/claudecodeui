@@ -241,6 +241,8 @@
     "answeredBy": "Beantwortet von {{model}}"
   },
   "composer": {
+    "sendNotConfirmed": "Der Server hat deine Nachricht nicht bestätigt, sie wurde also möglicherweise nicht gesendet. Sie ist noch hier – sende sie erneut, um es noch einmal zu versuchen.",
+    "sendRefused": "Deine Nachricht wurde nicht gesendet: {{error}}",
     "editing": {
       "title": "Ersetzt eine frühere Nachricht",
       "filesNotReverted": "bereits geänderte Dateien werden nicht zurückgesetzt",

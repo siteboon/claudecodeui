@@ -311,3 +311,55 @@ test('startRun rejects a second concurrent run for the same session', async () =
     assert.ok(third);
   });
 });
+
+test('admitted request ids are remembered per session until their retention lapses', (t) => {
+  let now = 1_000_000;
+  t.mock.method(Date, 'now', () => now);
+  try {
+    chatRunRegistry.recordAdmittedRequest('session-a', 'request-1');
+
+    assert.equal(chatRunRegistry.wasRequestAdmitted('session-a', 'request-1'), true);
+    assert.equal(chatRunRegistry.wasRequestAdmitted('session-b', 'request-1'), false, 'scoped to its session');
+    assert.equal(chatRunRegistry.hasAdmittedTurn('session-a'), true);
+    assert.equal(chatRunRegistry.hasAdmittedTurn('session-b'), false);
+
+    now += 30 * 60 * 1000;
+    assert.equal(chatRunRegistry.wasRequestAdmitted('session-a', 'request-1'), false);
+    assert.equal(chatRunRegistry.hasAdmittedTurn('session-a'), false);
+  } finally {
+    chatRunRegistry.clearAll();
+  }
+});
+
+test('a session with a run has an admitted turn even when no request id was sent', async () => {
+  await withIsolatedDatabase(() => {
+    // Older clients and scheduled turns send no request id; the run alone
+    // shows the session must not be discarded as never used.
+    sessionsDb.createAppSession('untagged-run', 'claude', '/workspace/demo');
+    const run = chatRunRegistry.startRun({
+      appSessionId: 'untagged-run',
+      provider: 'claude',
+      providerSessionId: null,
+      connection: null,
+      userId: 'user-1',
+    });
+    assert.ok(run);
+
+    assert.equal(chatRunRegistry.hasAdmittedTurn('untagged-run'), true);
+    assert.equal(chatRunRegistry.hasAdmittedTurn('other-session'), false);
+  });
+});
+
+test('remembered request ids are capped, dropping the oldest first', () => {
+  try {
+    for (let index = 0; index <= 1000; index += 1) {
+      chatRunRegistry.recordAdmittedRequest('session-a', `request-${index}`);
+    }
+
+    assert.equal(chatRunRegistry.wasRequestAdmitted('session-a', 'request-0'), false);
+    assert.equal(chatRunRegistry.wasRequestAdmitted('session-a', 'request-1'), true);
+    assert.equal(chatRunRegistry.wasRequestAdmitted('session-a', 'request-1000'), true);
+  } finally {
+    chatRunRegistry.clearAll();
+  }
+});

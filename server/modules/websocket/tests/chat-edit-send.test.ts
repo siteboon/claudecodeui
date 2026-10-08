@@ -185,6 +185,108 @@ test('every subscribed client is told to drop the superseded turns', async () =>
   });
 });
 
+test('a tagged edit is acknowledged before its truncation, and a retry of it is not run again', async () => {
+  await withGateway('claude', async ({ socket, runs }) => {
+    const frame = JSON.stringify({
+      type: 'chat.edit-send',
+      sessionId: SESSION_ID,
+      anchorId: 'e-u2',
+      content: 'replacement',
+      clientRequestId: 'edit-request-1',
+    });
+    socket.emit('message', frame);
+    await settle();
+    socket.emit('message', frame);
+    await settle();
+
+    assert.equal(runs.length, 1, 'the edit ran once');
+    const kinds = socket.frames.map((candidate) => candidate.kind);
+    assert.ok(
+      kinds.indexOf('chat_send_accepted') < kinds.indexOf('history_truncated'),
+      'the composer hears the edit was admitted before the transcript is cut',
+    );
+    assert.equal(kinds.filter((kind) => kind === 'chat_send_accepted').length, 2);
+  });
+});
+
+test('two copies of a tagged edit that arrive together run it once', async () => {
+  await withGateway('claude', async ({ socket, runs }) => {
+    holdTheNextRun();
+    const frame = JSON.stringify({
+      type: 'chat.edit-send',
+      sessionId: SESSION_ID,
+      anchorId: 'e-u2',
+      content: 'replacement',
+      clientRequestId: 'edit-request-1',
+    });
+    // Both copies are past the duplicate check while they read the transcript.
+    socket.emit('message', frame);
+    socket.emit('message', frame);
+    await settle();
+
+    assert.equal(runs.length, 1, 'the edit ran once');
+    assert.equal(socket.frames.filter((candidate) => candidate.kind === 'chat_send_accepted').length, 2);
+    assert.equal(
+      socket.frames.some((candidate) => candidate.kind === 'protocol_error'),
+      false,
+      'the second copy is not reported as refused while the edit it repeats is running',
+    );
+  });
+});
+
+test('a retry of a tagged edit is acknowledged after the rewind took its anchor out of the transcript', async () => {
+  await withGateway('codex', async ({ socket, runs }) => {
+    // A Codex edit forks the thread at the turn before the edited one and
+    // moves the session onto the fork, so once the edit ran, the turn it
+    // replaced is gone from the transcript its anchor is looked up in. A
+    // retry of the same frame (its acknowledgement was lost) is that edit,
+    // not a new one whose message vanished.
+    //
+    // The stub stands in for that fork: it cuts the transcript back to the
+    // turn before the edited one, which leaves the anchor lookup in the same
+    // state the real fork does (asserted below before the retry is sent).
+    const realRewind = sessionsService.rewindSessionForEdit;
+    sessionsService.rewindSessionForEdit = async (sessionId: string) => {
+      const transcriptPath = sessionsDb.getSessionById(sessionId)?.jsonl_path;
+      assert.ok(transcriptPath);
+      const keptRows = CODEX_TRANSCRIPT_ROWS.slice(0, 3);
+      await writeFile(transcriptPath, `${keptRows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+    };
+    const frame = JSON.stringify({
+      type: 'chat.edit-send',
+      sessionId: SESSION_ID,
+      anchorId: 'turn-b',
+      content: 'a better second prompt',
+      clientRequestId: 'edit-request-1',
+    });
+
+    try {
+      socket.emit('message', frame);
+      await settle();
+      const anchor = await sessionsService.resolveEditAnchor(SESSION_ID, 'turn-b');
+      assert.equal(anchor?.found, false, 'the edited turn is no longer in the transcript');
+
+      socket.emit('message', frame);
+      await settle();
+    } finally {
+      sessionsService.rewindSessionForEdit = realRewind;
+    }
+
+    assert.equal(runs.length, 1, 'the edit ran once');
+    assert.deepEqual(
+      socket.frames
+        .filter((candidate) => candidate.kind === 'chat_send_accepted')
+        .map((acceptance) => acceptance.duplicate ?? false),
+      [false, true],
+    );
+    assert.equal(
+      socket.frames.some((candidate) => candidate.kind === 'protocol_error'),
+      false,
+      'the retry is not refused for an anchor its own first copy removed',
+    );
+  }, CODEX_TRANSCRIPT_ROWS);
+});
+
 test('an edit without an anchor is refused', async () => {
   await withGateway('claude', async ({ socket, runs }) => {
     socket.emit('message', JSON.stringify({

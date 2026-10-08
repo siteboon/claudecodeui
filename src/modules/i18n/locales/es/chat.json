@@ -154,6 +154,8 @@
     }
   },
   "composer": {
+    "sendNotConfirmed": "El servidor no confirmó tu mensaje, así que puede que no se haya enviado. Sigue aquí: envíalo de nuevo para reintentarlo.",
+    "sendRefused": "Tu mensaje no se envió: {{error}}",
     "reasoning": "Razonamiento",
     "model": "Modelo",
     "effortDefault": "Por defecto",

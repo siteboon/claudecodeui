@@ -422,6 +422,10 @@ export const api = {
       projectPath: string;
       initialMessage?: unknown;
     }) => post('/api/providers/sessions', payload),
+    // Removes a session created for a first message the server never
+    // acknowledged; answers `kept` instead when that turn was admitted after all.
+    discardUnsentSession: (sessionId: string) =>
+      del(`/api/providers/sessions/${encodeURIComponent(sessionId)}/unsent`),
     sessionMessages: (
       sessionId: string,
       pagination: { limit?: number | null; offset?: number } = {},
