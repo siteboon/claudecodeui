@@ -17,7 +17,7 @@ import {
 } from '@/modules/providers/index.js';
 import { chatRunRegistry, createWebSocketServer } from '@/modules/websocket/index.js';
 
-import { getConnectableHost } from '../shared/networkHosts.js';
+import { getConnectableHost, getListenHost } from '../shared/networkHosts.js';
 
 import { createGitModule } from './modules/git/index.js';
 import {
@@ -279,7 +279,8 @@ app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
 });
 
 const SERVER_PORT = Number.parseInt(process.env.SERVER_PORT || '3001', 10);
-const HOST = process.env.HOST || '0.0.0.0';
+// Undefined when HOST is unset: server.listen() then accepts IPv4 and IPv6 on every interface.
+const HOST = getListenHost(process.env.HOST);
 const DISPLAY_HOST = getConnectableHost(HOST);
 const VITE_PORT = process.env.VITE_PORT || 5173;
 const LOCAL_SERVER_MARKER_PATH = path.join(os.homedir(), '.cloudcli', 'local-server.json');
