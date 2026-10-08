@@ -14,7 +14,12 @@ test('Chat waits for the retained Codex terminal writer to exit', async () => {
   const sessionId = `codex-handoff-${Date.now()}`;
   handleShellConnection(socket as never, {
     resolveProviderSessionId: () => 'provider-thread',
-    spawnPty: () => terminal as never,
+    spawnPty: (_shell, args) => {
+      const command = Array.isArray(args) ? args[args.length - 1] : args;
+      assert.match(command, /@openai\/codex\/bin\/codex\.js/);
+      assert.doesNotMatch(command, /\|\| codex/);
+      return terminal as never;
+    },
   });
   socket.emit('message', JSON.stringify({
     type: 'init', projectPath: process.cwd(), sessionId, provider: 'codex', hasSession: true,
