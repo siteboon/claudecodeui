@@ -3,7 +3,6 @@ import path from 'node:path';
 import readline from 'node:readline';
 
 import { spawn } from 'cross-spawn';
-import { rgPath } from '@vscode/ripgrep';
 
 import { stripAnsiSequences } from '@/shared/utils.js';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
@@ -97,6 +96,13 @@ const SUPPORTED_PROVIDERS = new Set<SearchableProvider>(['claude', 'codex']);
 const MAX_MATCHES_PER_SESSION = 2;
 const RIPGREP_FILE_CHUNK_SIZE = 40;
 const RIPGREP_CHUNK_CONCURRENCY = 6;
+/**
+ * Spawned when @vscode/ripgrep cannot provide a binary on this machine. The
+ * bare name is looked up on PATH at every spawn (cross-spawn adds PATHEXT on
+ * Windows), so a ripgrep installed later, e.g. `pkg install ripgrep` on Termux,
+ * is picked up without restarting the server.
+ */
+const RIPGREP_PATH_COMMAND = 'rg';
 const UNKNOWN_PROJECT_KEY = '__unknown_project__';
 
 const INTERNAL_CONTENT_PREFIXES = [
@@ -628,6 +634,55 @@ function buildProjectBuckets(searchableSessions: SearchableSessionRow[]): Projec
 }
 
 /**
+ * Picks the ripgrep executable conversation search spawns: the @vscode/ripgrep
+ * binary when it exists on disk, otherwise `rg` from PATH.
+ *
+ * The package is loaded lazily and defensively because it cannot always supply
+ * a binary: 1.18+ throws at import time when no `@vscode/ripgrep-<platform>-<arch>`
+ * package exists (e.g. android-arm64 on Termux), which crashed server startup
+ * while it was a static import, and 1.17.x points at `bin/rg` even when its
+ * postinstall download failed or never ran.
+ *
+ * Exported for tests; `loadBundledRipgrep` exists only for them.
+ */
+export async function resolveRipgrepCommand(
+  loadBundledRipgrep: () => Promise<{ rgPath: string }> = () => import('@vscode/ripgrep'),
+): Promise<string> {
+  try {
+    const { rgPath } = await loadBundledRipgrep();
+    if (typeof rgPath === 'string' && fsSync.existsSync(rgPath)) {
+      return rgPath;
+    }
+  } catch {
+    // No platform package for this machine; fall back to PATH below.
+  }
+
+  return RIPGREP_PATH_COMMAND;
+}
+
+let ripgrepCommandPromise: Promise<string> | null = null;
+
+function getRipgrepCommand(): Promise<string> {
+  // Resolve once per process; the concurrent ripgrep workers of the first
+  // search share the same lookup.
+  ripgrepCommandPromise ??= resolveRipgrepCommand();
+  return ripgrepCommandPromise;
+}
+
+// Worded for both reasons the bundled binary can be missing: no build for this
+// platform (e.g. android-arm64), or a supported platform whose binary was never
+// installed (failed 1.17.x postinstall download, 1.18 installed with --omit=optional).
+function createRipgrepUnavailableError(cause: unknown): Error {
+  return new Error(
+    'Conversation search needs ripgrep, but @vscode/ripgrep could not provide a ripgrep '
+      + `binary for ${process.platform}-${process.arch} and no \`rg\` executable was found `
+      + 'on PATH. Install ripgrep (Termux: `pkg install ripgrep`; other systems: '
+      + 'https://github.com/BurntSushi/ripgrep#installation) and search again.',
+    { cause },
+  );
+}
+
+/**
  * Executes ripgrep with the file list explicitly provided from sessionsDb jsonl paths.
  *
  * This avoids recursive directory walks and uses a fixed known candidate list.
@@ -641,6 +696,11 @@ async function runRipgrepFilesWithMatches(
     return new Set();
   }
 
+  const ripgrepCommand = await getRipgrepCommand();
+  if (signal?.aborted) {
+    return new Set();
+  }
+
   return new Promise((resolve, reject) => {
     const args = [
       '--files-with-matches',
@@ -651,7 +711,7 @@ async function runRipgrepFilesWithMatches(
       pattern,
       ...filePaths,
     ];
-    const rg = spawn(rgPath, args, {
+    const rg = spawn(ripgrepCommand, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
     });
@@ -687,7 +747,9 @@ async function runRipgrepFilesWithMatches(
         return;
       }
 
-      reject(error);
+      const isMissingPathRipgrep = ripgrepCommand === RIPGREP_PATH_COMMAND
+        && (error as NodeJS.ErrnoException).code === 'ENOENT';
+      reject(isMissingPathRipgrep ? createRipgrepUnavailableError(error) : error);
     });
 
     rg.on('close', (code) => {
