@@ -8,6 +8,7 @@ import type {
   ProviderPermissionDecision,
   ProviderRunFunction,
   ProviderRuntimeContext,
+  ProviderSteerInput,
   ProviderRuntimeWriter,
 } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
@@ -86,6 +87,18 @@ export function createProviderRuntimeService(
 
     getRunner(provider: LLMProvider): ProviderRunFunction {
       return (command, options, writer) => run(provider, command, options, writer);
+    },
+
+    activeTurnToken(providerName: LLMProvider, sessionId: string): string | null {
+      return dependencies.resolveProvider(providerName).runtime.activeTurnToken?.(sessionId) ?? null;
+    },
+
+    async steer(providerName: LLMProvider, input: ProviderSteerInput): Promise<void> {
+      const runtime = dependencies.resolveProvider(providerName).runtime;
+      if (!runtime.steer) throw new AppError('This runtime does not support steering.', {
+        code: 'STEER_UNSUPPORTED', statusCode: 409,
+      });
+      await runtime.steer(input);
     },
 
     async abort(providerName: LLMProvider, sessionId: string): Promise<boolean> {

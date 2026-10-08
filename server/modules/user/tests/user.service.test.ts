@@ -97,26 +97,10 @@ test('savePreferences rejects an over-long preference key', () => {
   assert.throws(() => service.savePreferences(3, { ['k'.repeat(201)]: 1 }), /1-200/);
 });
 
-test('saveDraft stores the text and queued message under the given scope', () => {
-  const saved: unknown[][] = [];
-  const service = createUserService(createDependencies({
-    drafts: {
-      getDrafts: () => [],
-      saveDraft: (...args) => saved.push(args),
-      deleteDraft: () => undefined,
-    },
-  }));
-
-  service.saveDraft(5, 'session-1', {
-    scope: 'session-1',
-    text: 'half a thought',
-    queuedMessage: { content: 'later' },
-  });
-
-  assert.deepEqual(saved, [[5, 'session-1', {
-    text: 'half a thought',
-    queuedMessage: { content: 'later' },
-  }]]);
+test('legacy whole-slot queue writes are rejected instead of resurrecting consumed messages', () => {
+  const service = createUserService(createDependencies());
+  assert.throws(() => service.saveDraft(5, 'session-1', { text: 'typing', queuedMessage: { content: 'old' } }),
+    /queued-messages API/);
 });
 
 test('saveDraft defaults a missing queued message to null rather than dropping the row', () => {

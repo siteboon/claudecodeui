@@ -250,6 +250,37 @@ CREATE TABLE IF NOT EXISTS superseded_provider_sessions (
 );
 `;
 
+/** Durable FIFO entries and RPC outcomes, separate from composer draft saves. */
+export const QUEUED_MESSAGES_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS queued_messages (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  id TEXT NOT NULL UNIQUE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  session_id TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  options TEXT NOT NULL DEFAULT '{}',
+  attachments TEXT NOT NULL DEFAULT '[]',
+  revision INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'queued'
+    CHECK(status IN ('queued','dispatching','steering','consumed','failed','unknown','cancelled')),
+  error TEXT,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_queue_session_sequence ON queued_messages(session_id, sequence);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_queue_session_claim ON queued_messages(session_id)
+  WHERE status IN ('dispatching','steering');
+CREATE TABLE IF NOT EXISTS queue_steer_operations (
+  request_id TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  message_id TEXT NOT NULL REFERENCES queued_messages(id) ON DELETE CASCADE,
+  session_id TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  turn_token TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('pending','accepted','rejected','unknown')),
+  error TEXT
+);
+`;
+
 export const INIT_SCHEMA_SQL = `
 -- Initialize authentication database
 PRAGMA foreign_keys = ON;

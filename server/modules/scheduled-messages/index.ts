@@ -6,3 +6,7 @@ export {
   initializeScheduledMessageDispatcher,
   closeScheduledMessageDispatcher,
 } from './services/scheduled-message-dispatcher.service.js';
+
+// Queue service and routes are consumed by the composition root and WebSocket steering gateway.
+export { default as queuedMessagesRoutes } from './queued-messages.routes.js';
+export { queuedMessagesService } from './services/queued-messages.service.js';

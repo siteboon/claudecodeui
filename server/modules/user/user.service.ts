@@ -175,6 +175,11 @@ export function createUserService(dependencies: UserDependencies) {
         });
       }
 
+      if (payload.queuedMessage != null) {
+        throw new AppError('Queue messages through the queued-messages API. Refresh this client.', {
+          code: 'LEGACY_QUEUE_WRITE', statusCode: 409,
+        });
+      }
       dependencies.drafts.saveDraft(userId, scope, {
         text,
         queuedMessage: payload.queuedMessage ?? null,

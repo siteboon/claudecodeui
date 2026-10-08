@@ -135,7 +135,19 @@
       "label": "Queued",
       "willSend": "Will send when this finishes",
       "edit": "Edit queued message",
-      "delete": "Delete queued message"
+      "delete": "Delete queued message",
+      "steer": "Steer now",
+      "list": "Message queue",
+      "editing": "Editing this queued message",
+      "needsAttention": "Check delivery status",
+      "removeAttachment": "Remove attachment",
+      "status": {
+        "queued": "Queued",
+        "dispatching": "Sending",
+        "steering": "Steering",
+        "failed": "Failed",
+        "unknown": "Delivery unconfirmed"
+      }
     }
   },
   "composer": {

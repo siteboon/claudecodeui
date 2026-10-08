@@ -564,6 +564,8 @@ async function abortCodexSession(sessionId: string) {
 export const codexRuntime = {
   run: queryCodex,
   abort: abortCodexSession,
+  activeTurnToken: codexAppServerRuntime.activeTurnToken,
+  steer: codexAppServerRuntime.steer,
   restart: codexAppServerRuntime.restart,
   permissions: codexAppServerRuntime.permissions,
 };

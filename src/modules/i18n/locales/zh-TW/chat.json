@@ -110,7 +110,21 @@
     "clickToChangeMode": "點擊變更權限模式（或在輸入框中按 Tab）",
     "showAllCommands": "顯示所有指令",
     "clearInput": "清空輸入",
-    "scrollToBottom": "捲動到底部"
+    "scrollToBottom": "捲動到底部",
+    "queue": {
+      "steer": "立即引導",
+      "list": "訊息佇列",
+      "editing": "正在編輯這則排隊訊息",
+      "needsAttention": "查看傳送狀態",
+      "removeAttachment": "移除附件",
+      "status": {
+        "queued": "排隊中",
+        "dispatching": "傳送中",
+        "steering": "引導中",
+        "failed": "傳送失敗",
+        "unknown": "結果待確認"
+      }
+    }
   },
   "thinkingMode": {
     "selector": {

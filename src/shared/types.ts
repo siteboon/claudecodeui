@@ -751,21 +751,6 @@ export type CommandModalPayload = {
   data: HelpCommandData | ModelCommandData | CostCommandData | StatusCommandData;
 };
 
-/** A composer message queued while its session is still busy, holding the text, the in-memory and already-uploaded attachments and the send options snapshotted at queue time so it can be auto-sent unchanged once the session goes idle. */
-export type QueuedDraft = {
-  content: string;
-  /** Browser files retained while this composer stays mounted, for editing. */
-  attachments: File[];
-  /** JSON-safe descriptors uploaded when the message is queued. */
-  uploadedAttachments?: unknown[];
-  /**
-   * Send options snapshotted at queue time. Persisted with the draft so the
-   * app-level auto-send can dispatch the message with the right model and
-   * permission settings while another session is being viewed.
-   */
-  options?: QueuedSendOptions;
-};
-
 /** Viewport-relative placement box (right/bottom offsets plus max height and width) computed for a composer popover so the model and permission menus stay inside the window. */
 export type ComposerMenuAnchor = {
   right: number;
@@ -1825,3 +1810,18 @@ type TaskStatus =
 
 /** A TaskMaster task's priority; high, medium and low are the known values and the string fallback tolerates anything else TaskMaster emits. */
 type TaskPriority = 'high' | 'medium' | 'low' | string;
+
+//----------------- PERSISTED MESSAGE QUEUE ------------
+
+/** An independently stored message waiting for normal dispatch or explicit steering. */
+export type QueuedMessage = {
+  id: string; sequence: number; sessionId: string; content: string;
+  attachments: ChatAttachment[]; options: QueuedSendOptions; revision: number;
+  status: 'queued' | 'dispatching' | 'steering' | 'failed' | 'unknown' | 'consumed' | 'cancelled';
+  error: string | null;
+};
+
+/** Content written through queue mutation APIs; uploaded descriptors survive refresh and editing. */
+export type QueueMessageInput = {
+  content: string; attachments: unknown[]; options: QueuedSendOptions;
+};

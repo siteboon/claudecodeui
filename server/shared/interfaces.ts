@@ -15,6 +15,7 @@ import type {
   ProviderSkillCreateInput,
   ProviderSkillRemoveInput,
   ProviderRuntimeContext,
+  ProviderSteerInput,
   ProviderRuntimePermissionGateway,
   ProviderRuntimeWriter,
   UpsertProviderMcpServerInput,
@@ -37,6 +38,10 @@ export interface IProviderRuntime {
     context: ProviderRuntimeContext,
   ): Promise<unknown>;
   abort(sessionId: string): boolean | Promise<boolean>;
+  /** A token exists only when this adapter has accepted an active steerable turn. */
+  activeTurnToken?(sessionId: string): string | null;
+  /** Appends input to the observed active turn without creating another run. */
+  steer?(input: ProviderSteerInput): Promise<void>;
   /** Restarts a provider-owned runtime process when that provider supports it. */
   restart?(): Promise<void>;
   permissions?: ProviderRuntimePermissionGateway;

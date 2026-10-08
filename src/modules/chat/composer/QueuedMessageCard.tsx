@@ -3,6 +3,11 @@ import { PencilIcon, XIcon } from 'lucide-react';
 
 type QueuedMessageCardProps = {
   content: string;
+  position?: number;
+  status?: string;
+  error?: string | null;
+  disabled?: boolean;
+  onSteer?: () => void;
   attachmentCount?: number;
   onEdit: () => void;
   onDelete: () => void;
@@ -14,6 +19,11 @@ type QueuedMessageCardProps = {
  */
 export default function QueuedMessageCard({
   content,
+  position,
+  status = 'queued',
+  error,
+  disabled = false,
+  onSteer,
   attachmentCount = 0,
   onEdit,
   onDelete,
@@ -22,40 +32,79 @@ export default function QueuedMessageCard({
 
   return (
     <div className="settings-content-enter mx-auto mb-2 max-w-[54.25rem] rounded-xl rounded-t-none border border-dashed border-primary/25 bg-primary/[0.04] px-3 py-2">
-      <div className="flex items-start gap-2.5">
-        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/60" aria-hidden />
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2.5 gap-y-1 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
+        <span
+          className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/60"
+          aria-hidden
+        />
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-primary/70">
-            <span>{t('input.queue.label', { defaultValue: 'Queued' })}</span>
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-primary/70">
+            <span>
+              {position ? `${position}. ` : ''}
+              {t(`input.queue.status.${status}`, { defaultValue: 'Queued' })}
+            </span>
             <span className="normal-case text-muted-foreground/60">
-              · {t('input.queue.willSend', { defaultValue: 'Will send when this finishes' })}
+              ·{' '}
+              {status === 'queued'
+                ? t('input.queue.willSend', {
+                    defaultValue: 'Will send when this finishes',
+                  })
+                : t('input.queue.needsAttention')}
             </span>
           </div>
-          <p className="mt-0.5 line-clamp-2 break-words text-sm text-foreground/90">{content}</p>
+          <p className="mt-0.5 line-clamp-2 break-words text-sm text-foreground/90">
+            {content}
+          </p>
+          {error && (
+            <p role="alert" className="mt-1 text-xs text-destructive">
+              {error}
+            </p>
+          )}
           {attachmentCount > 0 && (
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {attachmentCount} {attachmentCount === 1 ? 'file' : 'files'} attached
+              {attachmentCount} {attachmentCount === 1 ? 'file' : 'files'}{' '}
+              attached
             </p>
           )}
         </div>
 
-        <div className="flex shrink-0 items-center gap-0.5">
+        <div className="col-start-2 flex items-center justify-end gap-0.5 sm:col-start-3 sm:row-start-1">
+          {onSteer && (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={onSteer}
+              className="rounded-md px-2 py-1.5 text-xs font-medium text-primary disabled:opacity-50"
+            >
+              {t('input.queue.steer')}
+            </button>
+          )}
           <button
             type="button"
             onClick={onEdit}
-            aria-label={t('input.queue.edit', { defaultValue: 'Edit queued message' })}
-            title={t('input.queue.edit', { defaultValue: 'Edit queued message' })}
-            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            disabled={disabled || !['queued', 'failed'].includes(status)}
+            aria-label={t('input.queue.edit', {
+              defaultValue: 'Edit queued message',
+            })}
+            title={t('input.queue.edit', {
+              defaultValue: 'Edit queued message',
+            })}
+            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
           >
             <PencilIcon className="h-3.5 w-3.5" />
           </button>
           <button
             type="button"
             onClick={onDelete}
-            aria-label={t('input.queue.delete', { defaultValue: 'Delete queued message' })}
-            title={t('input.queue.delete', { defaultValue: 'Delete queued message' })}
-            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+            disabled={disabled}
+            aria-label={t('input.queue.delete', {
+              defaultValue: 'Delete queued message',
+            })}
+            title={t('input.queue.delete', {
+              defaultValue: 'Delete queued message',
+            })}
+            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
           >
             <XIcon className="h-3.5 w-3.5" />
           </button>

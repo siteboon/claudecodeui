@@ -128,7 +128,19 @@
       "label": "已排队",
       "willSend": "将在当前完成后发送",
       "edit": "编辑排队消息",
-      "delete": "删除排队消息"
+      "delete": "删除排队消息",
+      "steer": "立即引导",
+      "list": "消息队列",
+      "editing": "正在编辑这条排队消息",
+      "needsAttention": "查看发送状态",
+      "removeAttachment": "移除附件",
+      "status": {
+        "queued": "排队中",
+        "dispatching": "发送中",
+        "steering": "引导中",
+        "failed": "发送失败",
+        "unknown": "结果待确认"
+      }
     }
   },
   "providerSelection": {

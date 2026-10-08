@@ -169,6 +169,9 @@ export function useChatRealtimeHandlers({
           return;
         }
 
+        case 'chat_steer_result':
+          // Queue actions are correlated by useQueuedMessages and never idle the active run.
+          return;
         case 'protocol_error': {
           console.error('[Chat] Protocol error:', msg.code, msg.error);
           if (sid) {
@@ -355,6 +358,8 @@ export function useChatRealtimeHandlers({
         }
 
         case 'status': {
+          // Capability metadata is consumed by the queue hook, not shown as task progress.
+          if (msg.text === 'active_turn') return;
           if (msg.text === 'token_budget' && msg.tokenBudget) {
             // The counter shows the viewed session's context; budgets from
             // other concurrently running sessions must not overwrite it.

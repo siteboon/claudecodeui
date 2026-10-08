@@ -33,7 +33,7 @@ Benefits:
 |---|---|
 | `services/websocket-server.service.ts` | Creates `WebSocketServer`, binds `verifyClient`, routes connection by pathname |
 | `services/websocket-auth.service.ts` | Authenticates upgrade requests and attaches `request.user` |
-| `services/chat-websocket.service.ts` | Handles the `/ws` chat protocol (`chat.send` / `chat.abort` / `chat.stop-task` / `chat.subscribe` / `chat.permission-response`) |
+| `services/chat-websocket.service.ts` | Handles the `/ws` chat protocol (`chat.send` / `chat.steer` / `chat.abort` / `chat.stop-task` / `chat.subscribe` / `chat.permission-response`) |
 | `services/chat-run-registry.service.ts` | Tracks live provider runs per app session id: seq numbering, event replay buffer, provider-id mapping, completion state |
 | `services/chat-session-writer.service.ts` | Gateway writer handed to provider runtimes: remaps provider session ids to app ids, swallows `session_created`, assigns `seq` |
 | `services/shell-websocket.service.ts` | Handles `/shell` PTY lifecycle, reconnect buffering, auth URL detection |
@@ -274,3 +274,7 @@ To add a new websocket route:
 3. Add a new pathname branch in the router.
 4. Wire dependency injection from `server/index.ts`.
 5. Keep `index.ts` as barrel-only export surface.
+
+## Queued message steering
+
+`chat.steer` addresses one persisted queue entry by `messageId` and `revision`, with a stable `requestId` and the server-issued `activeTurnToken`. Its `chat_steer_result` ACK is independent of run completion. Only an accepted Codex app-server turn advertises the capability. See [message queue and steering](../../../docs/message-queue-steering.md) for the protocol and failure handling.

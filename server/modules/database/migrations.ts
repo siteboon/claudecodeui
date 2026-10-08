@@ -8,6 +8,7 @@ import {
   PROVIDER_MODELS_TABLE_SCHEMA_SQL,
   PUSH_SUBSCRIPTIONS_TABLE_SCHEMA_SQL,
   SESSION_DRAFTS_TABLE_SCHEMA_SQL,
+  QUEUED_MESSAGES_TABLE_SCHEMA_SQL,
   SUPERSEDED_PROVIDER_SESSIONS_TABLE_SCHEMA_SQL,
   SCHEDULED_MESSAGES_TABLE_SCHEMA_SQL,
   SESSIONS_TABLE_SCHEMA_SQL,
@@ -521,6 +522,28 @@ export const runMigrations = (db: Database) => {
     addForkedFromSessionIdColumn(db);
     ensureProjectsForSessionPaths(db);
     db.exec(SCHEDULED_MESSAGES_TABLE_SCHEMA_SQL);
+    db.exec(QUEUED_MESSAGES_TABLE_SCHEMA_SQL);
+    // Each legacy slot is imported once. Ordinary draft saves no longer write queue entries.
+    db.transaction(() => {
+      const rows = db.prepare(`SELECT user_id, draft_scope, queued_message FROM session_drafts
+        WHERE queued_message IS NOT NULL AND draft_scope IN (SELECT session_id FROM sessions)`)
+        .all() as Array<{ user_id: number; draft_scope: string; queued_message: string }>;
+      for (const row of rows) {
+        let message: Record<string, unknown>;
+        try { message = JSON.parse(row.queued_message); } catch { continue; }
+        if (!message || typeof message.content !== 'string') continue;
+        const attachments = Array.isArray(message.attachments) ? message.attachments
+          : Array.isArray(message.images) ? message.images : [];
+        if (!message.content.trim() && attachments.length === 0) continue;
+        db.prepare(`INSERT OR IGNORE INTO queued_messages
+          (id,user_id,session_id,content,options,attachments) VALUES (?,?,?,?,?,?)`).run(
+          `legacy:${row.user_id}:${row.draft_scope}`, row.user_id, row.draft_scope,
+          message.content, JSON.stringify(message.options ?? {}), JSON.stringify(attachments));
+        db.prepare('UPDATE session_drafts SET queued_message = NULL WHERE user_id = ? AND draft_scope = ?')
+          .run(row.user_id, row.draft_scope);
+      }
+    })();
+
 
     db.exec('CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_provider_session_id ON sessions(provider_session_id)');

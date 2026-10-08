@@ -386,7 +386,7 @@ test('starts/resumes a thread, submits a turn, and normalizes completed items', 
   assert.equal(output.messages.some((message) => message.kind === 'text' && message.content === 'The change is ready.'), true);
   assert.equal(output.messages.some((message) => message.kind === 'thinking' && message.content === 'First thought.\nSecond thought.'), true);
   assert.equal(output.messages.some((message) => message.kind === 'tool_use' && message.toolName === 'Bash'), true);
-  const tokenStatuses = output.messages.filter((message) => message.kind === 'status');
+  const tokenStatuses = output.messages.filter((message) => message.kind === 'status' && message.text === 'token_budget');
   assert.equal(tokenStatuses.length, 1);
   assert.equal((tokenStatuses[0]?.tokenBudget as AnyRecord)?.used, 150);
   assert.equal((tokenStatuses[0]?.tokenBudget as AnyRecord)?.total, 200000);
@@ -1207,4 +1207,60 @@ test('forks a persisted thread through the app-server protocol', async () => {
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+
+test('steer targets the observed turn, uses uploaded inputs and does not start another turn', async () => {
+  const harness = createHarness(); const runtime = createRuntime(harness.process); const output = createWriter();
+  const run = runtime.run('initial', { sessionId: 'resume-app' }, output.writer, context);
+  for (let i = 0; i < 4; i++) await harness.nextRequest();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const token = runtime.activeTurnToken('resume-app'); assert.ok(token);
+  const steering = runtime.steer({ sessionId: 'resume-app', activeTurnToken: token, content: 'Only fix the service',
+    messageId: 'queue-message', attachments: [{ path: path.join(os.homedir(), '.cloudcli', 'assets', 'image.png'), mimeType: 'image/png' }, { path: '/tmp/notes.txt' }] });
+  const request = await harness.nextRequest(); assert.equal(request.method, 'turn/steer');
+  const params = request.params as AnyRecord;
+  assert.equal(params.threadId, 'thread-existing'); assert.equal(params.expectedTurnId, 'turn-1');
+  assert.equal((params.input as AnyRecord[])[1].type, 'localImage');
+  assert.match(String((params.input as AnyRecord[])[0].text), /notes.txt/);
+  harness.respondWithResult(request, { turnId: 'turn-1' }); await steering;
+  assert.equal(output.messages.filter((item) => item.kind === 'complete').length, 0);
+  assert.equal(output.messages.find((item) => item.id === 'local_queue_queue-message')?.role, 'user');
+  await assert.rejects(runtime.steer({ sessionId: 'resume-app', activeTurnToken: 'stale', content: 'wrong',
+    messageId: 'stale', attachments: [] }), /changed/);
+  harness.notify('turn/completed', { threadId: 'thread-existing', turn: { id: 'turn-1', status: 'completed' } }); await run;
+  assert.equal(runtime.activeTurnToken('resume-app'), null);
+  await assert.rejects(runtime.steer({ sessionId: 'resume-app', activeTurnToken: token, content: 'late',
+    messageId: 'late', attachments: [] }), /No active/);
+});
+
+test('a stale token cannot steer the next turn in the same session', async () => {
+  const harness = createHarness(); const runtime = createRuntime(harness.process); const output = createWriter();
+  const first = runtime.run('first', { sessionId: 'resume-app' }, output.writer, context);
+  for (let i = 0; i < 4; i++) await harness.nextRequest();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const oldToken = runtime.activeTurnToken('resume-app')!;
+  harness.notify('turn/completed', { threadId: 'thread-existing', turn: { id: 'turn-1', status: 'completed' } }); await first;
+  const second = runtime.run('second', { sessionId: 'resume-app' }, output.writer, context);
+  for (let i = 0; i < 2; i++) await harness.nextRequest();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.notEqual(runtime.activeTurnToken('resume-app'), oldToken);
+  await assert.rejects(runtime.steer({ sessionId: 'resume-app', activeTurnToken: oldToken, content: 'old intent',
+    messageId: 'old-intent', attachments: [] }), /changed/);
+  harness.notify('turn/completed', { threadId: 'thread-existing', turn: { id: 'turn-2', status: 'completed' } }); await second;
+});
+
+test('explicit steer rejection leaves the original turn running', async () => {
+  const harness = createHarness(); const runtime = createRuntime(harness.process); const output = createWriter();
+  const run = runtime.run('initial', { sessionId: 'resume-app' }, output.writer, context);
+  for (let i = 0; i < 4; i++) await harness.nextRequest();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const token = runtime.activeTurnToken('resume-app')!;
+  const steering = runtime.steer({ sessionId: 'resume-app', activeTurnToken: token, content: 'change',
+    messageId: 'change', attachments: [] });
+  const rejected = assert.rejects(steering, /rejected by server/);
+  harness.respondWithError(await harness.nextRequest(), -32602, 'rejected by server'); await rejected;
+  assert.equal(runtime.activeTurnToken('resume-app'), token);
+  assert.equal(output.messages.filter((item) => item.kind === 'complete').length, 0);
+  harness.notify('turn/completed', { threadId: 'thread-existing', turn: { id: 'turn-1', status: 'completed' } }); await run;
 });

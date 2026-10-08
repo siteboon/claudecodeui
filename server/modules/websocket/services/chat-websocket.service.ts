@@ -2,6 +2,7 @@ import path from 'node:path';
 
 import type { WebSocket } from 'ws';
 
+import { queuedMessagesService } from '@/modules/scheduled-messages/index.js';
 import { sessionsDb } from '@/modules/database/index.js';
 import { providerModelsService, sessionsService } from '@/modules/providers/index.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
@@ -18,8 +19,9 @@ import type {
   LLMProvider,
   ProviderPermissionDecision,
   ProviderRuntimeWriter,
+  ProviderSteerInput,
 } from '@/shared/types.js';
-import { parseIncomingJsonObject } from '@/shared/utils.js';
+import { AppError, createNormalizedMessage, parseIncomingJsonObject } from '@/shared/utils.js';
 
 /**
  * Trust boundary for client-supplied image attachments: chat.send options come
@@ -66,6 +68,8 @@ export function filterImagesToUploadStore(
 /** Application boundary for dispatching provider runs and approvals. */
 export type ProviderRuntimeGateway = {
   hasRuntime(provider: string): boolean;
+  activeTurnToken?(provider: LLMProvider, sessionId: string): string | null;
+  steer?(provider: LLMProvider, input: ProviderSteerInput): Promise<void>;
   run(
     provider: LLMProvider,
     command: string,
@@ -158,6 +162,33 @@ async function handleChatSend(
   }
 
   await dispatchRun(ws, userId, resolved.sessionId, resolved.session, data, dependencies);
+}
+
+/** Steering has a separate result envelope: rejection must never terminate the existing ChatRun. */
+async function handleChatSteer(ws: WebSocket, userId: string | number | null, data: AnyRecord,
+  dependencies: ChatWebSocketDependencies): Promise<void> {
+  try {
+    const authenticatedUser = Number(userId);
+    if (!userId || !Number.isSafeInteger(authenticatedUser) || authenticatedUser < 1) {
+      throw new AppError('Authenticated user is required.', { code: 'USER_REQUIRED', statusCode: 401 });
+    }
+    const result = await queuedMessagesService.steer(authenticatedUser, data, async (input) => {
+      const session = sessionsDb.getSessionById(input.sessionId);
+      if (!session || session.provider !== 'codex' || !dependencies.runtime.steer) {
+        throw new AppError('This session does not support steering.', { code: 'STEER_UNSUPPORTED', statusCode: 409 });
+      }
+      const attachments = filterAttachmentsToUploadStore(input.attachments);
+      if (attachments.length !== input.attachments.length) {
+        throw new AppError('A queued attachment is outside the upload store.', { code: 'INVALID_ATTACHMENT', statusCode: 400 });
+      }
+      await dependencies.runtime.steer('codex', { ...input, attachments });
+    });
+    sendJson(ws, { kind: 'chat_steer_result', ...result });
+  } catch (error) {
+    sendJson(ws, { kind: 'chat_steer_result', requestId: data.requestId, messageId: data.messageId,
+      sessionId: data.sessionId, status: error instanceof AppError ? 'rejected' : 'unknown', error: error instanceof Error ? error.message : String(error),
+      code: error instanceof AppError ? error.code : 'STEER_FAILED' });
+  }
 }
 
 type ResolvedSendTarget = {
@@ -541,6 +572,7 @@ function handleChatSubscribe(
       isProcessing,
       lastSeq: run?.lastSeq ?? 0,
       pendingPermissions,
+      activeTurnToken: run?.status === 'running' ? dependencies.runtime.activeTurnToken?.(run.provider, sessionId) ?? null : null,
       timestamp: new Date().toISOString(),
     });
 
@@ -606,6 +638,7 @@ export async function runDetachedChatTurn(
     sessionId: string;
     userId: string | number | null;
     content: string;
+    messageId?: string;
     options?: AnyRecord;
     /**
      * Aborts a run already in progress instead of refusing to start. A
@@ -650,6 +683,14 @@ export async function runDetachedChatTurn(
     session,
     { sessionId: input.sessionId, content: input.content, options: input.options ?? {} },
     dependencies,
+    {},
+    input.messageId ? (run) => {
+      const attachments = filterAttachmentsToUploadStore(input.options?.attachments);
+      run.writer.send(createNormalizedMessage({ kind: 'text', role: 'user', provider,
+        sessionId: input.sessionId, id: `local_queue_${input.messageId}`, content: input.content,
+        images: attachments.filter(isImageAttachmentDescriptor),
+        files: attachments.filter((attachment) => !isImageAttachmentDescriptor(attachment)) }));
+    } : undefined,
   );
 }
 
@@ -676,6 +717,9 @@ export function handleChatConnection(
       switch (messageType) {
         case 'chat.edit-send':
           await handleChatEditSend(ws, userId, data, dependencies);
+          return;
+        case 'chat.steer':
+          await handleChatSteer(ws, userId, data, dependencies);
           return;
         case 'chat.send':
           await handleChatSend(ws, userId, data, dependencies);
