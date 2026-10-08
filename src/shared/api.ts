@@ -111,6 +111,35 @@ export async function readApiJson<T>(response: Response): Promise<T> {
   }
   return data as T;
 }
+
+/**
+ * Picks the server's human-readable message out of a failed response body, or
+ * null when it carries none. Accepts the legacy string envelope
+ * (`error: 'message'`), the structured AppError envelope
+ * (`error: { code, message, details }`) and a top-level `message`.
+ *
+ * The non-throwing counterpart of readApiJson, used by the auth and onboarding
+ * screens because they show their own localized message when the server gives
+ * none.
+ */
+export function readApiErrorMessage(body: unknown): string | null {
+  if (!body || typeof body !== 'object') {
+    return null;
+  }
+
+  const { error, message } = body as { error?: unknown; message?: unknown };
+  const candidates = [
+    error && typeof error === 'object' ? (error as { message?: unknown }).message : error,
+    message,
+  ];
+  // The body is unchecked JSON: anything but a non-blank string is skipped, as
+  // an object rendered as a React child throws and unmounts the screen.
+  const readable = candidates.find(
+    (candidate): candidate is string => typeof candidate === 'string' && candidate.trim() !== '',
+  );
+  return readable ?? null;
+}
+
 const get = (url: string, options: ApiRequestOptions = {}) => authenticatedFetch(url, options);
 
 const withBody =
@@ -307,6 +336,16 @@ export const api = {
       get(`/api/git/file-with-diff${query({ project: projectId, file: filePath })}`),
     branches: (projectId: string, options: ApiRequestOptions = {}) =>
       get(`/api/git/branches${query({ project: projectId })}`, options),
+    branchDiff: (projectId: string, base: string, options: ApiRequestOptions = {}) =>
+      get(`/api/git/branch-diff${query({ project: projectId, base })}`, options),
+    // `oldPath` is the pre-rename path of a renamed file so the server can diff the rename itself.
+    branchDiffFile: (
+      projectId: string,
+      base: string,
+      filePath: string,
+      oldPath?: string,
+      options: ApiRequestOptions = {},
+    ) => get(`/api/git/branch-diff/file${query({ project: projectId, base, file: filePath, oldPath })}`, options),
     remoteStatus: (projectId: string) =>
       get(`/api/git/remote-status${query({ project: projectId })}`),
     commits: (
@@ -368,6 +407,7 @@ export const api = {
     capabilities: () => get('/api/providers/capabilities'),
     authStatus: (provider: string) =>
       get(`/api/providers/${encodeURIComponent(provider)}/auth/status`),
+    claudeSettingsPermissions: () => get('/api/providers/claude/settings-permissions'),
 
     models: (provider: string) => get(`/api/providers/${provider}/models`),
     createModel: (provider: string, input: unknown) =>

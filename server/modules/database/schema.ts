@@ -174,6 +174,11 @@ CREATE TABLE IF NOT EXISTS app_config (
  * controlled in each provider's `-models.provider.ts` adapter so they can be
  * updated without migrating application data. `model_id` is unique only within
  * a provider because different CLIs can accept the same identifier.
+ *
+ * `effort_values` (JSON array of level ids) and `effort_default` hold the
+ * reasoning-effort levels the user declared for the model; both stay NULL when
+ * none were declared. They sit after the timestamps so fresh installs match the
+ * column order that `runMigrations` produces on upgraded databases.
  */
 export const PROVIDER_MODELS_TABLE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS provider_models (
@@ -184,6 +189,8 @@ CREATE TABLE IF NOT EXISTS provider_models (
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    effort_values TEXT DEFAULT NULL,
+    effort_default TEXT DEFAULT NULL,
     UNIQUE(provider, model_id)
 );
 `;

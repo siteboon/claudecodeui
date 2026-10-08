@@ -84,6 +84,27 @@
       "openPanel": "Buka panel pengaturan",
       "draggingStatus": "Menyeret...",
       "toggleAndMove": "Klik untuk membuka/menutup, seret untuk memindahkan"
+    },
+    "tabs": {
+      "settings": "Pengaturan",
+      "commands": "Perintah"
+    },
+    "pin": "Sematkan panel",
+    "unpin": "Lepas sematan panel",
+    "close": "Tutup panel",
+    "commands": {
+      "searchPlaceholder": "Cari perintah…",
+      "noProject": "Pilih proyek untuk melihat perintahnya.",
+      "loading": "Memuat perintah…",
+      "empty": "Tidak ada perintah untuk proyek ini.",
+      "noMatches": "Tidak ada perintah yang cocok dengan pencarian Anda.",
+      "loadError": "Perintah tidak dapat dimuat.",
+      "groups": {
+        "builtIn": "Bawaan",
+        "custom": "Kustom",
+        "skills": "Skill"
+      },
+      "insertTitle": "Sisipkan {{command}} ke chat"
     }
   },
   "terminalShortcuts": {
@@ -150,6 +171,13 @@
     "darkMode": {
       "label": "Mode Gelap",
       "description": "Beralih antara tema terang dan gelap"
+    },
+    "theme": {
+      "label": "Tema",
+      "description": "Pilih tampilan terang atau gelap, atau ikuti sistem operasi Anda",
+      "light": "Terang",
+      "dark": "Gelap",
+      "system": "Ikuti tampilan sistem"
     },
     "projectSorting": {
       "label": "Urutan Proyek",
@@ -400,6 +428,25 @@
       "description": "Tool yang otomatis diblokir tanpa meminta persetujuan",
       "placeholder": "mis., \"Bash(rm:*)\"",
       "empty": "Belum ada tool yang diblokir"
+    },
+    "settingsFiles": {
+      "title": "Aturan dari file pengaturan Claude",
+      "description": "Claude CLI juga menerapkan aturan ini, selain daftar di atas. Aturan tolak selalu menang di mana pun ditetapkan, tetapi aturan tanyakan tidak meminta konfirmasi untuk tool yang sudah ada di Tool yang Diizinkan. Di sini aturan hanya dapat dibaca; edit di filenya.",
+      "sources": {
+        "user": "Pengaturan Anda",
+        "managed": "Pengaturan terkelola (administrator)"
+      },
+      "groups": {
+        "allow": "Izinkan",
+        "ask": "Tanyakan",
+        "deny": "Tolak"
+      },
+      "missing": "File tidak ditemukan, jadi tidak menambahkan aturan.",
+      "invalid": "File ini tidak dapat dibaca. Pastikan isinya JSON yang valid.",
+      "empty": "Tidak ada aturan izin di file ini.",
+      "loading": "Memuat aturan…",
+      "loadFailed": "Tidak dapat memuat aturan dari file pengaturan Claude.",
+      "projectNote": "File .claude/settings.json dan .claude/settings.local.json milik sebuah proyek juga berlaku untuk obrolan di proyek tersebut. Claude CLI mengabaikan aturan izinkan di .claude/settings.json sampai folder tersebut dipercaya: jalankan Claude Code secara interaktif di sana sekali dan terima dialog kepercayaan."
     },
     "allowedCommands": {
       "title": "Perintah Shell yang Diizinkan",

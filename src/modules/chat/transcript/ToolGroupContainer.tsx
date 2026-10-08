@@ -101,6 +101,18 @@ function ToolGroupContainer({
   const preview = group.preview;
   const groupDiffStats = useGroupDiffStats(group.toolName, group.messages, createDiff);
 
+  // Keys only have to be unique among this group's own rows, so repeats of the
+  // same key are disambiguated here by occurrence.
+  const messageKeys = useMemo(() => {
+    const occurrences = new Map<string, number>();
+    return group.messages.map((message) => {
+      const key = getMessageKey(message);
+      const seen = occurrences.get(key) ?? 0;
+      occurrences.set(key, seen + 1);
+      return seen === 0 ? key : `${key}__${seen}`;
+    });
+  }, [group.messages, getMessageKey]);
+
   return (
     <div className="chat-message tool px-3 sm:px-0" data-message-timestamp={group.timestamp || undefined}>
       <button
@@ -133,7 +145,7 @@ function ToolGroupContainer({
         <div className="mt-2 space-y-3 sm:space-y-4">
           {group.messages.map((message, index) => (
             <MessageComponent
-              key={getMessageKey(message)}
+              key={messageKeys[index]}
               message={message}
               prevMessage={index > 0 ? group.messages[index - 1] : prevMessage}
               createDiff={createDiff}
@@ -154,13 +166,12 @@ function ToolGroupContainer({
 
 /**
  * Memoized for the transcript re-renders that are not message changes — the
- * pane re-renders when isProcessing or the activity indicator flips, and the
- * group is unchanged then.
+ * pane re-renders when isProcessing or the activity indicator flips, and on
+ * every 100ms stream tick, and the group is unchanged then.
  *
- * It cannot bail during streaming: groupConsecutiveTools rebuilds every group
- * object from a fresh visibleMessages array on each 100ms tick, so `group` is a
- * new reference even when its contents are identical. Stabilizing it would mean
- * keying a cache on the whole run — first and second message identity, run
- * length and showThinking — because the preview depends on all four.
+ * Bailing out depends on two identities the pane keeps stable on its side:
+ * `group`, which groupConsecutiveTools reuses while the run's rows are
+ * unchanged, and `getMessageKey`, a module-level function. Adding a prop
+ * rebuilt per render here would cost every group on screen a render per tick.
  */
 export default memo(ToolGroupContainer);

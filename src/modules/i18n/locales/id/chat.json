@@ -53,6 +53,22 @@
     "viewFullOutput": "Lihat output lengkap ({{count}} karakter)",
     "contentDisplayed": "Isi file ditampilkan pada tampilan diff di atas"
   },
+  "bashEditDiff": {
+    "created": "Dibuat",
+    "updated": "Diperbarui",
+    "deleted": "Dihapus",
+    "emptyFile": "File kosong",
+    "moreLines_other": "… {{count}} baris lagi",
+    "moreFiles_other": "… {{count}} file lain berubah",
+    "filesNotShown_other": "{{count}} file berubah (biner, hanya mode, atau terlalu besar untuk ditampilkan)",
+    "filesUnavailable_other": "{{count}} file berubah (diff tidak tersedia)",
+    "filesChanged_other": "{{count}} file berubah",
+    "morePaths_other": "+{{count}} lagi",
+    "diffUnavailable": "(diff file tidak tersedia untuk perintah ini)",
+    "partUnavailable": "(sebagian diff tidak tersedia)",
+    "skipped": "(diff file dilewati untuk perintah git ini)",
+    "shared": "(perintah lain berjalan di repositori ini pada saat yang sama; perubahan oleh salah satunya dapat muncul di hasil mana pun)"
+  },
   "interactive": {
     "title": "Prompt Interaktif",
     "waiting": "Menunggu respons di CLI",
@@ -208,7 +224,8 @@
     "status": {
       "newSession": "Sesi Baru",
       "initializing": "Menginisialisasi...",
-      "restarting": "Memulai ulang..."
+      "restarting": "Memulai ulang...",
+      "themeRestartHint": "Mulai ulang untuk menerapkan tema baru ke Claude Code"
     },
     "actions": {
       "disconnect": "Putuskan",
@@ -265,7 +282,8 @@
   },
   "message": {
     "editAndResend": "Edit dan kirim ulang",
-    "forkFromHere": "Fork dari sini"
+    "forkFromHere": "Fork dari sini",
+    "answeredBy": "Dijawab oleh {{model}}"
   },
   "export": {
     "trigger": "Ekspor percakapan",
@@ -355,5 +373,10 @@
     "tokensLabel_other": "token",
     "escClosesModal": "Esc menutup modal.",
     "close": "Tutup"
+  },
+  "modelLibrary": {
+    "effortLevels": "Tingkat penalaran",
+    "effortLevelsHint": "Pilih tingkat upaya penalaran yang diterima model ini. Jika tidak ada yang dipilih, tidak ada tingkat yang bisa dipilih untuk model ini di composer.",
+    "effortSummary": "Penalaran: {{levels}}"
   }
 }

@@ -112,6 +112,28 @@ import idTasks from '@/modules/i18n/locales/id/tasks.json';
 // oxlint-disable-next-line importx/order
 import idGit from '@/modules/i18n/locales/id/git.json';
 
+import csCommon from '@/modules/i18n/locales/cs/common.json';
+import csSettings from '@/modules/i18n/locales/cs/settings.json';
+import csAuth from '@/modules/i18n/locales/cs/auth.json';
+import csSidebar from '@/modules/i18n/locales/cs/sidebar.json';
+import csChat from '@/modules/i18n/locales/cs/chat.json';
+import csCodeEditor from '@/modules/i18n/locales/cs/codeEditor.json';
+// oxlint-disable-next-line importx/order
+import csTasks from '@/modules/i18n/locales/cs/tasks.json';
+// oxlint-disable-next-line importx/order
+import csGit from '@/modules/i18n/locales/cs/git.json';
+
+import heCommon from '@/modules/i18n/locales/he/common.json';
+import heSettings from '@/modules/i18n/locales/he/settings.json';
+import heAuth from '@/modules/i18n/locales/he/auth.json';
+import heSidebar from '@/modules/i18n/locales/he/sidebar.json';
+import heChat from '@/modules/i18n/locales/he/chat.json';
+import heCodeEditor from '@/modules/i18n/locales/he/codeEditor.json';
+// oxlint-disable-next-line importx/order
+import heTasks from '@/modules/i18n/locales/he/tasks.json';
+// oxlint-disable-next-line importx/order
+import heGit from '@/modules/i18n/locales/he/git.json';
+
 import zhTWCommon from '@/modules/i18n/locales/zh-TW/common.json';
 import zhTWSettings from '@/modules/i18n/locales/zh-TW/settings.json';
 import zhTWAuth from '@/modules/i18n/locales/zh-TW/auth.json';
@@ -247,6 +269,26 @@ git: enGit,
         codeEditor: idCodeEditor,
         tasks: idTasks,
         git: idGit,
+      },
+      cs: {
+        common: csCommon,
+        settings: csSettings,
+        auth: csAuth,
+        sidebar: csSidebar,
+        chat: csChat,
+        codeEditor: csCodeEditor,
+        tasks: csTasks,
+        git: csGit,
+      },
+      he: {
+        common: heCommon,
+        settings: heSettings,
+        auth: heAuth,
+        sidebar: heSidebar,
+        chat: heChat,
+        codeEditor: heCodeEditor,
+        tasks: heTasks,
+        git: heGit,
       },
       'zh-TW': {
         common: zhTWCommon,

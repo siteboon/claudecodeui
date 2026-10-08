@@ -457,6 +457,19 @@ const addSessionEffortColumn = (db: Database): void => {
   addColumnToTableIfNotExists(db, 'sessions', columnNames, 'effort', 'TEXT');
 };
 
+/**
+ * Adds the reasoning-effort metadata columns to the custom-model library.
+ *
+ * Existing rows stay NULL on purpose: no effort levels were ever declared for
+ * them, and a guessed list could offer levels the model rejects. Those models
+ * keep hiding the composer's Reasoning section until the user declares levels.
+ */
+const addProviderModelEffortColumns = (db: Database): void => {
+  const columnNames = getTableInfo(db, 'provider_models').map((column) => column.name);
+  addColumnToTableIfNotExists(db, 'provider_models', columnNames, 'effort_values', 'TEXT DEFAULT NULL');
+  addColumnToTableIfNotExists(db, 'provider_models', columnNames, 'effort_default', 'TEXT DEFAULT NULL');
+};
+
 const ensureProjectsForSessionPaths = (db: Database): void => {
   if (!tableExists(db, 'sessions')) {
     return;
@@ -490,8 +503,12 @@ const allowKiroProviderModels = (db: Database): void => {
     db.exec('ALTER TABLE provider_models RENAME TO provider_models_before_kiro');
     db.exec(PROVIDER_MODELS_TABLE_SCHEMA_SQL);
     db.exec(`
-      INSERT INTO provider_models (id, provider, model_id, model_name, sort_order, created_at, updated_at)
-      SELECT id, provider, model_id, model_name, sort_order, created_at, updated_at
+      INSERT INTO provider_models (
+        id, provider, model_id, model_name, sort_order, created_at, updated_at,
+        effort_values, effort_default
+      )
+      SELECT id, provider, model_id, model_name, sort_order, created_at, updated_at,
+             effort_values, effort_default
       FROM provider_models_before_kiro
     `);
     db.exec('DROP TABLE provider_models_before_kiro');
@@ -527,6 +544,8 @@ export const runMigrations = (db: Database) => {
     db.exec('CREATE INDEX IF NOT EXISTS idx_notification_channel_endpoints_user_channel ON notification_channel_endpoints(user_id, channel)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_notification_channel_endpoints_enabled ON notification_channel_endpoints(enabled)');
     db.exec(PROVIDER_MODELS_TABLE_SCHEMA_SQL);
+    // Normalize legacy schemas before the Kiro rebuild copies effort metadata.
+    addProviderModelEffortColumns(db);
     allowKiroProviderModels(db);
     db.exec(`
       CREATE INDEX IF NOT EXISTS idx_provider_models_provider_order

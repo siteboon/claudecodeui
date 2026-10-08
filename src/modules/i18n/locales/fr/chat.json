@@ -53,6 +53,28 @@
     "viewFullOutput": "Voir la sortie complète ({{count}} caractères)",
     "contentDisplayed": "Le contenu du fichier est affiché dans la vue diff ci-dessus"
   },
+  "bashEditDiff": {
+    "created": "Créé",
+    "updated": "Modifié",
+    "deleted": "Supprimé",
+    "emptyFile": "Fichier vide",
+    "moreLines_one": "… {{count}} ligne de plus",
+    "moreLines_other": "… {{count}} lignes de plus",
+    "moreFiles_one": "… {{count}} autre fichier modifié",
+    "moreFiles_other": "… {{count}} autres fichiers modifiés",
+    "filesNotShown_one": "{{count}} fichier modifié (binaire, mode uniquement ou trop volumineux pour être affiché)",
+    "filesNotShown_other": "{{count}} fichiers modifiés (binaires, mode uniquement ou trop volumineux pour être affichés)",
+    "filesUnavailable_one": "{{count}} fichier modifié (diff indisponible)",
+    "filesUnavailable_other": "{{count}} fichiers modifiés (diff indisponible)",
+    "filesChanged_one": "{{count}} fichier modifié",
+    "filesChanged_other": "{{count}} fichiers modifiés",
+    "morePaths_one": "+{{count}} autre",
+    "morePaths_other": "+{{count}} autres",
+    "diffUnavailable": "(diff des fichiers indisponible pour cette commande)",
+    "partUnavailable": "(une partie du diff est indisponible)",
+    "skipped": "(diff des fichiers ignoré pour cette commande git)",
+    "shared": "(une autre commande s'est exécutée dans ce dépôt en même temps ; une modification faite par l'une ou l'autre peut apparaître sous l'un ou l'autre résultat)"
+  },
   "thinking": {
     "title": "Réflexion...",
     "emoji": "💭 Réflexion..."
@@ -162,7 +184,8 @@
     "status": {
       "newSession": "Nouvelle session",
       "initializing": "Initialisation...",
-      "restarting": "Redémarrage..."
+      "restarting": "Redémarrage...",
+      "themeRestartHint": "Redémarrez pour appliquer le nouveau thème à Claude Code"
     },
     "actions": {
       "disconnect": "Déconnecter",
@@ -218,7 +241,8 @@
   },
   "message": {
     "editAndResend": "Modifier et renvoyer",
-    "forkFromHere": "Dupliquer à partir d’ici"
+    "forkFromHere": "Dupliquer à partir d’ici",
+    "answeredBy": "Répondu par {{model}}"
   },
   "composer": {
     "editing": {
@@ -259,5 +283,10 @@
     "failed": "Non envoyé — {{reason}}",
     "cancel": "Annuler le message programmé",
     "dismiss": "Masquer l'avis d'échec"
+  },
+  "modelLibrary": {
+    "effortLevels": "Niveaux de raisonnement",
+    "effortLevelsHint": "Sélectionnez les niveaux d'effort de raisonnement acceptés par ce modèle. Sans sélection, aucun niveau ne pourra être choisi pour ce modèle dans le compositeur.",
+    "effortSummary": "Raisonnement : {{levels}}"
   }
 }

@@ -111,6 +111,20 @@ export class AppError extends Error {
   }
 }
 
+/**
+ * Flattens a failed `git` invocation into one searchable string: the error
+ * message followed by whatever stderr/stdout the process runner attached.
+ *
+ * Used by the Git routes and the branch compare service to classify git
+ * failures (e.g. "not a git repository", "unknown revision") and to surface
+ * git's own explanation as error `details`. Accepts any thrown value; missing
+ * fields contribute nothing, so the result may be empty.
+ */
+export function getGitErrorDetails(error: unknown): string {
+  const details = error as { message?: string; stderr?: string; stdout?: string } | null;
+  return `${details?.message ?? ''} ${details?.stderr ?? ''} ${details?.stdout ?? ''}`.trim();
+}
+
 // ---------------------------
 //----------------- WORKSPACE PATH VALIDATION UTILITIES ------------
 /**
@@ -638,6 +652,22 @@ export function buildDefaultProviderCurrentActiveModel(
   return {
     model: models.DEFAULT,
   };
+}
+
+/**
+ * True for a model name a provider fabricated rather than actually ran.
+ *
+ * Claude Code stamps locally-synthesized transcript rows (API-error notices,
+ * usage-limit messages) with `model: "<synthetic>"`. Angle-bracketed values are
+ * placeholders, never real model ids, so neither the active-model lookup nor
+ * the per-message model a reply is labelled with may adopt one.
+ *
+ * Used by the Claude models provider (which walks the transcript backwards for
+ * the session's model) and by the Claude sessions provider (which stamps each
+ * assistant message with the model that answered it).
+ */
+export function isPlaceholderProviderModel(model: string): boolean {
+  return model.startsWith('<') && model.endsWith('>');
 }
 
 // ---------------------------
