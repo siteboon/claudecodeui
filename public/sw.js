@@ -24,14 +24,23 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Navigation requests (HTML) — always go to network, no caching
+  // Navigation requests (HTML): left to the browser while the device is online.
+  // The browser has to load the page itself: a fetch issued from a service worker
+  // cannot prompt for a TLS client certificate, so behind mutual TLS it fails and
+  // the page never loads.
   if (event.request.mode === 'navigate') {
+    if (self.navigator.onLine) {
+      return;
+    }
+
+    // Device offline: still try the network, since a server on localhost stays
+    // reachable, and fall back to the offline page.
     event.respondWith(
-      fetch(event.request).catch(() => caches.match('/manifest.json').then(() =>
+      fetch(event.request).catch(() =>
         new Response('<h1>Offline</h1><p>Please check your connection.</p>', {
           headers: { 'Content-Type': 'text/html' }
         })
-      ))
+      )
     );
     return;
   }
