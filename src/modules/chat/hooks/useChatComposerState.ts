@@ -658,7 +658,7 @@ export function useChatComposerState({
     processingSessionsRef.current = processingSessions;
   }, [processingSessions]);
 
-  const handleSubmit = useCallback(
+  const submitMessage = useCallback(
     async (
       event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
     ) => {
@@ -935,6 +935,33 @@ export function useChatComposerState({
       slashCommands,
       t,
     ],
+  );
+
+  // Chat scopes with a submit still awaiting its upload or, for a brand-new
+  // chat, its session id. The composer does not change until that returns (the
+  // text stays, send stays enabled), so on a slow server the user submits
+  // again — and each extra submit of a new chat allocated its own session and
+  // sent it the same first message.
+  const submittingScopesRef = useRef(new Set<string>());
+
+  const handleSubmit = useCallback(
+    async (
+      event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
+    ) => {
+      const scope = draftScopeRef.current ?? '';
+      if (submittingScopesRef.current.has(scope)) {
+        // Still cancel the event: an ignored form submit must not reload the page.
+        event.preventDefault();
+        return;
+      }
+      submittingScopesRef.current.add(scope);
+      try {
+        await submitMessage(event);
+      } finally {
+        submittingScopesRef.current.delete(scope);
+      }
+    },
+    [submitMessage],
   );
 
   useEffect(() => {

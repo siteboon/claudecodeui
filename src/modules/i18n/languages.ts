@@ -80,6 +80,16 @@ export const languages: Language[] = [
     label: 'Czech',
     nativeName: 'Čeština',
   },
+  {
+    value: 'he',
+    label: 'Hebrew',
+    nativeName: 'עברית',
+  },
+  {
+    value: 'pt-BR',
+    label: 'Portuguese (Brazil)',
+    nativeName: 'Português (Brasil)',
+  },
 ];
 
 /** Get language object by value, or undefined when it is not supported. */

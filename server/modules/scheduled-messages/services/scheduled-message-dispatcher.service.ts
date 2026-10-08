@@ -41,11 +41,16 @@ async function sendClaimedQueuedMessage(message: QueuedMessage, runtime: Provide
   }
 }
 
+/** A queued turn must wait for foreground and background work to finish. */
+function isSessionBusy(sessionId: string, runtime: ProviderRuntimeGateway): boolean {
+  return chatRunRegistry.isProcessing(sessionId) || runtime.hasBackgroundWork(sessionId);
+}
+
 /** Sends at most one FIFO head per idle session. Claimed/failed/unknown entries block later messages. */
 export async function dispatchQueuedMessages(runtime: ProviderRuntimeGateway): Promise<number> {
   let claimed = 0;
   await Promise.all(queuedMessagesDb.heads().map(async (message) => {
-    if (chatRunRegistry.isProcessing(message.sessionId) || !queuedMessagesDb.claim(message, 'dispatching')) return;
+    if (isSessionBusy(message.sessionId, runtime) || !queuedMessagesDb.claim(message, 'dispatching')) return;
     claimed += 1;
     await sendClaimedQueuedMessage(message, runtime);
   }));

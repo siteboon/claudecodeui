@@ -442,6 +442,25 @@
       "placeholder": "e.g., \"Bash(rm:*)\"",
       "empty": "No blocked tools configured"
     },
+    "settingsFiles": {
+      "title": "Rules from Claude settings files",
+      "description": "The Claude CLI also applies these rules, on top of the lists above. A deny rule wins wherever it is set, but an ask rule does not prompt for a tool that Allowed Tools already allows. The rules are read-only here; edit them in the files.",
+      "sources": {
+        "user": "Your settings",
+        "managed": "Managed settings (administrator)"
+      },
+      "groups": {
+        "allow": "Allow",
+        "ask": "Ask",
+        "deny": "Deny"
+      },
+      "missing": "File not found, so it adds no rules.",
+      "invalid": "This file could not be read. Check that it is valid JSON.",
+      "empty": "No permission rules in this file.",
+      "loading": "Loading rules…",
+      "loadFailed": "Could not load the rules from the Claude settings files.",
+      "projectNote": "A project's own .claude/settings.json and .claude/settings.local.json also apply to chats in that project. The Claude CLI ignores allow rules in .claude/settings.json until the folder is trusted: run Claude Code interactively there once and accept the trust dialog."
+    },
     "allowedCommands": {
       "title": "Allowed Shell Commands",
       "description": "Shell commands that are automatically allowed without prompting",
@@ -664,6 +683,12 @@
       "name": "GLM Usage",
       "badge": "unofficial",
       "description": "Track live GLM/Zhipu coding-plan quotas and 30-day token history.",
+      "install": "Install"
+    },
+    "agentMonitorPlugin": {
+      "name": "Agent Monitor",
+      "badge": "unofficial",
+      "description": "See background subagents and shells that keep running after a chat ends, and stop them.",
       "install": "Install"
     },
     "morePlugins": "More",

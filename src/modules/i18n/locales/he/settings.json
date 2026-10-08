@@ -1,0 +1,840 @@
+{
+  "title": "הגדרות",
+  "tabs": {
+    "account": "חשבון",
+    "permissions": "הרשאות",
+    "mcpServers": "שרתי MCP",
+    "skills": "Skills",
+    "appearance": "מראה"
+  },
+  "account": {
+    "title": "חשבון",
+    "language": "שפה",
+    "languageLabel": "שפת תצוגה",
+    "languageDescription": "בחירת השפה המועדפת לממשק",
+    "username": "שם משתמש",
+    "email": "אימייל",
+    "profile": "פרופיל",
+    "changePassword": "שינוי סיסמה"
+  },
+  "mcp": {
+    "title": "שרתי MCP",
+    "addServer": "הוספת שרת",
+    "editServer": "עריכת שרת",
+    "deleteServer": "מחיקת שרת",
+    "serverName": "שם השרת",
+    "serverType": "סוג השרת",
+    "config": "תצורה",
+    "testConnection": "בדיקת חיבור",
+    "status": "סטטוס",
+    "connected": "מחובר",
+    "disconnected": "מנותק",
+    "scope": {
+      "label": "היקף",
+      "user": "משתמש",
+      "project": "פרויקט"
+    }
+  },
+  "appearance": {
+    "title": "מראה",
+    "theme": "ערכת נושא",
+    "codeEditor": "עורך קוד",
+    "editorTheme": "ערכת נושא לעורך",
+    "wordWrap": "גלישת שורות",
+    "showMinimap": "הצגת מפה מוקטנת",
+    "lineNumbers": "מספרי שורות",
+    "fontSize": "גודל גופן"
+  },
+  "actions": {
+    "saveChanges": "שמירת שינויים",
+    "resetToDefaults": "איפוס לברירות המחדל",
+    "cancelChanges": "ביטול שינויים"
+  },
+  "voiceSettings": {
+    "title": "קול",
+    "description": "הקלטת דיבור לטקסט והקראה בקול, דרך שרת אודיו תואם OpenAI.",
+    "enable": "הפעלת קול",
+    "enableDescription": "הצגת כפתור המיקרופון וכפתור ההקראה בהודעות.",
+    "backendTitle": "שרת",
+    "backendDescription": "אפשר להפנות ל-OpenAI, ל-Groq או לשרת מקומי (LocalAI, Speaches, Kokoro-FastAPI). אפשר להשאיר ריק כדי להשתמש בברירת המחדל של השרת.",
+    "baseUrl": "כתובת בסיס",
+    "apiKey": "מפתח API",
+    "sttModel": "מודל דיבור לטקסט",
+    "ttsModel": "מודל טקסט לדיבור",
+    "voice": "קול",
+    "format": "פורמט אודיו",
+    "note": "כתובת בסיס מותאמת אישית נקראת ישירות מהדפדפן וחייבת לאפשר בקשות CORS מהדפדפן. אפשר להשאיר ריק כדי להשתמש בשרת שהוגדר בצד השרת."
+  },
+  "quickSettings": {
+    "title": "הגדרות מהירות",
+    "sections": {
+      "appearance": "מראה",
+      "toolDisplay": "תצוגת כלים",
+      "inputSettings": "הגדרות קלט"
+    },
+    "darkMode": "מצב כהה",
+    "showRawParameters": "הצגת פרמטרים גולמיים",
+    "showThinking": "הצגת חשיבה",
+    "sendByCtrlEnter": "שליחה ב-Ctrl+Enter",
+    "voiceEnabled": "קול (מיקרופון + הקראה)",
+    "sendByCtrlEnterDescription": "כשהאפשרות מופעלת, הודעה נשלחת ב-Ctrl+Enter במקום ב-Enter בלבד. שימושי למשתמשי IME כדי למנוע שליחה בטעות.",
+    "dragHandle": {
+      "dragging": "גרירת הידית",
+      "closePanel": "סגירת לוח ההגדרות",
+      "openPanel": "פתיחת לוח ההגדרות",
+      "draggingStatus": "גורר…",
+      "toggleAndMove": "לחיצה לפתיחה/סגירה, גרירה להזזה"
+    },
+    "tabs": {
+      "settings": "הגדרות",
+      "commands": "פקודות"
+    },
+    "pin": "הצמדת הלוח כפתוח",
+    "unpin": "ביטול הצמדת הלוח",
+    "close": "סגירת הלוח",
+    "commands": {
+      "searchPlaceholder": "חיפוש פקודות…",
+      "noProject": "יש לבחור פרויקט כדי לראות את הפקודות שלו.",
+      "loading": "טוען פקודות…",
+      "empty": "אין פקודות זמינות לפרויקט הזה.",
+      "noMatches": "אין פקודות שתואמות לחיפוש.",
+      "loadError": "לא ניתן לטעון את הפקודות.",
+      "groups": {
+        "builtIn": "מובנות",
+        "custom": "מותאמות אישית",
+        "skills": "Skills"
+      },
+      "insertTitle": "הוספת {{command}} לצ'אט"
+    }
+  },
+  "terminalShortcuts": {
+    "title": "קיצורי טרמינל",
+    "sectionKeys": "מקשים",
+    "sectionNavigation": "ניווט",
+    "paste": "הדבקה",
+    "escape": "Escape",
+    "tab": "Tab",
+    "shiftTab": "Shift+Tab",
+    "arrowUp": "חץ למעלה",
+    "arrowDown": "חץ למטה",
+    "scrollDown": "גלילה למטה",
+    "handle": {
+      "closePanel": "סגירת לוח הקיצורים",
+      "openPanel": "פתיחת לוח הקיצורים"
+    }
+  },
+  "mainTabs": {
+    "label": "הגדרות",
+    "agents": "סוכנים",
+    "appearance": "מראה",
+    "git": "Git",
+    "apiTokens": "API וטוקנים",
+    "voice": "קול",
+    "tasks": "משימות",
+    "browser": "דפדפן",
+    "notifications": "התראות",
+    "plugins": "תוספים",
+    "about": "אודות"
+  },
+  "notifications": {
+    "title": "התראות",
+    "description": "בחירת אירועי ההתראות שיתקבלו.",
+    "webPush": {
+      "title": "התראות בדפדפן הזה",
+      "enable": "הפעלת התראות",
+      "disable": "השבתת התראות",
+      "enabled": "ההתראות מופעלות בדפדפן הזה",
+      "loading": "מעדכן…",
+      "unsupported": "הדפדפן הזה לא תומך בהתראות push.",
+      "denied": "התראות push חסומות. יש לאשר אותן בהגדרות הדפדפן."
+    },
+    "desktop": {
+      "title": "התראות באפליקציית הדסקטופ הזו",
+      "enable": "הפעלת התראות",
+      "disable": "השבתת התראות",
+      "enabled": "ההתראות מופעלות באפליקציית הדסקטופ הזו",
+      "unsupported": "המערכת הזו לא תומכת בהתראות דסקטופ."
+    },
+    "sound": {
+      "title": "צליל",
+      "description": "השמעת צליל קצר כשריצת צ'אט מסתיימת או צריכה אישור לכלי.",
+      "enabled": "מופעל",
+      "test": "בדיקת צליל"
+    },
+    "events": {
+      "title": "סוגי אירועים",
+      "actionRequired": "נדרשת פעולה",
+      "stop": "הריצה נעצרה",
+      "error": "הריצה נכשלה"
+    }
+  },
+  "appearanceSettings": {
+    "darkMode": {
+      "label": "מצב כהה",
+      "description": "מעבר בין ערכת נושא בהירה לכהה"
+    },
+    "theme": {
+      "label": "ערכת נושא",
+      "description": "בחירת מראה בהיר או כהה, או מעקב אחרי מערכת ההפעלה",
+      "light": "בהיר",
+      "dark": "כהה",
+      "system": "לפי מראה המערכת"
+    },
+    "projectSorting": {
+      "label": "מיון פרויקטים",
+      "description": "סדר הפרויקטים בסרגל הצד",
+      "alphabetical": "לפי א-ב",
+      "recentActivity": "פעילות אחרונה"
+    },
+    "codeEditor": {
+      "title": "עורך קוד",
+      "theme": {
+        "label": "ערכת נושא לעורך",
+        "description": "ערכת הנושא שמוגדרת כברירת מחדל לעורך הקוד"
+      },
+      "wordWrap": {
+        "label": "גלישת שורות",
+        "description": "הפעלת גלישת שורות כברירת מחדל בעורך"
+      },
+      "showMinimap": {
+        "label": "הצגת מפה מוקטנת",
+        "description": "הצגת מפה מוקטנת לניווט נוח יותר בתצוגת diff"
+      },
+      "lineNumbers": {
+        "label": "הצגת מספרי שורות",
+        "description": "הצגת מספרי שורות בעורך"
+      },
+      "fontSize": {
+        "label": "גודל גופן",
+        "description": "גודל הגופן בעורך בפיקסלים"
+      }
+    }
+  },
+  "mcpForm": {
+    "title": {
+      "add": "הוספת שרת MCP",
+      "edit": "עריכת שרת MCP"
+    },
+    "importMode": {
+      "form": "הזנה בטופס",
+      "json": "ייבוא JSON"
+    },
+    "scope": {
+      "label": "היקף",
+      "userGlobal": "משתמש (גלובלי)",
+      "projectLocal": "פרויקט (מקומי)",
+      "userDescription": "היקף משתמש: זמין בכל הפרויקטים במחשב הזה",
+      "projectDescription": "היקף מקומי: זמין רק בפרויקט שנבחר",
+      "cannotChange": "אי אפשר לשנות היקף בעריכה של שרת קיים"
+    },
+    "fields": {
+      "serverName": "שם השרת",
+      "transportType": "סוג תעבורה",
+      "command": "פקודה",
+      "arguments": "ארגומנטים (אחד בכל שורה)",
+      "jsonConfig": "תצורת JSON",
+      "url": "URL",
+      "envVars": "משתני סביבה (KEY=value, אחד בכל שורה)",
+      "headers": "כותרות (KEY=value, אחת בכל שורה)",
+      "selectProject": "בחירת פרויקט…"
+    },
+    "placeholders": {
+      "serverName": "my-server"
+    },
+    "validation": {
+      "missingType": "חסר שדה חובה: type",
+      "stdioRequiresCommand": "סוג stdio מחייב שדה command",
+      "httpRequiresUrl": "סוג {{type}} מחייב שדה url",
+      "invalidJson": "פורמט JSON לא תקין",
+      "jsonHelp": "יש להדביק את תצורת שרת ה-MCP בפורמט JSON. דוגמאות:",
+      "jsonExampleStdio": "• stdio: {\"type\":\"stdio\",\"command\":\"npx\",\"args\":[\"@upstash/context7-mcp\"]}",
+      "jsonExampleHttp": "• http/sse: {\"type\":\"http\",\"url\":\"https://api.example.com/mcp\"}"
+    },
+    "configDetails": "פרטי תצורה (מתוך {{configFile}})",
+    "projectPath": "נתיב: {{path}}",
+    "actions": {
+      "cancel": "ביטול",
+      "saving": "שומר…",
+      "addServer": "הוספת שרת",
+      "updateServer": "עדכון שרת"
+    },
+    "scopes": {
+      "userGlobal": "משתמש (גלובלי)",
+      "userAllProviders": "משתמש (כל הספקים)",
+      "local": "Claude מקומי",
+      "project": "פרויקט",
+      "projectAllProviders": "פרויקט (כל הספקים)",
+      "userGlobalDesc": "זמין בכל הפרויקטים במחשב הזה",
+      "userAllProvidersDesc": "נכתב לתצורת המשתמש של כל ספק וזמין בכל הפרויקטים במחשב הזה",
+      "localDesc": "נשמר בהגדרות המשתמש של Claude עבור הפרויקט שנבחר",
+      "projectDesc": "נשמר בסביבת העבודה של הפרויקט שנבחר",
+      "projectAllProvidersDesc": "נכתב לסביבת העבודה של הפרויקט שנבחר עבור כל ספק"
+    },
+    "unsupportedTransport": "הוספת שרת MCP תומכת רק ב-stdio וב-http בכל הספקים, לא ב-{{transport}}.",
+    "addToProvider": "{{action}} ל-{{provider}}",
+    "workingDirectory": "תיקיית עבודה",
+    "envVarNames": "שמות משתני סביבה",
+    "bearerTokenEnvVar": "משתנה סביבה של Bearer Token"
+  },
+  "saveStatus": {
+    "success": "ההגדרות נשמרו בהצלחה!",
+    "error": "שמירת ההגדרות נכשלה",
+    "saving": "שומר…"
+  },
+  "footerActions": {
+    "save": "שמירת הגדרות",
+    "cancel": "ביטול"
+  },
+  "git": {
+    "title": "תצורת Git",
+    "description": "הגדרת זהות ה-git עבור commits. ההגדרות יחולו גלובלית דרך git config --global",
+    "name": {
+      "label": "שם ב-Git",
+      "help": "השם שיופיע ב-commits"
+    },
+    "email": {
+      "label": "אימייל ב-Git",
+      "help": "האימייל שיופיע ב-commits"
+    },
+    "actions": {
+      "save": "שמירת תצורה",
+      "saving": "שומר…"
+    },
+    "status": {
+      "success": "נשמר בהצלחה"
+    }
+  },
+  "apiKeys": {
+    "title": "מפתחות API",
+    "description": "יצירת מפתחות API לגישה ל-API החיצוני מאפליקציות אחרות.",
+    "newKey": {
+      "alertTitle": "⚠️ שמירת מפתח ה-API",
+      "alertMessage": "זו הפעם היחידה שהמפתח הזה מוצג. יש לשמור אותו במקום מאובטח.",
+      "iveSavedIt": "שמרתי אותו"
+    },
+    "form": {
+      "placeholder": "שם מפתח ה-API (למשל, Production Server)",
+      "createButton": "יצירה",
+      "cancelButton": "ביטול"
+    },
+    "newButton": "מפתח API חדש",
+    "empty": "עדיין לא נוצרו מפתחות API.",
+    "list": {
+      "created": "נוצר:",
+      "lastUsed": "שימוש אחרון:"
+    },
+    "confirmDelete": "למחוק את מפתח ה-API הזה?",
+    "status": {
+      "active": "פעיל",
+      "inactive": "לא פעיל"
+    },
+    "github": {
+      "title": "טוקנים של GitHub",
+      "description": "הוספת Personal Access Tokens של GitHub כדי לשכפל מאגרים פרטיים דרך ה-API החיצוני.",
+      "descriptionAlt": "הוספת Personal Access Tokens של GitHub כדי לשכפל מאגרים פרטיים. אפשר גם להעביר טוקנים ישירות בבקשות API בלי לשמור אותם.",
+      "addButton": "הוספת טוקן",
+      "form": {
+        "namePlaceholder": "שם הטוקן (למשל, Personal Repos)",
+        "tokenPlaceholder": "GitHub Personal Access Token (ghp_...)",
+        "descriptionPlaceholder": "תיאור (אופציונלי)",
+        "addButton": "הוספת טוקן",
+        "cancelButton": "ביטול",
+        "howToCreate": "איך יוצרים GitHub Personal Access Token ←"
+      },
+      "empty": "עדיין לא נוספו טוקנים של GitHub.",
+      "added": "נוסף:",
+      "confirmDelete": "למחוק את טוקן ה-GitHub הזה?"
+    },
+    "apiDocsLink": "תיעוד API",
+    "documentation": {
+      "title": "תיעוד ה-API החיצוני",
+      "description": "איך להשתמש ב-API החיצוני כדי להפעיל סשנים של Claude/Cursor מאפליקציות אחרות.",
+      "viewLink": "צפייה בתיעוד ה-API ←"
+    },
+    "loading": "טוען…",
+    "version": {
+      "updateAvailable": "יש עדכון זמין: v{{version}}"
+    }
+  },
+  "tasks": {
+    "checking": "בודק את התקנת TaskMaster…",
+    "notInstalled": {
+      "title": "TaskMaster AI CLI לא מותקן",
+      "description": "צריך את TaskMaster CLI כדי להשתמש בניהול משימות. כדי להתחיל, יש להתקין אותו:",
+      "installCommand": "npm install -g task-master-ai",
+      "viewOnGitHub": "צפייה ב-GitHub",
+      "afterInstallation": "אחרי ההתקנה:",
+      "steps": {
+        "restart": "הפעלה מחדש של האפליקציה",
+        "autoAvailable": "יכולות TaskMaster יהיו זמינות אוטומטית",
+        "initCommand": "הרצת task-master init בתיקיית הפרויקט"
+      }
+    },
+    "settings": {
+      "enableLabel": "הפעלת השילוב עם TaskMaster",
+      "enableDescription": "הצגת משימות, באנרים וסימונים בסרגל הצד של TaskMaster בכל הממשק"
+    }
+  },
+  "agents": {
+    "authStatus": {
+      "checking": "בודק…",
+      "connected": "מחובר",
+      "notConnected": "לא מחובר",
+      "disconnected": "מנותק",
+      "checkingAuth": "בודק את סטטוס האימות…",
+      "loggedInAs": "מחובר בתור {{email}}",
+      "authenticatedUser": "משתמש מאומת"
+    },
+    "account": {
+      "claude": {
+        "description": "Claude, עוזר ה-AI של Anthropic"
+      },
+      "cursor": {
+        "description": "Cursor, עורך קוד מבוסס AI"
+      },
+      "codex": {
+        "description": "Codex, עוזר ה-AI של OpenAI"
+      },
+      "opencode": {
+        "description": "OpenCode, עוזר CLI"
+      }
+    },
+    "connectionStatus": "סטטוס חיבור",
+    "subscriptionOverride": {
+      "title": "התחברות המנוי לא בשימוש",
+      "description": "{{variable}} מוגדר ב-{{source}}, ולכן Claude Code מחייב כל בקשה על המפתח הזה כשימוש API בתשלום לפי שימוש, במקום להשתמש בהתחברות המנוי.",
+      "descriptionWithEmail": "{{variable}} מוגדר ב-{{source}}, ולכן Claude Code מחייב כל בקשה על המפתח הזה כשימוש API בתשלום לפי שימוש, במקום להשתמש בהתחברות המנוי ({{email}}).",
+      "source": {
+        "process_env": "סביבת השרת",
+        "settings_file": "~/.claude/settings.json"
+      },
+      "fix": {
+        "process_env": "כדי להשתמש במנוי, יש לבטל את {{variable}} במקום שבו השרת מופעל (.env, פרופיל shell, יחידת שירות) ולהפעיל מחדש את השרת.",
+        "settings_file": "כדי להשתמש במנוי, יש להסיר את {{variable}} מבלוק \"env\" בקובץ ~/.claude/settings.json."
+      }
+    },
+    "login": {
+      "title": "התחברות",
+      "reAuthenticate": "אימות מחדש",
+      "description": "התחברות לחשבון {{agent}} כדי להפעיל יכולות AI",
+      "reAuthDescription": "התחברות עם חשבון אחר או רענון פרטי ההתחברות",
+      "button": "התחברות",
+      "reLoginButton": "התחברות מחדש"
+    },
+    "error": "שגיאה: {{error}}"
+  },
+  "permissions": {
+    "title": "הגדרות הרשאות",
+    "skipPermissions": {
+      "label": "דילוג על בקשות הרשאה (בזהירות)",
+      "claudeDescription": "שקול לדגל --dangerously-skip-permissions",
+      "cursorDescription": "שקול לדגל -f ב-Cursor CLI"
+    },
+    "allowedTools": {
+      "title": "כלים מאושרים",
+      "description": "כלים שמאושרים אוטומטית בלי לבקש הרשאה",
+      "placeholder": "למשל, \"Bash(git log:*)\" או \"Write\"",
+      "quickAdd": "הוספה מהירה של כלים נפוצים:",
+      "empty": "לא הוגדרו כלים מאושרים"
+    },
+    "blockedTools": {
+      "title": "כלים חסומים",
+      "description": "כלים שנחסמים אוטומטית בלי לבקש הרשאה",
+      "placeholder": "למשל, \"Bash(rm:*)\"",
+      "empty": "לא הוגדרו כלים חסומים"
+    },
+    "allowedCommands": {
+      "title": "פקודות shell מאושרות",
+      "description": "פקודות shell שמאושרות אוטומטית בלי לבקש אישור",
+      "placeholder": "למשל, \"Shell(ls)\" או \"Shell(git status)\"",
+      "quickAdd": "הוספה מהירה של פקודות נפוצות:",
+      "empty": "לא הוגדרו פקודות מאושרות"
+    },
+    "blockedCommands": {
+      "title": "פקודות shell חסומות",
+      "description": "פקודות shell שנחסמות אוטומטית",
+      "placeholder": "למשל, \"Shell(rm -rf)\" או \"Shell(sudo)\"",
+      "empty": "לא הוגדרו פקודות חסומות"
+    },
+    "toolExamples": {
+      "title": "דוגמאות לתבניות כלים:",
+      "bashGitLog": "- אישור כל פקודות git log",
+      "bashGitDiff": "- אישור כל פקודות git diff",
+      "write": "- אישור כל שימוש בכלי Write",
+      "bashRm": "- חסימת כל פקודות rm (מסוכן)"
+    },
+    "shellExamples": {
+      "title": "דוגמאות לפקודות shell:",
+      "ls": "- אישור הפקודה ls",
+      "gitStatus": "- אישור git status",
+      "npmInstall": "- אישור npm install",
+      "rmRf": "- חסימת מחיקה רקורסיבית"
+    },
+    "codex": {
+      "permissionMode": "מצב הרשאות",
+      "description": "קובע איך Codex מטפל בשינויי קבצים ובהרצת פקודות",
+      "modes": {
+        "default": {
+          "title": "ברירת מחדל",
+          "description": "מריץ פקודות בתוך ה-sandbox של סביבת העבודה. Codex מחליט מתי נדרש אישור; בשילוב הלא-אינטראקטיבי הזה אי אפשר לאשר בקשות."
+        },
+        "acceptEdits": {
+          "title": "אישור עריכות",
+          "description": "כל הפקודות רצות אוטומטית בתוך סביבת העבודה. מצב אוטומטי מלא עם הרצה ב-sandbox."
+        },
+        "bypassPermissions": {
+          "title": "עקיפת הרשאות",
+          "description": "גישה מלאה למערכת ללא הגבלות. כל הפקודות רצות אוטומטית עם גישה מלאה לדיסק ולרשת. להשתמש בזהירות."
+        }
+      },
+      "technicalDetails": "פרטים טכניים",
+      "technicalInfo": {
+        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. מריץ פקודות בתוך ה-sandbox של סביבת העבודה. Codex מחליט מתי נדרש אישור; בשילוב הלא-אינטראקטיבי הזה אי אפשר לאשר בקשות.",
+        "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. כל הפקודות רצות אוטומטית בתוך תיקיית הפרויקט.",
+        "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. גישה מלאה למערכת, להשתמש רק בסביבות מהימנות.",
+        "overrideNote": "אפשר לשנות את זה לכל סשן בנפרד עם כפתור המצב בממשק הצ'אט."
+      }
+    },
+    "actions": {
+      "add": "הוספה"
+    }
+  },
+  "mcpServers": {
+    "title": "שרתי MCP",
+    "description": {
+      "claude": "שרתי Model Context Protocol מספקים ל-Claude כלים ומקורות מידע נוספים",
+      "cursor": "שרתי Model Context Protocol מספקים ל-Cursor כלים ומקורות מידע נוספים",
+      "codex": "שרתי Model Context Protocol מספקים ל-Codex כלים ומקורות מידע נוספים",
+      "opencode": "שרתי Model Context Protocol מספקים ל-OpenCode כלים ומקורות מידע נוספים"
+    },
+    "addButton": "הוספת שרת MCP",
+    "empty": "לא הוגדרו שרתי MCP",
+    "serverType": "סוג",
+    "scope": {
+      "local": "מקומי",
+      "user": "משתמש"
+    },
+    "config": {
+      "command": "פקודה",
+      "url": "URL",
+      "args": "ארגומנטים",
+      "environment": "סביבה"
+    },
+    "tools": {
+      "title": "כלים",
+      "count_one": "({{count}}):",
+      "count_two": "({{count}}):",
+      "count_other": "({{count}}):",
+      "more_one": "+{{count}} נוסף",
+      "more_two": "+{{count}} נוספים",
+      "more_other": "+{{count}} נוספים"
+    },
+    "actions": {
+      "edit": "עריכת שרת",
+      "delete": "מחיקת שרת"
+    },
+    "managed": {
+      "badge": "מנוהל",
+      "hint": "מנוהל על ידי CloudCLI."
+    },
+    "help": {
+      "title": "על Codex MCP",
+      "description": "Codex תומך בשרתי MCP מבוססי stdio. אפשר להוסיף שרתים שמרחיבים את היכולות של Codex עם כלים ומשאבים נוספים."
+    }
+  },
+  "pluginSettings": {
+    "title": "תוספים",
+    "description": "הרחבת הממשק עם תוספים מותאמים אישית. אפשר להתקין מ-git או להניח תיקייה ב-~/.claude-code-ui/plugins/",
+    "installPlaceholder": "https://github.com/user/my-plugin",
+    "installButton": "התקנה",
+    "installing": "מתקין…",
+    "securityWarning": "יש להתקין רק תוספים שקוד המקור שלהם נבדק או ממפתחים מהימנים.",
+    "scanningPlugins": "סורק תוספים…",
+    "noPluginsInstalled": "אין תוספים מותקנים",
+    "pullLatest": "משיכת הגרסה האחרונה מ-git",
+    "noGitRemote": "אין git remote, אין אפשרות לעדכן",
+    "uninstallPlugin": "הסרת התוסף",
+    "confirmUninstall": "לחיצה נוספת לאישור",
+    "confirmUninstallMessage": "להסיר את {{name}}? אי אפשר לבטל את הפעולה.",
+    "cancel": "ביטול",
+    "remove": "הסרה",
+    "updateFailed": "העדכון נכשל",
+    "installFailed": "ההתקנה נכשלה",
+    "uninstallFailed": "ההסרה נכשלה",
+    "toggleFailed": "השינוי נכשל",
+    "starterPluginLabel": "תוסף התחלתי",
+    "starter": "התחלתי",
+    "docs": "תיעוד",
+    "sections": {
+      "officialTitle": "תוספים רשמיים",
+      "officialDescription": "מתוחזקים על ידי צוות CloudCLI ומוכנים להתקנה ישירה.",
+      "unofficialTitle": "תוספים נוספים",
+      "unofficialDescription": "תוספים ושילובים לא רשמיים ממשתמשים אחרים. כדאי לבדוק את קוד המקור לפני ההתקנה."
+    },
+    "starterPlugin": {
+      "name": "סטטיסטיקות פרויקט",
+      "badge": "התחלתי",
+      "description": "מספר קבצים, שורות קוד, פילוח לפי סוג קובץ ופעילות אחרונה בפרויקט.",
+      "install": "התקנה"
+    },
+    "terminalPlugin": {
+      "name": "טרמינל",
+      "badge": "רשמי",
+      "description": "טרמינל מובנה עם גישת shell מלאה ישירות מתוך הממשק.",
+      "install": "התקנה"
+    },
+    "scheduledPromptPlugin": {
+      "name": "פרומפטים מתוזמנים",
+      "badge": "לא רשמי",
+      "description": "תזמון פרומפטים לסביבת העבודה, צפייה בהיסטוריית ריצות וניהול משימות מקומיות חוזרות.",
+      "install": "התקנה"
+    },
+    "claudeWatchPlugin": {
+      "name": "Claude Watch",
+      "badge": "לא רשמי",
+      "description": "מעקב אחרי סשנים ארוכים של Claude Code כדי לזהות תקיעות, עם שליטה בתהליכים.",
+      "install": "התקנה"
+    },
+    "prismCloudCLI": {
+      "name": "PRISM CloudCLI",
+      "badge": "לא רשמי",
+      "description": "ניתוח סשנים של Claude Code בתוך CloudCLI. אפשר לראות למה הסשנים צורכים טוקנים בלי לצאת מהדפדפן.",
+      "install": "התקנה"
+    },
+    "sessionManagerPlugin": {
+      "name": "סשנים",
+      "badge": "לא רשמי",
+      "description": "צפייה, ניהול וסגירה של סשנים פעילים של Claude Code.",
+      "install": "התקנה"
+    },
+    "tokenCostCalculatorPlugin": {
+      "name": "מחשבון עלות טוקנים",
+      "badge": "לא רשמי",
+      "description": "חישוב עלויות API לפי מחירי מודלים ושימוש בטוקנים, עם תמחור מוגדר מראש למודלים.",
+      "install": "התקנה"
+    },
+    "taskQueuePlugin": {
+      "name": "תור משימות",
+      "badge": "לא רשמי",
+      "description": "לוח בקרה לתור משימות: צפייה, סינון והפעלה של משימות סוכן.",
+      "install": "התקנה"
+    },
+    "githubIssuesBoardPlugin": {
+      "name": "לוח GitHub Issues",
+      "badge": "לא רשמי",
+      "description": "לוח קנבן ל-GitHub Issues עם סנכרון דו-כיווני ל-TaskMaster והתקנה אוטומטית של CLI skill בשם /github-task",
+      "install": "התקנה"
+    },
+    "claudeUsagePlugin": {
+      "name": "שימוש ב-Claude",
+      "badge": "לא רשמי",
+      "description": "מעקב חי אחרי מגבלות התוכנית של Claude Code והיסטוריית טוקנים ועלויות של 30 יום.",
+      "install": "התקנה"
+    },
+    "codexUsagePlugin": {
+      "name": "שימוש ב-Codex",
+      "badge": "לא רשמי",
+      "description": "מעקב חי אחרי מגבלות התוכנית של Codex, זמני איפוס ופעילות טוקנים בחשבון ב-30 הימים האחרונים.",
+      "install": "התקנה"
+    },
+    "glmUsagePlugin": {
+      "name": "שימוש ב-GLM",
+      "badge": "לא רשמי",
+      "description": "מעקב חי אחרי מכסות תוכנית הקוד של GLM/Zhipu והיסטוריית טוקנים של 30 יום.",
+      "install": "התקנה"
+    },
+    "morePlugins": "עוד",
+    "enable": "הפעלה",
+    "disable": "השבתה",
+    "installAriaLabel": "כתובת מאגר ה-git של התוסף",
+    "tab": "לשונית",
+    "runningStatus": "פועל"
+  },
+  "skillsPage": {
+    "description": "ניהול skills של {{provider}} מקבצים מקומיים, תיקיות שלמות ומיקומים לפי פרויקט.",
+    "searchPlaceholder": "חיפוש skills…",
+    "searchAriaLabel": "חיפוש skills",
+    "clearSearch": "ניקוי חיפוש ה-skills",
+    "addSkill": "הוספת skill",
+    "refresh": "רענון",
+    "scanningProjectSkills": "סורק skills של הפרויקט…",
+    "addDialogTitle": "הוספת skill ל-{{provider}}",
+    "addDialogDescription": "העלאת קובץ SKILL.md או תיקיית skill שלמה.",
+    "closeDialog": "סגירת חלון הוספת skill",
+    "savedSuccessfully": "ה-skills נשמרו בהצלחה.",
+    "footerHint": "העלאת תיקייה שומרת את שם התיקייה שנבחרה; קבצים בודדים משתמשים ב-`name` שב-`SKILL.md`.",
+    "installWithCount_one": "התקנת skill אחד",
+    "installWithCount_two": "התקנת {{count}} skills",
+    "installWithCount_other": "התקנת {{count}} skills",
+    "installPlain": "התקנת skill",
+    "loading": "טוען skills של {{provider}}…",
+    "emptyTitle": "עדיין לא נמצאו skills",
+    "emptyDescription": "אפשר להוסיף skill גלובלי למעלה או ליצור תיקיות skills לפרויקט בסביבת העבודה.",
+    "noMatchTitle": "אין skills תואמים",
+    "noMatchDescription": "אפשר לנסות פקודה, שם, היקף, פרויקט או נתיב מקור אחרים.",
+    "count_one": "skill אחד",
+    "count_two": "{{count}} skills",
+    "count_other": "{{count}} skills",
+    "noDescription": "אין תיאור ב-front matter של ה-skill.",
+    "pluginBadge": "תוסף: {{name}}",
+    "projectBadge": "פרויקט: {{name}}",
+    "source": "מקור",
+    "upload": {
+      "dropTitle": "גרירה לכאן של תיקיית skill או SKILL.md",
+      "dropHint": "תיקיות יכולות לכלול סקריפטים, הפניות וקבצי משאבים.",
+      "chooseFiles": "בחירת קבצים",
+      "chooseFolder": "בחירת תיקייה",
+      "readyToInstall": "מוכן להתקנה",
+      "filesCount_one": "קובץ אחד",
+      "filesCount_two": "שני קבצים",
+      "filesCount_other": "{{count}} קבצים",
+      "markdownFile": "קובץ Markdown",
+      "removeFile": "הסרת {{name}}",
+      "hideInstallLocation": "הסתרת מיקום ההתקנה",
+      "whereToInstall": "איפה זה יותקן?"
+    },
+    "errors": {
+      "tooManyFiles": "תיקיית skill יכולה להכיל עד {{max}} קבצים.",
+      "tooLarge": "הגודל הכולל של תיקיות ה-skill שנבחרו חייב להיות קטן מ-30 MB.",
+      "noSkillMd": "התיקייה שנבחרה לא מכילה קובץ SKILL.md.",
+      "couldNotReadSkillMd": "לא ניתן לקרוא את SKILL.md מתוך {{folder}}.",
+      "readFailed": "קריאת תיקיית ה-skill נכשלה",
+      "dropMarkdown": "יש לגרור קובץ Markdown אחד או יותר, או תיקייה שמכילה SKILL.md.",
+      "addFirst": "יש להוסיף קודם קובץ Markdown אחד או יותר.",
+      "importFailed": "ייבוא ה-skills נכשל"
+    },
+    "scopes": {
+      "user": "משתמש",
+      "plugin": "תוסף",
+      "repo": "מאגר",
+      "project": "פרויקט",
+      "admin": "מנהל",
+      "system": "מערכת"
+    }
+  },
+  "browserUse": {
+    "title": "דפדפן",
+    "subtitle": "מעקב אחרי סשנים בדפדפן שנפתחו על ידי סוכני AI.",
+    "openSettings": "פתיחת הגדרות הדפדפן",
+    "refreshSessions": "רענון סשני הדפדפן",
+    "runtimeDisabled": "מושבת",
+    "runtimeReady": "מוכן",
+    "runtimeInstalling": "מתקין",
+    "runtimeSetupRequired": "נדרשת הגדרה",
+    "loadFailed": "טעינת הדפדפן נכשלה",
+    "actionFailed": "פעולת הדפדפן נכשלה",
+    "requestFailed": "הבקשה נכשלה ({{status}})",
+    "never": "אף פעם",
+    "unknown": "לא ידוע",
+    "justNow": "הרגע",
+    "secondsAgo": "לפני {{n}} שנ׳",
+    "minutesAgo": "לפני {{n}} דק׳",
+    "hoursAgo": "לפני {{n}} שע׳",
+    "daysAgo": "לפני {{n}} ימים",
+    "noPageLoaded": "לא נטען דף",
+    "waitingAction": "ממתין",
+    "emptyTitleEnabled": "עדיין אין סשנים בדפדפן",
+    "emptyTitleDisabled": "הדפדפן מושבת",
+    "emptyDescEnabled": "סשנים של סוכנים בדפדפן יופיעו כאן בזמן שמשימת AI משתמשת בדפדפן.",
+    "emptyDescDisabled": "אפשר להפעיל את הדפדפן בהגדרות כדי לאפשר לסוכנים לפתוח סשנים מנוטרים בדפדפן.",
+    "runtimeSetupTitle": "נדרשת הגדרת סביבת ריצה",
+    "installing": "מתקין…",
+    "installRuntime": "התקנת סביבת ריצה",
+    "promptLabel": "פרומפט",
+    "prompt1": "להשתמש בדפדפן כדי לבדוק את תהליך התשלום ולדווח על מצבי UI שבורים.",
+    "prompt2": "לפתוח את <url> בדפדפן, לבצע פעולות בדף ולסכם מה השתנה אחרי כל שלב.",
+    "screenshotAlt": "צילום מסך של סשן הדפדפן",
+    "waitingScreenshot": "ממתין לצילום מסך",
+    "waitingScreenshotHint": "צילום הדפדפן הבא של הסוכן יוצג כאן.",
+    "activeCount": "{{n}} פעילים",
+    "totalCount": "{{n}} בסך הכול",
+    "updated": "עודכן {{time}}",
+    "statusEmpty": "ריק",
+    "fullScreen": "מסך מלא",
+    "stopSession": "עצירת הסשן",
+    "deleteSession": "מחיקת הסשן",
+    "sessions": "סשנים",
+    "noSessions": "אין סשנים של סוכנים בדפדפן.",
+    "selected": "נבחר",
+    "statusLabel": "סטטוס",
+    "none": "אין",
+    "lastAction": "פעולה אחרונה",
+    "profileLabel": "פרופיל",
+    "temporaryProfile": "זמני",
+    "stop": "עצירה",
+    "delete": "מחיקה",
+    "sessionFallback": "סשן דפדפן",
+    "close": "סגירה",
+    "statusReadySession": "מוכן",
+    "statusStoppedSession": "נעצר",
+    "statusUnavailableSession": "לא זמין",
+    "installFailed": "התקנת סביבת הריצה של הדפדפן נכשלה"
+  },
+  "browserUseSettings": {
+    "sectionTitle": "דפדפן",
+    "sectionDescription": "מתן אפשרות לסוכנים ליצור סשנים מוגנים של Playwright בדפדפן, שאפשר לעקוב אחריהם מהלשונית דפדפן.",
+    "enableLabel": "הפעלת הדפדפן",
+    "enableDescription": "רושם את הדפדפן לסוכנים נתמכים. סוכנים יכולים ליצור סשנים בדפדפן, ואפשר לצפות בהם, לעצור ולמחוק אותם.",
+    "enableAriaLabel": "הפעלת הדפדפן",
+    "playwrightLabel": "Playwright",
+    "chromiumLabel": "Chromium",
+    "statusPrefix": "סטטוס",
+    "checking": "בודק…",
+    "installed": "מותקן",
+    "missing": "חסר",
+    "ready": "מוכן",
+    "setupRequired": "נדרשת הגדרה",
+    "disabled": "מושבת",
+    "runtimeRequiredTitle": "נדרשת סביבת ריצה לדפדפן",
+    "runtimeRequiredFallback": "יש להתקין את סביבת הריצה של הדפדפן לפני שסוכנים יוכלו ליצור סשנים בדפדפן.",
+    "installing": "מתקין…",
+    "installRuntime": "התקנת סביבת ריצה",
+    "loadSettingsFailed": "טעינת הגדרות הדפדפן נכשלה",
+    "loadStatusFailed": "טעינת סטטוס הדפדפן נכשלה",
+    "saveFailed": "שמירת הגדרות הדפדפן נכשלה",
+    "installFailed": "התקנת סביבת הריצה של הדפדפן נכשלה"
+  },
+  "mcpServersAdd": {
+    "menuLabel": "הוספת שרת MCP",
+    "globalButtonLabel": "הוספת שרת MCP גלובלי",
+    "providerButtonLabel": "הוספת שרת MCP ל-{{provider}}",
+    "globalAddDescription": "הוספת שרת MCP גלובלי כותבת שרת stdio או HTTP משותף אחד ל-Claude, Cursor, Codex ו-OpenCode.",
+    "providerAddDescription": "{{button}} משנה רק את {{provider}}.",
+    "globalModalDescription": "מוסיף את שרת ה-MCP הזה לכל הספקים: Claude, Cursor, Codex ו-OpenCode. נתמכות רק תעבורות stdio ו-HTTP, כי אותה תצורה צריכה לעבוד בכל הספקים.",
+    "refreshingScopes": "מרענן את היקפי הפרויקט…",
+    "loadingServers": "טוען שרתי MCP…",
+    "configCwd": "Cwd",
+    "configEnvVars": "משתני סביבה"
+  },
+  "mcpTeamCard": {
+    "title": "תצורות MCP לצוות",
+    "description": "שיתוף תצורות שרתי MCP עם כל הצוות. כולם נשארים מסונכרנים אוטומטית.",
+    "proLink": "זמין ב-CloudCLI Pro"
+  },
+  "mcpServersAddErrors": {
+    "loadFailedProvider": "טעינת שרתי ה-MCP של {{provider}} נכשלה",
+    "deleteFailed": "מחיקת שרת ה-MCP נכשלה",
+    "saveFailed": "שמירת שרת ה-MCP נכשלה",
+    "saveGlobalFailed": "שמירת שרת ה-MCP לכל הספקים נכשלה",
+    "selectProjectRequired": "יש לבחור פרויקט עבור שרתי MCP בהיקף פרויקט",
+    "globalScopeUnsupported": "הוספת שרת MCP תומכת רק בהיקף משתמש או פרויקט בכל הספקים.",
+    "globalAddFailed": "הוספת שרת ה-MCP לכל הספקים נכשלה. {{details}}",
+    "deleteConfirm": "למחוק את שרת ה-MCP הזה?",
+    "unknownError": "שגיאה לא ידועה"
+  },
+  "about": {
+    "tagline": "ממשק קוד פתוח לעוזר תכנות מבוסס AI",
+    "starOnGitHub": "כוכב ב-GitHub",
+    "docs": "תיעוד",
+    "hostedTitle": "לנסות את CloudCLI Hosted",
+    "hostedDescription": "שיתוף פעולה בצוות, תצורות MCP משותפות, סנכרון הגדרות בין סביבות ותשתית מנוהלת.",
+    "learnMore": "מידע נוסף",
+    "proFeaturesTitle": "יכולות CloudCLI Pro",
+    "syncSettingsTitle": "סנכרון הגדרות",
+    "syncSettingsDescription": "ההעדפות, תצורות ה-MCP וערכת הנושא נשארים מסונכרנים בכל הסביבות.",
+    "teamManagementTitle": "ניהול צוות",
+    "teamManagementDescription": "משתמשים מרובים, גישה מבוססת תפקידים ופרויקטים משותפים לצוות.",
+    "licensed": "ברישיון AGPL-3.0",
+    "proCta": "זמין ב-CloudCLI Pro"
+  }
+}

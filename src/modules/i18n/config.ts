@@ -123,6 +123,17 @@ import csTasks from '@/modules/i18n/locales/cs/tasks.json';
 // oxlint-disable-next-line importx/order
 import csGit from '@/modules/i18n/locales/cs/git.json';
 
+import heCommon from '@/modules/i18n/locales/he/common.json';
+import heSettings from '@/modules/i18n/locales/he/settings.json';
+import heAuth from '@/modules/i18n/locales/he/auth.json';
+import heSidebar from '@/modules/i18n/locales/he/sidebar.json';
+import heChat from '@/modules/i18n/locales/he/chat.json';
+import heCodeEditor from '@/modules/i18n/locales/he/codeEditor.json';
+// oxlint-disable-next-line importx/order
+import heTasks from '@/modules/i18n/locales/he/tasks.json';
+// oxlint-disable-next-line importx/order
+import heGit from '@/modules/i18n/locales/he/git.json';
+
 import zhTWCommon from '@/modules/i18n/locales/zh-TW/common.json';
 import zhTWSettings from '@/modules/i18n/locales/zh-TW/settings.json';
 import zhTWAuth from '@/modules/i18n/locales/zh-TW/auth.json';
@@ -131,6 +142,17 @@ import zhTWChat from '@/modules/i18n/locales/zh-TW/chat.json';
 import zhTWCodeEditor from '@/modules/i18n/locales/zh-TW/codeEditor.json';
 // oxlint-disable-next-line importx/order
 import zhTWTasks from '@/modules/i18n/locales/zh-TW/tasks.json';
+
+import ptBRCommon from '@/modules/i18n/locales/pt-BR/common.json';
+import ptBRSettings from '@/modules/i18n/locales/pt-BR/settings.json';
+import ptBRAuth from '@/modules/i18n/locales/pt-BR/auth.json';
+import ptBRSidebar from '@/modules/i18n/locales/pt-BR/sidebar.json';
+import ptBRChat from '@/modules/i18n/locales/pt-BR/chat.json';
+import ptBRCodeEditor from '@/modules/i18n/locales/pt-BR/codeEditor.json';
+// oxlint-disable-next-line importx/order
+import ptBRTasks from '@/modules/i18n/locales/pt-BR/tasks.json';
+// oxlint-disable-next-line importx/order
+import ptBRGit from '@/modules/i18n/locales/pt-BR/git.json';
 
 // Import supported languages configuration
 import { languages } from '@/modules/i18n/languages';
@@ -269,6 +291,16 @@ git: enGit,
         tasks: csTasks,
         git: csGit,
       },
+      he: {
+        common: heCommon,
+        settings: heSettings,
+        auth: heAuth,
+        sidebar: heSidebar,
+        chat: heChat,
+        codeEditor: heCodeEditor,
+        tasks: heTasks,
+        git: heGit,
+      },
       'zh-TW': {
         common: zhTWCommon,
         settings: zhTWSettings,
@@ -277,6 +309,16 @@ git: enGit,
         chat: zhTWChat,
         codeEditor: zhTWCodeEditor,
         tasks: zhTWTasks,
+      },
+      'pt-BR': {
+        common: ptBRCommon,
+        settings: ptBRSettings,
+        auth: ptBRAuth,
+        sidebar: ptBRSidebar,
+        chat: ptBRChat,
+        codeEditor: ptBRCodeEditor,
+        tasks: ptBRTasks,
+        git: ptBRGit,
       },
     },
 

@@ -1,0 +1,458 @@
+{
+  "buttons": {
+    "save": "שמירה",
+    "cancel": "ביטול",
+    "delete": "מחיקה",
+    "create": "יצירה",
+    "edit": "עריכה",
+    "close": "סגירה",
+    "confirm": "אישור",
+    "submit": "שליחה",
+    "retry": "ניסיון חוזר",
+    "refresh": "רענון",
+    "search": "חיפוש",
+    "clear": "ניקוי",
+    "copy": "העתקה",
+    "download": "הורדה",
+    "upload": "העלאה",
+    "browse": "עיון"
+  },
+  "tabs": {
+    "chat": "צ'אט",
+    "shell": "Shell",
+    "files": "קבצים",
+    "git": "ניהול גרסאות",
+    "tasks": "משימות",
+    "browser": "דפדפן",
+    "computer": "מחשב",
+    "views": "תצוגות סביבת העבודה"
+  },
+  "status": {
+    "loading": "טוען…",
+    "success": "הצלחה",
+    "error": "שגיאה",
+    "failed": "נכשל",
+    "pending": "ממתין",
+    "completed": "הושלם",
+    "inProgress": "בתהליך"
+  },
+  "messages": {
+    "savedSuccessfully": "נשמר בהצלחה",
+    "deletedSuccessfully": "נמחק בהצלחה",
+    "updatedSuccessfully": "עודכן בהצלחה",
+    "operationFailed": "הפעולה נכשלה",
+    "networkError": "שגיאת רשת. יש לבדוק את החיבור.",
+    "unauthorized": "אין הרשאה. יש להתחבר.",
+    "notFound": "לא נמצא",
+    "invalidInput": "קלט לא תקין",
+    "requiredField": "זהו שדה חובה",
+    "unknownError": "אירעה שגיאה לא ידועה"
+  },
+  "navigation": {
+    "settings": "הגדרות",
+    "home": "בית",
+    "back": "חזרה",
+    "next": "הבא",
+    "previous": "הקודם",
+    "logout": "התנתקות",
+    "scrollTabsLeft": "גלילת הלשוניות שמאלה",
+    "scrollTabsRight": "גלילת הלשוניות ימינה"
+  },
+  "common": {
+    "language": "שפה",
+    "theme": "ערכת נושא",
+    "darkMode": "מצב כהה",
+    "lightMode": "מצב בהיר",
+    "name": "שם",
+    "description": "תיאור",
+    "enabled": "מופעל",
+    "disabled": "מושבת",
+    "optional": "אופציונלי",
+    "version": "גרסה",
+    "select": "בחירה",
+    "selectAll": "בחירת הכול",
+    "deselectAll": "ביטול הבחירה",
+    "cancel": "ביטול",
+    "done": "הסתיים",
+    "failed": "נכשל"
+  },
+  "time": {
+    "justNow": "הרגע",
+    "minutesAgo_one": "לפני דקה",
+    "minutesAgo_two": "לפני שתי דקות",
+    "minutesAgo_other": "לפני {{count}} דקות",
+    "hoursAgo_one": "לפני שעה",
+    "hoursAgo_two": "לפני שעתיים",
+    "hoursAgo_other": "לפני {{count}} שעות",
+    "daysAgo_one": "לפני יום",
+    "daysAgo_two": "לפני יומיים",
+    "daysAgo_other": "לפני {{count}} ימים",
+    "yesterday": "אתמול"
+  },
+  "fileOperations": {
+    "newFile": "קובץ חדש",
+    "newFolder": "תיקייה חדשה",
+    "rename": "שינוי שם",
+    "move": "העברה",
+    "copyPath": "העתקת נתיב",
+    "openInEditor": "פתיחה בעורך"
+  },
+  "mainContent": {
+    "loading": "טוען את CloudCLI",
+    "settingUpWorkspace": "מכין את סביבת העבודה…",
+    "chooseProject": "בחירת פרויקט",
+    "selectProjectDescription": "יש לבחור פרויקט בסרגל הצד כדי להתחיל לכתוב קוד עם Claude. כל פרויקט מכיל את סשני הצ'אט ואת היסטוריית הקבצים שלו.",
+    "tip": "טיפ",
+    "createProjectMobile": "אפשר לגשת לפרויקטים דרך כפתור התפריט למעלה",
+    "createProjectDesktop": "אפשר ליצור פרויקט חדש בלחיצה על סמל התיקייה בסרגל הצד",
+    "newSession": "סשן חדש",
+    "untitledSession": "סשן ללא שם",
+    "projectFiles": "קבצי הפרויקט",
+    "renameSessionHint": "{{title}} (לחיצה כפולה לשינוי השם)",
+    "renameSessionLabel": "שם הסשן"
+  },
+  "fileTree": {
+    "loading": "טוען קבצים…",
+    "files": "קבצים",
+    "simpleView": "תצוגה פשוטה",
+    "compactView": "תצוגה דחוסה",
+    "detailedView": "תצוגה מפורטת",
+    "searchPlaceholder": "חיפוש קבצים ותיקיות…",
+    "clearSearch": "ניקוי החיפוש",
+    "name": "שם",
+    "size": "גודל",
+    "modified": "שונה",
+    "permissions": "הרשאות",
+    "noFilesFound": "לא נמצאו קבצים",
+    "checkProjectPath": "יש לבדוק שנתיב הפרויקט נגיש",
+    "loadFailed": "לא ניתן לטעון את הקבצים",
+    "noMatchesFound": "לא נמצאו התאמות",
+    "tryDifferentSearch": "אפשר לנסות מונח חיפוש אחר או לנקות את החיפוש",
+    "justNow": "הרגע",
+    "minAgo_one": "לפני דקה",
+    "minAgo_two": "לפני שתי דקות",
+    "minAgo_other": "לפני {{count}} דקות",
+    "hoursAgo_one": "לפני שעה",
+    "hoursAgo_two": "לפני שעתיים",
+    "hoursAgo_other": "לפני {{count}} שעות",
+    "daysAgo_one": "לפני יום",
+    "daysAgo_two": "לפני יומיים",
+    "daysAgo_other": "לפני {{count}} ימים",
+    "newFile": "קובץ חדש (Cmd+N)",
+    "newFolder": "תיקייה חדשה (Cmd+Shift+N)",
+    "refresh": "רענון",
+    "collapseAll": "כיווץ הכול",
+    "dropToUpload": "אפשר לשחרר כאן קבצים להעלאה",
+    "dropToUploadTo": "אפשר לשחרר כאן קבצים להעלאה אל \"{{folder}}\"",
+    "uploadingFiles": "מעלה קבצים",
+    "uploadFiles": "העלאת קבצים (עד {{size}} לקובץ)",
+    "uploadToFolder": "העלאת קבצים אל \"{{folder}}\"",
+    "uploadComplete": "ההעלאה הושלמה",
+    "uploadFailed": "ההעלאה נכשלה",
+    "uploadedCount": "הועלו {{uploaded}} מתוך {{total}} קבצים",
+    "context": {
+      "rename": "שינוי שם",
+      "delete": "מחיקה",
+      "copyPath": "העתקת נתיב",
+      "download": "הורדה",
+      "newFile": "קובץ חדש",
+      "newFolder": "תיקייה חדשה",
+      "upload": "העלאת קבצים",
+      "refresh": "רענון",
+      "menuLabel": "תפריט הקשר של קובץ",
+      "loading": "טוען…"
+    },
+    "delete": {
+      "title": "מחיקת פריט",
+      "folderWarning": "התיקייה וכל התוכן שלה יימחקו לצמיתות.",
+      "fileWarning": "הקובץ יימחק לצמיתות.",
+      "confirm": "מחיקה"
+    },
+    "toast": {
+      "renamed": "השם שונה בהצלחה",
+      "fileDeleted": "הקובץ נמחק",
+      "folderDeleted": "התיקייה נמחקה",
+      "fileCreated": "הקובץ נוצר בהצלחה",
+      "folderCreated": "התיקייה נוצרה בהצלחה",
+      "pathCopied": "הנתיב הועתק ללוח",
+      "copyFailed": "העתקת הנתיב נכשלה",
+      "folderDownloaded": "התיקייה הורדה כקובץ ZIP"
+    },
+    "validation": {
+      "emptyName": "שם הקובץ לא יכול להיות ריק",
+      "invalidChars": "שם הקובץ מכיל תווים לא חוקיים",
+      "reserved": "שם הקובץ הוא שם שמור",
+      "dotsOnly": "שם הקובץ לא יכול להכיל נקודות בלבד"
+    }
+  },
+  "projectWizard": {
+    "title": "יצירת פרויקט חדש",
+    "steps": {
+      "type": "סוג",
+      "configure": "הגדרה",
+      "confirm": "אישור"
+    },
+    "step1": {
+      "question": "כבר יש סביבת עבודה, או ליצור סביבה חדשה?",
+      "existing": {
+        "title": "סביבת עבודה קיימת",
+        "description": "כבר יש לי סביבת עבודה בשרת ורק צריך להוסיף אותה לרשימת הפרויקטים"
+      },
+      "new": {
+        "title": "סביבת עבודה חדשה",
+        "description": "יצירת סביבת עבודה חדשה, עם אפשרות לשכפל מאגר מ-GitHub"
+      }
+    },
+    "step2": {
+      "existingPath": "נתיב סביבת העבודה",
+      "newPath": "נתיב סביבת העבודה",
+      "existingPlaceholder": "/path/to/existing/workspace",
+      "newPlaceholder": "/path/to/new/workspace",
+      "existingHelp": "הנתיב המלא לתיקיית סביבת העבודה הקיימת",
+      "newHelp": "הנתיב המלא לתיקיית סביבת העבודה",
+      "githubUrl": "כתובת GitHub (אופציונלי)",
+      "githubPlaceholder": "https://github.com/username/repository",
+      "githubHelp": "אופציונלי: כתובת GitHub לשכפול מאגר",
+      "githubAuth": "אימות מול GitHub (אופציונלי)",
+      "githubAuthHelp": "נדרש רק למאגרים פרטיים. אפשר לשכפל מאגרים ציבוריים בלי אימות.",
+      "loadingTokens": "טוען טוקנים שמורים…",
+      "storedToken": "טוקן שמור",
+      "newToken": "טוקן חדש",
+      "nonePublic": "ללא (ציבורי)",
+      "selectToken": "בחירת טוקן",
+      "selectTokenPlaceholder": "-- בחירת טוקן --",
+      "tokenPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "tokenHelp": "הטוקן ישמש רק לפעולה הזו",
+      "publicRepoInfo": "מאגרים ציבוריים לא דורשים אימות. אפשר לדלג על הטוקן כשמשכפלים מאגר ציבורי.",
+      "noTokensHelp": "אין טוקנים שמורים. אפשר להוסיף טוקנים בהגדרות → מפתחות API לשימוש חוזר נוח.",
+      "optionalTokenPublic": "טוקן GitHub (אופציונלי למאגרים ציבוריים)",
+      "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (להשאיר ריק למאגרים ציבוריים)"
+    },
+    "step3": {
+      "reviewConfig": "סקירת ההגדרות",
+      "existingWorkspace": "סביבת עבודה קיימת",
+      "newWorkspace": "סביבת עבודה חדשה",
+      "path": "נתיב:",
+      "cloneFrom": "שכפול מ:",
+      "authentication": "אימות:",
+      "usingStoredToken": "שימוש בטוקן שמור:",
+      "usingProvidedToken": "שימוש בטוקן שהוזן",
+      "noAuthentication": "ללא אימות",
+      "sshKey": "מפתח SSH",
+      "existingInfo": "סביבת העבודה תתווסף לרשימת הפרויקטים ותהיה זמינה לסשנים של Claude/Cursor.",
+      "newWithClone": "המאגר ישוכפל מהתיקייה הזו.",
+      "newEmpty": "סביבת העבודה תתווסף לרשימת הפרויקטים ותהיה זמינה לסשנים של Claude/Cursor.",
+      "cloningRepository": "משכפל את המאגר…"
+    },
+    "buttons": {
+      "cancel": "ביטול",
+      "back": "חזרה",
+      "next": "הבא",
+      "createProject": "יצירת פרויקט",
+      "creating": "יוצר…",
+      "cloning": "משכפל…"
+    },
+    "errors": {
+      "selectType": "יש לבחור אם יש סביבת עבודה קיימת או ליצור סביבה חדשה",
+      "providePath": "יש להזין נתיב לסביבת העבודה",
+      "failedToCreate": "יצירת סביבת העבודה נכשלה",
+      "failedToCreateFolder": "יצירת התיקייה נכשלה"
+    }
+  },
+  "notifications": {
+    "genericTool": "כלי",
+    "codes": {
+      "generic": {
+        "info": {
+          "title": "התראה"
+        }
+      },
+      "permission": {
+        "required": {
+          "title": "נדרשת פעולה",
+          "body": "{{toolName}} ממתין להחלטה."
+        }
+      },
+      "run": {
+        "stopped": {
+          "title": "ההרצה נעצרה",
+          "body": "סיבה: {{reason}}"
+        },
+        "failed": {
+          "title": "ההרצה נכשלה"
+        }
+      },
+      "agent": {
+        "notification": {
+          "title": "התראה מסוכן"
+        }
+      }
+    }
+  },
+  "versionUpdate": {
+    "title": "יש עדכון זמין",
+    "newVersionReady": "גרסה חדשה מוכנה",
+    "currentVersion": "הגרסה הנוכחית",
+    "latestVersion": "הגרסה האחרונה",
+    "whatsNew": "מה חדש:",
+    "viewFullRelease": "לפרטי הגרסה המלאים",
+    "updateProgress": "התקדמות העדכון:",
+    "manualUpgrade": "שדרוג ידני:",
+    "npmUpgradeCommand": "npm install -g @cloudcli-ai/cloudcli@latest",
+    "manualUpgradeHint": "או ללחוץ על \"עדכון עכשיו\" כדי להריץ את העדכון אוטומטית.",
+    "updateCompleted": "העדכון הושלם בהצלחה!",
+    "restartServer": "יש להפעיל מחדש את השרת כדי להחיל את השינויים.",
+    "updateFailed": "העדכון נכשל",
+    "buttons": {
+      "close": "סגירה",
+      "later": "אחר כך",
+      "copyCommand": "העתקת הפקודה",
+      "updateNow": "עדכון עכשיו",
+      "updating": "מעדכן…"
+    },
+    "ariaLabels": {
+      "closeModal": "סגירת חלון שדרוג הגרסה",
+      "showSidebar": "הצגת סרגל הצד",
+      "settings": "הגדרות",
+      "updateAvailable": "יש עדכון זמין",
+      "closeSidebar": "סגירת סרגל הצד",
+      "resizeSidebar": "שינוי גודל סרגל הצד"
+    },
+    "startingUpdate": "מתחיל את העדכון…",
+    "updateStartedRestarting": "העדכון התחיל. נראה שהשרת מופעל מחדש כדי להחיל אותו.",
+    "unexpectedResponse": "נקודת הקצה של העדכון החזירה תגובה לא צפויה (HTTP {{status}}). אפשר לעדכן ידנית עם הפקודה שלמטה.",
+    "connectionInterrupted": "החיבור לשרת נקטע — כנראה הוא מופעל מחדש כדי להחיל את העדכון.",
+    "unknownError": "שגיאה לא ידועה",
+    "refreshNow": "מרענן את החלון עכשיו…",
+    "refreshIn_one": "החלון יתרענן בעוד שנייה. אם העדכון לא נכנס לתוקף, יש להפעיל מחדש (RESTART) את הסביבה.",
+    "refreshIn_two": "החלון יתרענן בעוד שתי שניות. אם העדכון לא נכנס לתוקף, יש להפעיל מחדש (RESTART) את הסביבה.",
+    "refreshIn_other": "החלון יתרענן בעוד {{count}} שניות. אם העדכון לא נכנס לתוקף, יש להפעיל מחדש (RESTART) את הסביבה."
+  },
+  "commandPalette": {
+    "title": "לוח הפקודות",
+    "pages": {
+      "actions": "פעולות",
+      "files": "קבצים",
+      "sessions": "סשנים",
+      "commits": "Commits",
+      "branches": "ענפים"
+    },
+    "backToAll": "חזרה להכול",
+    "backspaceHint": "Backspace לחזרה",
+    "searchPage": "חיפוש {{page}}…",
+    "searchAnything": "הקלדה לחיפוש בכל דבר…",
+    "noResults": "אין תוצאות.",
+    "groupActions": "פעולות",
+    "groupNavigate": "ניווט",
+    "groupGit": "Git",
+    "groupSettings": "הגדרות",
+    "groupSessions": "סשנים",
+    "groupFiles": "קבצים",
+    "groupCommits": "Commits",
+    "groupBranches": "ענפים",
+    "startNewChat": "צ'אט חדש",
+    "selectProjectFirst": "יש לבחור פרויקט קודם",
+    "openSettings": "פתיחת ההגדרות",
+    "toggleTheme": "החלפת ערכת נושא",
+    "navChat": "מעבר לצ'אט",
+    "navFiles": "מעבר לקבצים",
+    "navShell": "מעבר ל-Shell",
+    "navGit": "מעבר ל-Git",
+    "navTasks": "מעבר למשימות",
+    "gitFetch": "Git: Fetch",
+    "gitPull": "Git: Pull",
+    "gitPush": "Git: Push",
+    "settingsItem": "הגדרות: {{label}}",
+    "browseAllSessions_one": "עיון בכל הסשנים ({{count}})",
+    "browseAllSessions_two": "עיון בכל הסשנים ({{count}})",
+    "browseAllSessions_other": "עיון בכל הסשנים ({{count}})",
+    "browseAllFiles_one": "עיון בכל הקבצים ({{count}})",
+    "browseAllFiles_two": "עיון בכל הקבצים ({{count}})",
+    "browseAllFiles_other": "עיון בכל הקבצים ({{count}})",
+    "browseAllCommits_one": "עיון בכל ה-commits ({{count}})",
+    "browseAllCommits_two": "עיון בכל ה-commits ({{count}})",
+    "browseAllCommits_other": "עיון בכל ה-commits ({{count}})",
+    "browseAllBranches_one": "עיון בכל הענפים ({{count}})",
+    "browseAllBranches_two": "עיון בכל הענפים ({{count}})",
+    "browseAllBranches_other": "עיון בכל הענפים ({{count}})",
+    "switchTo": "מעבר אל: {{name}}"
+  },
+  "folderBrowser": {
+    "title": "בחירת תיקייה",
+    "hideHidden": "הסתרת תיקיות מוסתרות",
+    "showHidden": "הצגת תיקיות מוסתרות",
+    "createNew": "יצירת תיקייה חדשה",
+    "newFolderPlaceholder": "שם התיקייה החדשה",
+    "create": "יצירה",
+    "loadFailed": "טעינת התיקיות נכשלה",
+    "createFailed": "יצירת התיקייה נכשלה",
+    "noSubfolders": "לא נמצאו תיקיות משנה",
+    "select": "בחירה",
+    "pathLabel": "נתיב:",
+    "useThisFolder": "שימוש בתיקייה הזו"
+  },
+  "misc": {
+    "errorTitle": "משהו השתבש",
+    "errorDescription": "אירעה שגיאה בטעינת ממשק הצ'אט.",
+    "errorDetails": "פרטי השגיאה",
+    "tryAgain": "ניסיון חוזר",
+    "projectFallback": "פרויקט",
+    "openMenu": "פתיחת תפריט",
+    "noProjectSelected": "לא נבחר פרויקט",
+    "projectRequiredForShell": "צריך פרויקט כדי לפתוח shell",
+    "completedBadge": "(הושלם)",
+    "close": "סגירה",
+    "hideToken": "הסתרת הטוקן",
+    "showToken": "הצגת הטוקן",
+    "unknownProvider": "לא ידוע",
+    "browseFolders": "עיון בתיקיות",
+    "closeLoginModal": "סגירת חלון ההתחברות",
+    "pluginLoadFailed": "טעינת התוסף נכשלה: {{error}}"
+  },
+  "workflow": {
+    "title": "Workflow",
+    "status": {
+      "running": "פועל",
+      "completed": "הסתיים",
+      "failed": "נכשל",
+      "stopped": "ללא תוצאה"
+    },
+    "stoppedHint": "ההרצה הסתיימה לפני שה-workflow החזיר תוצאה",
+    "phases": "שלבים",
+    "agents": "סוכנים",
+    "agentsFinished_one": "סוכנים שהסתיימו: {{finished}} מתוך {{count}}",
+    "agentsFinished_two": "סוכנים שהסתיימו: {{finished}} מתוך {{count}}",
+    "agentsFinished_other": "סוכנים שהסתיימו: {{finished}} מתוך {{count}}",
+    "agentsFailed_one": "{{count}} נכשל",
+    "agentsFailed_two": "{{count}} נכשלו",
+    "agentsFailed_other": "{{count}} נכשלו",
+    "agentsProgress_one": "סוכן: {{finished}}/{{count}}",
+    "agentsProgress_two": "סוכנים: {{finished}}/{{count}}",
+    "agentsProgress_other": "סוכנים: {{finished}}/{{count}}",
+    "agentStatus": {
+      "queued": "בתור",
+      "running": "פועל",
+      "completed": "הסתיים",
+      "failed": "נכשל",
+      "stopped": "ללא תוצאה"
+    },
+    "agentTokens": "{{tokens}} טוקנים",
+    "agentToolCalls_one": "קריאה אחת לכלי",
+    "agentToolCalls_two": "שתי קריאות לכלים",
+    "agentToolCalls_other": "{{count}} קריאות לכלים",
+    "agentTimelineLoading": "קורא את שלבי הסוכן…",
+    "agentTimelineEmpty": "עדיין לא נרשם דבר",
+    "agentTimelineUnavailable": "השלבים לא זמינים: {{reason}}",
+    "usage": "{{toolUses}} שימושים בכלים · {{elapsed}}",
+    "currentAgent": "נוכחי: {{label}}",
+    "result": "תוצאה",
+    "script": "סקריפט",
+    "backgroundTasks": "משימות ברקע",
+    "backgroundAgent": "סוכן",
+    "backgroundCommand": "פקודה",
+    "stopTask": "עצירה",
+    "taskRowNotLoaded": "הופעלה מוקדם יותר בשיחה הזו; לחיצה לטעינה",
+    "taskOfAgent": "הופעלה על ידי אחד הסוכנים של הסשן הזה"
+  },
+  "cancel": "ביטול"
+}

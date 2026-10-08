@@ -16,7 +16,7 @@ The screenshot renders the actual queue-card component with sample state. Its su
 
 ## Persistence and recovery
 
-The database stores individual `queued_messages` rows, ordered by sequence per session. Conditional claims and a unique index allow only one delivery/steering claim per session. A failed or unknown head blocks later messages. Sessions dispatch independently; completing a queued turn wakes the next queue pass. The existing 30-second scheduler poll remains a fallback, including after an ordinary foreground turn completes.
+The database stores individual `queued_messages` rows, ordered by sequence per session. Conditional claims and a unique index allow only one delivery/steering claim per session. A failed or unknown head blocks later messages. Queued turns wait for both foreground and background work to finish. Sessions dispatch independently; completing a queued turn wakes the next queue pass. The existing 30-second scheduler poll remains a fallback, including after an ordinary foreground turn completes.
 
 Each entry preserves its own options and uploaded attachment descriptors. The UI refreshes server state every five seconds and reloads it when reconnecting. Stable creation IDs make a manual retry after a lost HTTP response idempotent. A dispatch or steering operation interrupted by server restart becomes unknown; it is never automatically replayed.
 
