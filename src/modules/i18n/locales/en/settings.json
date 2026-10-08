@@ -84,6 +84,27 @@
       "openPanel": "Open settings panel",
       "draggingStatus": "Dragging...",
       "toggleAndMove": "Click to toggle, drag to move"
+    },
+    "tabs": {
+      "settings": "Settings",
+      "commands": "Commands"
+    },
+    "pin": "Pin panel open",
+    "unpin": "Unpin panel",
+    "close": "Close panel",
+    "commands": {
+      "searchPlaceholder": "Search commands…",
+      "noProject": "Select a project to see its commands.",
+      "loading": "Loading commands…",
+      "empty": "No commands available for this project.",
+      "noMatches": "No commands match your search.",
+      "loadError": "Commands could not be loaded.",
+      "groups": {
+        "builtIn": "Built-in",
+        "custom": "Custom",
+        "skills": "Skills"
+      },
+      "insertTitle": "Insert {{command}} into the chat"
     }
   },
   "terminalShortcuts": {
@@ -150,6 +171,13 @@
     "darkMode": {
       "label": "Dark Mode",
       "description": "Toggle between light and dark themes"
+    },
+    "theme": {
+      "label": "Theme",
+      "description": "Choose a light or dark appearance, or follow your operating system",
+      "light": "Light",
+      "dark": "Dark",
+      "system": "Follow the system appearance"
     },
     "projectSorting": {
       "label": "Project Sorting",
@@ -371,6 +399,19 @@
       }
     },
     "connectionStatus": "Connection Status",
+    "subscriptionOverride": {
+      "title": "Your subscription login is not being used",
+      "description": "{{variable}} is set in {{source}}, so Claude Code bills every request to that key as pay-as-you-go API usage instead of using your subscription login.",
+      "descriptionWithEmail": "{{variable}} is set in {{source}}, so Claude Code bills every request to that key as pay-as-you-go API usage instead of using your subscription login ({{email}}).",
+      "source": {
+        "process_env": "the server environment",
+        "settings_file": "~/.claude/settings.json"
+      },
+      "fix": {
+        "process_env": "To use the subscription, unset {{variable}} where the server is started (.env, shell profile, service unit) and restart the server.",
+        "settings_file": "To use the subscription, remove {{variable}} from the \"env\" block of ~/.claude/settings.json."
+      }
+    },
     "login": {
       "title": "Login",
       "reAuthenticate": "Re-authenticate",
@@ -400,6 +441,25 @@
       "description": "Tools that are automatically blocked without prompting for permission",
       "placeholder": "e.g., \"Bash(rm:*)\"",
       "empty": "No blocked tools configured"
+    },
+    "settingsFiles": {
+      "title": "Rules from Claude settings files",
+      "description": "The Claude CLI also applies these rules, on top of the lists above. A deny rule wins wherever it is set, but an ask rule does not prompt for a tool that Allowed Tools already allows. The rules are read-only here; edit them in the files.",
+      "sources": {
+        "user": "Your settings",
+        "managed": "Managed settings (administrator)"
+      },
+      "groups": {
+        "allow": "Allow",
+        "ask": "Ask",
+        "deny": "Deny"
+      },
+      "missing": "File not found, so it adds no rules.",
+      "invalid": "This file could not be read. Check that it is valid JSON.",
+      "empty": "No permission rules in this file.",
+      "loading": "Loading rules…",
+      "loadFailed": "Could not load the rules from the Claude settings files.",
+      "projectNote": "A project's own .claude/settings.json and .claude/settings.local.json also apply to chats in that project. The Claude CLI ignores allow rules in .claude/settings.json until the folder is trusted: run Claude Code interactively there once and accept the trust dialog."
     },
     "allowedCommands": {
       "title": "Allowed Shell Commands",
@@ -589,6 +649,18 @@
       "name": "Codex Usage",
       "badge": "unofficial",
       "description": "Track live Codex plan limits, reset timing, and 30-day account token activity.",
+      "install": "Install"
+    },
+    "glmUsagePlugin": {
+      "name": "GLM Usage",
+      "badge": "unofficial",
+      "description": "Track live GLM/Zhipu coding-plan quotas and 30-day token history.",
+      "install": "Install"
+    },
+    "agentMonitorPlugin": {
+      "name": "Agent Monitor",
+      "badge": "unofficial",
+      "description": "See background subagents and shells that keep running after a chat ends, and stop them.",
       "install": "Install"
     },
     "morePlugins": "More",

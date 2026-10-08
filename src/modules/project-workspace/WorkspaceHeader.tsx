@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import type { AppTab, Project, ProjectSession } from '@/shared/types';
 import { cn } from '@/shared/utils';
 import MobileMenuButton from '@/modules/project-workspace/MobileMenuButton';
+import WorkspaceConnectionStatus from '@/modules/project-workspace/WorkspaceConnectionStatus';
 import WorkspaceTabs from '@/modules/project-workspace/WorkspaceTabs';
 import WorkspaceTitle from '@/modules/project-workspace/WorkspaceTitle';
 
@@ -17,9 +18,11 @@ type WorkspaceHeaderProps = {
   shouldShowBrowserTab: boolean;
   isMobile: boolean;
   onMenuClick: () => void;
+  /** Persists a new title for a session; resolves false when the backend refuses it. */
+  onRenameSession: (sessionId: string, summary: string) => Promise<boolean>;
 };
 
-/** Rendered by WorkspaceMain to show the workspace title alongside the scrollable tab bar. */
+/** Rendered by WorkspaceMain to show the workspace title and chat connection status alongside the scrollable tab bar. */
 export default function WorkspaceHeader({
   activeTab,
   setActiveTab,
@@ -29,6 +32,7 @@ export default function WorkspaceHeader({
   shouldShowBrowserTab,
   isMobile,
   onMenuClick,
+  onRenameSession,
 }: WorkspaceHeaderProps) {
   const { t } = useTranslation();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -101,7 +105,9 @@ export default function WorkspaceHeader({
             selectedProject={selectedProject}
             selectedSession={selectedSession}
             shouldShowTasksTab={shouldShowTasksTab}
+            onRenameSession={onRenameSession}
           />
+          <WorkspaceConnectionStatus />
         </div>
 
         <div className="-mx-3 min-w-0 sm:mx-0 sm:flex-1">

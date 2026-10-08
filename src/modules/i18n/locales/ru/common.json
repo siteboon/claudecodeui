@@ -33,7 +33,9 @@
     "failed": "Не удалось",
     "pending": "Ожидание",
     "completed": "Завершено",
-    "inProgress": "В процессе"
+    "inProgress": "В процессе",
+    "reconnecting": "Переподключение...",
+    "chatConnectionLost": "Соединение чата потеряно. Переподключение..."
   },
   "messages": {
     "savedSuccessfully": "Успешно сохранено",
@@ -234,7 +236,8 @@
       "showSidebar": "Показать боковую панель",
       "settings": "Настройки",
       "updateAvailable": "Доступно обновление",
-      "closeSidebar": "Закрыть боковую панель"
+      "closeSidebar": "Закрыть боковую панель",
+      "resizeSidebar": "Изменить ширину боковой панели"
     }
   }
 }

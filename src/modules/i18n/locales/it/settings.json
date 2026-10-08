@@ -67,6 +67,27 @@
       "openPanel": "Apri pannello impostazioni",
       "draggingStatus": "Trascinamento...",
       "toggleAndMove": "Clicca per attivare/disattivare, trascina per spostare"
+    },
+    "tabs": {
+      "settings": "Impostazioni",
+      "commands": "Comandi"
+    },
+    "pin": "Fissa il pannello aperto",
+    "unpin": "Sblocca il pannello",
+    "close": "Chiudi il pannello",
+    "commands": {
+      "searchPlaceholder": "Cerca comandi…",
+      "noProject": "Seleziona un progetto per vedere i suoi comandi.",
+      "loading": "Caricamento dei comandi…",
+      "empty": "Nessun comando disponibile per questo progetto.",
+      "noMatches": "Nessun comando corrisponde alla ricerca.",
+      "loadError": "Impossibile caricare i comandi.",
+      "groups": {
+        "builtIn": "Integrati",
+        "custom": "Personalizzati",
+        "skills": "Skill"
+      },
+      "insertTitle": "Inserisci {{command}} nella chat"
     }
   },
   "terminalShortcuts": {
@@ -124,6 +145,13 @@
     "darkMode": {
       "label": "Modalità scura",
       "description": "Alterna tra tema chiaro e scuro"
+    },
+    "theme": {
+      "label": "Tema",
+      "description": "Scegli un aspetto chiaro o scuro, oppure segui quello del sistema operativo",
+      "light": "Chiaro",
+      "dark": "Scuro",
+      "system": "Segui l'aspetto del sistema"
     },
     "projectSorting": {
       "label": "Ordinamento progetti",
@@ -354,6 +382,25 @@
       "description": "Strumenti automaticamente bloccati senza richiedere permesso",
       "placeholder": "es. \"Bash(rm:*)\"",
       "empty": "Nessuno strumento bloccato configurato"
+    },
+    "settingsFiles": {
+      "title": "Regole dai file di impostazioni di Claude",
+      "description": "La CLI di Claude applica anche queste regole, oltre agli elenchi sopra. Una regola di divieto prevale ovunque sia impostata, ma una regola di richiesta non chiede conferma per uno strumento già presente in Strumenti consentiti. Qui le regole sono di sola lettura; modificale nei file.",
+      "sources": {
+        "user": "Le tue impostazioni",
+        "managed": "Impostazioni gestite (amministratore)"
+      },
+      "groups": {
+        "allow": "Consenti",
+        "ask": "Chiedi",
+        "deny": "Nega"
+      },
+      "missing": "File non trovato, quindi non aggiunge regole.",
+      "invalid": "Impossibile leggere questo file. Verifica che sia un JSON valido.",
+      "empty": "Nessuna regola di autorizzazione in questo file.",
+      "loading": "Caricamento regole…",
+      "loadFailed": "Impossibile caricare le regole dai file di impostazioni di Claude.",
+      "projectNote": "I file .claude/settings.json e .claude/settings.local.json di un progetto si applicano anche alle chat di quel progetto. La CLI di Claude ignora le regole di consenso in .claude/settings.json finché la cartella non è considerata attendibile: avvia una volta Claude Code in modalità interattiva in quella cartella e accetta la finestra di dialogo sull'attendibilità."
     },
     "allowedCommands": {
       "title": "Comandi shell consentiti",

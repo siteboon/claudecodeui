@@ -13,6 +13,9 @@ type ShellInitMessage = {
   isPlainShell: boolean;
   forceRestart?: boolean;
   bypassPermissions?: boolean;
+  // The app theme at launch, so the server can start a CLI in the colour scheme
+  // the terminal is painted in.
+  colorScheme?: 'light' | 'dark';
 };
 
 type ShellResizeMessage = {
@@ -34,6 +37,9 @@ type ShellIncomingMessage =
   // rejected, so this is the only signal that the terminal will never start.
   | { type: 'error'; message?: string }
   | { type: 'auth_url'; url?: string }
+  // The app theme the Claude CLI in the pty was launched for. A running CLI
+  // keeps those colours, including one a reconnect reattaches to.
+  | { type: 'claude_theme'; colorScheme?: string }
   | { type: string; [key: string]: unknown };
 
 export function getShellWebSocketUrl(): string | null {

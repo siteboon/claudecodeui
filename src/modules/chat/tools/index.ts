@@ -9,5 +9,6 @@
 // the cycle possible are gone.
 export { ToolRenderer } from '@/modules/chat/tools/ToolRenderer';
 export { SubagentPanel } from '@/modules/chat/tools/SubagentPanel';
+export { WorkflowPanel } from '@/modules/chat/tools/WorkflowPanel';
 export { ToolErrorDisplay } from '@/modules/chat/tools/ToolErrorDisplay';
 export { getToolConfig, shouldHideToolResult } from '@/modules/chat/tools/configs/toolConfigs';

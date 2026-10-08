@@ -109,7 +109,8 @@ export default function SidebarRecentConversations({
         {conversations.map((conversation) => {
           const isSelected = String(selectedSession?.id ?? '') === conversation.sessionId;
           const age = formatCompactAge(conversation.lastActivity, currentTime);
-          const isProcessing = sessionActions.activeSessions.has(conversation.sessionId);
+          const hasBackgroundWork = sessionActions.backgroundSessionIds.has(conversation.sessionId);
+          const isProcessing = sessionActions.activeSessions.has(conversation.sessionId) && !hasBackgroundWork;
           const showAttentionIndicator =
             sessionActions.attentionSessionIds.has(conversation.sessionId) && !isSelected;
           // Resolved per row so a keystroke in one rename does not redraw the rest.
@@ -180,6 +181,19 @@ export default function SidebarRecentConversations({
                         <span className="flex-shrink-0 text-muted-foreground/40">·</span>
                         <Tooltip content={t('tooltips.processingSessionIndicator', 'Processing session')} position="top">
                           <Loader2 className="h-3 w-3 flex-shrink-0 animate-spin" />
+                        </Tooltip>
+                      </>
+                    ) : hasBackgroundWork ? (
+                      // No spinner: nothing is responding. The purple of the
+                      // workflow and agent cards says what is still running.
+                      <>
+                        <span className="flex-shrink-0 text-muted-foreground/40">·</span>
+                        <Tooltip content={t('tooltips.backgroundWorkIndicator', 'Background work running')} position="top">
+                          <span
+                            role="status"
+                            aria-label={t('tooltips.backgroundWorkIndicator', 'Background work running')}
+                            className="h-2 w-2 flex-shrink-0 animate-pulse rounded-full bg-purple-500 dark:bg-purple-400"
+                          />
                         </Tooltip>
                       </>
                     ) : age && (

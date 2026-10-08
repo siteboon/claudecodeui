@@ -51,6 +51,40 @@
     "viewFullOutput": "Просмотр полного вывода ({{count}} символов)",
     "contentDisplayed": "Содержимое файла отображено в представлении различий выше"
   },
+  "bashEditDiff": {
+    "created": "Создан",
+    "updated": "Изменён",
+    "deleted": "Удалён",
+    "emptyFile": "Пустой файл",
+    "moreLines_one": "… ещё {{count}} строка",
+    "moreLines_few": "… ещё {{count}} строки",
+    "moreLines_many": "… ещё {{count}} строк",
+    "moreLines_other": "… ещё {{count}} строки",
+    "moreFiles_one": "… ещё {{count}} файл изменён",
+    "moreFiles_few": "… ещё {{count}} файла изменены",
+    "moreFiles_many": "… ещё {{count}} файлов изменено",
+    "moreFiles_other": "… ещё {{count}} файла изменено",
+    "filesNotShown_one": "{{count}} файл изменён (двоичный, только режим или слишком большой для показа)",
+    "filesNotShown_few": "{{count}} файла изменены (двоичные, только режим или слишком большие для показа)",
+    "filesNotShown_many": "{{count}} файлов изменено (двоичные, только режим или слишком большие для показа)",
+    "filesNotShown_other": "{{count}} файла изменено (двоичные, только режим или слишком большие для показа)",
+    "filesUnavailable_one": "{{count}} файл изменён (diff недоступен)",
+    "filesUnavailable_few": "{{count}} файла изменены (diff недоступен)",
+    "filesUnavailable_many": "{{count}} файлов изменено (diff недоступен)",
+    "filesUnavailable_other": "{{count}} файла изменено (diff недоступен)",
+    "filesChanged_one": "{{count}} файл изменён",
+    "filesChanged_few": "{{count}} файла изменены",
+    "filesChanged_many": "{{count}} файлов изменено",
+    "filesChanged_other": "{{count}} файла изменено",
+    "morePaths_one": "+ещё {{count}}",
+    "morePaths_few": "+ещё {{count}}",
+    "morePaths_many": "+ещё {{count}}",
+    "morePaths_other": "+ещё {{count}}",
+    "diffUnavailable": "(diff файлов недоступен для этой команды)",
+    "partUnavailable": "(часть diff недоступна)",
+    "skipped": "(diff файлов пропущен для этой команды git)",
+    "shared": "(в этом репозитории одновременно выполнялась другая команда; изменение, сделанное любой из них, может отображаться под любым из результатов)"
+  },
   "thinking": {
     "title": "Думаю...",
     "emoji": "💭 Думаю..."
@@ -158,7 +192,8 @@
     "status": {
       "newSession": "Новый сеанс",
       "initializing": "Инициализация...",
-      "restarting": "Перезапуск..."
+      "restarting": "Перезапуск...",
+      "themeRestartHint": "Перезапустите, чтобы применить новую тему к Claude Code"
     },
     "actions": {
       "disconnect": "Отключиться",
@@ -214,7 +249,8 @@
   },
   "message": {
     "editAndResend": "Изменить и отправить снова",
-    "forkFromHere": "Ответвить отсюда"
+    "forkFromHere": "Ответвить отсюда",
+    "answeredBy": "Ответил {{model}}"
   },
   "composer": {
     "editing": {
@@ -255,5 +291,10 @@
     "failed": "Не отправлено — {{reason}}",
     "cancel": "Отменить запланированное сообщение",
     "dismiss": "Скрыть уведомление об ошибке"
+  },
+  "modelLibrary": {
+    "effortLevels": "Уровни рассуждения",
+    "effortLevelsHint": "Выберите уровни усилия рассуждения, которые принимает эта модель. Если ничего не выбрано, в поле ввода для этой модели нельзя будет выбрать уровень.",
+    "effortSummary": "Рассуждение: {{levels}}"
   }
 }

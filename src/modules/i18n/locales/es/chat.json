@@ -52,6 +52,28 @@
     "viewFullOutput": "Ver salida completa ({{count}} caracteres)",
     "contentDisplayed": "El contenido del archivo se muestra en la vista de diff de arriba"
   },
+  "bashEditDiff": {
+    "created": "Creado",
+    "updated": "Actualizado",
+    "deleted": "Eliminado",
+    "emptyFile": "Archivo vacío",
+    "moreLines_one": "… {{count}} línea más",
+    "moreLines_other": "… {{count}} líneas más",
+    "moreFiles_one": "… {{count}} archivo más modificado",
+    "moreFiles_other": "… {{count}} archivos más modificados",
+    "filesNotShown_one": "{{count}} archivo modificado (binario, solo de modo o demasiado grande para mostrar)",
+    "filesNotShown_other": "{{count}} archivos modificados (binarios, solo de modo o demasiado grandes para mostrar)",
+    "filesUnavailable_one": "{{count}} archivo modificado (diff no disponible)",
+    "filesUnavailable_other": "{{count}} archivos modificados (diff no disponible)",
+    "filesChanged_one": "{{count}} archivo modificado",
+    "filesChanged_other": "{{count}} archivos modificados",
+    "morePaths_one": "+{{count}} más",
+    "morePaths_other": "+{{count}} más",
+    "diffUnavailable": "(diff de archivos no disponible para este comando)",
+    "partUnavailable": "(parte del diff no está disponible)",
+    "skipped": "(diff de archivos omitido para este comando de git)",
+    "shared": "(otro comando se ejecutó en este repositorio al mismo tiempo; un cambio hecho por cualquiera de los dos puede aparecer en cualquiera de los resultados)"
+  },
   "thinking": {
     "title": "Pensando...",
     "emoji": "💭 Pensando..."
@@ -191,7 +213,8 @@
     "status": {
       "newSession": "Sesión nueva",
       "initializing": "Inicializando...",
-      "restarting": "Reiniciando..."
+      "restarting": "Reiniciando...",
+      "themeRestartHint": "Reinicia para aplicar el nuevo tema a Claude Code"
     },
     "actions": {
       "disconnect": "Desconectar",
@@ -248,7 +271,8 @@
   },
   "message": {
     "editAndResend": "Editar y reenviar",
-    "forkFromHere": "Bifurcar desde aquí"
+    "forkFromHere": "Bifurcar desde aquí",
+    "answeredBy": "Respondido por {{model}}"
   },
   "export": {
     "trigger": "Exportar conversación",
@@ -282,5 +306,10 @@
     "failed": "No enviado — {{reason}}",
     "cancel": "Cancelar mensaje programado",
     "dismiss": "Descartar el aviso de fallo"
+  },
+  "modelLibrary": {
+    "effortLevels": "Niveles de razonamiento",
+    "effortLevelsHint": "Selecciona los niveles de esfuerzo de razonamiento que acepta este modelo. Si no seleccionas ninguno, no se podrá elegir un nivel para este modelo en el compositor.",
+    "effortSummary": "Razonamiento: {{levels}}"
   }
 }

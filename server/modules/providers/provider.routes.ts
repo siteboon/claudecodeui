@@ -1,6 +1,7 @@
 import express, { type Request, type Response } from 'express';
 
 import { providerAuthService } from '@/modules/providers/services/provider-auth.service.js';
+import { claudeSettingsPermissionsService } from '@/modules/providers/services/claude-settings-permissions.service.js';
 import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
 import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
 import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
@@ -9,6 +10,7 @@ import { providerSkillsService } from '@/modules/providers/services/skills.servi
 import { sessionConversationsSearchService } from '@/modules/providers/services/session-conversations-search.service.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 import type {
+  CustomProviderModelEffort,
   CustomProviderModelInput,
   LLMProvider,
   McpScope,
@@ -51,6 +53,35 @@ const parseSessionId = (value: unknown): string => {
   }
 
   return sessionId;
+};
+
+/** A workflow run id as the harness mints one (`wf_16fbf852-274`). */
+const WORKFLOW_RUN_ID_PATTERN = /^wf_[A-Za-z0-9-]+$/;
+/** A workflow agent id as the CLI mints one: `a` and sixteen hex digits. */
+const WORKFLOW_AGENT_ID_PATTERN = /^a[0-9a-f]{16}$/;
+
+// Both ids name a file under the session's transcript directory, so nothing
+// outside these shapes may reach the filesystem.
+const parseWorkflowRunId = (value: unknown): string => {
+  const runId = readPathParam(value, 'runId');
+  if (!WORKFLOW_RUN_ID_PATTERN.test(runId)) {
+    throw new AppError('Invalid workflow run id.', {
+      code: 'INVALID_WORKFLOW_RUN_ID',
+      statusCode: 400,
+    });
+  }
+  return runId;
+};
+
+const parseWorkflowAgentId = (value: unknown): string => {
+  const agentId = readPathParam(value, 'agentId');
+  if (!WORKFLOW_AGENT_ID_PATTERN.test(agentId)) {
+    throw new AppError('Invalid workflow agent id.', {
+      code: 'INVALID_WORKFLOW_AGENT_ID',
+      statusCode: 400,
+    });
+  }
+  return agentId;
 };
 
 const readOptionalQueryString = (value: unknown): string | undefined => {
@@ -465,6 +496,78 @@ const parseModelRecordId = (value: unknown): number => {
   return recordId;
 };
 
+const invalidModelEffort = (message: string): AppError => new AppError(message, {
+  code: 'INVALID_MODEL_EFFORT',
+  statusCode: 400,
+});
+
+/**
+ * Upper bound on declared effort levels, far above any provider's level set.
+ * Checked before the per-entry loop so an oversized body (the JSON parser
+ * accepts up to 50 MB) is rejected at once instead of being walked in full.
+ */
+const MAX_MODEL_EFFORT_LEVELS = 32;
+
+/**
+ * Parses the optional `effort` field of a custom-model payload.
+ *
+ * Only the shape is checked here (unique, trimmed, non-empty level ids and a
+ * default drawn from them); which levels a provider accepts is decided by the
+ * Providers service. `undefined` means "not sent" and `null` or an empty
+ * `values` list means "no effort levels".
+ */
+const parseCustomProviderModelEffort = (
+  value: unknown,
+): CustomProviderModelEffort | null | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null) {
+    return null;
+  }
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw invalidModelEffort('effort must be an object with a values array.');
+  }
+
+  const effort = value as Record<string, unknown>;
+  if (!Array.isArray(effort.values)) {
+    throw invalidModelEffort('effort.values must be an array of effort levels.');
+  }
+  if (effort.values.length > MAX_MODEL_EFFORT_LEVELS) {
+    throw invalidModelEffort(`effort.values can list at most ${MAX_MODEL_EFFORT_LEVELS} effort levels.`);
+  }
+
+  const values: string[] = [];
+  const seenLevels = new Set<string>();
+  for (const entry of effort.values) {
+    const level = typeof entry === 'string' ? entry.trim() : '';
+    if (!level || level.length > 40) {
+      throw invalidModelEffort('effort.values must contain non-empty strings of 40 characters or fewer.');
+    }
+    if (seenLevels.has(level)) {
+      throw invalidModelEffort(`effort.values contains "${level}" more than once.`);
+    }
+    seenLevels.add(level);
+    values.push(level);
+  }
+
+  if (effort.default !== undefined && effort.default !== null && typeof effort.default !== 'string') {
+    throw invalidModelEffort('effort.default must be a string.');
+  }
+  const defaultLevel = readOptionalQueryString(effort.default);
+  if (values.length === 0) {
+    if (defaultLevel) {
+      throw invalidModelEffort('effort.default requires at least one effort level.');
+    }
+    return null;
+  }
+  if (defaultLevel && !values.includes(defaultLevel)) {
+    throw invalidModelEffort('effort.default must be one of effort.values.');
+  }
+
+  return defaultLevel ? { values, default: defaultLevel } : { values };
+};
+
 const parseCustomProviderModelPayload = (payload: unknown): CustomProviderModelInput => {
   if (!payload || typeof payload !== 'object') {
     throw new AppError('Request body must be an object.', {
@@ -501,7 +604,8 @@ const parseCustomProviderModelPayload = (payload: unknown): CustomProviderModelI
     });
   }
 
-  return { model, id };
+  const effort = parseCustomProviderModelEffort(body.effort);
+  return effort === undefined ? { model, id } : { model, id, effort };
 };
 
 router.get(
@@ -717,6 +821,15 @@ router.get(
   }),
 );
 
+// Read-only: the rules Claude's own settings files add on top of the UI's lists.
+router.get(
+  '/claude/settings-permissions',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const sources = await claudeSettingsPermissionsService.listRuleSources();
+    res.json(createApiSuccessResponse({ sources }));
+  }),
+);
+
 // ----------------- Session routes -----------------
 /**
  * Session gateway entry point: allocates the stable app-facing session id for
@@ -739,7 +852,7 @@ router.post(
 router.get(
   '/sessions/running',
   asyncHandler(async (_req: Request, res: Response) => {
-    const sessions = sessionsService.listRunningSessions();
+    const sessions = await sessionsService.listRunningSessions();
     res.json(createApiSuccessResponse({ sessions }));
   }),
 );
@@ -844,6 +957,22 @@ router.get(
       limit,
       offset,
     });
+    res.json(createApiSuccessResponse(result));
+  }),
+);
+
+/**
+ * One workflow agent's timeline, read on demand when its row in the workflow
+ * card is opened. History does not carry it: a run can spawn a dozen agents
+ * with hundreds of tool calls each, and the card only lists them.
+ */
+router.get(
+  '/sessions/:sessionId/workflows/:runId/agents/:agentId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const runId = parseWorkflowRunId(req.params.runId);
+    const agentId = parseWorkflowAgentId(req.params.agentId);
+    const result = await sessionsService.readWorkflowAgentActivity(sessionId, runId, agentId);
     res.json(createApiSuccessResponse(result));
   }),
 );
