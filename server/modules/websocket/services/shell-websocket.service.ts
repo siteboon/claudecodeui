@@ -1,11 +1,12 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 
 import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
-import { parseIncomingJsonObject } from '@/shared/utils.js';
+import { parseIncomingJsonObject, resolveCodexCliPath } from '@/shared/index.js';
 
 type ShellIncomingMessage = {
   type?: string;
@@ -201,13 +202,22 @@ function buildShellCommand(
   }
 
   if (provider === 'codex') {
+    const configuredPath = resolveCodexCliPath();
+    let codexCommand: string;
+    if (configuredPath) {
+      codexCommand = `"${configuredPath}"`;
+    } else {
+      const codexPackage = createRequire(import.meta.url).resolve('@openai/codex/package.json');
+      const codexEntry = path.join(path.dirname(codexPackage), 'bin', 'codex.js');
+      codexCommand = `"${process.execPath}" "${codexEntry}"`;
+    }
     if (resumeSessionId) {
       if (os.platform() === 'win32') {
-        return `codex resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { codex }`;
+        return `& ${codexCommand} resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { & ${codexCommand} }`;
       }
-      return `codex resume "${resumeSessionId}" || codex`;
+      return `${codexCommand} resume "${resumeSessionId}"`;
     }
-    return 'codex';
+    return os.platform() === 'win32' ? `& ${codexCommand}` : codexCommand;
   }
 
   if (provider === 'opencode') {

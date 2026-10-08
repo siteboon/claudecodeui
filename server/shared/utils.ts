@@ -40,6 +40,18 @@ import type {
  */
 export const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
 
+/**
+ * Returns the operator-selected Codex CLI executable for Chat, Shell, and
+ * app-server operations. When unset, callers retain their bundled-CLI
+ * fallback so packaged installs do not require a separate global install.
+ */
+export function resolveCodexCliPath(
+  configuredPath: string | undefined = process.env.CODEX_CLI_PATH,
+): string | undefined {
+  const normalizedPath = configuredPath?.trim();
+  return normalizedPath || undefined;
+}
+
 // ---------------------------
 //----------------- NORMALIZED MESSAGE HELPER INPUT TYPES ------------
 /**
