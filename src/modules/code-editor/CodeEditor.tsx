@@ -72,6 +72,7 @@ export default function CodeEditor({
     fileProjectId,
     hasUnsavedChanges,
     needsOutsideConfirm,
+    isOutsideProject,
     confirmOutsideFile,
     handleSave,
     handleDownload,
@@ -315,6 +316,7 @@ export default function CodeEditor({
         <div className={innerContainerClassName}>
           <CodeEditorHeader
             file={file}
+            readOnly={isOutsideProject}
             isSidebar={isSidebar}
             isFullscreen={isFullscreen}
             isMarkdownFile={isMarkdownFile}
@@ -357,6 +359,7 @@ export default function CodeEditor({
 
           <div className="flex-1 overflow-hidden">
             <CodeEditorSurface
+              readOnly={isOutsideProject}
               content={content}
               onChange={setContent}
               markdownPreview={markdownPreview}
