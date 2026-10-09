@@ -21,41 +21,11 @@
   }
 }
 
+/* Colour tokens live in src/shared/themes/*.css, imported by the theme
+ * registry. Only layout-level variables remain here. */
+
 @layer base {
   :root {
-    --background: 44 22% 96%;
-    --foreground: 36 25% 4%;
-    --card: 0 0% 100%;
-    --card-foreground: 36 25% 4%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 36 25% 4%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 44 15% 91%;
-    --secondary-foreground: 36 15% 18%;
-    --muted: 44 15% 91%;
-    --muted-foreground: 40 5% 44%;
-    --accent: 44 15% 91%;
-    --accent-foreground: 36 15% 18%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 44 14% 87%;
-    --input: 44 14% 87%;
-    --ring: 221.2 83.2% 53.3%;
-    --radius: 0.5rem;
-
-    /* Nav design tokens */
-    --nav-glass-bg: 44 22% 96% / 0.7;
-    --nav-glass-blur: 20px;
-    --nav-glass-saturate: 1.8;
-    --nav-tab-glow: 221.2 83.2% 53.3% / 0.18;
-    --nav-tab-ring: 221.2 83.2% 53.3% / 0.10;
-    --nav-float-shadow: 0 0% 0% / 0.06;
-    --nav-float-ring: 44 14% 87% / 0.5;
-    --nav-divider-color: 44 14% 87% / 0.5;
-    --nav-input-bg: 44 15% 91% / 0.5;
-    --nav-input-focus-ring: 221.2 83.2% 53.3% / 0.22;
-
     /* Safe area CSS variables */
     --safe-area-inset-top: env(safe-area-inset-top);
     --safe-area-inset-right: env(safe-area-inset-right);
@@ -82,40 +52,6 @@
       --safe-area-inset-bottom: constant(safe-area-inset-bottom);
       --safe-area-inset-left: constant(safe-area-inset-left);
     }
-  }
-
-  .dark {
-    --background: 0 0% 8%;
-    --foreground: 40 8% 93%;
-    --card: 0 0% 12%;
-    --card-foreground: 40 8% 93%;
-    --popover: 0 0% 12%;
-    --popover-foreground: 40 8% 93%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 0 0% 8%;
-    --secondary: 0 0% 17%;
-    --secondary-foreground: 40 8% 93%;
-    --muted: 0 0% 17%;
-    --muted-foreground: 0 0% 60%;
-    --accent: 0 0% 17%;
-    --accent-foreground: 40 8% 93%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 40 8% 93%;
-    --border: 0 0% 17%;
-    --input: 0 0% 23%;
-    --ring: 217.2 91.2% 59.8%;
-
-    /* Nav design tokens — dark overrides */
-    --nav-glass-bg: 0 0% 12% / 0.55;
-    --nav-glass-blur: 24px;
-    --nav-glass-saturate: 1.6;
-    --nav-tab-glow: 217.2 91.2% 59.8% / 0.25;
-    --nav-tab-ring: 217.2 91.2% 59.8% / 0.15;
-    --nav-float-shadow: 0 0% 0% / 0.35;
-    --nav-float-ring: 0 0% 17% / 0.3;
-    --nav-divider-color: 0 0% 17% / 0.5;
-    --nav-input-bg: 0 0% 17% / 0.5;
-    --nav-input-focus-ring: 217.2 91.2% 59.8% / 0.25;
   }
 }
 

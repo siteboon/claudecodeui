@@ -150,7 +150,22 @@
   "appearanceSettings": {
     "darkMode": {
       "label": "Tmavý režim",
-      "description": "Přepínání mezi světlým a tmavým motivem"
+      "description": "Přepínání mezi světlým a tmavým motivem",
+      "themeControlled": "Tento motiv si určuje vlastní světlý nebo tmavý vzhled"
+    },
+    "colorTheme": {
+      "label": "Barevný motiv",
+      "description": "Paleta barev použitá v celé aplikaci",
+      "remove": "Odebrat motiv",
+      "importFailed": "Tento motiv se nepodařilo importovat.",
+      "import": {
+        "label": "Importovat motiv z VS Code",
+        "description": "Převede soubor *-color-theme.json nebo rozšíření .vsix na paletu",
+        "button": "Importovat motiv",
+        "urlLabel": "Nebo vložte URL rozšíření",
+        "urlPlaceholder": "https://marketplace.visualstudio.com/items?itemName=…",
+        "urlButton": "Načíst"
+      }
     },
     "projectSorting": {
       "label": "Řazení projektů",

@@ -7,6 +7,7 @@ import SettingsCard from '@/modules/settings/SettingsCard';
 import SettingsRow from '@/modules/settings/SettingsRow';
 import SettingsSection from '@/modules/settings/SettingsSection';
 import SettingsToggle from '@/modules/settings/SettingsToggle';
+import ColorThemeSection from '@/modules/settings/tabs/appearance-settings/ColorThemeSection';
 
 type AppearanceSettingsTabProps = {
   projectSortOrder: ProjectSortOrder;
@@ -29,21 +30,26 @@ export default function AppearanceSettingsTab({
   onCodeEditorFontSizeChange,
 }: AppearanceSettingsTabProps) {
   const { t } = useTranslation('settings');
-  const { themeMode, setThemeMode } = useTheme();
+  const { themeMode, setThemeMode, canToggleDarkMode } = useTheme();
 
   return (
     <div className="space-y-8">
+      <ColorThemeSection />
+
       <SettingsSection title={t('appearanceSettings.theme.label')}>
         <SettingsCard>
           <SettingsRow
             label={t('appearanceSettings.theme.label')}
-            description={t('appearanceSettings.theme.description')}
+            description={canToggleDarkMode
+              ? t('appearanceSettings.theme.description')
+              : t('appearanceSettings.darkMode.themeControlled')}
           >
             <select
               value={themeMode}
               onChange={(event) => setThemeMode(event.target.value as ThemeMode)}
+              disabled={!canToggleDarkMode}
               aria-label={t('appearanceSettings.theme.label')}
-              className="w-full touch-manipulation rounded-lg border border-input bg-card p-2.5 text-sm text-foreground focus:border-primary focus:ring-1 focus:ring-primary sm:w-36"
+              className="w-full touch-manipulation rounded-lg border border-input bg-card p-2.5 text-sm text-foreground focus:border-primary focus:ring-1 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50 sm:w-36"
             >
               <option value="light">{t('appearanceSettings.theme.light')}</option>
               <option value="dark">{t('appearanceSettings.theme.dark')}</option>
