@@ -1,7 +1,7 @@
 import {
+  acceptRefreshedToken,
   expireAuthSession,
   getStoredAuthToken,
-  storeAuthToken,
 } from '@/shared/authToken';
 import { IS_PLATFORM } from '@/shared/utils';
 import { readVoiceConfig, voiceConfigHeaders } from '@/shared/voiceConfig';
@@ -39,7 +39,7 @@ export const authenticatedFetch = (
   }).then((response) => {
     const refreshedToken = response.headers.get('X-Refreshed-Token');
     if (refreshedToken) {
-      storeAuthToken(refreshedToken);
+      acceptRefreshedToken(refreshedToken);
     }
     if (response.headers.get('X-Auth-Error')) {
       expireAuthSession();
