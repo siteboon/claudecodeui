@@ -250,29 +250,32 @@ export function useGitPanelController({
     if (!selectedProject) {
       return;
     }
+    const requestScope = `${selectedProject.projectId}\u0000${repo ?? ''}`;
+    // A reply for a repository the user has since switched away from must not
+    // overwrite the selected repository's branches.
+    const applyBranches = (data: GitBranchesResponse | null) => {
+      if (selectedScopeRef.current !== requestScope) {
+        return;
+      }
+      if (!data || data.error || !data.branches) {
+        setBranches([]);
+        setLocalBranches([]);
+        setRemoteBranches([]);
+        setRemoteRefs([]);
+        return;
+      }
+      setBranches(data.branches);
+      setLocalBranches(data.localBranches ?? data.branches);
+      setRemoteBranches(data.remoteBranches ?? []);
+      setRemoteRefs(data.remoteRefs ?? []);
+    };
 
     try {
       const response = await api.git.branches({ projectId: selectedProject.projectId, repo });
-      const data = await readJson<GitBranchesResponse>(response);
-
-      if (!data.error && data.branches) {
-        setBranches(data.branches);
-        setLocalBranches(data.localBranches ?? data.branches);
-        setRemoteBranches(data.remoteBranches ?? []);
-        setRemoteRefs(data.remoteRefs ?? []);
-        return;
-      }
-
-      setBranches([]);
-      setLocalBranches([]);
-      setRemoteBranches([]);
-      setRemoteRefs([]);
+      applyBranches(await readJson<GitBranchesResponse>(response));
     } catch (error) {
       console.error('Error fetching branches:', error);
-      setBranches([]);
-      setLocalBranches([]);
-      setRemoteBranches([]);
-      setRemoteRefs([]);
+      applyBranches(null);
     }
   }, [repo, selectedProject]);
 
@@ -280,20 +283,20 @@ export function useGitPanelController({
     if (!selectedProject) {
       return;
     }
+    const requestScope = `${selectedProject.projectId}\u0000${repo ?? ''}`;
 
     try {
       const response = await api.git.remoteStatus({ projectId: selectedProject.projectId, repo });
       const data = await readJson<GitRemoteStatus | GitApiErrorResponse>(response);
-
-      if (!data.error) {
-        setRemoteStatus(data as GitRemoteStatus);
+      if (selectedScopeRef.current !== requestScope) {
         return;
       }
-
-      setRemoteStatus(null);
+      setRemoteStatus(data.error ? null : data as GitRemoteStatus);
     } catch (error) {
       console.error('Error fetching remote status:', error);
-      setRemoteStatus(null);
+      if (selectedScopeRef.current === requestScope) {
+        setRemoteStatus(null);
+      }
     }
   }, [repo, selectedProject]);
 

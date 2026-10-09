@@ -57,6 +57,8 @@ export function useGitRepositories(selectedProject: Project | null) {
       } catch (error) {
         if (!(error instanceof DOMException && error.name === 'AbortError')) {
           console.error('Error listing repositories:', error);
+          // A failed scan still settles it, so the panel falls back to the root.
+          setScan({ projectId, repositories: [] });
         }
       }
     })();
@@ -67,6 +69,9 @@ export function useGitRepositories(selectedProject: Project | null) {
     () => (scan && scan.projectId === projectId ? scan.repositories : []),
     [projectId, scan],
   );
+  // Until the scan for this project settles, the selected repository is not
+  // known yet, so nothing may act on the project root in its place.
+  const isRepositoryScanComplete = Boolean(scan && scan.projectId === projectId);
 
   const selectedRepositoryPath = useMemo(() => {
     if (!projectId) {
@@ -84,5 +89,5 @@ export function useGitRepositories(selectedProject: Project | null) {
     writeStoredSelection(projectId, path);
   }, [projectId]);
 
-  return { repositories, selectedRepositoryPath, selectRepository };
+  return { repositories, selectedRepositoryPath, selectRepository, isRepositoryScanComplete };
 }

@@ -11,7 +11,7 @@ import { createGitRouter } from '@/modules/git/git.routes.js';
 
 type SpawnCall = { args: string[]; cwd: string | undefined };
 
-function createRouter(calls: SpawnCall[]) {
+function createRouter(calls: SpawnCall[], realpath: (candidate: string) => Promise<string> = async (candidate) => candidate) {
   const spawnProcess = ((_command: string, args: string[], options: { cwd?: string }) => {
     calls.push({ args, cwd: options.cwd });
     const child = new EventEmitter() as EventEmitter & { stdout: PassThrough; stderr: PassThrough };
@@ -29,7 +29,7 @@ function createRouter(calls: SpawnCall[]) {
   }) as Parameters<typeof createGitRouter>[0]['spawnProcess'];
   const unexpectedProvider = async (): Promise<never> => { throw new Error('unexpected provider call'); };
   return createGitRouter({
-    fileSystem: { access: async () => undefined } as unknown as Parameters<typeof createGitRouter>[0]['fileSystem'],
+    fileSystem: { access: async () => undefined, realpath } as unknown as Parameters<typeof createGitRouter>[0]['fileSystem'],
     spawnProcess,
     resolveProjectPathById: () => path.resolve('/workspace/project'),
     queryClaude: unexpectedProvider,
@@ -72,3 +72,17 @@ test('git status refuses a repo path that escapes the project without running gi
   });
   assert.deepEqual(calls, []);
 });
+
+test('git refuses a repo that is a symlink out of the project, without running git', async () => {
+  const calls: SpawnCall[] = [];
+  const projectRoot = path.resolve('/workspace/project');
+  const realpath = async (candidate: string) => (candidate === path.join(projectRoot, 'link') ? '/etc' : candidate);
+  await withServer(createRouter(calls, realpath), async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/git/status?project=project-1&repo=link`);
+    const body = await response.json() as { error?: string; details?: string };
+    assert.equal(body.error, 'Git operation failed');
+    assert.match(body.details ?? '', /must be inside the project/);
+  });
+  assert.deepEqual(calls, []);
+});
+
