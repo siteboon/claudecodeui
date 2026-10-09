@@ -30,10 +30,12 @@ type ActiveCodexSession = {
   status: 'running' | 'aborted' | 'completed';
   abortController: AbortController;
   finished: Promise<void>;
+  settled: boolean;
   startedAt: string;
 };
 
 const activeCodexSessions = new Map<string, ActiveCodexSession>();
+const CODEX_ABORT_TIMEOUT_MS = 10_000;
 
 // Codex CLI requires non-whitespace stdin even when --image arguments are
 // present, so attachment-only turns need a small text instruction.
@@ -340,6 +342,7 @@ async function queryCodex(
         status: 'running',
         abortController,
         finished,
+        settled: false,
         startedAt: new Date().toISOString()
       });
     };
@@ -502,6 +505,7 @@ async function queryCodex(
       const session = activeCodexSessions.get(sessionKey() || '');
       if (session) {
         session.status = session.status === 'aborted' ? 'aborted' : 'completed';
+        session.settled = true;
       }
     }
     resolveFinished();
@@ -530,7 +534,20 @@ async function abortCodexSession(sessionId: string): Promise<boolean> {
   // AbortController only requests termination. Wait until the SDK's stream
   // has unwound and its child process has exited before another surface can
   // resume this single-writer thread.
-  await session.finished;
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    await Promise.race([
+      session.finished,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          // Reject so the gateway retains its active-run guard until the writer exits.
+          reject(new Error('Codex chat is still closing. Please retry stopping it before opening Shell.'));
+        }, CODEX_ABORT_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
   return true;
 }
 
@@ -565,7 +582,8 @@ const completedSessionCleanupTimer = setInterval(() => {
   const maxAge = 30 * 60 * 1000; // 30 minutes
 
   for (const [id, session] of activeCodexSessions.entries()) {
-    if (session.status !== 'running') {
+    // An abort request is not proof that its writer has actually exited.
+    if (session.settled) {
       const startedAt = new Date(session.startedAt).getTime();
       if (now - startedAt > maxAge) {
         activeCodexSessions.delete(id);

@@ -69,6 +69,35 @@ test('Chat asks Codex Shell to quit before forcing its PTY closed', async () => 
   assert.equal(terminal.killed, false);
 });
 
+test('a timed-out Codex handoff still waits for the retained PTY on retry', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const terminal = createFakePty();
+  const socket = createFakeSocket();
+  const sessionId = 'codex-handoff-timeout-retry';
+  handleShellConnection(socket as never, {
+    resolveProviderSessionId: () => 'provider-thread',
+    spawnPty: () => terminal as never,
+  });
+  socket.emit('message', JSON.stringify({
+    type: 'init', projectPath: process.cwd(), sessionId, provider: 'codex', hasSession: true,
+  }));
+  const first = assert.rejects(releaseCodexShellSession(sessionId), /still closing/);
+  t.mock.timers.tick(5000);
+  await first;
+
+  let released = false;
+  const retry = releaseCodexShellSession(sessionId).then(() => { released = true; });
+  try {
+    await Promise.resolve();
+    assert.equal(released, false, 'a timeout must not lose track of a live writer');
+  } finally {
+    terminal.emitExit();
+    await retry;
+  }
+  assert.equal(released, true);
+  await releaseCodexShellSession(sessionId);
+});
+
 function createFakeSocket() {
   const socket = new EventEmitter() as EventEmitter & {
     readyState: number;
@@ -83,7 +112,7 @@ function createFakeSocket() {
 
 function createFakePty() {
   let dataListener: ((data: string) => void) | null = null;
-  let exitListener: ((event: { exitCode: number; signal?: number }) => void) | null = null;
+  const exitListeners = new Set<(event: { exitCode: number; signal?: number }) => void>();
 
   return {
     killed: false,
@@ -92,14 +121,14 @@ function createFakePty() {
       return { dispose: () => undefined };
     },
     onExit(listener: (event: { exitCode: number; signal?: number }) => void) {
-      exitListener = listener;
-      return { dispose: () => undefined };
+      exitListeners.add(listener);
+      return { dispose: () => { exitListeners.delete(listener); } };
     },
     emitData(data: string) {
       dataListener?.(data);
     },
     emitExit() {
-      exitListener?.({ exitCode: 0 });
+      for (const listener of [...exitListeners]) listener({ exitCode: 0 });
     },
     write(_data: string) {},
     resize() {},

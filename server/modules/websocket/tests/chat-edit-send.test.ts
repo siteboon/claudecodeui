@@ -10,6 +10,7 @@ import { sessionsService } from '@/modules/providers/index.js';
 import { handleChatConnection } from '@/modules/websocket/services/chat-websocket.service.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
 import { connectedClients } from '@/modules/websocket/services/websocket-state.service.js';
+import { handleShellConnection } from '@/modules/websocket/services/shell-websocket.service.js';
 
 const SESSION_ID = 'edit-session';
 
@@ -79,6 +80,7 @@ async function withGateway(
     runs: RunCall[];
   }) => Promise<void>,
   rows: unknown[] = TRANSCRIPT_ROWS,
+  abort: () => Promise<boolean> = async () => true,
 ): Promise<void> {
   const previousDatabasePath = process.env.DATABASE_PATH;
   const tempDirectory = await mkdtemp(path.join(os.tmpdir(), 'chat-edit-send-'));
@@ -102,6 +104,7 @@ async function withGateway(
       {
         runtime: {
           hasRuntime: () => true,
+          abort,
           run: async (runProvider: string, command: string, options: Record<string, unknown>) => {
             runs.push({ provider: runProvider, command, options });
             if (holdRun) {
@@ -131,6 +134,93 @@ async function withGateway(
 
 /** The handler is async and the socket listener does not await it. */
 const settle = () => new Promise((resolve) => { setTimeout(resolve, 30); });
+
+for (const timesOut of [false, true]) {
+  test(`Codex edit ${timesOut ? 'does not rewind after a Shell timeout' : 'waits for Shell before rewinding'}`, async (t) => {
+    await withGateway('codex', async ({ socket, runs }) => {
+      const exitListeners = new Set<(event: { exitCode: number }) => void>();
+      const terminal = {
+        onData: () => ({ dispose() {} }),
+        onExit: (listener: (event: { exitCode: number }) => void) => {
+          exitListeners.add(listener);
+          return { dispose: () => { exitListeners.delete(listener); } };
+        },
+        write() {}, resize() {}, kill() {},
+      };
+      const shell = createFakeSocket();
+      handleShellConnection(shell as never, {
+        resolveProviderSessionId: () => 'native-thread',
+        spawnPty: () => terminal as never,
+      });
+      shell.emit('message', JSON.stringify({
+        type: 'init', provider: 'codex', sessionId: SESSION_ID, projectPath: process.cwd(), hasSession: true,
+      }));
+      const rewind = t.mock.method(sessionsService, 'rewindSessionForEdit', async () => {});
+      const realSetTimeout = setTimeout;
+      const waitForHandler = () => new Promise((resolve) => { realSetTimeout(resolve, 30); });
+      t.mock.timers.enable({ apis: ['setTimeout'] });
+      try {
+        socket.emit('message', JSON.stringify({
+          type: 'chat.edit-send', sessionId: SESSION_ID, anchorId: 'turn-b', content: 'replacement',
+        }));
+        await waitForHandler();
+        assert.equal(exitListeners.size, 2, 'the handoff has begun waiting for Shell exit');
+        assert.equal(rewind.mock.callCount(), 0);
+        assert.equal(runs.length, 0);
+        if (timesOut) {
+          t.mock.timers.tick(5000);
+          await waitForHandler();
+          assert.equal(rewind.mock.callCount(), 0);
+          assert.equal(runs.length, 0);
+          assert.ok(!socket.frames.some((frame) => frame.kind === 'history_truncated'));
+        } else {
+          for (const listener of [...exitListeners]) listener({ exitCode: 0 });
+          await waitForHandler();
+          assert.equal(rewind.mock.callCount(), 1);
+          assert.equal(runs.length, 1);
+        }
+      } finally {
+        for (const listener of [...exitListeners]) listener({ exitCode: 0 });
+        await waitForHandler();
+        t.mock.timers.reset();
+      }
+    }, CODEX_TRANSCRIPT_ROWS);
+  });
+}
+
+test('a failed Codex abort keeps both Chat and Shell blocked until the writer finishes', async () => {
+  await withGateway('codex', async ({ socket, runs }) => {
+    holdTheNextRun();
+    socket.emit('message', JSON.stringify({ type: 'chat.send', sessionId: SESSION_ID, content: 'running' }));
+    await settle();
+    assert.equal(runs.length, 1);
+
+    socket.emit('message', JSON.stringify({ type: 'chat.abort', sessionId: SESSION_ID }));
+    await settle();
+    assert.match(String(socket.frames.at(-1)?.error), /still closing/);
+    assert.equal(chatRunRegistry.getRun(SESSION_ID)?.status, 'running');
+
+    const shell = createFakeSocket();
+    let spawned = false;
+    handleShellConnection(shell as never, {
+      resolveProviderSessionId: () => 'native-thread',
+      spawnPty: () => { spawned = true; throw new Error('must not spawn'); },
+    });
+    shell.emit('message', JSON.stringify({
+      type: 'init', provider: 'codex', sessionId: SESSION_ID, projectPath: process.cwd(), hasSession: true,
+    }));
+    assert.equal(spawned, false);
+    assert.match(String(shell.frames.at(-1)?.message), /Stop the active Codex/);
+
+    socket.emit('message', JSON.stringify({ type: 'chat.send', sessionId: SESSION_ID, content: 'too early' }));
+    await settle();
+    assert.equal(runs.length, 1);
+    assert.equal(socket.frames.at(-1)?.code, 'RUN_IN_PROGRESS');
+    releaseHeldRun?.();
+    await settle();
+    assert.notEqual(chatRunRegistry.getRun(SESSION_ID)?.status, 'running');
+  }, CODEX_TRANSCRIPT_ROWS, async () => { throw new Error('Codex chat is still closing.'); });
+});
 
 test('an edit resumes through the turn before the one being replaced', async () => {
   await withGateway('claude', async ({ socket, runs }) => {

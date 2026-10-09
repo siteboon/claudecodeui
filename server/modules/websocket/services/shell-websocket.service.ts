@@ -61,7 +61,7 @@ function forceClosePty(terminal: IPty): void {
 
 /** Used by Chat to release a Codex terminal's exclusive session writer. */
 export async function releaseCodexShellSession(sessionId: string): Promise<void> {
-  for (const [key, session] of ptySessionsMap) {
+  for (const session of ptySessionsMap.values()) {
     if (session.provider !== 'codex' || session.sessionId !== sessionId) continue;
     await new Promise<void>((resolve, reject) => {
       let quitTimer: NodeJS.Timeout | undefined;
@@ -79,8 +79,11 @@ export async function releaseCodexShellSession(sessionId: string): Promise<void>
         listener.dispose();
         resolve();
       });
-      if (session.timeoutId) clearTimeout(session.timeoutId);
-      ptySessionsMap.delete(key);
+      if (session.timeoutId) {
+        clearTimeout(session.timeoutId);
+        session.timeoutId = null;
+      }
+      // Only onExit removes this writer; a timed-out handoff must remain retryable.
       session.pty.write('\x03');
       quitTimer = setTimeout(() => session.pty.write('/quit\r'), CODEX_GRACEFUL_EXIT_DELAY_MS);
       forceTimer = setTimeout(() => forceClosePty(session.pty), CODEX_FORCE_EXIT_TIMEOUT_MS);
