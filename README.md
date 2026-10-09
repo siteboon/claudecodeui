@@ -267,3 +267,9 @@ CloudCLI UI - (https://cloudcli.ai).
 <div align="center">
  <strong>Made with care for the Claude Code, Cursor and Codex community.</strong>
 </div>
+
+## Shared Codex CLI
+
+Set `CODEX_CLI_PATH=/usr/local/bin/codex` (or another executable path) in the CloudCLI service environment to use the same CLI for Chat, Shell, and app-server operations. Restart CloudCLI after changing this setting. Updating that executable applies to newly started runs; already running processes retain their version. Without this setting, each integration uses the packaged Codex runtime. This selects a shared executable; it does not automatically install CLI or SDK updates.
+
+Review hardening (2026-10-09): Configured Codex paths, the Node executable, and the bundled CLI entry are quoted as literal Bash/PowerShell arguments. Spaces, apostrophes, variables, command substitutions, and backticks in paths cannot expand into commands. Build with `npm run build` and restart the existing service to deploy. See [feature details](features.md) and [manual change records](docs/changelog.md); root `CHANGELOG.md` remains release-generated.
