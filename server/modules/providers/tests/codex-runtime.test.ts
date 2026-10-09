@@ -8,6 +8,69 @@ import type { Thread, ThreadOptions } from '@openai/codex-sdk';
 import { codexRuntime } from '@/modules/providers/list/codex/codex-runtime.provider.js';
 import type { ProviderRuntimeContext } from '@/shared/index.js';
 
+for (const timesOut of [false, true]) {
+  test(`Codex abort ${timesOut ? 'reports a timeout without claiming success' : 'waits for the SDK writer to exit'}`, async (t) => {
+    let releaseWriter: (() => void) | undefined;
+    let streamStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => { streamStarted = resolve; });
+    const writerReleased = new Promise<void>((resolve) => { releaseWriter = resolve; });
+    const thread = {
+      id: 'native-thread',
+      async runStreamed() {
+        return { events: (async function* () {
+          yield { type: 'thread.started', thread_id: 'native-thread' };
+          streamStarted?.();
+          await writerReleased;
+        })() };
+      },
+    } as unknown as Thread;
+    t.mock.method(Codex.prototype, 'resumeThread', () => thread);
+
+    const context: ProviderRuntimeContext = {
+      resolveProviderSessionId: () => 'native-thread',
+      resolveResumeModel: async () => 'test-model',
+      getProviderModels: async () => ({ OPTIONS: [], DEFAULT: 'test-model' }),
+      normalizeMessage: () => [],
+      isProviderInstalled: async () => true,
+    };
+    const run = codexRuntime.run(
+      'test',
+      { sessionId: 'app-session' },
+      { isWebSocketWriter: true, send: () => undefined },
+      context,
+    );
+    await started;
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+
+    let abortFinished = false;
+    let abortError: unknown;
+    const abort = Promise.resolve(codexRuntime.abort('app-session')).catch((error) => {
+      abortError = error;
+      return false;
+    }).then((result) => {
+      abortFinished = true;
+      return result;
+    });
+    try {
+      await Promise.resolve();
+      assert.equal(abortFinished, false);
+      if (timesOut) {
+        t.mock.timers.tick(10_000);
+        await new Promise(setImmediate);
+        assert.equal(abortFinished, true, 'abort must report the timeout instead of hanging');
+        assert.match(String(abortError), /still closing/);
+        assert.equal(await abort, false);
+      }
+    } finally {
+      releaseWriter?.();
+      await run;
+      await abort;
+    }
+    if (!timesOut) assert.equal(await abort, true);
+    assert.equal(await codexRuntime.abort('app-session'), true, 'retry succeeds after actual shutdown');
+  });
+}
+
 for (const resumed of [false, true]) {
   for (const permissionMode of [undefined, 'default', 'unknown', 'acceptEdits', 'bypassPermissions']) {
     test(`Codex ${resumed ? 'resumes' : 'starts'} with supported permissions (${permissionMode ?? 'omitted'})`, async (t) => {

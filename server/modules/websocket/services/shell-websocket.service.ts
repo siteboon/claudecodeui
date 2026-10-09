@@ -7,6 +7,8 @@ import { WebSocket, type RawData } from 'ws';
 
 import { parseIncomingJsonObject, stripAnsiSequences } from '@/shared/utils.js';
 
+import { chatRunRegistry } from './chat-run-registry.service.js';
+
 type ShellIncomingMessage = {
   type?: string;
   data?: string;
@@ -32,6 +34,7 @@ type PtySessionEntry = {
   timeoutId: NodeJS.Timeout | null;
   projectPath: string;
   sessionId: string | null;
+  provider: string;
   // The app theme a Claude CLI in this pty was launched for; null for any other
   // program. A running CLI keeps its launch-time colours, so a reattaching
   // client needs this, not its own current theme, to know if they differ.
@@ -40,6 +43,53 @@ type PtySessionEntry = {
 
 const ptySessionsMap = new Map<string, PtySessionEntry>();
 const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
+const CODEX_GRACEFUL_EXIT_DELAY_MS = 50;
+const CODEX_FORCE_EXIT_TIMEOUT_MS = 1500;
+const CODEX_EXIT_TIMEOUT_MS = 5000;
+
+function forceClosePty(terminal: IPty): void {
+  if (os.platform() !== 'win32' && Number.isInteger(terminal.pid) && terminal.pid > 0) {
+    try {
+      process.kill(-terminal.pid, 'SIGHUP');
+      return;
+    } catch {
+      // Fall back when the PTY pid is not also its process-group id.
+    }
+  }
+  terminal.kill();
+}
+
+/** Used by Chat to release a Codex terminal's exclusive session writer. */
+export async function releaseCodexShellSession(sessionId: string): Promise<void> {
+  for (const session of ptySessionsMap.values()) {
+    if (session.provider !== 'codex' || session.sessionId !== sessionId) continue;
+    await new Promise<void>((resolve, reject) => {
+      let quitTimer: NodeJS.Timeout | undefined;
+      let forceTimer: NodeJS.Timeout | undefined;
+      const timeout = setTimeout(() => {
+        if (quitTimer) clearTimeout(quitTimer);
+        if (forceTimer) clearTimeout(forceTimer);
+        listener.dispose();
+        reject(new Error('Codex terminal is still closing. Please retry in a moment.'));
+      }, CODEX_EXIT_TIMEOUT_MS);
+      const listener = session.pty.onExit(() => {
+        clearTimeout(timeout);
+        if (quitTimer) clearTimeout(quitTimer);
+        if (forceTimer) clearTimeout(forceTimer);
+        listener.dispose();
+        resolve();
+      });
+      if (session.timeoutId) {
+        clearTimeout(session.timeoutId);
+        session.timeoutId = null;
+      }
+      // Only onExit removes this writer; a timed-out handoff must remain retryable.
+      session.pty.write('\x03');
+      quitTimer = setTimeout(() => session.pty.write('/quit\r'), CODEX_GRACEFUL_EXIT_DELAY_MS);
+      forceTimer = setTimeout(() => forceClosePty(session.pty), CODEX_FORCE_EXIT_TIMEOUT_MS);
+    });
+  }
+}
 const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
 const TRAILING_URL_PUNCTUATION_REGEX = /[)\]}>.,;:!?]+$/;
 
@@ -234,13 +284,14 @@ function buildShellCommand(
   }
 
   if (provider === 'codex') {
+    const codexTuiCommand = 'codex --disable daemon_auto_start';
     if (resumeSessionId) {
       if (os.platform() === 'win32') {
-        return otherProgram(`codex resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { codex }`);
+        return otherProgram(`& ${codexTuiCommand} resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { & ${codexTuiCommand} }`);
       }
-      return otherProgram(`codex resume "${resumeSessionId}" || codex`);
+      return otherProgram(`${codexTuiCommand} resume "${resumeSessionId}"`);
     }
-    return otherProgram('codex');
+    return otherProgram(os.platform() === 'win32' ? `& ${codexTuiCommand}` : codexTuiCommand);
   }
 
   if (provider === 'opencode') {
@@ -550,6 +601,10 @@ export function handleShellConnection(
         const sessionId = readString(data.sessionId) || null;
         const hasSession = readBoolean(data.hasSession);
         const provider = readString(data.provider, 'claude');
+        if (provider === 'codex' && sessionId && chatRunRegistry.getRun(sessionId)?.status === 'running') {
+          ws.send(JSON.stringify({ type: 'error', message: 'Stop the active Codex chat response before opening its terminal.' }));
+          return;
+        }
         const initialCommand = readString(data.initialCommand);
         const forceRestart = readBoolean(data.forceRestart);
         const colorScheme = readColorScheme(data.colorScheme);
@@ -672,6 +727,7 @@ export function handleShellConnection(
           timeoutId: null,
           projectPath,
           sessionId,
+          provider,
           claudeColorScheme,
         });
 

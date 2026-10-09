@@ -21,6 +21,8 @@ import type {
 } from '@/shared/types.js';
 import { parseIncomingJsonObject } from '@/shared/utils.js';
 
+import { releaseCodexShellSession } from './shell-websocket.service.js';
+
 /**
  * Trust boundary for client-supplied image attachments: chat.send options come
  * straight from the browser, and the provider runtimes read the referenced
@@ -288,6 +290,7 @@ async function dispatchRun(
     // conversation here and a rewind for a run that was never admitted cannot
     // be taken back. Inside the try so a rewind that throws still releases the
     // run instead of leaving the session processing forever.
+    if (provider === 'codex') await releaseCodexShellSession(sessionId);
     await beforeRun?.(run);
     await dependencies.runtime.run(provider, command, runtimeOptions, run.writer);
   } catch (error) {
