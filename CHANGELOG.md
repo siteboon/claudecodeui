@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Discover Codex Chat models and reasoning efforts from the CLI, refresh visible Chat catalogs automatically, and retain a usable fallback when discovery fails (2026-10-09).
+
 All notable changes to CloudCLI UI will be documented in this file.
 
 

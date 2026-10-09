@@ -235,6 +235,41 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   }, [loadProviderModels]);
 
   useEffect(() => {
+    if (provider !== 'codex' || providerModelsLoading) return;
+
+    let cancelled = false;
+    let refreshing = false;
+    const refresh = async () => {
+      if (document.visibilityState !== 'visible' || refreshing) return;
+      refreshing = true;
+      try {
+        const response = await api.providers.models('codex');
+        const body = (await response.json()) as ProviderModelsApiResponse;
+        if (!cancelled && response.ok && body.success && body.data?.models) {
+          const models = body.data.models;
+          setProviderModelCatalog((previous) => ({ ...previous, codex: models }));
+        }
+      } catch {
+        // Keep the current picker usable while disconnected.
+      } finally {
+        refreshing = false;
+      }
+    };
+
+    // Pick up CLI upgrades in an already-open Chat without resetting its selection.
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 60_000);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [provider, providerModelsLoading]);
+
+  useEffect(() => {
     let cancelled = false;
 
     const loadCapabilities = async () => {
