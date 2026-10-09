@@ -32,7 +32,7 @@ test('Codex Shell uses the configured CLI for new and resumed sessions', (t) => 
       type: 'init', projectPath: process.cwd(), provider: 'codex',
       sessionId: `cli-runtime-${resumed}`, hasSession: resumed,
     }));
-    assert.ok(command.includes('"/configured/codex"'));
+    assert.ok(command.includes("'/configured/codex'"));
     assert.equal(command.includes('resume "native-thread"'), resumed);
     terminal.emitExit();
   }
@@ -772,7 +772,7 @@ test('other shells and initial commands only get the COLORFGBG hint', (t) => {
 
     assert.deepEqual(
       calls.map((call) => call.command),
-      ['npx task-master init', loginCommand, '"/configured/codex"', '"/configured/codex"']
+      ['npx task-master init', loginCommand, "'/configured/codex'", "'/configured/codex'"]
     );
     assert.deepEqual(
       calls.map((call) => call.env.COLORFGBG),

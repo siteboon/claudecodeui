@@ -238,11 +238,11 @@ function buildShellCommand(
     const configuredPath = resolveCodexCliPath();
     let codexCommand: string;
     if (configuredPath) {
-      codexCommand = `"${configuredPath}"`;
+      codexCommand = quoteShellArgument(configuredPath);
     } else {
       const codexPackage = createRequire(import.meta.url).resolve('@openai/codex/package.json');
       const codexEntry = path.join(path.dirname(codexPackage), 'bin', 'codex.js');
-      codexCommand = `"${process.execPath}" "${codexEntry}"`;
+      codexCommand = `${quoteShellArgument(process.execPath)} ${quoteShellArgument(codexEntry)}`;
     }
     if (resumeSessionId) {
       if (os.platform() === 'win32') {
