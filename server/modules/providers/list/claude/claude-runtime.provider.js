@@ -75,6 +75,35 @@ const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEO
 // forever. The timer resets on every message, so it measures silence, not total time.
 const BG_WAIT_CEILING_MS = 30 * 60 * 1000;
 
+// The CLI counts CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS from the end of the turn,
+// whether or not stdin is still held, so passing the silence ceiling above killed
+// any background Workflow or Agent that simply ran longer than 30 minutes. The CLI
+// gets a separate hard limit instead; the silence timer above stays the normal
+// release. CLOUDCLI_BG_HARD_CEILING_MS overrides it (0 = never).
+export const CLI_BG_HARD_CEILING_MS = (() => {
+  const configured = Number.parseInt(process.env.CLOUDCLI_BG_HARD_CEILING_MS ?? '', 10);
+  return Number.isInteger(configured) && configured >= 0 ? configured : 6 * 60 * 60 * 1000;
+})();
+
+/**
+ * Whether the silence timer may let a held process go.
+ *
+ * Silence is not the same as idle: a Workflow's agents can work for longer than
+ * the silence ceiling without the parent session's stream carrying anything, and
+ * releasing then let the CLI kill them on the spot (its own ceiling had long
+ * passed). While the tracker still lists outstanding tasks the hold is kept, up
+ * to the hard ceiling.
+ *
+ * @param {{ outstanding: boolean, heldSinceMs: number, nowMs: number, hardCeilingMs: number }} state
+ * @returns {boolean}
+ */
+export function shouldReleaseOnSilence({ outstanding, heldSinceMs, nowMs, hardCeilingMs }) {
+  if (!outstanding) {
+    return true;
+  }
+  return hardCeilingMs > 0 && nowMs - heldSinceMs >= hardCeilingMs;
+}
+
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
 // Ultracode is a session-scoped setting rather than an SDK effort level: it pairs xhigh
@@ -227,7 +256,7 @@ function mapCliOptionsToSDK(options = {}) {
 
   // Forward all host env vars (e.g. ANTHROPIC_BASE_URL) to the subprocess.
   // Since SDK 0.2.113, options.env replaces process.env instead of overlaying it.
-  sdkOptions.env = { ...process.env, CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: String(BG_WAIT_CEILING_MS) };
+  sdkOptions.env = { ...process.env, CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: String(CLI_BG_HARD_CEILING_MS) };
 
   // Resolve the executable eagerly on Windows because the SDK uses raw child_process.spawn,
   // which does not reliably follow npm's shell wrappers like cross-spawn does.
@@ -943,6 +972,8 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // True while the process is being held open for background work, so a later
   // `result` can be recognised as that work reporting back.
   let heldForBackgroundWork = false;
+  // When the current hold began, for the hard ceiling in shouldReleaseOnSilence.
+  let holdStartedAt = 0;
   // Set once a turn publishes a budget read from an assistant message, so the
   // turn-ending `result` is only mined for usage when nothing better arrived.
   let assistantBudgetSent = false;
@@ -961,6 +992,15 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     }
     idleReleaseTimer = setTimeout(() => {
       idleReleaseTimer = null;
+      if (!shouldReleaseOnSilence({
+        outstanding: Boolean(sessionKey()) && backgroundWork.hasOutstanding(sessionKey()),
+        heldSinceMs: holdStartedAt,
+        nowMs: Date.now(),
+        hardCeilingMs: CLI_BG_HARD_CEILING_MS,
+      })) {
+        scheduleRelease();
+        return;
+      }
       releasePromptStream();
     }, BG_WAIT_CEILING_MS);
     // Never let the hold keep the server process alive on its own.
@@ -1257,6 +1297,9 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         backgroundWorkPending = false;
         sawTaskEventThisTurn = false;
         if (holdForTurn) {
+          if (!heldForBackgroundWork) {
+            holdStartedAt = Date.now();
+          }
           heldForBackgroundWork = true;
           scheduleRelease();
         } else {
