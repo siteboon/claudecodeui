@@ -156,6 +156,19 @@ async function getRepositoryPath(projectId, repo) {
   if (resolved !== projectPath && !resolved.startsWith(projectPath + path.sep)) {
     throw new Error('Invalid repository path: must be inside the project');
   }
+  // Compare real paths too: a symlink inside the project must not let git
+  // (discard, push, init...) run somewhere else.
+  let realProject;
+  let realRepository;
+  try {
+    [realProject, realRepository] = await Promise.all([fs.realpath(projectPath), fs.realpath(resolved)]);
+  } catch {
+    throw new Error('Invalid repository path: not found');
+  }
+  const relative = path.relative(realProject, realRepository);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('Invalid repository path: must be inside the project');
+  }
   return resolved;
 }
 

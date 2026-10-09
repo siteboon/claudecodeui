@@ -41,7 +41,7 @@ export default function GitPanel({
   const [hasExpandedFiles, setHasExpandedFiles] = useState(false);
   const [confirmAction, setConfirmAction] = useState<ConfirmationRequest | null>(null);
 
-  const { repositories, selectedRepositoryPath, selectRepository } = useGitRepositories(selectedProject);
+  const { repositories, selectedRepositoryPath, selectRepository, isRepositoryScanComplete } = useGitRepositories(selectedProject);
   // Absolute root of the repository on show; per-repository caches and keys hang off it.
   const repositoryPath = selectedProject
     ? (selectedRepositoryPath ? `${selectedProject.fullPath}/${selectedRepositoryPath}` : selectedProject.fullPath)
@@ -169,10 +169,15 @@ export default function GitPanel({
         <GitRepositoryErrorState
           error={gitStatus.error}
           details={gitStatus.details}
-          canInitRepository={isMissingRepository}
+          // Before the repository scan settles the status may be for the
+          // project root rather than the selected nested repository.
+          canInitRepository={isMissingRepository && isRepositoryScanComplete}
           isInitializingRepository={isInitializingRepository}
           initError={isMissingRepository ? operationError : null}
           onInitRepository={() => {
+            if (!isRepositoryScanComplete) {
+              return;
+            }
             clearOperationError();
             void initRepository();
           }}
