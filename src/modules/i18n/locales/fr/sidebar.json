@@ -167,5 +167,9 @@
     "archiveSessions_other": "Archiver {{count}} sessions",
     "archiveSessionsNotice_one": "L'archivage retire la session de la liste active tout en conservant son historique.",
     "archiveSessionsNotice_other": "L'archivage retire les sessions de la liste active tout en conservant leur historique."
+  },
+  "projectGroup": {
+    "locations_one": "{{count}} chemin",
+    "locations_other": "{{count}} chemins"
   }
 }
