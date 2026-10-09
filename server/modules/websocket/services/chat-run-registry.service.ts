@@ -300,7 +300,7 @@ export const chatRunRegistry = {
    * marked running. Used when a provider runtime throws or resolves without
    * having produced its own terminal event, and by the abort path.
    */
-  completeRun(appSessionId: string, opts: { exitCode: number; aborted?: boolean }): void {
+  completeRun(appSessionId: string, opts: { exitCode: number; aborted?: boolean; replaced?: boolean }): void {
     const run = runs.get(appSessionId);
     if (!run || run.status !== 'running') {
       return;
@@ -317,7 +317,7 @@ export const chatRunRegistry = {
    * milliseconds of the previous turn ending) — the session-keyed
    * `completeRun` would terminate that newer run.
    */
-  completeRunIfCurrent(run: ChatRun, opts: { exitCode: number; aborted?: boolean }): void {
+  completeRunIfCurrent(run: ChatRun, opts: { exitCode: number; aborted?: boolean; replaced?: boolean }): void {
     if (runs.get(run.appSessionId) !== run || run.status !== 'running') {
       return;
     }

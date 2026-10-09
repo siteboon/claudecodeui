@@ -1,22 +1,29 @@
 import { useTranslation } from 'react-i18next';
-import { PencilIcon, XIcon } from 'lucide-react';
+import { PencilIcon, Wand2Icon, XIcon, ZapIcon } from 'lucide-react';
 
 type QueuedMessageCardProps = {
   content: string;
   attachmentCount?: number;
   onEdit: () => void;
   onDelete: () => void;
+  /** Dispatches the queued draft immediately via `chat.steer` or an interrupting `chat.send`, instead of waiting for the turn to finish. */
+  onSendNow?: (mode: 'steer' | 'interrupt') => void;
+  /** Whether the active provider supports `steer` (see providerCanSteer); when false, the steer action is hidden but "Now" (interrupt) stays available. */
+  canSteer: boolean;
 };
 
 /**
  * Rendered by chat's ChatComposer to show the message queued for a busy
- * session, with edit and delete actions before it is auto-sent.
+ * session, with edit and delete actions before it is auto-sent, plus two
+ * actions to dispatch it immediately instead of waiting.
  */
 export default function QueuedMessageCard({
   content,
   attachmentCount = 0,
   onEdit,
   onDelete,
+  onSendNow,
+  canSteer,
 }: QueuedMessageCardProps) {
   const { t } = useTranslation('chat');
 
@@ -41,6 +48,30 @@ export default function QueuedMessageCard({
         </div>
 
         <div className="flex shrink-0 items-center gap-0.5">
+          {onSendNow && (
+            <>
+              {canSteer && (
+                <button
+                  type="button"
+                  onClick={() => onSendNow('steer')}
+                  aria-label={t('input.sendMode.steer', { defaultValue: 'After next tool call' })}
+                  title={t('input.sendMode.steer', { defaultValue: 'After next tool call' })}
+                  className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  <Wand2Icon className="h-3.5 w-3.5" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => onSendNow('interrupt')}
+                aria-label={t('input.sendMode.interrupt', { defaultValue: 'Now' })}
+                title={t('input.sendMode.interrupt', { defaultValue: 'Now' })}
+                className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <ZapIcon className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
           <button
             type="button"
             onClick={onEdit}
