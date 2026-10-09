@@ -92,7 +92,7 @@ export default function CodeEditorMediaPreview({
           projectId,
           file.path,
           { signal: controller.signal },
-          isOutsideFileApproved(file.path),
+          isOutsideFileApproved(projectId, file.path),
         );
 
         if (!response.ok) {
@@ -224,7 +224,9 @@ export default function CodeEditorMediaPreview({
           <button
             type="button"
             onClick={() => {
-              approveOutsideFile(file.path);
+              if (projectId) {
+                approveOutsideFile(projectId, file.path);
+              }
               setReloadToken((token) => token + 1);
             }}
             className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground transition-colors hover:bg-primary/90"

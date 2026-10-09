@@ -111,7 +111,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
           throw new Error('Missing project identifier');
         }
 
-        const allowOutside = isOutsideFileApproved(filePath);
+        const allowOutside = isOutsideFileApproved(fileProjectId, filePath);
         const response = await api.readFile(fileProjectId, filePath, allowOutside);
         if (response.status === 403 && (await readFileTreeErrorCode(response)) === OUTSIDE_PROJECT_CONFIRM) {
           if (isStaleLoad()) {
@@ -124,12 +124,14 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
         // Read through readApiJson so the API's own explanation reaches the
         // pane — a directory, a path outside the project root, a missing file.
         // The bare status showed all of those as an opaque "403 Forbidden".
-        const data = await readApiJson<{ content: string }>(response);
+        const data = await readApiJson<{ content: string; outsideProject?: boolean }>(response);
         if (isStaleLoad()) {
           return;
         }
         applyLoadedContent(data.content);
-        setIsOutsideProject(allowOutside);
+        // The server says whether this read went outside the project; an
+        // earlier approval alone does not make a file read-only.
+        setIsOutsideProject(Boolean(data.outsideProject));
       } catch (error) {
         if (isStaleLoad()) {
           return;
@@ -148,9 +150,11 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
   }, [file.diffInfo, file.name, fileDiffNewString, fileDiffOldString, fileName, filePath, fileProjectId, reloadToken]);
 
   const confirmOutsideFile = useCallback(() => {
-    approveOutsideFile(filePath);
+    if (fileProjectId) {
+      approveOutsideFile(fileProjectId, filePath);
+    }
     setReloadToken((token) => token + 1);
-  }, [filePath]);
+  }, [filePath, fileProjectId]);
 
   const handleSave = useCallback(async () => {
     // Preview-only and binary files have no editable text buffer; never write

@@ -1418,7 +1418,7 @@ export type FileTreeServices = {
   }>;
   createWorkspaceFolder(folderPath: string): Promise<{ success: true; path: string }>;
   /** `allowOutside`: the user confirmed reading an absolute path outside the project. */
-  readTextFile(projectId: string, filePath: string, options?: { allowOutside?: boolean }): Promise<{ content: string; path: string }>;
+  readTextFile(projectId: string, filePath: string, options?: { allowOutside?: boolean }): Promise<{ content: string; path: string; outsideProject: boolean }>;
   openFile(projectId: string, filePath: string, options?: { allowOutside?: boolean }): Promise<{ contentType: string; stream: Readable }>;
   saveTextFile(projectId: string, filePath: string, content: string): Promise<{
     success: true;

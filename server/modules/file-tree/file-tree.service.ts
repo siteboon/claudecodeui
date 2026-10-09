@@ -66,10 +66,16 @@ const CREDENTIAL_DIRS = [...new Set([os.homedir(), os.userInfo().homedir])]
   .flatMap((home) => CREDENTIAL_DIR_NAMES.map((dir) => path.join(home, dir) + path.sep));
 const CREDENTIAL_FILE_PATTERN = /^(\.env(\..*)?|\.netrc|\.pgpass|id_[a-z0-9_]+|.*\.(pem|key|p12|pfx)|credentials(\.json)?)$/i;
 
-function isCredentialPath(realPath: string): boolean {
-  return CREDENTIAL_DIRS.some((dir) => realPath.startsWith(dir))
-    || realPath.split(path.sep).some((segment) => segment === '.ssh' || segment === '.gnupg')
-    || CREDENTIAL_FILE_PATTERN.test(path.basename(realPath));
+// Windows and default macOS volumes match names without regard to case, so
+// `.SSH` there is the same folder as `.ssh`.
+const CASE_INSENSITIVE_FS = process.platform === 'win32' || process.platform === 'darwin';
+const foldCase = (value: string) => (CASE_INSENSITIVE_FS ? value.toLowerCase() : value);
+
+function isCredentialPath(candidate: string): boolean {
+  const folded = foldCase(candidate);
+  return CREDENTIAL_DIRS.some((dir) => folded.startsWith(foldCase(dir)))
+    || folded.split(path.sep).some((segment) => segment === '.ssh' || segment === '.gnupg')
+    || CREDENTIAL_FILE_PATTERN.test(path.basename(candidate));
 }
 
 function readErrorCode(error: unknown): string | null {
@@ -369,16 +375,16 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
     projectRoot: string,
     targetPath: string,
     options: ReadOptions = {},
-  ): Promise<string> {
+  ): Promise<{ resolvedPath: string; outsideProject: boolean }> {
     if (path.isAbsolute(targetPath)) {
       const readOnlyPath = await dependencies.workspace.resolveReadOnlyRootPath(targetPath);
       if (readOnlyPath) {
-        return readOnlyPath;
+        return { resolvedPath: readOnlyPath, outsideProject: false };
       }
     }
 
     try {
-      return resolvePathInsideProject(projectRoot, targetPath);
+      return { resolvedPath: resolvePathInsideProject(projectRoot, targetPath), outsideProject: false };
     } catch (error) {
       if (!path.isAbsolute(targetPath) || readErrorCode(error) !== 'PATH_OUTSIDE_PROJECT') {
         throw error;
@@ -395,7 +401,8 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
     } catch {
       throw createFileTreeError('File not found', 404, 'FILE_NOT_FOUND');
     }
-    if (isCredentialPath(realPath)) {
+    // Both names: a symlinked `~/.ssh` resolves to a folder with another name.
+    if (isCredentialPath(path.resolve(targetPath)) || isCredentialPath(realPath)) {
       throw createFileTreeError('This file is in a credentials folder and cannot be opened here', 403, 'PATH_PROTECTED');
     }
     if (!options.allowOutside) {
@@ -405,7 +412,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
         'OUTSIDE_PROJECT_CONFIRM',
       );
     }
-    return realPath;
+    return { resolvedPath: realPath, outsideProject: true };
   }
 
   async function cleanupTemporaryFiles(files: FileTreeUploadedFile[]): Promise<void> {
@@ -501,10 +508,10 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
 
     async readTextFile(projectId, filePath, options) {
       const projectRoot = await resolveProjectRoot(projectId);
-      const resolvedPath = await resolveReadablePath(projectRoot, filePath, options);
+      const { resolvedPath, outsideProject } = await resolveReadablePath(projectRoot, filePath, options);
       try {
         const content = await fileSystem.readTextFile(resolvedPath);
-        return { content, path: resolvedPath };
+        return { content, path: resolvedPath, outsideProject };
       } catch (error) {
         mapFileSystemError(error, {
           ENOENT: { message: 'File not found', statusCode: 404 },
@@ -516,7 +523,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
 
     async openFile(projectId, filePath, options) {
       const projectRoot = await resolveProjectRoot(projectId);
-      const resolvedPath = await resolveReadablePath(projectRoot, filePath, options);
+      const { resolvedPath } = await resolveReadablePath(projectRoot, filePath, options);
       try {
         await fileSystem.access(resolvedPath);
       } catch {

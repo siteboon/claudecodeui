@@ -547,7 +547,9 @@ test('a file outside the project is read only after the user confirms', async ()
     );
     const confirmed = await service.readTextFile('project-1', target, { allowOutside: true });
     assert.equal(confirmed.content, 'plot');
-    await service.openFile('project-1', target, { allowOutside: true });
+    assert.equal(confirmed.outsideProject, true);
+    const opened = await service.openFile('project-1', target, { allowOutside: true });
+    opened.stream.destroy();
 
     // Confirmation is for reading only: the write path still refuses it.
     await assert.rejects(
@@ -574,6 +576,16 @@ test('credential files stay refused even when confirmed', async () => {
       path.join(outsideDirectory, 'server.key'),
       path.join(sshDirectory, 'config'),
     ];
+    // A symlink named `.ssh` into a folder with another name is refused by its own name.
+    const keysDirectory = path.join(outsideDirectory, 'keys');
+    await fsPromises.mkdir(keysDirectory);
+    await fsPromises.writeFile(path.join(keysDirectory, 'known_hosts'), 'secret', 'utf8');
+    await fsPromises.mkdir(path.join(outsideDirectory, 'home'));
+    await fsPromises.symlink(keysDirectory, path.join(outsideDirectory, 'home', '.ssh'));
+    await assert.rejects(
+      createRealFileSystemService(projectRoot).readTextFile('project-1', path.join(outsideDirectory, 'home', '.ssh', 'known_hosts'), { allowOutside: true }),
+      (error: unknown) => (error as AppError).code === 'PATH_PROTECTED',
+    );
     const service = createRealFileSystemService(projectRoot);
     for (const file of protectedFiles) {
       await fsPromises.writeFile(file, 'secret', 'utf8');

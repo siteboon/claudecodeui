@@ -6,15 +6,19 @@
  */
 const approvedPaths = new Set<string>();
 
+// Keyed by project as well: the same file can be inside another project, where
+// it is an ordinary editable file.
+const approvalKey = (projectId: string, filePath: string) => `${projectId}\u0000${filePath}`;
+
 /** Server error code for "outside the project, confirm to open read-only". */
 export const OUTSIDE_PROJECT_CONFIRM = 'OUTSIDE_PROJECT_CONFIRM';
 
-export function isOutsideFileApproved(filePath: string): boolean {
-  return approvedPaths.has(filePath);
+export function isOutsideFileApproved(projectId: string, filePath: string): boolean {
+  return approvedPaths.has(approvalKey(projectId, filePath));
 }
 
-export function approveOutsideFile(filePath: string): void {
-  approvedPaths.add(filePath);
+export function approveOutsideFile(projectId: string, filePath: string): void {
+  approvedPaths.add(approvalKey(projectId, filePath));
 }
 
 /** Reads the error code from a failed file-tree response without consuming the caller's copy. */
