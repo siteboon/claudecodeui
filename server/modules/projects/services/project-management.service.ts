@@ -7,7 +7,13 @@ import type {
   ProjectRepositoryRow,
   WorkspacePathValidationResult,
 } from '@/shared/types.js';
-import { AppError, normalizeProjectPath, validateWorkspacePath } from '@/shared/utils.js';
+import {
+  ALLOWED_PATHS,
+  AppError,
+  assertPathAllowed,
+  normalizeProjectPath,
+  validateWorkspacePath,
+} from '@/shared/utils.js';
 
 type CreateProjectInput = {
   projectPath: string;
@@ -99,9 +105,10 @@ export async function createProject(
 
   const pathValidation = await dependencies.validatePath(normalizedPath);
   if (!pathValidation.valid || !pathValidation.resolvedPath) {
+    const isOutsideAllowedPaths = pathValidation.errorCode === 'PATH_NOT_ALLOWED';
     throw new AppError('Invalid project path', {
-      code: 'INVALID_PROJECT_PATH',
-      statusCode: 400,
+      code: isOutsideAllowedPaths ? 'PATH_NOT_ALLOWED' : 'INVALID_PROJECT_PATH',
+      statusCode: isOutsideAllowedPaths ? 403 : 400,
       details: pathValidation.error ?? 'Path validation failed',
     });
   }
@@ -141,4 +148,22 @@ export async function createProject(
 export function updateProjectDisplayName(projectId: string, newDisplayName: unknown): void {
   const trimmed = typeof newDisplayName === 'string' ? newDisplayName.trim() : '';
   projectsDb.updateCustomProjectNameById(projectId, trimmed.length > 0 ? trimmed : null);
+}
+
+/**
+ * Refuses (403) a project whose directory lies outside `ALLOWED_PATHS`, so a
+ * project registered before the variable was set cannot be reached by id.
+ * Unknown ids pass so each route keeps answering its own 404.
+ *
+ * Used by the Projects router for every `:projectId` route.
+ */
+export async function assertProjectAccessAllowed(projectId: string): Promise<void> {
+  if (ALLOWED_PATHS.length === 0) {
+    return;
+  }
+
+  const projectPath = projectsDb.getProjectPathById(projectId);
+  if (projectPath) {
+    await assertPathAllowed(projectPath);
+  }
 }

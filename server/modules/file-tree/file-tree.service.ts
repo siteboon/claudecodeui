@@ -9,7 +9,12 @@ import type {
   FileTreeServices,
   FileTreeUploadedFile,
 } from '@/shared/types.js';
-import { AppError, FORBIDDEN_WORKSPACE_PATHS, normalizeProjectPath } from '@/shared/utils.js';
+import {
+  AppError,
+  FORBIDDEN_WORKSPACE_PATHS,
+  PATH_NOT_ALLOWED_MESSAGE,
+  normalizeProjectPath,
+} from '@/shared/utils.js';
 
 const HARD_EXCLUDED_DIRECTORY_NAMES = new Set([
   'node_modules', '.git', '.svn', '.hg',
@@ -180,12 +185,30 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
     : 1;
   const { acquire, release } = createConcurrencyLimiter(concurrencyLimit);
 
+  /**
+   * Refuses a path outside ALLOWED_PATHS. The lexical project-root check
+   * cannot see through a symlink inside the project, so every file operation
+   * also passes its resolved path through here (a no-op when unset).
+   */
+  async function assertInsideAllowedPaths(candidatePath: string): Promise<void> {
+    if (!(await dependencies.workspace.isPathAllowed(candidatePath))) {
+      throw createFileTreeError(PATH_NOT_ALLOWED_MESSAGE, 403, 'PATH_NOT_ALLOWED');
+    }
+  }
+
   async function resolveProjectRoot(projectId: string): Promise<string> {
     const projectRoot = await dependencies.projects.getProjectPathById(projectId);
     if (!projectRoot) {
       throw createFileTreeError('Project not found', 404, 'PROJECT_NOT_FOUND');
     }
+    await assertInsideAllowedPaths(projectRoot);
     return projectRoot;
+  }
+
+  async function resolveAllowedPathInsideProject(projectRoot: string, targetPath: string): Promise<string> {
+    const resolvedPath = resolvePathInsideProject(projectRoot, targetPath);
+    await assertInsideAllowedPaths(resolvedPath);
+    return resolvedPath;
   }
 
   /**
@@ -354,7 +377,66 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       }
     }
 
-    return resolvePathInsideProject(projectRoot, targetPath);
+    return resolveAllowedPathInsideProject(projectRoot, targetPath);
+  }
+
+  /**
+   * Lists a directory that is not inside ALLOWED_PATHS but leads to one, for
+   * the folder picker: only the children on the way to an allowed directory
+   * are shown, so the user can walk down to each without seeing anything else.
+   */
+  async function browseAllowedPathAncestor(targetPath: string, allowedChildPaths: string[]) {
+    let resolvedPath: string;
+    try {
+      resolvedPath = await fileSystem.realpath(targetPath);
+    } catch {
+      throw createFileTreeError('Directory not accessible', 404, 'DIRECTORY_NOT_ACCESSIBLE');
+    }
+
+    const suggestions: Array<{ path: string; name: string; type: 'directory' }> = [];
+    for (const childPath of allowedChildPaths) {
+      try {
+        if ((await fileSystem.stat(childPath)).isDirectory()) {
+          suggestions.push({ path: childPath, name: path.basename(childPath), type: 'directory' });
+        }
+      } catch {
+        // An allowed directory that does not exist yet has nothing to open.
+      }
+    }
+
+    suggestions.sort((left, right) => left.name.localeCompare(right.name));
+    return { path: resolvedPath, suggestions };
+  }
+
+  /**
+   * Where the folder picker opens when `~` leads to no allowed directory: the
+   * first allowed directory that exists, or, when none exists yet (a typo, a
+   * folder still to be created), the nearest existing folder above the first
+   * one, so the picker shows a real place instead of an error.
+   */
+  async function findPickerStartPath(allowedPaths: readonly string[]): Promise<string> {
+    for (const allowedPath of allowedPaths) {
+      try {
+        if ((await fileSystem.stat(allowedPath)).isDirectory()) {
+          return allowedPath;
+        }
+      } catch {
+        // Not there (yet); try the next entry.
+      }
+    }
+
+    let candidatePath = path.resolve(allowedPaths[0]);
+    while (path.dirname(candidatePath) !== candidatePath) {
+      candidatePath = path.dirname(candidatePath);
+      try {
+        if ((await fileSystem.stat(candidatePath)).isDirectory()) {
+          return candidatePath;
+        }
+      } catch {
+        // Keep climbing.
+      }
+    }
+    return candidatePath;
   }
 
   async function cleanupTemporaryFiles(files: FileTreeUploadedFile[]): Promise<void> {
@@ -372,7 +454,26 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       const requestedPath = inputPath
         ? expandWorkspacePath(dependencies.workspace.rootPath, inputPath)
         : dependencies.workspace.rootPath;
-      const targetPath = path.resolve(requestedPath);
+      let targetPath = path.resolve(requestedPath);
+
+      if (dependencies.workspace.allowedPaths.length > 0 && !(await dependencies.workspace.isPathAllowed(targetPath))) {
+        let allowedChildPaths = await dependencies.workspace.listAllowedPathChildren(targetPath);
+
+        // The picker opens at `~`; when the workspace root is neither inside
+        // an allowed directory nor on the way to one, open at an allowed
+        // directory instead of an error.
+        if (!allowedChildPaths && (!inputPath || inputPath === '~')) {
+          targetPath = await findPickerStartPath(dependencies.workspace.allowedPaths);
+          allowedChildPaths = await dependencies.workspace.isPathAllowed(targetPath)
+            ? null
+            : await dependencies.workspace.listAllowedPathChildren(targetPath);
+        }
+
+        if (allowedChildPaths) {
+          return browseAllowedPathAncestor(targetPath, allowedChildPaths);
+        }
+      }
+
       const resolvedPath = await resolveBrowsablePath(targetPath);
 
       try {
@@ -480,7 +581,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
 
     async saveTextFile(projectId, filePath, content) {
       const projectRoot = await resolveProjectRoot(projectId);
-      const resolvedPath = resolvePathInsideProject(projectRoot, filePath);
+      const resolvedPath = await resolveAllowedPathInsideProject(projectRoot, filePath);
       try {
         await fileSystem.writeTextFile(resolvedPath, content);
       } catch (error) {
@@ -522,7 +623,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       const targetPath = input.parentPath
         ? path.join(input.parentPath, input.name)
         : input.name;
-      const resolvedPath = resolvePathInsideProject(projectRoot, targetPath);
+      const resolvedPath = await resolveAllowedPathInsideProject(projectRoot, targetPath);
 
       try {
         await fileSystem.access(resolvedPath);
@@ -566,7 +667,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
     async renameEntry(input) {
       validateFilename(input.newName);
       const projectRoot = await resolveProjectRoot(input.projectId);
-      const resolvedOldPath = resolvePathInsideProject(projectRoot, input.oldPath);
+      const resolvedOldPath = await resolveAllowedPathInsideProject(projectRoot, input.oldPath);
 
       try {
         await fileSystem.access(resolvedOldPath);
@@ -575,7 +676,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       }
 
       const resolvedNewPath = path.join(path.dirname(resolvedOldPath), input.newName);
-      resolvePathInsideProject(projectRoot, resolvedNewPath);
+      await resolveAllowedPathInsideProject(projectRoot, resolvedNewPath);
       try {
         await fileSystem.access(resolvedNewPath);
         throw createFileTreeError(
@@ -608,7 +709,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
 
     async deleteEntry(input) {
       const projectRoot = await resolveProjectRoot(input.projectId);
-      const resolvedPath = resolvePathInsideProject(projectRoot, input.targetPath);
+      const resolvedPath = await resolveAllowedPathInsideProject(projectRoot, input.targetPath);
       let stats;
       try {
         stats = await fileSystem.stat(resolvedPath);
@@ -654,7 +755,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
           || input.targetPath === '.'
           || input.targetPath === './'
           ? path.resolve(projectRoot)
-          : resolvePathInsideProject(projectRoot, input.targetPath);
+          : await resolveAllowedPathInsideProject(projectRoot, input.targetPath);
 
         try {
           await fileSystem.access(resolvedTargetDirectory);
@@ -669,7 +770,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
           const destinationPath = path.join(resolvedTargetDirectory, fileName);
 
           try {
-            resolvePathInsideProject(projectRoot, destinationPath);
+            await resolveAllowedPathInsideProject(projectRoot, destinationPath);
           } catch (error) {
             if (error instanceof AppError && error.statusCode === 403) {
               await cleanupTemporaryFiles([file]);

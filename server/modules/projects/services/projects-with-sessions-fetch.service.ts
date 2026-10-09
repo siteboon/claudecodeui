@@ -5,7 +5,7 @@ import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { sessionSynchronizerService } from '@/modules/providers/index.js';
 import { WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
 import type { RealtimeClientConnection } from '@/shared/types.js';
-import { AppError } from '@/shared/utils.js';
+import { AppError, filterByAllowedPaths } from '@/shared/utils.js';
 
 type SessionSummary = {
   id: string;
@@ -184,12 +184,14 @@ export async function getProjectsWithSessions(
     await sessionSynchronizerService.synchronizeSessions();
   }
 
-  const projectRows = projectsDb.getProjectPaths() as Array<{
+  // Projects outside ALLOWED_PATHS are left out before any of them is read
+  // (a no-op when it is unset).
+  const projectRows = await filterByAllowedPaths(projectsDb.getProjectPaths() as Array<{
     project_id: string;
     project_path: string;
     custom_project_name?: string | null;
     isStarred?: number;
-  }>;
+  }>, (row) => row.project_path);
   const totalProjects = projectRows.length;
   const projects: ProjectListItem[] = [];
   let processedProjects = 0;
@@ -252,12 +254,12 @@ export async function getArchivedProjectsWithSessions(
     await sessionSynchronizerService.synchronizeSessions();
   }
 
-  const projectRows = projectsDb.getArchivedProjectPaths() as Array<{
+  const projectRows = await filterByAllowedPaths(projectsDb.getArchivedProjectPaths() as Array<{
     project_id: string;
     project_path: string;
     custom_project_name?: string | null;
     isStarred?: number;
-  }>;
+  }>, (row) => row.project_path);
 
   const archivedProjects: ArchivedProjectListItem[] = [];
 

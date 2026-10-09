@@ -5,7 +5,7 @@ import express from 'express';
 
 import type { ProviderRunFunction } from '@/shared/types.js';
 
-import { normalizeProjectPath } from '../../shared/utils.js';
+import { PATH_NOT_ALLOWED_MESSAGE, isPathAllowed, normalizeProjectPath } from '../../shared/utils.js';
 
 /** What the route reads off a session row it continues: the row, not the request, says which provider and project a session belongs to. */
 type AgentSessionRow = {
@@ -894,6 +894,18 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
     // Allow branch/PR creation with projectPath as long as it has a GitHub remote
     if ((createBranch || createPR) && !githubUrl && !projectPath) {
       return res.status(400).json({ error: 'createBranch and createPR require either githubUrl or projectPath with a GitHub remote' });
+    }
+
+    // The run registers its directory as a project, so it must lie inside
+    // ALLOWED_PATHS: the given path, or for a clone without one the default
+    // destination under ~/.claude/external-projects. A no-op when unset.
+    // Checked before the try below, so only a string is resolved here; any
+    // other value still fails inside it as before.
+    const requestedProjectPath = typeof projectPath === 'string' && projectPath
+      ? path.resolve(projectPath)
+      : path.join(os.homedir(), '.claude', 'external-projects');
+    if (!(await isPathAllowed(requestedProjectPath))) {
+      return res.status(403).json({ error: PATH_NOT_ALLOWED_MESSAGE });
     }
 
     // A run continues a session the caller names, by its app id or — for a

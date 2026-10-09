@@ -6,7 +6,7 @@ import type {
   GitCommandRunner,
   WorktreeFileSystem,
 } from '@/shared/types.js';
-import { AppError, normalizeProjectPath } from '@/shared/utils.js';
+import { AppError, assertPathAllowed, normalizeProjectPath } from '@/shared/utils.js';
 import {
   listWorktreePorcelainEntries,
   validateWorktreeBranchName,
@@ -50,6 +50,9 @@ export async function createWorktree(
 
   const entries = await listWorktreePorcelainEntries(input.projectPath, runGit);
   const repositoryRoot = entries[0].path;
+  // Git records the branch and the new worktree in the main repository, so it
+  // must be inside ALLOWED_PATHS too, not just the project that asked.
+  await assertPathAllowed(repositoryRoot);
 
   const checkedOutElsewhere = entries.find((entry) => entry.branch === branch);
   if (checkedOutElsewhere) {
@@ -74,6 +77,10 @@ export async function createWorktree(
       statusCode: 409,
     });
   }
+
+  // The sibling folder is outside the repository, so an allowed project does
+  // not imply an allowed worktree; refuse before git writes anything there.
+  await assertPathAllowed(worktreePath);
 
   const { stdout: branchListOutput } = await runGit(
     ['branch', '--list', branch, '--format=%(refname:short)'],

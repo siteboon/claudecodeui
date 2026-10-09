@@ -15,7 +15,13 @@ import type {
   NormalizedMessage,
   WorkflowAgentActivity,
 } from '@/shared/types.js';
-import { AppError, sliceTailPage } from '@/shared/utils.js';
+import {
+  ALLOWED_PATHS,
+  AppError,
+  assertPathAllowed,
+  filterByAllowedPaths,
+  sliceTailPage,
+} from '@/shared/utils.js';
 
 /**
  * One session the running-sessions poll reports as busy.
@@ -139,6 +145,21 @@ function resolveProjectDisplayName(
 }
 
 /**
+ * Project directories with recorded sessions that lie outside ALLOWED_PATHS,
+ * so the paged recent feed can exclude them in SQL and keep its totals right.
+ * Empty, without touching the database, when the variable is unset.
+ */
+async function listHiddenSessionProjectPaths(): Promise<string[]> {
+  if (ALLOWED_PATHS.length === 0) {
+    return [];
+  }
+
+  const projectPaths = sessionsDb.getSessionProjectPaths();
+  const allowedProjectPaths = new Set(await filterByAllowedPaths(projectPaths, (projectPath) => projectPath));
+  return projectPaths.filter((projectPath) => !allowedProjectPaths.has(projectPath));
+}
+
+/**
  * Application service for provider-backed session message operations.
  *
  * Callers pass a provider id and this service resolves the concrete provider
@@ -212,10 +233,11 @@ export const sessionsService = {
   },
 
   /**
-   * Returns the active conversation feed in true global activity order.
+   * Returns the active conversation feed in true global activity order,
+   * leaving out sessions of projects outside ALLOWED_PATHS.
    */
-  listRecentSessions(limit: number, offset: number): RecentSessionsPage {
-    const page = sessionsDb.getRecentSessionsPage(limit, offset);
+  async listRecentSessions(limit: number, offset: number): Promise<RecentSessionsPage> {
+    const page = sessionsDb.getRecentSessionsPage(limit, offset, await listHiddenSessionProjectPaths());
     const projectCache = new Map<string, ReturnType<typeof projectsDb.getProjectPath>>();
     const conversations = page.sessions.map((session) => {
       const projectPath = session.project_path?.trim() ? session.project_path : null;
@@ -590,6 +612,23 @@ export const sessionsService = {
   },
 
   /**
+   * Refuses (403) a session recorded in a project outside ALLOWED_PATHS. Used
+   * by the provider routes for every `:sessionId` route; a session without a
+   * row or a project passes, and so does everything when the variable is unset.
+   */
+  async assertSessionAccessAllowed(sessionId: string): Promise<void> {
+    if (ALLOWED_PATHS.length === 0) {
+      return;
+    }
+
+    const session =
+      sessionsDb.getSessionById(sessionId) ?? sessionsDb.getSessionByProviderSessionId(sessionId);
+    if (session?.project_path?.trim()) {
+      await assertPathAllowed(session.project_path);
+    }
+  },
+
+  /**
    * Resolves one session (by app id, falling back to the provider-native id)
    * to its metadata plus the owning project.
    *
@@ -636,8 +675,11 @@ export const sessionsService = {
    * Returns archived sessions with enough project metadata for the sidebar to
    * group, filter, open, and restore them without a per-row follow-up query.
    */
-  listArchivedSessions(): ArchivedSessionListItem[] {
-    const archivedSessions = sessionsDb.getArchivedSessions();
+  async listArchivedSessions(): Promise<ArchivedSessionListItem[]> {
+    const archivedSessions = await filterByAllowedPaths(
+      sessionsDb.getArchivedSessions(),
+      (session) => session.project_path,
+    );
     const projectCache = new Map<string, ReturnType<typeof projectsDb.getProjectPath>>();
 
     return archivedSessions.map((session) => {

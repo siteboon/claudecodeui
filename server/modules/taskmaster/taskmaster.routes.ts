@@ -14,6 +14,7 @@ import path from 'path';
 import express from 'express';
 
 import { WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
+import { ALLOWED_PATHS, PATH_NOT_ALLOWED_MESSAGE, isPathAllowed } from '@/shared/utils.js';
 
 import type { createTaskmasterService } from './taskmaster.service.js';
 // cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution — required
@@ -80,6 +81,44 @@ export function createTaskmasterRouter(dependencies: TaskmasterRouterDependencie
         ? dependencies.resolveProjectPathById(projectId)
         : null;
     const router = express.Router();
+
+    // Every `:projectId` route is refused with 403 when the project lies
+    // outside ALLOWED_PATHS (a no-op when it is unset); unknown ids still
+    // reach each route's own 404.
+    router.param('projectId', async (req, res, next, projectId) => {
+        if (ALLOWED_PATHS.length === 0) {
+            next();
+            return;
+        }
+
+        try {
+            const projectPath = await resolveProjectPathFromId(projectId);
+            if (projectPath && !(await isPathAllowed(projectPath))) {
+                return res.status(403).json({ error: PATH_NOT_ALLOWED_MESSAGE });
+            }
+            next();
+        } catch (error) {
+            next(error);
+        }
+    });
+
+    // PRD files live directly in `.taskmaster/docs`, so their names must be
+    // bare file names: a separator (`..%2F..%2Fsecret`) would read or write
+    // outside it.
+    function isBarePrdFileName(fileName) {
+        return typeof fileName === 'string'
+            && fileName !== ''
+            && fileName !== '.'
+            && fileName !== '..'
+            && !/[\\/\0]/.test(fileName);
+    }
+
+    function sendInvalidPrdFileName(res) {
+        return res.status(400).json({
+            error: 'Invalid filename',
+            message: 'fileName must be the name of a file in .taskmaster/docs'
+        });
+    }
 
     function runTaskmasterProcess(command, args, options, onComplete) {
         const child = spawn(command, args, options);
@@ -256,6 +295,10 @@ export function createTaskmasterRouter(dependencies: TaskmasterRouterDependencie
 
             const taskMasterPath = path.join(projectPath, '.taskmaster');
             const tasksFilePath = path.join(taskMasterPath, 'tasks', 'tasks.json');
+            // A symlinked `.taskmaster` must not lead outside ALLOWED_PATHS.
+            if (!(await isPathAllowed(tasksFilePath))) {
+                return res.status(403).json({ error: PATH_NOT_ALLOWED_MESSAGE });
+            }
 
             // Check if tasks file exists
             try {
@@ -368,6 +411,9 @@ export function createTaskmasterRouter(dependencies: TaskmasterRouterDependencie
             }
 
             const docsPath = path.join(projectPath, '.taskmaster', 'docs');
+            if (!(await isPathAllowed(docsPath))) {
+                return res.status(403).json({ error: PATH_NOT_ALLOWED_MESSAGE });
+            }
 
             // Check if docs directory exists
             try {
@@ -459,6 +505,9 @@ export function createTaskmasterRouter(dependencies: TaskmasterRouterDependencie
 
             const docsPath = path.join(projectPath, '.taskmaster', 'docs');
             const filePath = path.join(docsPath, fileName);
+            if (!(await isPathAllowed(filePath))) {
+                return res.status(403).json({ error: PATH_NOT_ALLOWED_MESSAGE });
+            }
 
             // Ensure docs directory exists
             try {
@@ -514,6 +563,9 @@ export function createTaskmasterRouter(dependencies: TaskmasterRouterDependencie
     router.get('/prd/:projectId/:fileName', async (req, res) => {
         try {
             const { projectId, fileName } = req.params;
+            if (!isBarePrdFileName(fileName)) {
+                return sendInvalidPrdFileName(res);
+            }
 
             const projectPath = await resolveProjectPathFromId(projectId);
             if (!projectPath) {
@@ -524,6 +576,9 @@ export function createTaskmasterRouter(dependencies: TaskmasterRouterDependencie
             }
 
             const filePath = path.join(projectPath, '.taskmaster', 'docs', fileName);
+            if (!(await isPathAllowed(filePath))) {
+                return res.status(403).json({ error: PATH_NOT_ALLOWED_MESSAGE });
+            }
 
             // Check if file exists
             try {
@@ -824,6 +879,9 @@ export function createTaskmasterRouter(dependencies: TaskmasterRouterDependencie
         try {
             const { projectId } = req.params;
             const { fileName = 'prd.txt', numTasks, append = false } = req.body;
+            if (!isBarePrdFileName(fileName)) {
+                return sendInvalidPrdFileName(res);
+            }
 
             const projectPath = await resolveProjectPathFromId(projectId);
             if (!projectPath) {
@@ -834,6 +892,9 @@ export function createTaskmasterRouter(dependencies: TaskmasterRouterDependencie
             }
 
             const prdPath = path.join(projectPath, '.taskmaster', 'docs', fileName);
+            if (!(await isPathAllowed(prdPath))) {
+                return res.status(403).json({ error: PATH_NOT_ALLOWED_MESSAGE });
+            }
 
             // Check if PRD file exists
             try {
@@ -1358,6 +1419,10 @@ Description of the business problem, data sources, and expected insights.
                 });
             }
 
+            if (!isBarePrdFileName(fileName)) {
+                return sendInvalidPrdFileName(res);
+            }
+
             const projectPath = await resolveProjectPathFromId(projectId);
             if (!projectPath) {
                 return res.status(404).json({
@@ -1386,15 +1451,18 @@ Description of the business problem, data sources, and expected insights.
                 content = content.replace(new RegExp(placeholder.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&'), 'g'), value);
             }
 
-            // Ensure .taskmaster/docs directory exists
             const docsDir = path.join(projectPath, '.taskmaster', 'docs');
+            const filePath = path.join(docsDir, fileName);
+            if (!(await isPathAllowed(filePath))) {
+                return res.status(403).json({ error: PATH_NOT_ALLOWED_MESSAGE });
+            }
+
+            // Ensure .taskmaster/docs directory exists
             try {
                 await fsPromises.mkdir(docsDir, { recursive: true });
             } catch (error) {
                 console.error('Failed to create docs directory:', error);
             }
-
-            const filePath = path.join(docsDir, fileName);
 
             // Write the template content to the file
             try {

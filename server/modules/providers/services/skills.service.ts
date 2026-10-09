@@ -5,6 +5,7 @@ import type {
   ProviderSkillListOptions,
   ProviderSkillRemoveInput,
 } from '@/shared/types.js';
+import { assertPathAllowed } from '@/shared/utils.js';
 
 export const providerSkillsService = {
   /**
@@ -15,6 +16,11 @@ export const providerSkillsService = {
     options?: ProviderSkillListOptions,
   ): Promise<ProviderSkill[]> {
     const provider = providerRegistry.resolveProvider(providerName);
+    // Project skills are read from under the workspace, so an explicit
+    // workspace outside ALLOWED_PATHS is refused (a no-op when it is unset).
+    if (options?.workspacePath) {
+      await assertPathAllowed(options.workspacePath);
+    }
     return provider.skills.listSkills(options);
   },
 

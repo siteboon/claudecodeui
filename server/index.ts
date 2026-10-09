@@ -9,7 +9,16 @@ import http from 'http';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import cors from 'cors';
 
-import { AppError, findApplicationRoot, getModuleDirectory, IS_PLATFORM, terminalTextStyles } from '@/shared/utils.js';
+import {
+    ALLOWED_PATHS,
+    AppError,
+    findAllowedPathsWarnings,
+    findApplicationRoot,
+    findEmptyAllowedPathsWarning,
+    getModuleDirectory,
+    IS_PLATFORM,
+    terminalTextStyles,
+} from '@/shared/utils.js';
 import {
     closeSessionsWatcher,
     initializeSessionsWatcher,
@@ -364,6 +373,16 @@ async function startServer() {
             console.log('');
             console.log(`${terminalTextStyles.info('[INFO]')} Server URL:  ${terminalTextStyles.bright('http://' + DISPLAY_HOST + ':' + SERVER_PORT)}`);
             console.log(`${terminalTextStyles.info('[INFO]')} Installed at: ${terminalTextStyles.dim(appInstallPath)}`);
+            if (ALLOWED_PATHS.length > 0) {
+                console.log(`${terminalTextStyles.info('[INFO]')} File access limited to (ALLOWED_PATHS): ${terminalTextStyles.dim(ALLOWED_PATHS.join(', '))}`);
+                for (const warning of await findAllowedPathsWarnings()) {
+                    console.log(`${terminalTextStyles.warn('[WARN]')} ${warning}`);
+                }
+            }
+            const emptyAllowedPathsWarning = findEmptyAllowedPathsWarning();
+            if (emptyAllowedPathsWarning) {
+                console.log(`${terminalTextStyles.warn('[WARN]')} ${emptyAllowedPathsWarning}`);
+            }
             console.log(`${terminalTextStyles.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
             console.log('');
 

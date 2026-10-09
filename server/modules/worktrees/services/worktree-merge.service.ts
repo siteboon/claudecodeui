@@ -5,7 +5,7 @@ import type {
   RemoveWorktreeInput,
   RemoveWorktreeResult,
 } from '@/shared/types.js';
-import { AppError } from '@/shared/utils.js';
+import { AppError, assertPathAllowed } from '@/shared/utils.js';
 import {
   countChangedFiles,
   findWorktreeEntryByPath,
@@ -43,6 +43,10 @@ export async function mergeWorktree(
   const entries = await listWorktreePorcelainEntries(input.projectPath, runGit);
   const entry = findWorktreeEntryByPath(entries, input.worktreePath);
   const repositoryRoot = entries[0].path;
+  // The merge checks out into the main worktree, so both must be inside
+  // ALLOWED_PATHS.
+  await assertPathAllowed(entry.path);
+  await assertPathAllowed(repositoryRoot);
   const targetBranch = entries[0].branch;
 
   if (entry.path === repositoryRoot) {

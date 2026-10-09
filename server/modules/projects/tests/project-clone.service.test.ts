@@ -71,6 +71,28 @@ test('startCloneProject rejects when workspace path is missing', async () => {
   );
 });
 
+test('startCloneProject answers 403 for a workspace outside ALLOWED_PATHS and 400 for other invalid paths', async () => {
+  const startWith = (validation: { valid: false; error: string; errorCode?: 'PATH_NOT_ALLOWED' }) =>
+    startCloneProject(
+      { workspacePath: '/srv/outside/repo', githubUrl: 'https://github.com/example/repo', userId: 1 },
+      { onProgress: () => undefined, onComplete: () => undefined },
+      buildDependencies({ validatePath: async () => validation }),
+    );
+
+  await assert.rejects(startWith({ valid: false, error: 'outside', errorCode: 'PATH_NOT_ALLOWED' }), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, 'PATH_NOT_ALLOWED');
+    assert.equal(error.statusCode, 403);
+    return true;
+  });
+  await assert.rejects(startWith({ valid: false, error: 'system directory' }), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, 'INVALID_PROJECT_PATH');
+    assert.equal(error.statusCode, 400);
+    return true;
+  });
+});
+
 test('startCloneProject rejects when github URL is missing', async () => {
   await assert.rejects(
     async () =>

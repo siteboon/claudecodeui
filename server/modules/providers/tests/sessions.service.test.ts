@@ -4,12 +4,17 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { closeConnection, initializeDatabase, projectsDb, sessionsDb } from '@/modules/database/index.js';
-import { providerRegistry } from '@/modules/providers/provider.registry.js';
-import { sessionsService } from '@/modules/providers/services/sessions.service.js';
-import { chatRunRegistry } from '@/modules/websocket/index.js';
 import type { IProvider } from '@/shared/interfaces.js';
 import type { BackgroundTaskSummary } from '@/shared/types.js';
+
+// ALLOWED_PATHS is read when the shared utils module is first evaluated. These
+// tests cover the unrestricted behaviour, so a value exported in the shell
+// that runs them must not leak in.
+delete process.env.ALLOWED_PATHS;
+const { closeConnection, initializeDatabase, projectsDb, sessionsDb } = await import('@/modules/database/index.js');
+const { providerRegistry } = await import('@/modules/providers/provider.registry.js');
+const { sessionsService } = await import('@/modules/providers/services/sessions.service.js');
+const { chatRunRegistry } = await import('@/modules/websocket/index.js');
 
 async function withIsolatedDatabase(runTest: () => void | Promise<void>): Promise<void> {
   const previousDatabasePath = process.env.DATABASE_PATH;
@@ -93,7 +98,7 @@ test('provider session id reports a missing app session', { concurrency: false }
 });
 
 test('recent sessions map project metadata and preserve database pagination', { concurrency: false }, async () => {
-  await withIsolatedDatabase(() => {
+  await withIsolatedDatabase(async () => {
     sessionsDb.createSession(
       'older-session',
       'claude',
@@ -113,7 +118,7 @@ test('recent sessions map project metadata and preserve database pagination', { 
     projectsDb.updateCustomProjectName('/tmp/recent-project', 'Recent Project');
 
     const project = projectsDb.getProjectPath('/tmp/recent-project');
-    const page = sessionsService.listRecentSessions(1, 0);
+    const page = await sessionsService.listRecentSessions(1, 0);
 
     assert.deepEqual(page, {
       conversations: [{

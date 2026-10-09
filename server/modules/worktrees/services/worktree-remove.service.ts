@@ -4,7 +4,7 @@ import type {
   RemoveWorktreeResult,
   WorktreeProjectGateway,
 } from '@/shared/types.js';
-import { AppError } from '@/shared/utils.js';
+import { AppError, assertPathAllowed } from '@/shared/utils.js';
 import {
   countChangedFiles,
   findWorktreeEntryByPath,
@@ -27,6 +27,10 @@ export async function removeWorktree(
   const entries = await listWorktreePorcelainEntries(input.projectPath, runGit);
   const entry = findWorktreeEntryByPath(entries, input.worktreePath);
   const repositoryRoot = entries[0].path;
+  // Git removes the worktree (and maybe its branch) from the main repository,
+  // so both must be inside ALLOWED_PATHS.
+  await assertPathAllowed(entry.path);
+  await assertPathAllowed(repositoryRoot);
 
   if (entry.path === repositoryRoot) {
     throw new AppError('The main worktree cannot be removed', {

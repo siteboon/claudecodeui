@@ -987,11 +987,14 @@ export type CreateProjectPathResult = {
  *
  * `resolvedPath` is present only when validation succeeds. `error` is present
  * only when validation fails and is suitable for user-facing diagnostics.
+ * `errorCode` is `PATH_NOT_ALLOWED` when the path was refused because it lies
+ * outside `ALLOWED_PATHS`, so callers can answer 403 instead of 400.
  */
 export type WorkspacePathValidationResult = {
   valid: boolean;
   resolvedPath?: string;
   error?: string;
+  errorCode?: 'PATH_NOT_ALLOWED';
 };
 
 // ---------------------------
@@ -1254,7 +1257,8 @@ export type WorktreeProjectGateway = {
  * repositories, filesystem adapters, Git runners, or individual service files.
  */
 export type WorktreeServices = {
-  resolveProjectPath(projectId: string): string;
+  /** Resolves a project id to its directory; refuses (403) one outside ALLOWED_PATHS. */
+  resolveProjectPath(projectId: string): string | Promise<string>;
   list(input: ListWorktreesInput): Promise<WorktreeListResult>;
   create(input: CreateWorktreeInput): Promise<CreateWorktreeResult>;
   createAndOpen(input: CreateWorktreeInput): Promise<CreateAndOpenWorktreeResult>;
@@ -1362,6 +1366,22 @@ export type FileTreeWorkspaceGateway = {
    * this.
    */
   resolveReadOnlyRootPath(candidatePath: string): Promise<string | null>;
+  /**
+   * The parsed `ALLOWED_PATHS` directories; empty when the variable is unset.
+   * The folder picker opens at the first one when the workspace root is not
+   * on the way to any of them.
+   */
+  allowedPaths: readonly string[];
+  /**
+   * Reports whether a path lies inside `ALLOWED_PATHS` (always `true` when it
+   * is unset), comparing real paths so a symlink cannot escape.
+   */
+  isPathAllowed(candidatePath: string): Promise<boolean>;
+  /**
+   * Lists the children of a strict ancestor of an allowed directory that lead
+   * toward one, or `null` when the path is not such an ancestor.
+   */
+  listAllowedPathChildren(directoryPath: string): Promise<string[] | null>;
 };
 
 /**

@@ -522,6 +522,24 @@ export const sessionsDb = {
     return normalizeSessionRow(row) ?? null;
   },
 
+  /**
+   * Distinct project directories that have at least one recorded session.
+   * The sessions service checks these against ALLOWED_PATHS to hide the
+   * sessions of projects outside the allowed directories from the recent feed.
+   */
+  getSessionProjectPaths(): string[] {
+    const db = getConnection();
+    const rows = db
+      .prepare(
+        `SELECT DISTINCT project_path
+         FROM sessions
+         WHERE project_path IS NOT NULL AND project_path != ''`
+      )
+      .all() as Array<{ project_path: string }>;
+
+    return rows.map((row) => row.project_path);
+  },
+
   getAllSessions(): SessionRow[] {
     const db = getConnection();
     const rows = db
@@ -543,11 +561,22 @@ export const sessionsDb = {
    * and correctly ordered across projects instead of flattening only the
    * per-project slices already loaded by the client.
    */
-  getRecentSessionsPage(limit: number, offset: number): RecentSessionsPage {
+  getRecentSessionsPage(
+    limit: number,
+    offset: number,
+    hiddenProjectPaths: readonly string[] = [],
+  ): RecentSessionsPage {
     const db = getConnection();
+    // `hiddenProjectPaths` are project directories outside ALLOWED_PATHS; they
+    // are excluded here, before paging, so pages and the total stay right.
+    const hiddenProjectsClause = hiddenProjectPaths.length > 0
+      ? `AND (sessions.project_path IS NULL
+          OR sessions.project_path NOT IN (${hiddenProjectPaths.map(() => '?').join(', ')}))`
+      : '';
     const visibilityClause = `
       sessions.isArchived = 0
       AND (projects.isArchived IS NULL OR projects.isArchived = 0)
+      ${hiddenProjectsClause}
     `;
     const rows = db
       .prepare(
@@ -559,7 +588,7 @@ export const sessionsDb = {
                   sessions.session_id DESC
          LIMIT ? OFFSET ?`
       )
-      .all(limit, offset) as SessionRow[];
+      .all(...hiddenProjectPaths, limit, offset) as SessionRow[];
     const countRow = db
       .prepare(
         `SELECT COUNT(*) AS count
@@ -567,7 +596,7 @@ export const sessionsDb = {
          LEFT JOIN projects ON projects.project_path = sessions.project_path
          WHERE ${visibilityClause}`
       )
-      .get() as { count: number } | undefined;
+      .get(...hiddenProjectPaths) as { count: number } | undefined;
 
     return {
       sessions: normalizeSessionRows(rows),

@@ -44,7 +44,7 @@ export function createWorktreesRouter(services: WorktreeServices): express.Route
   router.get(
     '/',
     asyncHandler(async (req, res) => {
-      const projectPath = services.resolveProjectPath(readProjectId(req.query.project));
+      const projectPath = await services.resolveProjectPath(readProjectId(req.query.project));
       const result = await services.list({ projectPath });
       res.json(createApiSuccessResponse(result));
     }),
@@ -54,7 +54,7 @@ export function createWorktreesRouter(services: WorktreeServices): express.Route
     '/create',
     asyncHandler(async (req, res) => {
       const body = req.body as Record<string, unknown>;
-      const projectPath = services.resolveProjectPath(readProjectId(body.project));
+      const projectPath = await services.resolveProjectPath(readProjectId(body.project));
       const branch = readRequiredString(body.branch, 'branch');
       const baseBranch = typeof body.baseBranch === 'string' ? body.baseBranch : null;
 
@@ -67,7 +67,7 @@ export function createWorktreesRouter(services: WorktreeServices): express.Route
     '/open',
     asyncHandler(async (req, res) => {
       const body = req.body as Record<string, unknown>;
-      const projectPath = services.resolveProjectPath(readProjectId(body.project));
+      const projectPath = await services.resolveProjectPath(readProjectId(body.project));
       const worktreePath = readRequiredString(body.worktreePath, 'worktreePath');
 
       const project = await services.open({ projectPath, worktreePath });
@@ -79,7 +79,7 @@ export function createWorktreesRouter(services: WorktreeServices): express.Route
     '/merge',
     asyncHandler(async (req, res) => {
       const body = req.body as Record<string, unknown>;
-      const projectPath = services.resolveProjectPath(readProjectId(body.project));
+      const projectPath = await services.resolveProjectPath(readProjectId(body.project));
       const worktreePath = readRequiredString(body.worktreePath, 'worktreePath');
 
       const result = await services.merge({
@@ -98,7 +98,7 @@ export function createWorktreesRouter(services: WorktreeServices): express.Route
     '/remove',
     asyncHandler(async (req, res) => {
       const body = req.body as Record<string, unknown>;
-      const projectPath = services.resolveProjectPath(readProjectId(body.project));
+      const projectPath = await services.resolveProjectPath(readProjectId(body.project));
       const worktreePath = readRequiredString(body.worktreePath, 'worktreePath');
 
       const result = await services.remove({
