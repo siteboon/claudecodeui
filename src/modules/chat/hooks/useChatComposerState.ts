@@ -1207,6 +1207,7 @@ export function useChatComposerState({
     async (
       event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
       queuedSubmission?: QueuedDraft,
+      submitOptions?: { mode?: ComposerSendMode },
     ) => {
       const scope = draftScopeRef.current ?? '';
       if (submittingScopesRef.current.has(scope)) {
@@ -1216,7 +1217,7 @@ export function useChatComposerState({
       }
       submittingScopesRef.current.add(scope);
       try {
-        await submitMessage(event, queuedSubmission);
+        await submitMessage(event, queuedSubmission, submitOptions);
       } finally {
         submittingScopesRef.current.delete(scope);
       }
