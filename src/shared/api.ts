@@ -175,8 +175,8 @@ export const sessionMessagesUrl = (
     : `${base}${query({ limit, offset: offset ?? 0 })}`;
 };
 
-const fileContentPath = (projectId: string, filePath: string) =>
-  `/api/file-tree/projects/${projectId}/files/content${query({ path: filePath })}`;
+const fileContentPath = (projectId: string, filePath: string, allowOutside = false) =>
+  `/api/file-tree/projects/${projectId}/files/content${query(allowOutside ? { path: filePath, allowOutside: '1' } : { path: filePath })}`;
 
 const pluginAssetPath = (pluginName: string, assetFile: string) =>
   `/api/plugins/${encodeURIComponent(pluginName)}/assets/${encodeURIComponent(assetFile)}`;
@@ -291,12 +291,12 @@ export const api = {
   },
 
   // Workspace file tree
-  readFile: (projectId: string, filePath: string) =>
-    get(`/api/file-tree/projects/${projectId}/file${query({ filePath })}`),
+  readFile: (projectId: string, filePath: string, allowOutside = false) =>
+    get(`/api/file-tree/projects/${projectId}/file${query(allowOutside ? { filePath, allowOutside: '1' } : { filePath })}`),
   // Raw bytes for a workspace file. The endpoint requires the auth header, so
   // media call sites fetch a blob through here instead of using a bare `src`.
-  readFileBlob: (projectId: string, filePath: string, options: ApiRequestOptions = {}) =>
-    get(fileContentPath(projectId, filePath), options),
+  readFileBlob: (projectId: string, filePath: string, options: ApiRequestOptions = {}, allowOutside = false) =>
+    get(fileContentPath(projectId, filePath, allowOutside), options),
   saveFile: (projectId: string, filePath: string, content: string) =>
     put(`/api/file-tree/projects/${projectId}/file`, { filePath, content }),
   getFiles: (projectId: string, options: ApiRequestOptions = {}) =>

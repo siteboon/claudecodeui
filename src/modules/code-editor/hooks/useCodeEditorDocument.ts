@@ -4,6 +4,12 @@ import { api, readApiJson } from '@/shared/api';
 import type { CodeEditorFile } from '@/shared/types';
 import { isBinaryFile } from '@/modules/code-editor/utils/binaryFile';
 import { getPreviewKind } from '@/modules/code-editor/utils/previewableFile';
+import {
+  approveOutsideFile,
+  isOutsideFileApproved,
+  OUTSIDE_PROJECT_CONFIRM,
+  readFileTreeErrorCode,
+} from '@/modules/code-editor/utils/outsideProjectFiles';
 
 type UseCodeEditorDocumentParams = {
   file: CodeEditorFile;
@@ -34,6 +40,11 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isBinary, setIsBinary] = useState(false);
+  // Set when the file is outside the project and the user has not confirmed
+  // opening it; the editor shows a confirm card instead of the text.
+  const [needsOutsideConfirm, setNeedsOutsideConfirm] = useState(false);
+  const [isOutsideProject, setIsOutsideProject] = useState(false);
+  const [reloadToken, setReloadToken] = useState(0);
   // Some binaries (images, PDFs, audio, video) can be rendered natively, so the
   // editor shows an inline preview instead of the generic binary placeholder.
   const previewKind = getPreviewKind(file.name);
@@ -68,6 +79,8 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
         // Any save still in flight or failed belongs to the previous file.
         setSaving(false);
         setSaveError(null);
+        setNeedsOutsideConfirm(false);
+        setIsOutsideProject(false);
 
         // Natively previewable media (image/pdf/audio/video) is rendered by
         // CodeEditorMediaPreview, so there is nothing to read as text here.
@@ -98,15 +111,27 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
           throw new Error('Missing project identifier');
         }
 
-        const response = await api.readFile(fileProjectId, filePath);
+        const allowOutside = isOutsideFileApproved(fileProjectId, filePath);
+        const response = await api.readFile(fileProjectId, filePath, allowOutside);
+        if (response.status === 403 && (await readFileTreeErrorCode(response)) === OUTSIDE_PROJECT_CONFIRM) {
+          if (isStaleLoad()) {
+            return;
+          }
+          applyLoadedContent('');
+          setNeedsOutsideConfirm(true);
+          return;
+        }
         // Read through readApiJson so the API's own explanation reaches the
         // pane — a directory, a path outside the project root, a missing file.
         // The bare status showed all of those as an opaque "403 Forbidden".
-        const data = await readApiJson<{ content: string }>(response);
+        const data = await readApiJson<{ content: string; outsideProject?: boolean }>(response);
         if (isStaleLoad()) {
           return;
         }
         applyLoadedContent(data.content);
+        // The server says whether this read went outside the project; an
+        // earlier approval alone does not make a file read-only.
+        setIsOutsideProject(Boolean(data.outsideProject));
       } catch (error) {
         if (isStaleLoad()) {
           return;
@@ -122,12 +147,19 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     };
 
     loadFileContent();
-  }, [file.diffInfo, file.name, fileDiffNewString, fileDiffOldString, fileName, filePath, fileProjectId]);
+  }, [file.diffInfo, file.name, fileDiffNewString, fileDiffOldString, fileName, filePath, fileProjectId, reloadToken]);
+
+  const confirmOutsideFile = useCallback(() => {
+    if (fileProjectId) {
+      approveOutsideFile(fileProjectId, filePath);
+    }
+    setReloadToken((token) => token + 1);
+  }, [filePath, fileProjectId]);
 
   const handleSave = useCallback(async () => {
     // Preview-only and binary files have no editable text buffer; never write
     // them back (e.g. via Cmd/Ctrl+S) or we'd corrupt the file on disk.
-    if (previewKind || isBinaryFile(fileName)) {
+    if (previewKind || isBinaryFile(fileName) || isOutsideProject || needsOutsideConfirm) {
       return;
     }
 
@@ -180,7 +212,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
         setSaving(false);
       }
     }
-  }, [content, filePath, fileProjectId, previewKind, fileName]);
+  }, [content, filePath, fileProjectId, previewKind, fileName, isOutsideProject, needsOutsideConfirm]);
 
   const handleDownload = useCallback(() => {
     const blob = new Blob([content], { type: 'text/plain' });
@@ -226,6 +258,9 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     previewKind,
     fileProjectId,
     hasUnsavedChanges,
+    needsOutsideConfirm,
+    isOutsideProject,
+    confirmOutsideFile,
     handleSave,
     handleDownload,
   };

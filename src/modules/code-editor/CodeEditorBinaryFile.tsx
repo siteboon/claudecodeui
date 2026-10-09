@@ -8,6 +8,10 @@ type CodeEditorBinaryFileProps = {
   onToggleFullscreen: () => void;
   title: string;
   message: string;
+  /** Shown under the message, e.g. the full path of a file outside the project. */
+  detail?: string;
+  /** A primary action offered next to Close. */
+  action?: { label: string; onClick: () => void };
 };
 
 /** Rendered by CodeEditor inside the code-editor module when the opened file is binary and cannot be edited as text. */
@@ -19,6 +23,8 @@ export default function CodeEditorBinaryFile({
   onToggleFullscreen,
   title,
   message,
+  detail,
+  action,
 }: CodeEditorBinaryFileProps) {
   const binaryContent = (
     <div className="flex h-full w-full flex-col items-center justify-center bg-background p-8 text-muted-foreground">
@@ -31,13 +37,27 @@ export default function CodeEditorBinaryFile({
         <div>
           <h3 className="mb-2 text-lg font-medium text-foreground">{title}</h3>
           <p className="text-sm text-muted-foreground">{message}</p>
+          {detail && <p className="mt-2 break-all font-mono text-xs text-muted-foreground">{detail}</p>}
         </div>
-        <button
-          onClick={onClose}
-          className="mt-4 rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground transition-colors hover:bg-primary/90"
-        >
-          Close
-        </button>
+        <div className="mt-4 flex gap-2">
+          {action && (
+            <button
+              type="button"
+              onClick={action.onClick}
+              className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              {action.label}
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className={action
+              ? 'rounded-md border border-border px-4 py-2 text-sm text-foreground transition-colors hover:bg-muted'
+              : 'rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground transition-colors hover:bg-primary/90'}
+          >
+            Close
+          </button>
+        </div>
       </div>
     </div>
   );
