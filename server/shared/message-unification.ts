@@ -305,7 +305,90 @@ function readChecklistSignature(message: NormalizedMessage): string {
  */
 const MAX_TOOL_RESULT_CONTENT = 40_000;
 
+const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
+
+const isBase64Payload = (value: unknown): value is string =>
+  typeof value === 'string' && value.length > 0 && BASE64_PATTERN.test(value);
+
+const isImageMediaType = (value: unknown): value is string =>
+  typeof value === 'string' && value.toLowerCase().startsWith('image/');
+
+/**
+ * True for the shapes that carry a renderable image: an Anthropic/MCP image
+ * block or a bare base64 source. The transcript renders these as pictures, so
+ * their base64 must survive truncation whole — a cut-off payload parses as
+ * neither JSON nor a decodable image and the UI falls back to a base64 wall.
+ *
+ * The exemption is gated the same way the frontend classifier
+ * (chat/utils/toolResultImages) gates its thumbnails: a declared image media
+ * type and a genuine base64 payload. Without that gate an image-shaped record
+ * could smuggle any oversized string past MAX_TOOL_RESULT_CONTENT.
+ */
+function isImageBearingBlock(value: unknown): boolean {
+  const record = readObjectRecord(value);
+  if (!record || typeof record.type !== 'string') {
+    return false;
+  }
+  if (record.type === 'image') {
+    const source = readObjectRecord((record as AnyRecord).source);
+    if (source && source.type === 'base64') {
+      return isImageMediaType(source.media_type) && isBase64Payload(source.data);
+    }
+    return isImageMediaType((record as AnyRecord).mimeType) && isBase64Payload((record as AnyRecord).data);
+  }
+  if (record.type === 'base64') {
+    return isImageMediaType((record as AnyRecord).media_type) && isBase64Payload((record as AnyRecord).data);
+  }
+  return false;
+}
+
+/**
+ * Caps a tool result's content without shredding image blocks.
+ *
+ * When the content is a JSON array of content blocks, each block is capped
+ * separately: text keeps the plain-text rule, and anything image-bearing is
+ * kept whole. Anything else falls back to the plain truncation.
+ */
+function capBlockAware(value: string): string | null {
+  // JSON.parse tolerates leading whitespace, so the bracket probe must too —
+  // otherwise " \n[…]" skips the block-aware path and a whole-image payload
+  // gets cut mid-base64 by the plain truncation.
+  const trimmed = value.trimStart();
+  if (!trimmed.startsWith('[')) {
+    return null;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+
+  if (!Array.isArray(parsed) || !parsed.some(isImageBearingBlock)) {
+    return null;
+  }
+
+  const capped = parsed.map((block) => {
+    if (isImageBearingBlock(block)) {
+      return block;
+    }
+    const record = readObjectRecord(block);
+    if (record && typeof record.text === 'string') {
+      return { ...record, text: truncateOutput(record.text) };
+    }
+    return block;
+  });
+
+  return JSON.stringify(capped);
+}
+
 function truncateOutput(value: string): string {
+  const capped = capBlockAware(value);
+  if (capped !== null) {
+    return capped;
+  }
+
   if (value.length <= MAX_TOOL_RESULT_CONTENT) {
     return value;
   }
