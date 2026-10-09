@@ -7,6 +7,7 @@ import {
   PROJECTS_TABLE_SCHEMA_SQL,
   PROVIDER_MODELS_TABLE_SCHEMA_SQL,
   PUSH_SUBSCRIPTIONS_TABLE_SCHEMA_SQL,
+  QUEUED_MESSAGES_TABLE_SCHEMA_SQL,
   SESSION_DRAFTS_TABLE_SCHEMA_SQL,
   SUPERSEDED_PROVIDER_SESSIONS_TABLE_SCHEMA_SQL,
   SCHEDULED_MESSAGES_TABLE_SCHEMA_SQL,
@@ -425,6 +426,37 @@ const addSupersededTranscriptPathColumn = (db: Database): void => {
   addColumnToTableIfNotExists(db, 'superseded_provider_sessions', columnNames, 'jsonl_path', 'TEXT');
 };
 
+/**
+ * Moves queued messages out of `session_drafts` into their own table.
+ *
+ * The old column is left in place (and emptied) so an older build still starts
+ * on this database; it just no longer sees what is queued.
+ */
+const moveQueuedMessagesOutOfDrafts = (db: Database): void => {
+  db.exec(QUEUED_MESSAGES_TABLE_SCHEMA_SQL);
+  const rows = db.prepare(
+    `SELECT user_id, draft_scope, queued_message, updated_at FROM session_drafts
+     WHERE queued_message IS NOT NULL AND draft_scope NOT LIKE 'project:%'`
+  ).all() as Array<{ user_id: number; draft_scope: string; queued_message: string; updated_at: string | null }>;
+  if (rows.length === 0) return;
+
+  console.log(`Running migration: moving ${rows.length} queued message(s) out of session_drafts`);
+  const insert = db.prepare(
+    `INSERT INTO queued_messages (id, user_id, session_id, message, created_at)
+     VALUES (lower(hex(randomblob(16))), ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))`
+  );
+  const clear = db.prepare(
+    `UPDATE session_drafts SET queued_message = NULL WHERE user_id = ? AND draft_scope = ?`
+  );
+  db.transaction(() => {
+    for (const row of rows) {
+      insert.run(row.user_id, row.draft_scope, row.queued_message, row.updated_at);
+      clear.run(row.user_id, row.draft_scope);
+    }
+    db.prepare(`DELETE FROM session_drafts WHERE draft_text = '' AND queued_message IS NULL`).run();
+  })();
+};
+
 const addForkedFromSessionIdColumn = (db: Database): void => {
   const columnNames = getTableInfo(db, 'sessions').map((column) => column.name);
   addColumnToTableIfNotExists(db, 'sessions', columnNames, 'forked_from_session_id', 'TEXT');
@@ -535,6 +567,7 @@ export const runMigrations = (db: Database) => {
     addForkedFromSessionIdColumn(db);
     ensureProjectsForSessionPaths(db);
     db.exec(SCHEDULED_MESSAGES_TABLE_SCHEMA_SQL);
+    moveQueuedMessagesOutOfDrafts(db);
 
     db.exec('CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_provider_session_id ON sessions(provider_session_id)');

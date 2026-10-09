@@ -282,6 +282,12 @@ export const api = {
     get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/workflows/${encodeURIComponent(runId)}/agents/${encodeURIComponent(agentId)}`),
 
   // Scheduled messages: send a message to a session at a future time.
+  queuedMessages: {
+    list: (sessionId: string) => get(`/api/queued-messages${query({ sessionId })}`),
+    enqueue: (body: { sessionId: string; content: string; options?: unknown; attachments?: unknown[] }) =>
+      post('/api/queued-messages', body),
+    remove: (id: string) => del(`/api/queued-messages/${encodeURIComponent(id)}`),
+  },
   scheduledMessages: {
     list: (sessionId?: string) =>
       get(`/api/scheduled-messages${sessionId ? query({ sessionId }) : ''}`),

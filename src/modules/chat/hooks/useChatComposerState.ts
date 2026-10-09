@@ -15,16 +15,12 @@ import { useTranslation } from 'react-i18next';
 import { api } from '@/shared/api';
 import { PROVIDER_PERMISSION_PREFERENCE_KEYS } from '@/shared/constants';
 import { readUserPreference } from '@/shared/userSettings';
-import type { CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
+import type { CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, QueuedMessage, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
 import { grantClaudeToolPermission } from '@/modules/chat/utils/chatPermissions';
 import {
-  clearQueuedMessage,
-  hydrateChatDrafts,
   readDraftText,
-  readQueuedMessage,
   subscribeToChatDrafts,
   writeDraftText,
-  writeQueuedMessage,
 } from '@/shared/chatDrafts';
 import { escapeRegExp } from '@/modules/chat/utils/chatFormatting';
 import { describeBackgroundTask, ownBackgroundTasks } from '@/modules/chat/utils/backgroundTasks';
@@ -124,18 +120,6 @@ const uploadAttachmentFiles = async (files: File[]): Promise<unknown[]> => {
   return result.attachments;
 };
 
-
-const restoreQueuedDraft = (sessionKey: string): QueuedDraft | null => {
-  const saved = readQueuedMessage(sessionKey);
-  return saved
-    ? {
-        content: saved.content,
-        attachments: [],
-        uploadedAttachments: saved.attachments ?? saved.images,
-        options: saved.options,
-      }
-    : null;
-};
 
 const getNotificationSessionSummary = (
   selectedSession: ProjectSession | null,
@@ -301,17 +285,23 @@ export function useChatComposerState({
     scope: draftScope,
   });
 
-  const [queuedDraft, setQueuedDraft] = useState<QueuedDraft | null>(() => {
-    if (typeof window === 'undefined' || !sessionKey) {
-      return null;
+  // Messages queued behind this session's running turn, oldest first. The
+  // server holds and sends them; this is a view of that list.
+  const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
+  const queuedSessionRef = useRef<string | null>(sessionKey);
+
+  const refreshQueuedMessages = useCallback(async (targetSession: string | null = sessionKeyRef.current) => {
+    if (!targetSession) return;
+    try {
+      const response = await api.queuedMessages.list(targetSession);
+      if (!response.ok) return;
+      const payload = await response.json();
+      if (queuedSessionRef.current !== targetSession) return;
+      setQueuedMessages(Array.isArray(payload?.data) ? payload.data : []);
+    } catch (error) {
+      console.error('Failed to load queued messages:', error);
     }
-    return restoreQueuedDraft(sessionKey);
-  });
-  // Which session the in-memory `queuedDraft` belongs to. On a session switch
-  // there is one commit where `sessionKey` already points at the new session
-  // while `queuedDraft` still holds the old session's draft; the persistence
-  // effect must not write across that gap.
-  const queuedDraftSessionRef = useRef<string | null>(sessionKey);
+  }, []);
 
   const handleBuiltInCommand = useCallback(
     (result: CommandExecutionResult) => {
@@ -686,17 +676,11 @@ export function useChatComposerState({
       // Upload attached files now so the queued record contains durable image
       // descriptors that can be sent even if another session is open later.
       if (isLoading) {
-        // A run can restart in the tiny gap between scheduling and flushing a
-        // queued submission. Put the same durable draft back without uploading
-        // its files again.
-        if (queuedSubmission) {
-          queuedDraftSessionRef.current = sessionKey;
-          setQueuedDraft(queuedSubmission);
-          return;
-        }
-
         const queuedOptions = buildSendOptions(currentInput);
         const queuedSessionKey = sessionKey;
+        if (!queuedSessionKey) {
+          return;
+        }
         let uploadedAttachments: unknown[] = [];
         try {
           uploadedAttachments = await uploadAttachmentFiles(currentAttachments);
@@ -711,36 +695,34 @@ export function useChatComposerState({
           return;
         }
 
-        const durableDraft: QueuedDraft = {
-          content: currentInput,
-          attachments: currentAttachments,
-          uploadedAttachments,
-          options: queuedOptions,
-        };
-        if (queuedSessionKey) {
-          // Write the claim ticket synchronously after upload; this closes the
-          // gap before React's persistence effect runs.
-          writeQueuedMessage(queuedSessionKey, {
-            content: durableDraft.content,
-            options: durableDraft.options,
-            attachments: durableDraft.uploadedAttachments,
+        try {
+          const response = await api.queuedMessages.enqueue({
+            sessionId: queuedSessionKey,
+            content: currentInput,
+            options: queuedOptions,
+            attachments: uploadedAttachments,
           });
-        }
-
-        // Recorded under the session the message was queued FOR, and before
-        // the session-switch return below — the queued text must be
-        // recallable even when it dispatches without this composer.
-        recordSentMessage(currentInput, queuedSessionKey);
-
-        // The server owns dispatch after persistence. If the user changed
-        // sessions during upload, the durable record is already enough; do
-        // not attach its UI card to the newly opened composer.
-        if (queuedSessionKey && sessionKeyRef.current !== queuedSessionKey) {
+          if (!response.ok) {
+            const payload = await response.json().catch(() => null);
+            throw new Error(payload?.error?.message ?? `HTTP ${response.status}`);
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unknown error';
+          addMessage({ type: 'error', content: `Failed to queue message: ${message}`, timestamp: new Date() });
           return;
         }
 
-        queuedDraftSessionRef.current = queuedSessionKey;
-        setQueuedDraft(durableDraft);
+        // Recorded under the session the message was queued FOR, so the queued
+        // text is recallable even when it dispatches without this composer.
+        recordSentMessage(currentInput, queuedSessionKey);
+
+        // The server owns dispatch now. If the user changed sessions during
+        // upload, leave this composer alone.
+        if (sessionKeyRef.current !== queuedSessionKey) {
+          return;
+        }
+
+        void refreshQueuedMessages(queuedSessionKey);
         setInput('');
         inputValueRef.current = '';
         setAttachedFiles([]);
@@ -1002,41 +984,53 @@ export function useChatComposerState({
     handleSubmitRef.current = handleSubmit;
   }, [handleSubmit]);
 
-  // The VPS dispatcher owns sending. While the card is visible, periodically
-  // reconcile only its removal so the UI notices when the server claims it.
+  // Load this session's queue when it opens, and re-read it while anything is
+  // queued or a turn is running, so a message the server sent drops off.
   useEffect(() => {
-    if (!sessionKey || !queuedDraft) {
-      return;
-    }
-    let cancelled = false;
-    const reconcile = async () => {
-      await hydrateChatDrafts();
-      if (!cancelled && !readQueuedMessage(sessionKey)) {
-        queuedDraftSessionRef.current = sessionKey;
-        setQueuedDraft(null);
-      }
-    };
-    const timer = setInterval(() => void reconcile(), 5_000);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [queuedDraft, sessionKey]);
+    queuedSessionRef.current = sessionKey;
+    setQueuedMessages([]);
+    void refreshQueuedMessages(sessionKey);
+  }, [refreshQueuedMessages, sessionKey]);
 
-  const editQueuedDraft = useCallback(() => {
-    if (!queuedDraft) {
+  const hasQueuedMessages = queuedMessages.length > 0;
+  useEffect(() => {
+    if (!sessionKey || !hasQueuedMessages) {
+      return undefined;
+    }
+    const timer = setInterval(() => void refreshQueuedMessages(sessionKey), 3_000);
+    return () => clearInterval(timer);
+  }, [hasQueuedMessages, refreshQueuedMessages, sessionKey]);
+
+  const deleteQueuedMessage = useCallback(async (id: string) => {
+    setQueuedMessages((current) => current.filter((message) => message.id !== id));
+    try {
+      await api.queuedMessages.remove(id);
+    } catch (error) {
+      console.error('Failed to delete queued message:', error);
+    }
+    void refreshQueuedMessages();
+  }, [refreshQueuedMessages]);
+
+  /** Takes a queued message back into the composer, after anything already typed. */
+  const editQueuedMessage = useCallback(async (id: string) => {
+    const message = queuedMessages.find((item) => item.id === id);
+    if (!message) {
       return;
     }
-    setQueuedDraft(null);
-    setInput(queuedDraft.content);
-    inputValueRef.current = queuedDraft.content;
-    setAttachedFiles(queuedDraft.attachments);
+    const response = await api.queuedMessages.remove(id).catch(() => null);
+    const payload = response ? await response.json().catch(() => null) : null;
+    if (!payload?.data?.removed) {
+      // Already sent: nothing to edit.
+      void refreshQueuedMessages();
+      return;
+    }
+    setQueuedMessages((current) => current.filter((item) => item.id !== id));
+    const base = inputValueRef.current.trim();
+    const next = base ? `${base}\n\n${message.content}` : message.content;
+    setInput(next);
+    inputValueRef.current = next;
     textareaRef.current?.focus();
-  }, [queuedDraft]);
-
-  const deleteQueuedDraft = useCallback(() => {
-    setQueuedDraft(null);
-  }, []);
+  }, [queuedMessages, refreshQueuedMessages, setInput]);
 
   // A voice transcript either fills the input (to edit before sending) or, when the
   // user tapped "stop and send", is submitted straight away. Mirror the value into
@@ -1083,41 +1077,6 @@ export function useChatComposerState({
     }
     writeDraftText(draftScope, inputState.value);
   }, [inputState, draftScope]);
-
-  // Persist the queued draft under its session's key. Must be defined BEFORE
-  // the swap effect below: on a session switch there is one commit where
-  // `sessionKey` already points at the new session while `queuedDraft` (and
-  // the owner ref) still describe the old one — the ref mismatch makes this
-  // effect skip that commit instead of writing/clearing across sessions.
-  useEffect(() => {
-    if (!sessionKey || queuedDraftSessionRef.current !== sessionKey) {
-      return;
-    }
-    if (
-      queuedDraft
-      && (queuedDraft.content.trim() || (queuedDraft.uploadedAttachments?.length ?? 0) > 0)
-    ) {
-      writeQueuedMessage(sessionKey, {
-        content: queuedDraft.content,
-        options: queuedDraft.options,
-        attachments: queuedDraft.uploadedAttachments,
-      });
-    } else {
-      clearQueuedMessage(sessionKey);
-    }
-  }, [queuedDraft, sessionKey]);
-
-  // Switching sessions swaps in that session's queued draft. Browser File
-  // objects are local to the mounted composer, while their already-uploaded
-  // descriptors restore from storage and remain sendable.
-  useEffect(() => {
-    queuedDraftSessionRef.current = sessionKey;
-    if (!sessionKey) {
-      setQueuedDraft(null);
-      return;
-    }
-    setQueuedDraft(restoreQueuedDraft(sessionKey));
-  }, [sessionKey]);
 
   useEffect(() => {
     if (!textareaRef.current) {
@@ -1349,9 +1308,9 @@ export function useChatComposerState({
     isDragActive,
     openAttachmentPicker: open,
     handleSubmit,
-    queuedDraft,
-    editQueuedDraft,
-    deleteQueuedDraft,
+    queuedMessages,
+    editQueuedMessage,
+    deleteQueuedMessage,
     handleVoiceTranscript,
     handleInputChange,
     handleKeyDown,

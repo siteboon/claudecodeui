@@ -96,6 +96,25 @@ CREATE TABLE IF NOT EXISTS projects (
 );
 `;
 
+/**
+ * Messages queued behind a session's running turn, oldest first.
+ *
+ * Kept apart from `session_drafts` so saving composer text can never write a
+ * queued message back after the dispatcher has sent it.
+ */
+export const QUEUED_MESSAGES_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS queued_messages (
+    id TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    session_id TEXT NOT NULL,
+    -- {content, options, attachments} as the composer queued it.
+    message TEXT NOT NULL,
+    created_at DATETIME NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_queued_messages_session ON queued_messages(session_id, created_at);
+`;
+
 export const SCHEDULED_MESSAGES_TABLE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS scheduled_messages (
     id TEXT PRIMARY KEY,

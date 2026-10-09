@@ -825,6 +825,17 @@ export type VoicePlayState = 'idle' | 'loading' | 'playing';
  */
 export type QueuedSendOptions = Record<string, unknown>;
 
+/** A message queued behind a session's running turn; the server sends it when the session is idle. */
+export type QueuedMessage = {
+  id: string;
+  sessionId: string;
+  content: string;
+  options: Record<string, unknown>;
+  /** Uploaded file descriptors. */
+  attachments: unknown[];
+  createdAt: string;
+};
+
 // ---------------------------
 
 //----------------- CHAT MESSAGE RENDERING ------------

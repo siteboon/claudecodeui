@@ -45,6 +45,7 @@ import { voiceRoutes } from './modules/voice/index.js';
 import {
     closeScheduledMessageDispatcher,
     initializeScheduledMessageDispatcher,
+    queuedMessagesRoutes,
     scheduledMessagesRoutes,
 } from './modules/scheduled-messages/index.js';
 import browserUseRoutes from './modules/browser-use/browser-use.routes.js';
@@ -197,6 +198,7 @@ app.use('/api/browser-use', authenticateToken, browserUseRoutes);
 // Unified provider MCP routes (protected)
 app.use('/api/providers', authenticateToken, providerRoutes);
 app.use('/api/scheduled-messages', authenticateToken, scheduledMessagesRoutes);
+app.use('/api/queued-messages', authenticateToken, queuedMessagesRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);

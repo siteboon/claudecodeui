@@ -14,7 +14,7 @@ import { PaperclipIcon, MessageSquareIcon, XIcon, Loader2, ArrowUpIcon, PencilIc
 
 import { useVoiceInput } from '@/modules/chat/hooks/useVoiceInput';
 import { useVoiceAvailable } from '@/modules/chat/hooks/useVoiceAvailable';
-import type { QueuedDraft, ScheduledMessage, SlashCommand,SessionActivity,PendingPermissionRequest,PermissionMode,ProviderModelOption } from '@/shared/types';
+import type { QueuedMessage, ScheduledMessage, SlashCommand,SessionActivity,PendingPermissionRequest,PermissionMode,ProviderModelOption } from '@/shared/types';
 import {
   PromptInput,
   PromptInputHeader,
@@ -71,7 +71,7 @@ type ChatComposerProps = {
   onClearInput: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement> | MouseEvent<HTMLButtonElement> | TouchEvent<HTMLButtonElement>) => void;
   isDragActive: boolean;
-  queuedDraft: QueuedDraft | null;
+  queuedMessages: QueuedMessage[];
   /** Set while the composer is replacing an already-sent message. */
   isEditingSentMessage: boolean;
   onCancelEditMessage: () => void;
@@ -79,8 +79,8 @@ type ChatComposerProps = {
   scheduledMessages: ScheduledMessage[];
   onScheduleMessage: (scheduledFor: Date) => void;
   onCancelScheduledMessage: (id: string) => void;
-  onEditQueuedDraft: () => void;
-  onDeleteQueuedDraft: () => void;
+  onEditQueuedMessage: (id: string) => void;
+  onDeleteQueuedMessage: (id: string) => void;
   attachedFiles: File[];
   onRemoveAttachment: (index: number) => void;
   fileErrors: Map<string, string>;
@@ -146,14 +146,14 @@ export default function ChatComposer({
   onClearInput,
   onSubmit,
   isDragActive,
-  queuedDraft,
+  queuedMessages,
   isEditingSentMessage,
   onCancelEditMessage,
   scheduledMessages,
   onScheduleMessage,
   onCancelScheduledMessage,
-  onEditQueuedDraft,
-  onDeleteQueuedDraft,
+  onEditQueuedMessage,
+  onDeleteQueuedMessage,
   attachedFiles,
   onRemoveAttachment,
   fileErrors,
@@ -251,19 +251,17 @@ export default function ChatComposer({
   const hasPendingPermissions = pendingPermissionRequests.length > 0;
   const hasActivityIndicator = Boolean(activity && !hasPendingPermissions);
 
-  const hasQueuedDraft = Boolean(queuedDraft);
+  const hasQueuedMessages = queuedMessages.length > 0;
   const canQueueDraft = isLoading && Boolean(input.trim() || attachedFiles.length > 0);
   const submitHint = canQueueDraft
-    ? hasQueuedDraft
-      ? t('input.hintText.updateQueued', { defaultValue: 'Enter to update queued message' })
+    ? hasQueuedMessages
+      ? t('input.hintText.queueAnother', { defaultValue: 'Enter to queue another message' })
       : t('input.hintText.queue', { defaultValue: 'Enter to queue your next message' })
     : sendByCtrlEnter
       ? t('input.hintText.ctrlEnter')
       : t('input.hintText.enter');
   const submitAriaLabel = canQueueDraft
-    ? hasQueuedDraft
-      ? t('input.queue.update', { defaultValue: 'Update queued message' })
-      : t('input.queue.sendNext', { defaultValue: 'Queue next message' })
+    ? t('input.queue.sendNext', { defaultValue: 'Queue next message' })
     : isLoading
       ? t('input.stop')
       : t('input.send');
@@ -309,16 +307,16 @@ export default function ChatComposer({
         </div>
       )}
 
-      {queuedDraft && (
+      {queuedMessages.map((message, index) => (
         <QueuedMessageCard
-          content={queuedDraft.content}
-          attachmentCount={
-            queuedDraft.uploadedAttachments?.length ?? queuedDraft.attachments.length
-          }
-          onEdit={onEditQueuedDraft}
-          onDelete={onDeleteQueuedDraft}
+          key={message.id}
+          content={message.content}
+          position={queuedMessages.length > 1 ? index + 1 : undefined}
+          attachmentCount={message.attachments.length}
+          onEdit={message.attachments.length === 0 ? () => onEditQueuedMessage(message.id) : undefined}
+          onDelete={() => onDeleteQueuedMessage(message.id)}
         />
-      )}
+      ))}
 
       {!hasQuestionPanel && <div className="relative mx-auto max-w-[54.25rem]">
         {showFileDropdown && filteredFiles.length > 0 && (
