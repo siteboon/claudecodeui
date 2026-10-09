@@ -30,6 +30,49 @@ export function filterFileTree(items: FileTreeNode[], query: string): FileTreeNo
   }, []);
 }
 
+export function findFileTreeNode(items: FileTreeNode[], targetPath: string): FileTreeNode | null {
+  for (const item of items) {
+    if (item.path === targetPath) {
+      return item;
+    }
+    if (item.children) {
+      const match = findFileTreeNode(item.children, targetPath);
+      if (match) {
+        return match;
+      }
+    }
+  }
+  return null;
+}
+
+// Returns the same array when the directory is not in the tree, so callers can
+// skip a re-render for a stale response.
+export function replaceDirectoryChildren(
+  items: FileTreeNode[],
+  directoryPath: string,
+  children: FileTreeNode[],
+): FileTreeNode[] {
+  let changed = false;
+  const next = items.map((item) => {
+    if (item.type !== 'directory') {
+      return item;
+    }
+    if (item.path === directoryPath) {
+      changed = true;
+      return { ...item, children, childrenLoaded: true };
+    }
+    if (item.children) {
+      const nextChildren = replaceDirectoryChildren(item.children, directoryPath, children);
+      if (nextChildren !== item.children) {
+        changed = true;
+        return { ...item, children: nextChildren };
+      }
+    }
+    return item;
+  });
+  return changed ? next : items;
+}
+
 // During search we auto-expand every directory present in the filtered subtree.
 export function collectExpandedDirectoryPaths(items: FileTreeNode[]): string[] {
   const paths: string[] = [];
