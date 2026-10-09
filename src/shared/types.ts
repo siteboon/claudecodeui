@@ -77,6 +77,8 @@ export type ScheduledMessage = {
   status: 'pending' | 'sent' | 'failed' | 'cancelled';
   /** Why it did not go, when `status` is `failed`. */
   failureReason: string | null;
+  /** Minutes between sends; null for a one-shot message. */
+  repeatEveryMinutes: number | null;
   createdAt: string;
 };
 

@@ -5,6 +5,9 @@ import { AppError } from '@/shared/utils.js';
 /** How far ahead a message may be scheduled. Beyond this it is almost certainly a mistake. */
 const MAX_SCHEDULE_AHEAD_MS = 365 * 24 * 60 * 60 * 1000;
 const MAX_CONTENT_LENGTH = 100_000;
+/** Bounds for a repeating message: no tighter than the dispatcher can honour, no looser than a week. */
+const MIN_REPEAT_MINUTES = 5;
+const MAX_REPEAT_MINUTES = 7 * 24 * 60;
 
 export type ScheduledMessage = {
   id: string;
@@ -14,6 +17,8 @@ export type ScheduledMessage = {
   scheduledFor: string;
   status: ScheduledMessageRow['status'];
   failureReason: string | null;
+  /** Minutes between sends; null for a one-shot message. */
+  repeatEveryMinutes: number | null;
   createdAt: string;
 };
 
@@ -38,6 +43,7 @@ export function toScheduledMessage(row: ScheduledMessageRow): ScheduledMessage {
     scheduledFor: row.scheduled_for,
     status: row.status,
     failureReason: row.failure_reason,
+    repeatEveryMinutes: row.repeat_every_minutes ?? null,
     createdAt: row.created_at,
   };
 }
@@ -56,6 +62,7 @@ export const scheduledMessagesService = {
     content: string;
     options?: unknown;
     scheduledFor: string;
+    repeatEveryMinutes?: unknown;
   }): ScheduledMessage {
     const content = input.content.trim();
     if (!content) {
@@ -85,6 +92,18 @@ export const scheduledMessagesService = {
       });
     }
 
+    let repeatEveryMinutes: number | null = null;
+    if (input.repeatEveryMinutes !== undefined && input.repeatEveryMinutes !== null) {
+      const minutes = Number(input.repeatEveryMinutes);
+      if (!Number.isInteger(minutes) || minutes < MIN_REPEAT_MINUTES || minutes > MAX_REPEAT_MINUTES) {
+        throw new AppError(
+          `repeatEveryMinutes must be a whole number from ${MIN_REPEAT_MINUTES} to ${MAX_REPEAT_MINUTES}.`,
+          { code: 'INVALID_REPEAT_INTERVAL', statusCode: 400 },
+        );
+      }
+      repeatEveryMinutes = minutes;
+    }
+
     if (!sessionsDb.getSessionById(input.sessionId)) {
       throw new AppError(`Session "${input.sessionId}" was not found.`, {
         code: 'SESSION_NOT_FOUND',
@@ -98,6 +117,7 @@ export const scheduledMessagesService = {
       content,
       options: input.options ?? {},
       scheduledFor,
+      repeatEveryMinutes,
     }));
   },
 

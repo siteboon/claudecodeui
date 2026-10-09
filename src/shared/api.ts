@@ -285,7 +285,7 @@ export const api = {
   scheduledMessages: {
     list: (sessionId?: string) =>
       get(`/api/scheduled-messages${sessionId ? query({ sessionId }) : ''}`),
-    create: (body: { sessionId: string; content: string; scheduledFor: string; options?: unknown }) =>
+    create: (body: { sessionId: string; content: string; scheduledFor: string; options?: unknown; repeatEveryMinutes?: number }) =>
       post('/api/scheduled-messages', body),
     cancel: (id: string) => del(`/api/scheduled-messages/${encodeURIComponent(id)}`),
   },

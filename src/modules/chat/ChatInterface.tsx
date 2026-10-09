@@ -377,7 +377,7 @@ function ChatInterface({
    * Hands the composer's current text to the server to send later, and clears
    * the box as a send would — the message has left the composer either way.
    */
-  const handleScheduleMessage = useCallback(async (scheduledFor: Date) => {
+  const handleScheduleMessage = useCallback(async (scheduledFor: Date, repeatEveryMinutes?: number) => {
     const content = input.trim();
     if (!content) return;
 
@@ -385,6 +385,7 @@ function ChatInterface({
       content,
       scheduledFor,
       options: { model: currentProviderModel, effort: currentProviderEffort, permissionMode },
+      repeatEveryMinutes,
     });
     if (scheduled) {
       setInput('');

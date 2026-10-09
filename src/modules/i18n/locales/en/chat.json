@@ -326,6 +326,18 @@
       "1440": "Tomorrow"
     },
     "pending": "Scheduled for {{when}}",
+    "repeating": "Every {{every}} min — next {{when}}",
+    "lastRun": "Last run: {{reason}}",
+    "stopRepeating": "Stop repeating",
+    "repeatLabel": "Repeat",
+    "repeat": {
+      "0": "Don't repeat",
+      "15": "Every 15 minutes",
+      "30": "Every 30 minutes",
+      "60": "Every hour",
+      "240": "Every 4 hours",
+      "1440": "Every day"
+    },
     "failed": "Not sent — {{reason}}",
     "cancel": "Cancel scheduled message",
     "dismiss": "Dismiss failure notice"

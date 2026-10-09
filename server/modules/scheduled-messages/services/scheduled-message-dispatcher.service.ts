@@ -113,10 +113,24 @@ export async function dispatchQueuedMessages(runtime: ProviderRuntimeGateway): P
   return claimed;
 }
 
+function formatSlotTime(date: Date): string {
+  return date.toISOString().slice(11, 16) + ' UTC';
+}
+
 async function sendClaimedMessage(
   row: ScheduledMessageRow,
   runtime: ProviderRuntimeGateway,
+  now: Date,
 ): Promise<void> {
+  const repeating = Boolean(row.repeat_every_minutes);
+  // A repeating message is a monitor, not a deadline: aborting whatever the
+  // session is doing every interval would kill its turn or background work.
+  // It skips this slot and tries again at the next one.
+  if (repeating && (chatRunRegistry.isProcessing(row.session_id) || runtime.hasBackgroundWork?.(row.session_id))) {
+    scheduledMessagesDb.markFailed(row.id, `Skipped at ${formatSlotTime(now)} — the session was busy.`);
+    return;
+  }
+
   try {
     const result = await runDetachedChatTurn(
       {
@@ -127,7 +141,7 @@ async function sendClaimedMessage(
         // The user picked this time on purpose; a run that happens to be going
         // is aborted so the scheduled message lands when it was due, instead
         // of being recorded as "not sent — session was busy".
-        interruptActiveRun: true,
+        interruptActiveRun: !repeating,
       },
       { runtime },
     );
@@ -138,6 +152,8 @@ async function sendClaimedMessage(
     // them it did not go.
     if (!result.started || result.error) {
       scheduledMessagesDb.markFailed(row.id, result.error ?? 'The session was unavailable when this was due.');
+    } else if (repeating) {
+      scheduledMessagesDb.clearFailure(row.id);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -164,7 +180,7 @@ export async function dispatchDueScheduledMessages(
   // Sequentially: a session can only have one run at a time, and two due
   // messages for the same session must not race each other into it.
   for (const row of due) {
-    await sendClaimedMessage(row, runtime);
+    await sendClaimedMessage(row, runtime, now);
   }
 
   return due.length;

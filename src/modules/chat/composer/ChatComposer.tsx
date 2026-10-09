@@ -77,7 +77,7 @@ type ChatComposerProps = {
   onCancelEditMessage: () => void;
   /** Messages waiting to be sent to this session later. */
   scheduledMessages: ScheduledMessage[];
-  onScheduleMessage: (scheduledFor: Date) => void;
+  onScheduleMessage: (scheduledFor: Date, repeatEveryMinutes?: number) => void;
   onCancelScheduledMessage: (id: string) => void;
   onEditQueuedDraft: () => void;
   onDeleteQueuedDraft: () => void;
