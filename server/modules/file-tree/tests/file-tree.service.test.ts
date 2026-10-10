@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { createReadStream } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { constants, createReadStream } from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -11,6 +12,7 @@ import { createFileTreeService } from '@/modules/file-tree/file-tree.service.js'
 import type {
   FileTreeDirectoryEntry,
   FileTreeFileSystem,
+  FileTreeReadHandle,
   FileTreeServiceDependencies,
   FileTreeServices,
   FileTreeStats,
@@ -43,6 +45,9 @@ function createStats(directory: boolean, mode: number): FileTreeStats {
     size: directory ? 0 : 24,
     mtime: new Date('2026-01-02T03:04:05.000Z'),
     mode,
+    dev: 1,
+    ino: 1,
+    isFile: () => !directory,
     isDirectory: () => directory,
     isSymbolicLink: () => false,
   };
@@ -71,6 +76,7 @@ function createFakeFileSystem(
     unlink: unexpectedOperation,
     copyFile: unexpectedOperation,
     createReadStream: () => Readable.from([]),
+    openForReading: unexpectedOperation,
     ...overrides,
   };
 }
@@ -425,6 +431,20 @@ function createRealFileSystemService(projectRoot: string): FileTreeServices {
       unlink: (filePath) => fsPromises.unlink(filePath),
       copyFile: (source, destination) => fsPromises.copyFile(source, destination),
       createReadStream: (filePath) => createReadStream(filePath),
+      // Same as the production adapter in file-tree.module.ts.
+      async openForReading(filePath) {
+        const handle = await fsPromises.open(filePath, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
+        return {
+          stat: () => handle.stat(),
+          async openedPath() {
+            if (process.platform !== 'linux') return null;
+            return fsPromises.readlink(`/proc/self/fd/${handle.fd}`).catch(() => null);
+          },
+          readTextFile: () => handle.readFile('utf8'),
+          createReadStream: () => handle.createReadStream(),
+          close: () => handle.close(),
+        };
+      },
     },
     projects: { getProjectPathById: async () => projectRoot },
     workspace: {
@@ -529,5 +549,143 @@ test('reading through a symlink out of the temp directory is still refused', asy
     await fsPromises.rm(temporaryDirectory, { recursive: true, force: true });
     await fsPromises.rm(projectRoot, { recursive: true, force: true });
     await fsPromises.rm(outsideDirectory, { recursive: true, force: true });
+  }
+});
+
+/**
+ * A scripted file handle: `openedPath` is what the OS reports for the
+ * descriptor (null where it cannot), `identity` its device/inode.
+ */
+function createFakeHandle(
+  openedPath: string | null,
+  { content = '', isFile = true, identity = { dev: 1, ino: 1 } } = {},
+) {
+  const record = { reads: 0, closed: false };
+  const handle: FileTreeReadHandle = {
+    stat: async () => ({ ...createStats(false, 0o100644), ...identity, isFile: () => isFile }),
+    openedPath: async () => openedPath,
+    readTextFile: async () => {
+      record.reads += 1;
+      return content;
+    },
+    createReadStream: () => {
+      record.reads += 1;
+      return Readable.from([content]);
+    },
+    close: async () => {
+      record.closed = true;
+    },
+  };
+  return { handle, record };
+}
+
+/**
+ * A service whose only read-only root is `readRoot`, checked by plain prefix
+ * (the realpath part is covered by the real-filesystem tests above).
+ */
+function createReadOnlyRootService(
+  readRoot: string,
+  fileSystemOverrides: Partial<FileTreeFileSystem>,
+): FileTreeServices {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const dependencies = createDependencies(createFakeFileSystem(fileSystemOverrides), projectRoot);
+  dependencies.workspace.resolveReadOnlyRootPath = async (candidatePath) => (
+    candidatePath.startsWith(`${readRoot}${path.sep}`) ? candidatePath : null
+  );
+  return createFileTreeService(dependencies);
+}
+
+const isOutsideProject = (error: unknown) => error instanceof AppError
+  && error.code === 'PATH_OUTSIDE_PROJECT'
+  && error.statusCode === 403;
+
+test('files under a read-only root are read through the descriptor that was checked', async () => {
+  const readRoot = path.resolve('file-tree-test-share');
+  const sharedFile = path.join(readRoot, 'exports', 'part.stl');
+  const text = createFakeHandle(sharedFile, { content: 'solid part' });
+  const service = createReadOnlyRootService(readRoot, {
+    openForReading: async () => text.handle,
+    // Reads by path would bypass the check; the service must not use them here.
+    readTextFile: async () => assert.fail('read by path'),
+    createReadStream: () => assert.fail('streamed by path'),
+  });
+
+  assert.deepEqual(await service.readTextFile('project-1', sharedFile), { content: 'solid part', path: sharedFile });
+  assert.equal(text.record.reads, 1);
+  assert.equal(text.record.closed, true);
+
+  const streamed = createFakeHandle(sharedFile, { content: 'solid part' });
+  const streamService = createReadOnlyRootService(readRoot, { openForReading: async () => streamed.handle });
+  const file = await streamService.openFile('project-1', sharedFile);
+  assert.equal(file.contentType, 'text/plain');
+  assert.equal(streamed.record.reads, 1);
+});
+
+test('a file swapped out of the root before the open is refused on the descriptor path', async () => {
+  const readRoot = path.resolve('file-tree-test-share');
+  const requested = path.join(readRoot, 'notes.txt');
+  // The path was under the root when it was resolved; by the time it was
+  // opened a component had become a symlink to the owner's keys.
+  const swapped = createFakeHandle(path.resolve('file-tree-test-home', '.ssh', 'id_ed25519'));
+  const service = createReadOnlyRootService(readRoot, { openForReading: async () => swapped.handle });
+
+  await assert.rejects(service.readTextFile('project-1', requested), isOutsideProject);
+  await assert.rejects(service.openFile('project-1', requested), isOutsideProject);
+  assert.equal(swapped.record.reads, 0);
+  assert.equal(swapped.record.closed, true);
+});
+
+test('without a descriptor path, the opened file must be the one the root still resolves to', async () => {
+  const readRoot = path.resolve('file-tree-test-share');
+  const requested = path.join(readRoot, 'notes.txt');
+
+  const same = createFakeHandle(null, { content: 'notes', identity: { dev: 7, ino: 42 } });
+  const sameService = createReadOnlyRootService(readRoot, {
+    openForReading: async () => same.handle,
+    stat: async () => ({ ...createStats(false, 0o100644), dev: 7, ino: 42 }),
+  });
+  assert.deepEqual(await sameService.readTextFile('project-1', requested), { content: 'notes', path: requested });
+
+  const other = createFakeHandle(null, { content: 'secret', identity: { dev: 7, ino: 99 } });
+  const otherService = createReadOnlyRootService(readRoot, {
+    openForReading: async () => other.handle,
+    stat: async () => ({ ...createStats(false, 0o100644), dev: 7, ino: 42 }),
+  });
+  await assert.rejects(otherService.readTextFile('project-1', requested), isOutsideProject);
+  assert.equal(other.record.reads, 0);
+  assert.equal(other.record.closed, true);
+});
+
+test('only regular files are served from a read-only root', async () => {
+  const readRoot = path.resolve('file-tree-test-share');
+  const fifo = path.join(readRoot, 'pipe');
+  const pipe = createFakeHandle(fifo, { isFile: false });
+  const service = createReadOnlyRootService(readRoot, { openForReading: async () => pipe.handle });
+
+  await assert.rejects(
+    service.openFile('project-1', fifo),
+    (error: unknown) => error instanceof AppError && error.code === 'NOT_A_FILE' && error.statusCode === 400,
+  );
+  assert.equal(pipe.record.reads, 0);
+  assert.equal(pipe.record.closed, true);
+});
+
+test('a FIFO in the temp directory is refused without blocking the request', { skip: process.platform === 'win32' }, async () => {
+  const temporaryDirectory = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'file-tree-tmp-'));
+  const projectRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'file-tree-project-'));
+
+  try {
+    const fifoPath = path.join(temporaryDirectory, 'pipe');
+    // No writer ever opens it: a blocking open would hang this test.
+    execFileSync('mkfifo', [fifoPath]);
+
+    const service = createRealFileSystemService(projectRoot);
+    await assert.rejects(
+      service.readTextFile('project-1', fifoPath),
+      (error: unknown) => (error as AppError).code === 'NOT_A_FILE',
+    );
+  } finally {
+    await fsPromises.rm(temporaryDirectory, { recursive: true, force: true });
+    await fsPromises.rm(projectRoot, { recursive: true, force: true });
   }
 });

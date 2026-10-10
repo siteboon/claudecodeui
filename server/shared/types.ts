@@ -1307,8 +1307,33 @@ export type FileTreeStats = {
   size: number;
   mtime: Date;
   mode: number;
+  /** Device and inode identify the file itself, whichever path reached it. */
+  dev: number;
+  ino: number;
+  isFile(): boolean;
   isDirectory(): boolean;
   isSymbolicLink(): boolean;
+};
+
+/**
+ * A file the File Tree service opened for reading.
+ *
+ * Reads through a read-only root go through a handle so the root check can be
+ * made on the file that was actually opened, and the bytes served are that
+ * file's, even if a path component is swapped for a symlink in between.
+ */
+export type FileTreeReadHandle = {
+  stat(): Promise<FileTreeStats>;
+  /**
+   * Path of the opened file as the operating system reports it for the
+   * descriptor (`/proc/self/fd` on Linux), or `null` where that is not
+   * available.
+   */
+  openedPath(): Promise<string | null>;
+  readTextFile(): Promise<string>;
+  /** The stream takes ownership of the handle and closes it when it ends. */
+  createReadStream(): Readable;
+  close(): Promise<void>;
 };
 
 /**
@@ -1334,6 +1359,8 @@ export type FileTreeFileSystem = {
   unlink(filePath: string): Promise<void>;
   copyFile(sourcePath: string, destinationPath: string): Promise<void>;
   createReadStream(filePath: string): Readable;
+  /** Opens a file for reading without blocking on a FIFO. */
+  openForReading(filePath: string): Promise<FileTreeReadHandle>;
 };
 
 /**
@@ -1357,8 +1384,8 @@ export type FileTreeWorkspaceGateway = {
   validatePath(candidatePath: string): Promise<WorkspacePathValidationResult>;
   /**
    * Resolves a path readable outside the workspace root — the system temp
-   * directory and the Claude projects directory — or `null` when it is not
-   * one. Read-only: the write policy is `validatePath` and it does not consult
+   * directory, the Claude projects directory and any `CLOUDCLI_READ_ROOTS`
+   * entry — or `null` when it is not one. Read-only: the write policy is `validatePath` and it does not consult
    * this.
    */
   resolveReadOnlyRootPath(candidatePath: string): Promise<string | null>;

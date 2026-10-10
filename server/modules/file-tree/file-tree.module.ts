@@ -54,6 +54,27 @@ const fileTreeFileSystem: FileTreeFileSystem = {
   unlink: (filePath) => fsPromises.unlink(filePath),
   copyFile: (sourcePath, destinationPath) => fsPromises.copyFile(sourcePath, destinationPath),
   createReadStream: (filePath) => fs.createReadStream(filePath),
+  async openForReading(filePath) {
+    // O_NONBLOCK so opening a FIFO cannot hang the request waiting for a
+    // writer; it changes nothing for regular files. Not defined on Windows.
+    const handle = await fsPromises.open(filePath, fs.constants.O_RDONLY | (fs.constants.O_NONBLOCK ?? 0));
+    return {
+      stat: () => handle.stat(),
+      async openedPath() {
+        if (process.platform !== 'linux') {
+          return null;
+        }
+        try {
+          return await fsPromises.readlink(`/proc/self/fd/${handle.fd}`);
+        } catch {
+          return null;
+        }
+      },
+      readTextFile: () => handle.readFile('utf8'),
+      createReadStream: () => handle.createReadStream(),
+      close: () => handle.close(),
+    };
+  },
 };
 
 /**
