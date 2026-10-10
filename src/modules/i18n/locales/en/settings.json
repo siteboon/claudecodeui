@@ -489,12 +489,37 @@
       "rmRf": "- Block recursive delete"
     },
     "codex": {
+      "runtime": {
+        "title": "Codex runtime",
+        "description": "Choose how CloudCLI runs Codex requests.",
+        "modes": {
+          "app-server": {
+            "title": "Codex app-server",
+            "description": "Use one persistent Codex app-server for conversations and thread operations."
+          },
+          "sdk": {
+            "title": "Codex SDK",
+            "description": "Use the direct @openai/codex-sdk runtime."
+          }
+        },
+        "restart": {
+          "title": "Restart app-server",
+          "description": "Reload Codex configuration and authentication from disk.",
+          "action": "Restart",
+          "restarting": "Restarting...",
+          "success": "Codex app-server restarted.",
+          "error": "Could not restart while Codex is busy or unavailable."
+        }
+      },
       "permissionMode": "Permission Mode",
       "description": "Controls how Codex handles file modifications and command execution",
       "modes": {
         "default": {
           "title": "Default",
-          "description": "Runs commands within the workspace sandbox. Codex decides when approval is needed; requests cannot be approved in this non-interactive integration."
+          "description": {
+            "app-server": "Runs commands within the workspace sandbox. Codex decides when approval is needed; requests can be approved interactively in chat.",
+            "sdk": "Runs commands within the workspace sandbox. Codex decides when approval is needed; requests cannot be approved in the non-interactive SDK integration."
+          }
         },
         "acceptEdits": {
           "title": "Accept Edits",
@@ -507,7 +532,10 @@
       },
       "technicalDetails": "Technical details",
       "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. Runs commands within the workspace sandbox. Codex decides when approval is needed; requests cannot be approved in this non-interactive integration.",
+        "default": {
+          "app-server": "sandbox=workspace-write, approvalPolicy=on-request. Runs commands within the workspace sandbox; requests can be approved interactively in chat.",
+          "sdk": "sandboxMode=workspace-write, approvalPolicy=on-request. Runs commands within the workspace sandbox; requests cannot be approved in the non-interactive SDK integration."
+        },
         "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. All commands auto-execute within project directory.",
         "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. Full system access, use only in trusted environments.",
         "overrideNote": "You can override this per-session using the mode button in the chat interface."

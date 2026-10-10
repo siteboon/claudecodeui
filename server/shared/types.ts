@@ -665,12 +665,15 @@ export type ProviderRunFunction = (
  * must use it — never the app-facing session id they were called with — when
  * matching transcript rows on disk, because app-created sessions use an
  * app-allocated id that the provider has never seen.
+ * `codexRuntimeMode` carries the caller's selected Codex runtime so history
+ * uses the same source as chat; omission preserves the server default.
  */
 export type FetchHistoryOptions = {
   projectPath?: string;
   limit?: number | null;
   offset?: number;
   providerSessionId?: string;
+  codexRuntimeMode?: 'app-server' | 'sdk';
 };
 
 /**
