@@ -7,12 +7,7 @@ import '@/modules/i18n';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
 import type { PermissionMode, Project, ProjectSession, SessionActivityMap } from '@/shared/types';
 
-/**
- * A session whose turn has ended with background work still running keeps
- * its composer usable — but a new turn replaces the CLI process that work
- * runs under, so the work is stopped or finishes where nothing listens. The
- * composer says so and asks before sending; nothing else in the app does.
- */
+/** Claude preserves background work across sends; other providers still warn. */
 
 const PROJECT: Project = { projectId: 'project-1', displayName: 'Project One', fullPath: '/tmp/project-one' };
 const SESSION: ProjectSession = { id: 'session-1' };
@@ -32,14 +27,14 @@ const backgroundOnly: SessionActivityMap = new Map([[
   },
 ]]);
 
-const submit = async (processingSessions: SessionActivityMap) => {
+const submit = async (processingSessions: SessionActivityMap, provider: 'claude' | 'codex' = 'claude') => {
   const sent: Array<{ type: string }> = [];
   const view = renderHook(() =>
     useChatComposerState({
       selectedProject: PROJECT,
       selectedSession: SESSION,
       currentSessionId: SESSION.id,
-      provider: 'claude',
+      provider,
       permissionMode: 'default',
       cyclePermissionMode: () => undefined,
       resolvePermissionModeForProvider: () => 'default' as PermissionMode,
@@ -77,7 +72,7 @@ afterEach(() => {
 
 test('sending on a session with background work asks first, naming the session\'s own tasks', async () => {
   confirm.mockReturnValue(false);
-  const { sends, view } = await submit(backgroundOnly);
+  const { sends, view } = await submit(backgroundOnly, 'codex');
 
   assert.equal(confirm.mock.calls.length, 1);
   assert.equal(
@@ -93,7 +88,7 @@ test('sending on a session with background work asks first, naming the session\'
 
 test('confirming sends the message', async () => {
   confirm.mockReturnValue(true);
-  const { sends } = await submit(backgroundOnly);
+  const { sends } = await submit(backgroundOnly, 'codex');
 
   assert.equal(sends.length, 1);
 });
@@ -101,6 +96,13 @@ test('confirming sends the message', async () => {
 test('a session with nothing in the background sends without asking', async () => {
   const { sends } = await submit(new Map());
 
+  assert.equal(confirm.mock.calls.length, 0);
+  assert.equal(sends.length, 1);
+});
+
+test('Claude sends over background work without a destructive-action confirmation', async () => {
+  confirm.mockReturnValue(false);
+  const { sends } = await submit(backgroundOnly, 'claude');
   assert.equal(confirm.mock.calls.length, 0);
   assert.equal(sends.length, 1);
 });
