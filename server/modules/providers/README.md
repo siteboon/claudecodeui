@@ -189,11 +189,19 @@ Command forms currently used by the providers are:
 
 - Implement `synchronize(since?: Date)` to scan provider artifacts and upsert
   sessions into `sessionsDb`.
+- Treat `since` as "created or modified after", never "created after" alone.
+  The cursor also moves past artifacts that indexed nothing yet (an empty
+  transcript, no `cwd` record so far), and only their later writes, which
+  bump the modification time, bring them back into an incremental scan.
+- On an incremental scan, skip a transcript that is already indexed at its
+  current mtime (`sessionsDb.isTranscriptUnchangedSinceIndexed(...)`), and
+  read that mtime before parsing. Upserting a session re-activates its
+  project, so re-indexing an unchanged transcript undoes a project archive.
 - Implement `synchronizeFile(filePath)` for single-file watcher updates.
 - Use the existing helpers when they fit:
   - `buildLookupMap(...)`
   - `extractFirstValidJsonlData(...)`
-  - `findFilesRecursivelyCreatedAfter(...)`
+  - `findFilesRecursivelyCreatedOrModifiedAfter(...)`
   - `normalizeSessionName(...)`
   - `readFileTimestamps(...)`
 - Make the sync resilient to partial, malformed, or missing provider files.
