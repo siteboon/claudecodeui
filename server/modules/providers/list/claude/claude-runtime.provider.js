@@ -839,6 +839,33 @@ function createHeldPromptStream(messages) {
 }
 
 /**
+ * Outcome of a turn's `result` message. The SDK reports a failed turn either
+ * with an `error_*` subtype (error_max_turns, error_during_execution,
+ * error_max_budget_usd, ...) or with `is_error` on a `success` subtype (an API
+ * error the CLI gave up on). Either way the turn did not complete.
+ *
+ * Exported for the runtime tests.
+ * @param {Object} message - SDK `result` message
+ * @returns {{ failed: boolean, reason: string }} `reason` is human-readable
+ *   for a failed turn and `'completed'` otherwise
+ */
+export function resultOutcome(message) {
+  const subtype = typeof message?.subtype === 'string' ? message.subtype : 'success';
+  const failed = message?.is_error === true || subtype !== 'success';
+  if (!failed) {
+    return { failed: false, reason: 'completed' };
+  }
+  const details = Array.isArray(message?.errors)
+    ? message.errors.filter((item) => typeof item === 'string' && item)
+    : [];
+  const text = details.length > 0
+    ? details.join('; ')
+    : (typeof message?.result === 'string' ? message.result : '');
+  const kind = subtype === 'success' ? 'error' : subtype;
+  return { failed: true, reason: text ? `${kind}: ${text}` : kind };
+}
+
+/**
  * Loads MCP server configurations from ~/.claude.json
  * @param {string} cwd - Current working directory for project-specific configs
  * @returns {Object|null} MCP servers object or null if none found
@@ -1218,14 +1245,33 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         const stillOutstanding = backgroundWork.hasOutstanding(sessionKey());
         if (!turnCompleteSent && !abortPending) {
           turnCompleteSent = true;
-          ws.send(createCompleteMessage({ provider: 'claude', sessionId: capturedSessionId || sessionId || null, exitCode: 0 }));
-          notifyRunStopped({
-            userId: ws?.userId || null,
-            provider: 'claude',
-            sessionId: sessionId || capturedSessionId || null,
-            sessionName: sessionSummary,
-            stopReason: 'completed'
-          });
+          // The terminal status follows the result: an error result ends the
+          // turn as failed instead of being reported as a success.
+          const outcome = resultOutcome(message);
+          if (outcome.failed && message.subtype !== 'success') {
+            // An `error_*` subtype comes with no assistant text explaining it,
+            // so the chat would otherwise just stop. (An `is_error` success
+            // result has already streamed its error text as a message.)
+            ws.send(createNormalizedMessage({ kind: 'error', content: `Claude ended the turn with ${outcome.reason}`, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+          }
+          ws.send(createCompleteMessage({ provider: 'claude', sessionId: capturedSessionId || sessionId || null, exitCode: outcome.failed ? 1 : 0 }));
+          if (outcome.failed) {
+            notifyRunFailed({
+              userId: ws?.userId || null,
+              provider: 'claude',
+              sessionId: sessionId || capturedSessionId || null,
+              sessionName: sessionSummary,
+              error: new Error(outcome.reason)
+            });
+          } else {
+            notifyRunStopped({
+              userId: ws?.userId || null,
+              provider: 'claude',
+              sessionId: sessionId || capturedSessionId || null,
+              sessionName: sessionSummary,
+              stopReason: 'completed'
+            });
+          }
         } else if (heldForBackgroundWork && !abortPending && !stillOutstanding) {
           // A result after the turn already reported complete means the work we
           // held the process open for has finished and pushed a follow-up turn
