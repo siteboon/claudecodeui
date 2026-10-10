@@ -32,6 +32,12 @@ export const authenticatedFetch = (
 
   return fetch(url, {
     ...options,
+    // Every response here can carry X-Refreshed-Token or X-Auth-Error, and a
+    // served-from-cache response replays the headers it was stored with. Those
+    // headers describe one moment in one session, so they must never be reused:
+    // a stale X-Refreshed-Token overwrote the current token with an expired one
+    // on every start, which then got discarded as expired.
+    cache: 'no-store',
     headers: {
       ...defaultHeaders,
       ...options.headers,
@@ -41,10 +47,10 @@ export const authenticatedFetch = (
     if (refreshedToken) {
       storeAuthToken(refreshedToken);
     }
-    // Only a real rejection ends the session. The header alone is not enough:
-    // a 304 replays the headers of the cached response, so a single stale 401
-    // would discard a freshly issued token on every start — and keep doing it,
-    // because the next start reads the same cache entry again.
+    // Belt and braces for any path that still reaches a cached response: only a
+    // real rejection ends the session. Note that a revalidated response surfaces
+    // its stored status (typically 200), not the 304 from the wire, so the
+    // header alone says nothing about the current request.
     if (response.status === 401 && response.headers.get('X-Auth-Error')) {
       expireAuthSession();
     }

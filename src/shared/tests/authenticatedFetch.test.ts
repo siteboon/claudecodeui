@@ -39,13 +39,14 @@ const expiredToken = () => {
 
 let lastInit: RequestInit | undefined;
 
-// The status matters as much as the headers: a 304 replays the headers of the
-// cached response, so the same header set has to mean different things
-// depending on whether the server actually rejected the request.
+// The status matters as much as the headers: a response served from cache
+// replays the headers it was stored with while surfacing its stored status, so
+// the same header set has to mean different things depending on whether the
+// server actually rejected *this* request.
 const respondWith = (headers: Record<string, string> = {}, status = 200) => {
   const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
     lastInit = init;
-    return new Response(status === 304 ? null : '{}', { status, headers });
+    return new Response('{}', { status, headers });
   });
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
@@ -181,9 +182,10 @@ test('an auth error replayed by a cached response does not end the session', asy
     expiries += 1;
   };
   window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, onExpired);
-  // A 304 carries the headers the response had when it was cached. Treating
-  // that stale X-Auth-Error as a rejection signed the user out on every start.
-  respondWith({ 'X-Auth-Error': 'invalid' }, 304);
+  // A cached response replays the headers it was stored with, under its stored
+  // status — a revalidated 200, not the 304 from the wire. Treating that stale
+  // X-Auth-Error as a rejection signed the user out on every start.
+  respondWith({ 'X-Auth-Error': 'invalid' }, 200);
 
   await (await loadFetch(false))('/api/projects');
 
@@ -198,11 +200,21 @@ test('an expired refreshed token does not replace the stored one', async () => {
   // Same replay problem on the refresh path, and the damaging one: a cached
   // X-Refreshed-Token from an old session overwrote a seconds-old sign-in,
   // which the next read then discarded as expired.
-  respondWith({ 'X-Refreshed-Token': expiredToken() }, 304);
+  respondWith({ 'X-Refreshed-Token': expiredToken() });
 
   await (await loadFetch(false))('/api/projects');
 
   assert.equal(localStorage.getItem('auth-token'), live);
+});
+
+test('requests bypass the HTTP cache', async () => {
+  localStorage.setItem('auth-token', liveToken());
+  respondWith();
+
+  await (await loadFetch(false))('/api/projects');
+
+  // Without this, a cached response replays another session's auth headers.
+  assert.equal(lastInit?.cache, 'no-store');
 });
 
 test('an ordinary response leaves the stored token alone', async () => {
