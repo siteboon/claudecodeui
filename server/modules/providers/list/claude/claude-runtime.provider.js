@@ -54,7 +54,41 @@ const abortedSessionIds = new Set();
 // entry, the abort flag, and all client-facing events belong to the new run.
 const supersededInstances = new WeakSet();
 
-const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS, 10) || 55000;
+// Longest delay a Node timer honours. A longer one overflows and fires after
+// about 1 ms (with a TimeoutOverflowWarning), the opposite of what was asked.
+const MAX_TIMER_DELAY_MS = 2147483647;
+
+/**
+ * Reads a millisecond setting from the environment.
+ *
+ * An explicit `0` is kept (for the approval timeout it means "wait
+ * indefinitely"); `|| fallback` used to turn it back into the default. Values
+ * above the longest timer delay are clamped to it instead of overflowing.
+ * Unset, empty, negative or non-numeric values use the fallback.
+ *
+ * Exported for the runtime tests.
+ * @param {string|undefined} raw - Raw environment value
+ * @param {number} fallback - Value used when `raw` is not a usable number
+ * @returns {number} Whole milliseconds in [0, MAX_TIMER_DELAY_MS]
+ */
+export function readMillisecondsEnv(raw, fallback) {
+  if (raw === undefined || raw === null || String(raw).trim() === '') {
+    return fallback;
+  }
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0) {
+    console.warn(`[Claude SDK] Ignoring invalid millisecond setting "${raw}"; using ${fallback} ms`);
+    return fallback;
+  }
+  if (value > MAX_TIMER_DELAY_MS) {
+    console.warn(`[Claude SDK] ${raw} ms exceeds the longest timer delay; using ${MAX_TIMER_DELAY_MS} ms`);
+    return MAX_TIMER_DELAY_MS;
+  }
+  return Math.floor(value);
+}
+
+// 0 waits for the owner indefinitely, like interaction-required tools do.
+const TOOL_APPROVAL_TIMEOUT_MS = readMillisecondsEnv(process.env.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS, 55000);
 
 // How long background work is allowed to keep running after a turn ends. This drives
 // two halves of the same behaviour:
