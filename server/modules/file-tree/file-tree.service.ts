@@ -5,6 +5,7 @@ import ignore from 'ignore';
 import type {
   FileTreeDirectoryEntry,
   FileTreeNode,
+  FileTreeReadHandle,
   FileTreeServiceDependencies,
   FileTreeServices,
   FileTreeUploadedFile,
@@ -346,15 +347,78 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
    * writing endpoints keep using `resolvePathInsideProject` alone, so nothing
    * outside the project can be changed.
    */
-  async function resolveReadablePath(projectRoot: string, targetPath: string): Promise<string> {
+  async function resolveReadablePath(
+    projectRoot: string,
+    targetPath: string,
+  ): Promise<{ path: string; underReadOnlyRoot: boolean }> {
     if (path.isAbsolute(targetPath)) {
       const readOnlyPath = await dependencies.workspace.resolveReadOnlyRootPath(targetPath);
       if (readOnlyPath) {
-        return readOnlyPath;
+        return { path: readOnlyPath, underReadOnlyRoot: true };
       }
     }
 
-    return resolvePathInsideProject(projectRoot, targetPath);
+    return { path: resolvePathInsideProject(projectRoot, targetPath), underReadOnlyRoot: false };
+  }
+
+  /**
+   * Opens a file reached through a read-only root and confirms, on the opened
+   * descriptor, that it is still a regular file under a root.
+   *
+   * The root check in `resolveReadablePath` resolves symlinks and then
+   * compares paths, but the read used to happen later, by path. A shared root
+   * such as `/tmp` lets another local user swap a path component for a symlink
+   * in between and have the server read a file outside every root. Here the
+   * file is opened first and every read uses that descriptor, so the check has
+   * to hold for the file actually opened:
+   *
+   * - where the OS reports the descriptor's path (Linux), that path must be
+   *   under a root and already canonical;
+   * - elsewhere, the opened file must be the same device and inode as the file
+   *   the requested path resolves to under a root after the open.
+   *
+   * Anything that fails the check is reported like any other path outside the
+   * project. FIFOs, sockets and devices are refused before anything is read.
+   */
+  async function openUnderReadOnlyRoot(requestedPath: string, resolvedPath: string): Promise<FileTreeReadHandle> {
+    let handle: FileTreeReadHandle;
+    try {
+      handle = await fileSystem.openForReading(resolvedPath);
+    } catch (error) {
+      mapFileSystemError(error, {
+        ENOENT: { message: 'File not found', statusCode: 404 },
+        EACCES: { message: 'Permission denied', statusCode: 403 },
+        EISDIR: { message: 'Path is a directory, not a file', statusCode: 400 },
+      });
+    }
+
+    try {
+      const opened = await handle.stat();
+      if (opened.isDirectory()) {
+        throw createFileTreeError('Path is a directory, not a file', 400, 'EISDIR');
+      }
+      if (!opened.isFile()) {
+        throw createFileTreeError('Path is not a regular file', 400, 'NOT_A_FILE');
+      }
+
+      const openedPath = await handle.openedPath();
+      let stillUnderRoot: boolean;
+      if (openedPath !== null) {
+        stillUnderRoot = (await dependencies.workspace.resolveReadOnlyRootPath(openedPath)) === openedPath;
+      } else {
+        const currentPath = await dependencies.workspace.resolveReadOnlyRootPath(requestedPath);
+        const current = currentPath ? await fileSystem.stat(currentPath).catch(() => null) : null;
+        stillUnderRoot = Boolean(current && current.dev === opened.dev && current.ino === opened.ino);
+      }
+      if (!stillUnderRoot) {
+        throw createFileTreeError('Path must be under project root', 403, 'PATH_OUTSIDE_PROJECT');
+      }
+
+      return handle;
+    } catch (error) {
+      await handle.close().catch(() => undefined);
+      throw error;
+    }
   }
 
   async function cleanupTemporaryFiles(files: FileTreeUploadedFile[]): Promise<void> {
@@ -450,7 +514,16 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
 
     async readTextFile(projectId, filePath) {
       const projectRoot = await resolveProjectRoot(projectId);
-      const resolvedPath = await resolveReadablePath(projectRoot, filePath);
+      const readable = await resolveReadablePath(projectRoot, filePath);
+      const resolvedPath = readable.path;
+      if (readable.underReadOnlyRoot) {
+        const handle = await openUnderReadOnlyRoot(filePath, resolvedPath);
+        try {
+          return { content: await handle.readTextFile(), path: resolvedPath };
+        } finally {
+          await handle.close().catch(() => undefined);
+        }
+      }
       try {
         const content = await fileSystem.readTextFile(resolvedPath);
         return { content, path: resolvedPath };
@@ -465,7 +538,16 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
 
     async openFile(projectId, filePath) {
       const projectRoot = await resolveProjectRoot(projectId);
-      const resolvedPath = await resolveReadablePath(projectRoot, filePath);
+      const readable = await resolveReadablePath(projectRoot, filePath);
+      const resolvedPath = readable.path;
+      if (readable.underReadOnlyRoot) {
+        const handle = await openUnderReadOnlyRoot(filePath, resolvedPath);
+        return {
+          contentType: dependencies.resolveMimeType(resolvedPath),
+          // The stream owns the descriptor and closes it when it ends.
+          stream: handle.createReadStream(),
+        };
+      }
       try {
         await fileSystem.access(resolvedPath);
       } catch {

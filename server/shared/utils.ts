@@ -169,6 +169,39 @@ export const FORBIDDEN_WORKSPACE_PATHS = [
 ];
 
 /**
+ * Parses `CLOUDCLI_READ_ROOTS`: extra directories, separated like `PATH`
+ * (`:` on POSIX, `;` on Windows), that join the built-in read-only roots below.
+ *
+ * Use it for directories outside every project that agents reference and the
+ * owner wants to open from a transcript, such as a shared exports directory.
+ * Entries get exactly the built-in roots' treatment: browsable and readable,
+ * never writable. Only absolute paths are accepted; relative or empty entries
+ * are ignored, with a warning for the relative ones, because a relative root
+ * would depend on the server's working directory.
+ *
+ * Exported for its tests; the server reads it once, when this module loads.
+ */
+export function readConfiguredReadRoots(rawValue: string | undefined): string[] {
+  if (!rawValue) {
+    return [];
+  }
+
+  const roots: string[] = [];
+  for (const entry of rawValue.split(path.delimiter)) {
+    const candidate = entry.trim();
+    if (!candidate) {
+      continue;
+    }
+    if (!path.isAbsolute(candidate)) {
+      console.warn(`[file-tree] Ignoring CLOUDCLI_READ_ROOTS entry "${candidate}": it is not an absolute path`);
+      continue;
+    }
+    roots.push(path.resolve(candidate));
+  }
+  return roots;
+}
+
+/**
  * Roots the file browser and viewer may read from even though they are outside
  * every project.
  *
@@ -185,6 +218,9 @@ export const FORBIDDEN_WORKSPACE_PATHS = [
  * transcripts, which the sessions API already serves; the directory is located
  * the same way the session watcher and synchronizer locate it.
  *
+ * `CLOUDCLI_READ_ROOTS` adds operator-chosen directories to this list (see
+ * `readConfiguredReadRoots`).
+ *
  * Being a read-only root grants reads only: the file-tree write paths resolve
  * against the project root alone, so nothing under these can be changed
  * through the file API. Whether one may become a workspace is decided
@@ -196,6 +232,7 @@ const READ_ONLY_ROOTS = [...new Set([
   '/tmp',
   os.tmpdir(),
   path.join(os.homedir(), '.claude', 'projects'),
+  ...readConfiguredReadRoots(process.env.CLOUDCLI_READ_ROOTS),
 ])];
 
 /**
