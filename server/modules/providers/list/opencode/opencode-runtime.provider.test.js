@@ -22,9 +22,17 @@ const runtimeContext = {
 const findEnvKey = (name) =>
   Object.keys(process.env).find((key) => key.toLowerCase() === name.toLowerCase()) || name;
 
-async function createFakeOpenCodeExecutable(binDir) {
+// `version` makes the fake answer `opencode --version`; without it the fake
+// prints no version, which the runtime treats as OpenCode 1.x.
+async function createFakeOpenCodeExecutable(binDir, version = null) {
   const scriptPath = path.join(binDir, 'opencode.js');
   await writeFile(scriptPath, `
+const fakeVersion = ${JSON.stringify(version)};
+if (fakeVersion && process.argv.includes('--version')) {
+  console.log(fakeVersion);
+  process.exit(0);
+}
+
 const capturePath = process.env.OPENCODE_ARGS_CAPTURE;
 if (capturePath) {
   require('node:fs').writeFileSync(capturePath, JSON.stringify({
@@ -131,6 +139,76 @@ test('spawnOpenCode emits session_created before normalized live messages for ne
     const attachmentPrompt = attachmentOnlyCapture.args[attachmentOnlyCapture.args.length - 1];
     assert.match(attachmentPrompt, /<files_input>/);
     assert.match(attachmentPrompt, /brief\.pdf/);
+  } finally {
+    if (previousPath === undefined) {
+      delete process.env[pathKey];
+    } else {
+      process.env[pathKey] = previousPath;
+    }
+
+    if (previousPathExt === undefined) {
+      delete process.env[pathExtKey];
+    } else {
+      process.env[pathExtKey] = previousPathExt;
+    }
+
+    if (previousArgsCapture === undefined) {
+      delete process.env.OPENCODE_ARGS_CAPTURE;
+    } else {
+      process.env.OPENCODE_ARGS_CAPTURE = previousArgsCapture;
+    }
+
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('spawnOpenCode omits --dir and --variant for OpenCode 2.x', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'opencode-cli-v2-'));
+  const argsCapturePath = path.join(tempRoot, 'opencode-args.json');
+  const pathKey = findEnvKey('PATH');
+  const pathExtKey = findEnvKey('PATHEXT');
+  const previousPath = process.env[pathKey];
+  const previousPathExt = process.env[pathExtKey];
+  const previousArgsCapture = process.env.OPENCODE_ARGS_CAPTURE;
+  const writer = {
+    userId: null,
+    sessionId: null,
+    send() {},
+    setSessionId(sessionId) {
+      this.sessionId = sessionId;
+    },
+  };
+  const v2Context = {
+    ...runtimeContext,
+    getProviderModels: async () => ({
+      OPTIONS: [{ value: 'opencode/big-pickle', effort: { values: [{ value: 'high' }] } }],
+      DEFAULT: 'opencode/big-pickle',
+    }),
+  };
+
+  try {
+    await createFakeOpenCodeExecutable(tempRoot, 'opencode v2.0.18');
+    process.env[pathKey] = `${tempRoot}${path.delimiter}${previousPath || ''}`;
+    process.env.OPENCODE_ARGS_CAPTURE = argsCapturePath;
+    if (process.platform === 'win32') {
+      process.env[pathExtKey] = previousPathExt?.toUpperCase().includes('.CMD')
+        ? previousPathExt
+        : `.COM;.EXE;.BAT;.CMD${previousPathExt ? `;${previousPathExt}` : ''}`;
+    }
+
+    await opencodeRuntime.run(
+      'Hi',
+      { cwd: tempRoot, model: 'opencode/big-pickle', effort: 'high' },
+      writer,
+      v2Context,
+    );
+
+    const { args } = JSON.parse(await readFile(argsCapturePath, 'utf8'));
+    assert.deepEqual(args.slice(0, 3), ['run', '--format', 'json']);
+    assert.equal(args.includes('--dir'), false);
+    assert.equal(args.includes('--variant'), false);
+    assert.equal(args[args.indexOf('--model') + 1], 'opencode/big-pickle#high');
+    assert.equal(args[args.length - 1], 'Hi');
   } finally {
     if (previousPath === undefined) {
       delete process.env[pathKey];

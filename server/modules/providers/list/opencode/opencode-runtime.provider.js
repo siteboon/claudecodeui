@@ -9,13 +9,47 @@ import {
   normalizeAttachmentDescriptors
 } from '@/shared/image-attachments.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
-import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell, getOpenCodeDatabasePath, stripAnsiSequences } from '@/shared/utils.js';
+import {
+  createCompleteMessage,
+  createNormalizedMessage,
+  flattenPromptForWindowsShell,
+  getOpenCodeDatabasePath,
+  resolveOpenCodeSessionTable,
+  stripAnsiSequences
+} from '@/shared/utils.js';
 
 // cross-spawn resolves .cmd shims/PATHEXT on Windows and delegates to
 // child_process.spawn everywhere else.
 const spawnFunction = crossSpawn;
 
 const activeOpenCodeProcesses = new Map();
+
+// Major version of the `opencode` binary, cached per PATH value because the
+// binary that PATH resolves to is what every run launches.
+const openCodeMajorVersionByPath = new Map();
+
+/**
+ * Returns the major version of the `opencode` CLI on PATH, or 0 when it cannot
+ * be determined. OpenCode 2.x changed the `run` flags (see spawnOpenCode).
+ */
+function getOpenCodeMajorVersion() {
+  const pathValue = process.env.PATH ?? process.env.Path ?? '';
+  if (openCodeMajorVersionByPath.has(pathValue)) {
+    return openCodeMajorVersionByPath.get(pathValue);
+  }
+
+  let majorVersion = 0;
+  try {
+    const result = crossSpawn.sync('opencode', ['--version'], { encoding: 'utf8', timeout: 5000 });
+    const match = /^\D*(\d+)\.\d+/.exec(String(result.stdout || '').trim());
+    majorVersion = match ? Number(match[1]) : 0;
+  } catch {
+    majorVersion = 0;
+  }
+
+  openCodeMajorVersionByPath.set(pathValue, majorVersion);
+  return majorVersion;
+}
 
 /**
  * Maps the UI permission mode onto OpenCode's non-interactive controls.
@@ -72,7 +106,8 @@ function readOpenCodeTokenUsage(sessionId) {
   let db = null;
   try {
     db = new Database(dbPath, { readonly: true, fileMustExist: true });
-    const columns = db.prepare('PRAGMA table_info(session)').all();
+    const sessionTable = resolveOpenCodeSessionTable(db);
+    const columns = db.prepare(`PRAGMA table_info(${sessionTable})`).all();
     const columnNames = new Set(columns.map((column) => column.name));
     const requiredColumns = ['tokens_input', 'tokens_output', 'tokens_reasoning', 'tokens_cache_read', 'tokens_cache_write'];
     if (!requiredColumns.every((column) => columnNames.has(column))) {
@@ -86,7 +121,7 @@ function readOpenCodeTokenUsage(sessionId) {
         tokens_reasoning AS reasoningTokens,
         tokens_cache_read AS cacheReadTokens,
         tokens_cache_write AS cacheWriteTokens
-      FROM session
+      FROM ${sessionTable}
       WHERE id = ?
     `).get(sessionId);
 
@@ -257,17 +292,23 @@ async function spawnOpenCode(command, options = {}, ws, context) {
 
       const resolvedEffort = resolveOpenCodeEffort(resolvedModel, effort, effortModels);
       const args = ['run', '--format', 'json'];
-      // OpenCode's `run` command owns workspace selection through `--dir`.
-      // Relying on the child-process cwd alone is not enough on Linux, where
-      // the CLI can still resolve the session under the server install dir.
-      args.push('--dir', workingDir);
+      // OpenCode 2.x removed `--dir` and `--variant` from `run` (both are rejected
+      // as unrecognized flags): the workspace comes from the child-process cwd,
+      // and the variant is appended to the model as `provider/model#variant`.
+      const isOpenCodeV2 = getOpenCodeMajorVersion() >= 2;
+      if (!isOpenCodeV2) {
+        // OpenCode 1.x's `run` command owns workspace selection through `--dir`.
+        // Relying on the child-process cwd alone is not enough on Linux, where
+        // the CLI can still resolve the session under the server install dir.
+        args.push('--dir', workingDir);
+      }
       if (providerSessionId) {
         args.push('--session', providerSessionId);
       }
       if (resolvedModel) {
-        args.push('--model', resolvedModel);
+        args.push('--model', isOpenCodeV2 && resolvedEffort ? `${resolvedModel}#${resolvedEffort}` : resolvedModel);
       }
-      if (resolvedEffort) {
+      if (resolvedEffort && !isOpenCodeV2) {
         args.push('--variant', resolvedEffort);
       }
       const permissionOptions = resolveOpenCodePermissionOptions(permissionMode);
