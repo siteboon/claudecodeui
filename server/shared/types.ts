@@ -235,7 +235,8 @@ export type GatewayEventKind =
   | 'chat_subscribed'
   | 'session_upserted'
   | 'loading_progress'
-  | 'protocol_error';
+  | 'protocol_error'
+  | 'chat_steer_result';
 
 /**
  * Complete set of `kind` values emitted to websocket clients.
@@ -369,6 +370,8 @@ export type NormalizedMessage = {
   text?: string;
   tokens?: number;
   canInterrupt?: boolean;
+  /** Opaque identity of an accepted steerable turn, never a provider thread id. */
+  activeTurnToken?: string | null;
   requestId?: string;
   input?: unknown;
   context?: unknown;
@@ -665,12 +668,15 @@ export type ProviderRunFunction = (
  * must use it — never the app-facing session id they were called with — when
  * matching transcript rows on disk, because app-created sessions use an
  * app-allocated id that the provider has never seen.
+ * `codexRuntimeMode` carries the caller's selected Codex runtime so history
+ * uses the same source as chat; omission preserves the server default.
  */
 export type FetchHistoryOptions = {
   projectPath?: string;
   limit?: number | null;
   offset?: number;
   providerSessionId?: string;
+  codexRuntimeMode?: 'app-server' | 'sdk';
 };
 
 /**
@@ -1602,4 +1608,38 @@ export type CliApplication = {
  */
 export type SandboxCommandService = {
   execute(argumentsList: string[]): Promise<number>;
+};
+
+//----------------- PERSISTED CHAT QUEUE ------------
+
+/** One durable message; sequence orders a session, revision guards edits, and status controls consumption. */
+export type QueuedMessage = {
+  id: string;
+  sequence: number;
+  userId: number;
+  sessionId: string;
+  content: string;
+  options: AnyRecord;
+  attachments: import('./image-attachments.js').ChatAttachmentDescriptor[];
+  revision: number;
+  status: 'queued' | 'dispatching' | 'steering' | 'consumed' | 'failed' | 'unknown' | 'cancelled';
+  error: string | null;
+};
+
+/** Input appended to an already running turn; its token identifies the turn observed by the client. */
+export type ProviderSteerInput = {
+  sessionId: string;
+  activeTurnToken: string;
+  content: string;
+  attachments: import('./image-attachments.js').ChatAttachmentDescriptor[];
+  messageId: string;
+};
+
+/** Correlated, persisted outcome of consuming a queue item through turn/steer. Unknown outcomes must not be retried automatically. */
+export type QueueSteerResult = {
+  requestId: string;
+  messageId: string;
+  sessionId: string;
+  status: 'pending' | 'accepted' | 'rejected' | 'unknown';
+  error: string | null;
 };

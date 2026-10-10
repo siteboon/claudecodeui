@@ -1,3 +1,25 @@
+import {
+  notifyRunFailed as notifyRunFailedLegacy,
+  notifyRunStopped as notifyRunStoppedLegacy,
+} from './services/notification-orchestrator.service.js';
+
+type RunNotificationContext = {
+  userId: string | number | null;
+  provider: string;
+  sessionId?: string | null;
+  sessionName?: string | null;
+};
+
+/** Used by provider runtimes to report failures with nullable app-session metadata. */
+export const notifyRunFailed = notifyRunFailedLegacy as (
+  input: RunNotificationContext & { error: unknown },
+) => void;
+
+/** Used by provider runtimes to report completion with nullable app-session metadata. */
+export const notifyRunStopped = notifyRunStoppedLegacy as (
+  input: RunNotificationContext & { stopReason?: string },
+) => void;
+
 export {
   // Used by notification tests and delivery workflows to create channel payloads.
   buildNotificationPayload,
@@ -5,10 +27,6 @@ export {
   createNotificationEvent,
   // Used by provider runtimes and Settings to deliver events through enabled channels.
   notifyUserIfEnabled,
-  // Used by provider runtimes to report failed agent runs.
-  notifyRunFailed,
-  // Used by provider runtimes to report stopped or completed agent runs.
-  notifyRunStopped,
   // Used by provider runtimes to report background work that finished after its turn ended.
   notifyBackgroundWorkCompleted,
 } from '@/modules/notifications/services/notification-orchestrator.service.js';

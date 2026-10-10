@@ -70,7 +70,7 @@ test('a draft is readable synchronously and reaches the server after the debounc
 
   await vi.advanceTimersByTimeAsync(1_500);
   assert.deepEqual(savedDrafts, [
-    { scope: 'session-a', text: 'half a thought', queuedMessage: null },
+    { scope: 'session-a', text: 'half a thought' },
   ]);
 });
 
@@ -157,7 +157,7 @@ test('a failed hydrate keeps the mirrored draft rather than blanking the compose
   assert.equal(store.readDraftText('session-a'), 'local work');
 });
 
-test('a queued message round-trips alongside the draft text', async () => {
+test('legacy local queue mirrors cannot be written back through text autosave', async () => {
   const store = await loadStore();
 
   store.writeDraftText('session-a', 'still editing');
@@ -172,7 +172,6 @@ test('a queued message round-trips alongside the draft text', async () => {
   assert.deepEqual(savedDrafts, [{
     scope: 'session-a',
     text: 'still editing',
-    queuedMessage: { content: 'send this next', attachments: [] },
   }]);
 });
 

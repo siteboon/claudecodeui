@@ -131,7 +131,6 @@ function flushServerWrites(): void {
 
       void api.user.saveDraft(scope, {
         text: draft.text,
-        queuedMessage: draft.queuedMessage,
       }).catch((error: unknown) => {
         console.error('Failed to save chat draft:', error);
       });

@@ -10,6 +10,8 @@ import express, { type NextFunction, type Request, type Response } from 'express
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import providerRouter from '@/modules/providers/provider.routes.js';
+import { providerRuntimeService } from '@/modules/providers/services/provider-runtime.service.js';
+import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import type { IProvider } from '@/shared/interfaces.js';
 import type { BackgroundTaskSummary, WorkflowAgentActivity } from '@/shared/types.js';
@@ -79,6 +81,59 @@ test('session creation route names a CloudCLI session from the initial message',
       'abcd efg hij klm',
     );
   });
+});
+
+test('Codex app-server restart route delegates to the provider runtime service', async () => {
+  const originalRestart = providerRuntimeService.restart;
+  let restartedProvider: string | null = null;
+  providerRuntimeService.restart = async (provider) => {
+    restartedProvider = provider;
+    return { provider, restarted: true };
+  };
+
+  try {
+    await withProviderServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/providers/codex/app-server/restart`, {
+        method: 'POST',
+      });
+      const payload = await response.json() as {
+        data: { provider: string; restarted: boolean };
+      };
+
+      assert.equal(response.status, 200);
+      assert.equal(restartedProvider, 'codex');
+      assert.deepEqual(payload.data, { provider: 'codex', restarted: true });
+    });
+  } finally {
+    providerRuntimeService.restart = originalRestart;
+  }
+});
+
+test('history route validates and forwards the selected Codex runtime', async () => {
+  const originalFetchHistory = sessionsService.fetchHistory;
+  const calls: unknown[] = [];
+  sessionsService.fetchHistory = async (sessionId, options) => {
+    calls.push({ sessionId, ...options });
+    return { messages: [], total: 0, hasMore: false, offset: 0, limit: null };
+  };
+  try {
+    await withProviderServer(async (baseUrl) => {
+      for (const mode of ['sdk', 'app-server']) {
+        const response = await fetch(`${baseUrl}/api/providers/sessions/runtime-history/messages?codexRuntimeMode=${mode}&limit=5&offset=2`);
+        assert.equal(response.status, 200);
+      }
+      assert.deepEqual(calls, ['sdk', 'app-server'].map((codexRuntimeMode) => ({
+        sessionId: 'runtime-history', limit: 5, offset: 2, codexRuntimeMode,
+      })));
+      for (const query of ['codexRuntimeMode=sdks', 'codexRuntimeMode=sdk&codexRuntimeMode=app-server']) {
+        const response = await fetch(`${baseUrl}/api/providers/sessions/runtime-history/messages?${query}`);
+        assert.equal(response.status, 400);
+      }
+      assert.equal(calls.length, 2);
+    });
+  } finally {
+    sessionsService.fetchHistory = originalFetchHistory;
+  }
 });
 
 test('conversation search streams title matches before transcript results', async () => {
