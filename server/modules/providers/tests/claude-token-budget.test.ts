@@ -93,6 +93,37 @@ test('the cumulative reader stays available for SDK builds with no assistant usa
   assert.equal(fromModelUsage.used, 1_200);
 });
 
+test('the modelUsage fallback sums every model the turn billed', () => {
+  // A turn that ran a subagent on another model reports one entry per model.
+  // Reading only the first key under-counted the turn and depended on key order.
+  const budget = extractCumulativeTokenBudget({
+    type: 'result',
+    modelUsage: {
+      'claude-haiku-5': { inputTokens: 300, outputTokens: 40, cacheReadInputTokens: 1_000, cacheCreationInputTokens: 0 },
+      'claude-sonnet-5': { inputTokens: 900, outputTokens: 160, cacheReadInputTokens: 20_000, cacheCreationInputTokens: 2_000 },
+    },
+  });
+
+  assert.ok(budget);
+  assert.equal(budget.inputTokens, 300 + 1_000 + 900 + 20_000 + 2_000);
+  assert.equal(budget.outputTokens, 40 + 160);
+  assert.equal(budget.cacheReadTokens, 21_000);
+  assert.equal(budget.cacheCreationTokens, 2_000);
+  assert.equal(budget.used, 24_400);
+});
+
+test('the modelUsage fallback skips malformed entries and returns null when none is usable', () => {
+  const budget = extractCumulativeTokenBudget({
+    type: 'result',
+    modelUsage: { broken: null, 'claude-sonnet-5': { inputTokens: 10, outputTokens: 5 } },
+  });
+  assert.ok(budget);
+  assert.equal(budget.used, 15);
+
+  assert.equal(extractCumulativeTokenBudget({ type: 'result', modelUsage: { broken: null } }), null);
+  assert.equal(extractCumulativeTokenBudget({ type: 'result', modelUsage: {} }), null);
+});
+
 test('the cumulative reader ignores anything that is not a result', () => {
   assert.equal(
     extractCumulativeTokenBudget({
