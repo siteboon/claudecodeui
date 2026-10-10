@@ -565,29 +565,26 @@ function extractCumulativeTokenBudget(sdkMessage) {
     return null;
   }
 
-  // Fallback for older SDK messages with only modelUsage
-  const modelKey = Object.keys(sdkMessage.modelUsage)[0];
-  const modelData = sdkMessage.modelUsage[modelKey];
-
-  if (!modelData || typeof modelData !== 'object') {
-    return null;
+  // Fallback for SDK messages with only modelUsage. A turn can bill several
+  // models (a subagent or a background task on a different model), each under
+  // its own key, so every entry is summed; reading only the first key dropped
+  // the rest and depended on object key order.
+  const totals = { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 };
+  let entries = 0;
+  for (const modelData of Object.values(sdkMessage.modelUsage)) {
+    if (!modelData || typeof modelData !== 'object') {
+      continue;
+    }
+    entries += 1;
+    totals.inputTokens += readNumber(modelData.cumulativeInputTokens ?? modelData.inputTokens);
+    totals.outputTokens += readNumber(modelData.cumulativeOutputTokens ?? modelData.outputTokens);
+    totals.cacheReadInputTokens += readNumber(modelData.cacheReadInputTokens);
+    totals.cacheCreationInputTokens += readNumber(modelData.cacheCreationInputTokens);
   }
 
-  const inputTokens = readNumber(modelData.cumulativeInputTokens ?? modelData.inputTokens);
-  const outputTokens = readNumber(modelData.cumulativeOutputTokens ?? modelData.outputTokens);
-  const totalUsed = inputTokens + outputTokens;
-  const contextWindow = parseInt(process.env.CONTEXT_WINDOW, 10) || 160000;
-
-  return {
-    used: totalUsed,
-    total: contextWindow,
-    inputTokens,
-    outputTokens,
-    breakdown: {
-      input: inputTokens,
-      output: outputTokens,
-    },
-  };
+  // Same shape and accounting as the `usage` branch above, cache reads and
+  // writes included.
+  return entries > 0 ? buildTokenBudget(totals) : null;
 }
 
 // Tool calls that leave work running past the end of a turn. Bash and Agent only
