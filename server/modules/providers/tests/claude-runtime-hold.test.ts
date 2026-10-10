@@ -222,103 +222,51 @@ test('an agent settled before the result leaves no outstanding work', async () =
   });
 });
 
-test('a new turn stops the tasks the held process still has going before letting it go', async () => {
-  // Two runs on one session, each with its own scripted CLI: the first is
-  // held for a background agent, the second is the user's next message.
-  const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-runtime-hold-'));
-  const first = createScriptedQuery();
-  const second = createScriptedQuery();
-  const sent: NormalizedMessage[] = [];
-  const writer = { send: (message: NormalizedMessage) => { sent.push(message); }, userId: null };
-  const sessions = new ClaudeSessionsProvider({ getLiveRunStartTime: () => null });
-  const context: Omit<ProviderRuntimeContext, 'createQuery'> = {
-    resolveProviderSessionId: () => null,
-    resolveResumeModel: async () => undefined,
-    getProviderModels: async () => CLAUDE_PREDEFINED_MODELS as never,
-    normalizeMessage: (raw, sessionId) => sessions.normalizeMessage(raw, sessionId),
-    isProviderInstalled: async () => true,
-  };
+test('a new turn over a held background agent joins the live process instead of stopping the agent', async () => {
+  // The scenario behind stopping held tasks on a new turn: a backgrounded
+  // agent followed by "Continue". Feeding the turn into the same process
+  // leaves exactly one CLI writing the transcript, so the agent can keep going.
+  await withRun(async ({ script, sent, submit }) => {
+    script.emit(init());
+    script.emit(toolUse('toolu_agent', 'Agent', { prompt: 'sleep 90', subagent_type: 'general-purpose', run_in_background: true }));
+    script.emit(taskStarted('a1', 'toolu_agent', 'local_agent'));
+    script.emit(ack('toolu_agent', 'Async agent launched successfully.', { status: 'async_launched', agentId: 'a1' }));
+    script.emit(result(script.prompts[0].uuid));
+    await until(() => sent.some((message) => message.kind === 'complete'));
 
-  try {
-    const firstRun = queryClaudeSDK('start an agent', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: first.createQuery });
-    await settle();
-    first.script.emit(init());
-    first.script.emit(toolUse('toolu_agent', 'Agent', { prompt: 'sleep 90', subagent_type: 'general-purpose', run_in_background: true }));
-    first.script.emit(taskStarted('a1', 'toolu_agent', 'local_agent'));
-    first.script.emit(ack('toolu_agent', 'Async agent launched successfully.', { status: 'async_launched', agentId: 'a1' }));
-    first.script.emit(result());
-    await waitFor(() => sent.some((message) => message.kind === 'complete'));
-    assert.equal(first.script.released(), false, 'the first process is held for its agent');
+    const next: NormalizedMessage[] = [];
+    const done = submit('Continue', next);
+    await until(() => script.prompts.length === 2);
+    assert.equal(script.creations, 1, 'no second process for the session');
+    assert.deepEqual(script.stopped, [], 'the agent is not stopped');
+    assert.equal(script.released(), false, 'stdin stays open');
+    assert.deepEqual(listClaudeSDKBackgroundWork()[0].tasks.map((task) => task.taskId), ['a1']);
 
-    // Closing stdin alone would leave the CLI waiting for the agent, so the
-    // superseded process would live on next to the new one for as long as
-    // the agent runs. The stop has to reach it before stdin ends, because the
-    // SDK drops control requests written to an ended stdin.
-    const secondRun = queryClaudeSDK('Continue', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: second.createQuery });
-    await settle();
-    assert.deepEqual(first.script.stopped, ['a1'], 'the held process is told to stop its agent');
-    assert.equal(first.script.released(), true, 'and is then let go');
-    assert.deepEqual(second.script.stopped, [], 'the new process is untouched');
-
-    first.script.emit(taskNotification('a1', 'toolu_agent', 'stopped'));
-    first.script.end();
-    await firstRun;
-    second.script.emit(init());
-    second.script.emit(result());
-    second.script.end();
-    await secondRun;
-    assert.deepEqual(listClaudeSDKBackgroundWork(), []);
-  } finally {
-    await rm(cwd, { recursive: true, force: true });
-  }
+    script.emit(result(script.prompts[1].uuid));
+    await done;
+    assert.equal(next.filter((message) => message.kind === 'complete').length, 1);
+  });
 });
 
-test('a held process is still let go when stopping its tasks throws', async () => {
-  // Stopping is best effort; a stop that throws on the spot must not keep the
-  // held process alive or take the new turn down with it.
-  const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-runtime-hold-'));
-  const first = createScriptedQuery();
-  const second = createScriptedQuery();
-  const sent: NormalizedMessage[] = [];
-  const writer = { send: (message: NormalizedMessage) => { sent.push(message); }, userId: null };
-  const sessions = new ClaudeSessionsProvider({ getLiveRunStartTime: () => null });
-  const context: Omit<ProviderRuntimeContext, 'createQuery'> = {
-    resolveProviderSessionId: () => null,
-    resolveResumeModel: async () => undefined,
-    getProviderModels: async () => CLAUDE_PREDEFINED_MODELS as never,
-    normalizeMessage: (raw, sessionId) => sessions.normalizeMessage(raw, sessionId),
-    isProviderInstalled: async () => true,
-  };
-  const throwingStop: NonNullable<ProviderRuntimeContext['createQuery']> = (options) =>
-    Object.assign(first.createQuery(options), {
-      stopTask: () => { throw new Error('stop failed'); },
-    });
+test('a settings change that needs a new process lets the idle one go before starting it', async () => {
+  await withRun(async ({ script, sent, submit }) => {
+    script.emit(init());
+    script.emit(result(script.prompts[0].uuid));
+    await until(() => sent.some((message) => message.kind === 'complete'));
 
-  try {
-    const firstRun = queryClaudeSDK('start an agent', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: throwingStop });
-    await settle();
-    first.script.emit(init());
-    first.script.emit(toolUse('toolu_agent', 'Agent', { prompt: 'sleep 90', subagent_type: 'general-purpose', run_in_background: true }));
-    first.script.emit(taskStarted('a1', 'toolu_agent', 'local_agent'));
-    first.script.emit(ack('toolu_agent', 'Async agent launched successfully.', { status: 'async_launched', agentId: 'a1' }));
-    first.script.emit(result());
-    await waitFor(() => sent.some((message) => message.kind === 'complete'));
-    assert.equal(first.script.released(), false, 'the first process is held for its agent');
-
-    const secondRun = queryClaudeSDK('Continue', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: second.createQuery });
-    await settle();
-    assert.equal(first.script.released(), true, 'the held process is let go anyway');
-
-    first.script.end();
-    await firstRun;
-    second.script.emit(init());
-    second.script.emit(result());
-    second.script.end();
-    await secondRun;
-    assert.equal(second.script.released(), true, 'the new turn ran to completion');
-  } finally {
-    await rm(cwd, { recursive: true, force: true });
-  }
+    const next: NormalizedMessage[] = [];
+    const restarted = submit('continue', next, { effort: 'high' });
+    await until(() => script.released());
+    assert.equal(script.creations, 1, 'the old process is closed before a new one starts');
+    script.end();
+    await until(() => script.creations === 2);
+    assert.deepEqual(script.stopped, []);
+    script.emit(init());
+    script.emit(result(script.prompts[1].uuid));
+    await until(() => next.some((message) => message.kind === 'complete'));
+    script.end();
+    await restarted;
+  });
 });
 
 test('a turn whose tool emits no task events still holds on the static rule', async () => {
