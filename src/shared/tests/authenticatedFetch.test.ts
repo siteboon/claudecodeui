@@ -39,10 +39,13 @@ const expiredToken = () => {
 
 let lastInit: RequestInit | undefined;
 
-const respondWith = (headers: Record<string, string> = {}) => {
+// The status matters as much as the headers: a 304 replays the headers of the
+// cached response, so the same header set has to mean different things
+// depending on whether the server actually rejected the request.
+const respondWith = (headers: Record<string, string> = {}, status = 200) => {
   const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
     lastInit = init;
-    return new Response('{}', { status: 200, headers });
+    return new Response(status === 304 ? null : '{}', { status, headers });
   });
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
@@ -161,13 +164,45 @@ test('an auth error on the response ends the session', async () => {
     expiries += 1;
   };
   window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, onExpired);
-  respondWith({ 'X-Auth-Error': 'invalid' });
+  respondWith({ 'X-Auth-Error': 'invalid' }, 401);
 
   await (await loadFetch(false))('/api/projects');
 
   window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, onExpired);
   assert.equal(expiries, 1);
   assert.equal(localStorage.getItem('auth-token'), null);
+});
+
+test('an auth error replayed by a cached response does not end the session', async () => {
+  const live = liveToken();
+  localStorage.setItem('auth-token', live);
+  let expiries = 0;
+  const onExpired = () => {
+    expiries += 1;
+  };
+  window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, onExpired);
+  // A 304 carries the headers the response had when it was cached. Treating
+  // that stale X-Auth-Error as a rejection signed the user out on every start.
+  respondWith({ 'X-Auth-Error': 'invalid' }, 304);
+
+  await (await loadFetch(false))('/api/projects');
+
+  window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, onExpired);
+  assert.equal(expiries, 0);
+  assert.equal(localStorage.getItem('auth-token'), live);
+});
+
+test('an expired refreshed token does not replace the stored one', async () => {
+  const live = liveToken();
+  localStorage.setItem('auth-token', live);
+  // Same replay problem on the refresh path, and the damaging one: a cached
+  // X-Refreshed-Token from an old session overwrote a seconds-old sign-in,
+  // which the next read then discarded as expired.
+  respondWith({ 'X-Refreshed-Token': expiredToken() }, 304);
+
+  await (await loadFetch(false))('/api/projects');
+
+  assert.equal(localStorage.getItem('auth-token'), live);
 });
 
 test('an ordinary response leaves the stored token alone', async () => {

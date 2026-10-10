@@ -41,7 +41,11 @@ export const authenticatedFetch = (
     if (refreshedToken) {
       storeAuthToken(refreshedToken);
     }
-    if (response.headers.get('X-Auth-Error')) {
+    // Only a real rejection ends the session. The header alone is not enough:
+    // a 304 replays the headers of the cached response, so a single stale 401
+    // would discard a freshly issued token on every start — and keep doing it,
+    // because the next start reads the same cache entry again.
+    if (response.status === 401 && response.headers.get('X-Auth-Error')) {
       expireAuthSession();
     }
     return response;
