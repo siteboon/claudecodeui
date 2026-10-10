@@ -11,8 +11,8 @@ import express from 'express';
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import { chatRunRegistry, connectedClients } from '@/modules/websocket/index.js';
-import type { NormalizedMessage } from '@/shared/types.js';
-import { createNormalizedMessage } from '@/shared/utils.js';
+import type { LLMProvider, NormalizedMessage } from '@/shared/index.js';
+import { createNormalizedMessage } from '@/shared/index.js';
 
 import { createAgentRouter } from '../agent.routes.js';
 
@@ -76,6 +76,7 @@ function createDependencies(queryClaude: RunFunction): AgentDependencies {
     queryCursor: unexpected as RunFunction,
     queryCodex: unexpected as RunFunction,
     queryOpenCode: unexpected as RunFunction,
+    queryKiro: unexpected as RunFunction,
     GithubClient: class {} as unknown as AgentDependencies['GithubClient'],
   };
 }
@@ -104,7 +105,7 @@ const readEvents = async (response: Response): Promise<Array<Record<string, unkn
     .map((frame) => JSON.parse(frame.slice('data: '.length)) as Record<string, unknown>);
 
 /** A runtime that announces its native session id, streams one text event, and waits to be released before completing. */
-function createHeldRuntime(nativeSessionId = 'native-1') {
+function createHeldRuntime(nativeSessionId = 'native-1', provider: LLMProvider = 'claude') {
   let release: () => void = () => undefined;
   const released = new Promise<void>((resolve) => { release = resolve; });
   const seen: Array<{ sessionId: unknown; writerIsGateway: boolean }> = [];
@@ -112,13 +113,118 @@ function createHeldRuntime(nativeSessionId = 'native-1') {
     seen.push({ sessionId: (options as { sessionId?: unknown }).sessionId, writerIsGateway: Boolean((writer as { isWebSocketWriter?: boolean }).isWebSocketWriter) });
     // A resumed session announces the id it resumed under; a new one, a fresh id.
     const announced = (writer as { getSessionId?: () => string | null }).getSessionId?.() ?? nativeSessionId;
-    writer.send(createNormalizedMessage({ kind: 'session_created', provider: 'claude', sessionId: announced, newSessionId: announced }));
-    writer.send(createNormalizedMessage({ kind: 'text', provider: 'claude', sessionId: announced, role: 'assistant', content: 'hello' }));
+    writer.send(createNormalizedMessage({ kind: 'session_created', provider, sessionId: announced, newSessionId: announced }));
+    if (provider === 'kiro') {
+      writer.send(createNormalizedMessage({ kind: 'stream_delta', provider, sessionId: announced, role: 'assistant', content: 'hel' }));
+      writer.send(createNormalizedMessage({ kind: 'stream_delta', provider, sessionId: announced, role: 'assistant', content: 'lo' }));
+      writer.send(createNormalizedMessage({ kind: 'stream_end', provider, sessionId: announced }));
+      writer.send(createNormalizedMessage({ kind: 'tool_result', provider, sessionId: announced, content: 'not an assistant reply', toolId: 'tool-1' }));
+      writer.send(createNormalizedMessage({ kind: 'stream_delta', provider, sessionId: announced, role: 'assistant', content: 'done' }));
+      writer.send(createNormalizedMessage({ kind: 'stream_end', provider, sessionId: announced }));
+    } else {
+      writer.send(createNormalizedMessage({ kind: 'text', provider, sessionId: announced, role: 'assistant', content: 'hello' }));
+    }
     await released;
-    writer.send(createNormalizedMessage({ kind: 'complete', provider: 'claude', sessionId: announced, exitCode: 0 }));
+    writer.send(createNormalizedMessage({ kind: 'complete', provider, sessionId: announced, exitCode: 0 }));
   };
   return { queryClaude, release, seen };
 }
+
+test('a Kiro API run streams through the registry and rejects a concurrent request', async () => {
+  await withIsolatedDatabase(async () => {
+    const runtime = createHeldRuntime('kiro-native', 'kiro');
+    const dependencies = createDependencies(async () => { throw new Error('Claude must not run'); });
+    dependencies.queryKiro = runtime.queryClaude;
+    await withAgentServer(dependencies, async (baseUrl) => {
+      const responsePromise = post(baseUrl, { projectPath: '/home/test/project', message: 'Run Kiro', provider: 'kiro' });
+      try {
+        for (let i = 0; i < 50 && runtime.seen.length === 0; i += 1) {
+          await new Promise((resolve) => { setTimeout(resolve, 20); });
+        }
+        const [running] = chatRunRegistry.listRunningRuns();
+        assert.ok(running);
+        assert.equal(running.provider, 'kiro');
+        assert.deepEqual(runtime.seen, [{ sessionId: running.sessionId, writerIsGateway: true }]);
+        const replay = chatRunRegistry.replayEvents(running.sessionId, 0);
+        assert.deepEqual(replay.map((event) => event.kind), ['stream_delta', 'stream_delta', 'stream_end', 'tool_result', 'stream_delta', 'stream_end']);
+        assert.equal(replay[0]?.sessionId, running.sessionId);
+
+        const second = await post(baseUrl, { projectPath: '/home/test/project', message: 'Again', sessionId: running.sessionId, stream: false });
+        assert.equal(second.status, 409);
+        assert.equal(runtime.seen.length, 1);
+
+        runtime.release();
+        const response = await responsePromise;
+        assert.equal(response.status, 200);
+        const events = await readEvents(response);
+        assert.deepEqual(events.map((event) => event.type ?? event.kind), [
+          'status', 'session-id', 'stream_delta', 'stream_delta', 'stream_end', 'tool_result', 'stream_delta', 'stream_end', 'complete', 'done',
+        ]);
+        assert.equal(events[1]?.sessionId, running.sessionId);
+        assert.equal(events[2]?.sessionId, running.sessionId);
+        assert.equal(events[2]?.seq, 1);
+        assert.equal(sessionsDb.getSessionById(running.sessionId)?.provider_session_id, 'kiro-native');
+        assert.equal(chatRunRegistry.isProcessing(running.sessionId), false);
+      } finally {
+        runtime.release();
+        await responsePromise;
+      }
+    });
+  });
+});
+
+test('Kiro API sessions resume by app or native id and return normalized replies', async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createAppSession('app-kiro', 'kiro', '/home/test/project', 'Kiro one');
+    sessionsDb.assignProviderSessionId('app-kiro', 'kiro-existing');
+    const runtime = createHeldRuntime('unused-native-id', 'kiro');
+    runtime.release();
+    const dependencies = createDependencies(async () => { throw new Error('Claude must not run'); });
+    dependencies.queryKiro = runtime.queryClaude;
+    await withAgentServer(dependencies, async (baseUrl) => {
+      for (const sessionId of ['app-kiro', 'kiro-existing']) {
+        const response = await post(baseUrl, { projectPath: '/home/test/project', message: 'More', sessionId, stream: false });
+        assert.equal(response.status, 200);
+        const body = await response.json() as { sessionId: string; providerSessionId: string; messages: NormalizedMessage[] };
+        assert.equal(body.sessionId, 'app-kiro');
+        assert.equal(body.providerSessionId, 'kiro-existing');
+        assert.deepEqual(body.messages.map((message) => message.content), ['hello', 'done']);
+        assert.deepEqual(body.messages.map((message) => message.kind), ['text', 'text']);
+        assert.equal(body.messages[0]?.sessionId, 'app-kiro');
+      }
+      assert.deepEqual(runtime.seen, [
+        { sessionId: 'app-kiro', writerIsGateway: true },
+        { sessionId: 'app-kiro', writerIsGateway: true },
+      ]);
+      assert.deepEqual(chatRunRegistry.listRunningRuns(), []);
+    });
+  });
+});
+
+test('an aborted Kiro API run cannot create a branch or pull request', async () => {
+  await withIsolatedDatabase(async () => {
+    let gitCalls = 0;
+    const dependencies = createDependencies(async () => { throw new Error('Claude must not run'); });
+    dependencies.queryKiro = async (_command, _options, writer) => {
+      writer.send(createNormalizedMessage({ kind: 'complete', provider: 'kiro', sessionId: null, exitCode: 1, aborted: true }));
+    };
+    dependencies.spawnProcess = (() => { gitCalls += 1; throw new Error('git must not run'); }) as unknown as AgentDependencies['spawnProcess'];
+    await withAgentServer(dependencies, async (baseUrl) => {
+      const response = await post(baseUrl, {
+        projectPath: '/home/test/project', message: 'Run Kiro', provider: 'kiro',
+        createBranch: true, createPR: true, githubToken: 'test-token', stream: false,
+      });
+      assert.equal(response.status, 200);
+      const body = await response.json() as { success: boolean; aborted?: boolean; branch?: unknown; pullRequest?: unknown };
+      assert.equal(body.success, false);
+      assert.equal(body.aborted, true);
+      assert.equal(body.branch, undefined);
+      assert.equal(body.pullRequest, undefined);
+      assert.equal(gitCalls, 0);
+      assert.deepEqual(chatRunRegistry.listRunningRuns(), []);
+    });
+  });
+});
 
 test('an API run is registered like a chat send: listed while running, streamed decorated, mapped to its native id', async () => {
   await withIsolatedDatabase(async () => {

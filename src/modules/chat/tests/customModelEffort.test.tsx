@@ -5,6 +5,7 @@ import { beforeEach, test, vi } from 'vitest';
 
 import '@/modules/i18n';
 import ModelLibraryPanel from '@/modules/chat/modals/ModelLibraryPanel';
+import { ThemeProvider } from '@/shared/context/ThemeContext';
 import { resetUserPreferences } from '@/shared/userSettings';
 import type {
   CustomProviderModelInput,
@@ -58,6 +59,11 @@ const CATALOG: Partial<Record<LLMProvider, ProviderModelsDefinition>> = {
   },
   cursor: {
     OPTIONS: [{ value: 'auto', label: 'Auto', isCustom: false }],
+    DEFAULT: 'auto',
+    EFFORT_LEVELS: [],
+  },
+  kiro: {
+    OPTIONS: [{ value: 'auto', label: 'Auto (router)', isCustom: false }],
     DEFAULT: 'auto',
     EFFORT_LEVELS: [],
   },
@@ -116,7 +122,7 @@ beforeEach(() => {
 
 test('the model library declares effort levels for a new custom model', async () => {
   const { actions, created } = createActions();
-  render(<ModelLibraryPanel initialProvider="claude" providerModelCatalog={CATALOG} actions={actions} />);
+  render(<ModelLibraryPanel initialProvider="claude" providerModelCatalog={CATALOG} actions={actions} />, { wrapper: ThemeProvider });
 
   // Every level the catalog allows is offered, in the server's order.
   const levelButtons = ['low', 'medium', 'high', 'xhigh', 'max', 'ultracode'].map((level) => (
@@ -144,7 +150,7 @@ test('the model library declares effort levels for a new custom model', async ()
 
 test('editing a custom model keeps its default level and can clear its levels', async () => {
   const { actions, updated } = createActions();
-  render(<ModelLibraryPanel initialProvider="claude" providerModelCatalog={CATALOG} actions={actions} />);
+  render(<ModelLibraryPanel initialProvider="claude" providerModelCatalog={CATALOG} actions={actions} />, { wrapper: ThemeProvider });
 
   screen.getByText('Reasoning: low · high');
   fireEvent.click(screen.getByRole('button', { name: 'Edit My Custom Model' }));
@@ -166,7 +172,7 @@ test('editing a custom model keeps its default level and can clear its levels', 
 
 test('OpenCode offers its effort levels even when no visible built-in model declares any', async () => {
   const { actions, created } = createActions();
-  render(<ModelLibraryPanel initialProvider="opencode" providerModelCatalog={CATALOG} actions={actions} />);
+  render(<ModelLibraryPanel initialProvider="opencode" providerModelCatalog={CATALOG} actions={actions} />, { wrapper: ThemeProvider });
 
   screen.getByText('Reasoning levels');
   fireEvent.change(screen.getByLabelText('Model name'), { target: { value: 'Router model' } });
@@ -179,16 +185,17 @@ test('OpenCode offers its effort levels even when no visible built-in model decl
   assert.deepEqual(created[0]?.input.effort, { values: ['none', 'high'] });
 });
 
-test('providers without effort support show no effort levels and send none', async () => {
+test.each(['cursor', 'kiro'] as const)('%s shows no effort levels and sends none', async (provider) => {
   const { actions, created } = createActions();
-  render(<ModelLibraryPanel initialProvider="cursor" providerModelCatalog={CATALOG} actions={actions} />);
+  render(<ModelLibraryPanel initialProvider={provider} providerModelCatalog={CATALOG} actions={actions} />, { wrapper: ThemeProvider });
 
   assert.equal(screen.queryByText('Reasoning levels'), null);
-  fireEvent.change(screen.getByLabelText('Model name'), { target: { value: 'Cursor Custom' } });
-  fireEvent.change(screen.getByLabelText('Model ID'), { target: { value: 'cursor-custom' } });
+  fireEvent.change(screen.getByLabelText('Model name'), { target: { value: `${provider} Custom` } });
+  fireEvent.change(screen.getByLabelText('Model ID'), { target: { value: `${provider}-custom` } });
   fireEvent.click(screen.getByRole('button', { name: 'Add model' }));
 
   await waitFor(() => assert.equal(created.length, 1));
+  assert.equal(created[0]?.provider, provider);
   assert.equal('effort' in (created[0]?.input ?? {}), false);
 });
 

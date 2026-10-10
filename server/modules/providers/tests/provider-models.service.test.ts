@@ -256,11 +256,39 @@ test('allowed effort levels come from the provider, not from the built-in models
     codex: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
     cursor: [],
     opencode: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'thinking'],
+    kiro: [],
   };
   for (const [provider, levels] of Object.entries(expectedLevels) as Array<[LLMProvider, string[]]>) {
     assert.deepEqual((await service.getProviderModels(provider)).EFFORT_LEVELS, levels, provider);
   }
   assert.deepEqual(created.models.EFFORT_LEVELS, expectedLevels.opencode);
+});
+
+test('Kiro custom models remain editable without reasoning effort and reject declared effort', async () => {
+  const { service } = createTestService();
+  const created = await service.createCustomModel('kiro', { model: 'My Kiro', id: 'kiro-custom' });
+  assert.deepEqual(created.models.EFFORT_LEVELS, []);
+  assert.equal('effort' in created.model, false);
+
+  const updated = await service.updateCustomModel('kiro', created.model.recordId as number, {
+    model: 'Renamed Kiro',
+    id: 'kiro-renamed',
+  });
+  assert.equal(updated.model.value, 'kiro-renamed');
+  await assert.rejects(
+    () => service.updateCustomModel('kiro', created.model.recordId as number, {
+      model: 'Kiro with effort',
+      id: 'kiro-renamed',
+      effort: { values: ['high'] },
+    }),
+    (error) => error instanceof AppError
+      && error.code === 'MODEL_EFFORT_NOT_SUPPORTED'
+      && error.statusCode === 400,
+  );
+
+  const removed = await service.deleteCustomModel('kiro', created.model.recordId as number);
+  assert.equal(removed.model.value, 'kiro-renamed');
+  assert.equal(removed.models.OPTIONS.some((option) => option.value === 'kiro-renamed'), false);
 });
 
 test('duplicate model ids are rejected within one provider', async () => {

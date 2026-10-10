@@ -686,6 +686,24 @@ test('providerSkillsService adds global skills for claude, codex, and cursor', {
  * OpenCode reuses other providers' skill folders, so it should not accept
  * direct skill writes through the managed provider endpoint.
  */
+test('providerSkillsService manages Kiro skills in its user directory', { concurrency: false }, async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-kiro-skills-'));
+  const restoreHomeDir = patchHomeDir(tempRoot);
+  try {
+    const created = await providerSkillsService.addProviderSkills('kiro', {
+      entries: [{ directoryName: 'kiro-skill', content: '---\nname: kiro-skill\n---\n\nKiro instructions.\n' }],
+    });
+    assert.equal(created[0].command, '/kiro-skill');
+    assert.equal(created[0].sourcePath, path.join(tempRoot, '.kiro', 'skills', 'kiro-skill', 'SKILL.md'));
+    const listed = await providerSkillsService.listProviderSkills('kiro', { workspacePath: tempRoot });
+    assert.ok(listed.some((skill) => skill.name === 'kiro-skill'));
+    assert.equal((await providerSkillsService.removeProviderSkill('kiro', { directoryName: 'kiro-skill' })).removed, true);
+  } finally {
+    restoreHomeDir();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('providerSkillsService rejects managed skill creation for opencode', { concurrency: false }, async () => {
   await assert.rejects(
     providerSkillsService.addProviderSkills('opencode', {
