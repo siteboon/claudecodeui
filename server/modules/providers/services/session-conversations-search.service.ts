@@ -177,17 +177,23 @@ function findSessionTitleResults(
   query: string,
   limit: number,
 ): SessionTitleSearchResult[] {
-  const normalizedQuery = query.toLocaleLowerCase().replace(/\s+/g, ' ');
+  const words = toSearchWords(query);
+  const phrase = words.join(' ');
   const projectCache = new Map<string, ReturnType<typeof projectsDb.getProjectPath>>();
 
   return sessions
     .flatMap((session) => {
       const sessionTitle = toSummaryText(session.custom_name, session.session_id, session.session_id);
       const normalizedTitle = sessionTitle.toLocaleLowerCase().replace(/\s+/g, ' ');
-      const matchIndex = normalizedTitle.indexOf(normalizedQuery);
-      if (matchIndex === -1) {
+      if (!words.every((word) => normalizedTitle.includes(word))) {
         return [];
       }
+
+      // Phrase hits sort ahead of titles that merely contain every word.
+      const phraseIndex = normalizedTitle.indexOf(phrase);
+      const matchIndex = phraseIndex === -1
+        ? normalizedTitle.length + Math.min(...words.map((word) => normalizedTitle.indexOf(word)))
+        : phraseIndex;
 
       const projectPath = typeof session.project_path === 'string' && session.project_path.trim()
         ? session.project_path.trim()
@@ -241,15 +247,27 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function createWordMatcher(
-  rawQuery: string,
+/**
+ * Lower-cased query words with a trailing plural "s" dropped, so "images" and
+ * "image" look for the same thing. Shared by the ripgrep pre-filter, the
+ * message matcher and the title match so they agree on what a hit is.
+ */
+export function toSearchWords(query: string): string[] {
+  return query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((word) => word.length > 0)
+    .map((word) => (word.length >= 4 && word.endsWith('s') && !word.endsWith('ss') ? word.slice(0, -1) : word));
+}
+
+// Words match at the start of a token ("image" finds "images", "odm" finds
+// "odm-only"); a multi-word query needs every word in the message, in any order.
+export function createWordMatcher(
   words: string[],
 ): Pick<SearchRuntime, 'matchesQuery' | 'buildSnippet'> {
-  const normalizedQuery = rawQuery.trim().replace(/\s+/g, ' ');
-  const requireExactPhrase = words.length > 1 && normalizedQuery.length > 0;
-  const wordPatterns = words.map((word) => new RegExp(`(?<!\\p{L})${escapeRegex(word)}(?!\\p{L})`, 'u'));
+  const wordPatterns = words.map((word) => new RegExp(`(?<!\\p{L})${escapeRegex(word)}`, 'u'));
   const phrasePattern = words.map((word) => escapeRegex(word)).join('\\s+');
-  const phraseRegex = new RegExp(phrasePattern, 'iu');
+  const phraseRegex = new RegExp(`(?<!\\p{L})${phrasePattern}`, 'iu');
 
   const allWordsMatch = (textLower: string): boolean =>
     wordPatterns.every((pattern) => pattern.test(textLower));
@@ -259,19 +277,7 @@ function createWordMatcher(
       return false;
     }
 
-    if (requireExactPhrase) {
-      return phraseRegex.test(text);
-    }
-
-    if (phraseRegex.test(text)) {
-      return true;
-    }
-
-    if (words.length === 1) {
-      return allWordsMatch(text.toLowerCase());
-    }
-
-    return allWordsMatch(text.toLowerCase());
+    return phraseRegex.test(text) || allWordsMatch(text.toLowerCase());
   };
 
   const buildSnippet = (
@@ -294,7 +300,7 @@ function createWordMatcher(
 
     if (firstIndex === -1) {
       for (const word of words) {
-        const regex = new RegExp(`(?<!\\p{L})${escapeRegex(word)}(?!\\p{L})`, 'u');
+        const regex = new RegExp(`(?<!\\p{L})${escapeRegex(word)}`, 'u');
         const match = regex.exec(textLower);
         if (match && (firstIndex === -1 || match.index < firstIndex)) {
           firstIndex = match.index;
@@ -326,14 +332,12 @@ function createWordMatcher(
       });
     }
 
-    if (!requireExactPhrase) {
-      for (const word of words) {
-        const regex = new RegExp(`(?<!\\p{L})${escapeRegex(word)}(?!\\p{L})`, 'gu');
-        let match = regex.exec(snippetLower);
-        while (match) {
-          highlights.push({ start: match.index, end: match.index + word.length });
-          match = regex.exec(snippetLower);
-        }
+    for (const word of words) {
+      const regex = new RegExp(`(?<!\\p{L})${escapeRegex(word)}\\p{L}*`, 'gu');
+      let match = regex.exec(snippetLower);
+      while (match) {
+        highlights.push({ start: match.index, end: match.index + match[0].length });
+        match = regex.exec(snippetLower);
       }
     }
 
@@ -1157,7 +1161,7 @@ export async function searchConversations(
 }> {
   const safeQuery = typeof query === 'string' ? query.trim() : '';
   const safeLimit = Math.max(1, Math.min(Number.isFinite(limit) ? limit : 50, 200));
-  const words = safeQuery.toLowerCase().split(/\s+/).filter((word) => word.length > 0);
+  const words = toSearchWords(safeQuery);
 
   if (words.length === 0) {
     return { results: [], titleResults: [], totalMatches: 0, query: safeQuery };
@@ -1226,7 +1230,7 @@ export async function searchConversations(
   let scannedProjects = 0;
 
   const runtime: SearchRuntime = {
-    ...createWordMatcher(safeQuery, words),
+    ...createWordMatcher(words),
     limit: safeLimit,
     totalMatches: 0,
     isAborted,
