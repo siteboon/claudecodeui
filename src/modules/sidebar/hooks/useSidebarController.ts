@@ -426,7 +426,9 @@ export function useSidebarController({
     }
 
     const query = debouncedSearchQuery;
-    if (searchMode !== 'conversations' || query.length < 2) {
+    // The Projects tab runs the same transcript search so a query that matches
+    // no project or session title still finds the chats that mention it.
+    if ((searchMode !== 'conversations' && searchMode !== 'projects') || query.length < 2) {
       searchSeqRef.current += 1;
       setConversationResults(null);
       setSearchProgress(null);
