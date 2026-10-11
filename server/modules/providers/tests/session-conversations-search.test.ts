@@ -26,6 +26,8 @@ test('a word matches at the start of a token only', () => {
   const matcher = createWordMatcher(words('odm'));
   assert.equal(matcher.matchesQuery('an odm-only build'), true);
   assert.equal(matcher.matchesQuery('random'), false);
+  assert.equal(createWordMatcher(words('images')).matchesQuery('a pilgrimage'), false);
+  assert.equal(createWordMatcher(words('odm images')).matchesQuery('podm image'), false);
 });
 
 test('the snippet highlights each word when there is no phrase hit', () => {
