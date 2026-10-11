@@ -267,7 +267,7 @@ export function createWordMatcher(
 ): Pick<SearchRuntime, 'matchesQuery' | 'buildSnippet'> {
   const wordPatterns = words.map((word) => new RegExp(`(?<!\\p{L})${escapeRegex(word)}`, 'u'));
   const phrasePattern = words.map((word) => escapeRegex(word)).join('\\s+');
-  const phraseRegex = new RegExp(phrasePattern, 'iu');
+  const phraseRegex = new RegExp(`(?<!\\p{L})${phrasePattern}`, 'iu');
 
   const allWordsMatch = (textLower: string): boolean =>
     wordPatterns.every((pattern) => pattern.test(textLower));
