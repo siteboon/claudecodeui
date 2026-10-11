@@ -567,14 +567,6 @@ export function useSidebarController({
     [searchMode],
   );
 
-  const isProjectExpanded = useCallback(
-    (projectId: string) =>
-      searchMode === 'running'
-        ? !collapsedRunningProjects.has(projectId)
-        : expandedProjects.has(projectId),
-    [collapsedRunningProjects, expandedProjects, searchMode],
-  );
-
   const handleSessionClick = useCallback(
     (session: SessionWithProvider, projectId: string) => {
       // Tag the session with its owning projectId so downstream handlers
@@ -751,6 +743,24 @@ export function useSidebarController({
   const filteredProjects = useMemo(
     () => filterProjects(searchMode === 'running' ? runningProjects : sortedProjects, debouncedSearchQuery),
     [debouncedSearchQuery, runningProjects, searchMode, sortedProjects],
+  );
+
+  // Projects kept only because a session title matched the filter.
+  const sessionMatchedProjectIds = useMemo(
+    () => new Set(
+      filteredProjects
+        .filter((project) => project.sessionsMatchedFilter === true)
+        .map((project) => project.projectId),
+    ),
+    [filteredProjects],
+  );
+
+  const isProjectExpanded = useCallback(
+    (projectId: string) =>
+      searchMode === 'running'
+        ? !collapsedRunningProjects.has(projectId)
+        : expandedProjects.has(projectId) || sessionMatchedProjectIds.has(projectId),
+    [collapsedRunningProjects, expandedProjects, searchMode, sessionMatchedProjectIds],
   );
 
   const filteredArchivedSessions = useMemo(() => {
