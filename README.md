@@ -208,6 +208,8 @@ curl -fsS -H "Authorization: Bearer $TOKEN" -o "cloudcli-backup-$(date +%F).db" 
    mkdir -p ~/.cloudcli/assets && cp -R /path/to/backup/assets/. ~/.cloudcli/assets/
    ```
 
+   This adds the backed-up files to the folder, so files uploaded after the backup stay. For an exact restore, run `rm -rf ~/.cloudcli/assets` first.
+
 4. Start CloudCLI and sign in with the account from the backup.
 
 When you move to a new machine or container, either restore to the default location or set `DATABASE_PATH` to where you put the file. Projects are stored by their absolute folder path, so keep the same folder layout on the new machine.
