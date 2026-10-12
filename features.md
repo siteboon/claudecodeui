@@ -7,3 +7,7 @@ Set `CODEX_CLI_PATH=/usr/local/bin/codex` (or another executable path) in the Cl
 ## Review hardening
 
 Configured Codex paths, the Node executable, and the bundled CLI entry are quoted as literal Bash/PowerShell arguments. Spaces, apostrophes, variables, command substitutions, and backticks in paths cannot expand into commands.
+
+## Review follow-up (2026-10-12)
+
+Derive PowerShell path expectations from the normalized CLI entry and exercise Windows path joining on Linux as well as Windows hosts. This fixes the bundled start/resume test expectations without changing production launch behavior.

@@ -23,7 +23,13 @@ for (const platform of ['linux', 'win32'] as const) {
         const executable = "/opt/it's $HOME $(printf EXPANDED) `printf EXPANDED`/codex";
         const node = "/opt/node's $HOME $(printf EXPANDED)/node";
         const packageDirectory = "/opt/package's $HOME $(printf EXPANDED)";
-        const entry = path.join(packageDirectory, 'bin', 'codex.js');
+        const join = path.join;
+        const joinEntry = platform === 'win32' ? path.win32.join : path.posix.join;
+        const entry = joinEntry(packageDirectory, 'bin', 'codex.js');
+        // Exercise Windows normalization even when the test host is Linux.
+        t.mock.method(path, 'join', (...parts: string[]) => (
+          parts[0] === packageDirectory ? joinEntry(...parts) : join(...parts)
+        ));
         if (configured) process.env.CODEX_CLI_PATH = executable;
         else delete process.env.CODEX_CLI_PATH;
         Object.defineProperty(process, 'execPath', { ...execDescriptor, value: node });
@@ -65,9 +71,7 @@ for (const platform of ['linux', 'win32'] as const) {
               ...(resumed ? ['resume', 'native-thread'] : []),
             ]);
           } else {
-            const expectedEntry = path.sep === '\\'
-              ? "'/opt/package''s $HOME $(printf EXPANDED)\\bin\\codex.js'"
-              : "'/opt/package''s $HOME $(printf EXPANDED)/bin/codex.js'";
+            const expectedEntry = `'${entry.replaceAll("'", "''")}'`;
             const expected = configured
               ? "'/opt/it''s $HOME $(printf EXPANDED) `printf EXPANDED`/codex'"
               : `'/opt/node''s $HOME $(printf EXPANDED)/node' ${expectedEntry}`;
