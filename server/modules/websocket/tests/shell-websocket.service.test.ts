@@ -832,3 +832,28 @@ test('a Cursor CLI on PATH still launches as the bare cursor-agent', posixOnly, 
     });
   });
 });
+
+// Faked on a POSIX host (like the Claude settings-path test above): the resolver still sees a POSIX
+// path, while the launch goes through PowerShell.
+test('PowerShell runs a resolved Cursor CLI through the call operator; a CLI on PATH stays bare', posixOnly, (t) => {
+  withClaudeConfig(({ projectPath }) => {
+    withCursorSearchPath((pathDirectory) => {
+      process.env.CURSOR_CLI_PATH = "/opt/Cursor Tools/it's/cursor-agent";
+      const { calls, dependencies } = spawnRecorder('cursor-chat-1');
+      t.mock.method(os, 'platform', () => 'win32');
+
+      launch(dependencies, { provider: 'cursor', hasSession: true }, projectPath);
+      launch(dependencies, { provider: 'plain-shell', isPlainShell: true, initialCommand: 'cursor-agent login' }, projectPath);
+      delete process.env.CURSOR_CLI_PATH;
+      writeExecutable(path.join(pathDirectory, 'cursor-agent'));
+      launch(dependencies, { provider: 'cursor' }, projectPath);
+
+      // A leading quoted string is only a value to PowerShell; `&` makes it run.
+      assert.deepEqual(calls.map((call) => [call.shell, ...call.args]), [
+        ['powershell.exe', '-Command', `& '/opt/Cursor Tools/it''s/cursor-agent' --resume="cursor-chat-1"`],
+        ['powershell.exe', '-Command', `& '/opt/Cursor Tools/it''s/cursor-agent' login`],
+        ['powershell.exe', '-Command', 'cursor-agent'],
+      ]);
+    });
+  });
+});

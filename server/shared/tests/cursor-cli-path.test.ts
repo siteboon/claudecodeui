@@ -169,11 +169,18 @@ test('a relative CURSOR_CLI_PATH is made absolute against the server cwd; a bare
 
 // ---------------------------
 
+// A case-insensitive Windows file system holding only `files`; folders exist as their parents.
 function fakeWindowsFiles(files: string[]) {
   const known = new Set(files.map((file) => file.toLowerCase()));
   return {
     isExecutableFile: (filePath: string) => known.has(filePath.toLowerCase()),
-    readDirectoryNames: () => [],
+    readDirectoryNames: (directoryPath: string) => {
+      const prefix = `${directoryPath.toLowerCase()}\\`;
+      const names = files
+        .filter((file) => file.toLowerCase().startsWith(prefix))
+        .map((file) => file.slice(prefix.length).split('\\')[0]);
+      return [...new Set(names)];
+    },
   };
 }
 
@@ -206,4 +213,43 @@ test('win32: the installer folder under %LOCALAPPDATA% is used when Path lacks i
   });
   assert.equal(resolution.command, 'C:\\Users\\dev\\AppData\\Local\\cursor-agent\\cursor-agent.cmd');
   assert.equal(resolution.source, 'install-dir');
+});
+
+test('win32: without the installer\'s top-level CLI the newest %LOCALAPPDATA% version folder is used', () => {
+  const versions = 'C:\\Users\\dev\\AppData\\Local\\cursor-agent\\versions';
+  const resolution = resolveCursorCli({
+    platform: 'win32',
+    env: { Path: 'C:\\Windows\\system32', LOCALAPPDATA: 'C:\\Users\\dev\\AppData\\Local' },
+    homedir: () => 'C:\\Users\\dev',
+    ...fakeWindowsFiles([
+      `${versions}\\2025.08.25-896bbe1\\cursor-agent.exe`,
+      `${versions}\\2026.10.01-e373342\\cursor-agent.cmd`,
+      `${versions}\\.tmp-2026.11.01-aaaaaaa-1760000000\\cursor-agent.exe`,
+    ]),
+  });
+  assert.equal(resolution.command, `${versions}\\2026.10.01-e373342\\cursor-agent.cmd`);
+  assert.equal(resolution.source, 'install-dir');
+});
+
+test('win32: with LOCALAPPDATA unset the installer folder is looked for under the home folder', () => {
+  const resolve = (files: string[]) =>
+    resolveCursorCli({
+      platform: 'win32',
+      env: { Path: 'C:\\Windows\\system32' },
+      homedir: () => 'C:\\Users\\dev',
+      ...fakeWindowsFiles(files),
+    });
+
+  const found = resolve(['C:\\Users\\dev\\AppData\\Local\\cursor-agent\\cursor-agent.exe']);
+  assert.equal(found.command, 'C:\\Users\\dev\\AppData\\Local\\cursor-agent\\cursor-agent.exe');
+  assert.equal(found.source, 'install-dir');
+
+  const missing = resolve([]);
+  assert.equal(missing.source, 'missing');
+  assert.equal(missing.command, 'cursor-agent');
+  assert.deepEqual(missing.searchedLocations, [
+    'C:\\Users\\dev\\AppData\\Local\\cursor-agent\\cursor-agent.exe',
+    'C:\\Users\\dev\\AppData\\Local\\cursor-agent\\cursor-agent.cmd',
+    'C:\\Users\\dev\\AppData\\Local\\cursor-agent\\versions\\*\\cursor-agent.{exe,cmd}',
+  ]);
 });

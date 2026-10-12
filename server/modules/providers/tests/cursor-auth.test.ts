@@ -148,18 +148,14 @@ const withFakeCursorAgent = async (
   } finally {
     // Lets a fake `status` that is still polling exit right away.
     await fake.releaseStatus().catch(() => {});
-    process.env[pathKey] = previousPath;
-    if (previousPathExt === undefined) {
-      delete process.env[pathExtKey];
-    } else {
-      process.env[pathExtKey] = previousPathExt;
-    }
-    if (previousMarkerDir === undefined) {
-      delete process.env.CURSOR_FAKE_MARKER_DIR;
-    } else {
-      process.env.CURSOR_FAKE_MARKER_DIR = previousMarkerDir;
-    }
-    for (const [key, value] of Object.entries(previousEnv)) {
+    // Assigning undefined to process.env stores the string "undefined", so unset keys are deleted.
+    const restored: [string, string | undefined][] = [
+      [pathKey, previousPath],
+      [pathExtKey, previousPathExt],
+      ['CURSOR_FAKE_MARKER_DIR', previousMarkerDir],
+      ...Object.entries(previousEnv),
+    ];
+    for (const [key, value] of restored) {
       if (value === undefined) {
         delete process.env[key];
       } else {
@@ -313,6 +309,26 @@ test('getStatus reports any other CURSOR_CLI_PATH the OS cannot start (ENOTDIR, 
       assert.equal(status.installed, false, cliPath);
       assert.ok(status.error?.startsWith(notRunnableMessage(cliPath)), status.error);
     }
+  }, 'nowhere');
+});
+
+test('getStatus reports a Cursor CLI in ~/.local/bin that the OS cannot start as not installed', posixOnly, async () => {
+  await withFakeCursorAgent(LOGGED_IN_OUTPUT, async () => {
+    // The resolver accepts any executable file there; a missing interpreter makes the spawn fail
+    // with ENOENT, the same code as a CLI that is not there at all.
+    const brokenCli = path.join(os.homedir(), '.local', 'bin', 'cursor-agent');
+    await mkdir(path.dirname(brokenCli), { recursive: true });
+    await writeFile(brokenCli, '#!/nonexistent/interpreter\nexit 0\n', 'utf8');
+    await chmod(brokenCli, 0o755);
+
+    const status = await new CursorProviderAuth().getStatus();
+    assert.equal(status.installed, false);
+    assert.equal(status.authenticated, false);
+    assert.equal(
+      status.error,
+      `Cursor CLI "${brokenCli}" was found but could not be started. `
+        + 'Reinstall it, or set CURSOR_CLI_PATH to a working cursor-agent executable.',
+    );
   }, 'nowhere');
 });
 
