@@ -260,10 +260,49 @@ test('the self-hosted system module reports this database and backs up its live 
       assetsPath: path.join(homedir(), '.cloudcli', 'assets'),
     });
 
+    const requestedAt = Date.now();
     const backup = await fetch(`${baseUrl}/api/system/backup`, authorized());
+    const respondedAt = Date.now();
     assert.equal(backup.status, 200);
     const contents = Buffer.from(await backup.arrayBuffer());
     assert.ok(contents.length > 0, 'the backup must not be empty');
     assert.deepEqual(readSnapshotUsernames(contents), ['route-user']);
+
+    // The file is named after the moment it was taken (to the second).
+    const stamp = /filename="cloudcli-backup-(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})Z\.db"/
+      .exec(backup.headers.get('content-disposition') ?? '');
+    assert.ok(stamp, `unexpected Content-Disposition: ${backup.headers.get('content-disposition')}`);
+    const takenAt = Date.parse(`${stamp[1]}T${stamp[2]}:${stamp[3]}:${stamp[4]}Z`);
+    assert.ok(takenAt >= requestedAt - 1000 && takenAt <= respondedAt, `backup named ${stamp[0]}`);
   });
+});
+
+test('the self-hosted system module stages its snapshot only in the OS temp directory', async () => {
+  // os.tmpdir() follows TMPDIR on POSIX and TEMP/TMP on Windows. Pointing them at
+  // a missing folder must make the backup fail, not write the copy of the
+  // credential database somewhere else.
+  const temporaryVariables = ['TMPDIR', 'TMP', 'TEMP'] as const;
+  const previousTemporaryVariables = temporaryVariables.map((name) => process.env[name]);
+  const missingDirectory = path.join(fixture.directory, 'missing-temp-directory');
+  for (const name of temporaryVariables) {
+    process.env[name] = missingDirectory;
+  }
+
+  try {
+    const router = fixture.createSystemModule({ appRoot: fixture.directory, installMode: 'npm', isPlatform: false });
+    await withSystemServer(router, async (baseUrl) => {
+      const backup = await fetch(`${baseUrl}/api/system/backup`, authorized());
+      assert.equal(backup.status, 500);
+      assert.equal(await readErrorCode(backup), 'INTERNAL_ERROR');
+    });
+  } finally {
+    temporaryVariables.forEach((name, index) => {
+      const value = previousTemporaryVariables[index];
+      if (value === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = value;
+      }
+    });
+  }
 });
