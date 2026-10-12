@@ -33,3 +33,8 @@ test('ordinary values are whole milliseconds', () => {
   assert.equal(readMillisecondsEnv('1500.9', 1), 1_500);
   assert.equal(readMillisecondsEnv('1e3', 1), 1_000);
 });
+
+test('a positive value below 1 ms rounds up to 1 ms instead of meaning no timeout', () => {
+  assert.equal(readMillisecondsEnv('0.5', 55_000), 1);
+  assert.equal(readMillisecondsEnv('0.0001', 55_000), 1);
+});

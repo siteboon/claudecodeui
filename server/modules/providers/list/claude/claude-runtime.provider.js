@@ -63,8 +63,8 @@ const MAX_TIMER_DELAY_MS = 2147483647;
  *
  * An explicit `0` is kept (for the approval timeout it means "wait
  * indefinitely"); `|| fallback` used to turn it back into the default. Values
- * above the longest timer delay are clamped to it instead of overflowing.
- * Unset, empty, negative or non-numeric values use the fallback.
+ * above the longest timer delay are clamped to it instead of overflowing, and
+ * a positive value below 1 ms becomes 1 ms rather than 0. Unset, empty, negative or non-numeric values use the fallback.
  *
  * Exported for the runtime tests.
  * @param {string|undefined} raw - Raw environment value
@@ -84,7 +84,9 @@ export function readMillisecondsEnv(raw, fallback) {
     console.warn(`[Claude SDK] ${raw} ms exceeds the longest timer delay; using ${MAX_TIMER_DELAY_MS} ms`);
     return MAX_TIMER_DELAY_MS;
   }
-  return Math.floor(value);
+  // Only an explicit 0 means "no timeout": a positive fraction below 1 ms
+  // rounds up instead of down to 0.
+  return value > 0 ? Math.max(1, Math.floor(value)) : 0;
 }
 
 // 0 waits for the owner indefinitely, like interaction-required tools do.
