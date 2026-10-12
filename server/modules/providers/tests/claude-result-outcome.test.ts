@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+import { ClaudeSessionsProvider } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import { CLAUDE_PREDEFINED_MODELS } from '@/modules/providers/list/claude/claude-models.provider.js';
 import { queryClaudeSDK, resultOutcome } from '@/modules/providers/list/claude/claude-runtime.provider.js';
 import type { NormalizedMessage, ProviderRuntimeContext } from '@/shared/types.js';
@@ -16,21 +17,29 @@ import type { NormalizedMessage, ProviderRuntimeContext } from '@/shared/types.j
 
 const NATIVE_ID = 'native-outcome-session';
 
-/** Runs one turn against a scripted SDK stream and returns what the client received. */
-async function runTurn(resultMessage: Record<string, unknown>): Promise<NormalizedMessage[]> {
+/**
+ * Runs one turn against a scripted SDK stream and returns what the client
+ * received. `before` is streamed ahead of the result.
+ */
+async function runTurn(
+  resultMessage: Record<string, unknown>,
+  before: Record<string, unknown>[] = [],
+): Promise<NormalizedMessage[]> {
   const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-result-outcome-'));
   const sent: NormalizedMessage[] = [];
+  const sessions = new ClaudeSessionsProvider({ getLiveRunStartTime: () => null });
   const context: ProviderRuntimeContext = {
     resolveProviderSessionId: () => null,
     resolveResumeModel: async () => undefined,
     getProviderModels: async () => CLAUDE_PREDEFINED_MODELS as never,
-    normalizeMessage: () => [],
+    normalizeMessage: (raw, sid) => sessions.normalizeMessage(raw, sid),
     isProviderInstalled: async () => true,
     createQuery: ({ prompt }) => {
       // Drain stdin like the CLI would, so the release at the end of the turn completes.
       void (async () => { for await (const _message of prompt) { /* read */ } })();
       const stream = (async function* () {
         yield { type: 'system', subtype: 'init', session_id: NATIVE_ID };
+        yield* before;
         yield { session_id: NATIVE_ID, duration_ms: 1, num_turns: 1, ...resultMessage, type: 'result' };
       })();
       return Object.assign(stream, { interrupt: async () => {} });
@@ -61,10 +70,27 @@ test('an error_* subtype fails the turn and says why', async () => {
   assert.match(String(error.content), /error_max_turns: Reached maximum number of turns/);
 });
 
+const assistantText = (text: string) => ({
+  type: 'assistant', session_id: NATIVE_ID, parent_tool_use_id: null,
+  message: { role: 'assistant', content: [{ type: 'text', text }] },
+});
+
 test('is_error on a success subtype fails the turn without repeating the streamed error text', async () => {
-  const sent = await runTurn({ subtype: 'success', is_error: true, result: 'API Error: 529 overloaded' });
+  const sent = await runTurn(
+    { subtype: 'success', is_error: true, result: 'API Error: 529 overloaded' },
+    [assistantText('API Error: 529 overloaded')],
+  );
   assert.deepEqual(completes(sent).map((message) => message.exitCode), [1]);
   assert.equal(sent.some((message) => message.kind === 'error'), false);
+  assert.equal(sent.filter((message) => message.kind === 'text').length, 1);
+});
+
+test('is_error on a success subtype says why when the turn showed no text', async () => {
+  const sent = await runTurn({ subtype: 'success', is_error: true, result: 'API Error: 500' });
+  assert.deepEqual(completes(sent).map((message) => message.exitCode), [1]);
+  const errors = sent.filter((message) => message.kind === 'error');
+  assert.equal(errors.length, 1);
+  assert.match(String(errors[0].content), /error: API Error: 500/);
 });
 
 test('resultOutcome classifies results and builds a readable reason', () => {
