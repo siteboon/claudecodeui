@@ -393,8 +393,9 @@ test('an ssh login failure explains the SSH setup instead of calling the reposit
     const error = createPluginGitError('install', 128, stderr);
     assert.equal(error.code, 'PLUGIN_GIT_AUTH_REQUIRED');
     assert.equal(error.statusCode, 422);
-    assert.match(error.message, /^Could not install the plugin: ssh could not log in to the git host/);
+    assert.match(error.message, /^Could not install the plugin: ssh, run as the user the CloudCLI server runs as, could not log in to the git host/);
     assert.match(error.message, /known_hosts/);
+    assert.match(error.message, /no passphrase, or loaded into an ssh-agent/);
     assert.ok(!/private or does not exist/.test(error.message), error.message);
   }
 });
@@ -415,6 +416,41 @@ test('an unrecognised ssh failure names ssh\'s own reason, not git\'s generic la
     'Could not install the plugin: git clone failed: kex_exchange_identification: Connection closed by remote host',
   );
 });
+
+// What a fake ssh (GIT_SSH_COMMAND) printed before git's own generic line, with real git 2.43.
+const SSH_GENERIC_TAIL = 'fatal: Could not read from remote repository.\n\n'
+  + 'Please make sure you have the correct access rights\nand the repository exists.\n';
+const UNRECOGNISED_SSH_FAILURES: Array<[string, string, string]> = [
+  ['GitLab\'s framed message', 'You are not allowed to download code from this project.',
+    'remote: \nremote: ========================================================================\nremote: \n'
+      + 'remote: You are not allowed to download code from this project.\nremote: \n'
+      + 'remote: ========================================================================\nremote: \n'],
+  ['OpenSSH\'s post-quantum warning before the reason', 'This account is currently not available.',
+    '** WARNING: connection is not using a post-quantum key exchange algorithm.\n'
+      + '** This session may be vulnerable to "store now, decrypt later" attacks.\n'
+      + '** The server may need to be upgraded. See https://openssh.com/pq.html\n'
+      + 'This account is currently not available.\n'],
+  ['a login banner before the disconnect', 'Received disconnect from 10.0.0.5 port 22:2: Too many authentication failures',
+    '*******************************************************\n*  Authorised access only. All activity is monitored.  *\n'
+      + '*******************************************************\n'
+      + 'Received disconnect from 10.0.0.5 port 22:2: Too many authentication failures\nDisconnected from 10.0.0.5 port 22\n'],
+  ['ssh -v output', 'kex_exchange_identification: Connection closed by remote host',
+    'OpenSSH_9.6p1 Ubuntu-3ubuntu13.18, OpenSSL 3.0.13 30 Jan 2024\ndebug1: Reading configuration data /etc/ssh/ssh_config\n'
+      + 'debug1: Connecting to git.example.test port 22.\nkex_exchange_identification: Connection closed by remote host\n'
+      + 'Connection closed by 10.0.0.5 port 22\n'],
+  ['the remote git\'s own fatal line', 'detected dubious ownership in repository at \'/srv/git/plugin.git\'',
+    "fatal: detected dubious ownership in repository at '/srv/git/plugin.git'\nTo add an exception for this directory, call:\n\n"
+      + '\tgit config --global --add safe.directory /srv/git/plugin.git\n'],
+  ['ssh that printed nothing', 'Could not read from remote repository.', ''],
+];
+
+for (const [situation, expectedReason, sshOutput] of UNRECOGNISED_SSH_FAILURES) {
+  test(`an unrecognised ssh failure after ${situation} names the reason`, () => {
+    const error = createPluginGitError('install', 128, `${sshOutput}${SSH_GENERIC_TAIL}`);
+    assert.equal(error.code, 'PLUGIN_GIT_FAILED');
+    assert.equal(error.message, `Could not install the plugin: git clone failed: ${expectedReason}`);
+  });
+}
 
 test('git stopped by a signal with no output is described, not shown as "exit code null"', () => {
   const error = createPluginGitError('update', null, '');

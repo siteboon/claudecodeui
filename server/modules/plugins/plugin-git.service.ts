@@ -44,7 +44,7 @@ const PLUGIN_GIT_FAILURE_RULES: PluginGitFailureRule[] = [
     pattern: /permission denied \(publickey|host key verification failed/i,
     code: 'PLUGIN_GIT_AUTH_REQUIRED',
     statusCode: 422,
-    reason: () => `ssh could not log in to the git host as ${SERVER_USER}. That user needs an SSH key the host `
+    reason: () => `ssh, run as ${SERVER_USER}, could not log in to the git host. That user needs an SSH key the host `
       + 'accepts that works without a prompt (no passphrase, or loaded into an ssh-agent the server inherits), '
       + 'and the host in its ~/.ssh/known_hosts, then try again.',
   },
@@ -126,12 +126,18 @@ function summarizeGitOutput(gitOutput: string): string | null {
   if (index < 0) return null;
 
   let summary = lines[index].trim().replace(/^(fatal|error):\s*/i, '');
-  // Over ssh, git's last word is always this generic line; ssh's own reason
-  // (e.g. "kex_exchange_identification: Connection closed by remote host") is
-  // the first line it printed that is not a "Warning: Permanently added …" note.
+  // When an ssh connection fails before the remote git answers, git's last
+  // word is this generic line and the reason is what ssh or the host printed
+  // before it, e.g. "kex_exchange_identification: Connection closed by remote
+  // host" or GitLab's "remote: You are not allowed to download code from this
+  // project.". Skipped: `remote:` prefixes, lines without text (dividers),
+  // "Warning: Permanently added …", `*`-framed notices (OpenSSH's post-quantum
+  // warning, login banners) and `ssh -v` output.
   if (/^could not read from remote repository\.?$/i.test(summary)) {
-    const sshReason = lines.slice(0, index).find((line) => line.trim() && !/^warning:/i.test(line.trim()));
-    if (sshReason) return sshReason.trim();
+    const sshReason = lines.slice(0, index)
+      .map((line) => line.trim().replace(/^remote:\s*/i, ''))
+      .find((line) => /[a-z0-9]/i.test(line) && !/^(warning:|\*|debug\d:|OpenSSH_)/i.test(line));
+    if (sshReason) return sshReason.replace(/^(fatal|error):\s*/i, '');
   }
   if (summary.endsWith(':')) {
     const listed: string[] = [];
