@@ -222,13 +222,15 @@ test('a refused send lets the run it collided with be subscribed to', async () =
 });
 
 test('a refused send while this socket is attached does not subscribe again', async () => {
-  const { dispatch, subscribes, poll } = await renderChatView();
+  const { hook, dispatch, subscribes, poll } = await renderChatView();
 
   dispatch({ kind: 'chat_subscribed', isProcessing: true, runId: 'run-2', pendingPermissions: [] });
   await poll(busy);
   dispatch({ kind: 'text', role: 'user', content: 'q2', id: 'local_server_1', seq: 1, runId: 'run-2' });
   const before = subscribes().length;
 
+  // The composer sends anyway, and the server refuses it.
+  act(() => hook.result.current.markRunStartedHere('session-a'));
   dispatch({ kind: 'protocol_error', code: 'RUN_IN_PROGRESS', error: 'already has a run in progress' });
   // The spinner goes off with the refusal; the next poll puts it back.
   await poll(idle);
