@@ -509,27 +509,39 @@ test('a detached git is stopped with its process group when the server exits', {
   skip: process.platform === 'win32' && 'git is not detached on Windows',
 }, async () => {
   const listenersBefore = new Set(process.listeners('exit'));
-  // Stands in for git: a group leader with a child of its own, like git and its ssh.
-  const git = spawn('sh', ['-c', 'sleep 30 & wait'], { detached: true, stdio: 'ignore' });
-  stopPluginGitOnServerExit(git);
-  const added = process.listeners('exit').filter((listener) => !listenersBefore.has(listener));
-  assert.equal(added.length, 1);
-
-  const exited = once(git, 'exit');
-  (added[0] as () => void)(); // what process.exit() runs on server shutdown
-  const [, signal] = await exited;
-  assert.equal(signal, 'SIGTERM');
-  assert.ok(!process.listeners('exit').includes(added[0]), 'the exit hook outlived git');
-
-  // The whole group is gone, not only its leader.
+  // Stands in for git: a group leader with a child of its own, like git and its
+  // git-remote-http or ssh. The child shares the leader's stdout, so that pipe
+  // closes only once both have exited.
+  const git = spawn('sh', ['-c', 'sleep 30 & echo $!; wait'], { detached: true, stdio: ['ignore', 'pipe', 'ignore'] });
   const pid = git.pid as number;
-  for (let attempt = 0; attempt < 40; attempt += 1) {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    stopPluginGitOnServerExit(git);
+    const added = process.listeners('exit').filter((listener) => !listenersBefore.has(listener));
+    assert.equal(added.length, 1);
+
+    // Run the hook only once the child exists; before that, ending the leader alone would do.
+    const [childPidLine] = await once(git.stdout, 'data');
+    const childPid = Number(String(childPidLine).trim());
+    assert.ok(Number.isInteger(childPid) && childPid > 0 && childPid !== pid, `bad child pid ${childPidLine}`);
+    process.kill(childPid, 0); // throws if the child is not running
+
+    const exited = once(git, 'exit');
+    const pipeClosed = once(git, 'close'); // after the exit, once nothing holds stdout open
+    (added[0] as () => void)(); // what process.exit() runs on server shutdown
+    const [, signal] = await exited;
+    assert.equal(signal, 'SIGTERM');
+    assert.ok(!process.listeners('exit').includes(added[0]), 'the exit hook outlived git');
+
+    // The leader's child is gone too, not only the leader.
+    const timedOut = new Promise<'timed out'>((resolve) => { timer = setTimeout(() => resolve('timed out'), 5_000); });
+    assert.notEqual(await Promise.race([pipeClosed, timedOut]), 'timed out', `git's child ${childPid} survived the server`);
+  } finally {
+    clearTimeout(timer);
     try {
-      process.kill(-pid, 0);
+      process.kill(-pid, 'SIGKILL');
     } catch {
-      return;
+      // The group is already gone.
     }
-    await new Promise((resolve) => { setTimeout(resolve, 50); });
   }
-  assert.fail('a process of git\'s group survived the server');
 });
