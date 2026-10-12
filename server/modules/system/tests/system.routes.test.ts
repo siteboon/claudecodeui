@@ -5,43 +5,20 @@ import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import test, { after } from 'node:test';
+import test, { after, before } from 'node:test';
 
 import Database from 'better-sqlite3';
 import express from 'express';
+import type { NextFunction, Request as ExpressRequest, Response as ExpressResponse } from 'express';
 
-// The auth middleware reads the platform flag and the JWT secret while it is
-// first imported, so the isolated database, the self-hosted mode and a known
-// secret have to be in place before any server module loads (the developer
-// shell may export Platform mode or point DATABASE_PATH at a real install).
-const fixtureDirectory = await mkdtemp(path.join(tmpdir(), 'system-routes-'));
-const snapshotParent = path.join(fixtureDirectory, 'snapshots');
-await mkdir(snapshotParent);
+import type { createSystemRouter } from '../system.routes.js';
+
 const JWT_SECRET = 'system-routes-test-secret';
 const previousEnvironment = {
   DATABASE_PATH: process.env.DATABASE_PATH,
   JWT_SECRET: process.env.JWT_SECRET,
   VITE_IS_PLATFORM: process.env.VITE_IS_PLATFORM,
 };
-process.env.DATABASE_PATH = path.join(fixtureDirectory, 'auth.db');
-process.env.JWT_SECRET = JWT_SECRET;
-process.env.VITE_IS_PLATFORM = 'false';
-
-const { authenticateToken } = await import('@/modules/auth/index.js');
-const {
-  closeConnection,
-  getConnection,
-  initializeDatabase,
-  projectsDb,
-  userDb,
-} = await import('@/modules/database/index.js');
-const { createSystemStorageService } = await import('../system-storage.service.js');
-const { createSystemRouter } = await import('../system.routes.js');
-
-await initializeDatabase();
-const user = userDb.createUser('route-user', 'password-hash');
-projectsDb.createProjectPath('/workspace/route-project', 'Route Project');
-const token = signSessionToken({ userId: Number(user.id), username: user.username });
 
 /** Signs an HS256 session token the way the auth module does, with the test's secret. */
 function signSessionToken(claims: { userId: number; username: string }): string {
@@ -51,8 +28,55 @@ function signSessionToken(claims: { userId: number; username: string }): string 
   return `${unsigned}.${createHmac('sha256', JWT_SECRET).update(unsigned).digest('base64url')}`;
 }
 
+/**
+ * The auth middleware and the shared Platform flag are read while their modules
+ * are first imported, so the isolated database, the self-hosted mode and a
+ * known secret have to be in place before any server module loads (the
+ * developer shell may export Platform mode or point DATABASE_PATH at a real
+ * install).
+ */
+async function setUpFixture(directory: string) {
+  process.env.DATABASE_PATH = path.join(directory, 'auth.db');
+  process.env.JWT_SECRET = JWT_SECRET;
+  process.env.VITE_IS_PLATFORM = 'false';
+  const snapshotParent = path.join(directory, 'snapshots');
+  await mkdir(snapshotParent);
+
+  const { authenticateToken } = await import('@/modules/auth/index.js');
+  const database = await import('@/modules/database/index.js');
+  const { AppError } = await import('@/shared/utils.js');
+  const { createSystemStorageService } = await import('../system-storage.service.js');
+  const { createSystemRouter: createRouter } = await import('../system.routes.js');
+
+  await database.initializeDatabase();
+  const user = database.userDb.createUser('route-user', 'password-hash');
+  database.projectsDb.createProjectPath('/workspace/route-project', 'Route Project');
+
+  return {
+    AppError,
+    authenticateToken,
+    closeConnection: database.closeConnection,
+    createSystemRouter: createRouter,
+    createSystemStorageService,
+    directory,
+    getConnection: database.getConnection,
+    snapshotParent,
+    token: signSessionToken({ userId: Number(user.id), username: user.username }),
+  };
+}
+
+// Both are assigned in before(), not at the top level: a failing import there
+// would end the file before after() runs and leak the fixture directory.
+let fixtureDirectory: string | undefined;
+let fixture!: Awaited<ReturnType<typeof setUpFixture>>;
+
+before(async () => {
+  fixtureDirectory = await mkdtemp(path.join(tmpdir(), 'system-routes-'));
+  fixture = await setUpFixture(fixtureDirectory);
+});
+
 after(async () => {
-  closeConnection();
+  fixture?.closeConnection();
   for (const [name, value] of Object.entries(previousEnvironment)) {
     if (value === undefined) {
       delete process.env[name];
@@ -60,7 +84,9 @@ after(async () => {
       process.env[name] = value;
     }
   }
-  await rm(fixtureDirectory, { recursive: true, force: true });
+  if (fixtureDirectory) {
+    await rm(fixtureDirectory, { recursive: true, force: true });
+  }
 });
 
 type SystemRouterServices = Parameters<typeof createSystemRouter>[0];
@@ -72,29 +98,37 @@ function createServices(options: { isPlatform?: boolean; onBackup?: () => void }
         throw new Error('Unexpected update');
       },
     },
-    systemStorageService: createSystemStorageService({
+    systemStorageService: fixture.createSystemStorageService({
       isPlatform: options.isPlatform ?? false,
       getDatabasePath: () => process.env.DATABASE_PATH ?? '',
-      getAssetsPath: () => path.join(fixtureDirectory, 'assets'),
+      getAssetsPath: () => path.join(fixture.directory, 'assets'),
       backupDatabase: (destinationPath) => {
         options.onBackup?.();
-        return getConnection().backup(destinationPath);
+        return fixture.getConnection().backup(destinationPath);
       },
-      temporaryDirectory: snapshotParent,
+      temporaryDirectory: fixture.snapshotParent,
       now: () => new Date('2026-10-12T18:30:05.000Z'),
     }),
   };
 }
 
-/** Mounts the router exactly like server/index.ts: behind authenticateToken at /api/system. */
+/**
+ * Mounts `router` like server/index.ts mounts the system module: behind
+ * authenticateToken at /api/system, followed by the same AppError response shape.
+ */
 async function withSystemServer(
-  services: SystemRouterServices,
+  router: express.Router,
   run: (baseUrl: string) => Promise<void>,
 ): Promise<void> {
   const app = express();
-  // Keeps Express's fallback error handler from printing the expected 403 stack traces.
-  app.set('env', 'test');
-  app.use('/api/system', authenticateToken, createSystemRouter(services));
+  app.use('/api/system', fixture.authenticateToken, router);
+  app.use((error: unknown, _request: ExpressRequest, response: ExpressResponse, _next: NextFunction) => {
+    if (error instanceof fixture.AppError) {
+      response.status(error.statusCode).json({ success: false, error: { code: error.code, message: error.message } });
+      return;
+    }
+    response.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR' } });
+  });
 
   const server = app.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -109,9 +143,18 @@ async function withSystemServer(
   }
 }
 
+function authorized(): RequestInit {
+  return { headers: { Authorization: `Bearer ${fixture.token}` } };
+}
+
+async function readErrorCode(response: Response): Promise<string | undefined> {
+  return ((await response.json()) as { error?: { code?: string } }).error?.code;
+}
+
 test('backup and storage routes reject requests without a valid token', async () => {
   let backupCalls = 0;
-  await withSystemServer(createServices({ onBackup: () => { backupCalls += 1; } }), async (baseUrl) => {
+  const router = fixture.createSystemRouter(createServices({ onBackup: () => { backupCalls += 1; } }));
+  await withSystemServer(router, async (baseUrl) => {
     for (const route of ['/api/system/backup', '/api/system/storage']) {
       const anonymous = await fetch(`${baseUrl}${route}`);
       assert.equal(anonymous.status, 401, route);
@@ -126,10 +169,8 @@ test('backup and storage routes reject requests without a valid token', async ()
 });
 
 test('an authenticated request downloads a consistent, uncached database snapshot', async () => {
-  await withSystemServer(createServices(), async (baseUrl) => {
-    const response = await fetch(`${baseUrl}/api/system/backup`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+  await withSystemServer(fixture.createSystemRouter(createServices()), async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/system/backup`, authorized());
 
     assert.equal(response.status, 200);
     assert.equal(
@@ -151,36 +192,31 @@ test('an authenticated request downloads a consistent, uncached database snapsho
     }
   });
 
-  assert.deepEqual(await readdir(snapshotParent), []);
+  assert.deepEqual(await readdir(fixture.snapshotParent), []);
 });
 
 test('an authenticated request reads the resolved storage locations', async () => {
-  await withSystemServer(createServices(), async (baseUrl) => {
-    const response = await fetch(`${baseUrl}/api/system/storage`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+  await withSystemServer(fixture.createSystemRouter(createServices()), async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/system/storage`, authorized());
 
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), {
-      databasePath: path.join(fixtureDirectory, 'auth.db'),
-      assetsPath: path.join(fixtureDirectory, 'assets'),
+      databasePath: path.join(fixture.directory, 'auth.db'),
+      assetsPath: path.join(fixture.directory, 'assets'),
     });
   });
 });
 
 test('platform installs answer 403 even for an authenticated request', async () => {
   let backupCalls = 0;
-  await withSystemServer(
-    createServices({ isPlatform: true, onBackup: () => { backupCalls += 1; } }),
-    async (baseUrl) => {
-      for (const route of ['/api/system/backup', '/api/system/storage']) {
-        const response = await fetch(`${baseUrl}${route}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        assert.equal(response.status, 403, route);
-      }
-    },
-  );
+  const router = fixture.createSystemRouter(createServices({ isPlatform: true, onBackup: () => { backupCalls += 1; } }));
+  await withSystemServer(router, async (baseUrl) => {
+    for (const route of ['/api/system/backup', '/api/system/storage']) {
+      const response = await fetch(`${baseUrl}${route}`, authorized());
+      assert.equal(response.status, 403, route);
+      assert.equal(await readErrorCode(response), 'PLATFORM_MANAGED_STORAGE', route);
+    }
+  });
 
   assert.equal(backupCalls, 0);
 });
