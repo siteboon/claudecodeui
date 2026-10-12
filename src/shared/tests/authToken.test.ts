@@ -84,6 +84,50 @@ test('storeAuthToken: a non-token value is rejected and does not overwrite the s
   assert.equal(localStorage.getItem('auth-token'), 'existing');
 });
 
+test('storeAuthToken: an older refresh cannot replace a newer stored token', () => {
+  localStorage.clear();
+  const now = Math.floor(Date.now() / 1000);
+  const newer = makeToken({ iat: now - 60, exp: now + 600 });
+  const older = makeToken({ iat: now - 600, exp: now + 300 });
+  localStorage.setItem('auth-token', newer);
+
+  assert.equal(storeAuthToken(older), false);
+  assert.equal(localStorage.getItem('auth-token'), newer);
+});
+
+test('storeAuthToken: equal issue times accept only the token already stored', () => {
+  localStorage.clear();
+  const now = Math.floor(Date.now() / 1000);
+  const stored = makeToken({ sub: 'current', iat: now, exp: now + 600 });
+  const different = makeToken({ sub: 'late-response', iat: now, exp: now + 600 });
+  localStorage.setItem('auth-token', stored);
+
+  assert.equal(storeAuthToken(stored), true);
+  assert.equal(storeAuthToken(different), false);
+  assert.equal(localStorage.getItem('auth-token'), stored);
+});
+
+test('storeAuthToken: a newer token is accepted even when it is already expired', () => {
+  localStorage.clear();
+  const now = Math.floor(Date.now() / 1000);
+  const older = makeToken({ iat: now - 600, exp: now + 600 });
+  const newerButExpired = makeToken({ iat: now - 120, exp: now - 60 });
+  localStorage.setItem('auth-token', older);
+
+  assert.equal(storeAuthToken(newerButExpired), true);
+  assert.equal(localStorage.getItem('auth-token'), newerButExpired);
+});
+
+test('storeAuthToken: unreadable claims cannot replace the stored token', () => {
+  localStorage.clear();
+  const now = Math.floor(Date.now() / 1000);
+  const stored = makeToken({ iat: now, exp: now + 600 });
+  localStorage.setItem('auth-token', stored);
+
+  assert.equal(storeAuthToken(makeToken({ sub: 'missing-timestamps' })), false);
+  assert.equal(localStorage.getItem('auth-token'), stored);
+});
+
 test('getStoredAuthToken: an expired token is dropped and the expiry is announced once', () => {
   localStorage.clear();
   const now = Math.floor(Date.now() / 1000);

@@ -107,6 +107,14 @@ test('no token means no Authorization header at all', async () => {
   assert.equal('Authorization' in sentHeaders(), false);
 });
 
+test('authenticated responses always bypass the HTTP cache', async () => {
+  respondWith();
+
+  await (await loadFetch(false))('/api/projects', { cache: 'force-cache' });
+
+  assert.equal(lastInit?.cache, 'no-store');
+});
+
 test('a JSON body is labelled as JSON', async () => {
   respondWith();
 
@@ -138,8 +146,9 @@ test('a caller header wins over the default', async () => {
 });
 
 test('a refreshed token on the response replaces the stored one', async () => {
-  localStorage.setItem('auth-token', liveToken());
-  const rotated = liveToken().replace('signature', 'rotated');
+  const now = Math.floor(Date.now() / 1000);
+  localStorage.setItem('auth-token', makeToken({ iat: now - 60, exp: now + 540 }));
+  const rotated = makeToken({ iat: now, exp: now + 600 });
   let announced: string | null = null;
   const onRefresh = (event: Event) => {
     announced = (event as CustomEvent<string>).detail;
@@ -152,6 +161,37 @@ test('a refreshed token on the response replaces the stored one', async () => {
   window.removeEventListener(AUTH_TOKEN_REFRESHED_EVENT, onRefresh);
   assert.equal(localStorage.getItem('auth-token'), rotated);
   assert.equal(announced, rotated);
+});
+
+test('a slower older refresh response cannot replace a newer token', async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const older = makeToken({ iat: now - 600, exp: now + 300 });
+  const newer = makeToken({ iat: now - 60, exp: now + 600 });
+  let releaseSlowResponse: (() => void) | undefined;
+  const slowResponse = new Promise<void>((resolve) => {
+    releaseSlowResponse = resolve;
+  });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) => {
+      const isSlow = url.endsWith('/slow');
+      if (isSlow) {
+        await slowResponse;
+      }
+      return new Response('{}', {
+        headers: { 'X-Refreshed-Token': isSlow ? older : newer },
+      });
+    }),
+  );
+  const fetch = await loadFetch(false);
+
+  const slowRequest = fetch('/api/slow');
+  await fetch('/api/fast');
+  assert.ok(releaseSlowResponse);
+  releaseSlowResponse();
+  await slowRequest;
+
+  assert.equal(localStorage.getItem('auth-token'), newer);
 });
 
 test('an auth error on the response ends the session', async () => {

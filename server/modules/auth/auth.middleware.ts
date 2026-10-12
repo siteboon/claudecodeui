@@ -8,6 +8,12 @@ import { userDb, appConfigDb } from '../database/index.js';
 // Use env var if set, otherwise auto-generate a unique secret per installation
 const JWT_SECRET = process.env.JWT_SECRET || appConfigDb.getOrCreateJwtSecret();
 
+/** Used by the server entrypoint so API responses carrying auth state never enter HTTP caches. */
+export const preventApiResponseCaching = (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+};
+
 // Optional API key middleware
 const validateApiKey = (req, res, next) => {
   // Skip API key validation if not configured
