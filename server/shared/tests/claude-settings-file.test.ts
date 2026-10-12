@@ -79,3 +79,44 @@ test('reports anything but a regular file as invalid without opening it', async 
     }
   });
 });
+
+test('follows a symlink to a regular file, as dotfile managers install settings', async (t) => {
+  if (process.platform === 'win32') {
+    t.skip('creating symlinks needs extra privileges on Windows');
+    return;
+  }
+
+  await withDirectory(async (directory) => {
+    // stow, chezmoi and home-manager link ~/.claude/settings.json into a dotfiles
+    // checkout or the Nix store, sometimes through a chain of links. The CLI
+    // applies the file at the end of the chain.
+    await mkdir(path.join(directory, 'dotfiles'));
+    await writeFile(path.join(directory, 'dotfiles', 'settings.json'), '{"model":"opus"}');
+    const relativeLink = path.join(directory, 'relative-link.json');
+    await symlink(path.join('dotfiles', 'settings.json'), relativeLink);
+    const chainedLink = path.join(directory, 'chained-link.json');
+    await symlink(relativeLink, chainedLink);
+
+    for (const filePath of [relativeLink, chainedLink]) {
+      assert.deepEqual(await readClaudeSettingsFile(filePath), { status: 'ok', settings: { model: 'opus' } }, filePath);
+    }
+  });
+});
+
+test('reports a symlink loop as invalid, not missing', async (t) => {
+  if (process.platform === 'win32') {
+    t.skip('creating symlinks needs extra privileges on Windows');
+    return;
+  }
+
+  await withDirectory(async (directory) => {
+    // Resolving the loop fails with ELOOP: the path exists but can never be
+    // loaded. Unlike an unreadable file, this fails the same way for root.
+    const loopA = path.join(directory, 'loop-a.json');
+    const loopB = path.join(directory, 'loop-b.json');
+    await symlink(loopB, loopA);
+    await symlink(loopA, loopB);
+
+    assert.deepEqual(await readClaudeSettingsFile(loopA), { status: 'invalid', settings: null });
+  });
+});
