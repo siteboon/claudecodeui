@@ -146,6 +146,92 @@ function runBuildIfNeeded(dir, packageJsonPath, onSuccess, onError) {
   });
 }
 
+/**
+ * Environment for the plugin `git clone` / `git pull`. Git runs with the server
+ * user's own setup, so credential helpers, ~/.git-credentials, GIT_ASKPASS and
+ * SSH keys keep working. It must never ask for a username or password on the
+ * terminal, though: when the server was started from a shell, the prompt lands
+ * in that shell and the install request hangs until someone answers it there.
+ */
+function buildPluginGitEnvironment(): NodeJS.ProcessEnv {
+  return { ...process.env, GIT_TERMINAL_PROMPT: '0' };
+}
+
+type PluginGitFailureKind = 'auth' | 'not-found' | 'unreachable';
+
+// Checked in order against git's stderr. Most hosts (GitHub included) answer an
+// anonymous request for a private repository and for a missing one with the
+// same 401, so an auth failure can only ever mean "private or missing"; only a
+// host that knows who is asking can say "not found".
+const PLUGIN_GIT_FAILURE_PATTERNS: Array<[PluginGitFailureKind, RegExp]> = [
+  ['auth', /could not read (username|password)|authentication failed|invalid username or (password|token)|http basic: access denied|permission denied \(publickey|host key verification failed|requested url returned error: 40[13]\b/i],
+  ['not-found', /repository not found|repository '[^']*' not found|does not appear to be a git repository|requested url returned error: 404\b|could not be found or you don't have permission/i],
+  ['unreachable', /could not resolve host|failed to connect to|connection refused|connection timed out|operation timed out|network is unreachable|no route to host|connection reset/i],
+];
+
+const PLUGIN_GIT_FAILURES: Record<PluginGitFailureKind, { code: string; statusCode: number; reason: string }> = {
+  auth: {
+    code: 'PLUGIN_GIT_AUTH_REQUIRED',
+    statusCode: 422,
+    reason: 'git could not authenticate to the repository\'s host, so the repository is private or does not exist. '
+      + 'Plugins are installed and updated with the git credentials of the user the CloudCLI server runs as: '
+      + 'set up a credential helper for that user (for example `gh auth setup-git` or ~/.git-credentials), '
+      + 'or an SSH key and known_hosts entry for git@ URLs, then try again.',
+  },
+  'not-found': {
+    code: 'PLUGIN_GIT_REPO_NOT_FOUND',
+    statusCode: 422,
+    reason: 'the repository was not found. Check the URL; if the repository is private, the git credentials '
+      + 'of the user the CloudCLI server runs as have no access to it.',
+  },
+  unreachable: {
+    code: 'PLUGIN_GIT_HOST_UNREACHABLE',
+    statusCode: 502,
+    reason: 'the git host could not be reached. Check the URL and the server\'s network connection.',
+  },
+};
+
+/** Removes `user:password@` from any URL git echoed, before the text is logged or sent to the client. */
+function redactUrlCredentials(text: string): string {
+  return text.replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/gi, '$1');
+}
+
+/**
+ * Turns a failed plugin `git clone` / `git pull` into an AppError the Settings >
+ * Plugins screen can show: a stable code and an actionable message for the
+ * common failures (credentials missing, repository missing, host unreachable),
+ * and git's own last error line for anything else. The full git output stays in
+ * `details` and in the server log.
+ *
+ * Exported for tests.
+ */
+export function createPluginGitError(
+  action: 'install' | 'update',
+  gitCommand: 'clone' | 'pull',
+  exitCode: number | null,
+  stderr: string,
+): AppError {
+  const gitOutput = redactUrlCredentials(stderr).replace(/\r/g, '').trim();
+  console.error(`[Plugins] git ${gitCommand} failed (exit code ${exitCode}):\n${gitOutput}`);
+
+  const details = { gitCommand: `git ${gitCommand}`, exitCode, gitOutput: gitOutput.slice(-4000) };
+  const kind = PLUGIN_GIT_FAILURE_PATTERNS.find(([, pattern]) => pattern.test(gitOutput))?.[0];
+  if (kind) {
+    const { code, statusCode, reason } = PLUGIN_GIT_FAILURES[kind];
+    return new AppError(`Could not ${action} the plugin: ${reason}`, { code, statusCode, details });
+  }
+
+  // Unrecognised: git's last fatal/error line is the most useful thing to show.
+  const lines = gitOutput.split('\n').map((line) => line.trim()).filter((line) => line && !line.startsWith('Cloning into'));
+  const lastError = [...lines].reverse().find((line) => /^(fatal|error):/i.test(line)) ?? lines.at(-1);
+  const summary = lastError ? lastError.replace(/^(fatal|error):\s*/i, '') : `exit code ${exitCode}`;
+  return new AppError(`Could not ${action} the plugin: git ${gitCommand} failed: ${summary}`, {
+    code: 'PLUGIN_GIT_FAILED',
+    statusCode: 502,
+    details,
+  });
+}
+
 export function scanPlugins() {
   const pluginsDir = getPluginsDir();
   const config = getPluginsConfig();
@@ -249,92 +335,6 @@ export function resolvePluginAssetPath(name, assetPath) {
   }
 
   return realResolved;
-}
-
-/**
- * Environment for the plugin `git clone` / `git pull`. Git runs with the server
- * user's own setup, so credential helpers, ~/.git-credentials, GIT_ASKPASS and
- * SSH keys keep working. It must never ask for a username or password on the
- * terminal, though: when the server was started from a shell, the prompt lands
- * in that shell and the install request hangs until someone answers it there.
- */
-function buildPluginGitEnvironment(): NodeJS.ProcessEnv {
-  return { ...process.env, GIT_TERMINAL_PROMPT: '0' };
-}
-
-type PluginGitFailureKind = 'auth' | 'not-found' | 'unreachable';
-
-// Checked in order against git's stderr. Most hosts (GitHub included) answer an
-// anonymous request for a private repository and for a missing one with the
-// same 401, so an auth failure can only ever mean "private or missing"; only a
-// host that knows who is asking can say "not found".
-const PLUGIN_GIT_FAILURE_PATTERNS: Array<[PluginGitFailureKind, RegExp]> = [
-  ['auth', /could not read (username|password)|authentication failed|invalid username or (password|token)|http basic: access denied|permission denied \(publickey|host key verification failed|requested url returned error: 40[13]\b/i],
-  ['not-found', /repository not found|repository '[^']*' not found|does not appear to be a git repository|requested url returned error: 404\b|could not be found or you don't have permission/i],
-  ['unreachable', /could not resolve host|failed to connect to|connection refused|connection timed out|operation timed out|network is unreachable|no route to host|connection reset/i],
-];
-
-const PLUGIN_GIT_FAILURES: Record<PluginGitFailureKind, { code: string; statusCode: number; reason: string }> = {
-  auth: {
-    code: 'PLUGIN_GIT_AUTH_REQUIRED',
-    statusCode: 422,
-    reason: 'git could not authenticate to the repository\'s host, so the repository is private or does not exist. '
-      + 'Plugins are installed and updated with the git credentials of the user the CloudCLI server runs as: '
-      + 'set up a credential helper for that user (for example `gh auth setup-git` or ~/.git-credentials), '
-      + 'or an SSH key and known_hosts entry for git@ URLs, then try again.',
-  },
-  'not-found': {
-    code: 'PLUGIN_GIT_REPO_NOT_FOUND',
-    statusCode: 422,
-    reason: 'the repository was not found. Check the URL; if the repository is private, the git credentials '
-      + 'of the user the CloudCLI server runs as have no access to it.',
-  },
-  unreachable: {
-    code: 'PLUGIN_GIT_HOST_UNREACHABLE',
-    statusCode: 502,
-    reason: 'the git host could not be reached. Check the URL and the server\'s network connection.',
-  },
-};
-
-/** Removes `user:password@` from any URL git echoed, before the text is logged or sent to the client. */
-function redactUrlCredentials(text: string): string {
-  return text.replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/gi, '$1');
-}
-
-/**
- * Turns a failed plugin `git clone` / `git pull` into an AppError the Settings >
- * Plugins screen can show: a stable code and an actionable message for the
- * common failures (credentials missing, repository missing, host unreachable),
- * and git's own last error line for anything else. The full git output stays in
- * `details` and in the server log.
- *
- * Exported for tests.
- */
-export function createPluginGitError(
-  action: 'install' | 'update',
-  gitCommand: 'clone' | 'pull',
-  exitCode: number | null,
-  stderr: string,
-): AppError {
-  const gitOutput = redactUrlCredentials(stderr).replace(/\r/g, '').trim();
-  console.error(`[Plugins] git ${gitCommand} failed (exit code ${exitCode}):\n${gitOutput}`);
-
-  const details = { gitCommand: `git ${gitCommand}`, exitCode, gitOutput: gitOutput.slice(-4000) };
-  const kind = PLUGIN_GIT_FAILURE_PATTERNS.find(([, pattern]) => pattern.test(gitOutput))?.[0];
-  if (kind) {
-    const { code, statusCode, reason } = PLUGIN_GIT_FAILURES[kind];
-    return new AppError(`Could not ${action} the plugin: ${reason}`, { code, statusCode, details });
-  }
-
-  // Unrecognised: git's last fatal/error line is the most useful thing to show.
-  const lines = gitOutput.split('\n').map((line) => line.trim()).filter((line) => line && !line.startsWith('Cloning into'));
-  const lastError = [...lines].reverse().find((line) => /^(fatal|error):/i.test(line)) ?? lines.at(-1);
-  const summary = lastError ? lastError.replace(/^(fatal|error):\s*/i, '') : `exit code ${exitCode}`;
-  return new AppError(`Could not ${action} the plugin: git ${gitCommand} failed: ${summary}`, {
-    code: 'PLUGIN_GIT_FAILED',
-    statusCode: 502,
-    details,
-  });
 }
 
 export function installPluginFromGit(url) {
