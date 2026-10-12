@@ -12,11 +12,14 @@ import type { NormalizedMessage, ProviderRuntimeContext } from '@/shared/types.j
  * AskUserQuestion and ExitPlanMode need the owner's answer. In 'auto' and
  * 'bypassPermissions' the CLI never calls `canUseTool`, so the runtime routes
  * them through a PreToolUse hook, which runs before permission-mode handling.
+ * The other modes keep `canUseTool` as their only approval path.
  */
 
 type HookCallback = (input: Record<string, unknown>, toolUseId: string | undefined, options: { signal: AbortSignal }) => Promise<Record<string, any>>;
+type CanUseTool = (toolName: string, input: Record<string, unknown>, options: { signal: AbortSignal }) => Promise<Record<string, any>>;
 type CapturedOptions = {
   hooks?: { PreToolUse?: Array<{ matcher: string; hooks: HookCallback[] }> };
+  canUseTool?: CanUseTool;
   disallowedTools?: string[];
   permissionMode?: string;
 };
@@ -25,10 +28,11 @@ type CapturedOptions = {
  * Starts a turn whose scripted SDK stream stays open until `finish` is called,
  * and returns the options every `createQuery` attempt received.
  */
-async function startTurn(permissionMode: string, { rejectHooks = false } = {}) {
+async function startTurn(permissionMode: string, { rejectHooks = false, rejectInitialization = false } = {}) {
   const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-interaction-hook-'));
   const sent: NormalizedMessage[] = [];
   const attempts: CapturedOptions[] = [];
+  const closed: boolean[] = [];
   let finish!: () => void;
   const finished = new Promise<void>((resolve) => { finish = resolve; });
 
@@ -49,7 +53,17 @@ async function startTurn(permissionMode: string, { rejectHooks = false } = {}) {
         await finished;
         yield { type: 'result', subtype: 'success', session_id: 'native-hook-session', result: 'ok', duration_ms: 1, num_turns: 1 };
       })();
-      return Object.assign(stream, { interrupt: async () => {} });
+      const attempt = closed.push(false) - 1;
+      // The SDK answers `query()` at once and reports a rejected initialize
+      // request (hooks included) only through `initializationResult()`.
+      const initialization = rejectInitialization && options.hooks
+        ? Promise.reject(new Error('initialize failed'))
+        : Promise.resolve({});
+      return Object.assign(stream, {
+        interrupt: async () => {},
+        initializationResult: () => initialization,
+        close: () => { closed[attempt] = true; },
+      });
     },
   };
 
@@ -60,6 +74,7 @@ async function startTurn(permissionMode: string, { rejectHooks = false } = {}) {
   return {
     sent,
     attempts,
+    closed,
     async end() {
       finish();
       await run;
@@ -74,7 +89,7 @@ const preToolUseHook = (options: CapturedOptions) => {
   return entry;
 };
 
-for (const mode of ['bypassPermissions', 'auto', 'default']) {
+for (const mode of ['bypassPermissions', 'auto']) {
   test(`AskUserQuestion is answered by the owner through the hook in ${mode} mode`, async () => {
     const turn = await startTurn(mode);
     try {
@@ -127,6 +142,31 @@ test('the hook leaves other tools to the normal permission flow', async () => {
   }
 });
 
+for (const mode of ['default', 'plan']) {
+  test(`AskUserQuestion asks the owner exactly once in ${mode} mode`, async () => {
+    const turn = await startTurn(mode);
+    try {
+      const options = turn.attempts[0];
+      assert.equal(options.hooks?.PreToolUse, undefined, 'no PreToolUse hook outside the modes that skip canUseTool');
+      assert.ok(options.canUseTool);
+
+      // What the CLI does for one invocation: matching PreToolUse hooks (none
+      // here), then the permission step, which calls `canUseTool`.
+      const question = { questions: [{ question: 'Which database?', options: [{ label: 'SQLite' }, { label: 'Postgres' }] }] };
+      const pending = options.canUseTool('AskUserQuestion', question, { signal: new AbortController().signal });
+
+      const requests = turn.sent.filter((message) => message.kind === 'permission_request');
+      assert.equal(requests.length, 1);
+      const answered = { ...question, answers: { 'Which database?': 'Postgres' } };
+      resolveToolApproval(requests[0].requestId, { allow: true, updatedInput: answered });
+      assert.deepEqual(await pending, { behavior: 'allow', updatedInput: answered });
+      assert.equal(turn.sent.filter((message) => message.kind === 'permission_request').length, 1);
+    } finally {
+      await turn.end();
+    }
+  });
+}
+
 test('without hook support, modes that skip canUseTool disallow interaction-required tools', async () => {
   const turn = await startTurn('bypassPermissions', { rejectHooks: true });
   try {
@@ -145,6 +185,23 @@ test('without hook support, default mode keeps asking through canUseTool', async
   try {
     const retry = turn.attempts[1];
     assert.equal(retry.disallowedTools?.includes('AskUserQuestion') ?? false, false);
+  } finally {
+    await turn.end();
+  }
+});
+
+test('a rejected initialization closes the hooked query and retries without hooks', async () => {
+  const turn = await startTurn('bypassPermissions', { rejectInitialization: true });
+  try {
+    for (let attempt = 0; attempt < 200 && turn.attempts.length < 2; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    assert.equal(turn.attempts.length, 2);
+    assert.deepEqual(turn.closed, [true, false]);
+    const retry = turn.attempts[1];
+    assert.equal(retry.hooks, undefined);
+    assert.ok(retry.disallowedTools?.includes('AskUserQuestion'));
+    assert.ok(retry.disallowedTools?.includes('ExitPlanMode'));
   } finally {
     await turn.end();
   }
