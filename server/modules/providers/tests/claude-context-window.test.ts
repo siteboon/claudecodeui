@@ -21,13 +21,17 @@ import type { NormalizedMessage, ProviderRuntimeContext } from '@/shared/types.j
 type Emitted = Record<string, unknown>;
 
 /** Drives `queryClaudeSDK` through one scripted SDK stream and returns every message it sent. */
-async function runScripted(appSessionId: string, stream: Emitted[]): Promise<NormalizedMessage[]> {
+async function runScripted(
+  appSessionId: string,
+  stream: Emitted[],
+  resumeProviderSessionId: string | null = null,
+): Promise<NormalizedMessage[]> {
   const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-context-window-'));
   const sent: NormalizedMessage[] = [];
   const writer = { send: (message: NormalizedMessage) => { sent.push(message); }, userId: null };
   const sessions = new ClaudeSessionsProvider({ getLiveRunStartTime: () => null });
   const context: ProviderRuntimeContext = {
-    resolveProviderSessionId: () => null,
+    resolveProviderSessionId: () => resumeProviderSessionId,
     resolveResumeModel: async () => undefined,
     getProviderModels: async () => CLAUDE_PREDEFINED_MODELS as never,
     normalizeMessage: (raw, sessionId) => sessions.normalizeMessage(raw, sessionId),
@@ -212,5 +216,26 @@ test('the history-derived usage keeps the window the run reported', async () => 
     } finally {
       await rm(tempDirectory, { recursive: true, force: true });
     }
+  });
+});
+
+test('a resumed session measures its first reading against the window it last reported', async () => {
+  await withContextWindowEnv('160000', async () => {
+    const nativeId = 'native-resumed';
+    await runScripted('app-resumed', [
+      { type: 'system', subtype: 'init', session_id: nativeId },
+      assistant(nativeId, 'claude-opus-4-6'),
+      result(nativeId, { 'claude-opus-4-6[1m]': modelUsageEntry(1_000_000, 'claude-opus-4-6') }),
+    ]);
+
+    const resumed = await runScripted('app-resumed', [
+      { type: 'system', subtype: 'init', session_id: nativeId },
+      assistant(nativeId, 'claude-opus-4-6'),
+      result(nativeId, { 'claude-opus-4-6[1m]': modelUsageEntry(1_000_000, 'claude-opus-4-6') }),
+    ], nativeId);
+
+    const budgets = tokenBudgets(resumed);
+    // No 160000 flash before the turn ends, and nothing re-sent when the window did not change.
+    assert.deepEqual(budgets.map((budget) => budget.total), [1_000_000]);
   });
 });
