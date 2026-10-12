@@ -17,14 +17,15 @@ import { AppError } from '@/shared/utils.js';
 const execFileAsync = promisify(execFile);
 
 // The registry resolves ~/.claude-code-ui/plugins when it is imported, so HOME
-// has to point at a fixture first. Git must not borrow a credential helper from
-// the developer's own config either: GIT_CONFIG_GLOBAL points at a file each
-// test controls, and GIT_TERMINAL_PROMPT is cleared so only the registry can set it.
+// has to point at a fixture first. Git must not borrow credentials from the
+// developer's setup either: GIT_CONFIG_GLOBAL points at a file each test
+// controls, askpass programs (an IDE terminal sets GIT_ASKPASS) are cleared, and
+// so is GIT_TERMINAL_PROMPT, so only the registry can set it.
 const fixtureHome = await mkdtemp(path.join(os.tmpdir(), 'plugin-git-home-'));
 const gitConfigPath = path.join(fixtureHome, 'gitconfig');
 await writeFile(gitConfigPath, '');
 const savedEnvironment = Object.fromEntries(
-  ['HOME', 'USERPROFILE', 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM', 'GIT_TERMINAL_PROMPT']
+  ['HOME', 'USERPROFILE', 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM', 'GIT_TERMINAL_PROMPT', 'GIT_ASKPASS', 'SSH_ASKPASS']
     .map((name) => [name, process.env[name]]),
 );
 process.env.HOME = fixtureHome;
@@ -32,6 +33,8 @@ process.env.USERPROFILE = fixtureHome;
 process.env.GIT_CONFIG_GLOBAL = gitConfigPath;
 process.env.GIT_CONFIG_NOSYSTEM = '1';
 delete process.env.GIT_TERMINAL_PROMPT;
+delete process.env.GIT_ASKPASS;
+delete process.env.SSH_ASKPASS;
 
 const { createPluginGitError, getPluginsDir, installPluginFromGit, updatePluginFromGit } = await import(
   '@/modules/plugins/plugin-registry.service.js'
