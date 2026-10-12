@@ -93,6 +93,10 @@ vi.mock('@/shared/api', () => ({
 // The picker's task banner pulls in the terminal stack; these tests never show it.
 vi.mock('@/modules/task-master', () => ({ NextTaskBanner: () => null }));
 
+// A boolean, so a failing assertion never has node:assert inspect a DOM node
+// (which runs the test worker out of memory).
+const isShown = (text: string | RegExp) => screen.queryByText(text) !== null;
+
 const createActions = (setCustomModelsOnly: ProviderModelActions['setCustomModelsOnly']) => ({
   create: async () => {},
   update: async () => {},
@@ -185,7 +189,7 @@ test('a toggle still saving keeps its state on its own provider tab', async () =
   await act(async () => {
     failSave(new Error('boom'));
   });
-  assert.equal(screen.queryByText('Unable to change this setting.'), null);
+  assert.equal(isShown('Unable to change this setting.'), false);
   assert.equal(readToggle().disabled, false);
 
   // It waits on the Claude tab, whose checkbox is usable again.
@@ -208,7 +212,7 @@ test('the model library shows the flag and says the built-ins are hidden', () =>
   const toggle = screen.getByRole('checkbox', { name: /Use only my models/ });
   assert.equal((toggle as HTMLInputElement).checked, true);
   screen.getByText('Hidden from model pickers while “Use only my models” is on.');
-  assert.equal(screen.queryByText('Default'), null);
+  assert.equal(isShown('Default'), false);
 });
 
 test('with the flag on but no custom models the built-ins stay listed', () => {
@@ -225,7 +229,7 @@ test('with the flag on but no custom models the built-ins stay listed', () => {
 
   assert.equal((screen.getByRole('checkbox', { name: /Use only my models/ }) as HTMLInputElement).checked, true);
   screen.getByText('Default');
-  assert.equal(screen.queryByText(/Hidden from model pickers/), null);
+  assert.equal(isShown(/Hidden from model pickers/), false);
 });
 
 test('a failed toggle is reported next to it', async () => {
@@ -337,5 +341,5 @@ test('the model picker says which providers list only your models', () => {
 
   renderPicker({ claude: CUSTOM_ONLY_CATALOG, codex });
   screen.getByText('Only your models are listed for Anthropic');
-  assert.equal(screen.queryByText('Built-in and custom models in one list'), null);
+  assert.equal(isShown('Built-in and custom models in one list'), false);
 });
