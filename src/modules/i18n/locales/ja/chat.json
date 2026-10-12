@@ -264,6 +264,10 @@
   "modelLibrary": {
     "effortLevels": "推論レベル",
     "effortLevelsHint": "このモデルが受け付ける推論エフォートのレベルを選択してください。何も選択しない場合、コンポーザーではこのモデルのレベルを選べません。",
-    "effortSummary": "推論: {{levels}}"
+    "effortSummary": "推論: {{levels}}",
+    "customModelsOnly": "自分のモデルのみを使用",
+    "customModelsOnlyHint": "{{provider}} の組み込みモデルをすべてのモデル選択から非表示にし、最初の自分のモデルをデフォルトにします。モデルを追加するまでは組み込みモデルが表示されます。",
+    "builtInModelsHidden": "「自分のモデルのみを使用」がオンの間、モデル選択には表示されません。",
+    "customModelsOnlyFailed": "この設定を変更できませんでした。"
   }
 }

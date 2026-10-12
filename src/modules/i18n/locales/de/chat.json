@@ -283,6 +283,10 @@
   "modelLibrary": {
     "effortLevels": "Reasoning-Stufen",
     "effortLevelsHint": "Wähle die Reasoning-Effort-Stufen, die dieses Modell akzeptiert. Ohne Auswahl lässt sich im Composer für dieses Modell keine Stufe wählen.",
-    "effortSummary": "Reasoning: {{levels}}"
+    "effortSummary": "Reasoning: {{levels}}",
+    "customModelsOnly": "Nur meine Modelle verwenden",
+    "customModelsOnlyHint": "Blendet die integrierten {{provider}}-Modelle in allen Modellauswahlen aus und macht dein erstes Modell zum Standard. Die integrierten Modelle bleiben sichtbar, bis du ein Modell hinzufügst.",
+    "builtInModelsHidden": "In den Modellauswahlen ausgeblendet, solange „Nur meine Modelle verwenden“ aktiv ist.",
+    "customModelsOnlyFailed": "Diese Einstellung konnte nicht geändert werden."
   }
 }

@@ -418,5 +418,11 @@
     "tokensLabel_other": "tokenů",
     "escClosesModal": "Esc zavře okno.",
     "close": "Zavřít"
+  },
+  "modelLibrary": {
+    "customModelsOnly": "Používat jen mé modely",
+    "customModelsOnlyHint": "Skryje vestavěné modely {{provider}} ve všech výběrech modelu a nastaví váš první model jako výchozí. Vestavěné modely zůstanou v seznamu, dokud nepřidáte model.",
+    "builtInModelsHidden": "Skryto ve výběrech modelu, dokud je zapnuto „Používat jen mé modely“.",
+    "customModelsOnlyFailed": "Toto nastavení se nepodařilo změnit."
   }
 }

@@ -285,6 +285,10 @@
   "modelLibrary": {
     "effortLevels": "Niveaux de raisonnement",
     "effortLevelsHint": "Sélectionnez les niveaux d'effort de raisonnement acceptés par ce modèle. Sans sélection, aucun niveau ne pourra être choisi pour ce modèle dans le compositeur.",
-    "effortSummary": "Raisonnement : {{levels}}"
+    "effortSummary": "Raisonnement : {{levels}}",
+    "customModelsOnly": "Utiliser uniquement mes modèles",
+    "customModelsOnlyHint": "Masque les modèles intégrés de {{provider}} dans tous les sélecteurs de modèle et fait de votre premier modèle le modèle par défaut. Les modèles intégrés restent affichés tant que vous n'avez ajouté aucun modèle.",
+    "builtInModelsHidden": "Masqués dans les sélecteurs de modèle tant que « Utiliser uniquement mes modèles » est activé.",
+    "customModelsOnlyFailed": "Impossible de modifier ce paramètre."
   }
 }
