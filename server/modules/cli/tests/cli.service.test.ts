@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import type { CliEnvironment, CliOutput } from '@/shared/types.js';
 
@@ -85,4 +87,29 @@ test('returns a failure code for an unknown command without exiting the process'
 
   assert.equal(exitCode, 1);
   assert.match(harness.errorMessages[0], /Unknown command: unknown/);
+});
+
+const TLS_FIXTURES = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../shared/tests/fixtures');
+
+test('status reports HTTPS and an https:// UI address when SSL_CERT/SSL_KEY load', async () => {
+  const harness = createHarness();
+  harness.environment.SSL_CERT = path.join(TLS_FIXTURES, 'test-only-tls-cert.pem');
+  harness.environment.SSL_KEY = path.join(TLS_FIXTURES, 'test-only-tls-key.pem');
+
+  assert.equal(await harness.service.run(['status']), 0);
+
+  const output = harness.logMessages.join('\n');
+  assert.match(output, /HTTPS: .*\[OK\] SSL_CERT=.*test-only-tls-cert\.pem/);
+  assert.match(output, /Access the UI at https:\/\/localhost:3001/);
+});
+
+test('status warns that the server will use plain HTTP when the SSL setup is incomplete', async () => {
+  const harness = createHarness();
+  harness.environment.SSL_CERT = path.join(TLS_FIXTURES, 'test-only-tls-cert.pem');
+
+  assert.equal(await harness.service.run(['status']), 0);
+
+  const output = harness.logMessages.join('\n');
+  assert.match(output, /HTTPS: .*\[WARN\] Off, the server will use plain HTTP\. SSL_CERT is set but SSL_KEY is not\./);
+  assert.match(output, /Access the UI at http:\/\/localhost:3001/);
 });
