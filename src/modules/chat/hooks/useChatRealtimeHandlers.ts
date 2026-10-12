@@ -52,7 +52,7 @@ type UseChatRealtimeHandlersArgs = {
    * Subscribes again to a session an idle ack left unwatched although it is
    * busy with a run that started after the subscribe went out.
    */
-  onIdleAckMissedRun?: (sessionId: string) => void;
+  onIdleAckMissedRun: (sessionId: string) => void;
   requestLatestMessages: (sessionId: string, allowNetwork?: boolean) => Promise<void>;
   sessionStore: SessionStore;
 };
@@ -220,7 +220,7 @@ export function useChatRealtimeHandlers({
                 && resubscribedRunStartRef.current.get(sid) !== activity.startedAt
               ) {
                 resubscribedRunStartRef.current.set(sid, activity.startedAt);
-                onIdleAckMissedRun?.(sid);
+                onIdleAckMissedRun(sid);
               }
             }
           }

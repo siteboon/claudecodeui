@@ -405,3 +405,16 @@ test('an ack naming a newer run keeps the previous run\'s late frames off the po
 
   assert.deepEqual(lastSeqRef.current.get('session-a'), { runId: 'run-B', seq: 0 });
 });
+
+test('an idle ack newer than the busy state it contradicts does not subscribe again', async () => {
+  // The session looked busy since before the subscribe went out; the server
+  // has since answered that nothing is running.
+  const { dispatch, subscribes, poll } = await renderChatView({
+    getSessionActivity: () => ({ statusText: null, canInterrupt: true, startedAt: 1 }),
+  });
+  await poll(busy);
+
+  dispatch({ kind: 'chat_subscribed', isProcessing: false, pendingPermissions: [] });
+
+  assert.equal(subscribes().length, 1);
+});
