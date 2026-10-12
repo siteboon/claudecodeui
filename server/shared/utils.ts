@@ -802,7 +802,7 @@ export async function readClaudeSettingsFile(
 
     const bytes = await readFile(filePath);
     const isUtf16LittleEndian = bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe;
-    content = bytes.toString(isUtf16LittleEndian ? 'utf16le' : 'utf8').replace(/^﻿/, '');
+    content = bytes.toString(isUtf16LittleEndian ? 'utf16le' : 'utf8').replace(/^\uFEFF/, '');
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     return { status: code === 'ENOENT' || code === 'ENOTDIR' ? 'missing' : 'invalid', settings: null };

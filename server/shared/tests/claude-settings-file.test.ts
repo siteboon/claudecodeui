@@ -24,8 +24,8 @@ test('reads a settings file the way the CLI loads it', async () => {
   await withDirectory(async (directory) => {
     const cases: Array<[string, string | Buffer, Awaited<ReturnType<typeof readClaudeSettingsFile>>]> = [
       ['plain.json', '{"model":"opus"}', { status: 'ok', settings: { model: 'opus' } }],
-      ['utf8-bom.json', '﻿{"model":"opus"}', { status: 'ok', settings: { model: 'opus' } }],
-      ['utf16le-bom.json', Buffer.from('﻿{"model":"opus"}', 'utf16le'), { status: 'ok', settings: { model: 'opus' } }],
+      ['utf8-bom.json', '\uFEFF{"model":"opus"}', { status: 'ok', settings: { model: 'opus' } }],
+      ['utf16le-bom.json', Buffer.from('\uFEFF{"model":"opus"}', 'utf16le'), { status: 'ok', settings: { model: 'opus' } }],
       ['empty.json', '', { status: 'ok', settings: {} }],
       ['blank.json', ' \n\t', { status: 'ok', settings: {} }],
       ['malformed.json', '{ "model": ', { status: 'invalid', settings: null }],
