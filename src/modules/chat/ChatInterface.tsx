@@ -143,7 +143,7 @@ function ChatInterface({
     addMessage,
     sessionActivity,
     isProcessing,
-    subscribeToUnwatchedRun,
+    followClaimedQueuedMessage,
     markRunStartedHere,
     resubscribeAfterReconnect,
     canAbortSession,
@@ -276,7 +276,7 @@ function ChatInterface({
     onSessionProcessing: markOwnSendProcessing,
     // The card goes when the server claims the message, and the run it then
     // starts is the one to watch.
-    onQueuedMessageSent: subscribeToUnwatchedRun,
+    onQueuedMessageSent: followClaimedQueuedMessage,
     onSessionEstablished: handleSessionEstablished,
     onFileOpen,
     onShowSettings,

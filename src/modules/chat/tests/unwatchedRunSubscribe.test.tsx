@@ -192,6 +192,16 @@ test('a transcript change on an idle-looking session subscribes before the poll 
   assert.equal(subscribes().length, 2);
 });
 
+test('a claimed queued message is subscribed to and its history read, in case its run already ended', async () => {
+  const { hook, subscribes } = await renderIdleChatView();
+  store.refreshLatestFromServer.mockClear();
+
+  act(() => hook.result.current.followClaimedQueuedMessage('session-a'));
+
+  assert.equal(subscribes().length, 2);
+  assert.equal(store.refreshLatestFromServer.mock.calls[0]?.[0], 'session-a');
+});
+
 test('opening a busy session subscribes once, not again for the poll that says it is busy', async () => {
   const { subscribes } = await renderChatView({ initialProcessing: busy });
 

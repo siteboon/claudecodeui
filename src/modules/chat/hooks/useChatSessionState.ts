@@ -713,6 +713,15 @@ export function useChatSessionState({
     subscribeToSessionRun(sessionId);
   }, [subscribeToSessionRun, watchedRunSessionsRef, ws]);
 
+  // The server took the session's queued message to send it, and its card is
+  // gone. The run it starts is subscribed to so the message stays on screen;
+  // a short one can already be over by the time the card's poll notices, and
+  // a finished run is not replayed, so the history is read as well.
+  const followClaimedQueuedMessage = useCallback((sessionId: string) => {
+    subscribeToUnwatchedRun(sessionId);
+    void requestLatestMessages(sessionId);
+  }, [requestLatestMessages, subscribeToUnwatchedRun]);
+
   // The composer's own send starts a run on this socket, so it is watched
   // from the moment it is dispatched rather than subscribed to. A run already
   // confirmed attached stays so: the send will be refused, and the run it
@@ -1215,7 +1224,7 @@ export function useChatSessionState({
     addMessage,
     sessionActivity,
     isProcessing,
-    subscribeToUnwatchedRun,
+    followClaimedQueuedMessage,
     markRunStartedHere,
     resubscribeAfterReconnect,
     canAbortSession,
