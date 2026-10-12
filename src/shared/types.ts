@@ -264,8 +264,30 @@ export type ServerEvent = {
   type?: string;
   sessionId?: string;
   seq?: number;
+  /** The run `seq` counts in; every run of a session restarts at seq 1. */
+  runId?: string;
   [key: string]: unknown;
 };
+
+/**
+ * How far this socket has got through one session's live run: the run's id
+ * and the highest `seq` handled in it. Sent back with `chat.subscribe` so the
+ * server replays only what was missed — or the whole run when it is not the
+ * one this position came from. `runId` is null only for frames from a server
+ * that does not name its runs.
+ */
+export type RunReplayPosition = { runId: string | null; seq: number };
+
+/**
+ * Why the chat view counts a session's current run as one its socket already
+ * receives, so it does not subscribe to it again:
+ * - `send`: this tab's own send started it. A refused send undoes this.
+ * - `subscribe`: a `chat.subscribe` is in flight; its ack settles the entry.
+ * - `attached`: the ack confirmed a running run is now streaming here.
+ * A session missing from the map while busy runs a turn nobody here attached
+ * to (a queued or scheduled message the server sent, another tab's send).
+ */
+export type WatchedRunSource = 'send' | 'subscribe' | 'attached';
 
 
 // ---------------------------
@@ -530,6 +552,8 @@ export type NormalizedMessage = {
    * REST history messages do not carry it.
    */
   seq?: number;
+  /** The run `seq` counts in, set alongside it. */
+  runId?: string;
 
   // kind-specific fields (flat for simplicity)
   role?: 'user' | 'assistant';

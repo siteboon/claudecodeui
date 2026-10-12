@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 
-import type { ServerEvent,MarkSessionIdle,MarkSessionProcessing,PendingPermissionRequest,ProjectSession,LLMProvider,NormalizedMessage,GetSessionActivity,MarkSessionBackground } from '@/shared/types';
+import type { ServerEvent,MarkSessionIdle,MarkSessionProcessing,PendingPermissionRequest,ProjectSession,LLMProvider,NormalizedMessage,GetSessionActivity,MarkSessionBackground,RunReplayPosition,WatchedRunSource } from '@/shared/types';
 import { showCompletionTitleIndicator } from '@/modules/chat/utils/pageTitleNotification';
 import { playChatCompletionSound, playNotificationSound } from '@/shared/utils';
 import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
@@ -28,20 +28,20 @@ type UseChatRealtimeHandlersArgs = {
   streamTimerRef: MutableRefObject<number | null>;
   accumulatedStreamRef: MutableRefObject<string>;
   /**
-   * Highest live `seq` observed per session. Essential for reconnect catch-up:
-   * `chat.subscribe` sends this value as `lastSeq` so the server replays only
-   * the events this client actually missed. Written here on every sequenced
-   * frame; read wherever a `chat.subscribe` is sent (session open, reconnect).
+   * Highest live `seq` handled per session, with the run it counts in.
+   * Essential for reconnect catch-up: `chat.subscribe` sends it so the server
+   * replays only the events this client actually missed. Written here on
+   * every sequenced frame; read wherever a `chat.subscribe` is sent.
    */
-  lastSeqRef: MutableRefObject<Map<string, number>>;
+  lastSeqRef: MutableRefObject<Map<string, RunReplayPosition>>;
   /** When each session's `chat.subscribe` was last sent; guards stale idle acks. */
   statusCheckSentAtRef: MutableRefObject<Map<string, number>>;
   /**
-   * Sessions whose current run already streams to this socket. Kept current
-   * here from acks, live frames and terminal events, so a run this tab never
-   * attached to can be told apart and subscribed to.
+   * Sessions whose current run already streams to this socket, shared with
+   * `useChatSessionState`. Settled here from acks, refusals and terminal
+   * events, so a run this tab never attached to can be told apart.
    */
-  watchedRunSessionsRef?: MutableRefObject<Set<string>>;
+  watchedRunSessionsRef: MutableRefObject<Map<string, WatchedRunSource>>;
   onSessionProcessing?: MarkSessionProcessing;
   onSessionIdle?: MarkSessionIdle;
   /** Reports the tasks a session still runs once its turn ends, so it reads as background work rather than idle. */
@@ -78,7 +78,7 @@ export function useChatRealtimeHandlers({
   accumulatedStreamRef,
   lastSeqRef,
   statusCheckSentAtRef,
-  watchedRunSessionsRef: providedWatchedRunSessionsRef,
+  watchedRunSessionsRef,
   onSessionProcessing,
   onSessionIdle,
   onSessionBackground,
@@ -87,10 +87,6 @@ export function useChatRealtimeHandlers({
   requestLatestMessages,
   sessionStore,
 }: UseChatRealtimeHandlersArgs) {
-  // ChatInterface shares one set between this hook and its sibling; a caller
-  // that passes none (a test mounting the hook alone) gets a private one.
-  const ownWatchedRunSessionsRef = useRef(new Set<string>());
-  const watchedRunSessionsRef = providedWatchedRunSessionsRef ?? ownWatchedRunSessionsRef;
   // Session switches can send `chat.subscribe` before this effect has a chance
   // to rebind the websocket listener. Read the visible session id from a ref
   // so a fast `chat_subscribed` ack is matched against the current view, not
@@ -126,15 +122,20 @@ export function useChatRealtimeHandlers({
       const activeViewSessionId = activeViewSessionIdRef.current;
       const sid = (typeof msg.sessionId === 'string' && msg.sessionId) || activeViewSessionId;
 
-      // Record replay progress for every sequenced live event.
+      // Record replay progress for every sequenced live event. A frame does
+      // not mark its run watched: a turn that ended with background work keeps
+      // sending through the finished run, and so does an aborted one for a
+      // moment, and neither is the run the session starts next.
       if (sid && typeof msg.seq === 'number') {
-        // Only a run's stream carries `seq`, so this socket is receiving it.
-        if (msg.kind !== 'complete') {
-          watchedRunSessionsRef.current.add(sid);
+        const runId = typeof msg.runId === 'string' ? msg.runId : null;
+        const known = lastSeqRef.current.get(sid);
+        if (known && runId !== null && known.runId === runId && msg.seq <= known.seq) {
+          // Already handled: a second subscribe replayed it (they overlap when
+          // two triggers fire before the first ack, or across a reconnect).
+          return;
         }
-        const known = lastSeqRef.current.get(sid) ?? 0;
-        if (msg.seq > known) {
-          lastSeqRef.current.set(sid, msg.seq);
+        if (!known || known.runId !== runId || msg.seq > known.seq) {
+          lastSeqRef.current.set(sid, { runId, seq: msg.seq });
         }
       }
 
@@ -159,7 +160,7 @@ export function useChatRealtimeHandlers({
           if (!sid) return;
 
           if (msg.isProcessing) {
-            watchedRunSessionsRef.current.add(sid);
+            watchedRunSessionsRef.current.set(sid, 'attached');
             onSessionProcessing?.(sid);
           } else {
             // Same staleness rule as the idle below: a send that started
@@ -169,7 +170,9 @@ export function useChatRealtimeHandlers({
             const startedSinceSubscribe = Boolean(
               activity && !activity.background && sentAt !== undefined && activity.startedAt >= sentAt,
             );
-            if (!startedSinceSubscribe) {
+            if (startedSinceSubscribe) {
+              watchedRunSessionsRef.current.set(sid, 'send');
+            } else {
               watchedRunSessionsRef.current.delete(sid);
             }
             // Idle ack: ignore it if a newer request started after the
@@ -207,7 +210,11 @@ export function useChatRealtimeHandlers({
               onSessionIdle?.(sid);
               // A refused send never became a run on this socket; if the
               // session is busy with another run, that one still has to attach.
-              watchedRunSessionsRef.current.delete(sid);
+              // A run this socket is attached to, or a subscribe in flight,
+              // is untouched by the refusal.
+              if (watchedRunSessionsRef.current.get(sid) === 'send') {
+                watchedRunSessionsRef.current.delete(sid);
+              }
             }
             sessionStore.appendRealtime(sid, {
               id: `protocol_error_${Date.now()}`,

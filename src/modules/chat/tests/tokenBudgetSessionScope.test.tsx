@@ -34,6 +34,7 @@ const renderHandlers = () => {
     streamTimerRef: { current: null },
     accumulatedStreamRef: { current: '' },
     lastSeqRef: { current: new Map() },
+    watchedRunSessionsRef: { current: new Map() },
     statusCheckSentAtRef: { current: new Map() },
     requestLatestMessages: async () => {},
     sessionStore: {} as SessionStore,

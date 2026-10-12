@@ -14,6 +14,8 @@ import type {
   MarkSessionProcessing,
   Project,
   ProjectSession,
+  RunReplayPosition,
+  WatchedRunSource,
   SessionEstablishedContext,
   SessionNavigationOptions,
 } from '@/shared/types';
@@ -91,13 +93,14 @@ function ChatInterface({
   const statusCheckSentAtRef = useRef(new Map<string, number>());
   // Highest live `seq` observed per session. Written by the realtime handler
   // on every sequenced frame, read whenever a `chat.subscribe` is sent so the
-  // server replays only the events this client actually missed.
-  const lastSeqRef = useRef(new Map<string, number>());
+  // server replays only the events this client actually missed. Kept with the
+  // run it counts in: every run restarts at seq 1.
+  const lastSeqRef = useRef(new Map<string, RunReplayPosition>());
   // Sessions whose current run already streams to this socket (or has a
-  // subscribe in flight). A busy session missing from it is running a turn
-  // this tab never attached to — a queued or scheduled message the server
-  // sent — and gets subscribed so that turn shows live.
-  const watchedRunSessionsRef = useRef(new Set<string>());
+  // subscribe in flight), and why. A busy session missing from it is running
+  // a turn this tab never attached to — a queued or scheduled message the
+  // server sent — and gets subscribed so that turn shows live.
+  const watchedRunSessionsRef = useRef(new Map<string, WatchedRunSource>());
 
   const resetStreamingState = useCallback(() => {
     if (streamTimerRef.current) {
@@ -141,6 +144,8 @@ function ChatInterface({
     sessionActivity,
     isProcessing,
     subscribeToUnwatchedRun,
+    markRunStartedHere,
+    resubscribeAfterReconnect,
     canAbortSession,
     currentSessionId,
     setCurrentSessionId,
@@ -185,18 +190,18 @@ function ChatInterface({
     sessionStore,
   });
 
-  // Brand-new conversation: the composer allocated a stable session id via
-  // the session gateway before the first send. Record it locally and put it
-  // in the URL — this id never changes again, so there is no later handoff.
   // The composer's send is a run this socket starts, so it is watched from
   // the moment it is dispatched rather than re-subscribed to.
   const markOwnSendProcessing = useCallback<MarkSessionProcessing>((sessionId, activity) => {
     if (sessionId) {
-      watchedRunSessionsRef.current.add(sessionId);
+      markRunStartedHere(sessionId);
     }
     onSessionProcessing(sessionId, activity);
-  }, [onSessionProcessing]);
+  }, [markRunStartedHere, onSessionProcessing]);
 
+  // Brand-new conversation: the composer allocated a stable session id via
+  // the session gateway before the first send. Record it locally and put it
+  // in the URL — this id never changes again, so there is no later handoff.
   const handleSessionEstablished = useCallback<NonNullable<ChatInterfaceProps['onSessionEstablished']>>((sessionId, context) => {
     setCurrentSessionId(sessionId);
     onSessionEstablished?.(sessionId, context);
@@ -282,24 +287,6 @@ function ChatInterface({
     resolvePermissionModeForProvider,
   });
 
-  // On WebSocket reconnect, request a bounded persisted-tail sync (deferred
-  // while Chat is hidden), then re-subscribe — the
-  // `chat_subscribed` ack restores or clears the activity indicator, replays
-  // missed live events, and re-attaches a still-running stream to this socket.
-  const handleWebSocketReconnect = useCallback(async () => {
-    if (!selectedProject || !selectedSession) return;
-    await requestLatestMessages(selectedSession.id, isActive);
-    statusCheckSentAtRef.current.set(selectedSession.id, Date.now());
-    watchedRunSessionsRef.current.add(selectedSession.id);
-    sendMessage({
-      type: 'chat.subscribe',
-      sessions: [{
-        sessionId: selectedSession.id,
-        lastSeq: lastSeqRef.current.get(selectedSession.id) ?? 0,
-      }],
-    });
-  }, [isActive, requestLatestMessages, selectedProject, selectedSession, sendMessage]);
-
   useChatRealtimeHandlers({
     isActive,
     subscribe,
@@ -318,7 +305,7 @@ function ChatInterface({
     onSessionIdle,
     onSessionBackground,
     getSessionActivity,
-    onWebSocketReconnect: handleWebSocketReconnect,
+    onWebSocketReconnect: resubscribeAfterReconnect,
     requestLatestMessages,
     sessionStore,
   });
