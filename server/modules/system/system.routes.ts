@@ -26,6 +26,8 @@ export function createSystemRouter({
 
   router.get('/storage', (_request, response, next) => {
     try {
+      // The paths include the OS user's home folder: keep them out of shared caches.
+      response.setHeader('Cache-Control', 'no-store');
       response.json(systemStorageService.getStorageLocations());
     } catch (error) {
       next(error);

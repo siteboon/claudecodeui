@@ -214,6 +214,7 @@ test('an authenticated request reads the resolved storage locations', async () =
     const response = await fetch(`${baseUrl}/api/system/storage`, authorized());
 
     assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
     assert.deepEqual(await response.json(), {
       databasePath: path.join(fixture.directory, 'auth.db'),
       assetsPath: path.join(fixture.directory, 'assets'),
