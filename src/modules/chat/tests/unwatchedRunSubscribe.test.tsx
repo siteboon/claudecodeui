@@ -393,3 +393,15 @@ test('a late frame of the run a send replaced does not make a reconnect replay t
   dispatch({ kind: 'text', role: 'assistant', content: 'b1', id: 'b1', seq: 1, runId: 'run-B' });
   assert.equal(appended.filter((message) => message.id === 'b1').length, 1);
 });
+
+test('an ack naming a newer run keeps the previous run\'s late frames off the position', async () => {
+  const { dispatch, lastSeqRef } = await renderChatView({
+    lastSeq: new Map([['session-a', { runId: 'run-A', seq: 5 }]]),
+  });
+
+  // The session moved on to run B while this socket was not attached.
+  dispatch({ kind: 'chat_subscribed', isProcessing: true, runId: 'run-B', pendingPermissions: [] });
+  dispatch({ kind: 'task_status', event: 'updated', id: 'a-tail', seq: 6, runId: 'run-A' });
+
+  assert.deepEqual(lastSeqRef.current.get('session-a'), { runId: 'run-B', seq: 0 });
+});

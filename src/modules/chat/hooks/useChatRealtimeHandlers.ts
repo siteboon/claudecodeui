@@ -195,7 +195,6 @@ export function useChatRealtimeHandlers({
             const position = lastSeqRef.current.get(sid);
             if (position?.runId !== msg.runId) {
               if (position?.runId) retireRun(sid, position.runId);
-              replacedRunIdsRef.current.get(sid)?.delete(msg.runId);
               lastSeqRef.current.set(sid, { runId: msg.runId, seq: 0 });
             }
           }
