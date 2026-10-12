@@ -189,7 +189,7 @@ The database backup below covers only the database. Copy the other folders too w
 
 The backup contains password hashes, API keys and access tokens. Store it like a password.
 
-To back up from a script or a cron job: while CloudCLI is stopped, a plain copy of the database file is a valid backup (`cp ~/.cloudcli/auth.db /path/to/backup/`). While it is running, sign in through the API and download the same snapshot as the button:
+To back up from a script or a cron job: while CloudCLI is stopped, a plain copy of the database file is a valid backup (`cp ~/.cloudcli/auth.db /path/to/backup/`). While it is running, sign in through the API and download the same snapshot as the button. Save these lines as a script and run the script from cron (a `%` typed directly into a crontab line has to be escaped as `\%`):
 
 ```bash
 umask 077  # the file holds credentials: keep it readable only by you
@@ -201,7 +201,7 @@ curl -fsS -H "Authorization: Bearer $TOKEN" -o "cloudcli-backup-$(date +%F).db" 
 **Restore**
 
 1. Stop CloudCLI.
-2. Copy the backup over the database file at the path shown in Settings > About, keeping the name (`auth.db` by default). If `auth.db-journal`, `auth.db-wal` or `auth.db-shm` files sit next to it, delete them.
+2. Copy the backup over the database file at the path you noted from Settings > About (or from `cloudcli status`), keeping the name (`auth.db` by default). If `auth.db-journal`, `auth.db-wal` or `auth.db-shm` files sit next to it, delete them.
 3. Copy the contents of the backed-up uploaded files folder back:
 
    ```bash
