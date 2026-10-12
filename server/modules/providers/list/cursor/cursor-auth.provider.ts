@@ -1,5 +1,6 @@
 import spawn from 'cross-spawn';
 
+import { describeMissingCursorCli, resolveCursorCli } from '@/shared/cursor-cli-path.js';
 import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { ProviderAuthStatus } from '@/shared/types.js';
 
@@ -18,12 +19,15 @@ const STATUS_TIMEOUT_MS = 20_000;
 
 export class CursorProviderAuth implements IProviderAuth {
   /**
-   * Checks whether the cursor-agent CLI is available on this host.
+   * Checks whether the resolved Cursor CLI can be started on this host. cross-spawn's sync form
+   * reports a command it cannot start in `result.error` instead of throwing, so a missing CLI
+   * used to count as installed. A slow `--version` (timeout) still counts as installed.
    */
-  private checkInstalled(): boolean {
+  private checkInstalled(command: string): boolean {
     try {
-      spawn.sync('cursor-agent', ['--version'], { stdio: 'ignore', timeout: 5000 });
-      return true;
+      const result = spawn.sync(command, ['--version'], { stdio: 'ignore', timeout: 5000 });
+      const errorCode = (result.error as NodeJS.ErrnoException | undefined)?.code;
+      return errorCode !== 'ENOENT' && errorCode !== 'EACCES';
     } catch {
       return false;
     }
@@ -33,7 +37,8 @@ export class CursorProviderAuth implements IProviderAuth {
    * Returns Cursor CLI installation and login status.
    */
   async getStatus(): Promise<ProviderAuthStatus> {
-    const installed = this.checkInstalled();
+    const cli = resolveCursorCli();
+    const installed = this.checkInstalled(cli.command);
 
     if (!installed) {
       return {
@@ -42,11 +47,11 @@ export class CursorProviderAuth implements IProviderAuth {
         authenticated: false,
         email: null,
         method: null,
-        error: 'Cursor CLI is not installed',
+        error: describeMissingCursorCli(cli),
       };
     }
 
-    const login = await this.checkCursorLogin();
+    const login = await this.checkCursorLogin(cli.command);
 
     return {
       installed,
@@ -59,9 +64,9 @@ export class CursorProviderAuth implements IProviderAuth {
   }
 
   /**
-   * Runs cursor-agent status and parses the login marker from stdout.
+   * Runs `<cursor cli> status` and parses the login marker from stdout.
    */
-  private checkCursorLogin(): Promise<CursorLoginStatus> {
+  private checkCursorLogin(command: string): Promise<CursorLoginStatus> {
     return new Promise((resolve) => {
       let processCompleted = false;
       let childProcess: ReturnType<typeof spawn> | undefined;
@@ -80,7 +85,7 @@ export class CursorProviderAuth implements IProviderAuth {
       }, STATUS_TIMEOUT_MS);
 
       try {
-        childProcess = spawn('cursor-agent', ['status']);
+        childProcess = spawn(command, ['status']);
       } catch {
         clearTimeout(timeout);
         processCompleted = true;

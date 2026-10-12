@@ -746,3 +746,87 @@ test('other shells and initial commands only get the COLORFGBG hint', () => {
     );
   });
 });
+
+// ---------------------------
+
+const posixOnly = { skip: process.platform === 'win32' ? 'bash quoting and POSIX install layout' : false };
+
+/**
+ * Runs `body` with a PATH whose only folder is `pathDirectory` (an empty one by default) and no
+ * CURSOR_CLI_PATH, like a systemd service whose PATH lacks the installer's ~/.local/bin (#1514).
+ */
+function withCursorSearchPath(body: (pathDirectory: string) => void) {
+  const pathKey = Object.keys(process.env).find((key) => key.toLowerCase() === 'path') || 'PATH';
+  const pathDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-cursor-path-'));
+  const saved = { path: process.env[pathKey], cursorCliPath: process.env.CURSOR_CLI_PATH };
+  process.env[pathKey] = pathDirectory;
+  delete process.env.CURSOR_CLI_PATH;
+  try {
+    body(pathDirectory);
+  } finally {
+    process.env[pathKey] = saved.path;
+    if (saved.cursorCliPath === undefined) {
+      delete process.env.CURSOR_CLI_PATH;
+    } else {
+      process.env.CURSOR_CLI_PATH = saved.cursorCliPath;
+    }
+    fs.rmSync(pathDirectory, { recursive: true, force: true });
+  }
+}
+
+function writeExecutable(filePath: string) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, '#!/bin/sh\nexit 0\n');
+  fs.chmodSync(filePath, 0o755);
+}
+
+test('the Cursor shell and its login command run the CLI in ~/.local/bin when PATH lacks it (#1514)', posixOnly, () => {
+  withClaudeConfig(({ home, projectPath }) => {
+    withCursorSearchPath(() => {
+      const cliPath = path.join(home, '.local', 'bin', 'cursor-agent');
+      writeExecutable(cliPath);
+      const { calls, dependencies } = spawnRecorder();
+
+      launch(dependencies, { provider: 'cursor' }, projectPath);
+      // What the Settings "Login" button sends.
+      launch(dependencies, { provider: 'plain-shell', isPlainShell: true, initialCommand: 'cursor-agent login' }, projectPath);
+      launch(dependencies, { provider: 'plain-shell', isPlainShell: true, initialCommand: 'cursor-agents --help' }, projectPath);
+
+      assert.deepEqual(
+        calls.map((call) => call.command),
+        [`'${cliPath}'`, `'${cliPath}' login`, 'cursor-agents --help'],
+      );
+    });
+  });
+});
+
+test('a resumed Cursor shell quotes a CURSOR_CLI_PATH that has spaces and quotes', posixOnly, () => {
+  withClaudeConfig(({ projectPath }) => {
+    withCursorSearchPath(() => {
+      process.env.CURSOR_CLI_PATH = "/opt/Cursor Tools/it's/cursor-agent";
+      const { calls, dependencies } = spawnRecorder('cursor-chat-1');
+
+      launch(dependencies, { provider: 'cursor', hasSession: true }, projectPath);
+
+      assert.deepEqual(
+        calls.map((call) => call.command),
+        [`'/opt/Cursor Tools/it'\\''s/cursor-agent' --resume="cursor-chat-1"`],
+      );
+    });
+  });
+});
+
+test('a Cursor CLI on PATH still launches as the bare cursor-agent', posixOnly, () => {
+  withClaudeConfig(({ home, projectPath }) => {
+    withCursorSearchPath((pathDirectory) => {
+      writeExecutable(path.join(pathDirectory, 'cursor-agent'));
+      writeExecutable(path.join(home, '.local', 'bin', 'cursor-agent'));
+      const { calls, dependencies } = spawnRecorder();
+
+      launch(dependencies, { provider: 'cursor' }, projectPath);
+      launch(dependencies, { provider: 'plain-shell', isPlainShell: true, initialCommand: 'cursor-agent login' }, projectPath);
+
+      assert.deepEqual(calls.map((call) => call.command), ['cursor-agent', 'cursor-agent login']);
+    });
+  });
+});

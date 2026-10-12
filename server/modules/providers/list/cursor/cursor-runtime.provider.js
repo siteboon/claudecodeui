@@ -5,6 +5,7 @@ import {
   appendImagesInputTag,
   normalizeAttachmentDescriptors
 } from '@/shared/image-attachments.js';
+import { describeMissingCursorCli, resolveCursorCli } from '@/shared/cursor-cli-path.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
 import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell, stripAnsiSequences } from '@/shared/utils.js';
 
@@ -156,7 +157,9 @@ async function spawnCursor(command, options = {}, ws, context) {
         console.log('Retrying Cursor CLI with --trust after workspace trust prompt');
       }
 
-      const cursorProcess = spawnFunction('cursor-agent', args, {
+      // CURSOR_CLI_PATH, PATH, or the installer's directory: a service's PATH often lacks ~/.local/bin.
+      const cursorCli = resolveCursorCli();
+      const cursorProcess = spawnFunction(cursorCli.command, args, {
         cwd: workingDir,
         stdio: ['pipe', 'pipe', 'pipe'],
         env: { ...process.env } // Inherit all environment variables
@@ -338,7 +341,7 @@ async function spawnCursor(command, options = {}, ws, context) {
         // Check if Cursor CLI is installed for a clearer error message
         const installed = await context.isProviderInstalled();
         const errorContent = !installed
-          ? 'Cursor CLI is not installed. Please install it from https://cursor.com'
+          ? describeMissingCursorCli(cursorCli)
           : error.message;
 
         ws.send(createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'cursor' }));
