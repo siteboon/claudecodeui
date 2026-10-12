@@ -278,8 +278,14 @@ test('a caller that sends no model (/api/agent) gets the configured model too', 
     await writeJson(userSettings(fixture), { model: 'auto/coding' });
 
     const options = await captureSdkOptions(fixture, {});
-
     assert.equal(options.model, 'auto/coding');
+
+    // Resuming a session still runs the choice recorded for it, not the settings model.
+    const resumed = await captureSdkOptions(fixture, {
+      recordedModel: 'sonnet',
+      providerSessionId: 'native-session-1',
+    });
+    assert.equal(resumed.model, 'sonnet');
   });
 });
 
