@@ -620,17 +620,31 @@ function extractCumulativeTokenBudget(sdkMessage, reportedContextWindow) {
   // models (a subagent or a background task on a different model), each under
   // its own key, so every entry is summed; reading only the first key dropped
   // the rest and depended on object key order.
+  // A cumulative count that is present but not a number falls back to the
+  // regular count instead of shadowing it.
+  const firstCount = (...candidates) => candidates.find((count) => Number.isFinite(count));
   const totals = { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 };
   let entries = 0;
   for (const modelData of Object.values(sdkMessage.modelUsage)) {
     if (!modelData || typeof modelData !== 'object') {
       continue;
     }
+    const counts = [
+      firstCount(modelData.cumulativeInputTokens, modelData.inputTokens),
+      firstCount(modelData.cumulativeOutputTokens, modelData.outputTokens),
+      modelData.cacheReadInputTokens,
+      modelData.cacheCreationInputTokens,
+    ];
+    // An entry with no count at all (`{}`) is not a zero bill; skip it so a
+    // modelUsage with nothing usable still yields no budget.
+    if (!counts.some((count) => Number.isFinite(count))) {
+      continue;
+    }
     entries += 1;
-    totals.inputTokens += readNumber(modelData.cumulativeInputTokens ?? modelData.inputTokens);
-    totals.outputTokens += readNumber(modelData.cumulativeOutputTokens ?? modelData.outputTokens);
-    totals.cacheReadInputTokens += readNumber(modelData.cacheReadInputTokens);
-    totals.cacheCreationInputTokens += readNumber(modelData.cacheCreationInputTokens);
+    totals.inputTokens += readNumber(counts[0]);
+    totals.outputTokens += readNumber(counts[1]);
+    totals.cacheReadInputTokens += readNumber(counts[2]);
+    totals.cacheCreationInputTokens += readNumber(counts[3]);
   }
 
   // Same shape and accounting as the `usage` branch above, cache reads and
