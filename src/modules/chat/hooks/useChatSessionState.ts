@@ -1227,6 +1227,7 @@ export function useChatSessionState({
     followClaimedQueuedMessage,
     markRunStartedHere,
     resubscribeAfterReconnect,
+    subscribeToUnwatchedRun,
     canAbortSession,
     currentSessionId,
     setCurrentSessionId,

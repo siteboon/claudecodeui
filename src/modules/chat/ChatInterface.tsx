@@ -146,6 +146,7 @@ function ChatInterface({
     followClaimedQueuedMessage,
     markRunStartedHere,
     resubscribeAfterReconnect,
+    subscribeToUnwatchedRun,
     canAbortSession,
     currentSessionId,
     setCurrentSessionId,
@@ -306,6 +307,7 @@ function ChatInterface({
     onSessionBackground,
     getSessionActivity,
     onWebSocketReconnect: resubscribeAfterReconnect,
+    onIdleAckMissedRun: subscribeToUnwatchedRun,
     requestLatestMessages,
     sessionStore,
   });

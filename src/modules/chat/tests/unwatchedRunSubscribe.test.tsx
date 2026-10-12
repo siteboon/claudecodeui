@@ -105,6 +105,8 @@ async function renderChatView(options: {
     statusCheckSentAtRef,
     watchedRunSessionsRef,
     getSessionActivity: options.getSessionActivity ?? (() => undefined),
+    // ChatInterface hands the session state's subscribe to the handlers.
+    onIdleAckMissedRun: (sessionId) => hook.result.current.subscribeToUnwatchedRun(sessionId),
     requestLatestMessages: async () => {},
     onSessionBackground: () => {},
     onSessionIdle: () => {},
@@ -332,4 +334,62 @@ test('an idle ack older than this tab\'s own send keeps that send watched', asyn
   await poll(busy);
 
   assert.equal(subscribes().length, 1);
+});
+
+test('an idle ack that missed a server-sent run leaves that run to be subscribed to', async () => {
+  // No send from this tab; the server sent a queued message while the
+  // subscribe from opening the session was still in flight.
+  const { dispatch, subscribes, poll, watchedRunSessionsRef } = await renderChatView({
+    getSessionActivity: () => ({ statusText: null, canInterrupt: true, startedAt: Number.MAX_SAFE_INTEGER }),
+  });
+  await poll(busy);
+  assert.equal(subscribes().length, 1, 'the subscribe in flight covers the poll');
+
+  // The ack answers that earlier subscribe. The poll that follows reports the
+  // same busy state, so nothing else would subscribe.
+  dispatch({ kind: 'chat_subscribed', isProcessing: false, pendingPermissions: [] });
+  await poll(new Map(busy));
+  assert.equal(subscribes().length, 2, 'the server-sent run still has to attach');
+  assert.equal(watchedRunSessionsRef.current.get('session-a'), 'subscribe');
+
+  // With a server clock ahead of this one, the next idle ack looks stale too;
+  // the same run is not subscribed to over and over.
+  dispatch({ kind: 'chat_subscribed', isProcessing: false, pendingPermissions: [] });
+  assert.equal(subscribes().length, 2);
+});
+
+test('a reconnect during this tab\'s own run resumes after what it already showed', async () => {
+  const { hook, dispatch, subscribes } = await renderIdleChatView();
+
+  act(() => hook.result.current.markRunStartedHere('session-a'));
+  dispatch({ kind: 'text', role: 'assistant', content: 'b1', id: 'b1', seq: 1, runId: 'run-B' });
+  dispatch({ kind: 'text', role: 'assistant', content: 'b2', id: 'b2', seq: 2, runId: 'run-B' });
+  await act(async () => {
+    await hook.result.current.resubscribeAfterReconnect();
+  });
+
+  assert.deepEqual(subscribes().at(-1)?.sessions, [{ sessionId: 'session-a', lastSeq: 2, runId: 'run-B' }]);
+});
+
+test('a late frame of the run a send replaced does not make a reconnect replay the new run twice', async () => {
+  const { hook, dispatch, subscribes, appended, lastSeqRef } = await renderIdleChatView();
+
+  // Run A ended with background work; this tab's send starts run B, which
+  // replaces A's process. A reports the killed task after B's first frame.
+  dispatch({ kind: 'complete', seq: 11, runId: 'run-A', exitCode: 0 });
+  act(() => hook.result.current.markRunStartedHere('session-a'));
+  dispatch({ kind: 'text', role: 'assistant', content: 'b1', id: 'b1', seq: 1, runId: 'run-B' });
+  dispatch({ kind: 'task_status', event: 'updated', id: 'a-tail', seq: 12, runId: 'run-A' });
+  assert.deepEqual(lastSeqRef.current.get('session-a'), { runId: 'run-B', seq: 1 });
+
+  // The socket drops and comes back.
+  await act(async () => {
+    await hook.result.current.resubscribeAfterReconnect();
+  });
+  assert.deepEqual(subscribes().at(-1)?.sessions, [{ sessionId: 'session-a', lastSeq: 1, runId: 'run-B' }]);
+
+  // Even a server that replays run B from its start shows b1 once.
+  dispatch({ kind: 'chat_subscribed', isProcessing: true, runId: 'run-B', pendingPermissions: [] });
+  dispatch({ kind: 'text', role: 'assistant', content: 'b1', id: 'b1', seq: 1, runId: 'run-B' });
+  assert.equal(appended.filter((message) => message.id === 'b1').length, 1);
 });
