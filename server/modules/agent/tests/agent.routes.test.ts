@@ -320,7 +320,7 @@ test('Agent route starts Claude and Cursor on the first custom model while only 
   assert.deepEqual((await runWithoutModel('cursor', catalogs, 'gpt-5')).models, ['gpt-5']);
 });
 
-test('Agent route keeps today\'s Claude and Cursor defaults while built-in models are listed', async () => {
+test('Agent route starts Claude on its built-in default and leaves Cursor to its CLI while built-in models are listed', async () => {
   const catalogs = {
     claude: {
       OPTIONS: [{ value: 'default', isCustom: false }, { value: 'gateway/claude', isCustom: true }],
@@ -346,4 +346,48 @@ test('Agent route keeps today\'s Claude and Cursor defaults while built-in model
     cursor: { OPTIONS: [{ value: 'auto', isCustom: false }], DEFAULT: 'auto', CUSTOM_MODELS_ONLY: true },
   };
   assert.deepEqual((await runWithoutModel('cursor', flagWithoutCustomModels)).models, [undefined]);
+});
+
+test('Agent route reads no model catalog for a continued session of an unregistered provider', async () => {
+  // A legacy row (e.g. 'gemini', removed in #964) has no catalog: the
+  // Providers service throws "Unsupported provider" for it. Continuing such a
+  // session runs no provider runtime, as before, instead of failing on the
+  // catalog read.
+  const catalogReads: string[] = [];
+
+  await withAgentServer(createDependencies({
+    fileSystem: {
+      access: async () => undefined,
+    } as unknown as AgentDependencies['fileSystem'],
+    models: {
+      getProviderModels: async (catalogProvider: string) => {
+        catalogReads.push(catalogProvider);
+        throw new Error(`Unsupported provider "${catalogProvider}"`);
+      },
+    } as unknown as AgentDependencies['models'],
+    sessions: {
+      getSessionById: () => ({
+        session_id: 'legacy-session',
+        provider: 'gemini',
+        provider_session_id: null,
+        project_path: '/home/test/project',
+      }),
+      getSessionByProviderSessionId: () => null,
+      createAppSession: () => { throw new Error('a continued session must not create a row'); },
+    },
+  }), async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/agent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectPath: '/home/test/project',
+        message: 'Run',
+        sessionId: 'legacy-session',
+        stream: false,
+      }),
+    });
+    assert.equal(response.status, 200);
+  });
+
+  assert.deepEqual(catalogReads, []);
 });

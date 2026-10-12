@@ -1022,10 +1022,14 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       // A request without `model` runs on the catalog's DEFAULT, the value
       // /api/providers/:provider/models and the API docs advertise. It is the
       // first custom model while the provider lists only custom models.
-      const providerModels = await providerModelsService.getProviderModels(provider);
+      // Only the four runnable providers have a catalog: a continued legacy
+      // session whose provider is no longer registered must not fail here.
+      const providerModels = ['claude', 'cursor', 'codex', 'opencode'].includes(provider)
+        ? await providerModelsService.getProviderModels(provider)
+        : null;
       // Cursor otherwise leaves the choice to its CLI, so it only takes the
       // catalog DEFAULT when that is one of the user's own models.
-      const cursorDefaultModel = providerModels.CUSTOM_MODELS_ONLY === true
+      const cursorDefaultModel = providerModels?.CUSTOM_MODELS_ONLY === true
         && providerModels.OPTIONS.some((option) => option.isCustom)
         ? providerModels.DEFAULT
         : undefined;
@@ -1038,7 +1042,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           projectPath: finalProjectPath,
           cwd: finalProjectPath,
           sessionId: appSessionId,
-          model: model || providerModels.DEFAULT,
+          model: model || providerModels?.DEFAULT,
           effort,
           permissionMode: 'bypassPermissions' // Bypass all permissions for API calls
         }, run.writer);
@@ -1060,7 +1064,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           projectPath: finalProjectPath,
           cwd: finalProjectPath,
           sessionId: appSessionId,
-          model: model || providerModels.DEFAULT,
+          model: model || providerModels?.DEFAULT,
           effort,
           permissionMode: 'bypassPermissions'
         }, run.writer);
@@ -1071,7 +1075,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           projectPath: finalProjectPath,
           cwd: finalProjectPath,
           sessionId: appSessionId,
-          model: model || providerModels.DEFAULT,
+          model: model || providerModels?.DEFAULT,
           effort,
           permissionMode: 'bypassPermissions' // Agent runs are non-interactive, like the other providers above
         }, run.writer);
