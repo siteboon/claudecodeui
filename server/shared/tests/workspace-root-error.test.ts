@@ -33,8 +33,7 @@ process.env.USERPROFILE = fixtureHome;
 
 type UtilsEnvironment = { WORKSPACES_ROOT?: string; VITE_IS_PLATFORM?: string };
 
-const utilsModuleUrl = pathToFileURL(path.join(testDirectory, '..', 'utils.ts')).href;
-async function importUtils(environment: UtilsEnvironment, copyName: string) {
+function applyEnvironment(environment: UtilsEnvironment): void {
   for (const name of ['WORKSPACES_ROOT', 'VITE_IS_PLATFORM'] as const) {
     if (environment[name] === undefined) {
       delete process.env[name];
@@ -42,12 +41,24 @@ async function importUtils(environment: UtilsEnvironment, copyName: string) {
       process.env[name] = environment[name];
     }
   }
-  return (await import(`${utilsModuleUrl}?${copyName}`)) as typeof import('@/shared/utils.js');
 }
 
-const selfHosted = await importUtils({}, 'self-hosted');
-const selfHostedWithChosenRoot = await importUtils({ WORKSPACES_ROOT: chosenRoot }, 'chosen-root');
-const platform = await importUtils({ VITE_IS_PLATFORM: 'true' }, 'platform');
+// Loads a separate copy of the utils module under `environment` and returns
+// its validator, which also runs under that environment, as it would in a
+// server started with it.
+const utilsModuleUrl = pathToFileURL(path.join(testDirectory, '..', 'utils.ts')).href;
+async function loadValidator(environment: UtilsEnvironment, copyName: string) {
+  applyEnvironment(environment);
+  const utils = (await import(`${utilsModuleUrl}?${copyName}`)) as typeof import('@/shared/utils.js');
+  return async (requestedPath: string) => {
+    applyEnvironment(environment);
+    return utils.validateWorkspacePath(requestedPath);
+  };
+}
+
+const validateSelfHosted = await loadValidator({}, 'self-hosted');
+const validateUnderChosenRoot = await loadValidator({ WORKSPACES_ROOT: chosenRoot }, 'chosen-root');
+const validateOnPlatform = await loadValidator({ VITE_IS_PLATFORM: 'true' }, 'platform');
 
 after(async () => {
   for (const [name, value] of Object.entries(previousEnvironment)) {
@@ -61,7 +72,7 @@ after(async () => {
 });
 
 test('a path outside the default workspace root is refused with the setting that moves the root', async () => {
-  const validation = await selfHosted.validateWorkspacePath(path.join(outsideDirectory, 'new-project'));
+  const validation = await validateSelfHosted(path.join(outsideDirectory, 'new-project'));
 
   assert.equal(validation.valid, false);
   // The default root is the home directory. A Windows user who wanted a
@@ -77,17 +88,14 @@ test('a path outside the default workspace root is refused with the setting that
 test('a path inside the default workspace root is still accepted', async () => {
   const projectPath = path.join(fixtureHome, 'projects', 'app');
 
-  assert.deepEqual(
-    await selfHosted.validateWorkspacePath(projectPath),
-    { valid: true, resolvedPath: projectPath },
-  );
+  assert.deepEqual(await validateSelfHosted(projectPath), { valid: true, resolvedPath: projectPath });
 });
 
 test('a root set through WORKSPACES_ROOT still names the setting when it refuses a path', async () => {
   // Once the root has moved, the home directory is outside it: a user who set
   // it to one drive and then wants the other one needs the same pointer.
   const homeProjectPath = path.join(fixtureHome, 'projects', 'app');
-  const validation = await selfHostedWithChosenRoot.validateWorkspacePath(homeProjectPath);
+  const validation = await validateUnderChosenRoot(homeProjectPath);
 
   assert.equal(validation.valid, false);
   assert.ok(
@@ -100,7 +108,7 @@ test('a root set through WORKSPACES_ROOT still names the setting when it refuses
 test('a hosted (Platform) install keeps the refusal without the WORKSPACES_ROOT hint', async () => {
   // The hosted platform manages the server's environment, so the user cannot
   // act on the hint there.
-  const validation = await platform.validateWorkspacePath(path.join(outsideDirectory, 'new-project'));
+  const validation = await validateOnPlatform(path.join(outsideDirectory, 'new-project'));
 
   assert.deepEqual(validation, {
     valid: false,
