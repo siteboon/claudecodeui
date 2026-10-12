@@ -165,6 +165,35 @@ To use Claude Code's full functionality, you'll need to manually enable tools:
 
 ---
 
+## Back up and restore your data
+
+A self-hosted install keeps its state in two places:
+
+- **The database** (`auth.db`, SQLite): your account, API keys and tokens, projects, session list and settings. It lives at `~/.cloudcli/auth.db` unless `DATABASE_PATH` is set.
+- **Uploaded files** (`~/.cloudcli/assets`): images and files attached in chat.
+
+Chat transcripts are not part of either: each agent keeps its own history (for example `~/.claude/projects` for Claude Code), so back those folders up separately if you need them.
+
+**Settings > About > Data & backup** shows the exact paths this server uses (`cloudcli status` prints the database path too).
+
+**Back up**
+
+1. Click **Download backup** in Settings > About. You get `cloudcli-backup-<timestamp>.db`, a consistent copy of the database that is safe to take while CloudCLI is running.
+2. Copy the uploaded files folder, e.g. `cp -r ~/.cloudcli/assets /path/to/backup/`.
+
+The backup contains password hashes, API keys and access tokens. Store it like a password.
+
+**Restore**
+
+1. Stop CloudCLI.
+2. Copy the backup over the database file at the path shown in Settings > About, keeping the name (`auth.db` by default). If `auth.db-journal`, `auth.db-wal` or `auth.db-shm` files sit next to it, delete them.
+3. Copy the uploaded files folder back to `~/.cloudcli/assets`.
+4. Start CloudCLI and sign in with the account from the backup.
+
+When you move to a new machine or container, either restore to the default location or set `DATABASE_PATH` to where you put the file. Projects are stored by their absolute folder path, so keep the same folder layout on the new machine.
+
+---
+
 ## Plugins
 
 CloudCLI has a plugin system that lets you add custom tabs with their own frontend UI and optional Node.js backend. Install plugins from git repos directly in **Settings > Plugins**, or build your own.

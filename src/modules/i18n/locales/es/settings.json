@@ -621,5 +621,23 @@
     "installAriaLabel": "URL del repositorio git del plugin",
     "tab": "pestaña",
     "runningStatus": "en ejecución"
+  },
+  "about": {
+    "dataBackup": {
+      "title": "Datos y copia de seguridad",
+      "description": "Esta instalación guarda tu cuenta, tus proyectos y tu configuración en una base de datos SQLite. Los archivos subidos en el chat se guardan en una carpeta aparte.",
+      "databaseLabel": "Base de datos",
+      "assetsLabel": "Archivos subidos",
+      "loading": "Cargando…",
+      "loadFailed": "No se pudieron leer las ubicaciones de almacenamiento.",
+      "copyPath": "Copiar ruta",
+      "pathCopied": "Ruta copiada",
+      "download": "Descargar copia de seguridad",
+      "downloading": "Preparando la copia…",
+      "downloadFailed": "No se pudo crear la copia de seguridad. Inténtalo de nuevo.",
+      "backupNote": "La descarga es una copia coherente de la base de datos y se puede hacer con CloudCLI en marcha. Contiene hashes de contraseñas y tokens de acceso, así que guárdala en un lugar seguro. Copia por separado la carpeta de archivos subidos.",
+      "restoreNote": "Para restaurar: detén CloudCLI, sustituye el archivo de base de datos de la ruta indicada arriba por la copia, vuelve a colocar la carpeta de archivos subidos e inicia CloudCLI de nuevo.",
+      "restoreGuide": "Guía de copia de seguridad y restauración"
+    }
   }
 }

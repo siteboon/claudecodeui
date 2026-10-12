@@ -528,5 +528,23 @@
     "installAriaLabel": "外掛 git 儲存庫 URL",
     "tab": "分頁",
     "runningStatus": "執行中"
+  },
+  "about": {
+    "dataBackup": {
+      "title": "資料與備份",
+      "description": "此安裝會將你的帳戶、專案和設定儲存在 SQLite 資料庫中。在聊天中上傳的檔案會存放在獨立的資料夾。",
+      "databaseLabel": "資料庫",
+      "assetsLabel": "上傳的檔案",
+      "loading": "載入中…",
+      "loadFailed": "無法讀取儲存位置。",
+      "copyPath": "複製路徑",
+      "pathCopied": "已複製路徑",
+      "download": "下載備份",
+      "downloading": "正在準備備份…",
+      "downloadFailed": "無法建立備份，請再試一次。",
+      "backupNote": "下載的檔案是資料庫的一致性副本，可在 CloudCLI 執行時建立。其中包含密碼雜湊和存取權杖，請妥善保管。上傳檔案所在的資料夾需另外複製。",
+      "restoreNote": "還原方式：停止 CloudCLI，以備份取代上方路徑中的資料庫檔案，放回上傳檔案所在的資料夾，然後重新啟動 CloudCLI。",
+      "restoreGuide": "備份與還原指南"
+    }
   }
 }

@@ -827,6 +827,22 @@
     "teamManagementTitle": "Manajemen Tim",
     "teamManagementDescription": "Banyak pengguna, akses berbasis peran, dan proyek bersama untuk tim.",
     "licensed": "Dilisensikan di bawah AGPL-3.0",
-    "proCta": "Tersedia dengan CloudCLI Pro"
+    "proCta": "Tersedia dengan CloudCLI Pro",
+    "dataBackup": {
+      "title": "Data & cadangan",
+      "description": "Instalasi ini menyimpan akun, proyek, dan pengaturan Anda di database SQLite. File yang diunggah di chat disimpan di folder terpisah.",
+      "databaseLabel": "Database",
+      "assetsLabel": "File yang diunggah",
+      "loading": "Memuat…",
+      "loadFailed": "Tidak dapat membaca lokasi penyimpanan.",
+      "copyPath": "Salin jalur",
+      "pathCopied": "Jalur disalin",
+      "download": "Unduh cadangan",
+      "downloading": "Menyiapkan cadangan…",
+      "downloadFailed": "Cadangan tidak dapat dibuat. Silakan coba lagi.",
+      "backupNote": "Unduhan ini adalah salinan database yang konsisten dan aman dibuat saat CloudCLI berjalan. Isinya mencakup hash kata sandi dan token akses, jadi simpan secara rahasia. Salin folder file yang diunggah secara terpisah.",
+      "restoreNote": "Untuk memulihkan: hentikan CloudCLI, ganti file database di jalur di atas dengan cadangan, kembalikan folder file yang diunggah, lalu jalankan CloudCLI lagi.",
+      "restoreGuide": "Panduan cadangan & pemulihan"
+    }
   }
 }

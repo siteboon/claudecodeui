@@ -5,6 +5,7 @@ import { CLOUDCLI_WORDMARK_FONT_FAMILY } from '@/shared/constants';
 import { IS_PLATFORM } from '@/shared/utils';
 import { useVersionCheck } from '@/shared/hooks/useVersionCheck';
 import PremiumFeatureCard from '@/modules/settings/PremiumFeatureCard';
+import AboutDataBackupSection from '@/modules/settings/tabs/AboutDataBackupSection';
 
 const GITHUB_REPO_URL = 'https://github.com/siteboon/claudecodeui';
 const DISCORD_URL = 'https://discord.gg/buxwujPNRE';
@@ -27,7 +28,7 @@ function DiscordIcon({ className }: { className?: string }) {
   );
 }
 
-/** Rendered by Settings for the "about" tab, showing version, links and premium upsell cards. */
+/** Rendered by Settings for the "about" tab, showing version, links, data & backup and premium upsell cards. */
 export default function AboutTab() {
   const { t } = useTranslation('settings');
   const { updateAvailable, latestVersion, currentVersion, releaseInfo } = useVersionCheck('siteboon', 'claudecodeui');
@@ -125,6 +126,9 @@ export default function AboutTab() {
           cloudcli.ai
         </a>
       </div>
+
+      {/* Storage locations and database backup (self-hosted only: Platform manages its own storage) */}
+      {!IS_PLATFORM && <AboutDataBackupSection />}
 
       {/* Hosted CTA (OSS mode only) */}
       {!IS_PLATFORM && (

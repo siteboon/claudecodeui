@@ -615,5 +615,23 @@
     "installAriaLabel": "플러그인 git 저장소 URL",
     "tab": "탭",
     "runningStatus": "실행 중"
+  },
+  "about": {
+    "dataBackup": {
+      "title": "데이터 및 백업",
+      "description": "이 설치는 계정, 프로젝트, 설정을 SQLite 데이터베이스에 저장합니다. 채팅에서 업로드한 파일은 별도 폴더에 저장됩니다.",
+      "databaseLabel": "데이터베이스",
+      "assetsLabel": "업로드한 파일",
+      "loading": "불러오는 중…",
+      "loadFailed": "저장 위치를 읽을 수 없습니다.",
+      "copyPath": "경로 복사",
+      "pathCopied": "경로를 복사했습니다",
+      "download": "백업 다운로드",
+      "downloading": "백업 준비 중…",
+      "downloadFailed": "백업을 만들 수 없습니다. 다시 시도해 주세요.",
+      "backupNote": "다운로드한 파일은 데이터베이스의 일관된 사본이며 CloudCLI가 실행 중일 때도 만들 수 있습니다. 비밀번호 해시와 액세스 토큰이 포함되어 있으므로 안전하게 보관하세요. 업로드한 파일 폴더는 따로 복사하세요.",
+      "restoreNote": "복원하려면 CloudCLI를 중지하고, 위 경로의 데이터베이스 파일을 백업으로 바꾸고, 업로드한 파일 폴더를 되돌려 놓은 다음 CloudCLI를 다시 시작하세요.",
+      "restoreGuide": "백업 및 복원 가이드"
+    }
   }
 }

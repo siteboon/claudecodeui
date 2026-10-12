@@ -855,6 +855,22 @@
     "teamManagementTitle": "Gerenciamento de equipe",
     "teamManagementDescription": "Múltiplos usuários, acesso baseado em funções e projetos compartilhados para sua equipe.",
     "licensed": "Licenciado sob AGPL-3.0",
-    "proCta": "Disponível com CloudCLI Pro"
+    "proCta": "Disponível com CloudCLI Pro",
+    "dataBackup": {
+      "title": "Dados e backup",
+      "description": "Esta instalação guarda sua conta, seus projetos e suas configurações em um banco de dados SQLite. Os arquivos enviados no chat ficam em uma pasta separada.",
+      "databaseLabel": "Banco de dados",
+      "assetsLabel": "Arquivos enviados",
+      "loading": "Carregando…",
+      "loadFailed": "Não foi possível ler os locais de armazenamento.",
+      "copyPath": "Copiar caminho",
+      "pathCopied": "Caminho copiado",
+      "download": "Baixar backup",
+      "downloading": "Preparando o backup…",
+      "downloadFailed": "Não foi possível criar o backup. Tente novamente.",
+      "backupNote": "O download é uma cópia consistente do banco de dados e pode ser feito com o CloudCLI em execução. Ele contém hashes de senha e tokens de acesso, então guarde-o com segurança. Copie a pasta de arquivos enviados separadamente.",
+      "restoreNote": "Para restaurar: pare o CloudCLI, substitua o arquivo do banco de dados no caminho acima pelo backup, coloque de volta a pasta de arquivos enviados e inicie o CloudCLI novamente.",
+      "restoreGuide": "Guia de backup e restauração"
+    }
   }
 }

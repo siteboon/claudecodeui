@@ -818,6 +818,22 @@
     "teamManagementTitle": "Správa týmu",
     "teamManagementDescription": "Více uživatelů, přístup podle rolí a sdílené projekty pro váš tým.",
     "licensed": "Šířeno pod licencí AGPL-3.0",
-    "proCta": "K dispozici v CloudCLI Pro"
+    "proCta": "K dispozici v CloudCLI Pro",
+    "dataBackup": {
+      "title": "Data a záloha",
+      "description": "Tato instalace ukládá váš účet, projekty a nastavení do databáze SQLite. Soubory nahrané v chatu jsou uloženy v samostatné složce.",
+      "databaseLabel": "Databáze",
+      "assetsLabel": "Nahrané soubory",
+      "loading": "Načítání…",
+      "loadFailed": "Umístění dat se nepodařilo načíst.",
+      "copyPath": "Kopírovat cestu",
+      "pathCopied": "Cesta zkopírována",
+      "download": "Stáhnout zálohu",
+      "downloading": "Připravuje se záloha…",
+      "downloadFailed": "Zálohu se nepodařilo vytvořit. Zkuste to prosím znovu.",
+      "backupNote": "Stažený soubor je konzistentní kopie databáze a lze ho vytvořit i za běhu CloudCLI. Obsahuje hashe hesel a přístupové tokeny, proto ho uchovávejte v soukromí. Složku s nahranými soubory zkopírujte zvlášť.",
+      "restoreNote": "Obnovení: zastavte CloudCLI, nahraďte soubor databáze na výše uvedené cestě zálohou, vraťte zpět složku s nahranými soubory a CloudCLI znovu spusťte.",
+      "restoreGuide": "Návod k zálohování a obnově"
+    }
   }
 }

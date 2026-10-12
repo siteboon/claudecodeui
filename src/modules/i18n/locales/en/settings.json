@@ -852,6 +852,22 @@
     "teamManagementTitle": "Team Management",
     "teamManagementDescription": "Multiple users, role-based access, and shared projects for your team.",
     "licensed": "Licensed under AGPL-3.0",
-    "proCta": "Available with CloudCLI Pro"
+    "proCta": "Available with CloudCLI Pro",
+    "dataBackup": {
+      "title": "Data & backup",
+      "description": "This install keeps your account, projects and settings in a SQLite database. Files uploaded in chat are stored in a separate folder.",
+      "databaseLabel": "Database",
+      "assetsLabel": "Uploaded files",
+      "loading": "Loading…",
+      "loadFailed": "Could not read the storage locations.",
+      "copyPath": "Copy path",
+      "pathCopied": "Path copied",
+      "download": "Download backup",
+      "downloading": "Preparing backup…",
+      "downloadFailed": "The backup could not be created. Please try again.",
+      "backupNote": "The download is a consistent copy of the database, safe to take while CloudCLI is running. It contains password hashes and access tokens, so keep it private. Copy the uploaded files folder separately.",
+      "restoreNote": "To restore: stop CloudCLI, replace the database file at the path above with the backup, put the uploaded files folder back, then start CloudCLI again.",
+      "restoreGuide": "Backup & restore guide"
+    }
   }
 }

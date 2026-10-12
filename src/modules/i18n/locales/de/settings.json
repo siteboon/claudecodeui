@@ -527,5 +527,23 @@
     "installAriaLabel": "Git-Repository-URL des Plugins",
     "tab": "Tab",
     "runningStatus": "läuft"
+  },
+  "about": {
+    "dataBackup": {
+      "title": "Daten & Sicherung",
+      "description": "Diese Installation speichert Konto, Projekte und Einstellungen in einer SQLite-Datenbank. Im Chat hochgeladene Dateien liegen in einem separaten Ordner.",
+      "databaseLabel": "Datenbank",
+      "assetsLabel": "Hochgeladene Dateien",
+      "loading": "Wird geladen…",
+      "loadFailed": "Die Speicherorte konnten nicht gelesen werden.",
+      "copyPath": "Pfad kopieren",
+      "pathCopied": "Pfad kopiert",
+      "download": "Sicherung herunterladen",
+      "downloading": "Sicherung wird erstellt…",
+      "downloadFailed": "Die Sicherung konnte nicht erstellt werden. Bitte erneut versuchen.",
+      "backupNote": "Der Download ist eine konsistente Kopie der Datenbank und kann bei laufendem CloudCLI erstellt werden. Er enthält Passwort-Hashes und Zugriffstoken, daher vertraulich aufbewahren. Den Ordner mit den hochgeladenen Dateien separat kopieren.",
+      "restoreNote": "Wiederherstellen: CloudCLI beenden, die Datenbankdatei unter dem obigen Pfad durch die Sicherung ersetzen, den Ordner mit den hochgeladenen Dateien zurückkopieren und CloudCLI wieder starten.",
+      "restoreGuide": "Anleitung zu Sicherung & Wiederherstellung"
+    }
   }
 }

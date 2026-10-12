@@ -585,5 +585,23 @@
     "installAriaLabel": "URL du dépôt git du plugin",
     "tab": "onglet",
     "runningStatus": "en cours"
+  },
+  "about": {
+    "dataBackup": {
+      "title": "Données et sauvegarde",
+      "description": "Cette installation conserve votre compte, vos projets et vos paramètres dans une base de données SQLite. Les fichiers envoyés dans le chat sont stockés dans un dossier séparé.",
+      "databaseLabel": "Base de données",
+      "assetsLabel": "Fichiers envoyés",
+      "loading": "Chargement…",
+      "loadFailed": "Impossible de lire les emplacements de stockage.",
+      "copyPath": "Copier le chemin",
+      "pathCopied": "Chemin copié",
+      "download": "Télécharger une sauvegarde",
+      "downloading": "Préparation de la sauvegarde…",
+      "downloadFailed": "La sauvegarde n'a pas pu être créée. Veuillez réessayer.",
+      "backupNote": "Le téléchargement est une copie cohérente de la base de données, réalisable pendant que CloudCLI fonctionne. Il contient des empreintes de mots de passe et des jetons d'accès : conservez-le en lieu sûr. Copiez séparément le dossier des fichiers envoyés.",
+      "restoreNote": "Pour restaurer : arrêtez CloudCLI, remplacez le fichier de base de données situé au chemin ci-dessus par la sauvegarde, remettez en place le dossier des fichiers envoyés, puis redémarrez CloudCLI.",
+      "restoreGuide": "Guide de sauvegarde et de restauration"
+    }
   }
 }

@@ -615,5 +615,23 @@
     "installAriaLabel": "插件 git 仓库 URL",
     "tab": "标签",
     "runningStatus": "运行中"
+  },
+  "about": {
+    "dataBackup": {
+      "title": "数据与备份",
+      "description": "此安装将你的账户、项目和设置保存在 SQLite 数据库中。聊天中上传的文件保存在单独的文件夹里。",
+      "databaseLabel": "数据库",
+      "assetsLabel": "上传的文件",
+      "loading": "加载中…",
+      "loadFailed": "无法读取存储位置。",
+      "copyPath": "复制路径",
+      "pathCopied": "路径已复制",
+      "download": "下载备份",
+      "downloading": "正在准备备份…",
+      "downloadFailed": "无法创建备份，请重试。",
+      "backupNote": "下载的文件是数据库的一致性副本，可在 CloudCLI 运行时创建。其中包含密码哈希和访问令牌，请妥善保管。上传的文件所在的文件夹需要另行复制。",
+      "restoreNote": "恢复方法：停止 CloudCLI，用备份替换上方路径中的数据库文件，放回上传文件所在的文件夹，然后重新启动 CloudCLI。",
+      "restoreGuide": "备份与恢复指南"
+    }
   }
 }

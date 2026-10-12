@@ -534,5 +534,23 @@
     "installAriaLabel": "Eklenti git deposu URL'si",
     "tab": "sekme",
     "runningStatus": "çalışıyor"
+  },
+  "about": {
+    "dataBackup": {
+      "title": "Veriler ve yedekleme",
+      "description": "Bu kurulum hesabınızı, projelerinizi ve ayarlarınızı bir SQLite veritabanında saklar. Sohbette yüklenen dosyalar ayrı bir klasörde tutulur.",
+      "databaseLabel": "Veritabanı",
+      "assetsLabel": "Yüklenen dosyalar",
+      "loading": "Yükleniyor…",
+      "loadFailed": "Depolama konumları okunamadı.",
+      "copyPath": "Yolu kopyala",
+      "pathCopied": "Yol kopyalandı",
+      "download": "Yedeği indir",
+      "downloading": "Yedek hazırlanıyor…",
+      "downloadFailed": "Yedek oluşturulamadı. Lütfen tekrar deneyin.",
+      "backupNote": "İndirilen dosya veritabanının tutarlı bir kopyasıdır ve CloudCLI çalışırken alınabilir. Parola özetleri ve erişim belirteçleri içerdiği için gizli tutun. Yüklenen dosyalar klasörünü ayrıca kopyalayın.",
+      "restoreNote": "Geri yüklemek için CloudCLI'ı durdurun, yukarıdaki yoldaki veritabanı dosyasını yedekle değiştirin, yüklenen dosyalar klasörünü yerine koyun ve CloudCLI'ı yeniden başlatın.",
+      "restoreGuide": "Yedekleme ve geri yükleme kılavuzu"
+    }
   }
 }
