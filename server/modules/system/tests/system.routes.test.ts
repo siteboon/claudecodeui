@@ -115,7 +115,7 @@ test('backup and storage routes reject requests without a valid token', async ()
     for (const route of ['/api/system/backup', '/api/system/storage']) {
       const anonymous = await fetch(`${baseUrl}${route}`);
       assert.equal(anonymous.status, 401, route);
-      assert.equal((await anonymous.json()).code, 'AUTH_TOKEN_INVALID');
+      assert.equal(((await anonymous.json()) as { code?: string }).code, 'AUTH_TOKEN_INVALID');
 
       const forged = await fetch(`${baseUrl}${route}`, { headers: { Authorization: 'Bearer not-a-token' } });
       assert.equal(forged.status, 401, route);
