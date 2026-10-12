@@ -520,6 +520,9 @@ function handleChatSubscribe(
     const lastSeq = typeof lastSeqRaw === 'number' && Number.isFinite(lastSeqRaw)
       ? Math.max(0, Math.floor(lastSeqRaw))
       : 0;
+    // The run `lastSeq` was counted in. Optional: a client that omits it gets
+    // the old seq-only replay.
+    const lastRunId = typeof (target as AnyRecord).runId === 'string' ? (target as AnyRecord).runId as string : null;
 
     const run = chatRunRegistry.getRun(sessionId);
     const isProcessing = chatRunRegistry.isProcessing(sessionId);
@@ -543,6 +546,7 @@ function handleChatSubscribe(
       sessionId,
       isProcessing,
       lastSeq: run?.lastSeq ?? 0,
+      runId: run?.runId ?? null,
       pendingPermissions,
       timestamp: new Date().toISOString(),
     });
@@ -552,7 +556,7 @@ function handleChatSubscribe(
     // replaying them (e.g. after a page reload where the client's lastSeq is
     // 0) would duplicate messages the history fetch already returned.
     if (isProcessing) {
-      for (const event of chatRunRegistry.replayEvents(sessionId, lastSeq)) {
+      for (const event of chatRunRegistry.replayEvents(sessionId, lastSeq, lastRunId)) {
         sendJson(ws, event);
       }
     }
@@ -584,7 +588,7 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  * - `chat.send`                { sessionId, content, options? }
  * - `chat.abort`               { sessionId }
  * - `chat.stop-task`           { sessionId, taskId }
- * - `chat.subscribe`           { sessions: [{ sessionId, lastSeq? }] }
+ * - `chat.subscribe`           { sessions: [{ sessionId, lastSeq?, runId? }] }
  * - `chat.permission-response` { requestId, allow, updatedInput?, message?, rememberEntry? }
  *
  * Outbound protocol (server to client): every frame is `kind`-based — either
