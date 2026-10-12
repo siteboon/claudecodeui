@@ -379,17 +379,16 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
       !resolvedPath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)
       && resolvedPath !== resolvedWorkspaceRoot
     ) {
-      // The root defaults to the home directory, so without naming the setting
-      // this reads like a fixed limit of the app. Hosted (Platform) installs
-      // manage the server's environment for the user, so the hint is left out
-      // there.
-      const outsideRootError = `Workspace path must be within the allowed workspace root: ${WORKSPACES_ROOT}`;
       return {
         valid: false,
-        error: IS_PLATFORM
-          ? outsideRootError
-          : `${outsideRootError}. `
-            + 'To change the root, set the WORKSPACES_ROOT environment variable and restart the server.',
+        // The root defaults to the home directory, so without naming the
+        // setting this reads like a fixed limit of the app. Hosted (Platform)
+        // installs manage the server's environment for the user, so the hint
+        // is left out there.
+        error: `Workspace path must be within the allowed workspace root: ${WORKSPACES_ROOT}`
+          + (IS_PLATFORM
+            ? ''
+            : '. To change the root, set the WORKSPACES_ROOT environment variable and restart the server.'),
       };
     }
 
