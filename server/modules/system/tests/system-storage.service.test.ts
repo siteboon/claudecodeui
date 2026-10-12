@@ -70,15 +70,16 @@ function assertPlatformRefusal(error: unknown): true {
   return true;
 }
 
-test('storage locations are reported as absolute paths, resolving a relative DATABASE_PATH', () => {
+test('storage locations are reported as absolute paths, resolving relative ones', () => {
+  // Both inputs are relative on purpose: each one must be resolved against the working directory.
   const service = createSystemStorageService(createDependencies({
     getDatabasePath: () => path.join('data', 'auth.db'),
-    getAssetsPath: () => path.join(tmpdir(), 'cloudcli', '..', 'cloudcli', 'assets'),
+    getAssetsPath: () => path.join('uploads', 'assets'),
   }));
 
   assert.deepEqual(service.getStorageLocations(), {
     databasePath: path.resolve('data', 'auth.db'),
-    assetsPath: path.join(tmpdir(), 'cloudcli', 'assets'),
+    assetsPath: path.resolve('uploads', 'assets'),
   });
 });
 
