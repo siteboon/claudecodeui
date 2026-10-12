@@ -120,7 +120,8 @@ export async function readApiJson<T>(response: Response): Promise<T> {
  *
  * The non-throwing counterpart of readApiJson, used by the auth and onboarding
  * screens because they show their own localized message when the server gives
- * none.
+ * none, and by the plugins context, whose install/update/uninstall/toggle
+ * failures arrive as the structured envelope and are shown in Settings > Plugins.
  */
 export function readApiErrorMessage(body: unknown): string | null {
   if (!body || typeof body !== 'object') {

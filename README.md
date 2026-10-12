@@ -189,6 +189,15 @@ CloudCLI has a plugin system that lets you add custom tabs with their own fronte
 
 **[Plugin Documentation →](https://cloudcli.ai/docs/plugin-overview)** — full guide to the plugin API, manifest format, security model, and more.
 
+### Private Repositories
+
+The server installs and updates plugins with `git clone` and `git pull`, using the git credentials of the operating-system user it runs as (for a systemd service, the unit's `User=`). It never prompts for a password, so set up credentials for that user before installing from a private repository:
+
+- **`https://` URLs:** configure a git credential helper, for example `gh auth login` followed by `gh auth setup-git`, or a token in `~/.git-credentials` with `git config --global credential.helper store`.
+- **`git@` URLs:** give that user an SSH key the git host accepts, and add the host to its `~/.ssh/known_hosts` (for example by running `ssh -T git@github.com` once).
+
+Without credentials, the install fails with a message saying that the repository is private or does not exist. Most git hosts, GitHub included, answer the same way for both.
+
 ---
 ## FAQ
 
