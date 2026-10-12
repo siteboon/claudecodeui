@@ -918,6 +918,19 @@ router.delete(
   }),
 );
 
+/**
+ * Called by the composer when the first message of a brand-new chat was never
+ * acknowledged, so a message that did not arrive leaves no empty titled
+ * session behind. Answers `kept` when the turn was admitted after all.
+ */
+router.delete(
+  '/sessions/:sessionId/unsent',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    res.json(createApiSuccessResponse(sessionsService.discardUnsentSession(sessionId)));
+  }),
+);
+
 router.post(
   '/sessions/:sessionId/restore',
   asyncHandler(async (req: Request, res: Response) => {

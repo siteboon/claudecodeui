@@ -225,14 +225,15 @@ export type MessageKind =
 /**
  * Event kinds added by the chat gateway layer on top of provider message kinds.
  *
- * These are app-level realtime events (subscription acks, sidebar deltas,
- * project loading progress, protocol failures) that are not produced by any
- * provider adapter. Together with `MessageKind` they form the complete set of
- * `kind` values a websocket client can receive, so the frontend only ever
- * needs one kind-based switch.
+ * These are app-level realtime events (subscription acks, acknowledgements of
+ * admitted chat turns, sidebar deltas, project loading progress, protocol
+ * failures) that are not produced by any provider adapter. Together with
+ * `MessageKind` they form the complete set of `kind` values a websocket client
+ * can receive, so the frontend only ever needs one kind-based switch.
  */
 export type GatewayEventKind =
   | 'chat_subscribed'
+  | 'chat_send_accepted'
   | 'session_upserted'
   | 'loading_progress'
   | 'protocol_error';

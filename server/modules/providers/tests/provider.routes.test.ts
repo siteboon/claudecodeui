@@ -11,6 +11,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import providerRouter from '@/modules/providers/provider.routes.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
+import { chatRunRegistry } from '@/modules/websocket/index.js';
 import type { IProvider } from '@/shared/interfaces.js';
 import type { BackgroundTaskSummary, WorkflowAgentActivity } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
@@ -78,6 +79,68 @@ test('session creation route names a CloudCLI session from the initial message',
       sessionsDb.getSessionById(payload.data.sessionId)?.custom_name,
       'abcd efg hij klm',
     );
+  });
+});
+
+test('discarding an unsent session deletes it only when no turn was ever admitted for it', async () => {
+  // The composer calls this when the first message of a new chat was never
+  // acknowledged. A session whose turn was admitted (its ack was lost) or that
+  // already has provider history must survive; only a truly unsent one goes.
+  await withProviderServer(async (baseUrl, workspacePath) => {
+    const discard = async (sessionId: string) => {
+      const response = await fetch(`${baseUrl}/api/providers/sessions/${sessionId}/unsent`, { method: 'DELETE' });
+      assert.equal(response.status, 200);
+      return ((await response.json()) as { data: { outcome: string } }).data.outcome;
+    };
+
+    try {
+      sessionsDb.createAppSession('never-sent', 'claude', workspacePath, 'Never sent');
+      sessionsDb.createAppSession('ack-lost', 'claude', workspacePath, 'Ack lost');
+      sessionsDb.createAppSession('has-history', 'claude', workspacePath, 'Has history');
+      chatRunRegistry.recordAdmittedRequest('ack-lost', 'request-1');
+      sessionsDb.assignProviderSessionId('has-history', 'provider-session-1');
+      // What the startup migration leaves on a row that never got a provider id.
+      sessionsDb.createAppSession('backfilled', 'claude', workspacePath, 'Backfilled');
+      sessionsDb.assignProviderSessionId('backfilled', 'backfilled');
+
+      assert.equal(await discard('never-sent'), 'discarded');
+      assert.equal(sessionsDb.getSessionById('never-sent'), null);
+
+      assert.equal(await discard('backfilled'), 'discarded', 'its own id is not provider history');
+      assert.equal(sessionsDb.getSessionById('backfilled'), null);
+
+      assert.equal(await discard('ack-lost'), 'kept');
+      assert.ok(sessionsDb.getSessionById('ack-lost'));
+
+      assert.equal(await discard('has-history'), 'kept');
+      assert.ok(sessionsDb.getSessionById('has-history'));
+
+      assert.equal(await discard('never-existed'), 'discarded', 'discarding twice is harmless');
+    } finally {
+      chatRunRegistry.clearAll();
+    }
+  });
+});
+
+test('discarding keeps a session with a transcript even when its provider id is its own id', async () => {
+  // A conversation started in the provider CLI is indexed under the provider
+  // id for both columns, so only its transcript shows that it has history.
+  await withProviderServer(async (baseUrl, workspacePath) => {
+    sessionsDb.createSession(
+      'from-the-cli',
+      'claude',
+      workspacePath,
+      'Started in the CLI',
+      undefined,
+      undefined,
+      path.join(workspacePath, 'from-the-cli.jsonl'),
+    );
+
+    const response = await fetch(`${baseUrl}/api/providers/sessions/from-the-cli/unsent`, { method: 'DELETE' });
+
+    assert.equal(response.status, 200);
+    assert.equal(((await response.json()) as { data: { outcome: string } }).data.outcome, 'kept');
+    assert.ok(sessionsDb.getSessionById('from-the-cli'));
   });
 });
 

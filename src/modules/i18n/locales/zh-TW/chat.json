@@ -271,6 +271,8 @@
     "answeredBy": "由 {{model}} 回答"
   },
   "composer": {
+    "sendNotConfirmed": "伺服器未確認收到您的訊息，因此可能沒有送出。訊息仍保留在這裡，請再次傳送以重試。",
+    "sendRefused": "訊息未送出：{{error}}",
     "editing": {
       "title": "正在取代先前的訊息",
       "filesNotReverted": "已修改的檔案不會還原",

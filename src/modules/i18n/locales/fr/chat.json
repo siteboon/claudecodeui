@@ -243,6 +243,8 @@
     "answeredBy": "Répondu par {{model}}"
   },
   "composer": {
+    "sendNotConfirmed": "Le serveur n’a pas confirmé votre message, il n’a donc peut-être pas été envoyé. Il est toujours là : renvoyez-le pour réessayer.",
+    "sendRefused": "Votre message n’a pas été envoyé : {{error}}",
     "editing": {
       "title": "Remplacement d’un message précédent",
       "filesNotReverted": "les fichiers déjà modifiés ne sont pas restaurés",

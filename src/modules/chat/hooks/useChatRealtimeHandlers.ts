@@ -169,9 +169,14 @@ export function useChatRealtimeHandlers({
           return;
         }
 
+        // The composer that sent the turn waits for these itself and reports a
+        // refusal next to the draft it kept, so they draw nothing here.
+        case 'chat_send_accepted':
+          return;
+
         case 'protocol_error': {
           console.error('[Chat] Protocol error:', msg.code, msg.error);
-          if (sid) {
+          if (sid && !msg.clientRequestId) {
             // Surface the failure in the conversation and stop the spinner —
             // the run never started (or was rejected), so no `complete` follows.
             // A refused stop request is not about the run: the task had

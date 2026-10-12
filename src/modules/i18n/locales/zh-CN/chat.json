@@ -256,6 +256,8 @@
     "answeredBy": "由 {{model}} 回答"
   },
   "composer": {
+    "sendNotConfirmed": "服务器未确认收到您的消息，因此它可能没有发送成功。消息仍保留在这里，请再次发送以重试。",
+    "sendRefused": "消息未发送：{{error}}",
     "editing": {
       "title": "正在替换先前的消息",
       "filesNotReverted": "已修改的文件不会被还原",

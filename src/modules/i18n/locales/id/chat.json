@@ -155,6 +155,8 @@
     }
   },
   "composer": {
+    "sendNotConfirmed": "Server tidak mengonfirmasi pesan Anda, jadi pesan mungkin belum terkirim. Pesan masih ada di sini — kirim lagi untuk mencoba ulang.",
+    "sendRefused": "Pesan Anda tidak terkirim: {{error}}",
     "reasoning": "Penalaran",
     "model": "Model",
     "effortDefault": "Default",

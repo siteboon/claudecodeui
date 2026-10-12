@@ -241,6 +241,8 @@
     "answeredBy": "{{model}} tarafından yanıtlandı"
   },
   "composer": {
+    "sendNotConfirmed": "Sunucu mesajını onaylamadı, bu yüzden gönderilmemiş olabilir. Mesajın hâlâ burada — yeniden denemek için tekrar gönder.",
+    "sendRefused": "Mesajın gönderilmedi: {{error}}",
     "editing": {
       "title": "Önceki bir mesaj değiştiriliyor",
       "filesNotReverted": "zaten değiştirilen dosyalar geri alınmaz",
