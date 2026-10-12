@@ -4,6 +4,7 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 
 import '@/modules/i18n';
+import type * as ChatDrafts from '@/shared/chatDrafts';
 import type { PermissionMode, Project, ProjectSession } from '@/shared/types';
 
 /**
@@ -18,7 +19,7 @@ import type { PermissionMode, Project, ProjectSession } from '@/shared/types';
 const serverQueue = vi.hoisted(() => ({ claimed: false }));
 
 vi.mock('@/shared/chatDrafts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/shared/chatDrafts')>();
+  const actual = await importOriginal<typeof ChatDrafts>();
   return {
     ...actual,
     hydrateChatDrafts: async () => undefined,
