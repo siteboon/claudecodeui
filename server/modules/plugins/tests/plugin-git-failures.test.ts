@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFile, spawn } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import fs from 'node:fs';
 import { mkdtemp, readdir, writeFile } from 'node:fs/promises';
@@ -36,8 +36,11 @@ delete process.env.GIT_TERMINAL_PROMPT;
 delete process.env.GIT_ASKPASS;
 delete process.env.SSH_ASKPASS;
 
-const { createPluginGitError, getPluginsDir, installPluginFromGit, updatePluginFromGit } = await import(
+const { getPluginsDir, installPluginFromGit, updatePluginFromGit } = await import(
   '@/modules/plugins/plugin-registry.service.js'
+);
+const { createPluginGitError, createPluginGitSpawnError, stopPluginGitOnServerExit } = await import(
+  '@/modules/plugins/plugin-git.service.js'
 );
 const { pluginsRoutes } = await import('@/modules/plugins/index.js');
 
@@ -159,13 +162,18 @@ test('an install from a host that wants credentials fails fast as PLUGIN_GIT_AUT
     assert.equal(error.statusCode, 422);
     assert.match(error.message, /^Could not install the plugin: .*private or does not exist/);
     assert.match(error.message, /credentials of the user the CloudCLI server runs as/);
-    assert.match(error.message, /gh auth setup-git/);
+    assert.match(error.message, /"gh auth setup-git"/);
     assert.match(error.message, /SSH key .* for git@ URLs/);
+    // The message is shown as plain text.
+    assert.ok(!error.message.includes('`'), error.message);
     // git refused to prompt instead of trying the server's terminal: the
     // registry set GIT_TERMINAL_PROMPT=0 (this test cleared it from the env).
     const details = error.details as GitErrorDetails;
     assert.equal(details.gitCommand, 'git clone');
     assert.match(details.gitOutput, /could not read Username for 'http:\/\/127\.0\.0\.1:\d+': terminal prompts disabled/);
+    // "Cloning into '<server path>/.tmp-…'" stays out of what the client sees.
+    assert.ok(!details.gitOutput.includes('Cloning into'), details.gitOutput);
+    assert.ok(!details.gitOutput.includes(getPluginsDir()), details.gitOutput);
   });
   assert.deepEqual(await leftoverTempDirectories(), []);
 });
@@ -220,7 +228,9 @@ test('a credential helper of the server user still installs a private plugin; wi
       await writeFile(gitConfigPath, '');
       const error = await rejection(updatePluginFromGit('private-demo'));
       assert.equal(error.code, 'PLUGIN_GIT_AUTH_REQUIRED');
-      assert.match(error.message, /^Could not update the plugin: .*private or does not exist/);
+      // The plugin was cloned from there before: no "private or does not exist".
+      assert.match(error.message, /^Could not update the plugin: .*credentials of the user the CloudCLI server runs as are missing or have expired/);
+      assert.ok(!/private or does not exist/.test(error.message), error.message);
       const details = error.details as GitErrorDetails;
       assert.equal(details.gitCommand, 'git pull');
       assert.match(details.gitOutput, /terminal prompts disabled/);
@@ -272,7 +282,7 @@ const MEASURED_FAILURES: Array<[string, string, string]> = [
     "Cloning into '/srv/plugins/.tmp-x'...\nfatal: could not read Username for 'https://github.com': No such device or address\n"],
   ['the same with prompts disabled', 'PLUGIN_GIT_AUTH_REQUIRED',
     "Cloning into '/srv/plugins/.tmp-x'...\nfatal: could not read Username for 'https://github.com': terminal prompts disabled\n"],
-  ['a credential helper with a revoked token', 'PLUGIN_GIT_AUTH_REQUIRED',
+  ['a credential helper with a revoked token', 'PLUGIN_GIT_AUTH_REJECTED',
     "remote: Invalid username or token. Password authentication is not supported for Git operations.\nfatal: Authentication failed for 'https://github.com/acme/plugin/'\n"],
   ['git@ URL without an SSH key', 'PLUGIN_GIT_AUTH_REQUIRED',
     'git@github.com: Permission denied (publickey).\r\nfatal: Could not read from remote repository.\n\nPlease make sure you have the correct access rights\nand the repository exists.\n'],
@@ -290,27 +300,18 @@ const MEASURED_FAILURES: Array<[string, string, string]> = [
 
 for (const [situation, expectedCode, stderr] of MEASURED_FAILURES) {
   test(`createPluginGitError classifies ${situation} as ${expectedCode}`, () => {
-    const error = createPluginGitError('install', 'clone', 128, stderr);
+    const error = createPluginGitError('install', 128, stderr);
     assert.equal(error.code, expectedCode);
-    assert.equal((error.details as GitErrorDetails).gitOutput, stderr.replace(/\r/g, '').trim());
+    assert.equal(
+      (error.details as GitErrorDetails).gitOutput,
+      stderr.replace(/\r/g, '').replace(/^Cloning into .*\n/, '').trim(),
+    );
   });
 }
-
-test('createPluginGitError shows git\'s own last error for anything it does not recognise', () => {
-  const error = createPluginGitError('update', 'pull', 1, 'hint: Diverging branches can\'t be fast-forwarded.\nfatal: Not possible to fast-forward, aborting.\n');
-  assert.equal(error.code, 'PLUGIN_GIT_FAILED');
-  assert.equal(error.statusCode, 502);
-  assert.equal(error.message, 'Could not update the plugin: git pull failed: Not possible to fast-forward, aborting.');
-  assert.deepEqual(
-    { gitCommand: (error.details as GitErrorDetails).gitCommand, exitCode: (error.details as GitErrorDetails).exitCode },
-    { gitCommand: 'git pull', exitCode: 1 },
-  );
-});
 
 test('createPluginGitError strips credentials from URLs before showing git output', () => {
   const error = createPluginGitError(
     'install',
-    'clone',
     128,
     "fatal: unable to access 'https://deploy:hunter2@git.example.test/acme/plugin/': SSL certificate problem: self-signed certificate\n",
   );
@@ -318,4 +319,217 @@ test('createPluginGitError strips credentials from URLs before showing git outpu
   assert.ok(!error.message.includes('hunter2'), error.message);
   assert.ok(!JSON.stringify(error.details).includes('hunter2'), JSON.stringify(error.details));
   assert.match(error.message, /SSL certificate problem/);
+});
+
+test('rejected credentials get their own code and advice, on install and on update', () => {
+  const revokedToken = "remote: Invalid username or token. Password authentication is not supported for Git operations.\n"
+    + "fatal: Authentication failed for 'https://github.com/acme/plugin/'\n";
+  const gitlabDenied = 'remote: HTTP Basic: Access denied. The provided password or token is incorrect.\n'
+    + "fatal: Authentication failed for 'https://gitlab.com/acme/plugin.git/'\n";
+  for (const [action, stderr] of [['install', revokedToken], ['update', gitlabDenied]] as const) {
+    const error = createPluginGitError(action, 128, stderr);
+    assert.equal(error.code, 'PLUGIN_GIT_AUTH_REJECTED');
+    assert.equal(error.statusCode, 422);
+    assert.match(error.message, new RegExp(`^Could not ${action} the plugin: the git host rejected the credentials of the user the CloudCLI server runs as`));
+    assert.match(error.message, /Update or re-create them/);
+    assert.ok(!/private or does not exist|set up a credential helper/i.test(error.message), error.message);
+  }
+});
+
+test('the rules are checked in order: rejected credentials win over a "not found" line in the same output', () => {
+  const stderr = 'remote: Repository not found.\n'
+    + "fatal: Authentication failed for 'https://git.example.test/acme/plugin.git/'\n";
+  assert.equal(createPluginGitError('install', 128, stderr).code, 'PLUGIN_GIT_AUTH_REJECTED');
+  // Without the rejection line the same host answer is a plain "not found".
+  assert.equal(createPluginGitError('install', 128, 'remote: Repository not found.\n').code, 'PLUGIN_GIT_REPO_NOT_FOUND');
+});
+
+test('an update that hits a missing repository does not ask to check a URL the user never typed', () => {
+  const error = createPluginGitError('update', 128, "remote: Repository not found.\nfatal: repository 'https://github.com/acme/plugin/' not found\n");
+  assert.equal(error.code, 'PLUGIN_GIT_REPO_NOT_FOUND');
+  assert.match(error.message, /^Could not update the plugin: the repository was not found at the plugin's git remote/);
+});
+
+// `git pull --ff-only` output measured with git 2.43 on a cloned plugin.
+const LOCAL_STATE_FAILURES: Array<[string, string, RegExp]> = [
+  ['local changes',
+    'From https://github.com/acme/plugin\n   e7b8fd7..670af34  main       -> origin/main\n'
+    + 'error: Your local changes to the following files would be overwritten by merge:\n\tindex.js\n'
+    + 'Please commit your changes or stash them before you merge.\nAborting\n',
+    /the plugin's directory on the server has local changes that the update would overwrite/],
+  ['untracked files',
+    'error: The following untracked working tree files would be overwritten by merge:\n\tnew.js\n'
+    + 'Please move or remove them before you merge.\nAborting\n',
+    /the plugin's directory on the server has local changes/],
+  ['diverged history',
+    "hint: Diverging branches can't be fast-forwarded, you need to either:\nhint: \nhint: \tgit merge --no-ff\n"
+    + 'fatal: Not possible to fast-forward, aborting.\n',
+    /has diverged from the repository .* cannot be fast-forwarded/],
+  ['no upstream branch',
+    'From https://github.com/acme/plugin\n   e7b8fd7..670af34  main       -> origin/main\n'
+    + 'There is no tracking information for the current branch.\nPlease specify which branch you want to merge with.\n'
+    + 'See git-pull(1) for details.\n\n    git pull <remote> <branch>\n\n'
+    + 'If you wish to set tracking information for this branch you can do so with:\n\n'
+    + '    git branch --set-upstream-to=origin/<branch> main\n\n',
+    /has no upstream branch to pull from/],
+];
+
+for (const [situation, stderr, expectedMessage] of LOCAL_STATE_FAILURES) {
+  test(`a pull refused because of ${situation} is a 409 PLUGIN_GIT_LOCAL_CONFLICT`, () => {
+    const error = createPluginGitError('update', 1, stderr);
+    assert.equal(error.code, 'PLUGIN_GIT_LOCAL_CONFLICT');
+    assert.equal(error.statusCode, 409);
+    assert.match(error.message, /^Could not update the plugin: /);
+    assert.match(error.message, expectedMessage);
+    assert.ok(!/set-upstream-to|:$/.test(error.message), error.message);
+  });
+}
+
+test('unrecognised output is a 422 PLUGIN_GIT_FAILED with git\'s last fatal line', () => {
+  const error = createPluginGitError(
+    'install',
+    128,
+    "Cloning into '/srv/plugins/.tmp-x'...\n"
+      + 'error: RPC failed; curl 56 GnuTLS recv error (-9): Error decoding the received TLS packet.\n'
+      + 'error: 2771 bytes of body are still expected\n'
+      + 'fetch-pack: unexpected disconnect while reading sideband packet\n'
+      + 'fatal: early EOF\n'
+      + 'fatal: fetch-pack: invalid index-pack output\n',
+  );
+  assert.equal(error.code, 'PLUGIN_GIT_FAILED');
+  assert.equal(error.statusCode, 422);
+  assert.equal(error.message, 'Could not install the plugin: git clone failed: fetch-pack: invalid index-pack output');
+  const details = error.details as GitErrorDetails;
+  assert.deepEqual({ gitCommand: details.gitCommand, exitCode: details.exitCode }, { gitCommand: 'git clone', exitCode: 128 });
+  assert.match(details.gitOutput, /^error: RPC failed/);
+});
+
+test('unrecognised output without a fatal line shows git\'s headline, not its suggested command', () => {
+  const error = createPluginGitError(
+    'update',
+    1,
+    'From https://git.example.test/acme/plugin\n * branch            main       -> FETCH_HEAD\n'
+      + 'The plugin checkout is in an unexpected state.\nRun this to repair it:\n\n    git repair --now\n',
+  );
+  assert.equal(error.code, 'PLUGIN_GIT_FAILED');
+  assert.equal(error.message, 'Could not update the plugin: git pull failed: The plugin checkout is in an unexpected state.');
+});
+
+test('an unrecognised error line that ends with a colon names the entries it introduces', () => {
+  const error = createPluginGitError(
+    'update',
+    1,
+    'error: The following paths have problems:\n\tdist/a.js\n\tdist/b.js\n\tdist/c.js\n\tdist/d.js\nAborting\n',
+  );
+  assert.equal(error.message, 'Could not update the plugin: git pull failed: The following paths have problems: dist/a.js, dist/b.js, dist/c.js, …');
+});
+
+test('createPluginGitError only builds the error; the registry logs it', (t) => {
+  const logged = t.mock.method(console, 'error', () => undefined);
+  createPluginGitError('install', 128, 'fatal: could not read Username for \'https://github.com\': terminal prompts disabled\n');
+  createPluginGitError('update', 1, 'fatal: something unexpected\n');
+  assert.equal(logged.mock.callCount(), 0);
+});
+
+test('no plugin git message contains Markdown backticks', () => {
+  const samples = [...MEASURED_FAILURES.map(([, , stderr]) => stderr), ...LOCAL_STATE_FAILURES.map(([, stderr]) => stderr)];
+  for (const action of ['install', 'update'] as const) {
+    for (const stderr of samples) {
+      const { message } = createPluginGitError(action, 128, stderr);
+      assert.ok(!message.includes('`'), message);
+    }
+  }
+});
+
+test('a missing git binary is a 503 PLUGIN_GIT_UNAVAILABLE, for install and update', { timeout: 30_000 }, async (t) => {
+  const logged = t.mock.method(console, 'error', () => undefined);
+  fs.mkdirSync(path.join(getPluginsDir(), 'no-git-demo'), { recursive: true });
+  fs.writeFileSync(path.join(getPluginsDir(), 'no-git-demo', 'manifest.json'), JSON.stringify({
+    name: 'no-git-demo', displayName: 'No Git Demo', entry: 'index.js',
+  }));
+  const emptyPath = fs.mkdtempSync(path.join(fixtureHome, 'empty-path-'));
+  const savedPath = process.env.PATH;
+  process.env.PATH = emptyPath;
+  try {
+    const installError = await rejection(installPluginFromGit('https://git.example.test/acme/plugin.git'));
+    const updateError = await rejection(updatePluginFromGit('no-git-demo'));
+    for (const [error, action] of [[installError, 'install'], [updateError, 'update']] as const) {
+      assert.equal(error.code, 'PLUGIN_GIT_UNAVAILABLE');
+      assert.equal(error.statusCode, 503);
+      assert.equal(error.message, `Could not ${action} the plugin: git is not installed or not on the PATH of the CloudCLI server.`);
+    }
+  } finally {
+    process.env.PATH = savedPath;
+    fs.rmSync(path.join(getPluginsDir(), 'no-git-demo'), { recursive: true, force: true });
+  }
+  assert.deepEqual(await leftoverTempDirectories(), []);
+  // Node also emits 'close' after the failed spawn; that must not log a second, bogus "git clone failed".
+  await new Promise((resolve) => { setTimeout(resolve, 100); });
+  assert.ok(
+    logged.mock.calls.every((call) => !String(call.arguments[0]).includes('exit code')),
+    JSON.stringify(logged.mock.calls.map((call) => call.arguments)),
+  );
+});
+
+test('createPluginGitSpawnError keeps other spawn failures readable', () => {
+  const error = createPluginGitSpawnError('install', Object.assign(new Error('spawn git EACCES'), { code: 'EACCES' }));
+  assert.equal(error.code, 'PLUGIN_GIT_UNAVAILABLE');
+  assert.equal(error.message, 'Could not install the plugin: git could not be started: spawn git EACCES');
+});
+
+// A terminal prompt from ssh (unknown host key, key passphrase) is not covered
+// by GIT_TERMINAL_PROMPT. git runs in a session of its own, so neither git nor
+// the ssh it starts has the server's terminal to prompt on.
+test('git and the ssh it starts run outside the server\'s session', {
+  timeout: 30_000,
+  skip: process.platform !== 'linux' && 'reads session ids with Linux ps',
+}, async () => {
+  const sessionFile = path.join(fixtureHome, 'ssh-session-ids');
+  const fakeSsh = path.join(fixtureHome, 'fake-ssh.sh');
+  await writeFile(fakeSsh, `#!/bin/sh\nps -o sid= -p $$ >> '${sessionFile}'\necho "git@127.0.0.1: Permission denied (publickey)." >&2\nexit 255\n`);
+  fs.chmodSync(fakeSsh, 0o755);
+  const savedSshCommand = process.env.GIT_SSH_COMMAND;
+  process.env.GIT_SSH_COMMAND = fakeSsh;
+  try {
+    const error = await rejection(installPluginFromGit('ssh://git@127.0.0.1/acme/session-probe.git'));
+    assert.equal(error.code, 'PLUGIN_GIT_AUTH_REQUIRED');
+  } finally {
+    if (savedSshCommand === undefined) delete process.env.GIT_SSH_COMMAND;
+    else process.env.GIT_SSH_COMMAND = savedSshCommand;
+  }
+  const serverSession = execFileSync('ps', ['-o', 'sid=', '-p', String(process.pid)]).toString().trim();
+  const sshSessions = fs.readFileSync(sessionFile, 'utf8').split('\n').map((line) => line.trim()).filter(Boolean);
+  assert.ok(sshSessions.length > 0, 'the fake ssh never ran');
+  for (const session of sshSessions) assert.notEqual(session, serverSession);
+  assert.deepEqual(await leftoverTempDirectories(), []);
+});
+
+test('a detached git is stopped with its process group when the server exits', {
+  timeout: 30_000,
+  skip: process.platform === 'win32' && 'git is not detached on Windows',
+}, async () => {
+  const listenersBefore = new Set(process.listeners('exit'));
+  // Stands in for git: a group leader with a child of its own, like git and its ssh.
+  const git = spawn('sh', ['-c', 'sleep 30 & wait'], { detached: true, stdio: 'ignore' });
+  stopPluginGitOnServerExit(git);
+  const added = process.listeners('exit').filter((listener) => !listenersBefore.has(listener));
+  assert.equal(added.length, 1);
+
+  const exited = once(git, 'exit');
+  (added[0] as () => void)(); // what process.exit() runs on server shutdown
+  const [, signal] = await exited;
+  assert.equal(signal, 'SIGTERM');
+  assert.ok(!process.listeners('exit').includes(added[0]), 'the exit hook outlived git');
+
+  // The whole group is gone, not only its leader.
+  const pid = git.pid as number;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    try {
+      process.kill(-pid, 0);
+    } catch {
+      return;
+    }
+    await new Promise((resolve) => { setTimeout(resolve, 50); });
+  }
+  assert.fail('a process of git\'s group survived the server');
 });
