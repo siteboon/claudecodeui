@@ -748,7 +748,7 @@ export const sessionsService = {
   /**
    * Renames one session by id without requiring the caller to pass provider.
    *
-   * The new name is also handed to the provider, so its own CLI lists the
+   * The new name is also handed to the provider, so its own CLI shows the
    * session under it too. That part is best effort: the database row is the
    * name CloudCLI shows, and a transcript that cannot be written does not fail
    * the rename.
