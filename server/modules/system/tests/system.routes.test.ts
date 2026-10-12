@@ -3,7 +3,7 @@ import { createHmac } from 'node:crypto';
 import { once } from 'node:events';
 import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import test, { after, before } from 'node:test';
 
@@ -47,6 +47,7 @@ async function setUpFixture(directory: string) {
   const { AppError } = await import('@/shared/utils.js');
   const { createSystemStorageService } = await import('../system-storage.service.js');
   const { createSystemRouter: createRouter } = await import('../system.routes.js');
+  const { createSystemModule } = await import('../index.js');
 
   await database.initializeDatabase();
   const user = database.userDb.createUser('route-user', 'password-hash');
@@ -56,6 +57,7 @@ async function setUpFixture(directory: string) {
     AppError,
     authenticateToken,
     closeConnection: database.closeConnection,
+    createSystemModule,
     createSystemRouter: createRouter,
     createSystemStorageService,
     directory,
@@ -151,6 +153,18 @@ async function readErrorCode(response: Response): Promise<string | undefined> {
   return ((await response.json()) as { error?: { code?: string } }).error?.code;
 }
 
+/** Opens a downloaded snapshot and returns its user names, after checking that it is a sound SQLite file. */
+function readSnapshotUsernames(contents: Buffer): string[] {
+  const snapshot = new Database(contents, { readonly: true });
+  try {
+    assert.equal(snapshot.pragma('integrity_check', { simple: true }), 'ok');
+    return (snapshot.prepare('SELECT username FROM users').all() as { username: string }[])
+      .map((row) => row.username);
+  } finally {
+    snapshot.close();
+  }
+}
+
 test('backup and storage routes reject requests without a valid token', async () => {
   let backupCalls = 0;
   const router = fixture.createSystemRouter(createServices({ onBackup: () => { backupCalls += 1; } }));
@@ -219,4 +233,37 @@ test('platform installs answer 403 even for an authenticated request', async () 
   });
 
   assert.equal(backupCalls, 0);
+});
+
+// The tests below build the router through the real createSystemModule, the
+// way server/index.ts does, so the Platform flag, the live connection and the
+// database path it wires into the storage service are covered too.
+
+test('the system module refuses storage locations and backups on Platform installs', async () => {
+  const router = fixture.createSystemModule({ appRoot: fixture.directory, installMode: 'npm', isPlatform: true });
+  await withSystemServer(router, async (baseUrl) => {
+    for (const route of ['/api/system/backup', '/api/system/storage']) {
+      const response = await fetch(`${baseUrl}${route}`, authorized());
+      assert.equal(response.status, 403, route);
+      assert.equal(await readErrorCode(response), 'PLATFORM_MANAGED_STORAGE', route);
+    }
+  });
+});
+
+test('the self-hosted system module reports this database and backs up its live connection', async () => {
+  const router = fixture.createSystemModule({ appRoot: fixture.directory, installMode: 'npm', isPlatform: false });
+  await withSystemServer(router, async (baseUrl) => {
+    const storage = await fetch(`${baseUrl}/api/system/storage`, authorized());
+    assert.equal(storage.status, 200);
+    assert.deepEqual(await storage.json(), {
+      databasePath: path.join(fixture.directory, 'auth.db'),
+      assetsPath: path.join(homedir(), '.cloudcli', 'assets'),
+    });
+
+    const backup = await fetch(`${baseUrl}/api/system/backup`, authorized());
+    assert.equal(backup.status, 200);
+    const contents = Buffer.from(await backup.arrayBuffer());
+    assert.ok(contents.length > 0, 'the backup must not be empty');
+    assert.deepEqual(readSnapshotUsernames(contents), ['route-user']);
+  });
 });
