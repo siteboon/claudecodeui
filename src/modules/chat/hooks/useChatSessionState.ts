@@ -1192,6 +1192,7 @@ export function useChatSessionState({
     addMessage,
     sessionActivity,
     isProcessing,
+    subscribeToUnwatchedRun,
     canAbortSession,
     currentSessionId,
     setCurrentSessionId,

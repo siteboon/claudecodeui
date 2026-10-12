@@ -140,6 +140,7 @@ function ChatInterface({
     addMessage,
     sessionActivity,
     isProcessing,
+    subscribeToUnwatchedRun,
     canAbortSession,
     currentSessionId,
     setCurrentSessionId,
@@ -268,6 +269,9 @@ function ChatInterface({
     sendMessage,
     sendByCtrlEnter,
     onSessionProcessing: markOwnSendProcessing,
+    // The card goes when the server claims the message, and the run it then
+    // starts is the one to watch.
+    onQueuedMessageSent: subscribeToUnwatchedRun,
     onSessionEstablished: handleSessionEstablished,
     onFileOpen,
     onShowSettings,
