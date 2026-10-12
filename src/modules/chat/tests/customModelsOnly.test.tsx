@@ -248,6 +248,32 @@ test('a failed toggle is reported next to it', async () => {
   await waitFor(() => screen.getByText('Unable to change this setting.'));
 });
 
+test('a successful retry clears the error of a failed toggle', async () => {
+  let attempts = 0;
+  const actions = createActions(async () => {
+    attempts += 1;
+    if (attempts === 1) {
+      throw new Error('boom');
+    }
+  });
+  render(
+    <ModelLibraryPanel
+      initialProvider="claude"
+      providerModelCatalog={{ claude: MERGED_CATALOG }}
+      actions={actions}
+    />,
+  );
+
+  const checkbox = () => screen.getByRole('checkbox', { name: /Use only my models/ });
+  fireEvent.click(checkbox());
+  await waitFor(() => screen.getByText('Unable to change this setting.'));
+  await waitFor(() => assert.equal((checkbox() as HTMLInputElement).disabled, false));
+
+  fireEvent.click(checkbox());
+  await waitFor(() => assert.equal(attempts, 2));
+  await waitFor(() => assert.equal(isShown('Unable to change this setting.'), false));
+});
+
 test('turning the flag on moves the composer off a built-in that is no longer listed', async () => {
   localStorage.setItem('claude-model', 'default');
   const { useChatProviderState } = await import('@/modules/chat/hooks/useChatProviderState');
