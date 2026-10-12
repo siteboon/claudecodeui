@@ -17,8 +17,8 @@ const DEFAULT_WINDOWS_PATHEXT = '.COM;.EXE;.BAT;.CMD';
  * - `install-dir`: an absolute path in a directory the official installer writes to.
  * - `missing`: the bare `cursor-agent`; spawning it fails with ENOENT.
  *
- * `searchedPath` and `searchedLocations` record what was looked at, so a "not found" message can
- * name them (see `describeMissingCursorCli`).
+ * `searchedPath` (the PATH folders, each once) and `searchedLocations` record what was looked at,
+ * so a "not found" message can name them (see `describeMissingCursorCli`).
  */
 export type CursorCliResolution = {
   command: string;
@@ -134,7 +134,11 @@ export function resolveCursorCli(dependencies: ResolveCursorCliDependencies = {}
   };
   const isWindows = deps.platform === 'win32';
   const pathApi = isWindows ? path.win32 : path.posix;
-  const searchedPath = readEnvironmentValue(deps.env, 'PATH', deps.platform) ?? '';
+  // Launchers (npx, the desktop app) often repeat folders; each one is searched and named once.
+  const pathDirectories = [
+    ...new Set((readEnvironmentValue(deps.env, 'PATH', deps.platform) ?? '').split(pathApi.delimiter).filter(Boolean)),
+  ];
+  const searchedPath = pathDirectories.join(pathApi.delimiter);
 
   const configured = stripWrappingQuotes(deps.env[CURSOR_CLI_PATH_ENV] ?? '');
   if (configured) {
@@ -150,7 +154,6 @@ export function resolveCursorCli(dependencies: ResolveCursorCliDependencies = {}
     : [''];
   const fileNames = executableExtensions.map((extension) => `${CURSOR_CLI_COMMAND}${extension}`);
 
-  const pathDirectories = searchedPath.split(pathApi.delimiter).filter(Boolean);
   const onPath = pathDirectories.some((directory) =>
     fileNames.some((fileName) => deps.isExecutableFile(pathApi.join(directory, fileName))),
   );

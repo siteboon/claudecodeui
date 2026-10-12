@@ -96,8 +96,13 @@ test('a non-executable file or a directory named cursor-agent does not count as 
 test('a missing CLI is explained with the PATH searched, every install location and CURSOR_CLI_PATH', posixOnly, () => {
   withLayout(({ home, pathDirectory }) => {
     const searchedPath = `${pathDirectory}${path.delimiter}/usr/bin`;
-    const resolution = resolveCursorCli({ env: { PATH: searchedPath }, homedir: () => home });
+    // npx and the desktop app repeat folders; the message names each one once.
+    const resolution = resolveCursorCli({
+      env: { PATH: `${searchedPath}${path.delimiter}${path.delimiter}${pathDirectory}` },
+      homedir: () => home,
+    });
     assert.equal(resolution.source, 'missing');
+    assert.equal(resolution.searchedPath, searchedPath);
     assert.deepEqual(resolution.searchedLocations, [
       path.join(home, '.local', 'bin', 'cursor-agent'),
       path.join(home, '.local', 'share', 'cursor-agent', 'versions', '*', 'cursor-agent'),
