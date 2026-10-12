@@ -1,5 +1,6 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import { AppError } from '@/shared/utils.js';
 
@@ -7,12 +8,22 @@ type SystemStorageDependencies = {
   isPlatform: boolean;
   getDatabasePath(): string;
   getAssetsPath(): string;
-  /** Writes a consistent copy of the live database to `destinationPath`. */
-  backupDatabase(destinationPath: string): Promise<unknown>;
+  /**
+   * Writes a consistent copy of the live database to `destinationPath` and
+   * reports how many pages it copied (better-sqlite3's backup metadata).
+   */
+  backupDatabase(destinationPath: string): Promise<{ totalPages: number }>;
   /** Parent folder for the private, short-lived snapshot directory. */
   temporaryDirectory: string;
   now(): Date;
 };
+
+// better-sqlite3 resolves a backup whose first step finds the source busy (a
+// write transaction open on the shared connection, or another process holding
+// the write lock) as finished with 0 pages, leaving an empty file. Such a
+// result is retried briefly instead of being sent as a "backup".
+const BACKUP_ATTEMPTS = 5;
+const BACKUP_RETRY_DELAY_MS = 200;
 
 /**
  * Hosted (Platform) installs keep their database on infrastructure the
@@ -69,7 +80,19 @@ export function createSystemStorageService(dependencies: SystemStorageDependenci
         const snapshotPath = path.join(snapshotDirectory, fileName);
         // Create the file owner-only first; SQLite keeps the existing mode when it writes into it.
         await writeFile(snapshotPath, '', { mode: 0o600, flag: 'wx' });
-        await dependencies.backupDatabase(snapshotPath);
+        for (let attempt = 1; ; attempt += 1) {
+          const { totalPages } = await dependencies.backupDatabase(snapshotPath);
+          if (totalPages > 0) {
+            break;
+          }
+          if (attempt === BACKUP_ATTEMPTS) {
+            throw new AppError('The database is busy. Try the backup again in a moment.', {
+              code: 'DATABASE_BUSY',
+              statusCode: 503,
+            });
+          }
+          await delay(BACKUP_RETRY_DELAY_MS);
+        }
         return { fileName, contents: await readFile(snapshotPath) };
       } finally {
         await rm(snapshotDirectory, { recursive: true, force: true });

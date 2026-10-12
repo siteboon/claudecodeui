@@ -142,6 +142,64 @@ test('the snapshot is written owner-only into a private directory that is remove
   });
 });
 
+test('a backup taken while the database is busy waits for the write to finish', async () => {
+  await withSeededDatabase(async (fixtureDirectory) => {
+    const connection = getConnection();
+    let attempts = 0;
+    const service = createSystemStorageService(createDependencies({
+      temporaryDirectory: fixtureDirectory,
+      backupDatabase: (destinationPath) => {
+        attempts += 1;
+        return connection.backup(destinationPath);
+      },
+    }));
+
+    // A write transaction left open across an await, as the auth service does
+    // around password hashing, makes better-sqlite3 report a 0-page "backup".
+    connection.exec('BEGIN IMMEDIATE');
+    userDb.createUser('late-user', 'password-hash');
+    const pendingBackup = service.createDatabaseBackup();
+    setTimeout(() => connection.exec('COMMIT'), 50);
+    const backup = await pendingBackup;
+
+    assert.ok(attempts > 1, `expected a retry, got ${attempts} attempt(s)`);
+    const snapshot = new Database(backup.contents, { readonly: true });
+    try {
+      assert.deepEqual(
+        snapshot.prepare('SELECT username FROM users ORDER BY id').all(),
+        [{ username: 'backup-user' }, { username: 'late-user' }],
+      );
+    } finally {
+      snapshot.close();
+    }
+  });
+});
+
+test('a database that stays busy yields a 503 instead of an empty backup, and leaves nothing on disk', async () => {
+  await withSeededDatabase(async (fixtureDirectory) => {
+    const snapshotParent = path.join(fixtureDirectory, 'snapshots');
+    await mkdir(snapshotParent);
+    const connection = getConnection();
+    const service = createSystemStorageService(createDependencies({
+      temporaryDirectory: snapshotParent,
+      backupDatabase: (destinationPath) => connection.backup(destinationPath),
+    }));
+
+    connection.exec('BEGIN IMMEDIATE');
+    try {
+      await assert.rejects(service.createDatabaseBackup(), (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.statusCode, 503);
+        assert.equal(error.code, 'DATABASE_BUSY');
+        return true;
+      });
+    } finally {
+      connection.exec('ROLLBACK');
+    }
+    assert.deepEqual(await readdir(snapshotParent), []);
+  });
+});
+
 test('a failed backup rejects and still removes the private snapshot directory', async () => {
   const snapshotParent = await mkdtemp(path.join(tmpdir(), 'system-storage-failure-'));
   try {
@@ -165,6 +223,7 @@ test('platform installs refuse both the storage locations and the backup', async
     isPlatform: true,
     backupDatabase: async () => {
       backupCalls += 1;
+      return { totalPages: 1 };
     },
   }));
 
