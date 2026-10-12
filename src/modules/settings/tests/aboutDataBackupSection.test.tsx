@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import '@/modules/i18n';
 
@@ -130,6 +130,36 @@ describe('Settings > About data & backup section', () => {
       expect(writeText.mock.calls).toEqual([[DATABASE_PATH], [ASSETS_PATH]]);
     } finally {
       delete (navigator as { clipboard?: unknown }).clipboard;
+    }
+  });
+
+  it('does not say a path was copied when the browser refuses the copy', async () => {
+    stubServer();
+    const writeText = vi.fn(async (_text: string) => {
+      throw new DOMException('Write permission denied.', 'NotAllowedError');
+    });
+    // The textarea fallback is refused too (execCommand reports false).
+    const execCommand = vi.fn((_command: string) => false);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    Object.defineProperty(document, 'execCommand', { configurable: true, value: execCommand });
+    try {
+      const AboutTab = await loadAboutTab(false);
+      render(<AboutTab />);
+      await screen.findByText(DATABASE_PATH);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Copy path: Database' }));
+      await waitFor(() => expect(execCommand).toHaveBeenCalledWith('copy'));
+      // Let the click handler finish after the failed copy before checking the label.
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+
+      expect(writeText).toHaveBeenCalledWith(DATABASE_PATH);
+      expect(screen.queryByRole('button', { name: 'Path copied: Database' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Copy path: Database' })).toBeTruthy();
+    } finally {
+      delete (navigator as { clipboard?: unknown }).clipboard;
+      delete (document as { execCommand?: unknown }).execCommand;
     }
   });
 
