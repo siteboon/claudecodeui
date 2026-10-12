@@ -31,6 +31,13 @@ import type {
   WorkspacePathValidationResult,
 } from '@/shared/types.js';
 
+//----------------- MULTIPART UPLOAD UTILITIES ------------
+/**
+ * Prevents nested multipart field names in Assets, File Tree, and Voice
+ * uploads so Multer does not expand attacker-controlled object structures.
+ */
+export const FLAT_MULTIPART_FIELD_NESTING_DEPTH = 0;
+
 //----------------- ENVIRONMENT UTILITIES ------------
 /**
  * Indicates whether the backend is running in hosted Platform mode rather than
