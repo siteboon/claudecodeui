@@ -117,7 +117,19 @@ export function createPluginsService(dependencies: PluginDependencies) {
       validatePluginName(pluginName);
       const wasRunning = dependencies.isServerRunning(pluginName);
       if (wasRunning) await dependencies.stopServer(pluginName);
-      const plugin = normalizePluginManifest(await dependencies.update(pluginName));
+      let updatedManifest: unknown;
+      try {
+        updatedManifest = await dependencies.update(pluginName);
+      } catch (error) {
+        // A failed update must not leave the plugin's server stopped. When the
+        // pull itself failed, the previous version is still in place.
+        if (wasRunning) {
+          const previousPlugin = dependencies.scanPlugins().find((candidate) => candidate.name === pluginName);
+          if (previousPlugin) await startServerIfAvailable(previousPlugin);
+        }
+        throw error;
+      }
+      const plugin = normalizePluginManifest(updatedManifest);
       if (wasRunning) await startServerIfAvailable(plugin);
       return { success: true, plugin };
     },

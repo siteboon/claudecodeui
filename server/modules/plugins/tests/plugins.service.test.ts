@@ -30,3 +30,30 @@ test('setEnabled persists configuration and starts an enabled plugin server', as
   await service.setEnabled('demo', true);
   assert.deepEqual(operations, ['save', 'start']);
 });
+
+test('update restarts a running plugin server when the update fails', async () => {
+  const operations: string[] = [];
+  let running = true;
+  const service = createPluginsService(dependencies({
+    scanPlugins: () => [{ name: 'demo', dirName: 'demo', server: 'server.js' }],
+    getPluginDirectory: () => '/plugins/demo',
+    isServerRunning: () => running,
+    stopServer: async () => { operations.push('stop'); running = false; },
+    update: async () => { operations.push('pull'); throw new Error('git pull failed'); },
+    startServer: async () => { operations.push('start'); running = true; return 4000; },
+  }));
+  await assert.rejects(service.update('demo'), /git pull failed/);
+  assert.deepEqual(operations, ['stop', 'pull', 'start']);
+});
+
+test('a failed update leaves a plugin server stopped that was not running', async () => {
+  const operations: string[] = [];
+  const service = createPluginsService(dependencies({
+    scanPlugins: () => [{ name: 'demo', dirName: 'demo', server: 'server.js' }],
+    getPluginDirectory: () => '/plugins/demo',
+    update: async () => { operations.push('pull'); throw new Error('git pull failed'); },
+    startServer: async () => { operations.push('start'); return 4000; },
+  }));
+  await assert.rejects(service.update('demo'), /git pull failed/);
+  assert.deepEqual(operations, ['pull']);
+});
