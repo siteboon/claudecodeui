@@ -1,0 +1,56 @@
+{
+  "autoSpeak": {
+    "label": "Read replies aloud",
+    "description": "When Claude finishes a turn you started here, its short spoken summary is read aloud.",
+    "unavailable": "Turn voice on first. Reading replies aloud works only when voice is set up in this workspace.",
+    "stateOn": "Reading replies aloud is on",
+    "stateOff": "Reading replies aloud is off",
+    "shortOn": "Read aloud: on",
+    "shortOff": "Read aloud: off"
+  },
+  "playback": {
+    "stop": "Stop reading aloud",
+    "loading": "Preparing the spoken reply…",
+    "playing": "Reading the reply aloud",
+    "replay": "Play reply",
+    "replayBlocked": "The browser did not allow the reply to play by itself. Tap to play it.",
+    "noSummary": "no voice summary",
+    "noSummaryAnnounce": "The reply has no voice summary.",
+    "failed": "The run failed."
+  },
+  "errors": {
+    "cap_daily": "Today's voice limit is used up. It resets tomorrow.",
+    "cap_rate": "Too many voice requests in a short time. Try again in a minute.",
+    "cap_request": "That is too long for one voice request.",
+    "cap_concurrency": "Another voice request is still running. Try again in a moment.",
+    "vendor_rate": "The voice service is busy right now. Try again in a moment.",
+    "vendor_down": "The voice service is not available right now.",
+    "timeout": "The voice service did not answer in time.",
+    "unknown_workspace": "Voice is not switched on for this workspace.",
+    "network": "Could not reach the voice service. Check your connection.",
+    "generic": "Voice did not work this time. Try again."
+  },
+  "dictation": {
+    "policyBlocked": "The microphone is not allowed on this page. Ask the administrator to enable it.",
+    "denied": "You declined microphone access. You can allow it in the browser's site settings (the lock icon next to the address).",
+    "busy": "Another application is using the microphone.",
+    "notFound": "No microphone was found.",
+    "tooShort": "The recording was too short.",
+    "noSpeech": "No speech was heard in the recording.",
+    "failedWithRetry": "Transcription did not work. The recording is kept and you can try again.",
+    "failedDiscarded": "Transcription did not work again. The recording was discarded.",
+    "retry": "Try transcribing again",
+    "recording": "Recording. It stops by itself after five minutes.",
+    "recordingElapsed": "Recording {{time}}",
+    "autoStopped": "Recording stopped by itself after five minutes.",
+    "transcribing": "Transcribing…",
+    "sendStopsRecording": "Stop recording and send",
+    "sendKeepsDraft": "Stop recording and keep the text for later",
+    "awaitingConfirmation": "The dictated text is waiting in the box. Send it when you are ready.",
+    "savedToOrigin": "The dictation was saved to the conversation where you started it.",
+    "unavailable": "Voice is not available in this workspace."
+  },
+  "settings": {
+    "platformManaged": "In this workspace, voice is set up by the administrator."
+  }
+}

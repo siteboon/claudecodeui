@@ -31,6 +31,10 @@ export const VOICE_CONFIG_DEFAULTS: VoiceConfig = {
 };
 
 export function readVoiceConfig(): VoiceConfig {
+  // Platform mode: the workspace's voice service is the only backend. Values a
+  // builder typed (or left behind) in this browser must not open a direct path
+  // to a vendor or ride along as `x-voice-*` override headers.
+  if (import.meta.env?.VITE_IS_PLATFORM === 'true') return { ...VOICE_CONFIG_DEFAULTS };
   try {
     const raw = localStorage.getItem(VOICE_CONFIG_STORAGE_KEY);
     if (!raw) return { ...VOICE_CONFIG_DEFAULTS };

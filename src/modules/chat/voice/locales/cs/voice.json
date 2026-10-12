@@ -1,0 +1,56 @@
+{
+  "autoSpeak": {
+    "label": "Předčítat odpovědi",
+    "description": "Když Claude dokončí práci, kterou jste zadali tady, přečte nahlas její krátké shrnutí.",
+    "unavailable": "Nejdřív zapněte hlas. Předčítání funguje jen tehdy, když je hlas v této pracovně nastavený.",
+    "stateOn": "Předčítání odpovědí je zapnuté",
+    "stateOff": "Předčítání odpovědí je vypnuté",
+    "shortOn": "Předčítání: zapnuto",
+    "shortOff": "Předčítání: vypnuto"
+  },
+  "playback": {
+    "stop": "Zastavit předčítání",
+    "loading": "Připravuji hlasovou odpověď…",
+    "playing": "Předčítám odpověď",
+    "replay": "Přehrát odpověď",
+    "replayBlocked": "Prohlížeč odpověď sám nepřehrál. Pusťte si ji klepnutím.",
+    "noSummary": "bez hlasového shrnutí",
+    "noSummaryAnnounce": "Odpověď nemá hlasové shrnutí.",
+    "failed": "Běh selhal."
+  },
+  "errors": {
+    "cap_daily": "Dnešní limit hlasu je vyčerpaný. Zítra se obnoví.",
+    "cap_rate": "Příliš mnoho hlasových požadavků za krátkou dobu. Zkuste to za minutu.",
+    "cap_request": "Na jeden hlasový požadavek je to příliš dlouhé.",
+    "cap_concurrency": "Ještě běží jiný hlasový požadavek. Zkuste to za chvíli.",
+    "vendor_rate": "Hlasová služba je teď přetížená. Zkuste to za chvíli.",
+    "vendor_down": "Hlasová služba teď není dostupná.",
+    "timeout": "Hlasová služba neodpověděla včas.",
+    "unknown_workspace": "Hlas není pro tuto pracovnu zapnutý.",
+    "network": "Nepodařilo se spojit s hlasovou službou. Zkontrolujte připojení.",
+    "generic": "Hlas tentokrát nefungoval. Zkuste to znovu."
+  },
+  "dictation": {
+    "policyBlocked": "Mikrofon na této stránce není povolený. Požádejte správce, aby ho zapnul.",
+    "denied": "Přístup k mikrofonu jste odmítli. Povolit ho můžete v nastavení webu v prohlížeči (ikona zámku vedle adresy).",
+    "busy": "Mikrofon teď používá jiná aplikace.",
+    "notFound": "Nenašel se žádný mikrofon.",
+    "tooShort": "Nahrávka byla příliš krátká.",
+    "noSpeech": "V nahrávce nebyla slyšet žádná řeč.",
+    "failedWithRetry": "Přepis se nepovedl. Nahrávka zůstala uložená a můžete to zkusit znovu.",
+    "failedDiscarded": "Přepis se znovu nepovedl. Nahrávka byla zahozena.",
+    "retry": "Zkusit přepis znovu",
+    "recording": "Nahrávám. Po pěti minutách se nahrávání samo zastaví.",
+    "recordingElapsed": "Nahrávám {{time}}",
+    "autoStopped": "Nahrávání se po pěti minutách samo zastavilo.",
+    "transcribing": "Přepisuji…",
+    "sendStopsRecording": "Zastavit nahrávání a odeslat",
+    "sendKeepsDraft": "Zastavit nahrávání a nechat text k odeslání",
+    "awaitingConfirmation": "Nadiktovaný text čeká v poli. Odešlete ho, až budete chtít.",
+    "savedToOrigin": "Diktát se uložil do konverzace, ve které jste ho začali.",
+    "unavailable": "Hlas v této pracovně není k dispozici."
+  },
+  "settings": {
+    "platformManaged": "Hlas v této pracovně nastavuje správce."
+  }
+}

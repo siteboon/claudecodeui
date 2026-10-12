@@ -1,5 +1,6 @@
 import { synthesizeVoice, voiceConfigSignature } from '@/shared/api';
 import type { VoicePlayState, VoiceSnapshot } from '@/shared/types';
+import { voiceErrorFromException, voiceErrorFromResponse, VoiceRequestError } from '@/modules/chat/voice/voiceErrors';
 
 // A single app-level audio player for read-aloud. It owns one <audio> element, lives
 // outside the React tree, and caches generated audio by content. Because playback is not
@@ -10,7 +11,9 @@ import type { VoicePlayState, VoiceSnapshot } from '@/shared/types';
 
 const IDLE: VoiceSnapshot = { state: 'idle', error: null };
 const CACHE_MAX = 24;
-const CLIENT_TIMEOUT_MS = 330000; // backstop; the server proxy already times out at 5 min
+// Backstop above the relay's VOICE_TIMEOUT_MS (the voice service's longest limit + 5 s),
+// so the service's own limit is the one that fires and reports a code.
+const CLIENT_TIMEOUT_MS = 75000;
 
 // Stable id / cache key from the text and voice settings that affect its audio (djb2).
 export function voiceId(content: string, signature = voiceConfigSignature()): string {
@@ -32,6 +35,10 @@ class VoicePlayer {
   private activeController: AbortController | null = null; // aborts the in-flight TTS fetch
   private errorTimer: ReturnType<typeof setTimeout> | null = null;
   private listeners = new Set<() => void>();
+  // The browser refused play() for this id; its audio stays cached for a replay.
+  private blockedId: string | null = null;
+  // The current play was started by auto-speak (and may be abandoned when it is switched off).
+  private autoId: string | null = null;
 
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
@@ -87,6 +94,34 @@ class VoicePlayer {
     void this.play(id, content);
   }
 
+  /** Auto-speak: play `text` unless `guard` says no - checked again right where the request is made. */
+  speak(text: string, guard: () => boolean): string {
+    const id = voiceId(text);
+    if (guard()) void this.play(id, text, guard);
+    return id;
+  }
+
+  /** Replays already-fetched audio without a second request; false when nothing is cached. */
+  replay(id: string): boolean {
+    if (!this.cache.has(id)) return false;
+    void this.play(id, '');
+    return true;
+  }
+
+  /** Stops playback only when it was started by auto-speak. */
+  stopAuto() {
+    if (this.autoId && this.autoId === this.currentId) this.stop();
+    this.autoId = null;
+  }
+
+  isBlocked(id: string): boolean {
+    return this.blockedId === id;
+  }
+
+  current(): { id: string | null; state: VoicePlayState } {
+    return { id: this.currentId, state: this.state };
+  }
+
   stop() {
     this.token++; // ignore any stale in-flight result
     this.abortActive(); // and actually cancel the network request
@@ -127,8 +162,10 @@ class VoicePlayer {
     }, 6000);
   }
 
-  private async play(id: string, content: string) {
+  private async play(id: string, content: string, guard?: () => boolean) {
     const audio = this.ensureAudio();
+    if (this.blockedId === id) this.blockedId = null;
+    this.autoId = guard ? id : null;
     audio.pause();
     this.currentId = id;
     this.errorId = null;
@@ -142,6 +179,7 @@ class VoicePlayer {
     try {
       let url = this.cache.get(id);
       if (!url) {
+        if (guard && !guard()) throw new DOMException('Auto-speak switched off', 'AbortError');
         const controller = new AbortController();
         this.activeController = controller;
         const timer = setTimeout(() => controller.abort(), CLIENT_TIMEOUT_MS);
@@ -151,14 +189,9 @@ class VoicePlayer {
         });
         if (myToken !== this.token) return; // superseded by another play/stop
         if (!res.ok) {
-          let msg = `Read-aloud failed (${res.status})`;
-          try {
-            const j = await res.json();
-            if (j?.error) msg = String(j.error);
-          } catch {
-            /* non-JSON error body */
-          }
-          throw new Error(msg);
+          // Only a code from the closed set leaves here - never the raw body.
+          const body = await res.text().catch(() => '');
+          throw new VoiceRequestError(voiceErrorFromResponse(res.status, body));
         }
         const blob = await res.blob();
         if (myToken !== this.token) return;
@@ -174,8 +207,21 @@ class VoicePlayer {
       this.emit();
     } catch (e) {
       if (myToken !== this.token) return;
-      const aborted = e instanceof Error && e.name === 'AbortError';
-      this.setError(id, aborted ? 'Read-aloud timed out.' : e instanceof Error ? e.message : 'Read-aloud failed');
+      if ((e as { name?: unknown } | null)?.name === 'NotAllowedError') {
+        // The browser refused play() (no recent gesture): keep the cached blob for a replay.
+        this.state = 'idle';
+        this.currentId = null;
+        this.blockedId = id;
+        this.emit();
+        return;
+      }
+      if (guard && !guard()) {
+        this.state = 'idle';
+        this.currentId = null;
+        this.emit();
+        return;
+      }
+      this.setError(id, voiceErrorFromException(e));
     }
   }
 

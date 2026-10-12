@@ -14,6 +14,8 @@ import StreamingMarkdown from '@/modules/chat/transcript/StreamingMarkdown';
 import MessageCopyControl from '@/modules/chat/transcript/MessageCopyControl';
 import MessageModelLabel from '@/modules/chat/transcript/MessageModelLabel';
 import MessageSpeakControl from '@/modules/chat/transcript/MessageSpeakControl';
+import { stripSpokenBlocks } from '@/modules/chat/voice/spokenLine';
+import MessageVoiceNote from '@/modules/chat/voice/MessageVoiceNote';
 import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
 import { MemoryCitations } from '@/modules/chat/transcript/MemoryCitations';
 
@@ -59,11 +61,15 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
   const formattedMessageContent = useMemo(
     () => {
       const content = formatUsageLimitText(String(message.content || ''));
-      return provider === 'codex' && message.type === 'assistant' && !message.isThinking
+      const shown = provider === 'codex' && message.type === 'assistant' && !message.isThinking
         ? stripProposedPlanEnvelope(content)
         : content;
+      // The closing <spoken> block is for the ear only: never rendered, never copied.
+      return message.type === 'assistant' && !message.isThinking
+        ? stripSpokenBlocks(shown, { streaming: Boolean(message.isStreaming) })
+        : shown;
     },
-    [message.content, message.isThinking, message.type, provider]
+    [message.content, message.isStreaming, message.isThinking, message.type, provider]
   );
   const assistantCopyContent = message.isToolUse
     ? String(message.displayText || message.content || '')
@@ -415,7 +421,10 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                   <MessageCopyControl content={assistantCopyContent} messageType="assistant" />
                 )}
                 {shouldShowAssistantCopyControl && (
-                  <MessageSpeakControl content={assistantCopyContent} />
+                  <MessageSpeakControl content={String(message.content || '')} />
+                )}
+                {shouldShowAssistantCopyControl && (
+                  <MessageVoiceNote content={String(message.content || '')} />
                 )}
                 {/* Which model actually answered, as the provider recorded it
                     on this row. Provenance rather than an affordance, so unlike

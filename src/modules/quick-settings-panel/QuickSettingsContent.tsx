@@ -15,6 +15,7 @@ import { SETTING_ROW_CLASS } from '@/shared/constants';
 import type { PreferenceToggleKey, QuickSettingsPreferences } from '@/shared/types';
 import QuickSettingsSection from '@/modules/quick-settings-panel/QuickSettingsSection';
 import QuickSettingsToggleRow from '@/modules/quick-settings-panel/QuickSettingsToggleRow';
+import { AutoSpeakSetting } from '@/modules/chat';
 
 /** Declarative description of one quick settings toggle row - its preference key, translation key and icon - so the rows can be rendered from a list instead of hand-written. */
 type PreferenceToggleItem = {
@@ -101,6 +102,7 @@ export default function QuickSettingsContent({
 
       <QuickSettingsSection title={t('quickSettings.sections.inputSettings')}>
         {renderToggleRows(inputSettingToggles)}
+        <AutoSpeakSetting variant="quick" />
         <p className="ml-3 text-xs text-muted-foreground">
           {t('quickSettings.sendByCtrlEnterDescription')}
         </p>
