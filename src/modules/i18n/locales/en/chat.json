@@ -193,6 +193,7 @@
     "pressToSearch": "Press <kbd>{{shortcut}}</kbd> to search sessions, files, and commits",
     "chooseModel": "Choose a model",
     "chooseModelDescription": "Built-in and custom models in one list",
+    "chooseModelDescriptionCustomOnly": "Only your models are listed for {{providers, list}}",
     "addModel": "Add model",
     "searchModels": "Search models...",
     "manageModels": "Manage models",

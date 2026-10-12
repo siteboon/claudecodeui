@@ -162,7 +162,8 @@
       "codex": "Готов использовать Codex с {{model}}. Начните вводить сообщение ниже.",
       "default": "Выберите провайдера выше для начала"
     },
-    "pressToSearch": "Нажмите <kbd>{{shortcut}}</kbd>, чтобы искать сессии, файлы и коммиты"
+    "pressToSearch": "Нажмите <kbd>{{shortcut}}</kbd>, чтобы искать сессии, файлы и коммиты",
+    "chooseModelDescriptionCustomOnly": "Для {{providers, list}} показаны только ваши модели"
   },
   "session": {
     "continue": {

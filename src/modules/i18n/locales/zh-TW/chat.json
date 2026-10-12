@@ -180,7 +180,8 @@
       "codex": "準備好使用 {{model}} 的 Codex。請在下方開始輸入您的訊息。",
       "default": "請在上方選擇一個提供者以開始"
     },
-    "pressToSearch": "按 <kbd>{{shortcut}}</kbd> 搜尋工作階段、檔案和提交"
+    "pressToSearch": "按 <kbd>{{shortcut}}</kbd> 搜尋工作階段、檔案和提交",
+    "chooseModelDescriptionCustomOnly": "{{providers, list}} 僅列出您的模型"
   },
   "session": {
     "continue": {

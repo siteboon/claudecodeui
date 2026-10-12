@@ -62,12 +62,16 @@ export default function ModelLibraryPanel({
   const [confirmDeleteRecordId, setConfirmDeleteRecordId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  // True while the "use only my models" change is saving, so the checkbox
-  // cannot fire a second request before the server's catalog comes back.
-  const [savingCustomModelsOnly, setSavingCustomModelsOnly] = useState(false);
-  // Failure of that change, shown next to the checkbox rather than in the
-  // add/edit form, whose own error belongs to the model being edited.
-  const [customModelsOnlyError, setCustomModelsOnlyError] = useState<string | null>(null);
+  // Providers whose "use only my models" change is still saving. Their
+  // checkbox cannot fire a second request before the server's catalog comes
+  // back. Kept per provider: the user can switch tabs mid-request, and the
+  // other tabs' checkboxes must stay usable.
+  const [customModelsOnlySavingProviders, setCustomModelsOnlySavingProviders] = useState<LLMProvider[]>([]);
+  // The last failed change per provider, shown next to that provider's
+  // checkbox rather than in the add/edit form, whose own error belongs to the
+  // model being edited. A failure that lands after a tab switch waits on the
+  // tab that issued it.
+  const [customModelsOnlyErrors, setCustomModelsOnlyErrors] = useState<Partial<Record<LLMProvider, string>>>({});
 
   useEffect(() => {
     setSelectedProvider(initialProvider);
@@ -95,6 +99,8 @@ export default function ModelLibraryPanel({
   const customModelsOnly = providerModelCatalog[selectedProvider]?.CUSTOM_MODELS_ONLY === true;
   // The server only hides the built-ins while a custom model exists.
   const builtInModelsHidden = customModelsOnly && customModels.length > 0;
+  const savingCustomModelsOnly = customModelsOnlySavingProviders.includes(selectedProvider);
+  const customModelsOnlyError = customModelsOnlyErrors[selectedProvider];
 
   const resetForm = () => {
     setEditing(null);
@@ -108,19 +114,22 @@ export default function ModelLibraryPanel({
     setSelectedProvider(provider);
     setConfirmDeleteRecordId(null);
     setNotice(null);
-    setCustomModelsOnlyError(null);
     resetForm();
   };
 
-  const handleCustomModelsOnlyChange = async (enabled: boolean) => {
-    setSavingCustomModelsOnly(true);
-    setCustomModelsOnlyError(null);
+  /** Saves the flag for the provider whose tab issued it, even if the user has since switched tabs. */
+  const handleCustomModelsOnlyChange = async (provider: LLMProvider, enabled: boolean) => {
+    setCustomModelsOnlySavingProviders((current) => [...current, provider]);
+    setCustomModelsOnlyErrors((current) => ({ ...current, [provider]: undefined }));
     try {
-      await actions.setCustomModelsOnly(selectedProvider, enabled);
+      await actions.setCustomModelsOnly(provider, enabled);
     } catch {
-      setCustomModelsOnlyError(t('chat:modelLibrary.customModelsOnlyFailed'));
+      setCustomModelsOnlyErrors((current) => ({
+        ...current,
+        [provider]: t('chat:modelLibrary.customModelsOnlyFailed'),
+      }));
     } finally {
-      setSavingCustomModelsOnly(false);
+      setCustomModelsOnlySavingProviders((current) => current.filter((entry) => entry !== provider));
     }
   };
 
@@ -393,7 +402,7 @@ export default function ModelLibraryPanel({
                 type="checkbox"
                 checked={customModelsOnly}
                 disabled={savingCustomModelsOnly}
-                onChange={(event) => void handleCustomModelsOnlyChange(event.target.checked)}
+                onChange={(event) => void handleCustomModelsOnlyChange(selectedProvider, event.target.checked)}
                 className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-primary"
               />
               <span className="min-w-0">

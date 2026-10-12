@@ -213,6 +213,7 @@
     "pressToSearch": "Stiskněte <kbd>{{shortcut}}</kbd> pro hledání v relacích, souborech a commitech",
     "chooseModel": "Vyberte model",
     "chooseModelDescription": "Vestavěné i vlastní modely v jednom seznamu",
+    "chooseModelDescriptionCustomOnly": "Pro {{providers, list}} se zobrazují jen vaše modely",
     "addModel": "Přidat model",
     "searchModels": "Hledat modely...",
     "manageModels": "Spravovat modely",

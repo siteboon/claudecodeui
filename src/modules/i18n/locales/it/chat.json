@@ -150,7 +150,8 @@
       "codex": "Pronto a usare Codex con {{model}}. Inizia a digitare il tuo messaggio qui sotto.",
       "default": "Seleziona un provider sopra per iniziare"
     },
-    "pressToSearch": "Premi <kbd>{{shortcut}}</kbd> per cercare sessioni, file e commit"
+    "pressToSearch": "Premi <kbd>{{shortcut}}</kbd> per cercare sessioni, file e commit",
+    "chooseModelDescriptionCustomOnly": "Per {{providers, list}} sono elencati solo i tuoi modelli"
   },
   "session": {
     "continue": {

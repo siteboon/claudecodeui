@@ -177,6 +177,7 @@
     "pressToSearch": "<kbd>{{shortcut}}</kbd> לחיפוש סשנים, קבצים ו-commits",
     "chooseModel": "בחירת מודל",
     "chooseModelDescription": "מודלים מובנים ומותאמים אישית ברשימה אחת",
+    "chooseModelDescriptionCustomOnly": "עבור {{providers, list}} מוצגים רק המודלים שלך",
     "addModel": "הוספת מודל",
     "searchModels": "חיפוש מודלים…",
     "manageModels": "ניהול מודלים",

@@ -187,6 +187,7 @@
     "pressToSearch": "Tekan <kbd>{{shortcut}}</kbd> untuk mencari sesi, file, dan commit",
     "chooseModel": "Pilih model",
     "chooseModelDescription": "Model bawaan dan kustom dalam satu daftar",
+    "chooseModelDescriptionCustomOnly": "Hanya model Anda yang ditampilkan untuk {{providers, list}}",
     "addModel": "Tambah model",
     "searchModels": "Cari model...",
     "manageModels": "Kelola model",

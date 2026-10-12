@@ -164,7 +164,8 @@
       "opencode": "准备好使用带有 {{model}} 的 OpenCode。请在下方开始输入您的消息。",
       "default": "请在上方选择一个提供者以开始"
     },
-    "pressToSearch": "按 <kbd>{{shortcut}}</kbd> 搜索会话、文件和提交"
+    "pressToSearch": "按 <kbd>{{shortcut}}</kbd> 搜索会话、文件和提交",
+    "chooseModelDescriptionCustomOnly": "{{providers, list}} 仅列出您的模型"
   },
   "session": {
     "continue": {

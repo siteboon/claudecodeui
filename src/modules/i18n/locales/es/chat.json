@@ -183,7 +183,8 @@
       "opencode": "Listo para usar OpenCode con {{model}}. Escribe tu mensaje abajo.",
       "default": "Selecciona un proveedor arriba para empezar"
     },
-    "pressToSearch": "Pulsa <kbd>{{shortcut}}</kbd> para buscar sesiones, archivos y commits"
+    "pressToSearch": "Pulsa <kbd>{{shortcut}}</kbd> para buscar sesiones, archivos y commits",
+    "chooseModelDescriptionCustomOnly": "Para {{providers, list}} solo se muestran tus modelos"
   },
   "session": {
     "continue": {
