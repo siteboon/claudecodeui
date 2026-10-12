@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { execFileSync, spawn } from 'node:child_process';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -135,7 +136,7 @@ test('ANTHROPIC_MODEL wins over a settings `model` from any file', async () => {
 test('ignores blank values and malformed or unreadable settings files', async () => {
   await withFixture(async (fixture) => {
     await writeJson(userSettings(fixture), { model: 'user-model' });
-    await writeJson(projectSettings(fixture), { model: '  ', env: { ANTHROPIC_MODEL: '' } });
+    await writeJson(projectSettings(fixture), { model: '  ', env: { ANTHROPIC_MODEL: ' ' } });
     await writeFile(localSettings(fixture), '{ "model": ', 'utf8');
 
     assert.equal(await resolveFlag(fixture, { ANTHROPIC_MODEL: '  ' }), 'user-model');
@@ -145,6 +146,63 @@ test('ignores blank values and malformed or unreadable settings files', async ()
     // A directory where the file should be cannot be read as JSON.
     await mkdir(userSettings(fixture));
     assert.equal(await resolveFlag(fixture), 'default');
+  });
+});
+
+// The project can be a cloned repository, and the repository decides what its
+// `.claude/settings*.json` are. The lookup runs before every "Default" turn, so
+// reading a symlink to a FIFO would hold the turn (and a server fs thread) until
+// something wrote to it. The CLI skips such files, and files over 2 MiB.
+test('skips a FIFO, a device and an oversized file without waiting, as the CLI does', async (t) => {
+  if (process.platform === 'win32') {
+    t.skip('needs mkfifo and /dev/null');
+    return;
+  }
+
+  await withFixture(async (fixture) => {
+    await writeJson(userSettings(fixture), { model: 'user-model' });
+    const fifoPath = path.join(fixture.cwd, 'settings.fifo');
+    execFileSync('mkfifo', [fifoPath]);
+    await symlink(fifoPath, projectSettings(fixture));
+    await symlink('/dev/null', localSettings(fixture));
+    // A lookup that opened the FIFO would read this model instead of blocking forever.
+    const writer = spawn('sh', ['-c', `printf %s '{"model":"fifo-model"}' > "$0"`, fifoPath], { stdio: 'ignore' });
+    try {
+      const startedAt = Date.now();
+      assert.equal(await resolveFlag(fixture), 'user-model');
+      assert.ok(Date.now() - startedAt < 1000, 'the lookup waited for the FIFO');
+    } finally {
+      writer.kill();
+    }
+  });
+
+  await withFixture(async (fixture) => {
+    await writeJson(userSettings(fixture), { model: 'user-model' });
+    await writeFile(projectSettings(fixture), `{"model":"oversized-model"}${' '.repeat(2 * 1024 * 1024)}`, 'utf8');
+    assert.equal(await resolveFlag(fixture), 'user-model');
+  });
+});
+
+test('reads settings saved with a byte order mark, as the CLI does', async () => {
+  await withFixture(async (fixture) => {
+    // Windows PowerShell and editors often write one; the CLI still applies the file.
+    await writeFile(userSettings(fixture), `\uFEFF${JSON.stringify({ env: { ANTHROPIC_MODEL: 'auto/coding' } })}`, 'utf8');
+    assert.equal(await resolveFlag(fixture), undefined, 'UTF-8 with BOM');
+  });
+
+  await withFixture(async (fixture) => {
+    const text = `\uFEFF${JSON.stringify({ model: 'auto/coding' })}`;
+    await writeFile(userSettings(fixture), Buffer.from(text, 'utf16le'));
+    assert.equal(await resolveFlag(fixture), 'auto/coding', 'UTF-16LE with BOM');
+  });
+});
+
+test('resolves a relative CLAUDE_CONFIG_DIR against the project, where the CLI runs', async () => {
+  await withFixture(async (fixture) => {
+    await mkdir(path.join(fixture.cwd, 'claude-config'));
+    await writeJson(path.join(fixture.cwd, 'claude-config', 'settings.json'), { model: 'auto/coding' });
+
+    assert.equal(await resolveFlag(fixture, { CLAUDE_CONFIG_DIR: 'claude-config' }), 'auto/coding');
   });
 });
 
@@ -163,18 +221,19 @@ type RunOptions = {
 
 /**
  * Runs one turn through `queryClaudeSDK` with a stand-in SDK and returns the
- * options the runtime built for it. HOME points at the fixture (so the user
- * settings come from `<home>/.claude` and nothing reads the real home), and
- * CLAUDE_CONFIG_DIR / ANTHROPIC_MODEL are pinned for the turn.
+ * options the runtime built for it. HOME and CLAUDE_CONFIG_DIR point at the
+ * fixture, so the user settings come from `<home>/.claude` and nothing reads
+ * the real home (on Windows os.homedir() ignores HOME), and ANTHROPIC_MODEL is
+ * pinned for the turn.
  */
 async function captureSdkOptions(
-  { home, cwd }: Fixture,
+  { home, userDir, cwd }: Fixture,
   runOptions: RunOptions,
   processAnthropicModel?: string,
 ): Promise<Record<string, unknown>> {
   const pinnedEnv: Record<string, string | undefined> = {
     HOME: home,
-    CLAUDE_CONFIG_DIR: undefined,
+    CLAUDE_CONFIG_DIR: userDir,
     ANTHROPIC_MODEL: processAnthropicModel,
   };
   const savedEnv = Object.fromEntries(Object.keys(pinnedEnv).map((key) => [key, process.env[key]]));

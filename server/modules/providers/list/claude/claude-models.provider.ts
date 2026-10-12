@@ -12,7 +12,7 @@ import type {
 import {
   buildDefaultProviderCurrentActiveModel,
   isPlaceholderProviderModel,
-  readJsonConfig,
+  readClaudeSettingsFile,
   readObjectRecord,
   readOptionalString,
   stripAnsiSequences,
@@ -195,8 +195,10 @@ export const findClaudeModelOption = (model: string | undefined | null): Provide
  *   from staying on its last model.
  *
  * Only the settings files the runtime lets the CLI load are read (`settingSources`: the
- * user settings and the project and local settings of `cwd`). An unreadable or malformed
- * file counts as unset.
+ * user settings and the project and local settings of `cwd`), through readClaudeSettingsFile.
+ * A file the CLI would not load either counts as unset: malformed, unreadable, over 2 MiB
+ * or not a regular file. The last two are never opened: the project files can come from a
+ * cloned repository, and this runs before every "Default" turn.
  */
 export const resolveClaudeDefaultModelFlag = async (
   cwd?: string | null,
@@ -206,7 +208,11 @@ export const resolveClaudeDefaultModelFlag = async (
     return undefined;
   }
 
-  const userConfigDir = readOptionalString(env.CLAUDE_CONFIG_DIR) ?? path.join(os.homedir(), '.claude');
+  // The CLI runs in `cwd` and resolves a relative CLAUDE_CONFIG_DIR against it.
+  const userConfigDir = path.resolve(
+    cwd ?? '',
+    readOptionalString(env.CLAUDE_CONFIG_DIR) ?? path.join(os.homedir(), '.claude'),
+  );
   // Lowest precedence first, so a later file's `model` replaces an earlier one.
   const settingsPaths = [path.join(userConfigDir, 'settings.json')];
   if (cwd) {
@@ -218,10 +224,8 @@ export const resolveClaudeDefaultModelFlag = async (
 
   let settingsModel: string | undefined;
   for (const settingsPath of settingsPaths) {
-    let settings: Record<string, unknown>;
-    try {
-      settings = await readJsonConfig(settingsPath);
-    } catch {
+    const { settings } = await readClaudeSettingsFile(settingsPath);
+    if (!settings) {
       continue;
     }
 
