@@ -121,8 +121,10 @@ export function createPluginsService(dependencies: PluginDependencies) {
       try {
         updatedManifest = await dependencies.update(pluginName);
       } catch (error) {
-        // A failed update must not leave the plugin's server stopped. When the
-        // pull itself failed, the previous version is still in place.
+        // A failed update must not leave the plugin's server stopped. It is
+        // restarted from whatever is on disk: the previous version when the
+        // pull itself failed, the pulled one when npm install or the build
+        // failed after it.
         if (wasRunning) {
           const previousPlugin = dependencies.scanPlugins().find((candidate) => candidate.name === pluginName);
           if (previousPlugin) await startServerIfAvailable(previousPlugin);

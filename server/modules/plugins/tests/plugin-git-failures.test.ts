@@ -385,6 +385,51 @@ for (const [situation, stderr, expectedMessage] of LOCAL_STATE_FAILURES) {
   });
 }
 
+test('an ssh login failure explains the SSH setup instead of calling the repository private or missing', () => {
+  for (const stderr of [
+    'git@github.com: Permission denied (publickey).\nfatal: Could not read from remote repository.\n',
+    'Host key verification failed.\nfatal: Could not read from remote repository.\n',
+  ]) {
+    const error = createPluginGitError('install', 128, stderr);
+    assert.equal(error.code, 'PLUGIN_GIT_AUTH_REQUIRED');
+    assert.equal(error.statusCode, 422);
+    assert.match(error.message, /^Could not install the plugin: ssh could not log in to the git host/);
+    assert.match(error.message, /known_hosts/);
+    assert.ok(!/private or does not exist/.test(error.message), error.message);
+  }
+});
+
+test('an unrecognised ssh failure names ssh\'s own reason, not git\'s generic last line', () => {
+  const error = createPluginGitError(
+    'install',
+    128,
+    "Warning: Permanently added 'git.example.test' (ED25519) to the list of known hosts.\r\n"
+      + 'kex_exchange_identification: Connection closed by remote host\r\n'
+      + 'Connection closed by 127.0.0.1 port 22\r\n'
+      + 'fatal: Could not read from remote repository.\n\n'
+      + 'Please make sure you have the correct access rights\nand the repository exists.\n',
+  );
+  assert.equal(error.code, 'PLUGIN_GIT_FAILED');
+  assert.equal(
+    error.message,
+    'Could not install the plugin: git clone failed: kex_exchange_identification: Connection closed by remote host',
+  );
+});
+
+test('git stopped by a signal with no output is described, not shown as "exit code null"', () => {
+  const error = createPluginGitError('update', null, '');
+  assert.equal(error.code, 'PLUGIN_GIT_FAILED');
+  assert.equal(error.message, 'Could not update the plugin: git pull failed: git was stopped before it finished');
+});
+
+test('details.gitOutput keeps the last 4000 characters, where git\'s final error is', () => {
+  const progress = Array.from({ length: 200 }, (_, line) => `remote: Counting objects: ${line}% (${line}/200)`).join('\n');
+  const error = createPluginGitError('install', 128, `${progress}\nfatal: the very last line\n`);
+  const { gitOutput } = error.details as GitErrorDetails;
+  assert.equal(gitOutput.length, 4000);
+  assert.ok(gitOutput.endsWith('fatal: the very last line'), gitOutput.slice(-80));
+});
+
 test('unrecognised output is a 422 PLUGIN_GIT_FAILED with git\'s last fatal line', () => {
   const error = createPluginGitError(
     'install',
