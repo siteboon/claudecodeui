@@ -27,7 +27,7 @@ import {
 import {
   CLAUDE_PREDEFINED_MODELS,
   CLAUDE_ULTRACODE_EFFORT,
-  hasClaudeCodeModelSetting
+  resolveClaudeDefaultModelFlag
 } from '@/modules/providers/list/claude/claude-models.provider.js';
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
 import {
@@ -277,20 +277,16 @@ function mapCliOptionsToSDK(options = {}) {
 
   sdkOptions.disallowedTools = settings.disallowedTools || [];
 
-  const selectedModel = options.model || CLAUDE_PREDEFINED_MODELS.DEFAULT;
-
-  // `--model default` pins the CLI's built-in default, which outranks a model the
-  // user configured for Claude Code itself (ANTHROPIC_MODEL or a settings `model`).
-  // The caller sets `useClaudeCodeModel` when "Default" meets such a setting, and the
-  // flag is left off so the CLI picks that model, on resume too. With nothing
-  // configured the flag stays: a resume without it keeps the session's last model.
-  if (!options.useClaudeCodeModel) {
-    sdkOptions.model = selectedModel;
+  // `model` is the option the user picked and `modelFlag` what the CLI is started
+  // with for it. They differ only for "Default", which can run the model set in
+  // Claude Code's own settings or leave the flag off (see resolveClaudeDefaultModelFlag).
+  if (options.modelFlag) {
+    sdkOptions.model = options.modelFlag;
   }
 
-  // Effort is validated against the option the user picked, even when no model flag is sent.
+  // Effort is validated against the option the user picked, whatever the flag is.
   applyClaudeEffort(sdkOptions, resolveClaudeEffort(
-    selectedModel,
+    options.model,
     effort,
     options.effortModels || CLAUDE_PREDEFINED_MODELS,
   ));
@@ -996,10 +992,11 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       ...options,
       providerSessionId,
       model: selectedModel,
+      // "Default" runs whatever Claude Code would run here (issue #1096).
+      modelFlag: selectedModel === CLAUDE_PREDEFINED_MODELS.DEFAULT
+        ? await resolveClaudeDefaultModelFlag(options.cwd)
+        : selectedModel,
       effortModels,
-      // "Default" means whatever Claude Code would run here (issue #1096).
-      useClaudeCodeModel: selectedModel === CLAUDE_PREDEFINED_MODELS.DEFAULT
-        && await hasClaudeCodeModelSetting(options.cwd),
     });
 
     const mcpServers = await loadMcpConfig(options.cwd);
