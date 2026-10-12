@@ -1837,6 +1837,102 @@ test('a task notification written twice keeps the conversation that followed the
   ]);
 });
 
+/**
+ * The shape from issue #1507: a background task's notification is written
+ * twice under one parent, the conversation carries on from the first copy, and
+ * the second copy is the row the transcript ends on — so it is also the row a
+ * stamp-less resume, or the exit stamp of the process that wrote it, points at.
+ */
+function duplicatedNotificationAtTheTail(noteMarkers: Record<string, unknown>): Record<string, unknown>[] {
+  const toolUseId = 'toolu_tail_bash_1';
+  const notification = (uuid: string) => forkPrompt(uuid, 'a2', [
+    '<task-notification>',
+    '<task-id>btail1</task-id>',
+    `<tool-use-id>${toolUseId}</tool-use-id>`,
+    '<status>completed</status>',
+    '<summary>Background command "Watch the build" completed (exit code 0)</summary>',
+    '</task-notification>',
+  ].join('\n'), noteMarkers);
+
+  return [
+    forkPrompt('u1', null, 'watch the build in the background'),
+    {
+      type: 'assistant', uuid: 'a1', parentUuid: 'u1',
+      message: {
+        role: 'assistant', model: 'claude-opus-5',
+        content: [{ type: 'tool_use', id: toolUseId, name: 'Bash', input: { command: 'npm run build', run_in_background: true } }],
+      },
+    },
+    {
+      type: 'user', uuid: 'r1', parentUuid: 'a1',
+      message: {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: toolUseId, content: 'Command running in background with ID: btail1.' }],
+      },
+      toolUseResult: { stdout: '', stderr: '', interrupted: false, isImage: false, backgroundTaskId: 'btail1' },
+    },
+    forkAnswer('a2', 'r1', 'the build is running'),
+    notification('n1'),
+    forkAnswer('a3', 'n1', 'the build passed'),
+    forkPrompt('u4', 'a3', 'now deploy it'),
+    forkAnswer('a4', 'u4', 'deployed'),
+    notification('n2'),
+  ];
+}
+
+const DUPLICATED_NOTIFICATION_SHOWN = [
+  'watch the build in the background',
+  'tool_use',
+  'the build is running',
+  'the build passed',
+  'now deploy it',
+  'deployed',
+];
+
+const tailStamp = (leafUuid: string) => ({ type: 'last-prompt', lastPrompt: 'redacted', leafUuid });
+
+for (const [build, noteMarkers] of [
+  ['current', { origin: { kind: 'task-notification' }, promptSource: 'system' }],
+  ['older, unmarked', {}],
+] as const) {
+  test(`a task notification duplicated at the end of the file does not hide the conversation (${build} CLI rows)`, { concurrency: false }, async () => {
+    assert.deepEqual(
+      await readForkedTranscript(duplicatedNotificationAtTheTail(noteMarkers)),
+      DUPLICATED_NOTIFICATION_SHOWN,
+    );
+  });
+}
+
+test('a task notification duplicated after the last exit stamp does not hide the conversation', { concurrency: false }, async () => {
+  // The process that wrote the second copy exited last, so its stamp names it.
+  const rows = duplicatedNotificationAtTheTail({ origin: { kind: 'task-notification' } });
+  rows.splice(rows.length - 1, 0, tailStamp('a4'));
+  rows.push(tailStamp('n2'));
+
+  assert.deepEqual(await readForkedTranscript(rows), DUPLICATED_NOTIFICATION_SHOWN);
+});
+
+test('a task notification duplicated just before a compaction does not hide what came before it', { concurrency: false }, async () => {
+  const shown = await readForkedTranscript([
+    ...duplicatedNotificationAtTheTail({ origin: { kind: 'task-notification' } }),
+    {
+      type: 'system', subtype: 'compact_boundary', uuid: 'cb', parentUuid: null, logicalParentUuid: 'a4',
+      content: 'Conversation compacted', compactMetadata: { trigger: 'auto' },
+    },
+    forkPrompt('cs', 'cb', 'summary of the conversation so far', { isCompactSummary: true }),
+    forkPrompt('u5', 'cs', 'prompt after the compaction'),
+    forkAnswer('a5', 'u5', 'answer after the compaction'),
+  ]);
+
+  assert.deepEqual(shown, [
+    ...DUPLICATED_NOTIFICATION_SHOWN,
+    'Compacted · auto',
+    'summary of the conversation so far',
+    'prompt after the compaction',
+    'answer after the compaction',
+  ]);
+});
+
 test('a note delivered after an edit neither undoes the edit nor is hidden by it', { concurrency: false }, async () => {
   // `origin` is how the CLI tells what it delivered from what the user typed,
   // whatever the note says.
