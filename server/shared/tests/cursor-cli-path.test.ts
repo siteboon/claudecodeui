@@ -48,6 +48,18 @@ test('CURSOR_CLI_PATH is used as given, without wrapping quotes, before PATH is 
   });
 });
 
+test('whitespace inside the quotes of CURSOR_CLI_PATH is trimmed, and a blank value is ignored', posixOnly, () => {
+  withLayout(({ home, pathDirectory, writeExecutable }) => {
+    writeExecutable(path.join(pathDirectory, 'cursor-agent'));
+    const resolve = (value: string) =>
+      resolveCursorCli({ env: { CURSOR_CLI_PATH: value, PATH: pathDirectory }, homedir: () => home });
+    assert.equal(resolve('" /opt/cursor/cursor-agent "').command, '/opt/cursor/cursor-agent');
+    for (const blank of ['', '   ', '" "', "''"]) {
+      assert.equal(resolve(blank).source, 'path', JSON.stringify(blank));
+    }
+  });
+});
+
 test('a cursor-agent on PATH keeps the bare command, even when the install directory has one too', posixOnly, () => {
   withLayout(({ home, pathDirectory, writeExecutable }) => {
     writeExecutable(path.join(pathDirectory, 'cursor-agent'));
