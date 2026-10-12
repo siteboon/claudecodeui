@@ -24,13 +24,18 @@ const loadAboutTab = async (isPlatform: boolean) => {
   return (await import('@/modules/settings/tabs/AboutTab')).default;
 };
 
-const stubServer = (backupReply: BackupReply = 'ok') => {
+const stubServer = (backupReply: BackupReply = 'ok', storageReply: BackupReply = 'ok') => {
   const fetchMock = vi.fn(async (url: string) => {
     if (url === '/api/system/storage') {
-      return new Response(JSON.stringify({ databasePath: DATABASE_PATH, assetsPath: ASSETS_PATH }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return storageReply === 'ok'
+        ? new Response(JSON.stringify({ databasePath: DATABASE_PATH, assetsPath: ASSETS_PATH }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+        : new Response(JSON.stringify({ success: false, error: { message: 'Internal server error' } }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        });
     }
     if (url === '/api/system/backup') {
       return backupReply === 'ok'
@@ -125,6 +130,17 @@ describe('Settings > About data & backup section', () => {
     );
     expect(clickedAnchors).toHaveLength(0);
     expect(createObjectURL).not.toHaveBeenCalled();
+    expect((screen.getByRole('button', { name: 'Download backup' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('says once that the locations could not be read, and still offers the backup', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    stubServer('ok', 'error');
+    const AboutTab = await loadAboutTab(false);
+    render(<AboutTab />);
+
+    expect(await screen.findAllByText('Could not read the storage locations.')).toHaveLength(1);
+    expect(screen.queryByText('Loading…')).toBeNull();
     expect((screen.getByRole('button', { name: 'Download backup' }) as HTMLButtonElement).disabled).toBe(false);
   });
 

@@ -79,7 +79,6 @@ function StoragePathRow({ icon, label, path, placeholder }: StoragePathRowProps)
 export default function AboutDataBackupSection() {
   const { t } = useTranslation('settings');
   const { locations, hasLocationsError, isDownloading, hasDownloadError, downloadBackup } = useDataBackup();
-  const placeholder = hasLocationsError ? t('about.dataBackup.loadFailed') : t('about.dataBackup.loading');
 
   return (
     <div className="space-y-4 border-t border-border/50 pt-6" data-testid="about-storage-section">
@@ -91,18 +90,24 @@ export default function AboutDataBackupSection() {
       </div>
 
       <div className="space-y-3 rounded-xl border border-border/60 bg-muted/20 p-4">
-        <StoragePathRow
-          icon={<Database className="h-3.5 w-3.5" />}
-          label={t('about.dataBackup.databaseLabel')}
-          path={locations?.databasePath ?? null}
-          placeholder={placeholder}
-        />
-        <StoragePathRow
-          icon={<FolderOpen className="h-3.5 w-3.5" />}
-          label={t('about.dataBackup.assetsLabel')}
-          path={locations?.assetsPath ?? null}
-          placeholder={placeholder}
-        />
+        {hasLocationsError ? (
+          <p className="text-xs text-muted-foreground">{t('about.dataBackup.loadFailed')}</p>
+        ) : (
+          <>
+            <StoragePathRow
+              icon={<Database className="h-3.5 w-3.5" />}
+              label={t('about.dataBackup.databaseLabel')}
+              path={locations?.databasePath ?? null}
+              placeholder={t('about.dataBackup.loading')}
+            />
+            <StoragePathRow
+              icon={<FolderOpen className="h-3.5 w-3.5" />}
+              label={t('about.dataBackup.assetsLabel')}
+              path={locations?.assetsPath ?? null}
+              placeholder={t('about.dataBackup.loading')}
+            />
+          </>
+        )}
       </div>
 
       <div className="space-y-2">
