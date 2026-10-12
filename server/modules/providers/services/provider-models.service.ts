@@ -322,8 +322,8 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     const predefined = await resolveProvider(provider).models.getSupportedModels();
     readCustomModel(provider, recordId);
     // Sessions on the deleted model move to the default of the catalog left
-    // behind: the next custom model while only custom models are listed, or
-    // the built-in default once none remain.
+    // behind: the first remaining custom model (the new DEFAULT) while only
+    // custom models are listed, or the built-in default once none remain.
     const fallbackModelId = mergeProviderModels(
       provider,
       predefined,

@@ -235,17 +235,25 @@ test('deleting a custom model moves its sessions to the default of the catalog l
   await service.deleteCustomModel('codex', second.model.recordId as number);
   assert.deepEqual(catalog.deleteFallbacks, ['codex-default']);
 
-  // Flag on: deleting the current default falls back to the next custom model,
-  // never to a built-in the picker no longer lists.
+  // Flag on: sessions fall back to the first remaining custom model (the new
+  // DEFAULT), never to a built-in the picker no longer lists.
   const third = await service.createCustomModel('codex', { model: 'Third', id: 'gateway-third' });
+  const fourth = await service.createCustomModel('codex', { model: 'Fourth', id: 'gateway-fourth' });
   await service.setCustomModelsOnly('codex', true);
+  // Deleting the last one in the list goes back to the first, not a neighbour.
+  await service.deleteCustomModel('codex', fourth.model.recordId as number);
+  assert.deepEqual(catalog.deleteFallbacks, ['codex-default', 'gateway-first']);
+  // Deleting the current default promotes the next one in list order.
   const removed = await service.deleteCustomModel('codex', first.model.recordId as number);
-  assert.deepEqual(catalog.deleteFallbacks, ['codex-default', 'gateway-third']);
+  assert.deepEqual(catalog.deleteFallbacks, ['codex-default', 'gateway-first', 'gateway-third']);
   assert.equal(removed.models.DEFAULT, 'gateway-third');
 
   // Deleting the last one falls back to the built-in default again.
   await service.deleteCustomModel('codex', third.model.recordId as number);
-  assert.deepEqual(catalog.deleteFallbacks, ['codex-default', 'gateway-third', 'codex-default']);
+  assert.deepEqual(
+    catalog.deleteFallbacks,
+    ['codex-default', 'gateway-first', 'gateway-third', 'codex-default'],
+  );
 });
 
 test('custom-models-only makes the first custom model the session fallback', async () => {
