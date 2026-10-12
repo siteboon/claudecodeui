@@ -1,4 +1,15 @@
 {
+  "sideQuestion": {
+    "title": "侧边提问",
+    "open": "打开侧边提问（⌘/Ctrl+;）",
+    "close": "关闭侧边提问",
+    "clear": "清空侧边问答",
+    "description": "使用 Claude Code 原生 /btw，读取当前对话上下文，工具保持禁用，问答独立于主对话。切换会话或刷新页面后会清空侧栏记录。",
+    "input": "在旁边问一句",
+    "send": "发送侧边问题",
+    "stop": "停止侧边回答",
+    "thinking": "正在思考…"
+  },
   "codeBlock": {
     "copy": "复制",
     "copied": "已复制",

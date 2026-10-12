@@ -17,6 +17,8 @@ import type {
   ProviderRuntimeContext,
   ProviderRuntimePermissionGateway,
   ProviderRuntimeWriter,
+  SideQuestionInput,
+  SideQuestionResult,
   UpsertProviderMcpServerInput,
   WorkflowAgentActivity,
 } from '@/shared/types.js';
@@ -51,6 +53,13 @@ export interface IProviderRuntime {
    * settled, or the id was never one of its own.
    */
   stopBackgroundTask?(sessionId: string, taskId: string): Promise<boolean>;
+  /** Runs the provider's native side question without submitting a main conversation turn. */
+  askSideQuestion?(
+    input: SideQuestionInput,
+    options: AnyRecord,
+    context: ProviderRuntimeContext,
+    signal: AbortSignal,
+  ): Promise<SideQuestionResult>;
 }
 
 /**

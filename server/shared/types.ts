@@ -610,6 +610,22 @@ export type ProviderRuntimeWriter = {
   isWebSocketWriter?: boolean;
 };
 
+//----------------- NATIVE SIDE QUESTIONS ------------
+/** Side-panel exchanges replayed by the provider, separately from the main transcript. */
+export type SideQuestionInput = {
+  question: string;
+  history: Array<{ question: string; response: string }>;
+};
+
+/** A native side-question answer. Synthetic answers carry the CLI's error explanation. */
+export type SideQuestionResult = {
+  response: string;
+  synthetic: boolean;
+  refusalFallback?: { originalModel: string; fallbackModel: string; content: string };
+};
+
+// ---------------------------
+
 export type ProviderPermissionDecision = {
   allow: boolean;
   updatedInput?: unknown;

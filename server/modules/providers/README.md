@@ -343,6 +343,35 @@ Requirements:
    - npx tsc --noEmit -p server/tsconfig.json
 ```
 
+## Native Claude side questions
+
+`POST /api/providers/sessions/:sessionId/side-question` accepts `question` and
+up to 20 `{ question, response }` history entries belonging to the side panel.
+The authenticated route resolves provider, working directory, model and effort
+from the session record. It dispatches the SDK's `askSideQuestion` control request
+directly, rather than submitting a `/btw` string as an ordinary prompt.
+
+The active runtime shares its existing Query. If its main turn finishes during
+a side question, stdin stays open until that side request settles. An idle
+session is resumed through a temporary Query with an empty input stream and
+`persistSession: false`, then closed after the control response. Disconnecting
+or cancelling the HTTP request aborts the side request without interrupting
+the main turn. Side answers never enter the chat run registry or transcript.
+
+The SDK currently implements `askSideQuestion` without public TypeScript
+declarations. The compatibility type is confined to
+`claude-side-question.provider.ts`, with an explicit unsupported-SDK error.
+SDK 0.3.296 supplies history replay and per-request cancellation. A configured
+external Claude CLI must also support the `side_question` control request.
+The native integration test has been verified with Claude Code 2.1.260.
+
+Run the optional native test against an installed Claude binary. It uses a
+loopback mock Messages API and temporary configuration, with no paid API calls.
+
+```bash
+CLOUDCLI_TEST_CLAUDE_PATH="$(command -v claude)" npx tsx --tsconfig server/tsconfig.json --test server/modules/providers/tests/claude-side-question-native.test.ts
+```
+
 ## Validation
 
 After adding or changing a provider, run the relevant checks:

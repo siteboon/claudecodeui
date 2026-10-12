@@ -63,6 +63,8 @@ type UseChatComposerStateArgs = {
   onSessionEstablished?: (sessionId: string, context: SessionEstablishedContext) => void;
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
+  /** Opens native /btw before normal busy-turn queueing can consume the command. */
+  onSideQuestion?: (question: string) => boolean;
   scrollToBottom: () => void;
   addMessage: (msg: ChatMessage) => void;
   setIsUserScrolledUp: (isScrolledUp: boolean) => void;
@@ -187,6 +189,7 @@ export function useChatComposerState({
   onSessionEstablished,
   onFileOpen,
   onShowSettings,
+  onSideQuestion,
   scrollToBottom,
   addMessage,
   setIsUserScrolledUp,
@@ -416,6 +419,12 @@ export function useChatComposerState({
         return;
       }
 
+      if (command.name === '/btw' && provider === 'claude' && onSideQuestion) {
+        onSideQuestion(rawInput?.replace(/^\/btw\s*/i, '') ?? '');
+        if (!options?.preserveInput) { setInput(''); inputValueRef.current = ''; }
+        return;
+      }
+
       try {
         const effectiveInput = rawInput ?? input;
         const commandMatch = effectiveInput.match(new RegExp(`${escapeRegExp(command.name)}\\s*(.*)`));
@@ -477,6 +486,7 @@ export function useChatComposerState({
       handleBuiltInCommand,
       handleCustomCommand,
       input,
+      onSideQuestion,
       provider,
       selectedProject,
       selectedSession?.id,
@@ -679,6 +689,15 @@ export function useChatComposerState({
         )
         || !selectedProject
       ) {
+        return;
+      }
+
+      if (!queuedSubmission && provider === 'claude' && /^\/btw(?:\s|$)/i.test(currentInput) && onSideQuestion) {
+        if (onSideQuestion(currentInput.replace(/^\/btw\s*/i, ''))) {
+          setInput('');
+          inputValueRef.current = '';
+          resetCommandMenuState();
+        }
         return;
       }
 
@@ -957,6 +976,7 @@ export function useChatComposerState({
       onSessionProcessing,
       onSessionEstablished,
       provider,
+      onSideQuestion,
       recordSentMessage,
       resetCommandMenuState,
       scrollToBottom,

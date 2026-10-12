@@ -18,6 +18,7 @@ import os from 'os';
 import path from 'path';
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import { claudeSideQuestions } from '@/modules/providers/list/claude/claude-side-question.provider.js';
 
 import {
   appendFilesInputTag,
@@ -970,6 +971,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // Hoisted above the try so the catch's cleanup can tell whether this run
   // still owns the activeSessions entry (or was superseded by a newer run).
   let queryInstance = null;
+  let sideQuestions = null;
 
   try {
     const resolvedModel = await context.resolveResumeModel(sessionId, options.model);
@@ -1128,6 +1130,11 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         prompt: heldPrompt.stream,
         options: sdkOptions
       });
+    }
+
+    if (sessionKey()) {
+      sideQuestions = claudeSideQuestions.register(sessionKey(), queryInstance, releasePromptStream);
+      releasePromptStream = sideQuestions.release;
     }
 
     // Track the query instance for abort capability
@@ -1351,6 +1358,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       idleReleaseTimer = null;
     }
     releasePromptStream();
+    sideQuestions?.dispose();
   }
 }
 
@@ -1498,6 +1506,18 @@ function reconnectSessionWriter(sessionId, newRawWs) {
 
 export const claudeRuntime = {
   run: queryClaudeSDK,
+  // The provider dispatcher supplies DB-derived session/model/cwd information.
+  askSideQuestion: (input, options, context, signal) => claudeSideQuestions.ask(
+    options.sessionId,
+    input,
+    async () => mapCliOptionsToSDK({
+      ...options,
+      providerSessionId: context.resolveProviderSessionId(options.sessionId),
+      model: await context.resolveResumeModel(options.sessionId, options.model),
+      effortModels: await context.getProviderModels(),
+    }),
+    signal,
+  ),
   abort: abortClaudeSDKSession,
   permissions: {
     resolve: resolveToolApproval,

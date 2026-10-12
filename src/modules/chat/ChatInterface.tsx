@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowDownIcon } from 'lucide-react';
+import { ArrowDownIcon, MessageSquare } from 'lucide-react';
 
 import { useTasksSettings } from '@/modules/task-master';
 import { usePaletteOpsRegister } from '@/modules/command-palette';
@@ -29,6 +29,8 @@ import {
 import ChatMessagesPane from '@/modules/chat/transcript/ChatMessagesPane';
 import ChatComposer from '@/modules/chat/composer/ChatComposer';
 import CommandResultModal from '@/modules/chat/modals/CommandResultModal';
+import { SideQuestionPanel } from '@/modules/chat/SideQuestionPanel';
+import { useSideQuestion } from '@/modules/chat/hooks/useSideQuestion';
 
 type ChatInterfaceProps = {
   isActive: boolean;
@@ -177,6 +179,22 @@ function ChatInterface({
     sessionStore,
   });
 
+  // Bind the ephemeral side panel to the selected Claude session.
+  const sideQuestionSessionId = provider === 'claude' ? selectedSession?.id || currentSessionId : null;
+  const side = useSideQuestion(sideQuestionSessionId);
+
+  useEffect(() => {
+    if (!isActive || !sideQuestionSessionId) return;
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === ';') {
+        event.preventDefault();
+        side.ask();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isActive, sideQuestionSessionId, side.ask]);
+
   // Brand-new conversation: the composer allocated a stable session id via
   // the session gateway before the first send. Record it locally and put it
   // in the URL — this id never changes again, so there is no later handoff.
@@ -237,6 +255,7 @@ function ChatInterface({
     beginEditMessage,
     cancelEditMessage,
   } = useChatComposerState({
+    onSideQuestion: side.ask,
     selectedProject,
     selectedSession,
     currentSessionId,
@@ -454,7 +473,15 @@ function ChatInterface({
 
   return (
     <PermissionContext.Provider value={permissionContextValue}>
-      <div className="flex h-full min-h-0 flex-col">
+      <div className="relative flex h-full min-h-0">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {sideQuestionSessionId && <div className="flex justify-end px-3 pt-1">
+          <button type="button" onClick={() => side.ask()} aria-expanded={side.open}
+            title={t('sideQuestion.open', { defaultValue: 'Ask a side question (⌘/Ctrl+;)' })}
+            className="flex items-center gap-1.5 rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
+            <MessageSquare className="h-3.5 w-3.5" /> /btw
+          </button>
+        </div>}
         <MarkdownWorkspaceContext.Provider value={markdownWorkspaceValue}>
           <TranscriptSessionContext.Provider value={transcriptSessionValue}>
             <ChatMessagesPane
@@ -603,6 +630,9 @@ function ChatInterface({
           sendByCtrlEnter={sendByCtrlEnter}
         />
         </div>
+      </div>
+
+      {side.open && sideQuestionSessionId && <SideQuestionPanel key={sideQuestionSessionId} side={side} />}
       </div>
 
       <CommandResultModal

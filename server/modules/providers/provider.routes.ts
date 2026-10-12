@@ -5,6 +5,7 @@ import { claudeSettingsPermissionsService } from '@/modules/providers/services/c
 import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
 import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
 import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
+import { providerRuntimeService } from '@/modules/providers/services/provider-runtime.service.js';
 import { providerTokenUsageService } from '@/modules/providers/services/provider-token-usage.service.js';
 import { providerSkillsService } from '@/modules/providers/services/skills.service.js';
 import { sessionConversationsSearchService } from '@/modules/providers/services/session-conversations-search.service.js';
@@ -18,6 +19,7 @@ import type {
   ProviderSkillCreateFile,
   ProviderSkillCreateInput,
   UpsertProviderMcpServerInput,
+  SideQuestionInput,
 } from '@/shared/types.js';
 import { AppError, asyncHandler, createApiSuccessResponse } from '@/shared/utils.js';
 
@@ -348,6 +350,20 @@ const parseSessionForkPayload = (payload: unknown): { upToAnchorId?: string; tit
     ...(upToAnchorId ? { upToAnchorId } : {}),
     ...(title ? { title } : {}),
   };
+};
+
+const parseSideQuestionPayload = (payload: unknown): SideQuestionInput => {
+  const body = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
+  const question = typeof body.question === 'string' ? body.question.trim() : '';
+  const history = body.history ?? [];
+  if (!question || question.length > 32000 || !Array.isArray(history) || history.length > 20
+    || history.some((entry) => !entry || typeof entry.question !== 'string'
+      || typeof entry.response !== 'string' || entry.question.length > 32000 || entry.response.length > 200000)) {
+    throw new AppError('Provide a question and at most 20 side-question exchanges.', {
+      code: 'INVALID_SIDE_QUESTION', statusCode: 400,
+    });
+  }
+  return { question, history: history.map(({ question, response }) => ({ question, response })) };
 };
 
 const parseSessionRenameSummary = (payload: unknown): string => {
@@ -933,6 +949,27 @@ router.post(
     const sessionId = parseSessionId(req.params.sessionId);
     const result = await sessionsService.forkSessionById(sessionId, parseSessionForkPayload(req.body));
     res.status(201).json(createApiSuccessResponse(result));
+  }),
+);
+
+router.post(
+  '/sessions/:sessionId/side-question',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const input = parseSideQuestionPayload(req.body);
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    // Closing this HTTP request cancels only the side request, never the main turn.
+    res.on('close', abort);
+    const timeout = setTimeout(abort, 180000);
+    timeout.unref();
+    try {
+      const result = await providerRuntimeService.askSideQuestion(sessionId, input, controller.signal);
+      res.json(createApiSuccessResponse(result));
+    } finally {
+      clearTimeout(timeout);
+      res.off('close', abort);
+    }
   }),
 );
 

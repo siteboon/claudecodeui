@@ -1,4 +1,15 @@
 {
+  "sideQuestion": {
+    "title": "Side question",
+    "open": "Ask a side question (⌘/Ctrl+;)",
+    "close": "Close side question",
+    "clear": "Clear side questions",
+    "description": "Claude Code’s native /btw. Uses the conversation context, with no tools or changes to the main history. This panel’s history lasts until you switch sessions or reload.",
+    "input": "Ask a side question",
+    "send": "Send side question",
+    "stop": "Stop side question",
+    "thinking": "Thinking…"
+  },
   "codeBlock": {
     "copy": "Copy",
     "copied": "Copied",

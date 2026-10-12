@@ -274,6 +274,9 @@ export const api = {
   // `upToAnchorId` (all of it when omitted). The source is left untouched.
   forkSession: (sessionId: string, body: { upToAnchorId?: string; title?: string } = {}) =>
     post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/fork`, body),
+  // Native /btw control request, deliberately separate from chat.send.
+  askSideQuestion: (sessionId: string, body: { question: string; history: Array<{ question: string; response: string }> }, signal: AbortSignal) =>
+    post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/side-question`, body, { signal }),
   renameSession: (sessionId: string, summary: string) =>
     put(`/api/providers/sessions/${sessionId}`, { summary }),
   // What one agent of a workflow run did, read from its transcript on demand

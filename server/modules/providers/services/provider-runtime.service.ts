@@ -1,4 +1,6 @@
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
+import { sessionsDb } from '@/modules/database/index.js';
+import { AppError } from '@/shared/utils.js';
 import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 import type { IProvider } from '@/shared/interfaces.js';
@@ -9,6 +11,8 @@ import type {
   ProviderRunFunction,
   ProviderRuntimeContext,
   ProviderRuntimeWriter,
+  SideQuestionInput,
+  SideQuestionResult,
 } from '@/shared/types.js';
 
 type ProviderRuntimeServiceDependencies = {
@@ -74,6 +78,21 @@ export function createProviderRuntimeService(
 
   return {
     run,
+
+    /** Used by provider routes to keep side questions out of normal chat dispatch/history. */
+    async askSideQuestion(sessionId: string, input: SideQuestionInput, signal: AbortSignal): Promise<SideQuestionResult> {
+      const session = sessionsDb.getSessionById(sessionId);
+      if (!session) throw new AppError('Session not found.', { code: 'SESSION_NOT_FOUND', statusCode: 404 });
+      const provider = dependencies.resolveProvider(session.provider);
+      if (!provider.runtime.askSideQuestion) {
+        throw new AppError('This provider does not support native side questions.', {
+          code: 'SIDE_QUESTION_UNSUPPORTED', statusCode: 400,
+        });
+      }
+      return provider.runtime.askSideQuestion(input, {
+        sessionId, cwd: session.project_path, model: session.model, effort: session.effort,
+      }, createRuntimeContext(provider), signal);
+    },
 
     hasRuntime(providerName: string): boolean {
       try {

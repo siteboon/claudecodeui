@@ -61,6 +61,7 @@
 - **Git Explorer** - View, stage and commit your changes. You can also switch branches 
 - **Browser Use** - Open browser sessions for web research, testing, and agent-driven browser tasks
 - **Session Management** - Resume conversations, manage multiple sessions, and track history
+- **Claude Side Questions** - Open `/btw` or press `Cmd+;` / `Ctrl+;` to ask Claude Code a native side question while the main conversation continues. The side panel uses the session context with tools disabled and keeps its answers out of the main transcript. Panel history is ephemeral and clears when you switch sessions or reload.
 - **Plugin System** - Extend CloudCLI with custom plugins — add new tabs, backend services, and integrations. [Build your own →](https://github.com/cloudcli-ai/cloudcli-plugin-starter)
 - **TaskMaster AI Integration** *(Optional)* - Advanced project management with AI-powered task planning, PRD parsing, and workflow automation
 - **Model Compatibility** - Works with Claude and GPT model families (the full list of supported models is available at runtime via `GET /api/providers/:provider/models`)

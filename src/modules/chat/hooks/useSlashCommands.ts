@@ -115,12 +115,16 @@ export function useSlashCommands({
     }
 
     const parsedHistory = readCommandHistory(selectedProject.projectId);
-    return [...projectCommands].sort((commandA, commandB) => {
+    const commands = [...projectCommands];
+    if (provider === 'claude' && !commands.some((command) => command.name === '/btw')) {
+      commands.push({ name: '/btw', description: 'Ask a native Claude Code side question', namespace: 'builtin', metadata: { type: 'builtin' } });
+    }
+    return commands.sort((commandA, commandB) => {
       const commandAUsage = parsedHistory[commandA.name] || 0;
       const commandBUsage = parsedHistory[commandB.name] || 0;
       return commandBUsage - commandAUsage;
     });
-  }, [projectCommands, selectedProject]);
+  }, [projectCommands, selectedProject, provider]);
 
   useEffect(() => {
     if (!showCommandMenu) {

@@ -57,6 +57,38 @@ async function withProviderServer(
   }
 }
 
+test('native side-question route validates input and resolves session metadata on the server', async () => {
+  await withProviderServer(async (baseUrl, workspacePath) => {
+    sessionsDb.createAppSession('side-session', 'claude', workspacePath);
+    const runtime = providerRegistry.resolveProvider('claude').runtime;
+    const original = runtime.askSideQuestion;
+    const seen: unknown[] = [];
+    runtime.askSideQuestion = async (input, options) => {
+      seen.push({ input, options });
+      return { response: 'Native answer', synthetic: false };
+    };
+    const ask = (session: string, body: unknown) => fetch(`${baseUrl}/api/providers/sessions/${session}/side-question`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    });
+    try {
+      assert.equal((await ask('side-session', { question: '' })).status, 400);
+      assert.equal((await ask('side-session', { question: 'Q', history: [null] })).status, 400);
+      assert.equal((await ask('side-session', { question: 'Q', history: Array(21).fill({ question: 'Q', response: 'A' }) })).status, 400);
+      assert.equal((await ask('missing', { question: 'Q' })).status, 404);
+      assert.equal(seen.length, 0);
+      const response = await ask('side-session', { question: 'Q', history: [{ question: 'Earlier', response: 'A' }], cwd: '/untrusted', provider: 'codex' });
+      assert.equal(response.status, 200);
+      const payload = await response.json() as { data: { response: string } };
+      assert.equal(payload.data.response, 'Native answer');
+      assert.equal(seen.length, 1);
+      assert.equal((seen[0] as { options: { cwd: string } }).options.cwd, workspacePath);
+      assert.deepEqual((seen[0] as { input: unknown }).input, { question: 'Q', history: [{ question: 'Earlier', response: 'A' }] });
+    } finally {
+      runtime.askSideQuestion = original;
+    }
+  });
+});
+
 test('session creation route names a CloudCLI session from the initial message', async () => {
   await withProviderServer(async (baseUrl, workspacePath) => {
     const response = await fetch(`${baseUrl}/api/providers/sessions`, {
