@@ -1018,6 +1018,9 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // for tools that emit none (Monitor, ScheduleWakeup, CronCreate, TaskCreate)
   // and for an SDK that does not report tasks at all.
   let sawTaskEventThisTurn = false;
+  // Set when this turn showed the client assistant text or an error, so an
+  // error `result` can tell whether its reason was already on screen.
+  let explanationSentThisTurn = false;
   // True while the process is being held open for background work, so a later
   // `result` can be recognised as that work reporting back.
   let heldForBackgroundWork = false;
@@ -1257,6 +1260,9 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         if (isSubagentPromptEcho(msg)) {
           continue;
         }
+        if (msg.kind === 'error' || msg.kind === 'stream_delta' || (msg.kind === 'text' && msg.role === 'assistant')) {
+          explanationSentThisTurn = true;
+        }
         ws.send(msg);
       }
 
@@ -1337,10 +1343,11 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
           // The terminal status follows the result: an error result ends the
           // turn as failed instead of being reported as a success.
           const outcome = resultOutcome(message);
-          if (outcome.failed && message.subtype !== 'success') {
+          if (outcome.failed && (message.subtype !== 'success' || !explanationSentThisTurn)) {
             // An `error_*` subtype comes with no assistant text explaining it,
-            // so the chat would otherwise just stop. (An `is_error` success
-            // result has already streamed its error text as a message.)
+            // so the chat would otherwise just stop. An `is_error` success
+            // result usually streams its error text as an assistant message
+            // first; repeat the reason only when the turn showed nothing.
             ws.send(createNormalizedMessage({ kind: 'error', content: `Claude ended the turn with ${outcome.reason}`, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
           }
           ws.send(createCompleteMessage({ provider: 'claude', sessionId: capturedSessionId || sessionId || null, exitCode: outcome.failed ? 1 : 0 }));
@@ -1391,6 +1398,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         const holdForTurn = sawTaskEventThisTurn ? stillOutstanding : backgroundWorkPending || stillOutstanding;
         backgroundWorkPending = false;
         sawTaskEventThisTurn = false;
+        explanationSentThisTurn = false;
         if (holdForTurn) {
           heldForBackgroundWork = true;
           scheduleRelease();
