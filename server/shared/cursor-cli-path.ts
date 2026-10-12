@@ -20,7 +20,7 @@ const DEFAULT_WINDOWS_PATHEXT = '.COM;.EXE;.BAT;.CMD';
  * `searchedPath` (the PATH folders, each once) and `searchedLocations` record what was looked at,
  * so a "not found" message can name them (see `describeMissingCursorCli`).
  */
-export type CursorCliResolution = {
+type CursorCliResolution = {
   command: string;
   source: 'env' | 'path' | 'install-dir' | 'missing';
   searchedPath: string;
