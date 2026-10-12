@@ -35,7 +35,8 @@ import type {
 /**
  * Indicates whether the backend is running in hosted Platform mode rather than
  * self-hosted OSS mode. The server bootstrap, Agent, Auth, and Browser Use
- * modules use this shared flag to keep environment-dependent behavior aligned.
+ * modules and `validateWorkspacePath` use this shared flag to keep
+ * environment-dependent behavior aligned.
  * Environment variables must be loaded before this module is evaluated.
  */
 export const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
@@ -378,12 +379,17 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
       !resolvedPath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)
       && resolvedPath !== resolvedWorkspaceRoot
     ) {
+      // The root defaults to the home directory, so without naming the setting
+      // this reads like a fixed limit of the app. Hosted (Platform) installs
+      // manage the server's environment for the user, so the hint is left out
+      // there.
+      const outsideRootError = `Workspace path must be within the allowed workspace root: ${WORKSPACES_ROOT}`;
       return {
         valid: false,
-        // The root defaults to the home directory, so without naming the
-        // setting this reads like a fixed limit of the app.
-        error: `Workspace path must be within the allowed workspace root: ${WORKSPACES_ROOT}. `
-          + 'To change the root, set the WORKSPACES_ROOT environment variable and restart the server.',
+        error: IS_PLATFORM
+          ? outsideRootError
+          : `${outsideRootError}. `
+            + 'To change the root, set the WORKSPACES_ROOT environment variable and restart the server.',
       };
     }
 
