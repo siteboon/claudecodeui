@@ -313,6 +313,7 @@ async function queryCodex(
   // Session-map key: the app session id when the caller supplied one, else
   // the provider-native thread id once captured (legacy/direct API callers).
   const sessionKey = () => sessionId || capturedSessionId || null;
+  let sessionEntry: ActiveCodexSession | null = null;
 
   try {
     codex = new Codex();
@@ -334,9 +335,9 @@ async function queryCodex(
 
     const registerSession = (id: string | null) => {
       if (!id) {
-        return;
+        return null;
       }
-      activeCodexSessions.set(id, {
+      const entry: ActiveCodexSession = {
         thread,
         codex,
         status: 'running',
@@ -344,11 +345,13 @@ async function queryCodex(
         finished,
         settled: false,
         startedAt: new Date().toISOString()
-      });
+      };
+      activeCodexSessions.set(id, entry);
+      return entry;
     };
 
     if (sessionKey()) {
-      registerSession(sessionKey());
+      sessionEntry = registerSession(sessionKey());
     }
 
     // Execute with streaming. Turns with image attachments send structured
@@ -371,7 +374,7 @@ async function queryCodex(
         const discoveredSessionId = event.thread_id || null;
         if (discoveredSessionId && !capturedSessionId) {
           capturedSessionId = discoveredSessionId;
-          registerSession(sessionKey());
+          sessionEntry = registerSession(sessionKey());
 
           if (ws.setSessionId && typeof ws.setSessionId === 'function') {
             ws.setSessionId(capturedSessionId);
@@ -500,13 +503,10 @@ async function queryCodex(
     }
 
   } finally {
-    // Update session status
-    if (sessionKey()) {
-      const session = activeCodexSessions.get(sessionKey() || '');
-      if (session) {
-        session.status = session.status === 'aborted' ? 'aborted' : 'completed';
-        session.settled = true;
-      }
+    // A queued run may have replaced the map entry after our completion event.
+    if (sessionEntry) {
+      sessionEntry.status = sessionEntry.status === 'aborted' ? 'aborted' : 'completed';
+      sessionEntry.settled = true;
     }
     resolveFinished();
   }

@@ -40,6 +40,7 @@ for (const timesOut of [false, true]) {
       context,
     );
     await started;
+    // Abort creates its timeout synchronously, so install mock timers before calling it.
     t.mock.timers.enable({ apis: ['setTimeout'] });
 
     let abortFinished = false;

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { EventEmitter } from 'node:events';
+import { EventEmitter, once } from 'node:events';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -136,13 +136,22 @@ async function withGateway(
 const settle = () => new Promise((resolve) => { setTimeout(resolve, 30); });
 
 for (const timesOut of [false, true]) {
-  test(`Codex edit ${timesOut ? 'does not rewind after a Shell timeout' : 'waits for Shell before rewinding'}`, async (t) => {
+  test(`Codex edit ${timesOut ? 'does not rewind after a Shell timeout' : 'waits for Shell before rewinding'}`, { timeout: 5000 }, async (t) => {
     await withGateway('codex', async ({ socket, runs }) => {
+      const milestones = new EventEmitter();
+      const handoffStarted = once(milestones, 'handoff');
+      const handlerFinished = once(milestones, 'complete');
+      const send = socket.send;
+      t.mock.method(socket, 'send', (data: string) => {
+        send(data);
+        if (socket.frames.at(-1)?.kind === 'complete') milestones.emit('complete');
+      });
       const exitListeners = new Set<(event: { exitCode: number }) => void>();
       const terminal = {
         onData: () => ({ dispose() {} }),
         onExit: (listener: (event: { exitCode: number }) => void) => {
           exitListeners.add(listener);
+          if (exitListeners.size === 2) milestones.emit('handoff');
           return { dispose: () => { exitListeners.delete(listener); } };
         },
         write() {}, resize() {}, kill() {},
@@ -156,32 +165,30 @@ for (const timesOut of [false, true]) {
         type: 'init', provider: 'codex', sessionId: SESSION_ID, projectPath: process.cwd(), hasSession: true,
       }));
       const rewind = t.mock.method(sessionsService, 'rewindSessionForEdit', async () => {});
-      const realSetTimeout = setTimeout;
-      const waitForHandler = () => new Promise((resolve) => { realSetTimeout(resolve, 30); });
       t.mock.timers.enable({ apis: ['setTimeout'] });
       try {
         socket.emit('message', JSON.stringify({
           type: 'chat.edit-send', sessionId: SESSION_ID, anchorId: 'turn-b', content: 'replacement',
         }));
-        await waitForHandler();
+        await handoffStarted;
         assert.equal(exitListeners.size, 2, 'the handoff has begun waiting for Shell exit');
         assert.equal(rewind.mock.callCount(), 0);
         assert.equal(runs.length, 0);
         if (timesOut) {
           t.mock.timers.tick(5000);
-          await waitForHandler();
+          await handlerFinished;
           assert.equal(rewind.mock.callCount(), 0);
           assert.equal(runs.length, 0);
           assert.ok(!socket.frames.some((frame) => frame.kind === 'history_truncated'));
         } else {
           for (const listener of [...exitListeners]) listener({ exitCode: 0 });
-          await waitForHandler();
+          await handlerFinished;
           assert.equal(rewind.mock.callCount(), 1);
           assert.equal(runs.length, 1);
         }
       } finally {
         for (const listener of [...exitListeners]) listener({ exitCode: 0 });
-        await waitForHandler();
+        await handlerFinished;
         t.mock.timers.reset();
       }
     }, CODEX_TRANSCRIPT_ROWS);
