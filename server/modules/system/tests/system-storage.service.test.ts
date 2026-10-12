@@ -154,8 +154,9 @@ test('a backup taken while the database is busy waits for the write to finish', 
       },
     }));
 
-    // A write transaction left open across an await, as the auth service does
-    // around password hashing, makes better-sqlite3 report a 0-page "backup".
+    // An uncommitted write on the source (here on the shared connection; in
+    // production typically another process committing to the same file) makes
+    // better-sqlite3 report a 0-page "backup".
     connection.exec('BEGIN IMMEDIATE');
     userDb.createUser('late-user', 'password-hash');
     const pendingBackup = service.createDatabaseBackup();
