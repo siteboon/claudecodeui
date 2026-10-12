@@ -99,6 +99,19 @@ describe('Settings > About data & backup section', () => {
     expect(requestHeaders(fetchMock, '/api/system/storage').Authorization).toBe(`Bearer ${TOKEN}`);
   });
 
+  it('sits below the hosted CTA and the Pro cards, just above the license line', async () => {
+    stubServer();
+    const AboutTab = await loadAboutTab(false);
+    render(<AboutTab />);
+    const section = await screen.findByTestId('about-storage-section');
+
+    const follows = (earlier: Node, later: Node) =>
+      Boolean(earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(screen.getByText('Try CloudCLI Hosted'), screen.getByText('CloudCLI Pro Features'))).toBe(true);
+    expect(follows(screen.getByText('CloudCLI Pro Features'), section)).toBe(true);
+    expect(follows(section, screen.getByText('Licensed under AGPL-3.0'))).toBe(true);
+  });
+
   it('copies each exact path, not its label, to the clipboard', async () => {
     stubServer();
     const writeText = vi.fn(async (_text: string) => undefined);

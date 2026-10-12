@@ -28,7 +28,7 @@ function DiscordIcon({ className }: { className?: string }) {
   );
 }
 
-/** Rendered by Settings for the "about" tab, showing version, links, data & backup and premium upsell cards. */
+/** Rendered by Settings for the "about" tab, showing version, links, premium upsell cards and data & backup. */
 export default function AboutTab() {
   const { t } = useTranslation('settings');
   const { updateAvailable, latestVersion, currentVersion, releaseInfo } = useVersionCheck('siteboon', 'claudecodeui');
@@ -127,9 +127,6 @@ export default function AboutTab() {
         </a>
       </div>
 
-      {/* Storage locations and database backup (self-hosted only: Platform manages its own storage) */}
-      {!IS_PLATFORM && <AboutDataBackupSection />}
-
       {/* Hosted CTA (OSS mode only) */}
       {!IS_PLATFORM && (
         <div className="rounded-xl border border-primary/10 bg-primary/5 p-4">
@@ -165,6 +162,10 @@ export default function AboutTab() {
           />
         </div>
       )}
+
+      {/* Storage locations and database backup (self-hosted only: Platform manages its own storage).
+          Kept below the hosted CTA and Pro cards so their order and position stay unchanged. */}
+      {!IS_PLATFORM && <AboutDataBackupSection />}
 
       {/* License */}
       <div className="border-t border-border/50 pt-4">
