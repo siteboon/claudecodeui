@@ -250,7 +250,7 @@ test('deleting a custom model moves its sessions to the default of the catalog l
 
 test('custom-models-only makes the first custom model the session fallback', async () => {
   const { service } = createTestService({
-    sessions: createSessionStore({ 'session-1': null }),
+    sessions: createSessionStore({ 'session-1': null, 'session-on-built-in': 'claude-default' }),
   });
   await service.createCustomModel('claude', { model: 'Gateway', id: 'gateway-model' });
   await service.setCustomModelsOnly('claude', true);
@@ -265,6 +265,16 @@ test('custom-models-only makes the first custom model the session fallback', asy
   const unrecorded = await service.resolveSessionModel('claude', { sessionId: 'session-1' });
   assert.equal(unrecorded.model, 'gateway-model');
   assert.equal(unrecorded.source, 'default');
+
+  // A session that already ran on a now-hidden built-in keeps its recorded
+  // model; hiding built-ins never rewrites existing sessions.
+  const recorded = await service.resolveSessionModel('claude', { sessionId: 'session-on-built-in' });
+  assert.equal(recorded.model, 'claude-default');
+  assert.equal(recorded.source, 'session');
+  assert.equal(
+    await service.resolveResumeModel('claude', 'session-on-built-in', 'gateway-model'),
+    'claude-default',
+  );
 });
 
 test('custom models can be created, edited, and deleted', async () => {
