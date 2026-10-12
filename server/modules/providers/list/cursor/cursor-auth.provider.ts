@@ -20,14 +20,17 @@ const STATUS_TIMEOUT_MS = 20_000;
 export class CursorProviderAuth implements IProviderAuth {
   /**
    * Checks whether the resolved Cursor CLI can be started on this host. cross-spawn's sync form
-   * reports a command it cannot start in `result.error` instead of throwing, so a missing CLI
-   * used to count as installed. A slow `--version` (timeout) still counts as installed.
+   * does not throw for a command it cannot start; it sets `result.error` (ENOENT, EACCES,
+   * ENOTDIR, ELOOP, ...), and any such error means "not installed". The one exception is
+   * ETIMEDOUT: that `--version` did start and was only slow, so it counts as installed.
    */
   private checkInstalled(command: string): boolean {
     try {
       const result = spawn.sync(command, ['--version'], { stdio: 'ignore', timeout: 5000 });
-      const errorCode = (result.error as NodeJS.ErrnoException | undefined)?.code;
-      return errorCode !== 'ENOENT' && errorCode !== 'EACCES';
+      if (!result.error) {
+        return true;
+      }
+      return (result.error as NodeJS.ErrnoException).code === 'ETIMEDOUT';
     } catch {
       return false;
     }

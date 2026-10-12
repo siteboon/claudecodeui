@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+import { CursorProviderAuth } from '@/modules/providers/list/cursor/cursor-auth.provider.js';
 import { cursorRuntime } from '@/modules/providers/list/cursor/cursor-runtime.provider.js';
 import { CursorSessionsProvider } from '@/modules/providers/list/cursor/cursor-sessions.provider.js';
 import type { NormalizedMessage } from '@/shared/types.js';
@@ -48,6 +49,7 @@ async function withServiceLikeEnvironment(body: (fixture: RuntimeFixture) => Pro
     [pathKey]: process.env[pathKey],
     HOME: process.env.HOME,
     USERPROFILE: process.env.USERPROFILE,
+    LOCALAPPDATA: process.env.LOCALAPPDATA,
     CURSOR_CLI_PATH: process.env.CURSOR_CLI_PATH,
   };
   const messages: NormalizedMessage[] = [];
@@ -55,6 +57,7 @@ async function withServiceLikeEnvironment(body: (fixture: RuntimeFixture) => Pro
     process.env[pathKey] = emptyPathDir;
     process.env.HOME = homeDir;
     process.env.USERPROFILE = homeDir;
+    process.env.LOCALAPPDATA = path.join(homeDir, 'AppData', 'Local');
     delete process.env.CURSOR_CLI_PATH;
     await body({
       homeDir,
@@ -74,43 +77,72 @@ async function withServiceLikeEnvironment(body: (fixture: RuntimeFixture) => Pro
   }
 }
 
-const runtimeContext = (installed: boolean) => ({
+// The real install check, as the provider runtime service wires it: the chat error text depends on it.
+const cursorAuth = new CursorProviderAuth();
+const runtimeContext = {
   resolveProviderSessionId: () => null,
   resolveResumeModel: async () => undefined,
   getProviderModels: async () => ({ OPTIONS: [], DEFAULT: '' }),
   normalizeMessage: (raw: unknown, sessionId: string | null) => sessionsProvider.normalizeMessage(raw, sessionId),
-  isProviderInstalled: async () => installed,
+  isProviderInstalled: async () => (await cursorAuth.getStatus()).installed,
+};
+
+const posixOnly = { skip: process.platform === 'win32' ? 'POSIX install layout' : false };
+
+/** Writes the fake CLI as `<binDir>/cursor-agent` (POSIX) and returns that folder. */
+async function writeFakeCursorAgent(binDir: string) {
+  await mkdir(binDir, { recursive: true });
+  const scriptPath = path.join(binDir, 'cursor-agent.cjs');
+  await writeFile(scriptPath, FAKE_CURSOR_AGENT_SCRIPT, 'utf8');
+  const commandPath = path.join(binDir, 'cursor-agent');
+  await writeFile(commandPath, `#!/bin/sh\nexec "${process.execPath}" "${scriptPath}" "$@"\n`, 'utf8');
+  await chmod(commandPath, 0o755);
+  return binDir;
+}
+
+async function assertFakeReplyStreamed(messages: NormalizedMessage[], binDir: string) {
+  assert.deepEqual(messages.filter((message) => message.kind === 'error'), []);
+  assert.ok(
+    messages.some((message) => message.kind === 'stream_delta' && message.content === 'fake cursor reply'),
+    JSON.stringify(messages),
+  );
+  const complete = messages.find((message) => message.kind === 'complete');
+  assert.equal(complete?.exitCode, 0);
+  const launchedArgs = JSON.parse(await readFile(path.join(binDir, 'args.json'), 'utf8'));
+  assert.deepEqual(launchedArgs.slice(0, 2), ['-p', 'say hi']);
+}
+
+test('a Cursor chat turn runs the CLI from ~/.local/bin when the server PATH lacks it (#1514)', posixOnly, async () => {
+  await withServiceLikeEnvironment(async ({ homeDir, projectDir, messages, writer }) => {
+    const binDir = await writeFakeCursorAgent(path.join(homeDir, '.local', 'bin'));
+
+    await cursorRuntime.run('say hi', { cwd: projectDir }, writer, runtimeContext);
+
+    await assertFakeReplyStreamed(messages, binDir);
+  });
 });
 
-test('a Cursor chat turn runs the CLI from ~/.local/bin when the server PATH lacks it (#1514)', {
-  skip: process.platform === 'win32' ? 'POSIX install layout' : false,
-}, async () => {
+test('a relative CURSOR_CLI_PATH runs the file next to the server, not one in the project folder', posixOnly, async () => {
   await withServiceLikeEnvironment(async ({ homeDir, projectDir, messages, writer }) => {
-    const binDir = path.join(homeDir, '.local', 'bin');
-    await mkdir(binDir, { recursive: true });
-    const scriptPath = path.join(binDir, 'cursor-agent.cjs');
-    await writeFile(scriptPath, FAKE_CURSOR_AGENT_SCRIPT, 'utf8');
-    const commandPath = path.join(binDir, 'cursor-agent');
-    await writeFile(commandPath, `#!/bin/sh\nexec "${process.execPath}" "${scriptPath}" "$@"\n`, 'utf8');
-    await chmod(commandPath, 0o755);
+    // The server runs from `serverDir`; the chat process is spawned in `projectDir`, which has no bin/.
+    const serverDir = path.join(homeDir, 'server');
+    const binDir = await writeFakeCursorAgent(path.join(serverDir, 'bin'));
+    const previousCwd = process.cwd();
+    process.chdir(serverDir);
+    process.env.CURSOR_CLI_PATH = './bin/cursor-agent';
+    try {
+      await cursorRuntime.run('say hi', { cwd: projectDir }, writer, runtimeContext);
+    } finally {
+      process.chdir(previousCwd);
+    }
 
-    await cursorRuntime.run('say hi', { cwd: projectDir }, writer, runtimeContext(true));
-
-    assert.deepEqual(messages.filter((message) => message.kind === 'error'), []);
-    assert.ok(
-      messages.some((message) => message.kind === 'stream_delta' && message.content === 'fake cursor reply'),
-      JSON.stringify(messages),
-    );
-    const complete = messages.find((message) => message.kind === 'complete');
-    assert.equal(complete?.exitCode, 0);
-    const launchedArgs = JSON.parse(await readFile(path.join(binDir, 'args.json'), 'utf8'));
-    assert.deepEqual(launchedArgs.slice(0, 2), ['-p', 'say hi']);
+    await assertFakeReplyStreamed(messages, binDir);
   });
 });
 
 test('a Cursor chat turn without any Cursor CLI says where it looked and how to point at one', async () => {
   await withServiceLikeEnvironment(async ({ projectDir, messages, writer }) => {
-    await assert.rejects(cursorRuntime.run('say hi', { cwd: projectDir }, writer, runtimeContext(false)));
+    await assert.rejects(cursorRuntime.run('say hi', { cwd: projectDir }, writer, runtimeContext));
 
     const errors = messages.filter((message) => message.kind === 'error');
     assert.equal(errors.length, 1);

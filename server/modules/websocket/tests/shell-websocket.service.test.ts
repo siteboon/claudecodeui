@@ -764,11 +764,13 @@ function withCursorSearchPath(body: (pathDirectory: string) => void) {
   try {
     body(pathDirectory);
   } finally {
-    process.env[pathKey] = saved.path;
-    if (saved.cursorCliPath === undefined) {
-      delete process.env.CURSOR_CLI_PATH;
-    } else {
-      process.env.CURSOR_CLI_PATH = saved.cursorCliPath;
+    // Assigning undefined to process.env stores the string "undefined", so unset keys are deleted.
+    for (const [key, value] of [[pathKey, saved.path], ['CURSOR_CLI_PATH', saved.cursorCliPath]] as const) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
     }
     fs.rmSync(pathDirectory, { recursive: true, force: true });
   }

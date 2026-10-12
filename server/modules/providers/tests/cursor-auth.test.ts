@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test, { mock } from 'node:test';
+
+import spawn from 'cross-spawn';
 
 import { CursorProviderAuth } from '@/modules/providers/list/cursor/cursor-auth.provider.js';
 
@@ -270,4 +272,72 @@ test('getStatus reports a missing Cursor CLI as not installed and says where it 
       assert.ok(status.error?.includes(path.join(os.homedir(), '.local', 'bin', 'cursor-agent')), status.error);
     }
   }, 'nowhere');
+});
+
+// ---------------------------
+
+const posixOnly = { skip: process.platform === 'win32' ? 'POSIX file modes and errno values' : false };
+
+const notRunnableMessage = (cliPath: string) =>
+  `Cursor CLI not found: CURSOR_CLI_PATH points to "${cliPath}", which cannot be run.`;
+
+test('getStatus reports a CURSOR_CLI_PATH file without the execute bit as not installed (EACCES)', posixOnly, async () => {
+  await withFakeCursorAgent(LOGGED_IN_OUTPUT, async () => {
+    // HOME is the test's temp folder here.
+    const notExecutable = path.join(os.homedir(), 'cursor-agent');
+    await writeFile(notExecutable, '#!/bin/sh\nexit 0\n', 'utf8');
+    await chmod(notExecutable, 0o644);
+    process.env.CURSOR_CLI_PATH = notExecutable;
+
+    const status = await new CursorProviderAuth().getStatus();
+    assert.equal(status.installed, false);
+    assert.equal(status.authenticated, false);
+    assert.ok(status.error?.startsWith(notRunnableMessage(notExecutable)), status.error);
+  }, 'nowhere');
+});
+
+test('getStatus reports any other CURSOR_CLI_PATH the OS cannot start (ENOTDIR, ELOOP) as not installed', posixOnly, async () => {
+  await withFakeCursorAgent(LOGGED_IN_OUTPUT, async () => {
+    const home = os.homedir();
+    const regularFile = path.join(home, 'notes.txt');
+    await writeFile(regularFile, '', 'utf8');
+    const loopA = path.join(home, 'loop-a');
+    const loopB = path.join(home, 'loop-b');
+    await symlink(loopB, loopA);
+    await symlink(loopA, loopB);
+
+    // ENOTDIR: a path "inside" a regular file. ELOOP: a symlink cycle.
+    for (const cliPath of [path.join(regularFile, 'cursor-agent'), loopA]) {
+      process.env.CURSOR_CLI_PATH = cliPath;
+      const status = await new CursorProviderAuth().getStatus();
+      assert.equal(status.installed, false, cliPath);
+      assert.ok(status.error?.startsWith(notRunnableMessage(cliPath)), status.error);
+    }
+  }, 'nowhere');
+});
+
+test('getStatus still counts a Cursor CLI whose `--version` timed out as installed', async () => {
+  await withFakeCursorAgent(LOGGED_IN_OUTPUT, async (fake) => {
+    await fake.releaseStatus();
+    // What cross-spawn returns when the 5 s `--version` probe is killed: the CLI started, it was slow.
+    const timedOut = Object.assign(new Error('spawnSync cursor-agent ETIMEDOUT'), { code: 'ETIMEDOUT' });
+    const versionProbe = mock.method(spawn, 'sync', () => ({
+      pid: 1,
+      output: [],
+      stdout: Buffer.alloc(0),
+      stderr: Buffer.alloc(0),
+      status: null,
+      signal: 'SIGTERM' as const,
+      error: timedOut,
+    }));
+    try {
+      const status = await new CursorProviderAuth().getStatus();
+      assert.equal(versionProbe.mock.callCount(), 1);
+      assert.equal(status.installed, true);
+      assert.equal(status.error, undefined);
+      assert.equal(status.authenticated, true);
+    } finally {
+      versionProbe.mock.restore();
+    }
+  });
 });

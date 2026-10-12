@@ -2,9 +2,18 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { stripWrappingQuotes } from '@/shared/utils.js';
+
 //----------------- CURSOR CLI LOCATION ------------
 
-const CURSOR_CLI_COMMAND = 'cursor-agent';
+/**
+ * The Cursor CLI's command name, as the official installer puts it on PATH.
+ *
+ * Consumers: the websocket module's Shell service. It launches this bare name when the CLI is on
+ * PATH (or missing), and spots a launch command that starts with it (the Settings Login button
+ * sends `cursor-agent login`) to point that command at the resolved CLI.
+ */
+export const CURSOR_CLI_COMMAND = 'cursor-agent';
 const CURSOR_CLI_PATH_ENV = 'CURSOR_CLI_PATH';
 const DEFAULT_WINDOWS_PATHEXT = '.COM;.EXE;.BAT;.CMD';
 
@@ -12,7 +21,9 @@ const DEFAULT_WINDOWS_PATHEXT = '.COM;.EXE;.BAT;.CMD';
  * The Cursor CLI command to run and how it was found.
  *
  * `command` is always spawnable as-is with cross-spawn:
- * - `env`: the CURSOR_CLI_PATH value (wrapping quotes removed), trusted without a check.
+ * - `env`: the CURSOR_CLI_PATH value (wrapping quotes removed), trusted without a check. A value
+ *   with a directory part is made absolute against the server's working directory; a bare name
+ *   (e.g. `agent`) stays a PATH lookup.
  * - `path`: the bare `cursor-agent`, because the server's PATH has it (the historical behaviour).
  * - `install-dir`: an absolute path in a directory the official installer writes to.
  * - `missing`: the bare `cursor-agent`; spawning it fails with ENOENT.
@@ -31,21 +42,10 @@ type ResolveCursorCliDependencies = {
   env?: NodeJS.ProcessEnv;
   platform?: NodeJS.Platform;
   homedir?: () => string;
+  cwd?: () => string;
   isExecutableFile?: (filePath: string) => boolean;
   readDirectoryNames?: (directoryPath: string) => string[];
 };
-
-function stripWrappingQuotes(value: string): string {
-  const trimmed = value.trim();
-  if (
-    trimmed.length >= 2 &&
-    ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-      (trimmed.startsWith("'") && trimmed.endsWith("'")))
-  ) {
-    return trimmed.slice(1, -1).trim();
-  }
-  return trimmed;
-}
 
 // Windows environment names are case-insensitive (`Path`, `PathExt`), POSIX ones are not.
 function readEnvironmentValue(
@@ -129,6 +129,7 @@ export function resolveCursorCli(dependencies: ResolveCursorCliDependencies = {}
     env: dependencies.env ?? process.env,
     platform: dependencies.platform ?? process.platform,
     homedir: dependencies.homedir ?? os.homedir,
+    cwd: dependencies.cwd ?? process.cwd,
     isExecutableFile: dependencies.isExecutableFile ?? isExecutableFileOnDisk,
     readDirectoryNames: dependencies.readDirectoryNames ?? readDirectoryNamesOnDisk,
   };
@@ -140,9 +141,14 @@ export function resolveCursorCli(dependencies: ResolveCursorCliDependencies = {}
   ];
   const searchedPath = pathDirectories.join(pathApi.delimiter);
 
-  const configured = stripWrappingQuotes(deps.env[CURSOR_CLI_PATH_ENV] ?? '');
+  const configured = stripWrappingQuotes(deps.env[CURSOR_CLI_PATH_ENV] ?? '').trim();
   if (configured) {
-    return { command: configured, source: 'env', searchedPath, searchedLocations: [] };
+    // The chat runtime spawns in the project folder and the Shell runs in a PTY there, so a relative
+    // path is resolved once, here, against the server's working directory: every consumer then runs
+    // the same file the Settings check ran. A bare name (no directory part) is left to PATH.
+    const hasDirectoryPart = pathApi.basename(configured) !== configured;
+    const command = hasDirectoryPart ? pathApi.resolve(deps.cwd(), configured) : configured;
+    return { command, source: 'env', searchedPath, searchedLocations: [] };
   }
 
   // On Windows the CLI is a `.cmd`/`.exe` next to a `.ps1`; PATHEXT says which ones run.
@@ -206,12 +212,13 @@ export function resolveCursorCli(dependencies: ResolveCursorCliDependencies = {}
  * where the server does not look".
  *
  * Consumers: the providers module's Cursor auth provider (the Settings error) and Cursor runtime
- * (the chat error) when spawning the resolved command fails with ENOENT.
+ * (the chat error) when the OS cannot start the resolved command (ENOENT, EACCES, ENOTDIR, ...).
  */
 export function describeMissingCursorCli(resolution: CursorCliResolution): string {
   if (resolution.source === 'env') {
-    return `Cursor CLI not found: ${CURSOR_CLI_PATH_ENV} is set to "${resolution.command}", which cannot be run. `
-      + `Point ${CURSOR_CLI_PATH_ENV} at the ${CURSOR_CLI_COMMAND} executable.`;
+    // `command` is the resolved value, so a relative setting shows the absolute file that was tried.
+    return `Cursor CLI not found: ${CURSOR_CLI_PATH_ENV} points to "${resolution.command}", which cannot be run. `
+      + `Set ${CURSOR_CLI_PATH_ENV} to the absolute path of the ${CURSOR_CLI_COMMAND} executable.`;
   }
 
   if (resolution.source !== 'missing') {
@@ -222,6 +229,6 @@ export function describeMissingCursorCli(resolution: CursorCliResolution): strin
 
   return `Cursor CLI not found. Looked for ${CURSOR_CLI_COMMAND} on the server's PATH `
     + `(${resolution.searchedPath || 'empty'}) and at ${resolution.searchedLocations.join(', ')}. `
-    + `Install it from https://cursor.com/cli, or set ${CURSOR_CLI_PATH_ENV} to its full path `
+    + `Install it from https://cursor.com/cli, or set ${CURSOR_CLI_PATH_ENV} to its absolute path `
     + 'and restart the server.';
 }

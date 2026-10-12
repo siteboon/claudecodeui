@@ -5,7 +5,7 @@ import path from 'node:path';
 import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
-import { resolveCursorCli } from '@/shared/cursor-cli-path.js';
+import { CURSOR_CLI_COMMAND, resolveCursorCli } from '@/shared/cursor-cli-path.js';
 import { parseIncomingJsonObject, stripAnsiSequences } from '@/shared/utils.js';
 
 type ShellIncomingMessage = {
@@ -203,8 +203,6 @@ type ShellLaunch = {
    */
   claudeFollowsAppTheme: boolean;
 };
-
-const CURSOR_CLI_COMMAND = 'cursor-agent';
 
 /**
  * What starts the Cursor CLI in the PTY. bash/PowerShell search the server's PATH, which often

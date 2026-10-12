@@ -72,7 +72,8 @@ test('without ~/.local/bin/cursor-agent the newest installed version is used', p
     const versions = path.join(home, '.local', 'share', 'cursor-agent', 'versions');
     writeExecutable(path.join(versions, '2025.08.25-896bbe1', 'cursor-agent'));
     const newest = writeExecutable(path.join(versions, '2026.10.01-e373342', 'cursor-agent'));
-    // The installer's half-finished download folder must never win.
+    // A download folder sorts after every real version, so this one does not show that `.tmp-*`
+    // folders are skipped; the next test does.
     writeExecutable(path.join(versions, '.tmp-2026.11.01-aaaaaaa-1760000000', 'cursor-agent'));
     // A newer folder without a usable CLI is skipped.
     fs.mkdirSync(path.join(versions, '2026.10.02-bbbbbbb'), { recursive: true });
@@ -80,6 +81,16 @@ test('without ~/.local/bin/cursor-agent the newest installed version is used', p
     const resolution = resolveCursorCli({ env: { PATH: pathDirectory }, homedir: () => home });
     assert.equal(resolution.command, newest);
     assert.equal(resolution.source, 'install-dir');
+  });
+});
+
+test('a CLI only inside the installer\'s half-finished .tmp-* download folder is never used', posixOnly, () => {
+  withLayout(({ home, pathDirectory, writeExecutable }) => {
+    const versions = path.join(home, '.local', 'share', 'cursor-agent', 'versions');
+    writeExecutable(path.join(versions, '.tmp-2026.11.01-aaaaaaa-1760000000', 'cursor-agent'));
+    const resolution = resolveCursorCli({ env: { PATH: pathDirectory }, homedir: () => home });
+    assert.equal(resolution.source, 'missing');
+    assert.equal(resolution.command, 'cursor-agent');
   });
 });
 
@@ -119,8 +130,29 @@ test('a missing CLI is explained with the PATH searched, every install location 
 });
 
 test('a CURSOR_CLI_PATH that cannot be run is named in the message', () => {
-  const message = describeMissingCursorCli(resolveCursorCli({ env: { CURSOR_CLI_PATH: '/nowhere/cursor-agent' } }));
-  assert.match(message, /CURSOR_CLI_PATH is set to "\/nowhere\/cursor-agent", which cannot be run/);
+  const message = describeMissingCursorCli(
+    resolveCursorCli({ platform: 'linux', env: { CURSOR_CLI_PATH: '/nowhere/cursor-agent' } }),
+  );
+  assert.match(message, /CURSOR_CLI_PATH points to "\/nowhere\/cursor-agent", which cannot be run/);
+  assert.match(message, /absolute path/);
+});
+
+test('a relative CURSOR_CLI_PATH is made absolute against the server cwd; a bare name stays a PATH lookup', () => {
+  // The chat runtime spawns in the project folder, so an unresolved `./bin/...` would run a different
+  // file (or none) there than the Settings check ran from the server's folder.
+  const resolve = (value: string) =>
+    resolveCursorCli({ platform: 'linux', env: { CURSOR_CLI_PATH: value }, cwd: () => '/srv/cloudcli' });
+  assert.equal(resolve('./bin/cursor-agent').command, '/srv/cloudcli/bin/cursor-agent');
+  assert.equal(resolve('"../tools/cursor-agent"').command, '/srv/tools/cursor-agent');
+  assert.equal(resolve('bin/cursor-agent').command, '/srv/cloudcli/bin/cursor-agent');
+  // `~` is not expanded (like CLAUDE_CLI_PATH); it is just a folder name.
+  assert.equal(resolve('~/bin/cursor-agent').command, '/srv/cloudcli/~/bin/cursor-agent');
+  assert.equal(resolve('/opt/cursor/cursor-agent').command, '/opt/cursor/cursor-agent');
+  assert.equal(resolve('agent').command, 'agent');
+  assert.equal(resolve('agent').source, 'env');
+
+  const message = describeMissingCursorCli(resolve('./bin/cursor-agent'));
+  assert.ok(message.includes('"/srv/cloudcli/bin/cursor-agent"'), message);
 });
 
 // ---------------------------
@@ -142,6 +174,15 @@ test('win32: a cursor-agent.cmd on Path is found through PATHEXT and keeps the b
   });
   assert.equal(resolution.command, 'cursor-agent');
   assert.equal(resolution.source, 'path');
+});
+
+test('win32: a relative CURSOR_CLI_PATH is made absolute; a bare name is kept', () => {
+  const resolve = (value: string) =>
+    resolveCursorCli({ platform: 'win32', env: { CURSOR_CLI_PATH: value }, cwd: () => 'C:\\srv\\cloudcli' });
+  assert.equal(resolve('.\\bin\\cursor-agent.cmd').command, 'C:\\srv\\cloudcli\\bin\\cursor-agent.cmd');
+  assert.equal(resolve('tools/cursor-agent.cmd').command, 'C:\\srv\\cloudcli\\tools\\cursor-agent.cmd');
+  assert.equal(resolve('D:\\Cursor\\cursor-agent.exe').command, 'D:\\Cursor\\cursor-agent.exe');
+  assert.equal(resolve('agent').command, 'agent');
 });
 
 test('win32: the installer folder under %LOCALAPPDATA% is used when Path lacks it', () => {

@@ -41,6 +41,31 @@ import type {
 export const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
 
 // ---------------------------
+//----------------- CLI PATH SETTING UTILITIES ------------
+/**
+ * Normalizes a CLI path read from an environment variable such as CLAUDE_CLI_PATH or
+ * CURSOR_CLI_PATH: trims it, then removes one pair of matching wrapping quotes (`"…"` or
+ * `'…'`), which people often keep in a `.env` file around a path with spaces.
+ *
+ * Only the outer whitespace is trimmed; whitespace inside the quotes is kept. Nothing is
+ * unescaped, `~` is not expanded and relative paths are not resolved. A lone quote character
+ * counts as a matching pair, so it becomes an empty string.
+ *
+ * Consumers: the shared Claude (`claude-cli-path.ts`) and Cursor (`cursor-cli-path.ts`) CLI
+ * resolvers, so both env settings accept the same quoting.
+ */
+export function stripWrappingQuotes(value: string): string {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+// ---------------------------
 //----------------- NORMALIZED MESSAGE HELPER INPUT TYPES ------------
 /**
  * Input payload accepted by `createNormalizedMessage`.
