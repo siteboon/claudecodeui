@@ -19,18 +19,6 @@ function dependencies(overrides: Partial<Dependencies> = {}): Dependencies {
   };
 }
 
-test('setEnabled persists configuration and starts an enabled plugin server', async () => {
-  const operations: string[] = [];
-  const service = createPluginsService(dependencies({
-    scanPlugins: () => [{ name: 'demo', dirName: 'demo', server: { entry: 'server.js' } }],
-    getPluginDirectory: () => '/plugins/demo',
-    saveConfig: () => operations.push('save'),
-    startServer: async () => { operations.push('start'); return 4000; },
-  }));
-  await service.setEnabled('demo', true);
-  assert.deepEqual(operations, ['save', 'start']);
-});
-
 test('update restarts a running plugin server when the update fails', async () => {
   const operations: string[] = [];
   let running = true;
@@ -46,7 +34,7 @@ test('update restarts a running plugin server when the update fails', async () =
   assert.deepEqual(operations, ['stop', 'pull', 'start']);
 });
 
-test('a failed update leaves a plugin server stopped that was not running', async () => {
+test('a failed update does not start a plugin server that was not running', async () => {
   const operations: string[] = [];
   const service = createPluginsService(dependencies({
     scanPlugins: () => [{ name: 'demo', dirName: 'demo', server: 'server.js' }],
@@ -56,4 +44,16 @@ test('a failed update leaves a plugin server stopped that was not running', asyn
   }));
   await assert.rejects(service.update('demo'), /git pull failed/);
   assert.deepEqual(operations, ['pull']);
+});
+
+test('setEnabled persists configuration and starts an enabled plugin server', async () => {
+  const operations: string[] = [];
+  const service = createPluginsService(dependencies({
+    scanPlugins: () => [{ name: 'demo', dirName: 'demo', server: { entry: 'server.js' } }],
+    getPluginDirectory: () => '/plugins/demo',
+    saveConfig: () => operations.push('save'),
+    startServer: async () => { operations.push('start'); return 4000; },
+  }));
+  await service.setEnabled('demo', true);
+  assert.deepEqual(operations, ['save', 'start']);
 });
