@@ -1173,39 +1173,51 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     // owner in every permission mode. In 'auto' and 'bypassPermissions' the CLI
     // approves tools at the permission-mode step and never calls `canUseTool`,
     // so the model would act on an answer it generated itself. PreToolUse hooks
-    // run before that step. An 'allow' from the hook (carrying the owner's
-    // answers in `updatedInput`) skips the permission step, so the owner is
-    // asked once in the other modes too.
-    sdkOptions.hooks.PreToolUse = [{
-      matcher: [...TOOLS_REQUIRING_INTERACTION].join('|'),
-      hooks: [async (input, _toolUseId, hookOptions) => {
-        const toolName = input?.tool_name;
-        if (!TOOLS_REQUIRING_INTERACTION.has(toolName)) {
-          return {};
-        }
-        const result = await requestOwnerApproval(toolName, input?.tool_input, hookOptions?.signal);
-        return {
-          hookSpecificOutput: result.behavior === 'allow'
-            ? { hookEventName: 'PreToolUse', permissionDecision: 'allow', updatedInput: result.updatedInput }
-            : { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: result.message }
-        };
-      }]
-    }];
+    // run before that step, so those modes ask the owner through one. The
+    // other modes keep `canUseTool` as the only approval path: the CLI still
+    // calls it for these tools after a hook's 'allow', so a hook there would
+    // ask the owner twice.
+    if (MODES_SKIPPING_CAN_USE_TOOL.has(sdkOptions.permissionMode)) {
+      sdkOptions.hooks.PreToolUse = [{
+        matcher: [...TOOLS_REQUIRING_INTERACTION].join('|'),
+        hooks: [async (input, _toolUseId, hookOptions) => {
+          const toolName = input?.tool_name;
+          if (!TOOLS_REQUIRING_INTERACTION.has(toolName)) {
+            return {};
+          }
+          const result = await requestOwnerApproval(toolName, input?.tool_input, hookOptions?.signal);
+          return {
+            hookSpecificOutput: result.behavior === 'allow'
+              ? { hookEventName: 'PreToolUse', permissionDecision: 'allow', updatedInput: result.updatedInput }
+              : { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: result.message }
+          };
+        }]
+      }];
+    }
 
     // The SDK's own `query`, unless the caller supplies one (tests script the
     // stream to drive the hold logic below without a CLI process).
     const createQuery = context.createQuery ?? query;
     let heldPrompt = createHeldPromptStream(promptMessages);
     releasePromptStream = heldPrompt.release;
+    let hookedQuery = null;
     try {
-      queryInstance = createQuery({
+      hookedQuery = createQuery({
         prompt: heldPrompt.stream,
         options: sdkOptions
       });
+      // `query()` returns before the CLI has answered the initialize request
+      // that registers the hooks, so a rejected registration only shows here.
+      if (typeof hookedQuery.initializationResult === 'function') {
+        await hookedQuery.initializationResult();
+      }
+      queryInstance = hookedQuery;
     } catch (hookError) {
       // Older/newer SDK versions may not accept hook shapes yet.
       // Keep notification behavior operational via runtime events even if hook registration fails.
       console.warn('Failed to initialize Claude query with hooks, retrying without hooks:', hookError?.message || hookError);
+      // Shut down the failed attempt's CLI process before starting another.
+      hookedQuery?.close?.();
       delete sdkOptions.hooks;
       // Without the PreToolUse hook, a mode that skips `canUseTool` would let
       // the model answer interaction-required tools itself: disallow them.
