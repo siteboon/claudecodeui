@@ -215,6 +215,20 @@ test('win32: the installer folder under %LOCALAPPDATA% is used when Path lacks i
   assert.equal(resolution.source, 'install-dir');
 });
 
+test('win32: a redirected %LOCALAPPDATA% is searched instead of the home folder default', () => {
+  const resolution = resolveCursorCli({
+    platform: 'win32',
+    env: { Path: 'C:\\Windows\\system32', LOCALAPPDATA: 'D:\\Profiles\\dev\\Local' },
+    homedir: () => 'C:\\Users\\dev',
+    ...fakeWindowsFiles([
+      'D:\\Profiles\\dev\\Local\\cursor-agent\\cursor-agent.exe',
+      'C:\\Users\\dev\\AppData\\Local\\cursor-agent\\cursor-agent.exe',
+    ]),
+  });
+  assert.equal(resolution.command, 'D:\\Profiles\\dev\\Local\\cursor-agent\\cursor-agent.exe');
+  assert.equal(resolution.source, 'install-dir');
+});
+
 test('win32: without the installer\'s top-level CLI the newest %LOCALAPPDATA% version folder is used', () => {
   const versions = 'C:\\Users\\dev\\AppData\\Local\\cursor-agent\\versions';
   const resolution = resolveCursorCli({
