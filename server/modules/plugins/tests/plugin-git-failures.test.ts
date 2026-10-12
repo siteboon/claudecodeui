@@ -452,6 +452,10 @@ const UNRECOGNISED_SSH_FAILURES: Array<[string, string, string]> = [
       + '========================================================================\n\n'
       + 'Transferred: sent 3572, received 3804 bytes, in 0.0 seconds\r\n'
       + 'Bytes per second: sent 71636.1, received 76288.9\r\n'],
+  ['a VERBOSE ssh login after which the host printed nothing', 'Could not read from remote repository.',
+    'Authenticated to 127.0.0.1 ([127.0.0.1]:41511) using "publickey".\r\n'
+      + 'Transferred: sent 3572, received 3804 bytes, in 0.0 seconds\r\n'
+      + 'Bytes per second: sent 71636.1, received 76288.9\r\n'],
   ['ssh that printed nothing', 'Could not read from remote repository.', ''],
 ];
 
