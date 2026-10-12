@@ -104,6 +104,8 @@ type UseChatSessionStateArgs = {
   statusCheckSentAtRef: MutableRefObject<Map<string, number>>;
   /** Highest live seq observed per session; sent as `lastSeq` on subscribe. */
   lastSeqRef: MutableRefObject<Map<string, number>>;
+  /** Sessions whose current run already streams to this socket, or has a subscribe in flight. */
+  watchedRunSessionsRef?: MutableRefObject<Set<string>>;
   sessionStore: SessionStore;
 };
 
@@ -202,8 +204,13 @@ export function useChatSessionState({
   resetStreamingState,
   statusCheckSentAtRef,
   lastSeqRef,
+  watchedRunSessionsRef: providedWatchedRunSessionsRef,
   sessionStore,
 }: UseChatSessionStateArgs) {
+  // ChatInterface shares one set between this hook and its sibling; a caller
+  // that passes none (a test mounting the hook alone) gets a private one.
+  const ownWatchedRunSessionsRef = useRef(new Set<string>());
+  const watchedRunSessionsRef = providedWatchedRunSessionsRef ?? ownWatchedRunSessionsRef;
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(selectedSession?.id || null);
   const [isLoadingSessionMessages, setIsLoadingSessionMessages] = useState(false);
   const [isLoadingMoreMessages, setIsLoadingMoreMessages] = useState(false);
@@ -677,6 +684,9 @@ export function useChatSessionState({
     if (!selectedSession || !selectedProject || !ws) return;
 
     statusCheckSentAtRef.current.set(selectedSession.id, Date.now());
+    // The ack settles whether a run is attached; until then the subscribe
+    // below must not send a second one and replay the run twice.
+    watchedRunSessionsRef.current.add(selectedSession.id);
     sendMessage({
       type: 'chat.subscribe',
       sessions: [{
@@ -684,7 +694,41 @@ export function useChatSessionState({
         lastSeq: lastSeqRef.current.get(selectedSession.id) ?? 0,
       }],
     });
-  }, [lastSeqRef, selectedProject, selectedSession, sendMessage, statusCheckSentAtRef, ws]);
+  }, [lastSeqRef, selectedProject, selectedSession, sendMessage, statusCheckSentAtRef, watchedRunSessionsRef, ws]);
+
+  // A run this tab did not start — a queued or scheduled message the server
+  // sent, or a send from another tab — streams to nobody until a socket
+  // subscribes. Without that the viewed session sat busy while the message
+  // that started the turn and its reply stayed off screen until the turn
+  // ended. Subscribing from 0 replays the run from its first event, which this
+  // socket has never seen; an idle ack just clears the entry again.
+  const subscribeToUnwatchedRun = useCallback((sessionId: string) => {
+    if (!ws || watchedRunSessionsRef.current.has(sessionId)) return;
+
+    watchedRunSessionsRef.current.add(sessionId);
+    statusCheckSentAtRef.current.set(sessionId, Date.now());
+    sendMessage({
+      type: 'chat.subscribe',
+      sessions: [{ sessionId, lastSeq: 0 }],
+    });
+  }, [sendMessage, statusCheckSentAtRef, watchedRunSessionsRef, ws]);
+
+  // The running-sessions poll reports the session busy.
+  useEffect(() => {
+    if (activeSessionId && isProcessing) {
+      subscribeToUnwatchedRun(activeSessionId);
+    }
+  }, [activeSessionId, isProcessing, subscribeToUnwatchedRun]);
+
+  // The viewed session's transcript changed on disk. A server-sent turn
+  // writes its prompt there as it starts, which is usually seconds before the
+  // poll above notices it.
+  const selectedSessionId = selectedSession?.id ?? null;
+  useEffect(() => {
+    if (externalMessageUpdate && selectedSessionId) {
+      subscribeToUnwatchedRun(selectedSessionId);
+    }
+  }, [externalMessageUpdate, selectedSessionId, subscribeToUnwatchedRun]);
 
   // Main session loading effect — store-based.
   //

@@ -36,6 +36,12 @@ type UseChatRealtimeHandlersArgs = {
   lastSeqRef: MutableRefObject<Map<string, number>>;
   /** When each session's `chat.subscribe` was last sent; guards stale idle acks. */
   statusCheckSentAtRef: MutableRefObject<Map<string, number>>;
+  /**
+   * Sessions whose current run already streams to this socket. Kept current
+   * here from acks, live frames and terminal events, so a run this tab never
+   * attached to can be told apart and subscribed to.
+   */
+  watchedRunSessionsRef?: MutableRefObject<Set<string>>;
   onSessionProcessing?: MarkSessionProcessing;
   onSessionIdle?: MarkSessionIdle;
   /** Reports the tasks a session still runs once its turn ends, so it reads as background work rather than idle. */
@@ -72,6 +78,7 @@ export function useChatRealtimeHandlers({
   accumulatedStreamRef,
   lastSeqRef,
   statusCheckSentAtRef,
+  watchedRunSessionsRef: providedWatchedRunSessionsRef,
   onSessionProcessing,
   onSessionIdle,
   onSessionBackground,
@@ -80,6 +87,10 @@ export function useChatRealtimeHandlers({
   requestLatestMessages,
   sessionStore,
 }: UseChatRealtimeHandlersArgs) {
+  // ChatInterface shares one set between this hook and its sibling; a caller
+  // that passes none (a test mounting the hook alone) gets a private one.
+  const ownWatchedRunSessionsRef = useRef(new Set<string>());
+  const watchedRunSessionsRef = providedWatchedRunSessionsRef ?? ownWatchedRunSessionsRef;
   // Session switches can send `chat.subscribe` before this effect has a chance
   // to rebind the websocket listener. Read the visible session id from a ref
   // so a fast `chat_subscribed` ack is matched against the current view, not
@@ -117,6 +128,10 @@ export function useChatRealtimeHandlers({
 
       // Record replay progress for every sequenced live event.
       if (sid && typeof msg.seq === 'number') {
+        // Only a run's stream carries `seq`, so this socket is receiving it.
+        if (msg.kind !== 'complete') {
+          watchedRunSessionsRef.current.add(sid);
+        }
         const known = lastSeqRef.current.get(sid) ?? 0;
         if (msg.seq > known) {
           lastSeqRef.current.set(sid, msg.seq);
@@ -144,8 +159,19 @@ export function useChatRealtimeHandlers({
           if (!sid) return;
 
           if (msg.isProcessing) {
+            watchedRunSessionsRef.current.add(sid);
             onSessionProcessing?.(sid);
           } else {
+            // Same staleness rule as the idle below: a send that started
+            // after this subscribe went out is a run this socket is watching.
+            const sentAt = statusCheckSentAtRef.current.get(sid);
+            const activity = getSessionActivity?.(sid);
+            const startedSinceSubscribe = Boolean(
+              activity && !activity.background && sentAt !== undefined && activity.startedAt >= sentAt,
+            );
+            if (!startedSinceSubscribe) {
+              watchedRunSessionsRef.current.delete(sid);
+            }
             // Idle ack: ignore it if a newer request started after the
             // subscribe was sent — the ack describes the older state.
             onSessionIdle?.(sid, {
@@ -179,6 +205,9 @@ export function useChatRealtimeHandlers({
             // flight on that session.
             if (msg.code !== 'NO_SUCH_TASK' && msg.code !== 'TASK_ID_REQUIRED') {
               onSessionIdle?.(sid);
+              // A refused send never became a run on this socket; if the
+              // session is busy with another run, that one still has to attach.
+              watchedRunSessionsRef.current.delete(sid);
             }
             sessionStore.appendRealtime(sid, {
               id: `protocol_error_${Date.now()}`,
@@ -273,6 +302,10 @@ export function useChatRealtimeHandlers({
           // running leaves the session as background work — the CLI is held
           // open for them — and any other leaves it idle. An abort releases
           // the CLI and takes that work down with it.
+          if (sid) {
+            // The run is over; the session's next one starts unwatched.
+            watchedRunSessionsRef.current.delete(sid);
+          }
           if (sid && !msg.aborted) {
             reportRemainingBackgroundWork(sid);
           } else {
@@ -410,6 +443,7 @@ export function useChatRealtimeHandlers({
     streamTimerRef,
     accumulatedStreamRef,
     lastSeqRef,
+    watchedRunSessionsRef,
     statusCheckSentAtRef,
     onSessionProcessing,
     onSessionIdle,

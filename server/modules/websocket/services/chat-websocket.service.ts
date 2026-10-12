@@ -19,7 +19,7 @@ import type {
   ProviderPermissionDecision,
   ProviderRuntimeWriter,
 } from '@/shared/types.js';
-import { parseIncomingJsonObject } from '@/shared/utils.js';
+import { createNormalizedMessage, generateMessageId, parseIncomingJsonObject } from '@/shared/utils.js';
 
 /**
  * Trust boundary for client-supplied image attachments: chat.send options come
@@ -216,7 +216,10 @@ async function dispatchRun(
   data: AnyRecord,
   dependencies: ChatWebSocketDependencies,
   extraRuntimeOptions: AnyRecord = {},
-  beforeRun?: (run: NonNullable<ReturnType<typeof chatRunRegistry.startRun>>) => void | Promise<void>,
+  beforeRun?: (
+    run: NonNullable<ReturnType<typeof chatRunRegistry.startRun>>,
+    attachments: ChatAttachmentDescriptor[],
+  ) => void | Promise<void>,
 ): Promise<{ started: boolean; error: string | null }> {
   const provider = session.provider as LLMProvider;
 
@@ -288,7 +291,7 @@ async function dispatchRun(
     // conversation here and a rewind for a run that was never admitted cannot
     // be taken back. Inside the try so a rewind that throws still releases the
     // run instead of leaving the session processing forever.
-    await beforeRun?.(run);
+    await beforeRun?.(run, uniqueAttachments);
     await dependencies.runtime.run(provider, command, runtimeOptions, run.writer);
   } catch (error) {
     failure = error instanceof Error ? error.message : String(error);
@@ -651,6 +654,28 @@ export async function runDetachedChatTurn(
     session,
     { sessionId: input.sessionId, content: input.content, options: input.options ?? {} },
     dependencies,
+    {},
+    (run, attachments) => {
+      // An interactive send shows its own message the moment it is typed; a
+      // turn the server sends on its own has nobody to do that. Without this
+      // row a queued or scheduled message left the queue card and was then
+      // missing from the conversation until the turn ended and the history
+      // was read back. It goes through the run's writer so it is sequenced
+      // and replayed to every tab that subscribes. The `local_` id is what
+      // the client already uses for its own unsent echoes, so the transcript
+      // row the provider writes for the same prompt retires it instead of
+      // showing the message twice.
+      run.writer.send(createNormalizedMessage({
+        kind: 'text',
+        role: 'user',
+        id: generateMessageId('local_server'),
+        provider,
+        sessionId: input.sessionId,
+        content: input.content,
+        images: attachments.filter(isImageAttachmentDescriptor),
+        files: attachments.filter((attachment) => !isImageAttachmentDescriptor(attachment)),
+      }));
+    },
   );
 }
 

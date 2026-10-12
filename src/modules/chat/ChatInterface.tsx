@@ -11,6 +11,7 @@ import { TranscriptSessionContext } from '@/modules/chat/context/TranscriptSessi
 import { api } from '@/shared/api';
 import type {
   ChatMessage,
+  MarkSessionProcessing,
   Project,
   ProjectSession,
   SessionEstablishedContext,
@@ -92,6 +93,11 @@ function ChatInterface({
   // on every sequenced frame, read whenever a `chat.subscribe` is sent so the
   // server replays only the events this client actually missed.
   const lastSeqRef = useRef(new Map<string, number>());
+  // Sessions whose current run already streams to this socket (or has a
+  // subscribe in flight). A busy session missing from it is running a turn
+  // this tab never attached to — a queued or scheduled message the server
+  // sent — and gets subscribed so that turn shows live.
+  const watchedRunSessionsRef = useRef(new Set<string>());
 
   const resetStreamingState = useCallback(() => {
     if (streamTimerRef.current) {
@@ -174,12 +180,22 @@ function ChatInterface({
     resetStreamingState,
     statusCheckSentAtRef,
     lastSeqRef,
+    watchedRunSessionsRef,
     sessionStore,
   });
 
   // Brand-new conversation: the composer allocated a stable session id via
   // the session gateway before the first send. Record it locally and put it
   // in the URL — this id never changes again, so there is no later handoff.
+  // The composer's send is a run this socket starts, so it is watched from
+  // the moment it is dispatched rather than re-subscribed to.
+  const markOwnSendProcessing = useCallback<MarkSessionProcessing>((sessionId, activity) => {
+    if (sessionId) {
+      watchedRunSessionsRef.current.add(sessionId);
+    }
+    onSessionProcessing(sessionId, activity);
+  }, [onSessionProcessing]);
+
   const handleSessionEstablished = useCallback<NonNullable<ChatInterfaceProps['onSessionEstablished']>>((sessionId, context) => {
     setCurrentSessionId(sessionId);
     onSessionEstablished?.(sessionId, context);
@@ -251,7 +267,7 @@ function ChatInterface({
     tokenBudget,
     sendMessage,
     sendByCtrlEnter,
-    onSessionProcessing,
+    onSessionProcessing: markOwnSendProcessing,
     onSessionEstablished: handleSessionEstablished,
     onFileOpen,
     onShowSettings,
@@ -270,6 +286,7 @@ function ChatInterface({
     if (!selectedProject || !selectedSession) return;
     await requestLatestMessages(selectedSession.id, isActive);
     statusCheckSentAtRef.current.set(selectedSession.id, Date.now());
+    watchedRunSessionsRef.current.add(selectedSession.id);
     sendMessage({
       type: 'chat.subscribe',
       sessions: [{
@@ -292,6 +309,7 @@ function ChatInterface({
     accumulatedStreamRef,
     lastSeqRef,
     statusCheckSentAtRef,
+    watchedRunSessionsRef,
     onSessionProcessing,
     onSessionIdle,
     onSessionBackground,
