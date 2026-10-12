@@ -99,6 +99,27 @@ describe('Settings > About data & backup section', () => {
     expect(requestHeaders(fetchMock, '/api/system/storage').Authorization).toBe(`Bearer ${TOKEN}`);
   });
 
+  it('copies each exact path, not its label, to the clipboard', async () => {
+    stubServer();
+    const writeText = vi.fn(async (_text: string) => undefined);
+    // jsdom has no Clipboard API; copyTextToClipboard uses it when the browser offers one.
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    try {
+      const AboutTab = await loadAboutTab(false);
+      render(<AboutTab />);
+      await screen.findByText(DATABASE_PATH);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Copy path: Database' }));
+      expect(await screen.findByRole('button', { name: 'Path copied: Database' })).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Copy path: Uploaded files' }));
+      await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
+
+      expect(writeText.mock.calls).toEqual([[DATABASE_PATH], [ASSETS_PATH]]);
+    } finally {
+      delete (navigator as { clipboard?: unknown }).clipboard;
+    }
+  });
+
   it('downloads the backup with the bearer token and saves it under the server-chosen name', async () => {
     const fetchMock = stubServer();
     const AboutTab = await loadAboutTab(false);
