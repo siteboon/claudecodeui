@@ -492,15 +492,22 @@ async function readTranscriptRows(jsonlPath: string, providerSessionId: string):
 }
 
 /**
- * Appends the row the Claude CLI writes for `/rename` to a transcript:
- * `{"type":"custom-title","customTitle":…,"sessionId":…}`, those three keys in
- * that order, as the CLI and the SDK's `renameSession()` write it. The CLI's
- * `--resume` picker and the title it restores on resume both take the last
- * such row. It has no `uuid`, so it is not part of the conversation and does
- * not move the point `--resume` continues from.
+ * Appends the two rows the Claude CLI writes for `/rename` to a transcript, in
+ * its order and with its keys:
+ * `{"type":"custom-title","customTitle":…,"sessionId":…}` then
+ * `{"type":"agent-name","agentName":…,"sessionId":…}`.
+ *
+ * The CLI's `--resume` picker and the title it restores on resume take the
+ * last `custom-title`; the name a resumed CLI shows on its prompt box is the
+ * last `agent-name`, so a session renamed earlier in the terminal would keep
+ * showing that older name there. Neither row has a `uuid`, so they are not
+ * part of the conversation and do not move the point `--resume` continues from.
  */
-async function appendClaudeCustomTitle(jsonlPath: string, providerSessionId: string, title: string): Promise<void> {
-  const row = `${JSON.stringify({ type: 'custom-title', customTitle: title, sessionId: providerSessionId })}\n`;
+async function appendClaudeRenameRows(jsonlPath: string, providerSessionId: string, title: string): Promise<void> {
+  const rows = [
+    { type: 'custom-title', customTitle: title, sessionId: providerSessionId },
+    { type: 'agent-name', agentName: title, sessionId: providerSessionId },
+  ].map((row) => `${JSON.stringify(row)}\n`).join('');
 
   let handle: fsp.FileHandle;
   try {
@@ -522,9 +529,10 @@ async function appendClaudeCustomTitle(jsonlPath: string, providerSessionId: str
 
     // A writer that stopped mid-row leaves no newline at the end; start a new
     // line, as the CLI does, so the title is not glued onto that partial row.
+    // One write, so the two rows land together.
     const lastByte = Buffer.alloc(1);
     await handle.read(lastByte, 0, 1, before.size - 1);
-    const payload = lastByte[0] === 0x0a ? row : `\n${row}`;
+    const payload = lastByte[0] === 0x0a ? rows : `\n${rows}`;
     await handle.write(payload);
 
     // A rename is not activity. The sidebar orders sessions by when their
@@ -1716,8 +1724,12 @@ export class ClaudeSessionsProvider implements IProviderSessions {
 
   /**
    * Writes a sidebar rename into the session's transcript as the CLI's own
-   * `/rename` row, so `claude --resume` lists the session under the new name
+   * `/rename` rows, so `claude --resume` lists the session under the new name
    * and a resumed CLI carries that name forward.
+   *
+   * A CLI process that already has the session open keeps the names it holds
+   * in memory and can write them back after these rows; a CLI that resumes
+   * the session later reads them.
    *
    * A session that has not run yet, or whose transcript is gone, has nowhere
    * to record it. Neither has a row whose path is not `<provider id>.jsonl` —
@@ -1734,7 +1746,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       return;
     }
 
-    await appendClaudeCustomTitle(jsonlPath, providerSessionId, title);
+    await appendClaudeRenameRows(jsonlPath, providerSessionId, title);
   }
 
   /**

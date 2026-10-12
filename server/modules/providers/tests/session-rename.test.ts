@@ -1,15 +1,15 @@
 import assert from 'node:assert/strict';
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, unlink, utimes, writeFile } from 'node:fs/promises';
+import fsp, { appendFile, chmod, mkdir, mkdtemp, readFile, rm, stat, unlink, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
+import test, { mock } from 'node:test';
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import { ClaudeSessionSynchronizer } from '@/modules/providers/list/claude/claude-session-synchronizer.provider.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 
 /**
- * A rename made in CloudCLI lands in the Claude transcript as the row the CLI
+ * A rename made in CloudCLI lands in the Claude transcript as the rows the CLI
  * writes for `/rename`, so `claude --resume` lists the session under the same
  * name as the sidebar. These drive the rename the way the REST route does and
  * read the transcript back.
@@ -86,10 +86,13 @@ async function indexCliSession(projectDir: string): Promise<string> {
   return filePath;
 }
 
-const customTitleRow = (title: string, providerSessionId: string): string =>
-  JSON.stringify({ type: 'custom-title', customTitle: title, sessionId: providerSessionId });
+/** What `/rename <title>` appends, byte for byte: the title, then the name, each on its own line. */
+const renameRows = (title: string, providerSessionId: string): string => [
+  JSON.stringify({ type: 'custom-title', customTitle: title, sessionId: providerSessionId }),
+  JSON.stringify({ type: 'agent-name', agentName: title, sessionId: providerSessionId }),
+].map((row) => `${row}\n`).join('');
 
-test('a sidebar rename is written to the transcript as the row the CLI writes for /rename', { concurrency: false }, async () => {
+test('a sidebar rename is written to the transcript as the rows the CLI writes for /rename', { concurrency: false }, async () => {
   await withClaudeFixture(async ({ projectDir }) => {
     const filePath = await indexCliSession(projectDir);
     const before = await readFile(filePath, 'utf8');
@@ -98,11 +101,8 @@ test('a sidebar rename is written to the transcript as the row the CLI writes fo
 
     assert.deepEqual(result, { sessionId: CLI_SESSION_ID, summary: 'Renamed in CloudCLI' });
     assert.equal(sessionsDb.getSessionById(CLI_SESSION_ID)?.custom_name, 'Renamed in CloudCLI');
-    // Exactly one row appended, byte for byte what `/rename` writes, newline included.
-    assert.equal(
-      await readFile(filePath, 'utf8'),
-      `${before}${customTitleRow('Renamed in CloudCLI', CLI_SESSION_ID)}\n`,
-    );
+    // Exactly two rows appended, byte for byte what `/rename` writes, newlines included.
+    assert.equal(await readFile(filePath, 'utf8'), `${before}${renameRows('Renamed in CloudCLI', CLI_SESSION_ID)}`);
 
     // The transcript now carries the name: indexing it afresh — another
     // CloudCLI, or this one after its database is gone — finds it there.
@@ -121,14 +121,13 @@ test('a session started in CloudCLI is renamed under the id its transcript uses'
 
     await sessionsService.renameSessionById('app-session-1462', 'Renamed in CloudCLI');
 
-    const lastRow = (await readFile(filePath, 'utf8')).trimEnd().split('\n').at(-1);
     // The CLI only reads titles stamped with the transcript's own session id,
     // never CloudCLI's app id.
-    assert.equal(lastRow, customTitleRow('Renamed in CloudCLI', APP_NATIVE_ID));
+    assert.ok((await readFile(filePath, 'utf8')).endsWith(renameRows('Renamed in CloudCLI', APP_NATIVE_ID)));
   });
 });
 
-test('a title with quotes, line breaks and non-ASCII text stays one row', { concurrency: false }, async () => {
+test('a title with quotes, line breaks and non-ASCII text stays one row each', { concurrency: false }, async () => {
   await withClaudeFixture(async ({ projectDir }) => {
     const filePath = await indexCliSession(projectDir);
     const rowsBefore = (await readFile(filePath, 'utf8')).split('\n').length;
@@ -137,16 +136,15 @@ test('a title with quotes, line breaks and non-ASCII text stays one row', { conc
     await sessionsService.renameSessionById(CLI_SESSION_ID, title);
 
     const lines = (await readFile(filePath, 'utf8')).split('\n');
-    assert.equal(lines.length, rowsBefore + 1);
-    assert.deepEqual(JSON.parse(lines.at(-2) ?? ''), {
-      type: 'custom-title',
-      customTitle: title,
-      sessionId: CLI_SESSION_ID,
-    });
+    assert.equal(lines.length, rowsBefore + 2);
+    assert.deepEqual(lines.slice(-3, -1).map((line) => JSON.parse(line)), [
+      { type: 'custom-title', customTitle: title, sessionId: CLI_SESSION_ID },
+      { type: 'agent-name', agentName: title, sessionId: CLI_SESSION_ID },
+    ]);
   });
 });
 
-test('a transcript whose last row was cut off gets the title on a line of its own', { concurrency: false }, async () => {
+test('a transcript whose last row was cut off gets the title rows on lines of their own', { concurrency: false }, async () => {
   await withClaudeFixture(async ({ projectDir }) => {
     const filePath = await writeTranscript(projectDir, CLI_SESSION_ID, { trailingNewline: false });
     await new ClaudeSessionSynchronizer().synchronizeFile(filePath);
@@ -154,10 +152,7 @@ test('a transcript whose last row was cut off gets the title on a line of its ow
 
     await sessionsService.renameSessionById(CLI_SESSION_ID, 'Renamed in CloudCLI');
 
-    assert.equal(
-      await readFile(filePath, 'utf8'),
-      `${before}\n${customTitleRow('Renamed in CloudCLI', CLI_SESSION_ID)}\n`,
-    );
+    assert.equal(await readFile(filePath, 'utf8'), `${before}\n${renameRows('Renamed in CloudCLI', CLI_SESSION_ID)}`);
   });
 });
 
@@ -179,6 +174,40 @@ test('a rename does not count as activity: the session keeps its place and stays
   });
 });
 
+test('a transcript something else appends to during the rename keeps the newer time', { concurrency: false }, async () => {
+  await withClaudeFixture(async ({ projectDir }) => {
+    const filePath = await indexCliSession(projectDir);
+    const cliRow = JSON.stringify({ type: 'last-prompt', lastPrompt: 'next prompt', sessionId: CLI_SESSION_ID });
+
+    // The CLI appends a row of its own right after the title rows go in.
+    const realOpen = fsp.open;
+    const openMock = mock.method(fsp, 'open', async (...args: Parameters<typeof fsp.open>) => {
+      const handle = await realOpen(...args);
+      if (args[0] === filePath) {
+        const realWrite = handle.write.bind(handle) as (...writeArgs: unknown[]) => Promise<unknown>;
+        Object.assign(handle, {
+          write: async (...writeArgs: unknown[]) => {
+            const written = await realWrite(...writeArgs);
+            await appendFile(filePath, `${cliRow}\n`);
+            return written;
+          },
+        });
+      }
+      return handle;
+    });
+    try {
+      await sessionsService.renameSessionById(CLI_SESSION_ID, 'Renamed in CloudCLI');
+    } finally {
+      openMock.mock.restore();
+    }
+
+    const content = await readFile(filePath, 'utf8');
+    assert.ok(content.endsWith(`${renameRows('Renamed in CloudCLI', CLI_SESSION_ID)}${cliRow}\n`));
+    // That row is activity, so the file keeps the time it was written at.
+    assert.ok((await stat(filePath)).mtime.getTime() > OLD_MTIME.getTime());
+  });
+});
+
 test('a rename with no transcript to write still renames the session', { concurrency: false }, async () => {
   await withClaudeFixture(async ({ projectDir }) => {
     // Never ran: no provider id, no transcript.
@@ -192,6 +221,20 @@ test('a rename with no transcript to write still renames the session', { concurr
     await sessionsService.renameSessionById(CLI_SESSION_ID, 'Renamed after deletion');
     assert.equal(sessionsDb.getSessionById(CLI_SESSION_ID)?.custom_name, 'Renamed after deletion');
     await assert.rejects(stat(filePath), { code: 'ENOENT' });
+  });
+});
+
+test('an empty transcript is left empty', { concurrency: false }, async () => {
+  await withClaudeFixture(async ({ projectDir }) => {
+    // The CLI creates the file before it writes the first row.
+    const filePath = path.join(projectDir, `${CLI_SESSION_ID}.jsonl`);
+    await writeFile(filePath, '');
+    sessionsDb.createSession(CLI_SESSION_ID, 'claude', PROJECT_PATH, 'Fresh session', undefined, undefined, filePath);
+
+    await sessionsService.renameSessionById(CLI_SESSION_ID, 'Renamed in CloudCLI');
+
+    assert.equal(sessionsDb.getSessionById(CLI_SESSION_ID)?.custom_name, 'Renamed in CloudCLI');
+    assert.equal(await readFile(filePath, 'utf8'), '');
   });
 });
 
@@ -231,7 +274,9 @@ test('a transcript that cannot be written does not fail the rename', { concurren
 
 test('renaming a session of another provider leaves its files alone', { concurrency: false }, async () => {
   await withClaudeFixture(async ({ home }) => {
-    const rolloutPath = path.join(home, '.codex', 'sessions', 'rollout-codex-native.jsonl');
+    // Named like a Claude transcript, so only dispatching by the row's
+    // provider keeps the Claude writer away from it.
+    const rolloutPath = path.join(home, '.codex', 'sessions', 'codex-native.jsonl');
     await mkdir(path.dirname(rolloutPath), { recursive: true });
     const rollout = `${JSON.stringify({ type: 'session_meta', payload: { id: 'codex-native', cwd: PROJECT_PATH } })}\n`;
     await writeFile(rolloutPath, rollout);
@@ -249,7 +294,7 @@ test('renaming a session of another provider leaves its files alone', { concurre
   });
 });
 
-test('the title row does not change the conversation history shows', { concurrency: false }, async () => {
+test('the title rows do not change the conversation history shows', { concurrency: false }, async () => {
   await withClaudeFixture(async ({ projectDir }) => {
     await indexCliSession(projectDir);
     const before = await sessionsService.fetchHistory(CLI_SESSION_ID);
