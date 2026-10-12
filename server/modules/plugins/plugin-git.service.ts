@@ -41,7 +41,7 @@ const PLUGIN_GIT_FAILURE_RULES: PluginGitFailureRule[] = [
     // repository: GitHub refuses ssh without an accepted key even for a public
     // one, and an unknown host key stops before any repository is asked for.
     // ssh does not say whether a key was offered at all.
-    pattern: /permission denied \(publickey|host key verification failed/i,
+    pattern: /permission denied \([^)]*publickey|host key verification failed/i,
     code: 'PLUGIN_GIT_AUTH_REQUIRED',
     statusCode: 422,
     reason: () => `ssh, run as ${SERVER_USER}, could not log in to the git host. That user needs an SSH key the host `
@@ -131,12 +131,14 @@ function summarizeGitOutput(gitOutput: string): string | null {
   // before it, e.g. "kex_exchange_identification: Connection closed by remote
   // host" or GitLab's "remote: You are not allowed to download code from this
   // project.". Skipped: `remote:` prefixes, lines without text (dividers),
-  // "Warning: Permanently added …", `*`-framed notices (OpenSSH's post-quantum
-  // warning, login banners) and `ssh -v` output.
+  // `Warning:` lines, `*`-framed notices (OpenSSH's post-quantum warning,
+  // framed login banners), `ssh -v` debug lines and the status lines ssh prints
+  // at LogLevel VERBOSE ("Authenticated to …", "Transferred: …").
   if (/^could not read from remote repository\.?$/i.test(summary)) {
     const sshReason = lines.slice(0, index)
       .map((line) => line.trim().replace(/^remote:\s*/i, ''))
-      .find((line) => /[a-z0-9]/i.test(line) && !/^(warning:|\*|debug\d:|OpenSSH_)/i.test(line));
+      .find((line) => /[a-z0-9]/i.test(line)
+        && !/^(warning:|\*|debug\d:|OpenSSH_|Authenticated to |Transferred: |Bytes per second:)/i.test(line));
     if (sshReason) return sshReason.replace(/^(fatal|error):\s*/i, '');
   }
   if (summary.endsWith(':')) {

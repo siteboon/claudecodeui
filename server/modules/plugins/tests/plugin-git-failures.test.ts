@@ -388,6 +388,8 @@ for (const [situation, stderr, expectedMessage] of LOCAL_STATE_FAILURES) {
 test('an ssh login failure explains the SSH setup instead of calling the repository private or missing', () => {
   for (const stderr of [
     'git@github.com: Permission denied (publickey).\nfatal: Could not read from remote repository.\n',
+    // Azure DevOps lists the methods it accepts.
+    'git@ssh.dev.azure.com: Permission denied (password,publickey).\nfatal: Could not read from remote repository.\n',
     'Host key verification failed.\nfatal: Could not read from remote repository.\n',
   ]) {
     const error = createPluginGitError('install', 128, stderr);
@@ -441,6 +443,15 @@ const UNRECOGNISED_SSH_FAILURES: Array<[string, string, string]> = [
   ['the remote git\'s own fatal line', 'detected dubious ownership in repository at \'/srv/git/plugin.git\'',
     "fatal: detected dubious ownership in repository at '/srv/git/plugin.git'\nTo add an exception for this directory, call:\n\n"
       + '\tgit config --global --add safe.directory /srv/git/plugin.git\n'],
+  // Captured from a real OpenSSH 9.6p1 client with LogLevel VERBOSE (as `ssh -v` also prints it) against a
+  // local sshd whose forced command answers like gitlab-shell.
+  ['a successful ssh login at LogLevel VERBOSE', 'You are not allowed to download code from this project.',
+    'Authenticated to 127.0.0.1 ([127.0.0.1]:41511) using "publickey".\r\n\n'
+      + '========================================================================\n\n'
+      + 'You are not allowed to download code from this project.\n\n'
+      + '========================================================================\n\n'
+      + 'Transferred: sent 3572, received 3804 bytes, in 0.0 seconds\r\n'
+      + 'Bytes per second: sent 71636.1, received 76288.9\r\n'],
   ['ssh that printed nothing', 'Could not read from remote repository.', ''],
 ];
 
