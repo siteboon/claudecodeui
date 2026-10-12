@@ -7,6 +7,9 @@ import type { ProviderRunFunction } from '@/shared/types.js';
 
 import { normalizeProjectPath } from '../../shared/utils.js';
 
+/** The providers an Agent API run can start: the ones with a runtime and a model catalog. */
+const AGENT_RUN_PROVIDERS = ['claude', 'cursor', 'codex', 'opencode'];
+
 /** What the route reads off a session row it continues: the row, not the request, says which provider and project a session belongs to. */
 type AgentSessionRow = {
   session_id: string;
@@ -889,7 +892,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       return res.status(400).json({ error: 'message is required' });
     }
 
-    if (requestedProvider !== null && !['claude', 'cursor', 'codex', 'opencode'].includes(requestedProvider)) {
+    if (requestedProvider !== null && !AGENT_RUN_PROVIDERS.includes(requestedProvider)) {
       return res.status(400).json({ error: 'provider must be "claude", "cursor", "codex", or "opencode"' });
     }
 
@@ -1024,7 +1027,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       // first custom model while the provider lists only custom models.
       // Only the four runnable providers have a catalog: a continued legacy
       // session whose provider is no longer registered must not fail here.
-      const providerModels = ['claude', 'cursor', 'codex', 'opencode'].includes(provider)
+      const providerModels = AGENT_RUN_PROVIDERS.includes(provider)
         ? await providerModelsService.getProviderModels(provider)
         : null;
       // Cursor otherwise leaves the choice to its CLI, so it only takes the
