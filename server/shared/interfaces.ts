@@ -234,7 +234,7 @@ export interface IProviderSessions {
 
   /**
    * Records a title the user gave the session in CloudCLI where the provider's
-   * own CLI reads it, so the CLI lists the session under the same name as the
+   * own CLI reads it, so the CLI shows the session under the same name as the
    * sidebar.
    *
    * Called after the database row is already renamed, so the rename stands

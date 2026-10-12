@@ -1724,8 +1724,10 @@ export class ClaudeSessionsProvider implements IProviderSessions {
 
   /**
    * Writes a sidebar rename into the session's transcript as the CLI's own
-   * `/rename` rows, so `claude --resume` lists the session under the new name
-   * and a resumed CLI carries that name forward.
+   * `/rename` rows, so a CLI that resumes the session shows the new name and
+   * carries it forward. The `claude --resume` picker lists a session started
+   * in the terminal under it; one started in CloudCLI (through the SDK) is
+   * never in that picker and is resumed by id only.
    *
    * A CLI process that already has the session open keeps the names it holds
    * in memory and can write them back after these rows; a CLI that resumes

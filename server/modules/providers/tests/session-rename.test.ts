@@ -10,9 +10,9 @@ import { sessionsService } from '@/modules/providers/services/sessions.service.j
 
 /**
  * A rename made in CloudCLI lands in the Claude transcript as the rows the CLI
- * writes for `/rename`, so `claude --resume` lists the session under the same
- * name as the sidebar. These drive the rename the way the REST route does and
- * read the transcript back.
+ * writes for `/rename`, so a resumed CLI shows the session under the same name
+ * as the sidebar. These drive the rename the way the REST route does and read
+ * the transcript back.
  */
 
 const CLI_SESSION_ID = '11111111-1111-4111-8111-111111111111';
