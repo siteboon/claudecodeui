@@ -252,3 +252,98 @@ test('Agent route starts codex on the catalog default when the request names no 
 
   assert.deepEqual(codexCalls.map((call) => call.model), ['catalog-default']);
 });
+
+/**
+ * Runs one Agent request with no `model` against stub catalogs and returns the
+ * model each provider runtime was started with, plus the catalogs read.
+ */
+async function runWithoutModel(
+  provider: 'claude' | 'cursor',
+  catalogs: Record<string, { OPTIONS: { value: string; isCustom?: boolean }[]; DEFAULT: string; CUSTOM_MODELS_ONLY?: boolean }>,
+  requestedModel?: string,
+): Promise<{ models: (string | undefined)[]; catalogReads: string[] }> {
+  const models: (string | undefined)[] = [];
+  const catalogReads: string[] = [];
+  const recordModel = (async (_prompt: string, options: { model?: string }) => {
+    models.push(options.model);
+  }) as unknown as AgentDependencies['queryClaude'];
+
+  await withAgentServer(createDependencies({
+    fileSystem: {
+      access: async () => undefined,
+    } as unknown as AgentDependencies['fileSystem'],
+    models: {
+      getProviderModels: async (catalogProvider: string) => {
+        catalogReads.push(catalogProvider);
+        return catalogs[catalogProvider];
+      },
+    } as unknown as AgentDependencies['models'],
+    queryClaude: recordModel,
+    queryCursor: recordModel,
+  }), async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/agent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectPath: '/home/test/project',
+        message: 'Run',
+        provider,
+        stream: false,
+        ...(requestedModel ? { model: requestedModel } : {}),
+      }),
+    });
+    assert.equal(response.status, 200);
+  });
+
+  return { models, catalogReads };
+}
+
+test('Agent route starts Claude and Cursor on the first custom model while only custom models are listed', async () => {
+  // What the Providers service returns with "Use only my models" on.
+  const customOnly = (value: string) => ({
+    OPTIONS: [{ value, isCustom: true }, { value: `${value}-mini`, isCustom: true }],
+    DEFAULT: value,
+    CUSTOM_MODELS_ONLY: true,
+  });
+  const catalogs = { claude: customOnly('gateway/claude'), cursor: customOnly('gateway/cursor') };
+
+  assert.deepEqual(await runWithoutModel('claude', catalogs), {
+    models: ['gateway/claude'],
+    catalogReads: ['claude'],
+  });
+  assert.deepEqual(await runWithoutModel('cursor', catalogs), {
+    models: ['gateway/cursor'],
+    catalogReads: ['cursor'],
+  });
+  // A model named in the request still wins.
+  assert.deepEqual((await runWithoutModel('claude', catalogs, 'opus')).models, ['opus']);
+  assert.deepEqual((await runWithoutModel('cursor', catalogs, 'gpt-5')).models, ['gpt-5']);
+});
+
+test('Agent route keeps today\'s Claude and Cursor defaults while built-in models are listed', async () => {
+  const catalogs = {
+    claude: {
+      OPTIONS: [{ value: 'default', isCustom: false }, { value: 'gateway/claude', isCustom: true }],
+      DEFAULT: 'default',
+      CUSTOM_MODELS_ONLY: false,
+    },
+    cursor: {
+      OPTIONS: [{ value: 'auto', isCustom: false }, { value: 'gateway/cursor', isCustom: true }],
+      DEFAULT: 'auto',
+      CUSTOM_MODELS_ONLY: false,
+    },
+  };
+
+  // Claude's built-in DEFAULT is what its runtime falls back to anyway.
+  assert.deepEqual((await runWithoutModel('claude', catalogs)).models, ['default']);
+  // Cursor leaves the choice to its CLI, as before.
+  assert.deepEqual((await runWithoutModel('cursor', catalogs)).models, [undefined]);
+
+  // The flag on with no custom models lists the built-ins, so Cursor still
+  // leaves the choice to its CLI.
+  const flagWithoutCustomModels = {
+    ...catalogs,
+    cursor: { OPTIONS: [{ value: 'auto', isCustom: false }], DEFAULT: 'auto', CUSTOM_MODELS_ONLY: true },
+  };
+  assert.deepEqual((await runWithoutModel('cursor', flagWithoutCustomModels)).models, [undefined]);
+});
