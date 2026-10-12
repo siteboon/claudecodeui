@@ -52,8 +52,9 @@ function StoragePathRow({ icon, label, path, placeholder }: StoragePathRowProps)
       </div>
       <div className="min-w-0 flex-1">
         <div className="text-xs font-medium text-foreground">{label}</div>
-        {/* Paths are long and unbreakable; break anywhere so narrow screens never scroll sideways. */}
-        <code className="mt-0.5 block select-all break-all font-mono text-xs text-muted-foreground">
+        {/* Paths are long and unbreakable; break anywhere so narrow screens never scroll sideways.
+            dir="ltr" keeps the separators in order in right-to-left locales. */}
+        <code dir="ltr" className="mt-0.5 block select-all break-all font-mono text-xs text-muted-foreground">
           {path ?? placeholder}
         </code>
       </div>
