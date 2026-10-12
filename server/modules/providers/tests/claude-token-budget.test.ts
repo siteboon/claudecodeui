@@ -115,12 +115,14 @@ test('the modelUsage fallback sums every model the turn billed', () => {
 test('the modelUsage fallback skips malformed entries and returns null when none is usable', () => {
   const budget = extractCumulativeTokenBudget({
     type: 'result',
-    modelUsage: { broken: null, 'claude-sonnet-5': { inputTokens: 10, outputTokens: 5 } },
+    modelUsage: { broken: null, empty: {}, 'claude-sonnet-5': { inputTokens: 10, outputTokens: 5 } },
   });
   assert.ok(budget);
   assert.equal(budget.used, 15);
 
   assert.equal(extractCumulativeTokenBudget({ type: 'result', modelUsage: { broken: null } }), null);
+  assert.equal(extractCumulativeTokenBudget({ type: 'result', modelUsage: { broken: {} } }), null);
+  assert.equal(extractCumulativeTokenBudget({ type: 'result', modelUsage: { broken: { inputTokens: 'n/a' } } }), null);
   assert.equal(extractCumulativeTokenBudget({ type: 'result', modelUsage: {} }), null);
 });
 

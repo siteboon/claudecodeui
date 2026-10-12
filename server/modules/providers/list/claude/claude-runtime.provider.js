@@ -575,11 +575,22 @@ function extractCumulativeTokenBudget(sdkMessage) {
     if (!modelData || typeof modelData !== 'object') {
       continue;
     }
+    const counts = [
+      modelData.cumulativeInputTokens ?? modelData.inputTokens,
+      modelData.cumulativeOutputTokens ?? modelData.outputTokens,
+      modelData.cacheReadInputTokens,
+      modelData.cacheCreationInputTokens,
+    ];
+    // An entry with no count at all (`{}`) is not a zero bill; skip it so a
+    // modelUsage with nothing usable still yields no budget.
+    if (!counts.some((count) => Number.isFinite(count))) {
+      continue;
+    }
     entries += 1;
-    totals.inputTokens += readNumber(modelData.cumulativeInputTokens ?? modelData.inputTokens);
-    totals.outputTokens += readNumber(modelData.cumulativeOutputTokens ?? modelData.outputTokens);
-    totals.cacheReadInputTokens += readNumber(modelData.cacheReadInputTokens);
-    totals.cacheCreationInputTokens += readNumber(modelData.cacheCreationInputTokens);
+    totals.inputTokens += readNumber(counts[0]);
+    totals.outputTokens += readNumber(counts[1]);
+    totals.cacheReadInputTokens += readNumber(counts[2]);
+    totals.cacheCreationInputTokens += readNumber(counts[3]);
   }
 
   // Same shape and accounting as the `usage` branch above, cache reads and
