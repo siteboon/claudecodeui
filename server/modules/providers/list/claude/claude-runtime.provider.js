@@ -76,6 +76,10 @@ const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEO
 const BG_WAIT_CEILING_MS = 30 * 60 * 1000;
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
+// Permission modes in which the CLI approves tools without calling
+// `canUseTool`. Interaction-required tools reach the owner in these modes only
+// through the PreToolUse hook registered in queryClaudeSDK.
+const MODES_SKIPPING_CAN_USE_TOOL = new Set(['auto', 'bypassPermissions']);
 
 // Ultracode is a session-scoped setting rather than an SDK effort level: it pairs xhigh
 // effort with standing dynamic-workflow orchestration, and the CLI only honours it when
@@ -1018,12 +1022,6 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       }]
     };
 
-    // Caveat: in 'auto' and 'bypassPermissions' modes the SDK resolves approval
-    // at the permission-mode step and skips this callback, so interactive tools
-    // (AskUserQuestion, ExitPlanMode) won't reach the UI — the classifier/bypass
-    // auto-approves them and the model acts on a generated answer. Move these
-    // tools to a PreToolUse hook (runs before the mode check) if we need them
-    // to work in those modes.
     sdkOptions.canUseTool = async (toolName, input, context) => {
       const requiresInteraction = TOOLS_REQUIRING_INTERACTION.has(toolName);
 
@@ -1047,6 +1045,14 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         }
       }
 
+      return requestOwnerApproval(toolName, input, context?.signal);
+    };
+
+    // Asks the owner through the UI and waits for the answer. Interaction-
+    // required tools wait indefinitely; everything else uses the approval
+    // timeout.
+    const requestOwnerApproval = async (toolName, input, signal) => {
+      const requiresInteraction = TOOLS_REQUIRING_INTERACTION.has(toolName);
       const requestId = createRequestId();
       ws.send(createNormalizedMessage({ kind: 'permission_request', requestId, toolName, input, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
       emitNotification(createNotificationEvent({
@@ -1062,7 +1068,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
 
       const decision = await waitForToolApproval(requestId, {
         timeoutMs: requiresInteraction ? 0 : undefined,
-        signal: context?.signal,
+        signal,
         metadata: {
           // Keyed by the app session id so `chat.subscribe` can look pending
           // approvals up directly; provider id only for legacy callers.
@@ -1105,21 +1111,63 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       return { behavior: 'deny', message: decision.message ?? 'User denied tool use' };
     };
 
+    // Interaction-required tools (AskUserQuestion, ExitPlanMode) go to the
+    // owner in every permission mode. In 'auto' and 'bypassPermissions' the CLI
+    // approves tools at the permission-mode step and never calls `canUseTool`,
+    // so the model would act on an answer it generated itself. PreToolUse hooks
+    // run before that step, so those modes ask the owner through one. The
+    // other modes keep `canUseTool` as the only approval path: the CLI still
+    // calls it for these tools after a hook's 'allow', so a hook there would
+    // ask the owner twice.
+    if (MODES_SKIPPING_CAN_USE_TOOL.has(sdkOptions.permissionMode)) {
+      sdkOptions.hooks.PreToolUse = [{
+        matcher: [...TOOLS_REQUIRING_INTERACTION].join('|'),
+        hooks: [async (input, _toolUseId, hookOptions) => {
+          const toolName = input?.tool_name;
+          if (!TOOLS_REQUIRING_INTERACTION.has(toolName)) {
+            return {};
+          }
+          const result = await requestOwnerApproval(toolName, input?.tool_input, hookOptions?.signal);
+          return {
+            hookSpecificOutput: result.behavior === 'allow'
+              ? { hookEventName: 'PreToolUse', permissionDecision: 'allow', updatedInput: result.updatedInput }
+              : { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: result.message }
+          };
+        }]
+      }];
+    }
+
     // The SDK's own `query`, unless the caller supplies one (tests script the
     // stream to drive the hold logic below without a CLI process).
     const createQuery = context.createQuery ?? query;
     let heldPrompt = createHeldPromptStream(promptMessages);
     releasePromptStream = heldPrompt.release;
+    let hookedQuery = null;
     try {
-      queryInstance = createQuery({
+      hookedQuery = createQuery({
         prompt: heldPrompt.stream,
         options: sdkOptions
       });
+      // `query()` returns before the CLI has answered the initialize request
+      // that registers the hooks, so a rejected registration only shows here.
+      if (typeof hookedQuery.initializationResult === 'function') {
+        await hookedQuery.initializationResult();
+      }
+      queryInstance = hookedQuery;
     } catch (hookError) {
       // Older/newer SDK versions may not accept hook shapes yet.
       // Keep notification behavior operational via runtime events even if hook registration fails.
       console.warn('Failed to initialize Claude query with hooks, retrying without hooks:', hookError?.message || hookError);
+      // Shut down the failed attempt's CLI process before starting another.
+      hookedQuery?.close?.();
       delete sdkOptions.hooks;
+      // Without the PreToolUse hook, a mode that skips `canUseTool` would let
+      // the model answer interaction-required tools itself: disallow them.
+      if (MODES_SKIPPING_CAN_USE_TOOL.has(sdkOptions.permissionMode)) {
+        sdkOptions.disallowedTools = [
+          ...new Set([...(sdkOptions.disallowedTools || []), ...TOOLS_REQUIRING_INTERACTION])
+        ];
+      }
       // Discard the abandoned stream and build a fresh one for the retry.
       heldPrompt.release();
       heldPrompt = createHeldPromptStream(promptMessages);
