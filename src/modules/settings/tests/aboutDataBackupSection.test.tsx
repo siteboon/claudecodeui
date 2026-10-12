@@ -197,6 +197,24 @@ describe('Settings > About data & backup section', () => {
     expect((screen.getByRole('button', { name: 'Download backup' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it('clears the failure message when a retried download succeeds', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    stubServer('error');
+    const AboutTab = await loadAboutTab(false);
+    render(<AboutTab />);
+    await screen.findByText(DATABASE_PATH);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Download backup' }));
+    expect(await screen.findByRole('alert')).toBeTruthy();
+
+    // The next attempt reaches a server that can create the snapshot.
+    stubServer('ok');
+    fireEvent.click(screen.getByRole('button', { name: 'Download backup' }));
+
+    await waitFor(() => expect(clickedAnchors).toHaveLength(1));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('says once that the locations could not be read, and still offers the backup', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     stubServer('ok', 'error');
