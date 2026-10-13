@@ -8,6 +8,7 @@ const MAX_BUFFERED_BYTES = 1_000_000;
 
 type BrowserUseClientMessage =
   | { type: 'click'; x: number; y: number }
+  | { type: 'scroll'; x: number; y: number; deltaX: number; deltaY: number }
   | { type: 'text'; text: string }
   | { type: 'key'; key: string };
 
@@ -16,6 +17,16 @@ function parseClientMessage(raw: string): BrowserUseClientMessage | null {
     const body = JSON.parse(raw) as Record<string, unknown>;
     if (body.type === 'click' && Number.isFinite(body.x) && Number.isFinite(body.y)) {
       return { type: 'click', x: Number(body.x), y: Number(body.y) };
+    }
+    if (body.type === 'scroll' && Number.isFinite(body.x) && Number.isFinite(body.y)
+      && Number.isFinite(body.deltaX) && Number.isFinite(body.deltaY)) {
+      return {
+        type: 'scroll',
+        x: Number(body.x),
+        y: Number(body.y),
+        deltaX: Math.max(-5000, Math.min(5000, Number(body.deltaX))),
+        deltaY: Math.max(-5000, Math.min(5000, Number(body.deltaY))),
+      };
     }
     if (body.type === 'text' && typeof body.text === 'string' && body.text.length > 0 && body.text.length <= 2000) {
       return { type: 'text', text: body.text };

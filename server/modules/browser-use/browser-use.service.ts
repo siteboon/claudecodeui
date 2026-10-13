@@ -789,7 +789,10 @@ export const browserUseService = {
   /** Lets the signed-in user drive an agent-owned session (e.g. to complete a login the agent must not handle). */
   async userInput(
     sessionId: string,
-    input: { type: 'click'; x: number; y: number } | { type: 'text'; text: string } | { type: 'key'; key: string },
+    input: { type: 'click'; x: number; y: number }
+      | { type: 'scroll'; x: number; y: number; deltaX: number; deltaY: number }
+      | { type: 'text'; text: string }
+      | { type: 'key'; key: string },
     options: { refreshScreenshot?: boolean } = {},
   ) {
     const session = sessions.get(sessionId);
@@ -806,6 +809,9 @@ export const browserUseService = {
 
     if (input.type === 'click') {
       await handle.page.mouse.click(input.x, input.y);
+    } else if (input.type === 'scroll') {
+      await handle.page.mouse.move(input.x, input.y);
+      await handle.page.mouse.wheel(input.deltaX, input.deltaY);
     } else if (input.type === 'text') {
       await handle.page.keyboard.insertText(input.text);
     } else {

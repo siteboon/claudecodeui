@@ -5,6 +5,7 @@ import { getStoredAuthToken } from '@/shared/authToken';
 
 export type BrowserUseInput =
   | { type: 'click'; x: number; y: number }
+  | { type: 'scroll'; x: number; y: number; deltaX: number; deltaY: number }
   | { type: 'text'; text: string }
   | { type: 'key'; key: string };
 

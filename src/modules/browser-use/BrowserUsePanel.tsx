@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -254,6 +254,54 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
     }
   }, [selectedSession, sendLiveInput, t]);
 
+  // Wheel events must be non-passive to stop the panel itself from scrolling, which React's
+  // onWheel cannot do; so listen on the document and act only while the pointer is over the surface.
+  const hoveredSurfaceRef = useRef<HTMLElement | null>(null);
+  const wheelStateRef = useRef({ isLive, viewport: selectedSession?.viewport ?? null, sendLiveInput });
+  useEffect(() => {
+    wheelStateRef.current = { isLive, viewport: selectedSession?.viewport ?? null, sendLiveInput };
+  }, [isLive, selectedSession?.viewport, sendLiveInput]);
+
+  useEffect(() => {
+    let pending: { x: number; y: number; deltaX: number; deltaY: number } | null = null;
+    let timer: number | null = null;
+
+    const flush = () => {
+      timer = null;
+      if (pending) {
+        wheelStateRef.current.sendLiveInput({ type: 'scroll', ...pending });
+        pending = null;
+      }
+    };
+
+    const onWheel = (event: WheelEvent) => {
+      const surface = hoveredSurfaceRef.current;
+      const { isLive: live, viewport } = wheelStateRef.current;
+      if (!surface || !live || !viewport) return;
+      const image = surface.querySelector('img');
+      const rect = image?.getBoundingClientRect();
+      if (!rect || !rect.width || !rect.height) return;
+
+      event.preventDefault();
+      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 800 : 1;
+      pending = {
+        x: ((event.clientX - rect.left) / rect.width) * viewport.width,
+        y: ((event.clientY - rect.top) / rect.height) * viewport.height,
+        deltaX: (pending?.deltaX ?? 0) + event.deltaX * unit,
+        deltaY: (pending?.deltaY ?? 0) + event.deltaY * unit,
+      };
+      if (timer === null) {
+        timer = window.setTimeout(flush, 40);
+      }
+    };
+
+    document.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      document.removeEventListener('wheel', onWheel);
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, []);
+
   const handleSurfaceClick = (event: MouseEvent<HTMLImageElement>) => {
     const viewport = selectedSession?.viewport;
     if (!viewport) return;
@@ -394,6 +442,8 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
           className="relative inline-block max-h-full outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
           tabIndex={isLive ? 0 : -1}
           onKeyDown={handleSurfaceKeyDown}
+          onMouseEnter={(event) => { hoveredSurfaceRef.current = event.currentTarget; }}
+          onMouseLeave={() => { hoveredSurfaceRef.current = null; }}
         >
           <img
             src={liveFrameUrl ?? selectedSession.screenshotDataUrl}
