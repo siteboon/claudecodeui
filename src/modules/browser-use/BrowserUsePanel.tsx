@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { KeyboardEvent, MouseEvent } from 'react';
+import type { ClipboardEvent, KeyboardEvent, MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Bot,
@@ -236,9 +236,28 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
 
   const [inputText, setInputText] = useState('');
 
+  // The page's selection arrives from the server after a copy/cut; put it on the user's clipboard.
+  const writeLocalClipboard = useCallback((text: string) => {
+    if (!text) return;
+    if (navigator.clipboard?.writeText) {
+      void navigator.clipboard.writeText(text).catch(() => undefined);
+      return;
+    }
+    // Plain-http pages have no async clipboard API; fall back to a temporary textarea.
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+  }, []);
+
   const { frameUrl: liveFrameUrl, isLive, send: sendLiveInput } = useBrowserUseStream(
     selectedSession?.id ?? null,
     isVisible && selectedSession?.status === 'ready',
+    writeLocalClipboard,
   );
 
   const sendInput = useCallback(async (input: BrowserUseInput) => {
@@ -302,16 +321,39 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
     };
   }, []);
 
-  const handleSurfaceClick = (event: MouseEvent<HTMLImageElement>) => {
+  const toViewportPoint = (event: MouseEvent<HTMLImageElement>) => {
     const viewport = selectedSession?.viewport;
-    if (!viewport) return;
+    if (!viewport) return null;
     const rect = event.currentTarget.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
-    void sendInput({
-      type: 'click',
+    if (!rect.width || !rect.height) return null;
+    return {
       x: ((event.clientX - rect.left) / rect.width) * viewport.width,
       y: ((event.clientY - rect.top) / rect.height) * viewport.height,
-    });
+    };
+  };
+
+  // `event.detail` is the browser's click count, so double and triple clicks select words and lines.
+  const handleSurfaceClick = (event: MouseEvent<HTMLImageElement>) => {
+    const point = toViewportPoint(event);
+    if (!point) return;
+    void sendInput({ type: 'click', ...point, clickCount: Math.min(Math.max(event.detail, 1), 3) });
+  };
+
+  const handleSurfaceContextMenu = (event: MouseEvent<HTMLImageElement>) => {
+    event.preventDefault();
+    const point = toViewportPoint(event);
+    if (!point || !isLive) return;
+    sendLiveInput({ type: 'click', ...point, button: 'right' });
+  };
+
+  const handleSurfacePaste = (event: ClipboardEvent<HTMLDivElement>) => {
+    if (!isLive) return;
+    event.preventDefault();
+    const text = event.clipboardData.getData('text/plain');
+    // The server accepts up to 2000 characters per message.
+    for (let index = 0; index < text.length; index += 2000) {
+      sendLiveInput({ type: 'text', text: text.slice(index, index + 2000) });
+    }
   };
 
   const handleSurfaceKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -322,8 +364,18 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
       return;
     }
     if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock'].includes(event.key)) return;
+
+    const shortcut = (event.ctrlKey || event.metaKey) && !event.altKey ? event.key.toLowerCase() : '';
+    // Paste is handled by the `paste` event, which carries the user's clipboard text.
+    if (shortcut === 'v') return;
     event.preventDefault();
-    const modifiers = [event.ctrlKey && 'Control', event.altKey && 'Alt', event.metaKey && 'Meta'].filter(Boolean);
+    // Copy/cut: ask the page for its selection first (messages are processed in order), then cut.
+    if (shortcut === 'c' || shortcut === 'x') {
+      sendLiveInput({ type: 'copy' });
+      if (shortcut === 'c') return;
+    }
+    // Command (Mac) shortcuts map to Control, which is what the remote Linux Chromium expects.
+    const modifiers = [(event.ctrlKey || event.metaKey) && 'Control', event.altKey && 'Alt'].filter(Boolean);
     void sendInput({ type: 'key', key: [...modifiers, event.key].join('+') });
   };
 
@@ -442,6 +494,7 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
           className="relative inline-block max-h-full outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
           tabIndex={isLive ? 0 : -1}
           onKeyDown={handleSurfaceKeyDown}
+          onPaste={handleSurfacePaste}
           onMouseEnter={(event) => { hoveredSurfaceRef.current = event.currentTarget; }}
           onMouseLeave={() => { hoveredSurfaceRef.current = null; }}
         >
@@ -449,6 +502,7 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
             src={liveFrameUrl ?? selectedSession.screenshotDataUrl}
             alt={t('browserUse.screenshotAlt')}
             onClick={handleSurfaceClick}
+            onContextMenu={handleSurfaceContextMenu}
             className={cn(
               fullscreen ? 'block max-h-[80vh] w-auto max-w-full object-contain' : 'block max-h-[72vh] w-auto max-w-full object-contain',
               selectedSession.status === 'ready' && 'cursor-pointer',

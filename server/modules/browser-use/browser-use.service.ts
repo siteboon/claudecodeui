@@ -789,7 +789,7 @@ export const browserUseService = {
   /** Lets the signed-in user drive an agent-owned session (e.g. to complete a login the agent must not handle). */
   async userInput(
     sessionId: string,
-    input: { type: 'click'; x: number; y: number }
+    input: { type: 'click'; x: number; y: number; button?: 'left' | 'right' | 'middle'; clickCount?: number }
       | { type: 'scroll'; x: number; y: number; deltaX: number; deltaY: number }
       | { type: 'text'; text: string }
       | { type: 'key'; key: string },
@@ -808,7 +808,7 @@ export const browserUseService = {
     }
 
     if (input.type === 'click') {
-      await handle.page.mouse.click(input.x, input.y);
+      await handle.page.mouse.click(input.x, input.y, { button: input.button ?? 'left', clickCount: input.clickCount ?? 1 });
     } else if (input.type === 'scroll') {
       await handle.page.mouse.move(input.x, input.y);
       await handle.page.mouse.wheel(input.deltaX, input.deltaY);
@@ -824,6 +824,31 @@ export const browserUseService = {
       await captureSession(session, handle.page);
     }
     return publicSession(session);
+  },
+
+  /** Returns the text currently selected in the page (or in a focused text field) for the panel's copy/cut. */
+  async readSelectedText(sessionId: string): Promise<string> {
+    const session = sessions.get(sessionId);
+    if (!session || session.ownerId !== AGENT_OWNER_ID) {
+      throw new Error('Browser session not found.');
+    }
+    const handle = handles.get(sessionId);
+    if (session.status !== 'ready' || !handle?.page) {
+      throw new Error(session.message || 'Browser session is not available.');
+    }
+    // Evaluated in the page; a string keeps the server build free of DOM typings.
+    const text = await handle.page.evaluate(`(() => {
+      const element = document.activeElement;
+      if (element && typeof element.selectionStart === 'number' && typeof element.selectionEnd === 'number') {
+        // Like a real browser, never hand out the contents of a password field.
+        if (element.type === 'password') {
+          return '';
+        }
+        return element.value.slice(element.selectionStart, element.selectionEnd);
+      }
+      return (window.getSelection() || '').toString();
+    })()`);
+    return typeof text === 'string' ? text : '';
   },
 
   /**

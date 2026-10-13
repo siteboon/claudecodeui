@@ -4,10 +4,11 @@ import { IS_PLATFORM } from '@/shared/utils';
 import { getStoredAuthToken } from '@/shared/authToken';
 
 export type BrowserUseInput =
-  | { type: 'click'; x: number; y: number }
+  | { type: 'click'; x: number; y: number; button?: 'left' | 'right' | 'middle'; clickCount?: number }
   | { type: 'scroll'; x: number; y: number; deltaX: number; deltaY: number }
   | { type: 'text'; text: string }
-  | { type: 'key'; key: string };
+  | { type: 'key'; key: string }
+  | { type: 'copy' };
 
 function getBrowserUseStreamUrl(sessionId: string): string | null {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -24,8 +25,16 @@ function getBrowserUseStreamUrl(sessionId: string): string | null {
  * `send` that forwards input over the same socket. `isLive` is false until the first frame arrives
  * (and after the socket drops), so callers can fall back to polled screenshots and HTTP input.
  */
-export function useBrowserUseStream(sessionId: string | null, enabled: boolean) {
+export function useBrowserUseStream(
+  sessionId: string | null,
+  enabled: boolean,
+  onClipboardText?: (text: string) => void,
+) {
   const socketRef = useRef<WebSocket | null>(null);
+  const onClipboardTextRef = useRef(onClipboardText);
+  useEffect(() => {
+    onClipboardTextRef.current = onClipboardText;
+  }, [onClipboardText]);
   const [frameUrl, setFrameUrl] = useState<string | null>(null);
   const [isLive, setIsLive] = useState(false);
 
@@ -44,6 +53,17 @@ export function useBrowserUseStream(sessionId: string | null, enabled: boolean) 
     let currentFrameUrl: string | null = null;
 
     socket.onmessage = (event) => {
+      if (typeof event.data === 'string') {
+        try {
+          const message = JSON.parse(event.data) as { type?: string; text?: unknown };
+          if (message.type === 'clipboard' && typeof message.text === 'string') {
+            onClipboardTextRef.current?.(message.text);
+          }
+        } catch {
+          // Ignore malformed messages.
+        }
+        return;
+      }
       if (!(event.data instanceof Blob)) {
         return;
       }
