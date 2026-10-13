@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { MouseEvent } from 'react';
+import type { KeyboardEvent, MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Bot,
@@ -20,6 +20,8 @@ import { cn } from '@/shared/utils';
 import { Badge, Button, Input } from '@/shared/ui';
 import { api, readApiJson, ApiRequestError } from '@/shared/api';
 import type { SettingsMainTab } from '@/shared/types';
+import { useBrowserUseStream } from '@/modules/browser-use/hooks/useBrowserUseStream';
+import type { BrowserUseInput } from '@/modules/browser-use/hooks/useBrowserUseStream';
 
 type BrowserUseStatus = {
   enabled: boolean;
@@ -234,8 +236,14 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
 
   const [inputText, setInputText] = useState('');
 
-  const sendInput = useCallback(async (input: { type: 'click'; x: number; y: number } | { type: 'text'; text: string } | { type: 'key'; key: string }) => {
+  const { frameUrl: liveFrameUrl, isLive, send: sendLiveInput } = useBrowserUseStream(
+    selectedSession?.id ?? null,
+    isVisible && selectedSession?.status === 'ready',
+  );
+
+  const sendInput = useCallback(async (input: BrowserUseInput) => {
     if (!selectedSession || selectedSession.status !== 'ready') return;
+    if (sendLiveInput(input)) return;
     setError(null);
     try {
       const response = await api.browserUse.sendInput(selectedSession.id, input);
@@ -244,7 +252,7 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
     } catch (err) {
       setError(localizeApiError(err, 'browserUse.actionFailed', t));
     }
-  }, [selectedSession, t]);
+  }, [selectedSession, sendLiveInput, t]);
 
   const handleSurfaceClick = (event: MouseEvent<HTMLImageElement>) => {
     const viewport = selectedSession?.viewport;
@@ -256,6 +264,19 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
       x: ((event.clientX - rect.left) / rect.width) * viewport.width,
       y: ((event.clientY - rect.top) / rect.height) * viewport.height,
     });
+  };
+
+  const handleSurfaceKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!isLive || event.target !== event.currentTarget) return;
+    if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      event.preventDefault();
+      void sendInput({ type: 'text', text: event.key });
+      return;
+    }
+    if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock'].includes(event.key)) return;
+    event.preventDefault();
+    const modifiers = [event.ctrlKey && 'Control', event.altKey && 'Alt', event.metaKey && 'Meta'].filter(Boolean);
+    void sendInput({ type: 'key', key: [...modifiers, event.key].join('+') });
   };
 
   const submitInputText = async () => {
@@ -369,9 +390,13 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
   const renderBrowserScreen = (fullscreen = false) => (
     <div className={cn('flex flex-1 items-center justify-center bg-neutral-950', fullscreen ? 'min-h-[80vh]' : 'min-h-[420px]')}>
       {selectedSession?.screenshotDataUrl ? (
-        <div className="relative inline-block max-h-full">
+        <div
+          className="relative inline-block max-h-full outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+          tabIndex={isLive ? 0 : -1}
+          onKeyDown={handleSurfaceKeyDown}
+        >
           <img
-            src={selectedSession.screenshotDataUrl}
+            src={liveFrameUrl ?? selectedSession.screenshotDataUrl}
             alt={t('browserUse.screenshotAlt')}
             onClick={handleSurfaceClick}
             className={cn(
@@ -419,7 +444,7 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
           <Button variant="outline" size="sm" onClick={() => void sendInput({ type: 'key', key: 'Backspace' })}>{t('browserUse.inputBackspace')}</Button>
           <Button variant="outline" size="sm" onClick={() => void sendInput({ type: 'key', key: 'Tab' })}>{t('browserUse.inputTab')}</Button>
           <Button variant="outline" size="sm" onClick={() => void sendInput({ type: 'key', key: 'Enter' })}>{t('browserUse.inputEnter')}</Button>
-          <span className="w-full text-xs text-muted-foreground">{t('browserUse.inputHint')}</span>
+          <span className="w-full text-xs text-muted-foreground">{isLive ? t('browserUse.inputHintLive') : t('browserUse.inputHint')}</span>
         </div>
       )}
     </div>

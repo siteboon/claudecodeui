@@ -790,6 +790,7 @@ export const browserUseService = {
   async userInput(
     sessionId: string,
     input: { type: 'click'; x: number; y: number } | { type: 'text'; text: string } | { type: 'key'; key: string },
+    options: { refreshScreenshot?: boolean } = {},
   ) {
     const session = sessions.get(sessionId);
     if (!session || session.ownerId !== AGENT_OWNER_ID) {
@@ -813,8 +814,43 @@ export const browserUseService = {
 
     session.lastAction = `user_${input.type}`;
     session.cursor = null;
-    await captureSession(session, handle.page);
+    if (options.refreshScreenshot !== false) {
+      await captureSession(session, handle.page);
+    }
     return publicSession(session);
+  },
+
+  /**
+   * Streams the session's page as JPEG frames through Chromium's screencast so the panel can show
+   * it live. Returns a stop function; frames are acknowledged so Chromium keeps producing them.
+   */
+  async startScreencast(
+    sessionId: string,
+    onFrame: (frame: Buffer) => void,
+  ): Promise<() => Promise<void>> {
+    const session = sessions.get(sessionId);
+    if (!session || session.ownerId !== AGENT_OWNER_ID) {
+      throw new Error('Browser session not found.');
+    }
+    if (session.status !== 'ready') {
+      throw new Error(session.message || 'Browser session is not available.');
+    }
+    const handle = handles.get(sessionId);
+    if (!handle?.page || !handle.context) {
+      throw new Error('Browser runtime handle is not available.');
+    }
+
+    const cdp = await handle.context.newCDPSession(handle.page);
+    cdp.on('Page.screencastFrame', (frame: { data: string; sessionId: number }) => {
+      onFrame(Buffer.from(frame.data, 'base64'));
+      void cdp.send('Page.screencastFrameAck', { sessionId: frame.sessionId }).catch(() => undefined);
+    });
+    await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 55, everyNthFrame: 1 });
+
+    return async () => {
+      await cdp.send('Page.stopScreencast').catch(() => undefined);
+      await cdp.detach().catch(() => undefined);
+    };
   },
 
   async stopSession(sessionId: string) {

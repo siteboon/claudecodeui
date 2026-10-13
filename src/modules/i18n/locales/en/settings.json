@@ -746,6 +746,7 @@
     "inputTab": "Tab",
     "inputBackspace": "Backspace",
     "inputHint": "Click the screenshot to click in the page.",
+    "inputHintLive": "Live. Click the page, then type with your keyboard.",
     "requestFailed": "Request failed ({{status}})",
     "never": "Never",
     "unknown": "Unknown",
