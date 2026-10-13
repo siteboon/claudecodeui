@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import os, { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
@@ -8,6 +8,7 @@ import Database from 'better-sqlite3';
 
 import {
   createProviderTokenUsageService,
+  readClaudeTranscriptTokenUsage,
   summarizeClaudeTokenUsage,
 } from '@/modules/providers/services/provider-token-usage.service.js';
 import { AppError } from '@/shared/utils.js';
@@ -369,5 +370,44 @@ test('Codex token usage falls back to the whole file when the tail has no token_
     assert.equal(usage.used, 6);
   } finally {
     await rm(tempDirectory, { recursive: true, force: true });
+  }
+});
+
+test('readClaudeTranscriptTokenUsage reads the newest account from the transcript', async () => {
+  const tempHome = await mkdtemp(path.join(tmpdir(), 'claude-transcript-home-'));
+  const originalHomedir = os.homedir;
+  (os as never as { homedir: () => string }).homedir = () => tempHome;
+
+  try {
+    const encoded = '/workspace/demo'.replace(/[^a-zA-Z0-9-]/g, '-');
+    const projectDir = path.join(tempHome, '.claude', 'projects', encoded);
+    await mkdir(projectDir, { recursive: true });
+    await writeFile(path.join(projectDir, 'native-1.jsonl'), [
+      JSON.stringify({
+        type: 'assistant',
+        isSidechain: false,
+        message: { role: 'assistant', usage: { input_tokens: 3, cache_creation_input_tokens: 0, cache_read_input_tokens: 10_000, output_tokens: 40 } },
+      }),
+      // Synthetic rows are written with an all-zero block; the newest real
+      // reading must win over them.
+      JSON.stringify({
+        type: 'assistant',
+        isSidechain: false,
+        message: { role: 'assistant', model: '<synthetic>', usage: { input_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 0 } },
+      }),
+    ].join('\n'), 'utf8');
+
+    const usage = await readClaudeTranscriptTokenUsage('native-1', '/workspace/demo');
+    assert.ok(usage);
+    assert.equal(usage.used, 10_043);
+
+    assert.equal(
+      await readClaudeTranscriptTokenUsage('missing-session', '/workspace/demo'),
+      null,
+      'an unknown session has no reading, which is not zero',
+    );
+  } finally {
+    (os as never as { homedir: () => string }).homedir = originalHomedir;
+    await rm(tempHome, { recursive: true, force: true });
   }
 });

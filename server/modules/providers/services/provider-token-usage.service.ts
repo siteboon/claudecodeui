@@ -276,6 +276,47 @@ function claudeEntriesHaveUsage(entries: AnyRecord[]): boolean {
   return entries.some((entry) => entry?.type === 'assistant' && entry.message?.usage);
 }
 
+/**
+ * Live context-window reading from a Claude session transcript, addressed by
+ * provider-native ids instead of an app session row.
+ *
+ * Used by the Claude runtime's live stream: some gateways stream assistant
+ * frames whose usage account is partial or zero, but the CLI's transcript on
+ * disk always carries the complete per-request account, written as each API
+ * response finishes. Reading the newest such row mid-turn is therefore the
+ * reliable live source on every deployment — a brand-new session's first turn
+ * included, before any history fetch could supply a figure.
+ *
+ * Returns null when the transcript cannot be located or holds no usage yet;
+ * callers keep their previous reading rather than treating that as zero.
+ */
+export async function readClaudeTranscriptTokenUsage(
+  providerSessionId: string,
+  projectPath: string,
+): Promise<TokenUsageResult | null> {
+  const encodedProjectPath = projectPath.replace(/[^a-zA-Z0-9-]/g, '-');
+  const sessionFilePath = path.join(
+    defaultDependencies.getHomeDirectory(),
+    '.claude',
+    'projects',
+    encodedProjectPath,
+    `${providerSessionId}.jsonl`,
+  );
+
+  if (!defaultDependencies.fileExists(sessionFilePath)) {
+    return null;
+  }
+
+  const tail = await defaultDependencies.readTextFileTail(sessionFilePath, TOKEN_USAGE_TAIL_BYTES);
+  let entries = parseClaudeUsageEntries(tail.content);
+  if (!claudeEntriesHaveUsage(entries) && !tail.isComplete) {
+    entries = parseClaudeUsageEntries(await defaultDependencies.readTextFile(sessionFilePath));
+  }
+
+  const usage = summarizeClaudeTokenUsage(entries, defaultDependencies.getClaudeContextWindow());
+  return usage.used > 0 ? usage : null;
+}
+
 function readOpenCodeTokenUsage(databasePath: string, providerSessionId: string): TokenUsageResult {
   const database = new Database(databasePath, { readonly: true, fileMustExist: true });
   try {

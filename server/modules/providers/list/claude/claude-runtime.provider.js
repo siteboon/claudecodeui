@@ -37,6 +37,7 @@ import {
   notifyUserIfEnabled
 } from '@/modules/notifications/index.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
+import { readClaudeTranscriptTokenUsage } from '@/modules/providers/services/provider-token-usage.service.js';
 import { createCompleteMessage, createNormalizedMessage } from '@/shared/utils.js';
 
 const activeSessions = new Map();
@@ -500,6 +501,16 @@ function buildTokenBudget(messageUsage) {
 }
 
 /**
+ * The two halves of a request's cache accounting, each in every casing the SDK
+ * has used for it. Presence — not the value — is what marks a usage payload a
+ * complete account, because both halves are reported even when unused.
+ */
+const CACHE_USAGE_KEY_GROUPS = [
+  ['cache_creation_input_tokens', 'cacheCreationInputTokens', 'cacheCreationTokens'],
+  ['cache_read_input_tokens', 'cacheReadInputTokens', 'cacheReadTokens'],
+];
+
+/**
  * Extracts the session's context-window usage from an SDK stream message.
  *
  * Only assistant messages describe the context window: each one reports the
@@ -533,7 +544,31 @@ function extractTokenBudget(sdkMessage) {
     return null;
   }
 
-  return buildTokenBudget(messageUsage);
+  // A reading is one request's whole prompt: the uncached input plus both
+  // cache halves. Some stacks stream assistant frames whose account carries
+  // input and output only — the uncached remainder, single digits against a
+  // warm cache, or zeros outright — and publishing one replaced the real
+  // figure with 0 or 2 for the rest of the turn. A payload that reports both
+  // cache halves is complete; anything else is left for the transcript
+  // fallback in the stream loop.
+  const reportsCacheAccount = CACHE_USAGE_KEY_GROUPS.every((keys) =>
+    keys.some((key) => messageUsage[key] != null && Number.isFinite(Number(messageUsage[key])))
+  );
+  if (!reportsCacheAccount) {
+    return null;
+  }
+
+  const budget = buildTokenBudget(messageUsage);
+
+  // There is no context window without a prompt: an account that is zero
+  // throughout is one of the messages the CLI writes itself (model
+  // `<synthetic>`: the interrupt notice, an API error, the usage-limit line),
+  // not a measurement of this conversation.
+  if (budget.inputTokens <= 0) {
+    return null;
+  }
+
+  return budget;
 }
 
 /**
@@ -1175,11 +1210,23 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         ws.send(msg);
       }
 
-      // Extract and send token budget updates from assistant usage payloads,
-      // falling back to the turn's cumulative bill only for SDK builds that
-      // report no per-assistant usage at all.
-      const tokenBudgetData = extractTokenBudget(message)
-        || (assistantBudgetSent ? null : extractCumulativeTokenBudget(message));
+      // Extract and send token budget updates from assistant usage payloads.
+      // A streamed frame whose account is partial or all-zero yields no
+      // reading, so the session transcript is read instead: the CLI writes
+      // each finished API response's complete account there mid-turn, which
+      // keeps the live counter correct even behind gateways that normalise
+      // streamed usage away. The turn's cumulative bill remains the last
+      // resort, for SDK builds that report no per-assistant usage at all.
+      let tokenBudgetData = extractTokenBudget(message);
+      if (!tokenBudgetData && message.type === 'assistant' && !message.parent_tool_use_id) {
+        const transcriptSessionId = capturedSessionId || providerSessionId;
+        if (transcriptSessionId && options.cwd) {
+          tokenBudgetData = await readClaudeTranscriptTokenUsage(transcriptSessionId, options.cwd);
+        }
+      }
+      if (!tokenBudgetData && !assistantBudgetSent) {
+        tokenBudgetData = extractCumulativeTokenBudget(message);
+      }
       if (tokenBudgetData) {
         if (message.type === 'assistant') {
           assistantBudgetSent = true;
