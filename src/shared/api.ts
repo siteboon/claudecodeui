@@ -580,6 +580,7 @@ export const api = {
     sessions: () => get('/api/browser-use/sessions'),
     stopSession: (sessionId: string) => post(`/api/browser-use/sessions/${sessionId}/stop`),
     deleteSession: (sessionId: string) => del(`/api/browser-use/sessions/${sessionId}`),
+    sendInput: (sessionId: string, input: unknown) => post(`/api/browser-use/sessions/${sessionId}/input`, input),
     installRuntime: () => post('/api/browser-use/runtime/install'),
   },
 

@@ -786,6 +786,37 @@ export const browserUseService = {
     };
   },
 
+  /** Lets the signed-in user drive an agent-owned session (e.g. to complete a login the agent must not handle). */
+  async userInput(
+    sessionId: string,
+    input: { type: 'click'; x: number; y: number } | { type: 'text'; text: string } | { type: 'key'; key: string },
+  ) {
+    const session = sessions.get(sessionId);
+    if (!session || session.ownerId !== AGENT_OWNER_ID) {
+      throw new Error('Browser session not found.');
+    }
+    if (session.status !== 'ready') {
+      throw new Error(session.message || 'Browser session is not available.');
+    }
+    const handle = handles.get(sessionId);
+    if (!handle?.page) {
+      throw new Error('Browser runtime handle is not available.');
+    }
+
+    if (input.type === 'click') {
+      await handle.page.mouse.click(input.x, input.y);
+    } else if (input.type === 'text') {
+      await handle.page.keyboard.insertText(input.text);
+    } else {
+      await handle.page.keyboard.press(input.key);
+    }
+
+    session.lastAction = `user_${input.type}`;
+    session.cursor = null;
+    await captureSession(session, handle.page);
+    return publicSession(session);
+  },
+
   async stopSession(sessionId: string) {
     const session = sessions.get(sessionId);
     if (!session || session.ownerId !== AGENT_OWNER_ID) {
