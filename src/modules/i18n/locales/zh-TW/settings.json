@@ -384,6 +384,25 @@
       "placeholder": "例如：\"Bash(rm:*)\"",
       "empty": "未設定停用的工具"
     },
+    "settingsFiles": {
+      "title": "來自 Claude 設定檔的規則",
+      "description": "Claude CLI 會在上方清單之外一併套用這些規則。拒絕規則無論設定在哪裡都優先，但對於「允許的工具」中已允許的工具，詢問規則不會再要求確認。這裡僅供檢視；請在檔案中編輯。",
+      "sources": {
+        "user": "您的設定",
+        "managed": "受管理設定（管理員）"
+      },
+      "groups": {
+        "allow": "允許",
+        "ask": "詢問",
+        "deny": "拒絕"
+      },
+      "missing": "找不到檔案，因此不會新增任何規則。",
+      "invalid": "無法讀取此檔案。請確認它是有效的 JSON。",
+      "empty": "此檔案中沒有權限規則。",
+      "loading": "正在載入規則…",
+      "loadFailed": "無法載入 Claude 設定檔中的規則。",
+      "projectNote": "專案本身的 .claude/settings.json 與 .claude/settings.local.json 也會套用於該專案中的聊天。在該資料夾受信任之前，Claude CLI 會忽略 .claude/settings.json 中的允許規則：請在該資料夾中以互動模式執行一次 Claude Code，並接受信任對話框。"
+    },
     "allowedCommands": {
       "title": "允許的 Shell 指令",
       "description": "無需權限提示即可自動執行的 Shell 指令",

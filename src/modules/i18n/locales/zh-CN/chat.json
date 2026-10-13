@@ -52,6 +52,22 @@
     "viewFullOutput": "查看完整输出（{{count}} 个字符）",
     "contentDisplayed": "文件内容显示在上面的差异视图中"
   },
+  "bashEditDiff": {
+    "created": "已创建",
+    "updated": "已更新",
+    "deleted": "已删除",
+    "emptyFile": "空文件",
+    "moreLines_other": "… 还有 {{count}} 行",
+    "moreFiles_other": "… 另有 {{count}} 个文件已更改",
+    "filesNotShown_other": "{{count}} 个文件已更改（二进制、仅模式变更或过大无法显示）",
+    "filesUnavailable_other": "{{count}} 个文件已更改（无法获取差异）",
+    "filesChanged_other": "{{count}} 个文件已更改",
+    "morePaths_other": "另有 {{count}} 个",
+    "diffUnavailable": "（无法获取此命令的文件差异）",
+    "partUnavailable": "（部分差异无法获取）",
+    "skipped": "（已跳过此 git 命令的文件差异）",
+    "shared": "（同一时间有另一个命令在此仓库中运行；任一命令所做的更改都可能显示在任一结果下）"
+  },
   "thinking": {
     "title": "思考中...",
     "emoji": "💭 思考中..."
@@ -178,7 +194,8 @@
     "status": {
       "newSession": "新会话",
       "initializing": "初始化中...",
-      "restarting": "重启中..."
+      "restarting": "重启中...",
+      "themeRestartHint": "重启以将新主题应用到 Claude Code"
     },
     "actions": {
       "disconnect": "断开连接",
@@ -277,5 +294,10 @@
     "failed": "未发送 — {{reason}}",
     "cancel": "取消定时消息",
     "dismiss": "关闭失败提示"
+  },
+  "modelLibrary": {
+    "effortLevels": "推理级别",
+    "effortLevelsHint": "选择此模型支持的推理强度级别。若未选择任何级别，将无法在输入框中为此模型选择级别。",
+    "effortSummary": "推理：{{levels}}"
   }
 }

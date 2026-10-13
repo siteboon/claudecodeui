@@ -51,6 +51,28 @@
     "viewFullOutput": "Vedi output completo ({{count}} caratteri)",
     "contentDisplayed": "Il contenuto del file è visualizzato nella vista differenze sopra"
   },
+  "bashEditDiff": {
+    "created": "Creato",
+    "updated": "Aggiornato",
+    "deleted": "Eliminato",
+    "emptyFile": "File vuoto",
+    "moreLines_one": "… {{count}} altra riga",
+    "moreLines_other": "… altre {{count}} righe",
+    "moreFiles_one": "… {{count}} altro file modificato",
+    "moreFiles_other": "… altri {{count}} file modificati",
+    "filesNotShown_one": "{{count}} file modificato (binario, solo modalità o troppo grande da mostrare)",
+    "filesNotShown_other": "{{count}} file modificati (binari, solo modalità o troppo grandi da mostrare)",
+    "filesUnavailable_one": "{{count}} file modificato (diff non disponibile)",
+    "filesUnavailable_other": "{{count}} file modificati (diff non disponibile)",
+    "filesChanged_one": "{{count}} file modificato",
+    "filesChanged_other": "{{count}} file modificati",
+    "morePaths_one": "+{{count}} altro",
+    "morePaths_other": "+{{count}} altri",
+    "diffUnavailable": "(diff dei file non disponibile per questo comando)",
+    "partUnavailable": "(parte del diff non è disponibile)",
+    "skipped": "(diff dei file saltato per questo comando git)",
+    "shared": "(un altro comando è stato eseguito contemporaneamente in questo repository; una modifica fatta da uno dei due può comparire sotto entrambi i risultati)"
+  },
   "thinking": {
     "title": "Sto pensando...",
     "emoji": "💭 Sto pensando..."
@@ -158,7 +180,8 @@
     "status": {
       "newSession": "Nuova sessione",
       "initializing": "Inizializzazione...",
-      "restarting": "Riavvio..."
+      "restarting": "Riavvio...",
+      "themeRestartHint": "Riavvia per applicare il nuovo tema a Claude Code"
     },
     "actions": {
       "disconnect": "Disconnetti",
@@ -256,5 +279,10 @@
     "failed": "Non inviato — {{reason}}",
     "cancel": "Annulla messaggio programmato",
     "dismiss": "Ignora l'avviso di errore"
+  },
+  "modelLibrary": {
+    "effortLevels": "Livelli di ragionamento",
+    "effortLevelsHint": "Seleziona i livelli di sforzo di ragionamento accettati da questo modello. Senza selezione, nel composer non si potrà scegliere alcun livello per questo modello.",
+    "effortSummary": "Ragionamento: {{levels}}"
   }
 }
