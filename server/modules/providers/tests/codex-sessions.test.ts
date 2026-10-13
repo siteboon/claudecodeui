@@ -610,3 +610,67 @@ test('Codex history restores user prompts from typed item_completed rows', { con
     await rm(tempRoot, { recursive: true, force: true });
   }
 });
+
+test('a live reasoning item stays a thinking block instead of becoming answer text', () => {
+  // The live adapter wraps the SDK item with message.role, so the history
+  // router must not claim it: persisted-row treatment would retype the
+  // reasoning text as an ordinary assistant answer in the transcript.
+  const messages = new CodexSessionsProvider().normalizeMessage({
+    type: 'item',
+    itemType: 'reasoning',
+    itemId: 'reasoning-1',
+    timestamp: '2026-10-12T00:00:00.000Z',
+    message: {
+      role: 'assistant',
+      content: 'This is reasoning',
+      isReasoning: true,
+    },
+  }, 'session-1');
+
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].id, 'reasoning-1');
+  assert.equal(messages[0].kind, 'thinking');
+  assert.equal(messages[0].content, 'This is reasoning');
+});
+
+test('a live agent message still normalizes as assistant text', () => {
+  const messages = new CodexSessionsProvider().normalizeMessage({
+    type: 'item',
+    itemType: 'agent_message',
+    itemId: 'agent-1',
+    timestamp: '2026-10-12T00:00:01.000Z',
+    message: { role: 'assistant', content: 'Here is the answer.' },
+  }, 'session-1');
+
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].id, 'agent-1');
+  assert.equal(messages[0].kind, 'text');
+  assert.equal(messages[0].role, 'assistant');
+  assert.equal(messages[0].content, 'Here is the answer.');
+});
+
+test('persisted rows with a message role keep using history normalization', () => {
+  // Compact history rows carry no itemType, so they must still take the
+  // history path — including persisted thinking rows, which live reasoning
+  // items were being mistaken for.
+  const provider = new CodexSessionsProvider();
+
+  const [reply] = provider.normalizeMessage({
+    type: 'assistant',
+    uuid: 'hist-reply-1',
+    timestamp: '2026-10-12T00:00:02.000Z',
+    message: { role: 'assistant', content: 'Stored reply.' },
+  }, 'session-1');
+  assert.equal(reply?.kind, 'text');
+  assert.equal(reply?.role, 'assistant');
+  assert.equal(reply?.id, 'hist-reply-1');
+
+  const [thought] = provider.normalizeMessage({
+    type: 'thinking',
+    uuid: 'hist-thought-1',
+    timestamp: '2026-10-12T00:00:03.000Z',
+    message: { role: 'assistant', content: 'Stored reasoning.' },
+  }, 'session-1');
+  assert.equal(thought?.kind, 'thinking');
+  assert.equal(thought?.id, 'hist-thought-1');
+});

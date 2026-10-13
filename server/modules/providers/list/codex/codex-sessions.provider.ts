@@ -2069,7 +2069,11 @@ export class CodexSessionsProvider implements IProviderSessions {
       return [];
     }
 
-    if (raw.message?.role) {
+    // Transformed live SDK items also carry message.role, so routing on role
+    // alone would classify a live reasoning item as a persisted assistant row
+    // and render its text as the answer. Only compact history rows take this
+    // path; live items continue to the itemType dispatch below.
+    if (raw.message?.role && raw.type !== 'item' && !raw.itemType) {
       return this.normalizeHistoryEntry(raw, sessionId);
     }
 
