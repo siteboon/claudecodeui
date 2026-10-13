@@ -12,8 +12,12 @@ import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/datab
 const fixtureHome = await mkdtemp(path.join(os.tmpdir(), 'session-prune-home-'));
 const previousHome = process.env.HOME;
 const previousUserProfile = process.env.USERPROFILE;
+const previousCodexRuntimeMode = process.env.CLOUDCLI_CODEX_RUNTIME_MODE;
 process.env.HOME = fixtureHome;
 process.env.USERPROFILE = fixtureHome;
+// This suite verifies database pruning. Keep provider synchronization file-backed
+// so it does not leave the long-lived Codex app-server process open after the test.
+process.env.CLOUDCLI_CODEX_RUNTIME_MODE = 'sdk';
 
 const { sessionSynchronizerService } = await import(
   '@/modules/providers/services/session-synchronizer.service.js'
@@ -29,6 +33,11 @@ process.on('exit', () => {
     delete process.env.USERPROFILE;
   } else {
     process.env.USERPROFILE = previousUserProfile;
+  }
+  if (previousCodexRuntimeMode === undefined) {
+    delete process.env.CLOUDCLI_CODEX_RUNTIME_MODE;
+  } else {
+    process.env.CLOUDCLI_CODEX_RUNTIME_MODE = previousCodexRuntimeMode;
   }
 });
 

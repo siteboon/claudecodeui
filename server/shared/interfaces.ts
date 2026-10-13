@@ -37,6 +37,8 @@ export interface IProviderRuntime {
     context: ProviderRuntimeContext,
   ): Promise<unknown>;
   abort(sessionId: string): boolean | Promise<boolean>;
+  /** Restarts a provider-owned runtime process when that provider supports it. */
+  restart?(): Promise<void>;
   permissions?: ProviderRuntimePermissionGateway;
   /**
    * Sessions with background tasks still outstanding, whether or not their

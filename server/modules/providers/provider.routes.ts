@@ -5,6 +5,7 @@ import { claudeSettingsPermissionsService } from '@/modules/providers/services/c
 import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
 import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
 import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
+import { providerRuntimeService } from '@/modules/providers/services/provider-runtime.service.js';
 import { providerTokenUsageService } from '@/modules/providers/services/provider-token-usage.service.js';
 import { providerSkillsService } from '@/modules/providers/services/skills.service.js';
 import { sessionConversationsSearchService } from '@/modules/providers/services/session-conversations-search.service.js';
@@ -617,6 +618,14 @@ router.get(
   }),
 );
 
+router.post(
+  '/codex/app-server/restart',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const result = await providerRuntimeService.restart('codex');
+    res.json(createApiSuccessResponse(result));
+  }),
+);
+
 router.get(
   '/:provider/models',
   asyncHandler(async (req: Request, res: Response) => {
@@ -953,9 +962,18 @@ router.get(
     const limit = parseBoundedIntegerQuery(req.query.limit, 'limit', null, 0);
     const offset = parseBoundedIntegerQuery(req.query.offset, 'offset', 0, 0);
 
+    const codexRuntimeMode = req.query.codexRuntimeMode;
+    if (codexRuntimeMode !== undefined && codexRuntimeMode !== 'sdk' && codexRuntimeMode !== 'app-server') {
+      throw new AppError('codexRuntimeMode must be "app-server" or "sdk".', {
+        code: 'INVALID_QUERY_PARAMETER',
+        statusCode: 400,
+      });
+    }
+
     const result = await sessionsService.fetchHistory(sessionId, {
       limit,
       offset,
+      codexRuntimeMode,
     });
     res.json(createApiSuccessResponse(result));
   }),

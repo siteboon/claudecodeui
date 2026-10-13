@@ -49,6 +49,30 @@ Current provider ids in this repo are:
 Those ids are mirrored in backend unions and frontend provider constants. If
 adding a new provider, update every place that hardcodes this list.
 
+## Codex Runtime Selection
+
+Codex uses the app-server runtime by default. Runtime selection is documented in
+[`docs/codex-app-server-rollout.md`](../../../docs/codex-app-server-rollout.md).
+The direct `@openai/codex-sdk` path remains available through the explicit
+`CLOUDCLI_CODEX_RUNTIME_MODE=sdk` setting or the Codex settings panel.
+
+Permission selection must be sent on every `turn/start` as `approvalPolicy` and
+`sandboxPolicy`, not just on `thread/start` or `thread/resume`. An already-loaded
+thread, including a newly forked thread, can retain its existing permissions
+when resumed even if the resume request supplies different settings. Explicit
+turn overrides apply both permission increases and decreases. Workspace-mode
+turns preserve the returned workspace sandbox configuration when available.
+
+Stop requests received during initialization, model lookup, or thread setup are
+remembered per app session. Setup ends with an aborted completion rather than
+submitting a turn, even if the pending setup request subsequently fails.
+
+Completed and failed runs use the shared notification service with the app
+session id and session summary, respecting the user's notification preferences.
+Interrupted or explicitly aborted runs do not send a successful-run notification.
+Codex approval actions target only the selected request; session-level approval
+scope is handled by Codex rather than by batching matching command prefixes.
+
 ## Current File Layout
 
 Each provider lives under its own folder in `server/modules/providers/list/`:
@@ -376,5 +400,3 @@ alongside the implementation.
 - Forgetting that Claude plugin skills are discovered differently from normal
   user/project skill folders.
 - Assuming one provider's MCP config file format works for the others.
-
-
