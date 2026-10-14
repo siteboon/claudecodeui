@@ -8,13 +8,18 @@ import SetupForm from '@/modules/auth/SetupForm';
 
 type StubbedReply = { status: number; body: unknown };
 
-// The login and register routes hand every failure to the global error
-// middleware, which answers with the structured AppError envelope; the auth
-// middleware still answers with a bare `{ error: 'message' }`.
+/**
+ * Builds the structured AppError envelope returned by login and registration
+ * failures. Auth middleware can still return a bare `{ error: 'message' }`.
+ */
 const envelope = (code: string, message: string) => ({ success: false, error: { code, message } });
 
 // `api.auth.*` calls the global fetch directly, so stubbing it drives the
 // real AuthProvider without any module mocks.
+/**
+ * Stubs auth API responses by URL while retaining the real auth context.
+ * Reads the supplied map on each request so tests can change a response before retrying.
+ */
 function stubAuthApi(replies: Record<string, StubbedReply>) {
   vi.stubGlobal(
     'fetch',
@@ -28,6 +33,7 @@ function stubAuthApi(replies: Record<string, StubbedReply>) {
   );
 }
 
+/** Renders the login form and submits the supplied credentials through the real auth context. */
 async function submitLogin(username: string, password: string) {
   render(
     <AuthProvider>
@@ -39,6 +45,7 @@ async function submitLogin(username: string, password: string) {
   fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
 }
 
+/** Renders the setup form and submits matching passwords through the real auth context. */
 async function submitSetup(username: string, password: string) {
   render(
     <AuthProvider>
@@ -73,6 +80,44 @@ describe('auth screens surface server errors as text', () => {
 
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Invalid username or password');
     expect(document.querySelectorAll('form')).toHaveLength(1);
+  });
+
+  it('lets a rejected login be corrected and retried successfully without remounting the form', async () => {
+    const user = { id: 1, username: 'triage' };
+    const now = Math.floor(Date.now() / 1000);
+    const token = `${Buffer.from('{}').toString('base64url')}.${Buffer.from(JSON.stringify({ iat: now, exp: now + 3600 })).toString('base64url')}.test`;
+    const replies: Record<string, StubbedReply> = {
+      '/api/auth/status': { status: 200, body: { needsSetup: false, isAuthenticated: false } },
+      '/api/auth/login': {
+        status: 401,
+        body: envelope('AUTH_INVALID_CREDENTIALS', 'Invalid username or password'),
+      },
+      '/api/auth/user': { status: 200, body: { user } },
+      '/api/user/onboarding-status': { status: 200, body: { hasCompletedOnboarding: true } },
+      '/api/user/preferences': { status: 200, body: { preferences: {} } },
+      '/api/user/drafts': { status: 200, body: { drafts: {} } },
+    };
+    stubAuthApi(replies);
+
+    await submitLogin('triage', 'wrong-password');
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Invalid username or password');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sign In' })).toHaveProperty('disabled', false));
+    expect(localStorage.getItem('auth-token')).toBeNull();
+    const form = document.querySelector('form');
+
+    replies['/api/auth/login'] = { status: 200, body: { user, token } };
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'corrected-password' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
+
+    await waitFor(() => {
+      expect(localStorage.getItem('auth-token')).toBe(token);
+      expect(screen.queryByRole('alert')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Sign In' })).toHaveProperty('disabled', false);
+    });
+    expect(document.querySelector('form')).toBe(form);
+    const loginRequests = vi.mocked(fetch).mock.calls.filter(([url]) => url === '/api/auth/login');
+    expect(loginRequests).toHaveLength(2);
+    expect(loginRequests[1]?.[1]?.body).toBe(JSON.stringify({ username: 'triage', password: 'corrected-password' }));
   });
 
   it('shows the message of the structured envelope when registration is rejected', async () => {
