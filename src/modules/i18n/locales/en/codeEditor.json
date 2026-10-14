@@ -39,5 +39,9 @@
     "loading": "Loading preview...",
     "error": "Unable to display this file.",
     "openInNewTab": "Open in new tab"
+  },
+  "unsavedChanges": {
+    "confirmClose": "You have unsaved changes. Close this file and discard them?",
+    "indicator": "Unsaved changes"
   }
 }

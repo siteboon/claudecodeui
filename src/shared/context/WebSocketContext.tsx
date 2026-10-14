@@ -8,6 +8,14 @@ import type { ServerEvent } from '@/shared/types';
 
 type ServerEventListener = (event: ServerEvent) => void;
 
+/**
+ * Where the chat socket stands. `connecting` covers a handshake the provider
+ * started on purpose (after sign-in, or with a refreshed token) and the time
+ * signed out; `disconnected` a socket that closed on its own (it dropped, or an
+ * attempt failed) until a reconnect opens again.
+ */
+type ConnectionStatus = 'connecting' | 'connected' | 'disconnected';
+
 type WebSocketContextType = {
   ws: WebSocket | null;
   sendMessage: (message: unknown) => void;
@@ -21,6 +29,14 @@ type WebSocketContextType = {
    */
   subscribe: (listener: ServerEventListener) => () => void;
   isConnected: boolean;
+  /**
+   * Lets the UI tell a lost connection (`disconnected`, reconnecting every few
+   * seconds) apart from the first handshake (`connecting`), so it can show the
+   * former without flashing on every page load. A socket the provider replaces
+   * on purpose, such as on a token refresh, reports `connecting` until the new
+   * one opens, never `disconnected`.
+   */
+  connectionStatus: ConnectionStatus;
 };
 
 const WebSocketContext = createContext<WebSocketContextType | null>(null);
@@ -54,7 +70,10 @@ const useWebSocketProviderState = (): WebSocketContextType => {
    * re-renders of the provider tree.
    */
   const listenersRef = useRef(new Set<ServerEventListener>());
-  const [isConnected, setIsConnected] = useState(false);
+  // Drives `isConnected` and the workspace header's "Reconnecting" indicator.
+  // Three values rather than a boolean: a first handshake still in flight must
+  // not read as a lost connection, or every page load would flash the indicator.
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { isLoading: isAuthLoading, token, user } = useAuth();
 
@@ -85,7 +104,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       wsRef.current = websocket;
 
       websocket.onopen = () => {
-        setIsConnected(true);
+        setConnectionStatus('connected');
         if (hasConnectedRef.current) {
           // This is a reconnect — signal so components can catch up on missed messages
           dispatch({ kind: 'websocket_reconnected', timestamp: Date.now() });
@@ -106,7 +125,10 @@ const useWebSocketProviderState = (): WebSocketContextType => {
         if (wsRef.current !== websocket) {
           return;
         }
-        setIsConnected(false);
+        // Also reached when the very first attempt fails, which is a lost
+        // connection too. The effect cleanup detaches this handler before
+        // closing a socket on purpose, so a token refresh never gets here.
+        setConnectionStatus('disconnected');
         wsRef.current = null;
 
         // Attempt to reconnect after 3 seconds
@@ -155,6 +177,11 @@ const useWebSocketProviderState = (): WebSocketContextType => {
         activeSocket.close();
         wsRef.current = null;
       }
+      // What comes next is a socket with a refreshed token, or none after a
+      // sign-out or session expiry. Either way it starts from a fresh
+      // handshake: the socket closed here is no longer live, and a drop seen
+      // before must not show as "Reconnecting" after the next sign-in.
+      setConnectionStatus('connecting');
     };
   }, [connect, isAuthLoading, user]); // reconnect after authentication or token refresh
 
@@ -179,8 +206,9 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     ws: wsRef.current,
     sendMessage,
     subscribe,
-    isConnected
-  }), [sendMessage, subscribe, isConnected]);
+    isConnected: connectionStatus === 'connected',
+    connectionStatus,
+  }), [sendMessage, subscribe, connectionStatus]);
 
   return value;
 };

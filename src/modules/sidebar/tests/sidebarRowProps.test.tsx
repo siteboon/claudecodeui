@@ -4,7 +4,7 @@ import { render } from '@testing-library/react';
 import React from 'react';
 import { beforeEach, test, vi } from 'vitest';
 
-import type { ActiveSidebarRename, Project, SidebarProjectListProps } from '@/shared/types';
+import type { ActiveSidebarRename, Project, SidebarProjectListProps, SidebarSessionSelection } from '@/shared/types';
 
 /**
  * SidebarProjectItem and SidebarSessionItem are memoized because a websocket
@@ -60,7 +60,10 @@ const NOW = new Date('2026-08-21T10:00:00.000Z');
 // Rebuilding them per render here would test the harness, not the component.
 const NO_SESSION_IDS: ReadonlySet<string> = new Set<string>();
 
-const listProps = (activeRename: ActiveSidebarRename | null): SidebarProjectListProps => ({
+const listProps = (
+  activeRename: ActiveSidebarRename | null,
+  sessionSelection: SidebarSessionSelection | null = null,
+): SidebarProjectListProps => ({
   projects: [PROJECT_A, PROJECT_B],
   filteredProjects: [PROJECT_A, PROJECT_B],
   selectedProject: null,
@@ -95,6 +98,11 @@ const listProps = (activeRename: ActiveSidebarRename | null): SidebarProjectList
   onStartEditingSession: noop,
   onCancelEditingSession: noop,
   onSaveEditingSession: noop,
+  sessionSelection,
+  onSetSessionSelection: noop,
+  onToggleSessionSelected: noop,
+  onCancelSessionSelection: noop,
+  onDeleteSelectedSessions: noop,
   t,
 });
 
@@ -194,7 +202,32 @@ test('the fork callback reaches the rows that render the fork action', () => {
   assert.equal(recordedProjectRowProps[0].onForkSession, onForkSession);
 });
 
-const sessionsProps = (sessionRenameId: string | null, sessionRenameDraft: string) => ({
+test('ticking a session changes props on the owning project row only', () => {
+  // The bulk selection is one object for the whole sidebar, so it has to be
+  // resolved per project: handing every row the selection itself would re-render
+  // all of them on each tick.
+  const { rerender } = render(React.createElement(SidebarProjectList, listProps(null)));
+  const [firstA, firstB] = recordedProjectRowProps;
+
+  rerender(React.createElement(
+    SidebarProjectList,
+    listProps(null, { projectId: 'a', sessionIds: new Set(['a1']) }),
+  ));
+  const [, , secondA, secondB] = recordedProjectRowProps;
+
+  assert.deepEqual(changedProps(firstA, secondA), ['selectedSessionIds']);
+  assert.deepEqual(
+    changedProps(firstB, secondB),
+    [],
+    'a selection inside project a must not re-render project b',
+  );
+});
+
+const sessionsProps = (
+  sessionRenameId: string | null,
+  sessionRenameDraft: string,
+  selectedSessionIds: ReadonlySet<string> | null = null,
+) => ({
   project: PROJECT_A,
   isExpanded: true,
   sessions: getAllSessions(PROJECT_A),
@@ -217,6 +250,11 @@ const sessionsProps = (sessionRenameId: string | null, sessionRenameDraft: strin
   onDeleteSession: noop,
   onLoadMoreSessions: noop,
   onNewSession: noop,
+  selectedSessionIds,
+  onSetSessionSelection: noop,
+  onToggleSessionSelected: noop,
+  onCancelSessionSelection: noop,
+  onDeleteSelectedSessions: noop,
   t,
 });
 
@@ -234,6 +272,25 @@ test('within a project, a keystroke changes props on the renamed session row onl
     changedProps(firstA2, secondA2),
     [],
     'the sibling session row must be handed a constant, not the live draft',
+  );
+});
+
+test('ticking one session row changes props on that row only', () => {
+  const { rerender } = render(
+    React.createElement(SidebarProjectSessions, sessionsProps(null, '', new Set())),
+  );
+  const [firstA1, firstA2] = recordedSessionRowProps;
+
+  rerender(
+    React.createElement(SidebarProjectSessions, sessionsProps(null, '', new Set(['a1']))),
+  );
+  const [, , secondA1, secondA2] = recordedSessionRowProps;
+
+  assert.deepEqual(changedProps(firstA1, secondA1), ['isChecked']);
+  assert.deepEqual(
+    changedProps(firstA2, secondA2),
+    [],
+    'the ticked flag must be resolved per row, not passed down as the live set',
   );
 });
 

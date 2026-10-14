@@ -3,6 +3,72 @@
 All notable changes to CloudCLI UI will be documented in this file.
 
 
+## [1.37.4](https://github.com/siteboon/claudecodeui/compare/v1.37.3...v1.37.4) (2026-10-09)
+
+### New Features
+
+* **1188:** let the sidebar be resized ([#1189](https://github.com/siteboon/claudecodeui/issues/1189)) ([6c51fca](https://github.com/siteboon/claudecodeui/commit/6c51fcaa76c250af70561fad7312c5a7f841a733))
+* **chat:** label each assistant reply with the model that answered it ([#1391](https://github.com/siteboon/claudecodeui/issues/1391)) ([7f4eba7](https://github.com/siteboon/claudecodeui/commit/7f4eba78c4dc887df9ca2c640e4ac6555996a426)), closes [#1059](https://github.com/siteboon/claudecodeui/issues/1059)
+* **chat:** render workspace image paths in markdown ([#1307](https://github.com/siteboon/claudecodeui/issues/1307)) ([4b98d2e](https://github.com/siteboon/claudecodeui/commit/4b98d2eaec077470b737790b32e896051c5ff5ba))
+* **chat:** say a compaction out loud, as one row with its summary folded in ([#1295](https://github.com/siteboon/claudecodeui/issues/1295)) ([d450ed8](https://github.com/siteboon/claudecodeui/commit/d450ed8521e71d731265021c75980656ab20c185)), closes [#1292](https://github.com/siteboon/claudecodeui/issues/1292)
+* **codex:** add GPT-6 Sol and GPT-6 Luna models ([#1435](https://github.com/siteboon/claudecodeui/issues/1435)) ([48c8ae4](https://github.com/siteboon/claudecodeui/commit/48c8ae4c55075325c2f5ca81664db7b21d23f432)), closes [#1415](https://github.com/siteboon/claudecodeui/issues/1415)
+* **git:** compare the working copy against any branch in Source Control ([#1369](https://github.com/siteboon/claudecodeui/issues/1369)) ([a2ed7f3](https://github.com/siteboon/claudecodeui/commit/a2ed7f3c85b04da01c8376e7a295e7740e4fe00b)), closes [#298](https://github.com/siteboon/claudecodeui/issues/298)
+* **i18n:** add Brazilian Portuguese language support ([#1518](https://github.com/siteboon/claudecodeui/issues/1518)) ([6b2fdd8](https://github.com/siteboon/claudecodeui/commit/6b2fdd8ebd00474485bf3473135439a7772c9ca9))
+* **i18n:** add Czech language support ([#1384](https://github.com/siteboon/claudecodeui/issues/1384)) ([7fb91f0](https://github.com/siteboon/claudecodeui/commit/7fb91f000ffc082f9eb73d5e49b80d80d830742c)), closes [#1328](https://github.com/siteboon/claudecodeui/issues/1328)
+* **i18n:** add Hebrew language support ([#1509](https://github.com/siteboon/claudecodeui/issues/1509)) ([6f579b5](https://github.com/siteboon/claudecodeui/commit/6f579b5c77a8baa1af6a740a9fc1fe720a9f4b86))
+* **i18n:** add Indonesian language support ([#1328](https://github.com/siteboon/claudecodeui/issues/1328)) ([b8e572b](https://github.com/siteboon/claudecodeui/commit/b8e572bdf919752aa17b521a2784341b7665beca))
+* **plugins:** recommend Agent Monitor plugin ([#1474](https://github.com/siteboon/claudecodeui/issues/1474)) ([dc94683](https://github.com/siteboon/claudecodeui/commit/dc9468300404aefd88734157f574f9d751f37d64))
+* **plugins:** recommend GLM Usage plugin ([#1323](https://github.com/siteboon/claudecodeui/issues/1323)) ([f05ba1f](https://github.com/siteboon/claudecodeui/commit/f05ba1fd6c6fc8cd0da180cee079fec66531a9bf))
+* **providers:** let custom models declare reasoning-effort levels ([#1418](https://github.com/siteboon/claudecodeui/issues/1418)) ([51fb575](https://github.com/siteboon/claudecodeui/commit/51fb575793f7f5f66131282e0a3eb46062fd79ef)), closes [#1294](https://github.com/siteboon/claudecodeui/issues/1294)
+* **quick-settings:** add Settings/Commands tabs and pin-to-dock to the right panel ([#1371](https://github.com/siteboon/claudecodeui/issues/1371)) ([9212ee3](https://github.com/siteboon/claudecodeui/commit/9212ee33618ad0daee9f3556b85c80f811637ffb)), closes [#508](https://github.com/siteboon/claudecodeui/issues/508)
+* **sessions:** report turns driven by the Claude CLI as running ([#1394](https://github.com/siteboon/claudecodeui/issues/1394)) ([3cc73ed](https://github.com/siteboon/claudecodeui/commit/3cc73ede4cef51927de79d39b6e820e58cda050c))
+* **settings:** close settings modal with escape and backdrop click ([#1164](https://github.com/siteboon/claudecodeui/issues/1164)) ([3ed3be5](https://github.com/siteboon/claudecodeui/commit/3ed3be5aa047b17ed1f6e591cfd3692eda2f1160))
+* **settings:** let the theme follow the operating system appearance ([#1393](https://github.com/siteboon/claudecodeui/issues/1393)) ([87c44f5](https://github.com/siteboon/claudecodeui/commit/87c44f58edb1f091e9e060d159838df7e7b5626c))
+* **settings:** show the permission rules from Claude's settings files (read-only) ([#1492](https://github.com/siteboon/claudecodeui/issues/1492)) ([4567700](https://github.com/siteboon/claudecodeui/commit/4567700825e3c1fa99010bdd95b5f5c42272c7de)), closes [#109](https://github.com/siteboon/claudecodeui/issues/109)
+* **sidebar:** pin expanded project header while sessions scroll ([#1312](https://github.com/siteboon/claudecodeui/issues/1312)) ([b028e0d](https://github.com/siteboon/claudecodeui/commit/b028e0d886c059e6c4c21137e8dbe05068c8877f))
+* **sidebar:** select and delete several of a project's sessions at once ([#1404](https://github.com/siteboon/claudecodeui/issues/1404)) ([f34ac83](https://github.com/siteboon/claudecodeui/commit/f34ac8342e953aeb457b11431912c8d8301e4154)), closes [#814](https://github.com/siteboon/claudecodeui/issues/814)
+* **workspace:** rename a session by double-clicking its title in the chat header ([#1374](https://github.com/siteboon/claudecodeui/issues/1374)) ([09892b5](https://github.com/siteboon/claudecodeui/commit/09892b575bd1c85caf041fb86aa2b846df797c9b)), closes [#512](https://github.com/siteboon/claudecodeui/issues/512) [#512](https://github.com/siteboon/claudecodeui/issues/512)
+
+### Bug Fixes
+
+* **auth:** render the message of a structured error envelope ([#1425](https://github.com/siteboon/claudecodeui/issues/1425)) ([f24fa19](https://github.com/siteboon/claudecodeui/commit/f24fa191504fc0bade5e2607b79249738aa198e5)), closes [#1300](https://github.com/siteboon/claudecodeui/issues/1300)
+* **auth:** stop token refreshes and language changes from remounting the app ([#1408](https://github.com/siteboon/claudecodeui/issues/1408)) ([dc7cb6c](https://github.com/siteboon/claudecodeui/commit/dc7cb6c6dcd22988f3241e10303298046ead351e)), closes [#1269](https://github.com/siteboon/claudecodeui/issues/1269)
+* **chat:** Enter that confirms an IME candidate must not send on Safari ([#1332](https://github.com/siteboon/claudecodeui/issues/1332)) ([fd424f3](https://github.com/siteboon/claudecodeui/commit/fd424f3fcd739371daeb6b173167e61f95270670))
+* **chat:** keep a queued message waiting while background work runs ([#1434](https://github.com/siteboon/claudecodeui/issues/1434)) ([80dd5c2](https://github.com/siteboon/claudecodeui/commit/80dd5c299e6f33c1a8b52761c00d418e6bfadfe7)), closes [#1334](https://github.com/siteboon/claudecodeui/issues/1334)
+* **chat:** make in-chat file references land where they point ([#1256](https://github.com/siteboon/claudecodeui/issues/1256)) ([580be52](https://github.com/siteboon/claudecodeui/commit/580be52dacd3538f1b0ec6fee56aa02d793cd21a))
+* **chat:** refetch the @ file list each time the dropdown opens ([#1411](https://github.com/siteboon/claudecodeui/issues/1411)) ([fce5c2e](https://github.com/siteboon/claudecodeui/commit/fce5c2e73f9d29d0afca5a490dfaf827f9bdbba7)), closes [#1367](https://github.com/siteboon/claudecodeui/issues/1367) [#1367](https://github.com/siteboon/claudecodeui/issues/1367)
+* **chat:** render LaTeX \(…\) and \[…\] math in assistant messages ([#1385](https://github.com/siteboon/claudecodeui/issues/1385)) ([de0908b](https://github.com/siteboon/claudecodeui/commit/de0908b079cfe9bf07a0247211dcf144cc850e4c)), closes [#1123](https://github.com/siteboon/claudecodeui/issues/1123)
+* **chat:** send a new chat's first message to one session only ([#1420](https://github.com/siteboon/claudecodeui/issues/1420)) ([bb81d0b](https://github.com/siteboon/claudecodeui/commit/bb81d0b039b9e13fca49cda4f495c6736f79779f)), closes [#1306](https://github.com/siteboon/claudecodeui/issues/1306)
+* **chat:** show what a Bash command changed under its command row ([#1483](https://github.com/siteboon/claudecodeui/issues/1483)) ([d392d9e](https://github.com/siteboon/claudecodeui/commit/d392d9eba24f82f60a3e08946ed036d65a263e3c)), closes [#1455](https://github.com/siteboon/claudecodeui/issues/1455) [#1455](https://github.com/siteboon/claudecodeui/issues/1455)
+* **chat:** show when the chat connection is lost ([#1485](https://github.com/siteboon/claudecodeui/issues/1485)) ([d4dd34d](https://github.com/siteboon/claudecodeui/commit/d4dd34da1fcab568afefc257e40c14771f076322)), closes [#582](https://github.com/siteboon/claudecodeui/issues/582)
+* **chat:** stop lazy transcript rows flickering at the band edge ([#1421](https://github.com/siteboon/claudecodeui/issues/1421)) ([6c8e8be](https://github.com/siteboon/claudecodeui/commit/6c8e8be7f0e9610f47c5a341107d111204ead02e)), closes [#1357](https://github.com/siteboon/claudecodeui/issues/1357)
+* **chat:** Tab completes a slash command instead of running it ([#1380](https://github.com/siteboon/claudecodeui/issues/1380)) ([eef9791](https://github.com/siteboon/claudecodeui/commit/eef9791ea34d69c8f88121f52162755fcbe78ee5))
+* **claude:** hold the CLI open for backgrounded agents and workflows ([#1291](https://github.com/siteboon/claudecodeui/issues/1291)) ([208c715](https://github.com/siteboon/claudecodeui/commit/208c71560278f7f9607847c0595803a683de2864)), closes [#1113](https://github.com/siteboon/claudecodeui/issues/1113) [#1268](https://github.com/siteboon/claudecodeui/issues/1268)
+* **claude:** show session titles instead of prompts in the sidebar ([#1258](https://github.com/siteboon/claudecodeui/issues/1258)) ([7704a90](https://github.com/siteboon/claudecodeui/commit/7704a90523ec6fb9514b2d251db1b18046517f2e))
+* **claude:** stop a held run's background tasks before a new turn takes over ([#1395](https://github.com/siteboon/claudecodeui/issues/1395)) ([b9d3d12](https://github.com/siteboon/claudecodeui/commit/b9d3d1299ae946c11e75d06db7409e9e4d402e49)), closes [#884](https://github.com/siteboon/claudecodeui/issues/884)
+* **code-editor:** confirm before discarding unsaved changes ([#1409](https://github.com/siteboon/claudecodeui/issues/1409)) ([05b6306](https://github.com/siteboon/claudecodeui/commit/05b6306015bcaa1fd7f583b00a458f78082d1655)), closes [#870](https://github.com/siteboon/claudecodeui/issues/870)
+* **codex:** restore user prompts from canonical typed rollout rows ([#1277](https://github.com/siteboon/claudecodeui/issues/1277)) ([5ce8ed4](https://github.com/siteboon/claudecodeui/commit/5ce8ed4537eb71397885a8a180e1d5090aa3bc2d))
+* **codex:** support image-only prompts ([#1346](https://github.com/siteboon/claudecodeui/issues/1346)) ([a6d50c8](https://github.com/siteboon/claudecodeui/commit/a6d50c84ca5f16872c4166fc4772af2dc8687e6b))
+* **cursor:** stop reporting fresh logins as "Command timeout" ([#1494](https://github.com/siteboon/claudecodeui/issues/1494)) ([272a108](https://github.com/siteboon/claudecodeui/commit/272a10884a5a11e30667888318439b324895549b)), closes [#551](https://github.com/siteboon/claudecodeui/issues/551) [#551](https://github.com/siteboon/claudecodeui/issues/551)
+* **desktop:** keep the app view sized to the window after maximize ([#1405](https://github.com/siteboon/claudecodeui/issues/1405)) ([4cd470f](https://github.com/siteboon/claudecodeui/commit/4cd470fac4d011dacab2a564272a0f72927396dc)), closes [#1194](https://github.com/siteboon/claudecodeui/issues/1194)
+* **opencode:** compose the provider prefix into session model ids ([#1333](https://github.com/siteboon/claudecodeui/issues/1333)) ([544baff](https://github.com/siteboon/claudecodeui/commit/544baffe3c02106abb443f5c5f0b2b3d2bdc7b6b))
+* **opencode:** hide child sessions ([#1344](https://github.com/siteboon/claudecodeui/issues/1344)) ([ed3f0bf](https://github.com/siteboon/claudecodeui/commit/ed3f0bfc0a45ee0b3aaddfd04de241c29335ff42))
+* **providers:** strip ANSI escapes from OpenCode and Cursor stderr ([#1303](https://github.com/siteboon/claudecodeui/issues/1303)) ([f362080](https://github.com/siteboon/claudecodeui/commit/f36208036efd5aef8dbfd92d3f0db18986f45530))
+* recover background-agent results and status, read-only temp browsing, clone-token redaction ([#1347](https://github.com/siteboon/claudecodeui/issues/1347)) ([557109a](https://github.com/siteboon/claudecodeui/commit/557109a2e98e833ad9cb6659ec89e97ccacdd024))
+* **sessions:** show the Claude branch a resume will replay ([#1148](https://github.com/siteboon/claudecodeui/issues/1148)) ([#1378](https://github.com/siteboon/claudecodeui/issues/1378)) ([d1b0933](https://github.com/siteboon/claudecodeui/commit/d1b093303755236d48a3bd2402e24862413c39ef))
+* **settings:** warn when an api key is bypassing the claude subscription login ([#1375](https://github.com/siteboon/claudecodeui/issues/1375)) ([c6468e1](https://github.com/siteboon/claudecodeui/commit/c6468e1311057cff3fb879dbad6376429f4338ed))
+* **shell:** make the shell tab follow the light/dark theme ([#1428](https://github.com/siteboon/claudecodeui/issues/1428)) ([6828313](https://github.com/siteboon/claudecodeui/commit/6828313154523b5de9e2d37227189319f9281c04)), closes [#1335](https://github.com/siteboon/claudecodeui/issues/1335) [#1335](https://github.com/siteboon/claudecodeui/issues/1335)
+* **sidebar:** let Running collapse project groups ([#1166](https://github.com/siteboon/claudecodeui/issues/1166)) ([7090a5d](https://github.com/siteboon/claudecodeui/commit/7090a5dbfdee7f0fae5fb17232300148c1963b94))
+* upstream electron build bug ([5e73a49](https://github.com/siteboon/claudecodeui/commit/5e73a49b89b4f13766fc2e22723297a36e7dcef2))
+
+### Performance
+
+* **chat:** keep collapsed tool groups memoized across stream ticks ([#1386](https://github.com/siteboon/claudecodeui/issues/1386)) ([3576232](https://github.com/siteboon/claudecodeui/commit/3576232e03e7cd6f7097a045b9b9fa196c90d31d)), closes [#1050](https://github.com/siteboon/claudecodeui/issues/1050)
+
+### Documentation
+
+* add Indonesian README ([#1468](https://github.com/siteboon/claudecodeui/issues/1468)) ([5fd3de6](https://github.com/siteboon/claudecodeui/commit/5fd3de63573ce5e50496da177bdfff5b9110d945))
+
 ## [1.37.3](https://github.com/siteboon/claudecodeui/compare/v1.37.2...v1.37.3) (2026-09-08)
 
 ### New Features
