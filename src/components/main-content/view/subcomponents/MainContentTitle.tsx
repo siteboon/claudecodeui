@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
 import type { AppTab, Project, ProjectSession } from '../../../../types/app';
 import { usePlugins } from '../../../../contexts/PluginsContext';
+import { useHomedir } from '../../../../hooks/useHomedir';
+import { collapseHomePath } from '../../../../utils/pathDisplay';
 import { useSessionRepoInfo } from '../../hooks/useSessionRepoInfo';
 
 type MainContentTitleProps = {
@@ -85,6 +87,12 @@ export default function MainContentTitle({
 }: MainContentTitleProps) {
   const { t } = useTranslation();
   const { plugins } = usePlugins();
+  const homedir = useHomedir();
+
+  // Subtitle shows the project's full working directory, with the home dir
+  // collapsed to `~`. Falls back to the display name until the path is known.
+  const projectPath = selectedProject.fullPath || selectedProject.path;
+  const pathLabel = projectPath ? collapseHomePath(projectPath, homedir) : selectedProject.displayName;
 
   const pluginDisplayName = activeTab.startsWith('plugin:')
     ? plugins.find((p) => p.name === activeTab.replace('plugin:', ''))?.displayName
@@ -108,7 +116,7 @@ export default function MainContentTitle({
               {getSessionTitle(selectedSession)}
             </h2>
             <div className="flex items-center justify-between gap-3">
-              <span className="truncate text-[11px] leading-tight text-muted-foreground">{selectedProject.displayName}</span>
+              <span className="truncate text-[11px] leading-tight text-muted-foreground" title={pathLabel}>{pathLabel}</span>
               <RepoBranchBadge projectId={selectedProject.projectId} />
             </div>
           </div>
@@ -116,7 +124,7 @@ export default function MainContentTitle({
           <div className="min-w-0">
             <h2 className="text-base font-semibold leading-tight text-foreground">{t('mainContent.newSession')}</h2>
             <div className="flex items-center justify-between gap-3">
-              <span className="truncate text-xs leading-tight text-muted-foreground">{selectedProject.displayName}</span>
+              <span className="truncate text-xs leading-tight text-muted-foreground" title={pathLabel}>{pathLabel}</span>
               <RepoBranchBadge projectId={selectedProject.projectId} />
             </div>
           </div>
@@ -126,7 +134,7 @@ export default function MainContentTitle({
               {getTabTitle(activeTab, shouldShowTasksTab, t, pluginDisplayName)}
             </h2>
             <div className="flex items-center justify-between gap-3">
-              <span className="truncate text-[11px] leading-tight text-muted-foreground">{selectedProject.displayName}</span>
+              <span className="truncate text-[11px] leading-tight text-muted-foreground" title={pathLabel}>{pathLabel}</span>
               <RepoBranchBadge projectId={selectedProject.projectId} />
             </div>
           </div>
