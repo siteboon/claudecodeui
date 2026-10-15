@@ -7,6 +7,7 @@ import test from 'node:test';
 import { ClaudeSessionsProvider } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import { CLAUDE_PREDEFINED_MODELS } from '@/modules/providers/list/claude/claude-models.provider.js';
 import {
+  hasActiveHeldTurn,
   listClaudeSDKBackgroundWork,
   queryClaudeSDK,
   stopClaudeSDKTask,
@@ -29,6 +30,10 @@ type Scripted = {
   end: () => void;
   released: () => boolean;
   stopped: string[];
+  /** What the run asked of the process, in order: `interrupt`, `release`, `close`. */
+  calls: string[];
+  /** Runs when the process is interrupted; a real CLI answers with the turn's `result`. */
+  onInterrupt: (() => void) | null;
 };
 
 /** A stand-in for the SDK query: yields what the test emits, and reads the held prompt to notice its release. */
@@ -43,12 +48,15 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
     end: () => { queue.push(null); wake?.(); },
     released: () => released,
     stopped,
+    calls: [],
+    onInterrupt: null,
   };
 
   const createQuery: NonNullable<ProviderRuntimeContext['createQuery']> = ({ prompt }) => {
     void (async () => {
       for await (const _message of prompt) { /* the CLI reads its stdin */ }
       released = true;
+      script.calls.push('release');
     })();
 
     const iterator = (async function* () {
@@ -67,7 +75,8 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
     })();
 
     return Object.assign(iterator, {
-      interrupt: async () => {},
+      interrupt: async () => { script.calls.push('interrupt'); script.onInterrupt?.(); },
+      close: () => { script.calls.push('close'); script.end(); },
       stopTask: async (taskId: string) => { stopped.push(taskId); },
     });
   };
@@ -306,4 +315,222 @@ test('a turn whose tool emits no task events still holds on the static rule', as
 
     assert.equal(script.released(), false, 'Monitor reports no task, so the launch rule decides');
   });
+});
+
+const assistantText = (text: string) => ({
+  type: 'assistant', session_id: NATIVE_ID, parent_tool_use_id: null,
+  message: { role: 'assistant', content: [{ type: 'text', text }] },
+});
+
+/** Two runs on one session, each with its own scripted CLI, sharing one writer. */
+async function withTwoRuns(
+  runTest: (context: {
+    first: ReturnType<typeof createScriptedQuery>;
+    second: ReturnType<typeof createScriptedQuery>;
+    sent: NormalizedMessage[];
+    startFirst: () => Promise<unknown>;
+    startSecond: () => Promise<unknown>;
+  }) => Promise<void>,
+): Promise<void> {
+  const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-runtime-hold-'));
+  const first = createScriptedQuery();
+  const second = createScriptedQuery();
+  const sent: NormalizedMessage[] = [];
+  const writer = { send: (message: NormalizedMessage) => { sent.push(message); }, userId: null };
+  const sessions = new ClaudeSessionsProvider({ getLiveRunStartTime: () => null });
+  const context: Omit<ProviderRuntimeContext, 'createQuery'> = {
+    resolveProviderSessionId: () => null,
+    resolveResumeModel: async () => undefined,
+    getProviderModels: async () => CLAUDE_PREDEFINED_MODELS as never,
+    normalizeMessage: (raw, sessionId) => sessions.normalizeMessage(raw, sessionId),
+    isProviderInstalled: async () => true,
+  };
+  try {
+    await runTest({
+      first,
+      second,
+      sent,
+      startFirst: () => queryClaudeSDK('start a job', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: first.createQuery }),
+      startSecond: () => queryClaudeSDK('Continue', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: second.createQuery }),
+    });
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+}
+
+/** Drives the first run to a held turn end with one backgrounded command outstanding. */
+async function holdForBackgroundCommand(script: Scripted, sent: NormalizedMessage[]): Promise<void> {
+  script.emit(init());
+  script.emit(toolUse('toolu_bg', 'Bash', { command: 'sleep 120', run_in_background: true }));
+  script.emit(taskStarted('b1', 'toolu_bg', 'local_bash'));
+  script.emit(ack('toolu_bg', 'Command running in background with ID: b1', { backgroundTaskId: 'b1' }));
+  script.emit(result());
+  await waitFor(() => sent.some((message) => message.kind === 'complete'));
+}
+
+test('a held process relaying its last task reads busy from the settle to the relay turn\'s result', async () => {
+  await withRun(async ({ script, sent }) => {
+    await holdForBackgroundCommand(script, sent);
+    assert.equal(hasActiveHeldTurn(SESSION_ID), false, 'between turns the background work alone marks the session');
+
+    // The task settles. The tracker lets go of it at once, but the CLI is
+    // about to run a turn to relay it, so the session must not read idle in
+    // the gap before that turn's first message arrives.
+    script.emit(taskNotification('b1', 'toolu_bg', 'completed'));
+    await settle();
+    assert.deepEqual(listClaudeSDKBackgroundWork(), []);
+    assert.equal(hasActiveHeldTurn(SESSION_ID), true, 'busy from the settle');
+
+    script.emit(assistantText('The job finished.'));
+    await settle();
+    assert.equal(hasActiveHeldTurn(SESSION_ID), true, 'busy through the relay');
+
+    script.emit(result());
+    await settle();
+    assert.equal(hasActiveHeldTurn(SESSION_ID), false, 'idle once the relay turn ends');
+    assert.equal(script.released(), true);
+  });
+});
+
+test('a stopped task starts no relay turn, so it does not mark the session busy', async () => {
+  await withRun(async ({ script, sent }) => {
+    await holdForBackgroundCommand(script, sent);
+    script.emit(taskNotification('b1', 'toolu_bg', 'stopped'));
+    await settle();
+    assert.equal(hasActiveHeldTurn(SESSION_ID), false);
+  });
+});
+
+test('a follow-up turn no task notification announced also marks the held session busy', async () => {
+  await withRun(async ({ script }) => {
+    // Monitor reports no task, so the hold rests on the static rule, and the
+    // turn it pushes later arrives with no settle in front of it.
+    script.emit(init());
+    script.emit(toolUse('toolu_monitor', 'Monitor', { command: 'tail -f x', description: 'watch', timeout_ms: 1000 }));
+    script.emit(ack('toolu_monitor', 'Monitor started', {}));
+    script.emit(result());
+    await settle();
+    assert.equal(hasActiveHeldTurn(SESSION_ID), false);
+
+    script.emit(assistantText('The log printed an error.'));
+    await settle();
+    assert.equal(hasActiveHeldTurn(SESSION_ID), true);
+
+    script.emit(result());
+    await settle();
+    assert.equal(hasActiveHeldTurn(SESSION_ID), false);
+  });
+});
+
+test('a held process that exits mid-turn no longer marks the session busy', async () => {
+  await withRun(async ({ script, sent, done }) => {
+    await holdForBackgroundCommand(script, sent);
+    script.emit(taskNotification('b1', 'toolu_bg', 'completed'));
+    await settle();
+    assert.equal(hasActiveHeldTurn(SESSION_ID), true);
+    script.end();
+    await done;
+    assert.equal(hasActiveHeldTurn(SESSION_ID), false);
+  });
+});
+
+test('a new turn sent while the held process relays waits for that turn to end before taking over', async () => {
+  await withTwoRuns(async ({ first, second, sent, startFirst, startSecond }) => {
+    const firstRun = startFirst();
+    await settle();
+    await holdForBackgroundCommand(first.script, sent);
+    first.script.emit(taskNotification('b1', 'toolu_bg', 'completed'));
+    first.script.emit(assistantText('Relaying the job result.'));
+    await settle();
+
+    let secondCreated = false;
+    const createSecond = second.createQuery;
+    second.createQuery = (options) => { secondCreated = true; return createSecond(options); };
+    const secondRun = startSecond();
+    await settle();
+    await settle();
+    assert.equal(first.script.released(), false, 'the relaying process keeps its stdin');
+    assert.equal(secondCreated, false, 'the new process is not started mid-turn');
+    assert.deepEqual(first.script.calls, [], 'and the relay is not interrupted');
+
+    first.script.emit(result());
+    await waitFor(() => secondCreated);
+    assert.equal(first.script.released(), true, 'released once its turn is over');
+
+    first.script.end();
+    await firstRun;
+    second.script.emit(init());
+    second.script.emit(result());
+    second.script.end();
+    await secondRun;
+  });
+});
+
+test('a relay turn that outlasts the wait is interrupted before its stdin is closed', async () => {
+  const previous = process.env.CLAUDE_HELD_TURN_WAIT_MS;
+  process.env.CLAUDE_HELD_TURN_WAIT_MS = '50';
+  try {
+    await withTwoRuns(async ({ first, second, sent, startFirst, startSecond }) => {
+      const firstRun = startFirst();
+      await settle();
+      await holdForBackgroundCommand(first.script, sent);
+      first.script.emit(taskNotification('b1', 'toolu_bg', 'completed'));
+      first.script.emit(assistantText('Relaying, slowly.'));
+      await settle();
+      // An interrupted turn ends with its `result`, as the CLI's does.
+      first.script.onInterrupt = () => { first.script.emit(result()); };
+
+      const secondRun = startSecond();
+      await waitFor(() => first.script.released());
+      // The SDK drops an interrupt written after stdin has ended.
+      assert.deepEqual(first.script.calls, ['interrupt', 'release']);
+
+      first.script.end();
+      await firstRun;
+      second.script.emit(init());
+      second.script.emit(result());
+      second.script.end();
+      await secondRun;
+    });
+  } finally {
+    if (previous === undefined) {
+      delete process.env.CLAUDE_HELD_TURN_WAIT_MS;
+    } else {
+      process.env.CLAUDE_HELD_TURN_WAIT_MS = previous;
+    }
+  }
+});
+
+test('a relay turn that ignores the interrupt has its process closed', async () => {
+  const previous = process.env.CLAUDE_HELD_TURN_WAIT_MS;
+  process.env.CLAUDE_HELD_TURN_WAIT_MS = '50';
+  try {
+    await withTwoRuns(async ({ first, second, sent, startFirst, startSecond }) => {
+      const firstRun = startFirst();
+      await settle();
+      await holdForBackgroundCommand(first.script, sent);
+      first.script.emit(taskNotification('b1', 'toolu_bg', 'completed'));
+      first.script.emit(assistantText('Relaying, and never stopping.'));
+      await settle();
+
+      const secondRun = startSecond();
+      // The wait's timers do not hold the event loop open, so poll for them.
+      await waitFor(() => first.script.calls.includes('close'));
+      await firstRun;
+      assert.deepEqual(first.script.calls.slice(0, 2), ['interrupt', 'close']);
+      assert.equal(hasActiveHeldTurn(SESSION_ID), false);
+
+      second.script.emit(init());
+      second.script.emit(result());
+      second.script.end();
+      await secondRun;
+      assert.equal(second.script.released(), true, 'the new turn ran');
+    });
+  } finally {
+    if (previous === undefined) {
+      delete process.env.CLAUDE_HELD_TURN_WAIT_MS;
+    } else {
+      process.env.CLAUDE_HELD_TURN_WAIT_MS = previous;
+    }
+  }
 });
