@@ -259,7 +259,7 @@ test('validateCloneUrl refuses a last segment the Windows path module would spli
   assert.equal(validateCloneUrl('https://github.com/example/repo.git', path.win32), 'repo');
 });
 
-for (const code of ['ENAMETOOLONG', 'EINVAL']) {
+for (const [code, description] of [['ENAMETOOLONG', 'name too long'], ['EINVAL', 'invalid argument']] as const) {
   test(`startCloneProject turns ${code} from the clone-target check into a 400 that does not echo the path`, async () => {
     // The name passed every check, but the OS refused the whole path (over
     // PATH_MAX, or over a smaller NAME_MAX). Its raw errno names that path.
@@ -271,7 +271,7 @@ for (const code of ['ENAMETOOLONG', 'EINVAL']) {
           { onProgress: () => undefined, onComplete: () => undefined },
           buildDependencies({
             pathExists: async (targetPath) => {
-              throw Object.assign(new Error(`${code}: name too long, access '${targetPath}'`), { code });
+              throw Object.assign(new Error(`${code}: ${description}, access '${targetPath}'`), { code });
             },
             spawnGitClone: () => { spawned += 1; throw new Error('must not spawn'); },
           }),
