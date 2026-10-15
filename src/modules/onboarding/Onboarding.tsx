@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { LLMProvider } from '@/shared/types';
-import { api } from '@/shared/api';
+import { api, readApiErrorMessage } from '@/shared/api';
 import { ProviderLoginModal, useProviderAuthStatus } from '@/modules/provider-auth';
 import AgentConnectionsStep from '@/modules/onboarding/AgentConnectionsStep';
 import GitConfigurationStep from '@/modules/onboarding/GitConfigurationStep';
@@ -13,8 +13,7 @@ const gitEmailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const readErrorMessageFromResponse = async (response: Response, fallback: string) => {
   try {
-    const payload = (await response.json()) as { error?: string };
-    return payload.error || fallback;
+    return readApiErrorMessage(await response.json()) ?? fallback;
   } catch {
     return fallback;
   }

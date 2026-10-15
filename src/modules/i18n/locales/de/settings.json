@@ -383,6 +383,25 @@
       "placeholder": "z. B. \"Bash(rm:*)\"",
       "empty": "Keine gesperrten Werkzeuge konfiguriert"
     },
+    "settingsFiles": {
+      "title": "Regeln aus den Claude-Einstellungsdateien",
+      "description": "Die Claude CLI wendet diese Regeln zusätzlich zu den Listen oben an. Eine Verbotsregel hat immer Vorrang, egal wo sie steht, aber eine Nachfrage-Regel fragt nicht nach, wenn das Werkzeug schon unter Erlaubte Werkzeuge steht. Hier sind die Regeln nur lesbar; bearbeite sie in den Dateien.",
+      "sources": {
+        "user": "Deine Einstellungen",
+        "managed": "Verwaltete Einstellungen (Administrator)"
+      },
+      "groups": {
+        "allow": "Erlauben",
+        "ask": "Nachfragen",
+        "deny": "Verbieten"
+      },
+      "missing": "Datei nicht gefunden, sie fügt also keine Regeln hinzu.",
+      "invalid": "Diese Datei konnte nicht gelesen werden. Prüfe, ob sie gültiges JSON ist.",
+      "empty": "Keine Berechtigungsregeln in dieser Datei.",
+      "loading": "Regeln werden geladen…",
+      "loadFailed": "Die Regeln aus den Claude-Einstellungsdateien konnten nicht geladen werden.",
+      "projectNote": "Die eigene .claude/settings.json und .claude/settings.local.json eines Projekts gelten zusätzlich für Chats in diesem Projekt. Erlaubnisregeln aus .claude/settings.json ignoriert die Claude CLI, bis du dem Ordner vertraust: Starte Claude Code dort einmal interaktiv und bestätige den Vertrauensdialog."
+    },
     "allowedCommands": {
       "title": "Erlaubte Shell-Befehle",
       "description": "Shell-Befehle, die automatisch ohne Aufforderung erlaubt werden",

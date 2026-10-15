@@ -135,7 +135,7 @@ tasks.json
 tasks/ 
 
 # Translations
-!src/i18n/locales/*/tasks.json
+!src/modules/i18n/locales/*/tasks.json
 
 # Git worktrees
 .worktrees/
