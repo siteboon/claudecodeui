@@ -152,6 +152,8 @@ async function startHeldRun() {
 
   return {
     cliEnv: () => cliEnv,
+    // The run loop has taken every emitted message and waits for the next one.
+    drained: () => queue.length === 0 && wake !== null,
     released: () => released,
     sent,
     // The turn ends; from here the process is held for the command.
@@ -164,8 +166,16 @@ async function startHeldRun() {
   };
 }
 
-// Lets the run loop and the prompt reader catch up without a timer, so the
-// mocked setTimeout below only ever drives the hold's own countdown.
+// Polls on setImmediate rather than a timer, so it keeps working once
+// setTimeout is mocked and only ever drives the hold's own countdown.
+async function waitUntil(condition: () => boolean): Promise<void> {
+  for (let round = 0; round < 5000 && !condition(); round += 1) {
+    await new Promise((resolve) => { setImmediate(resolve); });
+  }
+  assert.ok(condition(), 'condition never became true');
+}
+
+// Lets the prompt reader notice a release without waiting for one.
 async function flush(): Promise<void> {
   for (let round = 0; round < 20; round += 1) {
     await new Promise((resolve) => { setImmediate(resolve); });
@@ -175,7 +185,7 @@ async function flush(): Promise<void> {
 test('the configured ceiling is what the CLI is started with', async () => {
   const run = await startHeldRun();
   try {
-    await flush();
+    await waitUntil(() => run.cliEnv() !== undefined);
     assert.equal(run.cliEnv()?.CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS, String(CONFIGURED_CEILING_MS));
   } finally {
     await run.finish();
@@ -185,10 +195,10 @@ test('the configured ceiling is what the CLI is started with', async () => {
 test('a held session is let go after the configured ceiling of silence', async (t) => {
   const run = await startHeldRun();
   try {
-    await flush();
+    await waitUntil(run.drained);
     t.mock.timers.enable({ apis: ['setTimeout'] });
     run.endTurn();
-    await flush();
+    await waitUntil(() => run.drained() && run.sent.some((message) => message.kind === 'complete'));
     assert.ok(run.sent.some((message) => message.kind === 'complete'), 'the turn is over for the client');
     assert.equal(run.released(), false, 'the process is held for the background command');
 
