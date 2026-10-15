@@ -118,6 +118,7 @@ test('global npm installations update from the user home directory', async () =>
     '/home/cloudcli',
     dependencies.environment,
   ]]);
+  assert.ok(result.success);
   assert.equal(result.output, 'Update completed successfully');
 });
 
