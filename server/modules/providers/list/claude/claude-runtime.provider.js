@@ -41,7 +41,7 @@ import {
   getReportedClaudeContextWindow,
   rememberClaudeContextWindow
 } from '@/modules/providers/services/provider-token-usage.service.js';
-import { createCompleteMessage, createNormalizedMessage } from '@/shared/utils.js';
+import { createCompleteMessage, createNormalizedMessage, stripAnsiSequences } from '@/shared/utils.js';
 
 const activeSessions = new Map();
 // Outstanding background tasks per live session, keyed like activeSessions. An
@@ -946,6 +946,35 @@ async function loadMcpConfig(cwd) {
   }
 }
 
+// How much of the CLI's stderr a run keeps: the tail, where the reason for an
+// exit lands. A failed start writes one or two lines; the cap only stops a
+// chatty CLI from growing the buffer for the length of a long run.
+const CLI_STDERR_TAIL_CHARS = 2000;
+
+// The SDK's whole report of a CLI that ended without a `result` (sdk.mjs
+// `getProcessExitError`). Any other error already carries the CLI's own words.
+const CLI_EXIT_ERROR_PATTERN = /^Claude Code process (?:exited with code -?\d+|terminated by signal \w+)$/;
+
+/**
+ * Keeps the end of what the CLI writes to stderr during one run.
+ *
+ * The SDK discards the CLI's stderr unless `options.stderr` is set, so a CLI
+ * that stops before it can emit a `result` — an unknown flag on an older CLI,
+ * a temp directory it cannot create, the root/bypass guard — reached the user
+ * only as "Claude Code process exited with code 1", with its explanation lost.
+ */
+function createCliStderrTail() {
+  let tail = '';
+  return {
+    append(chunk) {
+      tail = (tail + String(chunk)).slice(-CLI_STDERR_TAIL_CHARS);
+    },
+    read() {
+      return stripAnsiSequences(tail).trim();
+    },
+  };
+}
+
 /**
  * Executes a Claude query using the SDK
  * @param {string} command - User prompt/command
@@ -1004,6 +1033,8 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   let reportedContextWindow = getReportedClaudeContextWindow(providerSessionId) ?? null;
   let mainThreadModel = null;
   let lastSentTokenBudget = null;
+  // The CLI's stderr, read only when the run ends in a bare exit error.
+  const cliStderr = createCliStderrTail();
 
   // A new turn supersedes any earlier one still holding this session's process
   // open, so held runs cannot stack up across a conversation.
@@ -1049,6 +1080,9 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     if (mcpServers) {
       sdkOptions.mcpServers = mcpServers;
     }
+
+    // Without a callback the SDK spawns the CLI with stderr ignored.
+    sdkOptions.stderr = cliStderr.append;
 
     // Every turn uses streaming input so stdin stays open past the turn's
     // `result`. The message list is reusable, but each query attempt needs its
@@ -1414,9 +1448,16 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
 
     // Check if Claude CLI is installed for a clearer error message
     const installed = await context.isProviderInstalled();
+    // A bare exit error is all the SDK knows about a CLI that ended without a
+    // `result`; whatever the CLI said on its way out explains it. Read after
+    // the await above, which gives the last stderr chunk time to arrive.
+    const exitReason = CLI_EXIT_ERROR_PATTERN.test(error?.message ?? '') ? cliStderr.read() : '';
+    if (exitReason) {
+      console.error('Claude CLI stderr before exit:', exitReason);
+    }
     const errorContent = !installed
       ? 'Claude Code is not installed. Please install it first: https://docs.anthropic.com/en/docs/claude-code'
-      : error.message;
+      : (exitReason ? `${error.message}\n${exitReason}` : error.message);
 
     // Send error to WebSocket, then the terminal complete. A run that already
     // reported completion and then failed during its post-turn hold still
