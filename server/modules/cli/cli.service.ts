@@ -10,6 +10,11 @@ import type {
 } from '@/shared/types.js';
 import { terminalTextStyles } from '@/shared/utils.js';
 
+// Where the server looks for the Cursor CLI when CURSOR_CLI_PATH is unset (shared/cursor-cli-path.ts).
+const CURSOR_CLI_DEFAULT_SEARCH = 'cursor-agent on PATH, then ~/.local/bin/cursor-agent, then '
+  + '~/.local/share/cursor-agent/versions/<newest>/cursor-agent '
+  + '(Windows: %LOCALAPPDATA%\\cursor-agent\\, then its versions\\<newest>\\) (default)';
+
 type CliServiceDependencies = {
   applicationRoot: string;
   defaultDatabasePath: string;
@@ -105,6 +110,7 @@ function showStatus(dependencies: CliServiceDependencies): void {
   output.log(`       SERVER_PORT: ${terminalTextStyles.bright(environment.SERVER_PORT || environment.PORT || '3001')} ${terminalTextStyles.dim(environment.SERVER_PORT || environment.PORT ? '' : '(default)')}`);
   output.log(`       DATABASE_PATH: ${terminalTextStyles.dim(environment.DATABASE_PATH || '(using default location)')}`);
   output.log(`       CLAUDE_CLI_PATH: ${terminalTextStyles.dim(environment.CLAUDE_CLI_PATH || 'claude (default)')}`);
+  output.log(`       CURSOR_CLI_PATH: ${terminalTextStyles.dim(environment.CURSOR_CLI_PATH || CURSOR_CLI_DEFAULT_SEARCH)}`);
   output.log(`       CONTEXT_WINDOW: ${terminalTextStyles.dim(environment.CONTEXT_WINDOW || '160000 (default)')}`);
   output.log(`\n${terminalTextStyles.info('[INFO]')} Claude Projects Folder:`);
   output.log(`       ${terminalTextStyles.dim(claudeProjectsPath)}`);
@@ -160,6 +166,7 @@ Environment Variables:
   PORT                Set server port (default: 3001) (LEGACY)
   DATABASE_PATH       Set custom database location
   CLAUDE_CLI_PATH     Set custom Claude CLI path
+  CURSOR_CLI_PATH     Set the absolute path of the Cursor CLI (cursor-agent)
   CONTEXT_WINDOW      Set context window size (default: 160000)
 
 Documentation:

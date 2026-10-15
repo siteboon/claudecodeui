@@ -180,7 +180,8 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
 
           {authStatus.error && (
             <div className="border-t border-border/50 pt-4">
-              <div className="text-sm text-red-600 dark:text-red-400">
+              {/* Server errors can carry long paths (e.g. where the Cursor CLI was looked for). */}
+              <div className="break-words text-sm text-red-600 dark:text-red-400">
                 {t('agents.error', { error: authStatus.error })}
               </div>
             </div>

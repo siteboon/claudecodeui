@@ -5,6 +5,7 @@ import path from 'node:path';
 import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
+import { CURSOR_CLI_COMMAND, resolveCursorCli } from '@/shared/cursor-cli-path.js';
 import { parseIncomingJsonObject, stripAnsiSequences } from '@/shared/utils.js';
 
 type ShellIncomingMessage = {
@@ -204,6 +205,32 @@ type ShellLaunch = {
 };
 
 /**
+ * What starts the Cursor CLI in the PTY. bash/PowerShell search the server's PATH, which often
+ * lacks the installer's ~/.local/bin, so a CLI found elsewhere (or set with CURSOR_CLI_PATH) is
+ * started by its quoted path. A CLI on PATH, or none at all, keeps the bare name.
+ */
+function resolveCursorShellProgram(): string {
+  const cli = resolveCursorCli();
+  if (cli.source === 'path' || cli.source === 'missing') {
+    return CURSOR_CLI_COMMAND;
+  }
+  const quotedCommand = quoteShellArgument(cli.command);
+  // PowerShell reads a leading quoted string as a value; the call operator runs it.
+  return os.platform() === 'win32' ? `& ${quotedCommand}` : quotedCommand;
+}
+
+/**
+ * Points a launch command that starts with `cursor-agent` (the Settings login button sends
+ * `cursor-agent login`) at the resolved Cursor CLI.
+ */
+function withResolvedCursorCli(command: string): string {
+  if (command !== CURSOR_CLI_COMMAND && !command.startsWith(`${CURSOR_CLI_COMMAND} `)) {
+    return command;
+  }
+  return `${resolveCursorShellProgram()}${command.slice(CURSOR_CLI_COMMAND.length)}`;
+}
+
+/**
  * Resolves provider command line for plain shell and agent-backed shell modes.
  */
 function buildShellCommand(
@@ -223,14 +250,15 @@ function buildShellCommand(
   const otherProgram = (command: string): ShellLaunch => ({ command, claudeFollowsAppTheme: false });
 
   if (isPlainShell) {
-    return otherProgram(initialCommand);
+    return otherProgram(withResolvedCursorCli(initialCommand));
   }
 
   if (provider === 'cursor') {
+    const cursorProgram = resolveCursorShellProgram();
     if (resumeSessionId) {
-      return otherProgram(`cursor-agent --resume="${resumeSessionId}"`);
+      return otherProgram(`${cursorProgram} --resume="${resumeSessionId}"`);
     }
-    return otherProgram('cursor-agent');
+    return otherProgram(cursorProgram);
   }
 
   if (provider === 'codex') {

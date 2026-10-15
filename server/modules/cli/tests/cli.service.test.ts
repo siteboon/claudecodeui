@@ -86,3 +86,22 @@ test('returns a failure code for an unknown command without exiting the process'
   assert.equal(exitCode, 1);
   assert.match(harness.errorMessages[0], /Unknown command: unknown/);
 });
+
+test('status and help say where the Cursor CLI is looked for and that CURSOR_CLI_PATH takes an absolute path', async () => {
+  const harness = createHarness();
+
+  assert.equal(await harness.service.run(['status']), 0);
+  const statusLine = harness.logMessages.find((message) => message.includes('CURSOR_CLI_PATH:')) ?? '';
+  for (const location of [
+    'cursor-agent on PATH',
+    '~/.local/bin/cursor-agent',
+    '~/.local/share/cursor-agent/versions/<newest>/cursor-agent',
+    '%LOCALAPPDATA%\\cursor-agent\\',
+    'versions\\<newest>\\',
+  ]) {
+    assert.ok(statusLine.includes(location), `${location} missing from: ${statusLine}`);
+  }
+
+  assert.equal(await harness.service.run(['help']), 0);
+  assert.match(harness.logMessages.join('\n'), /CURSOR_CLI_PATH {5}Set the absolute path of the Cursor CLI/);
+});
