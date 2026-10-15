@@ -223,11 +223,15 @@ function invalidCloneUrlError(reason: string): AppError {
 
 /**
  * Names the directory the clone lands in after the URL's last path segment,
- * with trailing slashes and a `.git` suffix dropped.
+ * with trailing separators and a `.git` suffix dropped. On Windows `\` also
+ * separates segments, so a UNC or backslash local path (`\\server\share\repo.git`)
+ * names `repo` there rather than a path.
  */
-function deriveCloneDirectoryName(githubUrl: string): string {
-  const sanitizedGithubUrl = githubUrl.replace(/\/+$/, '').replace(/\.git$/, '');
-  return sanitizedGithubUrl.split('/').pop() || 'repository';
+function deriveCloneDirectoryName(githubUrl: string, pathApi: path.PlatformPath): string {
+  const separators = pathApi.sep === '\\' ? /[\\/]/ : /\//;
+  const trailingSeparators = pathApi.sep === '\\' ? /[\\/]+$/ : /\/+$/;
+  const sanitizedGithubUrl = githubUrl.replace(trailingSeparators, '').replace(/\.git$/, '');
+  return sanitizedGithubUrl.split(separators).pop() || 'repository';
 }
 
 /**
@@ -238,9 +242,9 @@ function deriveCloneDirectoryName(githubUrl: string): string {
  * is parked. An empty URL passes; startCloneProject reports it as missing.
  *
  * It turns away what a prompt pasted into the URL field looks like — a line
- * break, which no remote, scp-like address or local path carries, or a last
- * segment too long to be a directory name — and a last segment that is not
- * one new directory inside the workspace. A space is refused only in an
+ * break, which no realistic clone source carries, or a last segment too long
+ * to be a directory name — and a last segment that is not one new directory
+ * inside the workspace. A space is refused only in an
  * http(s) URL: ssh, scp-like, file:// and local paths may hold one.
  * `pathApi` is the host's path module; tests pass `path.win32` to cover
  * Windows separators on any host.
@@ -258,10 +262,10 @@ export function validateCloneUrl(githubUrl: string, pathApi: path.PlatformPath =
     throw invalidCloneUrlError('it contains a line break or another control character');
   }
 
-  const cloneDirectoryName = deriveCloneDirectoryName(githubUrl);
+  const cloneDirectoryName = deriveCloneDirectoryName(githubUrl, pathApi);
   // `.` or `..` would put the clone in the workspace itself or its parent,
   // `.git` into the workspace's own git directory, and a name the platform
-  // splits (`..\..\outside` on Windows) anywhere the separators lead.
+  // still splits (a drive prefix such as `C:repo` on Windows) anywhere it leads.
   if (
     cloneDirectoryName === '.'
     || cloneDirectoryName === '..'

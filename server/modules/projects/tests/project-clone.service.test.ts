@@ -165,8 +165,9 @@ test('startCloneProject rejects an http(s) URL the parser cannot read before git
   assert.equal(spawned, 0);
 });
 
-// A prompt pasted into the URL field: the browser's single-line input turns
-// its line breaks into spaces, so what arrives has no slash and runs long.
+// A prompt pasted into the URL field. Sent as it is, its line breaks are
+// control characters; the browser's single-line input turns them into spaces
+// (the second row below), and then what arrives has no slash and runs long.
 const PASTED_PROMPT = [
   'Please audit this repository for security problems.',
   'Focus on the authentication flow, the websocket handlers and anything that touches the filesystem.',
@@ -239,24 +240,32 @@ for (const [label, githubUrl, reason] of [
   });
 }
 
-test('validateCloneUrl refuses a last segment the Windows path module would split', () => {
-  // `\` is a separator on Windows only: path.win32.join('C:\\ws', '..\\..\\outside')
-  // is 'C:\\outside', so the clone used to land outside the workspace there.
+test('validateCloneUrl names one directory inside the workspace on Windows too', () => {
+  // `\` is a separator on Windows only. Taking the last segment by `/` alone
+  // left `..\..\outside` there, and path.win32.join('C:\\ws', '..\\..\\outside')
+  // is 'C:\\outside': the clone landed outside the workspace.
   const githubUrl = 'git@github.com:example/..\\..\\outside.git';
-  assert.throws(
-    () => validateCloneUrl(githubUrl, path.win32),
-    (error: unknown) => {
-      assert.ok(error instanceof AppError, `expected an AppError, got ${String(error)}`);
-      assert.equal(error.code, 'INVALID_GITHUB_URL');
-      assert.equal(error.message, `Invalid repository URL: ${NOT_A_REPOSITORY_NAME}`);
-      return true;
-    },
-  );
-  assert.throws(() => validateCloneUrl('C:repo', path.win32), AppError);
+  assert.equal(validateCloneUrl(githubUrl, path.win32), 'outside');
+  // UNC and backslash local paths still name their repository.
+  assert.equal(validateCloneUrl('\\\\server\\share\\repo.git', path.win32), 'repo');
+  assert.equal(validateCloneUrl('..\\other\\repo.git\\', path.win32), 'repo');
+  assert.equal(validateCloneUrl('https://github.com/example/repo.git', path.win32), 'repo');
+
+  for (const unusable of ['git@github.com:example/..\\..', 'C:repo']) {
+    assert.throws(
+      () => validateCloneUrl(unusable, path.win32),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError, `expected an AppError, got ${String(error)}`);
+        assert.equal(error.code, 'INVALID_GITHUB_URL');
+        assert.equal(error.message, `Invalid repository URL: ${NOT_A_REPOSITORY_NAME}`);
+        return true;
+      },
+      unusable,
+    );
+  }
 
   // On POSIX a backslash is an ordinary name character: still one directory.
   assert.equal(validateCloneUrl(githubUrl, path.posix), '..\\..\\outside');
-  assert.equal(validateCloneUrl('https://github.com/example/repo.git', path.win32), 'repo');
 });
 
 for (const [code, description] of [['ENAMETOOLONG', 'name too long'], ['EINVAL', 'invalid argument']] as const) {
@@ -320,8 +329,8 @@ for (const [label, githubUrl, expectedDirectory] of [
   ['a last segment of exactly 255 bytes', `https://github.com/example/${'a'.repeat(255)}.git`, 'a'.repeat(255)],
 ] as const) {
   test(`startCloneProject clones ${label}`, async () => {
-    // The checks above only turn away what git or the filesystem never could
-    // take; every remote shape git accepts still reaches it, unchanged.
+    // The checks above only turn away what is never a realistic clone source;
+    // every remote shape git accepts still reaches it, unchanged.
     const gitProcess = createMockGitProcess();
     let spawnCall: { cloneUrl: string; clonePath: string } | null = null;
     const operation = await startCloneProject(

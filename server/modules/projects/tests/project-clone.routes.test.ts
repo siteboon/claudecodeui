@@ -10,7 +10,10 @@ import express, {
 } from 'express';
 
 import { createProjectCloneRouter } from '@/modules/projects/project-clone.routes.js';
-import { createPendingCloneRequests } from '@/modules/projects/services/project-clone-request.service.js';
+import {
+  createPendingCloneRequests,
+  type PendingCloneRequests,
+} from '@/modules/projects/services/project-clone-request.service.js';
 import type { startCloneProject } from '@/modules/projects/services/project-clone.service.js';
 import { AppError } from '@/shared/utils.js';
 
@@ -38,6 +41,7 @@ const unexpectedCloneRunner: CloneRunner = async () => {
 type ServerOptions = {
   startCloneProject: CloneRunner;
   pendingCloneTtlMs?: number;
+  pendingCloneRequests?: PendingCloneRequests;
 };
 
 // The auth middleware is mounted ahead of the router in production; here the
@@ -57,7 +61,8 @@ async function withProjectsServer(
   });
   app.use('/api/projects', createProjectCloneRouter({
     startCloneProject: options.startCloneProject,
-    pendingCloneRequests: createPendingCloneRequests(options.pendingCloneTtlMs ?? 60_000),
+    pendingCloneRequests: options.pendingCloneRequests
+      ?? createPendingCloneRequests(options.pendingCloneTtlMs ?? 60_000),
   }));
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (error instanceof AppError) {
@@ -123,8 +128,18 @@ test('POST /clone parks the request under a fresh id without spawning anything',
 
 test('POST /clone answers a URL the service would turn away with a 400 and no clone id', async () => {
   // These used to be parked with a 200 and only failed as an event on the
-  // stream, so an API client never saw a 400 or the error code.
-  await withProjectsServer({ startCloneProject: unexpectedCloneRunner }, async (baseUrl) => {
+  // stream, so an API client never saw a 400 or the error code. A refused URL
+  // is not parked either, so it cannot sit in memory until its expiry.
+  const parked: string[] = [];
+  const pendingCloneRequests = createPendingCloneRequests(60_000);
+  const recordingRequests: PendingCloneRequests = {
+    add: (userId, request) => {
+      parked.push(request.githubUrl);
+      return pendingCloneRequests.add(userId, request);
+    },
+    claim: pendingCloneRequests.claim,
+  };
+  await withProjectsServer({ startCloneProject: unexpectedCloneRunner, pendingCloneRequests: recordingRequests }, async (baseUrl) => {
     for (const [githubUrl, code] of [
       ['Please audit this repository.\nThen write a short report.', 'INVALID_GITHUB_URL'],
       [`https://github.com/example/${'a'.repeat(256)}`, 'INVALID_GITHUB_URL'],
@@ -136,6 +151,17 @@ test('POST /clone answers a URL the service would turn away with a 400 and no cl
       assert.equal(response.status, 400, githubUrl);
       assert.deepEqual(response.body, { error: code }, githubUrl);
     }
+  });
+  assert.deepEqual(parked, []);
+});
+
+test('POST /clone checks the URL the way the clone will read it, trimmed', async () => {
+  // The stream runs the clone on the trimmed URL, so a line break the form
+  // left at the end is no reason to refuse it here.
+  await withProjectsServer({ startCloneProject: unexpectedCloneRunner }, async (baseUrl) => {
+    const response = await postClone(baseUrl, 1, { ...cloneBody, githubUrl: ' https://github.com/example/repo.git\n' });
+    assert.equal(response.status, 200);
+    assert.match(response.body.cloneId ?? '', /^[0-9a-f-]{36}$/);
   });
 });
 
