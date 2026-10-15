@@ -106,9 +106,11 @@ beforeEach(() => {
   localStorage.clear();
 });
 
-afterEach(() => {
-  // Ends a re-submit loop a failing run may have left going.
+afterEach(async () => {
+  // Ends, and lets drain, a re-submit loop a failing run may have left going,
+  // so it cannot add execute requests to the next test's mock.
   expandedContent = 'expanded';
+  await new Promise((resolve) => setTimeout(resolve, 50));
   vi.unstubAllGlobals();
   localStorage.clear();
 });
@@ -151,12 +153,18 @@ const pickEchoFromMenu = async (text: string) => {
   return executeBodies()[0];
 };
 
-test('a menu pick takes no arguments from a name that is not at the start of the composer', async () => {
-  const body = await pickEchoFromMenu('see /echo2 docs\nmore\n/echo');
+for (const [where, text] of [
+  ['later in the composer', 'see /echo docs and\nmore\n/ech'],
+  ['inside a longer word', '/echo2 docs\nmore'],
+  ['inside a longer word and at the end', 'see /echo2 docs\nmore\n/echo'],
+]) {
+  test(`a menu pick takes no arguments from the command name ${where}`, async () => {
+    const body = await pickEchoFromMenu(text);
 
-  assert.equal(body.rawArgs, '');
-  assert.deepEqual(body.args, []);
-});
+    assert.equal(body.rawArgs, '');
+    assert.deepEqual(body.args, []);
+  });
+}
 
 test('a menu pick over a composer that opens with the command trims its argument text', async () => {
   const body = await pickEchoFromMenu('  /echo  hi there \n\n');
