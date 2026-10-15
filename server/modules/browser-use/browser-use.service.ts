@@ -165,29 +165,45 @@ function ensureRuntimeInstallDir(): string {
   return runtimeDir;
 }
 
-function getPlaywright(): any | null {
-  // Prefer the copy "Install Runtime" manages, so an install takes effect even when another Playwright
-  // resolves first (a global package above CloudCLI, or ~/node_modules left by installs that ran in the
-  // launch directory). Load it by absolute path: a bare `playwright` lookup from the runtime dir walks up
-  // into those parents, and Node keeps returning whatever that lookup found first for the whole process.
-  const runtimePlaywrightDir = path.join(getRuntimeInstallDir(), 'node_modules', 'playwright');
-  if (fs.existsSync(path.join(runtimePlaywrightDir, 'package.json'))) {
-    try {
-      return require(runtimePlaywrightDir);
-    } catch {
-      // A broken runtime copy falls back to any other Playwright that resolves.
-    }
-  }
-
+function hasChromium(playwright: any): boolean {
   try {
-    return require('playwright');
+    const executablePath = playwright?.chromium?.executablePath();
+    return Boolean(executablePath && fs.existsSync(executablePath));
   } catch {
-    try {
-      return createRequire(getRuntimePackageJsonPath())('playwright');
-    } catch {
-      return null;
-    }
+    return false;
   }
+}
+
+function getPlaywright(): any | null {
+  // Candidates in order: the copy "Install Runtime" manages, loaded by absolute path (a bare `playwright`
+  // lookup from the runtime dir walks up into its parents, and Node keeps returning whatever that lookup
+  // found first for the whole process); a Playwright that resolves from the CloudCLI install; then a bare
+  // lookup from the runtime dir. The first one whose Chromium exists wins, so neither a Chromium-less
+  // global copy nor a runtime copy whose install stopped before Chromium hides a working one. When none
+  // has Chromium, the first that loads is used, so the status still offers Install Runtime.
+  const runtimePlaywrightDir = path.join(path.resolve(getRuntimeInstallDir()), 'node_modules', 'playwright');
+  const loaders: Array<() => any> = [
+    () => (fs.existsSync(path.join(runtimePlaywrightDir, 'package.json')) ? require(runtimePlaywrightDir) : null),
+    () => require('playwright'),
+    () => createRequire(getRuntimePackageJsonPath())('playwright'),
+  ];
+  let firstLoaded: any | null = null;
+  for (const load of loaders) {
+    let playwright: any | null = null;
+    try {
+      playwright = load();
+    } catch {
+      continue;
+    }
+    if (!playwright) {
+      continue;
+    }
+    if (hasChromium(playwright)) {
+      return playwright;
+    }
+    firstLoaded ??= playwright;
+  }
+  return firstLoaded;
 }
 
 function getMcpCommand(): { command: string; args: string[] } {
