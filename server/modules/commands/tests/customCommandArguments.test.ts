@@ -99,6 +99,11 @@ test('custom command $1..$n use the raw text tokens when a client sends rawArgs 
 
   assert.equal(result.content, 'All: fix\nthe  tests | fix | the | tests');
 
+  // Surrounding whitespace is not a token: `$1` is the first word.
+  const padded = await executeCustomCommand('$1|$2', { rawArgs: '  fix tests\n' });
+
+  assert.equal(padded.content, 'fix|tests');
+
   // Blank raw text has no tokens, so `$1` stays as written.
   const blank = await executeCustomCommand('All: [$ARGUMENTS] | $1', { rawArgs: '' });
 

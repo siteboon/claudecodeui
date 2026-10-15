@@ -193,3 +193,28 @@ for (const [opening, expandedBody] of [
     assert.deepEqual(chatSends().map((message) => message.content), [expandedBody]);
   });
 }
+
+test('an expanded body that is exactly "help" is sent as the message, not opened as help', async () => {
+  expandedContent = 'help';
+  const { view, chatSends } = await renderLoadedComposer();
+  await act(async () => { view.result.current.setInput('/echo hi'); });
+  await act(async () => {
+    await view.result.current.handleSubmit({ preventDefault: () => undefined } as never);
+  });
+
+  await waitFor(() => assert.ok(chatSends().length > 0 || executeBodies().length > 1));
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+  assert.deepEqual(executeBodies().map((body) => body.commandName), ['/echo']);
+  assert.deepEqual(chatSends().map((message) => message.content), ['help']);
+});
+
+test('a voice transcript sent straight away is still read as a command', async () => {
+  // Only the re-submit of an expanded body skips interception; "stop and send"
+  // goes through the same path as typing and pressing Enter.
+  const { view, chatSends } = await renderLoadedComposer();
+  await act(async () => { view.result.current.handleVoiceTranscript('/echo hi\nthere', true); });
+
+  await waitFor(() => assert.equal(chatSends().length, 1));
+  assert.deepEqual(executeBodies().map((body) => [body.commandName, body.rawArgs]), [['/echo', 'hi\nthere']]);
+  assert.deepEqual(chatSends().map((message) => message.content), ['expanded']);
+});
