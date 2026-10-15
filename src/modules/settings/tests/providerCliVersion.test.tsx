@@ -1,17 +1,21 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import '@/modules/i18n';
+import AccountContent from '@/modules/settings/tabs/agents-settings/sections/content/AccountContent';
 import ProviderCliVersion from '@/modules/settings/tabs/agents-settings/sections/content/ProviderCliVersion';
 import type { ProviderCliStatus, ProviderCliUpdateResult } from '@/shared/types';
 
 // Issue #1529: Settings -> Agents -> Account shows which CLI version the server
 // runs, whether npm has a newer one, and runs the CLI's own updater.
 
+// Each status request takes the next entry (the last one repeats): a status, a
+// ready-made response, or 'pending' for a request that never answers.
+type StatusAnswer = ProviderCliStatus | Response | 'pending';
 const responses: {
-  status: ProviderCliStatus[];
-  update: () => Response;
+  status: StatusAnswer[];
+  update: () => Response | Promise<Response>;
 } = { status: [], update: () => new Response('{}') };
 const calls: string[] = [];
 
@@ -30,7 +34,10 @@ vi.mock('@/shared/api', async (importOriginal) => {
         cliStatus: async (provider: string) => {
           calls.push(`status:${provider}`);
           const next = responses.status.length > 1 ? responses.status.shift() : responses.status[0];
-          return json({ success: true, data: next });
+          if (next === 'pending') {
+            return new Promise<Response>(() => {});
+          }
+          return next instanceof Response ? next : json({ success: true, data: next });
         },
         updateCli: async (provider: string) => {
           calls.push(`update:${provider}`);
@@ -49,6 +56,8 @@ const claudeStatus = (overrides: Partial<ProviderCliStatus> = {}): ProviderCliSt
   updateAvailable: true,
   updateCommand: 'claude update',
   updateUnavailableReason: null,
+  updateInProgress: false,
+  lastUpdate: null,
   ...overrides,
 });
 
@@ -67,10 +76,25 @@ const renderRow = (installedVersion: string | null = '2.1.200') => render(
   <ProviderCliVersion agent="claude" installedVersion={installedVersion} textClass="" subtextClass="" />,
 );
 
+// What nginx answers after its 60 s read timeout while the updater keeps running.
+const gatewayTimeout = () => new Response('<html><head><title>504 Gateway Time-out</title></head></html>', {
+  status: 504,
+  headers: { 'Content-Type': 'text/html' },
+});
+
+/** Lets the row's 3 s poll run now instead of waiting for it. */
+const runPoll = () => act(async () => {
+  await vi.advanceTimersByTimeAsync(3000);
+});
+
 describe('ProviderCliVersion', () => {
   beforeEach(() => {
     responses.status = [];
     calls.length = 0;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('shows the installed version and the newer npm release with an update button', async () => {
@@ -146,5 +170,171 @@ describe('ProviderCliVersion', () => {
     responses.status = [claudeStatus({ installed: false, installedVersion: null, updateAvailable: false })];
     renderRow(null);
     await waitFor(() => expect(screen.queryByTestId('provider-cli-version')).toBeNull());
+  });
+
+  it('disables the button and shows what runs while the update is in progress', async () => {
+    responses.status = [claudeStatus()];
+    let finish: (response: Response) => void = () => {};
+    responses.update = () => new Promise<Response>((resolve) => {
+      finish = resolve;
+    });
+    renderRow();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Update to v2\.1\.300/ }));
+    const button = await screen.findByRole('button', { name: /Updating/ });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('Running claude update on the server. This can take a few minutes.')).toBeTruthy();
+
+    finish(json({ success: true, data: updateResult() }));
+    expect(await screen.findByText('Updated to v2.1.300.')).toBeTruthy();
+  });
+
+  it('says the CLI was already up to date, or that the version did not change when the newest is unknown', async () => {
+    responses.status = [claudeStatus({ installedVersion: '2.1.300', updateAvailable: false })];
+    responses.update = () => json({
+      success: true,
+      data: updateResult({ previousVersion: '2.1.300', output: 'Claude Code is up to date (2.1.300)' }),
+    });
+    const { unmount } = renderRow('2.1.300');
+    // Without an update hint the button says what it does: run the updater.
+    fireEvent.click(await screen.findByRole('button', { name: 'Run updater' }));
+    expect(await screen.findByText('Already up to date (v2.1.300).')).toBeTruthy();
+    unmount();
+
+    // Cursor has no npm release to compare with.
+    responses.status = [claudeStatus({
+      provider: 'cursor',
+      installedVersion: '2026.07.20-8cc9c0b',
+      latestVersion: null,
+      updateAvailable: false,
+      updateCommand: 'cursor-agent update',
+    })];
+    responses.update = () => json({
+      success: true,
+      data: updateResult({
+        command: 'cursor-agent update',
+        previousVersion: '2026.07.20-8cc9c0b',
+        installedVersion: '2026.07.20-8cc9c0b',
+        output: 'Already up to date',
+      }),
+    });
+    renderRow('2026.07.20-8cc9c0b');
+    fireEvent.click(await screen.findByRole('button', { name: 'Run updater' }));
+    expect(await screen.findByText(
+      'The updater finished and the version is still v2026.07.20-8cc9c0b. Its output below says why.',
+    )).toBeTruthy();
+  });
+
+  it('says the hosting platform manages the CLI and offers no update there', async () => {
+    responses.status = [claudeStatus({
+      latestVersion: null,
+      updateAvailable: false,
+      updateCommand: null,
+      updateUnavailableReason: 'platform',
+    })];
+    renderRow();
+    expect(await screen.findByText('Managed by the hosting platform.')).toBeTruthy();
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('stops saying it is checking when the version cannot be loaded', async () => {
+    responses.status = [json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'boom' } }, 500)];
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    renderRow(null);
+    expect(await screen.findByText('Could not read the version')).toBeTruthy();
+    expect(screen.queryByText('Checking version…')).toBeNull();
+  });
+
+  it('picks up an update that is still running when the row mounts, and shows its result', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    // The update was started before this row mounted: on another agent's tab, or before Settings was reopened.
+    responses.status = [
+      claudeStatus({ updateInProgress: true }),
+      claudeStatus({ updateInProgress: true }),
+      claudeStatus({ installedVersion: '2.1.300', updateAvailable: false, lastUpdate: updateResult() }),
+    ];
+    renderRow();
+
+    const button = await screen.findByRole('button', { name: /Updating/ });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('Running claude update on the server. This can take a few minutes.')).toBeTruthy();
+
+    await runPoll();
+    expect(screen.getByRole('button', { name: /Updating/ })).toBeTruthy();
+    await runPoll();
+    expect(await screen.findByText('Updated to v2.1.300.')).toBeTruthy();
+    expect(screen.getByText('Installed: v2.1.300')).toBeTruthy();
+    expect(screen.getByText('Up to date')).toBeTruthy();
+    // It only watched: the updater was not started a second time.
+    expect(calls).toEqual(['status:claude', 'status:claude', 'status:claude']);
+  });
+
+  it('follows the update to its end when a proxy gives up on the request', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    responses.status = [
+      claudeStatus(),
+      claudeStatus({ updateInProgress: true }),
+      claudeStatus({
+        installedVersion: '2.1.200',
+        lastUpdate: updateResult({
+          exitCode: 1,
+          installedVersion: '2.1.200',
+          failure: 'permission_denied',
+          output: 'Error: Insufficient permissions to install update',
+        }),
+      }),
+    ];
+    responses.update = gatewayTimeout;
+    renderRow();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Update to v2\.1\.300/ }));
+    await waitFor(() => expect(calls).toEqual(['status:claude', 'update:claude', 'status:claude']));
+    expect(screen.getByRole('button', { name: /Updating/ })).toBeTruthy();
+
+    await runPoll();
+    const message = await screen.findByText(/is not allowed to write where this CLI is installed/);
+    expect(message.textContent).toContain('Run claude update on the server');
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('says the update may have run when its answer is lost and no run is going on', async () => {
+    responses.status = [claudeStatus(), claudeStatus({ installedVersion: '2.1.300', updateAvailable: false })];
+    responses.update = gatewayTimeout;
+    renderRow();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Update to v2\.1\.300/ }));
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toMatch(/^No answer came back from the server \(.+\)\. The update may have run anyway;/);
+    expect(alert.textContent).not.toContain('did not run');
+    // The row shows what the server reports now.
+    expect(screen.getByText('Installed: v2.1.300')).toBeTruthy();
+  });
+});
+
+describe('AccountContent CLI version row', () => {
+  beforeEach(() => {
+    calls.length = 0;
+  });
+
+  it('shows the version from the auth status while the CLI status loads', async () => {
+    responses.status = ['pending'];
+    render(
+      <AccountContent
+        agent="claude"
+        authStatus={{
+          authenticated: true,
+          email: 'someone@example.com',
+          method: 'credentials_file',
+          error: null,
+          loading: false,
+          installedVersion: '2.1.295',
+        }}
+        onLogin={() => {}}
+      />,
+    );
+
+    const row = await screen.findByTestId('provider-cli-version');
+    expect(row.textContent).toContain('Installed: v2.1.295');
+    expect(calls).toEqual(['status:claude']);
   });
 });

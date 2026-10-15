@@ -404,18 +404,20 @@
       "checking": "Verificando a versão…",
       "installed": "Instalada: v{{version}}",
       "installedUnknown": "Instalada (versão desconhecida)",
+      "versionUnavailable": "Não foi possível ler a versão",
       "updateAvailable": "Atualização disponível: v{{version}}",
       "upToDate": "Atualizada",
       "bundled": "Vem com o CloudCLI e é atualizada junto com ele.",
       "platform": "Gerenciada pela plataforma de hospedagem.",
       "updateTo": "Atualizar para v{{version}}",
-      "checkForUpdates": "Verificar atualizações",
+      "runUpdater": "Executar atualizador",
       "updating": "Atualizando…",
       "updatingHint": "Executando {{command}} no servidor. Isso pode levar alguns minutos.",
       "runsCommand": "Executa {{command}} no servidor",
       "output": "Saída de {{command}}",
       "result": {
         "updated": "Atualizada para v{{version}}.",
+        "alreadyUpToDate": "Já está atualizada (v{{version}}).",
         "unchanged": "O atualizador terminou, mas a versão continua v{{version}}. A saída abaixo explica o motivo.",
         "unchangedUnknown": "O atualizador terminou. A saída está abaixo.",
         "permissionDenied": "O usuário do servidor não tem permissão para gravar onde esta CLI está instalada. Execute {{command}} no servidor como dono dessa instalação (por exemplo, com sudo).",
@@ -424,7 +426,8 @@
         "failedQuietly": "O atualizador informou uma falha. A saída está abaixo.",
         "notStarted": "Não foi possível iniciar o atualizador.",
         "busy": "Este agente está trabalhando em uma sessão. Espere ele terminar ou pare-o e depois atualize.",
-        "requestFailed": "A atualização não foi executada: {{error}}"
+        "requestFailed": "A atualização não foi executada: {{error}}",
+        "unconfirmed": "Nenhuma resposta chegou do servidor ({{error}}). A atualização pode ter sido executada mesmo assim; a versão acima é a última informada pelo servidor."
       }
     },
     "subscriptionOverride": {

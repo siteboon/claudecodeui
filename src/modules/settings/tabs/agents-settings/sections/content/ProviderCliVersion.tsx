@@ -15,9 +15,11 @@ type ProviderCliVersionProps = {
 
 type UpdateResultProps = {
   result: ProviderCliUpdateResult;
+  /** The newest npm release, when known; an unchanged version equal to it means there was nothing to update. */
+  latestVersion: string | null;
 };
 
-function UpdateResult({ result }: UpdateResultProps) {
+function UpdateResult({ result, latestVersion }: UpdateResultProps) {
   const { t } = useTranslation('settings');
   const changed = result.installedVersion !== null && result.installedVersion !== result.previousVersion;
 
@@ -35,6 +37,8 @@ function UpdateResult({ result }: UpdateResultProps) {
         : t('agents.cli.result.failed', { exitCode: result.exitCode });
   } else if (changed) {
     message = t('agents.cli.result.updated', { version: result.installedVersion });
+  } else if (result.installedVersion && result.installedVersion === latestVersion) {
+    message = t('agents.cli.result.alreadyUpToDate', { version: result.installedVersion });
   } else {
     message = result.installedVersion
       ? t('agents.cli.result.unchanged', { version: result.installedVersion })
@@ -72,7 +76,7 @@ function UpdateResult({ result }: UpdateResultProps) {
  */
 export default function ProviderCliVersion({ agent, installedVersion, textClass, subtextClass }: ProviderCliVersionProps) {
   const { t } = useTranslation('settings');
-  const { status, updating, updateResult, updateError, runUpdate } = useProviderCliVersion(agent);
+  const { status, statusFailed, updating, updateResult, updateError, runUpdate } = useProviderCliVersion(agent);
 
   // Nothing to say about a CLI that is not there; the status line above already reports it.
   if (status && !status.installed) {
@@ -80,11 +84,14 @@ export default function ProviderCliVersion({ agent, installedVersion, textClass,
   }
 
   const version = status ? status.installedVersion : installedVersion;
-  const versionText = version
-    ? t('agents.cli.installed', { version })
-    : status
-      ? t('agents.cli.installedUnknown')
-      : t('agents.cli.checking');
+  let versionText: string;
+  if (version) {
+    versionText = t('agents.cli.installed', { version });
+  } else if (status) {
+    versionText = t('agents.cli.installedUnknown');
+  } else {
+    versionText = statusFailed ? t('agents.cli.versionUnavailable') : t('agents.cli.checking');
+  }
 
   let detail: string | null = null;
   if (status?.updateUnavailableReason === 'bundled') {
@@ -98,11 +105,15 @@ export default function ProviderCliVersion({ agent, installedVersion, textClass,
   }
 
   const updateCommand = status?.updateCommand ?? null;
-  const updateErrorMessage = updateError?.code === 'PROVIDER_CLI_BUSY'
-    ? t('agents.cli.result.busy')
-    : updateError
-      ? t('agents.cli.result.requestFailed', { error: updateError.message })
-      : null;
+  let updateErrorMessage: string | null = null;
+  if (updateError?.kind === 'unconfirmed') {
+    // The answer was lost, not refused: the update may have run all the same.
+    updateErrorMessage = t('agents.cli.result.unconfirmed', { error: updateError.message });
+  } else if (updateError?.code === 'PROVIDER_CLI_BUSY') {
+    updateErrorMessage = t('agents.cli.result.busy');
+  } else if (updateError) {
+    updateErrorMessage = t('agents.cli.result.requestFailed', { error: updateError.message });
+  }
 
   return (
     <div className="border-t border-border/50 pt-4" data-testid="provider-cli-version">
@@ -146,7 +157,7 @@ export default function ProviderCliVersion({ agent, installedVersion, textClass,
               ? t('agents.cli.updating')
               : status?.updateAvailable && status.latestVersion
                 ? t('agents.cli.updateTo', { version: status.latestVersion })
-                : t('agents.cli.checkForUpdates')}
+                : t('agents.cli.runUpdater')}
           </Button>
         )}
       </div>
@@ -156,7 +167,7 @@ export default function ProviderCliVersion({ agent, installedVersion, textClass,
           {t('agents.cli.updatingHint', { command: updateCommand })}
         </p>
       )}
-      {!updating && updateResult && <UpdateResult result={updateResult} />}
+      {!updating && updateResult && <UpdateResult result={updateResult} latestVersion={status?.latestVersion ?? null} />}
       {!updating && updateErrorMessage && (
         <p role="alert" className="mt-3 break-words text-sm text-red-600 dark:text-red-400">
           {updateErrorMessage}
