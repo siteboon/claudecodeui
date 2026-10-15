@@ -15,7 +15,7 @@ import type { AnyRecord, NormalizedMessage, ProviderRuntimeContext } from '@/sha
  * itself only on stderr. The SDK drops that stream unless `options.stderr` is
  * set and reports just "Claude Code process exited with code 1", so the chat
  * showed that line and nothing else. The run now keeps the stderr tail and
- * puts it under the bare exit error.
+ * puts it, labelled as the CLI's stderr, under the bare exit error.
  *
  * Driven through the `context.createQuery` seam: the scripted query writes to
  * the `stderr` callback the runtime handed it, then fails the way the SDK
@@ -26,6 +26,7 @@ type ScriptedFailure = {
   stderr?: string[];
   messages?: AnyRecord[];
   error: Error;
+  installed?: boolean;
 };
 
 async function runFailingTurn(failure: ScriptedFailure): Promise<{ sent: NormalizedMessage[]; options: AnyRecord }> {
@@ -54,7 +55,7 @@ async function runFailingTurn(failure: ScriptedFailure): Promise<{ sent: Normali
     resolveResumeModel: async () => undefined,
     getProviderModels: async () => CLAUDE_PREDEFINED_MODELS as never,
     normalizeMessage: (raw, sessionId) => sessions.normalizeMessage(raw, sessionId),
-    isProviderInstalled: async () => true,
+    isProviderInstalled: async () => failure.installed ?? true,
     createQuery,
   };
 
@@ -68,31 +69,42 @@ async function runFailingTurn(failure: ScriptedFailure): Promise<{ sent: Normali
 
 const errorRows = (sent: NormalizedMessage[]) => sent.filter((message) => message.kind === 'error').map((message) => message.content);
 const exitCodes = (sent: NormalizedMessage[]) => sent.filter((message) => message.kind === 'complete').map((message) => message.exitCode);
+const exitRow = (exitError: string, stderr: string) => `${exitError}\nCLI stderr:\n${stderr}`;
 
 test('the runtime asks the SDK for the CLI stderr', async () => {
   const { options } = await runFailingTurn({ error: new Error('Claude Code process exited with code 1') });
   assert.equal(typeof options.stderr, 'function');
 });
 
-test('a CLI that exits before any result shows what it wrote to stderr', async () => {
+test('a CLI that exits before any result shows what it wrote to stderr', async (t) => {
+  const logged = t.mock.method(console, 'error', () => undefined);
   const { sent } = await runFailingTurn({
     stderr: ["EACCES: permission denied, mkdir '/nonexistent-dir'\n"],
     error: new Error('Claude Code process exited with code 1'),
   });
   assert.deepEqual(errorRows(sent), [
-    "Claude Code process exited with code 1\nEACCES: permission denied, mkdir '/nonexistent-dir'",
+    exitRow('Claude Code process exited with code 1', "EACCES: permission denied, mkdir '/nonexistent-dir'"),
   ]);
   assert.deepEqual(exitCodes(sent), [1]);
+  assert.ok(
+    logged.mock.calls.some(({ arguments: args }) => args[0] === 'Claude CLI stderr before exit:'
+      && args[1] === "EACCES: permission denied, mkdir '/nonexistent-dir'"),
+    'the server log gets the stderr too',
+  );
 });
 
-test('a CLI killed by a signal shows its last stderr too', async () => {
-  const { sent } = await runFailingTurn({
-    stderr: ['Background tasks still running after 600s; terminating.\n'],
-    error: new Error('Claude Code process terminated by signal SIGTERM'),
-  });
-  assert.deepEqual(errorRows(sent), [
-    'Claude Code process terminated by signal SIGTERM\nBackground tasks still running after 600s; terminating.',
-  ]);
+test('multi-digit exit codes and other signals count as a bare exit', async () => {
+  const cases: Array<[exitError: string, stderr: string]> = [
+    ['Claude Code process exited with code 127', 'claude: error while loading shared libraries'],
+    // 0xC0000005, a Windows access violation.
+    ['Claude Code process exited with code 3221225477', 'Segmentation fault at address 0x0'],
+    ['Claude Code process terminated by signal SIGSEGV', 'panic(main thread): Segmentation fault'],
+    ['Claude Code process terminated by signal SIGTERM', 'Background tasks still running after 600s; terminating.'],
+  ];
+  for (const [exitError, stderr] of cases) {
+    const { sent } = await runFailingTurn({ stderr: [`${stderr}\n`], error: new Error(exitError) });
+    assert.deepEqual(errorRows(sent), [exitRow(exitError, stderr)], exitError);
+  }
 });
 
 test('stderr split across chunks is reassembled and stripped of terminal styling', async () => {
@@ -100,25 +112,57 @@ test('stderr split across chunks is reassembled and stripped of terminal styling
     stderr: ['\u001b[31merror: unknown ', "option '--effort'\u001b[0m\n"],
     error: new Error('Claude Code process exited with code 1'),
   });
-  assert.deepEqual(errorRows(sent), ["Claude Code process exited with code 1\nerror: unknown option '--effort'"]);
+  assert.deepEqual(errorRows(sent), [exitRow('Claude Code process exited with code 1', "error: unknown option '--effort'")]);
 });
 
-test('only the tail of a long stderr is kept, and it keeps the last line', async () => {
-  const noise = `${'Warning: noisy line\n'.repeat(400)}`;
+test('only whole lines from the tail of a long stderr are kept', async () => {
+  const noisy = '\u001b[33mWarning: noisy line\u001b[0m\n';
+  const last = 'fatal: out of disk space\n';
+  const stderr = ['FIRST LINE\n', noisy.repeat(400), last];
+  // The 2000-char window opens inside the closing escape of a noisy line.
+  assert.ok(stderr.join('').slice(-2000).startsWith('0m\n'));
+
+  const { sent } = await runFailingTurn({ stderr, error: new Error('Claude Code process exited with code 1') });
+  const [header, label, ...lines] = (errorRows(sent)[0] ?? '').split('\n');
+  assert.deepEqual([header, label], ['Claude Code process exited with code 1', 'CLI stderr:']);
+  assert.equal(lines.at(-1), 'fatal: out of disk space', 'the last line survives');
+  assert.ok(lines.length > 1 && lines.length <= 2000 / noisy.length + 1, 'the tail is capped');
+  assert.deepEqual(new Set(lines.slice(0, -1)), new Set(['Warning: noisy line']), 'no cut line or escape remnant');
+});
+
+test('a cap that cuts exactly between two lines keeps the first whole line', async () => {
+  // 100 lines of 20 chars fill the 2000-char window exactly.
+  const stderr = ['FIRST LINE\n', 'kept: a whole line.\n', 'Warning: noisy line\n'.repeat(99)];
+  assert.ok(stderr.join('').slice(-2000).startsWith('kept: '));
+
+  const { sent } = await runFailingTurn({ stderr, error: new Error('Claude Code process exited with code 1') });
+  const [, , ...lines] = (errorRows(sent)[0] ?? '').split('\n');
+  assert.equal(lines[0], 'kept: a whole line.');
+  assert.equal(lines.length, 100);
+});
+
+test('a single stderr line longer than the cap is kept cut rather than dropped', async () => {
   const { sent } = await runFailingTurn({
-    stderr: ['FIRST LINE\n', noise, 'fatal: the real reason\n'],
+    stderr: [`${'x'.repeat(2500)}\n`],
     error: new Error('Claude Code process exited with code 1'),
   });
-  const [row] = errorRows(sent);
-  assert.ok(typeof row === 'string');
-  assert.ok(row.endsWith('fatal: the real reason'), 'the last line survives');
-  assert.ok(!row.includes('FIRST LINE'), 'the head of the stream is dropped');
-  assert.ok(row.length <= 'Claude Code process exited with code 1\n'.length + 2000);
+  assert.deepEqual(errorRows(sent), [exitRow('Claude Code process exited with code 1', 'x'.repeat(1999))]);
 });
 
 test('an exit with nothing on stderr keeps the plain exit message', async () => {
   const { sent } = await runFailingTurn({ error: new Error('Claude Code process exited with code 1') });
   assert.deepEqual(errorRows(sent), ['Claude Code process exited with code 1']);
+});
+
+test('the not-installed message stays as it was', async () => {
+  const { sent } = await runFailingTurn({
+    stderr: ['/bin/sh: 1: claude: not found\n'],
+    error: new Error('Claude Code process exited with code 127'),
+    installed: false,
+  });
+  assert.deepEqual(errorRows(sent), [
+    'Claude Code is not installed. Please install it first: https://docs.anthropic.com/en/docs/claude-code',
+  ]);
 });
 
 test('an error result already in the CLI words gets no stderr appended', async () => {

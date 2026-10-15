@@ -965,12 +965,29 @@ const CLI_EXIT_ERROR_PATTERN = /^Claude Code process (?:exited with code -?\d+|t
  */
 function createCliStderrTail() {
   let tail = '';
+  // Set when the cap cut through a line, which may also split an ANSI escape.
+  let startsMidLine = false;
   return {
     append(chunk) {
-      tail = (tail + String(chunk)).slice(-CLI_STDERR_TAIL_CHARS);
+      const text = tail + String(chunk);
+      if (text.length > CLI_STDERR_TAIL_CHARS) {
+        startsMidLine = text[text.length - CLI_STDERR_TAIL_CHARS - 1] !== '\n';
+        tail = text.slice(-CLI_STDERR_TAIL_CHARS);
+      } else {
+        tail = text;
+      }
     },
     read() {
-      return stripAnsiSequences(tail).trim();
+      let text = tail;
+      if (startsMidLine) {
+        // Drop the cut first line, unless it is the only line kept: a cut line
+        // still says more than none.
+        const nextLine = text.indexOf('\n') + 1;
+        if (nextLine > 0 && text.slice(nextLine).trim()) {
+          text = text.slice(nextLine);
+        }
+      }
+      return stripAnsiSequences(text).trim();
     },
   };
 }
@@ -1449,15 +1466,17 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     // Check if Claude CLI is installed for a clearer error message
     const installed = await context.isProviderInstalled();
     // A bare exit error is all the SDK knows about a CLI that ended without a
-    // `result`; whatever the CLI said on its way out explains it. Read after
-    // the await above, which gives the last stderr chunk time to arrive.
+    // `result`; whatever the CLI wrote to stderr on its way out explains it.
+    // The CLI writes that before it exits, so it has normally been delivered
+    // by the time the SDK reports the exit. A chunk still in flight is missed.
     const exitReason = CLI_EXIT_ERROR_PATTERN.test(error?.message ?? '') ? cliStderr.read() : '';
     if (exitReason) {
       console.error('Claude CLI stderr before exit:', exitReason);
     }
+    // Labelled so the row reads as the CLI's own output, not CloudCLI's diagnosis.
     const errorContent = !installed
       ? 'Claude Code is not installed. Please install it first: https://docs.anthropic.com/en/docs/claude-code'
-      : (exitReason ? `${error.message}\n${exitReason}` : error.message);
+      : (exitReason ? `${error.message}\nCLI stderr:\n${exitReason}` : error.message);
 
     // Send error to WebSocket, then the terminal complete. A run that already
     // reported completion and then failed during its post-turn hold still
