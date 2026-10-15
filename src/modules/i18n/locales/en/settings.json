@@ -117,6 +117,8 @@
     "arrowUp": "Arrow Up",
     "arrowDown": "Arrow Down",
     "scrollDown": "Scroll Down",
+    "ctrl": "Ctrl: applies to the next key, double-tap to lock",
+    "alt": "Alt: applies to the next key, double-tap to lock",
     "handle": {
       "closePanel": "Close shortcuts panel",
       "openPanel": "Open shortcuts panel"
