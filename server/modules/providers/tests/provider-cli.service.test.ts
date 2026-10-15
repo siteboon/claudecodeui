@@ -19,8 +19,8 @@ const findEnvKey = (name: string) =>
 const pathKey = findEnvKey('PATH');
 const pathExtKey = findEnvKey('PATHEXT');
 
-// A stand-in CLI driven by files next to it, so a test can set what `--version`
-// prints and what the updater does without touching any real install.
+// A stand-in CLI driven by files in its own state folder, so a test can set what
+// `--version` prints and what the updater does without touching any real install.
 //   version            text `--version` prints (exit code from version-exit)
 //   update-new-version written into `version` by a successful update
 //   update-stdout/-stderr, update-exit, update-sleep-ms shape the update run
@@ -55,34 +55,29 @@ if (command === 'update' || command === 'upgrade') {
 `;
 
 type FakeCli = {
-  dir: string;
-  commandPath: string;
   set(name: string, value: string): Promise<void>;
   read(name: string): Promise<string | null>;
 };
 
-/** Writes the fake CLI as `<dir>/<name>` (a `.cmd` shim on Windows). */
+/** Writes the fake CLI as `<dir>/<name>` (a `.cmd` shim on Windows), with its state beside the script. */
 async function createFakeCli(dir: string, name: string): Promise<FakeCli> {
-  await mkdir(dir, { recursive: true });
-  const scriptPath = path.join(dir, `${name}.cjs`);
+  const stateDir = path.join(dir, `.${name}-state`);
+  await mkdir(stateDir, { recursive: true });
+  const scriptPath = path.join(stateDir, `${name}.cjs`);
   await writeFile(scriptPath, FAKE_CLI_SCRIPT, 'utf8');
 
-  let commandPath: string;
   if (process.platform === 'win32') {
-    commandPath = path.join(dir, `${name}.cmd`);
-    await writeFile(commandPath, `@echo off\r\n"${process.execPath}" "${scriptPath}" %*\r\n`, 'utf8');
+    await writeFile(path.join(dir, `${name}.cmd`), `@echo off\r\n"${process.execPath}" "${scriptPath}" %*\r\n`, 'utf8');
   } else {
     // exec, so a signal sent to the updater reaches the node process itself.
-    commandPath = path.join(dir, name);
+    const commandPath = path.join(dir, name);
     await writeFile(commandPath, `#!/bin/sh\nexec "${process.execPath}" "${scriptPath}" "$@"\n`, 'utf8');
     await chmod(commandPath, 0o755);
   }
 
   return {
-    dir,
-    commandPath,
-    set: (file, value) => writeFile(path.join(dir, file), value, 'utf8'),
-    read: async (file) => (existsSync(path.join(dir, file)) ? readFile(path.join(dir, file), 'utf8') : null),
+    set: (file, value) => writeFile(path.join(stateDir, file), value, 'utf8'),
+    read: async (file) => (existsSync(path.join(stateDir, file)) ? readFile(path.join(stateDir, file), 'utf8') : null),
   };
 }
 

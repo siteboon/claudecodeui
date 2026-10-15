@@ -80,7 +80,7 @@ type ProviderCliStatus = {
   updateUnavailableReason: CliUpdateUnavailableReason | null;
 };
 
-/** Why an update run did not leave a working update behind; null when the updater exited 0. */
+/** Why an update run went wrong, as read from its exit code and output. */
 type CliUpdateFailure = 'permission_denied' | 'timed_out' | 'failed';
 
 type ProviderCliUpdateResult = {
@@ -91,6 +91,7 @@ type ProviderCliUpdateResult = {
   output: string;
   previousVersion: string | null;
   installedVersion: string | null;
+  /** null when neither the exit code nor the output reports a failure. */
   failure: CliUpdateFailure | null;
 };
 

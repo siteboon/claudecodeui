@@ -1350,7 +1350,7 @@ export type ProviderCliStatus = {
   updateUnavailableReason: 'bundled' | 'platform' | null;
 };
 
-/** What one run of a CLI's own updater did, from `POST /api/providers/:provider/cli/update`: the command, its exit code (null when it could not start or timed out), the tail of its output, the version before and after, and why it failed (null when it exited 0). Returned by useProviderCliVersion and rendered by the settings account view. */
+/** What one run of a CLI's own updater did, from `POST /api/providers/:provider/cli/update`: the command, its exit code (null when it could not start or timed out), the tail of its output, the version before and after, and why it failed (null when neither the exit code nor the output reports a failure). Returned by useProviderCliVersion and rendered by the settings account view. */
 export type ProviderCliUpdateResult = {
   provider: LLMProvider;
   command: string;
