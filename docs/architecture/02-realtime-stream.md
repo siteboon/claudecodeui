@@ -69,7 +69,7 @@ it.
 | --- | --- |
 | `src/shared/context/WebSocketContext.tsx` | The one socket. Parses each frame and calls every registered listener synchronously. Synthesises the client-only `websocket_reconnected` frame on a re-open, and retries a dropped socket after 3 s. |
 | `src/modules/chat/hooks/useChatRealtimeHandlers.ts` | The whole client-side protocol. One switch on `kind`; the streaming buffer; the `seq` bookkeeping. |
-| `src/modules/chat/ChatInterface.tsx` | Owns the four refs the handler mutates — `accumulatedStreamRef`, `streamTimerRef`, `lastSeqRef`, `statusCheckSentAtRef` — and clears the first two on unmount. |
+| `src/modules/chat/ChatInterface.tsx` | Owns the refs the handler mutates — `accumulatedStreamRef`, `streamTimerRef`, `lastSeqRef` (a `{ runId, seq }` position per session), `statusCheckSentAtRef`, `watchedRunSessionsRef` — and clears the first two on unmount. |
 | `src/modules/chat/hooks/useSessionStore.ts` | Per-session slots. `appendRealtime`, `updateStreaming`, `finalizeStreaming`, `truncateAt`, and the merge of live and persisted rows. |
 | `src/modules/chat/hooks/useChatMessages.ts` | `normalizedToChatMessages` — the projection from store records to UI objects. Pairs `tool_use` with `tool_result`, folds subagent rows into their container, and memoises through a `WeakMap`. |
 | `src/modules/chat/hooks/useChatSessionState.ts` | Sends `chat.subscribe` on session open and on reconnect, owns `requestLatestMessages` and `resetStreamingState`, and memoises `chatMessages`. |
@@ -134,8 +134,11 @@ Three things in that picture are easy to get backwards:
   `msg.toolResult` first and only then consults its map of `toolId` to result row.
 - **The run outlives the socket.** It is keyed by app session id in the registry, keeps
   its last 5000 events for replay, and stays available for five minutes after finishing.
-  A reconnecting client sends `lastSeq` and gets only what it missed — and only if the
-  run is still running, because a completed run is already on disk and served over REST.
+  Every frame carries the run's `runId` next to its `seq`, because every run of a session
+  restarts at seq 1. A reconnecting client sends `lastSeq` with that `runId` and gets only
+  what it missed; when its position is from another run (or past the end of this one), it
+  gets the current run from the start. Either way only while the run is still running,
+  because a completed run is already on disk and served over REST.
 
 ## What each provider actually emits
 
@@ -186,7 +189,7 @@ flowchart TD
     F["Frame arrives from WebSocketContext"]
     K{"Does it have a kind"}
     DROP["Return. Task Master frames key on type"]
-    SEQ["Advance lastSeq for this session id"]
+    SEQ["Advance the runId and seq position for this session id"]
     G{"Is it a gateway or client-only kind"}
     RC["websocket_reconnected. Refresh the tail then resubscribe"]
     HT["history_truncated. truncateAt the anchor id"]
@@ -225,11 +228,19 @@ because looking for these kinds in the transcript array is futile: **`complete`,
 never stored.** They exist to move the busy map, the token counter and the permission
 list.
 
-`lastSeqRef` is advanced for every frame that carries a numeric `seq`, and only ever
-forward. It is read when a `chat.subscribe` is sent — on session open and on reconnect —
-so the server replays exactly the gap. There is no reordering buffer: frames are applied
-in arrival order, which is safe because one TCP connection preserves order and replay is
-emitted in buffer order.
+`lastSeqRef` holds a `{ runId, seq }` position per session: the session's current run and
+the highest `seq` handled in it. A frame of the same run only moves it forward, and a frame
+it already covers is dropped as a replay duplicate (two subscribes can overlap). A frame of
+a run not seen before starts a new position, and the run it replaces is remembered for that
+socket: a replaced run can still send afterwards (a killed background task), and those
+frames are shown but never move the position back. A `chat_subscribed` ack names the
+current run and moves the position onto it. The position is read when a `chat.subscribe` is
+sent — on session open, on reconnect, and when the session is busy with a run this socket
+is not attached to — so the server replays exactly the gap, or the whole current run when
+the position is from another one. Frames from a server that sends no `runId` keep the old
+seq-only behaviour and are never deduplicated. There is no reordering buffer: frames are
+applied in arrival order, which is safe because one TCP connection preserves order and
+replay is emitted in buffer order.
 
 ## Text streaming
 
@@ -489,7 +500,7 @@ question rendered twice in another.
 | The `shouldPersist` filter | Adding a kind to it makes that kind renderable, which means `normalizedToChatMessages` needs a case for it or it silently disappears. |
 | Anything in `splitStreamingMarkdown` | `streamingMarkdown.test.ts` for the boundary rules and `streamingMarkdownRenderEquivalence.test.tsx` for split-equals-unsplit on every prefix. Both must pass on the fenced and list fixtures. |
 | A provider's `normalizeMessage` | The kind table above. Adding `stream_delta` to a provider that had none makes the shared buffer and the missing `stream_end` suddenly matter for it. |
-| `decorateAndRecordEvent` or `seq` assignment | Reconnect replay is `seq > lastSeq` with no gap detection, and `lastSeqRef` only moves forward. Any non-monotonic `seq` silently loses events. |
+| `decorateAndRecordEvent` or `seq` assignment | Reconnect replay is `seq > lastSeq` within the run named by `runId` (the whole run for another run's position), with no gap detection, and `lastSeqRef` only moves forward within a run. Any non-monotonic `seq` silently loses events, and a frame without its `runId` falls back to seq-only replay. `unwatchedRunSubscribe.test.tsx` and `chat-run-registry.test.ts` cover both sides. |
 | The `status` branch | Both arms. The `token_budget` arm is scoped to the viewed session on purpose, and the other arm currently has no producer — a new producer will start writing status text into the activity map for the first time. |
 | Session-switch cleanup in `useChatSessionState` | `resetStreamingState` is the only thing that unwinds a shared buffer mid-stream. Removing that call re-introduces cross-session text bleed. |
 

@@ -19,7 +19,7 @@ import type {
   ProviderPermissionDecision,
   ProviderRuntimeWriter,
 } from '@/shared/types.js';
-import { parseIncomingJsonObject } from '@/shared/utils.js';
+import { createNormalizedMessage, generateMessageId, parseIncomingJsonObject } from '@/shared/utils.js';
 
 /**
  * Trust boundary for client-supplied image attachments: chat.send options come
@@ -216,7 +216,10 @@ async function dispatchRun(
   data: AnyRecord,
   dependencies: ChatWebSocketDependencies,
   extraRuntimeOptions: AnyRecord = {},
-  beforeRun?: (run: NonNullable<ReturnType<typeof chatRunRegistry.startRun>>) => void | Promise<void>,
+  beforeRun?: (
+    run: NonNullable<ReturnType<typeof chatRunRegistry.startRun>>,
+    attachments: ChatAttachmentDescriptor[],
+  ) => void | Promise<void>,
 ): Promise<{ started: boolean; error: string | null }> {
   const provider = session.provider as LLMProvider;
 
@@ -288,7 +291,7 @@ async function dispatchRun(
     // conversation here and a rewind for a run that was never admitted cannot
     // be taken back. Inside the try so a rewind that throws still releases the
     // run instead of leaving the session processing forever.
-    await beforeRun?.(run);
+    await beforeRun?.(run, uniqueAttachments);
     await dependencies.runtime.run(provider, command, runtimeOptions, run.writer);
   } catch (error) {
     failure = error instanceof Error ? error.message : String(error);
@@ -517,6 +520,9 @@ function handleChatSubscribe(
     const lastSeq = typeof lastSeqRaw === 'number' && Number.isFinite(lastSeqRaw)
       ? Math.max(0, Math.floor(lastSeqRaw))
       : 0;
+    // The run `lastSeq` was counted in. Optional: a client that omits it gets
+    // the old seq-only replay.
+    const lastRunId = typeof (target as AnyRecord).runId === 'string' ? (target as AnyRecord).runId as string : null;
 
     const run = chatRunRegistry.getRun(sessionId);
     const isProcessing = chatRunRegistry.isProcessing(sessionId);
@@ -540,6 +546,7 @@ function handleChatSubscribe(
       sessionId,
       isProcessing,
       lastSeq: run?.lastSeq ?? 0,
+      runId: run?.runId ?? null,
       pendingPermissions,
       timestamp: new Date().toISOString(),
     });
@@ -549,7 +556,7 @@ function handleChatSubscribe(
     // replaying them (e.g. after a page reload where the client's lastSeq is
     // 0) would duplicate messages the history fetch already returned.
     if (isProcessing) {
-      for (const event of chatRunRegistry.replayEvents(sessionId, lastSeq)) {
+      for (const event of chatRunRegistry.replayEvents(sessionId, lastSeq, lastRunId)) {
         sendJson(ws, event);
       }
     }
@@ -581,7 +588,7 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  * - `chat.send`                { sessionId, content, options? }
  * - `chat.abort`               { sessionId }
  * - `chat.stop-task`           { sessionId, taskId }
- * - `chat.subscribe`           { sessions: [{ sessionId, lastSeq? }] }
+ * - `chat.subscribe`           { sessions: [{ sessionId, lastSeq?, runId? }] }
  * - `chat.permission-response` { requestId, allow, updatedInput?, message?, rememberEntry? }
  *
  * Outbound protocol (server to client): every frame is `kind`-based — either
@@ -651,6 +658,28 @@ export async function runDetachedChatTurn(
     session,
     { sessionId: input.sessionId, content: input.content, options: input.options ?? {} },
     dependencies,
+    {},
+    (run, attachments) => {
+      // An interactive send shows its own message the moment it is typed; a
+      // turn the server sends on its own has nobody to do that. Without this
+      // row a queued or scheduled message left the queue card and was then
+      // missing from the conversation until the turn ended and the history
+      // was read back. It goes through the run's writer so it is sequenced
+      // and replayed to every tab that subscribes. The `local_` id is what
+      // the client already uses for its own unsent echoes, so the transcript
+      // row the provider writes for the same prompt retires it instead of
+      // showing the message twice.
+      run.writer.send(createNormalizedMessage({
+        kind: 'text',
+        role: 'user',
+        id: generateMessageId('local_server'),
+        provider,
+        sessionId: input.sessionId,
+        content: input.content,
+        images: attachments.filter(isImageAttachmentDescriptor),
+        files: attachments.filter((attachment) => !isImageAttachmentDescriptor(attachment)),
+      }));
+    },
   );
 }
 

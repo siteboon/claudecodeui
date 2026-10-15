@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 
-import type { ServerEvent,MarkSessionIdle,MarkSessionProcessing,PendingPermissionRequest,ProjectSession,LLMProvider,NormalizedMessage,GetSessionActivity,MarkSessionBackground } from '@/shared/types';
+import type { ServerEvent,MarkSessionIdle,MarkSessionProcessing,PendingPermissionRequest,ProjectSession,LLMProvider,NormalizedMessage,GetSessionActivity,MarkSessionBackground,RunReplayPosition,WatchedRunSource } from '@/shared/types';
 import { showCompletionTitleIndicator } from '@/modules/chat/utils/pageTitleNotification';
 import { playChatCompletionSound, playNotificationSound } from '@/shared/utils';
 import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
@@ -28,20 +28,31 @@ type UseChatRealtimeHandlersArgs = {
   streamTimerRef: MutableRefObject<number | null>;
   accumulatedStreamRef: MutableRefObject<string>;
   /**
-   * Highest live `seq` observed per session. Essential for reconnect catch-up:
-   * `chat.subscribe` sends this value as `lastSeq` so the server replays only
-   * the events this client actually missed. Written here on every sequenced
-   * frame; read wherever a `chat.subscribe` is sent (session open, reconnect).
+   * Highest live `seq` handled per session, with the run it counts in.
+   * Essential for reconnect catch-up: `chat.subscribe` sends it so the server
+   * replays only the events this client actually missed. Written here on
+   * every sequenced frame; read wherever a `chat.subscribe` is sent.
    */
-  lastSeqRef: MutableRefObject<Map<string, number>>;
+  lastSeqRef: MutableRefObject<Map<string, RunReplayPosition>>;
   /** When each session's `chat.subscribe` was last sent; guards stale idle acks. */
   statusCheckSentAtRef: MutableRefObject<Map<string, number>>;
+  /**
+   * Sessions whose current run already streams to this socket, shared with
+   * `useChatSessionState`. Settled here from acks, refusals and terminal
+   * events, so a run this tab never attached to can be told apart.
+   */
+  watchedRunSessionsRef: MutableRefObject<Map<string, WatchedRunSource>>;
   onSessionProcessing?: MarkSessionProcessing;
   onSessionIdle?: MarkSessionIdle;
   /** Reports the tasks a session still runs once its turn ends, so it reads as background work rather than idle. */
   onSessionBackground?: MarkSessionBackground;
   getSessionActivity?: GetSessionActivity;
   onWebSocketReconnect?: () => void;
+  /**
+   * Subscribes again to a session an idle ack left unwatched although it is
+   * busy with a run that started after the subscribe went out.
+   */
+  onIdleAckMissedRun: (sessionId: string) => void;
   requestLatestMessages: (sessionId: string, allowNetwork?: boolean) => Promise<void>;
   sessionStore: SessionStore;
 };
@@ -72,11 +83,13 @@ export function useChatRealtimeHandlers({
   accumulatedStreamRef,
   lastSeqRef,
   statusCheckSentAtRef,
+  watchedRunSessionsRef,
   onSessionProcessing,
   onSessionIdle,
   onSessionBackground,
   getSessionActivity,
   onWebSocketReconnect,
+  onIdleAckMissedRun,
   requestLatestMessages,
   sessionStore,
 }: UseChatRealtimeHandlersArgs) {
@@ -94,6 +107,15 @@ export function useChatRealtimeHandlers({
   // notification sound before React finishes a rerender.
   const pendingPermissionRequestsRef = useRef(pendingPermissionRequests);
 
+  // Runs each session has moved on from, as seen on this socket. Every run
+  // restarts at seq 1 and run ids carry no order, so this is what tells a
+  // replaced run's late frame from the first frame of a new one.
+  const replacedRunIdsRef = useRef(new Map<string, Set<string>>());
+
+  // The run start each session was last subscribed to again after a stale
+  // idle ack, so a server clock ahead of this one cannot loop ack → subscribe.
+  const resubscribedRunStartRef = useRef(new Map<string, number>());
+
   useEffect(() => {
     pendingPermissionRequestsRef.current = pendingPermissionRequests;
   }, [pendingPermissionRequests]);
@@ -107,6 +129,14 @@ export function useChatRealtimeHandlers({
       onSessionBackground?.(sid, collectRunningBackgroundTasks(normalizedToChatMessages(sessionStore.getMessages(sid))));
     };
 
+    // Remembers that a session moved on from a run, so frames that run still
+    // sends afterwards are not mistaken for the start of a newer one.
+    const retireRun = (sid: string, runId: string) => {
+      const replacedRuns = replacedRunIdsRef.current.get(sid) ?? new Set<string>();
+      replacedRuns.add(runId);
+      replacedRunIdsRef.current.set(sid, replacedRuns);
+    };
+
     const handleEvent = (msg: ServerEvent) => {
       if (!msg.kind) {
         return;
@@ -115,11 +145,27 @@ export function useChatRealtimeHandlers({
       const activeViewSessionId = activeViewSessionIdRef.current;
       const sid = (typeof msg.sessionId === 'string' && msg.sessionId) || activeViewSessionId;
 
-      // Record replay progress for every sequenced live event.
+      // Record replay progress for every sequenced live event. A frame does
+      // not mark its run watched: a turn that ended with background work keeps
+      // sending through the finished run, and so does an aborted one for a
+      // moment, and neither is the run the session starts next.
       if (sid && typeof msg.seq === 'number') {
-        const known = lastSeqRef.current.get(sid) ?? 0;
-        if (msg.seq > known) {
-          lastSeqRef.current.set(sid, msg.seq);
+        const runId = typeof msg.runId === 'string' ? msg.runId : null;
+        const known = lastSeqRef.current.get(sid);
+        if (known && runId !== null && known.runId === runId && msg.seq <= known.seq) {
+          // Already handled: a second subscribe replayed it (they overlap when
+          // two triggers fire before the first ack, or across a reconnect).
+          return;
+        }
+        // A run the session has since replaced can still report, e.g. a
+        // killed background task. Its frame is shown, but the position stays
+        // on the current run, or a reconnect would replay that run again.
+        const fromReplacedRun = runId !== null && Boolean(replacedRunIdsRef.current.get(sid)?.has(runId));
+        if (!fromReplacedRun && (!known || known.runId !== runId || msg.seq > known.seq)) {
+          if (known?.runId && runId !== null && known.runId !== runId) {
+            retireRun(sid, known.runId);
+          }
+          lastSeqRef.current.set(sid, { runId, seq: msg.seq });
         }
       }
 
@@ -143,14 +189,40 @@ export function useChatRealtimeHandlers({
           // pending tool-permission prompts for the run.
           if (!sid) return;
 
+          // The ack names the session's current run. A position from another
+          // run is from one it replaced, so it restarts on this one.
+          if (typeof msg.runId === 'string') {
+            const position = lastSeqRef.current.get(sid);
+            if (position?.runId !== msg.runId) {
+              if (position?.runId) retireRun(sid, position.runId);
+              lastSeqRef.current.set(sid, { runId: msg.runId, seq: 0 });
+            }
+          }
+
           if (msg.isProcessing) {
+            watchedRunSessionsRef.current.set(sid, 'attached');
             onSessionProcessing?.(sid);
           } else {
             // Idle ack: ignore it if a newer request started after the
             // subscribe was sent — the ack describes the older state.
-            onSessionIdle?.(sid, {
-              ifStartedBefore: statusCheckSentAtRef.current.get(sid),
-            });
+            const sentAt = statusCheckSentAtRef.current.get(sid);
+            onSessionIdle?.(sid, { ifStartedBefore: sentAt });
+
+            // Only this tab's own send outlives an idle ack: its run streams
+            // here anyway. Any other run that started after the subscribe went
+            // out — one the server sent while it was in flight — streams to
+            // nobody, so it is subscribed to again, once per run start.
+            if (watchedRunSessionsRef.current.get(sid) !== 'send') {
+              watchedRunSessionsRef.current.delete(sid);
+              const activity = getSessionActivity?.(sid);
+              if (
+                activity && !activity.background && sentAt !== undefined && activity.startedAt >= sentAt
+                && resubscribedRunStartRef.current.get(sid) !== activity.startedAt
+              ) {
+                resubscribedRunStartRef.current.set(sid, activity.startedAt);
+                onIdleAckMissedRun(sid);
+              }
+            }
           }
 
           const isViewedSession = sid === activeViewSessionId;
@@ -179,6 +251,13 @@ export function useChatRealtimeHandlers({
             // flight on that session.
             if (msg.code !== 'NO_SUCH_TASK' && msg.code !== 'TASK_ID_REQUIRED') {
               onSessionIdle?.(sid);
+              // A refused send never became a run on this socket; if the
+              // session is busy with another run, that one still has to attach.
+              // A run this socket is attached to, or a subscribe in flight,
+              // is untouched by the refusal.
+              if (watchedRunSessionsRef.current.get(sid) === 'send') {
+                watchedRunSessionsRef.current.delete(sid);
+              }
             }
             sessionStore.appendRealtime(sid, {
               id: `protocol_error_${Date.now()}`,
@@ -273,6 +352,10 @@ export function useChatRealtimeHandlers({
           // running leaves the session as background work — the CLI is held
           // open for them — and any other leaves it idle. An abort releases
           // the CLI and takes that work down with it.
+          if (sid) {
+            // The run is over; the session's next one starts unwatched.
+            watchedRunSessionsRef.current.delete(sid);
+          }
           if (sid && !msg.aborted) {
             reportRemainingBackgroundWork(sid);
           } else {
@@ -410,12 +493,14 @@ export function useChatRealtimeHandlers({
     streamTimerRef,
     accumulatedStreamRef,
     lastSeqRef,
+    watchedRunSessionsRef,
     statusCheckSentAtRef,
     onSessionProcessing,
     onSessionIdle,
     onSessionBackground,
     getSessionActivity,
     onWebSocketReconnect,
+    onIdleAckMissedRun,
     requestLatestMessages,
     sessionStore,
   ]);

@@ -100,6 +100,75 @@ test('a queued message is sent by the server without a browser connection', asyn
   });
 });
 
+test('a queued message opens its run with the message itself, for whoever watches it', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    sessionDraftsDb.saveDraft(userId, SESSION_ID, {
+      text: '',
+      queuedMessage: { content: 'and what about the tests?', options: {} },
+    });
+
+    // What a tab that subscribes mid-run is replayed, read as the turn starts.
+    let replayAtStart: Array<Record<string, unknown>> = [];
+    const runtime = {
+      hasRuntime: () => true,
+      hasBackgroundWork: () => false,
+      run: async () => {
+        replayAtStart = chatRunRegistry.replayEvents(SESSION_ID, 0) as never;
+      },
+      abort: async () => true,
+    } as never;
+
+    assert.equal(await dispatchQueuedMessages(runtime), 1);
+
+    // The queue card is gone by now, so without this row the question was
+    // missing from the conversation until the turn ended (#1498).
+    assert.equal(replayAtStart.length, 1);
+    const [opening] = replayAtStart;
+    assert.equal(opening.kind, 'text');
+    assert.equal(opening.role, 'user');
+    assert.equal(opening.content, 'and what about the tests?');
+    assert.equal(opening.seq, 1);
+    // `local_` is what lets the transcript row for the same prompt retire it.
+    assert.match(String(opening.id), /^local_/);
+  });
+});
+
+test('a queued message\'s opening row carries its images and files apart', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    // Bare names are anchored in the upload store, so they pass its filter.
+    sessionDraftsDb.saveDraft(userId, SESSION_ID, {
+      text: '',
+      queuedMessage: {
+        content: 'look at these',
+        options: {},
+        attachments: [
+          { path: 'screenshot.png', name: 'screenshot.png', mimeType: 'image/png' },
+          { path: 'brief.pdf', name: 'brief.pdf', mimeType: 'application/pdf' },
+        ],
+      },
+    });
+
+    let replayAtStart: Array<Record<string, unknown>> = [];
+    const runtime = {
+      hasRuntime: () => true,
+      hasBackgroundWork: () => false,
+      run: async () => {
+        replayAtStart = chatRunRegistry.replayEvents(SESSION_ID, 0) as never;
+      },
+      abort: async () => true,
+    } as never;
+
+    assert.equal(await dispatchQueuedMessages(runtime), 1);
+
+    // The client matches this row against the transcript's by text and
+    // attachment counts, and draws images and files differently.
+    const [opening] = replayAtStart;
+    const names = (list: unknown) => (list as Array<{ name?: string }>).map((entry) => entry.name);
+    assert.deepEqual(names(opening.images), ['screenshot.png']);
+    assert.deepEqual(names(opening.files), ['brief.pdf']);
+  });
+});
+
 test('a queued message stays pending while its session is busy', async () => {
   await withIsolatedDatabase(async (userId) => {
     sessionDraftsDb.saveDraft(userId, SESSION_ID, {
