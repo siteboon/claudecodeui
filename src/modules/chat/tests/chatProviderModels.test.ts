@@ -146,3 +146,52 @@ test('the active provider’s model is what currentProviderModel reports', async
   });
   assert.equal(result.current.currentProviderModel, 'cursor-active');
 });
+
+test('Codex refreshes on focus and visible intervals without changing a supported selection', async () => {
+  writeUserPreference('selectedProvider', 'codex');
+  const { api } = await import('@/shared/api');
+  const catalog = {
+    OPTIONS: [{ value: 'cli-model', label: 'CLI Model' }],
+    DEFAULT: 'cli-model',
+  };
+  const models = vi.spyOn(api.providers, 'models').mockImplementation(async () => ({
+    ok: true,
+    json: async () => ({ success: true, data: { models: catalog } }),
+  } as Response));
+  const interval = vi.spyOn(window, 'setInterval');
+  const clearInterval = vi.spyOn(window, 'clearInterval');
+  const { result, unmount } = await renderProviderState();
+  await waitFor(() => {
+    assert.equal(result.current.currentProviderModel, 'cli-model');
+    assert.ok(interval.mock.calls.some((call) => call[1] === 60_000));
+  });
+  const timerIndex = interval.mock.calls.findIndex((call) => call[1] === 60_000);
+  const refresh = interval.mock.calls[timerIndex][0] as () => void;
+  catalog.OPTIONS = [...catalog.OPTIONS, { value: 'future-model', label: 'Future Model' }];
+
+  await act(async () => { window.dispatchEvent(new Event('focus')); });
+  await waitFor(() => {
+    assert.equal(result.current.currentProviderModelOptions.length, 2);
+  });
+  assert.equal(result.current.currentProviderModel, 'cli-model');
+  assert.equal(result.current.providerModelsLoading, false);
+
+  models.mockClear();
+  const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+  await act(async () => { refresh(); });
+  assert.equal(models.mock.calls.length, 0);
+  visibility.mockReturnValue('visible');
+  await act(async () => { refresh(); });
+  assert.deepEqual(models.mock.calls, [['codex']]);
+
+  models.mockRejectedValueOnce(new Error('Offline'));
+  await act(async () => { window.dispatchEvent(new Event('focus')); });
+  assert.equal(result.current.currentProviderModelOptions.length, 2);
+  assert.equal(result.current.currentProviderModel, 'cli-model');
+
+  unmount();
+  assert.ok(clearInterval.mock.calls.some((call) => call[0] === interval.mock.results[timerIndex].value));
+  models.mockClear();
+  window.dispatchEvent(new Event('focus'));
+  assert.equal(models.mock.calls.length, 0);
+});

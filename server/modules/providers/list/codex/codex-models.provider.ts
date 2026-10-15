@@ -15,7 +15,9 @@ import {
   readOptionalString,
 } from '@/shared/utils.js';
 
-/** Curated Codex catalog shipped as immutable CloudCLI defaults. */
+import { codexAppServer } from './codex-app-server.client.js';
+
+/** Last-resort catalog used by the Codex adapter when CLI discovery is unavailable. */
 export const CODEX_PREDEFINED_MODELS: ProviderModelsDefinition = {
   OPTIONS: [
     {
@@ -144,11 +146,34 @@ export const CODEX_PREDEFINED_MODELS: ProviderModelsDefinition = {
 };
 
 const CODEX_CONFIG_PATH = path.join(os.homedir(), '.codex', 'config.toml');
+const MODEL_CACHE_TTL_MS = 60_000;
 
-/** Provider registry model adapter for Codex predefined models and active config. */
+/** Provider registry adapter for the installed Codex CLI catalog and active config. */
 export class CodexProviderModels implements IProviderModels {
+  private catalog = CODEX_PREDEFINED_MODELS;
+  private expiresAt = 0;
+  private pending: Promise<ProviderModelsDefinition> | undefined;
+
   async getSupportedModels(): Promise<ProviderModelsDefinition> {
-    return CODEX_PREDEFINED_MODELS;
+    if (Date.now() < this.expiresAt) {
+      return this.catalog;
+    }
+    // Concurrent page loads and Chat starts share one short-lived CLI process.
+    this.pending ??= this.refreshCatalog();
+    return this.pending;
+  }
+
+  private async refreshCatalog(): Promise<ProviderModelsDefinition> {
+    try {
+      this.catalog = await codexAppServer.listModels();
+    } catch {
+      // Keep the last successful catalog (or bundled fallback on first failure).
+      console.warn('[Codex] Model discovery unavailable; retaining the previous catalog.');
+    } finally {
+      this.expiresAt = Date.now() + MODEL_CACHE_TTL_MS;
+      this.pending = undefined;
+    }
+    return this.catalog;
   }
 
   async getCurrentActiveModel(): Promise<ProviderCurrentActiveModel> {
