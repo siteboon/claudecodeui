@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import Shell from '@/modules/shell/Shell';
+import { ThemeProvider } from '@/shared/context/ThemeContext';
 import type { Project } from '@/shared/types';
 
 vi.mock('react-i18next', () => ({
@@ -104,7 +105,11 @@ const PROJECT = {
 
 /** Renders a connected plain Shell and returns its socket and fake terminal. */
 async function renderConnectedShell() {
-  render(<Shell selectedProject={PROJECT} isPlainShell autoConnect />);
+  render(
+    <ThemeProvider>
+      <Shell selectedProject={PROJECT} isPlainShell autoConnect />
+    </ThemeProvider>,
+  );
   const { Terminal } = (await import('@xterm/xterm')) as unknown as {
     Terminal: { last: { emitData: (data: string) => void } | null };
   };
