@@ -180,7 +180,8 @@
       "codex": "準備好使用 {{model}} 的 Codex。請在下方開始輸入您的訊息。",
       "default": "請在上方選擇一個提供者以開始"
     },
-    "pressToSearch": "按 <kbd>{{shortcut}}</kbd> 搜尋工作階段、檔案和提交"
+    "pressToSearch": "按 <kbd>{{shortcut}}</kbd> 搜尋工作階段、檔案和提交",
+    "chooseModelDescriptionCustomOnly": "{{providers, list}} 僅列出您的模型"
   },
   "session": {
     "continue": {
@@ -313,6 +314,10 @@
   "modelLibrary": {
     "effortLevels": "推理等級",
     "effortLevelsHint": "選擇此模型支援的推理強度等級。若未選擇任何等級，將無法在輸入框中為此模型選擇等級。",
-    "effortSummary": "推理：{{levels}}"
+    "effortSummary": "推理：{{levels}}",
+    "customModelsOnly": "僅使用我的模型",
+    "customModelsOnlyHint": "在所有模型選擇器中隱藏 {{provider}} 的內建模型，並將您的第一個模型設為預設模型。在您新增模型之前，內建模型仍會顯示。",
+    "builtInModelsHidden": "開啟「僅使用我的模型」時，這些模型不會出現在模型選擇器中。",
+    "customModelsOnlyFailed": "無法變更此設定。"
   }
 }

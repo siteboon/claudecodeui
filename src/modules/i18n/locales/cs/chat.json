@@ -213,6 +213,7 @@
     "pressToSearch": "Stiskněte <kbd>{{shortcut}}</kbd> pro hledání v relacích, souborech a commitech",
     "chooseModel": "Vyberte model",
     "chooseModelDescription": "Vestavěné i vlastní modely v jednom seznamu",
+    "chooseModelDescriptionCustomOnly": "Pro {{providers, list}} se zobrazují jen vaše modely",
     "addModel": "Přidat model",
     "searchModels": "Hledat modely...",
     "manageModels": "Spravovat modely",
@@ -418,5 +419,11 @@
     "tokensLabel_other": "tokenů",
     "escClosesModal": "Esc zavře okno.",
     "close": "Zavřít"
+  },
+  "modelLibrary": {
+    "customModelsOnly": "Používat jen mé modely",
+    "customModelsOnlyHint": "Skryje vestavěné modely {{provider}} ve všech výběrech modelu a nastaví váš první model jako výchozí. Vestavěné modely zůstanou v seznamu, dokud nepřidáte model.",
+    "builtInModelsHidden": "Skryto ve výběrech modelu, dokud je zapnuto „Používat jen mé modely“.",
+    "customModelsOnlyFailed": "Toto nastavení se nepodařilo změnit."
   }
 }
