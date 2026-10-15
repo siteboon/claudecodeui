@@ -76,12 +76,37 @@ const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEO
 // behind a turn that has gone wrong. Read per call so it can be tuned (and
 // shortened in tests) without a restart of the module.
 const DEFAULT_HELD_TURN_WAIT_MS = 120_000;
+// A configured wait is held to [1 s, the largest delay setTimeout honours].
+// Below the floor the wait is no wait at all, and above the ceiling Node fires
+// the timer after 1 ms, so either would interrupt a relay that was about to end.
+const MIN_HELD_TURN_WAIT_MS = 1_000;
+const MAX_HELD_TURN_WAIT_MS = 2_147_483_647;
 // After the wait, how long the interrupted turn gets to wind down before its
 // process is closed outright. Never longer than the wait itself.
 const HELD_TURN_INTERRUPT_GRACE_MS = 10_000;
+// After a close, how long to wait for the old process to exit before the new
+// run starts anyway. The SDK sends SIGTERM on close and SIGKILL 5 s later.
+const HELD_PROCESS_EXIT_GRACE_MS = 6_000;
 
+let reportedHeldTurnWaitMs = null;
+
+/**
+ * The configured held-turn wait: CLAUDE_HELD_TURN_WAIT_MS when it is a
+ * positive number, clamped to [MIN_HELD_TURN_WAIT_MS, MAX_HELD_TURN_WAIT_MS],
+ * otherwise the default.
+ * @returns {number}
+ */
 function readHeldTurnWaitMs() {
-  return parseInt(process.env.CLAUDE_HELD_TURN_WAIT_MS, 10) || DEFAULT_HELD_TURN_WAIT_MS;
+  const raw = process.env.CLAUDE_HELD_TURN_WAIT_MS;
+  const configured = Number(raw);
+  const waitMs = raw && Number.isFinite(configured) && configured > 0
+    ? Math.min(Math.max(Math.floor(configured), MIN_HELD_TURN_WAIT_MS), MAX_HELD_TURN_WAIT_MS)
+    : DEFAULT_HELD_TURN_WAIT_MS;
+  if (raw && waitMs !== Number(raw) && reportedHeldTurnWaitMs !== waitMs) {
+    reportedHeldTurnWaitMs = waitMs;
+    console.warn(`[Claude SDK] CLAUDE_HELD_TURN_WAIT_MS=${JSON.stringify(raw)} is out of range or not a number; using ${waitMs} ms`);
+  }
+  return waitMs;
 }
 
 // How long background work is allowed to keep running after a turn ends. This drives
@@ -402,14 +427,29 @@ function addSession(sessionId, queryInstance, writer = null, releaseInput = null
  * written after stdin has ended, which is also why the interrupt a later
  * supersede sends to this process cannot do the job.
  *
- * The stops are not awaited — each request is written to the CLI before this
+ * For the same reason the process is interrupted here, before anything else.
+ * waitForHeldTurn only knows about a turn once the run loop has read its first
+ * message, and a turn the CLI started on its own (a Monitor event, a scheduled
+ * wake-up) may show nothing until the model's first token. An interrupt ends
+ * such a turn; a process between turns has nothing to interrupt.
+ *
+ * The requests are not awaited — each is written to the CLI before this
  * returns, and a reply is only missing when the process has already gone.
  * @param {string} sessionId - Session identifier
+ * @param {{ interrupt?: boolean }} [options] - `interrupt: false` when the
+ *   caller has already interrupted (or closed) this process
  */
-function releaseHeldSession(sessionId) {
+function releaseHeldSession(sessionId, { interrupt = true } = {}) {
   const held = getSession(sessionId);
   if (!held) {
     return;
+  }
+  if (interrupt) {
+    try {
+      Promise.resolve(held.instance?.interrupt?.()).catch(() => {});
+    } catch {
+      // Same as a rejected stop below: the process is on its way out.
+    }
   }
   for (const task of backgroundWork.outstanding(sessionId)) {
     // A stop that cannot be delivered changes nothing about what happens
@@ -481,20 +521,21 @@ function settlesWithin(promise, ms) {
  * never takes the session over while the old process is still making tool
  * calls. Bounded: past the wait the turn is interrupted while stdin is still
  * open — after release the SDK would drop the request — and a process that
- * still has not finished is closed outright.
+ * still has not finished is closed outright, and given a few seconds to exit.
  * @param {string} sessionId - Session identifier
- * @returns {Promise<void>}
+ * @returns {Promise<boolean>} true when the held process was interrupted or
+ *   closed here, so the release need not interrupt it again
  */
 async function waitForHeldTurn(sessionId) {
   const turn = heldTurns.get(sessionId);
   if (!turn) {
-    return;
+    return false;
   }
   const waitMs = readHeldTurnWaitMs();
   console.log(`[Claude SDK] Session ${sessionId}: held process is mid-turn; waiting up to ${waitMs} ms for it to finish`);
   if (await settlesWithin(turn.ended, waitMs)) {
     console.log(`[Claude SDK] Session ${sessionId}: held turn finished; taking the session over`);
-    return;
+    return false;
   }
 
   console.warn(`[Claude SDK] Session ${sessionId}: held turn still running after ${waitMs} ms; interrupting it`);
@@ -505,7 +546,7 @@ async function waitForHeldTurn(sessionId) {
   }
   if (await settlesWithin(turn.ended, Math.min(HELD_TURN_INTERRUPT_GRACE_MS, waitMs))) {
     console.warn(`[Claude SDK] Session ${sessionId}: interrupted held turn finished; taking the session over`);
-    return;
+    return true;
   }
 
   console.warn(`[Claude SDK] Session ${sessionId}: interrupted held turn did not finish; closing its process`);
@@ -514,7 +555,14 @@ async function waitForHeldTurn(sessionId) {
   } catch (error) {
     console.error(`Error closing held process for session ${sessionId}:`, error?.message || error);
   }
+  // The run loop ends the turn when the process's stream closes. A tool the
+  // old CLI still had running may outlive a process that has not exited, so
+  // the new run waits for the exit, bounded.
+  if (!await settlesWithin(turn.ended, HELD_PROCESS_EXIT_GRACE_MS)) {
+    console.warn(`[Claude SDK] Session ${sessionId}: closed held process has not exited after ${HELD_PROCESS_EXIT_GRACE_MS} ms; taking the session over anyway`);
+  }
   endHeldTurn(sessionId, turn.instance);
+  return true;
 }
 
 /**
@@ -1133,8 +1181,8 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // that process is between turns: releasing it mid-turn does not stop the
   // turn, it only leaves two processes working the session at once.
   if (sessionKey()) {
-    await waitForHeldTurn(sessionKey());
-    releaseHeldSession(sessionKey());
+    const interrupted = await waitForHeldTurn(sessionKey());
+    releaseHeldSession(sessionKey(), { interrupt: !interrupted });
   }
 
   // Arms (or re-arms) the idle countdown that eventually closes stdin.
@@ -1738,6 +1786,7 @@ export {
   abortClaudeSDKSession,
   listClaudeSDKBackgroundWork,
   hasActiveHeldTurn,
+  readHeldTurnWaitMs,
   stopClaudeSDKTask,
   isClaudeSDKSessionActive,
   getClaudeSDKSessionStartTime,

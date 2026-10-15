@@ -10,6 +10,7 @@ import {
   hasActiveHeldTurn,
   listClaudeSDKBackgroundWork,
   queryClaudeSDK,
+  readHeldTurnWaitMs,
   stopClaudeSDKTask,
 } from '@/modules/providers/list/claude/claude-runtime.provider.js';
 import type { NormalizedMessage, ProviderRuntimeContext } from '@/shared/types.js';
@@ -34,6 +35,8 @@ type Scripted = {
   calls: string[];
   /** Runs when the process is interrupted; a real CLI answers with the turn's `result`. */
   onInterrupt: (() => void) | null;
+  /** Runs when the process is closed, in place of ending the stream at once. */
+  onClose: (() => void) | null;
 };
 
 /** A stand-in for the SDK query: yields what the test emits, and reads the held prompt to notice its release. */
@@ -50,6 +53,7 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
     stopped,
     calls: [],
     onInterrupt: null,
+    onClose: null,
   };
 
   const createQuery: NonNullable<ProviderRuntimeContext['createQuery']> = ({ prompt }) => {
@@ -76,7 +80,7 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
 
     return Object.assign(iterator, {
       interrupt: async () => { script.calls.push('interrupt'); script.onInterrupt?.(); },
-      close: () => { script.calls.push('close'); script.end(); },
+      close: () => { script.calls.push('close'); (script.onClose ?? script.end)(); },
       stopTask: async (taskId: string) => { stopped.push(taskId); },
     });
   };
@@ -468,7 +472,7 @@ test('a new turn sent while the held process relays waits for that turn to end b
 
 test('a relay turn that outlasts the wait is interrupted before its stdin is closed', async () => {
   const previous = process.env.CLAUDE_HELD_TURN_WAIT_MS;
-  process.env.CLAUDE_HELD_TURN_WAIT_MS = '50';
+  process.env.CLAUDE_HELD_TURN_WAIT_MS = '1000';
   try {
     await withTwoRuns(async ({ first, second, sent, startFirst, startSecond }) => {
       const firstRun = startFirst();
@@ -480,10 +484,17 @@ test('a relay turn that outlasts the wait is interrupted before its stdin is clo
       // An interrupted turn ends with its `result`, as the CLI's does.
       first.script.onInterrupt = () => { first.script.emit(result()); };
 
+      // What the old process had been asked by the time the new one starts:
+      // the release is done by then, and the supersede's own interrupt (sent
+      // after stdin has ended, so dropped) has not happened yet.
+      let callsAtTakeover: string[] | null = null;
+      const createSecond = second.createQuery;
+      second.createQuery = (options) => { callsAtTakeover = [...first.script.calls]; return createSecond(options); };
       const secondRun = startSecond();
       await waitFor(() => first.script.released());
-      // The SDK drops an interrupt written after stdin has ended.
-      assert.deepEqual(first.script.calls, ['interrupt', 'release']);
+      await waitFor(() => callsAtTakeover !== null);
+      // Interrupted once, by the wait. The release does not interrupt again.
+      assert.deepEqual(callsAtTakeover!.filter((call) => call === 'interrupt'), ['interrupt']);
 
       first.script.end();
       await firstRun;
@@ -503,7 +514,7 @@ test('a relay turn that outlasts the wait is interrupted before its stdin is clo
 
 test('a relay turn that ignores the interrupt has its process closed', async () => {
   const previous = process.env.CLAUDE_HELD_TURN_WAIT_MS;
-  process.env.CLAUDE_HELD_TURN_WAIT_MS = '50';
+  process.env.CLAUDE_HELD_TURN_WAIT_MS = '1000';
   try {
     await withTwoRuns(async ({ first, second, sent, startFirst, startSecond }) => {
       const firstRun = startFirst();
@@ -526,6 +537,108 @@ test('a relay turn that ignores the interrupt has its process closed', async () 
       await secondRun;
       assert.equal(second.script.released(), true, 'the new turn ran');
     });
+  } finally {
+    if (previous === undefined) {
+      delete process.env.CLAUDE_HELD_TURN_WAIT_MS;
+    } else {
+      process.env.CLAUDE_HELD_TURN_WAIT_MS = previous;
+    }
+  }
+});
+
+test('a new turn interrupts the held process before taking over, for a turn the run has not seen start', async () => {
+  await withTwoRuns(async ({ first, second, sent, startFirst, startSecond }) => {
+    const firstRun = startFirst();
+    await settle();
+    await holdForBackgroundCommand(first.script, sent);
+    // The CLI has started a turn of its own (a Monitor event, say) but has
+    // written nothing yet, so the run cannot know the session is busy.
+    assert.equal(hasActiveHeldTurn(SESSION_ID), false);
+
+    // The release happens before the new process is created; the supersede's
+    // interrupt comes after it, once stdin has ended, and is dropped by the
+    // SDK. So the interrupt that counts is one already sent at creation.
+    let callsAtTakeover: string[] | null = null;
+    const createSecond = second.createQuery;
+    second.createQuery = (options) => { callsAtTakeover = [...first.script.calls]; return createSecond(options); };
+    const secondRun = startSecond();
+    await waitFor(() => first.script.released());
+    await waitFor(() => callsAtTakeover !== null);
+    assert.ok(callsAtTakeover!.includes('interrupt'), 'the unseen turn is interrupted before the new process starts');
+    assert.deepEqual(first.script.stopped, ['b1']);
+
+    first.script.end();
+    await firstRun;
+    second.script.emit(init());
+    second.script.emit(result());
+    second.script.end();
+    await secondRun;
+  });
+});
+
+test('a closed held process gets to exit before the new turn starts', async () => {
+  const previous = process.env.CLAUDE_HELD_TURN_WAIT_MS;
+  process.env.CLAUDE_HELD_TURN_WAIT_MS = '1000';
+  try {
+    await withTwoRuns(async ({ first, second, sent, startFirst, startSecond }) => {
+      const firstRun = startFirst();
+      await settle();
+      await holdForBackgroundCommand(first.script, sent);
+      first.script.emit(taskNotification('b1', 'toolu_bg', 'completed'));
+      first.script.emit(assistantText('Relaying, and never stopping.'));
+      await settle();
+      // The process takes a while to go after it is closed, as a CLI that is
+      // SIGTERMed with a tool still running does.
+      let exitNow: () => void = () => {};
+      first.script.onClose = () => { exitNow = () => first.script.end(); };
+
+      let secondCreated = false;
+      const createSecond = second.createQuery;
+      second.createQuery = (options) => { secondCreated = true; return createSecond(options); };
+      const secondRun = startSecond();
+      await waitFor(() => first.script.calls.includes('close'));
+      await settle();
+      await settle();
+      assert.equal(secondCreated, false, 'the new process waits for the old one to exit');
+
+      exitNow();
+      await firstRun;
+      await waitFor(() => secondCreated);
+      second.script.emit(init());
+      second.script.emit(result());
+      second.script.end();
+      await secondRun;
+    });
+  } finally {
+    if (previous === undefined) {
+      delete process.env.CLAUDE_HELD_TURN_WAIT_MS;
+    } else {
+      process.env.CLAUDE_HELD_TURN_WAIT_MS = previous;
+    }
+  }
+});
+
+test('the held-turn wait is clamped to what a timer can honour', () => {
+  const previous = process.env.CLAUDE_HELD_TURN_WAIT_MS;
+  const read = (value: string | undefined) => {
+    if (value === undefined) {
+      delete process.env.CLAUDE_HELD_TURN_WAIT_MS;
+    } else {
+      process.env.CLAUDE_HELD_TURN_WAIT_MS = value;
+    }
+    return readHeldTurnWaitMs();
+  };
+  try {
+    assert.equal(read(undefined), 120_000);
+    assert.equal(read(''), 120_000);
+    assert.equal(read('abc'), 120_000);
+    assert.equal(read('0'), 120_000);
+    assert.equal(read('-5'), 120_000, 'a negative wait is not a wait');
+    assert.equal(read('Infinity'), 120_000);
+    assert.equal(read('50'), 1_000, 'raised to the floor');
+    assert.equal(read('3e6'), 3_000_000, 'exponent notation reads as the number it is');
+    assert.equal(read('99999999999'), 2_147_483_647, 'held below the timer overflow');
+    assert.equal(read('300000'), 300_000);
   } finally {
     if (previous === undefined) {
       delete process.env.CLAUDE_HELD_TURN_WAIT_MS;
