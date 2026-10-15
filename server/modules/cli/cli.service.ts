@@ -87,7 +87,8 @@ function formatRecordedTime(timestamp: string | null): string {
 }
 
 const UPDATE_RESULT_LABELS: Record<SystemUpdateRecord['result'], string> = {
-  running: terminalTextStyles.warn('did not finish'),
+  // `cloudcli status` cannot tell an update still in progress from a killed one.
+  running: terminalTextStyles.warn('still running, or stopped before it finished'),
   succeeded: terminalTextStyles.ok('succeeded'),
   failed: terminalTextStyles.error('failed'),
   'verification-failed': terminalTextStyles.error('installed, but cannot start'),
@@ -214,7 +215,7 @@ Commands:
   start            Start the CloudCLI server (default)
   sandbox          Manage Docker sandbox environments
   browser-use-mcp  Run Browser MCP stdio server
-  status           Show configuration and data locations
+  status           Show configuration, data locations, last start and update
   update           Update to the latest version
   help             Show this help information
   version          Show version information

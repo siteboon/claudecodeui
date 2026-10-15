@@ -175,7 +175,10 @@ export function createRecordedUpdateRunner(dependencies: SystemUpdateDependencie
       record.failureReason = processError;
     } else if (commandResult.exitCode !== 0) {
       record.result = 'failed';
-      record.failureReason = `Update command exited with code ${commandResult.exitCode}`;
+      // A null exit code means the process ended on a signal (a kill, an OOM kill).
+      record.failureReason = commandResult.exitCode === null
+        ? 'Update command was stopped by a signal before it finished'
+        : `Update command exited with code ${commandResult.exitCode}`;
     } else if (installMode === 'npm') {
       // Only a global npm install replaces the package in place with files this
       // process has never loaded; git and platform updates keep their workflows.

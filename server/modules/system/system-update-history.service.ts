@@ -29,7 +29,9 @@ function readRecordFile<TRecord>(
 }
 
 /**
- * Creates the store behind CloudCLI's update records: the last server start,
+ * System module composition root: creates the store behind CloudCLI's update
+ * records, shared by the web updater, the server start record and the
+ * `cloudcli update`/`cloudcli status` workflow. It holds the last server start,
  * the last update attempt, and one plain-text log per update. Everything lives
  * in the data folder so `cloudcli status` can read it while the server is down.
  * Writers decide how to handle a failed write; this store never swallows one.

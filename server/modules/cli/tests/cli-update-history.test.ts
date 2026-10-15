@@ -254,8 +254,38 @@ test('status falls back to the failed update record when no start was recorded f
 
   const statusText = stripAnsiSequences(harness.logMessages.join('\n'));
   assert.match(statusText, /Last started: 1\.2\.0 at .* \(from \/home\/user\/src\/claudecodeui\)/);
-  assert.match(statusText, /Last update: +1\.2\.3 -> 1\.2\.4 from cli, did not finish/);
+  assert.match(statusText, /Last update: +1\.2\.3 -> 1\.2\.4 from cli, still running, or stopped before it finished/);
   assert.match(statusText, /Roll back: +npm install -g @cloudcli-ai\/cloudcli@1\.2\.3/);
+});
+
+test('status offers no way back after a successful update when no start of this install was recorded', async () => {
+  const harness = createHarness({
+    updateHistory: {
+      ...EMPTY_UPDATE_HISTORY,
+      lastStart: {
+        version: '1.2.0',
+        appRoot: '/home/user/src/claudecodeui',
+        installMode: 'git',
+        nodeVersion: 'v24.21.0',
+        startedAt: '2026-10-14T11:00:00.000Z',
+      },
+      lastUpdate: UPDATE_RECORD,
+    },
+  });
+
+  await harness.service.run(['status']);
+
+  const statusText = stripAnsiSequences(harness.logMessages.join('\n'));
+  assert.match(statusText, /Last update: +1\.2\.3 -> 1\.2\.4 from cli, succeeded/);
+  assert.doesNotMatch(statusText, /Roll back:/);
+});
+
+test('help says status also reports the last start and update', async () => {
+  const harness = createHarness();
+
+  await harness.service.run(['help']);
+
+  assert.match(harness.logMessages.join('\n'), /status +Show configuration, data locations, last start and update/);
 });
 
 test('status still prints the rest when the update history cannot be loaded', async () => {

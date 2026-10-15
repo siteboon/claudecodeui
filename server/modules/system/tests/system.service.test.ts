@@ -305,6 +305,22 @@ test('the update record is saved before the command runs, so an interrupted upda
   assert.equal(savedRecords.at(-1)?.logPath, '/home/cloudcli/.cloudcli/logs/update-1792058400000.log');
 });
 
+test('an update command ended by a signal is recorded as stopped, not as exit code null', async () => {
+  const { history, savedRecords } = createUpdateHistory();
+  const service = createSystemUpdateService(createNpmUpgrade({
+    updateHistory: history,
+    // What the adapter resolves when npm is killed (an OOM kill, a platform restart).
+    runShellCommand: async () => ({ exitCode: null, output: 'reify: timing', errorOutput: '' }),
+  }));
+
+  const result = await service.updateSystem();
+
+  assert.equal(result.success, false);
+  assert.equal(savedRecords.at(-1)?.result, 'failed');
+  assert.equal(savedRecords.at(-1)?.exitCode, null);
+  assert.equal(savedRecords.at(-1)?.failureReason, 'Update command was stopped by a signal before it finished');
+});
+
 test('a history folder that cannot be written never fails a finished update', async () => {
   const errorLogs: string[] = [];
   const { history } = createUpdateHistory();

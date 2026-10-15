@@ -93,8 +93,13 @@ function createUpdateHistory() {
       // Write then rename so a crash never leaves half a record; logs hold
       // command output, so only their owner may read them.
       const temporaryPath = `${filePath}.${process.pid}.tmp`;
-      fs.writeFileSync(temporaryPath, contents, { encoding: 'utf8', mode: 0o600 });
-      fs.renameSync(temporaryPath, filePath);
+      try {
+        fs.writeFileSync(temporaryPath, contents, { encoding: 'utf8', mode: 0o600 });
+        fs.renameSync(temporaryPath, filePath);
+      } catch (error) {
+        fs.rmSync(temporaryPath, { force: true });
+        throw error;
+      }
     },
   });
 }
