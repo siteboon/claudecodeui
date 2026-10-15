@@ -13,6 +13,11 @@ type ProviderCliUpdateRequestError = {
   message: string;
 };
 
+const fetchCliStatus = async (provider: AgentProvider): Promise<ProviderCliStatus> => {
+  const response = await api.providers.cliStatus(provider);
+  return (await readApiJson<ProviderCliStatusResponse>(response)).data;
+};
+
 /**
  * Used by ProviderCliVersion (settings account view) to load one provider
  * CLI's installed and latest version and to run its updater. The status is
@@ -34,25 +39,21 @@ export function useProviderCliVersion(provider: AgentProvider) {
   // reached it; kept apart from updateResult because there is no run output.
   const [updateError, setUpdateError] = useState<ProviderCliUpdateRequestError | null>(null);
 
-  const loadStatus = useCallback(async (signal?: { cancelled: boolean }) => {
-    try {
-      const response = await api.providers.cliStatus(provider);
-      const payload = await readApiJson<ProviderCliStatusResponse>(response);
-      if (!signal?.cancelled) {
-        setStatus(payload.data);
-      }
-    } catch (error) {
-      console.error(`Error loading the ${provider} CLI version:`, error);
-    }
-  }, [provider]);
-
   useEffect(() => {
-    const signal = { cancelled: false };
-    void loadStatus(signal);
+    let cancelled = false;
+    void fetchCliStatus(provider)
+      .then((nextStatus) => {
+        if (!cancelled) {
+          setStatus(nextStatus);
+        }
+      })
+      .catch((error: unknown) => {
+        console.error(`Error loading the ${provider} CLI version:`, error);
+      });
     return () => {
-      signal.cancelled = true;
+      cancelled = true;
     };
-  }, [loadStatus]);
+  }, [provider]);
 
   const runUpdate = useCallback(async () => {
     setUpdating(true);
@@ -69,9 +70,13 @@ export function useProviderCliVersion(provider: AgentProvider) {
       });
     } finally {
       setUpdating(false);
-      await loadStatus();
     }
-  }, [loadStatus, provider]);
+    try {
+      setStatus(await fetchCliStatus(provider));
+    } catch (error) {
+      console.error(`Error reloading the ${provider} CLI version:`, error);
+    }
+  }, [provider]);
 
   return { status, updating, updateResult, updateError, runUpdate };
 }

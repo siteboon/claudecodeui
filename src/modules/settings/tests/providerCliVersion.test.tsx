@@ -21,7 +21,8 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 });
 
 vi.mock('@/shared/api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/shared/api')>();
+  // The real readApiJson and ApiRequestError, so error envelopes are read as the app reads them.
+  const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,
     api: {
