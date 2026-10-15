@@ -15,8 +15,12 @@ type SystemModuleOptions = {
   appRoot: string;
   installMode: 'git' | 'npm';
   isPlatform: boolean;
-  /** Version of the running server, read once at startup by the entrypoint. */
-  runningVersion: string | null;
+  /**
+   * Version of the running server, read once at startup by the entrypoint.
+   * Optional for existing callers; without it the rollback target falls back
+   * to the last recorded start of this install, then to the version on disk.
+   */
+  runningVersion?: string | null;
 };
 
 type CommandResult = { exitCode: number | null; output: string; errorOutput: string };
@@ -123,6 +127,7 @@ function createUpdateTrackingDependencies(
 export function createSystemModule(options: SystemModuleOptions): Router {
   const systemUpdateService = createSystemUpdateService({
     ...options,
+    runningVersion: options.runningVersion ?? null,
     homeDirectory: os.homedir(),
     environment: process.env,
     runShellCommand,
