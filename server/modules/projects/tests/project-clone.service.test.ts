@@ -165,6 +165,107 @@ test('startCloneProject rejects an http(s) URL the parser cannot read before git
   assert.equal(spawned, 0);
 });
 
+// A prompt pasted into the URL field: the browser's single-line input turns
+// its line breaks into spaces, so what arrives has no slash and runs long.
+const PASTED_PROMPT = [
+  'Please audit this repository for security problems.',
+  'Focus on the authentication flow, the websocket handlers and anything that touches the filesystem.',
+  'Then write a short report with severity ratings and suggested fixes for each finding you make.',
+  'Keep it concise and avoid speculative issues; cite file names and line numbers where possible.',
+].join('\n');
+
+for (const [label, githubUrl] of [
+  ['a multi-line prompt', PASTED_PROMPT],
+  ['a prompt whose line breaks the browser turned into spaces', PASTED_PROMPT.replaceAll('\n', ' ')],
+  ['an https URL whose last segment is 256 bytes', `https://github.com/example/${'a'.repeat(256)}`],
+  ['an https URL whose last segment is 130 two-byte characters', `https://github.com/example/${'é'.repeat(130)}`],
+  ['a URL with a line break inside', 'https://github.com/example/\nrepo.git'],
+  ['a URL with a tab inside', 'git@github.com:example/re\tpo.git'],
+  ['a URL with a NUL byte inside', 'ssh://git@github.com/example/repo\u0000.git'],
+  ['a URL with a Unicode line separator inside', 'https://github.com/example/re po.git'],
+  ['an https URL with a space in its path', 'https://github.com/example/my repo.git'],
+  ['a URL ending in ..', 'https://github.com/example/..'],
+  ['a URL ending in /./', 'git@github.com:example/./'],
+] as const) {
+  test(`startCloneProject rejects ${label} before touching the disk`, async () => {
+    // The directory name used to reach the filesystem first: `access()` threw a
+    // raw ENAMETOOLONG naming the whole pasted text, after the workspace had
+    // already been created for a clone that could never run.
+    const calls: string[] = [];
+    await assert.rejects(
+      async () =>
+        startCloneProject(
+          { workspacePath: '/workspace/root', githubUrl, githubTokenId: 3, userId: 1 },
+          { onProgress: () => undefined, onComplete: () => undefined },
+          buildDependencies({
+            validatePath: async () => {
+              calls.push('validatePath');
+              return { valid: true, resolvedPath: '/workspace/root' };
+            },
+            ensureDirectory: async () => { calls.push('ensureDirectory'); },
+            getGithubTokenById: async () => {
+              calls.push('getGithubTokenById');
+              return { github_token: 'token-value' };
+            },
+            pathExists: async () => {
+              calls.push('pathExists');
+              return false;
+            },
+            spawnGitClone: () => {
+              calls.push('spawnGitClone');
+              throw new Error('must not spawn');
+            },
+          }),
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError, `expected an AppError, got ${String(error)}`);
+        assert.equal(error.code, 'INVALID_GITHUB_URL');
+        assert.equal(error.statusCode, 400);
+        assert.ok(!error.message.includes('Please audit'), 'the error must not echo the pasted text');
+        return true;
+      },
+    );
+    assert.deepEqual(calls, []);
+  });
+}
+
+for (const [label, githubUrl, expectedDirectory] of [
+  ['an https URL', 'https://github.com/example/repo.git', 'repo'],
+  ['an http URL', 'http://git.example.com/example/repo', 'repo'],
+  ['a trailing slash', 'https://github.com/example/repo/', 'repo'],
+  ['GitLab nested groups', 'https://gitlab.com/group/subgroup/repo.git', 'repo'],
+  ['Bitbucket', 'https://bitbucket.org/workspace/repo.git', 'repo'],
+  ['an ssh URL', 'ssh://git@example.com:2222/example/repo.git', 'repo'],
+  ['an scp-like address', 'git@github.com:example/repo.git', 'repo'],
+  ['a git:// URL', 'git://example.com/example/repo.git', 'repo'],
+  ['a file:// URL', 'file:///srv/git/repo.git', 'repo'],
+  ['a local path with a space', '/srv/git repos/my repo.git', 'my repo'],
+  ['an scp-like address with a space', 'git@example.com:team/my repo.git', 'my repo'],
+  ['a last segment of 100 two-byte characters', `https://github.com/example/${'é'.repeat(100)}`, 'é'.repeat(100)],
+  ['a last segment of exactly 255 bytes', `https://github.com/example/${'a'.repeat(255)}.git`, 'a'.repeat(255)],
+] as const) {
+  test(`startCloneProject clones ${label}`, async () => {
+    // The checks above only turn away what git or the filesystem never could
+    // take; every remote shape git accepts still reaches it, unchanged.
+    const gitProcess = createMockGitProcess();
+    let spawnCall: { cloneUrl: string; clonePath: string } | null = null;
+    const operation = await startCloneProject(
+      { workspacePath: '/workspace/root', githubUrl, userId: 1 },
+      { onProgress: () => undefined, onComplete: () => undefined },
+      buildDependencies({
+        spawnGitClone: (cloneUrl, clonePath) => {
+          spawnCall = { cloneUrl, clonePath };
+          return gitProcess as never;
+        },
+      }),
+    );
+    gitProcess.emit('close', 0);
+    await operation.waitForCompletion;
+
+    assert.deepEqual(spawnCall, { cloneUrl: githubUrl, clonePath: path.join('/workspace/root', expectedDirectory) });
+  });
+}
+
 test('startCloneProject accepts the ssh login name that is not a credential', async () => {
   // `git@` on an SSH URL is the login every SSH clone uses, not a secret.
   const gitProcess = createMockGitProcess();

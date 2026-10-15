@@ -202,6 +202,55 @@ function isParsableUrl(url: string): boolean {
   }
 }
 
+/**
+ * NAME_MAX of the common filesystems (ext4, XFS, Btrfs, APFS): one path
+ * component may hold at most 255 bytes. Every filesystem call on a longer
+ * name fails with ENAMETOOLONG.
+ */
+const MAX_CLONE_DIRECTORY_NAME_BYTES = 255;
+
+/**
+ * Names the directory the clone lands in after the URL's last path segment,
+ * with trailing slashes and a `.git` suffix dropped.
+ */
+function deriveCloneDirectoryName(githubUrl: string): string {
+  const sanitizedGithubUrl = githubUrl.replace(/\/+$/, '').replace(/\.git$/, '');
+  return sanitizedGithubUrl.split('/').pop() || 'repository';
+}
+
+/**
+ * Rejects what a prompt pasted into the URL field looks like before anything
+ * touches the disk: a line break, which no remote, scp-like address or local
+ * path carries, or a last segment too long to be a directory name. A space is
+ * not rejected here — ssh, scp-like, file:// and local paths may hold one.
+ */
+function assertCloneSourceIsUsable(githubUrl: string, cloneDirectoryName: string): void {
+  if (/[\p{Cc}\p{Zl}\p{Zp}]/u.test(githubUrl)) {
+    throw new AppError('Invalid githubUrl: it contains a line break or another control character', {
+      code: 'INVALID_GITHUB_URL',
+      statusCode: 400,
+    });
+  }
+
+  // `.` or `..` would put the clone in the workspace itself or its parent.
+  if (cloneDirectoryName === '.' || cloneDirectoryName === '..') {
+    throw new AppError('Invalid githubUrl: it does not end in a repository name', {
+      code: 'INVALID_GITHUB_URL',
+      statusCode: 400,
+    });
+  }
+
+  if (Buffer.byteLength(cloneDirectoryName, 'utf8') > MAX_CLONE_DIRECTORY_NAME_BYTES) {
+    throw new AppError(
+      `Invalid githubUrl: the repository name it ends with is longer than ${MAX_CLONE_DIRECTORY_NAME_BYTES} bytes`,
+      {
+        code: 'INVALID_GITHUB_URL',
+        statusCode: 400,
+      },
+    );
+  }
+}
+
 export async function startCloneProject(
   input: CloneProjectInput,
   handlers: CloneProjectEventHandlers,
@@ -232,10 +281,17 @@ export async function startCloneProject(
     });
   }
 
+  const repoName = deriveCloneDirectoryName(normalizedGithubUrl);
+  assertCloneSourceIsUsable(normalizedGithubUrl, repoName);
+
   // An http(s) string the URL parser rejects (a bad port, a space in the
   // host) is one curl rejects too — but only after git has carried it, and
-  // any credential in it, on its command line.
-  if (/^https?:/i.test(normalizedGithubUrl) && !isParsableUrl(normalizedGithubUrl)) {
+  // any credential in it, on its command line. A space in the path is one as
+  // well: the parser percent-encodes it, curl refuses it as malformed.
+  if (
+    /^https?:/i.test(normalizedGithubUrl)
+    && (normalizedGithubUrl.includes(' ') || !isParsableUrl(normalizedGithubUrl))
+  ) {
     throw new AppError('Invalid githubUrl', {
       code: 'INVALID_GITHUB_URL',
       statusCode: 400,
@@ -286,8 +342,6 @@ export async function startCloneProject(
     githubToken = input.newGithubToken.trim();
   }
 
-  const sanitizedGithubUrl = normalizedGithubUrl.replace(/\/+$/, '').replace(/\.git$/, '');
-  const repoName = sanitizedGithubUrl.split('/').pop() || 'repository';
   const clonePath = path.join(absolutePath, repoName);
 
   if (await dependencies.pathExists(clonePath)) {
