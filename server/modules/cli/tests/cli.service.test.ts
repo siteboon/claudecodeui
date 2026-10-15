@@ -40,7 +40,7 @@ const UPDATE_RECORD: SystemUpdateRecord = {
 type HarnessOptions = {
   latestVersion?: string;
   updateRecord?: SystemUpdateRecord;
-  updateHistory?: SystemUpdateHistory;
+  updateHistory?: SystemUpdateHistory | Error;
 };
 
 function createHarness(options: HarnessOptions = {}) {
@@ -80,7 +80,12 @@ function createHarness(options: HarnessOptions = {}) {
       packageUpdates += 1;
       return options.updateRecord ?? UPDATE_RECORD;
     },
-    readUpdateHistory: async () => options.updateHistory ?? EMPTY_UPDATE_HISTORY,
+    readUpdateHistory: async () => {
+      if (options.updateHistory instanceof Error) {
+        throw options.updateHistory;
+      }
+      return options.updateHistory ?? EMPTY_UPDATE_HISTORY;
+    },
     startServer: async () => {
       serverStarts += 1;
     },
@@ -300,4 +305,15 @@ test('status falls back to the failed update record when no start was recorded f
   assert.match(statusText, /Last started: 1\.2\.0 at .* \(from \/home\/user\/src\/claudecodeui\)/);
   assert.match(statusText, /Last update: +1\.2\.3 -> 1\.2\.4 from cli, did not finish/);
   assert.match(statusText, /Roll back: +npm install -g @cloudcli-ai\/cloudcli@1\.2\.3/);
+});
+
+test('status still prints the rest when the update history cannot be loaded', async () => {
+  const harness = createHarness({ updateHistory: new Error("Cannot find package 'express'") });
+
+  const exitCode = await harness.service.run(['status']);
+
+  const statusText = stripAnsiSequences(harness.logMessages.join('\n'));
+  assert.equal(exitCode, 0);
+  assert.match(statusText, /Could not read the update history: Cannot find package 'express'/);
+  assert.match(statusText, /Database Location:/);
 });

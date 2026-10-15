@@ -155,7 +155,14 @@ async function showStatus(dependencies: CliServiceDependencies): Promise<void> {
   output.log(`\n${terminalTextStyles.bright('CloudCLI UI - Status')}\n`);
   output.log(terminalTextStyles.dim('═'.repeat(60)));
   output.log(`\n${terminalTextStyles.info('[INFO]')} Version: ${terminalTextStyles.bright(dependencies.packageMetadata.version)}`);
-  showUpdateHistory(dependencies, await dependencies.readUpdateHistory());
+  try {
+    showUpdateHistory(dependencies, await dependencies.readUpdateHistory());
+  } catch (error) {
+    // Status has to work on a broken install, so a history that cannot load
+    // only loses its own section.
+    const message = error instanceof Error ? error.message : String(error);
+    output.log(`\n${terminalTextStyles.warn('[WARN]')} Could not read the update history: ${message}`);
+  }
   output.log(`\n${terminalTextStyles.info('[INFO]')} Installation Directory:`);
   output.log(`       ${terminalTextStyles.dim(dependencies.applicationRoot)}`);
   output.log(`\n${terminalTextStyles.info('[INFO]')} Database Location:`);
