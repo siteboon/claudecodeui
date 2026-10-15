@@ -13,7 +13,7 @@ import providerRouter from '@/modules/providers/provider.routes.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import type { IProvider } from '@/shared/interfaces.js';
 import type { BackgroundTaskSummary, WorkflowAgentActivity } from '@/shared/types.js';
-import { AppError } from '@/shared/utils.js';
+import { AppError, IS_PLATFORM } from '@/shared/utils.js';
 
 async function withProviderServer(
   run: (baseUrl: string, workspacePath: string) => Promise<void>,
@@ -375,6 +375,38 @@ test('the running-sessions route reports a session held open for background work
         canInterrupt: false,
         tasks,
       }]);
+    });
+  } finally {
+    providerRegistry.listProviders = realListProviders;
+  }
+});
+
+test('the CLI update route refuses while that provider is busy in a session', {
+  skip: IS_PLATFORM ? 'platform mode refuses every CLI update before the busy check' : false,
+}, async () => {
+  // A session held open for background work counts as busy, like a running
+  // chat: replacing the CLI under it could break the work it is still doing.
+  const realListProviders = providerRegistry.listProviders;
+  providerRegistry.listProviders = () => [{
+    id: 'claude',
+    runtime: { listBackgroundWork: () => [{ sessionId: 'held-session', tasks: [] }] },
+  } as unknown as IProvider];
+
+  try {
+    await withProviderServer(async (baseUrl) => {
+      const busy = await fetch(`${baseUrl}/api/providers/claude/cli/update`, { method: 'POST' });
+      const busyPayload = await busy.json() as { error: { code: string } };
+      assert.equal(busy.status, 409);
+      assert.equal(busyPayload.error.code, 'PROVIDER_CLI_BUSY');
+
+      // Codex ships with CloudCLI: nothing to update, and the status says why.
+      const codex = await fetch(`${baseUrl}/api/providers/codex/cli/update`, { method: 'POST' });
+      assert.equal(codex.status, 400);
+      const codexStatus = await fetch(`${baseUrl}/api/providers/codex/cli`);
+      const codexPayload = await codexStatus.json() as { data: { updateUnavailableReason: string; updateCommand: null } };
+      assert.equal(codexStatus.status, 200);
+      assert.equal(codexPayload.data.updateUnavailableReason, 'bundled');
+      assert.equal(codexPayload.data.updateCommand, null);
     });
   } finally {
     providerRegistry.listProviders = realListProviders;

@@ -1,0 +1,408 @@
+import spawn from 'cross-spawn';
+
+import { providerRegistry } from '@/modules/providers/provider.registry.js';
+import { sessionsService } from '@/modules/providers/services/sessions.service.js';
+import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
+import type { IProvider } from '@/shared/interfaces.js';
+import type { LLMProvider } from '@/shared/types.js';
+import { AppError, IS_PLATFORM, stripAnsiSequences } from '@/shared/utils.js';
+
+/** How long the registry's answer is reused before it is asked again. */
+const LATEST_VERSION_TTL_MS = 60 * 60 * 1000;
+/** A failed lookup is retried sooner, but not on every settings page view of an offline server. */
+const LATEST_VERSION_FAILURE_TTL_MS = 5 * 60 * 1000;
+/** The registry gets this long; past it the settings page shows the installed version alone. */
+const LATEST_VERSION_TIMEOUT_MS = 4000;
+const NPM_REGISTRY_URL = 'https://registry.npmjs.org';
+
+/** One update run may take this long: `claude update` downloads a ~250 MB binary. */
+const UPDATE_TIMEOUT_MS = 10 * 60 * 1000;
+/** After SIGTERM on timeout, the updater gets this long to exit before SIGKILL. */
+const UPDATE_KILL_GRACE_MS = 10_000;
+/** Only the tail of the updater's output is returned; that is where its result and errors are. */
+const UPDATE_OUTPUT_LIMIT = 20_000;
+
+/** npm, Node and the CLIs' own updaters all phrase a write they were refused this way. */
+const PERMISSION_DENIED_PATTERN = /\bEACCES\b|\bEPERM\b|permission denied|insufficient permissions/i;
+const RELEASE_VERSION_PATTERN = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
+
+type CliUpdater = {
+  /** The CLI chats run, or undefined when they run a binary that ships inside CloudCLI's dependencies. */
+  resolveCommand: () => string | undefined;
+  /** Arguments that make the CLI update itself. */
+  args: string[];
+  /** The npm package whose `latest` dist-tag is the newest release, or null when the CLI is not on npm. */
+  npmPackage: string | null;
+};
+
+// Each CLI updates itself with its own updater. That updater knows how it was
+// installed (npm, a native installer, Homebrew, ...), which a blanket
+// `npm install -g` does not: on a native or Homebrew install it would add a
+// second copy that PATH may not even pick. Codex is absent on purpose: chats
+// run the @openai/codex build CloudCLI depends on, so it changes with CloudCLI.
+const CLI_UPDATERS: Partial<Record<LLMProvider, CliUpdater>> = {
+  claude: {
+    // undefined only on Windows when no CLI resolves: the SDK then runs its bundled binary.
+    resolveCommand: () => resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH),
+    args: ['update'],
+    npmPackage: '@anthropic-ai/claude-code',
+  },
+  cursor: {
+    // cursor-agent is distributed by Cursor's installer only, so there is no registry to compare with.
+    resolveCommand: () => 'cursor-agent',
+    args: ['update'],
+    npmPackage: null,
+  },
+  opencode: {
+    resolveCommand: () => 'opencode',
+    args: ['upgrade'],
+    npmPackage: 'opencode-ai',
+  },
+};
+
+/** Why the settings page offers no update: the CLI ships with CloudCLI, or the hosting platform manages the CLIs. */
+type CliUpdateUnavailableReason = 'bundled' | 'platform';
+
+type ProviderCliStatus = {
+  provider: LLMProvider;
+  installed: boolean;
+  installedVersion: string | null;
+  /** The registry's `latest` release, or null when the CLI is not on npm or the lookup failed. */
+  latestVersion: string | null;
+  updateAvailable: boolean;
+  /** What the update action runs, e.g. `claude update`; null when it is unavailable. */
+  updateCommand: string | null;
+  updateUnavailableReason: CliUpdateUnavailableReason | null;
+};
+
+/** Why an update run did not leave a working update behind; null when the updater exited 0. */
+type CliUpdateFailure = 'permission_denied' | 'timed_out' | 'failed';
+
+type ProviderCliUpdateResult = {
+  provider: LLMProvider;
+  command: string;
+  /** null when the updater could not be started or was stopped by the timeout. */
+  exitCode: number | null;
+  output: string;
+  previousVersion: string | null;
+  installedVersion: string | null;
+  failure: CliUpdateFailure | null;
+};
+
+type UpdaterRun = {
+  exitCode: number | null;
+  output: string;
+  spawnErrorCode: string | null;
+  timedOut: boolean;
+};
+
+type RunUpdaterOptions = {
+  timeoutMs: number;
+  killGraceMs: number;
+};
+
+type ProviderCliServiceDependencies = {
+  resolveProvider(provider: string): IProvider;
+  /** Providers with a chat run, background work or a busy Claude CLI session right now. */
+  listBusyProviders(): Promise<LLMProvider[]>;
+  fetch: typeof fetch;
+  platformMode: boolean;
+  now(): number;
+  updateTimeoutMs: number;
+  updateKillGraceMs: number;
+};
+
+const defaultDependencies: ProviderCliServiceDependencies = {
+  resolveProvider: (provider) => providerRegistry.resolveProvider(provider),
+  listBusyProviders: async () => (await sessionsService.listRunningSessions()).map((session) => session.provider),
+  fetch: (input, init) => fetch(input, init),
+  platformMode: IS_PLATFORM,
+  now: () => Date.now(),
+  updateTimeoutMs: UPDATE_TIMEOUT_MS,
+  updateKillGraceMs: UPDATE_KILL_GRACE_MS,
+};
+
+/**
+ * Whether `candidate` is a later release than `current`. Both are
+ * `major.minor.patch` with an optional prerelease; a release outranks its own
+ * prereleases. Anything else (a date-based or unparsable version) compares as
+ * not newer, so no update is ever advertised on a guess.
+ */
+function isNewerVersion(candidate: string, current: string): boolean {
+  const next = RELEASE_VERSION_PATTERN.exec(candidate);
+  const installed = RELEASE_VERSION_PATTERN.exec(current);
+  if (!next || !installed) {
+    return false;
+  }
+
+  for (let index = 1; index <= 3; index += 1) {
+    const difference = Number(next[index]) - Number(installed[index]);
+    if (difference !== 0) {
+      return difference > 0;
+    }
+  }
+
+  return !next[4] && Boolean(installed[4]);
+}
+
+/** Renders the updater as a user would type it, for display only; it is spawned without a shell. */
+function formatCommand(command: string, args: string[]): string {
+  const quote = (part: string) => (/[\s"']/.test(part) ? `"${part.replace(/"/g, '\\"')}"` : part);
+  return [command, ...args].map(quote).join(' ');
+}
+
+function getProviderLabel(provider: LLMProvider): string {
+  const labels: Record<LLMProvider, string> = {
+    claude: 'Claude Code',
+    codex: 'Codex',
+    cursor: 'Cursor CLI',
+    opencode: 'OpenCode',
+  };
+  return labels[provider];
+}
+
+/**
+ * Runs one updater to completion and keeps the tail of its combined output.
+ * No shell is involved: the command is the configured CLI and the arguments
+ * are fixed per provider. On POSIX the updater gets its own process group so
+ * a timeout also stops the npm or download child it started.
+ */
+function runUpdater(command: string, args: string[], options: RunUpdaterOptions): Promise<UpdaterRun> {
+  return new Promise((resolve) => {
+    let output = '';
+    let timedOut = false;
+    let settled = false;
+    let graceTimer: NodeJS.Timeout | undefined;
+
+    const appendOutput = (chunk: Buffer | string) => {
+      output = (output + stripAnsiSequences(String(chunk))).slice(-UPDATE_OUTPUT_LIMIT);
+    };
+
+    const finish = (result: Omit<UpdaterRun, 'output' | 'timedOut'>) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeoutTimer);
+      clearTimeout(graceTimer);
+      resolve({ ...result, output: output.trim(), timedOut });
+    };
+
+    const child = spawn(command, args, {
+      env: { ...process.env, NO_COLOR: '1' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: process.platform !== 'win32',
+      windowsHide: true,
+    });
+
+    const signalUpdater = (signal: NodeJS.Signals) => {
+      try {
+        if (process.platform !== 'win32' && child.pid) {
+          process.kill(-child.pid, signal);
+        } else {
+          child.kill(signal);
+        }
+      } catch {
+        // Already gone.
+      }
+    };
+
+    const timeoutTimer = setTimeout(() => {
+      timedOut = true;
+      signalUpdater('SIGTERM');
+      graceTimer = setTimeout(() => signalUpdater('SIGKILL'), options.killGraceMs);
+      graceTimer.unref?.();
+    }, options.timeoutMs);
+    timeoutTimer.unref?.();
+
+    child.stdout?.on('data', appendOutput);
+    child.stderr?.on('data', appendOutput);
+    child.on('error', (error: NodeJS.ErrnoException) => {
+      finish({ exitCode: null, spawnErrorCode: error.code ?? 'UNKNOWN' });
+    });
+    child.on('close', (code) => {
+      finish({ exitCode: timedOut ? null : code, spawnErrorCode: null });
+    });
+  });
+}
+
+/**
+ * Classifies a finished update run. Exit codes alone are not enough: some
+ * updaters print their refusal and still exit 0, so a run that left the
+ * version unchanged is also checked for a permission error in its output.
+ */
+function classifyUpdateFailure(
+  run: UpdaterRun,
+  previousVersion: string | null,
+  installedVersion: string | null,
+): CliUpdateFailure | null {
+  if (run.spawnErrorCode) {
+    return run.spawnErrorCode === 'EACCES' || run.spawnErrorCode === 'EPERM' ? 'permission_denied' : 'failed';
+  }
+  if (run.timedOut) {
+    return 'timed_out';
+  }
+  const permissionDenied = PERMISSION_DENIED_PATTERN.test(run.output);
+  if (run.exitCode !== 0) {
+    return permissionDenied ? 'permission_denied' : 'failed';
+  }
+  if (permissionDenied && previousVersion === installedVersion) {
+    return 'permission_denied';
+  }
+  return null;
+}
+
+/**
+ * Creates the service behind Settings -> Agents -> Account's CLI version row:
+ * the installed version, the newest release on npm, and the update action.
+ * Exported so tests can swap the registry, the busy-session lookup and the
+ * platform flag.
+ */
+export function createProviderCliService(dependencyOverrides: Partial<ProviderCliServiceDependencies> = {}) {
+  const dependencies = { ...defaultDependencies, ...dependencyOverrides };
+  const latestVersionCache = new Map<string, { version: string | null; expiresAt: number }>();
+  const latestVersionLookups = new Map<string, Promise<string | null>>();
+  const updatesInProgress = new Map<LLMProvider, Promise<ProviderCliUpdateResult>>();
+
+  const fetchLatestVersion = async (npmPackage: string): Promise<string | null> => {
+    const response = await dependencies.fetch(`${NPM_REGISTRY_URL}/${npmPackage.replace('/', '%2F')}/latest`, {
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(LATEST_VERSION_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      return null;
+    }
+    const manifest = (await response.json()) as { version?: unknown } | null;
+    const version = typeof manifest?.version === 'string' ? manifest.version : null;
+    return version && RELEASE_VERSION_PATTERN.test(version) ? version : null;
+  };
+
+  /** Never throws: an unreachable registry only means no "update available" hint. */
+  const getLatestVersion = (npmPackage: string): Promise<string | null> => {
+    const cached = latestVersionCache.get(npmPackage);
+    if (cached && cached.expiresAt > dependencies.now()) {
+      return Promise.resolve(cached.version);
+    }
+
+    // Concurrent page loads share one request instead of each asking the registry.
+    let lookup = latestVersionLookups.get(npmPackage);
+    if (!lookup) {
+      lookup = fetchLatestVersion(npmPackage)
+        .catch(() => null)
+        .then((version) => {
+          const ttl = version ? LATEST_VERSION_TTL_MS : LATEST_VERSION_FAILURE_TTL_MS;
+          latestVersionCache.set(npmPackage, { version, expiresAt: dependencies.now() + ttl });
+          return version;
+        })
+        .finally(() => latestVersionLookups.delete(npmPackage));
+      latestVersionLookups.set(npmPackage, lookup);
+    }
+    return lookup;
+  };
+
+  const resolveUpdateCommand = (provider: LLMProvider): { command: string; args: string[] } | null => {
+    const updater = CLI_UPDATERS[provider];
+    const command = updater?.resolveCommand();
+    return updater && command ? { command, args: updater.args } : null;
+  };
+
+  const runUpdate = async (
+    provider: IProvider,
+    update: { command: string; args: string[] },
+  ): Promise<ProviderCliUpdateResult> => {
+    // Replacing the binary under a live turn can break it mid-run, and some
+    // updaters (Claude's native installer) refuse while the CLI is running.
+    const busyProviders = await dependencies.listBusyProviders();
+    if (busyProviders.includes(provider.id)) {
+      throw new AppError(
+        `${getProviderLabel(provider.id)} is busy in at least one session. Wait for it to finish or stop it, then update.`,
+        { code: 'PROVIDER_CLI_BUSY', statusCode: 409 },
+      );
+    }
+
+    const before = provider.auth.checkInstalled();
+    if (!before.installed) {
+      throw new AppError(`${getProviderLabel(provider.id)} is not installed on the server, so there is nothing to update.`, {
+        code: 'PROVIDER_CLI_NOT_INSTALLED',
+        statusCode: 409,
+      });
+    }
+
+    const run = await runUpdater(update.command, update.args, {
+      timeoutMs: dependencies.updateTimeoutMs,
+      killGraceMs: dependencies.updateKillGraceMs,
+    });
+    const installedVersion = provider.auth.checkInstalled().version;
+
+    return {
+      provider: provider.id,
+      command: formatCommand(update.command, update.args),
+      exitCode: run.exitCode,
+      output: run.output,
+      previousVersion: before.version,
+      installedVersion,
+      failure: classifyUpdateFailure(run, before.version, installedVersion),
+    };
+  };
+
+  return {
+    /** Installed version, newest npm release and whether this server can update the CLI. */
+    async getCliStatus(providerName: LLMProvider): Promise<ProviderCliStatus> {
+      const provider = dependencies.resolveProvider(providerName);
+      const { installed, version: installedVersion } = provider.auth.checkInstalled();
+      const update = resolveUpdateCommand(provider.id);
+      const updateUnavailableReason: CliUpdateUnavailableReason | null = dependencies.platformMode
+        ? 'platform'
+        : update ? null : 'bundled';
+
+      // The registry is only worth asking when the answer can lead to an update.
+      const npmPackage = CLI_UPDATERS[provider.id]?.npmPackage;
+      const latestVersion = updateUnavailableReason === null && npmPackage
+        ? await getLatestVersion(npmPackage)
+        : null;
+
+      return {
+        provider: provider.id,
+        installed,
+        installedVersion,
+        latestVersion,
+        updateAvailable: Boolean(installedVersion && latestVersion && isNewerVersion(latestVersion, installedVersion)),
+        updateCommand: update && updateUnavailableReason === null ? formatCommand(update.command, update.args) : null,
+        updateUnavailableReason,
+      };
+    },
+
+    /**
+     * Runs the CLI's own updater and reports its output and the version after
+     * it. A second request while one runs gets the same result instead of
+     * starting another updater over the first.
+     */
+    async updateCli(providerName: LLMProvider): Promise<ProviderCliUpdateResult> {
+      if (dependencies.platformMode) {
+        throw new AppError('The hosting platform manages the CLIs on this server.', {
+          code: 'PROVIDER_CLI_UPDATE_UNAVAILABLE',
+          statusCode: 403,
+        });
+      }
+
+      const provider = dependencies.resolveProvider(providerName);
+      const update = resolveUpdateCommand(provider.id);
+      if (!update) {
+        throw new AppError(`${getProviderLabel(provider.id)} ships with CloudCLI and is updated together with it.`, {
+          code: 'PROVIDER_CLI_UPDATE_UNAVAILABLE',
+          statusCode: 400,
+        });
+      }
+
+      let inProgress = updatesInProgress.get(provider.id);
+      if (!inProgress) {
+        inProgress = runUpdate(provider, update).finally(() => updatesInProgress.delete(provider.id));
+        updatesInProgress.set(provider.id, inProgress);
+      }
+      return inProgress;
+    },
+  };
+}
+
+/** Used by the provider routes for `GET /:provider/cli` and `POST /:provider/cli/update`. */
+export const providerCliService = createProviderCliService();
