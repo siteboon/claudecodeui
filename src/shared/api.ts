@@ -596,6 +596,10 @@ export const api = {
 
   system: {
     update: () => post('/api/system/update'),
+    // Resolved database and uploaded-files locations of a self-hosted install.
+    storage: () => get('/api/system/storage'),
+    // Consistent snapshot of the database, returned as a file attachment.
+    backup: () => get('/api/system/backup'),
   },
 };
 

@@ -3,6 +3,10 @@ import os from 'node:os';
 import spawn from 'cross-spawn';
 import type { Router } from 'express';
 
+import { getConnection, getDatabasePath } from '@/modules/database/index.js';
+import { getGlobalImageAssetsDir } from '@/shared/image-attachments.js';
+
+import { createSystemStorageService } from './system-storage.service.js';
 import { createSystemRouter } from './system.routes.js';
 import { createSystemUpdateService } from './system.service.js';
 
@@ -45,8 +49,9 @@ function runShellCommand(
 }
 
 /**
- * Builds the authenticated system router for the server entrypoint using the
- * installation details it already resolves for health and startup metadata.
+ * Builds the authenticated system router (update, storage locations, database
+ * backup) for the server entrypoint using the installation details it already
+ * resolves for health and startup metadata.
  */
 export function createSystemModule(options: SystemModuleOptions): Router {
   const systemUpdateService = createSystemUpdateService({
@@ -58,5 +63,16 @@ export function createSystemModule(options: SystemModuleOptions): Router {
     logError: (message, detail) => console.error(message, detail ?? ''),
   });
 
-  return createSystemRouter(systemUpdateService);
+  const systemStorageService = createSystemStorageService({
+    isPlatform: options.isPlatform,
+    getDatabasePath,
+    getAssetsPath: getGlobalImageAssetsDir,
+    // better-sqlite3's online backup copies the shared connection page by page
+    // across event-loop turns, so the server keeps serving while it runs.
+    backupDatabase: (destinationPath) => getConnection().backup(destinationPath),
+    temporaryDirectory: os.tmpdir(),
+    now: () => new Date(),
+  });
+
+  return createSystemRouter({ systemUpdateService, systemStorageService });
 }

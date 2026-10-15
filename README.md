@@ -165,6 +165,57 @@ To use Claude Code's full functionality, you'll need to manually enable tools:
 
 ---
 
+## Back up and restore your data
+
+A self-hosted install keeps its own state in these places:
+
+- **The database** (`auth.db`, SQLite): your account, API keys and tokens, projects, session list and settings. It lives at `~/.cloudcli/auth.db` unless `DATABASE_PATH` is set.
+- **Uploaded files** (`~/.cloudcli/assets`): images and files attached in chat.
+- **Installed plugins** (`~/.claude-code-ui/plugins` and `~/.claude-code-ui/plugins.json`).
+- **Saved Browser Use profiles** (`~/.cloudcli/browser-use/profiles`): the sign-ins and cookies of named browser profiles.
+
+The database backup below covers only the database. Copy the other folders too when you move to a new machine. Chat transcripts are not part of any of these: each agent keeps its own history (for example `~/.claude/projects` for Claude Code), so back those folders up separately if you need them.
+
+**Settings > About > Data & backup** shows the exact database and uploaded-files paths this server uses (`cloudcli status` prints the database path too).
+
+**Back up**
+
+1. Click **Download backup** in Settings > About. You get `cloudcli-backup-<timestamp>.db`, a consistent copy of the database that is safe to take while CloudCLI is running.
+2. Copy the uploaded files folder:
+
+   ```bash
+   mkdir -p /path/to/backup && cp -R ~/.cloudcli/assets /path/to/backup/
+   ```
+
+The backup contains password hashes, API keys and access tokens. Store it like a password.
+
+To back up from a script or a cron job: while CloudCLI is stopped, a plain copy of the database file is a valid backup (`cp ~/.cloudcli/auth.db /path/to/backup/`). While it is running, sign in through the API and download the same snapshot as the button. Save these lines as a script and run the script from cron (a `%` typed directly into a crontab line has to be escaped as `\%`):
+
+```bash
+umask 077  # the file holds credentials: keep it readable only by you
+TOKEN=$(curl -fsS -X POST http://localhost:3001/api/auth/login -H 'Content-Type: application/json' \
+  -d '{"username":"<user>","password":"<password>"}' | sed -E 's/.*"token":"([^"]+)".*/\1/')
+curl -fsS -H "Authorization: Bearer $TOKEN" -o "cloudcli-backup-$(date +%F).db" http://localhost:3001/api/system/backup
+```
+
+**Restore**
+
+1. Stop CloudCLI.
+2. Copy the backup over the database file at the path you noted from Settings > About (or from `cloudcli status`), keeping the name (`auth.db` by default). If `auth.db-journal`, `auth.db-wal` or `auth.db-shm` files sit next to it, delete them.
+3. Copy the contents of the backed-up uploaded files folder back:
+
+   ```bash
+   mkdir -p ~/.cloudcli/assets && cp -R /path/to/backup/assets/. ~/.cloudcli/assets/
+   ```
+
+   This adds the backed-up files to the folder, so files uploaded after the backup stay. For an exact restore, run `rm -rf ~/.cloudcli/assets` first.
+
+4. Start CloudCLI and sign in with the account from the backup.
+
+When you move to a new machine or container, either restore to the default location or set `DATABASE_PATH` to where you put the file. Projects are stored by their absolute folder path, so keep the same folder layout on the new machine.
+
+---
+
 ## Plugins
 
 CloudCLI has a plugin system that lets you add custom tabs with their own frontend UI and optional Node.js backend. Install plugins from git repos directly in **Settings > Plugins**, or build your own.
