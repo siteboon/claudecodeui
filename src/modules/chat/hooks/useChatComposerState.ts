@@ -418,9 +418,12 @@ export function useChatComposerState({
 
       try {
         const effectiveInput = rawInput ?? input;
-        const commandMatch = effectiveInput.match(new RegExp(`${escapeRegExp(command.name)}\\s*(.*)`));
-        const args =
-          commandMatch && commandMatch[1] ? commandMatch[1].trim().split(/\s+/) : [];
+        // Everything typed after the command name is its argument text, line
+        // breaks included (`[\s\S]`, unlike `.`), trimmed as the Claude Code CLI
+        // does. `$ARGUMENTS` gets it verbatim; `$1`, `$2`, … get its tokens.
+        const commandMatch = effectiveInput.match(new RegExp(`${escapeRegExp(command.name)}\\s*([\\s\\S]*)`));
+        const rawArgs = commandMatch ? commandMatch[1].trim() : '';
+        const args = rawArgs ? rawArgs.split(/\s+/) : [];
 
         // The `/api/commands/execute` context sends `projectId` now instead of
         // a folder-derived project name; the path is still included verbatim.
@@ -437,6 +440,7 @@ export function useChatComposerState({
           commandName: command.name,
           commandPath: command.path,
           args,
+          rawArgs,
           context,
         });
 
@@ -761,10 +765,12 @@ export function useChatComposerState({
       const commandInput = currentInput.trimEnd();
       const isHelpAlias = commandInput.trim().toLowerCase() === 'help';
       if (commandInput.startsWith('/') || isHelpAlias) {
-        const firstSpace = commandInput.indexOf(' ');
+        // The name ends at the first whitespace of any kind, so "/cmd" followed
+        // by a line break still runs /cmd (the Claude Code CLI splits the same way).
+        const firstWhitespace = commandInput.search(/\s/);
         const commandName = isHelpAlias
           ? '/help'
-          : firstSpace > 0 ? commandInput.slice(0, firstSpace) : commandInput;
+          : firstWhitespace > 0 ? commandInput.slice(0, firstWhitespace) : commandInput;
         const matchedCommand =
           slashCommands.find((cmd: SlashCommand) => cmd.name === commandName) ||
           (commandName === '/help'
