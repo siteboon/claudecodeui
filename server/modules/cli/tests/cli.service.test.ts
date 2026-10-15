@@ -15,6 +15,7 @@ function createHarness() {
   };
   let serverStarts = 0;
   let sandboxArguments: string[] = [];
+  let latestVersionRequests = 0;
   const service = createCliService({
     applicationRoot: '/application',
     defaultDatabasePath: '/home/user/.cloudcli/auth.db',
@@ -36,7 +37,10 @@ function createHarness() {
         return 7;
       },
     },
-    getLatestPackageVersion: async () => '1.2.3',
+    getLatestPackageVersion: async () => {
+      latestVersionRequests += 1;
+      return '1.2.3';
+    },
     updateGlobalPackage: () => undefined,
     startServer: async () => {
       serverStarts += 1;
@@ -51,6 +55,7 @@ function createHarness() {
     errorMessages,
     getServerStarts: () => serverStarts,
     getSandboxArguments: () => sandboxArguments,
+    getLatestVersionRequests: () => latestVersionRequests,
   };
 }
 
@@ -85,4 +90,35 @@ test('returns a failure code for an unknown command without exiting the process'
 
   assert.equal(exitCode, 1);
   assert.match(harness.errorMessages[0], /Unknown command: unknown/);
+});
+
+test('skips the start-up update check when CLOUDCLI_DISABLE_UPDATE_CHECK is set', async () => {
+  const harness = createHarness();
+  harness.environment.CLOUDCLI_DISABLE_UPDATE_CHECK = 'true';
+
+  const exitCode = await harness.service.run(['start']);
+
+  assert.equal(exitCode, 0);
+  assert.equal(harness.getLatestVersionRequests(), 0);
+  assert.equal(harness.getServerStarts(), 1);
+});
+
+test('checks for updates on start when CLOUDCLI_DISABLE_UPDATE_CHECK is unset', async () => {
+  const harness = createHarness();
+
+  const exitCode = await harness.service.run(['start']);
+
+  assert.equal(exitCode, 0);
+  assert.equal(harness.getLatestVersionRequests(), 1);
+  assert.equal(harness.getServerStarts(), 1);
+});
+
+test('still checks for updates on an explicit update command when the flag is set', async () => {
+  const harness = createHarness();
+  harness.environment.CLOUDCLI_DISABLE_UPDATE_CHECK = 'true';
+
+  const exitCode = await harness.service.run(['update']);
+
+  assert.equal(exitCode, 0);
+  assert.equal(harness.getLatestVersionRequests(), 1);
 });
