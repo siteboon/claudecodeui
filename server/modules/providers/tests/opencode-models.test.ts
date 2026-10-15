@@ -22,6 +22,7 @@ const OPENCODE_ENV_KEYS = ['OPENCODE_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_
 const withOpenCodeHome = async (
   setUp: (homeDir: string) => Promise<void>,
   runTest: (adapter: OpenCodeProviderModels) => Promise<void>,
+  readModels: () => Promise<string[]> = async () => [],
 ): Promise<void> => {
   const homeDir = await mkdtemp(path.join(os.tmpdir(), 'opencode-catalog-'));
   const originalHomedir = os.homedir;
@@ -34,7 +35,7 @@ const withOpenCodeHome = async (
 
   try {
     await setUp(homeDir);
-    await runTest(new OpenCodeProviderModels());
+    await runTest(new OpenCodeProviderModels(readModels));
   } finally {
     (os as any).homedir = originalHomedir;
     for (const [key, value] of originalEnv) {
@@ -54,7 +55,7 @@ const writeOpenCodeAuth = async (homeDir: string, auth: Record<string, unknown>)
   await writeFile(path.join(authDir, 'auth.json'), JSON.stringify(auth), 'utf8');
 };
 
-test('OpenCode exposes only the curated predefined catalog', async () => {
+test('OpenCode falls back to the curated catalog only when no providers are known', async () => {
   await withOpenCodeHome(async () => {}, async (adapter) => {
     // Nothing readable about this install, so the picker keeps every option
     // rather than coming up empty.
@@ -118,7 +119,7 @@ test('OpenCode exposes only the curated predefined catalog', async () => {
   );
 });
 
-test('OpenCode offers only models the install can route to', async () => {
+test('OpenCode discovers only models available through connected providers', async () => {
   // Asking for a provider the user never connected fails the whole run with
   // "Model <id> is not valid", so an OpenCode Zen model must not be offered -
   // or defaulted to - on a machine that only holds an Anthropic key.
@@ -134,6 +135,7 @@ test('OpenCode offers only models the install can route to', async () => {
       assert.ok(catalog.OPTIONS.some((option) => option.value === catalog.DEFAULT));
       assert.equal((await adapter.getCurrentActiveModel()).model, catalog.DEFAULT);
     },
+    async () => ['anthropic/claude-sonnet-5', 'opencode/gpt-5.6-terra'],
   );
 
   // A Go subscriber's auth store holds only `opencode-go`, so the whole catalog
@@ -146,11 +148,12 @@ test('OpenCode offers only models the install can route to', async () => {
       const providerIds = new Set(catalog.OPTIONS.map((option) => option.value.split('/')[0]));
 
       assert.deepEqual([...providerIds], ['opencode-go']);
-      assert.equal(catalog.OPTIONS.length, 27);
+      assert.equal(catalog.OPTIONS.length, 2);
       assert.equal(catalog.DEFAULT, 'opencode-go/grok-4.6');
       assert.ok(catalog.OPTIONS.some((option) => option.value === catalog.DEFAULT));
       assert.equal((await adapter.getCurrentActiveModel()).model, catalog.DEFAULT);
     },
+    async () => ['opencode-go/grok-4.6', 'opencode-go/glm-5.3'],
   );
 
   // The catalog default survives whenever its own provider is connected.
@@ -166,6 +169,7 @@ test('OpenCode offers only models the install can route to', async () => {
       assert.deepEqual([...providerIds].sort(), ['opencode', 'openai'].sort());
       assert.equal(catalog.DEFAULT, OPENCODE_PREDEFINED_MODELS.DEFAULT);
     },
+    async () => ['opencode/gpt-5.6-terra', 'openai/gpt-5.6'],
   );
 
   // Providers configured rather than logged into count too.
@@ -185,6 +189,7 @@ test('OpenCode offers only models the install can route to', async () => {
 
       assert.deepEqual([...providerIds], ['anthropic']);
     },
+    async () => ['anthropic/claude-opus-5'],
   );
 
   // An API key in the environment is enough on its own.
@@ -198,6 +203,49 @@ test('OpenCode offers only models the install can route to', async () => {
 
       assert.deepEqual([...providerIds], ['openai']);
     },
+    async () => ['openai/gpt-5.6'],
+  );
+});
+
+test('OpenCode uses discovered GitHub Copilot models and never falls back to foreign providers', async () => {
+  await withOpenCodeHome(
+    (homeDir) => writeOpenCodeAuth(homeDir, { 'github-copilot': { type: 'oauth' } }),
+    async (adapter) => {
+      const catalog = await adapter.getSupportedModels();
+
+      assert.deepEqual(catalog.OPTIONS.map((option) => option.value), [
+        'github-copilot/gpt-5.6-terra',
+        'github-copilot/claude-sonnet-5.5',
+      ]);
+      assert.equal(catalog.DEFAULT, 'github-copilot/gpt-5.6-terra');
+      assert.equal((await adapter.getCurrentActiveModel()).model, 'github-copilot/gpt-5.6-terra');
+    },
+    async () => [
+      'github-copilot/gpt-5.6-terra',
+      'opencode/gpt-5.6-terra',
+      'github-copilot/claude-sonnet-5.5',
+    ],
+  );
+
+  await withOpenCodeHome(
+    (homeDir) => writeOpenCodeAuth(homeDir, { 'github-copilot': { type: 'oauth' } }),
+    async (adapter) => {
+      const catalog = await adapter.getSupportedModels();
+
+      assert.deepEqual(catalog.OPTIONS, []);
+      assert.equal(catalog.DEFAULT, '');
+    },
+  );
+
+  await withOpenCodeHome(
+    (homeDir) => writeOpenCodeAuth(homeDir, { 'github-copilot': { type: 'oauth' } }),
+    async (adapter) => {
+      const catalog = await adapter.getSupportedModels();
+
+      assert.deepEqual(catalog.OPTIONS, []);
+      assert.equal(catalog.DEFAULT, '');
+    },
+    async () => Promise.reject(new Error('OpenCode unavailable')),
   );
 });
 
@@ -271,6 +319,13 @@ test('OpenCode composes the provider prefix into session model ids', async () =>
           id: 'ses_plain_string',
           model: 'opencode/gpt-5.6-terra',
         },
+        {
+          id: 'ses_github_copilot',
+          model: JSON.stringify({
+            id: 'gpt-5.6-terra',
+            providerID: 'github-copilot',
+          }),
+        },
       ]),
       async (adapter) => {
         assert.equal(
@@ -284,6 +339,10 @@ test('OpenCode composes the provider prefix into session model ids', async () =>
         assert.equal(
           (await adapter.getCurrentActiveModel('ses_plain_string')).model,
           'opencode/gpt-5.6-terra',
+        );
+        assert.equal(
+          (await adapter.getCurrentActiveModel('ses_github_copilot')).model,
+          'github-copilot/gpt-5.6-terra',
         );
       },
     );

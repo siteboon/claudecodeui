@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import Database from 'better-sqlite3';
+import spawn from 'cross-spawn';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import type { IProviderModels } from '@/shared/interfaces.js';
@@ -303,6 +304,63 @@ const OPENCODE_ENV_PROVIDER_IDS: Record<string, string> = {
   OPENAI_API_KEY: 'openai',
 };
 
+const OPENCODE_MODELS_TIMEOUT_MS = 5_000;
+const OPENCODE_MODEL_REFERENCE_PATTERN = /^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._/:+-]*$/i;
+
+/**
+ * Reads model references from the local OpenCode CLI without invoking a shell.
+ *
+ * Model availability can differ by account and changes independently of
+ * CloudCLI releases, so `opencode models` is the source of truth. The CLI
+ * output is deliberately treated as untrusted: only standalone,
+ * fully-qualified `<provider>/<model>` lines are accepted.
+ */
+const readInstalledOpenCodeModels = async (): Promise<string[]> => new Promise((resolve) => {
+  let settled = false;
+  let output = '';
+  let timeout: NodeJS.Timeout | undefined;
+  const models = new Set<string>();
+  const finish = (): void => {
+    if (settled) {
+      return;
+    }
+    settled = true;
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+    resolve([...models]);
+  };
+  const child = spawn('opencode', ['models'], {
+    stdio: ['ignore', 'pipe', 'ignore'],
+    shell: false,
+  });
+  timeout = setTimeout(() => {
+    child.kill();
+    finish();
+  }, OPENCODE_MODELS_TIMEOUT_MS);
+
+  child.stdout?.on('data', (chunk: Buffer) => {
+    output += chunk.toString();
+    const completeLines = output.split(/\r?\n/);
+    output = completeLines.pop() ?? '';
+    for (const line of completeLines) {
+      const model = line.trim();
+      if (OPENCODE_MODEL_REFERENCE_PATTERN.test(model)) {
+        models.add(model);
+      }
+    }
+  });
+  child.on('error', finish);
+  child.on('close', (code) => {
+    if (code !== 0) {
+      models.clear();
+    } else if (OPENCODE_MODEL_REFERENCE_PATTERN.test(output.trim())) {
+      models.add(output.trim());
+    }
+    finish();
+  });
+});
+
 const readOpenCodeJsonFile = async (filePath: string): Promise<Record<string, unknown> | null> => {
   try {
     return readObjectRecord(JSON.parse(await readFile(filePath, 'utf8')));
@@ -323,10 +381,9 @@ const readOpenCodeJsonFile = async (filePath: string): Promise<Record<string, un
  * catalog spans every provider OpenCode can address, so it has to be narrowed
  * to this machine's providers before it reaches the model picker.
  *
- * Returns null when nothing can be read, so the caller keeps the full catalog
- * rather than leaving the picker empty. Providers declared only in a
- * project-level `opencode.json` are not visible here; the null fallback and the
- * env-key sweep keep those installs on the full list.
+ * Returns null when nothing can be read. Providers declared only in a
+ * project-level `opencode.json` are not visible here, so callers retain the
+ * unfiltered catalog in that case.
  */
 const readConnectedOpenCodeProviderIds = async (): Promise<Set<string> | null> => {
   const providerIds = new Set<string>();
@@ -358,7 +415,7 @@ const readConnectedOpenCodeProviderIds = async (): Promise<Set<string> | null> =
 };
 
 /**
- * Narrows the curated catalog to the providers OpenCode can route to.
+ * Narrows a catalog to providers OpenCode can route to.
  *
  * The default has to move with the list: leaving it on an OpenCode Zen model
  * would hand every new session a model the CLI refuses to run.
@@ -374,17 +431,33 @@ const filterOpenCodeModelsByProvider = (
   const options = definition.OPTIONS.filter(
     (option) => connectedProviderIds.has(option.value.split('/')[0]),
   );
-  if (options.length === 0) {
-    return definition;
-  }
-
   return {
     ...definition,
     OPTIONS: options,
     DEFAULT: options.some((option) => option.value === definition.DEFAULT)
       ? definition.DEFAULT
-      : options[0].value,
+      : options[0]?.value ?? '',
   };
+};
+
+const createDiscoveredOpenCodeModels = (
+  modelReferences: string[],
+  connectedProviderIds: Set<string> | null,
+): ProviderModelsDefinition | null => {
+  const options = modelReferences
+    .filter((model) => !connectedProviderIds || connectedProviderIds.has(model.split('/')[0]))
+    .map((value) => {
+      const [providerId, ...modelIdParts] = value.split('/');
+      return {
+        value,
+        label: modelIdParts.join('/'),
+        description: providerId,
+      };
+    });
+
+  return options.length > 0
+    ? { OPTIONS: options, DEFAULT: options[0].value }
+    : null;
 };
 
 const parseOpenCodeSessionModelValue = (rawModel: unknown): string | null => {
@@ -430,11 +503,25 @@ const parseOpenCodeSessionModelValue = (rawModel: unknown): string | null => {
 
 /** Provider registry model adapter for OpenCode predefined models and session metadata. */
 export class OpenCodeProviderModels implements IProviderModels {
+  /** Used by the provider registry and focused adapter tests to read local OpenCode models. */
+  constructor(private readonly readModels = readInstalledOpenCodeModels) {}
+
   async getSupportedModels(): Promise<ProviderModelsDefinition> {
-    return filterOpenCodeModelsByProvider(
-      OPENCODE_PREDEFINED_MODELS,
-      await readConnectedOpenCodeProviderIds(),
-    );
+    const connectedProviderIds = await readConnectedOpenCodeProviderIds();
+    let discovered: ProviderModelsDefinition | null = null;
+    try {
+      discovered = createDiscoveredOpenCodeModels(await this.readModels(), connectedProviderIds);
+    } catch {
+      // The picker remains available when a local CLI invocation fails.
+    }
+    if (discovered) {
+      return discovered;
+    }
+
+    // Discovery can fail when the CLI is not installed or is upgraded. Keep
+    // known static options only for connected providers; an unknown provider
+    // gets an empty picker instead of a misleading foreign-provider catalog.
+    return filterOpenCodeModelsByProvider(OPENCODE_PREDEFINED_MODELS, connectedProviderIds);
   }
 
   async getCurrentActiveModel(sessionId?: string): Promise<ProviderCurrentActiveModel> {
