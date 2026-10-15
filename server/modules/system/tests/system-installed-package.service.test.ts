@@ -223,6 +223,43 @@ test('a CLI that crashes keeps the error paragraph and drops the stack', async (
   assert.doesNotMatch(result.reason, /Module\._extensions|ERR_DLOPEN_FAILED|Node\.js v24/);
 });
 
+test('a CLI that throws reports the error, not the quoted source line', async (t) => {
+  // Node quotes the throwing line, with a caret, before the error itself.
+  const uncaughtErrorReport = [
+    '/app/dist-server/server/load-env.js:3',
+    "    throw new Error('Cannot read the config file');",
+    '    ^',
+    '',
+    'Error: Cannot read the config file',
+    '    at Object.<anonymous> (/app/dist-server/server/load-env.js:3:11)',
+    '',
+    'Node.js v24.21.0',
+  ].join('\n');
+  const appRoot = createInstallFixture(t, {
+    cliSource: `process.stderr.write(${JSON.stringify(uncaughtErrorReport)});\nprocess.exitCode = 1;\n`,
+  });
+
+  const result = await checkInstalledPackage(appRoot, CHECK_OPTIONS);
+
+  assert.ok(!result.passed);
+  assert.equal(result.reason, '"cloudcli version" failed: Error: Cannot read the config file');
+});
+
+test('a CLI that prints a wall of text gives a capped reason', async (t) => {
+  const wallOfText = Array.from({ length: 40 }, (_, index) => `Error line ${index + 1} ${'x'.repeat(60)}`).join('\n');
+  const appRoot = createInstallFixture(t, {
+    cliSource: `process.stderr.write(${JSON.stringify(wallOfText)});\nprocess.exitCode = 1;\n`,
+  });
+
+  const result = await checkInstalledPackage(appRoot, CHECK_OPTIONS);
+
+  assert.ok(!result.passed);
+  assert.match(result.reason, /^"cloudcli version" failed: Error line 1 x+ Error line 2 /);
+  assert.match(result.reason, /…$/);
+  assert.doesNotMatch(result.reason, /Error line 7 /);
+  assert.ok(result.reason.length <= '"cloudcli version" failed: '.length + 600, String(result.reason.length));
+});
+
 test('a CLI that labels its version passes the check', async (t) => {
   for (const printedVersion of ['cloudcli 1.37.5', 'CloudCLI v1.37.5.', '@cloudcli-ai/cloudcli@1.37.5']) {
     const appRoot = createInstallFixture(t, {
@@ -235,7 +272,7 @@ test('a CLI that labels its version passes the check', async (t) => {
 });
 
 test('a CLI that reports another version than the one on disk fails the check', async (t) => {
-  for (const printedVersion of ['1.37.4', '1.37.50', '1.37.5-beta.1', 'cloudcli 1.37.5.1']) {
+  for (const printedVersion of ['1.37.4', '1.37.50', '1.37.5-beta.1', 'cloudcli 1.37.5.1', 'cloudcli 11.37.5']) {
     const appRoot = createInstallFixture(t, {
       version: '1.37.5',
       cliSource: `console.log(${JSON.stringify(printedVersion)});\n`,

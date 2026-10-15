@@ -77,14 +77,28 @@ function runNodeProcess(
 // else at the first line. Node wraps some messages (a wrong-ABI binding names
 // the .node file, then explains on the next lines), so the paragraph runs on
 // until a blank line, a stack frame or a lead-in to a list, which is dropped
-// ("...bindings file. Tried:" ends at "file.").
+// ("...bindings file. Tried:" ends at "file."). It is capped, so a CLI that
+// prints a wall of text still gives a reason that fits on a status line; Node's
+// wrong-ABI explanation is five lines.
+const SUMMARY_MAX_LINES = 6;
+const SUMMARY_MAX_LENGTH = 600;
+
 function summarizeError(text: string): string {
   const lines = text.split('\n').map((line) => line.trim());
-  const errorLineIndex = lines.findIndex((line) => /\b[A-Za-z]*Error\b/.test(line));
+  // Node's report of an uncaught error quotes the throwing source line first
+  // (`throw new Error('...')`), so a line that starts with an error name wins.
+  const errorLineIndex = [/^[A-Za-z]*Error\b/, /\b[A-Za-z]*Error\b/]
+    .map((pattern) => lines.findIndex((line) => pattern.test(line)))
+    .find((index) => index >= 0) ?? -1;
   const firstLineIndex = errorLineIndex >= 0 ? errorLineIndex : lines.findIndex(Boolean);
   const paragraph: string[] = [];
+  let truncated = false;
   for (const line of firstLineIndex >= 0 ? lines.slice(firstLineIndex) : []) {
     if (!line || /^at\s/.test(line)) {
+      break;
+    }
+    if (paragraph.length === SUMMARY_MAX_LINES) {
+      truncated = true;
       break;
     }
     paragraph.push(line);
@@ -92,8 +106,11 @@ function summarizeError(text: string): string {
       break;
     }
   }
-  const summary = paragraph.join(' ');
-  return summary.replace(/\s+[^.:]*:$/, '') || summary;
+  const joined = paragraph.join(' ');
+  const summary = joined.replace(/\s+[^.:]*:$/, '') || joined;
+  return truncated || summary.length > SUMMARY_MAX_LENGTH
+    ? `${summary.slice(0, SUMMARY_MAX_LENGTH - 1).trimEnd()}…`
+    : summary;
 }
 
 // True when the CLI's output names the version, bare or labelled ("1.37.5",
