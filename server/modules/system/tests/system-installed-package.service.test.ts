@@ -20,7 +20,19 @@ type FixtureOptions = {
   cliSource?: string;
   /** Package directories to write, keyed by module name; `real` links the repository's own copy. */
   nativeModules?: Record<string, string | 'real'>;
+  /** package.json `dependencies`; defaults to the written native modules. */
+  dependencies?: Record<string, string>;
 };
+
+// Node's own wording for a binding built for another Node (ERR_DLOPEN_FAILED),
+// wrapped over several lines exactly as Node prints it.
+const WRONG_ABI_MESSAGE = [
+  "The module '/usr/lib/node_modules/@cloudcli-ai/cloudcli/node_modules/better-sqlite3/build/Release/better_sqlite3.node'",
+  'was compiled against a different Node.js version using',
+  'NODE_MODULE_VERSION 127. This version of Node.js requires',
+  'NODE_MODULE_VERSION 137. Please try re-compiling or re-installing',
+  'the module (for instance, using `npm rebuild` or `npm install`).',
+].join('\n');
 
 // Lays out a miniature global install: package.json with a cloudcli bin, the
 // CLI entry, and node_modules for the two native dependencies.
@@ -28,10 +40,16 @@ function createInstallFixture(t: test.TestContext, options: FixtureOptions = {})
   const appRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cloudcli-installed-package-'));
   t.after(() => fs.rmSync(appRoot, { recursive: true, force: true }));
   const version = options.version ?? '1.37.5';
+  const nativeModules = options.nativeModules ?? {
+    'better-sqlite3': 'module.exports = class Database { close() {} };',
+    'node-pty': 'module.exports = {};',
+  };
   fs.writeFileSync(path.join(appRoot, 'package.json'), JSON.stringify({
     name: '@cloudcli-ai/cloudcli',
     version,
     bin: { cloudcli: 'dist-server/server/modules/cli/cli.js' },
+    dependencies: options.dependencies
+      ?? Object.fromEntries(Object.keys(nativeModules).map((moduleName) => [moduleName, '*'])),
   }));
   fs.mkdirSync(path.join(appRoot, 'dist-server', 'server', 'modules', 'cli'), { recursive: true });
   fs.writeFileSync(
@@ -39,10 +57,6 @@ function createInstallFixture(t: test.TestContext, options: FixtureOptions = {})
     options.cliSource ?? `console.log(${JSON.stringify(version)});\n`,
   );
 
-  const nativeModules = options.nativeModules ?? {
-    'better-sqlite3': 'module.exports = class Database { close() {} };',
-    'node-pty': 'module.exports = {};',
-  };
   for (const [moduleName, source] of Object.entries(nativeModules)) {
     const modulePath = path.join(appRoot, 'node_modules', moduleName);
     fs.mkdirSync(path.dirname(modulePath), { recursive: true });
@@ -91,18 +105,64 @@ test('a missing better-sqlite3 binding fails the check with the loader message (
   assert.match(result.details, /→ \/app\/build\/better_sqlite3\.node/);
 });
 
-test('a node-pty built for another Node fails the check', async (t) => {
+test('a better-sqlite3 built for another Node fails the check and keeps Node\'s explanation (#1075)', async (t) => {
   const appRoot = createInstallFixture(t, {
     nativeModules: {
-      'better-sqlite3': 'module.exports = class Database { close() {} };',
-      'node-pty': `throw new Error('The module pty.node was compiled against a different Node.js version');`,
+      'better-sqlite3': `module.exports = class Database {
+        constructor() { throw new Error(${JSON.stringify(WRONG_ABI_MESSAGE)}); }
+      };`,
+      'node-pty': 'module.exports = {};',
     },
   });
 
   const result = await checkInstalledPackage(appRoot, CHECK_OPTIONS);
 
   assert.ok(!result.passed);
-  assert.equal(result.reason, 'node-pty: The module pty.node was compiled against a different Node.js version');
+  assert.equal(
+    result.reason,
+    "better-sqlite3: The module '/usr/lib/node_modules/@cloudcli-ai/cloudcli/node_modules/better-sqlite3/build/Release/"
+      + "better_sqlite3.node' was compiled against a different Node.js version using NODE_MODULE_VERSION 127. "
+      + 'This version of Node.js requires NODE_MODULE_VERSION 137. Please try re-compiling or re-installing '
+      + 'the module (for instance, using `npm rebuild` or `npm install`).',
+  );
+});
+
+test('a node-pty without its binding fails the check without the require stack', async (t) => {
+  const appRoot = createInstallFixture(t, {
+    nativeModules: {
+      'better-sqlite3': 'module.exports = class Database { close() {} };',
+      // Node's MODULE_NOT_FOUND wording, as node-pty throws it when build/Release is gone.
+      'node-pty': `throw new Error("Cannot find module '../build/Release/pty.node'\\nRequire stack:\\n- /app/node_modules/node-pty/lib/utils.js");`,
+    },
+  });
+
+  const result = await checkInstalledPackage(appRoot, CHECK_OPTIONS);
+
+  assert.ok(!result.passed);
+  assert.equal(result.reason, "node-pty: Cannot find module '../build/Release/pty.node'");
+});
+
+test('a release that no longer depends on a checked native module is not held to it', async (t) => {
+  // Neither module is installed: a later release that moved to node:sqlite and
+  // a node-pty fork must still pass, as long as its CLI answers.
+  const appRoot = createInstallFixture(t, {
+    nativeModules: {},
+    dependencies: { '@lydell/node-pty': '*', express: '*' },
+  });
+
+  assert.deepEqual(await checkInstalledPackage(appRoot, CHECK_OPTIONS), { passed: true });
+});
+
+test('a native module listed only as optional is not required to load', async (t) => {
+  const appRoot = createInstallFixture(t, {
+    nativeModules: { 'better-sqlite3': 'module.exports = class Database { close() {} };' },
+  });
+  const packageJsonPath = path.join(appRoot, 'package.json');
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+  // npm may skip an optional dependency that fails to build, so its absence is not a broken install.
+  fs.writeFileSync(packageJsonPath, JSON.stringify({ ...packageJson, optionalDependencies: { 'node-pty': '*' } }));
+
+  assert.deepEqual(await checkInstalledPackage(appRoot, CHECK_OPTIONS), { passed: true });
 });
 
 test('a CLI that cannot run fails the check after the native modules pass', async (t) => {
@@ -119,14 +179,93 @@ test('a CLI that cannot run fails the check after the native modules pass', asyn
   assert.equal(result.reason, '"cloudcli version" failed: Error [ERR_MODULE_NOT_FOUND]: Cannot find module ./load-env.js');
 });
 
-test('a CLI that reports another version than the one on disk fails the check', async (t) => {
+test('a CLI that prints its version but exits non-zero fails the check', async (t) => {
   const appRoot = createInstallFixture(t, {
     version: '1.37.5',
-    cliSource: `console.log('1.37.4');\n`,
+    cliSource: `console.log('1.37.5');
+      console.error('TypeError: Cannot read properties of undefined (reading \\'close\\')');
+      process.exitCode = 1;\n`,
   });
 
   const result = await checkInstalledPackage(appRoot, CHECK_OPTIONS);
 
   assert.ok(!result.passed);
-  assert.equal(result.reason, '"cloudcli version" printed "1.37.4" instead of 1.37.5');
+  assert.equal(
+    result.reason,
+    '"cloudcli version" failed: TypeError: Cannot read properties of undefined (reading \'close\')',
+  );
+});
+
+test('a CLI that crashes keeps the error paragraph and drops the stack', async (t) => {
+  // Node's report of an uncaught error: source excerpt, message, stack, extra properties.
+  const uncaughtErrorReport = [
+    '/app/node_modules/bindings/bindings.js:121',
+    '        throw e;',
+    '        ^',
+    '',
+    `Error: ${WRONG_ABI_MESSAGE}`,
+    '    at Module._extensions..node (node:internal/modules/cjs/loader:1921:18)',
+    '    at Module.load (node:internal/modules/cjs/loader:1465:32) {',
+    "  code: 'ERR_DLOPEN_FAILED'",
+    '}',
+    '',
+    'Node.js v24.21.0',
+  ].join('\n');
+  const appRoot = createInstallFixture(t, {
+    cliSource: `process.stderr.write(${JSON.stringify(uncaughtErrorReport)});\nprocess.exitCode = 1;\n`,
+  });
+
+  const result = await checkInstalledPackage(appRoot, CHECK_OPTIONS);
+
+  assert.ok(!result.passed);
+  assert.match(result.reason, /^"cloudcli version" failed: Error: The module '\/usr\/lib\/.*better_sqlite3\.node' was compiled/);
+  assert.match(result.reason, /requires NODE_MODULE_VERSION 137\. Please try re-compiling or re-installing the module/);
+  assert.doesNotMatch(result.reason, /Module\._extensions|ERR_DLOPEN_FAILED|Node\.js v24/);
+});
+
+test('a CLI that labels its version passes the check', async (t) => {
+  for (const printedVersion of ['cloudcli 1.37.5', 'CloudCLI v1.37.5.', '@cloudcli-ai/cloudcli@1.37.5']) {
+    const appRoot = createInstallFixture(t, {
+      version: '1.37.5',
+      cliSource: `console.log(${JSON.stringify(printedVersion)});\n`,
+    });
+
+    assert.deepEqual(await checkInstalledPackage(appRoot, CHECK_OPTIONS), { passed: true }, printedVersion);
+  }
+});
+
+test('a CLI that reports another version than the one on disk fails the check', async (t) => {
+  for (const printedVersion of ['1.37.4', '1.37.50', '1.37.5-beta.1', 'cloudcli 1.37.5.1']) {
+    const appRoot = createInstallFixture(t, {
+      version: '1.37.5',
+      cliSource: `console.log(${JSON.stringify(printedVersion)});\n`,
+    });
+
+    const result = await checkInstalledPackage(appRoot, CHECK_OPTIONS);
+
+    assert.ok(!result.passed, printedVersion);
+    assert.equal(result.reason, `"cloudcli version" printed "${printedVersion}" instead of 1.37.5`);
+  }
+});
+
+test('a CLI that never answers fails the check and says it timed out', async (t) => {
+  const appRoot = createInstallFixture(t, {
+    nativeModules: {},
+    cliSource: 'setTimeout(() => undefined, 60_000);\n',
+  });
+
+  const result = await checkInstalledPackage(appRoot, { ...CHECK_OPTIONS, timeoutMilliseconds: 2_000 });
+
+  assert.ok(!result.passed);
+  assert.equal(result.reason, '"cloudcli version" did not answer within 2 s');
+});
+
+test('an install without a readable package.json fails the check', async (t) => {
+  const appRoot = createInstallFixture(t);
+  fs.writeFileSync(path.join(appRoot, 'package.json'), '{ truncated');
+
+  const result = await checkInstalledPackage(appRoot, CHECK_OPTIONS);
+
+  assert.ok(!result.passed);
+  assert.equal(result.reason, 'the installed package.json could not be read');
 });

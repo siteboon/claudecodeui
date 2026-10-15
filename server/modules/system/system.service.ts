@@ -1,16 +1,10 @@
-import type { SystemUpdateRecord } from '@/shared/types.js';
+import type {
+  SystemInstalledPackageCheckResult,
+  SystemUpdateCommandResult,
+  SystemUpdateRecord,
+} from '@/shared/types.js';
 
 import type { createSystemUpdateHistoryService } from './system-update-history.service.js';
-
-type SystemUpdateCommandResult = {
-  exitCode: number | null;
-  output: string;
-  errorOutput: string;
-};
-
-type InstalledPackageCheckResult =
-  | { passed: true }
-  | { passed: false; reason: string; details: string };
 
 type SystemUpdateDependencies = {
   appRoot: string;
@@ -32,7 +26,7 @@ type SystemUpdateDependencies = {
   /** Reads the version in the application's package.json, or null when unreadable. */
   readInstalledVersion(): string | null;
   /** Loads the installed package the way the next start will, without starting a server. */
-  checkInstalledPackage(): Promise<InstalledPackageCheckResult>;
+  checkInstalledPackage(): Promise<SystemInstalledPackageCheckResult>;
   now(): Date;
   logInfo(message: string, detail?: string): void;
   logError(message: string, detail?: string): void;

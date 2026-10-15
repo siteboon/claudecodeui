@@ -2,6 +2,8 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import type { SystemInstalledPackageCheckResult } from '@/shared/types.js';
+
 type InstalledPackageCheckOptions = {
   /** Node binary the next start will use; the running server passes process.execPath. */
   nodeExecutable: string;
@@ -9,20 +11,28 @@ type InstalledPackageCheckOptions = {
   timeoutMilliseconds: number;
 };
 
-// Loads the native modules from the install's own dependency tree, the way the
-// next start will. better-sqlite3 only opens its binding when a database is
-// created, so the script opens an in-memory one.
+// Native modules whose binding must match the Node that starts the server. The
+// check runs in the version doing the update, so it only loads the ones the
+// installed release still lists in `dependencies`: a later release that drops
+// or replaces one is not held to this release's list. Optional dependencies
+// are left out because npm may skip them, and the server has to cope with that.
+const NATIVE_MODULE_NAMES = ['better-sqlite3', 'node-pty'];
+
+// Loads the named native modules from the install's own dependency tree, the
+// way the next start will. better-sqlite3 only opens its binding when a
+// database is created, so the script opens an in-memory one.
 const NATIVE_MODULE_CHECK_SCRIPT = `
 const path = require('node:path');
 const { createRequire } = require('node:module');
-const requireFromInstall = createRequire(path.join(process.argv[1], 'package.json'));
-const checks = [
-  ['better-sqlite3', () => { const Database = requireFromInstall('better-sqlite3'); new Database(':memory:').close(); }],
-  ['node-pty', () => requireFromInstall('node-pty')],
-];
-for (const [moduleName, load] of checks) {
+const [appRoot, ...moduleNames] = process.argv.slice(1);
+const requireFromInstall = createRequire(path.join(appRoot, 'package.json'));
+const loaders = {
+  'better-sqlite3': () => { const Database = requireFromInstall('better-sqlite3'); new Database(':memory:').close(); },
+  'node-pty': () => requireFromInstall('node-pty'),
+};
+for (const moduleName of moduleNames) {
   try {
-    load();
+    loaders[moduleName]();
   } catch (error) {
     console.error(moduleName + ': ' + (error && error.message ? error.message : String(error)));
     process.exit(1);
@@ -43,7 +53,7 @@ function runNodeProcess(
   argumentsList: string[],
   appRoot: string,
   options: InstalledPackageCheckOptions,
-): Promise<{ failed: boolean; output: string; errorOutput: string }> {
+): Promise<{ failed: boolean; timedOut: boolean; output: string; errorOutput: string }> {
   return new Promise((resolve) => {
     execFile(options.nodeExecutable, argumentsList, {
       cwd: appRoot,
@@ -53,6 +63,8 @@ function runNodeProcess(
     }, (error, output, errorOutput) => {
       resolve({
         failed: Boolean(error),
+        // execFile also kills a child that overflows its output buffer.
+        timedOut: Boolean(error?.killed) && error?.code !== 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER',
         output: String(output),
         errorOutput: String(errorOutput) || (error ? error.message : ''),
       });
@@ -60,13 +72,36 @@ function runNodeProcess(
   });
 }
 
-// One line for the update response: the first line naming an Error (an
-// install without .env prints a notice before it), else the first line, minus
-// a trailing lead-in to a list ("...bindings file. Tried:" ends at "file.").
+// One line for the update response: the paragraph that starts at the first
+// line naming an Error (an install without .env prints a notice before it),
+// else at the first line. Node wraps some messages (a wrong-ABI binding names
+// the .node file, then explains on the next lines), so the paragraph runs on
+// until a blank line, a stack frame or a lead-in to a list, which is dropped
+// ("...bindings file. Tried:" ends at "file.").
 function summarizeError(text: string): string {
-  const lines = text.split('\n').map((line) => line.trim()).filter(Boolean);
-  const summaryLine = lines.find((line) => /\b[A-Za-z]*Error\b/.test(line)) ?? lines[0] ?? '';
-  return summaryLine.replace(/\s+[^.:]*:$/, '') || summaryLine;
+  const lines = text.split('\n').map((line) => line.trim());
+  const errorLineIndex = lines.findIndex((line) => /\b[A-Za-z]*Error\b/.test(line));
+  const firstLineIndex = errorLineIndex >= 0 ? errorLineIndex : lines.findIndex(Boolean);
+  const paragraph: string[] = [];
+  for (const line of firstLineIndex >= 0 ? lines.slice(firstLineIndex) : []) {
+    if (!line || /^at\s/.test(line)) {
+      break;
+    }
+    paragraph.push(line);
+    if (line.endsWith(':')) {
+      break;
+    }
+  }
+  const summary = paragraph.join(' ');
+  return summary.replace(/\s+[^.:]*:$/, '') || summary;
+}
+
+// True when the CLI's output names the version, bare or labelled ("1.37.5",
+// "cloudcli v1.37.5"), but not when it only names another one ("1.37.50",
+// "1.37.5-beta.1").
+function outputNamesVersion(output: string, version: string): boolean {
+  const escapedVersion = version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?<![\\w.])v?${escapedVersion}(?![\\w+-]|\\.\\w)`).test(output);
 }
 
 /** System module composition root: reads the version on disk before and after an update. */
@@ -77,26 +112,44 @@ export function readInstalledPackageVersion(appRoot: string): string | null {
 
 /**
  * System module composition root: proves a freshly installed npm package can
- * load, without starting a second server. Its native modules must load with the
- * given Node binary (the #1075 failure class: a missing or wrong-ABI binding),
- * and its CLI must answer `version` with the version on disk. Neither step
- * touches a database, a port or the running process. Never rejects.
+ * load, without starting a second server. The native modules it depends on
+ * must load with the given Node binary (the #1075 failure class: a missing or
+ * wrong-ABI binding), and its CLI must answer `version` with the version on
+ * disk. Neither step touches a database, a port or the running process. Never
+ * rejects.
  */
 export async function checkInstalledPackage(
   appRoot: string,
   options: InstalledPackageCheckOptions,
-): Promise<{ passed: true } | { passed: false; reason: string; details: string }> {
-  const nativeCheck = await runNodeProcess(['-e', NATIVE_MODULE_CHECK_SCRIPT, appRoot], appRoot, options);
-  if (nativeCheck.failed) {
-    return {
-      passed: false,
-      reason: summarizeError(nativeCheck.errorOutput) || 'native modules failed to load',
-      details: nativeCheck.errorOutput,
-    };
+): Promise<SystemInstalledPackageCheckResult> {
+  const timeoutLabel = `${options.timeoutMilliseconds / 1000} s`;
+  const packageJson = readPackageJson(appRoot);
+  if (!packageJson) {
+    return { passed: false, reason: 'the installed package.json could not be read', details: '' };
   }
 
-  const packageJson = readPackageJson(appRoot);
-  const binField = packageJson?.bin;
+  const declaredDependencies = packageJson.dependencies && typeof packageJson.dependencies === 'object'
+    ? packageJson.dependencies as Record<string, unknown>
+    : {};
+  const nativeModuleNames = NATIVE_MODULE_NAMES.filter((moduleName) => moduleName in declaredDependencies);
+  if (nativeModuleNames.length > 0) {
+    const nativeCheck = await runNodeProcess(
+      ['-e', NATIVE_MODULE_CHECK_SCRIPT, appRoot, ...nativeModuleNames],
+      appRoot,
+      options,
+    );
+    if (nativeCheck.failed) {
+      return {
+        passed: false,
+        reason: nativeCheck.timedOut
+          ? `${nativeModuleNames.join(' and ')} did not load within ${timeoutLabel}`
+          : summarizeError(nativeCheck.errorOutput) || 'native modules failed to load',
+        details: nativeCheck.errorOutput,
+      };
+    }
+  }
+
+  const binField = packageJson.bin;
   const cliEntry = typeof binField === 'string'
     ? binField
     : (binField as Record<string, unknown> | undefined)?.cloudcli;
@@ -106,18 +159,22 @@ export async function checkInstalledPackage(
 
   const cliEntryPath = path.join(appRoot, cliEntry);
   const versionCheck = await runNodeProcess([cliEntryPath, 'version'], appRoot, options);
-  const reportedVersion = versionCheck.output.trim().split('\n').pop()?.trim() ?? '';
-  const expectedVersion = readInstalledPackageVersion(appRoot);
-  if (!versionCheck.failed && (expectedVersion === null || reportedVersion === expectedVersion)) {
+  const expectedVersion = typeof packageJson.version === 'string' ? packageJson.version : null;
+  if (!versionCheck.failed && (expectedVersion === null || outputNamesVersion(versionCheck.output, expectedVersion))) {
     return { passed: true };
   }
 
+  const reportedVersion = versionCheck.output.trim().split('\n').pop()?.trim() ?? '';
   const errorLine = summarizeError(versionCheck.errorOutput);
+  let reason = `"cloudcli version" printed "${reportedVersion}" instead of ${expectedVersion}`;
+  if (versionCheck.timedOut) {
+    reason = `"cloudcli version" did not answer within ${timeoutLabel}`;
+  } else if (versionCheck.failed) {
+    reason = `"cloudcli version" failed${errorLine ? `: ${errorLine}` : ''}`;
+  }
   return {
     passed: false,
-    reason: versionCheck.failed
-      ? `"cloudcli version" failed${errorLine ? `: ${errorLine}` : ''}`
-      : `"cloudcli version" printed "${reportedVersion}" instead of ${expectedVersion}`,
+    reason,
     details: `$ ${options.nodeExecutable} ${cliEntryPath} version\n${versionCheck.output}${versionCheck.errorOutput}`,
   };
 }

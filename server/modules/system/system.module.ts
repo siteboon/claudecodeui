@@ -6,6 +6,8 @@ import path from 'node:path';
 import spawn from 'cross-spawn';
 import type { Router } from 'express';
 
+import type { SystemUpdateCommandResult } from '@/shared/types.js';
+
 import { createSystemRouter } from './system.routes.js';
 import { checkInstalledPackage, readInstalledPackageVersion } from './system-installed-package.service.js';
 import { createSystemUpdateHistoryService } from './system-update-history.service.js';
@@ -23,13 +25,11 @@ type SystemModuleOptions = {
   runningVersion?: string | null;
 };
 
-type CommandResult = { exitCode: number | null; output: string; errorOutput: string };
-
 function collectCommandOutput(
   childProcess: ChildProcess,
   onOutput: (output: string) => void,
   onErrorOutput: (errorOutput: string) => void,
-): Promise<CommandResult> {
+): Promise<SystemUpdateCommandResult> {
   return new Promise((resolve, reject) => {
     let output = '';
     let errorOutput = '';
@@ -57,7 +57,7 @@ function runShellCommand(
   environment: NodeJS.ProcessEnv,
   onOutput: (output: string) => void,
   onErrorOutput: (errorOutput: string) => void,
-): Promise<CommandResult> {
+): Promise<SystemUpdateCommandResult> {
   const childProcess = spawn('sh', ['-c', command], {
     cwd: workingDirectory,
     env: environment,
@@ -73,7 +73,7 @@ function runPlatformShellCommand(
   environment: NodeJS.ProcessEnv,
   onOutput: (output: string) => void,
   onErrorOutput: (errorOutput: string) => void,
-): Promise<CommandResult> {
+): Promise<SystemUpdateCommandResult> {
   const childProcess = spawnInPlatformShell(command, {
     cwd: workingDirectory,
     env: environment,
