@@ -120,7 +120,7 @@ test('update fails with the rollback command when the installed version cannot s
     '1.2.4 was installed but cannot start: better-sqlite3: Could not locate the bindings file.',
   )));
   assert.ok(harness.logMessages.some((line) => line.includes(
-    'Go back to the previous version with: npm install -g @cloudcli-ai/cloudcli@1.2.3',
+    'Go back with: npm install -g @cloudcli-ai/cloudcli@1.2.3',
   )));
   assert.ok(!harness.logMessages.some((line) => line.includes('Update complete')));
 });

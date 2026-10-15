@@ -301,7 +301,7 @@ export function createCliService(dependencies: CliServiceDependencies): CliAppli
     } else if (record.result === 'verification-failed') {
       dependencies.output.error(`${terminalTextStyles.error('[ERROR]')} ${record.installedVersion ?? 'The new version'} was installed but cannot start: ${record.failureReason}`);
       if (record.rollbackCommand) {
-        dependencies.output.log(`${terminalTextStyles.tip('[TIP]')} Go back to the previous version with: ${record.rollbackCommand}`);
+        dependencies.output.log(`${terminalTextStyles.tip('[TIP]')} Go back with: ${record.rollbackCommand}`);
       }
     } else {
       dependencies.output.error(`${terminalTextStyles.error('[ERROR]')} Update failed: ${record.failureReason ?? 'unknown error'}`);
