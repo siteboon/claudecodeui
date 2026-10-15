@@ -33,7 +33,9 @@
     "failed": "실패",
     "pending": "대기 중",
     "completed": "완료",
-    "inProgress": "진행 중"
+    "inProgress": "진행 중",
+    "reconnecting": "다시 연결 중...",
+    "chatConnectionLost": "채팅 연결이 끊어졌습니다. 다시 연결 중..."
   },
   "messages": {
     "savedSuccessfully": "저장되었습니다",
