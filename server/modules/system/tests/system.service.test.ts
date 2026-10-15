@@ -301,6 +301,8 @@ test('the update record is saved before the command runs, so an interrupted upda
   assert.equal(recordsSavedBeforeCommand.length, 1);
   assert.equal(recordsSavedBeforeCommand[0].result, 'running');
   assert.equal(recordsSavedBeforeCommand[0].finishedAt, null);
+  assert.equal(recordsSavedBeforeCommand[0].logPath, null);
+  assert.equal(savedRecords.at(-1)?.logPath, '/home/cloudcli/.cloudcli/logs/update-1792058400000.log');
 });
 
 test('a history folder that cannot be written never fails a finished update', async () => {

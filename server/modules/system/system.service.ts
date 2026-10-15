@@ -155,7 +155,8 @@ export function createSystemUpdateService(dependencies: SystemUpdateDependencies
       rollbackCommand: installMode === 'npm' && knownGoodVersion
         ? `npm install -g ${PACKAGE_NAME}@${knownGoodVersion}`
         : null,
-      logPath,
+      // Set once the log exists, so a record never points at a missing file.
+      logPath: null,
     };
     // Written before the command runs, so an update killed midway (a platform
     // restart, an OOM kill) still shows up in `cloudcli status`.
@@ -206,8 +207,8 @@ export function createSystemUpdateService(dependencies: SystemUpdateDependencies
 
     try {
       updateHistory.writeUpdateLog(logPath, formatUpdateLog(record, commandResult, checkDetails));
+      record.logPath = logPath;
     } catch (error) {
-      record.logPath = null;
       dependencies.logError('Could not write the update log:', error instanceof Error ? error.message : String(error));
     }
     saveRecord(record);
