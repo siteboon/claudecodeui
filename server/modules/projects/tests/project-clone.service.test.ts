@@ -264,8 +264,10 @@ test('validateCloneUrl names one directory inside the workspace on Windows too',
     );
   }
 
-  // On POSIX a backslash is an ordinary name character: still one directory.
+  // On POSIX a backslash is an ordinary name character: still one directory,
+  // and a trailing one is part of the name, not a separator to drop.
   assert.equal(validateCloneUrl(githubUrl, path.posix), '..\\..\\outside');
+  assert.equal(validateCloneUrl('git@github.com:example/repo.git\\', path.posix), 'repo.git\\');
 });
 
 for (const [code, description] of [['ENAMETOOLONG', 'name too long'], ['EINVAL', 'invalid argument']] as const) {
