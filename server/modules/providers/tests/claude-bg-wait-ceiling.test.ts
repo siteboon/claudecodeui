@@ -90,7 +90,10 @@ test('a value past the longest Node timer is capped there', () => {
   assert.equal(warnings.length, 1);
 });
 
-/** Starts a run whose turn leaves a background command running, so the process is held. */
+/**
+ * Starts a run whose turn arms a Monitor, so the process is held. Monitor
+ * reports no task events, so nothing but the ceiling ever ends this hold.
+ */
 async function startHeldRun() {
   const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-bg-ceiling-'));
   const queue: Array<Record<string, unknown> | null> = [];
@@ -134,20 +137,16 @@ async function startHeldRun() {
     createQuery,
   };
 
-  const done = queryClaudeSDK('start a long build', { sessionId: 'app-ceiling-session', cwd }, writer as never, context);
+  const done = queryClaudeSDK('watch the build log', { sessionId: 'app-ceiling-session', cwd }, writer as never, context);
   const nativeId = 'native-ceiling-session';
   emit({ type: 'system', subtype: 'init', session_id: nativeId });
   emit({
     type: 'assistant', session_id: nativeId, parent_tool_use_id: null,
-    message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_bash', name: 'Bash', input: { command: 'make all', run_in_background: true } }] },
-  });
-  emit({
-    type: 'system', subtype: 'task_started', session_id: nativeId, task_id: 'b1', tool_use_id: 'toolu_bash', description: 'make all', task_type: 'local_bash',
+    message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_monitor', name: 'Monitor', input: { command: 'tail -f build.log', description: 'build log' } }] },
   });
   emit({
     type: 'user', session_id: nativeId, parent_tool_use_id: null,
-    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_bash', content: 'Command running in background with ID: b1' }] },
-    tool_use_result: { backgroundTaskId: 'b1' },
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_monitor', content: 'Monitor started' }] },
   });
 
   return {
@@ -156,8 +155,8 @@ async function startHeldRun() {
     drained: () => queue.length === 0 && wake !== null,
     released: () => released,
     sent,
-    // The turn ends; from here the process is held for the command.
-    endTurn: () => emit({ type: 'result', subtype: 'success', session_id: nativeId, result: 'started', duration_ms: 1, num_turns: 1 }),
+    // The turn ends; from here the process is held for the monitor.
+    endTurn: () => emit({ type: 'result', subtype: 'success', session_id: nativeId, result: 'watching', duration_ms: 1, num_turns: 1 }),
     finish: async () => {
       emit(null);
       await done;
@@ -200,7 +199,7 @@ test('a held session is let go after the configured ceiling of silence', async (
     run.endTurn();
     await waitUntil(() => run.drained() && run.sent.some((message) => message.kind === 'complete'));
     assert.ok(run.sent.some((message) => message.kind === 'complete'), 'the turn is over for the client');
-    assert.equal(run.released(), false, 'the process is held for the background command');
+    assert.equal(run.released(), false, 'the process is held for the monitor');
 
     t.mock.timers.tick(CONFIGURED_CEILING_MS - 1);
     await flush();
