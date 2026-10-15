@@ -590,12 +590,6 @@
       "description": "Jadwalkan prompt workspace, tinjau riwayat proses, dan kelola tugas lokal berulang.",
       "install": "Instal"
     },
-    "claudeWatchPlugin": {
-      "name": "Claude Watch",
-      "badge": "tidak resmi",
-      "description": "Pantau sesi Claude Code yang berjalan lama untuk mendeteksi hang dan menyediakan kontrol proses.",
-      "install": "Instal"
-    },
     "prismCloudCLI": {
       "name": "PRISM CloudCLI",
       "badge": "tidak resmi",
