@@ -342,6 +342,9 @@ const readInstalledOpenCodeModels = async (): Promise<string[]> => new Promise((
     shell: false,
   });
   timeout = setTimeout(() => {
+    // A truncated listing must not be cached as a complete one; an empty
+    // result takes the short retry path instead.
+    models.clear();
     child.kill();
     finish();
   }, OPENCODE_MODELS_TIMEOUT_MS);
@@ -388,6 +391,10 @@ const readOpenCodeJsonFile = async (filePath: string): Promise<Record<string, un
  * catalog spans every provider OpenCode can address, so it has to be narrowed
  * to this machine's providers before it reaches the model picker.
  *
+ * Custom config passed through `OPENCODE_CONFIG` (a file path) or
+ * `OPENCODE_CONFIG_CONTENT` (inline JSON) is read too, so providers declared
+ * there are not filtered out of the CLI listing.
+ *
  * Returns null when nothing can be read. Providers declared only in a
  * project-level `opencode.json` are not visible here, so callers retain the
  * unfiltered catalog in that case.
@@ -405,8 +412,26 @@ const readConnectedOpenCodeProviderIds = async (): Promise<Set<string> | null> =
     }
   }
 
+  const configs: Array<Record<string, unknown> | null> = [];
   for (const configFile of OPENCODE_CONFIG_FILES) {
-    const config = await readOpenCodeJsonFile(path.join(configDir, configFile));
+    configs.push(await readOpenCodeJsonFile(path.join(configDir, configFile)));
+  }
+
+  const customConfigPath = readOptionalString(process.env.OPENCODE_CONFIG);
+  if (customConfigPath) {
+    configs.push(await readOpenCodeJsonFile(customConfigPath));
+  }
+
+  const inlineConfig = readOptionalString(process.env.OPENCODE_CONFIG_CONTENT);
+  if (inlineConfig) {
+    try {
+      configs.push(readObjectRecord(JSON.parse(inlineConfig)));
+    } catch {
+      // Malformed inline config contributes nothing, like an unreadable file.
+    }
+  }
+
+  for (const config of configs) {
     for (const providerId of Object.keys(readObjectRecord(config?.provider) ?? {})) {
       providerIds.add(providerId);
     }
@@ -447,6 +472,11 @@ const filterOpenCodeModelsByProvider = (
   };
 };
 
+/** Curated options by model id, so discovered ids keep their labels and effort levels. */
+const OPENCODE_PREDEFINED_OPTIONS_BY_VALUE = new Map(
+  OPENCODE_PREDEFINED_MODELS.OPTIONS.map((option) => [option.value, option]),
+);
+
 const createDiscoveredOpenCodeModels = (
   modelReferences: string[],
   connectedProviderIds: Set<string> | null,
@@ -454,6 +484,11 @@ const createDiscoveredOpenCodeModels = (
   const options = modelReferences
     .filter((model) => !connectedProviderIds || connectedProviderIds.has(model.split('/')[0]))
     .map((value) => {
+      const predefined = OPENCODE_PREDEFINED_OPTIONS_BY_VALUE.get(value);
+      if (predefined) {
+        return predefined;
+      }
+
       const [providerId, ...modelIdParts] = value.split('/');
       return {
         value,

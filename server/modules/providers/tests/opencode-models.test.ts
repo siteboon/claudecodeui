@@ -12,7 +12,13 @@ import {
   OPENCODE_PREDEFINED_MODELS,
 } from '@/modules/providers/list/opencode/opencode-models.provider.js';
 
-const OPENCODE_ENV_KEYS = ['OPENCODE_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY'];
+const OPENCODE_ENV_KEYS = [
+  'OPENCODE_API_KEY',
+  'ANTHROPIC_API_KEY',
+  'OPENAI_API_KEY',
+  'OPENCODE_CONFIG',
+  'OPENCODE_CONFIG_CONTENT',
+];
 
 /**
  * Runs one case against a throwaway OpenCode home, so the catalog the adapter
@@ -246,6 +252,60 @@ test('OpenCode uses discovered GitHub Copilot models and never falls back to for
       assert.equal(catalog.DEFAULT, '');
     },
     async () => Promise.reject(new Error('OpenCode unavailable')),
+  );
+});
+
+test('OpenCode keeps curated metadata for discovered models it already knows', async () => {
+  await withOpenCodeHome(
+    (homeDir) => writeOpenCodeAuth(homeDir, { 'opencode-go': { type: 'api', key: 'test' } }),
+    async (adapter) => {
+      const catalog = await adapter.getSupportedModels();
+      const [known, unknown] = catalog.OPTIONS;
+
+      // The runtime turns the selected effort into `--variant`, so a known
+      // model losing its levels would silently hide the Reasoning picker.
+      assert.equal(known.value, 'opencode-go/glm-5.3-flash');
+      assert.equal(known.label, 'GLM 5.3 Flash');
+      assert.equal(known.description, 'OpenCode Go');
+      assert.deepEqual(known.effort?.values.map((value) => value.value), ['low', 'high', 'max']);
+      assert.deepEqual(unknown, {
+        value: 'opencode-go/new-model',
+        label: 'new-model',
+        description: 'opencode-go',
+      });
+    },
+    async () => ['opencode-go/glm-5.3-flash', 'opencode-go/new-model'],
+  );
+});
+
+test('OpenCode counts providers from OPENCODE_CONFIG and OPENCODE_CONFIG_CONTENT', async () => {
+  const listing = async () => ['my-proxy/foo', 'anthropic/claude-sonnet-5', 'opencode/gpt-5.6-terra'];
+  const expectProxyAndAnthropic = async (adapter: OpenCodeProviderModels): Promise<void> => {
+    const catalog = await adapter.getSupportedModels();
+    assert.deepEqual(
+      catalog.OPTIONS.map((option) => option.value),
+      ['my-proxy/foo', 'anthropic/claude-sonnet-5'],
+    );
+  };
+
+  await withOpenCodeHome(
+    async (homeDir) => {
+      await writeOpenCodeAuth(homeDir, { anthropic: { type: 'api', key: 'test' } });
+      process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({ provider: { 'my-proxy': {} } });
+    },
+    expectProxyAndAnthropic,
+    listing,
+  );
+
+  await withOpenCodeHome(
+    async (homeDir) => {
+      await writeOpenCodeAuth(homeDir, { anthropic: { type: 'api', key: 'test' } });
+      const configPath = path.join(homeDir, 'custom-opencode.json');
+      await writeFile(configPath, JSON.stringify({ provider: { 'my-proxy': {} } }), 'utf8');
+      process.env.OPENCODE_CONFIG = configPath;
+    },
+    expectProxyAndAnthropic,
+    listing,
   );
 });
 
