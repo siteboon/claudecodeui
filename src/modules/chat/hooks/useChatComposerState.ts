@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '@/shared/api';
 import { PROVIDER_PERMISSION_PREFERENCE_KEYS } from '@/shared/constants';
 import { readUserPreference } from '@/shared/userSettings';
-import type { CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
+import type { BackgroundSendChoice, BackgroundSendPrompt, CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
 import { grantClaudeToolPermission } from '@/modules/chat/utils/chatPermissions';
 import {
   clearQueuedMessage,
@@ -662,6 +662,79 @@ export function useChatComposerState({
     processingSessionsRef.current = processingSessions;
   }, [processingSessions]);
 
+  // Sending over background work asks first. The dialog is rendered by the
+  // composer; the submit awaits the user's choice through this resolver.
+  const [backgroundSendPrompt, setBackgroundSendPrompt] = useState<BackgroundSendPrompt | null>(null);
+  const backgroundSendResolverRef = useRef<((choice: BackgroundSendChoice) => void) | null>(null);
+
+  const askBeforeSendingOverBackgroundWork = useCallback(
+    (work: string[]) => new Promise<BackgroundSendChoice>((resolve) => {
+      // Only one prompt at a time: a stale one is answered "cancel".
+      backgroundSendResolverRef.current?.('cancel');
+      backgroundSendResolverRef.current = resolve;
+      setBackgroundSendPrompt({ work });
+    }),
+    [],
+  );
+
+  const resolveBackgroundSendPrompt = useCallback((choice: BackgroundSendChoice) => {
+    const resolve = backgroundSendResolverRef.current;
+    backgroundSendResolverRef.current = null;
+    setBackgroundSendPrompt(null);
+    resolve?.(choice);
+  }, []);
+
+  // An unmounted composer cannot answer; let the pending submit finish.
+  useEffect(() => () => {
+    backgroundSendResolverRef.current?.('cancel');
+    backgroundSendResolverRef.current = null;
+  }, []);
+
+  // Persist a message to send "when this finishes" and show it as the queued
+  // card. Used while a turn is in flight and when the user chooses to queue
+  // behind background work. Attachments must already be uploaded.
+  const queueMessage = useCallback(
+    (durableDraft: QueuedDraft, queuedSessionKey: string | null) => {
+      if (queuedSessionKey) {
+        // Write the claim ticket synchronously after upload; this closes the
+        // gap before React's persistence effect runs.
+        writeQueuedMessage(queuedSessionKey, {
+          content: durableDraft.content,
+          options: durableDraft.options,
+          attachments: durableDraft.uploadedAttachments,
+        });
+      }
+
+      // Recorded under the session the message was queued FOR, and before
+      // the session-switch return below — the queued text must be
+      // recallable even when it dispatches without this composer.
+      recordSentMessage(durableDraft.content, queuedSessionKey);
+
+      // The server owns dispatch after persistence. If the user changed
+      // sessions during upload, the durable record is already enough; do
+      // not attach its UI card to the newly opened composer.
+      if (queuedSessionKey && sessionKeyRef.current !== queuedSessionKey) {
+        return;
+      }
+
+      queuedDraftSessionRef.current = queuedSessionKey;
+      setQueuedDraft(durableDraft);
+      setInput('');
+      inputValueRef.current = '';
+      setAttachedFiles([]);
+      setFileErrors(new Map());
+      resetCommandMenuState();
+      setIsTextareaExpanded(false);
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
+      if (draftScopeRef.current) {
+        writeDraftText(draftScopeRef.current, '');
+      }
+    },
+    [recordSentMessage, resetCommandMenuState, setInput],
+  );
+
   const submitMessage = useCallback(
     async (
       event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
@@ -711,48 +784,12 @@ export function useChatComposerState({
           return;
         }
 
-        const durableDraft: QueuedDraft = {
+        queueMessage({
           content: currentInput,
           attachments: currentAttachments,
           uploadedAttachments,
           options: queuedOptions,
-        };
-        if (queuedSessionKey) {
-          // Write the claim ticket synchronously after upload; this closes the
-          // gap before React's persistence effect runs.
-          writeQueuedMessage(queuedSessionKey, {
-            content: durableDraft.content,
-            options: durableDraft.options,
-            attachments: durableDraft.uploadedAttachments,
-          });
-        }
-
-        // Recorded under the session the message was queued FOR, and before
-        // the session-switch return below — the queued text must be
-        // recallable even when it dispatches without this composer.
-        recordSentMessage(currentInput, queuedSessionKey);
-
-        // The server owns dispatch after persistence. If the user changed
-        // sessions during upload, the durable record is already enough; do
-        // not attach its UI card to the newly opened composer.
-        if (queuedSessionKey && sessionKeyRef.current !== queuedSessionKey) {
-          return;
-        }
-
-        queuedDraftSessionRef.current = queuedSessionKey;
-        setQueuedDraft(durableDraft);
-        setInput('');
-        inputValueRef.current = '';
-        setAttachedFiles([]);
-        setFileErrors(new Map());
-        resetCommandMenuState();
-        setIsTextareaExpanded(false);
-        if (textareaRef.current) {
-          textareaRef.current.style.height = 'auto';
-        }
-        if (draftScopeRef.current) {
-          writeDraftText(draftScopeRef.current, '');
-        }
+        }, queuedSessionKey);
         return;
       }
 
@@ -868,17 +905,29 @@ export function useChatComposerState({
       // A new turn replaces the CLI process a session's background work runs
       // under: the agents, workflows and commands it still has going are
       // stopped, or finish where nothing is listening. Sending is the user's
-      // call, but not one to make for them.
+      // call, but not one to make for them — and queueing behind the work,
+      // which the server holds until it finishes, is the safe alternative.
       const backgroundActivity = processingSessionsRef.current?.get(targetSessionId);
       if (backgroundActivity?.background) {
         const work = ownBackgroundTasks(backgroundActivity.tasks ?? [])
-          .map((task) => `• ${describeBackgroundTask(task, t)}`)
-          .join('\n');
-        const confirmed = window.confirm(t('claudeStatus.backgroundTask.sendAnyway', {
-          work,
-          defaultValue: 'This session still has background work running:\n{{work}}\n\nA new message starts a new turn, which stops that work; anything it has not reported yet is lost. Send anyway?',
-        }));
-        if (!confirmed) {
+          .map((task) => describeBackgroundTask(task, t));
+        const choice = await askBeforeSendingOverBackgroundWork(work);
+        if (choice === 'cancel') {
+          return;
+        }
+        if (choice === 'queue') {
+          if (queuedSubmission) {
+            queuedDraftSessionRef.current = sessionKey;
+            setQueuedDraft(queuedSubmission);
+            return;
+          }
+          // Attachments were uploaded above; queue the same descriptors.
+          queueMessage({
+            content: currentInput,
+            attachments: currentAttachments,
+            uploadedAttachments,
+            options: buildSendOptions(currentInput),
+          }, targetSessionId);
           return;
         }
       }
@@ -948,6 +997,7 @@ export function useChatComposerState({
     },
     [
       selectedSession,
+      askBeforeSendingOverBackgroundWork,
       attachedFiles,
       buildSendOptions,
       currentSessionId,
@@ -957,6 +1007,7 @@ export function useChatComposerState({
       onSessionProcessing,
       onSessionEstablished,
       provider,
+      queueMessage,
       recordSentMessage,
       resetCommandMenuState,
       scrollToBottom,
@@ -1349,6 +1400,8 @@ export function useChatComposerState({
     isDragActive,
     openAttachmentPicker: open,
     handleSubmit,
+    backgroundSendPrompt,
+    resolveBackgroundSendPrompt,
     queuedDraft,
     editQueuedDraft,
     deleteQueuedDraft,

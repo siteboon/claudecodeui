@@ -282,8 +282,7 @@
       "workflow": "Workflow {{name}}",
       "agent": "Agente {{description}}",
       "command": "Comando {{description}}",
-      "count": "{{count}} tarefas",
-      "sendAnyway": "Esta sessão ainda tem trabalho em segundo plano rodando:\n{{work}}\n\nUma nova mensagem inicia um novo turno, que interrompe esse trabalho; o que ele ainda não reportou é perdido. Enviar mesmo assim?"
+      "count": "{{count}} tarefas"
     },
     "controls": {
       "stopGeneration": "Parar geração",

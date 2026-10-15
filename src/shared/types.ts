@@ -783,6 +783,14 @@ export type QueuedDraft = {
   options?: QueuedSendOptions;
 };
 
+/** The answer to the prompt shown when sending over a session's background work: send now (stopping that work), queue the message until the work finishes, or do nothing. */
+export type BackgroundSendChoice = 'send' | 'queue' | 'cancel';
+
+/** An open background-work send prompt, listing the session's own background tasks as display strings. */
+export type BackgroundSendPrompt = {
+  work: string[];
+};
+
 /** Viewport-relative placement box (right/bottom offsets plus max height and width) computed for a composer popover so the model and permission menus stay inside the window. */
 export type ComposerMenuAnchor = {
   right: number;
