@@ -801,11 +801,30 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     setStoredProviderModel,
   ]);
 
+  /**
+   * Applies the server's catalog for the new flag. A remembered per-provider
+   * model that the catalog no longer lists is moved to its `DEFAULT` by the
+   * reconciliation effect above; an open session keeps its recorded model.
+   */
+  const setCustomModelsOnly = useCallback(async (
+    targetProvider: LLMProvider,
+    enabled: boolean,
+  ) => {
+    const response = await api.providers.setCustomModelsOnly(targetProvider, enabled);
+    const body = (await response.json()) as ProviderModelMutationApiResponse;
+    if (!response.ok || !body.success || !body.data?.models) {
+      throw new Error(body.error?.message || 'Unable to change this setting.');
+    }
+
+    applyProviderCatalog(targetProvider, body.data.models);
+  }, [applyProviderCatalog]);
+
   const providerModelActions = useMemo<ProviderModelActions>(() => ({
     create: createCustomModel,
     update: updateCustomModel,
     remove: removeCustomModel,
-  }), [createCustomModel, removeCustomModel, updateCustomModel]);
+    setCustomModelsOnly,
+  }), [createCustomModel, removeCustomModel, setCustomModelsOnly, updateCustomModel]);
 
   return {
     provider,

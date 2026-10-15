@@ -417,6 +417,8 @@ export const api = {
       patch(`/api/providers/${provider}/models/${recordId}`, input),
     deleteModel: (provider: string, recordId: string | number) =>
       del(`/api/providers/${provider}/models/${recordId}`),
+    setCustomModelsOnly: (provider: string, enabled: boolean) =>
+      put(`/api/providers/${provider}/models/custom-only`, { enabled }),
 
     createSession: (payload: {
       provider: string;

@@ -193,6 +193,7 @@
     "pressToSearch": "Press <kbd>{{shortcut}}</kbd> to search sessions, files, and commits",
     "chooseModel": "Choose a model",
     "chooseModelDescription": "Built-in and custom models in one list",
+    "chooseModelDescriptionCustomOnly": "Only your models are listed for {{providers, list}}",
     "addModel": "Add model",
     "searchModels": "Search models...",
     "manageModels": "Manage models",
@@ -391,6 +392,10 @@
   "modelLibrary": {
     "effortLevels": "Reasoning levels",
     "effortLevelsHint": "Select the reasoning-effort levels this model accepts. If none are selected, no effort level can be chosen for this model in the composer.",
-    "effortSummary": "Reasoning: {{levels}}"
+    "effortSummary": "Reasoning: {{levels}}",
+    "customModelsOnly": "Use only my models",
+    "customModelsOnlyHint": "Hide the built-in {{provider}} models from every model picker and make your first model the default. Built-in models stay listed until you add a model.",
+    "builtInModelsHidden": "Hidden from model pickers while “Use only my models” is on.",
+    "customModelsOnlyFailed": "Unable to change this setting."
   }
 }

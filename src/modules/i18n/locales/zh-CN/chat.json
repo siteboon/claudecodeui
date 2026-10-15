@@ -164,7 +164,8 @@
       "opencode": "准备好使用带有 {{model}} 的 OpenCode。请在下方开始输入您的消息。",
       "default": "请在上方选择一个提供者以开始"
     },
-    "pressToSearch": "按 <kbd>{{shortcut}}</kbd> 搜索会话、文件和提交"
+    "pressToSearch": "按 <kbd>{{shortcut}}</kbd> 搜索会话、文件和提交",
+    "chooseModelDescriptionCustomOnly": "{{providers, list}} 仅列出您的模型"
   },
   "session": {
     "continue": {
@@ -298,6 +299,10 @@
   "modelLibrary": {
     "effortLevels": "推理级别",
     "effortLevelsHint": "选择此模型支持的推理强度级别。若未选择任何级别，将无法在输入框中为此模型选择级别。",
-    "effortSummary": "推理：{{levels}}"
+    "effortSummary": "推理：{{levels}}",
+    "customModelsOnly": "仅使用我的模型",
+    "customModelsOnlyHint": "在所有模型选择器中隐藏 {{provider}} 的内置模型，并将您的第一个模型设为默认模型。在您添加模型之前，内置模型仍会显示。",
+    "builtInModelsHidden": "开启“仅使用我的模型”时，这些模型不会出现在模型选择器中。",
+    "customModelsOnlyFailed": "无法更改此设置。"
   }
 }
