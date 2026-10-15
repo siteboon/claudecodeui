@@ -210,6 +210,18 @@ function isParsableUrl(url: string): boolean {
 const MAX_CLONE_DIRECTORY_NAME_BYTES = 255;
 
 /**
+ * The 400 every unusable clone URL gets. The reason is written for the person
+ * reading the wizard's error banner and never echoes the URL, which may be a
+ * pasted prompt or carry a credential.
+ */
+function invalidCloneUrlError(reason: string): AppError {
+  return new AppError(`Invalid repository URL: ${reason}`, {
+    code: 'INVALID_GITHUB_URL',
+    statusCode: 400,
+  });
+}
+
+/**
  * Names the directory the clone lands in after the URL's last path segment,
  * with trailing slashes and a `.git` suffix dropped.
  */
@@ -219,36 +231,76 @@ function deriveCloneDirectoryName(githubUrl: string): string {
 }
 
 /**
- * Rejects what a prompt pasted into the URL field looks like before anything
- * touches the disk: a line break, which no remote, scp-like address or local
- * path carries, or a last segment too long to be a directory name. A space is
- * not rejected here — ssh, scp-like, file:// and local paths may hold one.
+ * Runs every check on a trimmed clone URL that needs neither the disk nor the
+ * database, and returns the name of the directory the clone will land in.
+ * Consumed by startCloneProject below and by the POST /clone route
+ * (project-clone.routes.ts), so an API client gets a real 400 before anything
+ * is parked. An empty URL passes; startCloneProject reports it as missing.
+ *
+ * It turns away what a prompt pasted into the URL field looks like — a line
+ * break, which no remote, scp-like address or local path carries, or a last
+ * segment too long to be a directory name — and a last segment that is not
+ * one new directory inside the workspace. A space is refused only in an
+ * http(s) URL: ssh, scp-like, file:// and local paths may hold one.
+ * `pathApi` is the host's path module; tests pass `path.win32` to cover
+ * Windows separators on any host.
  */
-function assertCloneSourceIsUsable(githubUrl: string, cloneDirectoryName: string): void {
-  if (/[\p{Cc}\p{Zl}\p{Zp}]/u.test(githubUrl)) {
-    throw new AppError('Invalid githubUrl: it contains a line break or another control character', {
+export function validateCloneUrl(githubUrl: string, pathApi: path.PlatformPath = path): string {
+  if (githubUrl.startsWith('-')) {
+    throw new AppError('Invalid githubUrl', {
       code: 'INVALID_GITHUB_URL',
       statusCode: 400,
     });
   }
 
-  // `.` or `..` would put the clone in the workspace itself or its parent.
-  if (cloneDirectoryName === '.' || cloneDirectoryName === '..') {
-    throw new AppError('Invalid githubUrl: it does not end in a repository name', {
-      code: 'INVALID_GITHUB_URL',
-      statusCode: 400,
-    });
+  // \p{Cc} includes NUL, so no later check has to look for one.
+  if (/[\p{Cc}\p{Zl}\p{Zp}]/u.test(githubUrl)) {
+    throw invalidCloneUrlError('it contains a line break or another control character');
+  }
+
+  const cloneDirectoryName = deriveCloneDirectoryName(githubUrl);
+  // `.` or `..` would put the clone in the workspace itself or its parent,
+  // `.git` into the workspace's own git directory, and a name the platform
+  // splits (`..\..\outside` on Windows) anywhere the separators lead.
+  if (
+    cloneDirectoryName === '.'
+    || cloneDirectoryName === '..'
+    || cloneDirectoryName.toLowerCase() === '.git'
+    || pathApi.basename(cloneDirectoryName) !== cloneDirectoryName
+  ) {
+    throw invalidCloneUrlError('it does not end in a repository name');
   }
 
   if (Buffer.byteLength(cloneDirectoryName, 'utf8') > MAX_CLONE_DIRECTORY_NAME_BYTES) {
-    throw new AppError(
-      `Invalid githubUrl: the repository name it ends with is longer than ${MAX_CLONE_DIRECTORY_NAME_BYTES} bytes`,
-      {
-        code: 'INVALID_GITHUB_URL',
-        statusCode: 400,
-      },
+    throw invalidCloneUrlError(
+      `its last part is longer than ${MAX_CLONE_DIRECTORY_NAME_BYTES} bytes, so it cannot be a folder name`,
     );
   }
+
+  // An http(s) string the URL parser rejects (a bad port, a space in the
+  // host) is one curl rejects too — but only after git has carried it, and
+  // any credential in it, on its command line. A space in the path is one as
+  // well: the parser percent-encodes it, curl refuses it as malformed.
+  if (/^https?:/i.test(githubUrl)) {
+    if (githubUrl.includes(' ')) {
+      throw invalidCloneUrlError('a web address cannot contain spaces');
+    }
+
+    if (!isParsableUrl(githubUrl)) {
+      throw invalidCloneUrlError('it is not a valid web address');
+    }
+  }
+
+  if (carriesCredentials(githubUrl)) {
+    // The token field is the only way in: a credential in the URL would ride
+    // git's argv, its stderr and the clone's `.git/config`.
+    throw new AppError('Put the token in the token field, not in the URL', {
+      code: 'GITHUB_URL_CARRIES_CREDENTIALS',
+      statusCode: 400,
+    });
+  }
+
+  return cloneDirectoryName;
 }
 
 export async function startCloneProject(
@@ -274,38 +326,7 @@ export async function startCloneProject(
     });
   }
 
-  if (normalizedGithubUrl.startsWith('-')) {
-    throw new AppError('Invalid githubUrl', {
-      code: 'INVALID_GITHUB_URL',
-      statusCode: 400,
-    });
-  }
-
-  const repoName = deriveCloneDirectoryName(normalizedGithubUrl);
-  assertCloneSourceIsUsable(normalizedGithubUrl, repoName);
-
-  // An http(s) string the URL parser rejects (a bad port, a space in the
-  // host) is one curl rejects too — but only after git has carried it, and
-  // any credential in it, on its command line. A space in the path is one as
-  // well: the parser percent-encodes it, curl refuses it as malformed.
-  if (
-    /^https?:/i.test(normalizedGithubUrl)
-    && (normalizedGithubUrl.includes(' ') || !isParsableUrl(normalizedGithubUrl))
-  ) {
-    throw new AppError('Invalid githubUrl', {
-      code: 'INVALID_GITHUB_URL',
-      statusCode: 400,
-    });
-  }
-
-  if (carriesCredentials(normalizedGithubUrl)) {
-    // The token field is the only way in: a credential in the URL would ride
-    // git's argv, its stderr and the clone's `.git/config`.
-    throw new AppError('Put the token in the token field, not in the URL', {
-      code: 'GITHUB_URL_CARRIES_CREDENTIALS',
-      statusCode: 400,
-    });
-  }
+  const repoName = validateCloneUrl(normalizedGithubUrl);
 
   const pathValidation = await dependencies.validatePath(normalizedWorkspacePath);
   if (!pathValidation.valid || !pathValidation.resolvedPath) {
@@ -344,7 +365,22 @@ export async function startCloneProject(
 
   const clonePath = path.join(absolutePath, repoName);
 
-  if (await dependencies.pathExists(clonePath)) {
+  let cloneTargetExists: boolean;
+  try {
+    cloneTargetExists = await dependencies.pathExists(clonePath);
+  } catch (error) {
+    // validateCloneUrl checks the name alone. The OS can still refuse the
+    // whole path (over PATH_MAX, or over a smaller NAME_MAX such as eCryptfs's
+    // 143 bytes), and its raw errno would echo that path, pasted text and all.
+    const errorCode = (error as NodeJS.ErrnoException | null)?.code;
+    if (errorCode === 'ENAMETOOLONG' || errorCode === 'EINVAL') {
+      throw invalidCloneUrlError('its last part cannot be used as a folder name in this workspace');
+    }
+
+    throw error;
+  }
+
+  if (cloneTargetExists) {
     throw new AppError(
       `Directory "${repoName}" already exists. Please choose a different location or remove the existing directory.`,
       {

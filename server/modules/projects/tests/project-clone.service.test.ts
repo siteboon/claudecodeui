@@ -11,7 +11,7 @@ import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
-import { startCloneProject } from '@/modules/projects/services/project-clone.service.js';
+import { startCloneProject, validateCloneUrl } from '@/modules/projects/services/project-clone.service.js';
 import { AppError } from '@/shared/utils.js';
 
 type TestDependencies = Parameters<typeof startCloneProject>[2];
@@ -174,18 +174,26 @@ const PASTED_PROMPT = [
   'Keep it concise and avoid speculative issues; cite file names and line numbers where possible.',
 ].join('\n');
 
-for (const [label, githubUrl] of [
-  ['a multi-line prompt', PASTED_PROMPT],
-  ['a prompt whose line breaks the browser turned into spaces', PASTED_PROMPT.replaceAll('\n', ' ')],
-  ['an https URL whose last segment is 256 bytes', `https://github.com/example/${'a'.repeat(256)}`],
-  ['an https URL whose last segment is 130 two-byte characters', `https://github.com/example/${'é'.repeat(130)}`],
-  ['a URL with a line break inside', 'https://github.com/example/\nrepo.git'],
-  ['a URL with a tab inside', 'git@github.com:example/re\tpo.git'],
-  ['a URL with a NUL byte inside', 'ssh://git@github.com/example/repo\u0000.git'],
-  ['a URL with a Unicode line separator inside', 'https://github.com/example/re po.git'],
-  ['an https URL with a space in its path', 'https://github.com/example/my repo.git'],
-  ['a URL ending in ..', 'https://github.com/example/..'],
-  ['a URL ending in /./', 'git@github.com:example/./'],
+const CONTROL_CHARACTER = 'it contains a line break or another control character';
+const NOT_A_REPOSITORY_NAME = 'it does not end in a repository name';
+const TOO_LONG = 'its last part is longer than 255 bytes, so it cannot be a folder name';
+
+for (const [label, githubUrl, reason] of [
+  ['a multi-line prompt', PASTED_PROMPT, CONTROL_CHARACTER],
+  ['a prompt whose line breaks the browser turned into spaces', PASTED_PROMPT.replaceAll('\n', ' '), TOO_LONG],
+  ['an https URL whose last segment is 256 bytes', `https://github.com/example/${'a'.repeat(256)}`, TOO_LONG],
+  ['an https URL whose last segment is 130 two-byte characters', `https://github.com/example/${'é'.repeat(130)}`, TOO_LONG],
+  ['a URL with a line break inside', 'https://github.com/example/\nrepo.git', CONTROL_CHARACTER],
+  ['a URL with a tab inside', 'git@github.com:example/re\tpo.git', CONTROL_CHARACTER],
+  ['a URL with a NUL byte inside', 'ssh://git@github.com/example/repo\u0000.git', CONTROL_CHARACTER],
+  ['a URL with a Unicode line separator inside', 'https://github.com/example/re\u2028po.git', CONTROL_CHARACTER],
+  ['an https URL with a space in its path', 'https://github.com/example/my repo.git', 'a web address cannot contain spaces'],
+  ['an https URL the parser cannot read', 'https://github.com:notaport/example/repo.git', 'it is not a valid web address'],
+  ['a URL ending in ..', 'https://github.com/example/..', NOT_A_REPOSITORY_NAME],
+  ['a URL ending in /./', 'git@github.com:example/./', NOT_A_REPOSITORY_NAME],
+  // `.git` is stripped once, leaving the workspace's own git directory.
+  ['a URL ending in .git.git', 'https://github.com/example/.git.git', NOT_A_REPOSITORY_NAME],
+  ['a URL ending in .GIT.git', 'git@github.com:example/.GIT.git', NOT_A_REPOSITORY_NAME],
 ] as const) {
   test(`startCloneProject rejects ${label} before touching the disk`, async () => {
     // The directory name used to reach the filesystem first: `access()` threw a
@@ -221,13 +229,80 @@ for (const [label, githubUrl] of [
         assert.ok(error instanceof AppError, `expected an AppError, got ${String(error)}`);
         assert.equal(error.code, 'INVALID_GITHUB_URL');
         assert.equal(error.statusCode, 400);
-        assert.ok(!error.message.includes('Please audit'), 'the error must not echo the pasted text');
+        // The wizard's banner shows this text as it is, so it says what is
+        // wrong in words, and never echoes the pasted text.
+        assert.equal(error.message, `Invalid repository URL: ${reason}`);
         return true;
       },
     );
     assert.deepEqual(calls, []);
   });
 }
+
+test('validateCloneUrl refuses a last segment the Windows path module would split', () => {
+  // `\` is a separator on Windows only: path.win32.join('C:\\ws', '..\\..\\outside')
+  // is 'C:\\outside', so the clone used to land outside the workspace there.
+  const githubUrl = 'git@github.com:example/..\\..\\outside.git';
+  assert.throws(
+    () => validateCloneUrl(githubUrl, path.win32),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError, `expected an AppError, got ${String(error)}`);
+      assert.equal(error.code, 'INVALID_GITHUB_URL');
+      assert.equal(error.message, `Invalid repository URL: ${NOT_A_REPOSITORY_NAME}`);
+      return true;
+    },
+  );
+  assert.throws(() => validateCloneUrl('C:repo', path.win32), AppError);
+
+  // On POSIX a backslash is an ordinary name character: still one directory.
+  assert.equal(validateCloneUrl(githubUrl, path.posix), '..\\..\\outside');
+  assert.equal(validateCloneUrl('https://github.com/example/repo.git', path.win32), 'repo');
+});
+
+for (const code of ['ENAMETOOLONG', 'EINVAL']) {
+  test(`startCloneProject turns ${code} from the clone-target check into a 400 that does not echo the path`, async () => {
+    // The name passed every check, but the OS refused the whole path (over
+    // PATH_MAX, or over a smaller NAME_MAX). Its raw errno names that path.
+    let spawned = 0;
+    await assert.rejects(
+      async () =>
+        startCloneProject(
+          { workspacePath: '/workspace/root', githubUrl: 'https://github.com/example/repo.git', userId: 1 },
+          { onProgress: () => undefined, onComplete: () => undefined },
+          buildDependencies({
+            pathExists: async (targetPath) => {
+              throw Object.assign(new Error(`${code}: name too long, access '${targetPath}'`), { code });
+            },
+            spawnGitClone: () => { spawned += 1; throw new Error('must not spawn'); },
+          }),
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError, `expected an AppError, got ${String(error)}`);
+        assert.equal(error.code, 'INVALID_GITHUB_URL');
+        assert.equal(error.statusCode, 400);
+        assert.equal(
+          error.message,
+          'Invalid repository URL: its last part cannot be used as a folder name in this workspace',
+        );
+        return true;
+      },
+    );
+    assert.equal(spawned, 0);
+  });
+}
+
+test('startCloneProject passes any other error from the clone-target check through', async () => {
+  const failure = Object.assign(new Error("EACCES: permission denied, access '/workspace/root/repo'"), { code: 'EACCES' });
+  await assert.rejects(
+    async () =>
+      startCloneProject(
+        { workspacePath: '/workspace/root', githubUrl: 'https://github.com/example/repo.git', userId: 1 },
+        { onProgress: () => undefined, onComplete: () => undefined },
+        buildDependencies({ pathExists: async () => { throw failure; } }),
+      ),
+    (error: unknown) => error === failure,
+  );
+});
 
 for (const [label, githubUrl, expectedDirectory] of [
   ['an https URL', 'https://github.com/example/repo.git', 'repo'],

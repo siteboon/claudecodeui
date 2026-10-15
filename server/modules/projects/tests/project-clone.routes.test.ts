@@ -121,6 +121,24 @@ test('POST /clone parks the request under a fresh id without spawning anything',
   });
 });
 
+test('POST /clone answers a URL the service would turn away with a 400 and no clone id', async () => {
+  // These used to be parked with a 200 and only failed as an event on the
+  // stream, so an API client never saw a 400 or the error code.
+  await withProjectsServer({ startCloneProject: unexpectedCloneRunner }, async (baseUrl) => {
+    for (const [githubUrl, code] of [
+      ['Please audit this repository.\nThen write a short report.', 'INVALID_GITHUB_URL'],
+      [`https://github.com/example/${'a'.repeat(256)}`, 'INVALID_GITHUB_URL'],
+      ['https://github.com/example/my repo.git', 'INVALID_GITHUB_URL'],
+      ['--upload-pack=touch /tmp/owned', 'INVALID_GITHUB_URL'],
+      ['https://ghp_supersecrettoken1234567890abcd@github.com/example/repo.git', 'GITHUB_URL_CARRIES_CREDENTIALS'],
+    ] as const) {
+      const response = await postClone(baseUrl, 1, { ...cloneBody, githubUrl });
+      assert.equal(response.status, 400, githubUrl);
+      assert.deepEqual(response.body, { error: code }, githubUrl);
+    }
+  });
+});
+
 test('POST /clone requires an authenticated user', async () => {
   await withProjectsServer({ startCloneProject: unexpectedCloneRunner }, async (baseUrl) => {
     const response = await fetch(`${baseUrl}/api/projects/clone`, {

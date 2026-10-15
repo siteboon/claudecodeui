@@ -1,7 +1,7 @@
 import express, { type Request } from 'express';
 
 import type { PendingCloneRequests } from '@/modules/projects/services/project-clone-request.service.js';
-import type { startCloneProject } from '@/modules/projects/services/project-clone.service.js';
+import { type startCloneProject, validateCloneUrl } from '@/modules/projects/services/project-clone.service.js';
 import { AppError, asyncHandler } from '@/shared/utils.js';
 
 type ProjectCloneRouterDependencies = {
@@ -48,17 +48,20 @@ export function createProjectCloneRouter(dependencies: ProjectCloneRouterDepende
   const router = express.Router();
 
   /**
-   * Parks the request under a fresh id for `/clone-progress` to pick up.
-   * Nothing is spawned here; the stream that follows runs and reports it.
+   * Answers a URL validateCloneUrl turns away with a real 400, then parks
+   * the request under a fresh id for `/clone-progress` to pick up. Nothing is
+   * spawned here; the stream that follows runs and reports it.
    */
   router.post(
     '/clone',
     asyncHandler(async (req, res) => {
       const userId = requireAuthenticatedUserId(req);
       const requestBody = req.body as Record<string, unknown>;
+      const githubUrl = typeof requestBody.githubUrl === 'string' ? requestBody.githubUrl : '';
+      validateCloneUrl(githubUrl.trim());
       const cloneId = dependencies.pendingCloneRequests.add(userId, {
         workspacePath: typeof requestBody.path === 'string' ? requestBody.path : '',
-        githubUrl: typeof requestBody.githubUrl === 'string' ? requestBody.githubUrl : '',
+        githubUrl,
         githubTokenId: typeof requestBody.githubTokenId === 'number' ? requestBody.githubTokenId : null,
         newGithubToken: typeof requestBody.newGithubToken === 'string' ? requestBody.newGithubToken : null,
       });
