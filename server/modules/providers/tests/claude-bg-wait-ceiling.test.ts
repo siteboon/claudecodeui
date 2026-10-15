@@ -58,6 +58,8 @@ test('a whole number of milliseconds is used as given', () => {
   assert.equal(resolveBgWaitCeilingMs('14400000', warn), 4 * 60 * 60 * 1000);
   assert.equal(resolveBgWaitCeilingMs(' 3600000 ', warn), 60 * 60 * 1000);
   assert.equal(resolveBgWaitCeilingMs('60000', warn), 60 * 1000);
+  // The longest delay Node's timers honour is still used as given, without a warning.
+  assert.equal(resolveBgWaitCeilingMs('2147483647', warn), 2 ** 31 - 1);
   assert.deepEqual(warnings, []);
 });
 
