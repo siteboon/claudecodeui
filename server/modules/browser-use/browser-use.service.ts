@@ -166,6 +166,19 @@ function ensureRuntimeInstallDir(): string {
 }
 
 function getPlaywright(): any | null {
+  // Prefer the copy "Install Runtime" manages, so an install takes effect even when another Playwright
+  // resolves first (a global package above CloudCLI, or ~/node_modules left by installs that ran in the
+  // launch directory). Load it by absolute path: a bare `playwright` lookup from the runtime dir walks up
+  // into those parents, and Node keeps returning whatever that lookup found first for the whole process.
+  const runtimePlaywrightDir = path.join(getRuntimeInstallDir(), 'node_modules', 'playwright');
+  if (fs.existsSync(path.join(runtimePlaywrightDir, 'package.json'))) {
+    try {
+      return require(runtimePlaywrightDir);
+    } catch {
+      // A broken runtime copy falls back to any other Playwright that resolves.
+    }
+  }
+
   try {
     return require('playwright');
   } catch {
