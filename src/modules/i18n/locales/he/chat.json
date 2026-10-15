@@ -177,6 +177,7 @@
     "pressToSearch": "<kbd>{{shortcut}}</kbd> לחיפוש סשנים, קבצים ו-commits",
     "chooseModel": "בחירת מודל",
     "chooseModelDescription": "מודלים מובנים ומותאמים אישית ברשימה אחת",
+    "chooseModelDescriptionCustomOnly": "עבור {{providers, list}} מוצגים רק המודלים שלך",
     "addModel": "הוספת מודל",
     "searchModels": "חיפוש מודלים…",
     "manageModels": "ניהול מודלים",
@@ -378,5 +379,11 @@
     "tokensLabel_other": "טוקנים",
     "escClosesModal": "Esc סוגר את החלון.",
     "close": "סגירה"
+  },
+  "modelLibrary": {
+    "customModelsOnly": "שימוש רק במודלים שלי",
+    "customModelsOnlyHint": "מסתיר את המודלים המובנים של {{provider}} מכל בוחרי המודלים, והמודל הראשון שלך הופך לברירת המחדל. המודלים המובנים ממשיכים להופיע עד להוספת מודל.",
+    "builtInModelsHidden": "מוסתרים מבוחרי המודלים כל עוד „שימוש רק במודלים שלי” פעיל.",
+    "customModelsOnlyFailed": "לא ניתן לשנות את ההגדרה הזו."
   }
 }
