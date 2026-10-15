@@ -5,14 +5,15 @@ import { afterEach, beforeEach, test, vi } from 'vitest';
 
 import '@/modules/i18n';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
-import type { PermissionMode, Project } from '@/shared/types';
+import type { PermissionMode, Project, SlashCommand } from '@/shared/types';
 
 /**
  * Regression guard for #1523: the composer cut a custom command's arguments at
  * the first line break (`(.*)` stops at `\n`) and only ever sent them as
  * whitespace-split tokens, so a multi-line brief reached `$ARGUMENTS` as its
  * first line. The execute request must carry the raw text typed after the
- * command name, like the Claude Code CLI substitutes it.
+ * command name, like the Claude Code CLI substitutes it. The expanded body
+ * that comes back is then sent as the message and never run as a command again.
  */
 
 const PROJECT: Project = { projectId: 'project-1', displayName: 'Project One', fullPath: '/tmp/project-one' };
@@ -24,10 +25,19 @@ const ECHO_COMMAND = {
   description: 'Repeat the arguments',
 };
 
+const OTHER_COMMAND = {
+  name: '/other',
+  path: '/tmp/project-one/.claude/commands/other.md',
+  namespace: 'project',
+  description: 'Another custom command',
+};
+
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 let fetchMock: ReturnType<typeof vi.fn>;
+// The expanded body the mocked `/api/commands/execute` answers with.
+let expandedContent = 'expanded';
 
 const executeBodies = () => fetchMock.mock.calls
   .filter(([url]) => String(url) === '/api/commands/execute')
@@ -59,11 +69,16 @@ const renderComposer = () => {
   return { view, chatSends: () => sent.filter((message) => message.type === 'chat.send') };
 };
 
+const renderLoadedComposer = async () => {
+  const composer = renderComposer();
+  await waitFor(() => assert.equal(composer.view.result.current.slashCommandsCount, 2));
+  return composer;
+};
+
 // Types `text` into the composer once the command list has loaded, presses
 // Enter, and returns the body of the `/api/commands/execute` request it made.
 const submitCommand = async (text: string) => {
-  const { view, chatSends } = renderComposer();
-  await waitFor(() => assert.equal(view.result.current.slashCommandsCount, 1));
+  const { view, chatSends } = await renderLoadedComposer();
   await act(async () => { view.result.current.setInput(text); });
   await act(async () => {
     await view.result.current.handleSubmit({ preventDefault: () => undefined } as never);
@@ -77,13 +92,13 @@ beforeEach(() => {
   fetchMock = vi.fn((url: RequestInfo | URL, init?: RequestInit) => {
     const target = String(url);
     if (target === '/api/commands/list' && init?.method === 'POST') {
-      return Promise.resolve(jsonResponse({ builtIn: [], custom: [ECHO_COMMAND], count: 1 }));
+      return Promise.resolve(jsonResponse({ builtIn: [], custom: [ECHO_COMMAND, OTHER_COMMAND], count: 2 }));
     }
     if (target.startsWith('/api/providers/claude/skills')) {
       return Promise.resolve(jsonResponse({ success: true, data: { skills: [] } }));
     }
     if (target === '/api/commands/execute' && init?.method === 'POST') {
-      return Promise.resolve(jsonResponse({ type: 'custom', command: '/echo', content: 'expanded', hasBashCommands: false }));
+      return Promise.resolve(jsonResponse({ type: 'custom', command: '/echo', content: expandedContent, hasBashCommands: false }));
     }
     return Promise.resolve(jsonResponse([]));
   });
@@ -92,6 +107,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // Ends a re-submit loop a failing run may have left going.
+  expandedContent = 'expanded';
   vi.unstubAllGlobals();
   localStorage.clear();
 });
@@ -121,3 +138,50 @@ test('a command with no argument sends empty arguments', async () => {
   assert.equal(body.rawArgs, '');
   assert.deepEqual(body.args, []);
 });
+
+// The slash menu runs the picked command against the whole composer text.
+const pickEchoFromMenu = async (text: string) => {
+  const { view } = await renderLoadedComposer();
+  await act(async () => { view.result.current.setInput(text); });
+  await act(async () => {
+    view.result.current.handleCommandSelect(ECHO_COMMAND as SlashCommand, 0, false);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  await waitFor(() => assert.equal(executeBodies().length, 1, 'the menu pick runs /echo'));
+  return executeBodies()[0];
+};
+
+test('a menu pick takes no arguments from a name that is not at the start of the composer', async () => {
+  const body = await pickEchoFromMenu('see /echo2 docs\nmore\n/echo');
+
+  assert.equal(body.rawArgs, '');
+  assert.deepEqual(body.args, []);
+});
+
+test('a menu pick over a composer that opens with the command trims its argument text', async () => {
+  const body = await pickEchoFromMenu('  /echo  hi there \n\n');
+
+  assert.equal(body.rawArgs, 'hi there');
+  assert.deepEqual(body.args, ['hi', 'there']);
+});
+
+for (const [opening, expandedBody] of [
+  ['its own name and a space', '/echo again: hi'],
+  ['its own name and a line break', '/echo\nhi'],
+  ['another command and a line break', '/other\nplease review'],
+]) {
+  test(`an expanded body that opens with ${opening} is sent as the message, not run as a command`, async () => {
+    expandedContent = expandedBody;
+    const { view, chatSends } = await renderLoadedComposer();
+    await act(async () => { view.result.current.setInput('/echo hi'); });
+    await act(async () => {
+      await view.result.current.handleSubmit({ preventDefault: () => undefined } as never);
+    });
+
+    // Re-interception would show up as a second execute request.
+    await waitFor(() => assert.ok(chatSends().length > 0 || executeBodies().length > 1));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+    assert.deepEqual(executeBodies().map((body) => body.commandName), ['/echo']);
+    assert.deepEqual(chatSends().map((message) => message.content), [expandedBody]);
+  });
+}

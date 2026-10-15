@@ -518,7 +518,11 @@ router.post("/list", async (req, res) => {
  */
 router.post("/execute", async (req, res) => {
   try {
-    const { commandName, commandPath, args = [], rawArgs, context = {} } = req.body;
+    const { commandName, commandPath, rawArgs, context = {} } = req.body;
+    // A client that sends only `rawArgs` still gets `$1`, `$2`, … from its
+    // whitespace-split tokens.
+    const args = req.body.args
+      ?? (typeof rawArgs === "string" && rawArgs.trim() ? rawArgs.trim().split(/\s+/) : []);
 
     if (!commandName) {
       return res.status(400).json({

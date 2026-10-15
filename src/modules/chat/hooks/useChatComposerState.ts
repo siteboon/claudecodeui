@@ -83,6 +83,17 @@ type CommandExecutionResult = {
   hasFileIncludes?: boolean;
 };
 
+type SubmitOptions = {
+  /**
+   * Send the text as a chat message even when it starts with "/" (or is
+   * "help"). Set only for the re-submit of a custom command's expanded body:
+   * like the Claude Code CLI, that body is never read as a command again, so a
+   * body that opens with its own or another command's name cannot loop or
+   * run that command instead of being sent.
+   */
+  skipCommandInterception?: boolean;
+};
+
 
 
 
@@ -237,6 +248,7 @@ export function useChatComposerState({
     ((
       event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
       queuedSubmission?: QueuedDraft,
+      submitOptions?: SubmitOptions,
     ) => Promise<void>) | null
   >(null);
   const inputValueRef = useRef(input);
@@ -403,9 +415,10 @@ export function useChatComposerState({
     inputValueRef.current = commandContent;
 
     // Defer submit to next tick so the command text is reflected in UI before dispatching.
+    // The expanded body is the message itself: it skips slash-command interception.
     setTimeout(() => {
       if (handleSubmitRef.current) {
-        handleSubmitRef.current(createFakeSubmitEvent());
+        handleSubmitRef.current(createFakeSubmitEvent(), undefined, { skipCommandInterception: true });
       }
     }, 0);
   }, [addMessage]);
@@ -421,7 +434,12 @@ export function useChatComposerState({
         // Everything typed after the command name is its argument text, line
         // breaks included (`[\s\S]`, unlike `.`), trimmed as the Claude Code CLI
         // does. `$ARGUMENTS` gets it verbatim; `$1`, `$2`, … get its tokens.
-        const commandMatch = effectiveInput.match(new RegExp(`${escapeRegExp(command.name)}\\s*([\\s\\S]*)`));
+        // The name must open the input and end at whitespace or the end: a pick
+        // from the slash menu passes the whole composer, where the name may
+        // appear later or inside a longer word ("see /echo2 …" has no arguments).
+        const commandMatch = effectiveInput
+          .trimStart()
+          .match(new RegExp(`^${escapeRegExp(command.name)}(?=\\s|$)([\\s\\S]*)`));
         const rawArgs = commandMatch ? commandMatch[1].trim() : '';
         const args = rawArgs ? rawArgs.split(/\s+/) : [];
 
@@ -670,6 +688,7 @@ export function useChatComposerState({
     async (
       event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
       queuedSubmission?: QueuedDraft,
+      submitOptions?: SubmitOptions,
     ) => {
       event.preventDefault();
       const currentInput = queuedSubmission?.content ?? inputValueRef.current;
@@ -764,7 +783,7 @@ export function useChatComposerState({
       // Also accept exact "help" as a convenience alias for users who expect CLI-style help.
       const commandInput = currentInput.trimEnd();
       const isHelpAlias = commandInput.trim().toLowerCase() === 'help';
-      if (commandInput.startsWith('/') || isHelpAlias) {
+      if (!submitOptions?.skipCommandInterception && (commandInput.startsWith('/') || isHelpAlias)) {
         // The name ends at the first whitespace of any kind, so "/cmd" followed
         // by a line break still runs /cmd (the Claude Code CLI splits the same way).
         const firstWhitespace = commandInput.search(/\s/);
@@ -987,6 +1006,7 @@ export function useChatComposerState({
     async (
       event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
       queuedSubmission?: QueuedDraft,
+      submitOptions?: SubmitOptions,
     ) => {
       const scope = draftScopeRef.current ?? '';
       if (submittingScopesRef.current.has(scope)) {
@@ -996,7 +1016,7 @@ export function useChatComposerState({
       }
       submittingScopesRef.current.add(scope);
       try {
-        await submitMessage(event, queuedSubmission);
+        await submitMessage(event, queuedSubmission, submitOptions);
       } finally {
         submittingScopesRef.current.delete(scope);
       }

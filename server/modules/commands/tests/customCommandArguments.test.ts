@@ -93,3 +93,14 @@ test('custom command placeholders without a matching argument are left as writte
 
   assert.equal(result.content, 'A=only B=$2 C=$01 D=$1x');
 });
+
+test('custom command $1..$n use the raw text tokens when a client sends rawArgs without args', async () => {
+  const result = await executeCustomCommand('All: $ARGUMENTS | $1 | $2 | $3', { rawArgs: 'fix\nthe  tests' });
+
+  assert.equal(result.content, 'All: fix\nthe  tests | fix | the | tests');
+
+  // Blank raw text has no tokens, so `$1` stays as written.
+  const blank = await executeCustomCommand('All: [$ARGUMENTS] | $1', { rawArgs: '' });
+
+  assert.equal(blank.content, 'All: [] | $1');
+});
