@@ -421,6 +421,7 @@
         "permissionDenied": "O usuário do servidor não tem permissão para gravar onde esta CLI está instalada. Execute {{command}} no servidor como dono dessa instalação (por exemplo, com sudo).",
         "timedOut": "A atualização não terminou a tempo e foi interrompida. Execute {{command}} no servidor para concluí-la.",
         "failed": "A atualização falhou (código de saída {{exitCode}}). A saída está abaixo.",
+        "failedQuietly": "O atualizador informou uma falha. A saída está abaixo.",
         "notStarted": "Não foi possível iniciar o atualizador.",
         "busy": "Este agente está trabalhando em uma sessão. Espere ele terminar ou pare-o e depois atualize.",
         "requestFailed": "A atualização não foi executada: {{error}}"

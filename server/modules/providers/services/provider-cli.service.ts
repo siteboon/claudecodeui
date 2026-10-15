@@ -21,9 +21,14 @@ const UPDATE_TIMEOUT_MS = 10 * 60 * 1000;
 const UPDATE_KILL_GRACE_MS = 10_000;
 /** Only the tail of the updater's output is returned; that is where its result and errors are. */
 const UPDATE_OUTPUT_LIMIT = 20_000;
+/** Raw output kept while the updater runs; spinner and progress-bar redraws shrink a lot once collapsed. */
+const UPDATE_RAW_OUTPUT_LIMIT = 256_000;
 
-/** npm, Node and the CLIs' own updaters all phrase a write they were refused this way. */
-const PERMISSION_DENIED_PATTERN = /\bEACCES\b|\bEPERM\b|permission denied|insufficient permissions/i;
+// How the updaters word a write they were refused: npm and Node print EACCES or
+// EPERM, `claude update` says "Insufficient permissions", and `opencode upgrade`
+// only passes on npm's exit code, which is 243 (errno -13, EACCES).
+const PERMISSION_DENIED_PATTERN = /\bEACCES\b|\bEPERM\b|permission denied|insufficient permissions|exit code 243\b/i;
+const FAILURE_PATTERN = /\bfailed\b/i;
 const RELEASE_VERSION_PATTERN = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
 
 type CliUpdater = {
@@ -162,6 +167,20 @@ function getProviderLabel(provider: LLMProvider): string {
 }
 
 /**
+ * Turns what an updater drew for a terminal into plain lines. Spinners and
+ * progress bars redraw one line with `\r` or a cursor-to-column sequence
+ * (`opencode upgrade` sends `ESC[999D` for every frame), so only the last
+ * non-empty state of each line is kept before the escapes are stripped.
+ */
+function toPlainOutput(raw: string): string {
+  const lines = stripAnsiSequences(raw.replace(/\u001B\[\d*[DG]/g, '\r'))
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((line) => line.split('\r').filter((state) => state.trim()).pop() ?? '');
+  return lines.join('\n').trim().slice(-UPDATE_OUTPUT_LIMIT);
+}
+
+/**
  * Runs one updater to completion and keeps the tail of its combined output.
  * No shell is involved: the command is the configured CLI and the arguments
  * are fixed per provider. On POSIX the updater gets its own process group so
@@ -172,10 +191,12 @@ function runUpdater(command: string, args: string[], options: RunUpdaterOptions)
     let output = '';
     let timedOut = false;
     let settled = false;
-    let graceTimer: NodeJS.Timeout | undefined;
+    const timers: NodeJS.Timeout[] = [];
 
-    const appendOutput = (chunk: Buffer | string) => {
-      output = (output + stripAnsiSequences(String(chunk))).slice(-UPDATE_OUTPUT_LIMIT);
+    const later = (delayMs: number, callback: () => void) => {
+      const timer = setTimeout(callback, delayMs);
+      timer.unref?.();
+      timers.push(timer);
     };
 
     const finish = (result: Omit<UpdaterRun, 'output' | 'timedOut'>) => {
@@ -183,9 +204,8 @@ function runUpdater(command: string, args: string[], options: RunUpdaterOptions)
         return;
       }
       settled = true;
-      clearTimeout(timeoutTimer);
-      clearTimeout(graceTimer);
-      resolve({ ...result, output: output.trim(), timedOut });
+      timers.forEach((timer) => clearTimeout(timer));
+      resolve({ ...result, output: toPlainOutput(output), timedOut });
     };
 
     const child = spawn(command, args, {
@@ -207,18 +227,31 @@ function runUpdater(command: string, args: string[], options: RunUpdaterOptions)
       }
     };
 
-    const timeoutTimer = setTimeout(() => {
+    later(options.timeoutMs, () => {
       timedOut = true;
       signalUpdater('SIGTERM');
-      graceTimer = setTimeout(() => signalUpdater('SIGKILL'), options.killGraceMs);
-      graceTimer.unref?.();
-    }, options.timeoutMs);
-    timeoutTimer.unref?.();
+      later(options.killGraceMs, () => {
+        signalUpdater('SIGKILL');
+        // A process that left the group can keep the pipes open; stop waiting for it.
+        later(2000, () => finish({ exitCode: null, spawnErrorCode: null }));
+      });
+    });
 
-    child.stdout?.on('data', appendOutput);
-    child.stderr?.on('data', appendOutput);
+    // Decoded per stream, so a multi-byte character split across chunks survives.
+    for (const stream of [child.stdout, child.stderr]) {
+      stream?.setEncoding('utf8');
+      stream?.on('data', (chunk: string) => {
+        output = (output + chunk).slice(-UPDATE_RAW_OUTPUT_LIMIT);
+      });
+    }
     child.on('error', (error: NodeJS.ErrnoException) => {
       finish({ exitCode: null, spawnErrorCode: error.code ?? 'UNKNOWN' });
+    });
+    // 'close' waits for the pipes as well, so the last output is in. A
+    // background process the updater left running could hold them open
+    // forever, so its exit code is used after a short grace period.
+    child.on('exit', (code) => {
+      later(2000, () => finish({ exitCode: timedOut ? null : code, spawnErrorCode: null }));
     });
     child.on('close', (code) => {
       finish({ exitCode: timedOut ? null : code, spawnErrorCode: null });
@@ -227,9 +260,9 @@ function runUpdater(command: string, args: string[], options: RunUpdaterOptions)
 }
 
 /**
- * Classifies a finished update run. Exit codes alone are not enough: some
- * updaters print their refusal and still exit 0, so a run that left the
- * version unchanged is also checked for a permission error in its output.
+ * Classifies a finished update run. Exit codes alone are not enough:
+ * `opencode upgrade` prints "Upgrade failed" and still exits 0, so a run that
+ * left the version unchanged is also checked for a failure in its output.
  */
 function classifyUpdateFailure(
   run: UpdaterRun,
@@ -246,8 +279,13 @@ function classifyUpdateFailure(
   if (run.exitCode !== 0) {
     return permissionDenied ? 'permission_denied' : 'failed';
   }
-  if (permissionDenied && previousVersion === installedVersion) {
-    return 'permission_denied';
+  if (previousVersion === installedVersion) {
+    if (permissionDenied) {
+      return 'permission_denied';
+    }
+    if (FAILURE_PATTERN.test(run.output)) {
+      return 'failed';
+    }
   }
   return null;
 }

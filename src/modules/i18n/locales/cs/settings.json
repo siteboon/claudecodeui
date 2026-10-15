@@ -394,6 +394,7 @@
         "permissionDenied": "Uživatel serveru nemá oprávnění zapisovat tam, kde je tato CLI nainstalována. Spusťte na serveru {{command}} jako vlastník této instalace (například pomocí sudo).",
         "timedOut": "Aktualizace nedoběhla včas a byla zastavena. Dokončete ji spuštěním {{command}} na serveru.",
         "failed": "Aktualizace selhala (návratový kód {{exitCode}}). Výstup je níže.",
+        "failedQuietly": "Aktualizační program ohlásil chybu. Výstup je níže.",
         "notStarted": "Aktualizační program se nepodařilo spustit.",
         "busy": "Tento agent právě pracuje v relaci. Počkejte, až skončí, nebo ho zastavte a pak aktualizujte.",
         "requestFailed": "Aktualizace se nespustila: {{error}}"

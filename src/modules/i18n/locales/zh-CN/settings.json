@@ -404,6 +404,7 @@
         "permissionDenied": "服务器用户无权写入此 CLI 的安装位置。请以该安装的所有者身份在服务器上运行 {{command}}（例如使用 sudo）。",
         "timedOut": "更新未能按时完成，已被停止。请在服务器上运行 {{command}} 来完成更新。",
         "failed": "更新失败（退出代码 {{exitCode}}），输出见下方。",
+        "failedQuietly": "更新程序报告了失败，输出见下方。",
         "notStarted": "无法启动更新程序。",
         "busy": "此智能体正在某个会话中工作。请等待其完成或将其停止，然后再更新。",
         "requestFailed": "未执行更新：{{error}}"

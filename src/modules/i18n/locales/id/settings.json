@@ -421,6 +421,7 @@
         "permissionDenied": "Pengguna server tidak diizinkan menulis ke lokasi tempat CLI ini terpasang. Jalankan {{command}} di server sebagai pemilik instalasi tersebut (misalnya dengan sudo).",
         "timedOut": "Pembaruan tidak selesai tepat waktu dan dihentikan. Jalankan {{command}} di server untuk menyelesaikannya.",
         "failed": "Pembaruan gagal (kode keluar {{exitCode}}). Keluarannya ada di bawah.",
+        "failedQuietly": "Pembaru melaporkan kegagalan. Keluarannya ada di bawah.",
         "notStarted": "Pembaru tidak dapat dijalankan.",
         "busy": "Agen ini sedang bekerja dalam sebuah sesi. Tunggu hingga selesai atau hentikan, lalu perbarui.",
         "requestFailed": "Pembaruan tidak dijalankan: {{error}}"

@@ -376,6 +376,7 @@
         "permissionDenied": "伺服器使用者沒有權限寫入此 CLI 的安裝位置。請以該安裝的擁有者身分在伺服器上執行 {{command}}（例如使用 sudo）。",
         "timedOut": "更新未能及時完成，已被停止。請在伺服器上執行 {{command}} 以完成更新。",
         "failed": "更新失敗（結束代碼 {{exitCode}}），輸出請見下方。",
+        "failedQuietly": "更新程式回報了失敗，輸出請見下方。",
         "notStarted": "無法啟動更新程式。",
         "busy": "此代理正在某個工作階段中執行。請等待其完成或將其停止，然後再更新。",
         "requestFailed": "未執行更新：{{error}}"

@@ -421,6 +421,7 @@
         "permissionDenied": "The server's user is not allowed to write where this CLI is installed. Run {{command}} on the server as the owner of that install (for example with sudo).",
         "timedOut": "The update did not finish in time and was stopped. Run {{command}} on the server to finish it.",
         "failed": "The update failed (exit code {{exitCode}}). Its output is below.",
+        "failedQuietly": "The updater reported a failure. Its output is below.",
         "notStarted": "The updater could not be started.",
         "busy": "This agent is working in a session. Wait for it to finish or stop it, then update.",
         "requestFailed": "The update did not run: {{error}}"

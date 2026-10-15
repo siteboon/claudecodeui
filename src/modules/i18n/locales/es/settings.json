@@ -404,6 +404,7 @@
         "permissionDenied": "El usuario del servidor no tiene permiso para escribir donde está instalada esta CLI. Ejecuta {{command}} en el servidor como propietario de esa instalación (por ejemplo, con sudo).",
         "timedOut": "La actualización no terminó a tiempo y se detuvo. Ejecuta {{command}} en el servidor para completarla.",
         "failed": "La actualización falló (código de salida {{exitCode}}). Su salida está más abajo.",
+        "failedQuietly": "El actualizador informó de un error. Su salida está más abajo.",
         "notStarted": "No se pudo iniciar el actualizador.",
         "busy": "Este agente está trabajando en una sesión. Espera a que termine o detenlo y luego actualiza.",
         "requestFailed": "La actualización no se ejecutó: {{error}}"

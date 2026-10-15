@@ -376,6 +376,7 @@
         "permissionDenied": "Sunucunun kullanıcısının bu CLI'nin kurulu olduğu yere yazma izni yok. Sunucuda {{command}} komutunu bu kurulumun sahibi olarak çalıştır (örneğin sudo ile).",
         "timedOut": "Güncelleme zamanında bitmedi ve durduruldu. Tamamlamak için sunucuda {{command}} komutunu çalıştır.",
         "failed": "Güncelleme başarısız oldu (çıkış kodu {{exitCode}}). Çıktısı aşağıda.",
+        "failedQuietly": "Güncelleyici bir hata bildirdi. Çıktısı aşağıda.",
         "notStarted": "Güncelleyici başlatılamadı.",
         "busy": "Bu ajan bir oturumda çalışıyor. Bitmesini bekle ya da durdur, sonra güncelle.",
         "requestFailed": "Güncelleme çalıştırılmadı: {{error}}"

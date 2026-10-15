@@ -444,3 +444,44 @@ test('a second update request while one runs gets the same run instead of a seco
     assert.equal(await opencode.read('update-count'), '2');
   });
 });
+
+test('updateCli keeps only the final state of spinner and progress-bar lines', async () => {
+  await withIsolatedCliEnv(async (binDir) => {
+    const cursor = await createFakeCli(binDir, 'cursor-agent');
+    await cursor.set('version', '2026.07.20-8cc9c0b\n');
+    await cursor.set('update-new-version', '2026.10.14-941492e\n');
+    // `cursor-agent update` draws its download progress with carriage returns.
+    await cursor.set(
+      'update-stdout',
+      'Checking for updates...\nLatest version available: 2026.10.14-941492e\n\r####      6.0%\r########  56.2%\r########## 100.0%\nDone\n',
+    );
+
+    const result = await createService().updateCli('cursor');
+    assert.equal(result.output, 'Checking for updates...\nLatest version available: 2026.10.14-941492e\n########## 100.0%\nDone');
+    assert.equal(result.failure, null);
+    assert.equal(result.installedVersion, '2026.10.14-941492e');
+  });
+});
+
+test('updateCli flags a failure that the updater only prints, as `opencode upgrade` does', async () => {
+  await withIsolatedCliEnv(async (binDir) => {
+    const opencode = await createFakeCli(binDir, 'opencode');
+    await opencode.set('version', '1.19.0\n');
+    // Recorded from opencode 1.19.0 upgrading into a read-only npm prefix: npm
+    // exits 243 (EACCES), OpenCode prints only that code and itself exits 0.
+    const spinner = '\u001B[?25l│\n◒  Upgrading\u001B[999D\u001B[J◐  Upgrading.\u001B[999D\u001B[J■  Upgrade failed\n';
+    await opencode.set('update-stdout', `●  From 1.19.0 → 1.18.20\n${spinner}│\n■  Upgrade failed for npm (exit code 243).\n│\n└  Done\n`);
+
+    const denied = await createService().updateCli('opencode');
+    assert.equal(denied.exitCode, 0);
+    assert.equal(denied.failure, 'permission_denied');
+    assert.equal(denied.output, '●  From 1.19.0 → 1.18.20\n│\n■  Upgrade failed\n│\n■  Upgrade failed for npm (exit code 243).\n│\n└  Done');
+
+    await opencode.set('update-stdout', '■  Upgrade failed\n■  Upgrade failed for npm (exit code 1).\n');
+    assert.equal((await createService().updateCli('opencode')).failure, 'failed');
+
+    // The same words after a version change are not a failure of this run.
+    await opencode.set('update-new-version', '1.19.1\n');
+    assert.equal((await createService().updateCli('opencode')).failure, null);
+  });
+});

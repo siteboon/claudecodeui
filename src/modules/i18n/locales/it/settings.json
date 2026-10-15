@@ -375,6 +375,7 @@
         "permissionDenied": "L'utente del server non può scrivere dove è installata questa CLI. Esegui {{command}} sul server come proprietario di quell'installazione (ad esempio con sudo).",
         "timedOut": "L'aggiornamento non è terminato in tempo ed è stato interrotto. Esegui {{command}} sul server per completarlo.",
         "failed": "L'aggiornamento non è riuscito (codice di uscita {{exitCode}}). L'output è qui sotto.",
+        "failedQuietly": "L'aggiornamento ha segnalato un errore. L'output è qui sotto.",
         "notStarted": "Impossibile avviare l'aggiornamento.",
         "busy": "Questo agente sta lavorando in una sessione. Attendi che finisca o fermalo, poi aggiorna.",
         "requestFailed": "L'aggiornamento non è stato eseguito: {{error}}"

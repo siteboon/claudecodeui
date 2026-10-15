@@ -27,9 +27,12 @@ function UpdateResult({ result }: UpdateResultProps) {
   } else if (result.failure === 'timed_out') {
     message = t('agents.cli.result.timedOut', { command: result.command });
   } else if (result.failure === 'failed') {
+    // OpenCode's updater reports a failed upgrade and still exits 0.
     message = result.exitCode === null
       ? t('agents.cli.result.notStarted')
-      : t('agents.cli.result.failed', { exitCode: result.exitCode });
+      : result.exitCode === 0
+        ? t('agents.cli.result.failedQuietly')
+        : t('agents.cli.result.failed', { exitCode: result.exitCode });
   } else if (changed) {
     message = t('agents.cli.result.updated', { version: result.installedVersion });
   } else {

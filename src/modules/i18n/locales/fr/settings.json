@@ -378,6 +378,7 @@
         "permissionDenied": "L'utilisateur du serveur n'a pas le droit d'écrire là où cette CLI est installée. Exécutez {{command}} sur le serveur en tant que propriétaire de cette installation (par exemple avec sudo).",
         "timedOut": "La mise à jour ne s'est pas terminée à temps et a été arrêtée. Exécutez {{command}} sur le serveur pour la terminer.",
         "failed": "La mise à jour a échoué (code de sortie {{exitCode}}). Sa sortie figure ci-dessous.",
+        "failedQuietly": "Le programme de mise à jour a signalé un échec. Sa sortie figure ci-dessous.",
         "notStarted": "Le programme de mise à jour n'a pas pu être lancé.",
         "busy": "Cet agent travaille dans une session. Attendez qu'il ait terminé ou arrêtez-le, puis lancez la mise à jour.",
         "requestFailed": "La mise à jour n'a pas été lancée : {{error}}"
