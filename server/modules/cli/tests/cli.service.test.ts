@@ -140,6 +140,9 @@ test('update reports the version change and where the update log is', async () =
   assert.equal(harness.getPackageUpdates(), 1);
   assert.ok(harness.logMessages.some((line) => line.includes('Update complete (1.2.3 -> 1.2.4)')));
   assert.ok(harness.logMessages.some((line) => line.includes(
+    'If it does not start after the restart, go back with: npm install -g @cloudcli-ai/cloudcli@1.2.3',
+  )));
+  assert.ok(harness.logMessages.some((line) => line.includes(
     'Update log: /home/user/.cloudcli/logs/update-2026-10-15T10-00-00-000Z.log',
   )));
 });

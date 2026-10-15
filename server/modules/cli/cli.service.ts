@@ -288,6 +288,9 @@ export function createCliService(dependencies: CliServiceDependencies): CliAppli
 
     if (record.result === 'succeeded') {
       dependencies.output.log(`${terminalTextStyles.ok('[OK]')} Update complete (${record.previousVersion ?? 'unknown'} -> ${record.installedVersion ?? 'unknown'})! Restart cloudcli to use the new version.`);
+      if (record.rollbackCommand) {
+        dependencies.output.log(`${terminalTextStyles.tip('[TIP]')} If it does not start after the restart, go back with: ${record.rollbackCommand}`);
+      }
     } else if (record.result === 'verification-failed') {
       dependencies.output.error(`${terminalTextStyles.error('[ERROR]')} ${record.installedVersion ?? 'The new version'} was installed but cannot start: ${record.failureReason}`);
       if (record.rollbackCommand) {

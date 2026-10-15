@@ -95,7 +95,8 @@ function describeFailedPackageCheck(record: SystemUpdateRecord): string {
     parts.push(`This server keeps running ${record.runningVersion} until it restarts.`);
   }
   if (record.rollbackCommand) {
-    parts.push(`To go back, run: ${record.rollbackCommand}`);
+    // Quoted so the command ends visibly where the next sentence starts.
+    parts.push(`To go back, run "${record.rollbackCommand}".`);
   }
   if (record.logPath) {
     parts.push(`Full log: ${record.logPath}`);
@@ -129,9 +130,12 @@ export function createSystemUpdateService(dependencies: SystemUpdateDependencies
     const installMode = dependencies.isPlatform ? 'platform' as const : dependencies.installMode;
     const startedAt = dependencies.now();
     const previousVersion = dependencies.readInstalledVersion();
-    // The running server is the one version proven to start; `cloudcli update`
-    // falls back to the version that was installed when it began.
-    const knownGoodVersion = dependencies.runningVersion ?? previousVersion;
+    // Go back to a version proven to start: the running server's own, else (for
+    // `cloudcli update`) the last one this install started, else the one that
+    // was installed when the update began.
+    const lastStart = dependencies.runningVersion ? null : updateHistory.readHistory().lastStart;
+    const lastStartedVersion = lastStart?.appRoot === dependencies.appRoot ? lastStart.version : null;
+    const knownGoodVersion = dependencies.runningVersion ?? lastStartedVersion ?? previousVersion;
     const logPath = updateHistory.getUpdateLogPath(startedAt);
     const record: SystemUpdateRecord = {
       source: request.source,

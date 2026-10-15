@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import type { SystemUpdateRecord } from '@/shared/types.js';
+import type { SystemServerStartRecord, SystemUpdateRecord } from '@/shared/types.js';
 
 import { createSystemUpdateService } from '../system.service.js';
 
 type SystemUpdateDependencies = Parameters<typeof createSystemUpdateService>[0];
 
-function createUpdateHistory() {
+function createUpdateHistory(lastStart: SystemServerStartRecord | null = null) {
   const savedRecords: SystemUpdateRecord[] = [];
   const logs = new Map<string, string>();
   return {
@@ -23,9 +23,12 @@ function createUpdateHistory() {
       recordUpdate: (record: SystemUpdateRecord) => {
         savedRecords.push({ ...record });
       },
-      readHistory: () => {
-        throw new Error('the update workflow never reads history');
-      },
+      readHistory: () => ({
+        lastStart,
+        lastUpdate: null,
+        lastStartPath: '/home/cloudcli/.cloudcli/last-start.json',
+        lastUpdatePath: '/home/cloudcli/.cloudcli/last-update.json',
+      }),
     },
   };
 }
@@ -221,7 +224,7 @@ test('an npm install that cannot load fails the update and names the version to 
     result.error,
     '1.37.5 was installed but cannot start: better-sqlite3: Could not locate the bindings file.'
       + ' This server keeps running 1.37.4 until it restarts.'
-      + ' To go back, run: npm install -g @cloudcli-ai/cloudcli@1.37.4'
+      + ' To go back, run "npm install -g @cloudcli-ai/cloudcli@1.37.4".'
       + ' Full log: /home/cloudcli/.cloudcli/logs/update-1792058400000.log',
   );
 });
@@ -380,4 +383,42 @@ test('cloudcli update runs through the same recorded workflow with its own comma
   assert.equal(record.result, 'verification-failed');
   assert.equal(record.rollbackCommand, 'npm install -g @cloudcli-ai/cloudcli@1.37.4');
   assert.deepEqual(savedRecords.at(-1), record);
+});
+
+test('cloudcli update goes back to the last version this install started, not an unstarted one', async () => {
+  const lastStart: SystemServerStartRecord = {
+    version: '1.37.3',
+    appRoot: '/app/cloudcli',
+    installMode: 'npm',
+    nodeVersion: 'v24.21.0',
+    startedAt: '2026-10-14T10:00:00.000Z',
+  };
+  const startedElsewhere: SystemServerStartRecord = {
+    ...lastStart,
+    version: '1.36.0',
+    appRoot: '/home/cloudcli/src/claudecodeui',
+  };
+  const rollbackCommands: Array<string | null> = [];
+  for (const startRecord of [lastStart, startedElsewhere]) {
+    const service = createSystemUpdateService(createNpmUpgrade({
+      runningVersion: null,
+      updateHistory: createUpdateHistory(startRecord).history,
+      checkInstalledPackage: async () => ({ passed: false, reason: 'node-pty: invalid ELF header', details: '' }),
+    }));
+
+    const { record } = await service.runRecordedUpdate({
+      source: 'cli',
+      command: 'npm update -g @cloudcli-ai/cloudcli',
+      workingDirectory: '/home/cloudcli',
+      onOutput: () => undefined,
+      onErrorOutput: () => undefined,
+    });
+    rollbackCommands.push(record.rollbackCommand);
+  }
+
+  // A start recorded by another install (a dev checkout sharing the home folder) does not count.
+  assert.deepEqual(rollbackCommands, [
+    'npm install -g @cloudcli-ai/cloudcli@1.37.3',
+    'npm install -g @cloudcli-ai/cloudcli@1.37.4',
+  ]);
 });
