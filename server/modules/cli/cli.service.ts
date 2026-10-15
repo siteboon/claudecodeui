@@ -7,6 +7,8 @@ import type {
   CliOutput,
   CliPackageMetadata,
   SandboxCommandService,
+  SystemUpdateHistory,
+  SystemUpdateRecord,
 } from '@/shared/types.js';
 import { terminalTextStyles } from '@/shared/utils.js';
 
@@ -20,7 +22,9 @@ type CliServiceDependencies = {
   output: CliOutput;
   sandboxService: SandboxCommandService;
   getLatestPackageVersion(): Promise<string>;
-  updateGlobalPackage(): void;
+  /** Runs the npm update through the system module's recorded and checked workflow. */
+  updateGlobalPackage(): Promise<SystemUpdateRecord>;
+  readUpdateHistory(): Promise<SystemUpdateHistory>;
   startServer(): Promise<void>;
   startBrowserUseMcp(): Promise<void>;
 };
@@ -77,7 +81,71 @@ function isNewerVersion(candidateVersion: string, currentVersion: string): boole
   return false;
 }
 
-function showStatus(dependencies: CliServiceDependencies): void {
+function formatRecordedTime(timestamp: string | null): string {
+  const recordedAt = timestamp ? new Date(timestamp) : null;
+  return recordedAt && !Number.isNaN(recordedAt.getTime()) ? recordedAt.toLocaleString() : 'unknown time';
+}
+
+const UPDATE_RESULT_LABELS: Record<SystemUpdateRecord['result'], string> = {
+  running: terminalTextStyles.warn('did not finish'),
+  succeeded: terminalTextStyles.ok('succeeded'),
+  failed: terminalTextStyles.error('failed'),
+  'verification-failed': terminalTextStyles.error('installed, but cannot start'),
+};
+
+// Speaks for a server that is down: which version last bound its port, what
+// the last update changed, and the one command that goes back.
+function showUpdateHistory(dependencies: CliServiceDependencies, history: SystemUpdateHistory): void {
+  const { output } = dependencies;
+  const installedVersion = dependencies.packageMetadata.version;
+  const { lastStart, lastUpdate } = history;
+  const lastStartIsThisInstall = lastStart?.appRoot === dependencies.applicationRoot;
+  const installedVersionNeverStarted = Boolean(
+    lastStart?.version && lastStartIsThisInstall && lastStart.version !== installedVersion,
+  );
+
+  output.log(`\n${terminalTextStyles.info('[INFO]')} Starts and Updates:`);
+  if (lastStart) {
+    const otherInstallNote = lastStartIsThisInstall ? '' : terminalTextStyles.dim(` (from ${lastStart.appRoot})`);
+    output.log(`       Last started: ${terminalTextStyles.bright(lastStart.version ?? 'unknown version')} at ${formatRecordedTime(lastStart.startedAt)}${otherInstallNote}`);
+  } else {
+    output.log(`       Last started: ${terminalTextStyles.dim(`not recorded yet (${history.lastStartPath})`)}`);
+  }
+  if (installedVersionNeverStarted) {
+    output.log(`       ${terminalTextStyles.warn('[WARN]')} ${installedVersion} is installed but has not started yet (restart pending, or it fails to start)`);
+  }
+
+  if (lastUpdate) {
+    const versionChange = `${lastUpdate.previousVersion ?? 'unknown'} -> ${lastUpdate.installedVersion ?? 'unknown'}`;
+    output.log(`       Last update:  ${versionChange} from ${lastUpdate.source}, ${UPDATE_RESULT_LABELS[lastUpdate.result] ?? lastUpdate.result} (${formatRecordedTime(lastUpdate.finishedAt ?? lastUpdate.startedAt)})`);
+    if (lastUpdate.failureReason) {
+      output.log(`                     ${terminalTextStyles.dim(lastUpdate.failureReason)}`);
+    }
+    if (lastUpdate.logPath) {
+      output.log(`       Update log:   ${terminalTextStyles.dim(lastUpdate.logPath)}`);
+    }
+  } else {
+    output.log(`       Last update:  ${terminalTextStyles.dim(`not recorded yet (${history.lastUpdatePath})`)}`);
+  }
+
+  // Offer a way back only while the installed version has not started. The
+  // last version this install started is the safest target, and it also covers
+  // a plain `npm install -g` that left no update record; without a start
+  // record, fall back to the failed update's own command.
+  let rollbackCommand: string | null = null;
+  if (installedVersionNeverStarted) {
+    rollbackCommand = lastStart?.installMode === 'npm'
+      ? `npm install -g @cloudcli-ai/cloudcli@${lastStart.version}`
+      : null;
+  } else if (!lastStartIsThisInstall && lastUpdate && lastUpdate.result !== 'succeeded') {
+    rollbackCommand = lastUpdate.rollbackCommand;
+  }
+  if (rollbackCommand) {
+    output.log(`       Roll back:    ${terminalTextStyles.bright(rollbackCommand)}`);
+  }
+}
+
+async function showStatus(dependencies: CliServiceDependencies): Promise<void> {
   const { environment, fileSystem, output } = dependencies;
   const databasePath = environment.DATABASE_PATH || dependencies.defaultDatabasePath;
   const databaseExists = fileSystem.pathExists(databasePath);
@@ -87,6 +155,7 @@ function showStatus(dependencies: CliServiceDependencies): void {
   output.log(`\n${terminalTextStyles.bright('CloudCLI UI - Status')}\n`);
   output.log(terminalTextStyles.dim('═'.repeat(60)));
   output.log(`\n${terminalTextStyles.info('[INFO]')} Version: ${terminalTextStyles.bright(dependencies.packageMetadata.version)}`);
+  showUpdateHistory(dependencies, await dependencies.readUpdateHistory());
   output.log(`\n${terminalTextStyles.info('[INFO]')} Installation Directory:`);
   output.log(`       ${terminalTextStyles.dim(dependencies.applicationRoot)}`);
   output.log(`\n${terminalTextStyles.info('[INFO]')} Database Location:`);
@@ -197,23 +266,41 @@ export function createCliService(dependencies: CliServiceDependencies): CliAppli
     }
   };
 
-  const updatePackage = async (): Promise<void> => {
+  /** Returns false when the update failed or installed a version that cannot start. */
+  const updatePackage = async (): Promise<boolean> => {
     dependencies.output.log(`${terminalTextStyles.info('[INFO]')} Checking for updates...`);
     const hasUpdate = await checkForUpdates(true);
     if (!hasUpdate) {
       dependencies.output.log(`${terminalTextStyles.ok('[OK]')} Already on the latest version (${dependencies.packageMetadata.version})`);
-      return;
+      return true;
     }
 
+    let record: SystemUpdateRecord;
     try {
       dependencies.output.log(`${terminalTextStyles.info('[INFO]')} Updating ${dependencies.packageMetadata.version}...`);
-      dependencies.updateGlobalPackage();
-      dependencies.output.log(`${terminalTextStyles.ok('[OK]')} Update complete! Restart cloudcli to use the new version.`);
+      record = await dependencies.updateGlobalPackage();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       dependencies.output.error(`${terminalTextStyles.error('[ERROR]')} Update failed: ${message}`);
       dependencies.output.log(`${terminalTextStyles.tip('[TIP]')} Try running manually: npm update -g @cloudcli-ai/cloudcli`);
+      return false;
     }
+
+    if (record.result === 'succeeded') {
+      dependencies.output.log(`${terminalTextStyles.ok('[OK]')} Update complete (${record.previousVersion ?? 'unknown'} -> ${record.installedVersion ?? 'unknown'})! Restart cloudcli to use the new version.`);
+    } else if (record.result === 'verification-failed') {
+      dependencies.output.error(`${terminalTextStyles.error('[ERROR]')} ${record.installedVersion ?? 'The new version'} was installed but cannot start: ${record.failureReason}`);
+      if (record.rollbackCommand) {
+        dependencies.output.log(`${terminalTextStyles.tip('[TIP]')} Go back to the previous version with: ${record.rollbackCommand}`);
+      }
+    } else {
+      dependencies.output.error(`${terminalTextStyles.error('[ERROR]')} Update failed: ${record.failureReason ?? 'unknown error'}`);
+      dependencies.output.log(`${terminalTextStyles.tip('[TIP]')} Try running manually: npm update -g @cloudcli-ai/cloudcli`);
+    }
+    if (record.logPath) {
+      dependencies.output.log(`${terminalTextStyles.info('[INFO]')} Update log: ${record.logPath}`);
+    }
+    return record.result === 'succeeded';
   };
 
   return {
@@ -240,7 +327,7 @@ export function createCliService(dependencies: CliServiceDependencies): CliAppli
           return 0;
         case 'status':
         case 'info':
-          showStatus(dependencies);
+          await showStatus(dependencies);
           return 0;
         case 'help':
           showHelp(dependencies);
@@ -249,8 +336,7 @@ export function createCliService(dependencies: CliServiceDependencies): CliAppli
           dependencies.output.log(dependencies.packageMetadata.version);
           return 0;
         case 'update':
-          await updatePackage();
-          return 0;
+          return await updatePackage() ? 0 : 1;
         default:
           dependencies.output.error(`\n❌ Unknown command: ${parsedArguments.command}`);
           dependencies.output.log('   Run "cloudcli help" for usage information.\n');

@@ -1603,3 +1603,62 @@ export type CliApplication = {
 export type SandboxCommandService = {
   execute(argumentsList: string[]): Promise<number>;
 };
+
+// ---------------------------
+//----------------- SYSTEM UPDATE HISTORY CONTRACTS ------------
+/**
+ * Durable note of the last time a server process bound its port, written to
+ * `~/.cloudcli/last-start.json` by the system module and read by
+ * `cloudcli status`. A server that cannot start cannot answer over HTTP, so this
+ * file is what lets the CLI name the last version that actually ran.
+ */
+export type SystemServerStartRecord = {
+  version: string | null;
+  appRoot: string;
+  installMode: 'git' | 'npm';
+  nodeVersion: string;
+  startedAt: string;
+};
+
+/**
+ * Durable record of the latest update attempt, written to
+ * `~/.cloudcli/last-update.json` by the system module for both the web updater
+ * (`source: 'web'`) and `cloudcli update` (`source: 'cli'`).
+ *
+ * `result` stays `running` while the command runs, so an update whose process
+ * was killed midway still leaves a trace. `previousVersion` and
+ * `installedVersion` are read from the application's package.json before and
+ * after the command. `rollbackCommand` is only set for npm installs, where
+ * reinstalling the last known-good version is one command. `logPath` names the
+ * full invocation log, or is null when that file could not be written.
+ */
+export type SystemUpdateRecord = {
+  source: 'web' | 'cli';
+  installMode: 'git' | 'npm' | 'platform';
+  command: string;
+  workingDirectory: string;
+  appRoot: string;
+  nodeVersion: string;
+  runningVersion: string | null;
+  previousVersion: string | null;
+  installedVersion: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+  exitCode: number | null;
+  result: 'running' | 'succeeded' | 'failed' | 'verification-failed';
+  failureReason: string | null;
+  rollbackCommand: string | null;
+  logPath: string | null;
+};
+
+/**
+ * Update history read by `cloudcli status`: both records (null when not written
+ * yet or unreadable) plus the files they live in, so the status output can say
+ * where it looked.
+ */
+export type SystemUpdateHistory = {
+  lastStart: SystemServerStartRecord | null;
+  lastUpdate: SystemUpdateRecord | null;
+  lastStartPath: string;
+  lastUpdatePath: string;
+};
