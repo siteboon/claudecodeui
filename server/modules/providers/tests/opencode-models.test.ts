@@ -249,6 +249,87 @@ test('OpenCode uses discovered GitHub Copilot models and never falls back to for
   );
 });
 
+test('OpenCode caches the CLI model listing and refreshes it in the background', async () => {
+  await withOpenCodeHome(
+    (homeDir) => writeOpenCodeAuth(homeDir, { anthropic: { type: 'api', key: 'test' } }),
+    async () => {
+      let now = 0;
+      let listing = ['anthropic/claude-sonnet-5'];
+      const pendingReads: Array<() => void> = [];
+      let readCount = 0;
+      const adapter = new OpenCodeProviderModels(
+        () => {
+          readCount += 1;
+          const snapshot = listing;
+          return new Promise((resolve) => {
+            pendingReads.push(() => resolve(snapshot));
+          });
+        },
+        () => now,
+      );
+      const flushRead = async (): Promise<void> => {
+        pendingReads.shift()?.();
+        await new Promise((resolve) => setImmediate(resolve));
+      };
+
+      // Concurrent first loads share one CLI invocation.
+      const firstLoads = Promise.all([adapter.getSupportedModels(), adapter.getSupportedModels()]);
+      await new Promise((resolve) => setImmediate(resolve));
+      await flushRead();
+      const [first, second] = await firstLoads;
+      assert.equal(readCount, 1);
+      assert.deepEqual(first.OPTIONS.map((option) => option.value), ['anthropic/claude-sonnet-5']);
+      assert.deepEqual(second, first);
+
+      // Fresh cache: no new process.
+      await adapter.getSupportedModels();
+      assert.equal(readCount, 1);
+
+      // Stale cache answers immediately and refreshes behind the response.
+      now = 5 * 60_000;
+      listing = ['anthropic/claude-opus-5'];
+      const stale = await adapter.getSupportedModels();
+      assert.deepEqual(stale.OPTIONS.map((option) => option.value), ['anthropic/claude-sonnet-5']);
+      assert.equal(readCount, 2);
+      await flushRead();
+      const refreshed = await adapter.getSupportedModels();
+      assert.deepEqual(refreshed.OPTIONS.map((option) => option.value), ['anthropic/claude-opus-5']);
+      assert.equal(readCount, 2);
+    },
+  );
+});
+
+test('OpenCode retries a failed CLI listing sooner than a successful one', async () => {
+  await withOpenCodeHome(
+    (homeDir) => writeOpenCodeAuth(homeDir, { anthropic: { type: 'api', key: 'test' } }),
+    async () => {
+      let now = 0;
+      let readCount = 0;
+      const adapter = new OpenCodeProviderModels(
+        async () => {
+          readCount += 1;
+          if (readCount === 1) {
+            throw new Error('OpenCode unavailable');
+          }
+          return ['anthropic/claude-sonnet-5'];
+        },
+        () => now,
+      );
+
+      // Failure falls back to the connected-provider slice of the static catalog.
+      const fallback = await adapter.getSupportedModels();
+      assert.ok(fallback.OPTIONS.every((option) => option.value.startsWith('anthropic/')));
+
+      now = 30_000;
+      await adapter.getSupportedModels();
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(readCount, 2);
+      const recovered = await adapter.getSupportedModels();
+      assert.deepEqual(recovered.OPTIONS.map((option) => option.value), ['anthropic/claude-sonnet-5']);
+    },
+  );
+});
+
 const writeOpenCodeSessionDatabase = async (homeDir: string, rows: Array<Record<string, unknown>>) => {
   const dbPath = path.join(homeDir, '.local', 'share', 'opencode', 'opencode.db');
   await mkdir(path.dirname(dbPath), { recursive: true });

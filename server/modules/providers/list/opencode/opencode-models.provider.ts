@@ -305,6 +305,13 @@ const OPENCODE_ENV_PROVIDER_IDS: Record<string, string> = {
 };
 
 const OPENCODE_MODELS_TIMEOUT_MS = 5_000;
+/** How long a successful `opencode models` listing is served before it is refreshed. */
+const OPENCODE_MODELS_CACHE_TTL_MS = 5 * 60_000;
+/**
+ * Empty listings (CLI missing, timed out on a cold start, or logged out) are
+ * retried sooner so a transient failure does not pin the static fallback.
+ */
+const OPENCODE_MODELS_EMPTY_CACHE_TTL_MS = 30_000;
 const OPENCODE_MODEL_REFERENCE_PATTERN = /^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._/:+-]*$/i;
 
 /**
@@ -503,17 +510,57 @@ const parseOpenCodeSessionModelValue = (rawModel: unknown): string | null => {
 
 /** Provider registry model adapter for OpenCode predefined models and session metadata. */
 export class OpenCodeProviderModels implements IProviderModels {
+  /** Last `opencode models` listing and when it stops being fresh. */
+  private cachedModelReferences: { references: string[]; expiresAt: number } | null = null;
+
+  /** In-flight CLI read, shared so concurrent picker loads spawn one process. */
+  private pendingModelReferences: Promise<string[]> | null = null;
+
   /** Used by the provider registry and focused adapter tests to read local OpenCode models. */
-  constructor(private readonly readModels = readInstalledOpenCodeModels) {}
+  constructor(
+    private readonly readModels = readInstalledOpenCodeModels,
+    private readonly now: () => number = Date.now,
+  ) {}
+
+  private refreshModelReferences(): Promise<string[]> {
+    this.pendingModelReferences ??= this.readModels()
+      // The picker remains available when a local CLI invocation fails.
+      .catch(() => [] as string[])
+      .then((references) => {
+        const ttl = references.length > 0
+          ? OPENCODE_MODELS_CACHE_TTL_MS
+          : OPENCODE_MODELS_EMPTY_CACHE_TTL_MS;
+        this.cachedModelReferences = { references, expiresAt: this.now() + ttl };
+        return references;
+      })
+      .finally(() => {
+        this.pendingModelReferences = null;
+      });
+    return this.pendingModelReferences;
+  }
+
+  /**
+   * Serves the cached CLI listing, refreshing it in the background once stale.
+   *
+   * Spawning `opencode models` takes seconds and every picker load asks for
+   * the catalog, so only the first read after startup waits on the CLI.
+   */
+  private async readModelReferences(): Promise<string[]> {
+    if (!this.cachedModelReferences) {
+      return this.refreshModelReferences();
+    }
+    if (this.now() >= this.cachedModelReferences.expiresAt) {
+      void this.refreshModelReferences();
+    }
+    return this.cachedModelReferences.references;
+  }
 
   async getSupportedModels(): Promise<ProviderModelsDefinition> {
-    const connectedProviderIds = await readConnectedOpenCodeProviderIds();
-    let discovered: ProviderModelsDefinition | null = null;
-    try {
-      discovered = createDiscoveredOpenCodeModels(await this.readModels(), connectedProviderIds);
-    } catch {
-      // The picker remains available when a local CLI invocation fails.
-    }
+    const [connectedProviderIds, modelReferences] = await Promise.all([
+      readConnectedOpenCodeProviderIds(),
+      this.readModelReferences(),
+    ]);
+    const discovered = createDiscoveredOpenCodeModels(modelReferences, connectedProviderIds);
     if (discovered) {
       return discovered;
     }
