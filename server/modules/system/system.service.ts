@@ -105,10 +105,12 @@ function describeFailedPackageCheck(record: SystemUpdateRecord): string {
 }
 
 /**
- * Creates the update workflow used by the system module and its focused tests.
- * Runtime-specific process spawning stays behind the injected command adapter.
+ * System module: creates the recorded update workflow shared by the web
+ * updater below and `cloudcli update`. Each run leaves a durable trace: the
+ * versions before and after, a check that an npm install can still load, a
+ * full log, and the last-update record that `cloudcli status` reads.
  */
-export function createSystemUpdateService(dependencies: SystemUpdateDependencies) {
+export function createRecordedUpdateRunner(dependencies: SystemUpdateDependencies) {
   const { updateHistory } = dependencies;
 
   // Records are best effort: a full disk or a read-only home folder must never
@@ -121,12 +123,7 @@ export function createSystemUpdateService(dependencies: SystemUpdateDependencies
     }
   };
 
-  /**
-   * Runs one update command and leaves a durable trace of it: the versions
-   * before and after, a check that an npm install can still load, a full log,
-   * and the last-update record that `cloudcli status` reads.
-   */
-  const runRecordedUpdate = async (request: RecordedUpdateRequest) => {
+  return async (request: RecordedUpdateRequest) => {
     const installMode = dependencies.isPlatform ? 'platform' as const : dependencies.installMode;
     const startedAt = dependencies.now();
     const previousVersion = dependencies.readInstalledVersion();
@@ -215,6 +212,14 @@ export function createSystemUpdateService(dependencies: SystemUpdateDependencies
 
     return { record, commandResult, processError };
   };
+}
+
+/**
+ * Creates the update workflow used by the system module and its focused tests.
+ * Runtime-specific process spawning stays behind the injected command adapter.
+ */
+export function createSystemUpdateService(dependencies: SystemUpdateDependencies) {
+  const runRecordedUpdate = createRecordedUpdateRunner(dependencies);
 
   return {
     /** Selects and executes the correct update workflow for this installation. */
@@ -288,7 +293,5 @@ export function createSystemUpdateService(dependencies: SystemUpdateDependencies
         ...updateDetails,
       };
     },
-
-    runRecordedUpdate,
   };
 }

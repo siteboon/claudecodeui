@@ -9,7 +9,7 @@ import type { Router } from 'express';
 import { createSystemRouter } from './system.routes.js';
 import { checkInstalledPackage, readInstalledPackageVersion } from './system-installed-package.service.js';
 import { createSystemUpdateHistoryService } from './system-update-history.service.js';
-import { createSystemUpdateService } from './system.service.js';
+import { createRecordedUpdateRunner, createSystemUpdateService } from './system.service.js';
 
 type SystemModuleOptions = {
   appRoot: string;
@@ -162,7 +162,7 @@ export function recordServerStart(details: {
  */
 export function createCliUpdateWorkflow(appRoot: string) {
   const updateHistory = createUpdateHistory();
-  const updateService = createSystemUpdateService({
+  const runRecordedUpdate = createRecordedUpdateRunner({
     appRoot,
     homeDirectory: os.homedir(),
     installMode: fs.existsSync(path.join(appRoot, '.git')) ? 'git' : 'npm',
@@ -177,7 +177,7 @@ export function createCliUpdateWorkflow(appRoot: string) {
 
   return {
     async runUpdate(command: string) {
-      const { record } = await updateService.runRecordedUpdate({
+      const { record } = await runRecordedUpdate({
         source: 'cli',
         command,
         workingDirectory: os.homedir(),

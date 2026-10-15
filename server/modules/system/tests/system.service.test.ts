@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import type { SystemServerStartRecord, SystemUpdateRecord } from '@/shared/types.js';
 
-import { createSystemUpdateService } from '../system.service.js';
+import { createRecordedUpdateRunner, createSystemUpdateService } from '../system.service.js';
 
 type SystemUpdateDependencies = Parameters<typeof createSystemUpdateService>[0];
 
@@ -360,7 +360,7 @@ test('cloudcli update runs through the same recorded workflow with its own comma
   const calls: unknown[][] = [];
   const outputChunks: string[] = [];
   const { history, savedRecords } = createUpdateHistory();
-  const service = createSystemUpdateService(createNpmUpgrade({
+  const runRecordedUpdate = createRecordedUpdateRunner(createNpmUpgrade({
     runningVersion: null,
     updateHistory: history,
     runShellCommand: async (command, workingDirectory, _environment, onOutput) => {
@@ -371,7 +371,7 @@ test('cloudcli update runs through the same recorded workflow with its own comma
     checkInstalledPackage: async () => ({ passed: false, reason: 'node-pty: invalid ELF header', details: '' }),
   }));
 
-  const { record } = await service.runRecordedUpdate({
+  const { record } = await runRecordedUpdate({
     source: 'cli',
     command: 'npm update -g @cloudcli-ai/cloudcli',
     workingDirectory: '/home/cloudcli',
@@ -402,13 +402,13 @@ test('cloudcli update goes back to the last version this install started, not an
   };
   const rollbackCommands: Array<string | null> = [];
   for (const startRecord of [lastStart, startedElsewhere]) {
-    const service = createSystemUpdateService(createNpmUpgrade({
+    const runRecordedUpdate = createRecordedUpdateRunner(createNpmUpgrade({
       runningVersion: null,
       updateHistory: createUpdateHistory(startRecord).history,
       checkInstalledPackage: async () => ({ passed: false, reason: 'node-pty: invalid ELF header', details: '' }),
     }));
 
-    const { record } = await service.runRecordedUpdate({
+    const { record } = await runRecordedUpdate({
       source: 'cli',
       command: 'npm update -g @cloudcli-ai/cloudcli',
       workingDirectory: '/home/cloudcli',
