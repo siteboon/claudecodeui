@@ -131,3 +131,19 @@ test('a poll that changes what it says about a listed task is not dropped as a r
   assert.equal(listed?.nested, true);
   assert.equal(listed?.description, 'Audit the whole frontend');
 });
+
+test('a polled entry that carries tasks but no background flag is a response in flight', () => {
+  // The server lists a held session this way while its process is mid-turn.
+  // The composer must queue behind it, not offer to send over it.
+  const { result } = renderHook(() => useSessionProtection());
+  const listed = task({ startedAt: Date.now() - 120_000 });
+
+  act(() => {
+    result.current.syncProcessingSessions([
+      { sessionId: 'session-1', startedAt: listed.startedAt, canInterrupt: false, statusText: 'Running in the Claude CLI', tasks: [listed] },
+    ]);
+  });
+  assert.equal(result.current.isSessionProcessing('session-1'), true);
+  assert.equal(result.current.getSessionActivity('session-1')?.background, undefined);
+  assert.deepEqual(result.current.getSessionActivity('session-1')?.tasks, [listed]);
+});
