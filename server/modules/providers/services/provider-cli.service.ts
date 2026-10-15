@@ -68,18 +68,6 @@ const CLI_UPDATERS: Partial<Record<LLMProvider, CliUpdater>> = {
 /** Why the settings page offers no update: the CLI ships with CloudCLI, or the hosting platform manages the CLIs. */
 type CliUpdateUnavailableReason = 'bundled' | 'platform';
 
-type ProviderCliStatus = {
-  provider: LLMProvider;
-  installed: boolean;
-  installedVersion: string | null;
-  /** The registry's `latest` release, or null when the CLI is not on npm or the lookup failed. */
-  latestVersion: string | null;
-  updateAvailable: boolean;
-  /** What the update action runs, e.g. `claude update`; null when it is unavailable. */
-  updateCommand: string | null;
-  updateUnavailableReason: CliUpdateUnavailableReason | null;
-};
-
 /** Why an update run went wrong, as read from its exit code and output. */
 type CliUpdateFailure = 'permission_denied' | 'timed_out' | 'failed';
 
@@ -93,6 +81,27 @@ type ProviderCliUpdateResult = {
   installedVersion: string | null;
   /** null when neither the exit code nor the output reports a failure. */
   failure: CliUpdateFailure | null;
+};
+
+type ProviderCliStatus = {
+  provider: LLMProvider;
+  installed: boolean;
+  installedVersion: string | null;
+  /** The registry's `latest` release, or null when the CLI is not on npm or the lookup failed. */
+  latestVersion: string | null;
+  updateAvailable: boolean;
+  /** What the update action runs, e.g. `claude update`; null when it is unavailable. */
+  updateCommand: string | null;
+  updateUnavailableReason: CliUpdateUnavailableReason | null;
+  /**
+   * Whether an update run is going on right now. An update outlives the page
+   * that started it (another agent tab, a closed Settings dialog, a proxy that
+   * gave up on the long request), so a page that sees this polls until it
+   * turns false and then shows `lastUpdate`.
+   */
+  updateInProgress: boolean;
+  /** The most recent finished update run since the server started, or null. */
+  lastUpdate: ProviderCliUpdateResult | null;
 };
 
 type UpdaterRun = {
@@ -114,6 +123,7 @@ type ProviderCliServiceDependencies = {
   fetch: typeof fetch;
   platformMode: boolean;
   now(): number;
+  latestVersionTimeoutMs: number;
   updateTimeoutMs: number;
   updateKillGraceMs: number;
 };
@@ -124,6 +134,7 @@ const defaultDependencies: ProviderCliServiceDependencies = {
   fetch: (input, init) => fetch(input, init),
   platformMode: IS_PLATFORM,
   now: () => Date.now(),
+  latestVersionTimeoutMs: LATEST_VERSION_TIMEOUT_MS,
   updateTimeoutMs: UPDATE_TIMEOUT_MS,
   updateKillGraceMs: UPDATE_KILL_GRACE_MS,
 };
@@ -302,11 +313,12 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
   const latestVersionCache = new Map<string, { version: string | null; expiresAt: number }>();
   const latestVersionLookups = new Map<string, Promise<string | null>>();
   const updatesInProgress = new Map<LLMProvider, Promise<ProviderCliUpdateResult>>();
+  const lastUpdateResults = new Map<LLMProvider, ProviderCliUpdateResult>();
 
   const fetchLatestVersion = async (npmPackage: string): Promise<string | null> => {
     const response = await dependencies.fetch(`${NPM_REGISTRY_URL}/${npmPackage.replace('/', '%2F')}/latest`, {
       headers: { accept: 'application/json' },
-      signal: AbortSignal.timeout(LATEST_VERSION_TIMEOUT_MS),
+      signal: AbortSignal.timeout(dependencies.latestVersionTimeoutMs),
     });
     if (!response.ok) {
       return null;
@@ -385,7 +397,10 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
   };
 
   return {
-    /** Installed version, newest npm release and whether this server can update the CLI. */
+    /**
+     * Installed version, newest npm release, whether this server can update
+     * the CLI, and whether an update of it is running.
+     */
     async getCliStatus(providerName: LLMProvider): Promise<ProviderCliStatus> {
       const provider = dependencies.resolveProvider(providerName);
       const { installed, version: installedVersion } = provider.auth.checkInstalled();
@@ -394,9 +409,10 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
         ? 'platform'
         : update ? null : 'bundled';
 
-      // The registry is only worth asking when the answer can lead to an update.
+      // The registry is only worth asking when the answer can lead to an update
+      // of a CLI that is there.
       const npmPackage = CLI_UPDATERS[provider.id]?.npmPackage;
-      const latestVersion = updateUnavailableReason === null && npmPackage
+      const latestVersion = installed && updateUnavailableReason === null && npmPackage
         ? await getLatestVersion(npmPackage)
         : null;
 
@@ -408,6 +424,8 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
         updateAvailable: Boolean(installedVersion && latestVersion && isNewerVersion(latestVersion, installedVersion)),
         updateCommand: update && updateUnavailableReason === null ? formatCommand(update.command, update.args) : null,
         updateUnavailableReason,
+        updateInProgress: updatesInProgress.has(provider.id),
+        lastUpdate: lastUpdateResults.get(provider.id) ?? null,
       };
     },
 
@@ -435,7 +453,14 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
 
       let inProgress = updatesInProgress.get(provider.id);
       if (!inProgress) {
-        inProgress = runUpdate(provider, update).finally(() => updatesInProgress.delete(provider.id));
+        // The result is stored before the run leaves updatesInProgress, so a
+        // status request never sees the run over without its result.
+        inProgress = runUpdate(provider, update)
+          .then((result) => {
+            lastUpdateResults.set(provider.id, result);
+            return result;
+          })
+          .finally(() => updatesInProgress.delete(provider.id));
         updatesInProgress.set(provider.id, inProgress);
       }
       return inProgress;

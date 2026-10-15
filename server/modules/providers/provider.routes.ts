@@ -618,7 +618,7 @@ router.get(
   }),
 );
 
-/** The installed CLI version, the newest npm release and whether this server can update the CLI. */
+/** The installed CLI version, the newest npm release, whether this server can update the CLI and whether it is doing so. */
 router.get(
   '/:provider/cli',
   asyncHandler(async (req: Request, res: Response) => {

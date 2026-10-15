@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -392,12 +392,30 @@ test('the CLI update route refuses while that provider is busy in a session', {
     runtime: { listBackgroundWork: () => [{ sessionId: 'held-session', tasks: [] }] },
   } as unknown as IProvider];
 
+  // The route runs the real service, so the CLI it would update is a stub that
+  // only logs its calls: if the busy guard ever broke, this test must not run
+  // `claude update` on the developer's own install.
+  const cliDirectory = await mkdtemp(path.join(os.tmpdir(), 'provider-routes-cli-'));
+  const callLog = path.join(cliDirectory, 'calls.log');
+  const stubPath = path.join(cliDirectory, process.platform === 'win32' ? 'claude.cmd' : 'claude');
+  await writeFile(callLog, '');
+  await writeFile(
+    stubPath,
+    process.platform === 'win32'
+      ? `@echo off\r\necho %* >> "${callLog}"\r\necho 2.1.200 (Claude Code)\r\n`
+      : `#!/bin/sh\necho "$*" >> "${callLog}"\necho "2.1.200 (Claude Code)"\n`,
+  );
+  await chmod(stubPath, 0o755);
+  const previousCliPath = process.env.CLAUDE_CLI_PATH;
+  process.env.CLAUDE_CLI_PATH = stubPath;
+
   try {
     await withProviderServer(async (baseUrl) => {
       const busy = await fetch(`${baseUrl}/api/providers/claude/cli/update`, { method: 'POST' });
       const busyPayload = await busy.json() as { error: { code: string } };
       assert.equal(busy.status, 409);
       assert.equal(busyPayload.error.code, 'PROVIDER_CLI_BUSY');
+      assert.equal(await readFile(callLog, 'utf8'), '', 'a refused update never runs the CLI');
 
       // Codex ships with CloudCLI: nothing to update, and the status says why.
       const codex = await fetch(`${baseUrl}/api/providers/codex/cli/update`, { method: 'POST' });
@@ -410,6 +428,12 @@ test('the CLI update route refuses while that provider is busy in a session', {
     });
   } finally {
     providerRegistry.listProviders = realListProviders;
+    if (previousCliPath === undefined) {
+      delete process.env.CLAUDE_CLI_PATH;
+    } else {
+      process.env.CLAUDE_CLI_PATH = previousCliPath;
+    }
+    await rm(cliDirectory, { recursive: true, force: true });
   }
 });
 

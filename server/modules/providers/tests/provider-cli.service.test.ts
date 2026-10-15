@@ -4,7 +4,10 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
+import test, { afterEach, mock } from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
+
+import spawn from 'cross-spawn';
 
 import { ClaudeProviderAuth } from '@/modules/providers/list/claude/claude-auth.provider.js';
 import { CodexProviderAuth } from '@/modules/providers/list/codex/codex-auth.provider.js';
@@ -26,6 +29,11 @@ const pathExtKey = findEnvKey('PATHEXT');
 //   update-stdout/-stderr, update-exit, update-sleep-ms shape the update run
 //   update-count       incremented on every update run
 //   update-finished    written when an update ran to the end (a killed one never does)
+//   ignore-sigterm     the update run survives SIGTERM, so only SIGKILL stops it
+//   child-sleep-ms     the update run starts a child (its pid in child-pid) that
+//                      writes child-finished after this long; with child-holds-output
+//                      the child keeps the update run's stdout and stderr open
+//   lock-after-version `--version` drops the execute bit after answering
 const FAKE_CLI_SCRIPT = `
 const fs = require('node:fs');
 const path = require('node:path');
@@ -34,10 +42,25 @@ const read = (name, fallback) => (fs.existsSync(path.join(dir, name)) ? fs.readF
 const command = process.argv[2];
 if (command === '--version') {
   process.stdout.write(read('version', ''));
+  if (read('lock-after-version', '')) {
+    fs.chmodSync(path.join(dir, '..', path.basename(__filename, '.cjs')), 0o644);
+  }
   process.exit(Number(read('version-exit', '0')));
 }
 if (command === 'update' || command === 'upgrade') {
   fs.writeFileSync(path.join(dir, 'update-count'), String(Number(read('update-count', '0')) + 1));
+  if (read('ignore-sigterm', '')) {
+    process.on('SIGTERM', () => {});
+  }
+  const childSleepMs = read('child-sleep-ms', '');
+  if (childSleepMs) {
+    const child = require('node:child_process').spawn(
+      process.execPath,
+      ['-e', 'setTimeout(() => require("node:fs").writeFileSync(process.argv[1], ""), Number(process.argv[2]))', path.join(dir, 'child-finished'), childSleepMs],
+      { stdio: read('child-holds-output', '') ? ['ignore', 'inherit', 'inherit'] : 'ignore' },
+    );
+    fs.writeFileSync(path.join(dir, 'child-pid'), String(child.pid));
+  }
   process.stdout.write(read('update-stdout', ''));
   process.stderr.write(read('update-stderr', ''));
   setTimeout(() => {
@@ -131,14 +154,36 @@ function createFakeRegistry(answer: () => Promise<Response>) {
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
+// The default registry of createService: a test that does not pass its own
+// expects no lookup. The service swallows registry errors, so a throwing fetch
+// would go unnoticed; the calls are recorded and checked after every test.
+const unexpectedRegistryCalls: string[] = [];
+afterEach(() => {
+  assert.deepEqual(unexpectedRegistryCalls.splice(0), [], 'the registry must not be contacted in this test');
+});
+
 const createService = (overrides: Parameters<typeof createProviderCliService>[0] = {}) => createProviderCliService({
   listBusyProviders: async () => [],
   platformMode: false,
-  fetch: (async () => {
+  fetch: (async (input: string | URL | Request) => {
+    unexpectedRegistryCalls.push(String(input));
     throw new Error('the registry must not be contacted in this test');
   }) as typeof fetch,
   ...overrides,
 });
+
+/** Rejects when `promise` has not settled within `ms`, instead of letting the test hang. */
+async function withDeadline<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  try {
+    return await Promise.race([promise, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 const rejectsWithAppError = async (promise: Promise<unknown>, code: string, statusCode: number) => {
   await assert.rejects(promise, (error: unknown) => {
@@ -210,6 +255,31 @@ test('a --version that exits non-zero or prints no version leaves the version un
   });
 });
 
+test('a --version that timed out still counts as installed, with an unknown version', async () => {
+  await withIsolatedCliEnv(async () => {
+    // What cross-spawn returns when the 5 s probe is killed: the CLI started and was slow.
+    const timedOut = Object.assign(new Error('spawnSync claude ETIMEDOUT'), { code: 'ETIMEDOUT' });
+    const versionProbe = mock.method(spawn, 'sync', () => ({
+      pid: 1,
+      output: [],
+      stdout: '',
+      stderr: '',
+      status: null,
+      signal: 'SIGTERM' as const,
+      error: timedOut,
+    }));
+    try {
+      assert.deepEqual(new ClaudeProviderAuth().checkInstalled(), { installed: true, exitCode: null, version: null });
+      assert.deepEqual(new CursorProviderAuth().checkInstalled(), { installed: true, exitCode: null, version: null });
+      // OpenCode needs a clean exit, as before.
+      assert.equal(new OpenCodeProviderAuth().checkInstalled().installed, false);
+      assert.equal(versionProbe.mock.callCount(), 3);
+    } finally {
+      versionProbe.mock.restore();
+    }
+  });
+});
+
 // ----------------- latest version from the npm registry ------------
 
 test('getCliStatus compares with the npm latest release and caches it for an hour', async () => {
@@ -229,6 +299,8 @@ test('getCliStatus compares with the npm latest release and caches it for an hou
       updateAvailable: true,
       updateCommand: `${process.env.CLAUDE_CLI_PATH} update`,
       updateUnavailableReason: null,
+      updateInProgress: false,
+      lastUpdate: null,
     });
     assert.deepEqual(registry.calls.map((call) => call.url), ['https://registry.npmjs.org/@anthropic-ai%2Fclaude-code/latest']);
 
@@ -297,6 +369,54 @@ test('concurrent getCliStatus calls share one registry request', async () => {
   });
 });
 
+test('getCliStatus gives up on a registry that never answers', async () => {
+  await withIsolatedCliEnv(async (binDir) => {
+    const opencode = await createFakeCli(binDir, 'opencode');
+    await opencode.set('version', '1.18.20\n');
+    const signals: unknown[] = [];
+    // Settles only when the lookup's own signal aborts it, like a proxy that accepts and never replies.
+    const silentRegistry = ((_input: string | URL | Request, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      signals.push(init?.signal);
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+    })) as typeof fetch;
+    const service = createService({ fetch: silentRegistry, latestVersionTimeoutMs: 50 });
+
+    const status = await withDeadline(service.getCliStatus('opencode'), 3000, 'the status waited on the registry');
+    assert.equal(status.installedVersion, '1.18.20');
+    assert.equal(status.latestVersion, null);
+    assert.equal(signals.length, 1);
+    assert.ok(signals[0] instanceof AbortSignal);
+  });
+});
+
+test('a release outranks its own prerelease, and a prerelease never outranks its release', async () => {
+  await withIsolatedCliEnv(async (binDir) => {
+    const claude = await createFakeCli(binDir, 'claude');
+    let latest = '2.1.300';
+    const registry = createFakeRegistry(async () => jsonResponse({ version: latest }));
+
+    await claude.set('version', '2.1.300-beta.1 (Claude Code)\n');
+    const onPrerelease = await createService({ fetch: registry.fetch }).getCliStatus('claude');
+    assert.equal(onPrerelease.installedVersion, '2.1.300-beta.1');
+    assert.equal(onPrerelease.updateAvailable, true);
+
+    await claude.set('version', '2.1.300 (Claude Code)\n');
+    latest = '2.1.300-beta.1';
+    assert.equal((await createService({ fetch: registry.fetch }).getCliStatus('claude')).updateAvailable, false);
+    assert.equal(registry.calls.length, 2);
+  });
+});
+
+test('getCliStatus does not ask the registry about a CLI that is not installed', async () => {
+  await withIsolatedCliEnv(async () => {
+    const registry = createFakeRegistry(async () => jsonResponse({ version: '2.1.300' }));
+    const status = await createService({ fetch: registry.fetch }).getCliStatus('claude');
+    assert.equal(status.installed, false);
+    assert.equal(status.latestVersion, null);
+    assert.equal(registry.calls.length, 0);
+  });
+});
+
 test('Cursor has no npm release to compare with; Codex ships with CloudCLI; platform mode offers no update', async () => {
   await withIsolatedCliEnv(async (binDir) => {
     const cursor = await createFakeCli(binDir, 'cursor-agent');
@@ -321,6 +441,15 @@ test('Cursor has no npm release to compare with; Codex ships with CloudCLI; plat
     assert.equal(platformStatus.updateUnavailableReason, 'platform');
     await rejectsWithAppError(platformService.updateCli('cursor'), 'PROVIDER_CLI_UPDATE_UNAVAILABLE', 403);
     assert.equal(await cursor.read('update-count'), null);
+
+    // A CLI that is on npm is not looked up either: the platform, not this server, updates it.
+    // (createService's default registry fails the test when it is asked.)
+    const claude = await createFakeCli(binDir, 'claude');
+    await claude.set('version', '2.1.200 (Claude Code)\n');
+    const platformClaude = await platformService.getCliStatus('claude');
+    assert.equal(platformClaude.installedVersion, '2.1.200');
+    assert.equal(platformClaude.latestVersion, null);
+    assert.equal(platformClaude.updateAvailable, false);
   });
 });
 
@@ -359,10 +488,15 @@ test('updateCli refuses while the provider is busy in a session and does not sta
     const claude = await createFakeCli(binDir, 'claude');
     await claude.set('version', '2.1.200 (Claude Code)\n');
     const busy: LLMProvider[] = ['claude'];
-    const service = createService({ listBusyProviders: async () => busy });
+    const registry = createFakeRegistry(async () => jsonResponse({ version: '2.1.300' }));
+    const service = createService({ listBusyProviders: async () => busy, fetch: registry.fetch });
 
     await rejectsWithAppError(service.updateCli('claude'), 'PROVIDER_CLI_BUSY', 409);
     assert.equal(await claude.read('update-count'), null);
+    // A refused request is no run: nothing is reported as running or finished.
+    const afterRefusal = await service.getCliStatus('claude');
+    assert.equal(afterRefusal.updateInProgress, false);
+    assert.equal(afterRefusal.lastUpdate, null);
 
     // Another provider's activity does not block it.
     busy.splice(0, 1, 'codex');
@@ -405,20 +539,78 @@ test('updateCli reports a refused write as permission_denied, whatever the updat
   });
 });
 
-test('updateCli stops an updater that runs past the timeout', {
+test('updateCli stops an updater that runs past the timeout, and the child it started', {
   skip: process.platform === 'win32' ? 'POSIX process groups' : false,
 }, async () => {
   await withIsolatedCliEnv(async (binDir) => {
     const cursor = await createFakeCli(binDir, 'cursor-agent');
     await cursor.set('version', '2026.07.20-8cc9c0b\n');
-    await cursor.set('update-sleep-ms', '5000');
+    // An updater that ignores SIGTERM and has a download child running, as
+    // `claude update` has npm: only SIGKILL to the whole group stops both.
+    await cursor.set('ignore-sigterm', '1');
+    await cursor.set('child-sleep-ms', '2500');
+    await cursor.set('update-sleep-ms', '2500');
     await cursor.set('update-new-version', '2026.10.09-1a2b3c4\n');
 
-    const result = await createService({ updateTimeoutMs: 300, updateKillGraceMs: 200 }).updateCli('cursor');
+    const startedAt = Date.now();
+    const result = await createService({ updateTimeoutMs: 1000, updateKillGraceMs: 300 }).updateCli('cursor');
     assert.equal(result.failure, 'timed_out');
     assert.equal(result.exitCode, null);
     assert.equal(result.installedVersion, '2026.07.20-8cc9c0b');
-    assert.equal(await cursor.read('update-finished'), null);
+    assert.ok(Date.now() - startedAt < 2500, 'the result came from the kill, not from the updater finishing');
+    assert.ok(await cursor.read('child-pid'), 'the updater had started its child');
+
+    // Past the point where either would have finished on its own.
+    await delay(Math.max(0, startedAt + 3500 - Date.now()));
+    assert.equal(await cursor.read('update-finished'), null, 'the updater was stopped');
+    assert.equal(await cursor.read('child-finished'), null, 'its child was stopped with it');
+  });
+});
+
+test('updateCli returns once the updater exits, even when a process it left behind holds its output open', {
+  skip: process.platform === 'win32' ? 'POSIX pipes' : false,
+}, async () => {
+  await withIsolatedCliEnv(async (binDir) => {
+    const opencode = await createFakeCli(binDir, 'opencode');
+    await opencode.set('version', '1.18.20\n');
+    await opencode.set('update-new-version', '1.19.0\n');
+    await opencode.set('child-sleep-ms', '15000');
+    await opencode.set('child-holds-output', '1');
+
+    const startedAt = Date.now();
+    try {
+      const result = await createService().updateCli('opencode');
+      assert.equal(result.exitCode, 0);
+      assert.equal(result.failure, null);
+      assert.equal(result.installedVersion, '1.19.0');
+      assert.ok(Date.now() - startedAt < 8000, 'the result did not wait for the left-behind process');
+    } finally {
+      const childPid = Number(await opencode.read('child-pid'));
+      if (childPid) {
+        try {
+          process.kill(childPid, 'SIGKILL');
+        } catch {
+          // Already gone.
+        }
+      }
+    }
+  });
+});
+
+test('updateCli reports an updater the server may not start as permission_denied', {
+  skip: process.platform === 'win32' ? 'POSIX execute bit' : false,
+}, async () => {
+  await withIsolatedCliEnv(async (binDir) => {
+    const claude = await createFakeCli(binDir, 'claude');
+    await claude.set('version', '2.1.200 (Claude Code)\n');
+    // Answers the version check, then loses its execute bit: the update spawn fails with EACCES.
+    await claude.set('lock-after-version', '1');
+
+    const result = await createService().updateCli('claude');
+    assert.equal(result.exitCode, null);
+    assert.equal(result.failure, 'permission_denied');
+    assert.equal(result.previousVersion, '2.1.200');
+    assert.equal(await claude.read('update-count'), null);
   });
 });
 
@@ -437,6 +629,35 @@ test('a second update request while one runs gets the same run instead of a seco
     // Once it has finished, a new request runs the updater again.
     await service.updateCli('opencode');
     assert.equal(await opencode.read('update-count'), '2');
+  });
+});
+
+test('getCliStatus reports a running update and, once it is over, that run\'s result', async () => {
+  await withIsolatedCliEnv(async (binDir) => {
+    const opencode = await createFakeCli(binDir, 'opencode');
+    await opencode.set('version', '1.18.20\n');
+    await opencode.set('update-sleep-ms', '300');
+    await opencode.set('update-new-version', '1.19.0\n');
+    const registry = createFakeRegistry(async () => jsonResponse({ version: '1.19.0' }));
+    const service = createService({ fetch: registry.fetch });
+
+    const before = await service.getCliStatus('opencode');
+    assert.equal(before.updateInProgress, false);
+    assert.equal(before.lastUpdate, null);
+
+    // A page that mounts while the update runs (or lost the update request) sees it running...
+    const running = service.updateCli('opencode');
+    const during = await service.getCliStatus('opencode');
+    assert.equal(during.updateInProgress, true);
+    assert.equal(during.lastUpdate, null);
+
+    // ...and, once it is over, gets the run's result with the new version.
+    const result = await running;
+    const after = await service.getCliStatus('opencode');
+    assert.equal(after.updateInProgress, false);
+    assert.deepEqual(after.lastUpdate, result);
+    assert.equal(after.installedVersion, '1.19.0');
+    assert.equal(after.updateAvailable, false);
   });
 });
 
