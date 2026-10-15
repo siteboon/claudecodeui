@@ -106,8 +106,9 @@ export default function ProviderCliVersion({ agent, installedVersion, textClass,
 
   return (
     <div className="border-t border-border/50 pt-4" data-testid="provider-cli-version">
+      {/* The minimum width wraps the button under the version on phones instead of squeezing it. */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-[12rem] flex-1">
           <div className={`font-medium ${textClass}`}>{t('agents.cli.title')}</div>
           <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-sm ${subtextClass}`}>
             <span className="break-all">{versionText}</span>
