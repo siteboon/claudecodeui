@@ -81,13 +81,26 @@ async function sendClaimedQueuedMessage(
   sessionDraftsDb.deleteEmptyDraft(candidate.userId, candidate.sessionId);
 }
 
+/**
+ * Whether a queued turn has to keep waiting for the session.
+ *
+ * A turn that ends with background work still going (a backgrounded command,
+ * agent or workflow) is marked completed, but its CLI process stays open so
+ * that work can report back. A new turn replaces that process and stops the
+ * work, which is why the composer asks before an interactive send. A queued
+ * turn was promised to go "when this finishes", so it waits for that work too.
+ */
+function isSessionBusy(sessionId: string, runtime: ProviderRuntimeGateway): boolean {
+  return chatRunRegistry.isProcessing(sessionId) || runtime.hasBackgroundWork(sessionId);
+}
+
 /** Sends every persisted queued turn whose session is currently idle. */
 export async function dispatchQueuedMessages(runtime: ProviderRuntimeGateway): Promise<number> {
   const candidates = sessionDraftsDb.listQueuedMessages();
   let claimed = 0;
 
   await Promise.all(candidates.map(async (candidate) => {
-    if (chatRunRegistry.isProcessing(candidate.sessionId)) {
+    if (isSessionBusy(candidate.sessionId, runtime)) {
       return;
     }
     if (!sessionDraftsDb.claimQueuedMessage(candidate)) {
