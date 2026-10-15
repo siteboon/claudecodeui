@@ -1607,19 +1607,6 @@ export type SandboxCommandService = {
 // ---------------------------
 //----------------- SYSTEM UPDATE HISTORY AND CHECK CONTRACTS ------------
 /**
- * Outcome of one update command run by the system module's update adapters
- * (`sh -c` for the web updater, the platform shell for `cloudcli update`).
- * `exitCode` is null when the process ended on a signal. `errorOutput` is the
- * whole stderr stream, which npm also uses for warnings on a successful
- * install, so only `exitCode` decides whether the command failed.
- */
-export type SystemUpdateCommandResult = {
-  exitCode: number | null;
-  output: string;
-  errorOutput: string;
-};
-
-/**
  * Result of the system module's check that a freshly installed npm package can
  * load (its native modules and its `cloudcli version` command). On failure,
  * `reason` is one line for the update response, the update record and

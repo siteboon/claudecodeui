@@ -1,10 +1,12 @@
-import type {
-  SystemInstalledPackageCheckResult,
-  SystemUpdateCommandResult,
-  SystemUpdateRecord,
-} from '@/shared/types.js';
+import type { SystemInstalledPackageCheckResult, SystemUpdateRecord } from '@/shared/types.js';
 
 import type { createSystemUpdateHistoryService } from './system-update-history.service.js';
+
+type SystemUpdateCommandResult = {
+  exitCode: number | null;
+  output: string;
+  errorOutput: string;
+};
 
 type SystemUpdateDependencies = {
   appRoot: string;
