@@ -109,7 +109,9 @@ export function resolveBgWaitCeilingMs(rawValue, warn = console.warn) {
 // two halves of the same behaviour:
 //
 //  1. Passed to the spawned CLI as CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS, which is how
-//     long it waits for still-running background *agents* before killing them.
+//     long it waits for still-running background *agents* before killing them. Its
+//     clock starts when stdin closes, so it comes on top of the hold below rather
+//     than overlapping it.
 //  2. A backstop on how long we hold the SDK's stdin open after a turn's `result`.
 //     The SDK closes stdin as soon as a turn ends, and the CLI reads that EOF as
 //     "print wind-down" — killing background *shells* after a short grace period,
