@@ -149,9 +149,14 @@ test('a single stderr line longer than the cap is kept cut rather than dropped',
   assert.deepEqual(errorRows(sent), [exitRow('Claude Code process exited with code 1', 'x'.repeat(1999))]);
 });
 
-test('an exit with nothing on stderr keeps the plain exit message', async () => {
+test('an exit with nothing on stderr keeps the plain exit message', async (t) => {
+  const logged = t.mock.method(console, 'error', () => undefined);
   const { sent } = await runFailingTurn({ error: new Error('Claude Code process exited with code 1') });
   assert.deepEqual(errorRows(sent), ['Claude Code process exited with code 1']);
+  assert.ok(
+    !logged.mock.calls.some(({ arguments: args }) => args[0] === 'Claude CLI stderr before exit:'),
+    'no stderr line is logged when the CLI wrote nothing',
+  );
 });
 
 test('the not-installed message stays as it was', async () => {
@@ -177,5 +182,9 @@ test('an error result already in the CLI words gets no stderr appended', async (
     ],
     error: new Error(`Claude Code returned an error result: ${resultText}`),
   });
-  assert.deepEqual(errorRows(sent), [`Claude Code returned an error result: ${resultText}`]);
+  // Other rows about the same failure may come and go (open PR #1538 adds
+  // one); what matters is that none of them carries the stderr.
+  const rows = errorRows(sent);
+  assert.ok(rows.includes(`Claude Code returned an error result: ${resultText}`), rows.join('\n'));
+  assert.ok(rows.every((row) => !row?.includes('CLI stderr:') && !row?.includes('no stdin data')), rows.join('\n'));
 });
