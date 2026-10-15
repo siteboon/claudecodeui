@@ -83,6 +83,10 @@ type CommandExecutionResult = {
   hasFileIncludes?: boolean;
 };
 
+
+
+
+
 type SubmitOptions = {
   /**
    * Send the text as a chat message even when it starts with "/" (or is
@@ -93,11 +97,6 @@ type SubmitOptions = {
    */
   skipCommandInterception?: boolean;
 };
-
-
-
-
-
 
 const createFakeSubmitEvent = () => {
   return { preventDefault: () => undefined } as unknown as FormEvent<HTMLFormElement>;
