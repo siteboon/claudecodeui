@@ -16,6 +16,7 @@
     "dist/",
     "dist-server/",
     "scripts/",
+    "docs/deployment-recovery.md",
     "README.md"
   ],
   "homepage": "https://cloudcli.ai",
@@ -50,6 +51,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p server/tsconfig.json",
     "test": "tsx --tsconfig server/tsconfig.json --test \"server/**/*.test.ts\" \"server/**/*.test.js\"",
     "test:client": "vitest run",
+    "test:deployment-recovery": "node --test scripts/tests/deployment-recovery.test.mjs",
+    "deployment:recover": "node scripts/deployment-recovery.mjs",
     "lint": "oxlint src/ server/",
     "lint:server": "oxlint server/",
     "lint:client": "oxlint src/",
