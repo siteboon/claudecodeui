@@ -328,6 +328,34 @@ async function runWithoutModel(
   return { models, catalogReads };
 }
 
+test('a non-streaming Agent reply lists the agent\'s own text, not what its subagents said', async () => {
+  // The Claude runtime forwards subagents' prose too, tagged with the call
+  // that spawned them; the reply is the main thread's answer alone.
+  let reply: { messages?: Array<{ content?: string }> } = {};
+
+  await withAgentServer(createDependencies({
+    fileSystem: {
+      access: async () => undefined,
+    } as unknown as AgentDependencies['fileSystem'],
+    models: {
+      getProviderModels: async () => ({ OPTIONS: [], DEFAULT: 'claude-catalog-default' }),
+    } as unknown as AgentDependencies['models'],
+    queryClaude: (async (_prompt: string, _options: unknown, writer: { send(data: unknown): void }) => {
+      writer.send({ kind: 'text', role: 'assistant', content: 'Reading the packages', parentToolUseId: 'toolu_agent' });
+      writer.send({ kind: 'text', role: 'assistant', content: 'There are two packages.' });
+    }) as unknown as AgentDependencies['queryClaude'],
+  }), async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/agent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ projectPath: '/home/test/project', message: 'Count the packages', provider: 'claude', stream: false }),
+    });
+    reply = await response.json() as typeof reply;
+  });
+
+  assert.deepEqual(reply.messages?.map((message) => message.content), ['There are two packages.']);
+});
+
 test('Agent route starts Claude and Cursor on the first custom model while only custom models are listed', async () => {
   // What the Providers service returns with "Use only my models" on.
   const customOnly = (value: string) => ({

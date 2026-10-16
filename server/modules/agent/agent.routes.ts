@@ -571,7 +571,9 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
      * always empty.)
      */
     getAssistantMessages() {
-      return this.messages.filter((msg) => msg && msg.kind === 'text' && msg.role === 'assistant');
+      // A subagent's prose arrives tagged with the call that spawned it; the
+      // reply is the main thread's own text.
+      return this.messages.filter((msg) => msg && msg.kind === 'text' && msg.role === 'assistant' && !msg.parentToolUseId);
     }
 
     /**
