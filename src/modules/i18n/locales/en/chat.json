@@ -167,6 +167,7 @@
     "loadingModels": "Loading models…",
     "modelMenu": "Select model and reasoning effort",
     "permissionHeading": "How should {{provider}} actions be approved?",
+    "permissionCycleHint": "Press Tab in the message box to switch modes",
     "editing": {
       "title": "Replacing an earlier message",
       "filesNotReverted": "files the agent already changed are not reverted",
