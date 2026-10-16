@@ -537,6 +537,189 @@ test('OpenCode synchronizer preserves the title assigned when CloudCLI creates a
   }
 });
 
+/**
+ * Seeds an OpenCode 2.x database: sessions live in `session_v2` and messages in
+ * `session_message` (one JSON row per message). Row shapes mirror opencode 2.0.18.
+ * Directories are stored with forward slashes, as OpenCode 2.x writes them on Windows.
+ */
+const createOpenCodeV2Database = async (homeDir: string, workspacePath: string): Promise<void> => {
+  const dataDir = path.join(homeDir, '.local', 'share', 'opencode');
+  await mkdir(dataDir, { recursive: true });
+  const storedDirectory = workspacePath.replace(/\\/g, '/');
+
+  const db = new Database(path.join(dataDir, 'opencode.db'));
+  try {
+    db.exec(`
+      CREATE TABLE project (id TEXT PRIMARY KEY, worktree TEXT NOT NULL);
+      CREATE TABLE session_v2 (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        parent_id TEXT,
+        directory TEXT NOT NULL,
+        title TEXT,
+        agent TEXT,
+        model TEXT,
+        tokens_input INTEGER NOT NULL DEFAULT 0,
+        tokens_output INTEGER NOT NULL DEFAULT 0,
+        tokens_reasoning INTEGER NOT NULL DEFAULT 0,
+        tokens_cache_read INTEGER NOT NULL DEFAULT 0,
+        tokens_cache_write INTEGER NOT NULL DEFAULT 0,
+        time_created INTEGER NOT NULL,
+        time_updated INTEGER NOT NULL,
+        time_archived INTEGER
+      );
+      CREATE TABLE session_message (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        seq INTEGER NOT NULL,
+        time_created INTEGER NOT NULL,
+        time_updated INTEGER NOT NULL,
+        data TEXT NOT NULL
+      );
+    `);
+
+    db.prepare('INSERT INTO project (id, worktree) VALUES (?, ?)').run('project-v2', storedDirectory);
+    const insertSession = db.prepare(`
+      INSERT INTO session_v2 (
+        id, project_id, parent_id, directory, title, tokens_input, tokens_output, tokens_reasoning,
+        tokens_cache_read, tokens_cache_write, time_created, time_updated, time_archived
+      )
+      VALUES (?, 'project-v2', ?, ?, ?, 10, 20, 7, 3, 2, ?, ?, NULL)
+    `);
+    // A null title makes the synchronizer fall back to the first user prompt.
+    insertSession.run('ses_v2_1', null, storedDirectory, null, 1_700_000_000_000, 1_700_000_004_000);
+    insertSession.run('ses_v2_child', 'ses_v2_1', storedDirectory, 'Subagent task', 1_700_000_002_000, 1_700_000_005_000);
+
+    const insertMessage = db.prepare(`
+      INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
+      VALUES (?, 'ses_v2_1', ?, ?, ?, ?, ?)
+    `);
+    insertMessage.run('msg-user', 'user', 4, 1_700_000_001_000, 1_700_000_001_000, JSON.stringify({
+      time: { created: 1_700_000_001_000 },
+      text: JSON.stringify('Read a.txt'),
+      files: [],
+    }));
+    insertMessage.run('msg-assistant-tool', 'assistant', 5, 1_700_000_002_000, 1_700_000_002_000, JSON.stringify({
+      time: { created: 1_700_000_002_000, completed: 1_700_000_002_500 },
+      agent: 'build',
+      model: { id: 'big-pickle', providerID: 'opencode' },
+      content: [
+        { type: 'reasoning', text: 'I should read the file.' },
+        {
+          type: 'tool',
+          id: 'call-1',
+          name: 'read',
+          state: {
+            status: 'completed',
+            input: { path: 'a.txt' },
+            content: [{ type: 'text', text: '1: hello' }],
+          },
+        },
+      ],
+      finish: 'tool-calls',
+    }));
+    insertMessage.run('msg-assistant-text', 'assistant', 16, 1_700_000_003_000, 1_700_000_003_000, JSON.stringify({
+      time: { created: 1_700_000_003_000, completed: 1_700_000_003_500 },
+      content: [{ type: 'text', text: 'The file says hello.' }],
+      finish: 'stop',
+    }));
+    insertMessage.run('msg-idle', 'idle', 23, 1_700_000_004_000, 1_700_000_004_000, JSON.stringify({
+      time: { created: 1_700_000_004_000 },
+      outcome: 'succeeded',
+    }));
+  } finally {
+    db.close();
+  }
+};
+
+test('OpenCode synchronizer indexes OpenCode 2.x session_v2 rows', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'opencode-session-sync-v2-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tempRoot);
+
+  try {
+    await createOpenCodeV2Database(tempRoot, workspacePath);
+    await withIsolatedDatabase(async () => {
+      const processed = await new OpenCodeSessionSynchronizer().synchronize();
+
+      assert.equal(processed, 1);
+      const indexed = sessionsDb.getSessionById('ses_v2_1');
+      assert.equal(indexed?.provider, 'opencode');
+      // Forward-slash directories are normalized back to the platform form.
+      assert.equal(indexed?.project_path, process.platform === 'win32' ? workspacePath : workspacePath.replace(/\\/g, '/'));
+      assert.equal(indexed?.custom_name, 'Read a.txt');
+      assert.equal(sessionsDb.getSessionById('ses_v2_child'), null);
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('OpenCode sessions provider reads OpenCode 2.x session_message history', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'opencode-session-history-v2-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tempRoot);
+
+  try {
+    await createOpenCodeV2Database(tempRoot, workspacePath);
+    const history = await new OpenCodeSessionsProvider().fetchHistory('ses_v2_1');
+    const kinds = history.messages.map((message) => message.kind);
+
+    assert.deepEqual(kinds, ['text', 'thinking', 'tool_use', 'stream_end', 'text', 'stream_end']);
+    assert.equal(history.messages[0]?.role, 'user');
+    assert.equal(history.messages[0]?.content, 'Read a.txt');
+    assert.equal(history.messages[2]?.toolName, 'read');
+    assert.deepEqual(history.messages[2]?.toolInput, { path: 'a.txt' });
+    assert.deepEqual(history.messages[2]?.toolResult, { content: '1: hello', isError: false });
+    assert.equal(history.messages[4]?.role, 'assistant');
+    assert.equal(history.messages[4]?.content, 'The file says hello.');
+    assert.deepEqual(history.tokenUsage, {
+      used: 42,
+      inputTokens: 13,
+      outputTokens: 20,
+      breakdown: {
+        input: 13,
+        output: 20,
+      },
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('OpenCode sessions provider unwraps part-nested live events', () => {
+  const provider = new OpenCodeSessionsProvider();
+
+  const text = provider.normalizeMessage({
+    type: 'text',
+    sessionID: 'ses_live',
+    part: { id: 'prt_text', type: 'text', text: 'Streaming answer' },
+  }, null);
+  assert.equal(text[0]?.kind, 'stream_delta');
+  assert.equal(text[0]?.content, 'Streaming answer');
+
+  const tool = provider.normalizeMessage({
+    type: 'tool_use',
+    sessionID: 'ses_live',
+    part: {
+      id: 'call-1',
+      type: 'tool',
+      tool: 'read',
+      state: { status: 'completed', input: { path: 'a.txt' }, output: '1: hello' },
+    },
+  }, null);
+  assert.equal(tool[0]?.kind, 'tool_use');
+  assert.equal(tool[0]?.toolName, 'read');
+  assert.equal(tool[0]?.toolId, 'call-1');
+  assert.deepEqual(tool[0]?.toolInput, { path: 'a.txt' });
+  assert.deepEqual(tool[0]?.toolResult, { content: '1: hello', isError: false });
+});
+
 test('OpenCode synchronizer keeps the stored title for indexed sessions', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'opencode-session-sync-indexed-'));
   const workspacePath = path.join(tempRoot, 'workspace');

@@ -16,6 +16,7 @@ import {
   getOpenCodeDatabasePath,
   readObjectRecord,
   readOptionalString,
+  resolveOpenCodeSessionTable,
 } from '@/shared/utils.js';
 
 /**
@@ -629,7 +630,7 @@ export class OpenCodeProviderModels implements IProviderModels {
             s.directory AS directory,
             s.time_updated AS timeUpdated,
             s.time_created AS timeCreated
-          FROM session s
+          FROM ${resolveOpenCodeSessionTable(db)} s
           WHERE s.id = ?
           ORDER BY COALESCE(s.time_updated, s.time_created, 0) DESC
           LIMIT 1
