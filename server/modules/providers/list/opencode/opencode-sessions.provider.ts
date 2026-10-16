@@ -78,6 +78,33 @@ const hasUserRole = (value: unknown): boolean => {
   return readOptionalString(record?.role) === 'user';
 };
 
+// `opencode run --format json` nests each event's payload under `part`; older builds sent it flat.
+const readEventPart = (raw: AnyRecord): AnyRecord => readObjectRecord(raw.part) ?? {};
+
+// Error events carry an object (`{ name, data }`), not a string.
+const readEventError = (value: unknown): string | undefined => {
+  const record = readObjectRecord(value);
+  if (!record) {
+    return readOptionalString(value);
+  }
+
+  const data = readObjectRecord(record.data);
+  const message = readOptionalString(data?.message) ?? readOptionalString(record.message);
+  if (message) {
+    return message;
+  }
+
+  const name = readOptionalString(record.name);
+  const providerId = readOptionalString(data?.providerID) ?? readOptionalString(record.providerID);
+  const modelId = readOptionalString(data?.modelID) ?? readOptionalString(record.modelID);
+  if (providerId && modelId) {
+    return `${name ?? 'Error'}: ${providerId}/${modelId}`;
+  }
+
+  const details = data ? JSON.stringify(data).slice(0, 200) : '';
+  return [name, details].filter(Boolean).join(': ') || undefined;
+};
+
 const isUserTextEcho = (raw: AnyRecord): boolean => {
   return readOptionalString(raw.role) === 'user'
     || hasUserRole(raw.message)
@@ -211,7 +238,13 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
     const type = readOptionalString(raw.type) ?? readOptionalString(raw.event);
     const eventSessionId = readOptionalString(raw.sessionID) ?? readOptionalString(raw.sessionId) ?? sessionId;
     const timestamp = normalizeProviderTimestamp(raw.time ?? raw.timestamp);
-    const baseId = readOptionalString(raw.id)
+    const part = readEventPart(raw);
+    const toolState = readObjectRecord(part.state) ?? {};
+    const partMessageId = readOptionalString(part.messageID);
+    const partId = readOptionalString(part.id);
+    // Same id the history reader gives this part, so a reload does not duplicate it.
+    const baseId = (partMessageId && partId ? `${partMessageId}_${partId}` : undefined)
+      ?? readOptionalString(raw.id)
       ?? readOptionalString(raw.messageID)
       ?? generateMessageId('opencode');
 
@@ -222,9 +255,23 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
         return [];
       }
 
-      const content = extractText(raw.text ?? raw.delta ?? raw.message);
+      const content = extractText(raw.text ?? raw.delta ?? raw.message ?? part.text);
       if (!content.trim()) {
         return [];
+      }
+
+      // A nested text part arrives once, complete: as its own assistant row it
+      // keeps the history id instead of merging with the next part's stream.
+      if (typeof part.text === 'string') {
+        return [createNormalizedMessage({
+          id: baseId,
+          sessionId: eventSessionId,
+          timestamp,
+          provider: PROVIDER,
+          kind: 'text',
+          role: 'assistant',
+          content,
+        })];
       }
 
       return [createNormalizedMessage({
@@ -238,7 +285,7 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
     }
 
     if (type === 'reasoning') {
-      const content = extractText(raw.text ?? raw.delta ?? raw.message);
+      const content = extractText(raw.text ?? raw.delta ?? raw.message ?? part.text);
       if (!content.trim()) {
         return [];
       }
@@ -254,8 +301,8 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
     }
 
     if (type === 'tool_use') {
-      const toolName = readOptionalString(raw.tool) ?? readOptionalString(raw.name) ?? 'Tool';
-      const toolId = readOptionalString(raw.callID) ?? readOptionalString(raw.toolCallId) ?? baseId;
+      const toolName = readOptionalString(raw.tool) ?? readOptionalString(raw.name) ?? readOptionalString(part.tool) ?? 'Tool';
+      const toolId = readOptionalString(raw.callID) ?? readOptionalString(raw.toolCallId) ?? readOptionalString(part.callID) ?? baseId;
       const toolMessage = createNormalizedMessage({
         id: baseId,
         sessionId: eventSessionId,
@@ -263,14 +310,20 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
         provider: PROVIDER,
         kind: 'tool_use',
         toolName,
-        toolInput: raw.input ?? raw.arguments ?? {},
+        toolInput: raw.input ?? raw.arguments ?? toolState.input ?? {},
         toolId,
       });
 
+      const toolStatus = readOptionalString(toolState.status);
       if (raw.output !== undefined || raw.error !== undefined) {
         toolMessage.toolResult = {
           content: formatToolContent(raw.output ?? raw.error),
           isError: raw.error !== undefined,
+        };
+      } else if (toolStatus === 'completed' || toolStatus === 'error') {
+        toolMessage.toolResult = {
+          content: formatToolContent(toolState.output ?? toolState.error),
+          isError: toolStatus === 'error',
         };
       }
 
@@ -284,7 +337,7 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
         timestamp,
         provider: PROVIDER,
         kind: 'error',
-        content: readOptionalString(raw.error) ?? readOptionalString(raw.message) ?? 'Unknown OpenCode error',
+        content: readEventError(raw.error) ?? readOptionalString(raw.message) ?? 'Unknown OpenCode error',
       })];
     }
 
