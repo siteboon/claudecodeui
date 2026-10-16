@@ -7,6 +7,7 @@ import test from 'node:test';
 import { ClaudeSessionsProvider } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import { CLAUDE_PREDEFINED_MODELS } from '@/modules/providers/list/claude/claude-models.provider.js';
 import {
+  abortClaudeSDKSession,
   listClaudeSDKBackgroundWork,
   queryClaudeSDK,
   stopClaudeSDKTask,
@@ -291,6 +292,85 @@ test('a held process is still let go when stopping its tasks throws', async () =
     second.script.end();
     await secondRun;
     assert.equal(second.script.released(), true, 'the new turn ran to completion');
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test('stopping a run mid-turn stops the background agent it launched before letting the process go', async () => {
+  await withRun(async ({ script }) => {
+    script.emit(init());
+    script.emit(toolUse('toolu_agent', 'Agent', { prompt: 'sleep 90', subagent_type: 'general-purpose', run_in_background: true }));
+    script.emit(taskStarted('a1', 'toolu_agent', 'local_agent'));
+    script.emit(ack('toolu_agent', 'Async agent launched successfully.', { status: 'async_launched', agentId: 'a1' }));
+    await waitFor(() => listClaudeSDKBackgroundWork().length === 1);
+
+    // The user presses Stop while the turn is still going. Interrupting the
+    // turn and closing stdin leaves the CLI waiting on the agent, so it would
+    // keep running — and writing files — after the UI has called it stopped.
+    assert.equal(await abortClaudeSDKSession(SESSION_ID), true);
+    assert.deepEqual(script.stopped, ['a1'], 'the agent is told to stop');
+    await settle();
+    assert.equal(script.released(), true, 'and the process is then let go');
+    assert.deepEqual(listClaudeSDKBackgroundWork(), []);
+  });
+});
+
+test('stopping a run held for its background agent stops the agent before letting the process go', async () => {
+  await withRun(async ({ script, sent }) => {
+    script.emit(init());
+    script.emit(toolUse('toolu_agent', 'Agent', { prompt: 'sleep 90', subagent_type: 'general-purpose', run_in_background: true }));
+    script.emit(taskStarted('a1', 'toolu_agent', 'local_agent'));
+    script.emit(ack('toolu_agent', 'Async agent launched successfully.', { status: 'async_launched', agentId: 'a1' }));
+    script.emit(result());
+    await waitFor(() => sent.some((message) => message.kind === 'complete'));
+    assert.equal(script.released(), false, 'the process is held for its agent');
+
+    assert.equal(await abortClaudeSDKSession(SESSION_ID), true);
+    assert.deepEqual(script.stopped, ['a1'], 'the agent is told to stop');
+    await settle();
+    assert.equal(script.released(), true, 'and the process is then let go');
+    assert.deepEqual(listClaudeSDKBackgroundWork(), []);
+  });
+});
+
+test('a stopped run is still let go when stopping its background agent throws', async () => {
+  const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-runtime-hold-'));
+  const { createQuery, script } = createScriptedQuery();
+  const sent: NormalizedMessage[] = [];
+  const writer = { send: (message: NormalizedMessage) => { sent.push(message); }, userId: null };
+  const sessions = new ClaudeSessionsProvider({ getLiveRunStartTime: () => null });
+  const throwingStop: NonNullable<ProviderRuntimeContext['createQuery']> = (options) =>
+    Object.assign(createQuery(options), {
+      stopTask: () => { throw new Error('stop failed'); },
+    });
+  const context: ProviderRuntimeContext = {
+    resolveProviderSessionId: () => null,
+    resolveResumeModel: async () => undefined,
+    getProviderModels: async () => CLAUDE_PREDEFINED_MODELS as never,
+    normalizeMessage: (raw, sessionId) => sessions.normalizeMessage(raw, sessionId),
+    isProviderInstalled: async () => true,
+    createQuery: throwingStop,
+  };
+
+  try {
+    const run = queryClaudeSDK('start an agent', { sessionId: SESSION_ID, cwd }, writer as never, context);
+    await settle();
+    script.emit(init());
+    script.emit(toolUse('toolu_agent', 'Agent', { prompt: 'sleep 90', subagent_type: 'general-purpose', run_in_background: true }));
+    script.emit(taskStarted('a1', 'toolu_agent', 'local_agent'));
+    script.emit(ack('toolu_agent', 'Async agent launched successfully.', { status: 'async_launched', agentId: 'a1' }));
+    await waitFor(() => listClaudeSDKBackgroundWork().length === 1);
+
+    // Stopping the agent is best effort; it must not leave the process up or
+    // report the user's Stop as failed.
+    assert.equal(await abortClaudeSDKSession(SESSION_ID), true);
+    await settle();
+    assert.equal(script.released(), true, 'the process is let go anyway');
+
+    script.end();
+    await run;
+    assert.deepEqual(listClaudeSDKBackgroundWork(), []);
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }

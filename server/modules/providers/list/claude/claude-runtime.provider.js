@@ -360,20 +360,44 @@ function addSession(sessionId, queryInstance, writer = null, releaseInput = null
 }
 
 /**
- * Lets go of the process an earlier run left holding a session open, so the
- * next turn can take the session over.
+ * Stops the background tasks a session's process still has going, then closes
+ * its held stdin so the CLI can exit.
  *
  * Closing stdin is not enough on its own: the CLI's wind-down waits for the
  * background agents the process still has going — for up to the ceiling it
- * was started with (BG_WAIT_CEILING_MS) — so an abandoned process with an
- * agent outstanding would run next to the process that replaced it for as
- * long as the agent does, both appending to the same session file. Stop the
- * tasks first, while stdin is still open: the SDK drops control requests
- * written after stdin has ended, which is also why the interrupt a later
- * supersede sends to this process cannot do the job.
+ * was started with (BG_WAIT_CEILING_MS) — so they would keep running, and
+ * appending to the session's files, with nothing left that could stop them.
+ * Stop the tasks first, while stdin is still open: the SDK drops control
+ * requests written after stdin has ended.
  *
  * The stops are not awaited — each request is written to the CLI before this
  * returns, and a reply is only missing when the process has already gone.
+ * @param {string} sessionId - Session identifier
+ * @param {Object} session - The session's entry in the active sessions map
+ */
+function stopTasksAndReleaseInput(sessionId, session) {
+  for (const task of backgroundWork.outstanding(sessionId)) {
+    // A stop that cannot be delivered changes nothing about what happens
+    // next: the process is on its way out either way. Guard the synchronous
+    // call too, so a failing stop can never skip the release below.
+    try {
+      Promise.resolve(session.instance?.stopTask?.(task.taskId)).catch(() => {});
+    } catch {
+      // Same as a rejected stop.
+    }
+  }
+  session.releaseInput?.();
+}
+
+/**
+ * Lets go of the process an earlier run left holding a session open, so the
+ * next turn can take the session over.
+ *
+ * Its tasks are stopped first: an abandoned process with an agent outstanding
+ * would otherwise run next to the process that replaced it for as long as the
+ * agent does, both appending to the same session file. The interrupt a later
+ * supersede sends to this process cannot do the job, because it arrives after
+ * stdin has ended.
  * @param {string} sessionId - Session identifier
  */
 function releaseHeldSession(sessionId) {
@@ -381,17 +405,7 @@ function releaseHeldSession(sessionId) {
   if (!held) {
     return;
   }
-  for (const task of backgroundWork.outstanding(sessionId)) {
-    // A stop that cannot be delivered changes nothing about what happens
-    // next: the process is on its way out either way. Guard the synchronous
-    // call too, so a failing stop can never skip the release below.
-    try {
-      Promise.resolve(held.instance?.stopTask?.(task.taskId)).catch(() => {});
-    } catch {
-      // Same as a rejected stop.
-    }
-  }
-  held.releaseInput?.();
+  stopTasksAndReleaseInput(sessionId, held);
 }
 
 /**
@@ -400,7 +414,8 @@ function releaseHeldSession(sessionId) {
  */
 function removeSession(sessionId) {
   activeSessions.delete(sessionId);
-  // No process, no background work: anything still tracked was killed with it.
+  // The process has exited, or was let go with its tasks stopped
+  // (stopTasksAndReleaseInput): nothing still tracked will report again.
   backgroundWork.clear(sessionId);
   // See addSession: a page cached while the process was up still says
   // `running` for any agent that never reported back.
@@ -1466,9 +1481,10 @@ async function abortClaudeSDKSession(sessionId) {
     // Call interrupt() on the query instance
     await session.instance.interrupt();
 
-    // Release the held stdin stream; without this the CLI stays up for the rest
-    // of the post-turn hold even though the user cancelled.
-    session.releaseInput?.();
+    // Stop the background tasks the run started and release the held stdin
+    // stream; without this the CLI stays up for the rest of the post-turn hold,
+    // and its background agents keep working, even though the user cancelled.
+    stopTasksAndReleaseInput(sessionId, session);
 
     // Update session status
     session.status = 'aborted';
