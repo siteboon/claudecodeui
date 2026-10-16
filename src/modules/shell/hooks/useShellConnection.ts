@@ -21,6 +21,7 @@ type UseShellConnectionOptions = {
   initialCommandRef: MutableRefObject<string | null | undefined>;
   isPlainShellRef: MutableRefObject<boolean>;
   bypassPermissionsRef: MutableRefObject<boolean>;
+  isDarkModeRef: MutableRefObject<boolean>;
   onProcessCompleteRef: MutableRefObject<((exitCode: number) => void) | null | undefined>;
   isInitialized: boolean;
   autoConnect: boolean;
@@ -32,6 +33,7 @@ type UseShellConnectionOptions = {
 type UseShellConnectionResult = {
   isConnected: boolean;
   isConnecting: boolean;
+  claudeLaunchColorScheme: 'light' | 'dark' | null;
   closeSocket: () => void;
   connectToShell: (options?: { forceRestart?: boolean }) => void;
   disconnectFromShell: (options?: { suppressAutoConnect?: boolean }) => void;
@@ -46,6 +48,7 @@ export function useShellConnection({
   initialCommandRef,
   isPlainShellRef,
   bypassPermissionsRef,
+  isDarkModeRef,
   onProcessCompleteRef,
   isInitialized,
   autoConnect,
@@ -55,6 +58,10 @@ export function useShellConnection({
 }: UseShellConnectionOptions): UseShellConnectionResult {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  // The theme the server says the Claude CLI in this pty was launched for. Only
+  // the server knows it: a reconnect can reattach to a CLI started in another
+  // theme. Null when the pty runs anything else or no socket is open.
+  const [claudeLaunchColorScheme, setClaudeLaunchColorScheme] = useState<'light' | 'dark' | null>(null);
   const connectingRef = useRef(false);
   const forceRestartOnInitRef = useRef(false);
   const suppressAutoConnectRef = useRef(false);
@@ -113,6 +120,11 @@ export function useShellConnection({
         terminalRef.current?.write(`\r\n\x1b[31m${detail}\x1b[0m\r\n`);
         return;
       }
+
+      if (message.type === 'claude_theme') {
+        const { colorScheme } = message;
+        setClaudeLaunchColorScheme(colorScheme === 'light' || colorScheme === 'dark' ? colorScheme : null);
+      }
     },
     [handleProcessCompletion, onOutputRef, terminalRef],
   );
@@ -167,6 +179,8 @@ export function useShellConnection({
               // Launch-time flag: bypass mode can only join the CLI's
               // shift+tab cycle when claude starts with it.
               bypassPermissions: bypassPermissionsRef.current,
+              // Launch-time too: a CLI picks its colours when it starts.
+              colorScheme: isDarkModeRef.current ? 'dark' : 'light',
             });
           }, TERMINAL_INIT_DELAY_MS);
         };
@@ -179,6 +193,7 @@ export function useShellConnection({
         socket.onclose = () => {
           setIsConnected(false);
           setIsConnecting(false);
+          setClaudeLaunchColorScheme(null);
           connectingRef.current = false;
           clearTerminalScreen();
         };
@@ -203,6 +218,7 @@ export function useShellConnection({
       initialCommandRef,
       isConnected,
       isConnecting,
+      isDarkModeRef,
       isPlainShellRef,
       selectedProjectRef,
       selectedSessionRef,
@@ -232,6 +248,7 @@ export function useShellConnection({
     clearTerminalScreen();
     setIsConnected(false);
     setIsConnecting(false);
+    setClaudeLaunchColorScheme(null);
     connectingRef.current = false;
     forceRestartOnInitRef.current = false;
   }, [clearTerminalScreen, closeSocket]);
@@ -253,6 +270,7 @@ export function useShellConnection({
   return {
     isConnected,
     isConnecting,
+    claudeLaunchColorScheme,
     closeSocket,
     connectToShell,
     disconnectFromShell,

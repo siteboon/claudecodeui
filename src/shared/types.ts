@@ -23,16 +23,32 @@ export type ProviderModelOption = {
   };
 };
 
-/** The full model catalog for one provider: every option plus the value used when the user has not chosen one. */
+/**
+ * The full model catalog for one provider: every option plus the value used when the user has not chosen one.
+ * `EFFORT_LEVELS` lists, weakest first, the reasoning-effort levels a custom model may declare in the model
+ * library; the server derives it from the provider, not from the options, and it is empty without effort support.
+ * `CUSTOM_MODELS_ONLY` is the user's "use only my models" flag: while it is on and a custom model exists, the
+ * server lists only custom models and the first is `DEFAULT`. Older servers omit it, which means off.
+ */
 export type ProviderModelsDefinition = {
   OPTIONS: ProviderModelOption[];
   DEFAULT: string;
+  EFFORT_LEVELS?: string[];
+  CUSTOM_MODELS_ONLY?: boolean;
 };
 
-/** User-supplied fields for creating or editing a custom provider model entry. */
+/**
+ * User-supplied fields for creating or editing a custom provider model entry.
+ * `effort` lists the reasoning-effort levels the model accepts; omit it to keep
+ * the stored levels on edit, send `null` to clear them.
+ */
 export type CustomProviderModelInput = {
   model: string;
   id: string;
+  effort?: {
+    values: string[];
+    default?: string;
+  } | null;
 };
 
 /** Mutation callbacks a model menu calls to persist custom provider models. */
@@ -44,6 +60,8 @@ export type ProviderModelActions = {
     input: CustomProviderModelInput,
   ): Promise<void>;
   remove(provider: LLMProvider, existing: ProviderModelOption): Promise<void>;
+  /** Turns the provider's "use only my models" flag on or off. */
+  setCustomModelsOnly(provider: LLMProvider, enabled: boolean): Promise<void>;
 };
 
 // ---------------------------
@@ -765,6 +783,14 @@ export type QueuedDraft = {
   options?: QueuedSendOptions;
 };
 
+/** The answer to the prompt shown when sending over a session's background work: send now (stopping that work), queue the message until the work finishes, or do nothing. */
+export type BackgroundSendChoice = 'send' | 'queue' | 'cancel';
+
+/** An open background-work send prompt, listing the session's own background tasks as display strings. */
+export type BackgroundSendPrompt = {
+  work: string[];
+};
+
 /** Viewport-relative placement box (right/bottom offsets plus max height and width) computed for a composer popover so the model and permission menus stay inside the window. */
 export type ComposerMenuAnchor = {
   right: number;
@@ -1378,6 +1404,16 @@ export type ClaudePermissionsState = {
   allowedTools: string[];
   disallowedTools: string[];
   skipPermissions: boolean;
+};
+
+/** One of the Claude CLI's own settings files (the user's ~/.claude/settings.json or the administrator-managed file) and the permission rules it adds on top of ClaudePermissionsState; served read-only by the server, never edited in the app. `missing` and `invalid` files carry empty rule lists. */
+export type ClaudeSettingsPermissionSource = {
+  scope: 'user' | 'managed';
+  path: string;
+  status: 'ok' | 'missing' | 'invalid';
+  allow: string[];
+  deny: string[];
+  ask: string[];
 };
 
 /** The user's notification settings, grouped into delivery channels (in-app, web push, desktop, sound) and the events that trigger them; mirrors the payload of the notification preferences API. */

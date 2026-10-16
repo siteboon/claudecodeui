@@ -15,7 +15,7 @@
  <a href="https://trendshift.io/repositories/15586" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15586" alt="siteboon%2Fclaudecodeui | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 </p>
 
-<div align="right"><i><a href="../README.md">English</a> · <a href="./README.ru.md">Русский</a> · <a href="./README.de.md">Deutsch</a> · <a href="./README.ko.md">한국어</a> · <a href="./README.zh-CN.md">简体中文</a> · <a href="./README.zh-TW.md">繁體中文</a> · <b>日本語</b> · <a href="./README.tr.md">Türkçe</a></i></div>
+<div align="right"><i><a href="../README.md">English</a> · <a href="./README.ru.md">Русский</a> · <a href="./README.de.md">Deutsch</a> · <a href="./README.ko.md">한국어</a> · <a href="./README.zh-CN.md">简体中文</a> · <a href="./README.zh-TW.md">繁體中文</a> · <b>日本語</b> · <a href="./README.tr.md">Türkçe</a> · <a href="./README.id.md">Bahasa Indonesia</a></i></div>
 
 ---
 
@@ -159,7 +159,6 @@ CloudCLI にはプラグインシステムがあり、独自のフロントエ�
 |---|---|
 | **[Project Stats](https://github.com/cloudcli-ai/cloudcli-plugin-starter)** | 現在のプロジェクトについて、ファイル数、コード行数、ファイル種別の内訳、最大ファイル、最近変更されたファイルを表示 |
 | **[Web Terminal](https://github.com/cloudcli-ai/cloudcli-plugin-terminal)** | 複数タブに対応した本格的な xterm.js ターミナル |
-| **[Claude Watch](https://github.com/satsuki19980613/cloudcli-claude-watch)** | 長時間実行中の Claude Code セッションのハングを監視し、プロセス操作を提供 |
 | **[CloudCLI Scheduler](https://github.com/grostim/cloudcli-cron)** | ワークスペース単位のスケジュール済みプロンプトを作成し、Codex、Claude Code などのローカル CLI で実行 |
 | **[PRISM CloudCLI](https://github.com/jakeefr/cloudcli-plugin-prism)** | CloudCLI 内で Claude Code のセッション分析を行い、トークン消費の可視化も提供 |
 | **[Sessions](https://github.com/strykereye2/cloudcli-plugin-session-manager)** | アクティブな Claude Code セッションを表示、管理、終了 |
