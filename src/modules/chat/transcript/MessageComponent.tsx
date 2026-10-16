@@ -12,6 +12,7 @@ import ChatMessageFiles from '@/modules/chat/transcript/ChatMessageFiles';
 import { Markdown } from '@/modules/chat/transcript/Markdown';
 import StreamingMarkdown from '@/modules/chat/transcript/StreamingMarkdown';
 import MessageCopyControl from '@/modules/chat/transcript/MessageCopyControl';
+import MessageModelLabel from '@/modules/chat/transcript/MessageModelLabel';
 import MessageSpeakControl from '@/modules/chat/transcript/MessageSpeakControl';
 import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
 import { MemoryCitations } from '@/modules/chat/transcript/MemoryCitations';
@@ -416,6 +417,11 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                 {shouldShowAssistantCopyControl && (
                   <MessageSpeakControl content={assistantCopyContent} />
                 )}
+                {/* Which model actually answered, as the provider recorded it
+                    on this row. Provenance rather than an affordance, so unlike
+                    copy and speak it is not gated on the copy control, and an
+                    exported transcript keeps it wherever the footer renders. */}
+                <MessageModelLabel model={message.model} />
                 {!isGrouped && <span>{formattedTime}</span>}
               </div>
             )}

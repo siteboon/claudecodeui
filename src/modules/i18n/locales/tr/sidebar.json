@@ -32,7 +32,13 @@
     "loadingSessions": "Oturumlar yükleniyor...",
     "unnamed": "Adsız",
     "loading": "Yükleniyor...",
-    "showMore": "Daha fazla oturum göster"
+    "showMore": "Daha fazla oturum göster",
+    "select": "Seç",
+    "selectAll": "Tümünü seç",
+    "selectAllLoaded": "Yüklenenleri seç",
+    "clearSelection": "Seçimi kaldır",
+    "deleteSelected_one": "{{count}} oturumu sil",
+    "deleteSelected_other": "{{count}} oturumu sil"
   },
   "tooltips": {
     "viewEnvironments": "Ortamları Görüntüle",
@@ -114,7 +120,9 @@
     "restoreProjectError": "Proje geri yüklenirken hata oluştu. Lütfen tekrar dene.",
     "restoreSessionFailed": "Oturum geri yüklenemedi. Lütfen tekrar dene.",
     "restoreSessionError": "Oturum geri yüklenirken hata oluştu. Lütfen tekrar dene.",
-    "forkSessionError": "Bu oturum çatallanamadı. Lütfen tekrar deneyin."
+    "forkSessionError": "Bu oturum çatallanamadı. Lütfen tekrar deneyin.",
+    "deleteSessionsPartialFailure_one": "{{total}} oturumdan {{count}} tanesi silinemedi. Lütfen tekrar dene.",
+    "deleteSessionsPartialFailure_other": "{{total}} oturumdan {{count}} tanesi silinemedi. Lütfen tekrar dene."
   },
   "version": {
     "updateAvailable": "Güncelleme mevcut",
@@ -149,6 +157,15 @@
     "deleteSessionPermanently": "Kalıcı olarak sil",
     "deleteAllData": "Tüm veriyi kalıcı olarak sil",
     "allConversationsDeleted": "Proje kenar çubuğundan kaldırılacak. Dosyaların, bellek verilerin ve oturum verilerin korunacak.",
-    "cannotUndo": "Projeyi sonra tekrar ekleyebilirsin."
+    "cannotUndo": "Projeyi sonra tekrar ekleyebilirsin.",
+    "confirmDeleteSessions": "Ne yapmak istersin:",
+    "deleteSessions_one": "{{count}} Oturumu Sil",
+    "deleteSessions_other": "{{count}} Oturumu Sil",
+    "selectedSessions_one": "seçili {{count}} oturum",
+    "selectedSessions_other": "seçili {{count}} oturum",
+    "archiveSessions_one": "{{count}} oturumu arşivle",
+    "archiveSessions_other": "{{count}} oturumu arşivle",
+    "archiveSessionsNotice_one": "Arşivleme, oturumu etkin listeden çıkarır ancak geçmişini korur.",
+    "archiveSessionsNotice_other": "Arşivleme, oturumları etkin listeden çıkarır ancak geçmişlerini korur."
   }
 }

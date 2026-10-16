@@ -172,6 +172,13 @@
       "label": "다크 모드",
       "description": "라이트/다크 테마 전환"
     },
+    "theme": {
+      "label": "테마",
+      "description": "밝은 테마나 어두운 테마를 선택하거나 운영체제 설정을 따릅니다",
+      "light": "밝게",
+      "dark": "어둡게",
+      "system": "시스템 설정 따르기"
+    },
     "projectSorting": {
       "label": "프로젝트 정렬",
       "description": "사이드바에서 프로젝트 정렬 방식",
@@ -405,6 +412,25 @@
       "placeholder": "예: \"Bash(rm:*)\"",
       "empty": "설정된 차단 도구 없음"
     },
+    "settingsFiles": {
+      "title": "Claude 설정 파일의 규칙",
+      "description": "Claude CLI는 위 목록에 더해 이 규칙들도 적용합니다. 거부 규칙은 어디에 설정되어 있든 우선하지만, 허용된 도구에서 이미 허용한 도구에는 확인 규칙이 있어도 확인을 요청하지 않습니다. 여기서는 읽기 전용이며, 파일에서 직접 편집하세요.",
+      "sources": {
+        "user": "사용자 설정",
+        "managed": "관리형 설정(관리자)"
+      },
+      "groups": {
+        "allow": "허용",
+        "ask": "확인",
+        "deny": "거부"
+      },
+      "missing": "파일이 없으므로 추가되는 규칙이 없습니다.",
+      "invalid": "이 파일을 읽을 수 없습니다. 올바른 JSON인지 확인하세요.",
+      "empty": "이 파일에는 권한 규칙이 없습니다.",
+      "loading": "규칙을 불러오는 중…",
+      "loadFailed": "Claude 설정 파일의 규칙을 불러오지 못했습니다.",
+      "projectNote": "프로젝트의 .claude/settings.json 및 .claude/settings.local.json도 해당 프로젝트의 채팅에 적용됩니다. 단, 폴더를 신뢰하기 전까지 Claude CLI는 .claude/settings.json의 허용 규칙을 무시합니다. 해당 폴더에서 Claude Code를 대화형으로 한 번 실행하고 신뢰 대화상자를 수락하세요."
+    },
     "allowedCommands": {
       "title": "허용된 Shell 명령어",
       "description": "권한 확인 없이 자동으로 허용되는 Shell 명령어",
@@ -545,12 +571,6 @@
       "name": "예약 프롬프트",
       "badge": "비공식",
       "description": "워크스페이스 프롬프트를 예약하고, 실행 기록을 확인하고, 반복되는 로컬 작업을 관리합니다.",
-      "install": "설치"
-    },
-    "claudeWatchPlugin": {
-      "name": "Claude Watch",
-      "badge": "비공식",
-      "description": "장시간 실행되는 Claude Code 세션의 멈춤 현상을 감시하고 프로세스 제어 기능을 제공합니다.",
       "install": "설치"
     },
     "prismCloudCLI": {

@@ -7,6 +7,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
 import type { ITerminalOptions } from '@xterm/xterm';
 
+import { useTheme } from '@/shared/context/ThemeContext';
 import type { MobileTerminalSelectionManager, Project } from '@/shared/types';
 import { copyTextToClipboard } from '@/shared/utils';
 import { TERMINAL_INIT_DELAY_MS } from '@/shared/constants';
@@ -28,6 +29,18 @@ const TERMINAL_OPTIONS: ITerminalOptions = {
   windowsMode: false,
   macOptionIsMeta: true,
   macOptionClickForcesSelection: true,
+};
+
+// The options that follow the app's light/dark theme. They are applied when the
+// terminal is created and re-applied to the open terminal on every toggle, so the
+// pty behind it keeps running. xterm answers OSC 10/11 colour queries from
+// `theme`, which is what TUIs that probe the terminal at startup (Codex, Claude
+// Code's "auto" theme) read to choose a light or dark look.
+type TerminalColorOptions = Pick<ITerminalOptions, 'theme' | 'minimumContrastRatio'>;
+
+const DARK_TERMINAL_COLORS: TerminalColorOptions = {
+  // xterm's default: leave the colours programs ask for untouched.
+  minimumContrastRatio: 1,
   // Keep the runtime theme keys used by the previous JSX implementation.
   theme: {
     background: '#1e1e1e',
@@ -70,6 +83,40 @@ const TERMINAL_OPTIONS: ITerminalOptions = {
       '#00ffff',
       '#ffffff',
     ],
+  },
+};
+
+const LIGHT_TERMINAL_COLORS: TerminalColorOptions = {
+  // Many CLIs hard-code truecolor accents picked for a dark background (bright
+  // yellow, white, cyan). WCAG AA contrast (VS Code's terminal default) makes
+  // xterm darken just those cells on white instead of leaving them unreadable.
+  minimumContrastRatio: 4.5,
+  // Based on GitHub's Primer light palette. The bright variants are darker than
+  // Primer's, because xterm draws bold text in them: every colour except the two
+  // whites keeps at least 4.5:1 against the white background.
+  theme: {
+    background: '#ffffff',
+    foreground: '#1f2328',
+    cursor: '#1f2328',
+    cursorAccent: '#ffffff',
+    selectionBackground: '#add6ff',
+    selectionForeground: '#1f2328',
+    black: '#24292f',
+    red: '#cf222e',
+    green: '#116329',
+    yellow: '#9a6700',
+    blue: '#0969da',
+    magenta: '#8250df',
+    cyan: '#1b7c83',
+    white: '#6e7781',
+    brightBlack: '#57606a',
+    brightRed: '#a40e26',
+    brightGreen: '#1a7f37',
+    brightYellow: '#7d4e00',
+    brightBlue: '#0550ae',
+    brightMagenta: '#6639ba',
+    brightCyan: '#0e6d73',
+    brightWhite: '#8c959f',
   },
 };
 
@@ -137,7 +184,12 @@ export function useShellTerminal({
   isRestarting,
   closeSocket,
 }: UseShellTerminalOptions): UseShellTerminalResult {
+  const { isDarkMode } = useTheme();
   const [isInitialized, setIsInitialized] = useState(false);
+  // Read through a ref when the terminal is created: with the theme in that
+  // effect's dependencies, a toggle would dispose the terminal and close the
+  // socket instead of repainting the session that is running.
+  const isDarkModeRef = useRef(isDarkMode);
   const resizeTimeoutRef = useRef<number | null>(null);
   const mobileSelectionRef = useRef<MobileTerminalSelectionManager | null>(null);
   const selectedProjectKey = selectedProject?.fullPath || selectedProject?.path || '';
@@ -177,7 +229,10 @@ export function useShellTerminal({
       return;
     }
 
-    const nextTerminal = new Terminal(TERMINAL_OPTIONS);
+    const nextTerminal = new Terminal({
+      ...TERMINAL_OPTIONS,
+      ...(isDarkModeRef.current ? DARK_TERMINAL_COLORS : LIGHT_TERMINAL_COLORS),
+    });
     terminalRef.current = nextTerminal;
 
     const nextFitAddon = new FitAddon();
@@ -361,6 +416,19 @@ export function useShellTerminal({
     terminalRef,
     wsRef,
   ]);
+
+  useEffect(() => {
+    isDarkModeRef.current = isDarkMode;
+
+    const currentTerminal = terminalRef.current;
+    if (!currentTerminal) {
+      return;
+    }
+
+    const colors = isDarkMode ? DARK_TERMINAL_COLORS : LIGHT_TERMINAL_COLORS;
+    currentTerminal.options.theme = colors.theme;
+    currentTerminal.options.minimumContrastRatio = colors.minimumContrastRatio;
+  }, [isDarkMode, terminalRef]);
 
   return {
     isInitialized,
