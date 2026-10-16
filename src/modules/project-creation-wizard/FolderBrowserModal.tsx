@@ -78,6 +78,22 @@ export default function FolderBrowserModal({
     loadFoldersRef.current = loadFolders;
   }, [loadFolders]);
 
+  // Closing can bypass handleClose — selecting a folder hands control back to
+  // the wizard, which hides the modal itself, and this component stays mounted
+  // the whole time. Clearing the search state when that happens stops a
+  // debounced request from writing into it after the close, and stops the next
+  // opening from starting in search mode with a stale query.
+  useEffect(() => {
+    if (isOpen) {
+      return;
+    }
+    setError(null);
+    setSearchQuery('');
+    setSearchResults(null);
+    setSearchMeta(null);
+    setIsSearching(false);
+  }, [isOpen]);
+
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -90,7 +106,7 @@ export default function FolderBrowserModal({
   // render gates on `searchActive`, so no state reset is needed for that.
   useEffect(() => {
     const trimmed = searchQuery.trim();
-    if (trimmed.length < 2) {
+    if (!isOpen || trimmed.length < 2) {
       return undefined;
     }
 
@@ -121,7 +137,7 @@ export default function FolderBrowserModal({
       cancelled = true;
       window.clearTimeout(timerId);
     };
-  }, [searchQuery, currentPath, t]);
+  }, [searchQuery, currentPath, isOpen, t]);
 
   const visibleFolders = useMemo(
     () =>
