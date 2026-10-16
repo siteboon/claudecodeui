@@ -333,6 +333,7 @@
     "createFailed": "Failed to create folder",
     "noSubfolders": "No subfolders found",
     "searchPlaceholder": "Search folders by name (2+ characters)",
+    "searchAriaLabel": "Search folders by name",
     "searchNoResults": "No matching folders found",
     "searchFailed": "Folder search failed",
     "select": "Select",

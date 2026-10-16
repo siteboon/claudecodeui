@@ -272,6 +272,7 @@ export default function FolderBrowserModal({
               type="text"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
+              aria-label={t('folderBrowser.searchAriaLabel')}
               placeholder={t('folderBrowser.searchPlaceholder')}
               className="pl-9"
             />
