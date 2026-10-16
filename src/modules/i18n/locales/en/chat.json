@@ -271,6 +271,7 @@
       "startingNow": "Starting now"
     },
     "stop": "Stop",
+    "stopBackground": "Stop all",
     "backgroundWork": "Background work",
     "backgroundTask": {
       "workflow": "Workflow {{name}}",

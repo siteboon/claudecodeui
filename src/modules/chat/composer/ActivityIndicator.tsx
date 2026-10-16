@@ -9,6 +9,8 @@ import { describeBackgroundTask, ownBackgroundTasks } from '@/modules/chat/utils
 type ActivityIndicatorProps = {
   activity: SessionActivity | null;
   onAbort?: () => void;
+  /** Stops the work a background-only session still runs; offered only in that state. */
+  onStopBackground?: () => void;
   isInputFocused?: boolean;
 };
 
@@ -39,13 +41,14 @@ function describeBackgroundTasks(allTasks: BackgroundTaskSummary[], t: TFunction
  * entry is removed.
  *
  * A session whose turn has ended while the tasks it launched still run is
- * drawn in the workflow and agent cards' purple, naming the work, and with no
- * Stop: nothing is responding, and the composer can send.
+ * drawn in the workflow and agent cards' purple, naming the work. It has no
+ * Stop for a turn — nothing is responding, and the composer can send — but a
+ * "Stop all" for the work itself.
  *
  * Rendered by chat's ChatComposer above the input so the user can see and
  * interrupt the in-flight turn without leaving the composer.
  */
-export default function ActivityIndicator({ activity, onAbort, isInputFocused = false }: ActivityIndicatorProps) {
+export default function ActivityIndicator({ activity, onAbort, onStopBackground, isInputFocused = false }: ActivityIndicatorProps) {
   const { t } = useTranslation('chat');
   const [renderedActivity, setRenderedActivity] = useState<SessionActivity | null>(activity);
   const [isExiting, setIsExiting] = useState(false);
@@ -135,6 +138,21 @@ export default function ActivityIndicator({ activity, onAbort, isInputFocused = 
             <kbd className="hidden rounded border border-border/60 px-1 text-[10px] text-muted-foreground/70 sm:inline-block">
               esc
             </kbd>
+          </button>
+        )}
+
+        {/* No Esc shortcut here on purpose: a stray Esc must not end a long
+            workflow the user is no longer watching. */}
+        {isBackground && onStopBackground && ownBackgroundTasks(renderedActivity.tasks ?? []).length > 0 && (
+          <button
+            type="button"
+            onClick={onStopBackground}
+            className={`${tabSurfaceClassName} pointer-events-auto gap-1.5 text-muted-foreground hover:bg-card hover:text-destructive`}
+          >
+            <svg className="h-2.5 w-2.5 fill-current" viewBox="0 0 24 24" aria-hidden>
+              <rect x="5" y="5" width="14" height="14" rx="2" />
+            </svg>
+            <span>{t('claudeStatus.stopBackground', { defaultValue: 'Stop all' })}</span>
           </button>
         )}
       </div>

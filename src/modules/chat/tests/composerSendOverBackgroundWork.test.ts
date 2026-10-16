@@ -104,3 +104,34 @@ test('a session with nothing in the background sends without asking', async () =
   assert.equal(confirm.mock.calls.length, 0);
   assert.equal(sends.length, 1);
 });
+
+test('stopping a session\'s background work asks the server to stop the session', () => {
+  const sent: Array<Record<string, unknown>> = [];
+  const view = renderHook(() =>
+    useChatComposerState({
+      selectedProject: PROJECT,
+      selectedSession: SESSION,
+      currentSessionId: SESSION.id,
+      provider: 'claude',
+      permissionMode: 'default',
+      cyclePermissionMode: () => undefined,
+      resolvePermissionModeForProvider: () => 'default' as PermissionMode,
+      currentProviderModel: 'test-model',
+      currentProviderEffort: 'medium',
+      isLoading: false,
+      processingSessions: backgroundOnly,
+      canAbortSession: false,
+      tokenBudget: null,
+      sendMessage: (message) => { sent.push(message as Record<string, unknown>); },
+      scrollToBottom: () => undefined,
+      addMessage: () => undefined,
+      setIsUserScrolledUp: () => undefined,
+      setPendingPermissionRequests: () => undefined,
+    }),
+  );
+  act(() => { view.result.current.handleStopBackgroundWork(); });
+
+  // The turn has ended, so there is nothing for the ordinary Stop to abort;
+  // the server stops the work the session's process is still holding.
+  assert.deepEqual(sent.filter((message) => message.type === 'chat.abort'), [{ type: 'chat.abort', sessionId: SESSION.id }]);
+});

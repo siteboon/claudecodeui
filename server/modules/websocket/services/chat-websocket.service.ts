@@ -413,7 +413,8 @@ async function handleChatEditSend(
 /**
  * Handles `chat.abort`: cancels the run for one app session and emits the
  * terminal `complete` on its behalf (runtimes skip their own complete for
- * aborted runs, and the registry drops any duplicate).
+ * aborted runs, and the registry drops any duplicate). A session whose turn
+ * has ended but whose background work is still going is stopped as well.
  */
 async function handleChatAbort(
   ws: WebSocket,
@@ -428,6 +429,17 @@ async function handleChatAbort(
 
   const run = chatRunRegistry.getRun(sessionId);
   if (!run || run.status !== 'running') {
+    // The turn has ended, but the agents, workflows or commands it launched
+    // may still be going in the process held open for them. Stopping the
+    // session stops those; the runtime reports each one stopped on the
+    // session's stream, and there is no run left to complete.
+    const session = dependencies.runtime.hasBackgroundWork(sessionId)
+      ? sessionsDb.getSessionById(sessionId)
+      : null;
+    if (session) {
+      await dependencies.runtime.abort(session.provider as LLMProvider, sessionId);
+      return;
+    }
     sendProtocolError(ws, 'NO_ACTIVE_RUN', `Session "${sessionId}" has no active run.`, sessionId);
     return;
   }

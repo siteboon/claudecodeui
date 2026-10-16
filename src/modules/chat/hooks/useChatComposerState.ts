@@ -1255,6 +1255,20 @@ export function useChatComposerState({
     });
   }, [canAbortSession, currentSessionId, selectedSession?.id, sendMessage]);
 
+  // Stops what a session's ended turn left running: there is no response to
+  // abort, so this is not gated on canAbortSession, and the server answers a
+  // session with no background work as it does any abort with nothing to stop.
+  const handleStopBackgroundWork = useCallback(() => {
+    const targetSessionId = selectedSession?.id || currentSessionId || null;
+    if (!targetSessionId) {
+      return;
+    }
+    sendMessage({
+      type: 'chat.abort',
+      sessionId: targetSessionId,
+    });
+  }, [currentSessionId, selectedSession?.id, sendMessage]);
+
   const handleGrantToolPermission = useCallback(
     (suggestion: { entry: string; toolName: string }) => {
       if (!suggestion || provider !== 'claude') {
@@ -1361,6 +1375,7 @@ export function useChatComposerState({
     syncInputOverlayScroll,
     handleClearInput,
     handleAbortSession,
+    handleStopBackgroundWork,
     handlePermissionDecision,
     handleGrantToolPermission,
     handleInputFocusChange,

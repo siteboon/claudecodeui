@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { test, vi } from 'vitest';
 
@@ -12,8 +12,9 @@ import type { BackgroundTaskSummary, SessionActivity } from '@/shared/types';
  * The pill above the composer used to vanish at the turn's `complete` even
  * when the CLI stayed open for the agents, workflows or commands the turn
  * launched. A background-only entry now keeps it up, named for the work and
- * in the purple of the workflow and agent cards — with no Stop, because
- * nothing is responding and the composer can send.
+ * in the purple of the workflow and agent cards. Nothing is responding and the
+ * composer can send, so it offers no Stop for a turn — but it does offer to
+ * stop the work, which otherwise had no control besides one chip per task.
  */
 
 const task = (overrides: Partial<BackgroundTaskSummary> = {}): BackgroundTaskSummary => ({
@@ -34,7 +35,7 @@ const backgroundActivity = (tasks: BackgroundTaskSummary[]): SessionActivity => 
   tasks,
 });
 
-test('a background-only session names its workflow, counts from its start and offers no Stop', () => {
+test('a background-only session names its workflow, counts from its start and offers no Stop for a turn', () => {
   const onAbort = vi.fn();
   const { container } = render(<ActivityIndicator activity={backgroundActivity([task()])} onAbort={onAbort} />);
 
@@ -43,6 +44,15 @@ test('a background-only session names its workflow, counts from its start and of
   assert.match(container.textContent ?? '', /1m 5s/, 'elapsed since the task started, not since the pill mounted');
   assert.equal(screen.queryByRole('button', { name: 'Stop' }), null);
   assert.ok(container.querySelector('.bg-purple-500'), 'the dot is the cards\' purple, not the primary colour');
+});
+
+test('a background-only session offers to stop all of its background work', () => {
+  const onStopBackground = vi.fn();
+  render(<ActivityIndicator activity={backgroundActivity([task()])} onStopBackground={onStopBackground} />);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Stop all' }));
+
+  assert.equal(onStopBackground.mock.calls.length, 1);
 });
 
 test('an agent and a command are named by what they were asked to do; several tasks by their count', () => {
