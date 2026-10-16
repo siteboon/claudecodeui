@@ -26,6 +26,19 @@ test('the composer names the mode the next message runs in', () => {
   assert.match(getByRole('button').textContent ?? '', /Plan Mode/);
 });
 
+test('a screen reader hears the mode the button shows', () => {
+  const { getByRole } = render(
+    <ComposerPermissionMenu
+      permissionMode="plan"
+      permissionModes={[...MODES]}
+      onSelectPermissionMode={() => {}}
+      providerLabel="Claude"
+    />,
+  );
+
+  assert.ok(getByRole('button', { name: /^Plan Mode/ }));
+});
+
 test('the default mode is named too', () => {
   const { getByRole } = render(
     <ComposerPermissionMenu

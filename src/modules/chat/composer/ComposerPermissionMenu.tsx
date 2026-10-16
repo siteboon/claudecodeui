@@ -125,7 +125,9 @@ function ComposerPermissionMenu({
         className={`flex h-8 min-w-8 max-w-40 shrink-0 items-center justify-center gap-1.5 rounded-lg border px-2 text-xs font-medium transition-colors sm:max-w-48 ${activeAppearance.trigger}`}
         aria-haspopup="menu"
         aria-expanded={isOpen}
-        aria-label={heading}
+        // The visible mode name leads the accessible name, so what a screen
+        // reader announces matches what the button shows.
+        aria-label={`${modeLabel(permissionMode)}: ${heading}`}
         title={t('input.clickToChangeMode')}
       >
         <ActiveIcon className="h-4 w-4 shrink-0" />
