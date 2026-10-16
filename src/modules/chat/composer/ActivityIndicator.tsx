@@ -52,6 +52,10 @@ export default function ActivityIndicator({ activity, onAbort, onStopBackground,
   const { t } = useTranslation('chat');
   const [renderedActivity, setRenderedActivity] = useState<SessionActivity | null>(activity);
   const [isExiting, setIsExiting] = useState(false);
+  // The activity "Stop all" was pressed for: a second press for the same work
+  // would find nothing left to stop and come back as an error, so the button
+  // stays disabled until the activity changes.
+  const [stopRequestedFor, setStopRequestedFor] = useState<SessionActivity | null>(null);
   const startedAt = renderedActivity?.startedAt ?? null;
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
@@ -146,8 +150,12 @@ export default function ActivityIndicator({ activity, onAbort, onStopBackground,
         {isBackground && onStopBackground && ownBackgroundTasks(renderedActivity.tasks ?? []).length > 0 && (
           <button
             type="button"
-            onClick={onStopBackground}
-            className={`${tabSurfaceClassName} pointer-events-auto gap-1.5 text-muted-foreground hover:bg-card hover:text-destructive`}
+            disabled={stopRequestedFor === renderedActivity}
+            onClick={() => {
+              setStopRequestedFor(renderedActivity);
+              onStopBackground();
+            }}
+            className={`${tabSurfaceClassName} pointer-events-auto gap-1.5 text-muted-foreground hover:bg-card hover:text-destructive disabled:cursor-default disabled:opacity-60 disabled:hover:text-muted-foreground`}
           >
             <svg className="h-2.5 w-2.5 fill-current" viewBox="0 0 24 24" aria-hidden>
               <rect x="5" y="5" width="14" height="14" rx="2" />

@@ -55,6 +55,18 @@ test('a background-only session offers to stop all of its background work', () =
   assert.equal(onStopBackground.mock.calls.length, 1);
 });
 
+test('Stop all asks once: a second click before the work settles sends nothing', () => {
+  // The first stop ends the work, so a second would find nothing to stop and
+  // come back as an error in the conversation.
+  const onStopBackground = vi.fn();
+  render(<ActivityIndicator activity={backgroundActivity([task()])} onStopBackground={onStopBackground} />);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Stop all' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Stop all' }));
+
+  assert.equal(onStopBackground.mock.calls.length, 1);
+});
+
 test('an agent and a command are named by what they were asked to do; several tasks by their count', () => {
   const agent = render(
     <ActivityIndicator activity={backgroundActivity([task({ taskType: 'local_agent', description: 'Survey the repo', workflowName: undefined })])} />,
