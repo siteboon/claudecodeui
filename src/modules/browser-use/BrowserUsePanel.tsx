@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Bot,
@@ -16,7 +17,7 @@ import {
 } from 'lucide-react';
 
 import { cn } from '@/shared/utils';
-import { Badge, Button } from '@/shared/ui';
+import { Badge, Button, Input } from '@/shared/ui';
 import { api, readApiJson, ApiRequestError } from '@/shared/api';
 import type { SettingsMainTab } from '@/shared/types';
 
@@ -65,6 +66,7 @@ const BROWSER_USE_PANEL_ERROR_KEYS: Record<string, string> = {
   BROWSER_USE_SESSIONS_LOAD_FAILED: 'browserUse.loadFailed',
   BROWSER_USE_SESSION_STOP_FAILED: 'browserUse.actionFailed',
   BROWSER_USE_SESSION_DELETE_FAILED: 'browserUse.actionFailed',
+  BROWSER_USE_SESSION_INPUT_FAILED: 'browserUse.actionFailed',
   BROWSER_USE_RUNTIME_INSTALL_FAILED: 'browserUse.installFailed',
 };
 
@@ -230,6 +232,40 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
     setIsFullscreen(false);
   });
 
+  const [inputText, setInputText] = useState('');
+
+  const sendInput = useCallback(async (input: { type: 'click'; x: number; y: number } | { type: 'text'; text: string } | { type: 'key'; key: string }) => {
+    if (!selectedSession || selectedSession.status !== 'ready') return;
+    setError(null);
+    try {
+      const response = await api.browserUse.sendInput(selectedSession.id, input);
+      const data = await readApiJson<{ data: { session: BrowserUseSession } }>(response);
+      setSessions((current) => current.map((session) => (session.id === data.data.session.id ? data.data.session : session)));
+    } catch (err) {
+      setError(localizeApiError(err, 'browserUse.actionFailed', t));
+    }
+  }, [selectedSession, t]);
+
+  const handleSurfaceClick = (event: MouseEvent<HTMLImageElement>) => {
+    const viewport = selectedSession?.viewport;
+    if (!viewport) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    void sendInput({
+      type: 'click',
+      x: ((event.clientX - rect.left) / rect.width) * viewport.width,
+      y: ((event.clientY - rect.top) / rect.height) * viewport.height,
+    });
+  };
+
+  const submitInputText = async () => {
+    if (!inputText) return;
+    const text = inputText;
+    setInputText('');
+    await sendInput({ type: 'text', text });
+    await sendInput({ type: 'key', key: 'Enter' });
+  };
+
   const installBrowserBinaries = () => runAction(async () => {
     setIsInstalling(true);
     try {
@@ -330,14 +366,18 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
     </div>
   );
 
-  const renderBrowserSurface = (fullscreen = false) => (
+  const renderBrowserScreen = (fullscreen = false) => (
     <div className={cn('flex flex-1 items-center justify-center bg-neutral-950', fullscreen ? 'min-h-[80vh]' : 'min-h-[420px]')}>
       {selectedSession?.screenshotDataUrl ? (
         <div className="relative inline-block max-h-full">
           <img
             src={selectedSession.screenshotDataUrl}
             alt={t('browserUse.screenshotAlt')}
-            className={fullscreen ? 'block max-h-[80vh] w-auto max-w-full object-contain' : 'block max-h-[72vh] w-auto max-w-full object-contain'}
+            onClick={handleSurfaceClick}
+            className={cn(
+              fullscreen ? 'block max-h-[80vh] w-auto max-w-full object-contain' : 'block max-h-[72vh] w-auto max-w-full object-contain',
+              selectedSession.status === 'ready' && 'cursor-pointer',
+            )}
           />
           {cursorStyle && (
             <div
@@ -353,6 +393,33 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
           <MonitorPlay className="mx-auto h-9 w-9 text-neutral-500" />
           <div className="mt-3 text-sm font-medium text-neutral-100">{selectedSession?.message || t('browserUse.waitingScreenshot')}</div>
           <p className="mt-1 text-xs text-neutral-400">{t('browserUse.waitingScreenshotHint')}</p>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderBrowserSurface = (fullscreen = false) => (
+    <div className="flex flex-1 flex-col">
+      {renderBrowserScreen(fullscreen)}
+      {selectedSession?.status === 'ready' && (
+        <div className="flex flex-wrap items-center gap-2 border-t border-border/60 bg-background px-3 py-2">
+          <Input
+            value={inputText}
+            onChange={(event) => setInputText(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                void submitInputText();
+              }
+            }}
+            placeholder={t('browserUse.inputPlaceholder')}
+            className="min-w-[200px] flex-1"
+          />
+          <Button variant="outline" size="sm" onClick={() => void submitInputText()} disabled={!inputText}>{t('browserUse.inputSend')}</Button>
+          <Button variant="outline" size="sm" onClick={() => void sendInput({ type: 'key', key: 'Backspace' })}>{t('browserUse.inputBackspace')}</Button>
+          <Button variant="outline" size="sm" onClick={() => void sendInput({ type: 'key', key: 'Tab' })}>{t('browserUse.inputTab')}</Button>
+          <Button variant="outline" size="sm" onClick={() => void sendInput({ type: 'key', key: 'Enter' })}>{t('browserUse.inputEnter')}</Button>
+          <span className="w-full text-xs text-muted-foreground">{t('browserUse.inputHint')}</span>
         </div>
       )}
     </div>
