@@ -265,8 +265,7 @@
       "command": "פקודה {{description}}",
       "count_one": "משימה אחת",
       "count_two": "שתי משימות",
-      "count_other": "{{count}} משימות",
-      "sendAnyway": "בסשן הזה עדיין רצה עבודה ברקע:\n{{work}}\n\nהודעה חדשה פותחת תור חדש, וזה עוצר את העבודה הזו; כל מה שעוד לא דווח ממנה יאבד. לשלוח בכל זאת?"
+      "count_other": "{{count}} משימות"
     },
     "controls": {
       "stopGeneration": "עצירת היצירה",

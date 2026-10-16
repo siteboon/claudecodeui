@@ -304,8 +304,7 @@
       "count_one": "{{count}} úloha",
       "count_few": "{{count}} úlohy",
       "count_many": "{{count}} úlohy",
-      "count_other": "{{count}} úloh",
-      "sendAnyway": "V této relaci stále běží práce na pozadí:\n{{work}}\n\nNová zpráva zahájí nové kolo, které tuto práci zastaví; cokoli, co zatím nenahlásila, se ztratí. Přesto odeslat?"
+      "count_other": "{{count}} úloh"
     },
     "controls": {
       "stopGeneration": "Zastavit generování",
