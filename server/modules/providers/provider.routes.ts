@@ -609,6 +609,21 @@ const parseCustomProviderModelPayload = (payload: unknown): CustomProviderModelI
   return effort === undefined ? { model, id } : { model, id, effort };
 };
 
+/** Reads the `{ enabled: boolean }` body of the custom-models-only toggle. */
+const parseCustomModelsOnlyPayload = (payload: unknown): boolean => {
+  const enabled = payload && typeof payload === 'object'
+    ? (payload as Record<string, unknown>).enabled
+    : undefined;
+  if (typeof enabled !== 'boolean') {
+    throw new AppError('enabled must be true or false.', {
+      code: 'INVALID_CUSTOM_MODELS_ONLY',
+      statusCode: 400,
+    });
+  }
+
+  return enabled;
+};
+
 router.get(
   '/:provider/auth/status',
   asyncHandler(async (req: Request, res: Response) => {
@@ -623,6 +638,17 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const provider = parseProvider(req.params.provider);
     const models = await providerModelsService.getProviderModels(provider);
+    res.json(createApiSuccessResponse({ provider, models }));
+  }),
+);
+
+/** Turns "use only my models" on or off for one provider and returns its new catalog. */
+router.put(
+  '/:provider/models/custom-only',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const enabled = parseCustomModelsOnlyPayload(req.body);
+    const models = await providerModelsService.setCustomModelsOnly(provider, enabled);
     res.json(createApiSuccessResponse({ provider, models }));
   }),
 );

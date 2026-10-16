@@ -27,11 +27,14 @@ export type ProviderModelOption = {
  * The full model catalog for one provider: every option plus the value used when the user has not chosen one.
  * `EFFORT_LEVELS` lists, weakest first, the reasoning-effort levels a custom model may declare in the model
  * library; the server derives it from the provider, not from the options, and it is empty without effort support.
+ * `CUSTOM_MODELS_ONLY` is the user's "use only my models" flag: while it is on and a custom model exists, the
+ * server lists only custom models and the first is `DEFAULT`. Older servers omit it, which means off.
  */
 export type ProviderModelsDefinition = {
   OPTIONS: ProviderModelOption[];
   DEFAULT: string;
   EFFORT_LEVELS?: string[];
+  CUSTOM_MODELS_ONLY?: boolean;
 };
 
 /**
@@ -57,6 +60,8 @@ export type ProviderModelActions = {
     input: CustomProviderModelInput,
   ): Promise<void>;
   remove(provider: LLMProvider, existing: ProviderModelOption): Promise<void>;
+  /** Turns the provider's "use only my models" flag on or off. */
+  setCustomModelsOnly(provider: LLMProvider, enabled: boolean): Promise<void>;
 };
 
 // ---------------------------

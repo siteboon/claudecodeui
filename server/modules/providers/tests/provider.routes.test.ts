@@ -246,6 +246,77 @@ test('model routes expose immutable defaults and full custom model CRUD', async 
   });
 });
 
+for (const provider of ['codex', 'kiro']) {
+  test(`the custom-only route restricts ${provider} to its custom models`, async () => {
+    await withProviderServer(async (baseUrl) => {
+      type Catalog = {
+        OPTIONS: Array<{ value: string; isCustom: boolean }>;
+        DEFAULT: string;
+        CUSTOM_MODELS_ONLY?: boolean;
+      };
+      const readCatalog = async (provider: string): Promise<Catalog> => {
+        const response = await fetch(`${baseUrl}/api/providers/${provider}/models`);
+        return (await response.json() as { data: { models: Catalog } }).data.models;
+      };
+      const putCustomOnly = async (provider: string, body: unknown) => {
+        const response = await fetch(`${baseUrl}/api/providers/${provider}/models/custom-only`, {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        return {
+          status: response.status,
+          payload: await response.json() as {
+            data?: { provider: string; models: Catalog };
+            error?: { code: string };
+          },
+        };
+      };
+
+      const builtIn = await readCatalog(provider);
+      assert.equal(builtIn.CUSTOM_MODELS_ONLY, false);
+      assert.ok(builtIn.OPTIONS.length > 0);
+
+      for (const [model, id] of [['Gateway One', 'gateway/one'], ['Gateway Two', 'gateway/two']]) {
+        const created = await fetch(`${baseUrl}/api/providers/${provider}/models`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ model, id }),
+        });
+        assert.equal(created.status, 201);
+      }
+
+      const enabled = await putCustomOnly(provider, { enabled: true });
+      assert.equal(enabled.status, 200);
+      assert.equal(enabled.payload.data?.provider, provider);
+      assert.deepEqual(
+        enabled.payload.data?.models.OPTIONS.map((option) => option.value),
+        ['gateway/one', 'gateway/two'],
+      );
+      assert.equal(enabled.payload.data?.models.DEFAULT, 'gateway/one');
+      assert.equal(enabled.payload.data?.models.CUSTOM_MODELS_ONLY, true);
+      // Persisted, and scoped to the one provider.
+      assert.deepEqual(await readCatalog(provider), enabled.payload.data?.models);
+      assert.equal((await readCatalog('cursor')).CUSTOM_MODELS_ONLY, false);
+
+      for (const invalid of [{}, { enabled: 'true' }, { enabled: 1 }, []]) {
+        const rejected = await putCustomOnly(provider, invalid);
+        assert.equal(rejected.status, 400, JSON.stringify(invalid));
+        assert.equal(rejected.payload.error?.code, 'INVALID_CUSTOM_MODELS_ONLY');
+      }
+      assert.equal((await readCatalog(provider)).CUSTOM_MODELS_ONLY, true);
+
+      const disabled = await putCustomOnly(provider, { enabled: false });
+      assert.equal(disabled.status, 200);
+      assert.equal(disabled.payload.data?.models.DEFAULT, builtIn.DEFAULT);
+      assert.equal(
+        disabled.payload.data?.models.OPTIONS.length,
+        builtIn.OPTIONS.length + 2,
+      );
+    });
+  });
+}
+
 test('custom model routes accept, validate, and return reasoning-effort levels', async () => {
   await withProviderServer(async (baseUrl) => {
     const postModel = async (provider: string, body: unknown) => {

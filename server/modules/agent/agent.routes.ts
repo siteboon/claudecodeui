@@ -8,6 +8,9 @@ import { normalizeProjectPath } from '@/shared/index.js';
 
 import { collectAssistantMessages } from './agent-response.service.js';
 
+/** The providers an Agent API run can start: the ones with a runtime and a model catalog. */
+const AGENT_RUN_PROVIDERS = ['claude', 'cursor', 'codex', 'opencode', 'kiro'];
+
 /** What the route reads off a session row it continues: the row, not the request, says which provider and project a session belongs to. */
 type AgentSessionRow = {
   session_id: string;
@@ -645,6 +648,10 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
    *                             Omitted: a new session is created for the run.
    *
    * @param {string} model - (Optional) Model identifier for providers.
+   *                        Omitted: the provider's catalog DEFAULT from GET /api/providers/:provider/models,
+   *                        which is the first custom model while "Use only my models" is on. Cursor
+   *                        without that setting leaves the choice to its CLI. Continued Kiro
+   *                        sessions retain their recorded model or the native session's selection.
    *
    *                        Claude models: 'default', 'sonnet', 'opus', 'haiku', 'sonnet[1m]', 'opus[1m]', 'fable'
    *                        Cursor models: 'gpt-5' (default), 'gpt-5.2', 'gpt-5.2-high', 'sonnet-4.5', 'opus-4.5',
@@ -889,7 +896,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       return res.status(400).json({ error: 'message is required' });
     }
 
-    if (requestedProvider !== null && !['claude', 'cursor', 'codex', 'opencode', 'kiro'].includes(requestedProvider)) {
+    if (requestedProvider !== null && !AGENT_RUN_PROVIDERS.includes(requestedProvider)) {
       return res.status(400).json({ error: 'provider must be "claude", "cursor", "codex", "opencode", or "kiro"' });
     }
 
@@ -1019,8 +1026,20 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       });
       writer.send({ type: 'session-id', sessionId: appSessionId });
 
-      const codexModels = await providerModelsService.getProviderModels('codex');
-      const opencodeModels = await providerModelsService.getProviderModels('opencode');
+      // A request without `model` runs on the catalog's DEFAULT, the value
+      // /api/providers/:provider/models and the API docs advertise. It is the
+      // first custom model while the provider lists only custom models.
+      // Only the registered runnable providers have a catalog: a continued legacy
+      // session whose provider is no longer registered must not fail here.
+      const providerModels = AGENT_RUN_PROVIDERS.includes(provider)
+        ? await providerModelsService.getProviderModels(provider)
+        : null;
+      // Cursor otherwise leaves the choice to its CLI, so it only takes the
+      // catalog DEFAULT when that is one of the user's own models.
+      const cursorDefaultModel = providerModels?.CUSTOM_MODELS_ONLY === true
+        && providerModels.OPTIONS.some((option) => option.isCustom)
+        ? providerModels.DEFAULT
+        : undefined;
 
       // Start the appropriate session
       if (provider === 'claude') {
@@ -1030,7 +1049,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           projectPath: finalProjectPath,
           cwd: finalProjectPath,
           sessionId: appSessionId,
-          model: model,
+          model: model || providerModels?.DEFAULT,
           effort,
           permissionMode: 'bypassPermissions' // Bypass all permissions for API calls
         }, run.writer);
@@ -1042,7 +1061,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           projectPath: finalProjectPath,
           cwd: finalProjectPath,
           sessionId: appSessionId,
-          model: model || undefined,
+          model: model || cursorDefaultModel,
           skipPermissions: true // Bypass permissions for Cursor
         }, run.writer);
       } else if (provider === 'codex') {
@@ -1052,7 +1071,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           projectPath: finalProjectPath,
           cwd: finalProjectPath,
           sessionId: appSessionId,
-          model: model || codexModels.DEFAULT,
+          model: model || providerModels?.DEFAULT,
           effort,
           permissionMode: 'bypassPermissions'
         }, run.writer);
@@ -1063,7 +1082,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           projectPath: finalProjectPath,
           cwd: finalProjectPath,
           sessionId: appSessionId,
-          model: model || opencodeModels.DEFAULT,
+          model: model || providerModels?.DEFAULT,
           effort,
           permissionMode: 'bypassPermissions' // Agent runs are non-interactive, like the other providers above
         }, run.writer);
@@ -1072,7 +1091,8 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           projectPath: finalProjectPath,
           cwd: finalProjectPath,
           sessionId: appSessionId,
-          model: model || undefined,
+          // New runs follow the catalog; resumes let Kiro restore the session's model.
+          model: model || (sessionRow ? undefined : providerModels?.DEFAULT),
         }, run.writer);
       }
 
