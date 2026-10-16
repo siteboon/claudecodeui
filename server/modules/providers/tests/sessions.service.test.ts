@@ -405,6 +405,60 @@ test('a CLI turn does not duplicate a session already running a chat run', { con
   });
 });
 
+test('a held session the CLI reports idle is listed once, as background work', { concurrency: false }, async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createAppSession('held-idle', 'claude', '/tmp/running-project');
+    sessionsDb.assignProviderSessionId('held-idle', 'claude-native-held-idle');
+    const tasks = [task('sleep', 1_000)];
+
+    await withClaudeCliRegistry(
+      [{ pid: process.pid, sessionId: 'claude-native-held-idle', status: 'idle', startedAt: 3_000 }],
+      async () => await withProviders(
+        { claude: { run: async () => undefined, abort: () => false, listBackgroundWork: () => [{ sessionId: 'held-idle', tasks }] } },
+        async () => {
+          assert.deepEqual(await sessionsService.listRunningSessions(), [{
+            sessionId: 'held-idle',
+            provider: 'claude',
+            startedAt: 1_000,
+            lastSeq: 0,
+            background: true,
+            canInterrupt: false,
+            tasks,
+          }]);
+        },
+      ),
+    );
+  });
+});
+
+test('a held session the CLI reports busy is listed once, as processing, with its tasks', { concurrency: false }, async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createAppSession('held-busy', 'claude', '/tmp/running-project');
+    sessionsDb.assignProviderSessionId('held-busy', 'claude-native-held-busy');
+    const tasks = [task('second', 1_000)];
+
+    // The held process is mid-turn (relaying one task while this one still
+    // runs). Listed as background, a client would offer to send over the turn.
+    await withClaudeCliRegistry(
+      [{ pid: process.pid, sessionId: 'claude-native-held-busy', status: 'busy', startedAt: 3_000 }],
+      async () => await withProviders(
+        { claude: { run: async () => undefined, abort: () => false, listBackgroundWork: () => [{ sessionId: 'held-busy', tasks }] } },
+        async () => {
+          assert.deepEqual(await sessionsService.listRunningSessions(), [{
+            sessionId: 'held-busy',
+            provider: 'claude',
+            startedAt: 1_000,
+            lastSeq: 0,
+            canInterrupt: false,
+            statusText: 'Running in the Claude CLI',
+            tasks,
+          }]);
+        },
+      ),
+    );
+  });
+});
+
 test('an unreadable registry never fails the running-sessions poll', { concurrency: false }, async () => {
   await withIsolatedDatabase(async () => {
     sessionsDb.createAppSession('safe-session', 'claude', '/tmp/running-project');

@@ -171,7 +171,7 @@ export const sessionsService = {
           running.tasks = tasks;
           continue;
         }
-        entries.push({
+        const entry: RunningSessionEntry = {
           sessionId,
           provider: provider.id,
           startedAt: Math.min(...tasks.map((task) => task.startedAt)),
@@ -181,17 +181,35 @@ export const sessionsService = {
           background: true,
           canInterrupt: false,
           tasks,
-        });
+        };
+        entries.push(entry);
+        runningById.set(sessionId, entry);
       }
     }
 
     // The chat-run registry only knows about turns CloudCLI drives itself, so
     // without this a session working under the Claude CLI — including one
     // CloudCLI spawned for its own Shell view — looks idle. A session already
-    // listed above keeps its richer entry.
+    // listed above keeps its richer entry, and stays listed once.
     for (const live of await listBusyClaudeCliSessions()) {
       const session = sessionsDb.getSessionByProviderSessionId(live.providerSessionId);
-      if (!session || runningById.has(session.session_id)) {
+      if (!session) {
+        continue;
+      }
+      const listed = runningById.get(session.session_id);
+      if (listed) {
+        if (listed.background) {
+          // The process held open for this session's background work is in a
+          // turn — relaying a task that finished while another still runs,
+          // say. That is a response in flight, not idle background work: a
+          // client shown "background" here would offer to send over it.
+          console.warn(
+            `[Sessions] Claude CLI reports busy for held session ${session.session_id} `
+            + `(pid ${live.pid}, ${listed.tasks?.length ?? 0} background task(s)); listing it as processing`,
+          );
+          delete listed.background;
+          listed.statusText = 'Running in the Claude CLI';
+        }
         continue;
       }
 
