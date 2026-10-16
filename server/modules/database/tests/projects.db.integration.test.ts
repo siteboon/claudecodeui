@@ -36,7 +36,7 @@ test('projectsDb.createProjectPath returns created for fresh paths', async () =>
 
     assert.equal(created.outcome, 'created');
     assert.ok(created.project);
-    assert.equal(created.project?.project_path, '/workspace/new-project');
+    assert.equal(created.project?.project_path, path.join(path.sep, 'workspace', 'new-project'));
     assert.equal(created.project?.isArchived, 0);
   });
 });
