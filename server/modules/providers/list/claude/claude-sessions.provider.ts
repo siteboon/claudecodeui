@@ -1730,6 +1730,39 @@ export class ClaudeSessionsProvider implements IProviderSessions {
   }
 
   /**
+   * The files besides the session transcript that `fetchHistory` reads, all
+   * under `<projectDir>/<providerSessionId>/subagents/`: each agent's
+   * transcript and metadata, and each workflow run's journal. A workflow
+   * agent's own transcript is not among them — its card fetches it on demand
+   * (`readWorkflowAgentActivity`). Keyed by the provider session id, as the
+   * history reader looks agents up (`findClaudeSubagentTranscript`); the
+   * legacy layout that dropped agent files beside the transcript is left out.
+   */
+  async listHistoryDependencies(transcriptPath: string, providerSessionId: string): Promise<string[]> {
+    const subagentDirectory = path.join(path.dirname(transcriptPath), providerSessionId, 'subagents');
+    const readDirectory = async (directory: string) => {
+      try {
+        return await fsp.readdir(directory, { withFileTypes: true });
+      } catch {
+        return [];
+      }
+    };
+
+    const dependencies: string[] = [];
+    for (const entry of await readDirectory(subagentDirectory)) {
+      if (entry.isFile() && entry.name.startsWith('agent-')) {
+        dependencies.push(path.join(subagentDirectory, entry.name));
+      }
+    }
+    for (const run of await readDirectory(path.join(subagentDirectory, 'workflows'))) {
+      if (run.isDirectory()) {
+        dependencies.push(path.join(subagentDirectory, 'workflows', run.name, 'journal.jsonl'));
+      }
+    }
+    return dependencies.sort();
+  }
+
+  /**
    * Loads Claude JSONL history for a project/session and returns normalized
    * messages, preserving the existing pagination behavior from projects.js.
    */

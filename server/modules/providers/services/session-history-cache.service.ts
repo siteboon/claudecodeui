@@ -29,13 +29,26 @@ import type { FetchHistoryResult } from '@/shared/types.js';
  * callers pass `transcriptPath: null` for providers whose messages live
  * elsewhere (Cursor's store.db, OpenCode's shared SQLite), which bypasses
  * caching entirely.
+ *
+ * A reader that also parses other files names them through
+ * `listDependencies`, and their identities are part of the entry's key too.
+ * Claude's does: a background agent writes its steps to a transcript of its
+ * own while the session's file stays untouched until it reports back.
  */
+
+type FileIdentity = {
+  path: string;
+  mtimeMs: number;
+  size: number;
+};
 
 type CacheEntry = {
   transcriptPath: string;
   mtimeMs: number;
   /** File size in bytes; doubles as the entry's cost against the byte budget. */
   size: number;
+  /** The other files the history was read from, as they were when it was loaded. */
+  dependencies: FileIdentity[];
   full: FetchHistoryResult;
 };
 
@@ -45,7 +58,33 @@ type GetFullHistoryArgs = {
   transcriptPath: string | null | undefined;
   /** Loads the complete transcript (`limit: null, offset: 0`) from the provider. */
   loadFull: () => Promise<FetchHistoryResult>;
+  /** Other files the history reader parses; a path that does not exist yet still counts once it appears. */
+  listDependencies?: () => Promise<string[]>;
 };
+
+/** Identities of the dependency files that exist right now, in listing order. */
+async function readDependencyIdentities(listDependencies: GetFullHistoryArgs['listDependencies']): Promise<FileIdentity[]> {
+  if (!listDependencies) {
+    return [];
+  }
+  const paths = await listDependencies();
+  const identities = await Promise.all(paths.map(async (dependencyPath) => {
+    try {
+      const stat = await fsp.stat(dependencyPath);
+      return stat.isFile() ? { path: dependencyPath, mtimeMs: stat.mtimeMs, size: stat.size } : null;
+    } catch {
+      return null;
+    }
+  }));
+  return identities.filter((identity): identity is FileIdentity => identity !== null);
+}
+
+function sameIdentities(left: FileIdentity[], right: FileIdentity[]): boolean {
+  return left.length === right.length && left.every((identity, index) =>
+    identity.path === right[index].path
+    && identity.mtimeMs === right[index].mtimeMs
+    && identity.size === right[index].size);
+}
 
 /**
  * A transcript entry's heap cost is roughly the file it was parsed from, so
@@ -83,7 +122,7 @@ export function createSessionHistoryCache(
      * the session is not cacheable (no transcript path, or the file cannot be
      * stat'ed) — the caller then falls back to a plain provider read.
      */
-    async getFullHistory({ sessionId, transcriptPath, loadFull }: GetFullHistoryArgs): Promise<FetchHistoryResult | null> {
+    async getFullHistory({ sessionId, transcriptPath, loadFull, listDependencies }: GetFullHistoryArgs): Promise<FetchHistoryResult | null> {
       if (!transcriptPath) {
         return null;
       }
@@ -100,12 +139,14 @@ export function createSessionHistoryCache(
         return null;
       }
 
+      const dependencies = await readDependencyIdentities(listDependencies);
       const cached = entries.get(sessionId);
       if (
         cached
         && cached.transcriptPath === transcriptPath
         && cached.mtimeMs === stat.mtimeMs
         && cached.size === stat.size
+        && sameIdentities(cached.dependencies, dependencies)
       ) {
         // Re-insert to mark as most recently used.
         entries.delete(sessionId);
@@ -127,6 +168,7 @@ export function createSessionHistoryCache(
           transcriptPath,
           mtimeMs: stat.mtimeMs,
           size: stat.size,
+          dependencies,
           full,
         });
         evictOverBudget();

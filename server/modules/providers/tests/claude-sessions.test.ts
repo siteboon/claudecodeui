@@ -217,6 +217,61 @@ test('Claude history attaches a subagent transcript stored under the session dir
   }
 });
 
+test('Claude history depends on each subagent transcript and workflow journal of its session', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-history-dependencies-'));
+
+  try {
+    const parentPath = await writeClaudeSubagentSession(tempRoot);
+    const subagentDirectory = path.join(tempRoot, SESSION_ID, 'subagents');
+    const workflowDirectory = path.join(subagentDirectory, 'workflows', 'wf_run1');
+    await mkdir(workflowDirectory, { recursive: true });
+    await writeFile(path.join(workflowDirectory, 'journal.jsonl'), '{"type":"started"}\n', 'utf8');
+    // A workflow agent's own transcript is read on demand by its card, not by
+    // the session history.
+    await writeFile(path.join(workflowDirectory, 'agent-b1.jsonl'), '{"type":"assistant"}\n', 'utf8');
+
+    const dependencies = await new ClaudeSessionsProvider().listHistoryDependencies(parentPath, SESSION_ID);
+
+    assert.deepEqual(dependencies, [
+      path.join(subagentDirectory, `agent-${AGENT_ID}.jsonl`),
+      path.join(subagentDirectory, `agent-${AGENT_ID}.meta.json`),
+      path.join(workflowDirectory, 'journal.jsonl'),
+    ]);
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('a Claude session without subagents depends on no other file', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-history-dependencies-'));
+
+  try {
+    assert.deepEqual(await new ClaudeSessionsProvider().listHistoryDependencies(path.join(tempRoot, 'lonely.jsonl'), 'lonely'), []);
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('Claude history depends on the provider session\'s agents, whatever its transcript file is called', async () => {
+  // History reads agents from the provider session's directory, so that is
+  // where a change must be noticed, not beside a file of another name.
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-history-dependencies-'));
+
+  try {
+    await writeClaudeSubagentSession(tempRoot);
+    const renamedTranscript = path.join(tempRoot, 'renamed-copy.jsonl');
+
+    const dependencies = await new ClaudeSessionsProvider().listHistoryDependencies(renamedTranscript, SESSION_ID);
+
+    assert.deepEqual(dependencies, [
+      path.join(tempRoot, SESSION_ID, 'subagents', `agent-${AGENT_ID}.jsonl`),
+      path.join(tempRoot, SESSION_ID, 'subagents', `agent-${AGENT_ID}.meta.json`),
+    ]);
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('Claude history folds an agent task notification into the call that spawned it', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-notification-'));
 
