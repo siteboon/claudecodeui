@@ -136,3 +136,23 @@ test('routes permission decisions through provider-owned runtime capabilities', 
     { requestId: 'request-1', sessionId: 'session-1' },
   ]);
 });
+
+test('a session reads as having background work while its held process relays a settled task', () => {
+  // The task has left the runtime's list, but the process held open for it is
+  // running the turn that relays its result. The dispatcher, the retention
+  // guard and a subscribing tab all ask this one question, so a queued turn
+  // sent in that window would run next to the relay.
+  let relaying = true;
+  const service = createService([
+    createProvider('claude', createRuntime({
+      listBackgroundWork: () => [],
+      hasActiveHeldTurn: (sessionId) => sessionId === 'held-session' && relaying,
+    })),
+    createProvider('codex', createRuntime()),
+  ]);
+
+  assert.equal(service.hasBackgroundWork('held-session'), true);
+  assert.equal(service.hasBackgroundWork('other-session'), false);
+  relaying = false;
+  assert.equal(service.hasBackgroundWork('held-session'), false);
+});

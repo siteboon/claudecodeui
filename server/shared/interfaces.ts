@@ -46,6 +46,13 @@ export interface IProviderRuntime {
    */
   listBackgroundWork?(): Array<{ sessionId: string; tasks: BackgroundTaskSummary[] }>;
   /**
+   * Whether the process held open for a session's background work is running
+   * a turn of its own — relaying a task that just settled, say. The task has
+   * left `listBackgroundWork` by then, but the session is not idle until that
+   * turn ends.
+   */
+  hasActiveHeldTurn?(sessionId: string): boolean;
+  /**
    * Stops one outstanding background task. Resolves false when the session has
    * no live process or that process is not tracking the task — it already
    * settled, or the id was never one of its own.
