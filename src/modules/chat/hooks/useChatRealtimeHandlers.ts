@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 
-import type { ServerEvent,MarkSessionIdle,MarkSessionProcessing,PendingPermissionRequest,ProjectSession,LLMProvider,NormalizedMessage,GetSessionActivity,MarkSessionBackground } from '@/shared/types';
+import type { ServerEvent,MarkSessionIdle,MarkSessionProcessing,PendingPermissionRequest,PlanModeChange,ProjectSession,LLMProvider,NormalizedMessage,GetSessionActivity,MarkSessionBackground } from '@/shared/types';
 import { showCompletionTitleIndicator } from '@/modules/chat/utils/pageTitleNotification';
 import { playChatCompletionSound, playNotificationSound } from '@/shared/utils';
 import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
@@ -15,6 +15,13 @@ const isActionablePermissionRequest = (request: { toolName?: unknown } | null | 
 const hasActionablePermissionRequests = (requests: Array<{ toolName?: unknown }> | null | undefined): boolean => {
   return Array.isArray(requests) && requests.some((request) => isActionablePermissionRequest(request));
 };
+
+/** The change each plan tool makes to its session's mode once its call succeeds. */
+const PLAN_MODE_CHANGE_BY_TOOL = new Map<string, PlanModeChange>([
+  ['EnterPlanMode', 'entered'],
+  ['ExitPlanMode', 'exited'],
+  ['exit_plan_mode', 'exited'],
+]);
 
 type UseChatRealtimeHandlersArgs = {
   isActive: boolean;
@@ -44,6 +51,8 @@ type UseChatRealtimeHandlersArgs = {
   onWebSocketReconnect?: () => void;
   requestLatestMessages: (sessionId: string, allowNetwork?: boolean) => Promise<void>;
   sessionStore: SessionStore;
+  /** Reports a plan-mode change the CLI made during a live run, so the composer can follow it instead of undoing it with the next message. `provider` is the session's own, from the event. */
+  onPlanModeChange?: (sessionId: string, change: PlanModeChange, provider?: LLMProvider) => void;
 };
 
 /* ------------------------------------------------------------------ */
@@ -79,7 +88,13 @@ export function useChatRealtimeHandlers({
   onWebSocketReconnect,
   requestLatestMessages,
   sessionStore,
+  onPlanModeChange,
 }: UseChatRealtimeHandlersArgs) {
+  // Main-thread plan tool calls still waiting for their result, by tool-use
+  // id: the call names the change, but only a successful result makes it. A
+  // ref, because the listener below is re-subscribed whenever a dependency
+  // changes, which can fall between a call and its result.
+  const pendingPlanModeChangesRef = useRef(new Map<string, PlanModeChange>());
   // Session switches can send `chat.subscribe` before this effect has a chance
   // to rebind the websocket listener. Read the visible session id from a ref
   // so a fast `chat_subscribed` ack is matched against the current view, not
@@ -391,7 +406,32 @@ export function useChatRealtimeHandlers({
           break;
         }
 
-        // text, tool_use, tool_result, thinking, task_notification
+        case 'tool_use': {
+          // A subagent's plan tools govern only its own run, not the session.
+          const change = !msg.parentToolUseId && typeof msg.toolName === 'string'
+            ? PLAN_MODE_CHANGE_BY_TOOL.get(msg.toolName)
+            : undefined;
+          if (change && typeof msg.toolId === 'string') {
+            pendingPlanModeChangesRef.current.set(msg.toolId, change);
+          }
+          break;
+        }
+
+        case 'tool_result': {
+          const toolId = typeof msg.toolId === 'string' ? msg.toolId : null;
+          const change = toolId ? pendingPlanModeChangesRef.current.get(toolId) : undefined;
+          if (toolId && change && sid) {
+            pendingPlanModeChangesRef.current.delete(toolId);
+            // A rejected ExitPlanMode is the user asking for a revision, so
+            // the session stays in plan mode.
+            if (!msg.isError) {
+              onPlanModeChange?.(sid, change, typeof msg.provider === 'string' ? msg.provider as LLMProvider : undefined);
+            }
+          }
+          break;
+        }
+
+        // text, thinking, task_notification
         // → already routed to store above, no UI side effects needed
         default:
           break;
@@ -418,5 +458,6 @@ export function useChatRealtimeHandlers({
     onWebSocketReconnect,
     requestLatestMessages,
     sessionStore,
+    onPlanModeChange,
   ]);
 }

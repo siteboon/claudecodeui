@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '@/shared/api';
 import type { PendingPermissionRequest, PermissionMode,
+  PlanModeChange,
   ProjectSession,
   LLMProvider,
   Project,
@@ -39,6 +40,29 @@ const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode'];
 
 /** localStorage key holding the user's default model for one provider. */
 const providerModelStorageKey = (provider: LLMProvider): string => `${provider}-model`;
+
+/** Where a session keeps the mode it had before entering plan mode, which an approved plan returns to. */
+const prePlanModeStorageKey = (sessionId: string): string => `permissionMode-preplan-${sessionId}`;
+
+/**
+ * The permission mode stored for a session: its own choice, else the last mode
+ * picked for the provider — a brand-new chat only receives its session id
+ * after the first send, so without that fallback the mode chosen beforehand
+ * would snap back to the default as soon as the id appears.
+ */
+const readSavedPermissionMode = (
+  sessionId: string | undefined,
+  provider: LLMProvider,
+  validModes: PermissionMode[],
+): PermissionMode | undefined => {
+  const sessionSavedMode = sessionId
+    ? (localStorage.getItem(`permissionMode-${sessionId}`) as PermissionMode | null)
+    : null;
+  const providerSavedMode = localStorage.getItem(`permissionMode-last-${provider}`) as PermissionMode | null;
+  return [sessionSavedMode, providerSavedMode].find(
+    (mode): mode is PermissionMode => Boolean(mode && validModes.includes(mode)),
+  );
+};
 
 /**
  * Fallback permission-mode matrix used only until the backend capability
@@ -407,18 +431,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   }, [providerEfforts, providerModels, reconcileStoredEffort]);
 
   useEffect(() => {
-    const validModes = getPermissionModesForProvider(provider);
-    const sessionSavedMode = selectedSession?.id
-      ? (localStorage.getItem(`permissionMode-${selectedSession.id}`) as PermissionMode | null)
-      : null;
-    // Fall back to the last mode picked for this provider: a brand-new chat
-    // only receives its session id after the first send, so without this the
-    // mode chosen beforehand would snap back to the default as soon as the
-    // session id appears.
-    const providerSavedMode = localStorage.getItem(`permissionMode-last-${provider}`) as PermissionMode | null;
-    const savedMode = [sessionSavedMode, providerSavedMode].find(
-      (mode): mode is PermissionMode => Boolean(mode && validModes.includes(mode)),
-    );
+    const savedMode = readSavedPermissionMode(selectedSession?.id, provider, getPermissionModesForProvider(provider));
     setPermissionMode(savedMode ?? getDefaultPermissionModeForProvider(provider));
   }, [selectedSession?.id, provider, getDefaultPermissionModeForProvider, getPermissionModesForProvider]);
 
@@ -440,6 +453,11 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   }, [selectedSession?.id]);
 
   const selectPermissionMode = useCallback((nextMode: PermissionMode) => {
+    // Entering plan mode remembers the mode it leaves, which an approved plan
+    // returns to (applyPlanModeChange).
+    if (nextMode === 'plan' && permissionMode !== 'plan' && selectedSession?.id) {
+      localStorage.setItem(prePlanModeStorageKey(selectedSession.id), permissionMode);
+    }
     setPermissionMode(nextMode);
 
     // Persist per provider as well as per session: a brand-new chat has no
@@ -449,7 +467,53 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     if (selectedSession?.id) {
       localStorage.setItem(`permissionMode-${selectedSession.id}`, nextMode);
     }
-  }, [provider, selectedSession?.id]);
+  }, [permissionMode, provider, selectedSession?.id]);
+
+  /**
+   * Follows a plan-mode change the CLI made during a live run, reported by
+   * useChatRealtimeHandlers. Entering remembers the mode the session had, and
+   * an approved plan returns to it, as the CLI restores its pre-plan mode.
+   * Unlike selectPermissionMode this leaves the per-provider mode alone: plan
+   * mode Claude chose for one session must not become every new chat's
+   * starting mode. A session that is not on screen only has its stored mode
+   * updated, which the restore effect above reads when it is opened.
+   *
+   * The mode is judged from storage, not render state: replayed events reach
+   * this back to back before React renders again, and both setters write
+   * storage synchronously. `sessionProvider` is the session's own provider,
+   * which for a session not on screen may not be the one being viewed.
+   */
+  const applyPlanModeChange = useCallback((sessionId: string, change: PlanModeChange, sessionProvider: LLMProvider = provider) => {
+    const validModes = getPermissionModesForProvider(sessionProvider);
+    if (!validModes.includes('plan')) {
+      return;
+    }
+    const isOnScreen = sessionId === selectedSession?.id;
+    const defaultMode = getDefaultPermissionModeForProvider(sessionProvider);
+    const currentMode = readSavedPermissionMode(sessionId, sessionProvider, validModes) ?? defaultMode;
+
+    let nextMode: PermissionMode;
+    if (change === 'entered') {
+      if (currentMode === 'plan') {
+        return;
+      }
+      localStorage.setItem(prePlanModeStorageKey(sessionId), currentMode);
+      nextMode = 'plan';
+    } else {
+      // The user may have left plan mode by hand while the plan was drafted.
+      if (currentMode !== 'plan') {
+        return;
+      }
+      const prePlanMode = localStorage.getItem(prePlanModeStorageKey(sessionId)) as PermissionMode | null;
+      localStorage.removeItem(prePlanModeStorageKey(sessionId));
+      nextMode = prePlanMode && prePlanMode !== 'plan' && validModes.includes(prePlanMode) ? prePlanMode : defaultMode;
+    }
+
+    localStorage.setItem(`permissionMode-${sessionId}`, nextMode);
+    if (isOnScreen) {
+      setPermissionMode(nextMode);
+    }
+  }, [getDefaultPermissionModeForProvider, getPermissionModesForProvider, provider, selectedSession?.id]);
 
   const cyclePermissionMode = useCallback(() => {
     const modes = getPermissionModesForProvider(provider);
@@ -841,6 +905,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     availablePermissionModes,
     selectPermissionMode,
     cyclePermissionMode,
+    applyPlanModeChange,
     providerModelCatalog,
     providerModelsLoading,
     providerModelActions,
