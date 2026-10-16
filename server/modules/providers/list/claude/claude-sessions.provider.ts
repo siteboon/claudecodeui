@@ -23,6 +23,7 @@ import { prepareTranscriptMessages, truncateNestedOutput } from '@/shared/messag
 import {
   createNormalizedMessage,
   generateMessageId,
+  isClaudeNonTurnMessageRow,
   isPlaceholderProviderModel,
   readObjectRecord,
   sliceTailPage,
@@ -122,6 +123,9 @@ async function readClaudeSubagentTranscript(filePath: string): Promise<ClaudeSub
 
       try {
         const entry = JSON.parse(line) as AnyRecord;
+        if (isClaudeNonTurnMessageRow(entry)) {
+          continue;
+        }
         const timestamp = typeof entry.timestamp === 'string' ? entry.timestamp : undefined;
         if (timestamp && !transcript.startedAt) {
           transcript.startedAt = timestamp;
@@ -483,7 +487,7 @@ async function readTranscriptRows(jsonlPath: string, providerSessionId: string):
     }
     try {
       const entry = JSON.parse(line) as AnyRecord;
-      if (entry.sessionId === providerSessionId) {
+      if (entry.sessionId === providerSessionId && !isClaudeNonTurnMessageRow(entry)) {
         rows.push(entry);
       }
     } catch {
