@@ -199,6 +199,7 @@
     "pressToSearch": "Pressione <kbd>{{shortcut}}</kbd> para pesquisar sessões, arquivos e commits",
     "chooseModel": "Escolher um modelo",
     "chooseModelDescription": "Modelos integrados e personalizados em uma lista",
+    "chooseModelDescriptionCustomOnly": "Apenas os seus modelos são listados para {{providers, list}}",
     "addModel": "Adicionar modelo",
     "searchModels": "Pesquisar modelos...",
     "manageModels": "Gerenciar modelos",
@@ -399,6 +400,10 @@
   "modelLibrary": {
     "effortLevels": "Níveis de raciocínio",
     "effortLevelsHint": "Selecione os níveis de esforço de raciocínio que este modelo aceita. Se nenhum for selecionado, nenhum nível de esforço poderá ser escolhido para este modelo no composer.",
-    "effortSummary": "Raciocínio: {{levels}}"
+    "effortSummary": "Raciocínio: {{levels}}",
+    "customModelsOnly": "Usar apenas meus modelos",
+    "customModelsOnlyHint": "Oculta os modelos integrados do {{provider}} em todos os seletores de modelo e torna o seu primeiro modelo o padrão. Os integrados continuam visíveis até você adicionar um modelo.",
+    "builtInModelsHidden": "Ocultos nos seletores de modelo enquanto “Usar apenas meus modelos” estiver ativado.",
+    "customModelsOnlyFailed": "Não foi possível alterar esta configuração."
   }
 }

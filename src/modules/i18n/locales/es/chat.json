@@ -183,7 +183,8 @@
       "opencode": "Listo para usar OpenCode con {{model}}. Escribe tu mensaje abajo.",
       "default": "Selecciona un proveedor arriba para empezar"
     },
-    "pressToSearch": "Pulsa <kbd>{{shortcut}}</kbd> para buscar sesiones, archivos y commits"
+    "pressToSearch": "Pulsa <kbd>{{shortcut}}</kbd> para buscar sesiones, archivos y commits",
+    "chooseModelDescriptionCustomOnly": "Para {{providers, list}} solo se muestran tus modelos"
   },
   "session": {
     "continue": {
@@ -310,6 +311,10 @@
   "modelLibrary": {
     "effortLevels": "Niveles de razonamiento",
     "effortLevelsHint": "Selecciona los niveles de esfuerzo de razonamiento que acepta este modelo. Si no seleccionas ninguno, no se podrá elegir un nivel para este modelo en el compositor.",
-    "effortSummary": "Razonamiento: {{levels}}"
+    "effortSummary": "Razonamiento: {{levels}}",
+    "customModelsOnly": "Usar solo mis modelos",
+    "customModelsOnlyHint": "Oculta los modelos integrados de {{provider}} en todos los selectores de modelos y convierte tu primer modelo en el predeterminado. Los integrados siguen visibles hasta que añadas un modelo.",
+    "builtInModelsHidden": "Ocultos en los selectores de modelos mientras «Usar solo mis modelos» esté activado.",
+    "customModelsOnlyFailed": "No se pudo cambiar este ajuste."
   }
 }
