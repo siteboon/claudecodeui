@@ -468,16 +468,15 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
         { directoryPath: resolvedRoot, depth: 1 },
       ];
 
-      // Once the result cap is reached the walk stops descending, but the
-      // directories already queued keep being visited, so matches at the same
-      // depth from later branches still make it into the list. Trimming to
-      // the cap happens after the sort below — capping by discovery order
-      // instead would discard same-depth matches arbitrarily.
-      let keepDescending = true;
-
+      // Nothing is queued beyond what the visit budget can actually consume:
+      // without that bound a single wide directory hands thousands of paths to
+      // a walk that then abandons them. The walk also stops the moment the cap
+      // is met, so what reaches the caller is the shallowest thirty matches in
+      // breadth-first order rather than everything the search could reach.
       while (
         queue.length > 0
         && visitedDirectories < MAXIMUM_FOLDER_SEARCH_VISITED_DIRECTORIES
+        && results.length < MAXIMUM_FOLDER_SEARCH_RESULTS
       ) {
         const { directoryPath, depth } = queue.shift()!;
         visitedDirectories += 1;
@@ -485,6 +484,10 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
         await acquire();
         try {
           for await (const entry of fileSystem.openDirectory(directoryPath)) {
+            if (results.length >= MAXIMUM_FOLDER_SEARCH_RESULTS) {
+              break;
+            }
+
             if (!entry.isDirectory()
               || entry.name.startsWith('.')
               || IGNORED_DIRECTORY_NAMES.has(entry.name)) {
@@ -500,7 +503,8 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
               results.push({ path: itemPath, name: entry.name, type: 'directory' as const });
             }
 
-            if (keepDescending && depth < MAXIMUM_FOLDER_SEARCH_DEPTH) {
+            if (depth < MAXIMUM_FOLDER_SEARCH_DEPTH
+              && visitedDirectories + queue.length < MAXIMUM_FOLDER_SEARCH_VISITED_DIRECTORIES) {
               queue.push({ directoryPath: itemPath, depth: depth + 1 });
             }
           }
@@ -509,16 +513,12 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
         } finally {
           release();
         }
-
-        if (results.length >= MAXIMUM_FOLDER_SEARCH_RESULTS) {
-          keepDescending = false;
-        }
       }
 
       // Shallowest first: the closer a match is to the directory the user was
-      // browsing, the more likely it is the one they meant. Only after the
-      // sort is the result cap applied, so what gets dropped is the deepest
-      // tail, never a shallow match from a later branch.
+      // browsing, the more likely it is the one they meant. The walk above has
+      // already capped the list; this slice keeps that invariant regardless of
+      // how the cap is enforced there.
       results.sort((left, right) => {
         const depthDifference = left.path.split(/[\\/]/).length - right.path.split(/[\\/]/).length;
         if (depthDifference !== 0) {
