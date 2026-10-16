@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ClipboardEvent, KeyboardEvent, MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Bot,
@@ -16,9 +17,11 @@ import {
 } from 'lucide-react';
 
 import { cn } from '@/shared/utils';
-import { Badge, Button } from '@/shared/ui';
+import { Badge, Button, Input } from '@/shared/ui';
 import { api, readApiJson, ApiRequestError } from '@/shared/api';
 import type { SettingsMainTab } from '@/shared/types';
+import { useBrowserUseStream } from '@/modules/browser-use/hooks/useBrowserUseStream';
+import type { BrowserUseInput } from '@/modules/browser-use/hooks/useBrowserUseStream';
 
 type BrowserUseStatus = {
   enabled: boolean;
@@ -65,6 +68,7 @@ const BROWSER_USE_PANEL_ERROR_KEYS: Record<string, string> = {
   BROWSER_USE_SESSIONS_LOAD_FAILED: 'browserUse.loadFailed',
   BROWSER_USE_SESSION_STOP_FAILED: 'browserUse.actionFailed',
   BROWSER_USE_SESSION_DELETE_FAILED: 'browserUse.actionFailed',
+  BROWSER_USE_SESSION_INPUT_FAILED: 'browserUse.actionFailed',
   BROWSER_USE_RUNTIME_INSTALL_FAILED: 'browserUse.installFailed',
 };
 
@@ -230,6 +234,159 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
     setIsFullscreen(false);
   });
 
+  const [inputText, setInputText] = useState('');
+
+  // The page's selection arrives from the server after a copy/cut; put it on the user's clipboard.
+  const writeLocalClipboard = useCallback((text: string) => {
+    if (!text) return;
+    if (navigator.clipboard?.writeText) {
+      void navigator.clipboard.writeText(text).catch(() => undefined);
+      return;
+    }
+    // Plain-http pages have no async clipboard API; fall back to a temporary textarea.
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+  }, []);
+
+  const { frameUrl: liveFrameUrl, isLive, send: sendLiveInput } = useBrowserUseStream(
+    selectedSession?.id ?? null,
+    isVisible && selectedSession?.status === 'ready',
+    writeLocalClipboard,
+  );
+
+  const sendInput = useCallback(async (input: BrowserUseInput) => {
+    if (!selectedSession || selectedSession.status !== 'ready') return;
+    if (sendLiveInput(input)) return;
+    setError(null);
+    try {
+      const response = await api.browserUse.sendInput(selectedSession.id, input);
+      const data = await readApiJson<{ data: { session: BrowserUseSession } }>(response);
+      setSessions((current) => current.map((session) => (session.id === data.data.session.id ? data.data.session : session)));
+    } catch (err) {
+      setError(localizeApiError(err, 'browserUse.actionFailed', t));
+    }
+  }, [selectedSession, sendLiveInput, t]);
+
+  // Wheel events must be non-passive to stop the panel itself from scrolling, which React's
+  // onWheel cannot do; so listen on the document and act only while the pointer is over the surface.
+  const hoveredSurfaceRef = useRef<HTMLElement | null>(null);
+  const wheelStateRef = useRef({ isLive, viewport: selectedSession?.viewport ?? null, sendLiveInput });
+  useEffect(() => {
+    wheelStateRef.current = { isLive, viewport: selectedSession?.viewport ?? null, sendLiveInput };
+  }, [isLive, selectedSession?.viewport, sendLiveInput]);
+
+  useEffect(() => {
+    let pending: { x: number; y: number; deltaX: number; deltaY: number } | null = null;
+    let timer: number | null = null;
+
+    const flush = () => {
+      timer = null;
+      if (pending) {
+        wheelStateRef.current.sendLiveInput({ type: 'scroll', ...pending });
+        pending = null;
+      }
+    };
+
+    const onWheel = (event: WheelEvent) => {
+      const surface = hoveredSurfaceRef.current;
+      const { isLive: live, viewport } = wheelStateRef.current;
+      if (!surface || !live || !viewport) return;
+      const image = surface.querySelector('img');
+      const rect = image?.getBoundingClientRect();
+      if (!rect || !rect.width || !rect.height) return;
+
+      event.preventDefault();
+      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 800 : 1;
+      pending = {
+        x: ((event.clientX - rect.left) / rect.width) * viewport.width,
+        y: ((event.clientY - rect.top) / rect.height) * viewport.height,
+        deltaX: (pending?.deltaX ?? 0) + event.deltaX * unit,
+        deltaY: (pending?.deltaY ?? 0) + event.deltaY * unit,
+      };
+      if (timer === null) {
+        timer = window.setTimeout(flush, 40);
+      }
+    };
+
+    document.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      document.removeEventListener('wheel', onWheel);
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, []);
+
+  const toViewportPoint = (event: MouseEvent<HTMLImageElement>) => {
+    const viewport = selectedSession?.viewport;
+    if (!viewport) return null;
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    return {
+      x: ((event.clientX - rect.left) / rect.width) * viewport.width,
+      y: ((event.clientY - rect.top) / rect.height) * viewport.height,
+    };
+  };
+
+  // `event.detail` is the browser's click count, so double and triple clicks select words and lines.
+  const handleSurfaceClick = (event: MouseEvent<HTMLImageElement>) => {
+    const point = toViewportPoint(event);
+    if (!point) return;
+    void sendInput({ type: 'click', ...point, clickCount: Math.min(Math.max(event.detail, 1), 3) });
+  };
+
+  const handleSurfaceContextMenu = (event: MouseEvent<HTMLImageElement>) => {
+    event.preventDefault();
+    const point = toViewportPoint(event);
+    if (!point || !isLive) return;
+    sendLiveInput({ type: 'click', ...point, button: 'right' });
+  };
+
+  const handleSurfacePaste = (event: ClipboardEvent<HTMLDivElement>) => {
+    if (!isLive) return;
+    event.preventDefault();
+    const text = event.clipboardData.getData('text/plain');
+    // The server accepts up to 2000 characters per message.
+    for (let index = 0; index < text.length; index += 2000) {
+      sendLiveInput({ type: 'text', text: text.slice(index, index + 2000) });
+    }
+  };
+
+  const handleSurfaceKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!isLive || event.target !== event.currentTarget) return;
+    if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      event.preventDefault();
+      void sendInput({ type: 'text', text: event.key });
+      return;
+    }
+    if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock'].includes(event.key)) return;
+
+    const shortcut = (event.ctrlKey || event.metaKey) && !event.altKey ? event.key.toLowerCase() : '';
+    // Paste is handled by the `paste` event, which carries the user's clipboard text.
+    if (shortcut === 'v') return;
+    event.preventDefault();
+    // Copy/cut: ask the page for its selection first (messages are processed in order), then cut.
+    if (shortcut === 'c' || shortcut === 'x') {
+      sendLiveInput({ type: 'copy' });
+      if (shortcut === 'c') return;
+    }
+    // Command (Mac) shortcuts map to Control, which is what the remote Linux Chromium expects.
+    const modifiers = [(event.ctrlKey || event.metaKey) && 'Control', event.altKey && 'Alt'].filter(Boolean);
+    void sendInput({ type: 'key', key: [...modifiers, event.key].join('+') });
+  };
+
+  const submitInputText = async () => {
+    if (!inputText) return;
+    const text = inputText;
+    setInputText('');
+    await sendInput({ type: 'text', text });
+    await sendInput({ type: 'key', key: 'Enter' });
+  };
+
   const installBrowserBinaries = () => runAction(async () => {
     setIsInstalling(true);
     try {
@@ -330,14 +487,26 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
     </div>
   );
 
-  const renderBrowserSurface = (fullscreen = false) => (
+  const renderBrowserScreen = (fullscreen = false) => (
     <div className={cn('flex flex-1 items-center justify-center bg-neutral-950', fullscreen ? 'min-h-[80vh]' : 'min-h-[420px]')}>
       {selectedSession?.screenshotDataUrl ? (
-        <div className="relative inline-block max-h-full">
+        <div
+          className="relative inline-block max-h-full outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+          tabIndex={isLive ? 0 : -1}
+          onKeyDown={handleSurfaceKeyDown}
+          onPaste={handleSurfacePaste}
+          onMouseEnter={(event) => { hoveredSurfaceRef.current = event.currentTarget; }}
+          onMouseLeave={() => { hoveredSurfaceRef.current = null; }}
+        >
           <img
-            src={selectedSession.screenshotDataUrl}
+            src={liveFrameUrl ?? selectedSession.screenshotDataUrl}
             alt={t('browserUse.screenshotAlt')}
-            className={fullscreen ? 'block max-h-[80vh] w-auto max-w-full object-contain' : 'block max-h-[72vh] w-auto max-w-full object-contain'}
+            onClick={handleSurfaceClick}
+            onContextMenu={handleSurfaceContextMenu}
+            className={cn(
+              fullscreen ? 'block max-h-[80vh] w-auto max-w-full object-contain' : 'block max-h-[72vh] w-auto max-w-full object-contain',
+              selectedSession.status === 'ready' && 'cursor-pointer',
+            )}
           />
           {cursorStyle && (
             <div
@@ -353,6 +522,33 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
           <MonitorPlay className="mx-auto h-9 w-9 text-neutral-500" />
           <div className="mt-3 text-sm font-medium text-neutral-100">{selectedSession?.message || t('browserUse.waitingScreenshot')}</div>
           <p className="mt-1 text-xs text-neutral-400">{t('browserUse.waitingScreenshotHint')}</p>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderBrowserSurface = (fullscreen = false) => (
+    <div className="flex flex-1 flex-col">
+      {renderBrowserScreen(fullscreen)}
+      {selectedSession?.status === 'ready' && (
+        <div className="flex flex-wrap items-center gap-2 border-t border-border/60 bg-background px-3 py-2">
+          <Input
+            value={inputText}
+            onChange={(event) => setInputText(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                void submitInputText();
+              }
+            }}
+            placeholder={t('browserUse.inputPlaceholder')}
+            className="min-w-[200px] flex-1"
+          />
+          <Button variant="outline" size="sm" onClick={() => void submitInputText()} disabled={!inputText}>{t('browserUse.inputSend')}</Button>
+          <Button variant="outline" size="sm" onClick={() => void sendInput({ type: 'key', key: 'Backspace' })}>{t('browserUse.inputBackspace')}</Button>
+          <Button variant="outline" size="sm" onClick={() => void sendInput({ type: 'key', key: 'Tab' })}>{t('browserUse.inputTab')}</Button>
+          <Button variant="outline" size="sm" onClick={() => void sendInput({ type: 'key', key: 'Enter' })}>{t('browserUse.inputEnter')}</Button>
+          <span className="w-full text-xs text-muted-foreground">{isLive ? t('browserUse.inputHintLive') : t('browserUse.inputHint')}</span>
         </div>
       )}
     </div>

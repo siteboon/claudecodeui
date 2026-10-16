@@ -9,3 +9,6 @@ export async function startBrowserUseMcp(): Promise<void> {
 
 // getBrowserUseRuntime: used by Browser Use services and environment-mode regression coverage.
 export { getBrowserUseRuntime } from './browser-use-runtime.js';
+
+// browserUseService: used by the websocket module to stream live Browser sessions.
+export { browserUseService } from './browser-use.service.js';
