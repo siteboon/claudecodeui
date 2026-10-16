@@ -91,7 +91,7 @@ function createRouteHandler(
       await operation(request, response);
     } catch (error) {
       if (error instanceof AppError) {
-        response.status(error.statusCode).json({ error: error.message });
+        response.status(error.statusCode).json({ error: error.message, code: error.code });
         return;
       }
 
@@ -127,12 +127,16 @@ export function createFileTreeRouter(
 
   router.get('/projects/:projectId/file', createRouteHandler(async (request, response) => {
     const filePath = readRequiredString(request.query.filePath, 'filePath', 'Invalid file path');
-    response.json(await services.readTextFile(readProjectId(request), filePath));
+    response.json(await services.readTextFile(readProjectId(request), filePath, {
+      allowOutside: request.query.allowOutside === '1',
+    }));
   }, logger));
 
   router.get('/projects/:projectId/files/content', createRouteHandler(async (request, response) => {
     const filePath = readRequiredString(request.query.path, 'path', 'Invalid file path');
-    const file = await services.openFile(readProjectId(request), filePath);
+    const file = await services.openFile(readProjectId(request), filePath, {
+      allowOutside: request.query.allowOutside === '1',
+    });
     response.setHeader('Content-Type', file.contentType);
     file.stream.pipe(response);
     file.stream.on('error', (error) => {
