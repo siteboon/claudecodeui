@@ -119,6 +119,13 @@ export function createFileTreeRouter(
     response.json(await services.browseWorkspace(readOptionalString(request.query.path)));
   }, logger));
 
+  router.get('/search-filesystem', createRouteHandler(async (request, response) => {
+    response.json(await services.searchWorkspaceFolders(
+      readOptionalString(request.query.query) ?? '',
+      readOptionalString(request.query.root),
+    ));
+  }, logger));
+
   router.post('/create-folder', createRouteHandler(async (request, response) => {
     const body = readBody(request);
     const folderPath = readRequiredString(body.path, 'path', 'Path is required');
