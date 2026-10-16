@@ -33,7 +33,7 @@ Benefits:
 |---|---|
 | `services/websocket-server.service.ts` | Creates `WebSocketServer`, binds `verifyClient`, routes connection by pathname |
 | `services/websocket-auth.service.ts` | Authenticates upgrade requests and attaches `request.user` |
-| `services/chat-websocket.service.ts` | Handles the `/ws` chat protocol (`chat.send` / `chat.abort` / `chat.stop-task` / `chat.subscribe` / `chat.permission-response`) |
+| `services/chat-websocket.service.ts` | Handles the `/ws` chat protocol (`chat.send` / `chat.steer` / `chat.abort` / `chat.stop-task` / `chat.subscribe` / `chat.permission-response`) |
 | `services/chat-run-registry.service.ts` | Tracks live provider runs per app session id: seq numbering, event replay buffer, provider-id mapping, completion state |
 | `services/chat-session-writer.service.ts` | Gateway writer handed to provider runtimes: remaps provider session ids to app ids, swallows `session_created`, assigns `seq` |
 | `services/shell-websocket.service.ts` | Handles `/shell` PTY lifecycle, reconnect buffering, auth URL detection |
@@ -144,6 +144,7 @@ flowchart TD
 2. **Unified terminal lifecycle**: every provider run ends with exactly one `complete` message built by `createCompleteMessage()` (`server/shared/utils.ts`): `{ kind: "complete", sessionId, actualSessionId, exitCode, success, aborted }`. The chat handler emits a synthetic `complete` for runs that crash or get aborted, and the run registry drops duplicate completes.
 3. **Per-run event log**: every live event gets a monotonically increasing `seq`. `chat.subscribe { sessions: [{ sessionId, lastSeq }] }` re-attaches the live stream to the requesting socket (any provider, not just Claude) and replays events with `seq > lastSeq`. If the buffer no longer covers `lastSeq`, the client refreshes over REST.
 4. `chat_subscribed` includes `isProcessing` (replaces `check-session-status`) and `pendingPermissions` (replaces `get-pending-permissions`).
+5. **Provider-neutral approvals**: runtimes expose pending approvals through the optional `runtime.permissions` capability. Claude tool approvals and Codex app-server command/file approvals both use the same `permission_request`, `permission_cancelled`, and `chat.permission-response` flow.
 
 ## `/shell` Terminal Flow
 
@@ -273,3 +274,7 @@ To add a new websocket route:
 3. Add a new pathname branch in the router.
 4. Wire dependency injection from `server/index.ts`.
 5. Keep `index.ts` as barrel-only export surface.
+
+## Queued message steering
+
+`chat.steer` addresses one persisted queue entry by `messageId` and `revision`, with a stable `requestId` and the server-issued `activeTurnToken`. Its `chat_steer_result` ACK is independent of run completion. Only an accepted Codex app-server turn advertises the capability. See [message queue and steering](../../../docs/message-queue-steering.md) for the protocol and failure handling.

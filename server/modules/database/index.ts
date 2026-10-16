@@ -25,3 +25,6 @@ export { userPreferencesDb } from '@/modules/database/repositories/user-preferen
 export { vapidKeysDb } from '@/modules/database/repositories/vapid-keys.js';
 export { scheduledMessagesDb } from './repositories/scheduled-messages.db.js';
 export type { ScheduledMessageRow, ScheduledMessageStatus } from './repositories/scheduled-messages.db.js';
+
+// queuedMessagesDb: used by Scheduled Messages for durable FIFO and steer consumption.
+export { queuedMessagesDb } from './repositories/queued-messages.db.js';

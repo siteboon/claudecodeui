@@ -14,7 +14,7 @@ import { PaperclipIcon, MessageSquareIcon, XIcon, Loader2, ArrowUpIcon, PencilIc
 
 import { useVoiceInput } from '@/modules/chat/hooks/useVoiceInput';
 import { useVoiceAvailable } from '@/modules/chat/hooks/useVoiceAvailable';
-import type { QueuedDraft, ScheduledMessage, SlashCommand,SessionActivity,PendingPermissionRequest,PermissionMode,ProviderModelOption } from '@/shared/types';
+import type { QueuedMessage, ScheduledMessage, SlashCommand,SessionActivity,PendingPermissionRequest,PermissionMode,ProviderModelOption } from '@/shared/types';
 import {
   PromptInput,
   PromptInputHeader,
@@ -71,7 +71,14 @@ type ChatComposerProps = {
   onClearInput: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement> | MouseEvent<HTMLButtonElement> | TouchEvent<HTMLButtonElement>) => void;
   isDragActive: boolean;
-  queuedDraft: QueuedDraft | null;
+  queueItems: QueuedMessage[];
+  canSteerQueue: boolean;
+  pendingQueueIds: Set<string>;
+  queueError: string | null;
+  editingQueuedMessage: QueuedMessage | null;
+  onCancelQueuedEdit: () => void;
+  onRemoveUploadedAttachment: (index: number) => void;
+  onSteerQueuedDraft: (message: QueuedMessage) => void;
   /** Set while the composer is replacing an already-sent message. */
   isEditingSentMessage: boolean;
   onCancelEditMessage: () => void;
@@ -79,8 +86,8 @@ type ChatComposerProps = {
   scheduledMessages: ScheduledMessage[];
   onScheduleMessage: (scheduledFor: Date) => void;
   onCancelScheduledMessage: (id: string) => void;
-  onEditQueuedDraft: () => void;
-  onDeleteQueuedDraft: () => void;
+  onEditQueuedDraft: (message: QueuedMessage) => void;
+  onDeleteQueuedDraft: (message: QueuedMessage) => void;
   attachedFiles: File[];
   onRemoveAttachment: (index: number) => void;
   fileErrors: Map<string, string>;
@@ -146,7 +153,14 @@ export default function ChatComposer({
   onClearInput,
   onSubmit,
   isDragActive,
-  queuedDraft,
+  queueItems,
+  canSteerQueue,
+  pendingQueueIds,
+  queueError,
+  editingQueuedMessage,
+  onCancelQueuedEdit,
+  onRemoveUploadedAttachment,
+  onSteerQueuedDraft,
   isEditingSentMessage,
   onCancelEditMessage,
   scheduledMessages,
@@ -251,8 +265,8 @@ export default function ChatComposer({
   const hasPendingPermissions = pendingPermissionRequests.length > 0;
   const hasActivityIndicator = Boolean(activity && !hasPendingPermissions);
 
-  const hasQueuedDraft = Boolean(queuedDraft);
-  const canQueueDraft = isLoading && Boolean(input.trim() || attachedFiles.length > 0);
+  const hasQueuedDraft = Boolean(editingQueuedMessage);
+  const canQueueDraft = (isLoading || queueItems.length > 0 || hasQueuedDraft) && Boolean(input.trim() || attachedFiles.length > 0 || editingQueuedMessage?.attachments.length);
   const submitHint = canQueueDraft
     ? hasQueuedDraft
       ? t('input.hintText.updateQueued', { defaultValue: 'Enter to update queued message' })
@@ -309,15 +323,24 @@ export default function ChatComposer({
         </div>
       )}
 
-      {queuedDraft && (
-        <QueuedMessageCard
-          content={queuedDraft.content}
-          attachmentCount={
-            queuedDraft.uploadedAttachments?.length ?? queuedDraft.attachments.length
-          }
-          onEdit={onEditQueuedDraft}
-          onDelete={onDeleteQueuedDraft}
-        />
+      {queueError && <p role="alert" className="mx-auto mb-2 max-w-[54.25rem] text-sm text-destructive">{queueError}</p>}
+      {editingQueuedMessage && (
+        <div className="mx-auto mb-2 flex max-w-[54.25rem] items-center justify-between text-sm">
+          <span>{t('input.queue.editing')}</span>
+          <button type="button" onClick={onCancelQueuedEdit}>{t('composer.editing.cancel')}</button>
+        </div>
+      )}
+      {queueItems.length > 0 && (
+        <div className="max-h-60 overflow-y-auto" aria-label={t('input.queue.list')}>
+          {queueItems.map((message, index) => (
+            <QueuedMessageCard key={message.id} content={message.content} position={index + 1}
+              attachmentCount={message.attachments.length} status={message.status} error={message.error}
+              disabled={pendingQueueIds.has(message.id) || message.status === 'dispatching' || message.status === 'steering'}
+              onEdit={() => onEditQueuedDraft(message)} onDelete={() => onDeleteQueuedDraft(message)}
+              onSteer={canSteerQueue && message.status === 'queued' && editingQueuedMessage?.id !== message.id
+                ? () => onSteerQueuedDraft(message) : undefined} />
+          ))}
+        </div>
       )}
 
       {!hasQuestionPanel && <div className="relative mx-auto max-w-[54.25rem]">
@@ -387,6 +410,17 @@ export default function ChatComposer({
             </div>
           )}
 
+          {Boolean(editingQueuedMessage?.attachments.length) && (
+            <div className="flex flex-wrap gap-2 p-2">
+              {editingQueuedMessage!.attachments.map((attachment, index) => (
+                <div key={`${attachment.path}-${index}`} className="flex items-center gap-2 rounded-md bg-muted px-2 py-1 text-xs">
+                  <span>{attachment.name || attachment.path?.split('/').pop()}</span>
+                  <button type="button" aria-label={t('input.queue.removeAttachment')}
+                    onClick={() => onRemoveUploadedAttachment(index)}><XIcon className="h-3 w-3" /></button>
+                </div>
+              ))}
+            </div>
+          )}
           {attachedFiles.length > 0 && (
             <PromptInputHeader>
               <div className="rounded-xl bg-muted/40 p-2">
@@ -518,7 +552,7 @@ export default function ChatComposer({
                     ? false
                     : isTranscribing
                       ? true
-                      : !input.trim() && attachedFiles.length === 0
+                      : !input.trim() && attachedFiles.length === 0 && !editingQueuedMessage?.attachments.length
               }
               aria-label={submitAriaLabel}
               title={submitAriaLabel}

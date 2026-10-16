@@ -20,6 +20,7 @@ import { useChatProviderState } from '@/modules/chat/hooks/useChatProviderState'
 import { useScheduledMessages } from '@/modules/chat/composer/useScheduledMessages';
 import { useChatSessionState } from '@/modules/chat/hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '@/modules/chat/hooks/useChatRealtimeHandlers';
+import { useQueuedMessages } from '@/modules/chat/hooks/useQueuedMessages';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
 import { useSessionStore } from '@/modules/chat/hooks/useSessionStore';
 import {
@@ -186,6 +187,9 @@ function ChatInterface({
     onNavigateToSession?.(sessionId);
   }, [setCurrentSessionId, onSessionEstablished, onNavigateToSession]);
 
+  const { queueItems, enqueue, update, cancel, steer, canSteer, pendingIds, queueError } =
+    useQueuedMessages(selectedSession?.id || currentSessionId || null, subscribe, sendMessage);
+
   const {
     input,
     setInput,
@@ -214,9 +218,10 @@ function ChatInterface({
     isDragActive,
     openAttachmentPicker,
     handleSubmit,
-    queuedDraft,
+    editingQueuedMessage,
     editQueuedDraft,
-    deleteQueuedDraft,
+    cancelQueuedEdit,
+    removeUploadedAttachment,
     handleVoiceTranscript,
     handleInputChange,
     handleKeyDown,
@@ -237,6 +242,9 @@ function ChatInterface({
     beginEditMessage,
     cancelEditMessage,
   } = useChatComposerState({
+    hasQueuedMessages: queueItems.length > 0,
+    enqueueQueuedMessage: enqueue,
+    updateQueuedMessage: update,
     selectedProject,
     selectedSession,
     currentSessionId,
@@ -562,9 +570,16 @@ function ChatInterface({
           onClearInput={handleClearInput}
           onSubmit={handleSubmit}
           isDragActive={isDragActive}
-          queuedDraft={queuedDraft}
+          queueItems={queueItems}
           onEditQueuedDraft={editQueuedDraft}
-          onDeleteQueuedDraft={deleteQueuedDraft}
+          onDeleteQueuedDraft={cancel}
+          onSteerQueuedDraft={steer}
+          canSteerQueue={canSteer}
+          pendingQueueIds={pendingIds}
+          queueError={queueError}
+          editingQueuedMessage={editingQueuedMessage}
+          onCancelQueuedEdit={cancelQueuedEdit}
+          onRemoveUploadedAttachment={removeUploadedAttachment}
           attachedFiles={attachedFiles}
           onRemoveAttachment={(index) =>
             setAttachedFiles((previous) =>

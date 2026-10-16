@@ -1,6 +1,7 @@
-import { scheduledMessagesDb, sessionDraftsDb } from '@/modules/database/index.js';
-import type { QueuedSessionMessageRecord, ScheduledMessageRow } from '@/modules/database/index.js';
+import { scheduledMessagesDb, queuedMessagesDb } from '@/modules/database/index.js';
+import type { ScheduledMessageRow } from '@/modules/database/index.js';
 import { chatRunRegistry, runDetachedChatTurn } from '@/modules/websocket/index.js';
+import type { QueuedMessage } from '@/shared/types.js';
 import type { ProviderRuntimeGateway } from '@/modules/websocket/index.js';
 
 /**
@@ -14,12 +15,8 @@ const POLL_INTERVAL_MS = 30_000;
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let dispatchInFlight = false;
-
-type StoredQueuedMessage = {
-  content: string;
-  options: Record<string, unknown>;
-  attachments: unknown[];
-};
+// Installed only while the production dispatcher is running; tests can drive one pass explicitly.
+let wakeQueue: () => void = () => {};
 
 function readOptions(raw: string): Record<string, unknown> {
   try {
@@ -32,84 +29,31 @@ function readOptions(raw: string): Record<string, unknown> {
   }
 }
 
-function readQueuedMessage(value: unknown): StoredQueuedMessage | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return null;
+async function sendClaimedQueuedMessage(message: QueuedMessage, runtime: ProviderRuntimeGateway): Promise<void> {
+  try {
+    const result = await runDetachedChatTurn({ sessionId: message.sessionId, userId: message.userId,
+      content: message.content, messageId: message.id, options: { ...message.options, attachments: message.attachments } }, { runtime });
+    const busy = !result.started && result.error === 'A run was already in progress for this session.';
+    queuedMessagesDb.finish(message, 'dispatching', busy ? 'queued' : result.error ? 'failed' : 'consumed', result.error);
+    if (!busy && !result.error) wakeQueue();
+  } catch (error) {
+    queuedMessagesDb.finish(message, 'dispatching', 'unknown', error instanceof Error ? error.message : String(error));
   }
-  const record = value as Record<string, unknown>;
-  const content = typeof record.content === 'string' ? record.content : '';
-  const attachments = Array.isArray(record.attachments)
-    ? record.attachments
-    : Array.isArray(record.images)
-      ? record.images
-      : [];
-  if (!content.trim() && attachments.length === 0) {
-    return null;
-  }
-  const options = record.options && typeof record.options === 'object' && !Array.isArray(record.options)
-    ? record.options as Record<string, unknown>
-    : {};
-  return { content, options, attachments };
 }
 
-async function sendClaimedQueuedMessage(
-  candidate: QueuedSessionMessageRecord,
-  runtime: ProviderRuntimeGateway,
-): Promise<void> {
-  const message = readQueuedMessage(candidate.queuedMessage);
-  if (!message) {
-    sessionDraftsDb.deleteEmptyDraft(candidate.userId, candidate.sessionId);
-    return;
-  }
-
-  const result = await runDetachedChatTurn(
-    {
-      sessionId: candidate.sessionId,
-      userId: candidate.userId,
-      content: message.content,
-      options: { ...message.options, attachments: message.attachments },
-    },
-    { runtime },
-  );
-
-  // The registry check and run reservation are separate operations. If a run
-  // wins that tiny race, put the turn back so the next poll tries again.
-  if (!result.started && result.error === 'A run was already in progress for this session.') {
-    sessionDraftsDb.restoreQueuedMessage(candidate);
-    return;
-  }
-  sessionDraftsDb.deleteEmptyDraft(candidate.userId, candidate.sessionId);
-}
-
-/**
- * Whether a queued turn has to keep waiting for the session.
- *
- * A turn that ends with background work still going (a backgrounded command,
- * agent or workflow) is marked completed, but its CLI process stays open so
- * that work can report back. A new turn replaces that process and stops the
- * work, which is why the composer asks before an interactive send. A queued
- * turn was promised to go "when this finishes", so it waits for that work too.
- */
+/** A queued turn must wait for foreground and background work to finish. */
 function isSessionBusy(sessionId: string, runtime: ProviderRuntimeGateway): boolean {
   return chatRunRegistry.isProcessing(sessionId) || runtime.hasBackgroundWork(sessionId);
 }
 
-/** Sends every persisted queued turn whose session is currently idle. */
+/** Sends at most one FIFO head per idle session. Claimed/failed/unknown entries block later messages. */
 export async function dispatchQueuedMessages(runtime: ProviderRuntimeGateway): Promise<number> {
-  const candidates = sessionDraftsDb.listQueuedMessages();
   let claimed = 0;
-
-  await Promise.all(candidates.map(async (candidate) => {
-    if (isSessionBusy(candidate.sessionId, runtime)) {
-      return;
-    }
-    if (!sessionDraftsDb.claimQueuedMessage(candidate)) {
-      return;
-    }
+  await Promise.all(queuedMessagesDb.heads().map(async (message) => {
+    if (isSessionBusy(message.sessionId, runtime) || !queuedMessagesDb.claim(message, 'dispatching')) return;
     claimed += 1;
-    await sendClaimedQueuedMessage(candidate, runtime);
+    await sendClaimedQueuedMessage(message, runtime);
   }));
-
   return claimed;
 }
 
@@ -182,23 +126,21 @@ export function initializeScheduledMessageDispatcher(runtime: ProviderRuntimeGat
     return;
   }
 
+  // An interrupted RPC/run may already have executed. Do not automatically redeliver after restart.
+  queuedMessagesDb.recoverClaims();
   const poll = () => {
-    // A pass that overruns the interval must not be started again underneath
-    // itself; the claim is transactional but the runs are not.
-    if (dispatchInFlight) {
-      return;
+    // Scheduled messages retain their sequential due-time behavior. Queue claims
+    // independently guard each session, so one long run cannot stall every other FIFO.
+    if (!dispatchInFlight) {
+      dispatchInFlight = true;
+      void dispatchDueScheduledMessages(runtime)
+        .catch((error: unknown) => console.error('[ScheduledMessages] Dispatch pass failed', error))
+        .finally(() => { dispatchInFlight = false; });
     }
-    dispatchInFlight = true;
-    void dispatchDueScheduledMessages(runtime)
-      .then(() => dispatchQueuedMessages(runtime))
-      .catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : String(error);
-        console.error('[ScheduledMessages] Dispatch pass failed', { error: message });
-      })
-      .finally(() => {
-        dispatchInFlight = false;
-      });
+    void dispatchQueuedMessages(runtime)
+      .catch((error: unknown) => console.error('[QueuedMessages] Dispatch pass failed', error));
   };
+  wakeQueue = () => { if (pollTimer) queueMicrotask(poll); };
 
   pollTimer = setInterval(poll, POLL_INTERVAL_MS);
   // Never keep the process alive just to poll for scheduled messages.
@@ -209,6 +151,7 @@ export function initializeScheduledMessageDispatcher(runtime: ProviderRuntimeGat
 }
 
 export function closeScheduledMessageDispatcher(): void {
+  wakeQueue = () => {};
   if (pollTimer) {
     clearInterval(pollTimer);
     pollTimer = null;

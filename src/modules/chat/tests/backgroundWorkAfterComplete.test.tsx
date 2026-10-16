@@ -195,3 +195,11 @@ test('a refused stop request does not idle the session it was sent on', () => {
   dispatch(event({ kind: 'protocol_error', code: 'SESSION_NOT_FOUND', error: 'gone' }));
   assert.deepEqual(log, [{ sessionId: 'viewed-session', idle: true }]);
 });
+
+
+test('a rejected steer does not idle the running session', () => {
+  const { dispatch, log } = renderHandlers();
+  dispatch(event({ kind: 'chat_steer_result', requestId: 'steer', messageId: 'queue-item',
+    status: 'rejected', error: 'The active turn changed.' }));
+  assert.deepEqual(log, []);
+});

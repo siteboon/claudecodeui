@@ -4,8 +4,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { closeConnection, initializeDatabase, scheduledMessagesDb, sessionDraftsDb, sessionsDb, userDb } from '@/modules/database/index.js';
+import { closeConnection, initializeDatabase, scheduledMessagesDb, queuedMessagesDb, sessionsDb, userDb } from '@/modules/database/index.js';
 import { dispatchDueScheduledMessages, dispatchQueuedMessages } from '@/modules/scheduled-messages/services/scheduled-message-dispatcher.service.js';
+import { queuedMessagesService } from '@/modules/scheduled-messages/services/queued-messages.service.js';
 import { scheduledMessagesService } from '@/modules/scheduled-messages/services/scheduled-messages.service.js';
 import { chatRunRegistry } from '@/modules/websocket/index.js';
 
@@ -81,14 +82,9 @@ test('a message due in the past is sent on the next pass, not skipped', async ()
 
 test('a queued message is sent by the server without a browser connection', async () => {
   await withIsolatedDatabase(async (userId) => {
-    sessionDraftsDb.saveDraft(userId, SESSION_ID, {
-      text: '',
-      queuedMessage: {
-        content: 'continue on the VPS',
-        options: { model: 'claude-opus-5' },
-        attachments: [{ path: '/tmp/upload.png' }],
-      },
-    });
+    queuedMessagesService.enqueue(userId, { id: 'vps-queue', sessionId: SESSION_ID,
+      content: 'continue on the VPS', options: { model: 'claude-opus-5' },
+      attachments: [{ path: '/tmp/upload.png' }] });
 
     const runs: RunCall[] = [];
     assert.equal(await dispatchQueuedMessages(createRuntime(runs)), 1);
@@ -96,16 +92,13 @@ test('a queued message is sent by the server without a browser connection', asyn
     assert.equal(runs[0].command, 'continue on the VPS');
     assert.equal(runs[0].options.model, 'claude-opus-5');
     assert.deepEqual(runs[0].options.attachments, []);
-    assert.equal(sessionDraftsDb.getDrafts(userId).length, 0);
+    assert.equal(queuedMessagesDb.list(userId, SESSION_ID).length, 0);
   });
 });
 
 test('a queued message stays pending while its session is busy', async () => {
   await withIsolatedDatabase(async (userId) => {
-    sessionDraftsDb.saveDraft(userId, SESSION_ID, {
-      text: '',
-      queuedMessage: { content: 'send after this run' },
-    });
+    queuedMessagesService.enqueue(userId, { id: 'busy-queue', sessionId: SESSION_ID, content: 'send after this run' });
     chatRunRegistry.startRun({
       appSessionId: SESSION_ID,
       provider: 'claude',
@@ -117,18 +110,16 @@ test('a queued message stays pending while its session is busy', async () => {
     const runs: RunCall[] = [];
     assert.equal(await dispatchQueuedMessages(createRuntime(runs)), 0);
     assert.equal(runs.length, 0);
-    assert.deepEqual(sessionDraftsDb.getDrafts(userId)[0]?.queuedMessage, {
-      content: 'send after this run',
-    });
+    assert.equal(queuedMessagesDb.list(userId, SESSION_ID)[0]?.content, 'send after this run');
   });
 });
 
 test('a queued message waits for background work its session\'s last turn left running', async () => {
   await withIsolatedDatabase(async (userId) => {
-    sessionDraftsDb.saveDraft(userId, SESSION_ID, {
-      text: '',
-      queuedMessage: { content: 'send after the background job' },
-    });
+    queuedMessagesService.enqueue(userId, { id: 'background-queue', sessionId: SESSION_ID,
+      content: 'send after the background job' });
+    queuedMessagesService.enqueue(userId, { id: 'background-next', sessionId: SESSION_ID,
+      content: 'send after B' });
     // Turn A ended, so its run is completed, but it backgrounded a command
     // that is still running under A's CLI process.
     const runA = chatRunRegistry.startRun({
@@ -148,16 +139,18 @@ test('a queued message waits for background work its session\'s last turn left r
     // Starting B now would replace that process and stop the command.
     assert.equal(await dispatchQueuedMessages(runtime), 0);
     assert.equal(runs.length, 0);
-    assert.deepEqual(sessionDraftsDb.getDrafts(userId)[0]?.queuedMessage, {
-      content: 'send after the background job',
-    });
+    assert.deepEqual(queuedMessagesDb.list(userId, SESSION_ID).map((item) => item.content),
+      ['send after the background job', 'send after B']);
 
     // Once the work has reported back, B goes on the next pass.
     backgroundWork = false;
     assert.equal(await dispatchQueuedMessages(runtime), 1);
     assert.equal(runs.length, 1);
     assert.equal(runs[0].command, 'send after the background job');
-    assert.equal(sessionDraftsDb.getDrafts(userId).length, 0);
+    assert.equal(queuedMessagesDb.list(userId, SESSION_ID)[0]?.content, 'send after B');
+    assert.equal(await dispatchQueuedMessages(runtime), 1);
+    assert.equal(runs[1].command, 'send after B');
+    assert.equal(queuedMessagesDb.list(userId, SESSION_ID).length, 0);
   });
 });
 

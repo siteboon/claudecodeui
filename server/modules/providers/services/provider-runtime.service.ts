@@ -8,8 +8,10 @@ import type {
   ProviderPermissionDecision,
   ProviderRunFunction,
   ProviderRuntimeContext,
+  ProviderSteerInput,
   ProviderRuntimeWriter,
 } from '@/shared/types.js';
+import { AppError } from '@/shared/utils.js';
 
 type ProviderRuntimeServiceDependencies = {
   listProviders(): IProvider[];
@@ -87,8 +89,33 @@ export function createProviderRuntimeService(
       return (command, options, writer) => run(provider, command, options, writer);
     },
 
+    activeTurnToken(providerName: LLMProvider, sessionId: string): string | null {
+      return dependencies.resolveProvider(providerName).runtime.activeTurnToken?.(sessionId) ?? null;
+    },
+
+    async steer(providerName: LLMProvider, input: ProviderSteerInput): Promise<void> {
+      const runtime = dependencies.resolveProvider(providerName).runtime;
+      if (!runtime.steer) throw new AppError('This runtime does not support steering.', {
+        code: 'STEER_UNSUPPORTED', statusCode: 409,
+      });
+      await runtime.steer(input);
+    },
+
     async abort(providerName: LLMProvider, sessionId: string): Promise<boolean> {
       return Boolean(await dependencies.resolveProvider(providerName).runtime.abort(sessionId));
+    },
+
+    async restart(providerName: LLMProvider): Promise<{ provider: LLMProvider; restarted: true }> {
+      const runtime = dependencies.resolveProvider(providerName).runtime;
+      if (!runtime.restart) {
+        throw new AppError(`${providerName} does not expose a restartable runtime.`, {
+          code: 'PROVIDER_RUNTIME_RESTART_UNSUPPORTED',
+          statusCode: 409,
+        });
+      }
+
+      await runtime.restart();
+      return { provider: providerName, restarted: true };
     },
 
     async stopBackgroundTask(providerName: LLMProvider, sessionId: string, taskId: string): Promise<boolean> {
