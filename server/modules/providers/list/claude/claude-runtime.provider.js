@@ -1031,6 +1031,8 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   let heldForBackgroundWork = false;
   // Set once a turn publishes a budget read from an assistant message, so the
   // turn-ending `result` is only mined for usage when nothing better arrived.
+  // Reset when that `result` is handled — the process this loop reads can be
+  // held for background work, and a follow-up turn deserves its own fallback.
   let assistantBudgetSent = false;
   // The window the SDK reported for this session's model (a resumed session
   // starts from the one its last run reported), the model the main thread's
@@ -1321,6 +1323,10 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         }
         lastSentTokenBudget = tokenBudgetData;
         ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+      }
+      if (message.type === 'result') {
+        // The turn is over; a held process's next turn starts from scratch.
+        assistantBudgetSent = false;
       }
 
       if (startsBackgroundWork(message)) {

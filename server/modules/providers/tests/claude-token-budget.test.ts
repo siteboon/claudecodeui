@@ -226,14 +226,22 @@ const budgetFrames = (sent: NormalizedMessage[]) => sent.filter(
   (message) => message.kind === 'status' && message.text === 'token_budget',
 );
 
+// Patches the home directory for transcript fixtures and clears
+// CLAUDE_CONFIG_DIR for the run: an inherited absolute value would route the
+// reader away from the patched home and the fixtures under it.
 async function withPatchedHome(runTest: (homeDir: string) => Promise<void>): Promise<void> {
   const homeDir = await mkdtemp(path.join(os.tmpdir(), 'claude-budget-home-'));
   const original = os.homedir;
+  const originalConfigDirectory = process.env.CLAUDE_CONFIG_DIR;
   (os as never as { homedir: () => string }).homedir = () => homeDir;
+  delete process.env.CLAUDE_CONFIG_DIR;
   try {
     await runTest(homeDir);
   } finally {
     (os as never as { homedir: () => string }).homedir = original;
+    if (originalConfigDirectory !== undefined) {
+      process.env.CLAUDE_CONFIG_DIR = originalConfigDirectory;
+    }
     await rm(homeDir, { recursive: true, force: true });
   }
 }
@@ -328,6 +336,34 @@ test('with no streamed usage and no transcript, the result fallback still lands'
       const budgets = budgetFrames(sent);
       assert.equal(budgets.length, 1, 'the zero-usage frame publishes nothing; only the result fallback does');
       assert.equal((budgets[0].tokenBudget as Record<string, number> | undefined)?.used, 1_035);
+    });
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test('a follow-up turn on a held process gets its own result fallback', async () => {
+  const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-budget-cwd-'));
+  const nativeId = 'budget-native-4';
+
+  try {
+    await withPatchedHome(async () => {
+      // Background work holds the process open, and the CLI pushes its
+      // follow-up turn through the same stream. The first turn published an
+      // assistant budget; the follow-up has nothing of its own to publish, so
+      // its result must still be mined — the per-turn fallback flag has to be
+      // reset when the first turn's result was handled, not stay set forever.
+      const sent = await driveRun([
+        assistantFrame({ input_tokens: 100, cache_creation_input_tokens: 50, cache_read_input_tokens: 20_000, output_tokens: 400 }, nativeId),
+        resultFrame(nativeId, { input_tokens: 100, cache_read_input_tokens: 20_000, output_tokens: 400 }),
+        assistantFrame(null, nativeId),
+        resultFrame(nativeId, { input_tokens: 8, cache_read_input_tokens: 2_000, cache_creation_input_tokens: 0, output_tokens: 12 }),
+      ], cwd);
+
+      const budgets = budgetFrames(sent);
+      assert.equal(budgets.length, 2, 'the first turn streams its reading; the follow-up turn falls back to its result');
+      assert.equal((budgets[0].tokenBudget as Record<string, number> | undefined)?.used, 20_550);
+      assert.equal((budgets[1].tokenBudget as Record<string, number> | undefined)?.used, 2_020);
     });
   } finally {
     await rm(cwd, { recursive: true, force: true });
