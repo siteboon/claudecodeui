@@ -589,12 +589,6 @@
       "description": "תזמון פרומפטים לסביבת העבודה, צפייה בהיסטוריית ריצות וניהול משימות מקומיות חוזרות.",
       "install": "התקנה"
     },
-    "claudeWatchPlugin": {
-      "name": "Claude Watch",
-      "badge": "לא רשמי",
-      "description": "מעקב אחרי סשנים ארוכים של Claude Code כדי לזהות תקיעות, עם שליטה בתהליכים.",
-      "install": "התקנה"
-    },
     "prismCloudCLI": {
       "name": "PRISM CloudCLI",
       "badge": "לא רשמי",

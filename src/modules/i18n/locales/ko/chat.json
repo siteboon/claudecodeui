@@ -164,7 +164,8 @@
       "opencode": "{{model}} 모델로 OpenCode를 사용할 준비가 되었습니다. 아래에 메시지를 입력하세요.",
       "default": "시작하려면 위에서 제공자를 선택하세요"
     },
-    "pressToSearch": "<kbd>{{shortcut}}</kbd>를 눌러 세션, 파일 및 커밋을 검색하세요"
+    "pressToSearch": "<kbd>{{shortcut}}</kbd>를 눌러 세션, 파일 및 커밋을 검색하세요",
+    "chooseModelDescriptionCustomOnly": "{{providers, list}}에는 내 모델만 표시됩니다"
   },
   "session": {
     "continue": {
@@ -298,6 +299,10 @@
   "modelLibrary": {
     "effortLevels": "추론 수준",
     "effortLevelsHint": "이 모델이 지원하는 추론 노력 수준을 선택하세요. 선택하지 않으면 작성기에서 이 모델의 수준을 고를 수 없습니다.",
-    "effortSummary": "추론: {{levels}}"
+    "effortSummary": "추론: {{levels}}",
+    "customModelsOnly": "내 모델만 사용",
+    "customModelsOnlyHint": "모든 모델 선택기에서 {{provider}} 기본 제공 모델을 숨기고 첫 번째 내 모델을 기본값으로 설정합니다. 모델을 추가하기 전까지는 기본 제공 모델이 계속 표시됩니다.",
+    "builtInModelsHidden": "'내 모델만 사용'이 켜져 있는 동안 모델 선택기에서 숨겨집니다.",
+    "customModelsOnlyFailed": "이 설정을 변경할 수 없습니다."
   }
 }

@@ -150,7 +150,8 @@
       "codex": "Codex'i {{model}} ile kullanmaya hazır. Mesajını aşağıya yazmaya başla.",
       "default": "Başlamak için yukarıdan bir sağlayıcı seç"
     },
-    "pressToSearch": "Oturumlarda, dosyalarda ve commit'lerde arama yapmak için <kbd>{{shortcut}}</kbd> tuşlarına bas"
+    "pressToSearch": "Oturumlarda, dosyalarda ve commit'lerde arama yapmak için <kbd>{{shortcut}}</kbd> tuşlarına bas",
+    "chooseModelDescriptionCustomOnly": "{{providers, list}} için yalnızca kendi modelleriniz listelenir"
   },
   "session": {
     "continue": {
@@ -283,6 +284,10 @@
   "modelLibrary": {
     "effortLevels": "Akıl yürütme seviyeleri",
     "effortLevelsHint": "Bu modelin kabul ettiği akıl yürütme çabası seviyelerini seçin. Hiçbiri seçilmezse, yazma alanında bu model için seviye seçilemez.",
-    "effortSummary": "Akıl yürütme: {{levels}}"
+    "effortSummary": "Akıl yürütme: {{levels}}",
+    "customModelsOnly": "Yalnızca kendi modellerimi kullan",
+    "customModelsOnlyHint": "Yerleşik {{provider}} modellerini tüm model seçicilerde gizler ve ilk modelinizi varsayılan yapar. Bir model ekleyene kadar yerleşik modeller listede kalır.",
+    "builtInModelsHidden": "“Yalnızca kendi modellerimi kullan” açıkken model seçicilerde gizlenir.",
+    "customModelsOnlyFailed": "Bu ayar değiştirilemedi."
   }
 }

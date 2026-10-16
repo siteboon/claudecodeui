@@ -150,7 +150,8 @@
       "codex": "Pronto a usare Codex con {{model}}. Inizia a digitare il tuo messaggio qui sotto.",
       "default": "Seleziona un provider sopra per iniziare"
     },
-    "pressToSearch": "Premi <kbd>{{shortcut}}</kbd> per cercare sessioni, file e commit"
+    "pressToSearch": "Premi <kbd>{{shortcut}}</kbd> per cercare sessioni, file e commit",
+    "chooseModelDescriptionCustomOnly": "Per {{providers, list}} sono elencati solo i tuoi modelli"
   },
   "session": {
     "continue": {
@@ -283,6 +284,10 @@
   "modelLibrary": {
     "effortLevels": "Livelli di ragionamento",
     "effortLevelsHint": "Seleziona i livelli di sforzo di ragionamento accettati da questo modello. Senza selezione, nel composer non si potrà scegliere alcun livello per questo modello.",
-    "effortSummary": "Ragionamento: {{levels}}"
+    "effortSummary": "Ragionamento: {{levels}}",
+    "customModelsOnly": "Usa solo i miei modelli",
+    "customModelsOnlyHint": "Nasconde i modelli integrati di {{provider}} in tutti i selettori di modello e rende predefinito il tuo primo modello. I modelli integrati restano visibili finché non aggiungi un modello.",
+    "builtInModelsHidden": "Nascosti nei selettori di modello finché «Usa solo i miei modelli» è attivo.",
+    "customModelsOnlyFailed": "Impossibile modificare questa impostazione."
   }
 }
