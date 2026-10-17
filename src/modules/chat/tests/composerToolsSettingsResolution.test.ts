@@ -91,6 +91,10 @@ const seedAllProviderSettings = () => {
     allowedTools: ['opencode-tool'],
     skipPermissions: false,
   });
+  writeUserPreference('kiroPermissions', {
+    allowedTools: ['kiro-tool'],
+    skipPermissions: false,
+  });
 };
 
 beforeEach(() => {
@@ -121,6 +125,7 @@ test.each<[LLMProvider, string]>([
   ['cursor', 'cursor-tool'],
   ['codex', 'codex-tool'],
   ['opencode', 'opencode-tool'],
+  ['kiro', 'kiro-tool'],
 ])('a %s send carries the tools stored under that provider own preference', async (provider, tool) => {
   seedAllProviderSettings();
 
