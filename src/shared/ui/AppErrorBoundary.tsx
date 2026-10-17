@@ -6,6 +6,7 @@ type AppErrorBoundaryProps = {
   children: ReactNode;
 };
 
+/** Renders a thrown value as a single `Name: message` line for the fallback details. */
 function formatError(error: unknown): string {
   if (error instanceof Error) {
     return `${error.name}: ${error.message}`;
@@ -13,6 +14,7 @@ function formatError(error: unknown): string {
   return String(error);
 }
 
+/** Fallback UI shown by the root boundary: error summary, collapsed details and a reload button. */
 function AppErrorFallback({ error, componentStack }: FallbackProps & { componentStack: string | null }) {
   const { t } = useTranslation();
 
