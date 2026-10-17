@@ -17,6 +17,7 @@ type VersionUpgradeModalProps = {
 };
 
 const RELOAD_COUNTDOWN_START = 120;
+const UPDATE_POLL_INTERVAL_MS = 2000;
 
 /** This module's only public export: rendered by the sidebar module's modal layer to show release notes and run the app upgrade. */
 export function VersionUpgradeModal({
@@ -73,7 +74,20 @@ export function VersionUpgradeModal({
 
         try {
             // Call the backend API to run the update command
-            const response = await api.system.update();
+            let response = await api.system.update();
+
+            // The server answers 202 and keeps installing in the background so
+            // a slow install cannot run into a proxy timeout; poll until done.
+            while (response.status === 202) {
+                await new Promise(resolve => window.setTimeout(resolve, UPDATE_POLL_INTERVAL_MS));
+                response = await api.system.updateStatus();
+            }
+
+            if (IS_PLATFORM && response.status === 404) {
+                // A restarted platform server no longer knows the update it ran.
+                setUpdateOutput(prev => prev + '\n' + t('versionUpdate.updateStartedRestarting') + '\n');
+                return;
+            }
 
             // The server (or a proxy in front of it) can answer with an HTML
             // page instead of JSON — e.g. while a hosted/Docker deployment

@@ -644,6 +644,7 @@ export const api = {
 
   system: {
     update: () => post('/api/system/update'),
+    updateStatus: () => get('/api/system/update'),
   },
 };
 
