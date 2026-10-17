@@ -167,5 +167,8 @@
     "archiveSessions_other": "세션 {{count}}개 보관",
     "archiveSessionsNotice_one": "보관하면 세션이 활성 목록에서 제외되지만 기록은 유지됩니다.",
     "archiveSessionsNotice_other": "보관하면 세션이 활성 목록에서 제외되지만 기록은 유지됩니다."
+  },
+  "projectGroup": {
+    "locations_other": "경로 {{count}}개"
   }
 }

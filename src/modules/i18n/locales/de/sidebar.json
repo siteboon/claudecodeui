@@ -167,5 +167,9 @@
     "archiveSessions_other": "{{count}} Sitzungen archivieren",
     "archiveSessionsNotice_one": "Beim Archivieren verschwindet die Sitzung aus der aktiven Liste, ihr Verlauf bleibt erhalten.",
     "archiveSessionsNotice_other": "Beim Archivieren verschwinden die Sitzungen aus der aktiven Liste, ihr Verlauf bleibt erhalten."
+  },
+  "projectGroup": {
+    "locations_one": "{{count}} Pfad",
+    "locations_other": "{{count}} Pfade"
   }
 }
