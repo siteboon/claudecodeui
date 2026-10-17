@@ -22,6 +22,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   consoleErrorSpy.mockRestore();
 });
 
@@ -57,13 +58,9 @@ test('renders children normally when nothing throws', () => {
 
 test('the reload action asks the page to reload', () => {
   const reload = vi.fn();
-  const originalLocation = window.location;
-  // jsdom's window.location.reload throws "Not implemented" -- replace the
-  // whole object for this test, then restore it so other tests are unaffected.
-  Object.defineProperty(window, 'location', {
-    configurable: true,
-    value: { ...originalLocation, reload },
-  });
+  // jsdom's window.location.reload throws "Not implemented", so stub it for
+  // this test. afterEach unstubs, so a failed assertion can't leak the stub.
+  vi.stubGlobal('location', { ...window.location, reload });
 
   render(
     <AppErrorBoundary>
@@ -73,6 +70,4 @@ test('the reload action asks the page to reload', () => {
 
   fireEvent.click(screen.getByText('misc.reloadApp'));
   assert.equal(reload.mock.calls.length, 1);
-
-  Object.defineProperty(window, 'location', { configurable: true, value: originalLocation });
 });
