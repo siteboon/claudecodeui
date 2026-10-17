@@ -292,6 +292,9 @@ export type QueueItemStatus = 'completed' | 'in_progress' | 'pending';
 /** Permission preset a provider runs a turn under ('default', 'acceptEdits', 'auto', 'bypassPermissions' or 'plan'), chosen in the composer and sent with each message; the backend capability matrix decides which values a given provider accepts. */
 export type PermissionMode = 'default' | 'acceptEdits' | 'auto' | 'bypassPermissions' | 'plan';
 
+/** A plan-mode change the CLI made by itself during a live run: Claude called EnterPlanMode ('entered'), or an ExitPlanMode it called was approved ('exited'). The composer follows it, since the mode it sends with the next message would otherwise undo the change. */
+export type PlanModeChange = 'entered' | 'exited';
+
 /** A non-image file attached to a chat message, described by its path in the server-managed attachment store plus display metadata so it can be listed and downloaded. */
 export type ChatAttachment = {
   /** Absolute path inside the server-managed chat attachment store. */
