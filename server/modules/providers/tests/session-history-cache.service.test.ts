@@ -163,3 +163,33 @@ test('invalidating a session re-parses its unchanged transcript on the next read
     assert.equal(second?.messages[0]?.content, 'load-2');
   });
 });
+
+test('a file the history also reads invalidates the cached load when it changes or appears', async () => {
+  await withTranscriptFile(async (transcriptPath) => {
+    const cache = createSessionHistoryCache();
+    let loads = 0;
+    const loadFull = async () => {
+      loads += 1;
+      return historyResult(`load-${loads}`);
+    };
+    const agentTranscript = path.join(path.dirname(transcriptPath), 'agent-a1.jsonl');
+    const journal = path.join(path.dirname(transcriptPath), 'journal.jsonl');
+    await writeFile(agentTranscript, '{"type":"assistant"}\n', 'utf8');
+    const listDependencies = async () => [agentTranscript, journal];
+
+    await cache.getFullHistory({ sessionId: 's1', transcriptPath, loadFull, listDependencies });
+    await cache.getFullHistory({ sessionId: 's1', transcriptPath, loadFull, listDependencies });
+    assert.equal(loads, 1, 'nothing changed, so the cached load is served');
+
+    // A background agent's transcript grows while the session file does not.
+    await appendFile(agentTranscript, '{"type":"user"}\n', 'utf8');
+    await cache.getFullHistory({ sessionId: 's1', transcriptPath, loadFull, listDependencies });
+    assert.equal(loads, 2);
+
+    // A workflow's journal is created after the first read.
+    await writeFile(journal, '{"type":"started"}\n', 'utf8');
+    const afterJournal = await cache.getFullHistory({ sessionId: 's1', transcriptPath, loadFull, listDependencies });
+    assert.equal(loads, 3);
+    assert.equal(afterJournal?.messages[0]?.id, 'load-3');
+  });
+});

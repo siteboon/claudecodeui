@@ -201,6 +201,20 @@ export interface IProviderSessions {
   fetchHistory(sessionId: string, options?: FetchHistoryOptions): Promise<FetchHistoryResult>;
 
   /**
+   * Lists the files besides the session transcript at `transcriptPath` that
+   * `fetchHistory` also parses for `providerSessionId`, so the history cache
+   * can tell when a page read earlier has gone stale although the transcript
+   * itself has not changed. Paths that do not exist yet may be listed; they
+   * count once they appear.
+   *
+   * Implemented only by providers whose history reads more than the session
+   * file. Claude's does: each background agent writes its own transcript, and
+   * each workflow run its own journal, while the session file stays untouched
+   * until the work reports back.
+   */
+  listHistoryDependencies?(transcriptPath: string, providerSessionId: string): Promise<string[]>;
+
+  /**
    * Resolves where a conversation must resume from so that the turn identified
    * by `anchorId`, and everything after it, is replaced.
    *
