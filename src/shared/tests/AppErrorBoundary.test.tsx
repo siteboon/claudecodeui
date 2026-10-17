@@ -9,6 +9,7 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
+/** Child that always throws during render, to trip the boundary. */
 function Bomb(): JSX.Element {
   throw new Error('render exploded');
 }
