@@ -6,7 +6,7 @@ import { sessionsDb } from '@/modules/database/index.js';
 import {
   buildLookupMap,
   extractFirstValidJsonlData,
-  findFilesRecursivelyCreatedAfter,
+  findFilesRecursivelyCreatedOrModifiedAfter,
   normalizeSessionName,
   readFileTimestamps,
 } from '@/shared/utils.js';
@@ -44,10 +44,14 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
 
   /**
    * Scans ~/.claude/projects and upserts discovered sessions into DB.
+   *
+   * An incremental scan (`since` set) skips transcripts already indexed at
+   * their current mtime: re-upserting one would re-activate an archived
+   * project for nothing.
    */
   async synchronize(since?: Date): Promise<number> {
     const nameMap = await buildLookupMap(path.join(this.claudeHome, 'history.jsonl'), 'sessionId', 'display');
-    const files = await findFilesRecursivelyCreatedAfter(
+    const files = await findFilesRecursivelyCreatedOrModifiedAfter(
       path.join(this.claudeHome, 'projects'),
       '.jsonl',
       since ?? null
@@ -59,12 +63,22 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         continue;
       }
 
+      // Stat before parsing so `updated_at` never covers writes this pass did
+      // not read; the skip below relies on that.
+      const timestamps = await readFileTimestamps(filePath);
+      if (
+        since
+        && timestamps.updatedAt
+        && sessionsDb.isTranscriptUnchangedSinceIndexed(filePath, timestamps.updatedAt)
+      ) {
+        continue;
+      }
+
       const parsed = await this.processSessionFile(filePath, nameMap);
       if (!parsed) {
         continue;
       }
 
-      const timestamps = await readFileTimestamps(filePath);
       sessionsDb.createSession(
         parsed.sessionId,
         this.provider,
@@ -92,12 +106,13 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     }
 
     const nameMap = await buildLookupMap(path.join(this.claudeHome, 'history.jsonl'), 'sessionId', 'display');
+    // Stat before parsing, as in `synchronize()`.
+    const timestamps = await readFileTimestamps(filePath);
     const parsed = await this.processSessionFile(filePath, nameMap);
     if (!parsed) {
       return null;
     }
 
-    const timestamps = await readFileTimestamps(filePath);
     return sessionsDb.createSession(
       parsed.sessionId,
       this.provider,
