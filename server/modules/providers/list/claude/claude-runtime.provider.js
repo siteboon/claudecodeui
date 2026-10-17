@@ -60,11 +60,62 @@ const supersededInstances = new WeakSet();
 
 const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS, 10) || 55000;
 
+const DEFAULT_BG_WAIT_CEILING_MS = 30 * 60 * 1000;
+// Anything shorter is far more likely a unit slip than a real ceiling: a value
+// meant as minutes (`240` for four hours) would otherwise end the hold, and the
+// background work with it, a quarter of a second into the silence.
+const MIN_BG_WAIT_CEILING_MS = 60 * 1000;
+// The longest delay setTimeout honours; Node fires anything longer after 1 ms.
+const MAX_BG_WAIT_CEILING_MS = 2 ** 31 - 1;
+
+/**
+ * Reads the background-work ceiling (BG_WAIT_CEILING_MS below) from the
+ * CLOUDCLI_BG_WAIT_CEILING_MS value the server was started with.
+ *
+ * The value is a whole number of milliseconds; unset or blank means the
+ * 30-minute default. Anything else that is not a whole number, or is under a
+ * minute, falls back to the default with a warning rather than being honoured
+ * or silently dropped. A value past the longest timer Node supports is capped
+ * there, since the timer would otherwise fire at once.
+ *
+ * Exported for the providers module's tests, which pin the parsing directly;
+ * the runtime reads the variable once, at load.
+ *
+ * @param {string|undefined} rawValue - The variable as found in process.env
+ * @param {(message: string) => void} [warn] - Receives the warning for a value that is not used as given
+ * @returns {number} Ceiling in milliseconds
+ */
+export function resolveBgWaitCeilingMs(rawValue, warn = console.warn) {
+  const value = typeof rawValue === 'string' ? rawValue.trim() : '';
+  if (!value) {
+    return DEFAULT_BG_WAIT_CEILING_MS;
+  }
+
+  const fallback = `Using the default of ${DEFAULT_BG_WAIT_CEILING_MS} ms (30 minutes).`;
+  if (!/^\d+$/.test(value)) {
+    warn(`[Claude SDK] Ignoring CLOUDCLI_BG_WAIT_CEILING_MS="${value}": expected a whole number of milliseconds, e.g. 14400000 for 4 hours. ${fallback}`);
+    return DEFAULT_BG_WAIT_CEILING_MS;
+  }
+
+  const ceilingMs = Number(value);
+  if (ceilingMs < MIN_BG_WAIT_CEILING_MS) {
+    warn(`[Claude SDK] Ignoring CLOUDCLI_BG_WAIT_CEILING_MS=${value}: the value is in milliseconds and must be at least ${MIN_BG_WAIT_CEILING_MS} (1 minute), e.g. 14400000 for 4 hours. ${fallback}`);
+    return DEFAULT_BG_WAIT_CEILING_MS;
+  }
+  if (ceilingMs > MAX_BG_WAIT_CEILING_MS) {
+    warn(`[Claude SDK] CLOUDCLI_BG_WAIT_CEILING_MS=${value} is longer than Node.js timers allow; using ${MAX_BG_WAIT_CEILING_MS} ms (about 24.8 days).`);
+    return MAX_BG_WAIT_CEILING_MS;
+  }
+  return ceilingMs;
+}
+
 // How long background work is allowed to keep running after a turn ends. This drives
 // two halves of the same behaviour:
 //
 //  1. Passed to the spawned CLI as CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS, which is how
-//     long it waits for still-running background *agents* before killing them.
+//     long it waits for still-running background *agents* before killing them. Its
+//     clock starts when stdin closes, so it comes on top of the hold below rather
+//     than overlapping it.
 //  2. A backstop on how long we hold the SDK's stdin open after a turn's `result`.
 //     The SDK closes stdin as soon as a turn ends, and the CLI reads that EOF as
 //     "print wind-down" — killing background *shells* after a short grace period,
@@ -77,7 +128,8 @@ const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEO
 // new turn supersedes the previous hold. This ceiling only catches background work
 // that never reports at all, so an abandoned session cannot leak a CLI process
 // forever. The timer resets on every message, so it measures silence, not total time.
-const BG_WAIT_CEILING_MS = 30 * 60 * 1000;
+// Operators can change it with CLOUDCLI_BG_WAIT_CEILING_MS (see resolveBgWaitCeilingMs).
+const BG_WAIT_CEILING_MS = resolveBgWaitCeilingMs(process.env.CLOUDCLI_BG_WAIT_CEILING_MS);
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
