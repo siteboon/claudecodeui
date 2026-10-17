@@ -24,6 +24,7 @@ import {
     authenticateToken,
     authenticateWebSocket,
     authRoutes,
+    noStoreApiResponses,
     validateApiKey,
 } from './modules/auth/index.js';
 import { taskmasterRoutes } from './modules/taskmaster/index.js';
@@ -125,6 +126,12 @@ createWebSocketServer(server, {
 });
 
 app.use(cors({ exposedHeaders: ['X-Refreshed-Token', 'X-Auth-Error'] }));
+
+// Auth headers travel on every /api response and a cached copy replays them
+// (#1308): drop the default weak ETag so JSON bodies stop being revalidated,
+// and tell browsers not to store /api responses at all.
+app.set('etag', false);
+app.use('/api', noStoreApiResponses);
 app.use(express.json({
     limit: '50mb',
     type: (req) => {
