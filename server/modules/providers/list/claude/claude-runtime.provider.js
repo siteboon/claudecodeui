@@ -29,6 +29,7 @@ import {
   CLAUDE_ULTRACODE_EFFORT
 } from '@/modules/providers/list/claude/claude-models.provider.js';
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
+import { beginNativeCommandsCapture } from '@/shared/native-commands.js';
 import {
   createNotificationEvent,
   notifyBackgroundWorkCompleted,
@@ -997,6 +998,14 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // Set once a turn publishes a budget read from an assistant message, so the
   // turn-ending `result` is only mined for usage when nothing better arrived.
   let assistantBudgetSent = false;
+  // Set when this turn streamed at least one non-empty assistant text
+  // message, cleared each time a `result` ends the turn (see below). A
+  // result-only native command (`/context`, `/usage`, …) produces no
+  // assistant message at all — only a `result` whose own `.result` string
+  // carries the answer — so when this is still false at that `result`, the
+  // string is synthesized into an assistant text message instead of the
+  // turn silently completing with nothing to show for it.
+  let assistantTextSeen = false;
   // The window the SDK reported for this session's model (a resumed session
   // starts from the one its last run reported), the model the main thread's
   // assistant rows name, and the budget last published — re-sent with the
@@ -1193,9 +1202,43 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       addSession(sessionKey(), queryInstance, ws, releasePromptStream);
     }
 
+    // The initialize handshake carries the CLI's real command catalogue — the
+    // same list the CLI's own `/` menu shows, including locally installed
+    // skills and plugins. Capturing it here is what keeps the composer's
+    // native-command list per-machine accurate; the static table in
+    // native-commands is only the fallback until this lands. The capture is
+    // generation-guarded: two sessions in one workspace race their writes, and
+    // only the newest attempt for a workspace may record.
+    const recordNativeCatalogue = beginNativeCommandsCapture('claude', options.cwd ?? '');
+    // The SDK does not order initializationResult() against stream messages.
+    // If a commands_changed push lands while the initialization promise is
+    // still pending, the stream already holds the newer catalogue — the
+    // initialization result must not overwrite it when it finally settles.
+    let streamCatalogueArrived = false;
+    if (typeof queryInstance.initializationResult === 'function') {
+      void Promise.resolve(queryInstance.initializationResult())
+        .then((initialization) => {
+          if (!streamCatalogueArrived) {
+            recordNativeCatalogue(initialization?.commands ?? []);
+          }
+        })
+        .catch(() => {
+          // A CLI that declines the control request leaves the fallback table
+          // in place; nothing else about the run is affected.
+        });
+    }
+
     // Process streaming messages
     console.log('Starting async generator loop for session:', capturedSessionId || 'NEW');
     for await (const message of queryInstance) {
+      // A mid-session command catalogue change (skills or plugins discovered
+      // on the fly) arrives as a full replacement, not a delta — the protocol
+      // is explicit that clients must replace their cached list.
+      if (message.type === 'system' && message.subtype === 'commands_changed') {
+        streamCatalogueArrived = true;
+        recordNativeCatalogue(message.commands ?? []);
+      }
+
       // Capture session ID from first message
       if (message.session_id && !capturedSessionId) {
 
@@ -1229,6 +1272,9 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         }
         if (isSubagentPromptEcho(msg)) {
           continue;
+        }
+        if (msg.kind === 'text' && msg.role === 'assistant' && typeof msg.content === 'string' && msg.content.trim()) {
+          assistantTextSeen = true;
         }
         ws.send(msg);
       }
@@ -1305,8 +1351,26 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         // The turn is done as far as the client is concerned.
         const abortPending = sessionKey() ? abortedSessionIds.has(sessionKey()) : false;
         const stillOutstanding = backgroundWork.hasOutstanding(sessionKey());
+        // A result-only turn (a native command whose whole answer is the
+        // result string, e.g. `/context`) streams no assistant message of
+        // its own. Only synthesize it when nothing else already rendered
+        // text this turn, and only for a result that reports success with
+        // content — an error/blocked result's `.result` is not an answer.
+        const shouldSynthesizeResultText = !assistantTextSeen
+          && typeof message.result === 'string'
+          && message.result.trim()
+          && message.subtype === 'success';
         if (!turnCompleteSent && !abortPending) {
           turnCompleteSent = true;
+          if (shouldSynthesizeResultText) {
+            ws.send(createNormalizedMessage({
+              kind: 'text',
+              role: 'assistant',
+              content: message.result,
+              sessionId: capturedSessionId || sessionId || null,
+              provider: 'claude',
+            }));
+          }
           ws.send(createCompleteMessage({ provider: 'claude', sessionId: capturedSessionId || sessionId || null, exitCode: 0 }));
           notifyRunStopped({
             userId: ws?.userId || null,
@@ -1345,6 +1409,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         const holdForTurn = sawTaskEventThisTurn ? stillOutstanding : backgroundWorkPending || stillOutstanding;
         backgroundWorkPending = false;
         sawTaskEventThisTurn = false;
+        assistantTextSeen = false;
         if (holdForTurn) {
           heldForBackgroundWork = true;
           scheduleRelease();
