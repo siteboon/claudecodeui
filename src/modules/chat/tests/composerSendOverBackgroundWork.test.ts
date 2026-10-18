@@ -11,11 +11,12 @@ import type { BackgroundSendChoice, PermissionMode, Project, ProjectSession, Ses
 
 /**
  * A session whose turn has ended with background work still running keeps
- * its composer usable — but a new turn replaces the CLI process that work
- * runs under, so the work is stopped or finishes where nothing listens. The
- * composer says so and asks before sending: send anyway, queue the message
- * until the work finishes (the server holds it while the work runs), or
- * cancel.
+ * its composer usable. Claude feeds the next turn into the live process, so
+ * the work keeps running and the composer sends without asking. For other
+ * providers a new turn replaces the CLI process that work runs under, so the
+ * work is stopped or finishes where nothing listens. The composer says so
+ * and asks before sending: send anyway, queue the message until the work
+ * finishes (the server holds it while the work runs), or cancel.
  */
 
 const { writeQueuedMessage } = vi.hoisted(() => ({ writeQueuedMessage: vi.fn() }));
@@ -52,14 +53,14 @@ const backgroundOnly: SessionActivityMap = new Map([[
 
 const uploads = () => vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/api/assets/files'));
 
-const render = (processingSessions: SessionActivityMap) => {
+const render = (processingSessions: SessionActivityMap, provider: 'claude' | 'codex' = 'codex') => {
   const sent: Array<{ type: string }> = [];
   const view = renderHook(() =>
     useChatComposerState({
       selectedProject: PROJECT,
       selectedSession: SESSION,
       currentSessionId: SESSION.id,
-      provider: 'claude',
+      provider,
       permissionMode: 'default',
       cyclePermissionMode: () => undefined,
       resolvePermissionModeForProvider: () => 'default' as PermissionMode,
@@ -211,4 +212,14 @@ test('a session with nothing in the background sends without asking', async () =
 
   assert.equal(view.result.current.backgroundSendPrompt, null);
   assert.equal(sends().length, 1);
+});
+
+test('Claude sends over background work without asking, since the work keeps running', async () => {
+  const { view, sends } = render(backgroundOnly, 'claude');
+  await act(async () => { view.result.current.setInput('hello'); });
+  await act(async () => { await view.result.current.handleSubmit({ preventDefault: () => undefined } as never); });
+
+  assert.equal(view.result.current.backgroundSendPrompt, null);
+  assert.equal(sends().length, 1);
+  assert.equal(writeQueuedMessage.mock.calls.length, 0);
 });
