@@ -38,6 +38,15 @@ const COMMON_WORKSPACE_DIRECTORY_NAMES = [
 // server heap before the browser has a chance to switch to a narrower project.
 const MAXIMUM_FILE_TREE_ENTRIES = 10_000;
 
+// The directory picker's search walks outward from the directory being
+// browsed. The walk is capped in depth, visited directories and results so a
+// broad root (a user's home directory) cannot pin the server, and heavy
+// folders (node_modules, .git, dist, ...) are skipped outright — searching is
+// for finding a project to open, not for indexing everything on disk.
+const MAXIMUM_FOLDER_SEARCH_DEPTH = 4;
+const MAXIMUM_FOLDER_SEARCH_RESULTS = 30;
+const MAXIMUM_FOLDER_SEARCH_VISITED_DIRECTORIES = 4000;
+
 type FileTreeEntryFilter = (entryPath: string, isDirectory: boolean) => boolean;
 
 function includeEntryByHardExclusions(entryPath: string, isDirectory: boolean): boolean {
@@ -413,6 +422,113 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
         : directories;
 
       return { path: resolvedPath, suggestions };
+    },
+
+    async searchWorkspaceFolders(searchQuery, inputRoot) {
+      const trimmedQuery = searchQuery.trim().toLowerCase();
+      if (trimmedQuery.length < 2) {
+        return { query: searchQuery, root: null, results: [] };
+      }
+
+      const requestedRoot = inputRoot
+        ? expandWorkspacePath(dependencies.workspace.rootPath, inputRoot)
+        : dependencies.workspace.rootPath;
+      const resolvedRoot = await resolveBrowsablePath(path.resolve(requestedRoot));
+
+      try {
+        await fileSystem.access(resolvedRoot);
+        const rootStats = await fileSystem.stat(resolvedRoot);
+        if (!rootStats.isDirectory()) {
+          throw createFileTreeError('Path is not a directory', 400, 'NOT_A_DIRECTORY');
+        }
+      } catch (error) {
+        if (error instanceof AppError) throw error;
+        throw createFileTreeError('Directory not accessible', 404, 'DIRECTORY_NOT_ACCESSIBLE');
+      }
+
+      const results: Array<{ path: string; name: string; type: 'directory' }> = [];
+      let visitedDirectories = 0;
+
+      // Breadth-first, one directory at a time through the shared limiter,
+      // mirroring the tree walk: the search runs beside live file operations
+      // and must not starve them of the concurrency budget. Two ordering
+      // properties fall out of this shape:
+      //
+      // - BFS is what makes the result cap honest. Taking the first results
+      //   in breadth order means they are the shallowest ones, so a deep
+      //   early branch can never crowd out a shallower match discovered in a
+      //   later branch the way a depth-first walk would.
+      // - Each directory acquires and releases the permit on its own. A
+      //   recursive walk that held the permit while awaiting its children
+      //   would deadlock outright when FS_CONCURRENCY is 1.
+      //
+      // An unreadable branch is skipped — a best-effort search reports what
+      // it could reach rather than failing on one locked directory.
+      const queue: Array<{ directoryPath: string; depth: number }> = [
+        { directoryPath: resolvedRoot, depth: 1 },
+      ];
+
+      // Nothing is queued beyond what the visit budget can actually consume:
+      // without that bound a single wide directory hands thousands of paths to
+      // a walk that then abandons them. The walk also stops the moment the cap
+      // is met, so what reaches the caller is the shallowest thirty matches in
+      // breadth-first order rather than everything the search could reach.
+      while (
+        queue.length > 0
+        && visitedDirectories < MAXIMUM_FOLDER_SEARCH_VISITED_DIRECTORIES
+        && results.length < MAXIMUM_FOLDER_SEARCH_RESULTS
+      ) {
+        const { directoryPath, depth } = queue.shift()!;
+        visitedDirectories += 1;
+
+        await acquire();
+        try {
+          for await (const entry of fileSystem.openDirectory(directoryPath)) {
+            if (results.length >= MAXIMUM_FOLDER_SEARCH_RESULTS) {
+              break;
+            }
+
+            if (!entry.isDirectory()
+              || entry.name.startsWith('.')
+              || IGNORED_DIRECTORY_NAMES.has(entry.name)) {
+              continue;
+            }
+
+            const itemPath = path.join(directoryPath, entry.name);
+            if (FORBIDDEN_WORKSPACE_PATHS.includes(normalizeProjectPath(itemPath))) {
+              continue;
+            }
+
+            if (entry.name.toLowerCase().includes(trimmedQuery)) {
+              results.push({ path: itemPath, name: entry.name, type: 'directory' as const });
+            }
+
+            if (depth < MAXIMUM_FOLDER_SEARCH_DEPTH
+              && visitedDirectories + queue.length < MAXIMUM_FOLDER_SEARCH_VISITED_DIRECTORIES) {
+              queue.push({ directoryPath: itemPath, depth: depth + 1 });
+            }
+          }
+        } catch {
+          // An unreadable branch is skipped, not fatal.
+        } finally {
+          release();
+        }
+      }
+
+      // Shallowest first: the closer a match is to the directory the user was
+      // browsing, the more likely it is the one they meant. The walk above has
+      // already capped the list; this slice keeps that invariant regardless of
+      // how the cap is enforced there.
+      results.sort((left, right) => {
+        const depthDifference = left.path.split(/[\\/]/).length - right.path.split(/[\\/]/).length;
+        if (depthDifference !== 0) {
+          return depthDifference;
+        }
+        return left.name.toLowerCase().localeCompare(right.name.toLowerCase());
+      });
+      results.splice(MAXIMUM_FOLDER_SEARCH_RESULTS);
+
+      return { query: searchQuery, root: resolvedRoot, results };
     },
 
     async createWorkspaceFolder(folderPath) {
