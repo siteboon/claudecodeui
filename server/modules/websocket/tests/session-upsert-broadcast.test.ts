@@ -91,6 +91,27 @@ test('a session with no provider id yet reports null rather than omitting the fi
   });
 });
 
+test('a fork broadcast carries its app-facing parent and off-page ancestors for immediate nesting', async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createAppSession('parent', 'claude', '/workspace/demo', 'Original');
+    sessionsDb.assignProviderSessionId('parent', 'native-parent');
+    sessionsDb.createForkedSession({
+      sessionId: 'child', provider: 'claude', projectPath: '/workspace/demo',
+      customName: 'Fork', providerSessionId: 'native-child', jsonlPath: '/transcripts/child.jsonl',
+      forkedFromSessionId: 'parent', model: null, effort: null,
+    });
+    const connection = new FakeConnection();
+    connectedClients.add(connection as never);
+
+    await broadcastSessionUpserted('child');
+    await broadcastSessionUpsertedBatch(['native-child']);
+    const summary = connection.frames[0].session as { forkedFromSessionId: string; forkAncestors: { id: string }[] };
+    assert.equal(summary.forkedFromSessionId, 'parent');
+    assert.deepEqual(summary.forkAncestors.map((ancestor) => ancestor.id), ['parent']);
+    assert.deepEqual(connection.frames[1].session, summary);
+  });
+});
+
 test('an unresolvable id broadcasts nothing', async () => {
   await withIsolatedDatabase(async () => {
     const connection = new FakeConnection();

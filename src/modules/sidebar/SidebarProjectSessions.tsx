@@ -1,4 +1,5 @@
-import { CheckSquare, Plus, Trash2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { CheckSquare, ChevronRight, GitBranch, Plus, Trash2 } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { Button } from '@/shared/ui';
@@ -6,6 +7,7 @@ import { cn } from '@/shared/utils';
 import type { LLMProvider, Project, ProjectSession, SessionWithProvider, SidebarSessionSelection } from '@/shared/types';
 import SidebarSessionItem from '@/modules/sidebar/SidebarSessionItem';
 import { useCompactSidebar } from '@/modules/sidebar/hooks/useCompactSidebar';
+import { buildProjectSessionTree } from '@/modules/sidebar/utils/projectSessionTree';
 
 type SidebarProjectSessionsProps = {
   project: Project;
@@ -92,18 +94,60 @@ export default function SidebarProjectSessions({
   t,
 }: SidebarProjectSessionsProps) {
   const isCompact = useCompactSidebar();
+  const treeRows = useMemo(() => buildProjectSessionTree(sessions, project.projectId), [sessions, project.projectId]);
+  const selectedSessionId = selectedSession?.id ?? null;
+  const targetAncestors = useMemo(() => {
+    const parents = new Map(treeRows.map((row) => [row.session.id, row.parentId]));
+    const reveal = new Set<string>();
+    for (const target of [selectedSessionId, sessionRenameId]) {
+      let parentId = target ? parents.get(target) : null;
+      while (parentId && !reveal.has(parentId)) {
+        reveal.add(parentId);
+        parentId = parents.get(parentId);
+      }
+    }
+    return reveal;
+  }, [treeRows, selectedSessionId, sessionRenameId]);
+  const [forkTreeState, setForkTreeState] = useState(() => ({
+    targetAncestors, selectedSessionId, sessionRenameId, collapsedForks: new Set<string>(),
+  }));
+  const { collapsedForks } = forkTreeState;
+
+  // Reveal a newly selected/renamed fork before committing a hidden row. Later
+  // title/activity updates must not undo an explicit collapse by the user.
+  if (forkTreeState.selectedSessionId !== selectedSessionId
+    || forkTreeState.sessionRenameId !== sessionRenameId
+    || forkTreeState.targetAncestors.size !== targetAncestors.size
+    || [...targetAncestors].some((id) => !forkTreeState.targetAncestors.has(id))) {
+    setForkTreeState({
+      targetAncestors, selectedSessionId, sessionRenameId,
+      collapsedForks: new Set([...collapsedForks].filter((id) => !targetAncestors.has(id))),
+    });
+  }
+
+  const visibleRows = useMemo(() => {
+    let hiddenBelowDepth = Infinity;
+    const visible: typeof treeRows = [];
+    for (const row of treeRows) {
+      if (row.depth > hiddenBelowDepth) continue;
+      hiddenBelowDepth = row.hasChildren && collapsedForks.has(row.session.id) ? row.depth : Infinity;
+      visible.push(row);
+    }
+    return visible;
+  }, [treeRows, collapsedForks]);
+  const hasForks = treeRows.some((row) => row.hasChildren);
 
   if (!isExpanded) {
     return null;
   }
 
-  const hasSessions = sessions.length > 0;
+  const hasSessions = treeRows.length > 0;
   const isSelecting = selectedSessionIds !== null;
   // A session with a response in flight cannot be deleted — the same rule the
   // row's options menu applies — so it is not selectable either.
   const isSessionRunning = (session: SessionWithProvider) =>
     activeSessions.has(session.id) && !backgroundSessionIds.has(session.id);
-  const selectableSessionIds = sessions.filter((session) => !isSessionRunning(session)).map((session) => session.id);
+  const selectableSessionIds = treeRows.filter(({ session }) => !isSessionRunning(session)).map(({ session }) => session.id);
   // Re-derived from the selectable rows rather than read straight off the
   // selection, so a row that started running after it was ticked drops out of
   // the count, the button and the ids the confirmation is opened with.
@@ -218,32 +262,68 @@ export default function SidebarProjectSessions({
         </div>
       ) : (
         <>
-          {sessions.map((session) => (
-            <SidebarSessionItem
-              key={session.id}
-              project={project}
-              session={session}
-              selectedSession={selectedSession}
-              isProcessing={isSessionRunning(session)}
-              hasBackgroundWork={backgroundSessionIds.has(session.id)}
-              needsAttention={attentionSessionIds.has(session.id)}
-              currentTime={currentTime}
-              onRenameDraftChange={onRenameDraftChange}
-              isEditing={session.id === sessionRenameId}
-              renameDraft={session.id === sessionRenameId ? sessionRenameDraft : ''}
-              onStartEditingSession={onStartEditingSession}
-              onCancelEditingSession={onCancelEditingSession}
-              onSaveEditingSession={onSaveEditingSession}
-              onProjectSelect={onProjectSelect}
-              onSessionSelect={onSessionSelect}
-              onDeleteSession={onDeleteSession}
-              onForkSession={onForkSession}
-              isSelecting={isSelecting}
-              isChecked={checkedSessionIds.has(session.id)}
-              onToggleSessionSelected={onToggleSessionSelected}
-              t={t}
-            />
-          ))}
+          <div className="space-y-1" data-testid="project-session-tree">
+            {visibleRows.map(({ session, parentId, depth, hasChildren }) => (
+              <div
+                key={session.id}
+                data-session-id={session.id}
+                data-parent-session-id={parentId ?? undefined}
+                data-fork-depth={depth}
+                className={cn('flex min-w-0 items-start', depth > 0 && 'border-l border-border/60')}
+                style={depth > 0 ? { marginLeft: `${Math.min(depth, 4) * 12}px` } : undefined}
+              >
+                {hasForks && (
+                  hasChildren ? (
+                    <button
+                      type="button"
+                      className="mt-1 flex h-8 w-6 flex-shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-expanded={!collapsedForks.has(session.id)}
+                      aria-label={collapsedForks.has(session.id)
+                        ? t('sessions.expandForks', { session: session.summary || session.name || t('projects.newSession') })
+                        : t('sessions.collapseForks', { session: session.summary || session.name || t('projects.newSession') })}
+                      onClick={() => setForkTreeState((previous) => {
+                        const next = new Set(previous.collapsedForks);
+                        if (next.has(session.id)) next.delete(session.id);
+                        else next.add(session.id);
+                        return { ...previous, collapsedForks: next };
+                      })}
+                    >
+                      <ChevronRight className={cn('h-3.5 w-3.5 transition-transform', !collapsedForks.has(session.id) && 'rotate-90')} aria-hidden="true" />
+                    </button>
+                  ) : (
+                    <span className="mt-1 flex h-8 w-6 flex-shrink-0 items-center justify-center text-muted-foreground/60" aria-hidden="true">
+                      {parentId && <GitBranch className="h-3 w-3" />}
+                    </span>
+                  )
+                )}
+                <div className="min-w-0 flex-1">
+                  <SidebarSessionItem
+                    project={project}
+                    session={session}
+                    selectedSession={selectedSession}
+                    isProcessing={isSessionRunning(session)}
+                    hasBackgroundWork={backgroundSessionIds.has(session.id)}
+                    needsAttention={attentionSessionIds.has(session.id)}
+                    currentTime={currentTime}
+                    onRenameDraftChange={onRenameDraftChange}
+                    isEditing={session.id === sessionRenameId}
+                    renameDraft={session.id === sessionRenameId ? sessionRenameDraft : ''}
+                    onStartEditingSession={onStartEditingSession}
+                    onCancelEditingSession={onCancelEditingSession}
+                    onSaveEditingSession={onSaveEditingSession}
+                    onProjectSelect={onProjectSelect}
+                    onSessionSelect={onSessionSelect}
+                    onDeleteSession={onDeleteSession}
+                    onForkSession={onForkSession}
+                    isSelecting={isSelecting}
+                    isChecked={checkedSessionIds.has(session.id)}
+                    onToggleSessionSelected={onToggleSessionSelected}
+                    t={t}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
 
           {hasMoreSessions && (
             <Button

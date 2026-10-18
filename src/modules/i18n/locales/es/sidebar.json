@@ -38,7 +38,9 @@
     "selectAllLoaded": "Seleccionar las cargadas",
     "clearSelection": "Quitar selección",
     "deleteSelected_one": "Eliminar {{count}} sesión",
-    "deleteSelected_other": "Eliminar {{count}} sesiones"
+    "deleteSelected_other": "Eliminar {{count}} sesiones",
+    "expandForks": "Expandir bifurcaciones de {{session}}",
+    "collapseForks": "Contraer bifurcaciones de {{session}}"
   },
   "tooltips": {
     "viewEnvironments": "Ver entornos",
