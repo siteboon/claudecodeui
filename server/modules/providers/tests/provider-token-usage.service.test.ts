@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import os, { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
@@ -8,6 +8,7 @@ import Database from 'better-sqlite3';
 
 import {
   createProviderTokenUsageService,
+  readClaudeTranscriptTokenUsage,
   summarizeClaudeTokenUsage,
 } from '@/modules/providers/services/provider-token-usage.service.js';
 import { AppError } from '@/shared/utils.js';
@@ -370,4 +371,146 @@ test('Codex token usage falls back to the whole file when the tail has no token_
   } finally {
     await rm(tempDirectory, { recursive: true, force: true });
   }
+});
+
+/**
+ * Runs a test against a throwaway home directory for the Claude transcript
+ * fixtures. `CLAUDE_CONFIG_DIR` is cleared for the run regardless of the
+ * machine's setting — an inherited absolute value would route the reader away
+ * from the patched home and the fixtures under it — and both the directory and
+ * the variable are restored afterwards. Tests that exercise the variable set
+ * it inside the callback.
+ */
+async function withIsolatedClaudeHome(runTest: (homeDirectory: string) => Promise<void>): Promise<void> {
+  const tempHome = await mkdtemp(path.join(tmpdir(), 'claude-transcript-home-'));
+  const originalHomedir = os.homedir;
+  const originalConfigDirectory = process.env.CLAUDE_CONFIG_DIR;
+  (os as never as { homedir: () => string }).homedir = () => tempHome;
+  delete process.env.CLAUDE_CONFIG_DIR;
+
+  try {
+    await runTest(tempHome);
+  } finally {
+    (os as never as { homedir: () => string }).homedir = originalHomedir;
+    if (originalConfigDirectory !== undefined) {
+      process.env.CLAUDE_CONFIG_DIR = originalConfigDirectory;
+    }
+    await rm(tempHome, { recursive: true, force: true });
+  }
+}
+
+test('readClaudeTranscriptTokenUsage reads the newest account from the transcript', async () => {
+  await withIsolatedClaudeHome(async (tempHome) => {
+    const encoded = '/workspace/demo'.replace(/[^a-zA-Z0-9-]/g, '-');
+    const projectDir = path.join(tempHome, '.claude', 'projects', encoded);
+    await mkdir(projectDir, { recursive: true });
+    await writeFile(path.join(projectDir, 'native-1.jsonl'), [
+      JSON.stringify({
+        type: 'assistant',
+        isSidechain: false,
+        message: { role: 'assistant', usage: { input_tokens: 3, cache_creation_input_tokens: 0, cache_read_input_tokens: 10_000, output_tokens: 40 } },
+      }),
+      // Synthetic rows are written with an all-zero block; the newest real
+      // reading must win over them.
+      JSON.stringify({
+        type: 'assistant',
+        isSidechain: false,
+        message: { role: 'assistant', model: '<synthetic>', usage: { input_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 0 } },
+      }),
+    ].join('\n'), 'utf8');
+
+    const usage = await readClaudeTranscriptTokenUsage('native-1', '/workspace/demo');
+    assert.ok(usage);
+    assert.equal(usage.used, 10_043);
+
+    assert.equal(
+      await readClaudeTranscriptTokenUsage('missing-session', '/workspace/demo'),
+      null,
+      'an unknown session has no reading, which is not zero',
+    );
+  });
+});
+
+test('readClaudeTranscriptTokenUsage reads the transcript from CLAUDE_CONFIG_DIR when set', async () => {
+  const configDirectory = await mkdtemp(path.join(tmpdir(), 'claude-config-dir-'));
+
+  try {
+    await withIsolatedClaudeHome(async () => {
+      // Only the configured directory holds a transcript; the default
+      // home-directory path stays empty, so a reader that ignores the variable
+      // finds nothing at all.
+      process.env.CLAUDE_CONFIG_DIR = configDirectory;
+      const encoded = '/workspace/demo'.replace(/[^a-zA-Z0-9-]/g, '-');
+      const projectDir = path.join(configDirectory, 'projects', encoded);
+      await mkdir(projectDir, { recursive: true });
+      await writeFile(path.join(projectDir, 'native-config.jsonl'), [
+        JSON.stringify({
+          type: 'assistant',
+          isSidechain: false,
+          message: { role: 'assistant', usage: { input_tokens: 7, cache_creation_input_tokens: 0, cache_read_input_tokens: 5_000, output_tokens: 10 } },
+        }),
+      ].join('\n'), 'utf8');
+
+      const usage = await readClaudeTranscriptTokenUsage('native-config', '/workspace/demo');
+      assert.ok(usage);
+      assert.equal(usage.used, 5_017);
+    });
+  } finally {
+    await rm(configDirectory, { recursive: true, force: true });
+  }
+});
+
+test('a tail of only skippable rows still falls back to the full transcript', async () => {
+  await withIsolatedClaudeHome(async (tempHome) => {
+    const encoded = '/workspace/demo'.replace(/[^a-zA-Z0-9-]/g, '-');
+    const projectDir = path.join(tempHome, '.claude', 'projects', encoded);
+    await mkdir(projectDir, { recursive: true });
+
+    // A real reading, then enough synthetic zero-usage rows to push it outside
+    // the 4 MiB tail window. Every row in the tail carries a usage block, so
+    // deciding the fallback on row presence alone would return no reading
+    // while a real one sits in the file.
+    const realReading = JSON.stringify({
+      type: 'assistant',
+      isSidechain: false,
+      message: { role: 'assistant', usage: { input_tokens: 1_000, cache_creation_input_tokens: 0, cache_read_input_tokens: 20_000, output_tokens: 500 } },
+    });
+    const syntheticPadding = Array.from({ length: 60 }, () => JSON.stringify({
+      type: 'assistant',
+      isSidechain: false,
+      message: {
+        role: 'assistant',
+        model: '<synthetic>',
+        usage: { input_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 0 },
+        content: [{ type: 'text', text: 'x'.repeat(100_000) }],
+      },
+    }));
+    await writeFile(
+      path.join(projectDir, 'native-tail.jsonl'),
+      [realReading, ...syntheticPadding].join('\n'),
+      'utf8',
+    );
+
+    const usage = await readClaudeTranscriptTokenUsage('native-tail', '/workspace/demo');
+    assert.ok(usage, 'the reading outside the tail window is still found');
+    assert.equal(usage.used, 21_500);
+  });
+});
+
+test('a transcript that fails to read is no reading, not a failure', async () => {
+  await withIsolatedClaudeHome(async (tempHome) => {
+    // A directory passes the existence check but cannot be read as a file —
+    // the shape of a transcript that disappeared or locked between the check
+    // and the read. The reader is awaited inside the SDK stream loop, so the
+    // rejection has to be absorbed here rather than end the stream.
+    const encoded = '/workspace/demo'.replace(/[^a-zA-Z0-9-]/g, '-');
+    const projectDir = path.join(tempHome, '.claude', 'projects', encoded);
+    await mkdir(path.join(projectDir, 'native-vanished.jsonl'), { recursive: true });
+
+    assert.equal(
+      await readClaudeTranscriptTokenUsage('native-vanished', '/workspace/demo'),
+      null,
+      'an unreadable transcript reads as no reading',
+    );
+  });
 });

@@ -39,6 +39,7 @@ import {
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import {
   getReportedClaudeContextWindow,
+  readClaudeTranscriptTokenUsage,
   rememberClaudeContextWindow
 } from '@/modules/providers/services/provider-token-usage.service.js';
 import { createCompleteMessage, createNormalizedMessage } from '@/shared/utils.js';
@@ -549,6 +550,16 @@ function buildTokenBudget(messageUsage, reportedContextWindow) {
 }
 
 /**
+ * The two halves of a request's cache accounting, each in every casing the SDK
+ * has used for it. Presence — not the value — is what marks a usage payload a
+ * complete account, because both halves are reported even when unused.
+ */
+const CACHE_USAGE_KEY_GROUPS = [
+  ['cache_creation_input_tokens', 'cacheCreationInputTokens', 'cacheCreationTokens'],
+  ['cache_read_input_tokens', 'cacheReadInputTokens', 'cacheReadTokens'],
+];
+
+/**
  * Extracts the session's context-window usage from an SDK stream message.
  *
  * Only assistant messages describe the context window: each one reports the
@@ -583,7 +594,31 @@ function extractTokenBudget(sdkMessage, reportedContextWindow) {
     return null;
   }
 
-  return buildTokenBudget(messageUsage, reportedContextWindow);
+  // A reading is one request's whole prompt: the uncached input plus both
+  // cache halves. Some stacks stream assistant frames whose account carries
+  // input and output only — the uncached remainder, single digits against a
+  // warm cache, or zeros outright — and publishing one replaced the real
+  // figure with 0 or 2 for the rest of the turn. A payload that reports both
+  // cache halves is complete; anything else is left for the transcript
+  // fallback in the stream loop.
+  const reportsCacheAccount = CACHE_USAGE_KEY_GROUPS.every((keys) =>
+    keys.some((key) => messageUsage[key] != null && Number.isFinite(Number(messageUsage[key])))
+  );
+  if (!reportsCacheAccount) {
+    return null;
+  }
+
+  const budget = buildTokenBudget(messageUsage, reportedContextWindow);
+
+  // There is no context window without a prompt: an account that is zero
+  // throughout is one of the messages the CLI writes itself (model
+  // `<synthetic>`: the interrupt notice, an API error, the usage-limit line),
+  // not a measurement of this conversation.
+  if (budget.inputTokens <= 0) {
+    return null;
+  }
+
+  return budget;
 }
 
 /**
@@ -996,6 +1031,8 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   let heldForBackgroundWork = false;
   // Set once a turn publishes a budget read from an assistant message, so the
   // turn-ending `result` is only mined for usage when nothing better arrived.
+  // Reset when that `result` is handled — the process this loop reads can be
+  // held for background work, and a follow-up turn deserves its own fallback.
   let assistantBudgetSent = false;
   // The window the SDK reported for this session's model (a resumed session
   // starts from the one its last run reported), the model the main thread's
@@ -1254,11 +1291,23 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         }
       }
 
-      // Extract and send token budget updates from assistant usage payloads,
-      // falling back to the turn's cumulative bill only for SDK builds that
-      // report no per-assistant usage at all.
-      let tokenBudgetData = extractTokenBudget(message, reportedContextWindow)
-        || (assistantBudgetSent ? null : extractCumulativeTokenBudget(message, reportedContextWindow));
+      // Extract and send token budget updates from assistant usage payloads.
+      // A streamed frame whose account is partial or all-zero yields no
+      // reading, so the session transcript is read instead: the CLI writes
+      // each finished API response's complete account there mid-turn, which
+      // keeps the live counter correct even behind gateways that normalise
+      // streamed usage away. The turn's cumulative bill remains the last
+      // resort, for SDK builds that report no per-assistant usage at all.
+      let tokenBudgetData = extractTokenBudget(message, reportedContextWindow);
+      if (!tokenBudgetData && message.type === 'assistant' && !message.parent_tool_use_id) {
+        const transcriptSessionId = capturedSessionId || providerSessionId;
+        if (transcriptSessionId && options.cwd) {
+          tokenBudgetData = await readClaudeTranscriptTokenUsage(transcriptSessionId, options.cwd);
+        }
+      }
+      if (!tokenBudgetData && !assistantBudgetSent) {
+        tokenBudgetData = extractCumulativeTokenBudget(message, reportedContextWindow);
+      }
       if (
         !tokenBudgetData
         && turnContextWindow
@@ -1274,6 +1323,10 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         }
         lastSentTokenBudget = tokenBudgetData;
         ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+      }
+      if (message.type === 'result') {
+        // The turn is over; a held process's next turn starts from scratch.
+        assistantBudgetSent = false;
       }
 
       if (startsBackgroundWork(message)) {

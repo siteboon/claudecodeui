@@ -331,6 +331,86 @@ function claudeEntriesHaveUsage(entries: AnyRecord[]): boolean {
   return entries.some((entry) => entry?.type === 'assistant' && entry.message?.usage);
 }
 
+/**
+ * The directory the Claude CLI keeps session transcripts under. The runtime
+ * provider forwards the server's whole environment to every CLI it spawns, so
+ * a deployment's `CLAUDE_CONFIG_DIR` moves the transcripts with it, and this
+ * reader has to resolve the same directory or finds nothing where it looks.
+ * Non-absolute values are ignored, matching how the settings service reads
+ * the same variable.
+ */
+function resolveClaudeTranscriptRoot(): string {
+  const configuredDirectory = process.env.CLAUDE_CONFIG_DIR?.trim();
+  if (configuredDirectory && path.isAbsolute(configuredDirectory)) {
+    return configuredDirectory;
+  }
+  return path.join(defaultDependencies.getHomeDirectory(), '.claude');
+}
+
+/**
+ * Live context-window reading from a Claude session transcript, addressed by
+ * provider-native ids instead of an app session row.
+ *
+ * Used by the Claude runtime's live stream: some gateways stream assistant
+ * frames whose usage account is partial or zero, but the CLI's transcript on
+ * disk always carries the complete per-request account, written as each API
+ * response finishes. Reading the newest such row mid-turn is therefore the
+ * reliable live source on every deployment — a brand-new session's first turn
+ * included, before any history fetch could supply a figure.
+ *
+ * Returns null when the transcript cannot be located or read, or holds no
+ * usage yet; callers keep their previous reading rather than treating that as
+ * zero. Reading is best-effort by design — the caller awaits this from inside
+ * its SDK stream loop, so a transcript that disappears or turns unreadable
+ * between the existence check and the read must surface as no reading, never
+ * as a rejection that would end an otherwise healthy stream.
+ */
+export async function readClaudeTranscriptTokenUsage(
+  providerSessionId: string,
+  projectPath: string,
+): Promise<TokenUsageResult | null> {
+  const encodedProjectPath = projectPath.replace(/[^a-zA-Z0-9-]/g, '-');
+  const sessionFilePath = path.join(
+    resolveClaudeTranscriptRoot(),
+    'projects',
+    encodedProjectPath,
+    `${providerSessionId}.jsonl`,
+  );
+
+  if (!defaultDependencies.fileExists(sessionFilePath)) {
+    return null;
+  }
+
+  try {
+    // Measure against the window the SDK last reported for this session when
+    // one is remembered, the way the history reader does, so the live
+    // transcript reading and the history-derived usage name the same total.
+    const reportedContextWindow = defaultDependencies.getReportedClaudeContextWindow(providerSessionId);
+    const tail = await defaultDependencies.readTextFileTail(sessionFilePath, TOKEN_USAGE_TAIL_BYTES);
+    let usage = summarizeClaudeTokenUsage(
+      parseClaudeUsageEntries(tail.content),
+      defaultDependencies.getClaudeContextWindow(),
+      reportedContextWindow,
+    );
+
+    // A tail can hold only rows the summarizer skips — a subagent's turns,
+    // all-zero synthetic notices — while a real reading lies just outside the
+    // window. The presence of any usage row is therefore not evidence the
+    // tail is enough; only a summarized positive reading is.
+    if (usage.used <= 0 && !tail.isComplete) {
+      usage = summarizeClaudeTokenUsage(
+        parseClaudeUsageEntries(await defaultDependencies.readTextFile(sessionFilePath)),
+        defaultDependencies.getClaudeContextWindow(),
+        reportedContextWindow,
+      );
+    }
+
+    return usage.used > 0 ? usage : null;
+  } catch {
+    return null;
+  }
+}
+
 function readOpenCodeTokenUsage(databasePath: string, providerSessionId: string): TokenUsageResult {
   const database = new Database(databasePath, { readonly: true, fileMustExist: true });
   try {
