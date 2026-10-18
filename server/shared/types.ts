@@ -1315,8 +1315,49 @@ export type FileTreeStats = {
   size: number;
   mtime: Date;
   mode: number;
+  isFile(): boolean;
   isDirectory(): boolean;
   isSymbolicLink(): boolean;
+};
+
+/**
+ * Device and inode of a file: they identify the file itself, whichever path
+ * reached it. Read as bigints, because a 64-bit identifier above
+ * `Number.MAX_SAFE_INTEGER` loses precision as a number and two files could
+ * then compare equal.
+ *
+ * `file-tree.module.ts` produces it and `file-tree.service.ts` compares it, to
+ * confirm an opened file is still the one its read-only root resolves to.
+ */
+export type FileTreeFileIdentity = {
+  dev: bigint;
+  ino: bigint;
+};
+
+/**
+ * A file the File Tree service opened for reading.
+ *
+ * Reads through a read-only root go through a handle so the root check can be
+ * made on the file that was actually opened, and the bytes served are that
+ * file's, even if a path component is swapped for a symlink in between.
+ *
+ * `file-tree.module.ts` implements it over a Node file handle, and
+ * `file-tree.service.ts` checks and reads files under read-only roots through it.
+ */
+export type FileTreeReadHandle = {
+  stat(): Promise<FileTreeStats>;
+  /** Exact device and inode of the opened file. */
+  identity(): Promise<FileTreeFileIdentity>;
+  /**
+   * Path of the opened file as the operating system reports it for the
+   * descriptor (`/proc/self/fd` on Linux), or `null` where that is not
+   * available.
+   */
+  openedPath(): Promise<string | null>;
+  readTextFile(): Promise<string>;
+  /** The stream takes ownership of the handle and closes it when it ends. */
+  createReadStream(): Readable;
+  close(): Promise<void>;
 };
 
 /**
@@ -1342,6 +1383,10 @@ export type FileTreeFileSystem = {
   unlink(filePath: string): Promise<void>;
   copyFile(sourcePath: string, destinationPath: string): Promise<void>;
   createReadStream(filePath: string): Readable;
+  /** Opens a file for reading without blocking on a FIFO. */
+  openForReading(filePath: string): Promise<FileTreeReadHandle>;
+  /** Exact device and inode of the file a path resolves to. */
+  identity(filePath: string): Promise<FileTreeFileIdentity>;
 };
 
 /**
@@ -1365,8 +1410,8 @@ export type FileTreeWorkspaceGateway = {
   validatePath(candidatePath: string): Promise<WorkspacePathValidationResult>;
   /**
    * Resolves a path readable outside the workspace root — the system temp
-   * directory and the Claude projects directory — or `null` when it is not
-   * one. Read-only: the write policy is `validatePath` and it does not consult
+   * directory, the Claude projects directory and any `CLOUDCLI_READ_ROOTS`
+   * entry — or `null` when it is not one. Read-only: the write policy is `validatePath` and it does not consult
    * this.
    */
   resolveReadOnlyRootPath(candidatePath: string): Promise<string | null>;

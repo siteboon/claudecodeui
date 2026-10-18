@@ -16,17 +16,27 @@ const fixtureHome = path.join(fixtureRoot, 'home');
 const claudeProjectsRoot = path.join(fixtureHome, '.claude', 'projects');
 // Under no read-only root: not the temp directory, not the Claude projects dir.
 const outsideDirectory = path.join(fixtureRoot, 'outside');
+// Configured through CLOUDCLI_READ_ROOTS, which is read when utils loads.
+const configuredRoot = path.join(fixtureRoot, 'shared-exports');
 await mkdir(claudeProjectsRoot, { recursive: true });
 await mkdir(outsideDirectory);
+await mkdir(configuredRoot);
 
 const previousHome = process.env.HOME;
 const previousUserProfile = process.env.USERPROFILE;
+const previousReadRoots = process.env.CLOUDCLI_READ_ROOTS;
 process.env.HOME = fixtureHome;
 process.env.USERPROFILE = fixtureHome;
+process.env.CLOUDCLI_READ_ROOTS = ['relative/ignored', '', configuredRoot].join(path.delimiter);
 
-const { resolvePathUnderRoots, resolveReadOnlyRootPath, validateWorkspacePath } = await import('@/shared/utils.js');
+const { readConfiguredReadRoots, resolvePathUnderRoots, resolveReadOnlyRootPath, validateWorkspacePath } = await import('@/shared/utils.js');
 
 after(async () => {
+  if (previousReadRoots === undefined) {
+    delete process.env.CLOUDCLI_READ_ROOTS;
+  } else {
+    process.env.CLOUDCLI_READ_ROOTS = previousReadRoots;
+  }
   if (previousHome === undefined) {
     delete process.env.HOME;
   } else {
@@ -136,4 +146,34 @@ test('a root that does not exist does not stop later roots from matching', async
 
 test('traversal out of the temp directory does not resolve', async () => {
   assert.equal(await resolveReadOnlyRootPath(`${os.tmpdir()}/../etc/passwd`), null);
+});
+
+test('CLOUDCLI_READ_ROOTS keeps absolute entries and ignores relative and empty ones', () => {
+  const absolute = path.resolve('first-root');
+  const other = path.resolve('second-root');
+  assert.deepEqual(readConfiguredReadRoots(undefined), []);
+  assert.deepEqual(readConfiguredReadRoots(''), []);
+  assert.deepEqual(
+    readConfiguredReadRoots([` ${absolute} `, 'relative', '', other].join(path.delimiter)),
+    [absolute, other],
+  );
+});
+
+test('a configured read root is readable and browsable, and nothing else is added', async () => {
+  const filePath = path.join(configuredRoot, 'part.stl');
+  await writeFile(filePath, 'solid part', 'utf8');
+
+  assert.equal(await resolveReadOnlyRootPath(configuredRoot), configuredRoot);
+  assert.equal(await resolveReadOnlyRootPath(filePath), filePath);
+  // Sibling directories of the configured root stay outside.
+  assert.equal(await resolveReadOnlyRootPath(outsideDirectory), null);
+  assert.equal(await resolveReadOnlyRootPath(`${configuredRoot}-sibling`), null);
+});
+
+test('a configured read root is still not a valid workspace location for writes', async () => {
+  // Only the workspace policy grants writes and it does not consult the read
+  // roots; the workspace root here is the fixture home, beside which the
+  // configured root sits.
+  const validation = await validateWorkspacePath(configuredRoot);
+  assert.equal(validation.valid, false);
 });
