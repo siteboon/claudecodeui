@@ -88,7 +88,9 @@ async function sendClaimedQueuedMessage(
  * agent or workflow) is marked completed, but its CLI process stays open so
  * that work can report back. A new turn replaces that process and stops the
  * work, which is why the composer asks before an interactive send. A queued
- * turn was promised to go "when this finishes", so it waits for that work too.
+ * turn was promised to go "when this finishes", so it waits for that work too —
+ * and for the turn in which the held process relays the work's result, which
+ * starts only after the last task has settled.
  */
 function isSessionBusy(sessionId: string, runtime: ProviderRuntimeGateway): boolean {
   return chatRunRegistry.isProcessing(sessionId) || runtime.hasBackgroundWork(sessionId);

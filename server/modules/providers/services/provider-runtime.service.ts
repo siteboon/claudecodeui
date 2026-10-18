@@ -98,8 +98,11 @@ export function createProviderRuntimeService(
     },
 
     hasBackgroundWork(sessionId: string): boolean {
+      // The turn in which a held process relays its last task counts: the task
+      // has settled, but the process is still working the session.
       return dependencies.listProviders().some((provider) =>
-        (provider.runtime.listBackgroundWork?.() ?? []).some((entry) => entry.sessionId === sessionId));
+        Boolean(provider.runtime.hasActiveHeldTurn?.(sessionId))
+        || (provider.runtime.listBackgroundWork?.() ?? []).some((entry) => entry.sessionId === sessionId));
     },
 
     resolveToolApproval(requestId: string, decision: ProviderPermissionDecision): void {
