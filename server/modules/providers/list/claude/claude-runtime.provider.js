@@ -567,9 +567,11 @@ const CACHE_USAGE_KEY_GROUPS = [
  * @returns {boolean} True when both cache halves are reported
  */
 function reportsCacheAccount(messageUsage) {
-  return CACHE_USAGE_KEY_GROUPS.every((keys) =>
-    keys.some((key) => messageUsage[key] != null && Number.isFinite(Number(messageUsage[key])))
-  );
+  // Judge the alias buildTokenBudget will read (the first non-null one), not any alias.
+  return CACHE_USAGE_KEY_GROUPS.every((keys) => {
+    const key = keys.find((k) => messageUsage[k] != null);
+    return key !== undefined && Number.isFinite(Number(messageUsage[key]));
+  });
 }
 
 /**

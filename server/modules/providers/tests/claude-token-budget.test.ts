@@ -58,6 +58,25 @@ test('one cache half without the other emits no budget', () => {
   assert.equal(budget, null);
 });
 
+test('an unreadable cache field is not rescued by a later alias', () => {
+  // The builder reads the first non-null alias, so a later valid spelling must
+  // not vouch for it: that would publish the unreadable half as 0.
+  const budget = extractTokenBudget({
+    type: 'assistant',
+    message: {
+      usage: {
+        input_tokens: 2,
+        cache_creation_input_tokens: 'n/a',
+        cacheCreationTokens: 2_000,
+        cache_read_input_tokens: 40_000,
+        output_tokens: 118,
+      },
+    },
+  });
+
+  assert.equal(budget, null);
+});
+
 test('zero cache fields still count as an account', () => {
   // A first request against a cold cache reports both cache halves as zero.
   // Presence is the test, not the value, or the opening turn of every session
