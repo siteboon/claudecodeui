@@ -193,36 +193,24 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     setProviderModelsLoading(true);
 
     try {
-      const results = await Promise.all(
+      // Each provider lands in the catalog as soon as it answers, so a slow
+      // one (OpenCode shells out to its CLI) cannot hold back the others.
+      await Promise.all(
         PROVIDERS.map(async (p) => {
-          const response = await api.providers.models(p);
-          const body = (await response.json()) as ProviderModelsApiResponse;
-          if (!body.success || !body.data?.models) {
-            return null;
-          }
+          try {
+            const response = await api.providers.models(p);
+            const body = (await response.json()) as ProviderModelsApiResponse;
+            const models = body.success ? body.data?.models : undefined;
+            if (!models || providerModelsRequestIdRef.current !== requestId) {
+              return;
+            }
 
-          return body.data.models;
+            setProviderModelCatalog((previous) => ({ ...previous, [p]: models }));
+          } catch (error) {
+            console.error(`Error loading ${p} models:`, error);
+          }
         }),
       );
-
-      if (providerModelsRequestIdRef.current !== requestId) {
-        return;
-      }
-
-      const nextCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>> = {};
-
-      PROVIDERS.forEach((p, i) => {
-        const entry = results[i];
-        if (!entry) {
-          return;
-        }
-
-        nextCatalog[p] = entry;
-      });
-
-      setProviderModelCatalog(nextCatalog);
-    } catch (error) {
-      console.error('Error loading provider models:', error);
     } finally {
       if (providerModelsRequestIdRef.current === requestId) {
         setProviderModelsLoading(false);
