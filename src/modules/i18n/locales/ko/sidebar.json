@@ -32,7 +32,13 @@
     "loadingSessions": "세션 로딩 중...",
     "unnamed": "이름 없음",
     "loading": "로딩 중...",
-    "showMore": "더 많은 세션 보기"
+    "showMore": "더 많은 세션 보기",
+    "select": "선택",
+    "selectAll": "모두 선택",
+    "selectAllLoaded": "불러온 항목 모두 선택",
+    "clearSelection": "선택 해제",
+    "deleteSelected_one": "세션 {{count}}개 삭제",
+    "deleteSelected_other": "세션 {{count}}개 삭제"
   },
   "tooltips": {
     "viewEnvironments": "환경 보기",
@@ -114,7 +120,9 @@
     "restoreProjectError": "프로젝트 복원 오류. 다시 시도해주세요.",
     "restoreSessionFailed": "세션 복원 실패. 다시 시도해주세요.",
     "restoreSessionError": "세션 복원 오류. 다시 시도해주세요.",
-    "forkSessionError": "이 세션을 분기하지 못했습니다. 다시 시도해 주세요."
+    "forkSessionError": "이 세션을 분기하지 못했습니다. 다시 시도해 주세요.",
+    "deleteSessionsPartialFailure_one": "세션 {{total}}개 중 {{count}}개를 삭제하지 못했습니다. 다시 시도해주세요.",
+    "deleteSessionsPartialFailure_other": "세션 {{total}}개 중 {{count}}개를 삭제하지 못했습니다. 다시 시도해주세요."
   },
   "version": {
     "updateAvailable": "업데이트 가능",
@@ -149,6 +157,15 @@
     "deleteSessionPermanently": "영구 삭제",
     "deleteAllData": "모든 데이터 영구 삭제",
     "allConversationsDeleted": "프로젝트가 사이드바에서 제거됩니다. 파일, 메모리 및 세션 데이터는 보존됩니다.",
-    "cannotUndo": "나중에 프로젝트를 다시 추가할 수 있습니다."
+    "cannotUndo": "나중에 프로젝트를 다시 추가할 수 있습니다.",
+    "confirmDeleteSessions": "다음 세션을 어떻게 하시겠습니까:",
+    "deleteSessions_one": "세션 {{count}}개 삭제",
+    "deleteSessions_other": "세션 {{count}}개 삭제",
+    "selectedSessions_one": "선택한 세션 {{count}}개",
+    "selectedSessions_other": "선택한 세션 {{count}}개",
+    "archiveSessions_one": "세션 {{count}}개 보관",
+    "archiveSessions_other": "세션 {{count}}개 보관",
+    "archiveSessionsNotice_one": "보관하면 세션이 활성 목록에서 제외되지만 기록은 유지됩니다.",
+    "archiveSessionsNotice_other": "보관하면 세션이 활성 목록에서 제외되지만 기록은 유지됩니다."
   }
 }

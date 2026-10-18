@@ -32,7 +32,13 @@
     "loadingSessions": "Caricamento sessioni...",
     "unnamed": "Senza nome",
     "loading": "Caricamento...",
-    "showMore": "Mostra più sessioni"
+    "showMore": "Mostra più sessioni",
+    "select": "Seleziona",
+    "selectAll": "Seleziona tutto",
+    "selectAllLoaded": "Seleziona le caricate",
+    "clearSelection": "Deseleziona tutto",
+    "deleteSelected_one": "Elimina {{count}} sessione",
+    "deleteSelected_other": "Elimina {{count}} sessioni"
   },
   "tooltips": {
     "viewEnvironments": "Visualizza ambienti",
@@ -114,7 +120,9 @@
     "restoreProjectError": "Errore durante il ripristino del progetto. Riprova.",
     "restoreSessionFailed": "Impossibile ripristinare la sessione. Riprova.",
     "restoreSessionError": "Errore durante il ripristino della sessione. Riprova.",
-    "forkSessionError": "Impossibile creare un ramo da questa sessione. Riprova."
+    "forkSessionError": "Impossibile creare un ramo da questa sessione. Riprova.",
+    "deleteSessionsPartialFailure_one": "Impossibile eliminare {{count}} sessione su {{total}}. Riprova.",
+    "deleteSessionsPartialFailure_other": "Impossibile eliminare {{count}} sessioni su {{total}}. Riprova."
   },
   "version": {
     "updateAvailable": "Aggiornamento disponibile",
@@ -149,6 +157,15 @@
     "deleteSessionPermanently": "Elimina definitivamente",
     "deleteAllData": "Elimina tutti i dati permanentemente",
     "allConversationsDeleted": "Il progetto verrà rimosso dalla barra laterale. I tuoi file, memorie e dati delle sessioni verranno preservati.",
-    "cannotUndo": "Puoi riaggiungerlo in seguito."
+    "cannotUndo": "Puoi riaggiungerlo in seguito.",
+    "confirmDeleteSessions": "Cosa vuoi fare con",
+    "deleteSessions_one": "Elimina {{count}} sessione",
+    "deleteSessions_other": "Elimina {{count}} sessioni",
+    "selectedSessions_one": "{{count}} sessione selezionata",
+    "selectedSessions_other": "{{count}} sessioni selezionate",
+    "archiveSessions_one": "Archivia {{count}} sessione",
+    "archiveSessions_other": "Archivia {{count}} sessioni",
+    "archiveSessionsNotice_one": "L'archiviazione rimuove la sessione dall'elenco attivo mantenendone la cronologia.",
+    "archiveSessionsNotice_other": "L'archiviazione rimuove le sessioni dall'elenco attivo mantenendone la cronologia."
   }
 }

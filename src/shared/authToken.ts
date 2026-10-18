@@ -92,6 +92,14 @@ export const storeAuthToken = (token: unknown): boolean => {
     return false;
   }
 
+  // Never let an expired token replace the stored one. A 304 replays the
+  // headers of the cached response, so a stale X-Refreshed-Token from an
+  // earlier session arrives again on every start; overwriting with it makes
+  // the next getStoredAuthToken() discard a sign-in that was seconds old.
+  if (isAuthTokenExpired(token)) {
+    return false;
+  }
+
   localStorage.setItem('auth-token', token);
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(AUTH_TOKEN_REFRESHED_EVENT, { detail: token }));

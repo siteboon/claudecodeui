@@ -172,6 +172,13 @@
       "label": "深色模式",
       "description": "切换浅色和深色主题"
     },
+    "theme": {
+      "label": "主题",
+      "description": "选择浅色或深色外观，或跟随操作系统设置",
+      "light": "浅色",
+      "dark": "深色",
+      "system": "跟随系统外观"
+    },
     "projectSorting": {
       "label": "项目排序",
       "description": "项目在侧边栏中的排列方式",
@@ -405,6 +412,25 @@
       "placeholder": "例如：\"Bash(rm:*)\"",
       "empty": "未配置禁用的工具"
     },
+    "settingsFiles": {
+      "title": "来自 Claude 设置文件的规则",
+      "description": "Claude CLI 会在上面的列表之外同时应用这些规则。拒绝规则无论设置在哪里都优先，但对于「允许的工具」中已允许的工具，询问规则不会再请求确认。这里仅供查看；请在文件中编辑。",
+      "sources": {
+        "user": "您的设置",
+        "managed": "托管设置（管理员）"
+      },
+      "groups": {
+        "allow": "允许",
+        "ask": "询问",
+        "deny": "拒绝"
+      },
+      "missing": "未找到文件，因此不会添加任何规则。",
+      "invalid": "无法读取此文件。请检查它是否为有效的 JSON。",
+      "empty": "此文件中没有权限规则。",
+      "loading": "正在加载规则…",
+      "loadFailed": "无法加载 Claude 设置文件中的规则。",
+      "projectNote": "项目自己的 .claude/settings.json 和 .claude/settings.local.json 也会应用于该项目中的聊天。在该文件夹被信任之前，Claude CLI 会忽略 .claude/settings.json 中的允许规则：请在该文件夹中以交互方式运行一次 Claude Code，并接受信任对话框。"
+    },
     "allowedCommands": {
       "title": "允许的 Shell 命令",
       "description": "无需权限提示即可自动执行的 Shell 命令",
@@ -545,12 +571,6 @@
       "name": "定时提示",
       "badge": "非官方",
       "description": "安排工作区提示、查看运行历史并管理定期本地任务。",
-      "install": "安装"
-    },
-    "claudeWatchPlugin": {
-      "name": "Claude Watch",
-      "badge": "非官方",
-      "description": "监控长时间运行的 Claude Code 会话，检测挂起并暴露进程控制。",
       "install": "安装"
     },
     "prismCloudCLI": {

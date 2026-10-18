@@ -33,7 +33,9 @@
     "failed": "失敗",
     "pending": "保留中",
     "completed": "完了",
-    "inProgress": "進行中"
+    "inProgress": "進行中",
+    "reconnecting": "再接続中...",
+    "chatConnectionLost": "チャットの接続が切れました。再接続中..."
   },
   "messages": {
     "savedSuccessfully": "保存しました",

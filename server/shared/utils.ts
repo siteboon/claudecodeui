@@ -654,6 +654,22 @@ export function buildDefaultProviderCurrentActiveModel(
   };
 }
 
+/**
+ * True for a model name a provider fabricated rather than actually ran.
+ *
+ * Claude Code stamps locally-synthesized transcript rows (API-error notices,
+ * usage-limit messages) with `model: "<synthetic>"`. Angle-bracketed values are
+ * placeholders, never real model ids, so neither the active-model lookup nor
+ * the per-message model a reply is labelled with may adopt one.
+ *
+ * Used by the Claude models provider (which walks the transcript backwards for
+ * the session's model) and by the Claude sessions provider (which stamps each
+ * assistant message with the model that answered it).
+ */
+export function isPlaceholderProviderModel(model: string): boolean {
+  return model.startsWith('<') && model.endsWith('>');
+}
+
 // ---------------------------
 //----------------- WEBSOCKET PAYLOAD PARSING UTILITIES ------------
 /**
@@ -1193,6 +1209,25 @@ export async function extractFirstValidJsonlData<T>(
   }
 
   return null;
+}
+
+// ---------------------------
+//----------------- CLAUDE TRANSCRIPT ROW UTILITIES ------------
+/**
+ * True for a Claude session JSONL row that holds a `message` without being a
+ * conversation turn.
+ *
+ * Only `user` and `assistant` rows are turns. The Claude CLI also logs the
+ * requests it sends to the API as `api-request-blob` rows, and each one holds a
+ * copy of a prompt, tool call or system block that is already recorded as its
+ * own turn. Those copies have no timestamp. A reader that recognizes a turn by
+ * `message.role` alone shows each copy a second time, stamped with the time the
+ * transcript was read. Use this check to skip such rows before reading
+ * `message`. A row with no `message` returns false, so callers keep their
+ * other records, such as `queue-operation`, `system` and `last-prompt`.
+ */
+export function isClaudeNonTurnMessageRow(row: AnyRecord): boolean {
+  return row.message != null && row.type !== 'user' && row.type !== 'assistant';
 }
 
 // ---------------------------

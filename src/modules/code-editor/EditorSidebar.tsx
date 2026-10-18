@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import type { MouseEvent, MutableRefObject } from 'react';
 
 import type { CodeEditorFile } from '@/shared/types';
@@ -14,6 +14,9 @@ type EditorSidebarProps = {
   onResizeStart: (event: MouseEvent<HTMLDivElement>) => void;
   onCloseEditor: () => void;
   onToggleEditorExpand: () => void;
+  // Forwarded to CodeEditor so useEditorSidebar can refuse to swap a dirty
+  // buffer for another file without asking.
+  onUnsavedChangesChange?: (hasUnsavedChanges: boolean) => void;
   projectPath?: string;
   fillSpace?: boolean;
 };
@@ -34,6 +37,7 @@ export default function EditorSidebar({
   onResizeStart,
   onCloseEditor,
   onToggleEditorExpand,
+  onUnsavedChangesChange,
   projectPath,
   fillSpace,
 }: EditorSidebarProps) {
@@ -86,30 +90,36 @@ export default function EditorSidebar({
     ? editorWidth
     : Math.min(editorWidth, maxEditorWidth);
 
+  // Closing always leaves the floating layout behind so the next file opens
+  // docked again; stable identities keep the editor's keyboard shortcuts and
+  // toolbar extension from being rebuilt on every render.
+  const handleClose = useCallback(() => {
+    setPoppedOut(false);
+    onCloseEditor();
+  }, [onCloseEditor]);
+
+  const handlePopOut = useCallback(() => setPoppedOut(true), []);
+
   if (!editingFile) {
     return null;
   }
 
-  if (isMobile || poppedOut) {
-    return (
-      <CodeEditor
-        file={editingFile}
-        onClose={() => {
-          setPoppedOut(false);
-          onCloseEditor();
-        }}
-        projectPath={projectPath}
-        isSidebar={false}
-      />
-    );
-  }
+  // One CodeEditor element in one position for every layout; only the wrappers
+  // change, so switching layouts never remounts it and drops the buffer.
+  const isFloating = isMobile || poppedOut;
 
   // In files tab, fill the remaining width unless user has dragged manually.
   const useFlexLayout = editorExpanded || (fillSpace && !hasManualWidth);
 
+  // The resize handle sits in a fixed child slot, so dropping it never shifts
+  // the editor's position and remounts it. `contents` makes the wrappers give
+  // up their own boxes while the floating editor covers the viewport by itself.
   return (
-    <div ref={containerRef} className={`flex h-full min-w-0 ${editorExpanded ? 'flex-1' : ''}`}>
-      {!editorExpanded && (
+    <div
+      ref={containerRef}
+      className={isFloating ? 'contents' : `flex h-full min-w-0 ${editorExpanded ? 'flex-1' : ''}`}
+    >
+      {!isFloating && !editorExpanded && (
         <div
           ref={resizeHandleRef}
           onMouseDown={onResizeStart}
@@ -121,17 +131,20 @@ export default function EditorSidebar({
       )}
 
       <div
-        className={`h-full overflow-hidden border-l border-gray-200 dark:border-gray-700 ${useFlexLayout ? 'min-w-0 flex-1' : ''}`}
-        style={useFlexLayout ? undefined : { width: `${effectiveWidth}px`, minWidth: `${MIN_EDITOR_WIDTH}px` }}
+        className={isFloating
+          ? 'contents'
+          : `h-full overflow-hidden border-l border-gray-200 dark:border-gray-700 ${useFlexLayout ? 'min-w-0 flex-1' : ''}`}
+        style={isFloating || useFlexLayout ? undefined : { width: `${effectiveWidth}px`, minWidth: `${MIN_EDITOR_WIDTH}px` }}
       >
         <CodeEditor
           file={editingFile}
-          onClose={onCloseEditor}
+          onClose={handleClose}
+          onUnsavedChangesChange={onUnsavedChangesChange}
           projectPath={projectPath}
-          isSidebar
-          isExpanded={editorExpanded}
-          onToggleExpand={onToggleEditorExpand}
-          onPopOut={() => setPoppedOut(true)}
+          isSidebar={!isFloating}
+          isExpanded={!isFloating && editorExpanded}
+          onToggleExpand={isFloating ? null : onToggleEditorExpand}
+          onPopOut={isFloating ? null : handlePopOut}
         />
       </div>
     </div>
