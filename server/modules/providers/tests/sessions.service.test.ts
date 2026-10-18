@@ -196,6 +196,63 @@ test('history pages are sliced from the cached full transcript and see appended 
   }
 });
 
+test('history shows a background agent\'s new steps although only its own transcript grew', { concurrency: false }, async () => {
+  // A background agent writes to `<session>/subagents/agent-<id>.jsonl`; the
+  // session's own transcript stays untouched until the agent reports back, so
+  // a cache keyed by that file alone kept serving the agent's first steps.
+  const projectDirectory = await mkdtemp(path.join(os.tmpdir(), 'sessions-service-agent-'));
+  const sessionId = 'claude-agent-history-session';
+  const agentId = 'a0123456789abcdef';
+  const transcriptPath = path.join(projectDirectory, `${sessionId}.jsonl`);
+  const agentTranscriptPath = path.join(projectDirectory, sessionId, 'subagents', `agent-${agentId}.jsonl`);
+  const agentStep = (ordinal: number) => JSON.stringify({
+    type: 'assistant',
+    isSidechain: true,
+    agentId,
+    timestamp: new Date(Date.UTC(2026, 0, 1, 0, 1, ordinal)).toISOString(),
+    message: { role: 'assistant', content: [{ type: 'text', text: `step ${ordinal}` }] },
+  });
+
+  try {
+    await withIsolatedDatabase(async () => {
+      const rows = [
+        {
+          type: 'assistant',
+          uuid: 'launch-call',
+          sessionId,
+          timestamp: '2026-01-01T00:00:00.000Z',
+          message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_bg_agent', name: 'Agent', input: { description: 'Survey', prompt: 'Look around', run_in_background: true } }] },
+        },
+        {
+          type: 'user',
+          uuid: 'launch-ack',
+          parentUuid: 'launch-call',
+          sessionId,
+          timestamp: '2026-01-01T00:00:01.000Z',
+          message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_bg_agent', content: 'Async agent launched successfully.' }] },
+          toolUseResult: { isAsync: true, status: 'async_launched', agentId, description: 'Survey' },
+        },
+      ];
+      await writeFile(transcriptPath, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+      await mkdir(path.dirname(agentTranscriptPath), { recursive: true });
+      await writeFile(agentTranscriptPath, `${agentStep(1)}\n`, 'utf8');
+      sessionsDb.createSession(sessionId, 'claude', projectDirectory, 'Agent history', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:01.000Z', transcriptPath);
+
+      const agentSteps = async () => {
+        const history = await sessionsService.fetchHistory(sessionId, { limit: null, offset: 0 });
+        const launch = history.messages.find((message) => message.kind === 'tool_use' && message.toolId === 'toolu_bg_agent');
+        return (launch?.subagentTools ?? []).map((step) => step.content);
+      };
+
+      assert.deepEqual(await agentSteps(), ['step 1']);
+      await appendFile(agentTranscriptPath, `${agentStep(2)}\n`, 'utf8');
+      assert.deepEqual(await agentSteps(), ['step 1', 'step 2']);
+    });
+  } finally {
+    await rm(projectDirectory, { recursive: true, force: true });
+  }
+});
+
 /**
  * Stands in for the provider registry with one provider per id, each with the
  * runtime given — the seam through which a runtime's background work reaches
