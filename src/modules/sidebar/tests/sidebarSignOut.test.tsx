@@ -30,7 +30,7 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-// Value: protects=every placement offers Sign Out; fails_when=a variant renders no trigger or an unlabeled icon; why_new=new component; seam=none; no_claim=visual styling
+// Value: protects=every placement offers Sign Out with a named, described dialog; fails_when=a variant renders no trigger or an unlabeled icon, or the dialog loses its title or description link; why_new=new component; seam=none; no_claim=visual styling
 test('each placement renders a Sign Out trigger that opens the confirmation', async () => {
   const SidebarSignOutButton = await loadButton(false);
 
@@ -38,8 +38,8 @@ test('each placement renders a Sign Out trigger that opens the confirmation', as
     render(<SidebarSignOutButton variant={variant} />);
     fireEvent.click(screen.getByRole('button', { name: 'Sign Out' }));
 
-    const dialog = screen.getByRole('dialog');
-    assert.ok(dialog.textContent?.includes('Are you sure you want to sign out?'));
+    const dialog = screen.getByRole('dialog', { name: 'Sign Out', description: 'Are you sure you want to sign out?' });
+    assert.ok(dialog);
     cleanup();
   }
   assert.equal(logout.mock.calls.length, 0);

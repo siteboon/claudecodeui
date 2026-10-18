@@ -67,8 +67,12 @@ export default function SidebarSignOutButton({ variant }: SidebarSignOutButtonPr
         )}
       </DialogTrigger>
 
-      <DialogContent aria-describedby="sidebar-sign-out-description" className="max-w-md p-5">
-        <DialogTitle className="not-sr-only text-base font-semibold text-foreground">
+      <DialogContent
+        aria-labelledby="sidebar-sign-out-title"
+        aria-describedby="sidebar-sign-out-description"
+        className="max-w-md p-5"
+      >
+        <DialogTitle id="sidebar-sign-out-title" className="not-sr-only text-base font-semibold text-foreground">
           {t('auth:logout.title')}
         </DialogTitle>
         <p id="sidebar-sign-out-description" className="mt-2 text-sm text-muted-foreground">

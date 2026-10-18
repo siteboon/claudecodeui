@@ -205,9 +205,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return;
       }
       const tokenRemoved = event.key === AUTH_TOKEN_STORAGE_KEY && event.newValue === null;
-      if (tokenRemoved || event.key === null) {
-        clearSession();
+      if (!tokenRemoved && event.key !== null) {
+        return;
       }
+      // Storage events are queued for other tabs, so this one can arrive after
+      // another tab has already signed in again. Its new token must survive.
+      if (readStoredToken()) {
+        return;
+      }
+      clearSession();
     };
 
     window.addEventListener('storage', handleStorage);
@@ -258,6 +264,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const userPayload = await parseJsonSafely<AuthUserPayload>(userResponse);
       if (!userPayload?.user) {
         clearSession();
+        return;
+      }
+
+      // Another tab may have signed out while the user request was in flight;
+      // publishing the user now would bring back a workspace with no token.
+      if (!readStoredToken()) {
         return;
       }
 

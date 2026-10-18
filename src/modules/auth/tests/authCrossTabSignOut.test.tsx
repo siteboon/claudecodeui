@@ -20,8 +20,15 @@ const makeToken = (issuedAtSeconds: number) => {
 
 const nowSeconds = () => Math.floor(Date.now() / 1000);
 
+// Set by a test to hold /api/auth/user open until it calls the function.
+let holdUserRequest: ((release: () => void) => void) | null = null;
+
 const stubServer = () => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url === '/api/auth/user' && holdUserRequest) {
+      const hold = holdUserRequest;
+      await new Promise<void>((resolve) => hold(resolve));
+    }
     const body = url === '/api/auth/status'
       ? { needsSetup: false }
       : url === '/api/auth/user'
@@ -34,7 +41,7 @@ const stubServer = () => {
 };
 
 // AuthContext reads IS_PLATFORM at module load, so each mode gets a fresh copy.
-const renderApp = async (isPlatform: boolean) => {
+const renderApp = async (isPlatform: boolean, { waitForWorkspace = true } = {}) => {
   vi.stubEnv('VITE_IS_PLATFORM', isPlatform ? 'true' : 'false');
   vi.resetModules();
   const { AuthProvider, useAuth } = await import('@/modules/auth/context/AuthContext');
@@ -55,7 +62,9 @@ const renderApp = async (isPlatform: boolean) => {
       <Gate />
     </AuthProvider>,
   );
-  await screen.findByText('workspace');
+  if (waitForWorkspace) {
+    await screen.findByText('workspace');
+  }
 };
 
 // What the browser delivers in this tab when another tab changes localStorage.
@@ -66,6 +75,7 @@ const otherTabChanges = async (key: string | null, newValue: string | null) => {
 };
 
 beforeEach(() => {
+  holdUserRequest = null;
   localStorage.clear();
   localStorage.setItem('auth-token', makeToken(nowSeconds()));
   stubServer();
@@ -101,6 +111,38 @@ test('another tab storing a refreshed token keeps this tab signed in', async () 
 
   assert.ok(screen.getByText('workspace'));
   assert.equal(localStorage.getItem('auth-token'), refreshedToken);
+});
+
+// Value: protects=a sign-in in another tab survives this tab's late sign-out event; fails_when=the listener acts on the event without checking current storage; why_new=storage events are queued, so they can arrive after a newer sign-in; seam=none; no_claim=real browser event queueing
+test('a removal event that arrives after another tab signed in again keeps the new token', async () => {
+  await renderApp(false);
+  const newerSignIn = makeToken(nowSeconds() + 1);
+  localStorage.setItem('auth-token', newerSignIn);
+
+  await otherTabChanges('auth-token', null);
+
+  assert.ok(screen.getByText('workspace'));
+  assert.equal(localStorage.getItem('auth-token'), newerSignIn);
+});
+
+// Value: protects=a tab still starting up honours a sign-out from another tab; fails_when=checkAuthStatus publishes the user after the token was removed mid-request; why_new=the startup check had no such guard; seam=none; no_claim=real network latency (held stub)
+test('another tab signing out during this tab\'s startup check ends on the sign-in screen', async () => {
+  let releaseUserRequest: (() => void) | null = null;
+  holdUserRequest = (release) => {
+    releaseUserRequest = release;
+  };
+  await renderApp(false, { waitForWorkspace: false });
+  await vi.waitFor(() => assert.ok(releaseUserRequest, 'the user request is in flight'));
+
+  localStorage.removeItem('auth-token');
+  await otherTabChanges('auth-token', null);
+  await act(async () => {
+    releaseUserRequest?.();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+
+  assert.ok(screen.getByText('login'));
+  assert.equal(screen.queryByText('workspace'), null);
 });
 
 // Value: protects=platform mode keeps its built-in user; fails_when=the IS_PLATFORM guard on the listener is removed; why_new=platform user is never cleared elsewhere; seam=none; no_claim=real platform build
