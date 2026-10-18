@@ -59,6 +59,9 @@ export default function Shell({
   const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restartAfterInitRef = useRef(false);
   const onOutputRef = useRef<(() => void) | null>(null);
+  // Set by the key bar while it is mounted, so its CTRL/ALT also apply to
+  // characters typed on the on-screen keyboard.
+  const inputTransformRef = useRef<((data: string) => string) | null>(null);
 
   const {
     terminalContainerRef,
@@ -81,6 +84,7 @@ export default function Shell({
     isRestarting,
     onProcessComplete,
     onOutputRef,
+    inputTransformRef,
   });
 
   // Check xterm.js buffer for CLI prompt patterns (❯ N. label)
@@ -269,6 +273,7 @@ export default function Shell({
         <TerminalShortcutsPanel
           wsRef={wsRef}
           terminalRef={terminalRef}
+          inputTransformRef={inputTransformRef}
           isConnected={isConnected}
           bottomOffset="bottom-0"
         />
@@ -381,6 +386,7 @@ export default function Shell({
       <TerminalShortcutsPanel
         wsRef={wsRef}
         terminalRef={terminalRef}
+        inputTransformRef={inputTransformRef}
         isConnected={isConnected}
       />
 
