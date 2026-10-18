@@ -84,7 +84,12 @@ test('spawnOpenCode emits session_created before normalized live messages for ne
         : `.COM;.EXE;.BAT;.CMD${previousPathExt ? `;${previousPathExt}` : ''}`;
     }
 
-    await opencodeRuntime.run('Hi', { cwd: tempRoot }, writer, runtimeContext);
+    await opencodeRuntime.run(
+      'Hi',
+      { cwd: tempRoot, model: 'github-copilot/gpt-5.6-terra' },
+      writer,
+      runtimeContext,
+    );
 
     const sessionCreatedIndex = messages.findIndex((message) => message.kind === 'session_created');
     const assistantDeltaIndex = messages.findIndex((message) =>
@@ -107,6 +112,10 @@ test('spawnOpenCode emits session_created before normalized live messages for ne
     assert.ok(Array.isArray(launchedArgs));
     assert.deepEqual(launchedArgs.slice(0, 4), ['run', '--format', 'json', '--dir']);
     assert.equal(launchedArgs[4], tempRoot);
+    assert.deepEqual(
+      launchedArgs.slice(5, 7),
+      ['--model', 'github-copilot/gpt-5.6-terra'],
+    );
     // No permission mode requested → no permission flags and no env override.
     assert.equal(launchedArgs.includes('--auto'), false);
     assert.equal(launchedArgs.includes('--agent'), false);
