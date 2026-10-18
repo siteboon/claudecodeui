@@ -193,6 +193,7 @@
     "pressToSearch": "Press <kbd>{{shortcut}}</kbd> to search sessions, files, and commits",
     "chooseModel": "Choose a model",
     "chooseModelDescription": "Built-in and custom models in one list",
+    "chooseModelDescriptionCustomOnly": "Only your models are listed for {{providers, list}}",
     "addModel": "Add model",
     "searchModels": "Search models...",
     "manageModels": "Manage models",
@@ -276,7 +277,13 @@
       "agent": "Agent {{description}}",
       "command": "Command {{description}}",
       "count": "{{count}} tasks",
-      "sendAnyway": "This session still has background work running:\n{{work}}\n\nA new message starts a new turn, which stops that work; anything it has not reported yet is lost. Send anyway?"
+      "prompt": {
+        "title": "This session still has background work running",
+        "description": "A new message starts a new turn, which stops that work; anything it has not reported yet is lost. Queue the message to send it when the work finishes.",
+        "cancel": "Cancel",
+        "queue": "Queue",
+        "sendAnyway": "Send anyway"
+      }
     },
     "controls": {
       "stopGeneration": "Stop Generation",
@@ -391,6 +398,10 @@
   "modelLibrary": {
     "effortLevels": "Reasoning levels",
     "effortLevelsHint": "Select the reasoning-effort levels this model accepts. If none are selected, no effort level can be chosen for this model in the composer.",
-    "effortSummary": "Reasoning: {{levels}}"
+    "effortSummary": "Reasoning: {{levels}}",
+    "customModelsOnly": "Use only my models",
+    "customModelsOnlyHint": "Hide the built-in {{provider}} models from every model picker and make your first model the default. Built-in models stay listed until you add a model.",
+    "builtInModelsHidden": "Hidden from model pickers while “Use only my models” is on.",
+    "customModelsOnlyFailed": "Unable to change this setting."
   }
 }

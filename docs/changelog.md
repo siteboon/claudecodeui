@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.37.5
+
+### 2026-10-18
+
+- Merge upstream main (`0ce5630f`) and resolve the CLI help conflict by retaining both the shared `CODEX_CLI_PATH` setting and the updated `CONTEXT_WINDOW` fallback description. Shared CLI selection and literal shell path quoting remain intact.
+
 ## 1.37.3
 
 ### 2026-10-12

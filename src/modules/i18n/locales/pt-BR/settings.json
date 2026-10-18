@@ -603,12 +603,6 @@
       "description": "Agende prompts de espaço de trabalho, revise histórico de execuções e gerencie tarefas locais recorrentes.",
       "install": "Instalar"
     },
-    "claudeWatchPlugin": {
-      "name": "Claude Watch",
-      "badge": "não oficial",
-      "description": "Monitore sessões longas do Claude Code para travamentos e exponha controles de processo.",
-      "install": "Instalar"
-    },
     "prismCloudCLI": {
       "name": "PRISM CloudCLI",
       "badge": "não oficial",

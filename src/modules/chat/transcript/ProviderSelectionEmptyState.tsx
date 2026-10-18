@@ -132,6 +132,21 @@ export default function ProviderSelectionEmptyState({
     [providerModelCatalog],
   );
 
+  /**
+   * Names of the branches whose built-in models are hidden ("Use only my
+   * models" on, with a custom model to show instead). The subtitle names them
+   * rather than promising built-in models there.
+   */
+  const customOnlyGroupNames = useMemo(
+    () => PROVIDER_META
+      .filter((meta) => {
+        const catalog = providerModelCatalog[meta.id];
+        return catalog?.CUSTOM_MODELS_ONLY === true && catalog.OPTIONS.some((option) => option.isCustom);
+      })
+      .map((meta) => meta.name),
+    [providerModelCatalog],
+  );
+
   const nextTaskPrompt = t("tasks.nextTaskPrompt", {
     defaultValue: "Start the next task",
   });
@@ -223,9 +238,13 @@ export default function ProviderSelectionEmptyState({
                     })}
                   </p>
                   <p className="mt-0.5 text-[11px] text-muted-foreground">
-                    {t("providerSelection.chooseModelDescription", {
-                      defaultValue: "Built-in and custom models in one list",
-                    })}
+                    {customOnlyGroupNames.length > 0
+                      ? t("providerSelection.chooseModelDescriptionCustomOnly", {
+                        providers: customOnlyGroupNames,
+                      })
+                      : t("providerSelection.chooseModelDescription", {
+                        defaultValue: "Built-in and custom models in one list",
+                      })}
                   </p>
                 </div>
                 <Button

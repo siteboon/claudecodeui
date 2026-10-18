@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '@/shared/api';
 import { PROVIDER_PERMISSION_PREFERENCE_KEYS } from '@/shared/constants';
 import { readUserPreference } from '@/shared/userSettings';
-import type { CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
+import type { BackgroundSendChoice, BackgroundSendPrompt, CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
 import { grantClaudeToolPermission } from '@/modules/chat/utils/chatPermissions';
 import {
   clearQueuedMessage,
@@ -87,6 +87,16 @@ type CommandExecutionResult = {
 
 
 
+type SubmitOptions = {
+  /**
+   * Send the text as a chat message even when it starts with "/" (or is
+   * "help"). Set only for the re-submit of a custom command's expanded body:
+   * like the Claude Code CLI, that body is never read as a command again, so a
+   * body that opens with its own or another command's name cannot loop or
+   * run that command instead of being sent.
+   */
+  skipCommandInterception?: boolean;
+};
 
 const createFakeSubmitEvent = () => {
   return { preventDefault: () => undefined } as unknown as FormEvent<HTMLFormElement>;
@@ -237,6 +247,7 @@ export function useChatComposerState({
     ((
       event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
       queuedSubmission?: QueuedDraft,
+      submitOptions?: SubmitOptions,
     ) => Promise<void>) | null
   >(null);
   const inputValueRef = useRef(input);
@@ -403,9 +414,10 @@ export function useChatComposerState({
     inputValueRef.current = commandContent;
 
     // Defer submit to next tick so the command text is reflected in UI before dispatching.
+    // The expanded body is the message itself: it skips slash-command interception.
     setTimeout(() => {
       if (handleSubmitRef.current) {
-        handleSubmitRef.current(createFakeSubmitEvent());
+        handleSubmitRef.current(createFakeSubmitEvent(), undefined, { skipCommandInterception: true });
       }
     }, 0);
   }, [addMessage]);
@@ -418,9 +430,17 @@ export function useChatComposerState({
 
       try {
         const effectiveInput = rawInput ?? input;
-        const commandMatch = effectiveInput.match(new RegExp(`${escapeRegExp(command.name)}\\s*(.*)`));
-        const args =
-          commandMatch && commandMatch[1] ? commandMatch[1].trim().split(/\s+/) : [];
+        // Everything typed after the command name is its argument text, line
+        // breaks included (`[\s\S]`, unlike `.`), trimmed as the Claude Code CLI
+        // does. `$ARGUMENTS` gets it verbatim; `$1`, `$2`, … get its tokens.
+        // The name must open the input and end at whitespace or the end: a pick
+        // from the slash menu passes the whole composer, where the name may
+        // appear later or inside a longer word ("see /echo2 …" has no arguments).
+        const commandMatch = effectiveInput
+          .trimStart()
+          .match(new RegExp(`^${escapeRegExp(command.name)}(?=\\s|$)([\\s\\S]*)`));
+        const rawArgs = commandMatch ? commandMatch[1].trim() : '';
+        const args = rawArgs ? rawArgs.split(/\s+/) : [];
 
         // The `/api/commands/execute` context sends `projectId` now instead of
         // a folder-derived project name; the path is still included verbatim.
@@ -437,6 +457,7 @@ export function useChatComposerState({
           commandName: command.name,
           commandPath: command.path,
           args,
+          rawArgs,
           context,
         });
 
@@ -662,10 +683,84 @@ export function useChatComposerState({
     processingSessionsRef.current = processingSessions;
   }, [processingSessions]);
 
+  // Sending over background work asks first. The dialog is rendered by the
+  // composer; the submit awaits the user's choice through this resolver.
+  const [backgroundSendPrompt, setBackgroundSendPrompt] = useState<BackgroundSendPrompt | null>(null);
+  const backgroundSendResolverRef = useRef<((choice: BackgroundSendChoice) => void) | null>(null);
+
+  const askBeforeSendingOverBackgroundWork = useCallback(
+    (work: string[]) => new Promise<BackgroundSendChoice>((resolve) => {
+      // Only one prompt at a time: a stale one is answered "cancel".
+      backgroundSendResolverRef.current?.('cancel');
+      backgroundSendResolverRef.current = resolve;
+      setBackgroundSendPrompt({ work });
+    }),
+    [],
+  );
+
+  const resolveBackgroundSendPrompt = useCallback((choice: BackgroundSendChoice) => {
+    const resolve = backgroundSendResolverRef.current;
+    backgroundSendResolverRef.current = null;
+    setBackgroundSendPrompt(null);
+    resolve?.(choice);
+  }, []);
+
+  // An unmounted composer cannot answer; let the pending submit finish.
+  useEffect(() => () => {
+    backgroundSendResolverRef.current?.('cancel');
+    backgroundSendResolverRef.current = null;
+  }, []);
+
+  // Persist a message to send "when this finishes" and show it as the queued
+  // card. Used while a turn is in flight and when the user chooses to queue
+  // behind background work. Attachments must already be uploaded.
+  const queueMessage = useCallback(
+    (durableDraft: QueuedDraft, queuedSessionKey: string | null) => {
+      if (queuedSessionKey) {
+        // Write the claim ticket synchronously after upload; this closes the
+        // gap before React's persistence effect runs.
+        writeQueuedMessage(queuedSessionKey, {
+          content: durableDraft.content,
+          options: durableDraft.options,
+          attachments: durableDraft.uploadedAttachments,
+        });
+      }
+
+      // Recorded under the session the message was queued FOR, and before
+      // the session-switch return below — the queued text must be
+      // recallable even when it dispatches without this composer.
+      recordSentMessage(durableDraft.content, queuedSessionKey);
+
+      // The server owns dispatch after persistence. If the user changed
+      // sessions during upload, the durable record is already enough; do
+      // not attach its UI card to the newly opened composer.
+      if (queuedSessionKey && sessionKeyRef.current !== queuedSessionKey) {
+        return;
+      }
+
+      queuedDraftSessionRef.current = queuedSessionKey;
+      setQueuedDraft(durableDraft);
+      setInput('');
+      inputValueRef.current = '';
+      setAttachedFiles([]);
+      setFileErrors(new Map());
+      resetCommandMenuState();
+      setIsTextareaExpanded(false);
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
+      if (draftScopeRef.current) {
+        writeDraftText(draftScopeRef.current, '');
+      }
+    },
+    [recordSentMessage, resetCommandMenuState, setInput],
+  );
+
   const submitMessage = useCallback(
     async (
       event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
       queuedSubmission?: QueuedDraft,
+      submitOptions?: SubmitOptions,
     ) => {
       event.preventDefault();
       const currentInput = queuedSubmission?.content ?? inputValueRef.current;
@@ -711,48 +806,12 @@ export function useChatComposerState({
           return;
         }
 
-        const durableDraft: QueuedDraft = {
+        queueMessage({
           content: currentInput,
           attachments: currentAttachments,
           uploadedAttachments,
           options: queuedOptions,
-        };
-        if (queuedSessionKey) {
-          // Write the claim ticket synchronously after upload; this closes the
-          // gap before React's persistence effect runs.
-          writeQueuedMessage(queuedSessionKey, {
-            content: durableDraft.content,
-            options: durableDraft.options,
-            attachments: durableDraft.uploadedAttachments,
-          });
-        }
-
-        // Recorded under the session the message was queued FOR, and before
-        // the session-switch return below — the queued text must be
-        // recallable even when it dispatches without this composer.
-        recordSentMessage(currentInput, queuedSessionKey);
-
-        // The server owns dispatch after persistence. If the user changed
-        // sessions during upload, the durable record is already enough; do
-        // not attach its UI card to the newly opened composer.
-        if (queuedSessionKey && sessionKeyRef.current !== queuedSessionKey) {
-          return;
-        }
-
-        queuedDraftSessionRef.current = queuedSessionKey;
-        setQueuedDraft(durableDraft);
-        setInput('');
-        inputValueRef.current = '';
-        setAttachedFiles([]);
-        setFileErrors(new Map());
-        resetCommandMenuState();
-        setIsTextareaExpanded(false);
-        if (textareaRef.current) {
-          textareaRef.current.style.height = 'auto';
-        }
-        if (draftScopeRef.current) {
-          writeDraftText(draftScopeRef.current, '');
-        }
+        }, queuedSessionKey);
         return;
       }
 
@@ -760,11 +819,13 @@ export function useChatComposerState({
       // Also accept exact "help" as a convenience alias for users who expect CLI-style help.
       const commandInput = currentInput.trimEnd();
       const isHelpAlias = commandInput.trim().toLowerCase() === 'help';
-      if (commandInput.startsWith('/') || isHelpAlias) {
-        const firstSpace = commandInput.indexOf(' ');
+      if (!submitOptions?.skipCommandInterception && (commandInput.startsWith('/') || isHelpAlias)) {
+        // The name ends at the first whitespace of any kind, so "/cmd" followed
+        // by a line break still runs /cmd (the Claude Code CLI splits the same way).
+        const firstWhitespace = commandInput.search(/\s/);
         const commandName = isHelpAlias
           ? '/help'
-          : firstSpace > 0 ? commandInput.slice(0, firstSpace) : commandInput;
+          : firstWhitespace > 0 ? commandInput.slice(0, firstWhitespace) : commandInput;
         const matchedCommand =
           slashCommands.find((cmd: SlashCommand) => cmd.name === commandName) ||
           (commandName === '/help'
@@ -868,17 +929,29 @@ export function useChatComposerState({
       // A new turn replaces the CLI process a session's background work runs
       // under: the agents, workflows and commands it still has going are
       // stopped, or finish where nothing is listening. Sending is the user's
-      // call, but not one to make for them.
+      // call, but not one to make for them — and queueing behind the work,
+      // which the server holds until it finishes, is the safe alternative.
       const backgroundActivity = processingSessionsRef.current?.get(targetSessionId);
       if (backgroundActivity?.background) {
         const work = ownBackgroundTasks(backgroundActivity.tasks ?? [])
-          .map((task) => `• ${describeBackgroundTask(task, t)}`)
-          .join('\n');
-        const confirmed = window.confirm(t('claudeStatus.backgroundTask.sendAnyway', {
-          work,
-          defaultValue: 'This session still has background work running:\n{{work}}\n\nA new message starts a new turn, which stops that work; anything it has not reported yet is lost. Send anyway?',
-        }));
-        if (!confirmed) {
+          .map((task) => describeBackgroundTask(task, t));
+        const choice = await askBeforeSendingOverBackgroundWork(work);
+        if (choice === 'cancel') {
+          return;
+        }
+        if (choice === 'queue') {
+          if (queuedSubmission) {
+            queuedDraftSessionRef.current = sessionKey;
+            setQueuedDraft(queuedSubmission);
+            return;
+          }
+          // Attachments were uploaded above; queue the same descriptors.
+          queueMessage({
+            content: currentInput,
+            attachments: currentAttachments,
+            uploadedAttachments,
+            options: buildSendOptions(currentInput),
+          }, targetSessionId);
           return;
         }
       }
@@ -948,6 +1021,7 @@ export function useChatComposerState({
     },
     [
       selectedSession,
+      askBeforeSendingOverBackgroundWork,
       attachedFiles,
       buildSendOptions,
       currentSessionId,
@@ -957,6 +1031,7 @@ export function useChatComposerState({
       onSessionProcessing,
       onSessionEstablished,
       provider,
+      queueMessage,
       recordSentMessage,
       resetCommandMenuState,
       scrollToBottom,
@@ -981,6 +1056,7 @@ export function useChatComposerState({
     async (
       event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
       queuedSubmission?: QueuedDraft,
+      submitOptions?: SubmitOptions,
     ) => {
       const scope = draftScopeRef.current ?? '';
       if (submittingScopesRef.current.has(scope)) {
@@ -990,7 +1066,7 @@ export function useChatComposerState({
       }
       submittingScopesRef.current.add(scope);
       try {
-        await submitMessage(event, queuedSubmission);
+        await submitMessage(event, queuedSubmission, submitOptions);
       } finally {
         submittingScopesRef.current.delete(scope);
       }
@@ -1349,6 +1425,8 @@ export function useChatComposerState({
     isDragActive,
     openAttachmentPicker: open,
     handleSubmit,
+    backgroundSendPrompt,
+    resolveBackgroundSendPrompt,
     queuedDraft,
     editQueuedDraft,
     deleteQueuedDraft,
