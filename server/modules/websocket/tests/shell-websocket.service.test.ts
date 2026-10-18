@@ -8,7 +8,95 @@ import test from 'node:test';
 
 import { WebSocket } from 'ws';
 
-import { handleShellConnection } from '@/modules/websocket/services/shell-websocket.service.js';
+import { handleShellConnection, releaseCodexShellSession } from '@/modules/websocket/services/shell-websocket.service.js';
+
+test('Chat waits for the retained Codex terminal writer to exit', async () => {
+  const terminal = createFakePty();
+  const socket = createFakeSocket();
+  const sessionId = `codex-handoff-${Date.now()}`;
+  handleShellConnection(socket as never, {
+    resolveProviderSessionId: () => 'provider-thread',
+    spawnPty: (_shell, args) => {
+      const command = Array.isArray(args) ? args[args.length - 1] : args;
+      assert.match(
+        command,
+        /^codex --disable daemon_auto_start resume "provider-thread"$/,
+      );
+      assert.doesNotMatch(command, /\|\| codex/);
+      return terminal as never;
+    },
+  });
+  socket.emit('message', JSON.stringify({
+    type: 'init', projectPath: process.cwd(), sessionId, provider: 'codex', hasSession: true,
+  }));
+  let released = false;
+  const handoff = releaseCodexShellSession(sessionId).then(() => { released = true; });
+  assert.equal(terminal.killed, false);
+  await Promise.resolve();
+  assert.equal(released, false);
+  terminal.emitExit();
+  await handoff;
+  assert.equal(released, true);
+});
+
+test('Chat asks Codex Shell to quit before forcing its PTY closed', async () => {
+  const terminal = createFakePty();
+  const originalKill = terminal.kill.bind(terminal);
+  let writerLocked = true;
+  terminal.write = (data: string) => {
+    if (data.includes('/quit')) {
+      writerLocked = false;
+      queueMicrotask(() => terminal.emitExit());
+    }
+  };
+  terminal.kill = () => {
+    originalKill();
+    queueMicrotask(() => terminal.emitExit());
+  };
+  const socket = createFakeSocket();
+  const sessionId = `codex-graceful-handoff-${Date.now()}`;
+  handleShellConnection(socket as never, {
+    resolveProviderSessionId: () => 'provider-thread',
+    spawnPty: () => terminal as never,
+  });
+  socket.emit('message', JSON.stringify({
+    type: 'init', projectPath: process.cwd(), sessionId, provider: 'codex', hasSession: true,
+  }));
+
+  await releaseCodexShellSession(sessionId);
+
+  assert.equal(writerLocked, false);
+  assert.equal(terminal.killed, false);
+});
+
+test('a timed-out Codex handoff still waits for the retained PTY on retry', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const terminal = createFakePty();
+  const socket = createFakeSocket();
+  const sessionId = 'codex-handoff-timeout-retry';
+  handleShellConnection(socket as never, {
+    resolveProviderSessionId: () => 'provider-thread',
+    spawnPty: () => terminal as never,
+  });
+  socket.emit('message', JSON.stringify({
+    type: 'init', projectPath: process.cwd(), sessionId, provider: 'codex', hasSession: true,
+  }));
+  const first = assert.rejects(releaseCodexShellSession(sessionId), /still closing/);
+  t.mock.timers.tick(5000);
+  await first;
+
+  let released = false;
+  const retry = releaseCodexShellSession(sessionId).then(() => { released = true; });
+  try {
+    await Promise.resolve();
+    assert.equal(released, false, 'a timeout must not lose track of a live writer');
+  } finally {
+    terminal.emitExit();
+    await retry;
+  }
+  assert.equal(released, true);
+  await releaseCodexShellSession(sessionId);
+});
 
 function createFakeSocket() {
   const socket = new EventEmitter() as EventEmitter & {
@@ -24,7 +112,7 @@ function createFakeSocket() {
 
 function createFakePty() {
   let dataListener: ((data: string) => void) | null = null;
-  let exitListener: ((event: { exitCode: number; signal?: number }) => void) | null = null;
+  const exitListeners = new Set<(event: { exitCode: number; signal?: number }) => void>();
 
   return {
     killed: false,
@@ -33,16 +121,16 @@ function createFakePty() {
       return { dispose: () => undefined };
     },
     onExit(listener: (event: { exitCode: number; signal?: number }) => void) {
-      exitListener = listener;
-      return { dispose: () => undefined };
+      exitListeners.add(listener);
+      return { dispose: () => { exitListeners.delete(listener); } };
     },
     emitData(data: string) {
       dataListener?.(data);
     },
     emitExit() {
-      exitListener?.({ exitCode: 0 });
+      for (const listener of [...exitListeners]) listener({ exitCode: 0 });
     },
-    write() {},
+    write(_data: string) {},
     resize() {},
     kill() {
       this.killed = true;
@@ -738,7 +826,7 @@ test('other shells and initial commands only get the COLORFGBG hint', () => {
 
     assert.deepEqual(
       calls.map((call) => call.command),
-      ['npx task-master init', loginCommand, 'codex', 'codex']
+      ['npx task-master init', loginCommand, 'codex --disable daemon_auto_start', 'codex --disable daemon_auto_start']
     );
     assert.deepEqual(
       calls.map((call) => call.env.COLORFGBG),
