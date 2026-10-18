@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 
 import { IS_PLATFORM } from '@/shared/utils';
 import { api, readApiErrorMessage } from '@/shared/api';
-import { AUTH_SESSION_EXPIRED_EVENT, AUTH_TOKEN_REFRESHED_EVENT, getAuthTokenRefreshDelay, isValidRefreshedToken, storeAuthToken } from '@/shared/authToken';
+import { AUTH_SESSION_EXPIRED_EVENT, AUTH_TOKEN_REFRESHED_EVENT, getAuthTokenRefreshDelay, isValidRefreshedToken, storeAuthToken, storeRefreshedAuthToken } from '@/shared/authToken';
 import { hydrateChatDrafts, resetChatDrafts } from '@/shared/chatDrafts';
 import { hydrateUserPreferences, resetUserPreferences } from '@/shared/userSettings';
 /** The signed-in account held by AuthContext - a required `username` plus an optional id and any additional fields the auth API returns - and should be read through `useAuth()` rather than re-derived from raw auth responses. */
@@ -147,15 +147,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     try {
+      // Read from storage, not `token` state: the request goes out with the
+      // stored token, and the reply may only replace that one (it is gone if
+      // the user signed out while this request was in flight).
+      const sentWithToken = readStoredToken();
       const response = await api.auth.refresh();
       if (!response.ok) {
         return;
       }
 
       const payload = await parseJsonSafely<AuthSessionPayload>(response);
-      if (isValidRefreshedToken(payload?.token)) {
+      if (isValidRefreshedToken(payload?.token) && storeRefreshedAuthToken(payload.token, sentWithToken)) {
         setToken(payload.token);
-        persistToken(payload.token);
       }
     } catch (caughtError) {
       // A transient network failure must not sign the user out. Focus/visibility
