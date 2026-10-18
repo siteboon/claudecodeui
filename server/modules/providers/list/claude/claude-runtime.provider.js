@@ -26,7 +26,8 @@ import {
 } from '@/shared/image-attachments.js';
 import {
   CLAUDE_PREDEFINED_MODELS,
-  CLAUDE_ULTRACODE_EFFORT
+  CLAUDE_ULTRACODE_EFFORT,
+  resolveClaudeDefaultModelFlag
 } from '@/modules/providers/list/claude/claude-models.provider.js';
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
 import {
@@ -280,10 +281,16 @@ function mapCliOptionsToSDK(options = {}) {
 
   sdkOptions.disallowedTools = settings.disallowedTools || [];
 
-  sdkOptions.model = options.model || CLAUDE_PREDEFINED_MODELS.DEFAULT;
+  // `model` is the option the user picked and `modelFlag` what the CLI is started
+  // with for it. They differ only for "Default", which can run the model set in
+  // Claude Code's own settings or leave the flag off (see resolveClaudeDefaultModelFlag).
+  if (options.modelFlag) {
+    sdkOptions.model = options.modelFlag;
+  }
 
+  // Effort is validated against the option the user picked, whatever the flag is.
   applyClaudeEffort(sdkOptions, resolveClaudeEffort(
-    sdkOptions.model,
+    options.model,
     effort,
     options.effortModels || CLAUDE_PREDEFINED_MODELS,
   ));
@@ -1038,10 +1045,15 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       console.warn('[Claude SDK] Unable to load provider models for effort validation:', error);
     }
 
+    const selectedModel = resolvedModel || options.model || CLAUDE_PREDEFINED_MODELS.DEFAULT;
     const sdkOptions = mapCliOptionsToSDK({
       ...options,
       providerSessionId,
-      model: resolvedModel || options.model,
+      model: selectedModel,
+      // "Default" runs whatever Claude Code would run here (issue #1096).
+      modelFlag: selectedModel === CLAUDE_PREDEFINED_MODELS.DEFAULT
+        ? await resolveClaudeDefaultModelFlag(options.cwd)
+        : selectedModel,
       effortModels,
     });
 

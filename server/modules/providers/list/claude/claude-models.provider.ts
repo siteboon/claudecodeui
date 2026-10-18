@@ -1,4 +1,6 @@
 import { readFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import type { IProviderModels } from '@/shared/interfaces.js';
@@ -10,6 +12,9 @@ import type {
 import {
   buildDefaultProviderCurrentActiveModel,
   isPlaceholderProviderModel,
+  readClaudeSettingsFile,
+  readObjectRecord,
+  readOptionalString,
   stripAnsiSequences,
 } from '@/shared/utils.js';
 
@@ -31,7 +36,7 @@ export const CLAUDE_PREDEFINED_MODELS: ProviderModelsDefinition = {
     {
       value: 'default',
       label: 'Default (recommended)',
-      description: 'Use the recommended model for your Claude account and deployment.',
+      description: 'Use the model set in your Claude Code settings, otherwise the recommended model for your account.',
       effort: {
         default: 'high',
         values: [
@@ -171,6 +176,68 @@ export const findClaudeModelOption = (model: string | undefined | null): Provide
 
   return CLAUDE_PREDEFINED_MODELS.OPTIONS.find((option) => option.value === normalizedModel) ?? null;
 };
+
+/**
+ * Picks the `--model` value that makes "Default (recommended)" run what Claude Code
+ * itself would run in `cwd` (issue #1096). `undefined` means the flag is left off.
+ *
+ * Used by the Claude runtime (claude-runtime.provider.js) whenever the selected model is
+ * "Default". A plain `--model default` pins the CLI's built-in default and outranks a
+ * model the user configured for Claude Code. The CLI treats the two kinds of setting
+ * differently when a session is resumed:
+ * - `ANTHROPIC_MODEL`, in the environment the CLI inherits or in a settings `env` block,
+ *   also beats the session's last model on `--resume`. The flag is left off, so the CLI
+ *   picks the value with its own precedence.
+ * - A settings `model` loses to the session's last model on `--resume`, so its value is
+ *   passed explicitly. Local settings win over project settings, which win over user
+ *   settings, as in the CLI.
+ * - With nothing configured the result is `default`, which also keeps a resumed session
+ *   from staying on its last model.
+ *
+ * Only the settings files the runtime lets the CLI load are read (`settingSources`: the
+ * user settings and the project and local settings of `cwd`), through readClaudeSettingsFile.
+ * A file the CLI would not load either counts as unset: malformed, unreadable, over 2 MiB
+ * or not a regular file. The last two are never opened: the project files can come from a
+ * cloned repository, and this runs before every "Default" turn.
+ */
+export const resolveClaudeDefaultModelFlag = async (
+  cwd?: string | null,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<string | undefined> => {
+  if (readOptionalString(env.ANTHROPIC_MODEL)) {
+    return undefined;
+  }
+
+  // The CLI runs in `cwd` and resolves a relative CLAUDE_CONFIG_DIR against it.
+  const userConfigDir = path.resolve(
+    cwd ?? '',
+    readOptionalString(env.CLAUDE_CONFIG_DIR) ?? path.join(os.homedir(), '.claude'),
+  );
+  // Lowest precedence first, so a later file's `model` replaces an earlier one.
+  const settingsPaths = [path.join(userConfigDir, 'settings.json')];
+  if (cwd) {
+    settingsPaths.push(
+      path.join(cwd, '.claude', 'settings.json'),
+      path.join(cwd, '.claude', 'settings.local.json'),
+    );
+  }
+
+  let settingsModel: string | undefined;
+  for (const settingsPath of settingsPaths) {
+    const { settings } = await readClaudeSettingsFile(settingsPath);
+    if (!settings) {
+      continue;
+    }
+
+    if (readOptionalString(readObjectRecord(settings.env)?.ANTHROPIC_MODEL)) {
+      return undefined;
+    }
+    settingsModel = readOptionalString(settings.model) ?? settingsModel;
+  }
+
+  return settingsModel ?? CLAUDE_PREDEFINED_MODELS.DEFAULT;
+};
+
 type ClaudeInitEvent = {
   sessionId?: string;
   session_id?: string;

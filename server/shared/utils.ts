@@ -762,6 +762,66 @@ export const writeJsonConfig = async (filePath: string, data: Record<string, unk
 };
 
 // ---------------------------
+//----------------- CLAUDE CODE SETTINGS FILE UTILITIES ------------
+// The Claude CLI refuses to load a settings file larger than this (2 MiB).
+const MAX_CLAUDE_SETTINGS_FILE_BYTES = 2 * 1024 * 1024;
+
+/**
+ * Reads one Claude Code settings file (`settings.json`, `settings.local.json`,
+ * managed settings) the way the Claude CLI loads it, without ever blocking on it.
+ *
+ * Used by the Claude settings permissions service (the permissions panel in
+ * Settings) and by the Claude models provider (the model "Default" runs).
+ *
+ * - `missing`: there is no such file.
+ * - `invalid`: a file the CLI would not apply either. That is anything but a
+ *   regular file, a file over the CLI's 2 MiB cap, an unreadable file, or content
+ *   that is not a JSON object. A project can be a cloned repository, and the
+ *   repository decides what its `.claude/settings*.json` are. `stat` follows a
+ *   symlink without opening its target, so a FIFO or a device such as /dev/zero
+ *   is never read: that would stall the server's fs threadpool or exhaust its
+ *   memory.
+ * - `ok`: the parsed object. An empty or whitespace-only file loads as `{}`, as
+ *   in the CLI. An empty file is not even opened, since kernel pseudo-files report
+ *   a size of 0 even when a read would block. The text is decoded like the CLI
+ *   does: UTF-16LE when it starts with that byte order mark, UTF-8 otherwise,
+ *   without a leading BOM. Windows editors and PowerShell often save one.
+ */
+export async function readClaudeSettingsFile(
+  filePath: string,
+): Promise<{ status: 'ok'; settings: AnyRecord } | { status: 'missing' | 'invalid'; settings: null }> {
+  let content: string;
+  try {
+    const stats = await stat(filePath);
+    if (!stats.isFile() || stats.size > MAX_CLAUDE_SETTINGS_FILE_BYTES) {
+      return { status: 'invalid', settings: null };
+    }
+    if (stats.size === 0) {
+      return { status: 'ok', settings: {} };
+    }
+
+    const bytes = await readFile(filePath);
+    const isUtf16LittleEndian = bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe;
+    content = bytes.toString(isUtf16LittleEndian ? 'utf16le' : 'utf8').replace(/^\uFEFF/, '');
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return { status: code === 'ENOENT' || code === 'ENOTDIR' ? 'missing' : 'invalid', settings: null };
+  }
+
+  if (!content.trim()) {
+    return { status: 'ok', settings: {} };
+  }
+
+  let settings: AnyRecord | null;
+  try {
+    settings = readObjectRecord(JSON.parse(content));
+  } catch {
+    settings = null;
+  }
+  return settings ? { status: 'ok', settings } : { status: 'invalid', settings: null };
+}
+
+// ---------------------------
 //----------------- PROVIDER SKILL FILE UTILITIES ------------
 async function hasGitMarker(dirPath: string): Promise<boolean> {
   try {
