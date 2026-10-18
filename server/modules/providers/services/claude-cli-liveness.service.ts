@@ -10,6 +10,7 @@ import path from 'node:path';
  */
 type LiveClaudeCliSession = {
   providerSessionId: string;
+  pid: number;
   startedAt: number;
 };
 
@@ -90,7 +91,7 @@ async function readLiveBusySession(filePath: string): Promise<LiveClaudeCliSessi
   }
 
   const startedAt = typeof record.startedAt === 'number' ? record.startedAt : Date.now();
-  return { providerSessionId, startedAt };
+  return { providerSessionId, pid, startedAt };
 }
 
 /**
