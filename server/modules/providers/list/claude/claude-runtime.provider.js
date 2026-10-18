@@ -246,6 +246,12 @@ function mapCliOptionsToSDK(options = {}) {
     sdkOptions.cwd = cwd;
   }
 
+  // Without this the CLI forwards only a subagent's tool calls, so its card
+  // shows the agent's prose and reasoning only after a reload reads them from
+  // the transcript. The client folds these rows into the card by
+  // parent_tool_use_id, the same way it folds the agent's tool calls.
+  sdkOptions.forwardSubagentText = true;
+
   if (permissionMode && permissionMode !== 'default') {
     sdkOptions.permissionMode = permissionMode;
   }
