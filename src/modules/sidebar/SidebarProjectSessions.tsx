@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CheckSquare, ChevronRight, GitBranch, Plus, Trash2 } from 'lucide-react';
+import { CheckSquare, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { Button } from '@/shared/ui';
@@ -167,7 +167,7 @@ export default function SidebarProjectSessions({
       : t('sessions.selectAll');
 
   return (
-    <div className="ml-3 space-y-1 border-l border-border pl-3">
+    <div className="ml-1.5 space-y-1 border-l border-border/70 pl-1.5">
       {isCompact ? (
         <div className="px-3 pb-1 pt-1">
           <button
@@ -269,14 +269,15 @@ export default function SidebarProjectSessions({
                 data-session-id={session.id}
                 data-parent-session-id={parentId ?? undefined}
                 data-fork-depth={depth}
-                className={cn('flex min-w-0 items-start', depth > 0 && 'border-l border-border/60')}
+                data-fork-branch={hasChildren || undefined}
+                className="flex min-w-0 items-start"
                 style={depth > 0 ? { marginLeft: `${Math.min(depth, 4) * 12}px` } : undefined}
               >
                 {hasForks && (
                   hasChildren ? (
                     <button
                       type="button"
-                      className="mt-1 flex h-8 w-6 flex-shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="mt-1 flex h-8 w-3 flex-shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       aria-expanded={!collapsedForks.has(session.id)}
                       aria-label={collapsedForks.has(session.id)
                         ? t('sessions.expandForks', { session: session.summary || session.name || t('projects.newSession') })
@@ -288,13 +289,9 @@ export default function SidebarProjectSessions({
                         return { ...previous, collapsedForks: next };
                       })}
                     >
-                      <ChevronRight className={cn('h-3.5 w-3.5 transition-transform', !collapsedForks.has(session.id) && 'rotate-90')} aria-hidden="true" />
+                      <ChevronRight className={cn('h-3 w-3 transition-transform', !collapsedForks.has(session.id) && 'rotate-90')} aria-hidden="true" />
                     </button>
-                  ) : (
-                    <span className="mt-1 flex h-8 w-6 flex-shrink-0 items-center justify-center text-muted-foreground/60" aria-hidden="true">
-                      {parentId && <GitBranch className="h-3 w-3" />}
-                    </span>
-                  )
+                  ) : depth === 0 ? <span className="w-3 flex-shrink-0" aria-hidden="true" /> : null
                 )}
                 <div className="min-w-0 flex-1">
                   <SidebarSessionItem
@@ -318,6 +315,7 @@ export default function SidebarProjectSessions({
                     isSelecting={isSelecting}
                     isChecked={checkedSessionIds.has(session.id)}
                     onToggleSessionSelected={onToggleSessionSelected}
+                    treeRow={hasForks}
                     t={t}
                   />
                 </div>

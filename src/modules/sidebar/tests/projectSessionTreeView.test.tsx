@@ -43,6 +43,12 @@ test.each([false, true])('Projects nests forks and preserves row actions in comp
   assert.deepEqual(rowIds(container), ['root', 'child', 'leaf', 'unrelated']);
   assert.equal(container.querySelector('[data-session-id="leaf"]')?.getAttribute('data-fork-depth'), '2');
   assert.equal(container.querySelector('[data-session-id="child"]')?.getAttribute('data-parent-session-id'), 'root');
+  assert.equal(container.querySelector('[data-session-id="root"]')?.getAttribute('data-fork-branch'), 'true');
+  assert.equal(container.querySelector('[data-session-id="child"]')?.getAttribute('data-fork-branch'), 'true');
+  assert.equal(container.querySelector('[data-session-id="leaf"]')?.getAttribute('data-fork-branch'), null);
+  assert.equal(container.querySelector('[data-session-id="child"]')?.getAttribute('style'), 'margin-left: 12px;');
+  assert.equal(container.querySelector('[data-session-id="leaf"]')?.getAttribute('style'), 'margin-left: 24px;');
+  assert.equal(container.querySelector('[data-session-id="leaf"] [data-lucide="git-branch"]'), null);
 
   fireEvent.click(screen.getByText('Experiment'));
   assert.deepEqual(select.mock.calls, [[leaf, 'project']]);
