@@ -184,6 +184,35 @@ export function AuthProvider({ children }: AuthProviderProps) {
     };
   }, [clearSession, t]);
 
+  // Signing out in one tab only clears that tab's state; every other open tab
+  // would keep a working session until it next hit a 401. The `storage` event
+  // fires in those other tabs when the token is removed (or when storage is
+  // cleared outright, which arrives with a null key), so they sign out too.
+  // A new token arriving from another tab's refresh is not a sign-out. Platform
+  // mode has no local session, and clearing its user would only drop the chat
+  // socket without ever showing a sign-in screen.
+  useEffect(() => {
+    if (IS_PLATFORM) {
+      return undefined;
+    }
+
+    const handleStorage = (event: StorageEvent) => {
+      // sessionStorage changes fire the same event, also with a null key on clear().
+      if (event.storageArea !== localStorage) {
+        return;
+      }
+      const tokenRemoved = event.key === AUTH_TOKEN_STORAGE_KEY && event.newValue === null;
+      if (tokenRemoved || event.key === null) {
+        clearSession();
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [clearSession]);
+
   // The startup check below needs `t` only for its failure message.
   // react-i18next gives `t` a new identity on every language change, so
   // depending on it would re-run that check - and swap the whole app for the
