@@ -43,5 +43,10 @@
   "unsavedChanges": {
     "confirmClose": "You have unsaved changes. Close this file and discard them?",
     "indicator": "Unsaved changes"
+  },
+  "outsideProject": {
+    "title": "This file is outside the project",
+    "message": "It can be opened read-only. Changes cannot be saved from here.",
+    "confirm": "Open read-only"
   }
 }
