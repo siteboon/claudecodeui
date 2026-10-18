@@ -352,3 +352,115 @@ test('scheduling validates its input', async () => {
     );
   });
 });
+
+test('a repeating message stays pending and moves to its next slot, skipping missed ones', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    const now = new Date('2026-09-23T15:40:00.000Z');
+    // Due at 15:04, then 15:19 and 15:34 were missed while the server was down.
+    scheduledMessagesService.schedule({
+      userId,
+      sessionId: SESSION_ID,
+      content: 'soak monitor',
+      scheduledFor: '2026-09-23T15:04:00.000Z',
+      repeatEveryMinutes: 15,
+    });
+
+    const runs: RunCall[] = [];
+    assert.equal(await dispatchDueScheduledMessages(createRuntime(runs), now), 1);
+    assert.equal(runs.length, 1, 'missed slots are not sent in a burst');
+
+    const [row] = scheduledMessagesDb.listForSession(userId, SESSION_ID);
+    assert.equal(row.status, 'pending');
+    assert.equal(new Date(row.scheduled_for).toISOString(), '2026-09-23T15:49:00.000Z');
+    assert.equal(row.repeat_every_minutes, 15);
+  });
+});
+
+test('a repeating message skips a busy session instead of interrupting it', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    scheduledMessagesService.schedule({
+      userId,
+      sessionId: SESSION_ID,
+      content: 'soak monitor',
+      scheduledFor: new Date(Date.now() - 1_000).toISOString(),
+      repeatEveryMinutes: 15,
+    });
+    chatRunRegistry.startRun({
+      appSessionId: SESSION_ID,
+      provider: 'claude',
+      providerSessionId: null,
+      connection: null,
+      userId,
+    });
+
+    const runs: RunCall[] = [];
+    const aborts: string[] = [];
+    await dispatchDueScheduledMessages(createRuntime(runs, 'ok', aborts));
+
+    assert.deepEqual(aborts, []);
+    assert.equal(runs.length, 0);
+    const [row] = scheduledMessagesDb.listForSession(userId, SESSION_ID);
+    assert.equal(row.status, 'pending');
+    assert.match(row.failure_reason ?? '', /busy/);
+  });
+});
+
+test('a repeating message skips a session that is holding background work', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    scheduledMessagesService.schedule({
+      userId,
+      sessionId: SESSION_ID,
+      content: 'soak monitor',
+      scheduledFor: new Date(Date.now() - 1_000).toISOString(),
+      repeatEveryMinutes: 15,
+    });
+
+    const runs: RunCall[] = [];
+    const runtime = { ...(createRuntime(runs) as object), hasBackgroundWork: () => true } as never;
+    await dispatchDueScheduledMessages(runtime);
+
+    assert.equal(runs.length, 0);
+    assert.equal(scheduledMessagesDb.listForSession(userId, SESSION_ID)[0].status, 'pending');
+  });
+});
+
+test('a failed repeating send is recorded but keeps the schedule, and clears on the next success', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    const message = scheduledMessagesService.schedule({
+      userId,
+      sessionId: SESSION_ID,
+      content: 'soak monitor',
+      scheduledFor: new Date(Date.now() - 1_000).toISOString(),
+      repeatEveryMinutes: 15,
+    });
+
+    await dispatchDueScheduledMessages(createRuntime([], 'throw'));
+    let [row] = scheduledMessagesDb.listForSession(userId, SESSION_ID);
+    assert.equal(row.status, 'pending');
+    assert.match(row.failure_reason ?? '', /provider exploded/);
+
+    const runs: RunCall[] = [];
+    await dispatchDueScheduledMessages(createRuntime(runs), new Date(Date.parse(row.scheduled_for) + 1_000));
+    [row] = scheduledMessagesDb.listForSession(userId, SESSION_ID);
+    assert.equal(runs.length, 1);
+    assert.equal(row.failure_reason, null);
+    assert.equal(row.id, message.id);
+  });
+});
+
+test('a repeat interval outside 5 minutes to a week is refused', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    for (const repeatEveryMinutes of [0, 4, 7.5, 7 * 24 * 60 + 1, 'often']) {
+      assert.throws(
+        () => scheduledMessagesService.schedule({
+          userId,
+          sessionId: SESSION_ID,
+          content: 'x',
+          scheduledFor: new Date(Date.now() + 60_000).toISOString(),
+          repeatEveryMinutes,
+        }),
+        /repeatEveryMinutes/,
+      );
+    }
+  });
+});

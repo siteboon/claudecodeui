@@ -49,10 +49,20 @@ export function useScheduledMessages(sessionId: string | null) {
     void refresh();
   }, [refresh, sessionId]);
 
+  // A repeating message moves its next time and records skips on the server;
+  // re-read while one is scheduled so the banner does not show a stale slot.
+  const hasRepeating = scheduledMessages.some((message) => message.status === 'pending' && message.repeatEveryMinutes);
+  useEffect(() => {
+    if (!hasRepeating) return undefined;
+    const timer = setInterval(() => { void refresh(); }, 60_000);
+    return () => clearInterval(timer);
+  }, [hasRepeating, refresh]);
+
   const schedule = useCallback(async (input: {
     content: string;
     scheduledFor: Date;
     options?: Record<string, unknown>;
+    repeatEveryMinutes?: number;
   }) => {
     if (!sessionId) return false;
 
@@ -62,6 +72,7 @@ export function useScheduledMessages(sessionId: string | null) {
         content: input.content,
         scheduledFor: input.scheduledFor.toISOString(),
         options: input.options,
+        repeatEveryMinutes: input.repeatEveryMinutes,
       });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
