@@ -428,8 +428,9 @@ test('an agent question reaches the chat and its answers go back as label lists'
 
   assert.equal(turn.error, null);
   const prompt = questionPrompt as NormalizedMessage | null;
-  assert.equal(prompt?.toolName, 'question');
-  assert.deepEqual(prompt?.input, {
+  assert.ok(prompt, 'the question reached the chat');
+  assert.equal(prompt.toolName, 'question');
+  assert.deepEqual(prompt.input, {
     questions: [
       {
         question: 'Which color should the button be?',
@@ -447,7 +448,7 @@ test('an agent question reaches the chat and its answers go back as label lists'
       },
     ],
   });
-  assert.equal((prompt?.context as AnyRecord).answerFormat, 'label-lists');
+  assert.equal((prompt.context as AnyRecord).answerFormat, 'label-lists');
   assert.deepEqual(turn.requests('POST', '/question/que_1/reply').map((entry) => entry.body), [
     { answers: [['Red'], ['Small', 'Large, wide', 'a custom size']] },
   ]);
