@@ -19,7 +19,15 @@ type NotificationPreferences = {
     stop: boolean;
     error: boolean;
   };
+  /** Completion chime volume in percent (0-100); the `sound` channel still decides whether it plays. */
+  soundVolume: number;
 };
+
+/**
+ * Chime volume for users who never moved the slider, including every row saved
+ * before the setting existed. Mirrors DEFAULT_NOTIFICATION_SOUND_VOLUME in src/shared/constants.ts.
+ */
+const DEFAULT_SOUND_VOLUME = 70;
 
 const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   channels: {
@@ -33,7 +41,16 @@ const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
     stop: true,
     error: true,
   },
+  soundVolume: DEFAULT_SOUND_VOLUME,
 };
+
+/** Clamps a stored or submitted volume to a whole percent; anything that is not a number means the default. */
+function normalizeSoundVolume(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return DEFAULT_SOUND_VOLUME;
+  }
+  return Math.min(100, Math.max(0, Math.round(value)));
+}
 
 function normalizeNotificationPreferences(value: unknown): NotificationPreferences {
   const source = value && typeof value === 'object' ? (value as Record<string, any>) : {};
@@ -58,6 +75,7 @@ function normalizeNotificationPreferences(value: unknown): NotificationPreferenc
       stop: source.events?.stop !== false,
       error: source.events?.error !== false,
     },
+    soundVolume: normalizeSoundVolume(source.soundVolume),
   };
 }
 

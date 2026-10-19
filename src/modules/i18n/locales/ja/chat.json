@@ -117,6 +117,7 @@
     "disabled": "入力無効",
     "attachFiles": "ファイルを添付",
     "attachImages": "画像を添付",
+    "fileTooLarge": "{{name}} は大きすぎるため添付できません（最大 {{size}} MB）",
     "send": "送信",
     "stop": "停止",
     "hintText": {

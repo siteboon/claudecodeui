@@ -1,6 +1,7 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
+import { DEFAULT_NOTIFICATION_SOUND_VOLUME } from '@/shared/constants';
 import type { Project, ProjectSession, QuickSettingsTab, SlashCommand } from '@/shared/types';
 
 //----------------- DEPLOYMENT MODE ------------
@@ -93,6 +94,17 @@ export async function copyTextToClipboard(text: string): Promise<boolean> {
 /** localStorage key holding the user's completion-sound preference. Private to the sound helpers. */
 const NOTIFICATION_SOUND_ENABLED_STORAGE_KEY = 'notificationSoundEnabled';
 
+/** localStorage key holding the user's chime volume, in percent. Private to the sound helpers. */
+const NOTIFICATION_SOUND_VOLUME_STORAGE_KEY = 'notificationSoundVolume';
+
+/**
+ * Peak gain of the chime's first note at 100% volume. The second note plays at
+ * `CHIME_SECOND_NOTE_LEVEL` of it, the chime's original .075/.06 balance, so even
+ * fully overlapping notes would peak at 0.9 and never clip. Private to the sound helpers.
+ */
+const CHIME_MAX_PEAK_GAIN = 0.5;
+const CHIME_SECOND_NOTE_LEVEL = 0.8;
+
 /** The browser's AudioContext constructor, including the webkit-prefixed fallback; undefined outside a browser. */
 const AudioContextConstructor =
   typeof window !== 'undefined'
@@ -118,6 +130,29 @@ export const setNotificationSoundEnabled = (enabled: boolean): void => {
   }
 
   localStorage.setItem(NOTIFICATION_SOUND_ENABLED_STORAGE_KEY, String(enabled));
+};
+
+/** Reads the user's chime volume (0-100) from its local mirror; the default when unset or unreadable. */
+const readNotificationSoundVolume = (): number => {
+  if (typeof localStorage === 'undefined') {
+    return DEFAULT_NOTIFICATION_SOUND_VOLUME;
+  }
+
+  const stored = localStorage.getItem(NOTIFICATION_SOUND_VOLUME_STORAGE_KEY);
+  const volume = stored === null || stored.trim() === '' ? Number.NaN : Number(stored);
+  return Number.isFinite(volume) ? Math.min(100, Math.max(0, volume)) : DEFAULT_NOTIFICATION_SOUND_VOLUME;
+};
+
+/**
+ * Mirrors the user's chime volume (0-100) locally, where the chime reads it;
+ * the settings controller calls it whenever the saved preference changes.
+ */
+export const setNotificationSoundVolume = (volume: number): void => {
+  if (typeof localStorage === 'undefined') {
+    return;
+  }
+
+  localStorage.setItem(NOTIFICATION_SOUND_VOLUME_STORAGE_KEY, String(volume));
 };
 
 /** Returns the shared AudioContext, creating it on first use. Private to the sound helpers. */
@@ -159,13 +194,23 @@ const playTone = (
 };
 
 /**
- * Plays the two-tone notification chime, honouring the user's preference unless `force`
- * is set (settings previews pass `force` so the user can hear the sound while it is off).
+ * Plays the two-tone notification chime at the user's volume, honouring the on/off
+ * preference unless `force` is set (settings previews pass `force` so the user can
+ * hear the sound while it is off).
  */
 export const playNotificationSound = async ({ force = false } = {}): Promise<void> => {
   if (!force && !isNotificationSoundEnabled()) {
     return;
   }
+
+  const volume = readNotificationSoundVolume();
+  if (volume <= 0) {
+    return;
+  }
+
+  // Squared so equal slider steps sound like roughly equal loudness steps: with a
+  // linear gain most of the audible change would sit in the slider's bottom fifth.
+  const peakGain = CHIME_MAX_PEAK_GAIN * (volume / 100) ** 2;
 
   const context = getAudioContext();
   if (!context) {
@@ -178,8 +223,8 @@ export const playNotificationSound = async ({ force = false } = {}): Promise<voi
     }
 
     const now = context.currentTime;
-    playTone(context, 740, now, 0.12, 0.075);
-    playTone(context, 988, now + 0.11, 0.16, 0.06);
+    playTone(context, 740, now, 0.12, peakGain);
+    playTone(context, 988, now + 0.11, 0.16, peakGain * CHIME_SECOND_NOTE_LEVEL);
   } catch (error) {
     // Browsers may block audio until the page receives a user gesture.
     console.warn('Unable to play notification sound:', error);

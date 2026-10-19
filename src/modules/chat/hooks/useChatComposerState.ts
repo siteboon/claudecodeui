@@ -28,6 +28,7 @@ import {
 } from '@/shared/chatDrafts';
 import { escapeRegExp } from '@/modules/chat/utils/chatFormatting';
 import { describeBackgroundTask, ownBackgroundTasks } from '@/modules/chat/utils/backgroundTasks';
+import { useAttachmentSizeLimit } from '@/modules/chat/hooks/useAttachmentSizeLimit';
 import { useFileMentions } from '@/modules/chat/hooks/useFileMentions';
 import { useInputHistory } from '@/modules/chat/hooks/useInputHistory';
 import { useSlashCommands } from '@/modules/chat/hooks/useSlashCommands';
@@ -103,7 +104,6 @@ const createFakeSubmitEvent = () => {
 };
 
 const MAX_ATTACHMENT_COUNT = 10;
-const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024;
 
 const isImageAttachment = (attachment: ChatAttachment) => {
   if (attachment.mimeType?.startsWith('image/')) return true;
@@ -236,6 +236,8 @@ export function useChatComposerState({
   const input = inputState.value;
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [fileErrors, setFileErrors] = useState<Map<string, string>>(new Map());
+  // The server's per-file attachment limit in bytes; null until it has loaded.
+  const maxAttachmentSizeBytes = useAttachmentSizeLimit();
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
   const [commandModalPayload, setCommandModalPayload] = useState<CommandModalPayload | null>(null);
 
@@ -581,6 +583,9 @@ export function useChatComposerState({
   }, []);
 
   const handleAttachmentFiles = useCallback((files: File[]) => {
+    // Each pick, paste or drop replaces the previous batch's rejections, so a
+    // message about a file the user already moved on from does not linger.
+    const rejectedFiles = new Map<string, string>();
     const validFiles = files.filter((file) => {
       try {
         if (!file || typeof file !== 'object') {
@@ -588,13 +593,14 @@ export function useChatComposerState({
           return false;
         }
 
-        if (file.size > MAX_ATTACHMENT_SIZE) {
+        // Until the server's limit has loaded nothing is rejected here; the
+        // upload itself is still refused, with the limit in the error.
+        if (maxAttachmentSizeBytes !== null && file.size > maxAttachmentSizeBytes) {
           const fileName = file.name || 'Unknown file';
-          setFileErrors((previous) => {
-            const next = new Map(previous);
-            next.set(fileName, 'File too large (max 10MB)');
-            return next;
-          });
+          rejectedFiles.set(fileName, t('input.fileTooLarge', {
+            name: fileName,
+            size: Math.round((maxAttachmentSizeBytes / (1024 * 1024)) * 10) / 10,
+          }));
           return false;
         }
 
@@ -605,24 +611,24 @@ export function useChatComposerState({
       }
     });
 
+    setFileErrors(rejectedFiles);
     if (validFiles.length > 0) {
       setAttachedFiles((previous) => [...previous, ...validFiles].slice(0, MAX_ATTACHMENT_COUNT));
     }
-  }, []);
+  }, [maxAttachmentSizeBytes, t]);
 
   const handlePaste = useCallback(
     (event: ClipboardEvent<HTMLTextAreaElement>) => {
       const items = Array.from(event.clipboardData.items);
 
-      items.forEach((item) => {
-        if (!item.type.startsWith('image/')) {
-          return;
-        }
-        const file = item.getAsFile();
-        if (file) {
-          handleAttachmentFiles([file]);
-        }
-      });
+      // One batch, so a rejected image is reported even when others pasted with it are kept.
+      const pastedImages = items
+        .filter((item) => item.type.startsWith('image/'))
+        .map((item) => item.getAsFile())
+        .filter((file): file is File => file !== null);
+      if (pastedImages.length > 0) {
+        handleAttachmentFiles(pastedImages);
+      }
 
       if (items.length === 0 && event.clipboardData.files.length > 0) {
         const files = Array.from(event.clipboardData.files);
@@ -635,8 +641,9 @@ export function useChatComposerState({
     [handleAttachmentFiles],
   );
 
+  // No `maxSize` here: react-dropzone would drop an oversized file before
+  // onDrop without telling the user, so handleAttachmentFiles checks the size.
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
-    maxSize: MAX_ATTACHMENT_SIZE,
     maxFiles: MAX_ATTACHMENT_COUNT,
     onDrop: handleAttachmentFiles,
     noClick: true,

@@ -159,6 +159,7 @@
     "disabled": "Vstup je vypnutý",
     "attachFiles": "Přiložit soubory",
     "attachImages": "Přiložit obrázky",
+    "fileTooLarge": "Soubor {{name}} je příliš velký na přiložení (max. {{size}} MB)",
     "send": "Odeslat",
     "stop": "Zastavit",
     "hintText": {

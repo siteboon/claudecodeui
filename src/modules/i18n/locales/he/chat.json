@@ -123,6 +123,7 @@
     "disabled": "הקלט מושבת",
     "attachFiles": "צירוף קבצים",
     "attachImages": "צירוף תמונות",
+    "fileTooLarge": "הקובץ {{name}} גדול מדי לצירוף (עד {{size}} MB)",
     "send": "שליחה",
     "stop": "עצירה",
     "hintText": {

@@ -126,6 +126,7 @@
     "disabled": "输入已禁用",
     "attachFiles": "附加文件",
     "attachImages": "附加图片",
+    "fileTooLarge": "{{name}} 太大，无法附加（最大 {{size}} MB）",
     "send": "发送",
     "stop": "停止",
     "hintText": {

@@ -124,6 +124,7 @@
     "disabled": "Saisie désactivée",
     "attachFiles": "Joindre des fichiers",
     "attachImages": "Joindre des images",
+    "fileTooLarge": "{{name}} est trop volumineux pour être joint (max. {{size}} Mo)",
     "send": "Envoyer",
     "stop": "Arrêter",
     "hintText": {

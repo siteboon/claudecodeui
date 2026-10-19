@@ -218,3 +218,17 @@ export const PROVIDER_PERMISSION_PREFERENCE_KEYS: Record<LLMProvider, UserPrefer
   codex: 'codexPermissions',
   opencode: 'opencodePermissions',
 };
+
+// ---------------------------
+
+//----------------- NOTIFICATION SOUND ------------
+
+/**
+ * Completion-chime volume, in percent, for anyone who has not picked one,
+ * including users whose saved notification preferences predate the setting.
+ * At this level the chime peaks near -12 dBFS, about 10 dB above the fixed
+ * level it played at before (-22.6 dBFS), which was easy to miss on speakers
+ * set for ordinary media. The server's notification-preferences repository
+ * carries the same default.
+ */
+export const DEFAULT_NOTIFICATION_SOUND_VOLUME = 70;

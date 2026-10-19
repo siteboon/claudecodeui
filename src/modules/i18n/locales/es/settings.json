@@ -158,6 +158,7 @@
       "title": "Sonido",
       "description": "Reproduce un tono corto cuando una ejecución del chat termina o necesita aprobación de una herramienta.",
       "enabled": "Activado",
+      "volume": "Volumen",
       "test": "Probar sonido"
     },
     "events": {

@@ -117,6 +117,7 @@
     "disabled": "輸入已停用",
     "attachFiles": "附加檔案",
     "attachImages": "附加圖片",
+    "fileTooLarge": "{{name}} 太大，無法附加（上限 {{size}} MB）",
     "send": "傳送",
     "stop": "停止",
     "hintText": {
