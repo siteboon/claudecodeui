@@ -414,7 +414,9 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
 
       // Read after the registry lookup, so a run that started meanwhile counts.
       // A run that ended meanwhile replaced the binary: the version from before
-      // it would sit next to that run's result, so the CLI is probed once more.
+      // it would sit next to that run's result, so the CLI is probed once more,
+      // or, when another run has started since, that run's starting version is
+      // reported instead (still no probe while a run is going on).
       const runAfterLookup = updatesInProgress.get(provider.id);
       if (running && runAfterLookup !== running) {
         ({ installed, version: installedVersion } = runAfterLookup?.before ?? provider.auth.checkInstalled());

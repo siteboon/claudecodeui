@@ -739,6 +739,54 @@ test('getCliStatus probes again when the update it saw running ended during the 
     assert.deepEqual(reported.lastUpdate, result);
     assert.equal(reported.installedVersion, '1.19.0');
     assert.equal(reported.updateAvailable, false);
+    // The run's probes before and after the updater, then the status's one re-probe.
+    assert.equal(await opencode.read('version-count'), '3');
+  });
+});
+
+test('getCliStatus reports the starting version of a run that began during the registry lookup', async () => {
+  await withIsolatedCliEnv(async (binDir) => {
+    const opencode = await createFakeCli(binDir, 'opencode');
+    await opencode.set('version', '1.18.20\n');
+    await opencode.set('update-sleep-ms', '300');
+    await opencode.set('update-new-version', '1.19.0\n');
+    let answerRegistry: () => void = () => {};
+    const registryAnswered = new Promise<void>((resolve) => {
+      answerRegistry = resolve;
+    });
+    const registry = createFakeRegistry(async () => {
+      await registryAnswered;
+      return jsonResponse({ version: '1.20.0' });
+    });
+    const service = createService({ fetch: registry.fetch });
+
+    const firstRun = service.updateCli('opencode');
+    await waitForFakeCliFile(opencode, 'update-count');
+    const status = service.getCliStatus('opencode');
+    const firstResult = await withDeadline(firstRun, 5000, 'the first update never finished');
+
+    // A second run starts before the registry answers the status.
+    await opencode.set('update-sleep-ms', '2000');
+    await opencode.set('update-new-version', '1.20.0\n');
+    const secondRun = service.updateCli('opencode');
+    const deadline = Date.now() + 5000;
+    while ((await opencode.read('update-count')) !== '2') {
+      assert.ok(Date.now() < deadline, 'the second updater never started');
+      await delay(20);
+    }
+    // Before and after the first run, before the second.
+    assert.equal(await opencode.read('version-count'), '3');
+    answerRegistry();
+    const reported = await withDeadline(status, 5000, 'the status never answered');
+
+    assert.equal(await opencode.read('version-count'), '3', 'no --version ran while the second update was running');
+    assert.equal(reported.updateInProgress, true);
+    assert.equal(reported.installedVersion, '1.19.0');
+    assert.deepEqual(reported.lastUpdate, firstResult);
+    assert.equal(reported.updateAvailable, true);
+
+    const secondResult = await withDeadline(secondRun, 5000, 'the second update never finished');
+    assert.equal(secondResult.installedVersion, '1.20.0');
   });
 });
 
