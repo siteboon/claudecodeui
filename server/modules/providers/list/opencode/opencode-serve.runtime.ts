@@ -380,6 +380,7 @@ class OpenCodeServeTurn {
   /** Sessions whose requests belong to this turn: ours plus subagent children. */
   private readonly family = new Set<string>();
   private idleSeen = false;
+  private promptSent = false;
   private promptSettled = false;
   private sessionErrorSeen = false;
   private errorText: string | null = null;
@@ -515,6 +516,7 @@ class OpenCodeServeTurn {
     }
 
     if (!this.aborted) {
+      this.promptSent = true;
       void server
         .requestLong('POST', `/session/${encodeURIComponent(sessionId)}/message`, promptBody)
         .then((response) => this.onPromptAnswered(sessionId, response), async (error: unknown) => {
@@ -974,7 +976,8 @@ class OpenCodeServeTurn {
       await server
         .request('POST', `/session/${encodeURIComponent(this.mainSessionId)}/abort`, undefined, SESSION_ABORT_TIMEOUT_MS)
         .catch(() => undefined);
-      if (!this.promptSettled) {
+      // Only a turn that is still running has a tool command to wait for.
+      if (this.promptSent && !this.promptSettled) {
         await waitFor(() => this.idleSeen || server.hasExited(), SESSION_ABORT_TIMEOUT_MS);
       }
     }
