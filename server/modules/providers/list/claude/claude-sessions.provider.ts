@@ -499,16 +499,44 @@ async function readTranscriptRows(jsonlPath: string, providerSessionId: string):
 }
 
 /**
+ * True for a user row Claude Code wrote into the session itself, such as a
+ * background task's `<task-notification>` or a queued peer message, rather
+ * than one somebody typed.
+ *
+ * CLI builds mark these rows differently, so each marker is checked in turn:
+ * - current builds stamp them `promptSource: "system"`;
+ * - builds from about 2.1.85 set `origin` to any kind but `human`. The
+ *   SDK-bundled 2.1.165, which Chat falls back to when no `claude` is
+ *   installed, stamps its notifications `promptSource: "sdk"`, so `origin` is
+ *   the only marker there;
+ * - older builds set neither, so a notification can only be recognised by its
+ *   leading tag.
+ */
+function isInjectedNoteRow(row: AnyRecord): boolean {
+  if (row.type !== 'user') {
+    return false;
+  }
+  if (row.promptSource === 'system') {
+    return true;
+  }
+
+  const originKind = row.origin?.kind;
+  if (typeof originKind === 'string') {
+    return originKind !== 'human';
+  }
+
+  return readTaskNotificationTexts(row).some((text) => text.trimStart().startsWith('<task-notification>'));
+}
+
+/**
  * True for a row the user typed, as opposed to a tool result or an injected note.
  *
- * Rows the system injects are user rows only in shape: a background task's
- * `<task-notification>`, a queued peer message. Claude Code stamps them
- * `promptSource: "system"`, and it commonly writes two of them under the same
- * parent — which is not an edit, and must not read as one (see
- * dropSupersededPromptBranches).
+ * Injected notes are user rows only in shape (see `isInjectedNoteRow`), and
+ * Claude Code often writes two of them under the same parent. That is not an
+ * edit and must not be treated as one (see dropSupersededPromptBranches).
  */
 function isUserPromptRow(row: AnyRecord): boolean {
-  if (row.type !== 'user' || row.isMeta === true || row.isCompactSummary === true || row.promptSource === 'system') {
+  if (row.type !== 'user' || row.isMeta === true || row.isCompactSummary === true || isInjectedNoteRow(row)) {
     return false;
   }
 
@@ -635,22 +663,50 @@ function indexNewestRowPerBranch(rows: AnyRecord[]): Map<string, number> {
  * fork that is not on that chain at all (one made before a compaction) keeps
  * the branch that was appended to last.
  *
+ * A resumed run first writes a "stopped" note for any background task it
+ * cannot see running, and the prompt it was started for hangs off that note.
+ * Editing that prompt resumes through the assistant row above the note (see
+ * `resolveEditAnchor`), and the edited run writes its own note there before
+ * the replacement. Prompts are therefore paired by the row above any notes
+ * they hang off. Only the replaced prompt's subtree is dropped; the note
+ * stays, since it really arrived.
+ *
  * Only sibling *prompts* are treated as a fork. Branch points made by parallel
  * tool calls are extremely common — one assistant turn writes several chained
  * rows and each tool result parents onto its own — and pruning those would
  * delete tool output from every transcript in the app.
  */
 function dropSupersededPromptBranches(rows: AnyRecord[]): AnyRecord[] {
+  const noteParents = new Map<string, unknown>();
+  for (const row of rows) {
+    if (typeof row.uuid === 'string' && isInjectedNoteRow(row)) {
+      noteParents.set(row.uuid, row.parentUuid);
+    }
+  }
+  const forkPointOf = (row: AnyRecord): unknown => {
+    let parentUuid: unknown = row.parentUuid;
+    const visited = new Set<string>();
+    while (typeof parentUuid === 'string' && noteParents.has(parentUuid) && !visited.has(parentUuid)) {
+      visited.add(parentUuid);
+      parentUuid = noteParents.get(parentUuid);
+    }
+    return parentUuid;
+  };
+
   const promptSiblings = new Map<string, AnyRecord[]>();
   for (const row of rows) {
-    if (typeof row.parentUuid !== 'string' || !isUserPromptRow(row)) {
+    if (!isUserPromptRow(row)) {
       continue;
     }
-    const siblings = promptSiblings.get(row.parentUuid);
+    const forkPoint = forkPointOf(row);
+    if (typeof forkPoint !== 'string') {
+      continue;
+    }
+    const siblings = promptSiblings.get(forkPoint);
     if (siblings) {
       siblings.push(row);
     } else {
-      promptSiblings.set(row.parentUuid, [row]);
+      promptSiblings.set(forkPoint, [row]);
     }
   }
 

@@ -1727,6 +1727,162 @@ test('background task notifications sharing a parent are not mistaken for an edi
   }
 });
 
+const TASK_NOTE_SESSION_ID = 'claude-task-note-session';
+const TASK_NOTE_TOOL_USE_ID = 'toolu_background_build';
+
+/**
+ * How CLI builds mark a task notification they write into the transcript: the
+ * current CLI (2.1.303), the SDK-bundled 2.1.165 that Chat falls back to, the
+ * builds that only set `origin` (2.1.85 to 2.1.110), and older builds that mark
+ * it with nothing but its text.
+ */
+const TASK_NOTE_MARKINGS: Record<string, object> = {
+  'promptSource "system"': { promptSource: 'system', origin: { kind: 'task-notification' } },
+  'origin with promptSource "sdk"': { promptSource: 'sdk', origin: { kind: 'task-notification' } },
+  'origin only': { origin: { kind: 'task-notification' } },
+  'no marker': {},
+};
+
+/** Timestamps in the order rows are built, since history is sorted by them. */
+let taskNoteClock = 0;
+const nextTaskNoteTimestamp = () => new Date(Date.UTC(2026, 9, 19, 10, 0, taskNoteClock++)).toISOString();
+
+/**
+ * Rows of a Chat session that started a background build, shaped after the
+ * transcripts the real CLI writes through the Agent SDK. A run resumed while
+ * the build is still going first writes a `stopped` note for it, and the
+ * prompt it was started for hangs off that note.
+ */
+const taskNoteRow = {
+  prompt: (uuid: string, parentUuid: string | null, text: string) => ({
+    type: 'user', uuid, parentUuid, sessionId: TASK_NOTE_SESSION_ID, timestamp: nextTaskNoteTimestamp(),
+    promptSource: 'sdk', message: { role: 'user', content: text },
+  }),
+  reply: (uuid: string, parentUuid: string, text: string) => ({
+    type: 'assistant', uuid, parentUuid, sessionId: TASK_NOTE_SESSION_ID, timestamp: nextTaskNoteTimestamp(),
+    message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text }] },
+  }),
+  note: (uuid: string, parentUuid: string, status: string, marking: object) => ({
+    type: 'user', uuid, parentUuid, sessionId: TASK_NOTE_SESSION_ID, timestamp: nextTaskNoteTimestamp(),
+    ...marking,
+    message: {
+      role: 'user',
+      content: [
+        '<task-notification>',
+        '<task-id>bbuild1</task-id>',
+        `<tool-use-id>${TASK_NOTE_TOOL_USE_ID}</tool-use-id>`,
+        `<status>${status}</status>`,
+        `<summary>Background command "Build" ${status}</summary>`,
+        '</task-notification>',
+      ].join('\n'),
+    },
+  }),
+  stamp: (leafUuid: string) => ({
+    type: 'last-prompt', lastPrompt: 'redacted', leafUuid, sessionId: TASK_NOTE_SESSION_ID,
+  }),
+};
+
+const taskNoteLaunchRows = () => [
+  taskNoteRow.prompt('p1', null, 'build it in the background'),
+  {
+    type: 'assistant', uuid: 'a1', parentUuid: 'p1', sessionId: TASK_NOTE_SESSION_ID,
+    timestamp: nextTaskNoteTimestamp(),
+    message: {
+      role: 'assistant', model: 'claude-opus-5',
+      content: [{ type: 'tool_use', id: TASK_NOTE_TOOL_USE_ID, name: 'Bash', input: { command: 'npm run build', run_in_background: true } }],
+    },
+  },
+  {
+    type: 'user', uuid: 'r1', parentUuid: 'a1', sessionId: TASK_NOTE_SESSION_ID,
+    timestamp: nextTaskNoteTimestamp(),
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: TASK_NOTE_TOOL_USE_ID, content: 'Command running in background with ID: bbuild1.' }] },
+    toolUseResult: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'bbuild1' },
+  },
+  taskNoteRow.reply('a2', 'r1', 'The build is running.'),
+  taskNoteRow.stamp('a2'),
+];
+
+/** The text turns history shows; the notes themselves fold onto the Bash card. */
+async function readTaskNoteHistory(rows: object[]): Promise<unknown[]> {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-task-note-history-'));
+
+  try {
+    const transcriptPath = path.join(tempRoot, `${TASK_NOTE_SESSION_ID}.jsonl`);
+    await writeFile(transcriptPath, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+
+    let texts: unknown[] = [];
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(TASK_NOTE_SESSION_ID, 'claude', tempRoot, 'Task note session', now, now, transcriptPath);
+
+      const history = await new ClaudeSessionsProvider({ getLiveRunStartTime: () => null }).fetchHistory(
+        TASK_NOTE_SESSION_ID,
+        { providerSessionId: TASK_NOTE_SESSION_ID },
+      );
+      texts = history.messages.filter((message) => message.kind === 'text').map((message) => message.content);
+    });
+    return texts;
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+}
+
+const TASK_NOTE_LAUNCH_TURN = ['build it in the background', 'The build is running.'];
+
+test('a late task notification does not hide the conversation a resumed run went on to have', { concurrency: false }, async () => {
+  const r = taskNoteRow;
+  const marking = TASK_NOTE_MARKINGS['promptSource "system"'];
+  // The process that launched the build waits for it after its turn. Chat
+  // resumes the session in a new process meanwhile, which reports the build
+  // `stopped` under the same leaf and carries on. When the build finishes, the
+  // first process writes its own report under that leaf too, answers it, and
+  // exits last, so the resume chain runs through that report.
+  const texts = await readTaskNoteHistory([
+    ...taskNoteLaunchRows(),
+    r.note('n1', 'a2', 'stopped', marking), r.prompt('p2', 'n1', 'what changed?'), r.reply('a3', 'p2', 'Two files changed.'),
+    r.stamp('a3'),
+    r.note('n2', 'a2', 'completed', marking), r.reply('a4', 'n2', 'The build passed.'),
+    r.stamp('a4'),
+  ]);
+
+  assert.deepEqual(texts, [...TASK_NOTE_LAUNCH_TURN, 'what changed?', 'Two files changed.', 'The build passed.']);
+});
+
+for (const markingName of ['origin with promptSource "sdk"', 'origin only', 'no marker']) {
+  test(`a late task notification marked by ${markingName} is not mistaken for an edit`, { concurrency: false }, async () => {
+    const r = taskNoteRow;
+    // Older builds write no `stopped` note on resume, so the late report lands
+    // beside the prompt itself rather than beside another note.
+    const texts = await readTaskNoteHistory([
+      ...taskNoteLaunchRows(),
+      r.prompt('p2', 'a2', 'what changed?'), r.reply('a3', 'p2', 'Two files changed.'),
+      r.stamp('a3'),
+      r.note('n2', 'a2', 'completed', TASK_NOTE_MARKINGS[markingName]), r.reply('a4', 'n2', 'The build passed.'),
+      r.stamp('a4'),
+    ]);
+
+    assert.deepEqual(texts, [...TASK_NOTE_LAUNCH_TURN, 'what changed?', 'Two files changed.', 'The build passed.']);
+  });
+}
+
+test('an edited prompt that followed a task note replaces the original', { concurrency: false }, async () => {
+  const r = taskNoteRow;
+  const marking = TASK_NOTE_MARKINGS['promptSource "system"'];
+  // The edit resumes through `a2`, past the note the original prompt hangs
+  // off, and the edited run reports the build `stopped` again before the
+  // replacement. The two prompts never share a parent; the two notes do.
+  const texts = await readTaskNoteHistory([
+    ...taskNoteLaunchRows(),
+    r.note('n1', 'a2', 'stopped', marking), r.prompt('p2', 'n1', 'what changed?'), r.reply('a3', 'p2', 'Two files changed.'),
+    r.stamp('a3'),
+    r.note('n1b', 'a2', 'stopped', marking), r.prompt('p2b', 'n1b', 'what changed, file by file?'),
+    r.reply('a3b', 'p2b', 'src/a.ts and src/b.ts changed.'),
+    r.stamp('a3b'),
+  ]);
+
+  assert.deepEqual(texts, [...TASK_NOTE_LAUNCH_TURN, 'what changed, file by file?', 'src/a.ts and src/b.ts changed.']);
+});
+
 test('parallel tool calls are not mistaken for an edit', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-parallel-tools-'));
   const sessionId = 'claude-parallel-session';
