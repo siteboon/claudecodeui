@@ -10,7 +10,8 @@ import { appConfigDb, closeConnection, initializeDatabase } from '@/modules/data
 
 type FakeBrowserState = {
   // What a canvas `measureText` returns in the launched browser: 0 when Chromium has no usable fonts.
-  textWidth: number;
+  textWidth: number | undefined;
+  evaluateError: string | null;
   innerText: string;
   innerTextError: string | null;
 };
@@ -18,10 +19,13 @@ type FakeBrowserState = {
 const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'cloudcli-browser-page-text-'));
 const fakePlaywrightPath = path.join(tempDirectory, 'fake-playwright.cjs');
 fs.writeFileSync(fakePlaywrightPath, `
-const state = { textWidth: 0, innerText: '', innerTextError: null };
+const state = { textWidth: 0, evaluateError: null, innerText: '', innerTextError: null };
 function createPage() {
   return {
-    async evaluate() { return state.textWidth; },
+    async evaluate() {
+      if (state.evaluateError) throw new Error(state.evaluateError);
+      return state.textWidth;
+    },
     async screenshot() { return Buffer.from('fake-jpeg'); },
     async title() { return 'Fake page'; },
     url() { return 'about:blank'; },
@@ -89,7 +93,7 @@ async function withFakeBrowser(state: FakeBrowserState, run: (sessionId: string,
 
 test('a browser without usable fonts explains why snapshots have no text', async (t) => {
   const warn = t.mock.method(console, 'warn', () => undefined);
-  await withFakeBrowser({ textWidth: 0, innerText: '', innerTextError: null }, async (sessionId, message) => {
+  await withFakeBrowser({ textWidth: 0, evaluateError: null, innerText: '', innerTextError: null }, async (sessionId, message) => {
     assert.match(message || '', /no usable fonts/);
     assert.match(message || '', /npx playwright install-deps chromium/);
     assert.match(message || '', /FONTCONFIG_FILE/);
@@ -103,7 +107,7 @@ test('a browser without usable fonts explains why snapshots have no text', async
 });
 
 test('a browser with fonts keeps the ready message and plain snapshot text', async () => {
-  await withFakeBrowser({ textWidth: 21.1, innerText: 'hello', innerTextError: null }, async (sessionId, message) => {
+  await withFakeBrowser({ textWidth: 21.1, evaluateError: null, innerText: 'hello', innerTextError: null }, async (sessionId, message) => {
     assert.equal(message, 'Browser session is ready.');
 
     const snapshot = await browserUseService.agentSnapshot(sessionId);
@@ -112,10 +116,23 @@ test('a browser with fonts keeps the ready message and plain snapshot text', asy
   });
 });
 
+test('a font probe that cannot measure text never reports missing fonts', async () => {
+  for (const probe of [
+    { textWidth: undefined, evaluateError: null },
+    { textWidth: 0, evaluateError: 'page.evaluate: Execution context was destroyed' },
+  ]) {
+    await withFakeBrowser({ ...probe, innerText: 'hello', innerTextError: null }, async (sessionId, message) => {
+      assert.equal(message, 'Browser session is ready.');
+      assert.equal('textError' in await browserUseService.agentSnapshot(sessionId), false);
+    });
+  }
+});
+
 test('snapshot reports a failed page text read instead of returning silently empty text', async (t) => {
   const warn = t.mock.method(console, 'warn', () => undefined);
   await withFakeBrowser({
     textWidth: 21.1,
+    evaluateError: null,
     innerText: '',
     innerTextError: 'locator.innerText: Target page, context or browser has been closed\nCall log:\n  - waiting for body',
   }, async (sessionId) => {
