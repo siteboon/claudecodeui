@@ -18,6 +18,9 @@ const MESSAGE_A = {
   status: 'pending',
 };
 
+// Session switching is about the initial fetch; nothing is announced here.
+const subscribe = () => () => {};
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -26,7 +29,7 @@ test('switching sessions clears the previous session\'s scheduled messages immed
   vi.spyOn(api.scheduledMessages, 'list').mockImplementation(async (sessionId?: string) =>
     listResponse(sessionId === 'session-a' ? [MESSAGE_A] : []));
 
-  const { result, rerender } = renderHook(({ sessionId }) => useScheduledMessages(sessionId), {
+  const { result, rerender } = renderHook(({ sessionId }) => useScheduledMessages(sessionId, subscribe), {
     initialProps: { sessionId: 'session-a' },
   });
   await waitFor(() => assert.equal(result.current.scheduledMessages.length, 1));
@@ -48,7 +51,7 @@ test('a slow fetch for the previous session cannot land on the next one', async 
     return Promise.resolve(listResponse([]));
   });
 
-  const { result, rerender } = renderHook(({ sessionId }) => useScheduledMessages(sessionId), {
+  const { result, rerender } = renderHook(({ sessionId }) => useScheduledMessages(sessionId, subscribe), {
     initialProps: { sessionId: 'session-a' },
   });
   rerender({ sessionId: 'session-b' });
