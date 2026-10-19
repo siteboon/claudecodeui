@@ -196,6 +196,45 @@ describe('slash command keys pressed inside the filter debounce', () => {
     assert.deepEqual(executedCommands.map((command) => command.name), ['/baz']);
   });
 
+  it('drops a hover highlight made on the previous list', async () => {
+    const { result, executedCommands, typeQuickly, press } = await setUp(
+      ['/foo', '/bar', '/baz', '/bazooka'],
+      { '/foo': 5 },
+    );
+
+    typeQuickly('/ba');
+    // The pointer rests on the second row of the list still on screen
+    // (/help); in the list for "/ba" index 1 is /baz, which was never shown.
+    act(() => {
+      result.current.handleCommandSelect(result.current.filteredCommands[1], 1, true);
+    });
+    press('ArrowDown');
+    assert.equal(result.current.selectedCommandIndex, 0);
+
+    typeQuickly('/ba');
+    act(() => {
+      result.current.handleCommandSelect(result.current.filteredCommands[1], 1, true);
+    });
+    press('Enter');
+    assert.deepEqual(executedCommands.map((command) => command.name), ['/bar']);
+  });
+
+  it('keeps a hover highlight made once the list has caught up', async () => {
+    const { result, executedCommands, typeQuickly, press, listedNames } = await setUp(
+      ['/foo', '/bar', '/baz', '/bazooka'],
+      { '/foo': 5 },
+    );
+
+    typeQuickly('/ba');
+    await waitFor(() => assert.deepEqual(listedNames(), ['/bar', '/baz', '/bazooka']));
+    act(() => {
+      result.current.handleCommandSelect(result.current.filteredCommands[2], 2, true);
+    });
+    press('Enter');
+
+    assert.deepEqual(executedCommands.map((command) => command.name), ['/bazooka']);
+  });
+
   it('lets Enter fall through to a normal send when nothing matches the typed text', async () => {
     const { result, executedCommands, setInputCalls, typeQuickly, press } = await setUp(
       ['/foo', '/bar'],
