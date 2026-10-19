@@ -1,13 +1,14 @@
-import { randomUUID } from 'node:crypto';
 import fs, { promises as fsPromises } from 'node:fs';
-import os from 'node:os';
 
 import mime from 'mime-types';
-import multer from 'multer';
 
 import { projectsDb } from '@/modules/database/index.js';
 import { createFileTreeRouter } from '@/modules/file-tree/file-tree.routes.js';
 import { createFileTreeService } from '@/modules/file-tree/file-tree.service.js';
+import {
+  fileTreeUploadLimits,
+  fileTreeUploadMiddleware,
+} from '@/modules/file-tree/file-tree-upload.middleware.js';
 import type {
   FileTreeFileSystem,
   FileTreeLogger,
@@ -15,10 +16,6 @@ import type {
   FileTreeWorkspaceGateway,
 } from '@/shared/types.js';
 import { WORKSPACES_ROOT, resolveReadOnlyRootPath, validateWorkspacePath } from '@/shared/utils.js';
-
-const MAXIMUM_UPLOAD_SIZE_MEGABYTES = 200;
-const MAXIMUM_UPLOAD_SIZE_BYTES = MAXIMUM_UPLOAD_SIZE_MEGABYTES * 1024 * 1024;
-const MAXIMUM_UPLOAD_FILE_COUNT = 20;
 
 function readFileSystemConcurrency(): number {
   const configuredConcurrency = Number.parseInt(process.env.FS_CONCURRENCY ?? '', 10);
@@ -89,29 +86,13 @@ const fileTreeServices = createFileTreeService({
   logger: fileTreeLogger,
 });
 
-const fileUploadMiddleware = multer({
-  storage: multer.diskStorage({
-    destination: os.tmpdir(),
-    filename: (_request, _file, callback) => {
-      callback(null, `cloudcli-file-upload-${randomUUID()}`);
-    },
-  }),
-  limits: {
-    fileSize: MAXIMUM_UPLOAD_SIZE_BYTES,
-    files: MAXIMUM_UPLOAD_FILE_COUNT,
-  },
-}).array('files', MAXIMUM_UPLOAD_FILE_COUNT);
-
 /**
  * File Tree router used by the server entrypoint to mount the authenticated
  * browsing, editing, file-management, and upload API under `/api/file-tree`.
  */
 export const fileTreeRoutes = createFileTreeRouter(
   fileTreeServices,
-  fileUploadMiddleware,
-  {
-    maximumFileSizeMegabytes: MAXIMUM_UPLOAD_SIZE_MEGABYTES,
-    maximumFileCount: MAXIMUM_UPLOAD_FILE_COUNT,
-  },
+  fileTreeUploadMiddleware,
+  fileTreeUploadLimits,
   fileTreeLogger,
 );

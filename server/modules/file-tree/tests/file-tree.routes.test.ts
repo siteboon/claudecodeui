@@ -6,6 +6,10 @@ import test from 'node:test';
 import express, { type RequestHandler } from 'express';
 
 import { createFileTreeRouter } from '@/modules/file-tree/file-tree.routes.js';
+import {
+  fileTreeUploadLimits,
+  fileTreeUploadMiddleware,
+} from '@/modules/file-tree/file-tree-upload.middleware.js';
 import type { FileTreeServices } from '@/shared/types.js';
 
 function createFakeServices(overrides: Partial<FileTreeServices> = {}): FileTreeServices {
@@ -33,13 +37,14 @@ const passUploadRequest: RequestHandler = (_request, _response, next) => next();
 async function withFileTreeServer(
   services: FileTreeServices,
   run: (baseUrl: string) => Promise<void>,
+  uploadFilesMiddleware: RequestHandler = passUploadRequest,
 ): Promise<void> {
   const app = express();
   app.use(express.json());
   app.use('/api/file-tree', createFileTreeRouter(
     services,
-    passUploadRequest,
-    { maximumFileSizeMegabytes: 200, maximumFileCount: 20 },
+    uploadFilesMiddleware,
+    fileTreeUploadLimits,
     { error: () => undefined },
   ));
 
@@ -154,4 +159,19 @@ test('create route rejects invalid entry types without calling the service', asy
   });
 
   assert.equal(createCalled, false);
+});
+
+test('production file uploads reject nested multipart fields', async () => {
+  await withFileTreeServer(createFakeServices(), async (baseUrl) => {
+    const form = new FormData();
+    form.set('nested[value]', 'blocked');
+    const response = await fetch(
+      `${baseUrl}/api/file-tree/projects/project-1/files/upload`,
+      { method: 'POST', body: form },
+    );
+    const body = await response.json() as { error: string };
+
+    assert.equal(response.status, 400);
+    assert.equal(body.error, 'Nested upload fields are not allowed.');
+  }, fileTreeUploadMiddleware);
 });
