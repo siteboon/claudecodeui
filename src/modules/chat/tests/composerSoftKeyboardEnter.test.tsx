@@ -48,6 +48,7 @@ vi.mock('@/shared/api', () => {
 // every query (the desktop layout). The pointer environment is the input
 // under test here, so each case installs its own answer for it.
 let coarsePointer = false;
+/** Installs a matchMedia whose only truthful query is `(pointer: coarse)` — and only while {@link coarsePointer} is set — leaving every other query desktop-shaped. */
 const installMatchMedia = () => {
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: query === '(pointer: coarse)' && coarsePointer,
@@ -61,6 +62,7 @@ const installMatchMedia = () => {
   }));
 };
 
+/** Builds a synthetic textarea Enter keydown, tracking whether it was cancelled. */
 const enterEvent = (overrides: { shiftKey?: boolean; ctrlKey?: boolean } = {}) => {
   let defaultPrevented = false;
   return {
@@ -79,6 +81,7 @@ const enterEvent = (overrides: { shiftKey?: boolean; ctrlKey?: boolean } = {}) =
   };
 };
 
+/** Mounts the composer hook against an open session and a recording sendMessage. */
 const renderComposer = (sendMessage: ReturnType<typeof vi.fn>, sendByCtrlEnter?: boolean) => renderHook(
   () => useChatComposerState({
     selectedProject: PROJECT,

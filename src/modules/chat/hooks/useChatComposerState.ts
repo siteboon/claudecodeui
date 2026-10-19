@@ -191,6 +191,7 @@ function isSoftKeyboardEnvironment(): boolean {
   return window.matchMedia('(pointer: coarse)').matches;
 }
 
+/** The composer's input state machine — text, drafts, sending, queueing and the keyboard handling around them; used by ChatInterface. */
 export function useChatComposerState({
   selectedProject,
   selectedSession,
