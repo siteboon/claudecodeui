@@ -177,6 +177,29 @@ function buildNotificationPayload(event) {
   };
 }
 
+// A push endpoint URL embeds the device's push token, so logs name only its host.
+function describePushService(endpoint) {
+  try {
+    return new URL(endpoint).host;
+  } catch {
+    return 'unknown push service';
+  }
+}
+
+const MAX_LOGGED_PUSH_RESPONSE_LENGTH = 200;
+
+// Push services explain a rejection in the response body, e.g. Apple's {"reason":"BadJwtToken"}.
+// Network failures have no status code and are described by their error message instead.
+function describePushFailure(reason, endpoint) {
+  const statusCode = reason?.statusCode;
+  const detail = statusCode
+    ? `HTTP ${statusCode} ${typeof reason.body === 'string' ? reason.body : ''}`
+    : normalizeErrorMessage(reason);
+  const redactedDetail = endpoint ? detail.split(endpoint).join('<endpoint>') : detail;
+
+  return redactedDetail.replace(/\s+/g, ' ').trim().slice(0, MAX_LOGGED_PUSH_RESPONSE_LENGTH);
+}
+
 function sendWebPushPayload(userId, payload) {
   const subscriptions = pushSubscriptionsDb.getSubscriptions(userId);
   if (!subscriptions.length) return Promise.resolve();
@@ -198,10 +221,16 @@ function sendWebPushPayload(userId, payload) {
   ).then((results) => {
     results.forEach((result, index) => {
       if (result.status === 'rejected') {
+        const { endpoint } = subscriptions[index];
         const statusCode = result.reason?.statusCode;
+        // 404/410: the push service no longer knows this subscription, so forget it quietly.
         if (statusCode === 410 || statusCode === 404) {
-          pushSubscriptionsDb.removeSubscription(subscriptions[index].endpoint);
+          pushSubscriptionsDb.removeSubscription(endpoint);
+          return;
         }
+        console.warn(
+          `[WebPush] Delivery to ${describePushService(endpoint)} failed for user ${userId}: ${describePushFailure(result.reason, endpoint)}`
+        );
       }
     });
   });
