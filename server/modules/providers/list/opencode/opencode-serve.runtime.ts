@@ -60,6 +60,9 @@ const SESSION_ERROR_GRACE_MS = 1_500;
 // Bounds both the abort request and the wait for the session to go idle
 // after it (OpenCode ends a running tool command before it reports idle).
 const SESSION_ABORT_TIMEOUT_MS = 3_000;
+// How long a failed prompt request or a closed event stream waits to see
+// whether the server died.
+const SERVER_EXIT_GRACE_MS = 1_000;
 // Upper bound on remembered "Always allow" rules per chat session.
 const MAX_REMEMBERED_RULES_PER_SESSION = 200;
 
@@ -514,8 +517,11 @@ class OpenCodeServeTurn {
     if (!this.aborted) {
       void server
         .requestLong('POST', `/session/${encodeURIComponent(sessionId)}/message`, promptBody)
-        .then((response) => this.onPromptAnswered(sessionId, response), (error: unknown) => {
+        .then((response) => this.onPromptAnswered(sessionId, response), async (error: unknown) => {
           this.promptSettled = true;
+          // A dying server resets the prompt's connection before its exit
+          // event arrives; that exit is the error worth reporting.
+          await waitFor(() => this.aborted || server.hasExited(), SERVER_EXIT_GRACE_MS);
           if (this.aborted || server.hasExited()) {
             return;
           }
@@ -527,7 +533,11 @@ class OpenCodeServeTurn {
           });
           this.endTurn('completed');
         });
-      void eventsClosed.then(() => this.endTurn('stream-closed'));
+      void eventsClosed.then(async () => {
+        // A dying server drops the stream before its exit event arrives.
+        await waitFor(() => this.aborted || server.hasExited(), SERVER_EXIT_GRACE_MS);
+        this.endTurn(server.hasExited() ? 'server-exit' : 'stream-closed');
+      });
     }
 
     const reason = await this.turnEnded;
