@@ -52,15 +52,15 @@ test('the default limit is 10 MB, inclusive, and the composer is told so', async
   };
 
   try {
-    const limits = await fetch(`${baseUrl}/limits`);
-    assert.deepEqual(await limits.json(), { maxFileSizeBytes: DEFAULT_LIMIT_BYTES });
-
     const exactlyTenMegabytes = await upload('ten-mb.log', DEFAULT_LIMIT_BYTES);
     assert.equal(exactlyTenMegabytes.status, 200, JSON.stringify(exactlyTenMegabytes.body));
 
     const oneByteOver = await upload('ten-mb-plus-one.log', DEFAULT_LIMIT_BYTES + 1);
     assert.equal(oneByteOver.status, 400);
     assert.equal(oneByteOver.body.error, 'File too large. Maximum size is 10 MB.');
+
+    const limits = await fetch(`${baseUrl}/limits`);
+    assert.deepEqual(await limits.json(), { maxFileSizeBytes: DEFAULT_LIMIT_BYTES });
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
