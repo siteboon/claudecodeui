@@ -455,12 +455,14 @@ export type PendingPermissionRequest = {
   receivedAt?: Date;
 };
 
-/** One question asked by the AskUserQuestion tool, with its answer options and whether more than one option may be selected. */
+/** One question asked by the AskUserQuestion tool (or OpenCode's question tool), with its answer options and whether more than one option may be selected. */
 export type Question = {
   question: string;
   header?: string;
   options: QuestionOption[];
   multiSelect?: boolean;
+  /** False when the agent accepts only the listed options (OpenCode's `custom: false`), which hides "Other". Absent means a typed answer is allowed. */
+  custom?: boolean;
 };
 
 /** Options for a programmatic session navigation, currently only whether the route change should replace the current history entry instead of pushing a new one. */

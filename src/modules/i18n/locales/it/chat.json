@@ -11,6 +11,11 @@
     "copyAsMarkdown": "Copia come markdown",
     "copyAsText": "Copia come testo"
   },
+  "agentPrompts": {
+    "alwaysAllow": "Consenti sempre",
+    "alwaysAllowsLabel": "Consente sempre:",
+    "needsYourInput": "{{agent}} ha bisogno della tua risposta"
+  },
   "messageTypes": {
     "user": "U",
     "error": "Errore",

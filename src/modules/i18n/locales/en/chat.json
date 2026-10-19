@@ -11,6 +11,11 @@
     "copyAsMarkdown": "Copy as markdown",
     "copyAsText": "Copy as text"
   },
+  "agentPrompts": {
+    "alwaysAllow": "Always allow",
+    "alwaysAllowsLabel": "Always allows:",
+    "needsYourInput": "{{agent}} needs your input"
+  },
   "messageTypes": {
     "user": "U",
     "error": "Error",

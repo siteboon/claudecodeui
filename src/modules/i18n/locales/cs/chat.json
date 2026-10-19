@@ -13,6 +13,11 @@
     "markdownShort": "MD",
     "textShort": "TXT"
   },
+  "agentPrompts": {
+    "alwaysAllow": "Vždy povolit",
+    "alwaysAllowsLabel": "Vždy povolí:",
+    "needsYourInput": "{{agent}} potřebuje vaši odpověď"
+  },
   "messageTypes": {
     "user": "U",
     "error": "Chyba",
