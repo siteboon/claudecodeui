@@ -18,6 +18,14 @@ const KANBAN_COLUMN_CONFIG = [
     headerColor: 'bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200',
   },
   {
+    // TaskMaster's own `review` status; without a column these tasks vanished from the board.
+    id: 'review',
+    titleKey: 'kanban.review',
+    status: 'review',
+    color: 'bg-violet-50 dark:bg-violet-900/50 border-violet-200 dark:border-violet-700',
+    headerColor: 'bg-violet-100 dark:bg-violet-800 text-violet-800 dark:text-violet-200',
+  },
+  {
     id: 'done',
     titleKey: 'kanban.done',
     status: 'done',
