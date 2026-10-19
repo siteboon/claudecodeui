@@ -399,7 +399,7 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
       // and cursor-agent), a page that follows the run asks every few seconds,
       // and the updater may be replacing that binary right then.
       const running = updatesInProgress.get(provider.id);
-      const { installed, version: installedVersion } = running?.before ?? provider.auth.checkInstalled();
+      let { installed, version: installedVersion } = running?.before ?? provider.auth.checkInstalled();
       const update = resolveUpdateCommand(provider.id);
       const updateUnavailableReason: CliUpdateUnavailableReason | null = dependencies.platformMode
         ? 'platform'
@@ -412,6 +412,14 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
         ? await getLatestVersion(npmPackage)
         : null;
 
+      // Read after the registry lookup, so a run that started meanwhile counts.
+      // A run that ended meanwhile replaced the binary: the version from before
+      // it would sit next to that run's result, so the CLI is probed once more.
+      const runAfterLookup = updatesInProgress.get(provider.id);
+      if (running && runAfterLookup !== running) {
+        ({ installed, version: installedVersion } = runAfterLookup?.before ?? provider.auth.checkInstalled());
+      }
+
       return {
         provider: provider.id,
         installed,
@@ -420,8 +428,7 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
         updateAvailable: Boolean(installedVersion && latestVersion && isNewerVersion(latestVersion, installedVersion)),
         updateCommand: update && updateUnavailableReason === null ? formatCommand(update.command, update.args) : null,
         updateUnavailableReason,
-        // Read after the registry lookup, so a run that started meanwhile counts.
-        updateInProgress: updatesInProgress.has(provider.id),
+        updateInProgress: Boolean(runAfterLookup),
         lastUpdate: lastUpdateResults.get(provider.id) ?? null,
       };
     },

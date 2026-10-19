@@ -707,6 +707,41 @@ test('getCliStatus does not run --version while an update runs, and reports the 
   });
 });
 
+test('getCliStatus probes again when the update it saw running ended during the registry lookup', async () => {
+  await withIsolatedCliEnv(async (binDir) => {
+    const opencode = await createFakeCli(binDir, 'opencode');
+    await opencode.set('version', '1.18.20\n');
+    await opencode.set('update-sleep-ms', '300');
+    await opencode.set('update-new-version', '1.19.0\n');
+    // The registry answers only once the test lets it, as an expired cache
+    // entry behind a slow mirror would.
+    let answerRegistry: () => void = () => {};
+    const registryAnswered = new Promise<void>((resolve) => {
+      answerRegistry = resolve;
+    });
+    const registry = createFakeRegistry(async () => {
+      await registryAnswered;
+      return jsonResponse({ version: '1.19.0' });
+    });
+    const service = createService({ fetch: registry.fetch });
+
+    const running = service.updateCli('opencode');
+    await waitForFakeCliFile(opencode, 'update-count');
+    // Starts while the run is going on, then waits on the registry...
+    const status = service.getCliStatus('opencode');
+    // ...while the run ends and replaces the binary.
+    const result = await withDeadline(running, 5000, 'the update never finished');
+    answerRegistry();
+    const reported = await withDeadline(status, 5000, 'the status never answered');
+
+    assert.equal(result.installedVersion, '1.19.0');
+    assert.equal(reported.updateInProgress, false);
+    assert.deepEqual(reported.lastUpdate, result);
+    assert.equal(reported.installedVersion, '1.19.0');
+    assert.equal(reported.updateAvailable, false);
+  });
+});
+
 test('a request still in its busy check is not reported as a running update', async () => {
   await withIsolatedCliEnv(async (binDir) => {
     const cursor = await createFakeCli(binDir, 'cursor-agent');
