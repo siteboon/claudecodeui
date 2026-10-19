@@ -64,15 +64,21 @@ async function waitForUpdateToEnd(
  * followed to its end and its result returned.
  */
 async function requestUpdate(provider: AgentProvider, isActive: () => boolean): Promise<ProviderCliUpdateOutcome> {
+  let response: Response | null = null;
   try {
-    const response = await api.providers.updateCli(provider);
+    response = await api.providers.updateCli(provider);
     const payload = await readApiJson<ProviderCliUpdateResponse>(response);
     return { result: payload.data, error: null, status: null };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    let message = error instanceof Error ? error.message : String(error);
     // The server's own refusals always carry a code.
     if (error instanceof ApiRequestError && error.code) {
       return { result: null, error: { kind: 'refused', code: error.code, message }, status: null };
+    }
+    // A proxy's HTML error page fails to parse as JSON; its HTTP status says
+    // more than the parser's message does.
+    if (response && !response.ok && !(error instanceof ApiRequestError)) {
+      message = `HTTP ${response.status} ${response.statusText}`.trim();
     }
 
     const unconfirmed: ProviderCliUpdateRequestError = { kind: 'unconfirmed', code: null, message };

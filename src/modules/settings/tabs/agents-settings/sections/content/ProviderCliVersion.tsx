@@ -78,8 +78,11 @@ export default function ProviderCliVersion({ agent, installedVersion, textClass,
   const { t } = useTranslation('settings');
   const { status, statusFailed, updating, updateResult, updateError, runUpdate } = useProviderCliVersion(agent);
 
-  // Nothing to say about a CLI that is not there; the status line above already reports it.
-  if (status && !status.installed) {
+  // Nothing to say about a CLI that is not there; the status line above
+  // already reports it. Unless an update this row showed left the CLI unable
+  // to start: then the run's result and output say what happened.
+  const missing = status !== null && !status.installed;
+  if (missing && !updateResult && !updateError) {
     return null;
   }
 
@@ -87,10 +90,12 @@ export default function ProviderCliVersion({ agent, installedVersion, textClass,
   let versionText: string;
   if (version) {
     versionText = t('agents.cli.installed', { version });
-  } else if (status) {
+  } else if (status && !missing) {
     versionText = t('agents.cli.installedUnknown');
+  } else if (status || statusFailed) {
+    versionText = t('agents.cli.versionUnavailable');
   } else {
-    versionText = statusFailed ? t('agents.cli.versionUnavailable') : t('agents.cli.checking');
+    versionText = t('agents.cli.checking');
   }
 
   let detail: string | null = null;
@@ -135,7 +140,8 @@ export default function ProviderCliVersion({ agent, installedVersion, textClass,
             ) : null}
           </div>
         </div>
-        {updateCommand && (
+        {/* The server refuses to update a CLI it cannot start. */}
+        {updateCommand && !missing && (
           <Button
             type="button"
             size="sm"

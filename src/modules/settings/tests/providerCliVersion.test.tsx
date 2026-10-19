@@ -79,6 +79,7 @@ const renderRow = (installedVersion: string | null = '2.1.200') => render(
 // What nginx answers after its 60 s read timeout while the updater keeps running.
 const gatewayTimeout = () => new Response('<html><head><title>504 Gateway Time-out</title></head></html>', {
   status: 504,
+  statusText: 'Gateway Time-out',
   headers: { 'Content-Type': 'text/html' },
 });
 
@@ -298,16 +299,94 @@ describe('ProviderCliVersion', () => {
   });
 
   it('says the update may have run when its answer is lost and no run is going on', async () => {
-    responses.status = [claudeStatus(), claudeStatus({ installedVersion: '2.1.300', updateAvailable: false })];
+    responses.status = [
+      claudeStatus(),
+      claudeStatus({
+        installedVersion: '2.1.300',
+        updateAvailable: false,
+        // An earlier run's result: not this request's, since no run was seen going on.
+        lastUpdate: updateResult({ exitCode: 1, installedVersion: '2.1.200', failure: 'permission_denied' }),
+      }),
+    ];
     responses.update = gatewayTimeout;
     renderRow();
 
     fireEvent.click(await screen.findByRole('button', { name: /Update to v2\.1\.300/ }));
     const alert = await screen.findByRole('alert');
-    expect(alert.textContent).toMatch(/^No answer came back from the server \(.+\)\. The update may have run anyway;/);
+    // The proxy's HTTP status, not the JSON parser's complaint about its HTML page.
+    expect(alert.textContent).toMatch(
+      /^No answer came back from the server \(HTTP 504 Gateway Time-out\)\. The update may have run anyway;/,
+    );
     expect(alert.textContent).not.toContain('did not run');
+    expect(screen.queryByText(/is not allowed to write where this CLI is installed/)).toBeNull();
     // The row shows what the server reports now.
     expect(screen.getByText('Installed: v2.1.300')).toBeTruthy();
+  });
+
+  it('treats an error answer without a server error code as lost, not as refused', async () => {
+    responses.status = [claudeStatus()];
+    // A proxy's own JSON error page: the server's refusals always carry a code.
+    responses.update = () => json({ message: 'upstream connect error' }, 502);
+    renderRow();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Update to v2\.1\.300/ }));
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toMatch(/^No answer came back from the server \(.+\)\. The update may have run anyway;/);
+    expect(calls).toEqual(['status:claude', 'update:claude', 'status:claude']);
+  });
+
+  it('gives the button back when a run it follows can no longer be checked', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    responses.status = [
+      claudeStatus({ updateInProgress: true }),
+      json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'boom' } }, 500),
+    ];
+    renderRow();
+
+    expect(await screen.findByRole('button', { name: /Updating/ })).toBeTruthy();
+    await runPoll();
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toMatch(/^No answer came back from the server \(boom\)\./);
+    const button = screen.getByRole('button', { name: /Update to v2\.1\.300/ });
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('stops asking about a running update once the row is gone', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    responses.status = [claudeStatus({ updateInProgress: true })];
+    const { unmount } = renderRow();
+
+    expect(await screen.findByRole('button', { name: /Updating/ })).toBeTruthy();
+    unmount();
+    await runPoll();
+    await runPoll();
+    expect(calls).toEqual(['status:claude']);
+  });
+
+  it('keeps the update result on screen when the run left the CLI unable to start', async () => {
+    responses.status = [
+      claudeStatus(),
+      claudeStatus({ installed: false, installedVersion: null, latestVersion: null, updateAvailable: false }),
+    ];
+    responses.update = () => json({
+      success: true,
+      data: updateResult({
+        exitCode: 1,
+        installedVersion: null,
+        failure: 'failed',
+        output: "Error: ENOENT: no such file or directory, rename '/usr/lib/node_modules/.claude-code-x1'",
+      }),
+    });
+    renderRow();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Update to v2\.1\.300/ }));
+    // The reload says the CLI is gone; the row stays to show what the run did.
+    expect(await screen.findByText('Could not read the version')).toBeTruthy();
+    expect(screen.getByText('The update failed (exit code 1). Its output is below.')).toBeTruthy();
+    expect(screen.getByText(/ENOENT: no such file or directory/)).toBeTruthy();
+    // The server refuses to update a CLI it cannot start.
+    expect(screen.queryByRole('button')).toBeNull();
   });
 });
 
