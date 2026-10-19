@@ -46,9 +46,6 @@ test.each([false, true])('Projects nests forks and preserves row actions in comp
   assert.equal(container.querySelector('[data-session-id="root"]')?.getAttribute('data-fork-branch'), 'true');
   assert.equal(container.querySelector('[data-session-id="child"]')?.getAttribute('data-fork-branch'), 'true');
   assert.equal(container.querySelector('[data-session-id="leaf"]')?.getAttribute('data-fork-branch'), null);
-  assert.equal(container.querySelector('[data-session-id="child"]')?.getAttribute('style'), 'margin-left: 12px;');
-  assert.equal(container.querySelector('[data-session-id="leaf"]')?.getAttribute('style'), 'margin-left: 24px;');
-  assert.equal(container.querySelector('[data-session-id="leaf"] [data-lucide="git-branch"]'), null);
 
   fireEvent.click(screen.getByText('Experiment'));
   assert.deepEqual(select.mock.calls, [[leaf, 'project']]);
@@ -60,6 +57,37 @@ test.each([false, true])('Projects nests forks and preserves row actions in comp
   assert.equal(collapse.getAttribute('aria-expanded'), 'false');
   fireEvent.click(screen.getByRole('button', { name: 'sessions.expandForks Original' }));
   assert.deepEqual(rowIds(container), ['root', 'child', 'leaf', 'unrelated']);
+});
+
+test.each([false, true])('fork connectors identify siblings and terminate the family in compact=%s', (isCompact) => {
+  compact.value = isCompact;
+  const second = { ...child, id: 'second', summary: 'Second fork', forkedFromSessionId: 'root' };
+  const last = { ...second, id: 'last', summary: 'Last fork' };
+  const initial = props({ sessions: [leaf, second, last, child, root, unrelated] });
+  const { container, rerender } = render(<SidebarProjectSessions {...initial} />);
+  const row = (id: string) => container.querySelector(`[data-session-id="${id}"]`)!;
+  const connector = (id: string) => row(id).querySelector('[data-fork-connector]')?.getAttribute('data-fork-connector');
+
+  assert.deepEqual(rowIds(container), ['root', 'child', 'leaf', 'second', 'last', 'unrelated']);
+  assert.equal(connector('root'), undefined);
+  assert.equal(connector('child'), 'branch');
+  assert.equal(connector('second'), 'branch');
+  assert.equal(connector('last'), 'last');
+  assert.equal(connector('leaf'), 'last');
+  assert.ok(row('leaf').querySelector('[data-fork-continuation="1"]'), 'the root rail continues through nested descendants to its remaining children');
+  assert.equal(row('unrelated').querySelector('[data-fork-continuation]'), null);
+
+  fireEvent.click(screen.getByRole('button', { name: 'sessions.collapseForks Alternative' }));
+  assert.equal(row('child').querySelector('[data-fork-stem]'), null);
+  assert.equal(connector('child'), 'branch');
+  assert.equal(connector('last'), 'last');
+
+  rerender(<SidebarProjectSessions {...initial} sessions={initial.sessions.filter((session) => session.id !== 'last')} />);
+  assert.equal(connector('second'), 'last', 'removing the last fork terminates the line at its previous sibling');
+  fireEvent.click(screen.getByRole('button', { name: 'sessions.collapseForks Original' }));
+  assert.deepEqual(rowIds(container), ['root', 'unrelated']);
+  assert.equal(container.querySelector('[data-fork-connector]'), null);
+  assert.equal(container.querySelector('[data-fork-stem]'), null);
 });
 
 test('selecting or renaming a hidden descendant opens its complete ancestry', () => {

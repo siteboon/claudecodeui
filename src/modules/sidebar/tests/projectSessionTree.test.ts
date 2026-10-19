@@ -51,6 +51,16 @@ test('unrelated sessions preserve flat order and object identities', () => {
   assert.ok(rows.every((row) => row.depth === 0 && !row.hasChildren));
 });
 
+test('the last sibling follows displayed family order rather than the raw page order', () => {
+  const rows = buildProjectSessionTree([
+    session('grandchild', 'older-child'), session('unrelated'), session('newer-child', 'root'),
+    session('older-child', 'root'), session('root'),
+  ], 'project');
+  assert.deepEqual(rows.map(({ session: row, isLastSibling }) => [row.id, isLastSibling]), [
+    ['root', false], ['older-child', false], ['grandchild', true], ['newer-child', true], ['unrelated', true],
+  ]);
+});
+
 test('deep fork chains are projected without recursive stack overflow', () => {
   const input = Array.from({ length: 5000 }, (_, index) => session(`s${index}`, index ? `s${index - 1}` : null)).reverse();
   const rows = buildProjectSessionTree(input, 'project');

@@ -93,13 +93,13 @@ export function buildProjectSessionTree(sessions: SessionWithProvider[], project
   }
   roots.sort((a, b) => a.rank - b.rank);
 
-  const rows: { session: SessionWithProvider; parentId: string | null; depth: number; hasChildren: boolean }[] = [];
-  const stack = [...roots].reverse().map((node) => ({ node, depth: 0 }));
+  const rows: { session: SessionWithProvider; parentId: string | null; depth: number; hasChildren: boolean; isLastSibling: boolean }[] = [];
+  const stack = roots.map((node, index) => ({ node, depth: 0, isLastSibling: index === roots.length - 1 })).reverse();
   while (stack.length) {
-    const { node, depth } = stack.pop()!;
-    rows.push({ session: node.session, parentId: node.parentId, depth, hasChildren: node.children.length > 0 });
+    const { node, depth, isLastSibling } = stack.pop()!;
+    rows.push({ session: node.session, parentId: node.parentId, depth, hasChildren: node.children.length > 0, isLastSibling });
     for (let index = node.children.length - 1; index >= 0; index -= 1) {
-      stack.push({ node: node.children[index], depth: depth + 1 });
+      stack.push({ node: node.children[index], depth: depth + 1, isLastSibling: index === node.children.length - 1 });
     }
   }
   return rows;
