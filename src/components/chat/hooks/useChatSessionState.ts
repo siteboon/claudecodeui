@@ -71,7 +71,9 @@ function chatMessageToNormalized(
     ? msg.timestamp.toISOString()
     : typeof msg.timestamp === 'number'
       ? new Date(msg.timestamp).toISOString()
-      : String(msg.timestamp);
+      : typeof msg.timestamp === 'string' && !Number.isNaN(Date.parse(msg.timestamp))
+        ? msg.timestamp
+        : new Date().toISOString();
   const base = { id, sessionId, timestamp: ts, provider };
 
   if (msg.isToolUse) {

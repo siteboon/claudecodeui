@@ -175,13 +175,32 @@ function hasServerEchoForLocalUser(
   });
 }
 
+/**
+ * Fuzzy identity for a user turn across the live and persisted paths. User rows
+ * get no cross-path `dedupeKey` (the live event carries no transcript uuid, so it
+ * falls back to a random id while the persisted copy uses the uuid), so the only
+ * stable signal is identical trimmed text at a near-identical time.
+ */
+function isSameUserTurn(a: NormalizedMessage, b: NormalizedMessage): boolean {
+  const text = userTextFingerprint(a);
+  if (!text || text !== userTextFingerprint(b)) return false;
+  const timeA = readMessageTime(a);
+  const timeB = readMessageTime(b);
+  if (timeA === null || timeB === null) return true;
+  return Math.abs(timeA - timeB) <= LOCAL_USER_DEDUPE_WINDOW_MS;
+}
+
 function compareMessagesChronologically(a: NormalizedMessage, b: NormalizedMessage): number {
-  const timeA = readMessageTime(a) ?? 0;
-  const timeB = readMessageTime(b) ?? 0;
-  if (timeA !== timeB) {
-    return timeA - timeB;
+  // Rows with an unreadable timestamp sort LAST (treated as newest), never to the
+  // epoch/top: `?? 0` used to fling them above every real row, where the render
+  // window's front-truncation then hid them — the chat appeared to jump to an
+  // earlier message with the newest ones missing.
+  const timeA = readMessageTime(a) ?? Number.POSITIVE_INFINITY;
+  const timeB = readMessageTime(b) ?? Number.POSITIVE_INFINITY;
+  if (timeA === timeB) {
+    return 0;
   }
-  return 0;
+  return timeA - timeB;
 }
 
 /**
@@ -387,7 +406,9 @@ export function pruneRealtimeSupersededByServer(
  *     assistant/tool message arrives with a different `id` on the live
  *     websocket path than on the persisted REST path, so id alone cannot
  *     catch this, but the stable provider-derived dedupeKey can;
- * (iii) `local_*` optimistic user echoes matched by `hasServerEchoForLocalUser`;
+ * (iii) realtime user turns whose text+time matches a server copy — the optimistic
+ *     `local_*` row AND the WS-replayed echo, since user rows have no cross-path
+ *     dedupeKey — plus realtime-internal echoes of the same user turn;
  * (iv) realtime-internal duplicates (replay/reconnect stacking before the
  *     message is persisted), keyed by `(dedupeKey ?? id)`.
  * Original realtime order is preserved.
@@ -403,9 +424,18 @@ function dropSupersededRealtime(
   for (const m of realtime) {
     if (serverIds.has(m.id)) continue;
     if (m.dedupeKey && serverDedupeKeys.has(m.dedupeKey)) continue;
-    if (m.id.startsWith('local_') && hasServerEchoForLocalUser(m, server)) continue;
+    // User rows get no cross-path dedupeKey, so collapse a realtime user turn
+    // against its persisted copy by text+time. Applies to the optimistic
+    // `local_*` row AND the WS-replayed echo (which carries a random live id,
+    // so id- and dedupeKey-based checks above miss it — the duplicate that
+    // survived a refresh mid-run).
+    if (hasServerEchoForLocalUser(m, server)) continue;
     const internalKey = m.dedupeKey ?? m.id;
     if (seen.has(internalKey)) continue;
+    // Collapse realtime-internal echoes of the same user turn (optimistic row +
+    // replayed echo, before either is persisted); their ids differ, so the
+    // id-keyed `seen` set above cannot catch them.
+    if (userTextFingerprint(m) && out.some((kept) => isSameUserTurn(kept, m))) continue;
     seen.add(internalKey);
     out.push(m);
   }
@@ -695,15 +725,21 @@ export function useSessionStore() {
   const updateStreaming = useCallback((sessionId: string, accumulatedText: string, msgProvider: LLMProvider) => {
     const slot = getSlot(sessionId);
     const streamId = `__streaming_${sessionId}`;
+    const idx = slot.realtimeMessages.findIndex(m => m.id === streamId);
+    const existing = idx >= 0 ? slot.realtimeMessages[idx] : null;
     const msg: NormalizedMessage = {
       id: streamId,
       sessionId,
-      timestamp: new Date().toISOString(),
+      // Freeze the timestamp at the first delta (≈ when this turn began) instead
+      // of bumping to `now` each delta. A long-running stream would otherwise
+      // drift past the send-time of any prompt sent/queued while it runs, and the
+      // chronological merge would misorder the in-progress response *after* that
+      // later prompt (correct once idle, since idle skips the sort).
+      timestamp: existing?.timestamp ?? new Date().toISOString(),
       provider: msgProvider,
       kind: 'stream_delta',
       content: accumulatedText,
     };
-    const idx = slot.realtimeMessages.findIndex(m => m.id === streamId);
     if (idx >= 0) {
       slot.realtimeMessages = [...slot.realtimeMessages];
       slot.realtimeMessages[idx] = msg;
