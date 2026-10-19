@@ -177,6 +177,20 @@ const getNotificationSessionSummary = (
  */
 const SAFARI_IME_RACE_WINDOW_MS = 30;
 
+/**
+ * A phone or tablet types through an on-screen keyboard: its return key is
+ * labelled "new line", and Shift+Enter — the desktop combination for a newline
+ * in Enter-to-send mode — cannot be typed on it at all. `(pointer: coarse)`
+ * marks exactly those primary inputs; a touch laptop keeps its fine primary
+ * pointer and with it the desktop Enter behaviour.
+ */
+function isSoftKeyboardEnvironment(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return false;
+  }
+  return window.matchMedia('(pointer: coarse)').matches;
+}
+
 export function useChatComposerState({
   selectedProject,
   selectedSession,
@@ -1266,7 +1280,16 @@ export function useChatComposerState({
         if ((event.ctrlKey || event.metaKey) && !event.shiftKey) {
           event.preventDefault();
           handleSubmit(event);
-        } else if (!event.shiftKey && !event.ctrlKey && !event.metaKey && !sendByCtrlEnter) {
+        } else if (
+          !event.shiftKey
+          && !event.ctrlKey
+          && !event.metaKey
+          && !sendByCtrlEnter
+          // Submitting on plain Enter strands the newline on a soft keyboard:
+          // the return key is the only Enter, and no Shift exists to combine
+          // with it. The send button still submits.
+          && !isSoftKeyboardEnvironment()
+        ) {
           event.preventDefault();
           handleSubmit(event);
         }
