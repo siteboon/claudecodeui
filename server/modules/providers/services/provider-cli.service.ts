@@ -4,7 +4,7 @@ import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
 import type { IProvider } from '@/shared/interfaces.js';
-import type { LLMProvider } from '@/shared/types.js';
+import type { CliVersionProbe, LLMProvider } from '@/shared/types.js';
 import { AppError, IS_PLATFORM, stripAnsiSequences } from '@/shared/utils.js';
 
 /** How long the registry's answer is reused before it is asked again. */
@@ -102,6 +102,13 @@ type ProviderCliStatus = {
   updateInProgress: boolean;
   /** The most recent finished update run since the server started, or null. */
   lastUpdate: ProviderCliUpdateResult | null;
+};
+
+/** An update run that has passed its checks and started the updater. */
+type UpdateInProgress = {
+  /** What `--version` reported just before the updater started; the status reports it while the run lasts. */
+  before: CliVersionProbe;
+  result: Promise<ProviderCliUpdateResult>;
 };
 
 type UpdaterRun = {
@@ -312,7 +319,7 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
   const dependencies = { ...defaultDependencies, ...dependencyOverrides };
   const latestVersionCache = new Map<string, { version: string | null; expiresAt: number }>();
   const latestVersionLookups = new Map<string, Promise<string | null>>();
-  const updatesInProgress = new Map<LLMProvider, Promise<ProviderCliUpdateResult>>();
+  const updatesInProgress = new Map<LLMProvider, UpdateInProgress>();
   const lastUpdateResults = new Map<LLMProvider, ProviderCliUpdateResult>();
 
   const fetchLatestVersion = async (npmPackage: string): Promise<string | null> => {
@@ -360,25 +367,8 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
   const runUpdate = async (
     provider: IProvider,
     update: { command: string; args: string[] },
+    before: CliVersionProbe,
   ): Promise<ProviderCliUpdateResult> => {
-    // Replacing the binary under a live turn can break it mid-run, and some
-    // updaters (Claude's native installer) refuse while the CLI is running.
-    const busyProviders = await dependencies.listBusyProviders();
-    if (busyProviders.includes(provider.id)) {
-      throw new AppError(
-        `${getProviderLabel(provider.id)} is busy in at least one session. Wait for it to finish or stop it, then update.`,
-        { code: 'PROVIDER_CLI_BUSY', statusCode: 409 },
-      );
-    }
-
-    const before = provider.auth.checkInstalled();
-    if (!before.installed) {
-      throw new AppError(`${getProviderLabel(provider.id)} is not installed on the server, so there is nothing to update.`, {
-        code: 'PROVIDER_CLI_NOT_INSTALLED',
-        statusCode: 409,
-      });
-    }
-
     const run = await runUpdater(update.command, update.args, {
       timeoutMs: dependencies.updateTimeoutMs,
       killGraceMs: dependencies.updateKillGraceMs,
@@ -403,7 +393,13 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
      */
     async getCliStatus(providerName: LLMProvider): Promise<ProviderCliStatus> {
       const provider = dependencies.resolveProvider(providerName);
-      const { installed, version: installedVersion } = provider.auth.checkInstalled();
+      // While an updater runs, the version from just before it is reported
+      // instead of probed. `--version` runs synchronously and holds up every
+      // other request for the CLI's start-up time (about a second for OpenCode
+      // and cursor-agent), a page that follows the run asks every few seconds,
+      // and the updater may be replacing that binary right then.
+      const running = updatesInProgress.get(provider.id);
+      const { installed, version: installedVersion } = running?.before ?? provider.auth.checkInstalled();
       const update = resolveUpdateCommand(provider.id);
       const updateUnavailableReason: CliUpdateUnavailableReason | null = dependencies.platformMode
         ? 'platform'
@@ -424,6 +420,7 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
         updateAvailable: Boolean(installedVersion && latestVersion && isNewerVersion(latestVersion, installedVersion)),
         updateCommand: update && updateUnavailableReason === null ? formatCommand(update.command, update.args) : null,
         updateUnavailableReason,
+        // Read after the registry lookup, so a run that started meanwhile counts.
         updateInProgress: updatesInProgress.has(provider.id),
         lastUpdate: lastUpdateResults.get(provider.id) ?? null,
       };
@@ -451,19 +448,46 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
         });
       }
 
-      let inProgress = updatesInProgress.get(provider.id);
-      if (!inProgress) {
-        // The result is stored before the run leaves updatesInProgress, so a
-        // status request never sees the run over without its result.
-        inProgress = runUpdate(provider, update)
-          .then((result) => {
-            lastUpdateResults.set(provider.id, result);
-            return result;
-          })
-          .finally(() => updatesInProgress.delete(provider.id));
-        updatesInProgress.set(provider.id, inProgress);
+      const running = updatesInProgress.get(provider.id);
+      if (running) {
+        return running.result;
       }
-      return inProgress;
+
+      // Replacing the binary under a live turn can break it mid-run, and some
+      // updaters (Claude's native installer) refuse while the CLI is running.
+      const busyProviders = await dependencies.listBusyProviders();
+      // A request that came in during that lookup may have started a run.
+      const startedMeanwhile = updatesInProgress.get(provider.id);
+      if (startedMeanwhile) {
+        return startedMeanwhile.result;
+      }
+      if (busyProviders.includes(provider.id)) {
+        throw new AppError(
+          `${getProviderLabel(provider.id)} is busy in at least one session. Wait for it to finish or stop it, then update.`,
+          { code: 'PROVIDER_CLI_BUSY', statusCode: 409 },
+        );
+      }
+
+      const before = provider.auth.checkInstalled();
+      if (!before.installed) {
+        throw new AppError(`${getProviderLabel(provider.id)} is not installed on the server, so there is nothing to update.`, {
+          code: 'PROVIDER_CLI_NOT_INSTALLED',
+          statusCode: 409,
+        });
+      }
+
+      // Registered only now that the updater starts, so a refused request is
+      // never reported as running; nothing above awaits after the re-check.
+      // The result is stored before the run leaves updatesInProgress, so a
+      // status request never sees the run over without its result.
+      const result = runUpdate(provider, update, before)
+        .then((finished) => {
+          lastUpdateResults.set(provider.id, finished);
+          return finished;
+        })
+        .finally(() => updatesInProgress.delete(provider.id));
+      updatesInProgress.set(provider.id, { before, result });
+      return result;
     },
   };
 }

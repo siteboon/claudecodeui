@@ -25,6 +25,7 @@ const pathExtKey = findEnvKey('PATHEXT');
 // A stand-in CLI driven by files in its own state folder, so a test can set what
 // `--version` prints and what the updater does without touching any real install.
 //   version            text `--version` prints (exit code from version-exit)
+//   version-count      incremented on every `--version` run
 //   update-new-version written into `version` by a successful update
 //   update-stdout/-stderr, update-exit, update-sleep-ms shape the update run
 //   update-count       incremented on every update run
@@ -41,6 +42,7 @@ const dir = __dirname;
 const read = (name, fallback) => (fs.existsSync(path.join(dir, name)) ? fs.readFileSync(path.join(dir, name), 'utf8') : fallback);
 const command = process.argv[2];
 if (command === '--version') {
+  fs.writeFileSync(path.join(dir, 'version-count'), String(Number(read('version-count', '0')) + 1));
   process.stdout.write(read('version', ''));
   if (read('lock-after-version', '')) {
     fs.chmodSync(path.join(dir, '..', path.basename(__filename, '.cjs')), 0o644);
@@ -182,6 +184,15 @@ async function withDeadline<T>(promise: Promise<T>, ms: number, message: string)
     return await Promise.race([promise, deadline]);
   } finally {
     clearTimeout(timer);
+  }
+}
+
+/** Resolves once the fake CLI has written `file`, e.g. `update-count` when its updater started. */
+async function waitForFakeCliFile(cli: FakeCli, file: string): Promise<void> {
+  const deadline = Date.now() + 5000;
+  while ((await cli.read(file)) === null) {
+    assert.ok(Date.now() < deadline, `the fake CLI never wrote ${file}`);
+    await delay(20);
   }
 }
 
@@ -647,6 +658,7 @@ test('getCliStatus reports a running update and, once it is over, that run\'s re
 
     // A page that mounts while the update runs (or lost the update request) sees it running...
     const running = service.updateCli('opencode');
+    await waitForFakeCliFile(opencode, 'update-count');
     const during = await service.getCliStatus('opencode');
     assert.equal(during.updateInProgress, true);
     assert.equal(during.lastUpdate, null);
@@ -658,6 +670,65 @@ test('getCliStatus reports a running update and, once it is over, that run\'s re
     assert.deepEqual(after.lastUpdate, result);
     assert.equal(after.installedVersion, '1.19.0');
     assert.equal(after.updateAvailable, false);
+  });
+});
+
+test('getCliStatus does not run --version while an update runs, and reports the version from before it', async () => {
+  await withIsolatedCliEnv(async (binDir) => {
+    const cursor = await createFakeCli(binDir, 'cursor-agent');
+    await cursor.set('version', '2026.07.20-8cc9c0b\n');
+    await cursor.set('update-sleep-ms', '600');
+    await cursor.set('update-new-version', '2026.10.14-941492e\n');
+    const service = createService();
+
+    const running = service.updateCli('cursor');
+    await waitForFakeCliFile(cursor, 'update-count');
+    // The probe that recorded the version before the run.
+    assert.equal(await cursor.read('version-count'), '1');
+
+    // A page that follows the run asks every few seconds. A `--version` per
+    // answer would block the server each time and run the binary the updater
+    // is replacing.
+    for (let poll = 0; poll < 3; poll += 1) {
+      const during = await service.getCliStatus('cursor');
+      assert.equal(during.updateInProgress, true);
+      assert.equal(during.installed, true);
+      assert.equal(during.installedVersion, '2026.07.20-8cc9c0b');
+    }
+    assert.equal(await cursor.read('version-count'), '1', 'no --version ran while the update was running');
+
+    const result = await running;
+    assert.equal(result.installedVersion, '2026.10.14-941492e');
+    // Once the run is over, the status probes again and shows the new version.
+    const after = await service.getCliStatus('cursor');
+    assert.equal(after.updateInProgress, false);
+    assert.equal(after.installedVersion, '2026.10.14-941492e');
+    assert.equal(await cursor.read('version-count'), '3');
+  });
+});
+
+test('a request still in its busy check is not reported as a running update', async () => {
+  await withIsolatedCliEnv(async (binDir) => {
+    const cursor = await createFakeCli(binDir, 'cursor-agent');
+    await cursor.set('version', '2026.07.20-8cc9c0b\n');
+    let answerBusyCheck: (busy: LLMProvider[]) => void = () => {};
+    const service = createService({
+      listBusyProviders: () => new Promise<LLMProvider[]>((resolve) => {
+        answerBusyCheck = resolve;
+      }),
+    });
+
+    const refused = service.updateCli('cursor');
+    // A row that mounts now must not follow a run that is about to be refused.
+    const whileChecking = await service.getCliStatus('cursor');
+    assert.equal(whileChecking.updateInProgress, false);
+
+    answerBusyCheck(['cursor']);
+    await rejectsWithAppError(refused, 'PROVIDER_CLI_BUSY', 409);
+    const afterRefusal = await service.getCliStatus('cursor');
+    assert.equal(afterRefusal.updateInProgress, false);
+    assert.equal(afterRefusal.lastUpdate, null);
+    assert.equal(await cursor.read('update-count'), null);
   });
 });
 
