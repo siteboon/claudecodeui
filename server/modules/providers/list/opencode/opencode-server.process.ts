@@ -24,6 +24,7 @@ import net from 'node:net';
 import crossSpawn from 'cross-spawn';
 
 import type { AnyRecord } from '@/shared/types.js';
+import { stripAnsiSequences } from '@/shared/utils.js';
 
 const SERVER_USERNAME = 'opencode';
 // Measured 2.3-8 s on a loaded Linux box (v1.18.25); generous for slow disks
@@ -38,7 +39,12 @@ const EVENTS_CONNECT_TIMEOUT_MS = 15_000;
 const STOP_GRACE_MS = 3_000;
 const STDERR_TAIL_LENGTH = 4_000;
 const LISTENING_LINE = /listening on (https?:\/\/\S+)/;
-const ADDRESS_IN_USE = /EADDRINUSE|address already in use|port .* in use/i;
+// Start failures worth one more try: the port probed free was taken before
+// the server bound it, or another OpenCode process (a previous turn's server
+// shutting down, the TUI) held the shared opencode.db lock while this one
+// booted (seen live: "database is locked").
+const TRANSIENT_START_FAILURE = /EADDRINUSE|address already in use|port .* in use|database is locked/i;
+const START_RETRY_DELAY_MS = 1_000;
 
 const RUNS_DETACHED = process.platform !== 'win32';
 
@@ -184,8 +190,6 @@ export class OpenCodeServerProcess {
     env: NodeJS.ProcessEnv;
     signal?: AbortSignal;
   }): Promise<OpenCodeServerProcess> {
-    // One retry covers the tiny window between probing a free port and the
-    // server binding it.
     for (let attempt = 0; ; attempt += 1) {
       const port = await allocateLoopbackPort();
       const password = randomBytes(24).toString('hex');
@@ -209,8 +213,9 @@ export class OpenCodeServerProcess {
         return new OpenCodeServerProcess(child, baseUrl, password, options.cwd, stderr);
       } catch (error) {
         signalProcessTree(child, 'SIGKILL', false);
-        const retryable = error instanceof OpenCodeServerUnavailableError && ADDRESS_IN_USE.test(error.message);
+        const retryable = error instanceof OpenCodeServerUnavailableError && TRANSIENT_START_FAILURE.test(error.message);
         if (attempt === 0 && retryable && !options.signal?.aborted) {
+          await new Promise((resolve) => setTimeout(resolve, START_RETRY_DELAY_MS));
           continue;
         }
         throw error;
@@ -492,7 +497,7 @@ function waitForListening(child: ChildProcess, signal?: AbortSignal): Promise<{ 
       stderr = (stderr + chunk.toString()).slice(-STDERR_TAIL_LENGTH);
     };
     const onExit = (code: number | null, exitSignal: NodeJS.Signals | null) => {
-      const detail = stderr.trim() || stdout.trim();
+      const detail = stripAnsiSequences(stderr).trim() || stripAnsiSequences(stdout).trim();
       finish(new OpenCodeServerUnavailableError(
         `opencode serve exited before listening (code ${code}, signal ${exitSignal})${detail ? `: ${detail.slice(-500)}` : ''}`,
       ));

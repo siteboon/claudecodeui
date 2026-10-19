@@ -8,8 +8,10 @@
 //
 // Driven by environment variables (read once at start):
 // - FAKE_OPENCODE_CAPTURE   JSONL file; every spawn, request and exit is appended.
-// - FAKE_OPENCODE_SCENARIO  JSON file: { serve?: 'exit' | 'no-api', newSessionId?, sessions?, agents?,
-//                           config?, steps?: Step[], promptStatus?, promptBody? }
+// - FAKE_OPENCODE_SCENARIO  JSON file: { serve?: 'exit' | 'no-api', lockedOnceMarker?, newSessionId?,
+//                           sessions?, agents?, config?, steps?: Step[], promptStatus?, promptBody? }
+//                           `lockedOnceMarker`: the first serve fails like a locked opencode.db, then
+//                           the file exists and later serves start normally.
 //
 // Steps run when the prompt arrives ("$SID" anywhere is replaced by the session id):
 // - { "emit": <event> }                  push one SSE event `{ type, properties }`
@@ -59,6 +61,12 @@ if (argv[0] === 'run') {
 
 if (argv[0] !== 'serve') {
   process.exit(2);
+}
+
+if (scenario.lockedOnceMarker && !fs.existsSync(scenario.lockedOnceMarker)) {
+  fs.writeFileSync(scenario.lockedOnceMarker, 'locked');
+  console.error('\u001b[91m\u001b[1mError: \u001b[0mUnexpected error\n\ndatabase is locked');
+  process.exit(1);
 }
 
 if (scenario.serve === 'exit') {

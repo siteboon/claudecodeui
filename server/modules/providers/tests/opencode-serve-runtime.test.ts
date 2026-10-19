@@ -718,6 +718,21 @@ test('losing the event stream mid-turn aborts the session and fails the turn', a
   assert.equal(isProcessAlive(spawn?.pid as number), false);
 });
 
+test('a server that hits a locked opencode database at start is started once more', async () => {
+  const turn = await runTurn({
+    appSessionId: 'app-locked-db',
+    scenario: {
+      lockedOnceMarker: path.join(tempRoot, 'locked-once.marker'),
+      newSessionId: 'ses_locked',
+      steps: [textPart('started on the second try')],
+    },
+  });
+
+  assert.equal(turn.error, null);
+  assert.deepEqual(turn.capture.filter((entry) => entry.kind === 'spawn').map((entry) => entry.argv?.[0]), ['serve', 'serve']);
+  assert.equal(turn.messages.find((message) => message.kind === 'text')?.content, 'started on the second try');
+});
+
 test('falls back to `opencode run` when the server cannot start or lacks the permission API', async () => {
   for (const serve of ['exit', 'no-api']) {
     const turn = await runTurn({ appSessionId: `app-fallback-${serve}`, scenario: { serve } });
