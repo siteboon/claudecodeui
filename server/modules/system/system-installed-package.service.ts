@@ -86,7 +86,8 @@ const SUMMARY_MAX_LENGTH = 600;
 function summarizeError(text: string): string {
   const lines = text.split('\n').map((line) => line.trim());
   // Node's report of an uncaught error quotes the throwing source line first
-  // (`throw new Error('...')`), so a line that starts with an error name wins.
+  // (`throw new Error('...')`), so a line that starts with an error name wins
+  // over one that only names one (cloudcli's own "❌ Error: ...").
   const errorLineIndex = [/^[A-Za-z]*Error\b/, /\b[A-Za-z]*Error\b/]
     .map((pattern) => lines.findIndex((line) => pattern.test(line)))
     .find((index) => index >= 0) ?? -1;

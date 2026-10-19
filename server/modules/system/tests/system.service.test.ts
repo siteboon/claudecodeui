@@ -229,6 +229,17 @@ test('an npm install that cannot load fails the update and names the version to 
   );
 });
 
+test('a capped failure reason is not followed by an extra period', async () => {
+  const service = createSystemUpdateService(createNpmUpgrade({
+    checkInstalledPackage: async () => ({ passed: false, reason: '"cloudcli version" failed: warning line 5\u2026', details: '' }),
+  }));
+
+  const result = await service.updateSystem();
+
+  assert.ok('error' in result);
+  assert.match(result.error, /^1\.37\.5 was installed but cannot start: "cloudcli version" failed: warning line 5\u2026 This server keeps running/);
+});
+
 test('the version to go back to is the running one, even when a newer install is already on disk', async () => {
   const service = createSystemUpdateService(createNpmUpgrade({
     runningVersion: '1.37.3',

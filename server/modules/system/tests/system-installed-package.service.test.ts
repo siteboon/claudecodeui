@@ -260,6 +260,33 @@ test('a CLI that prints a wall of text gives a capped reason', async (t) => {
   assert.ok(result.reason.length <= '"cloudcli version" failed: '.length + 600, String(result.reason.length));
 });
 
+test('a CLI that prints one very long line gives a reason of at most 600 characters', async (t) => {
+  const appRoot = createInstallFixture(t, {
+    cliSource: `console.error(${JSON.stringify(`TypeError: ${'y'.repeat(2000)}`)});\nprocess.exitCode = 1;\n`,
+  });
+
+  const result = await checkInstalledPackage(appRoot, CHECK_OPTIONS);
+
+  assert.ok(!result.passed);
+  const reasonText = result.reason.slice('"cloudcli version" failed: '.length);
+  assert.equal(reasonText.length, 600);
+  assert.match(reasonText, /^TypeError: y+\u2026$/);
+});
+
+test('cloudcli\'s own error line is found after the .env notice', async (t) => {
+  // cli.ts prints a failure as "\n❌ Error: <message>", so no line starts with an error name.
+  const appRoot = createInstallFixture(t, {
+    cliSource: `console.error('No .env file found or error reading it: ENOENT');
+      console.error('\\n\u274c Error: Cannot find package express');
+      process.exit(1);\n`,
+  });
+
+  const result = await checkInstalledPackage(appRoot, CHECK_OPTIONS);
+
+  assert.ok(!result.passed);
+  assert.equal(result.reason, '"cloudcli version" failed: \u274c Error: Cannot find package express');
+});
+
 test('a CLI that labels its version passes the check', async (t) => {
   for (const printedVersion of ['cloudcli 1.37.5', 'CloudCLI v1.37.5.', '@cloudcli-ai/cloudcli@1.37.5']) {
     const appRoot = createInstallFixture(t, {

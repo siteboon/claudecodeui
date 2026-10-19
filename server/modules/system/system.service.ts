@@ -86,7 +86,7 @@ function formatUpdateLog(
 function describeFailedPackageCheck(record: SystemUpdateRecord): string {
   const installedLabel = record.installedVersion ?? 'The new version';
   const reason = record.failureReason ?? 'unknown error';
-  const parts = [`${installedLabel} was installed but cannot start: ${reason}${/[.!?]$/.test(reason) ? '' : '.'}`];
+  const parts = [`${installedLabel} was installed but cannot start: ${reason}${/[.!?…]$/.test(reason) ? '' : '.'}`];
   if (record.runningVersion) {
     parts.push(`This server keeps running ${record.runningVersion} until it restarts.`);
   }
