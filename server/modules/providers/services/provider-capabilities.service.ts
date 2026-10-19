@@ -47,7 +47,8 @@ type ProviderCapabilities = {
 /**
  * The capability matrix mirrors what each runtime actually implements today:
  * - permission modes match the option sets accepted by each CLI/SDK.
- * - only the Claude SDK integration surfaces interactive permission requests.
+ * - Claude (SDK) and OpenCode (its private `opencode serve`) surface
+ *   interactive permission requests.
  * - Cursor has no token usage endpoint support (its store.db has no usage rows).
  */
 const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
@@ -101,15 +102,18 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
   },
   opencode: {
     provider: 'opencode',
-    // Mapped by the runtime onto OpenCode's controls: `--agent plan` (plan),
-    // `--auto` (bypassPermissions) and the OPENCODE_PERMISSION env var
-    // (acceptEdits). See resolveOpenCodePermissionOptions in the OpenCode runtime adapter.
+    // Mapped by the runtime onto OpenCode's controls: the `plan` agent (plan),
+    // auto-approval like `--auto` (bypassPermissions) and the
+    // OPENCODE_PERMISSION env var (acceptEdits). See opencode-serve.runtime.ts
+    // and resolveOpenCodePermissionOptions in the OpenCode runtime adapter.
     permissionModes: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
     defaultPermissionMode: 'default',
     supportsImages: true,
     supportsFiles: true,
     supportsAbort: true,
-    supportsPermissionRequests: false,
+    // `ask` rules and the agent's questions reach the chat over the private
+    // server; only the `opencode run` fallback still rejects them.
+    supportsPermissionRequests: true,
     supportsTokenUsage: true,
     supportsEffort: true,
     // Passed on as OpenCode's `--variant`. `thinking` (MiniMax's on/off

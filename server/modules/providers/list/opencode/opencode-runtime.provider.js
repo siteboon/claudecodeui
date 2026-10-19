@@ -9,6 +9,14 @@ import {
   normalizeAttachmentDescriptors
 } from '@/shared/image-attachments.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
+import {
+  abortOpenCodeServeTurn,
+  hasOpenCodeServeTurn,
+  listOpenCodeServeTurnKeys,
+  openCodeServePermissions,
+  runOpenCodeServeTurn
+} from '@/modules/providers/list/opencode/opencode-serve.runtime.js';
+import { OpenCodeServerUnavailableError } from '@/modules/providers/list/opencode/opencode-server.process.js';
 import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell, getOpenCodeDatabasePath, stripAnsiSequences } from '@/shared/utils.js';
 
 // cross-spawn resolves .cmd shims/PATHEXT on Windows and delegates to
@@ -31,6 +39,10 @@ const activeOpenCodeProcesses = new Map();
  *                       every other rule stays under the user's own config.
  * - default           → nothing; the user's opencode.json governs. In
  *                       non-interactive `run` mode any `ask` rule is denied.
+ *
+ * This is the `opencode run` fallback's mapping. The serve runtime
+ * (opencode-serve.runtime.ts) keeps each mode's meaning but answers `ask`
+ * rules through the chat instead of denying them.
  *
  * Exported for tests only.
  */
@@ -123,7 +135,31 @@ function readOpenCodeTokenUsage(sessionId) {
   }
 }
 
+/**
+ * Runs one OpenCode chat turn. A private `opencode serve` is the first choice:
+ * it lets the user answer OpenCode's permission requests and questions in the
+ * chat (issue #1569). When that server cannot be started or lacks the API —
+ * always detected before anything reached the model — the turn runs through
+ * `opencode run` exactly as before, where `ask` rules are rejected.
+ */
 async function spawnOpenCode(command, options = {}, ws, context) {
+  try {
+    await runOpenCodeServeTurn(command, options, ws, context, {
+      resolveEffort: resolveOpenCodeEffort,
+      readTokenUsage: readOpenCodeTokenUsage,
+    });
+    return;
+  } catch (error) {
+    if (!(error instanceof OpenCodeServerUnavailableError)) {
+      throw error;
+    }
+    console.warn('[OpenCode] opencode serve unavailable, falling back to opencode run:', error.message);
+  }
+
+  return runOpenCodeCliTurn(command, options, ws, context);
+}
+
+async function runOpenCodeCliTurn(command, options = {}, ws, context) {
   return new Promise((resolve, reject) => {
     const {
       sessionId,
@@ -403,6 +439,10 @@ async function spawnOpenCode(command, options = {}, ws, context) {
 }
 
 function abortOpenCodeSession(sessionId) {
+  if (hasOpenCodeServeTurn(sessionId)) {
+    return abortOpenCodeServeTurn(sessionId);
+  }
+
   const process = activeOpenCodeProcesses.get(sessionId);
   if (!process) {
     return false;
@@ -417,16 +457,17 @@ function abortOpenCodeSession(sessionId) {
 }
 
 function isOpenCodeSessionActive(sessionId) {
-  return activeOpenCodeProcesses.has(sessionId);
+  return hasOpenCodeServeTurn(sessionId) || activeOpenCodeProcesses.has(sessionId);
 }
 
 function getActiveOpenCodeSessions() {
-  return Array.from(activeOpenCodeProcesses.keys());
+  return [...listOpenCodeServeTurnKeys(), ...activeOpenCodeProcesses.keys()];
 }
 
 export const opencodeRuntime = {
   run: spawnOpenCode,
   abort: abortOpenCodeSession,
+  permissions: openCodeServePermissions,
 };
 
 export {
