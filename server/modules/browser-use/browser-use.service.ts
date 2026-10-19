@@ -418,11 +418,11 @@ async function detectMissingFonts(page: any): Promise<boolean> {
  */
 async function readPageText(handle: RuntimeHandle): Promise<{ text: string; textError?: string }> {
   try {
-    const text: string = await handle.page.locator('body').innerText({ timeout: 5_000 });
+    const text: string = (await handle.page.locator('body').innerText({ timeout: 5_000 })).slice(0, SNAPSHOT_TEXT_LIMIT);
     if (!text.trim() && handle.fontsMissing) {
       return { text, textError: MISSING_FONTS_MESSAGE };
     }
-    return { text: text.slice(0, SNAPSHOT_TEXT_LIMIT) };
+    return { text };
   } catch (error) {
     const reason = (error instanceof Error ? error.message : String(error)).split('\n')[0];
     console.warn('[Browser] Failed to read page text:', reason);
