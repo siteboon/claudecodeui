@@ -5,28 +5,31 @@ import { api } from '@/shared/api';
 // Shared by composers that mount together, so they make one request between them.
 let limitRequest: Promise<number | null> | null = null;
 
-function fetchAttachmentSizeLimit(): Promise<number | null> {
-  if (limitRequest) {
-    return limitRequest;
+async function requestAttachmentSizeLimit(): Promise<number | null> {
+  try {
+    const response = await api.assets.limits();
+    if (!response.ok) {
+      return null;
+    }
+    const body = await response.json() as { maxFileSizeBytes?: unknown } | null;
+    const limit = body?.maxFileSizeBytes;
+    return typeof limit === 'number' && Number.isFinite(limit) && limit > 0 ? limit : null;
+  } catch {
+    // Any failure, thrown or rejected, only skips the composer's own check;
+    // the upload is still refused by the server.
+    return null;
   }
+}
 
-  const request = api.assets.limits()
-    .then(async (response) => {
-      if (!response.ok) {
-        return null;
-      }
-      const body = await response.json().catch(() => null) as { maxFileSizeBytes?: unknown } | null;
-      const limit = body?.maxFileSizeBytes;
-      return typeof limit === 'number' && Number.isFinite(limit) && limit > 0 ? limit : null;
-    })
-    .catch(() => null)
-    .finally(() => {
+function fetchAttachmentSizeLimit(): Promise<number | null> {
+  if (!limitRequest) {
+    limitRequest = requestAttachmentSizeLimit().finally(() => {
       // Not cached past the request: the operator can change the limit and
       // restart the server while this page stays open.
       limitRequest = null;
     });
-  limitRequest = request;
-  return request;
+  }
+  return limitRequest;
 }
 
 /**
