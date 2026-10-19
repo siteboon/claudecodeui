@@ -60,7 +60,14 @@ const filterSlashCommands = (
   // Namespaced commands should behave like path completion. Once a provider
   // namespace is typed, only exact command-prefix matches should stay visible.
   if (normalizedQuery.includes(':') || namePrefixMatches.length > 0) {
-    return namePrefixMatches;
+    // A fully typed name means that command, as it does when the text is sent:
+    // list it first, ahead of more-used longer names, since Enter and Tab act
+    // on the first entry while nothing is highlighted.
+    const isExactName = (command: SlashCommand) => command.name.toLowerCase() === commandPrefix;
+    return [
+      ...namePrefixMatches.filter(isExactName),
+      ...namePrefixMatches.filter((command) => !isExactName(command)),
+    ];
   }
 
   const nameSubstringMatches = commands.filter((command) =>
@@ -91,12 +98,16 @@ export function useSlashCommands({
   const [slashPosition, setSlashPosition] = useState(-1);
 
   const commandQueryTimerRef = useRef<number | null>(null);
+  // The query typed but not yet committed by the debounce timer, or null when
+  // none is waiting. Keys that pick or move through entries commit it early.
+  const pendingCommandQueryRef = useRef<string | null>(null);
 
   const clearCommandQueryTimer = useCallback(() => {
     if (commandQueryTimerRef.current !== null) {
       window.clearTimeout(commandQueryTimerRef.current);
       commandQueryTimerRef.current = null;
     }
+    pendingCommandQueryRef.current = null;
   }, []);
 
   const resetCommandMenuState = useCallback(() => {
@@ -290,12 +301,33 @@ export function useSlashCommands({
       setSelectedCommandIndex(-1);
 
       clearCommandQueryTimer();
+      pendingCommandQueryRef.current = query;
       commandQueryTimerRef.current = window.setTimeout(() => {
+        commandQueryTimerRef.current = null;
+        pendingCommandQueryRef.current = null;
         setCommandQuery(query);
       }, COMMAND_QUERY_DEBOUNCE_MS);
     },
     [resetCommandMenuState, clearCommandQueryTimer],
   );
+
+  // The debounce only spares re-filtering on every keystroke. A key pressed
+  // before it fires must still act on the text in the input, not on the list
+  // for the previous query (for a fresh "/" that is every command, most-used
+  // first), so this commits the waiting query now and returns its list, or
+  // null when nothing is waiting.
+  const flushPendingCommandQuery = useCallback((): SlashCommand[] | null => {
+    const pendingQuery = pendingCommandQueryRef.current;
+    if (pendingQuery === null) {
+      return null;
+    }
+
+    clearCommandQueryTimer();
+    setCommandQuery(pendingQuery);
+    // A highlight made meanwhile (mouse hover) indexes the previous list.
+    setSelectedCommandIndex(-1);
+    return filterSlashCommands(slashCommands, pendingQuery);
+  }, [clearCommandQueryTimer, slashCommands]);
 
   const handleCommandMenuKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
@@ -303,7 +335,17 @@ export function useSlashCommands({
         return false;
       }
 
-      if (!filteredCommands.length) {
+      // Only keys that pick or move through entries commit early; flushing on
+      // every typed character would undo the debounce.
+      const isSelectionKey = event.key === 'ArrowDown'
+        || event.key === 'ArrowUp'
+        || event.key === 'Tab'
+        || event.key === 'Enter';
+      const flushedCommands = isSelectionKey ? flushPendingCommandQuery() : null;
+      const menuCommands = flushedCommands ?? filteredCommands;
+      const highlightedIndex = flushedCommands ? -1 : selectedCommandIndex;
+
+      if (!menuCommands.length) {
         if (event.key === 'Escape') {
           event.preventDefault();
           resetCommandMenuState();
@@ -315,7 +357,7 @@ export function useSlashCommands({
       if (event.key === 'ArrowDown') {
         event.preventDefault();
         setSelectedCommandIndex((previousIndex) =>
-          previousIndex < filteredCommands.length - 1 ? previousIndex + 1 : 0,
+          previousIndex < menuCommands.length - 1 ? previousIndex + 1 : 0,
         );
         return true;
       }
@@ -323,7 +365,7 @@ export function useSlashCommands({
       if (event.key === 'ArrowUp') {
         event.preventDefault();
         setSelectedCommandIndex((previousIndex) =>
-          previousIndex > 0 ? previousIndex - 1 : filteredCommands.length - 1,
+          previousIndex > 0 ? previousIndex - 1 : menuCommands.length - 1,
         );
         return true;
       }
@@ -332,7 +374,7 @@ export function useSlashCommands({
         event.preventDefault();
         // Until the user arrows through the menu nothing is highlighted, so both
         // keys act on the first match — the entry the menu renders at the top.
-        const targetCommand = filteredCommands[selectedCommandIndex >= 0 ? selectedCommandIndex : 0];
+        const targetCommand = menuCommands[highlightedIndex >= 0 ? highlightedIndex : 0];
         if (!targetCommand) {
           return true;
         }
@@ -359,6 +401,7 @@ export function useSlashCommands({
     [
       showCommandMenu,
       filteredCommands,
+      flushPendingCommandQuery,
       insertCommandIntoInput,
       resetCommandMenuState,
       selectCommandFromKeyboard,
