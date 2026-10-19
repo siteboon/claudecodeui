@@ -62,12 +62,29 @@ const keyEvent = (key: string) => {
   };
 };
 
-const setUp = async (customCommandNames: string[], usageHistory: Record<string, number>) => {
+const setUp = async (
+  customCommandNames: string[],
+  usageHistory: Record<string, number>,
+  skillCommandNames: string[] = [],
+) => {
   localStorage.setItem(`command_history_${project.projectId}`, JSON.stringify(usageHistory));
   listCommands.mockResolvedValue(
     jsonResponse({
       builtIn: [{ name: '/help', description: 'Show help', namespace: 'builtin' }],
       custom: customCommandNames.map(projectCommand),
+    }),
+  );
+  listSkills.mockResolvedValue(
+    jsonResponse({
+      success: true,
+      data: {
+        skills: skillCommandNames.map((command) => ({
+          name: command.slice(1),
+          command,
+          scope: 'project',
+          description: `Skill ${command}`,
+        })),
+      },
     }),
   );
 
@@ -94,7 +111,10 @@ const setUp = async (customCommandNames: string[], usageHistory: Record<string, 
     { initialProps: { input: '' } },
   );
 
-  await waitFor(() => assert.equal(result.current.slashCommandsCount, customCommandNames.length + 1));
+  await waitFor(() => assert.equal(
+    result.current.slashCommandsCount,
+    customCommandNames.length + skillCommandNames.length + 1,
+  ));
 
   // Mirrors the composer: one input change per typed character, each telling
   // the hook the new text and where the caret is.
@@ -128,7 +148,6 @@ beforeEach(() => {
   localStorage.clear();
   listCommands.mockReset();
   listSkills.mockReset();
-  listSkills.mockResolvedValue(jsonResponse({ success: true, data: { skills: [] } }));
 });
 
 afterEach(() => {
@@ -174,6 +193,29 @@ describe('slash command keys pressed inside the filter debounce', () => {
     assert.equal(tab.handled, true);
     assert.deepEqual(setInputCalls, ['/bar ']);
     assert.deepEqual(executedCommands, []);
+  });
+
+  it('runs the typed command when the slash follows other text', async () => {
+    const { executedCommands, typeQuickly, press } = await setUp(['/foo', '/bar'], { '/foo': 5 });
+
+    typeQuickly('see /bar');
+    press('Enter');
+
+    assert.deepEqual(executedCommands.map((command) => command.name), ['/bar']);
+  });
+
+  it('inserts a typed namespaced skill on Enter instead of running the most-used command', async () => {
+    const { setInputCalls, executedCommands, typeQuickly, press } = await setUp(
+      ['/foo'],
+      { '/foo': 5 },
+      ['/plugin:review'],
+    );
+
+    typeQuickly('/plugin:re');
+    press('Enter');
+
+    assert.deepEqual(executedCommands, []);
+    assert.deepEqual(setInputCalls, ['/plugin:review ']);
   });
 
   it('moves the highlight through the list for the typed text', async () => {
