@@ -1883,6 +1883,23 @@ test('an edited prompt that followed a task note replaces the original', { concu
   assert.deepEqual(texts, [...TASK_NOTE_LAUNCH_TURN, 'what changed, file by file?', 'src/a.ts and src/b.ts changed.']);
 });
 
+test('an edited auto-continuation prompt replaces the original', { concurrency: false }, async () => {
+  const r = taskNoteRow;
+  // After a plan the CLI sends the "implement it" turn itself, marked with an
+  // `auto-continuation` origin, and counts it as the user's own prompt. Editing
+  // it from Chat puts the replacement under the same parent.
+  const texts = await readTaskNoteHistory([
+    ...taskNoteLaunchRows(),
+    { ...r.prompt('p2', 'a2', 'Implement this plan.'), promptSource: undefined, origin: { kind: 'auto-continuation' } },
+    r.reply('a3', 'p2', 'Implementing it.'),
+    r.stamp('a3'),
+    r.prompt('p2b', 'a2', 'Implement only step one.'), r.reply('a3b', 'p2b', 'Step one done.'),
+    r.stamp('a3b'),
+  ]);
+
+  assert.deepEqual(texts, [...TASK_NOTE_LAUNCH_TURN, 'Implement only step one.', 'Step one done.']);
+});
+
 test('parallel tool calls are not mistaken for an edit', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-parallel-tools-'));
   const sessionId = 'claude-parallel-session';

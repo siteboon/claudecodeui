@@ -508,7 +508,9 @@ async function readTranscriptRows(jsonlPath: string, providerSessionId: string):
  * - builds from about 2.1.85 set `origin` to any kind but `human`. The
  *   SDK-bundled 2.1.165, which Chat falls back to when no `claude` is
  *   installed, stamps its notifications `promptSource: "sdk"`, so `origin` is
- *   the only marker there;
+ *   the only marker there. An `auto-continuation` prompt (the "implement this
+ *   plan" turn the CLI sends after a plan) is one the CLI itself counts as the
+ *   user's, so it stays a prompt;
  * - older builds set neither, so a notification can only be recognised by its
  *   leading tag.
  */
@@ -522,7 +524,7 @@ function isInjectedNoteRow(row: AnyRecord): boolean {
 
   const originKind = row.origin?.kind;
   if (typeof originKind === 'string') {
-    return originKind !== 'human';
+    return originKind !== 'human' && originKind !== 'auto-continuation';
   }
 
   return readTaskNotificationTexts(row).some((text) => text.trimStart().startsWith('<task-notification>'));
