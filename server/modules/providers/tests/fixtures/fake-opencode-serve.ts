@@ -1,4 +1,5 @@
-// Fake `opencode` CLI for the OpenCode serve runtime tests.
+// Fake `opencode` CLI for the OpenCode serve runtime tests, run by node with
+// the tsx loader through an `opencode` shim on PATH.
 //
 // `opencode serve --hostname <h> --port <p>` emulates the parts of OpenCode's
 // HTTP API (v1.18.x) the runtime uses: Basic auth, the permission/question
@@ -8,10 +9,14 @@
 //
 // Driven by environment variables (read once at start):
 // - FAKE_OPENCODE_CAPTURE   JSONL file; every spawn, request and exit is appended.
-// - FAKE_OPENCODE_SCENARIO  JSON file: { serve?: 'exit' | 'no-api', lockedOnceMarker?, newSessionId?,
-//                           sessions?, agents?, config?, steps?: Step[], promptStatus?, promptBody? }
+// - FAKE_OPENCODE_SCENARIO  JSON file: { serve?: 'exit' | 'no-api', lockedOnceMarker?, listenDelayMs?,
+//                           newSessionId?, sessions?, agents?, config?, steps?: Step[],
+//                           trailingSteps?: Step[], promptStatus?, promptBody?, replyStatus? }
 //                           `lockedOnceMarker`: the first serve fails like a locked opencode.db, then
 //                           the file exists and later serves start normally.
+//                           `listenDelayMs`: the server boots that long before it listens.
+//                           `replyStatus`: every permission/question reply answers this HTTP status
+//                           and leaves the request waiting.
 //
 // Steps run when the prompt arrives ("$SID" anywhere is replaced by the session id):
 // - { "emit": <event> }                  push one SSE event `{ type, properties }`
@@ -27,19 +32,49 @@
 // - { "closeEvents": true }              end every SSE stream (the server keeps running)
 // - { "stop": true }                     end the turn here
 // The turn ends with `session.status` idle for the session and the prompt answering
-// HTTP `promptStatus` (default 200).
-'use strict';
+// HTTP `promptStatus` (default 200). With `trailingSteps`, the prompt answers first and
+// those steps and the idle follow on the event stream, as they can with the real server.
+import fs from 'node:fs';
+import http from 'node:http';
 
-const fs = require('node:fs');
-const http = require('node:http');
+type Step = {
+  emit?: unknown;
+  await?: string;
+  branch?: string;
+  cases?: Record<string, Step[]>;
+  settle?: string;
+  reply?: string;
+  sleep?: number;
+  exit?: number;
+  closeEvents?: boolean;
+  stop?: boolean;
+};
+
+type Scenario = {
+  serve?: 'exit' | 'no-api';
+  lockedOnceMarker?: string;
+  listenDelayMs?: number;
+  newSessionId?: string;
+  sessions?: Record<string, Record<string, unknown>>;
+  agents?: unknown[];
+  config?: Record<string, unknown>;
+  steps?: Step[];
+  trailingSteps?: Step[];
+  promptStatus?: number;
+  promptBody?: unknown;
+  replyStatus?: number;
+  knownRequests?: string[];
+};
+
+type StepOutcome = 'continue' | 'stop' | 'aborted';
 
 const capturePath = process.env.FAKE_OPENCODE_CAPTURE;
-const scenario = process.env.FAKE_OPENCODE_SCENARIO
-  ? JSON.parse(fs.readFileSync(process.env.FAKE_OPENCODE_SCENARIO, 'utf8'))
+const scenario: Scenario = process.env.FAKE_OPENCODE_SCENARIO
+  ? JSON.parse(fs.readFileSync(process.env.FAKE_OPENCODE_SCENARIO, 'utf8')) as Scenario
   : {};
 const argv = process.argv.slice(2);
 
-function capture(entry) {
+function capture(entry: Record<string, unknown>): void {
   if (capturePath) {
     fs.appendFileSync(capturePath, `${JSON.stringify({ pid: process.pid, ...entry })}\n`);
   }
@@ -79,55 +114,57 @@ const password = process.env.OPENCODE_SERVER_PASSWORD;
 const username = process.env.OPENCODE_SERVER_USERNAME || 'opencode';
 const expectedAuth = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
 
-const sseClients = new Set();
-const pendingWaits = new Map();
-const replies = new Map();
-let activeSessionId = null;
+const sseClients = new Set<http.ServerResponse>();
+const pendingWaits = new Map<string, (reply: string) => void>();
+const replies = new Map<string, string | undefined>();
+let activeSessionId: string | null = null;
 let aborted = false;
-let finishPrompt = null;
+let finishPrompt: (() => void) | null = null;
 
-function substitute(value, sessionId) {
-  return JSON.parse(JSON.stringify(value).replaceAll('$SID', sessionId));
+function substitute<T>(value: T, sessionId: string): T {
+  return JSON.parse(JSON.stringify(value).replaceAll('$SID', sessionId)) as T;
 }
 
-function broadcast(event) {
-  const frame = `data: ${JSON.stringify({ id: `evt_${Date.now()}`, ...event })}\n\n`;
+function broadcast(event: unknown): void {
+  const frame = `data: ${JSON.stringify({ id: `evt_${Date.now()}`, ...(event as Record<string, unknown>) })}\n\n`;
   for (const client of sseClients) {
     client.write(frame);
   }
 }
 
-function json(res, status, body) {
+function json(res: http.ServerResponse, status: number, body?: unknown): void {
   res.writeHead(status, { 'content-type': 'application/json' });
   res.end(body === undefined ? '' : JSON.stringify(body));
 }
 
-function readBody(req) {
+function readBody(req: http.IncomingMessage): Promise<Record<string, unknown> | undefined> {
   return new Promise((resolve) => {
     let raw = '';
-    req.on('data', (chunk) => { raw += chunk; });
+    req.on('data', (chunk: Buffer) => {
+      raw += chunk.toString();
+    });
     req.on('end', () => {
       try {
-        resolve(raw ? JSON.parse(raw) : undefined);
+        resolve(raw ? JSON.parse(raw) as Record<string, unknown> : undefined);
       } catch {
-        resolve(raw);
+        resolve(undefined);
       }
     });
   });
 }
 
-function settleWait(requestId, reply) {
+function settleWait(requestId: string, reply: string | undefined): boolean {
   replies.set(requestId, reply);
   const wait = pendingWaits.get(requestId);
   if (!wait) {
     return false;
   }
   pendingWaits.delete(requestId);
-  wait(reply);
+  wait(reply ?? '');
   return true;
 }
 
-async function runSteps(steps, sessionId) {
+async function runSteps(steps: Step[], sessionId: string): Promise<StepOutcome> {
   for (const step of steps) {
     if (aborted) {
       return 'aborted';
@@ -135,11 +172,12 @@ async function runSteps(steps, sessionId) {
     if (step.emit) {
       broadcast(substitute(step.emit, sessionId));
     } else if (step.await) {
-      if (!replies.has(step.await)) {
-        await new Promise((resolve) => pendingWaits.set(step.await, resolve));
+      const requestId = step.await;
+      if (!replies.has(requestId)) {
+        await new Promise<void>((resolve) => pendingWaits.set(requestId, () => resolve()));
       }
     } else if (step.branch) {
-      const outcome = await runSteps(step.cases[replies.get(step.branch)] || [], sessionId);
+      const outcome = await runSteps(step.cases?.[replies.get(step.branch) ?? ''] ?? [], sessionId);
       if (outcome !== 'continue') {
         return outcome;
       }
@@ -163,21 +201,34 @@ async function runSteps(steps, sessionId) {
   return 'continue';
 }
 
-async function runTurn(sessionId, res) {
+async function runTurn(sessionId: string, res: http.ServerResponse): Promise<void> {
   activeSessionId = sessionId;
   broadcast({ type: 'session.status', properties: { sessionID: sessionId, status: { type: 'busy' } } });
-  await new Promise((resolve) => {
+  await new Promise<void>((resolve) => {
     finishPrompt = resolve;
-    runSteps(scenario.steps || [], sessionId).then(resolve);
+    void runSteps(scenario.steps || [], sessionId).then(() => resolve());
   });
+  const answerPrompt = () => {
+    json(res, aborted ? 200 : scenario.promptStatus || 200, scenario.promptBody || { info: { id: 'msg_reply' }, parts: [] });
+  };
+  if (scenario.trailingSteps && !aborted) {
+    answerPrompt();
+    await runSteps(scenario.trailingSteps, sessionId);
+  }
   if (!aborted) {
     broadcast({ type: 'session.status', properties: { sessionID: sessionId, status: { type: 'idle' } } });
   }
-  json(res, aborted ? 200 : scenario.promptStatus || 200, scenario.promptBody || { info: { id: 'msg_reply' }, parts: [] });
+  if (!scenario.trailingSteps || aborted) {
+    answerPrompt();
+  }
 }
 
-const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, `http://${req.headers.host}`);
+const server = http.createServer((req, res) => {
+  void handleRequest(req, res);
+});
+
+async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
   const body = await readBody(req);
   const authorized = req.headers.authorization === expectedAuth;
   capture({
@@ -255,14 +306,19 @@ const server = http.createServer(async (req, res) => {
     json(res, 200, { id: parts[1] });
     return;
   }
+  if ((parts[0] === 'permission' || parts[0] === 'question') && scenario.replyStatus && req.method === 'POST') {
+    json(res, scenario.replyStatus, { name: 'BadRequest' });
+    return;
+  }
   if (parts[0] === 'permission' && parts[2] === 'reply' && req.method === 'POST') {
     const known = pendingWaits.has(parts[1]) || (scenario.knownRequests || []).includes(parts[1]);
     if (!known || replies.has(parts[1])) {
       json(res, 404, { _tag: 'PermissionNotFoundError' });
       return;
     }
-    settleWait(parts[1], body?.reply);
-    broadcast({ type: 'permission.replied', properties: { sessionID: activeSessionId, requestID: parts[1], reply: body?.reply } });
+    const reply = typeof body?.reply === 'string' ? body.reply : undefined;
+    settleWait(parts[1], reply);
+    broadcast({ type: 'permission.replied', properties: { sessionID: activeSessionId, requestID: parts[1], reply } });
     json(res, 200, true);
     return;
   }
@@ -281,13 +337,15 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   json(res, 404, { name: 'NotFound' });
-});
+}
 
 process.on('SIGTERM', () => {
   capture({ kind: 'exit', signal: 'SIGTERM' });
   process.exit(0);
 });
 
-server.listen(port, '127.0.0.1', () => {
-  console.log(`opencode server listening on http://127.0.0.1:${port}`);
-});
+setTimeout(() => {
+  server.listen(port, '127.0.0.1', () => {
+    console.log(`opencode server listening on http://127.0.0.1:${port}`);
+  });
+}, scenario.listenDelayMs ?? 0);

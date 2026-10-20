@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test, { after, before } from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { opencodeRuntime } from '@/modules/providers/list/opencode/opencode-runtime.provider.js';
 import { OpenCodeSessionsProvider } from '@/modules/providers/list/opencode/opencode-sessions.provider.js';
@@ -15,12 +16,19 @@ import type { AnyRecord, NormalizedMessage } from '@/shared/types.js';
  * permission requests and the agent's questions reach the chat user (#1569).
  * Before, every turn ran `opencode run`, which rejected each request itself and
  * hid the question tool. These tests drive the real runtime adapter against a
- * fake `opencode` executable (fixtures/fake-opencode-serve.cjs) that emulates
+ * fake `opencode` executable (fixtures/fake-opencode-serve.ts) that emulates
  * the server's HTTP API and event stream and records every request it gets.
  */
 
-const FIXTURES_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
-const FAKE_OPENCODE = path.join(FIXTURES_DIR, 'fake-opencode-serve.cjs');
+const TESTS_DIR = path.dirname(fileURLToPath(import.meta.url));
+const FAKE_OPENCODE = path.join(TESTS_DIR, 'fixtures', 'fake-opencode-serve.ts');
+const SERVER_PROCESS_MODULE = path.resolve(TESTS_DIR, '..', 'list', 'opencode', 'opencode-server.process.ts');
+const APPLICATION_ROOT = path.resolve(TESTS_DIR, '..', '..', '..', '..');
+// The fake is TypeScript; node runs it with tsx's loader, as the tests run.
+const TSX_LOADER = import.meta.resolve('tsx');
+// A turn that has not finished by then is stuck; it is aborted so the suite
+// fails instead of hanging.
+const TURN_DEADLINE_MS = 20_000;
 
 const sessionsProvider = new OpenCodeSessionsProvider();
 const providerSessionIds = new Map<string, string>();
@@ -39,8 +47,11 @@ const findEnvKey = (name: string) =>
 
 let tempRoot = '';
 let projectDir = '';
+let binDir = '';
 let runCounter = 0;
 const savedEnv = new Map<string, string | undefined>();
+/** Every fake server pid seen, so none can outlive the suite. */
+const fakePids = new Set<number>();
 
 function setEnv(name: string, value: string | undefined): void {
   if (!savedEnv.has(name)) {
@@ -56,21 +67,23 @@ function setEnv(name: string, value: string | undefined): void {
 before(async () => {
   tempRoot = await mkdtemp(path.join(os.tmpdir(), 'opencode-serve-runtime-'));
   projectDir = path.join(tempRoot, 'project');
-  const binDir = path.join(tempRoot, 'bin');
+  binDir = path.join(tempRoot, 'bin');
   const homeDir = path.join(tempRoot, 'home');
   await mkdir(projectDir, { recursive: true });
   await mkdir(binDir, { recursive: true });
   await mkdir(homeDir, { recursive: true });
 
   if (process.platform === 'win32') {
-    await writeFile(path.join(binDir, 'opencode.cmd'), `@echo off\r\nnode "${FAKE_OPENCODE}" %*\r\n`, 'utf8');
+    await writeFile(
+      path.join(binDir, 'opencode.cmd'),
+      `@echo off\r\n"${process.execPath}" --import "${TSX_LOADER}" "${FAKE_OPENCODE}" %*\r\n`,
+      'utf8',
+    );
     const pathExtKey = findEnvKey('PATHEXT');
     const pathExt = process.env[pathExtKey];
     setEnv(pathExtKey, pathExt?.toUpperCase().includes('.CMD') ? pathExt : `.COM;.EXE;.BAT;.CMD${pathExt ? `;${pathExt}` : ''}`);
   } else {
-    const shimPath = path.join(binDir, 'opencode');
-    await writeFile(shimPath, `#!/bin/sh\nexec node "${FAKE_OPENCODE}" "$@"\n`, 'utf8');
-    await chmod(shimPath, 0o755);
+    await writeShim(binDir, 'exec');
   }
 
   const pathKey = findEnvKey('PATH');
@@ -81,9 +94,15 @@ before(async () => {
   setEnv('USERPROFILE', homeDir);
   setEnv('DATABASE_PATH', path.join(tempRoot, 'auth.db'));
   setEnv('OPENCODE_PERMISSION', undefined);
+  // The fake runs in the project directory; a relative tsconfig path (the
+  // test runner's) would not resolve there.
+  setEnv('TSX_TSCONFIG_PATH', path.join(APPLICATION_ROOT, 'server', 'tsconfig.json'));
 });
 
 after(async () => {
+  for (const pid of fakePids) {
+    killProcessGroup(pid);
+  }
   for (const [name, value] of savedEnv) {
     if (value === undefined) {
       delete process.env[name];
@@ -108,6 +127,53 @@ type CaptureEntry = {
   signal?: string;
 };
 
+/**
+ * The `opencode` shim on PATH. `exec` replaces the shell with the fake, as an
+ * npm-installed native binary does; `wrap` keeps the shell as the parent of
+ * the fake, as an install whose `opencode` is a wrapper script does.
+ */
+async function writeShim(directory: string, mode: 'exec' | 'wrap', delaySeconds = 0): Promise<void> {
+  const shimPath = path.join(directory, 'opencode');
+  const run = `"${process.execPath}" --import "${TSX_LOADER}" "${FAKE_OPENCODE}" "$@"`;
+  const delay = delaySeconds > 0 ? `sleep ${delaySeconds}\n` : '';
+  await writeFile(shimPath, `#!/bin/sh\n${delay}${mode === 'exec' ? `exec ${run}` : run}\n`, 'utf8');
+  await chmod(shimPath, 0o755);
+}
+
+function killProcessGroup(pid: number): void {
+  for (const target of [-pid, pid]) {
+    try {
+      process.kill(target, 'SIGKILL');
+    } catch {
+      // Gone already, or not a group leader.
+    }
+  }
+}
+
+async function readCapture(capturePath: string): Promise<CaptureEntry[]> {
+  const entries = (await readFile(capturePath, 'utf8'))
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as CaptureEntry);
+  for (const entry of entries) {
+    if (entry.kind === 'spawn') {
+      fakePids.add(entry.pid);
+    }
+  }
+  return entries;
+}
+
+async function waitUntil(condition: () => boolean | Promise<boolean>, timeoutMs: number): Promise<boolean> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (await condition()) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return condition();
+}
+
 type TurnResult = {
   messages: NormalizedMessage[];
   capture: CaptureEntry[];
@@ -126,6 +192,8 @@ async function runTurn(input: {
   prompt?: string;
   options?: AnyRecord;
   onMessage?: (message: NormalizedMessage) => void;
+  /** Runs next to the turn, with the capture file the fake writes to. */
+  whileRunning?: (capturePath: string) => Promise<void>;
 }): Promise<TurnResult> {
   runCounter += 1;
   const scenarioPath = path.join(tempRoot, `scenario-${runCounter}.json`);
@@ -148,21 +216,31 @@ async function runTurn(input: {
   };
 
   let error: Error | null = null;
+  let deadline: NodeJS.Timeout | undefined;
   try {
-    await opencodeRuntime.run(
+    const turn = opencodeRuntime.run(
       input.prompt ?? 'Run it',
       { cwd: projectDir, sessionId: input.appSessionId, model: 'fake/fake-model', ...input.options },
       writer,
       runtimeContext,
     );
+    const stuck = new Promise<'stuck'>((resolve) => {
+      deadline = setTimeout(() => resolve('stuck'), TURN_DEADLINE_MS);
+    });
+    const sideTask = input.whileRunning?.(capturePath);
+    if (await Promise.race([turn, stuck]) === 'stuck') {
+      await opencodeRuntime.abort(input.appSessionId);
+      await turn.catch(() => undefined);
+      throw new Error(`the turn did not finish within ${TURN_DEADLINE_MS / 1000} s`);
+    }
+    await sideTask;
   } catch (caught) {
     error = caught as Error;
+  } finally {
+    clearTimeout(deadline);
   }
 
-  const capture = (await readFile(capturePath, 'utf8'))
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as CaptureEntry);
+  const capture = await readCapture(capturePath);
   return {
     messages,
     capture,
@@ -257,6 +335,17 @@ const bashCallSteps = (id: string, command: string) => [
   },
   toolPart(`call_${id}`, 'completed', `ran ${command}`),
 ];
+
+const PLAN_SWITCH_RULES = [
+  { permission: 'plan_enter', pattern: '*', action: 'deny' },
+  { permission: 'plan_exit', pattern: '*', action: 'deny' },
+];
+const QUESTION_DENY = { permission: 'question', pattern: '*', action: 'deny' };
+const QUESTION_ALLOW = { permission: 'question', pattern: '*', action: 'allow' };
+
+const sessionStatus = (type: 'busy' | 'idle') => ({
+  emit: { type: 'session.status', properties: { sessionID: '$SID', status: { type } } },
+});
 
 const twoQuestions = [
   {
@@ -515,7 +604,10 @@ test('bypassPermissions answers requests like `opencode run --auto` and never pr
 
   assert.equal(turn.messages.some((message) => message.kind === 'permission_request'), false);
   assert.deepEqual(turn.requests('POST', '/permission/per_bypass/reply').map((entry) => entry.body), [{ reply: 'once' }]);
-  assert.equal(turn.requests('POST', '/question/que_bypass/reject').length, 1);
+  // Bypass sessions hide the question tool; should a question still come,
+  // it is left unanswered so the model carries on (a reject ends the turn).
+  assert.equal(turn.requests('POST', '/question/que_bypass/reject').length, 0);
+  assert.deepEqual(turn.requests('POST', '/question/que_bypass/reply').map((entry) => entry.body), [{ answers: [[], []] }]);
   assert.deepEqual(turn.requests('POST', '/session')[0].body, {
     permission: [
       { permission: 'question', pattern: '*', action: 'deny' },
@@ -584,6 +676,241 @@ test('a second answer is ignored and OpenCode\'s cascade retracts the other prom
   assert.equal(turn.requests('POST', '/permission/per_c2/reply').length, 0);
   assert.deepEqual(replies.sort(), ['per_c1', 'per_c2']);
   assert.deepEqual(opencodeRuntime.permissions.listPending('app-cascade'), []);
+});
+
+test('bypassPermissions hides the question tool of a resumed session that shows it', async () => {
+  // Created by this runtime in default mode: questions are shown.
+  providerSessionIds.set('app-bypass-resume', 'ses_default_created');
+  const shown = await runTurn({
+    appSessionId: 'app-bypass-resume',
+    options: { permissionMode: 'bypassPermissions' },
+    scenario: { sessions: { ses_default_created: { permission: PLAN_SWITCH_RULES } }, steps: [textPart('decided alone')] },
+  });
+  assert.equal(shown.error, null);
+  assert.deepEqual(shown.requests('PATCH', '/session/ses_default_created').map((entry) => entry.body), [
+    { permission: [QUESTION_DENY] },
+  ]);
+  // Before the prompt reached the model.
+  const order = shown.capture.filter((entry) => entry.kind === 'request').map((entry) => `${entry.method} ${entry.path}`);
+  assert.ok(order.indexOf('PATCH /session/ses_default_created') < order.indexOf('POST /session/ses_default_created/message'));
+
+  // Already hidden (created in bypassPermissions or by `opencode run`): nothing is appended.
+  providerSessionIds.set('app-bypass-resume-hidden', 'ses_bypass_created');
+  const hidden = await runTurn({
+    appSessionId: 'app-bypass-resume-hidden',
+    options: { permissionMode: 'bypassPermissions' },
+    scenario: { sessions: { ses_bypass_created: { permission: [QUESTION_DENY, ...PLAN_SWITCH_RULES] } }, steps: [textPart('x')] },
+  });
+  assert.equal(hidden.error, null);
+  assert.equal(hidden.requests('PATCH', '/session/ses_bypass_created').length, 0);
+
+  // The next turn in default mode shows the tool again.
+  const back = await runTurn({
+    appSessionId: 'app-bypass-resume',
+    scenario: {
+      sessions: { ses_default_created: { permission: [...PLAN_SWITCH_RULES, QUESTION_DENY] } },
+      agents: [{ name: 'build', permission: [QUESTION_ALLOW] }],
+      steps: [textPart('asking again')],
+    },
+  });
+  assert.equal(back.error, null);
+  assert.deepEqual(back.requests('PATCH', '/session/ses_default_created').map((entry) => entry.body), [
+    { permission: [QUESTION_ALLOW] },
+  ]);
+});
+
+test('"Always allow" covers a later request only when each of its patterns was approved', async () => {
+  const first = await runTurn({
+    appSessionId: 'app-always-every',
+    scenario: { newSessionId: 'ses_every', steps: bashCallSteps('per_e1', 'cd src') },
+    onMessage(message) {
+      if (message.kind === 'permission_request') {
+        opencodeRuntime.permissions.resolve(message.requestId as string, { allow: true, rememberEntry: 'cd *' });
+      }
+    },
+  });
+  assert.equal(first.error, null);
+
+  // `cd src && rm -rf build` asks for both commands; only `cd *` was approved.
+  const prompted: string[] = [];
+  const compound = await runTurn({
+    appSessionId: 'app-always-every',
+    scenario: {
+      sessions: { ses_every: { permission: [] } },
+      steps: [
+        permissionAsked('per_e2', 'cd src && rm -rf build', { patterns: ['cd src', 'rm -rf build'], always: ['cd *', 'rm *'] }),
+        { await: 'per_e2' },
+      ],
+    },
+    onMessage(message) {
+      if (message.kind === 'permission_request') {
+        prompted.push(message.requestId as string);
+        opencodeRuntime.permissions.resolve(message.requestId as string, { allow: false });
+      }
+    },
+  });
+  assert.equal(compound.error, null);
+  assert.deepEqual(prompted, ['per_e2']);
+  assert.deepEqual(compound.requests('POST', '/permission/per_e2/reply').map((entry) => entry.body), [{ reply: 'reject' }]);
+
+  // Every pattern approved: no prompt.
+  const covered = await runTurn({
+    appSessionId: 'app-always-every',
+    scenario: {
+      sessions: { ses_every: { permission: [] } },
+      steps: [permissionAsked('per_e3', 'cd a && cd b', { patterns: ['cd a', 'cd b'], always: ['cd *'] }), { await: 'per_e3' }],
+    },
+  });
+  assert.equal(covered.error, null);
+  assert.equal(kinds(covered.messages).includes('permission_request'), false);
+  assert.deepEqual(covered.requests('POST', '/permission/per_e3/reply').map((entry) => entry.body), [{ reply: 'once' }]);
+});
+
+test('an answer OpenCode does not take ends the turn with an error instead of leaving it waiting', async () => {
+  const turn = await runTurn({
+    appSessionId: 'app-reply-refused',
+    scenario: { newSessionId: 'ses_reply_refused', replyStatus: 500, steps: bashCallSteps('per_refused', 'printf x') },
+    onMessage(message) {
+      if (message.kind === 'permission_request') {
+        opencodeRuntime.permissions.resolve(message.requestId as string, { allow: true });
+      }
+    },
+  });
+
+  assert.match(String(turn.error?.message), /OpenCode did not accept the answer \(HTTP 500\)/);
+  assert.equal(turn.messages.filter((message) => message.kind === 'error').length, 1);
+  assert.equal(turn.messages.filter((message) => message.kind === 'complete').length, 1);
+  assert.equal(turn.messages.find((message) => message.kind === 'complete')?.exitCode, 1);
+  const spawn = turn.capture.find((entry) => entry.kind === 'spawn');
+  assert.equal(isProcessAlive(spawn?.pid as number), false);
+});
+
+test('a question without questions is answered at once instead of waiting unseen', async () => {
+  const turn = await runTurn({
+    appSessionId: 'app-empty-question',
+    scenario: {
+      newSessionId: 'ses_empty_question',
+      steps: [
+        { emit: { type: 'question.asked', properties: { id: 'que_empty', sessionID: '$SID', questions: [] } } },
+        { await: 'que_empty' },
+      ],
+    },
+  });
+
+  assert.equal(turn.error, null);
+  assert.equal(kinds(turn.messages).includes('permission_request'), false);
+  assert.deepEqual(turn.requests('POST', '/question/que_empty/reply').map((entry) => entry.body), [{ answers: [] }]);
+});
+
+test('an idle from before the session went busy again does not cut off what follows the prompt answer', async () => {
+  const turn = await runTurn({
+    appSessionId: 'app-stale-idle',
+    scenario: {
+      newSessionId: 'ses_stale_idle',
+      // An idle and a busy the runtime has seen well before the prompt answers.
+      steps: [sessionStatus('idle'), sessionStatus('busy'), { sleep: 300 }],
+      // The prompt answers first; the last part and the idle follow on the stream.
+      trailingSteps: [{ sleep: 300 }, textPart('after the answer')],
+    },
+  });
+
+  assert.equal(turn.error, null);
+  assert.equal(turn.messages.find((message) => message.kind === 'text')?.content, 'after the answer');
+});
+
+test('a stop during the pause before a second start attempt starts no second server', async () => {
+  let turnCapture = '';
+  const turn = await runTurn({
+    appSessionId: 'app-locked-abort',
+    scenario: { lockedOnceMarker: path.join(tempRoot, 'locked-abort.marker'), newSessionId: 'ses_locked_abort', steps: [textPart('x')] },
+    async whileRunning(capturePath) {
+      turnCapture = capturePath;
+      // The first server fails at once like a locked database; stop the turn
+      // while the runtime waits to try again.
+      let firstPid = 0;
+      await waitUntil(async () => {
+        firstPid = (await readCapture(capturePath)).find((entry) => entry.kind === 'spawn')?.pid ?? 0;
+        return firstPid > 0 && !isProcessAlive(firstPid);
+      }, 10_000);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      await opencodeRuntime.abort('app-locked-abort');
+    },
+  });
+
+  assert.equal(turn.error, null);
+  await new Promise((resolve) => setTimeout(resolve, 1_500));
+  const spawns = (await readCapture(turnCapture)).filter((entry) => entry.kind === 'spawn');
+  assert.equal(spawns.length, 1);
+  assert.equal(turn.messages.length, 0);
+});
+
+test('stopping a server also stops the binary behind a wrapper script', {
+  skip: process.platform === 'win32' && 'Windows stops the whole tree with taskkill /T',
+}, async () => {
+  // Some installs put a shell script in front of the binary, which then runs
+  // as the script's child; the server is stopped as a process group.
+  const wrapperBin = path.join(tempRoot, 'bin-wrapper');
+  await mkdir(wrapperBin, { recursive: true });
+  await writeShim(wrapperBin, 'wrap');
+  const pathKey = findEnvKey('PATH');
+  const previousPath = process.env[pathKey];
+  process.env[pathKey] = `${wrapperBin}${path.delimiter}${previousPath ?? ''}`;
+  try {
+    const turn = await runTurn({ appSessionId: 'app-wrapper', scenario: { newSessionId: 'ses_wrapper', steps: [textPart('wrapped')] } });
+
+    assert.equal(turn.error, null);
+    const serverPid = turn.capture.find((entry) => entry.kind === 'spawn')?.pid as number;
+    assert.ok(await waitUntil(() => !isProcessAlive(serverPid), 5_000), 'the wrapped binary outlived its server');
+  } finally {
+    process.env[pathKey] = previousPath;
+  }
+});
+
+test('a server still starting when CloudCLI exits is stopped too', {
+  skip: process.platform === 'win32' && 'POSIX signals',
+}, async () => {
+  runCounter += 1;
+  const scenarioPath = path.join(tempRoot, `scenario-${runCounter}.json`);
+  const capturePath = path.join(tempRoot, `capture-${runCounter}.jsonl`);
+  // Boots for a minute, far longer than the test: it must be stopped while booting.
+  await writeFile(scenarioPath, JSON.stringify({ listenDelayMs: 60_000 }), 'utf8');
+  await writeFile(capturePath, '', 'utf8');
+  const script = path.join(tempRoot, 'cloudcli-exits-during-start.mts');
+  await writeFile(script, [
+    `import { OpenCodeServerProcess } from ${JSON.stringify(pathToFileURL(SERVER_PROCESS_MODULE).href)};`,
+    // CloudCLI's own shutdown: SIGTERM ends in process.exit().
+    `process.on('SIGTERM', () => process.exit(0));`,
+    `OpenCodeServerProcess.start({ cwd: ${JSON.stringify(projectDir)}, env: process.env }).catch(() => {});`,
+    'setInterval(() => {}, 1000);',
+    '',
+  ].join('\n'), 'utf8');
+
+  const cloudcli = spawn(process.execPath, ['--import', TSX_LOADER, script], {
+    cwd: APPLICATION_ROOT,
+    env: {
+      ...process.env,
+      FAKE_OPENCODE_SCENARIO: scenarioPath,
+      FAKE_OPENCODE_CAPTURE: capturePath,
+    },
+    stdio: 'ignore',
+  });
+  const cloudcliExited = new Promise((resolve) => cloudcli.once('exit', resolve));
+  try {
+    // The fake records its spawn as soon as it runs, long before it listens.
+    let serverPid = 0;
+    const started = await waitUntil(async () => {
+      serverPid = (await readCapture(capturePath)).find((entry) => entry.kind === 'spawn')?.pid ?? 0;
+      return serverPid > 0;
+    }, 15_000);
+    assert.ok(started, 'the server never started');
+
+    cloudcli.kill('SIGTERM');
+    await cloudcliExited;
+    assert.ok(await waitUntil(() => !isProcessAlive(serverPid), 5_000), 'the booting server outlived CloudCLI');
+    assert.ok((await readCapture(capturePath)).some((entry) => entry.kind === 'exit' && entry.signal === 'SIGTERM'));
+  } finally {
+    cloudcli.kill('SIGKILL');
+  }
 });
 
 test('requests from a subagent session are asked, unrelated sessions are ignored', async () => {
