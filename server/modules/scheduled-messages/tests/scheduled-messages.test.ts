@@ -409,6 +409,31 @@ test('a due message is announced to open tabs as it is claimed, before its turn 
   });
 });
 
+test('a pass announces each session it claimed from once, however many of its messages were due', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    const otherSessionId = 'other-scheduled-session';
+    sessionsDb.createAppSession(otherSessionId, 'claude', tmpdir(), 'Other scheduled session');
+    for (const [sessionId, content] of [
+      [SESSION_ID, 'first for this session'],
+      [SESSION_ID, 'second for this session'],
+      [otherSessionId, 'only one for the other session'],
+    ]) {
+      scheduledMessagesService.schedule({
+        userId,
+        sessionId,
+        content,
+        scheduledFor: new Date(Date.now() - 1_000).toISOString(),
+      });
+    }
+    const tab = openTab();
+
+    assert.equal(await dispatchDueScheduledMessages(createRuntime([])), 3);
+
+    // One read per session is enough: a single GET returns all of its rows.
+    assert.deepEqual(tab.announcements().map((frame) => frame.sessionId).sort(), [otherSessionId, SESSION_ID]);
+  });
+});
+
 test('a message that fails to send is announced again once the reason is recorded', async () => {
   await withIsolatedDatabase(async (userId) => {
     scheduledMessagesService.schedule({

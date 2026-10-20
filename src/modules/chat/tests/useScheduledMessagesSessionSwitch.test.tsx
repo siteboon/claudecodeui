@@ -63,3 +63,24 @@ test('a slow fetch for the previous session cannot land on the next one', async 
 
   assert.equal(result.current.scheduledMessages.length, 0);
 });
+
+test('a slow fetch for the previous session cannot land after switching to no session', async () => {
+  // Leaving for no session sends no request of its own, so nothing newer
+  // supersedes A's request: only the active-session check can drop it.
+  let releaseSessionA: (() => void) | undefined;
+  vi.spyOn(api.scheduledMessages, 'list').mockImplementation(() => new Promise<Response>((resolve) => {
+    releaseSessionA = () => resolve(listResponse([MESSAGE_A]));
+  }));
+
+  const { result, rerender } = renderHook(({ sessionId }) => useScheduledMessages(sessionId, subscribe), {
+    initialProps: { sessionId: 'session-a' as string | null },
+  });
+  await waitFor(() => assert.ok(releaseSessionA));
+  rerender({ sessionId: null });
+
+  await act(async () => {
+    releaseSessionA?.();
+  });
+
+  assert.equal(result.current.scheduledMessages.length, 0);
+});

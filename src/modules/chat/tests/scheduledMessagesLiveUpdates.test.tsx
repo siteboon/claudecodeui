@@ -123,6 +123,39 @@ test('a change to another session\'s messages does not refetch this one', async 
   assert.equal(list.mock.calls.length, callsBefore);
 });
 
+test('after a session switch, only the newly opened session\'s announcements refetch', async () => {
+  const list = vi.spyOn(api.scheduledMessages, 'list').mockImplementation(async () => listResponse([]));
+  const socket = createSocket();
+
+  const { rerender } = renderHook(({ sessionId }) => useScheduledMessages(sessionId, socket.subscribe), {
+    initialProps: { sessionId: SESSION_ID },
+  });
+  await waitFor(() => assert.ok(list.mock.calls.length > 0));
+  rerender({ sessionId: 'session-b' });
+  await waitFor(() => assert.equal(list.mock.calls.at(-1)?.[0], 'session-b'));
+
+  // The listener must follow the switch: a frame for B reads B's list.
+  const callsBeforeB = list.mock.calls.length;
+  socket.emit({ kind: 'scheduled_messages_changed', sessionId: 'session-b' });
+  await waitFor(() => assert.equal(list.mock.calls.length, callsBeforeB + 1));
+  assert.equal(list.mock.calls.at(-1)?.[0], 'session-b');
+
+  // And a frame for the session left behind is someone else's now.
+  socket.emit({ kind: 'scheduled_messages_changed', sessionId: SESSION_ID });
+  await act(async () => {});
+  assert.equal(list.mock.calls.length, callsBeforeB + 1);
+});
+
+test('a caller that passes no subscribe still gets the list, just not live', async () => {
+  // Callers written before the announcement existed call the hook with the
+  // session id alone. They keep the old behaviour instead of crashing.
+  vi.spyOn(api.scheduledMessages, 'list').mockImplementation(async () => listResponse([scheduledMessage('pending')]));
+
+  const { result } = renderHook(() => useScheduledMessages(SESSION_ID));
+
+  await waitFor(() => assert.equal(result.current.scheduledMessages[0]?.status, 'pending'));
+});
+
 test('a reconnect reads the list again, since announcements sent while it was down are lost', async () => {
   let serverState: ScheduledMessage[] = [scheduledMessage('pending')];
   vi.spyOn(api.scheduledMessages, 'list').mockImplementation(async () => listResponse(serverState));

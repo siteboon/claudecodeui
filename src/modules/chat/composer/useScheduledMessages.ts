@@ -12,10 +12,14 @@ import type { ScheduledMessage, ServerEvent } from '@/shared/types';
  * sends a message, or records why it could not, and another tab or device
  * can schedule or cancel one. A reconnect reads it again too, because an
  * announcement sent while the socket was down is lost.
+ *
+ * `subscribe` is the websocket context's. A caller that leaves it out still
+ * gets the list, read on open and after its own schedule or cancel, but not
+ * the live updates.
  */
 export function useScheduledMessages(
   sessionId: string | null,
-  subscribe: (listener: (event: ServerEvent) => void) => () => void,
+  subscribe?: (listener: (event: ServerEvent) => void) => () => void,
 ) {
   const [scheduledMessages, setScheduledMessages] = useState<ScheduledMessage[]>([]);
   // Which session the list on screen belongs to. A fetch that resolves after
@@ -60,14 +64,22 @@ export function useScheduledMessages(
     void refresh();
   }, [refresh, sessionId]);
 
-  useEffect(() => subscribe((event) => {
-    if (
-      event.kind === 'websocket_reconnected'
-      || (event.kind === 'scheduled_messages_changed' && event.sessionId === sessionId)
-    ) {
-      void refresh();
+  useEffect(() => {
+    // No socket to listen on: the list stays as last read, as it did before
+    // the server announced changes.
+    if (!subscribe) {
+      return;
     }
-  }), [refresh, sessionId, subscribe]);
+
+    return subscribe((event) => {
+      if (
+        event.kind === 'websocket_reconnected'
+        || (event.kind === 'scheduled_messages_changed' && event.sessionId === sessionId)
+      ) {
+        void refresh();
+      }
+    });
+  }, [refresh, sessionId, subscribe]);
 
   const schedule = useCallback(async (input: {
     content: string;
