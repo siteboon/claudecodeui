@@ -398,6 +398,14 @@ async function expireStaleSessions(now = Date.now()): Promise<void> {
   }));
 }
 
+/** Caller must hold the session lock for `session.id`. */
+async function navigateLocked(session: BrowserUseSession, handle: RuntimeHandle, rawUrl: string): Promise<void> {
+  const url = normalizeUrl(rawUrl);
+  await handle.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  session.lastAction = `navigate:${url}`;
+  session.cursor = null;
+}
+
 async function captureSession(session: BrowserUseSession, page: any): Promise<void> {
   const screenshot = await page.screenshot({ type: 'jpeg', quality: 72, fullPage: false });
   session.screenshotDataUrl = `data:image/jpeg;base64,${Buffer.from(screenshot).toString('base64')}`;
@@ -630,10 +638,7 @@ export const browserUseService = {
         throw new Error('Browser runtime handle is not available.');
       }
 
-      const url = normalizeUrl(rawUrl);
-      await handle.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-      session.lastAction = `navigate:${url}`;
-      session.cursor = null;
+      await navigateLocked(session, handle, rawUrl);
       await captureSession(session, handle.page);
       return publicSession(session);
     });
@@ -790,9 +795,11 @@ export const browserUseService = {
       const action = input.action || 'list';
       if (action === 'new') {
         const page = await handle.context.newPage();
-        handles.set(sessionId, { ...handle, page });
+        const newHandle = { ...handle, page };
+        handles.set(sessionId, newHandle);
         if (input.url) {
-          await this.agentNavigate(sessionId, input.url);
+          // Not agentNavigate: it would wait on the session lock this call already holds.
+          await navigateLocked(session, newHandle, input.url);
         }
       } else if (action === 'select') {
         const page = handle.context.pages()[input.index || 0];
