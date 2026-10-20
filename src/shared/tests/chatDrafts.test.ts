@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 
 import { afterEach, beforeEach, test, vi } from 'vitest';
 
+import type * as Api from '@/shared/api';
+
 /**
  * Drafts moved out of the browser and into auth.db so a message half-typed on
  * one device can be finished on another — the case the composer could not serve
@@ -28,7 +30,8 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
   headers: { 'Content-Type': 'application/json' },
 });
 
-vi.mock('@/shared/api', () => ({
+vi.mock('@/shared/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof Api>()),
   api: {
     user: {
       drafts: async () => {

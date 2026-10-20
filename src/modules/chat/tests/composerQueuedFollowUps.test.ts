@@ -53,7 +53,8 @@ const fakeServer = async (url: RequestInfo | URL, init?: RequestInit): Promise<R
 
   if (path.includes('/api/assets/files')) {
     await uploadGate;
-    const files = (init?.body as FormData).getAll('files') as File[];
+    const form = init?.body instanceof FormData ? init.body : new FormData();
+    const files = form.getAll('files') as File[];
     return json({ attachments: files.map((file) => ({ name: file.name, path: `/uploads/${file.name}` })) });
   }
 
