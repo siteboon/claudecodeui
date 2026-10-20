@@ -103,6 +103,12 @@ test('a browser without usable fonts explains why snapshots have no text', async
     assert.equal(snapshot.text, '');
     assert.equal(snapshot.textError, message);
     assert.equal(snapshot.session.message, message);
+
+    // Whitespace is all a font-less browser returns for some pages; it is still capped like any snapshot text.
+    Object.assign(fakeBrowser, { innerText: ' \n'.repeat(20_000) });
+    const whitespace = await browserUseService.agentSnapshot(sessionId);
+    assert.equal(whitespace.text.length, 30_000);
+    assert.equal(whitespace.textError, message);
   });
 });
 
@@ -113,6 +119,17 @@ test('a browser with fonts keeps the ready message and plain snapshot text', asy
     const snapshot = await browserUseService.agentSnapshot(sessionId);
     assert.equal(snapshot.text, 'hello');
     assert.equal('textError' in snapshot, false);
+
+    // A page without text (about:blank, a canvas-only page, an app that has not rendered yet) is not a font problem.
+    for (const innerText of ['', ' \n ']) {
+      Object.assign(fakeBrowser, { innerText });
+      const blank = await browserUseService.agentSnapshot(sessionId);
+      assert.equal(blank.text, innerText);
+      assert.equal('textError' in blank, false);
+    }
+
+    Object.assign(fakeBrowser, { innerText: 'x'.repeat(40_000) });
+    assert.equal((await browserUseService.agentSnapshot(sessionId)).text.length, 30_000);
   });
 });
 
