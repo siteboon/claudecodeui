@@ -57,6 +57,10 @@ module.exports = {
 };
 `, 'utf8');
 
+// Keep any Browser runtime dir lookup inside the temp dir, so a Playwright installed under HOME is never loaded.
+const previousRuntimeDir = process.env.CLOUDCLI_BROWSER_USE_RUNTIME_DIR;
+process.env.CLOUDCLI_BROWSER_USE_RUNTIME_DIR = tempDirectory;
+
 // The service loads Playwright with a bare `require('playwright')`; point that one request at the fake.
 const moduleResolver = Module as unknown as { _resolveFilename: (request: string, ...rest: unknown[]) => string };
 const originalResolveFilename = moduleResolver._resolveFilename;
@@ -79,6 +83,11 @@ test.after(async () => {
     delete process.env.DATABASE_PATH;
   } else {
     process.env.DATABASE_PATH = previousDatabasePath;
+  }
+  if (previousRuntimeDir === undefined) {
+    delete process.env.CLOUDCLI_BROWSER_USE_RUNTIME_DIR;
+  } else {
+    process.env.CLOUDCLI_BROWSER_USE_RUNTIME_DIR = previousRuntimeDir;
   }
   fs.rmSync(tempDirectory, { recursive: true, force: true });
 });
