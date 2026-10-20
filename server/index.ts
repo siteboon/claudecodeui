@@ -402,6 +402,11 @@ async function startServer() {
         };
         process.on('SIGTERM', () => void shutdownRuntimeServices());
         process.on('SIGINT', () => void shutdownRuntimeServices());
+        // A closed terminal sends SIGHUP. Node's default would exit without
+        // running this shutdown or any 'exit' hook, so children in their own
+        // process group (plugin git commands, OpenCode's private
+        // `opencode serve`) would keep running.
+        process.on('SIGHUP', () => void shutdownRuntimeServices());
     } catch (error) {
         console.error('[ERROR] Failed to start server:', error);
         process.exit(1);

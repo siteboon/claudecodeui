@@ -12,8 +12,10 @@
  *   flags so the user's `server.*` config cannot widen the binding;
  * - protected by a random Basic-auth password that only travels in the child
  *   environment, never in argv;
- * - stopped on every exit path, and synchronously when CloudCLI itself exits,
- *   because `opencode serve` does not exit when its parent dies.
+ * - stopped when its turn ends, and synchronously when CloudCLI itself exits
+ *   (also while it is still starting), because `opencode serve` does not exit
+ *   when its parent dies. Only a hard kill of CloudCLI (SIGKILL, OOM, a
+ *   Windows TerminateProcess) leaves one behind.
  */
 import { spawn as spawnChildProcess, spawnSync } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
@@ -48,8 +50,11 @@ const START_RETRY_DELAY_MS = 1_000;
 
 const RUNS_DETACHED = process.platform !== 'win32';
 
-/** Every private server that has not exited yet, for the exit-time sweep. */
-const liveServers = new Set<OpenCodeServerProcess>();
+/**
+ * Every private server process that has not exited yet, from the moment it is
+ * spawned (a server can take seconds to listen), for the exit-time sweep.
+ */
+const liveServerProcesses = new Set<ChildProcess>();
 let exitSweepInstalled = false;
 
 /**
@@ -133,14 +138,30 @@ function installExitSweep(): void {
     return;
   }
   exitSweepInstalled = true;
-  // CloudCLI's SIGTERM/SIGINT handlers end in process.exit(), and uncaught
-  // crashes still run 'exit' listeners. Only a hard kill of CloudCLI itself
-  // (SIGKILL, OOM, a Windows TerminateProcess) can leave a server behind.
+  // CloudCLI's SIGTERM/SIGINT/SIGHUP handlers end in process.exit(), and
+  // uncaught crashes still run 'exit' listeners. Only a hard kill of CloudCLI
+  // itself (SIGKILL, OOM, a Windows TerminateProcess) can leave a server behind.
   process.once('exit', () => {
-    for (const server of liveServers) {
-      server.killSynchronously();
+    for (const child of liveServerProcesses) {
+      signalProcessTree(child, 'SIGTERM', true);
     }
   });
+}
+
+/**
+ * Puts a freshly spawned server under the exit-time sweep until it exits.
+ * Registered at spawn rather than once it listens: CloudCLI can exit while a
+ * server boots, and a shutdown that is still awaiting other services can see a
+ * turn spawn one more.
+ */
+function sweepOnExit(child: ChildProcess): void {
+  if (child.pid === undefined) {
+    // Never started (ENOENT and the like): nothing to stop.
+    return;
+  }
+  liveServerProcesses.add(child);
+  child.once('exit', () => liveServerProcesses.delete(child));
+  installExitSweep();
 }
 
 /**
@@ -172,13 +193,10 @@ export class OpenCodeServerProcess {
     });
     child.once('exit', (code, signal) => {
       this.exitInfo = { code, signal };
-      liveServers.delete(this);
       for (const listener of this.exitListeners) {
         listener(this.exitInfo);
       }
     });
-    liveServers.add(this);
-    installExitSweep();
   }
 
   /**
@@ -207,6 +225,7 @@ export class OpenCodeServerProcess {
       // A late 'error' (a failed kill, say) must never become an uncaught
       // exception in CloudCLI; startup failures are read in waitForListening.
       child.on('error', () => {});
+      sweepOnExit(child);
 
       try {
         const { baseUrl, stderr } = await waitForListening(child, options.signal);
@@ -216,6 +235,10 @@ export class OpenCodeServerProcess {
         const retryable = error instanceof OpenCodeServerUnavailableError && TRANSIENT_START_FAILURE.test(error.message);
         if (attempt === 0 && retryable && !options.signal?.aborted) {
           await new Promise((resolve) => setTimeout(resolve, START_RETRY_DELAY_MS));
+          if (options.signal?.aborted) {
+            // The user stopped the turn during the pause: no second server.
+            throw new OpenCodeServerUnavailableError('opencode serve start was aborted');
+          }
           continue;
         }
         throw error;
@@ -416,13 +439,6 @@ export class OpenCodeServerProcess {
       };
       this.exitListeners.add(listener);
     });
-  }
-
-  /** Exit-time variant of stop(): nothing can be awaited inside 'exit'. */
-  killSynchronously(): void {
-    if (!this.hasExited()) {
-      signalProcessTree(this.child, 'SIGTERM', true);
-    }
   }
 }
 
