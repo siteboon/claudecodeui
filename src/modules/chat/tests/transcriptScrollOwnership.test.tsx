@@ -257,3 +257,89 @@ describe('search jump ownership', () => {
     );
   });
 });
+
+describe('older-history restore', () => {
+  it('keeps the scrolling the reader did while the older page was loading', async () => {
+    const olderPage = Array.from({ length: 20 }, (_, index) => (
+      buildMessage(index, new Date(Date.UTC(2026, 0, 1, 0, 0, index)).toISOString())
+    ));
+    const latestPage = Array.from({ length: 20 }, (_, index) => (
+      buildMessage(20 + index, new Date(Date.UTC(2026, 0, 1, 0, 1, index)).toISOString())
+    ));
+    const messages = new Map<string, NormalizedMessage[]>([[SESSION_A, latestPage]]);
+    const store = createStore(messages);
+    store.getSessionSlot.mockImplementation(() => ({
+      fetchedAt: 1, status: 'idle' as const, total: 40, hasMore: true, offset: 20,
+    }));
+    store.fetchFromServer.mockImplementation(async () => ({
+      fetchedAt: 1, status: 'idle' as const, total: 40, hasMore: true, offset: 20,
+    }));
+
+    // The older page lands only when the test says so, like a slow network.
+    let deliverOlderPage: () => void = () => undefined;
+    store.fetchMore.mockImplementation(() => new Promise((resolve) => {
+      deliverOlderPage = () => {
+        messages.set(SESSION_A, [...olderPage, ...latestPage]);
+        resolve({
+          slot: { fetchedAt: 1, status: 'idle' as const, total: 40, hasMore: false, offset: 40 },
+          prependedCount: 20,
+        });
+      };
+    }) as never);
+
+    // The first rendered row, laid out 100px down the content until the older
+    // page renders above it and pushes it 2000px further down. React renders
+    // the page when the hook reads the merged messages, so the model moves the
+    // row then.
+    let rowContentTop = 100;
+    const getMessages = store.getMessages.getMockImplementation()!;
+    store.getMessages.mockImplementation((sessionId: string) => {
+      const list = getMessages(sessionId);
+      if (list.length === 40) rowContentTop = 2100;
+      return list;
+    });
+
+    const { result } = await renderChatSessionState({ session: { id: SESSION_A } as ProjectSession, store });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
+
+    const container = createContainer(6000, 500);
+    const pane = container.element;
+    pane.getBoundingClientRect = () => ({ top: 0, bottom: 500, height: 500, width: 400 }) as DOMRect;
+    pane.getClientRects = () => [pane.getBoundingClientRect()] as unknown as DOMRectList;
+    const row = document.createElement('div');
+    row.className = 'chat-message';
+    row.getBoundingClientRect = () => {
+      const top = rowContentTop - pane.scrollTop;
+      return { top, bottom: top + 300, height: 300, width: 400 } as DOMRect;
+    };
+    pane.appendChild(row);
+    document.body.appendChild(pane);
+    (result.current.scrollContainerRef as { current: HTMLDivElement | null }).current = pane;
+
+    // Reaching the top asks for the older page...
+    pane.scrollTop = 90;
+    await act(async () => {
+      void result.current.handleScroll();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    assert.equal(store.fetchMore.mock.calls.length, 1, 'the older page must have been requested');
+
+    // ...and the momentum carries the transcript another 60px while it loads.
+    pane.scrollTop = 30;
+    const offsetBeforePage = row.getBoundingClientRect().top;
+
+    await act(async () => {
+      deliverOlderPage();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    assert.equal(
+      row.getBoundingClientRect().top,
+      offsetBeforePage,
+      'the row on screen when the page arrived must stay where it was, not jump back to where it was at the request',
+    );
+    pane.remove();
+  });
+});

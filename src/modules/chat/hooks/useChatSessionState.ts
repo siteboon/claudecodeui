@@ -130,6 +130,22 @@ function captureScrollRestoreState(container: HTMLDivElement): ScrollRestoreStat
   };
 }
 
+/**
+ * The scroll state a prepend should restore, taken once the older page is in
+ * hand. The momentum scroll that triggered the load keeps going while the
+ * request is in flight; restoring what was captured when it went out undid
+ * that scrolling (#1574). The page renders after this synchronous
+ * continuation, so the layout read here is still the one the reader sees. A
+ * Chat tab hidden meanwhile has no layout to read, so the request-time state
+ * stands in.
+ */
+function latestScrollRestoreState(
+  container: HTMLDivElement,
+  requestState: ScrollRestoreState,
+): ScrollRestoreState {
+  return container.getClientRects().length > 0 ? captureScrollRestoreState(container) : requestState;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Helper: Convert a ChatMessage to a NormalizedMessage for the store */
 /* ------------------------------------------------------------------ */
@@ -479,7 +495,7 @@ export function useChatSessionState({
 
       isLoadingMoreRef.current = true;
       setIsLoadingMoreMessages(true);
-      const scrollRestoreState = captureScrollRestoreState(container);
+      const requestScrollState = captureScrollRestoreState(container);
 
       try {
         const result = await sessionStore.fetchMore(selectedSession.id, {
@@ -510,7 +526,7 @@ export function useChatSessionState({
           return false;
         }
 
-        pendingScrollRestoreRef.current = scrollRestoreState;
+        pendingScrollRestoreRef.current = latestScrollRestoreState(container, requestScrollState);
         setVisibleMessageCount((prev) => prev + SESSION_MESSAGES_PAGE_SIZE);
         if (!slot.hasMore) {
           allMessagesLoadedRef.current = true;
@@ -1041,7 +1057,7 @@ export function useChatSessionState({
     }
 
     const container = scrollContainerRef.current;
-    const scrollRestoreState = container ? captureScrollRestoreState(container) : null;
+    const requestScrollState = container ? captureScrollRestoreState(container) : null;
 
     try {
       const slot = await sessionStore.fetchFromServer(requestSessionId, {
@@ -1056,8 +1072,8 @@ export function useChatSessionState({
       if (currentSessionId !== requestSessionId) return;
 
       if (slot) {
-        if (scrollRestoreState) {
-          pendingScrollRestoreRef.current = scrollRestoreState;
+        if (container && requestScrollState) {
+          pendingScrollRestoreRef.current = latestScrollRestoreState(container, requestScrollState);
         }
 
         setHasMoreMessages(false);
