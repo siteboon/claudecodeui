@@ -397,6 +397,8 @@ class OpenCodeServeTurn {
   private turnOver = false;
   private errorText: string | null = null;
   private graceTimer: NodeJS.Timeout | null = null;
+  /** Settles when abort() has finished; set by the first abort() call. */
+  private abortFinished: Promise<void> | null = null;
   private readonly turnEnded: Promise<TurnEndReason>;
   private endTurn: (reason: TurnEndReason) => void = () => {};
 
@@ -476,6 +478,14 @@ class OpenCodeServeTurn {
       }
       if (this.server && !this.server.hasExited()) {
         void this.server.stop();
+      }
+      if (this.abortFinished) {
+        // The stop handler (chat.abort) sends this turn's terminal complete
+        // once abort() returns. Settling first would let the chat's safety
+        // net report the stopped turn as failed. The handler continues in
+        // microtasks, so it has run by the next macrotask.
+        await this.abortFinished;
+        await new Promise((resolve) => setImmediate(resolve));
       }
     }
   }
@@ -999,10 +1009,14 @@ class OpenCodeServeTurn {
    * aborts the session (which ends a tool command that is still running —
    * stopping the server alone would orphan it), then the server stops.
    */
-  async abort(): Promise<void> {
-    if (this.aborted) {
-      return;
+  abort(): Promise<void> {
+    if (!this.abortFinished) {
+      this.abortFinished = this.performAbort();
     }
+    return this.abortFinished;
+  }
+
+  private async performAbort(): Promise<void> {
     this.aborted = true;
     this.startController.abort();
     this.withdrawOpenRequests('cancelled');

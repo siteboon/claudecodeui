@@ -194,6 +194,8 @@ async function runTurn(input: {
   onMessage?: (message: NormalizedMessage) => void;
   /** Runs next to the turn, with the capture file the fake writes to. */
   whileRunning?: (capturePath: string) => Promise<void>;
+  /** Called the moment the runtime's promise settles. */
+  onSettled?: () => void;
 }): Promise<TurnResult> {
   runCounter += 1;
   const scenarioPath = path.join(tempRoot, `scenario-${runCounter}.json`);
@@ -224,6 +226,7 @@ async function runTurn(input: {
       writer,
       runtimeContext,
     );
+    turn.then(() => input.onSettled?.(), () => input.onSettled?.());
     const stuck = new Promise<'stuck'>((resolve) => {
       deadline = setTimeout(() => resolve('stuck'), TURN_DEADLINE_MS);
     });
@@ -590,6 +593,31 @@ test('aborting while a prompt waits withdraws it, aborts the session and stops t
   assert.equal(turn.messages.some((message) => message.kind === 'error'), false);
   const spawn = turn.capture.find((entry) => entry.kind === 'spawn');
   assert.equal(isProcessAlive(spawn?.pid as number), false);
+});
+
+test('a stopped turn settles only once its stop has finished', async () => {
+  // chat.abort sends the stopped turn's terminal complete when the runtime's
+  // abort returns; if the turn settled first, the chat's safety net would
+  // report it as failed (exit code 1, not aborted). Here OpenCode takes the
+  // abort but its event stream ends before any idle, so the turn ends while
+  // the abort still waits for the server to go.
+  const order: string[] = [];
+  let abortDone: Promise<unknown> = Promise.resolve();
+  const turn = await runTurn({
+    appSessionId: 'app-abort-order',
+    scenario: { newSessionId: 'ses_abort_order', abortDropsEvents: true, steps: bashCallSteps('per_order', 'sleep 30') },
+    onMessage(message) {
+      if (message.kind === 'permission_request') {
+        abortDone = Promise.resolve(opencodeRuntime.abort('app-abort-order')).then(() => order.push('abort returned'));
+      }
+    },
+    onSettled: () => order.push('turn settled'),
+  });
+  await abortDone;
+
+  assert.equal(turn.error, null);
+  assert.deepEqual(order, ['abort returned', 'turn settled']);
+  assert.equal(turn.messages.some((message) => message.kind === 'complete'), false);
 });
 
 test('bypassPermissions answers requests like `opencode run --auto` and never prompts', async () => {

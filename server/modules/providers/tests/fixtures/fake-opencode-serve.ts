@@ -17,6 +17,8 @@
 //                           `listenDelayMs`: the server boots that long before it listens.
 //                           `replyStatus`: every permission/question reply answers this HTTP status
 //                           and leaves the request waiting.
+//                           `abortDropsEvents`: a session abort is accepted, then every event stream
+//                           ends before any idle and the prompt never answers.
 //
 // Steps run when the prompt arrives ("$SID" anywhere is replaced by the session id):
 // - { "emit": <event> }                  push one SSE event `{ type, properties }`
@@ -63,6 +65,7 @@ type Scenario = {
   promptStatus?: number;
   promptBody?: unknown;
   replyStatus?: number;
+  abortDropsEvents?: boolean;
   knownRequests?: string[];
 };
 
@@ -292,6 +295,14 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   }
   if (parts[0] === 'session' && parts[2] === 'abort' && req.method === 'POST') {
     aborted = true;
+    if (scenario.abortDropsEvents) {
+      json(res, 200, true);
+      for (const client of sseClients) {
+        client.end();
+      }
+      sseClients.clear();
+      return;
+    }
     for (const [requestId, wait] of pendingWaits) {
       pendingWaits.delete(requestId);
       wait('aborted');
