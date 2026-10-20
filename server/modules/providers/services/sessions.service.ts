@@ -182,6 +182,10 @@ export const sessionsService = {
           canInterrupt: false,
           tasks,
         });
+        // A process held open for its background work still records itself as
+        // busy in the CLI registry; without this the loop below lists it a
+        // second time as a CLI turn, and the client keeps that entry instead.
+        runningById.set(sessionId, entries[entries.length - 1]);
       }
     }
 

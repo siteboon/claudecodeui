@@ -405,6 +405,32 @@ test('a CLI turn does not duplicate a session already running a chat run', { con
   });
 });
 
+test('a CLI process held open for background work stays listed as background work', { concurrency: false }, async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createAppSession('held-cli-session', 'claude', '/tmp/running-project');
+    sessionsDb.assignProviderSessionId('held-cli-session', 'claude-native-held');
+    const run = chatRunRegistry.startRun({
+      appSessionId: 'held-cli-session', provider: 'claude', providerSessionId: 'claude-native-held', connection: null, userId: null,
+    });
+    assert.ok(run);
+    run.writer.sendComplete({ exitCode: 0 });
+
+    const tasks = [task('monitor', 1_000)];
+    // The SDK-spawned CLI keeps its registry entry `busy` while it is held open.
+    await withClaudeCliRegistry(
+      [{ pid: process.pid, sessionId: 'claude-native-held', status: 'busy', entrypoint: 'sdk-ts', startedAt: 500 }],
+      async () => await withProviders(
+        { claude: { run: async () => undefined, abort: () => false, listBackgroundWork: () => [{ sessionId: 'held-cli-session', tasks }] } },
+        async () => {
+          const sessions = await sessionsService.listRunningSessions();
+          assert.equal(sessions.length, 1, 'the background entry already covers this session');
+          assert.equal(sessions[0].background, true, 'the composer stays usable');
+        },
+      ),
+    );
+  });
+});
+
 test('an unreadable registry never fails the running-sessions poll', { concurrency: false }, async () => {
   await withIsolatedDatabase(async () => {
     sessionsDb.createAppSession('safe-session', 'claude', '/tmp/running-project');
