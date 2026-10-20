@@ -85,6 +85,29 @@ test('a saved volume round-trips and survives a channel toggle', async () => {
   });
 });
 
+test('a save without a volume keeps the stored one', async () => {
+  await withDatabase(() => {
+    // The pre-volume shape: what a tab still running the old bundle, or a
+    // script, PUTs to /api/settings/notification-preferences.
+    const oldShape = {
+      channels: { inApp: false, webPush: false, desktop: false, sound: true },
+      events: { actionRequired: true, stop: true, error: true },
+    };
+
+    // A user with no stored row yet still gets the default.
+    assert.equal(notificationPreferencesDb.updatePreferences(USER_ID, oldShape).soundVolume, 70);
+
+    notificationPreferencesDb.updatePreferences(USER_ID, { ...oldShape, soundVolume: 35 });
+    const saved = notificationPreferencesDb.updatePreferences(USER_ID, {
+      ...oldShape,
+      events: { ...oldShape.events, stop: false },
+    });
+    assert.equal(saved.soundVolume, 35);
+    assert.equal(saved.events.stop, false, 'the rest of the payload is still applied');
+    assert.equal(notificationPreferencesDb.getPreferences(USER_ID).soundVolume, 35);
+  });
+});
+
 test('a submitted volume is clamped to a whole percent between 0 and 100', async () => {
   await withDatabase(() => {
     const save = (soundVolume: unknown) => notificationPreferencesDb.updatePreferences(USER_ID, { soundVolume }).soundVolume;

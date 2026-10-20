@@ -79,39 +79,59 @@ function normalizeNotificationPreferences(value: unknown): NotificationPreferenc
   };
 }
 
+/** Reads a user's stored preferences, or null when the user has no row yet. */
+function readStoredPreferences(userId: number): NotificationPreferences | null {
+  const row = getConnection()
+    .prepare(
+      'SELECT preferences_json FROM user_notification_preferences WHERE user_id = ?'
+    )
+    .get(userId) as { preferences_json: string } | undefined;
+  if (!row) {
+    return null;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(row.preferences_json);
+  } catch {
+    parsed = DEFAULT_NOTIFICATION_PREFERENCES;
+  }
+  return normalizeNotificationPreferences(parsed);
+}
+
 export const notificationPreferencesDb = {
   /** Returns the normalized preferences for a user, creating defaults on first read. */
   getNotificationPreferences(userId: number): NotificationPreferences {
-    const db = getConnection();
-    const row = db
-      .prepare(
-        'SELECT preferences_json FROM user_notification_preferences WHERE user_id = ?'
-      )
-      .get(userId) as { preferences_json: string } | undefined;
-
-    if (!row) {
-      const defaults = normalizeNotificationPreferences(DEFAULT_NOTIFICATION_PREFERENCES);
-      db.prepare(
-        'INSERT INTO user_notification_preferences (user_id, preferences_json, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)'
-      ).run(userId, JSON.stringify(defaults));
-      return defaults;
+    const stored = readStoredPreferences(userId);
+    if (stored) {
+      return stored;
     }
 
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(row.preferences_json);
-    } catch {
-      parsed = DEFAULT_NOTIFICATION_PREFERENCES;
-    }
-    return normalizeNotificationPreferences(parsed);
+    const defaults = normalizeNotificationPreferences(DEFAULT_NOTIFICATION_PREFERENCES);
+    getConnection().prepare(
+      'INSERT INTO user_notification_preferences (user_id, preferences_json, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)'
+    ).run(userId, JSON.stringify(defaults));
+    return defaults;
   },
 
-  /** Upserts normalized preferences for a user and returns the stored value. */
+  /**
+   * Upserts normalized preferences for a user and returns the stored value.
+   * A payload without `soundVolume` keeps the stored volume: a tab still running
+   * a bundle from before the setting existed, or a script that only sends
+   * channels and events, must not reset it to the default.
+   */
   updateNotificationPreferences(
     userId: number,
     preferences: unknown
   ): NotificationPreferences {
-    const normalized = normalizeNotificationPreferences(preferences);
+    const source = preferences && typeof preferences === 'object'
+      ? preferences as Record<string, unknown>
+      : {};
+    const normalized = normalizeNotificationPreferences(
+      source.soundVolume === undefined
+        ? { ...source, soundVolume: readStoredPreferences(userId)?.soundVolume }
+        : source
+    );
     const db = getConnection();
 
     db.prepare(
