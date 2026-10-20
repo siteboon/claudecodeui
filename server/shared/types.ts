@@ -952,6 +952,25 @@ export type CreateCredentialResult = {
 };
 
 // ---------------------------
+//----------------- CHAT DRAFT QUEUE TYPES ------------
+/**
+ * A chat message queued to be sent when its session is next idle, in the shape
+ * the composer submits it and `session_drafts.queued_message` stores it.
+ *
+ * `content` is the message text, `attachments` the JSON-safe descriptors
+ * returned by POST /api/assets/files, and `options` the composer's send options
+ * (model, effort, permission mode, ...) captured when it was queued. A session
+ * has at most one: a message queued while another is waiting is merged into it
+ * by the drafts repository, which is why the User module and the Database module
+ * both use this type.
+ */
+export type QueuedChatMessage = {
+  content: string;
+  options?: Record<string, unknown>;
+  attachments: unknown[];
+};
+
+// ---------------------------
 //----------------- PROJECT PERSISTENCE TYPES ------------
 /**
  * Canonical project row shape returned by the projects repository.
@@ -1610,23 +1629,4 @@ export type CliApplication = {
  */
 export type SandboxCommandService = {
   execute(argumentsList: string[]): Promise<number>;
-};
-
-// ---------------------------
-//----------------- CHAT DRAFT QUEUE TYPES ------------
-/**
- * A chat message queued to be sent when its session is next idle, in the shape
- * the composer submits it and `session_drafts.queued_message` stores it.
- *
- * `content` is the message text, `attachments` the JSON-safe descriptors
- * returned by POST /api/assets/files, and `options` the composer's send options
- * (model, effort, permission mode, ...) captured when it was queued. A session
- * has at most one: a message queued while another is waiting is merged into it
- * by the drafts repository, which is why the User module and the Database module
- * both use this type.
- */
-export type QueuedChatMessage = {
-  content: string;
-  options?: Record<string, unknown>;
-  attachments: unknown[];
 };
