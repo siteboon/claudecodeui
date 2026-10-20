@@ -15,6 +15,10 @@ import type { AnyRecord, ProviderRuntimeContext } from '@/shared/types.js';
  * /proc/<pid>/cmdline. The CLI already loads the servers in ~/.claude.json on
  * its own (the runtime sets `settingSources`), so the runtime must never copy
  * them, secrets included, into the options it hands the SDK.
+ *
+ * The copy also cost time on every message: the CLI makes the first API call
+ * of a turn wait until each `--mcp-config` server has connected, while servers
+ * it loads itself connect in the background (#1576).
  */
 
 const ENV_SECRET = 'SENTINEL-ENV-1211';

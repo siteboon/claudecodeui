@@ -295,6 +295,10 @@ function mapCliOptionsToSDK(options = {}) {
   // pass them as `sdkOptions.mcpServers`: the SDK serializes that into a
   // `--mcp-config <json>` argument, exposing every server's env and header
   // secrets to any local user through `ps` or /proc/<pid>/cmdline.
+  // It would also slow every turn down: the CLI holds the first API request
+  // until each `--mcp-config` server has connected (up to MCP_TIMEOUT, 30 s by
+  // default), and every turn spawns a new CLI. Servers it loads itself connect
+  // in the background and join the turn when ready, as in a terminal.
   sdkOptions.settingSources = ['project', 'user', 'local'];
 
   // The SDK resumes with the provider-native session id, never the app id.
