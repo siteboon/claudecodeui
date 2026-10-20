@@ -93,10 +93,17 @@ const setUp = async (
   const textarea = document.createElement('textarea');
   document.body.appendChild(textarea);
   const textareaRef = { current: textarea } as RefObject<HTMLTextAreaElement>;
+  // Every render the hook goes through. A key pressed right after another one
+  // can reach the handler of the first render that follows it, before React
+  // renders again, so tests can press keys through an earlier render.
+  const renders: Array<{
+    listed: string[];
+    handleCommandMenuKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => boolean;
+  }> = [];
 
   const { result, rerender } = renderHook(
-    ({ input }: { input: string }) =>
-      useSlashCommands({
+    ({ input }: { input: string }) => {
+      const hook = useSlashCommands({
         selectedProject: project,
         provider: 'claude',
         input,
@@ -107,7 +114,13 @@ const setUp = async (
         onExecuteCommand: (command) => {
           executedCommands.push(command);
         },
-      }),
+      });
+      renders.push({
+        listed: hook.filteredCommands.map((command) => command.name),
+        handleCommandMenuKeyDown: hook.handleCommandMenuKeyDown,
+      });
+      return hook;
+    },
     { initialProps: { input: '' } },
   );
 
@@ -141,7 +154,7 @@ const setUp = async (
 
   const listedNames = () => result.current.filteredCommands.map((command) => command.name);
 
-  return { result, setInputCalls, executedCommands, typeQuickly, press, listedNames };
+  return { result, renders, setInputCalls, executedCommands, typeQuickly, press, listedNames };
 };
 
 beforeEach(() => {
@@ -259,6 +272,43 @@ describe('slash command keys pressed inside the filter debounce', () => {
     });
     press('Enter');
     assert.deepEqual(executedCommands.map((command) => command.name), ['/bar']);
+  });
+
+  it('acts on the typed list for a key that follows the flush before React renders again', async () => {
+    const { renders, executedCommands, typeQuickly, press } = await setUp(
+      ['/foo', '/bar', '/baz'],
+      { '/foo': 5 },
+    );
+
+    typeQuickly('/ba');
+    const rendersBeforeArrow = renders.length;
+    press('ArrowDown');
+
+    // Keys pressed back to back: Enter reaches the handler of the first render
+    // after the ArrowDown, so that render must already hold the typed list,
+    // not the full one for the query committed before.
+    const firstRenderAfterArrow = renders[rendersBeforeArrow];
+    assert.deepEqual(firstRenderAfterArrow.listed, ['/bar', '/baz']);
+    act(() => {
+      firstRenderAfterArrow.handleCommandMenuKeyDown(keyEvent('Enter').event);
+    });
+    assert.deepEqual(executedCommands.map((command) => command.name), ['/bar']);
+  });
+
+  it('lists every command again at the next slash after a pick', async () => {
+    const { executedCommands, typeQuickly, press, listedNames } = await setUp(
+      ['/foo', '/bar'],
+      { '/foo': 5 },
+    );
+
+    typeQuickly('/bar');
+    press('Enter');
+    assert.deepEqual(executedCommands.map((command) => command.name), ['/bar']);
+
+    // The pick commits "bar" and resets the query in the same event, so the
+    // query never visibly changes; the next "/" must still list everything.
+    typeQuickly('/');
+    assert.deepEqual(listedNames(), ['/foo', '/help', '/bar']);
   });
 
   it('keeps a hover highlight made once the list has caught up', async () => {

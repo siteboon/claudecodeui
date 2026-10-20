@@ -91,7 +91,6 @@ export function useSlashCommands({
   onExecuteCommand,
 }: UseSlashCommandsOptions) {
   const { commands: projectCommands } = useProjectSlashCommands(selectedProject, provider);
-  const [filteredCommands, setFilteredCommands] = useState<SlashCommand[]>([]);
   const [showCommandMenu, setShowCommandMenu] = useState(false);
   const [commandQuery, setCommandQuery] = useState('');
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(-1);
@@ -139,9 +138,13 @@ export function useSlashCommands({
     }
   }, [showCommandMenu]);
 
-  useEffect(() => {
-    setFilteredCommands(filterSlashCommands(slashCommands, commandQuery));
-  }, [commandQuery, slashCommands]);
+  // Derived during render rather than copied into state by an effect: the
+  // render right after a query is committed must already hold its list, or a
+  // key handled before the effect's follow-up render acts on the old list.
+  const filteredCommands = useMemo(
+    () => filterSlashCommands(slashCommands, commandQuery),
+    [slashCommands, commandQuery],
+  );
 
   const frequentCommands = useMemo(() => {
     if (!selectedProject || slashCommands.length === 0) {
@@ -260,12 +263,8 @@ export function useSlashCommands({
     setCommandQuery('');
     setSelectedCommandIndex(-1);
 
-    if (isOpening) {
-      setFilteredCommands(slashCommands);
-    }
-
     textareaRef.current?.focus();
-  }, [showCommandMenu, slashCommands, textareaRef]);
+  }, [showCommandMenu, textareaRef]);
 
   const handleCommandInputChange = useCallback(
     (newValue: string, cursorPos: number) => {
@@ -315,7 +314,8 @@ export function useSlashCommands({
   // before it fires must still act on the text in the input, not on the list
   // for the previous query (for a fresh "/" that is every command, most-used
   // first), so this commits the waiting query now and returns its list, or
-  // null when nothing is waiting.
+  // null when nothing is waiting. The next render derives the same list, so a
+  // key that follows at once acts on it too.
   const flushPendingCommandQuery = useCallback((): SlashCommand[] | null => {
     const pendingQuery = pendingCommandQueryRef.current;
     if (pendingQuery === null) {
