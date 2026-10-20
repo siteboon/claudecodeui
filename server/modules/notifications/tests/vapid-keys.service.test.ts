@@ -71,9 +71,10 @@ function configureWithSubject(
 test('configureWebPush uses a public https subject that Apple accepts by default', () => {
   const { subject, warnings } = configureWithSubject(undefined);
 
-  // Apple's push service answers 403 BadJwtToken for `.local` and localhost contacts.
+  // Apple's push service answers 403 BadJwtToken for local-only contacts such as `.local`, `.lan`
+  // or localhost.
   assert.equal(subject, DEFAULT_VAPID_SUBJECT);
-  assert.doesNotMatch(subject, /\.local\b|localhost/);
+  assert.doesNotMatch(subject, /\.(local|lan)\b|localhost/);
   assert.deepEqual(warnings, []);
 });
 
@@ -98,6 +99,16 @@ test('configureWebPush ignores an invalid VAPID_SUBJECT with a warning instead o
     assert.match(warnings[0], /VAPID_SUBJECT/);
     assert.ok(warnings[0].includes(invalidSubject), invalidSubject);
   }
+});
+
+test('configureWebPush echoes only the first 200 chars of an invalid VAPID_SUBJECT', () => {
+  const hugeSubject = 'x'.repeat(5000);
+  const { subject, warnings } = configureWithSubject(hugeSubject);
+
+  assert.equal(subject, DEFAULT_VAPID_SUBJECT);
+  assert.equal(warnings.length, 1);
+  assert.ok(warnings[0].includes(`"${'x'.repeat(200)}" (first 200 of 5000 chars)`));
+  assert.ok(!warnings[0].includes('x'.repeat(201)));
 });
 
 test('configureWebPush stores one VAPID key pair and reuses it after a restart', async () => {

@@ -4,9 +4,13 @@ import webPush from 'web-push';
 import { vapidKeysDb } from '@/modules/database/index.js';
 
 // Push services read the VAPID `sub` claim as the sender's contact. Apple's
-// service (iPhone/iPad Home Screen apps) answers 403 BadJwtToken when it is a
-// `.local` or localhost address, so the default is the project's public URL.
+// service (iPhone/iPad Home Screen apps) answers 403 BadJwtToken when it names a
+// local-only domain such as `.local`, `.lan` or localhost, so the default is the
+// project's public URL.
 const DEFAULT_VAPID_SUBJECT = 'https://github.com/siteboon/claudecodeui';
+
+// An invalid VAPID_SUBJECT is echoed in the startup warning only up to this many chars.
+const MAX_LOGGED_SUBJECT_LENGTH = 200;
 
 type VapidKeyPair = NonNullable<ReturnType<typeof vapidKeysDb.getVapidKeys>>;
 
@@ -46,8 +50,15 @@ function resolveVapidSubject(): string {
   if (!configuredSubject) return DEFAULT_VAPID_SUBJECT;
   if (isValidVapidSubject(configuredSubject)) return configuredSubject;
 
+  // Only the start of the value is echoed: enough to spot the mistake, without letting a huge or
+  // garbage value flood the log.
+  const loggedSubject = JSON.stringify(configuredSubject.slice(0, MAX_LOGGED_SUBJECT_LENGTH));
+  const cutNote =
+    configuredSubject.length > MAX_LOGGED_SUBJECT_LENGTH
+      ? ` (first ${MAX_LOGGED_SUBJECT_LENGTH} of ${configuredSubject.length} chars)`
+      : '';
   console.warn(
-    `[WebPush] Ignoring VAPID_SUBJECT ${JSON.stringify(configuredSubject)}: it must be an https: URL or a mailto: address. Using ${DEFAULT_VAPID_SUBJECT} instead.`
+    `[WebPush] Ignoring VAPID_SUBJECT ${loggedSubject}${cutNote}: it must be an https: URL or a mailto: address. Using ${DEFAULT_VAPID_SUBJECT} instead.`
   );
   return DEFAULT_VAPID_SUBJECT;
 }

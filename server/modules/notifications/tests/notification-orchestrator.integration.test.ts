@@ -155,11 +155,11 @@ test('a push service rejection is logged with its status and reason, never the d
 
 test('a push service response that echoes the endpoint is logged without it', async () => {
   const { warnings } = await deliverFailingWebPush(
-    pushServiceResponse(400, `Bad device token for ${APPLE_ENDPOINT}`),
+    pushServiceResponse(400, `Bad device token for ${APPLE_ENDPOINT} (again: ${APPLE_ENDPOINT})`),
   );
 
   assert.equal(warnings.length, 1);
-  assert.match(warnings[0], /400 Bad device token for <endpoint>/);
+  assert.match(warnings[0], /400 Bad device token for <endpoint> \(again: <endpoint>\)/);
   assert.ok(!warnings[0].includes(APPLE_DEVICE_TOKEN));
 });
 
@@ -209,6 +209,27 @@ test('each failed subscription is logged on one plain line, with the reason capp
   );
   // Only the expired (410) subscription is removed.
   assert.deepEqual(storedEndpoints.sort(), [fcmEndpoint, malformedEndpoint].sort());
+});
+
+test('C1 control and format characters in a push service response are flattened too', async () => {
+  // U+009B (CSI) and U+0085 (NEL) are C1 controls; U+202E (right-to-left override) would visually
+  // reorder the rest of the log line. The trailing line break must not leave a trailing space.
+  const { warnings } = await deliverFailingWebPush(
+    pushServiceResponse(400, '\u009b31mBad\u0085token\u202e!dilavni\n'),
+  );
+
+  assert.equal(warnings.length, 1);
+  assert.ok(warnings[0].endsWith(': HTTP 400 31mBad token !dilavni'), JSON.stringify(warnings[0]));
+});
+
+test('a long push service response is cut at 200 code points without splitting a surrogate pair', async () => {
+  const { warnings } = await deliverFailingWebPush(pushServiceResponse(500, '\u{1F600}'.repeat(300)));
+
+  assert.equal(warnings.length, 1);
+  const detail = warnings[0].slice(warnings[0].indexOf('HTTP 500'));
+  // 9 code points for "HTTP 500 ", then 191 whole emoji (two UTF-16 units each).
+  assert.equal(detail, `HTTP 500 ${'\u{1F600}'.repeat(191)}`);
+  assert.doesNotMatch(detail, /\p{Cs}/u);
 });
 
 test('a push service that never answers does not hold back logging and cleanup of the others', async () => {

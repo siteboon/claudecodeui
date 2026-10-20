@@ -197,14 +197,23 @@ function describePushFailure(reason, endpoint) {
     : normalizeErrorMessage(reason);
   const redactedDetail = endpoint ? detail.split(endpoint).join('<endpoint>') : detail;
 
-  // The body comes from whichever host the subscription names, so line breaks and terminal
-  // escape characters are flattened to keep it on one plain log line.
-  return redactedDetail.replace(/[\s\p{Cc}]+/gu, ' ').trim().slice(0, MAX_LOGGED_PUSH_RESPONSE_LENGTH);
+  // The body comes from whichever host the subscription names, so line breaks, terminal escapes
+  // and invisible format characters (such as U+202E, which reorders the rest of a line) are
+  // flattened to keep it on one plain log line.
+  const flattenedDetail = redactedDetail.replace(/[\s\p{Cc}\p{Cf}]+/gu, ' ').trim();
+  // Array.from() splits by code point, so the cut never leaves half of a surrogate pair. A code
+  // point takes at most two UTF-16 units, so slicing to twice the limit first only keeps a huge
+  // body cheap and does not change the result.
+  return Array.from(flattenedDetail.slice(0, 2 * MAX_LOGGED_PUSH_RESPONSE_LENGTH))
+    .slice(0, MAX_LOGGED_PUSH_RESPONSE_LENGTH)
+    .join('');
 }
 
-// web-push sets no request timeout of its own. A push service that never answers would keep
-// the whole batch from settling, so no failure would be logged and no expired subscription
-// removed. With a timeout, the hung request fails as "Socket timeout" instead.
+// web-push sets no timeout of its own, so a push service that never answers would keep the whole
+// batch from settling: no failure would be logged and no expired subscription removed. Its
+// `timeout` option is an idle-socket timeout, not a limit on the whole request: a request whose
+// socket stays silent this long fails as "Socket timeout" (a stalled TLS handshake took about
+// twice as long when measured), while a service that keeps sending bytes is not cut off.
 const WEB_PUSH_REQUEST_TIMEOUT_MS = 30000;
 
 function sendWebPushPayload(userId, payload) {
