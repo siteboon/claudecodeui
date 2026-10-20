@@ -95,6 +95,8 @@ const MISSING_FONTS_MESSAGE = 'Chromium found no usable fonts, so pages render w
   + 'and pages with form controls can crash the browser. Install fonts on the machine running CloudCLI (on Debian or '
   + 'Ubuntu, `npx playwright install-deps chromium` installs them and needs root or sudo) or set FONTCONFIG_FILE to a '
   + 'fontconfig file that lists a font directory and restart CloudCLI, then create a new Browser session.';
+// The probe takes milliseconds; a renderer that never answers must not hold up session creation.
+const FONT_PROBE_TIMEOUT_MS = 3_000;
 
 function readSettings(): BrowserUseSettings {
   try {
@@ -401,14 +403,22 @@ async function captureSession(session: BrowserUseSession, page: any): Promise<vo
 
 /**
  * Measures a string on a canvas in the freshly launched browser; a width of zero means no font is reachable.
- * A failed probe counts as "fonts present" so it can never raise a false warning.
+ * A failed or timed-out probe counts as "fonts present" so it can never raise a false warning.
  */
 async function detectMissingFonts(page: any): Promise<boolean> {
+  let timeout: NodeJS.Timeout | undefined;
   try {
-    const width = await page.evaluate("document.createElement('canvas').getContext('2d')?.measureText('Hello').width");
+    const width = await Promise.race([
+      page.evaluate("document.createElement('canvas').getContext('2d')?.measureText('Hello').width"),
+      new Promise((resolve) => {
+        timeout = setTimeout(resolve, FONT_PROBE_TIMEOUT_MS, null);
+      }),
+    ]);
     return width === 0;
   } catch {
     return false;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

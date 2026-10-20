@@ -12,6 +12,8 @@ type FakeBrowserState = {
   // What a canvas `measureText` returns in the launched browser: 0 when Chromium has no usable fonts.
   textWidth: number | undefined;
   evaluateError: string | null;
+  // The probe never settles, like a renderer that stopped answering.
+  evaluateHangs?: boolean;
   innerText: string;
   innerTextError: string | null;
 };
@@ -19,10 +21,11 @@ type FakeBrowserState = {
 const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'cloudcli-browser-page-text-'));
 const fakePlaywrightPath = path.join(tempDirectory, 'fake-playwright.cjs');
 fs.writeFileSync(fakePlaywrightPath, `
-const state = { textWidth: 0, evaluateError: null, innerText: '', innerTextError: null };
+const state = { textWidth: 0, evaluateError: null, evaluateHangs: false, innerText: '', innerTextError: null };
 function createPage() {
   return {
     async evaluate() {
+      if (state.evaluateHangs) return new Promise(() => {});
       if (state.evaluateError) throw new Error(state.evaluateError);
       return state.textWidth;
     },
@@ -81,7 +84,7 @@ test.after(async () => {
 });
 
 async function withFakeBrowser(state: FakeBrowserState, run: (sessionId: string, message: string | null) => Promise<void>) {
-  Object.assign(fakeBrowser, state);
+  Object.assign(fakeBrowser, { evaluateHangs: false, ...state });
   const session = await browserUseService.createAgentSession();
   try {
     assert.equal(session.status, 'ready');
@@ -161,5 +164,12 @@ test('snapshot reports a failed page text read instead of returning silently emp
       'Failed to read page text: locator.innerText: Target page, context or browser has been closed',
     );
     assert.ok(warn.mock.calls.some((call) => /Failed to read page text/.test(String(call.arguments[0]))));
+  });
+});
+
+test('a font probe that never settles does not hold up the session', { timeout: 10_000 }, async () => {
+  await withFakeBrowser({ textWidth: 0, evaluateError: null, evaluateHangs: true, innerText: 'hello', innerTextError: null }, async (sessionId, message) => {
+    assert.equal(message, 'Browser session is ready.');
+    assert.equal((await browserUseService.agentSnapshot(sessionId)).text, 'hello');
   });
 });
