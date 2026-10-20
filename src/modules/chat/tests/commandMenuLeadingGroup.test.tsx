@@ -60,6 +60,29 @@ describe('slash command menu group order', () => {
     );
   });
 
+  it('keeps the group order while the highlight moves into a later group', () => {
+    render(
+      <CommandMenu
+        isOpen
+        commands={[project('/stat'), builtin('/status')]}
+        selectedIndex={1}
+        onClose={() => undefined}
+      />,
+    );
+
+    // The order follows the first command, not the highlighted one, so the
+    // groups do not swap places on every arrow key.
+    const rows = Array.from(document.body.querySelectorAll('[role="option"]'));
+    assert.deepEqual(
+      rows.map((row) => row.querySelector('span[title]')?.getAttribute('title')),
+      ['/stat', '/status'],
+    );
+    assert.deepEqual(
+      rows.map((row) => row.getAttribute('aria-selected')),
+      ['false', 'true'],
+    );
+  });
+
   it('keeps the remaining groups in their usual order', () => {
     assert.deepEqual(
       renderedNames([user('/stat-user'), builtin('/status'), project('/stat-project')]),
