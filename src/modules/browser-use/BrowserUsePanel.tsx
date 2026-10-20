@@ -478,6 +478,7 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
             }}
             disabled={isInputPending}
             placeholder={t('browserUse.inputPlaceholder')}
+            aria-label={t('browserUse.inputPlaceholder')}
             className="min-w-[200px] flex-1"
           />
           <Button variant="outline" size="sm" onClick={() => void submitInputText()} disabled={!inputText || isInputPending}>{t('browserUse.inputSend')}</Button>
