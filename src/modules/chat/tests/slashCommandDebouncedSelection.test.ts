@@ -14,9 +14,9 @@ import type { Project, SlashCommand } from '@/shared/types';
  * by usage, so Enter ran the most-used command instead of the typed one. The
  * keys must act on the text actually in the input.
  *
- * Every keystroke and key press below happens in one synchronous run, so the
- * 150 ms debounce timer cannot fire in between: that is the window the bug
- * lived in.
+ * Unless a test waits on purpose, every keystroke and key press below happens
+ * in one synchronous run, so the 150 ms debounce timer cannot fire in between:
+ * that is the window the bug lived in.
  */
 
 const jsonResponse = (payload: unknown) => ({
@@ -164,6 +164,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   document.body.innerHTML = '';
 });
 
@@ -293,6 +294,46 @@ describe('slash command keys pressed inside the filter debounce', () => {
       firstRenderAfterArrow.handleCommandMenuKeyDown(keyEvent('Enter').event);
     });
     assert.deepEqual(executedCommands.map((command) => command.name), ['/bar']);
+  });
+
+  it('runs the typed command for an Enter right after the debounce timer fires', async () => {
+    const { result, executedCommands, typeQuickly } = await setUp(['/foo', '/bar'], { '/foo': 5 });
+
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    typeQuickly('/bar');
+    // Inside act() an ordinary update renders only once act() returns, so this
+    // Enter is handled straight after the timer commits "bar", before a render
+    // React would schedule for it: in the browser that render runs in a later
+    // task, and a key in between reached the render that listed everything.
+    act(() => {
+      vi.advanceTimersByTime(150);
+      result.current.handleCommandMenuKeyDown(keyEvent('Enter').event);
+    });
+
+    assert.deepEqual(executedCommands.map((command) => command.name), ['/bar']);
+  });
+
+  it('keeps a hover highlight made after the timer commits the query already shown', async () => {
+    const { result, executedCommands, typeQuickly, press } = await setUp(
+      ['/foo', '/bar', '/baz', '/bazooka'],
+      { '/foo': 5 },
+    );
+
+    typeQuickly('/ba');
+    await waitFor(() => assert.equal(result.current.commandQuery, 'ba'));
+    // An "r" typed and deleted inside the window: the timer then commits "ba"
+    // again, which changes nothing, and the pointer then picks a row of it.
+    typeQuickly('/bar');
+    typeQuickly('/ba');
+    await new Promise((resolve) => {
+      setTimeout(resolve, 200);
+    });
+    act(() => {
+      result.current.handleCommandSelect(result.current.filteredCommands[2], 2, true);
+    });
+    press('Enter');
+
+    assert.deepEqual(executedCommands.map((command) => command.name), ['/bazooka']);
   });
 
   it('lists every command again at the next slash after a pick', async () => {

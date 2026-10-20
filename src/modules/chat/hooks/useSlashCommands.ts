@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, KeyboardEvent, RefObject, SetStateAction } from 'react';
+import { flushSync } from 'react-dom';
 
 import { safeLocalStorage } from '@/modules/chat/utils/chatStorage';
 import { useProjectSlashCommands } from '@/shared/hooks/useProjectSlashCommands';
@@ -308,7 +309,12 @@ export function useSlashCommands({
       commandQueryTimerRef.current = window.setTimeout(() => {
         commandQueryTimerRef.current = null;
         pendingCommandQueryRef.current = null;
-        setCommandQuery(query);
+        // Rendered before the timer returns. An ordinary update renders in a
+        // later task, and a key handled in between would reach the previous
+        // render's handler, find nothing waiting and act on the old list.
+        flushSync(() => {
+          setCommandQuery(query);
+        });
       }, COMMAND_QUERY_DEBOUNCE_MS);
     },
     [resetCommandMenuState, clearCommandQueryTimer],
