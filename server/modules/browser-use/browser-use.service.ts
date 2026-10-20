@@ -92,9 +92,9 @@ const SNAPSHOT_TEXT_LIMIT = 30_000;
 // size: innerText comes back empty, text locators never match, and pages with form controls abort the
 // renderer in Skia ("Not implemented"). Agents get the cause and the fix instead of silently empty text.
 const MISSING_FONTS_MESSAGE = 'Chromium found no usable fonts, so pages render without text, snapshots return no text, '
-  + 'and pages with form controls can crash the browser. Install fonts on the machine running CloudCLI (on Linux, '
-  + '`npx playwright install-deps chromium` installs them) or set FONTCONFIG_FILE to a fontconfig file that lists a '
-  + 'font directory and restart CloudCLI, then create a new Browser session.';
+  + 'and pages with form controls can crash the browser. Install fonts on the machine running CloudCLI (on Debian or '
+  + 'Ubuntu, `npx playwright install-deps chromium` installs them and needs root or sudo) or set FONTCONFIG_FILE to a '
+  + 'fontconfig file that lists a font directory and restart CloudCLI, then create a new Browser session.';
 
 function readSettings(): BrowserUseSettings {
   try {

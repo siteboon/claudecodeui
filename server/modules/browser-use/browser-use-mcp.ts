@@ -25,8 +25,8 @@ const textResponse = (text: string) => ({
 });
 
 // Sessions carry their latest screenshot as a base64 data URL for the Browser panel. Left in the
-// JSON text it costs 10k+ tokens per call, overflows clients' tool-result limits when several
-// sessions are listed, and models cannot read it, so it never goes into the text.
+// JSON text it costs 10k+ tokens per call (and per session in list results) and models cannot
+// read it, so it never goes into the text.
 const omitScreenshotDataUrl = (key: string, value: unknown) => (key === 'screenshotDataUrl' ? undefined : value);
 
 const jsonResponse = (value: unknown) => textResponse(JSON.stringify(value, omitScreenshotDataUrl, 2));
@@ -116,7 +116,7 @@ const tools: ToolDefinition[] = [
   },
   {
     name: 'browser_take_screenshot',
-    description: 'Capture a screenshot image of the current page for a Browser session.',
+    description: 'Capture a screenshot image of the current page for a Browser session, with the same page metadata and visible body text as browser_snapshot.',
     inputSchema: sessionIdSchema,
   },
   {
