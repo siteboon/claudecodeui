@@ -364,7 +364,7 @@ feeding it a summed `result.usage` is what made it bounce before commit `ab13376
 The other arm of the `status` branch — the one that writes `statusText` and `canInterrupt`
 into the activity map — **has no producer today.** All four `status` emitters
 (`claude-runtime.provider.js:968`, `codex-runtime.provider.js:406`,
-`opencode-runtime.provider.js:378`, `opencode-serve.runtime.ts:1034`) send `text: 'token_budget'`. The arm is live code
+`opencode-runtime.provider.js:378`, `opencode-serve.runtime.ts:1048`) send `text: 'token_budget'`. The arm is live code
 kept for a provider that reports progress text; do not delete it expecting nothing to
 change, and do not assume the status text you see in the UI came from it.
 
