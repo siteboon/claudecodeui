@@ -818,7 +818,7 @@ test('an idle from before the session went busy again does not cut off what foll
   assert.equal(turn.messages.find((message) => message.kind === 'text')?.content, 'after the answer');
 });
 
-test('a stop during the pause before a second start attempt starts no second server', async () => {
+test('a stop during the pause before a second start attempt ends the turn quietly', async () => {
   let turnCapture = '';
   const turn = await runTurn({
     appSessionId: 'app-locked-abort',
@@ -837,10 +837,12 @@ test('a stop during the pause before a second start attempt starts no second ser
     },
   });
 
+  // No second server, no fallback to `opencode run`, nothing sent: the stop
+  // handler reports the end of the turn.
   assert.equal(turn.error, null);
   await new Promise((resolve) => setTimeout(resolve, 1_500));
   const spawns = (await readCapture(turnCapture)).filter((entry) => entry.kind === 'spawn');
-  assert.equal(spawns.length, 1);
+  assert.deepEqual(spawns.map((entry) => entry.argv?.[0]), ['serve']);
   assert.equal(turn.messages.length, 0);
 });
 
