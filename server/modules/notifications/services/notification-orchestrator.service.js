@@ -197,8 +197,15 @@ function describePushFailure(reason, endpoint) {
     : normalizeErrorMessage(reason);
   const redactedDetail = endpoint ? detail.split(endpoint).join('<endpoint>') : detail;
 
-  return redactedDetail.replace(/\s+/g, ' ').trim().slice(0, MAX_LOGGED_PUSH_RESPONSE_LENGTH);
+  // The body comes from whichever host the subscription names, so line breaks and terminal
+  // escape characters are flattened to keep it on one plain log line.
+  return redactedDetail.replace(/[\s\p{Cc}]+/gu, ' ').trim().slice(0, MAX_LOGGED_PUSH_RESPONSE_LENGTH);
 }
+
+// web-push sets no request timeout of its own. A push service that never answers would keep
+// the whole batch from settling, so no failure would be logged and no expired subscription
+// removed. With a timeout, the hung request fails as "Socket timeout" instead.
+const WEB_PUSH_REQUEST_TIMEOUT_MS = 30000;
 
 function sendWebPushPayload(userId, payload) {
   const subscriptions = pushSubscriptionsDb.getSubscriptions(userId);
@@ -215,7 +222,8 @@ function sendWebPushPayload(userId, payload) {
             auth: sub.keys_auth
           }
         },
-        serializedPayload
+        serializedPayload,
+        { timeout: WEB_PUSH_REQUEST_TIMEOUT_MS }
       )
     )
   ).then((results) => {

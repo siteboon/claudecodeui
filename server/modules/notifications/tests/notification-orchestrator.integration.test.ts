@@ -66,25 +66,32 @@ const APPLE_DEVICE_TOKEN = 'QAbCdEfGhIjKlMnOpQrStUvWxYz0123456789fakeDeviceToken
 const APPLE_ENDPOINT = `https://web.push.apple.com/${APPLE_DEVICE_TOKEN}`;
 
 type PushDeliveryOutcome = { warnings: string[]; storedEndpoints: string[] };
+type FakePushSend = (endpoint: string, options: unknown) => Promise<unknown>;
 
 /**
- * Sends one notification through the real web push channel to a single stored
- * subscription while web-push fails with `failure`, and reports what was logged
- * and which subscriptions survived.
+ * Sends one notification through the real web push channel to the given stored
+ * subscriptions while web-push answers each request through `send`, and reports
+ * what was logged and which subscriptions survived.
  */
-async function deliverFailingWebPush(failure: unknown): Promise<PushDeliveryOutcome> {
+async function deliverWebPush(endpoints: string[], send: FakePushSend): Promise<PushDeliveryOutcome> {
   let outcome: PushDeliveryOutcome = { warnings: [], storedEndpoints: [] };
 
   await withIsolatedDatabase(async () => {
     const userId = Number(userDb.createUser('push-user', 'hash').id);
-    pushSubscriptionsDb.saveSubscription(userId, APPLE_ENDPOINT, 'p256dh-key', 'auth-key');
+    for (const endpoint of endpoints) {
+      pushSubscriptionsDb.saveSubscription(userId, endpoint, 'p256dh-key', 'auth-key');
+    }
     const preferences = notificationPreferencesDb.getPreferences(userId);
     notificationPreferencesDb.updatePreferences(userId, {
       ...preferences,
       channels: { ...preferences.channels, webPush: true, desktop: false },
     });
 
-    const sendNotification = mock.method(webPush, 'sendNotification', () => Promise.reject(failure));
+    const sendNotification = mock.method(
+      webPush,
+      'sendNotification',
+      (subscription: { endpoint: string }, _payload: string, options: unknown) => send(subscription.endpoint, options),
+    );
     const warnings: string[] = [];
     const warn = mock.method(console, 'warn', (...args: unknown[]) => {
       warnings.push(args.map(String).join(' '));
@@ -103,7 +110,7 @@ async function deliverFailingWebPush(failure: unknown): Promise<PushDeliveryOutc
       await new Promise((resolve) => setImmediate(resolve));
       await new Promise((resolve) => setImmediate(resolve));
 
-      assert.equal(sendNotification.mock.callCount(), 1);
+      assert.equal(sendNotification.mock.callCount(), endpoints.length);
       outcome = {
         warnings,
         storedEndpoints: pushSubscriptionsDb.getSubscriptions(userId).map((row) => row.endpoint),
@@ -115,6 +122,11 @@ async function deliverFailingWebPush(failure: unknown): Promise<PushDeliveryOutc
   });
 
   return outcome;
+}
+
+/** Like deliverWebPush() for one Apple subscription whose request fails with `failure`. */
+function deliverFailingWebPush(failure: unknown): Promise<PushDeliveryOutcome> {
+  return deliverWebPush([APPLE_ENDPOINT], () => Promise.reject(failure));
 }
 
 // Shape of web-push's WebPushError for a non-2xx push service response.
@@ -168,4 +180,51 @@ test('an expired push subscription (404/410) is removed without a warning', asyn
     assert.deepEqual(warnings, [], String(statusCode));
     assert.deepEqual(storedEndpoints, [], String(statusCode));
   }
+});
+
+test('each failed subscription is logged on one plain line, with the reason capped at 200 chars', async () => {
+  const fcmEndpoint = 'https://fcm.googleapis.com/fcm/send/fakeFcmRegistrationToken0123456789';
+  const malformedEndpoint = 'not-a-push-endpoint';
+  const failures = new Map<string, unknown>([
+    [APPLE_ENDPOINT, pushServiceResponse(410, '')],
+    // Terminal escapes and line breaks from a push service must not reach the log as such.
+    [fcmEndpoint, pushServiceResponse(500, `\x1b[31mRED\x1b[0m\r\n[ERROR] forged line\t${'x'.repeat(500)}`)],
+    [malformedEndpoint, new Error('Invalid endpoint')],
+  ]);
+
+  const { warnings, storedEndpoints } = await deliverWebPush([...failures.keys()], (endpoint) =>
+    Promise.reject(failures.get(endpoint)),
+  );
+
+  assert.equal(warnings.length, 2, warnings.join('\n'));
+  const fcmWarning = warnings.find((warning) => warning.includes('Delivery to fcm.googleapis.com'));
+  assert.ok(fcmWarning, warnings.join('\n'));
+  assert.doesNotMatch(fcmWarning, /\p{Cc}/u);
+  const fcmDetail = fcmWarning.slice(fcmWarning.indexOf('HTTP 500'));
+  assert.ok(fcmDetail.startsWith('HTTP 500 [31mRED [0m [ERROR] forged line xxx'), fcmDetail);
+  assert.equal(fcmDetail.length, 200);
+  assert.ok(
+    warnings.some((warning) => warning.includes('Delivery to unknown push service') && warning.includes('Invalid endpoint')),
+    warnings.join('\n'),
+  );
+  // Only the expired (410) subscription is removed.
+  assert.deepEqual(storedEndpoints.sort(), [fcmEndpoint, malformedEndpoint].sort());
+});
+
+test('a push service that never answers does not hold back logging and cleanup of the others', async () => {
+  const unresponsiveEndpoint = 'https://push.example.net/never-answers';
+
+  const { warnings, storedEndpoints } = await deliverWebPush([APPLE_ENDPOINT, unresponsiveEndpoint], (endpoint, options) => {
+    if (endpoint === APPLE_ENDPOINT) return Promise.reject(pushServiceResponse(410, ''));
+    // Stands in for web-push, which has no default timeout: with a `timeout` option an unanswered
+    // request fails as "Socket timeout" (here at once); without one it waits forever.
+    const timeout = (options as { timeout?: unknown } | undefined)?.timeout;
+    return typeof timeout === 'number' && timeout > 0
+      ? Promise.reject(new Error('Socket timeout'))
+      : new Promise(() => {});
+  });
+
+  assert.equal(warnings.length, 1, warnings.join('\n'));
+  assert.match(warnings[0], /Delivery to push\.example\.net failed for user \d+: Socket timeout/);
+  assert.deepEqual(storedEndpoints, [unresponsiveEndpoint]);
 });

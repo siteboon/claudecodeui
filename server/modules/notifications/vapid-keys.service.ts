@@ -1,4 +1,4 @@
-// @ts-nocheck -- web-push does not provide declarations in this project.
+// @ts-expect-error -- web-push does not provide declarations in this project.
 import webPush from 'web-push';
 
 import { vapidKeysDb } from '@/modules/database/index.js';
@@ -8,9 +8,11 @@ import { vapidKeysDb } from '@/modules/database/index.js';
 // `.local` or localhost address, so the default is the project's public URL.
 const DEFAULT_VAPID_SUBJECT = 'https://github.com/siteboon/claudecodeui';
 
-let cachedKeys = null;
+type VapidKeyPair = NonNullable<ReturnType<typeof vapidKeysDb.getVapidKeys>>;
 
-function ensureVapidKeys() {
+let cachedKeys: VapidKeyPair | null = null;
+
+function ensureVapidKeys(): VapidKeyPair {
   if (cachedKeys) return cachedKeys;
 
   const storedKeys = vapidKeysDb.getVapidKeys();
@@ -19,14 +21,14 @@ function ensureVapidKeys() {
     return cachedKeys;
   }
 
-  const keys = webPush.generateVAPIDKeys();
+  const keys: VapidKeyPair = webPush.generateVAPIDKeys();
   vapidKeysDb.createVapidKeys(keys.publicKey, keys.privateKey);
   cachedKeys = keys;
   return cachedKeys;
 }
 
 // Same rule web-push's setVapidDetails() enforces (it throws otherwise).
-function isValidVapidSubject(subject) {
+function isValidVapidSubject(subject: string): boolean {
   try {
     const { protocol } = new URL(subject);
     return protocol === 'https:' || protocol === 'mailto:';
@@ -39,7 +41,7 @@ function isValidVapidSubject(subject) {
  * Uses VAPID_SUBJECT when it is set and valid. An invalid value is reported and
  * replaced by the default, because setVapidDetails() would throw and abort startup.
  */
-function resolveVapidSubject() {
+function resolveVapidSubject(): string {
   const configuredSubject = process.env.VAPID_SUBJECT?.trim();
   if (!configuredSubject) return DEFAULT_VAPID_SUBJECT;
   if (isValidVapidSubject(configuredSubject)) return configuredSubject;
@@ -51,12 +53,12 @@ function resolveVapidSubject() {
 }
 
 // Used by Settings (through the notifications barrel) to expose the Web Push subscription key.
-export function getPublicKey() {
+export function getPublicKey(): string {
   return ensureVapidKeys().publicKey;
 }
 
 // Used by the server entrypoint (through the notifications barrel) during notification startup.
-export function configureWebPush() {
+export function configureWebPush(): void {
   const keys = ensureVapidKeys();
   const subject = resolveVapidSubject();
   webPush.setVapidDetails(subject, keys.publicKey, keys.privateKey);
