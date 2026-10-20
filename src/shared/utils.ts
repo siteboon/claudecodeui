@@ -25,6 +25,44 @@ export function cn(...inputs: ClassValue[]) {
 
 // ---------------------------
 
+//----------------- PROGRAMMATIC SCROLLING ------------
+
+/**
+ * Where the app itself last scrolled each element, and whether that was the
+ * element's end. Read from scroll events, outside any render, so it lives
+ * outside React; weakly keyed, so a removed element drops its entry.
+ */
+const programmaticScrollPositions = new WeakMap<Element, { scrollTop: number; atEnd: boolean }>();
+
+/**
+ * Sets an element's scrollTop on the app's behalf and remembers where that
+ * landed, so the scroll event it fires is not taken for the user scrolling.
+ * The chat module scrolls its transcript through this (stick-to-bottom,
+ * history restores, holding the reading position).
+ */
+export function setScrollTopProgrammatically(element: Element, scrollTop: number): void {
+  element.scrollTop = scrollTop;
+  programmaticScrollPositions.set(element, {
+    scrollTop: element.scrollTop,
+    atEnd: element.scrollTop >= element.scrollHeight - element.clientHeight - 1,
+  });
+}
+
+/**
+ * How `setScrollTopProgrammatically` last left an element, while the element
+ * still sits exactly there; null once anything else (the user) has moved it.
+ * Content can have changed size since, so an element the app scrolled to its
+ * end need no longer be at its end. Used by the chat module to tell its own
+ * transcript scrolls from the reader's.
+ */
+export function getProgrammaticScrollPosition(element: Element): { atEnd: boolean } | null {
+  const position = programmaticScrollPositions.get(element);
+  if (!position || Math.abs(element.scrollTop - position.scrollTop) >= 1) return null;
+  return { atEnd: position.atEnd };
+}
+
+// ---------------------------
+
 //----------------- CLIPBOARD ------------
 
 /**
@@ -250,41 +288,3 @@ export const getQuickSettingsTabId = (tab: QuickSettingsTab): string => `quick-s
 
 /** DOM id of the tabpanel a quick settings tab controls; pairs with `getQuickSettingsTabId`. */
 export const getQuickSettingsTabPanelId = (tab: QuickSettingsTab): string => `quick-settings-tabpanel-${tab}`;
-
-// ---------------------------
-
-//----------------- PROGRAMMATIC SCROLLING ------------
-
-/**
- * Where the app itself last scrolled each element, and whether that was the
- * element's end. Read from scroll events, outside any render, so it lives
- * outside React; weakly keyed, so a removed element drops its entry.
- */
-const programmaticScrollPositions = new WeakMap<Element, { scrollTop: number; atEnd: boolean }>();
-
-/**
- * Sets an element's scrollTop on the app's behalf and remembers where that
- * landed, so the scroll event it fires is not taken for the user scrolling.
- * The chat module scrolls its transcript through this (stick-to-bottom,
- * history restores, holding the reading position).
- */
-export function setScrollTopProgrammatically(element: Element, scrollTop: number): void {
-  element.scrollTop = scrollTop;
-  programmaticScrollPositions.set(element, {
-    scrollTop: element.scrollTop,
-    atEnd: element.scrollTop >= element.scrollHeight - element.clientHeight - 1,
-  });
-}
-
-/**
- * How `setScrollTopProgrammatically` last left an element, while the element
- * still sits exactly there; null once anything else (the user) has moved it.
- * Content can have changed size since, so an element the app scrolled to its
- * end need no longer be at its end. Used by the chat module to tell its own
- * transcript scrolls from the reader's.
- */
-export function getProgrammaticScrollPosition(element: Element): { atEnd: boolean } | null {
-  const position = programmaticScrollPositions.get(element);
-  if (!position || Math.abs(element.scrollTop - position.scrollTop) >= 1) return null;
-  return { atEnd: position.atEnd };
-}
