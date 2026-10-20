@@ -106,6 +106,11 @@ function ComposerPermissionMenu({
 
   const activeAppearance = getAppearance(permissionMode);
   const ActiveIcon = activeAppearance.icon;
+  // Below lg the composer is at most ~735px wide, and 450-700px beside the
+  // sidebar from md up. Naming every mode there pushes the model and send
+  // buttons onto a second row, so only plan mode, the one that changes
+  // nothing, is named; the others stay the 32px icon they were.
+  const isNamedOnNarrowScreens = permissionMode === 'plan';
   const modeLabel = (mode: PermissionMode) =>
     t(`codex.modes.${mode}`, { defaultValue: getAppearance(mode).label || mode });
   const heading = t('composer.permissionHeading', {
@@ -122,7 +127,7 @@ function ComposerPermissionMenu({
           updateAnchor();
           setIsOpen((current) => !current);
         }}
-        className={`flex h-8 min-w-8 max-w-40 shrink-0 items-center justify-center gap-1.5 rounded-lg border px-2 text-xs font-medium transition-colors sm:max-w-48 ${activeAppearance.trigger}`}
+        className={`flex h-8 min-w-8 max-w-40 shrink-0 items-center justify-center gap-1.5 rounded-lg border text-xs font-medium transition-colors sm:max-w-48 ${isNamedOnNarrowScreens ? 'px-2' : 'w-8 lg:w-auto lg:px-2'} ${activeAppearance.trigger}`}
         aria-haspopup="menu"
         aria-expanded={isOpen}
         // The visible mode name leads the accessible name, so what a screen
@@ -134,7 +139,7 @@ function ComposerPermissionMenu({
         {/* Named, not just drawn: the mode decides what the next message may
             change. Plan mode stays named on narrow screens too, since it is
             the one that changes nothing. */}
-        <span className={`truncate ${permissionMode === 'plan' ? '' : 'hidden sm:inline'}`}>
+        <span className={`truncate ${isNamedOnNarrowScreens ? '' : 'hidden lg:inline'}`}>
           {modeLabel(permissionMode)}
         </span>
       </button>
