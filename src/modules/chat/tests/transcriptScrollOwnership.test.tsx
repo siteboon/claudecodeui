@@ -289,6 +289,38 @@ describe('following new messages at the bottom', () => {
     expect(container.writes).toContain(container.scrollHeight);
   });
 
+  it('follows again after "Scroll to bottom" even when more of a reply is committed before its scroll event', async () => {
+    const messages = new Map<string, NormalizedMessage[]>([
+      [SESSION_A, [buildMessage(0, '2026-01-01T00:00:00.000Z')]],
+    ]);
+    const store = createStore(messages);
+    const { result } = await renderChatSessionState({
+      session: { id: SESSION_A } as ProjectSession,
+      store,
+    });
+
+    const container = createContainer(5000, 500);
+    (result.current.scrollContainerRef as { current: HTMLDivElement | null }).current = container.element;
+    // The reader had scrolled up while a reply streams in.
+    container.element.scrollTop = 3000;
+    act(() => {
+      void result.current.handleScroll();
+    });
+    expect(result.current.isUserScrolledUp).toBe(true);
+
+    // They press "Scroll to bottom", and the stream commits more before the
+    // scroll's event is dispatched.
+    act(() => {
+      result.current.scrollToBottomAndReset();
+    });
+    container.grow(200);
+    act(() => {
+      void result.current.handleScroll();
+    });
+
+    expect(result.current.isUserScrolledUp).toBe(false);
+  });
+
   it('keeps following when the transcript holds the reading position in a browser without scroll anchoring', async () => {
     vi.stubGlobal('IntersectionObserver', SilentIntersectionObserver);
     vi.stubGlobal('ResizeObserver', StubResizeObserver);
