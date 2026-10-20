@@ -24,7 +24,8 @@
     "git": "Control de versiones",
     "tasks": "Tareas",
     "browser": "Navegador",
-    "computer": "Equipo"
+    "computer": "Equipo",
+    "views": "Vistas del espacio de trabajo"
   },
   "status": {
     "loading": "Cargando...",
@@ -55,7 +56,9 @@
     "back": "Atrás",
     "next": "Siguiente",
     "previous": "Anterior",
-    "logout": "Cerrar sesión"
+    "logout": "Cerrar sesión",
+    "scrollTabsLeft": "Desplazar pestañas a la izquierda",
+    "scrollTabsRight": "Desplazar pestañas a la derecha"
   },
   "common": {
     "language": "Idioma",
@@ -70,13 +73,22 @@
     "version": "Versión",
     "select": "Seleccionar",
     "selectAll": "Seleccionar todo",
-    "deselectAll": "Deseleccionar todo"
+    "deselectAll": "Deseleccionar todo",
+    "cancel": "Cancelar",
+    "done": "Listo",
+    "failed": "Error"
   },
   "time": {
     "justNow": "Justo ahora",
     "minutesAgo": "hace {{count}} min",
     "hoursAgo": "hace {{count}} horas",
+    "hoursAgo_one": "hace {{count}} hora",
+    "hoursAgo_other": "hace {{count}} horas",
+    "hoursAgo_many": "hace {{count}} horas",
     "daysAgo": "hace {{count}} días",
+    "daysAgo_one": "hace {{count}} día",
+    "daysAgo_other": "hace {{count}} días",
+    "daysAgo_many": "hace {{count}} días",
     "yesterday": "Ayer"
   },
   "fileOperations": {
@@ -121,11 +133,25 @@
     "justNow": "justo ahora",
     "minAgo": "hace {{count}} min",
     "hoursAgo": "hace {{count}} horas",
+    "hoursAgo_one": "hace {{count}} hora",
+    "hoursAgo_other": "hace {{count}} horas",
+    "hoursAgo_many": "hace {{count}} horas",
     "daysAgo": "hace {{count}} días",
+    "daysAgo_one": "hace {{count}} día",
+    "daysAgo_other": "hace {{count}} días",
+    "daysAgo_many": "hace {{count}} días",
     "newFile": "Archivo nuevo (Cmd+N)",
     "newFolder": "Carpeta nueva (Cmd+Shift+N)",
     "refresh": "Actualizar",
     "collapseAll": "Contraer todo",
+    "dropToUpload": "Suelta archivos para subirlos",
+    "dropToUploadTo": "Suelta archivos para subirlos a \"{{folder}}\"",
+    "uploadingFiles": "Subiendo archivos",
+    "uploadFiles": "Subir archivos (máx. {{size}} cada uno)",
+    "uploadToFolder": "Subir archivos a \"{{folder}}\"",
+    "uploadComplete": "Subida completada",
+    "uploadFailed": "Error al subir",
+    "uploadedCount": "Se subieron {{uploaded}} de {{total}} archivos",
     "context": {
       "rename": "Renombrar",
       "delete": "Eliminar",
@@ -137,6 +163,28 @@
       "refresh": "Actualizar",
       "menuLabel": "Menú contextual de archivo",
       "loading": "Cargando..."
+    },
+    "delete": {
+      "title": "Eliminar elemento",
+      "folderWarning": "Esta carpeta y todo su contenido se eliminarán permanentemente.",
+      "fileWarning": "Este archivo se eliminará permanentemente.",
+      "confirm": "Eliminar"
+    },
+    "toast": {
+      "renamed": "Renombrado correctamente",
+      "fileDeleted": "Archivo eliminado",
+      "folderDeleted": "Carpeta eliminada",
+      "fileCreated": "Archivo creado correctamente",
+      "folderCreated": "Carpeta creada correctamente",
+      "pathCopied": "Ruta copiada al portapapeles",
+      "copyFailed": "No se pudo copiar la ruta",
+      "folderDownloaded": "Carpeta descargada como ZIP"
+    },
+    "validation": {
+      "emptyName": "El nombre del archivo no puede estar vacío",
+      "invalidChars": "El nombre del archivo contiene caracteres no válidos",
+      "reserved": "El nombre del archivo es un nombre reservado",
+      "dotsOnly": "El nombre del archivo no puede contener solo puntos"
     }
   },
   "projectWizard": {

@@ -9,7 +9,9 @@
     "copied": "Mensaje copiado",
     "selectFormat": "Selecciona el formato de copia",
     "copyAsMarkdown": "Copiar como markdown",
-    "copyAsText": "Copiar como texto"
+    "copyAsText": "Copiar como texto",
+    "markdownShort": "MD",
+    "textShort": "TXT"
   },
   "messageTypes": {
     "user": "U",
@@ -50,6 +52,9 @@
     "newFile": "Archivo nuevo",
     "viewContent": "Ver contenido del archivo",
     "viewFullOutput": "Ver salida completa ({{count}} caracteres)",
+    "viewFullOutput_one": "Ver salida completa ({{count}} carácter)",
+    "viewFullOutput_other": "Ver salida completa ({{count}} caracteres)",
+    "viewFullOutput_many": "Ver salida completa ({{count}} caracteres)",
     "contentDisplayed": "El contenido del archivo se muestra en la vista de diff de arriba"
   },
   "bashEditDiff": {
@@ -220,6 +225,9 @@
       "showingOf": "Mostrando {{shown}} de {{total}} mensajes",
       "scrollToLoad": "Desplázate hacia arriba para cargar más",
       "showingLast": "Mostrando los últimos {{count}} mensajes ({{total}} en total)",
+      "showingLast_one": "Mostrando el último mensaje ({{count}} de {{total}})",
+      "showingLast_other": "Mostrando los últimos {{count}} mensajes ({{total}} en total)",
+      "showingLast_many": "Mostrando los últimos {{count}} mensajes ({{total}} en total)",
       "loadEarlier": "Cargar mensajes anteriores",
       "loadAll": "Cargar todos los mensajes",
       "loadingAll": "Cargando todos los mensajes...",
@@ -283,6 +291,9 @@
       "agent": "Agente {{description}}",
       "command": "Comando {{description}}",
       "count": "{{count}} tareas",
+      "count_one": "{{count}} tarea",
+      "count_other": "{{count}} tareas",
+      "count_many": "{{count}} tareas",
       "prompt": {
         "title": "Esta sesión aún tiene trabajo en segundo plano",
         "description": "Un mensaje nuevo inicia un turno nuevo y detiene ese trabajo; lo que aún no haya informado se pierde. Pon el mensaje en cola para enviarlo cuando termine.",

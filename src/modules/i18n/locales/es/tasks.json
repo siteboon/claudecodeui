@@ -117,7 +117,10 @@
     "addPRD": "Añadir PRD",
     "addTask": "Añadir tarea",
     "createNewPRD": "Crear PRD nuevo",
-    "prdsAvailable": "{{count}} PRD(s) disponibles"
+    "prdsAvailable": "{{count}} PRD(s) disponibles",
+    "prdsAvailable_one": "{{count}} PRD disponible",
+    "prdsAvailable_other": "{{count}} PRD disponibles",
+    "prdsAvailable_many": "{{count}} PRD disponibles"
   },
   "prd": {
     "modified": "Modificado: {{date}}"

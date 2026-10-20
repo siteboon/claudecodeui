@@ -58,7 +58,8 @@
     "clearSearch": "Limpiar búsqueda",
     "openCommandPalette": "Abrir paleta de comandos",
     "attentionRequiredIndicator": "La sesión requiere atención",
-    "backgroundWorkIndicator": "Trabajo en segundo plano en curso"
+    "backgroundWorkIndicator": "Trabajo en segundo plano en curso",
+    "processingSessionIndicator": "Procesando sesión"
   },
   "navigation": {
     "chat": "Chat",
@@ -97,8 +98,14 @@
     "minutesAgo": "hace {{count}} min",
     "oneHourAgo": "hace 1 hora",
     "hoursAgo": "hace {{count}} horas",
+    "hoursAgo_one": "hace {{count}} hora",
+    "hoursAgo_other": "hace {{count}} horas",
+    "hoursAgo_many": "hace {{count}} horas",
     "oneDayAgo": "hace 1 día",
-    "daysAgo": "hace {{count}} días"
+    "daysAgo": "hace {{count}} días",
+    "daysAgo_one": "hace {{count}} día",
+    "daysAgo_other": "hace {{count}} días",
+    "daysAgo_many": "hace {{count}} días"
   },
   "messages": {
     "deleteConfirm": "¿Seguro que quieres eliminar esto?",
@@ -135,7 +142,11 @@
     "modeProjects": "Proyectos",
     "modeConversations": "Conversaciones",
     "modeMore": "Más",
+    "runningTooltip": "Sesiones en ejecución",
+    "archiveOnlyTooltip": "Solo archivados",
     "conversationsPlaceholder": "Buscar en conversaciones...",
+    "runningPlaceholder": "Buscar sesiones en ejecución...",
+    "archivedPlaceholder": "Buscar sesiones archivadas...",
     "searching": "Buscando...",
     "sessionTitles": "Títulos de sesiones",
     "conversationContents": "Contenido de conversaciones",
@@ -155,6 +166,26 @@
     "loadFailed": "No se pudieron cargar las conversaciones recientes",
     "loadMore": "Cargar conversaciones anteriores",
     "loadingMore": "Cargando más..."
+  },
+  "running": {
+    "title": "En ejecución",
+    "emptyTitle": "No hay sesiones en ejecución",
+    "emptyDescription": "El trabajo activo aparecerá aquí mientras un proveedor lo esté procesando.",
+    "noMatchingSessions": "Ninguna sesión en ejecución coincide con esta búsqueda."
+  },
+  "archived": {
+    "title": "Archivados",
+    "restoreHint": "Restaura elementos cuando los necesites",
+    "loadingTitle": "Cargando archivados...",
+    "loadingDescription": "Obteniendo los proyectos y sesiones ocultos que puedes restaurar más tarde.",
+    "emptyTitle": "No hay elementos archivados",
+    "emptyDescription": "Los proyectos y sesiones archivados aparecerán aquí cuando los ocultes de la lista activa.",
+    "noMatchingSessions": "No hay elementos archivados que coincidan",
+    "tryDifferentSearch": "Prueba con otro término de búsqueda.",
+    "restoreAction": "Restaurar",
+    "restoreProject": "Restaurar proyecto",
+    "restore": "Restaurar sesión",
+    "deletePermanently": "Eliminar permanentemente"
   },
   "deleteConfirmation": {
     "deleteProject": "Quitar proyecto",
