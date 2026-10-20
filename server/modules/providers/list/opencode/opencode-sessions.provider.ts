@@ -120,6 +120,12 @@ const readEventError = (value: unknown): string | undefined => {
   return [name, details].filter(Boolean).join(': ') || undefined;
 };
 
+// OpenCode records a stopped turn as `MessageAbortedError` on its assistant
+// message. That is the user's own Stop, which the live chat never shows as an
+// error either, so history does not turn it into an error card.
+const isUserAbort = (error: unknown): boolean =>
+  readOptionalString(readObjectRecord(error)?.name) === 'MessageAbortedError';
+
 const isUserTextEcho = (raw: AnyRecord): boolean => {
   return readOptionalString(raw.role) === 'user'
     || hasUserRole(raw.message)
@@ -299,6 +305,43 @@ const readOpenCodeSubagentActivity = (
   }
 
   return activity;
+};
+
+/** OpenCode's tool for asking the user; the chat answers it in its question panel. */
+const QUESTION_TOOL_NAME = 'question';
+
+/**
+ * Shows a `question` call with the chat's AskUserQuestion card, as Claude's and
+ * Codex's ask-the-user calls are shown: the canonical tool name, Claude's
+ * `multiSelect` spelling, and the picked labels (OpenCode keeps one list per
+ * question in `metadata.answers`) folded into the input by question text.
+ */
+const presentOpenCodeQuestionCall = (message: NormalizedMessage, state: AnyRecord): void => {
+  const input = readObjectRecord(state.input) ?? readObjectRecord(message.toolInput);
+  if (!input || !Array.isArray(input.questions)) {
+    return;
+  }
+
+  const metadataAnswers = readObjectRecord(state.metadata)?.answers;
+  const answerLists: unknown[] = Array.isArray(metadataAnswers) ? metadataAnswers : [];
+  const answers: Record<string, string> = {};
+  const questions = input.questions.map((entry: unknown, index: number) => {
+    const question = readObjectRecord(entry);
+    if (!question) {
+      return entry;
+    }
+    const labelList = answerLists[index];
+    const labels = Array.isArray(labelList)
+      ? labelList.filter((label): label is string => typeof label === 'string' && label.length > 0)
+      : [];
+    if (typeof question.question === 'string' && labels.length > 0) {
+      answers[question.question] = labels.join(', ');
+    }
+    return { ...question, multiSelect: question.multiple === true };
+  });
+
+  message.toolName = 'AskUserQuestion';
+  message.toolInput = { ...input, questions, answers };
 };
 
 // The task tool wraps the subagent's answer as `<task …><task_result>…</task_result></task>`.
@@ -481,6 +524,10 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
         };
       }
 
+      if (toolName === QUESTION_TOOL_NAME) {
+        presentOpenCodeQuestionCall(toolMessage, toolState);
+      }
+
       if (toolName === SUBAGENT_TOOL_NAME) {
         // `opencode run` reports a task only once it has finished, so its
         // child session is complete in the database by now.
@@ -600,6 +647,7 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
         messageInfo
         && messageRole === 'assistant'
         && messageInfo.error != null
+        && !isUserAbort(messageInfo.error)
         && !emittedMessageErrors.has(row.message_id)
       ) {
         emittedMessageErrors.add(row.message_id);
@@ -689,6 +737,9 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
           };
         }
 
+        if (toolMessage.toolName === QUESTION_TOOL_NAME) {
+          presentOpenCodeQuestionCall(toolMessage, state);
+        }
         attachOpenCodeSubagent(toolMessage, state, db, runIsLive);
         normalized.push(toolMessage);
         continue;
