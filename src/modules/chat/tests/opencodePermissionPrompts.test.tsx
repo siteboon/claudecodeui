@@ -139,11 +139,13 @@ describe('the question panel', () => {
     expect(onDecision).toHaveBeenCalledWith('que_1', { allow: true, updatedInput: { answers: [['Red', 'Teal']] } });
   });
 
-  it('dismisses an OpenCode question on Skip', () => {
+  it('labels the reject of an OpenCode question "Dismiss", since it ends OpenCode\'s turn', () => {
     const onDecision = vi.fn();
     render(<AskUserQuestionPanel request={openCodeQuestionRequest} onDecision={onDecision} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Skip all/ }));
+    // "Skip" would promise that the agent carries on, as it does for Claude.
+    expect(screen.queryByRole('button', { name: /Skip/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Dismiss/ }));
 
     expect(onDecision).toHaveBeenCalledWith('que_1', { allow: false });
   });

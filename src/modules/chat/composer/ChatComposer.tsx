@@ -247,9 +247,10 @@ export default function ChatComposer({
   const isRecording = voiceState === 'recording';
   const isTranscribing = voiceState === 'transcribing';
 
-  // Detect if the AskUserQuestion interactive panel is active
+  // Detect if the question panel is active (Claude's AskUserQuestion or
+  // OpenCode's question tool); it replaces the input while the agent waits.
   const hasQuestionPanel = pendingPermissionRequests.some(
-    (r) => r.toolName === 'AskUserQuestion'
+    (r) => r.toolName === 'AskUserQuestion' || r.toolName === 'question'
   );
 
   // Hide the thinking/status bar while any permission request is pending

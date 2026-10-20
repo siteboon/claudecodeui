@@ -14,6 +14,7 @@
   "agentPrompts": {
     "alwaysAllow": "一律允許",
     "alwaysAllowsLabel": "一律允許：",
+    "dismissQuestion": "拒絕",
     "needsYourInput": "{{agent}} 需要您的輸入"
   },
   "messageTypes": {

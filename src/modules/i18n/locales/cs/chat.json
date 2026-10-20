@@ -16,6 +16,7 @@
   "agentPrompts": {
     "alwaysAllow": "Vždy povolit",
     "alwaysAllowsLabel": "Vždy povolí:",
+    "dismissQuestion": "Odmítnout",
     "needsYourInput": "{{agent}} potřebuje vaši odpověď"
   },
   "messageTypes": {

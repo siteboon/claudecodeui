@@ -14,7 +14,8 @@
   "agentPrompts": {
     "alwaysAllow": "항상 허용",
     "alwaysAllowsLabel": "항상 허용 대상:",
-    "needsYourInput": "{{agent}}에서 답변이 필요합니다"
+    "dismissQuestion": "거절",
+    "needsYourInput": "{{agent}}의 질문에 답해 주세요"
   },
   "messageTypes": {
     "user": "U",

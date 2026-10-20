@@ -14,6 +14,7 @@
   "agentPrompts": {
     "alwaysAllow": "Sempre permitir",
     "alwaysAllowsLabel": "Sempre permite:",
+    "dismissQuestion": "Dispensar",
     "needsYourInput": "{{agent}} precisa da sua resposta"
   },
   "messageTypes": {

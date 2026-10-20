@@ -21,7 +21,8 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
   const questions: Question[] = input?.questions ?? NO_QUESTIONS;
   const context = request.context as { answerFormat?: unknown; agentName?: unknown } | undefined;
   // OpenCode takes one list of picked labels per question, in question order,
-  // and "Skip" dismisses the question; Claude takes a map of joined answers.
+  // and its "Dismiss" rejects the question, which ends OpenCode's turn; Claude
+  // takes a map of joined answers, and its "Skip" lets the agent carry on.
   const answersAsLabelLists = context?.answerFormat === 'label-lists';
   const agentName = typeof context?.agentName === 'string' && context.agentName ? context.agentName : 'Claude';
 
@@ -373,7 +374,9 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
             onClick={handleSkip}
             className="text-[11px] text-gray-400 transition-colors hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
           >
-            {isSingle ? t('chat:misc.skipOne') : t('chat:misc.skipAll')}
+            {answersAsLabelLists
+              ? t('chat:agentPrompts.dismissQuestion')
+              : isSingle ? t('chat:misc.skipOne') : t('chat:misc.skipAll')}
             <span className="ml-1 text-[9px] text-gray-300 dark:text-gray-600">Esc</span>
           </button>
 

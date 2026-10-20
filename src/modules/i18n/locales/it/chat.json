@@ -14,6 +14,7 @@
   "agentPrompts": {
     "alwaysAllow": "Consenti sempre",
     "alwaysAllowsLabel": "Consente sempre:",
+    "dismissQuestion": "Rifiuta",
     "needsYourInput": "{{agent}} ha bisogno della tua risposta"
   },
   "messageTypes": {

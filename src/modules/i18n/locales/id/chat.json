@@ -14,6 +14,7 @@
   "agentPrompts": {
     "alwaysAllow": "Selalu izinkan",
     "alwaysAllowsLabel": "Selalu mengizinkan:",
+    "dismissQuestion": "Tolak",
     "needsYourInput": "{{agent}} membutuhkan jawaban Anda"
   },
   "messageTypes": {

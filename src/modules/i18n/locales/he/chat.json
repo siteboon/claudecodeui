@@ -16,6 +16,7 @@
   "agentPrompts": {
     "alwaysAllow": "לאפשר תמיד",
     "alwaysAllowsLabel": "מאפשר תמיד:",
+    "dismissQuestion": "דחייה",
     "needsYourInput": "{{agent}} ממתין לתשובה"
   },
   "messageTypes": {

@@ -14,6 +14,7 @@
   "agentPrompts": {
     "alwaysAllow": "Always allow",
     "alwaysAllowsLabel": "Always allows:",
+    "dismissQuestion": "Dismiss",
     "needsYourInput": "{{agent}} needs your input"
   },
   "messageTypes": {
