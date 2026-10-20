@@ -889,8 +889,10 @@ test('stopping a server also stops the binary behind a wrapper script', {
     const turn = await runTurn({ appSessionId: 'app-wrapper', scenario: { newSessionId: 'ses_wrapper', steps: [textPart('wrapped')] } });
 
     assert.equal(turn.error, null);
-    const serverPid = turn.capture.find((entry) => entry.kind === 'spawn')?.pid as number;
-    assert.ok(await waitUntil(() => !isProcessAlive(serverPid), 5_000), 'the wrapped binary outlived its server');
+    assert.equal(turn.messages.find((message) => message.kind === 'text')?.content, 'wrapped');
+    const spawn = turn.capture.find((entry) => entry.kind === 'spawn');
+    assert.equal(spawn?.argv?.[0], 'serve');
+    assert.ok(await waitUntil(() => !isProcessAlive(spawn?.pid as number), 5_000), 'the wrapped binary outlived its server');
   } finally {
     process.env[pathKey] = previousPath;
   }
