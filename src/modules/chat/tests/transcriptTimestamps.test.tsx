@@ -143,6 +143,8 @@ describe('a transcript row with timestamps on', () => {
     assert.equal(time.textContent, '9:00:00 AM');
     assert.equal(time.getAttribute('dateTime'), USER_TURN.timestamp);
     assert.match(plainSpaces(time.getAttribute('title')), /Tuesday, October 20, 2026/);
+    // Its own bidi isolate: a Hebrew month name must not be reordered by the row around it.
+    assert.equal(time.getAttribute('dir'), 'auto');
   });
 
   it('does not repeat the model label on every tool call of a run', () => {

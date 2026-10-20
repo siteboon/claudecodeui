@@ -125,7 +125,10 @@ function TranscriptTimestamp({ value, className }: TranscriptTimestampProps) {
   }
 
   return (
+    // Isolated, and directed by its own text: a Hebrew month name inside a
+    // left-to-right row otherwise comes out reordered around the digits.
     <time
+      dir="auto"
       dateTime={stamp.iso}
       title={stamp.full}
       className={cn('whitespace-nowrap tabular-nums', className)}
