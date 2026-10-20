@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import type { ChatMessage } from '@/shared/types';
@@ -18,7 +18,7 @@ import type { LazyRowObserver } from '@/modules/chat/hooks/useLazyRowObserver';
  * The placeholder reuses the row's last measured height, so scrolling back
  * through previously seen content changes no scroll geometry at all; rows
  * never yet measured use an estimate and rely on browser scroll anchoring
- * while they settle.
+ * while they settle, or on useLazyRowObserver where the browser has none.
  */
 
 /** Placeholder height for rows that have never been measured. */
@@ -66,7 +66,10 @@ export default function LazyMessageRow({
     setIsNearViewport(nextIsNearViewport);
   }, []);
 
-  useEffect(() => {
+  // A layout effect, so the row is watched from the height it was committed
+  // with: the scroll restore of a prepended page runs later in that commit,
+  // and whatever the row settles to afterwards is measured against it.
+  useLayoutEffect(() => {
     const element = elementRef.current;
     if (!lazyRows || !element) return undefined;
     return lazyRows.observe(element, handleNearViewportChange);

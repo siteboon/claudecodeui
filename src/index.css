@@ -588,20 +588,13 @@
     clip-path: inset(-8px -8px 0 -8px);
   }
 
+  /* No content-visibility: LazyMessageRow already keeps only the rows near the
+     viewport mounted. Its size estimate resolved only once a row was on
+     screen in Safari (27 included), where no scroll anchoring can absorb it,
+     and after a history page's scroll restore Chromium did not either: the
+     transcript jumped under the reader while they scrolled up (#1574). */
   .chat-message {
     contain: layout style paint;
-    content-visibility: auto;
-    contain-intrinsic-size: auto 180px;
-  }
-
-  .chat-message.assistant {
-    contain-intrinsic-size: auto 240px;
-  }
-
-  .chat-message.user,
-  .chat-message.tool,
-  .chat-message.error {
-    contain-intrinsic-size: auto 96px;
   }
 
   /* Mobile touch optimization and safe areas */

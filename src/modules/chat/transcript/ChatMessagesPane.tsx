@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 
 import type { BackgroundTaskSummary,
@@ -26,6 +26,16 @@ import { BackgroundTasksStrip } from '@/modules/chat/transcript/BackgroundTasksS
  * near the viewport. Covers a bit more than one screen of typical rows.
  */
 const INITIAL_MOUNTED_TAIL_ROWS = 30;
+
+/**
+ * How many of the rows a history page prepends, counted up from the rows that
+ * were already on screen, mount with real content on their first commit. That
+ * commit also restores the reader's scroll position, so their heights are part
+ * of the restore. As placeholders they grew a frame later, above the reader,
+ * and pushed the transcript down by several messages; after the programmatic
+ * restore no browser's scroll anchoring absorbed that (#1574).
+ */
+const PREPENDED_MOUNTED_ROWS = 30;
 
 type ChatMessagesPaneProps = {
   scrollContainerRef: RefObject<HTMLDivElement>;
@@ -185,6 +195,35 @@ function ChatMessagesPane({
     [messageKeyMap],
   );
 
+  const rowKeys = useMemo(
+    () => groupedVisibleMessages.map((item) => (
+      isToolGroupItem(item) ? `tool-group-${getMessageKey(item.messages[0])}` : getMessageKey(item)
+    )),
+    [groupedVisibleMessages, getMessageKey],
+  );
+
+  // The rows that were on screen when the first row last changed, and where
+  // the first of them now sits. A prepended page of history changes the first
+  // row; the rows above that index are the page's, and the ones right above it
+  // mount in the same commit as the scroll restore that accounts for them.
+  // Kept in state and updated during render, so that commit already sees it;
+  // stream ticks leave the first row alone and never touch it. A set rather
+  // than the old first key alone, because a page ending in the same tool run
+  // merges into (and re-keys) the old first group row.
+  const [shownRows, setShownRows] = useState(() => ({
+    firstKey: rowKeys[0],
+    keys: new Set(rowKeys) as ReadonlySet<string>,
+    firstShownIndex: -1,
+  }));
+  if (rowKeys[0] !== shownRows.firstKey) {
+    setShownRows({
+      firstKey: rowKeys[0],
+      keys: new Set(rowKeys),
+      firstShownIndex: rowKeys.findIndex((key) => shownRows.keys.has(key)),
+    });
+  }
+  const { firstShownIndex } = shownRows;
+
   return (
     <div
       ref={scrollContainerRef}
@@ -299,9 +338,12 @@ function ChatMessagesPane({
 
             return groupedVisibleMessages.map((item, index) => {
               // Rows near the tail mount their content on first commit so the
-              // initial scroll-to-bottom measures real heights; older rows
-              // start as placeholders and mount when scrolled toward.
-              const initiallyNearViewport = index >= rowCount - INITIAL_MOUNTED_TAIL_ROWS;
+              // initial scroll-to-bottom measures real heights, and so do the
+              // prepended rows right above the ones already shown, for the
+              // scroll restore; older rows start as placeholders and mount
+              // when scrolled toward.
+              const initiallyNearViewport = index >= rowCount - INITIAL_MOUNTED_TAIL_ROWS
+                || (index < firstShownIndex && index >= firstShownIndex - PREPENDED_MOUNTED_ROWS);
 
               if (isToolGroupItem(item)) {
                 const groupPrevMessage = prevMessage;
@@ -309,7 +351,7 @@ function ChatMessagesPane({
 
                 return (
                   <LazyMessageRow
-                    key={`tool-group-${getMessageKey(item.messages[0])}`}
+                    key={rowKeys[index]}
                     lazyRows={lazyRows}
                     timestamp={item.timestamp}
                     initiallyNearViewport={initiallyNearViewport}
@@ -336,7 +378,7 @@ function ChatMessagesPane({
 
               return (
                 <LazyMessageRow
-                  key={getMessageKey(item)}
+                  key={rowKeys[index]}
                   lazyRows={lazyRows}
                   timestamp={item.timestamp}
                   initiallyNearViewport={initiallyNearViewport}
