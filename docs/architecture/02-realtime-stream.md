@@ -364,7 +364,7 @@ feeding it a summed `result.usage` is what made it bounce before commit `ab13376
 The other arm of the `status` branch — the one that writes `statusText` and `canInterrupt`
 into the activity map — **has no producer today.** All four `status` emitters
 (`claude-runtime.provider.js:968`, `codex-runtime.provider.js:406`,
-`opencode-runtime.provider.js:378`, `opencode-serve.runtime.ts:999`) send `text: 'token_budget'`. The arm is live code
+`opencode-runtime.provider.js:378`, `opencode-serve.runtime.ts:1034`) send `text: 'token_budget'`. The arm is live code
 kept for a provider that reports progress text; do not delete it expecting nothing to
 change, and do not assume the status text you see in the UI came from it.
 
@@ -382,11 +382,16 @@ pins the replayed request-then-resolution netting out to nothing.
 
 OpenCode's `opencode run` answers every permission request itself, so each OpenCode turn
 runs on a private `opencode serve` instead (`opencode-serve.runtime.ts`, loopback only,
-random Basic-auth password, stopped on every exit path). Its `permission.asked` events
+random Basic-auth password). The server is stopped when its turn ends and, from the moment
+it is spawned, when CloudCLI exits (SIGTERM, SIGINT, SIGHUP, or a crash that runs `exit`
+hooks); a hard kill of CloudCLI (SIGKILL, OOM) leaves it running. Its `permission.asked` events
 become `permission_request` frames (`toolName` is OpenCode's permission, e.g. `bash` or
 `external_directory`; `context.always` holds what "Always allow" approves) and its
 `question.asked` events become requests for the `question` tool, rendered by the
-AskUserQuestion panel (`context.answerFormat: 'label-lists'`). The same
+AskUserQuestion panel (`context.answerFormat: 'label-lists'`; its Dismiss rejects the
+question, which ends OpenCode's turn). bypassPermissions turns, which nobody answers, hide
+the question tool: new sessions are created with `question: deny` and a resumed session
+that shows it gets that rule appended. The same
 `permission_resolved` / `permission_cancelled` frames retract them, including when OpenCode
 settles a request on its own (the cascade after "Always allow" or Deny). Permission
 requests time out after `OPENCODE_TOOL_APPROVAL_TIMEOUT_MS` (55 s), questions after
