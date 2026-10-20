@@ -34,6 +34,8 @@ type AgentRouterDependencies = {
     getSessionById(sessionId: string): AgentSessionRow | null;
     getSessionByProviderSessionId(providerSessionId: string): AgentSessionRow | null;
     createAppSession(provider: string, projectPath: string, initialMessage: string): { sessionId: string };
+    /** Hides the session from the sidebar the way the UI's archive action does; nothing is deleted. */
+    archiveSession(sessionId: string): Promise<unknown>;
   };
   /** The live-run registry the chat socket uses; registering here is what puts an API run on the running-sessions list. */
   runs: Pick<typeof import('../websocket/index.js').chatRunRegistry, 'startRun' | 'completeRunIfCurrent' | 'isProcessing'>;
@@ -1356,6 +1358,31 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       if (run) {
         runRegistry.completeRunIfCurrent(run, { exitCode: 1 });
       }
+    }
+  });
+
+  /**
+   * POST /api/agent/sessions/:sessionId/archive
+   *
+   * Archives a session an earlier agent run created, so an orchestrator that
+   * starts one session per task can tidy up after itself with the same API key
+   * instead of a UI login. Accepts the app id or the provider's own id, like
+   * `sessionId` on POST /. A session mid-run is refused (409), an unknown id 404.
+   */
+  router.post('/sessions/:sessionId/archive', validateExternalApiKey, async (req, res) => {
+    const requested = req.params.sessionId;
+    const sessionRow = sessionGateway.getSessionById(requested) ?? sessionGateway.getSessionByProviderSessionId(requested);
+    if (!sessionRow) {
+      return res.status(404).json({ success: false, error: `Session "${requested}" was not found` });
+    }
+    if (runRegistry.isProcessing(sessionRow.session_id)) {
+      return res.status(409).json({ success: false, error: `Session "${sessionRow.session_id}" has a run in progress` });
+    }
+    try {
+      await sessionGateway.archiveSession(sessionRow.session_id);
+      res.json({ success: true, sessionId: sessionRow.session_id, action: 'archived' });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error instanceof Error ? error.message : String(error) });
     }
   });
 
