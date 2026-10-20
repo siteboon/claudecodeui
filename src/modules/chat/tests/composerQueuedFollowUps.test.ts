@@ -1,0 +1,342 @@
+import assert from 'node:assert/strict';
+
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, test, vi } from 'vitest';
+
+import '@/modules/i18n';
+import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
+import { readDraftText, resetChatDrafts } from '@/shared/chatDrafts';
+import type { BackgroundSendChoice, ChatMessage, PermissionMode, Project, ProjectSession, SessionActivityMap } from '@/shared/types';
+
+/**
+ * #1587: follow-ups submitted while a turn runs used to replace each other in
+ * the session's single queued slot, so only the last one reached the
+ * provider and nothing said the others were gone. Every accepted follow-up
+ * must now be kept, in order, and the card must show all of them.
+ *
+ * The server is faked at the HTTP boundary with the drafts contract the real
+ * server implements, so these tests see what would be stored in
+ * `session_drafts.queued_message` (what the dispatcher sends), not only what
+ * the card renders.
+ */
+
+type StoredQueued = { content: string; options?: Record<string, unknown>; attachments: unknown[] };
+type StoredDraft = { text: string; queuedMessage: StoredQueued | null };
+
+const PROJECT: Project = { projectId: 'project-1', displayName: 'Project One', fullPath: '/tmp/project-one' };
+const SESSION_1: ProjectSession = { id: 'session-1' };
+const SESSION_2: ProjectSession = { id: 'session-2' };
+
+let server: Map<string, StoredDraft>;
+let refuseQueueing = false;
+// Held open by a test to keep an upload in flight (e.g. across a session switch).
+let uploadGate: Promise<void> | null = null;
+
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
+  status,
+  headers: { 'Content-Type': 'application/json' },
+});
+
+const dropIfEmpty = (scope: string) => {
+  const draft = server.get(scope);
+  if (draft && !draft.text && !draft.queuedMessage) {
+    server.delete(scope);
+  }
+};
+
+// The drafts endpoints, as the server implements them.
+const fakeServer = async (url: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const path = String(url);
+  const method = init?.method ?? 'GET';
+  const body = init?.body && typeof init.body === 'string' ? JSON.parse(init.body) as Record<string, unknown> : {};
+  const scope = String(body.scope ?? '');
+
+  if (path.includes('/api/assets/files')) {
+    await uploadGate;
+    const files = (init?.body as FormData).getAll('files') as File[];
+    return json({ attachments: files.map((file) => ({ name: file.name, path: `/uploads/${file.name}` })) });
+  }
+
+  if (path.endsWith('/api/user/drafts/queued-message')) {
+    if (method === 'POST') {
+      if (refuseQueueing) {
+        return json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } }, 500);
+      }
+      const message = body.queuedMessage as StoredQueued;
+      const current = server.get(scope) ?? { text: '', queuedMessage: null };
+      const waiting = current.queuedMessage;
+      const queuedMessage: StoredQueued = waiting
+        ? {
+            content: [waiting.content, message.content].filter((part) => part.trim()).join('\n\n'),
+            options: message.options ?? waiting.options,
+            attachments: [...waiting.attachments, ...(message.attachments ?? [])],
+          }
+        : { content: message.content, options: message.options, attachments: message.attachments ?? [] };
+      server.set(scope, { ...current, queuedMessage });
+      return json({ success: true, queuedMessage, appended: Boolean(waiting) });
+    }
+    if (method === 'DELETE') {
+      const current = server.get(scope);
+      if (current) {
+        server.set(scope, { ...current, queuedMessage: null });
+        dropIfEmpty(scope);
+      }
+      return json({ success: true });
+    }
+  }
+
+  if (path.endsWith('/api/user/drafts')) {
+    if (method === 'GET') {
+      return json({ success: true, drafts: [...server].map(([draftScope, draft]) => ({ scope: draftScope, ...draft })) });
+    }
+    if (method === 'PUT') {
+      const text = typeof body.text === 'string' ? body.text : '';
+      const current = server.get(scope) ?? { text: '', queuedMessage: null };
+      server.set(scope, body.queuedMessage === undefined
+        ? { ...current, text }
+        : { text, queuedMessage: (body.queuedMessage as StoredQueued | null) ?? null });
+      dropIfEmpty(scope);
+      return json({ success: true });
+    }
+    if (method === 'DELETE') {
+      server.delete(scope);
+      return json({ success: true });
+    }
+  }
+
+  return json([]);
+};
+
+// What the server's dispatcher does when the session goes idle: take the
+// queued message off the queue to send it.
+const dispatcherClaims = (scope: string): StoredQueued | null => {
+  const draft = server.get(scope);
+  const claimed = draft?.queuedMessage ?? null;
+  if (draft) {
+    server.set(scope, { ...draft, queuedMessage: null });
+    dropIfEmpty(scope);
+  }
+  return claimed;
+};
+
+type Props = {
+  session: ProjectSession;
+  isLoading: boolean;
+  model: string;
+  processingSessions?: SessionActivityMap;
+};
+
+const render = (initialProps: Partial<Props> = {}) => {
+  const errors: ChatMessage[] = [];
+  const view = renderHook(
+    ({ session, isLoading, model, processingSessions }: Props) => useChatComposerState({
+      selectedProject: PROJECT,
+      selectedSession: session,
+      currentSessionId: session.id ?? null,
+      provider: 'claude',
+      permissionMode: 'default',
+      cyclePermissionMode: () => undefined,
+      resolvePermissionModeForProvider: () => 'default' as PermissionMode,
+      currentProviderModel: model,
+      currentProviderEffort: 'medium',
+      isLoading,
+      processingSessions,
+      canAbortSession: false,
+      tokenBudget: null,
+      sendMessage: () => undefined,
+      scrollToBottom: () => undefined,
+      addMessage: (message) => {
+        if (message.type === 'error') errors.push(message);
+      },
+      setIsUserScrolledUp: () => undefined,
+      setPendingPermissionRequests: () => undefined,
+    }),
+    { initialProps: { session: SESSION_1, isLoading: true, model: 'model-1', ...initialProps } },
+  );
+  return { view, errors };
+};
+
+type View = ReturnType<typeof render>['view'];
+
+const submit = async (view: View, text: string, files: File[] = []) => {
+  await act(async () => {
+    view.result.current.setInput(text);
+    view.result.current.setAttachedFiles(files);
+  });
+  await act(async () => {
+    await view.result.current.handleSubmit({ preventDefault: () => undefined } as never);
+  });
+};
+
+const queuedOnServer = (scope = 'session-1') => server.get(scope)?.queuedMessage ?? null;
+
+beforeEach(() => {
+  server = new Map();
+  refuseQueueing = false;
+  uploadGate = null;
+  resetChatDrafts();
+  localStorage.clear();
+  vi.stubGlobal('fetch', vi.fn(fakeServer));
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+  resetChatDrafts();
+  localStorage.clear();
+});
+
+test('follow-ups A, B and C queued during one turn are all kept, in order, and the card shows them all', async () => {
+  const { view } = render();
+
+  await submit(view, 'follow-up A');
+  await submit(view, 'follow-up B', [new File(['b'], 'b.txt', { type: 'text/plain' })]);
+  view.rerender({ session: SESSION_1, isLoading: true, model: 'model-2' });
+  await submit(view, 'follow-up C');
+
+  assert.equal(queuedOnServer()?.content, 'follow-up A\n\nfollow-up B\n\nfollow-up C', 'all three will be sent, in order');
+  assert.deepEqual(queuedOnServer()?.attachments, [{ name: 'b.txt', path: '/uploads/b.txt' }]);
+  assert.equal(queuedOnServer()?.options?.model, 'model-2', 'the latest send options win');
+  assert.equal(view.result.current.queuedDraft?.content, 'follow-up A\n\nfollow-up B\n\nfollow-up C');
+  assert.equal(view.result.current.queuedDraft?.uploadedAttachments?.length, 1);
+  assert.equal(view.result.current.input, '');
+});
+
+test('a follow-up queued after the server sent the waiting one is queued alone, so nothing is sent twice', async () => {
+  const { view } = render();
+  await submit(view, 'follow-up A');
+
+  // The turn ended and the dispatcher took A, before this page heard about it.
+  assert.equal(dispatcherClaims('session-1')?.content, 'follow-up A');
+  assert.equal(view.result.current.queuedDraft?.content, 'follow-up A', 'the card has not caught up yet');
+
+  await submit(view, 'follow-up B');
+
+  assert.deepEqual(queuedOnServer(), { content: 'follow-up B', options: queuedOnServer()?.options, attachments: [] });
+  assert.equal(view.result.current.queuedDraft?.content, 'follow-up B', 'the card shows what will be sent');
+});
+
+test('typing after the server sent the queued message does not bring it back', async () => {
+  const { view } = render();
+  await submit(view, 'follow-up A');
+  dispatcherClaims('session-1');
+
+  // The user keeps writing the next follow-up; the text save is debounced.
+  await act(async () => { view.result.current.setInput('still writing the next one'); });
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1_300)); });
+
+  assert.equal(server.get('session-1')?.text, 'still writing the next one', 'the text was saved');
+  assert.equal(queuedOnServer(), null, 'and A, already sent, is not queued again');
+});
+
+test('queueing behind background work adds to a message already waiting there', async () => {
+  const background: SessionActivityMap = new Map([[
+    'session-1',
+    { statusText: null, canInterrupt: false, startedAt: 1, background: true, tasks: [] },
+  ]]);
+  const { view } = render({ isLoading: false, processingSessions: background });
+
+  const queueBehindWork = async (text: string) => {
+    await act(async () => { view.result.current.setInput(text); });
+    let pending!: Promise<void>;
+    act(() => {
+      pending = view.result.current.handleSubmit({ preventDefault: () => undefined } as never);
+    });
+    await waitFor(() => assert.notEqual(view.result.current.backgroundSendPrompt, null));
+    await act(async () => {
+      view.result.current.resolveBackgroundSendPrompt('queue' as BackgroundSendChoice);
+      await pending;
+    });
+  };
+
+  await queueBehindWork('after the job: A');
+  await queueBehindWork('after the job: B');
+
+  assert.equal(queuedOnServer()?.content, 'after the job: A\n\nafter the job: B');
+  assert.equal(view.result.current.queuedDraft?.content, 'after the job: A\n\nafter the job: B');
+});
+
+test('editing the merged card brings every follow-up back and takes it off the queue', async () => {
+  const fileA = new File(['a'], 'a.txt', { type: 'text/plain' });
+  const fileB = new File(['b'], 'b.txt', { type: 'text/plain' });
+  const { view } = render();
+  await submit(view, 'follow-up A', [fileA]);
+  await submit(view, 'follow-up B', [fileB]);
+
+  await act(async () => { view.result.current.editQueuedDraft(); });
+
+  assert.equal(view.result.current.input, 'follow-up A\n\nfollow-up B');
+  assert.deepEqual(view.result.current.attachedFiles, [fileA, fileB]);
+  assert.equal(view.result.current.queuedDraft, null);
+  await waitFor(() => assert.equal(queuedOnServer(), null, 'nothing is left for the dispatcher to send'));
+});
+
+test('deleting the merged card takes the whole message off the queue', async () => {
+  const { view } = render();
+  await submit(view, 'follow-up A');
+  await submit(view, 'follow-up B');
+
+  await act(async () => { view.result.current.deleteQueuedDraft(); });
+
+  assert.equal(view.result.current.queuedDraft, null);
+  await waitFor(() => assert.equal(queuedOnServer(), null));
+});
+
+test('a message queued from another tab is kept and shown when this tab queues one', async () => {
+  // Another tab (or this page before a reload) queued A; this page has not heard of it.
+  server.set('session-1', { text: '', queuedMessage: { content: 'from the other tab', attachments: [] } });
+  const { view } = render();
+
+  await submit(view, 'from this tab');
+
+  assert.equal(queuedOnServer()?.content, 'from the other tab\n\nfrom this tab');
+  assert.equal(view.result.current.queuedDraft?.content, 'from the other tab\n\nfrom this tab');
+});
+
+test('the card follows the server when another tab adds to the queued message', async () => {
+  const { view } = render();
+  await submit(view, 'follow-up A');
+  server.set('session-1', { text: '', queuedMessage: { content: 'follow-up A\n\nfrom the other tab', attachments: [] } });
+
+  // The card re-reads the server every 5 s while it is shown.
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5_300)); });
+
+  assert.equal(view.result.current.queuedDraft?.content, 'follow-up A\n\nfrom the other tab');
+}, 10_000);
+
+test('a follow-up the server does not accept stays in the composer, with an error, and no card', async () => {
+  const { view, errors } = render();
+  refuseQueueing = true;
+
+  await submit(view, 'follow-up A');
+
+  assert.equal(view.result.current.input, 'follow-up A', 'the message is kept for another try');
+  assert.equal(view.result.current.queuedDraft, null, 'no card for a message nothing will send');
+  assert.equal(errors.length, 1);
+  assert.match(String(errors[0]?.content), /Failed to queue message/);
+});
+
+test('switching sessions during the upload still queues the follow-up behind the earlier one', async () => {
+  const { view } = render();
+  await submit(view, 'follow-up A');
+
+  let releaseUpload!: () => void;
+  uploadGate = new Promise((resolve) => { releaseUpload = resolve; });
+  await act(async () => {
+    view.result.current.setInput('follow-up B');
+    view.result.current.setAttachedFiles([new File(['b'], 'b.txt', { type: 'text/plain' })]);
+  });
+  let pending!: Promise<void>;
+  act(() => {
+    pending = view.result.current.handleSubmit({ preventDefault: () => undefined } as never);
+  });
+  view.rerender({ session: SESSION_2, isLoading: true, model: 'model-1' });
+  await act(async () => {
+    releaseUpload();
+    await pending;
+  });
+
+  assert.equal(queuedOnServer('session-1')?.content, 'follow-up A\n\nfollow-up B');
+  assert.equal(view.result.current.queuedDraft, null, 'the session now open has no card of its own');
+  assert.equal(readDraftText('session-1'), '', 'and going back will not offer B to be queued again');
+});

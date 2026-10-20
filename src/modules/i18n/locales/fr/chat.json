@@ -128,12 +128,16 @@
     "stop": "Arrêter",
     "hintText": {
       "ctrlEnter": "Ctrl+Entrée pour envoyer • Maj+Entrée pour nouvelle ligne • Tab pour changer de mode • / pour les commandes slash",
-      "enter": "Entrée pour envoyer • Maj+Entrée pour nouvelle ligne • Tab pour changer de mode • / pour les commandes slash"
+      "enter": "Entrée pour envoyer • Maj+Entrée pour nouvelle ligne • Tab pour changer de mode • / pour les commandes slash",
+      "appendQueued": "Entrée pour ajouter au message en file d'attente"
     },
     "clickToChangeMode": "Cliquez pour changer le mode de permission (ou appuyez sur Tab dans la saisie)",
     "showAllCommands": "Afficher toutes les commandes",
     "clearInput": "Effacer la saisie",
-    "scrollToBottom": "Défiler vers le bas"
+    "scrollToBottom": "Défiler vers le bas",
+    "queue": {
+      "append": "Ajouter au message en file d'attente"
+    }
   },
   "providerSelection": {
     "title": "Choisissez votre assistant IA",

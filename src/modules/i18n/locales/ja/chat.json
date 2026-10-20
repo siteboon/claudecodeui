@@ -121,10 +121,14 @@
     "stop": "停止",
     "hintText": {
       "ctrlEnter": "Ctrl+Enterで送信 • Shift+Enterで改行 • Tabでモード切替 • / でスラッシュコマンド",
-      "enter": "Enterで送信 • Shift+Enterで改行 • Tabでモード切替 • / でスラッシュコマンド"
+      "enter": "Enterで送信 • Shift+Enterで改行 • Tabでモード切替 • / でスラッシュコマンド",
+      "appendQueued": "Enterでキュー内のメッセージに追加"
     },
     "clickToChangeMode": "クリックで権限モードを変更（または入力欄でTab）",
-    "showAllCommands": "すべてのコマンドを表示"
+    "showAllCommands": "すべてのコマンドを表示",
+    "queue": {
+      "append": "キュー内のメッセージに追加"
+    }
   },
   "providerSelection": {
     "title": "AIアシスタントを選択",
