@@ -74,6 +74,8 @@ type ChatMessagesPaneProps = {
   onGrantToolPermission: (suggestion: { entry: string; toolName: string }) => { success: boolean };
   showRawParameters?: boolean;
   showThinking?: boolean;
+  /** Stamps every row, tool group and subagent step with its time, not only user turns (the "Show timestamps" preference). */
+  showTimestamps?: boolean;
   selectedProject: Project;
   /** Loads an already-sent message back into the composer; absent when the provider cannot re-run from a point. */
   onEditMessage?: (message: ChatMessage) => void;
@@ -144,6 +146,7 @@ function ChatMessagesPane({
   onGrantToolPermission,
   showRawParameters,
   showThinking,
+  showTimestamps = false,
   selectedProject,
 }: ChatMessagesPaneProps) {
   const { t } = useTranslation('chat');
@@ -214,6 +217,7 @@ function ChatMessagesPane({
               provider={provider}
               selectedProject={selectedProject}
               createDiff={createDiff}
+              showTimestamps={showTimestamps}
               onLoadFullTranscript={onLoadFullTranscript}
             />
           </div>
@@ -324,6 +328,7 @@ function ChatMessagesPane({
                       onGrantToolPermission={onGrantToolPermission}
                       showRawParameters={showRawParameters}
                       showThinking={showThinking}
+                      showTimestamps={showTimestamps}
                       selectedProject={selectedProject}
                       provider={provider}
                     />
@@ -350,6 +355,7 @@ function ChatMessagesPane({
                     onGrantToolPermission={onGrantToolPermission}
                     showRawParameters={showRawParameters}
                     showThinking={showThinking}
+                    showTimestamps={showTimestamps}
                     selectedProject={selectedProject}
                     provider={provider}
                     onEditMessage={onEditMessage}

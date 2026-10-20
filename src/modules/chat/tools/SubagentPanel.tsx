@@ -19,6 +19,8 @@ type SubagentPanelProps = {
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
   selectedProject?: Project | null;
+  /** Stamps each step of the agent's timeline with its time. */
+  showTimestamps?: boolean;
 };
 
 function parseToolInput(toolInput: unknown): Record<string, unknown> {
@@ -82,6 +84,7 @@ export const SubagentPanel = memo(({
   onFileOpen,
   createDiff,
   selectedProject,
+  showTimestamps = false,
 }: SubagentPanelProps) => {
   // Collapsed by default: an agent is a summary of work, and its detail is
   // only wanted on demand.
@@ -179,6 +182,7 @@ export const SubagentPanel = memo(({
             onFileOpen={onFileOpen}
             createDiff={createDiff}
             selectedProject={selectedProject}
+            showTimestamps={showTimestamps}
           />
 
           {resultText && (

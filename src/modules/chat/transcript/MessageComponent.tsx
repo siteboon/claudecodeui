@@ -14,6 +14,7 @@ import StreamingMarkdown from '@/modules/chat/transcript/StreamingMarkdown';
 import MessageCopyControl from '@/modules/chat/transcript/MessageCopyControl';
 import MessageModelLabel from '@/modules/chat/transcript/MessageModelLabel';
 import MessageSpeakControl from '@/modules/chat/transcript/MessageSpeakControl';
+import TranscriptTimestamp from '@/modules/chat/transcript/TranscriptTimestamp';
 import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
 import { MemoryCitations } from '@/modules/chat/transcript/MemoryCitations';
 
@@ -26,6 +27,12 @@ type MessageComponentProps = {
   onGrantToolPermission?: (suggestion: ClaudePermissionSuggestion) => PermissionGrantResult | null | undefined;
   showRawParameters?: boolean;
   showThinking?: boolean;
+  /**
+   * Stamps this row with its time whatever its kind, and hands the preference
+   * on to the agent and workflow cards' timelines. Off, only user turns and
+   * the first row of an assistant run carry a time, as they always have.
+   */
+  showTimestamps?: boolean;
   selectedProject?: Project | null;
   provider: LLMProvider | string;
   /**
@@ -47,7 +54,7 @@ const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'Edit', 'Write', 'ApplyPatch']);
  * Rendered by chat's ChatMessagesPane and ToolGroupContainer to draw one
  * transcript entry — user turn, assistant turn, or a tool call and its result.
  */
-const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, showRawParameters, showThinking, selectedProject, provider, onEditMessage, onForkFromMessage }: MessageComponentProps) => {
+const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, showRawParameters, showThinking, showTimestamps = false, selectedProject, provider, onEditMessage, onForkFromMessage }: MessageComponentProps) => {
   const { t } = useTranslation('chat');
   const isGrouped = prevMessage && prevMessage.type === message.type &&
     ((prevMessage.type === 'assistant') ||
@@ -85,6 +92,10 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
 
 
   const formattedTime = useMemo(() => new Date(message.timestamp).toLocaleTimeString(), [message.timestamp]);
+  // The footer a left-hand row has always had: copy controls, model and, on
+  // the first row of a run, the time. The timestamps preference adds a
+  // time-only footer to every other row.
+  const hasDefaultFooter = shouldShowAssistantCopyControl || !isGrouped;
   const shouldHideThinkingMessage = Boolean(message.isThinking && !showThinking);
 
   if (shouldHideThinkingMessage) {
@@ -146,13 +157,13 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                   {shouldShowUserCopyControl && (
                     <MessageCopyControl content={userCopyContent} messageType="user" />
                   )}
-                  <span>{formattedTime}</span>
+                  {showTimestamps ? <TranscriptTimestamp value={message.timestamp} /> : <span>{formattedTime}</span>}
                 </div>
               </div>
             ) : (
               /* Attachment-only turn: no text bubble, but the timestamp still shows */
               <div className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
-                <span>{formattedTime}</span>
+                {showTimestamps ? <TranscriptTimestamp value={message.timestamp} /> : <span>{formattedTime}</span>}
               </div>
             )}
           </div>
@@ -178,6 +189,9 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
             <span className="text-xs text-gray-500 dark:text-gray-400">
               {message.content || t('chat:misc.compacted', 'Compacted')}
             </span>
+            {showTimestamps && (
+              <TranscriptTimestamp value={message.timestamp} className="ml-auto flex-shrink-0 text-[11px] text-gray-400 dark:text-gray-500" />
+            )}
           </div>
           {message.compactSummary && (
             <details className="ml-3.5 mt-0.5">
@@ -198,6 +212,9 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
           <div className="flex items-center gap-2 py-0.5">
             <span className={`inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${message.taskNotificationStatus === 'completed' ? 'bg-green-400 dark:bg-green-500' : 'bg-amber-400 dark:bg-amber-500'}`} />
             <span className="text-xs text-gray-500 dark:text-gray-400">{message.content}</span>
+            {showTimestamps && (
+              <TranscriptTimestamp value={message.timestamp} className="ml-auto flex-shrink-0 text-[11px] text-gray-400 dark:text-gray-500" />
+            )}
           </div>
         </div>
       ) : (
@@ -248,6 +265,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                   onFileOpen={onFileOpen}
                   createDiff={createDiff}
                   selectedProject={selectedProject}
+                  showTimestamps={showTimestamps}
                 />
               </div>
             ) : message.isSubagentContainer ? (
@@ -263,6 +281,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                   onFileOpen={onFileOpen}
                   createDiff={createDiff}
                   selectedProject={selectedProject}
+                  showTimestamps={showTimestamps}
                 />
               </div>
             ) : message.isToolUse ? (
@@ -409,7 +428,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
               <MemoryCitations citations={message.memoryCitations} />
             )}
 
-            {(shouldShowAssistantCopyControl || !isGrouped) && (
+            {(hasDefaultFooter || showTimestamps) && (
               <div className="mt-1 flex w-full items-center gap-2 text-[11px] text-gray-400 dark:text-gray-500">
                 {shouldShowAssistantCopyControl && (
                   <MessageCopyControl content={assistantCopyContent} messageType="assistant" />
@@ -420,9 +439,14 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                 {/* Which model actually answered, as the provider recorded it
                     on this row. Provenance rather than an affordance, so unlike
                     copy and speak it is not gated on the copy control, and an
-                    exported transcript keeps it wherever the footer renders. */}
-                <MessageModelLabel model={message.model} />
-                {!isGrouped && <span>{formattedTime}</span>}
+                    exported transcript keeps it wherever the footer renders.
+                    The time-only footer the timestamps preference adds to
+                    every other row leaves it out, so it is not repeated on
+                    each tool call of a run. */}
+                {hasDefaultFooter && <MessageModelLabel model={message.model} />}
+                {showTimestamps
+                  ? <TranscriptTimestamp value={message.timestamp} />
+                  : !isGrouped && <span>{formattedTime}</span>}
               </div>
             )}
           </div>

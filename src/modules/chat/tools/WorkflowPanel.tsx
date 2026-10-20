@@ -20,6 +20,7 @@ import { SubagentTimeline } from '@/modules/chat/tools/SubagentTimeline';
 import { ToolErrorDisplay } from '@/modules/chat/tools/ToolErrorDisplay';
 import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
 import { useTranscriptSessionId } from '@/modules/chat/context/TranscriptSessionContext';
+import TranscriptTimestamp from '@/modules/chat/transcript/TranscriptTimestamp';
 import {
   describeWorkflowAgent,
   findCurrentWorkflowAgent,
@@ -39,6 +40,8 @@ type WorkflowPanelProps = {
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
   selectedProject?: Project | null;
+  /** Stamps each agent with the time it started, when the live stream said, and each step of an opened agent's timeline. */
+  showTimestamps?: boolean;
 };
 
 /** What the agent-activity route answers with. */
@@ -199,6 +202,7 @@ type WorkflowAgentTimelineProps = {
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
   selectedProject?: Project | null;
+  showTimestamps: boolean;
 };
 
 /**
@@ -209,7 +213,7 @@ type WorkflowAgentTimelineProps = {
  * re-read every few seconds while the agent runs, since the transcript is
  * the only place its progress lands.
  */
-const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFileOpen, createDiff, selectedProject }: WorkflowAgentTimelineProps) => {
+const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFileOpen, createDiff, selectedProject, showTimestamps }: WorkflowAgentTimelineProps) => {
   const { t } = useTranslation();
   // What the last read returned — the timeline, or why there is none — and
   // null until the first read lands. A later read that fails keeps the last
@@ -275,6 +279,7 @@ const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFi
       onFileOpen={onFileOpen}
       createDiff={createDiff}
       selectedProject={selectedProject}
+      showTimestamps={showTimestamps}
     />
   );
 });
@@ -287,6 +292,7 @@ type WorkflowAgentRowProps = {
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
   selectedProject?: Project | null;
+  showTimestamps: boolean;
 };
 
 /**
@@ -294,7 +300,7 @@ type WorkflowAgentRowProps = {
  * runs and what it came back with when done — and, opened on demand, its
  * timeline.
  */
-const WorkflowAgentRowView = memo(({ agent, timelineAddress, onFileOpen, createDiff, selectedProject }: WorkflowAgentRowProps) => {
+const WorkflowAgentRowView = memo(({ agent, timelineAddress, onFileOpen, createDiff, selectedProject, showTimestamps }: WorkflowAgentRowProps) => {
   const { t } = useTranslation();
   // Opened on demand: the timeline is a fetch and, for a long run, a few
   // hundred tool renderers.
@@ -302,6 +308,9 @@ const WorkflowAgentRowView = memo(({ agent, timelineAddress, onFileOpen, createD
   // A queued slot has no transcript yet, and outside a session there is
   // nothing to fetch one from.
   const canOpen = Boolean(timelineAddress && agent.agentId);
+  // Only the live stream says when an agent started; the journal a history
+  // load reads records no times, so a reloaded row has none to show.
+  const showStartedAt = showTimestamps && agent.startedAt !== undefined;
 
   const summary = (
     <>
@@ -310,7 +319,10 @@ const WorkflowAgentRowView = memo(({ agent, timelineAddress, onFileOpen, createD
         {describeWorkflowAgent(agent)}
       </span>
       {agent.phase && <span className="flex-shrink-0 text-muted-foreground/70">· {agent.phase}</span>}
-      <span className="ml-auto flex-shrink-0 text-[11px] text-muted-foreground/70">
+      {showStartedAt && (
+        <TranscriptTimestamp value={agent.startedAt} className="ml-auto flex-shrink-0 text-[10px] text-muted-foreground/60" />
+      )}
+      <span className={cn('flex-shrink-0 text-[11px] text-muted-foreground/70', !showStartedAt && 'ml-auto')}>
         {t(`workflow.agentStatus.${agent.status}`, agent.status)}
       </span>
     </>
@@ -359,6 +371,7 @@ const WorkflowAgentRowView = memo(({ agent, timelineAddress, onFileOpen, createD
             onFileOpen={onFileOpen}
             createDiff={createDiff}
             selectedProject={selectedProject}
+            showTimestamps={showTimestamps}
           />
         </div>
       )}
@@ -376,7 +389,7 @@ WorkflowAgentRowView.displayName = 'WorkflowAgentRowView';
  * Shaped like SubagentPanel: the launch is a summary of work, and the
  * detail is only wanted on demand, so the body stays unmounted until opened.
  */
-export const WorkflowPanel = memo(({ toolInput, toolResult, workflow, taskStatus, onFileOpen, createDiff, selectedProject }: WorkflowPanelProps) => {
+export const WorkflowPanel = memo(({ toolInput, toolResult, workflow, taskStatus, onFileOpen, createDiff, selectedProject, showTimestamps = false }: WorkflowPanelProps) => {
   const { t } = useTranslation();
   const isExporting = useIsExportingTranscript();
   // Collapsed by default, like an agent card; the header carries the status.
@@ -515,6 +528,7 @@ export const WorkflowPanel = memo(({ toolInput, toolResult, workflow, taskStatus
                     onFileOpen={onFileOpen}
                     createDiff={createDiff}
                     selectedProject={selectedProject}
+                    showTimestamps={showTimestamps}
                   />
                 ))}
               </ul>

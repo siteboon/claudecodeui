@@ -5,6 +5,7 @@ import type { DiffLine, Project, SubagentActivity } from '@/shared/types';
 import { cn } from '@/shared/utils';
 import { ToolRenderer } from '@/modules/chat/tools/ToolRenderer';
 import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
+import TranscriptTimestamp from '@/modules/chat/transcript/TranscriptTimestamp';
 
 type SubagentTimelineProps = {
   activity: SubagentActivity[];
@@ -13,6 +14,8 @@ type SubagentTimelineProps = {
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
   selectedProject?: Project | null;
+  /** Puts each step's time beside it, for a step the provider recorded one for. */
+  showTimestamps?: boolean;
 };
 
 /**
@@ -52,7 +55,7 @@ SubagentNote.displayName = 'SubagentNote';
  * Only mount it while its panel is open: a run of a hundred tools is a
  * hundred tool renderers.
  */
-export const SubagentTimeline = memo(({ activity, activityCount, onFileOpen, createDiff, selectedProject }: SubagentTimelineProps) => {
+export const SubagentTimeline = memo(({ activity, activityCount, onFileOpen, createDiff, selectedProject, showTimestamps = false }: SubagentTimelineProps) => {
   const isExporting = useIsExportingTranscript();
   // Raised by the "show more" step so a long run can be inspected in full
   // without paying for it up front.
@@ -69,13 +72,14 @@ export const SubagentTimeline = memo(({ activity, activityCount, onFileOpen, cre
     <>
       {visibleEntries.length > 0 && (
         <div className="border-l border-border/60 pl-2">
-          {visibleEntries.map((entry, index) => (
-            entry.kind === 'tool' ? (
+          {visibleEntries.map((entry, index) => {
+            const key = entry.kind === 'tool' ? entry.toolId ?? `activity-${index}` : `activity-${index}`;
+            const step = entry.kind === 'tool' ? (
               // Rendered through the same router the main thread uses, so a
               // subagent's shell command or diff looks exactly like one the
               // top-level agent ran.
               <ToolRenderer
-                key={entry.toolId ?? `activity-${index}`}
+                key={key}
                 toolName={entry.toolName || 'UnknownTool'}
                 toolInput={entry.toolInput}
                 toolResult={entry.toolResult}
@@ -86,9 +90,23 @@ export const SubagentTimeline = memo(({ activity, activityCount, onFileOpen, cre
                 selectedProject={selectedProject}
               />
             ) : (
-              <SubagentNote key={`activity-${index}`} activity={entry} />
-            )
-          ))}
+              <SubagentNote key={key} activity={entry} />
+            );
+
+            // The time sits in a column of its own beside the step rather than
+            // inside it, since a step is any of the tool renderers. Only
+            // wrapped while shown, so with the preference off the timeline's
+            // markup is exactly what it was.
+            return showTimestamps ? (
+              <div key={key} className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">{step}</div>
+                <TranscriptTimestamp
+                  value={entry.timestamp}
+                  className="mt-1.5 flex-shrink-0 text-[10px] leading-none text-muted-foreground/60"
+                />
+              </div>
+            ) : step;
+          })}
         </div>
       )}
 
