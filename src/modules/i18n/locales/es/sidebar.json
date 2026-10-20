@@ -38,7 +38,8 @@
     "selectAllLoaded": "Seleccionar las cargadas",
     "clearSelection": "Quitar selección",
     "deleteSelected_one": "Eliminar {{count}} sesión",
-    "deleteSelected_other": "Eliminar {{count}} sesiones"
+    "deleteSelected_other": "Eliminar {{count}} sesiones",
+    "deleteSelected_many": "Eliminar {{count}} sesiones"
   },
   "tooltips": {
     "viewEnvironments": "Ver entornos",
@@ -56,7 +57,8 @@
     "cancel": "Cancelar",
     "clearSearch": "Limpiar búsqueda",
     "openCommandPalette": "Abrir paleta de comandos",
-    "attentionRequiredIndicator": "La sesión requiere atención"
+    "attentionRequiredIndicator": "La sesión requiere atención",
+    "backgroundWorkIndicator": "Trabajo en segundo plano en curso"
   },
   "navigation": {
     "chat": "Chat",
@@ -122,7 +124,8 @@
     "restoreSessionError": "Error al restaurar la sesión. Inténtalo de nuevo.",
     "forkSessionError": "No se pudo bifurcar esta sesión. Inténtalo de nuevo.",
     "deleteSessionsPartialFailure_one": "No se pudo eliminar {{count}} sesión de {{total}}. Inténtalo de nuevo.",
-    "deleteSessionsPartialFailure_other": "No se pudieron eliminar {{count}} de {{total}} sesiones. Inténtalo de nuevo."
+    "deleteSessionsPartialFailure_other": "No se pudieron eliminar {{count}} de {{total}} sesiones. Inténtalo de nuevo.",
+    "deleteSessionsPartialFailure_many": "No se pudieron eliminar {{count}} de {{total}} sesiones. Inténtalo de nuevo."
   },
   "version": {
     "updateAvailable": "Actualización disponible",
@@ -140,8 +143,18 @@
     "tryDifferentQuery": "Prueba con otra búsqueda",
     "matches_one": "{{count}} coincidencia",
     "matches_other": "{{count}} coincidencias",
+    "matches_many": "{{count}} coincidencias",
     "projectsScanned_one": "{{count}} proyecto examinado",
-    "projectsScanned_other": "{{count}} proyectos examinados"
+    "projectsScanned_other": "{{count}} proyectos examinados",
+    "projectsScanned_many": "{{count}} proyectos examinados"
+  },
+  "recent": {
+    "title": "Conversaciones recientes",
+    "emptyTitle": "Aún no hay conversaciones",
+    "emptyDescription": "Aquí aparecerán tus conversaciones más recientes.",
+    "loadFailed": "No se pudieron cargar las conversaciones recientes",
+    "loadMore": "Cargar conversaciones anteriores",
+    "loadingMore": "Cargando más..."
   },
   "deleteConfirmation": {
     "deleteProject": "Quitar proyecto",
@@ -149,6 +162,7 @@
     "confirmDelete": "¿Qué quieres hacer con",
     "sessionCount_one": "Este proyecto contiene {{count}} conversación.",
     "sessionCount_other": "Este proyecto contiene {{count}} conversaciones.",
+    "sessionCount_many": "Este proyecto contiene {{count}} conversaciones.",
     "removeFromSidebar": "Solo quitar de la barra lateral",
     "archiveProject": "Archivar proyecto",
     "archiveSession": "Archivar sesión",
@@ -161,11 +175,15 @@
     "confirmDeleteSessions": "¿Qué quieres hacer con",
     "deleteSessions_one": "Eliminar {{count}} sesión",
     "deleteSessions_other": "Eliminar {{count}} sesiones",
+    "deleteSessions_many": "Eliminar {{count}} sesiones",
     "selectedSessions_one": "{{count}} sesión seleccionada",
     "selectedSessions_other": "{{count}} sesiones seleccionadas",
+    "selectedSessions_many": "{{count}} sesiones seleccionadas",
     "archiveSessions_one": "Archivar {{count}} sesión",
     "archiveSessions_other": "Archivar {{count}} sesiones",
+    "archiveSessions_many": "Archivar {{count}} sesiones",
     "archiveSessionsNotice_one": "Archivar mantiene la sesión fuera de la lista activa y conserva su historial.",
-    "archiveSessionsNotice_other": "Archivar mantiene las sesiones fuera de la lista activa y conserva su historial."
+    "archiveSessionsNotice_other": "Archivar mantiene las sesiones fuera de la lista activa y conserva su historial.",
+    "archiveSessionsNotice_many": "Archivar mantiene las sesiones fuera de la lista activa y conserva su historial."
   }
 }
