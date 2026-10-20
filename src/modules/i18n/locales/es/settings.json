@@ -760,7 +760,7 @@
     "screenshotAlt": "Captura de la sesión del navegador",
     "waitingScreenshot": "Esperando la captura",
     "waitingScreenshotHint": "La próxima instantánea del navegador del agente se mostrará aquí.",
-    "activeCount": "{{n}} activas",
+    "activeCount": "Activas: {{n}}",
     "totalCount": "{{n}} en total",
     "updated": "Actualizado {{time}}",
     "statusEmpty": "vacío",

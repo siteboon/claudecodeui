@@ -277,10 +277,10 @@
     "unexpectedResponse": "El punto de actualización devolvió una respuesta inesperada (HTTP {{status}}). Actualiza a mano con el comando de abajo.",
     "connectionInterrupted": "Se interrumpió la conexión con el servidor: es probable que se esté reiniciando para aplicar la actualización.",
     "unknownError": "Error desconocido",
-    "refreshNow": "Actualizando la ventana ahora...",
-    "refreshIn_one": "La ventana se actualizará en {{count}} segundo. Si la actualización no se aplica, REINICIA el entorno.",
-    "refreshIn_other": "La ventana se actualizará en {{count}} segundos. Si la actualización no se aplica, REINICIA el entorno.",
-    "refreshIn_many": "La ventana se actualizará en {{count}} segundos. Si la actualización no se aplica, REINICIA el entorno."
+    "refreshNow": "Recargando la ventana ahora...",
+    "refreshIn_one": "La ventana se recargará en {{count}} segundo. Si la actualización no se aplica, REINICIA el entorno.",
+    "refreshIn_other": "La ventana se recargará en {{count}} segundos. Si la actualización no se aplica, REINICIA el entorno.",
+    "refreshIn_many": "La ventana se recargará en {{count}} segundos. Si la actualización no se aplica, REINICIA el entorno."
   },
   "commandPalette": {
     "title": "Paleta de comandos",
@@ -369,7 +369,7 @@
     "agentsFinished_one": "{{finished}} de {{count}} agente terminó",
     "agentsFinished_other": "{{finished}} de {{count}} agentes terminaron",
     "agentsFinished_many": "{{finished}} de {{count}} agentes terminaron",
-    "agentsFailed": "{{count}} fallaron",
+    "agentsFailed": "{{count}} con error",
     "agentsProgress_one": "{{finished}}/{{count}} agente",
     "agentsProgress_other": "{{finished}}/{{count}} agentes",
     "agentsProgress_many": "{{finished}}/{{count}} agentes",
@@ -387,7 +387,7 @@
     "agentTimelineLoading": "Leyendo los pasos del agente…",
     "agentTimelineEmpty": "Aún no hay nada registrado",
     "agentTimelineUnavailable": "Pasos no disponibles: {{reason}}",
-    "usage": "{{toolUses}} usos de herramientas · {{elapsed}}",
+    "usage": "Usos de herramientas: {{toolUses}} · {{elapsed}}",
     "currentAgent": "actual: {{label}}",
     "result": "Resultado",
     "script": "Script",
