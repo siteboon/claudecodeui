@@ -3,6 +3,29 @@
 All notable changes to CloudCLI UI will be documented in this file.
 
 
+## [1.37.5](https://github.com/siteboon/claudecodeui/compare/v1.37.4...v1.37.5) (2026-10-17)
+
+### New Features
+
+* **chat:** offer to queue a message behind a session's background work ([#1583](https://github.com/siteboon/claudecodeui/issues/1583)) ([82a2b62](https://github.com/siteboon/claudecodeui/commit/82a2b62a5e6085a41acb3ac908fa21e493ba43fd))
+* **opencode:** show task calls as subagents ([#1443](https://github.com/siteboon/claudecodeui/issues/1443)) ([02e44b0](https://github.com/siteboon/claudecodeui/commit/02e44b016d43aadf3513ff2795e536df3817f4b4))
+* **providers:** let a provider list only its custom models ([#1561](https://github.com/siteboon/claudecodeui/issues/1561)) ([abc14eb](https://github.com/siteboon/claudecodeui/commit/abc14eb27cc4b60b08535983953a9f6912205969)), closes [#1513](https://github.com/siteboon/claudecodeui/issues/1513)
+
+### Bug Fixes
+
+* **auth:** ignore auth headers replayed by cached responses ([#1549](https://github.com/siteboon/claudecodeui/issues/1549)) ([b26207a](https://github.com/siteboon/claudecodeui/commit/b26207ac5edd10c7558cf9894d151810b998257a))
+* **claude:** measure the context window against the SDK-reported window ([#1557](https://github.com/siteboon/claudecodeui/issues/1557)) ([5d76a2d](https://github.com/siteboon/claudecodeui/commit/5d76a2d85d957912e7e9c83a25731d86d48162a5)), closes [#1505](https://github.com/siteboon/claudecodeui/issues/1505)
+* **codex:** read inherited history in reference-backed forks ([#1530](https://github.com/siteboon/claudecodeui/issues/1530)) ([92ccebc](https://github.com/siteboon/claudecodeui/commit/92ccebc660749e63ba8f2b51fac3e3ba2c8b7462))
+* **commands:** keep multi-line slash command arguments in $ARGUMENTS ([#1581](https://github.com/siteboon/claudecodeui/issues/1581)) ([d1a4929](https://github.com/siteboon/claudecodeui/commit/d1a49297dd3884c5c4299694d379e76be11be25f)), closes [#1523](https://github.com/siteboon/claudecodeui/issues/1523) [#1523](https://github.com/siteboon/claudecodeui/issues/1523) [#1523](https://github.com/siteboon/claudecodeui/issues/1523)
+* **opencode:** discover models for connected providers ([#1578](https://github.com/siteboon/claudecodeui/issues/1578)) ([6c50659](https://github.com/siteboon/claudecodeui/commit/6c506597d677988bcddf9b79bee982ef05d9cad9))
+* **plugins:** explain why a plugin git clone or pull failed ([#1562](https://github.com/siteboon/claudecodeui/issues/1562)) ([94da1c2](https://github.com/siteboon/claudecodeui/commit/94da1c221f15a377e9624753d8009ca35c3c06f7)), closes [#1511](https://github.com/siteboon/claudecodeui/issues/1511) [#1511](https://github.com/siteboon/claudecodeui/issues/1511)
+* **sessions:** show pasted text instead of raw <pasted_content> tags ([#1504](https://github.com/siteboon/claudecodeui/issues/1504)) ([0753fc6](https://github.com/siteboon/claudecodeui/commit/0753fc6b3b9d46b243fdf5e8ada8a0a8932b3f7f))
+* **sessions:** stop showing logged API requests as repeated messages ([#1596](https://github.com/siteboon/claudecodeui/issues/1596)) ([16311b6](https://github.com/siteboon/claudecodeui/commit/16311b635197bf8cff6a5ed7ceeeb9fba3a9960b))
+
+### Documentation
+
+* **plugins:** drop the Claude Watch plugin whose repository is gone ([#1577](https://github.com/siteboon/claudecodeui/issues/1577)) ([cfd2cc0](https://github.com/siteboon/claudecodeui/commit/cfd2cc0218cc44a2c6be741e5582b0242215df30)), closes [#1510](https://github.com/siteboon/claudecodeui/issues/1510)
+
 ## [1.37.4](https://github.com/siteboon/claudecodeui/compare/v1.37.3...v1.37.4) (2026-10-09)
 
 ### New Features

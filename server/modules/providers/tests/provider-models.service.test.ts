@@ -48,11 +48,14 @@ const createSessionStore = (
 
 const createCatalogStore = () => {
   const rows = new Map<LLMProvider, CustomProviderModelRecord[]>();
+  // Model ids the service asked the repository to move deleted models' sessions to.
+  const deleteFallbacks: string[] = [];
   let nextRecordId = 1;
   const readRows = (provider: LLMProvider) => rows.get(provider) ?? [];
 
   return {
     rows,
+    deleteFallbacks,
     listCustomProviderModels(provider: LLMProvider) {
       return [...readRows(provider)];
     },
@@ -95,13 +98,26 @@ const createCatalogStore = () => {
       )));
       return updated;
     },
-    deleteCustomProviderModel(provider: LLMProvider, recordId: number, _fallbackModelId: string) {
+    deleteCustomProviderModel(provider: LLMProvider, recordId: number, fallbackModelId: string) {
       const existing = readRows(provider).find((record) => record.recordId === recordId);
       if (!existing) {
         return null;
       }
+      deleteFallbacks.push(fallbackModelId);
       rows.set(provider, readRows(provider).filter((record) => record.recordId !== recordId));
       return existing;
+    },
+  };
+};
+
+/** In-memory stand-in for the `app_config` key-value table. */
+const createSettingsStore = () => {
+  const values = new Map<string, string>();
+  return {
+    values,
+    get: (key: string) => values.get(key) ?? null,
+    set: (key: string, value: string) => {
+      values.set(key, value);
     },
   };
 };
@@ -109,14 +125,17 @@ const createCatalogStore = () => {
 const createTestService = (options: {
   catalog?: ReturnType<typeof createCatalogStore>;
   sessions?: ReturnType<typeof createSessionStore>;
+  settings?: ReturnType<typeof createSettingsStore>;
   activeModel?: (provider: LLMProvider, sessionId?: string) => string;
   onCatalogRead?: (provider: LLMProvider) => void;
 } = {}) => {
   const catalog = options.catalog ?? createCatalogStore();
   const sessions = options.sessions ?? createSessionStore();
+  const settings = options.settings ?? createSettingsStore();
   const service = createProviderModelsService({
     catalog,
     sessions,
+    settings,
     resolveProvider: (provider) => ({
       models: {
         getSupportedModels: async () => {
@@ -130,7 +149,7 @@ const createTestService = (options: {
     }),
   });
 
-  return { service, catalog, sessions };
+  return { service, catalog, sessions, settings };
 };
 
 test('provider catalogs merge source-controlled defaults with custom persistence rows', async () => {
@@ -147,6 +166,123 @@ test('provider catalogs merge source-controlled defaults with custom persistence
     isCustom: false,
   });
   assert.deepEqual(catalog.rows.get('codex'), undefined);
+});
+
+test('the custom-models-only flag is off by default and leaves the merged catalog unchanged', async () => {
+  const { service } = createTestService();
+  await service.createCustomModel('claude', { model: 'Gateway', id: 'gateway-model' });
+
+  const models = await service.getProviderModels('claude');
+
+  assert.deepEqual(models.OPTIONS.map((option) => option.value), ['claude-default', 'gateway-model']);
+  assert.equal(models.DEFAULT, 'claude-default');
+  assert.equal(models.CUSTOM_MODELS_ONLY, false);
+});
+
+test('custom-models-only lists just the custom models and makes the first one the default', async () => {
+  const { service, settings } = createTestService();
+  await service.createCustomModel('claude', { model: 'Gateway Sonnet', id: 'gateway-sonnet' });
+  await service.createCustomModel('claude', { model: 'Gateway Haiku', id: 'gateway-haiku' });
+
+  const toggled = await service.setCustomModelsOnly('claude', true);
+
+  assert.deepEqual(toggled.OPTIONS.map((option) => option.value), ['gateway-sonnet', 'gateway-haiku']);
+  assert.equal(toggled.OPTIONS.every((option) => option.isCustom), true);
+  assert.equal(toggled.DEFAULT, 'gateway-sonnet');
+  assert.equal(toggled.CUSTOM_MODELS_ONLY, true);
+  assert.deepEqual(await service.getProviderModels('claude'), toggled);
+  assert.equal(settings.values.get('provider_models_custom_only:claude'), 'true');
+
+  // The flag is per provider: Codex keeps its built-ins.
+  const codex = await service.getProviderModels('codex');
+  assert.equal(codex.DEFAULT, 'codex-default');
+  assert.equal(codex.CUSTOM_MODELS_ONLY, false);
+
+  // Turning it off restores the merged catalog.
+  const restored = await service.setCustomModelsOnly('claude', false);
+  assert.deepEqual(
+    restored.OPTIONS.map((option) => option.value),
+    ['claude-default', 'gateway-sonnet', 'gateway-haiku'],
+  );
+  assert.equal(restored.DEFAULT, 'claude-default');
+});
+
+test('custom-models-only never leaves a provider with an empty catalog', async () => {
+  const { service } = createTestService();
+
+  const enabledWithoutModels = await service.setCustomModelsOnly('opencode', true);
+  assert.deepEqual(enabledWithoutModels.OPTIONS.map((option) => option.value), ['opencode-default']);
+  assert.equal(enabledWithoutModels.DEFAULT, 'opencode-default');
+  assert.equal(enabledWithoutModels.CUSTOM_MODELS_ONLY, true);
+
+  // The flag stays on, so the first custom model takes over as soon as it exists.
+  const created = await service.createCustomModel('opencode', { model: 'Router', id: 'router/model' });
+  assert.deepEqual(created.models.OPTIONS.map((option) => option.value), ['router/model']);
+  assert.equal(created.models.DEFAULT, 'router/model');
+
+  // Deleting the last custom model brings the built-ins back.
+  const removed = await service.deleteCustomModel('opencode', created.model.recordId as number);
+  assert.deepEqual(removed.models.OPTIONS.map((option) => option.value), ['opencode-default']);
+  assert.equal(removed.models.DEFAULT, 'opencode-default');
+});
+
+test('deleting a custom model moves its sessions to the default of the catalog left behind', async () => {
+  const { service, catalog } = createTestService();
+  const first = await service.createCustomModel('codex', { model: 'First', id: 'gateway-first' });
+  const second = await service.createCustomModel('codex', { model: 'Second', id: 'gateway-second' });
+
+  // Flag off: sessions fall back to the built-in default, as before.
+  await service.deleteCustomModel('codex', second.model.recordId as number);
+  assert.deepEqual(catalog.deleteFallbacks, ['codex-default']);
+
+  // Flag on: sessions fall back to the first remaining custom model (the new
+  // DEFAULT), never to a built-in the picker no longer lists.
+  const third = await service.createCustomModel('codex', { model: 'Third', id: 'gateway-third' });
+  const fourth = await service.createCustomModel('codex', { model: 'Fourth', id: 'gateway-fourth' });
+  await service.setCustomModelsOnly('codex', true);
+  // Deleting the last one in the list goes back to the first, not a neighbour.
+  await service.deleteCustomModel('codex', fourth.model.recordId as number);
+  assert.deepEqual(catalog.deleteFallbacks, ['codex-default', 'gateway-first']);
+  // Deleting the current default promotes the next one in list order.
+  const removed = await service.deleteCustomModel('codex', first.model.recordId as number);
+  assert.deepEqual(catalog.deleteFallbacks, ['codex-default', 'gateway-first', 'gateway-third']);
+  assert.equal(removed.models.DEFAULT, 'gateway-third');
+
+  // Deleting the last one falls back to the built-in default again.
+  await service.deleteCustomModel('codex', third.model.recordId as number);
+  assert.deepEqual(
+    catalog.deleteFallbacks,
+    ['codex-default', 'gateway-first', 'gateway-third', 'codex-default'],
+  );
+});
+
+test('custom-models-only makes the first custom model the session fallback', async () => {
+  const { service } = createTestService({
+    sessions: createSessionStore({ 'session-1': null, 'session-on-built-in': 'claude-default' }),
+  });
+  await service.createCustomModel('claude', { model: 'Gateway', id: 'gateway-model' });
+  await service.setCustomModelsOnly('claude', true);
+
+  // No session: the catalog default is the custom model.
+  const withoutSession = await service.resolveSessionModel('claude');
+  assert.equal(withoutSession.model, 'gateway-model');
+  assert.equal(withoutSession.source, 'default');
+
+  // An unrecorded session whose adapter only knows its built-in default must
+  // not report that built-in as the session's own model.
+  const unrecorded = await service.resolveSessionModel('claude', { sessionId: 'session-1' });
+  assert.equal(unrecorded.model, 'gateway-model');
+  assert.equal(unrecorded.source, 'default');
+
+  // A session that already ran on a now-hidden built-in keeps its recorded
+  // model; hiding built-ins never rewrites existing sessions.
+  const recorded = await service.resolveSessionModel('claude', { sessionId: 'session-on-built-in' });
+  assert.equal(recorded.model, 'claude-default');
+  assert.equal(recorded.source, 'session');
+  assert.equal(
+    await service.resolveResumeModel('claude', 'session-on-built-in', 'gateway-model'),
+    'claude-default',
+  );
 });
 
 test('custom models can be created, edited, and deleted', async () => {
