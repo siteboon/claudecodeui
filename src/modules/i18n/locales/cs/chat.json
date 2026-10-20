@@ -296,6 +296,7 @@
       "startingNow": "Právě začíná"
     },
     "stop": "Zastavit",
+    "stopBackground": "Zastavit vše",
     "backgroundWork": "Práce na pozadí",
     "backgroundTask": {
       "workflow": "Pracovní postup {{name}}",

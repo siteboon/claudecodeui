@@ -222,6 +222,7 @@
       "label": "{{time}} vergangen",
       "startingNow": "Startet jetzt"
     },
+    "stopBackground": "Alle stoppen",
     "controls": {
       "stopGeneration": "Generierung stoppen",
       "pressEscToStop": "Jederzeit Esc drücken, um zu stoppen"

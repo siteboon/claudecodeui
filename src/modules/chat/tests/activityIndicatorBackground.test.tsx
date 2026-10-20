@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
-import { test, vi } from 'vitest';
+import { afterEach, test, vi } from 'vitest';
 
 import '@/modules/i18n';
 import ActivityIndicator from '@/modules/chat/composer/ActivityIndicator';
@@ -35,6 +35,10 @@ const backgroundActivity = (tasks: BackgroundTaskSummary[]): SessionActivity => 
   tasks,
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 test('a background-only session names its workflow, counts from its start and offers no Stop for a turn', () => {
   const onAbort = vi.fn();
   const { container } = render(<ActivityIndicator activity={backgroundActivity([task()])} onAbort={onAbort} />);
@@ -65,6 +69,100 @@ test('Stop all asks once: a second click before the work settles sends nothing',
   fireEvent.click(screen.getByRole('button', { name: 'Stop all' }));
 
   assert.equal(onStopBackground.mock.calls.length, 1);
+});
+
+test('Stop all stays disabled while the tasks it stopped report back one by one', () => {
+  // Each `stopped` notification republishes the pill with the tasks left, and
+  // the last one takes it down through the exit animation: every step is a new
+  // activity, and a press during any of them would still find nothing to stop.
+  const onStopBackground = vi.fn();
+  const first = task({ taskId: 'a1', toolUseId: 'toolu_agent_1', taskType: 'local_agent', workflowName: undefined });
+  const second = task({ taskId: 'a2', toolUseId: 'toolu_agent_2', taskType: 'local_agent', workflowName: undefined });
+  const view = render(<ActivityIndicator activity={backgroundActivity([first, second])} onStopBackground={onStopBackground} />);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Stop all' }));
+  view.rerender(<ActivityIndicator activity={backgroundActivity([second])} onStopBackground={onStopBackground} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Stop all' }));
+  view.rerender(<ActivityIndicator activity={null} onStopBackground={onStopBackground} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Stop all' }));
+
+  assert.equal(onStopBackground.mock.calls.length, 1);
+});
+
+test('Stop all is offered again for work started after the press', () => {
+  // Even while a task the press stopped is still listed next to it: the new
+  // work has not been asked to stop.
+  const onStopBackground = vi.fn();
+  const view = render(<ActivityIndicator activity={backgroundActivity([task()])} onStopBackground={onStopBackground} />);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Stop all' }));
+  view.rerender(
+    <ActivityIndicator
+      activity={backgroundActivity([
+        task(),
+        task({ taskId: 'a3', toolUseId: 'toolu_agent_3', taskType: 'local_agent', workflowName: undefined }),
+      ])}
+      onStopBackground={onStopBackground}
+    />,
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Stop all' }));
+
+  assert.equal(onStopBackground.mock.calls.length, 2);
+});
+
+test('Stop all stays disabled while a workflow it stopped still lists its own command', () => {
+  // The workflow agent's backgrounded command is the agent's business, not new
+  // work of the session's, so it does not bring the button back.
+  const onStopBackground = vi.fn();
+  const listed = () => [task(), task({ taskId: 'b5xsbzu5k', toolUseId: 'toolu_bash_1', taskType: 'local_bash', nested: true })];
+  const view = render(<ActivityIndicator activity={backgroundActivity(listed())} onStopBackground={onStopBackground} />);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Stop all' }));
+  view.rerender(<ActivityIndicator activity={backgroundActivity(listed())} onStopBackground={onStopBackground} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Stop all' }));
+
+  assert.equal(onStopBackground.mock.calls.length, 1);
+});
+
+test('Stop all can be pressed again once a press has changed nothing for 10 s', () => {
+  // A press can be lost (the socket was not open, or the server's stop
+  // failed), and then the same tasks stay listed. A press that took effect
+  // clears the pill long before: the stops report back within a second, and
+  // the 5 s running-sessions poll drops work the server no longer tracks.
+  vi.useFakeTimers();
+  const onStopBackground = vi.fn();
+  const listed = () => [
+    task({ taskId: 'a1', toolUseId: 'toolu_agent_1', taskType: 'local_agent', workflowName: undefined }),
+    task({ taskId: 'a2', toolUseId: 'toolu_agent_2', taskType: 'local_agent', workflowName: undefined }),
+  ];
+  const view = render(<ActivityIndicator activity={backgroundActivity(listed())} onStopBackground={onStopBackground} />);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Stop all' }));
+  act(() => { vi.advanceTimersByTime(6_000); });
+  // The poll hands in an equal copy of the same work.
+  view.rerender(<ActivityIndicator activity={backgroundActivity(listed())} onStopBackground={onStopBackground} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Stop all' }));
+  assert.equal(onStopBackground.mock.calls.length, 1, 'still disabled past the first poll');
+
+  act(() => { vi.advanceTimersByTime(4_000); });
+  fireEvent.click(screen.getByRole('button', { name: 'Stop all' }));
+
+  assert.equal(onStopBackground.mock.calls.length, 2);
+});
+
+test('a response in flight offers its Stop, not Stop all, even with tasks running', () => {
+  render(
+    <ActivityIndicator
+      activity={{ statusText: 'Thinking', canInterrupt: true, startedAt: Date.now(), tasks: [task()] }}
+      onAbort={() => {}}
+      onStopBackground={() => {}}
+    />,
+  );
+
+  assert.ok(screen.getByRole('button', { name: 'Stop' }));
+  // Compared as a boolean: a failing assertion on the element itself would
+  // serialize the whole jsdom node into the report.
+  assert.equal(screen.queryByRole('button', { name: 'Stop all' }) === null, true, 'no Stop all while a response is in flight');
 });
 
 test('an agent and a command are named by what they were asked to do; several tasks by their count', () => {

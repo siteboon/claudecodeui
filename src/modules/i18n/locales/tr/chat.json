@@ -222,6 +222,7 @@
       "label": "{{time}} geçti",
       "startingNow": "Şimdi başlıyor"
     },
+    "stopBackground": "Tümünü durdur",
     "controls": {
       "stopGeneration": "Üretmeyi Durdur",
       "pressEscToStop": "Durdurmak için istediğin zaman Esc'ye bas"

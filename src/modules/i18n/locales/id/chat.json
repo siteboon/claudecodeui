@@ -265,6 +265,7 @@
       "startingNow": "Baru dimulai"
     },
     "stop": "Hentikan",
+    "stopBackground": "Hentikan semua",
     "controls": {
       "stopGeneration": "Hentikan Generasi",
       "pressEscToStop": "Tekan Esc kapan saja untuk menghentikan"

@@ -258,6 +258,7 @@
       "startingNow": "מתחיל עכשיו"
     },
     "stop": "עצירה",
+    "stopBackground": "עצירת הכול",
     "backgroundWork": "עבודה ברקע",
     "backgroundTask": {
       "workflow": "תהליך עבודה {{name}}",

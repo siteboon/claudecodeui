@@ -256,6 +256,7 @@
       "startingNow": "Empezando ahora"
     },
     "stop": "Detener",
+    "stopBackground": "Detener todo",
     "controls": {
       "stopGeneration": "Detener generación",
       "pressEscToStop": "Pulsa Esc en cualquier momento para detener"

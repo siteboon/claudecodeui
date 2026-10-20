@@ -277,6 +277,7 @@
       "startingNow": "Começando agora"
     },
     "stop": "Parar",
+    "stopBackground": "Parar tudo",
     "backgroundWork": "Trabalho em segundo plano",
     "backgroundTask": {
       "workflow": "Workflow {{name}}",

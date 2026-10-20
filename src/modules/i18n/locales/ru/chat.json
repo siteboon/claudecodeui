@@ -234,6 +234,7 @@
       "label": "Прошло {{time}}",
       "startingNow": "Начинается сейчас"
     },
+    "stopBackground": "Остановить всё",
     "controls": {
       "stopGeneration": "Остановить генерацию",
       "pressEscToStop": "Нажмите Esc в любое время для остановки"

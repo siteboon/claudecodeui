@@ -222,6 +222,7 @@
       "label": "{{time}} trascorsi",
       "startingNow": "Avvio in corso"
     },
+    "stopBackground": "Ferma tutto",
     "controls": {
       "stopGeneration": "Interrompi generazione",
       "pressEscToStop": "Premi Esc in qualsiasi momento per interrompere"

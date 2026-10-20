@@ -224,6 +224,7 @@
       "label": "{{time}} écoulé",
       "startingNow": "Démarrage"
     },
+    "stopBackground": "Tout arrêter",
     "controls": {
       "stopGeneration": "Arrêter la génération",
       "pressEscToStop": "Appuyez sur Échap à tout moment pour arrêter"

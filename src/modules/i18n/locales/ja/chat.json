@@ -209,6 +209,7 @@
       "label": "{{time}} elapsed",
       "startingNow": "Starting now"
     },
+    "stopBackground": "すべて停止",
     "controls": {
       "stopGeneration": "Stop Generation",
       "pressEscToStop": "Press Esc anytime to stop"

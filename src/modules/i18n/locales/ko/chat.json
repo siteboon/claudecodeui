@@ -237,6 +237,7 @@
       "startingNow": "Starting now"
     },
     "stop": "중지",
+    "stopBackground": "모두 중지",
     "controls": {
       "stopGeneration": "Stop Generation",
       "pressEscToStop": "Press Esc anytime to stop"
