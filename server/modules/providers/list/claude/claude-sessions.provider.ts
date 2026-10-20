@@ -690,7 +690,12 @@ function dropSupersededPromptBranches(rows: AnyRecord[]): AnyRecord[] {
     const visited = new Set<string>();
     while (typeof parentUuid === 'string' && noteParents.has(parentUuid) && !visited.has(parentUuid)) {
       visited.add(parentUuid);
-      parentUuid = noteParents.get(parentUuid);
+      const noteParentUuid = noteParents.get(parentUuid);
+      if (typeof noteParentUuid !== 'string') {
+        // The topmost note has no parent row, so prompts pair under that note.
+        return parentUuid;
+      }
+      parentUuid = noteParentUuid;
     }
     return parentUuid;
   };

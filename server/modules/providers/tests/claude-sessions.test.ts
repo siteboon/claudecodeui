@@ -1762,7 +1762,7 @@ const taskNoteRow = {
     type: 'assistant', uuid, parentUuid, sessionId: TASK_NOTE_SESSION_ID, timestamp: nextTaskNoteTimestamp(),
     message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text }] },
   }),
-  note: (uuid: string, parentUuid: string, status: string, marking: object) => ({
+  note: (uuid: string, parentUuid: string | null, status: string, marking: object) => ({
     type: 'user', uuid, parentUuid, sessionId: TASK_NOTE_SESSION_ID, timestamp: nextTaskNoteTimestamp(),
     ...marking,
     message: {
@@ -1898,6 +1898,79 @@ test('an edited auto-continuation prompt replaces the original', { concurrency: 
   ]);
 
   assert.deepEqual(texts, [...TASK_NOTE_LAUNCH_TURN, 'Implement only step one.', 'Step one done.']);
+});
+
+test('an edited prompt typed in the CLI replaces the original', { concurrency: false }, async () => {
+  const r = taskNoteRow;
+  // Prompts typed in the CLI carry `promptSource: "typed"` and a `human`
+  // origin. They are the user's own, so when one is replaced (a rewind in the
+  // CLI, or an edit from Chat) the replacement under the same parent wins.
+  const typed = { promptSource: 'typed', origin: { kind: 'human' } };
+  const texts = await readTaskNoteHistory([
+    ...taskNoteLaunchRows(),
+    { ...r.prompt('p2', 'a2', 'what changed?'), ...typed }, r.reply('a3', 'p2', 'Two files changed.'),
+    r.stamp('a3'),
+    { ...r.prompt('p2b', 'a2', 'what changed, file by file?'), ...typed },
+    r.reply('a3b', 'p2b', 'src/a.ts and src/b.ts changed.'),
+    r.stamp('a3b'),
+  ]);
+
+  assert.deepEqual(texts, [...TASK_NOTE_LAUNCH_TURN, 'what changed, file by file?', 'src/a.ts and src/b.ts changed.']);
+});
+
+test('an edited prompt that followed a chain of task notes replaces the original', { concurrency: false }, async () => {
+  const r = taskNoteRow;
+  const marking = TASK_NOTE_MARKINGS['promptSource "system"'];
+  // A resumed run writes a `stopped` note for each background task it cannot
+  // see, each under the one before, and the prompt hangs off the last of them.
+  // Both notes here report the one build, so they fold onto its card.
+  const texts = await readTaskNoteHistory([
+    ...taskNoteLaunchRows(),
+    r.note('n1', 'a2', 'stopped', marking), r.note('n2', 'n1', 'stopped', marking),
+    r.prompt('p2', 'n2', 'what changed?'), r.reply('a3', 'p2', 'Two files changed.'),
+    r.stamp('a3'),
+    r.note('n1b', 'a2', 'stopped', marking), r.note('n2b', 'n1b', 'stopped', marking),
+    r.prompt('p2b', 'n2b', 'what changed, file by file?'), r.reply('a3b', 'p2b', 'src/a.ts and src/b.ts changed.'),
+    r.stamp('a3b'),
+  ]);
+
+  assert.deepEqual(texts, [...TASK_NOTE_LAUNCH_TURN, 'what changed, file by file?', 'src/a.ts and src/b.ts changed.']);
+});
+
+test('an edited prompt under a note that starts the transcript replaces the original', { concurrency: false }, async () => {
+  const r = taskNoteRow;
+  const marking = TASK_NOTE_MARKINGS['promptSource "system"'];
+  // With no row above the note to pair them by, the two prompts pair under the
+  // note itself. There is no Bash card here, so the note shows as text.
+  const texts = await readTaskNoteHistory([
+    r.note('n0', null, 'completed', marking),
+    r.prompt('p2', 'n0', 'what changed?'), r.reply('a3', 'p2', 'Two files changed.'),
+    r.stamp('a3'),
+    r.prompt('p2b', 'n0', 'what changed, file by file?'), r.reply('a3b', 'p2b', 'src/a.ts and src/b.ts changed.'),
+    r.stamp('a3b'),
+  ]);
+
+  assert.deepEqual(
+    texts.filter((text) => !String(text).startsWith('<task-notification>')),
+    ['what changed, file by file?', 'src/a.ts and src/b.ts changed.'],
+  );
+});
+
+test('task notes that are each other\'s parent neither hang history nor drop rows', { concurrency: false }, async () => {
+  const r = taskNoteRow;
+  const marking = TASK_NOTE_MARKINGS['promptSource "system"'];
+  // Damaged rows can make two notes point at each other. Walking up past the
+  // notes must stop there instead of looping forever. Such a loop never yields
+  // to the event loop, so it shows up as a hung run rather than a failure.
+  const texts = await readTaskNoteHistory([
+    ...taskNoteLaunchRows(),
+    r.note('c1', 'c2', 'stopped', marking), r.note('c2', 'c1', 'stopped', marking),
+    r.prompt('p2', 'c1', 'what changed?'), r.reply('a3', 'p2', 'Two files changed.'),
+    r.prompt('p3', 'a2', 'is it done?'), r.reply('a4', 'p3', 'Not yet.'),
+    r.stamp('a4'),
+  ]);
+
+  assert.deepEqual(texts, [...TASK_NOTE_LAUNCH_TURN, 'what changed?', 'Two files changed.', 'is it done?', 'Not yet.']);
 });
 
 test('parallel tool calls are not mistaken for an edit', { concurrency: false }, async () => {
