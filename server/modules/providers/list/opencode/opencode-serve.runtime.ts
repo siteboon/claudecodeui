@@ -14,7 +14,7 @@
  * - `permission.asked` becomes a `permission_request` frame (Allow once,
  *   Always allow, Deny → `once` / `always` / `reject`); `question.asked`
  *   becomes a `permission_request` for the `question` tool, which the chat
- *   renders with its question panel (answers → `question/reply`, Skip →
+ *   renders with its question panel (answers → `question/reply`, Dismiss →
  *   `question/reject`). The provider-neutral plumbing (`permissions.resolve`,
  *   `permissions.listPending`, `permission_resolved` / `permission_cancelled`
  *   frames) is the one the Claude runtime already uses.
@@ -63,8 +63,10 @@ const SESSION_ABORT_TIMEOUT_MS = 3_000;
 // How long a failed prompt request or a closed event stream waits to see
 // whether the server died.
 const SERVER_EXIT_GRACE_MS = 1_000;
-// Upper bound on remembered "Always allow" rules per chat session.
+// Upper bound on remembered "Always allow" rules per chat session, and on the
+// chat sessions remembered at all (least recently approved ones go first).
 const MAX_REMEMBERED_RULES_PER_SESSION = 200;
+const MAX_REMEMBERED_SESSIONS = 500;
 
 // Mirrors `opencode run`: plan_enter/plan_exit switch agents interactively,
 // which a chat turn cannot follow, so they stay hidden as they were.
@@ -208,7 +210,15 @@ function rememberApproval(sessionKey: string | null, permission: string, pattern
       rules.push({ permission, pattern });
     }
   }
+  // Re-inserted so the Map's order stays least recently approved first.
+  rememberedApprovals.delete(sessionKey);
   rememberedApprovals.set(sessionKey, rules.slice(-MAX_REMEMBERED_RULES_PER_SESSION));
+  for (const staleKey of rememberedApprovals.keys()) {
+    if (rememberedApprovals.size <= MAX_REMEMBERED_SESSIONS) {
+      break;
+    }
+    rememberedApprovals.delete(staleKey);
+  }
 }
 
 /**
@@ -383,6 +393,8 @@ class OpenCodeServeTurn {
   private promptSent = false;
   private promptSettled = false;
   private sessionErrorSeen = false;
+  /** Set once the turn's outcome is decided; nothing may be reported after it. */
+  private turnOver = false;
   private errorText: string | null = null;
   private graceTimer: NodeJS.Timeout | null = null;
   private readonly turnEnded: Promise<TurnEndReason>;
@@ -524,7 +536,9 @@ class OpenCodeServeTurn {
           // A dying server resets the prompt's connection before its exit
           // event arrives; that exit is the error worth reporting.
           await waitFor(() => this.aborted || server.hasExited(), SERVER_EXIT_GRACE_MS);
-          if (this.aborted || server.hasExited()) {
+          // Also nothing to report once the turn ended for another reason,
+          // whose server stop cut this connection.
+          if (this.aborted || this.turnOver || server.hasExited()) {
             return;
           }
           this.emitRunEvent({
@@ -543,6 +557,7 @@ class OpenCodeServeTurn {
     }
 
     const reason = await this.turnEnded;
+    this.turnOver = true;
     if (this.graceTimer) {
       clearTimeout(this.graceTimer);
     }
@@ -636,7 +651,9 @@ class OpenCodeServeTurn {
     this.family.add(sessionId);
     this.registerSession(sessionId);
 
-    if (this.providerSessionId && this.mode !== 'bypassPermissions') {
+    if (this.providerSessionId && this.mode === 'bypassPermissions') {
+      await hideQuestionToolIfShown(server, session);
+    } else if (this.providerSessionId) {
       const agentName = this.mode === 'plan' ? 'plan' : readString(config.default_agent) ?? 'build';
       await enableQuestionToolIfHidden(server, session, agentName);
     }
@@ -702,7 +719,13 @@ class OpenCodeServeTurn {
       return;
     }
     if (type === 'session.status') {
-      if (properties.sessionID === mainSessionId && isRecord(properties.status) && properties.status.type === 'idle') {
+      if (properties.sessionID !== mainSessionId || !isRecord(properties.status)) {
+        return;
+      }
+      if (properties.status.type === 'busy') {
+        // Only an idle after the session last went busy ends the turn.
+        this.idleSeen = false;
+      } else if (properties.status.type === 'idle') {
         this.idleSeen = true;
         if (this.promptSettled) {
           this.endTurn('completed');
@@ -769,21 +792,32 @@ class OpenCodeServeTurn {
     });
   }
 
-  /** Fire-and-forget reply; 404 means OpenCode settled the request meanwhile. */
+  /**
+   * Sends an answer to OpenCode without holding up the event loop. 404 means
+   * OpenCode settled the request meanwhile (its own cascade). Any other
+   * failure ends the turn with an error: the chat already shows the request
+   * as answered, so a reply OpenCode never took would leave the turn waiting
+   * for an answer nobody can give any more.
+   */
   private postReply(pathname: string, body?: unknown): void {
     const server = this.server;
     if (!server) {
       return;
     }
+    const failTurn = (detail: string) => {
+      if (this.aborted || this.turnOver || server.hasExited()) {
+        return;
+      }
+      console.warn(`[OpenCode] ${pathname} failed: ${detail}`);
+      this.errorText = `OpenCode did not accept the answer (${detail})`;
+      this.sendError(this.errorText);
+      this.endTurn('completed');
+    };
     void server.request('POST', pathname, body).then((response) => {
       if (response.status >= 400 && response.status !== 404) {
-        console.warn(`[OpenCode] ${pathname} answered HTTP ${response.status}`);
+        failTurn(`HTTP ${response.status}`);
       }
-    }).catch((error: unknown) => {
-      if (!this.aborted) {
-        console.warn(`[OpenCode] ${pathname} failed:`, describeError(error));
-      }
-    });
+    }).catch((error: unknown) => failTurn(describeError(error)));
   }
 
   private replyPermission(requestId: string, reply: 'once' | 'always' | 'reject'): void {
@@ -896,15 +930,18 @@ class OpenCodeServeTurn {
     if (!requestId || pendingRequests.has(requestId)) {
       return;
     }
+    const replyPath = `/question/${encodeURIComponent(requestId)}/reply`;
     const rejectPath = `/question/${encodeURIComponent(requestId)}/reject`;
-    // Unattended runs (bypassPermissions, /api/agent) cannot answer; they only
-    // see the tool at all on a resumed session that allows it.
-    if (this.mode === 'bypassPermissions') {
-      this.postReply(rejectPath);
+    const questions = readQuestions(asked.questions);
+    // bypassPermissions sessions hide the question tool, so this is a
+    // fallback: nobody answers in that mode (it is also how /api/agent runs),
+    // and a reject would end the turn, while unanswered questions let the
+    // model carry on. A request without questions has nothing to show.
+    if (this.mode === 'bypassPermissions' || questions.length === 0) {
+      this.postReply(replyPath, { answers: questions.map(() => []) });
       return;
     }
 
-    const questions = readQuestions(asked.questions);
     this.openRequest({
       requestId,
       toolName: 'question',
@@ -932,9 +969,7 @@ class OpenCodeServeTurn {
         }
         this.send(this.resolvedFrame(requestId));
         if (decision.allow) {
-          this.postReply(`/question/${encodeURIComponent(requestId)}/reply`, {
-            answers: toAnswerLists(decision.updatedInput, questions),
-          });
+          this.postReply(replyPath, { answers: toAnswerLists(decision.updatedInput, questions) });
           return;
         }
         this.postReply(rejectPath);
@@ -1019,11 +1054,13 @@ class OpenCodeServeTurn {
 /**
  * Sessions created by `opencode run` (every CloudCLI OpenCode chat before
  * this runtime) carry a persisted `question: deny` rule that hides the
- * question tool for good. OpenCode evaluates the session's rules after the
- * agent's, so appending `question: allow` brings the tool back — but only when
- * the agent's own rules (which include the user's config) do not hide it too:
- * a user who denied questions keeps them denied. The PATCH appends (it cannot
- * remove rules) and is skipped once the last session rule already allows.
+ * question tool for good, and so does a session whose last turn ran in
+ * bypassPermissions (see hideQuestionToolIfShown). OpenCode evaluates the
+ * session's rules after the agent's, so appending `question: allow` brings the
+ * tool back — but only when the agent's own rules (which include the user's
+ * config) do not hide it too: a user who denied questions keeps them denied.
+ * The PATCH appends (it cannot remove rules) and is skipped once the last
+ * session rule already allows.
  */
 async function enableQuestionToolIfHidden(
   server: OpenCodeServerProcess,
@@ -1046,6 +1083,28 @@ async function enableQuestionToolIfHidden(
     });
   } catch (error) {
     console.warn('[OpenCode] Could not re-enable the question tool:', describeError(error));
+  }
+}
+
+/**
+ * A bypassPermissions turn (also how /api/agent runs) has nobody to answer a
+ * question, and a dismissed question ends OpenCode's turn. New bypass
+ * sessions are created with `question: deny`, as `opencode run` created every
+ * session; a resumed session that shows the tool (created in another mode)
+ * gets the same rule appended, so the model decides on its own instead of
+ * asking. The next turn in another mode re-enables it (enableQuestionToolIfHidden).
+ */
+async function hideQuestionToolIfShown(server: OpenCodeServerProcess, session: AnyRecord): Promise<void> {
+  if (isWholeDeny(findLastRuleFor(session.permission, 'question'))) {
+    return;
+  }
+  try {
+    await server.request('PATCH', `/session/${encodeURIComponent(String(session.id))}`, {
+      permission: [QUESTION_DENY_RULE],
+    });
+  } catch (error) {
+    // The question, if the model asks one, is then answered as unanswered.
+    console.warn('[OpenCode] Could not hide the question tool:', describeError(error));
   }
 }
 
