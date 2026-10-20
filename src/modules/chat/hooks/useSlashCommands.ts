@@ -314,6 +314,9 @@ export function useSlashCommands({
         // render's handler, find nothing waiting and act on the old list.
         flushSync(() => {
           setCommandQuery(query);
+          // As in the early commit below: a highlight made meanwhile (mouse
+          // hover) indexes the previous list.
+          setSelectedCommandIndex(-1);
         });
       }, COMMAND_QUERY_DEBOUNCE_MS);
     },

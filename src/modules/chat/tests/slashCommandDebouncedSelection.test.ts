@@ -313,6 +313,34 @@ describe('slash command keys pressed inside the filter debounce', () => {
     assert.deepEqual(executedCommands.map((command) => command.name), ['/bar']);
   });
 
+  it('drops a hover highlight made on the previous list when the timer commits the query', async () => {
+    const { result, executedCommands, typeQuickly, listedNames } = await setUp(
+      ['/foo', '/bar', '/baz', '/bazooka'],
+      { '/foo': 5 },
+    );
+
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    typeQuickly('/ba');
+    // The pointer rests on the last row of the list still on screen
+    // (/bazooka, index 4), which is past the end of the list for "/ba".
+    act(() => {
+      result.current.handleCommandSelect(result.current.filteredCommands[4], 4, true);
+    });
+    let atKey = { listed: [] as string[], highlightedIndex: 0 };
+    // As in the Enter test above, the key lands straight after the timer.
+    act(() => {
+      vi.advanceTimersByTime(150);
+      atKey = { listed: listedNames(), highlightedIndex: result.current.selectedCommandIndex };
+      result.current.handleCommandMenuKeyDown(keyEvent('Enter').event);
+    });
+
+    // Same as a key pressed before the timer: the list for "/ba" with nothing
+    // highlighted, so Enter runs its top row instead of nothing.
+    assert.deepEqual(atKey.listed, ['/bar', '/baz', '/bazooka']);
+    assert.equal(atKey.highlightedIndex, -1);
+    assert.deepEqual(executedCommands.map((command) => command.name), ['/bar']);
+  });
+
   it('keeps a hover highlight made after the timer commits the query already shown', async () => {
     const { result, executedCommands, typeQuickly, press } = await setUp(
       ['/foo', '/bar', '/baz', '/bazooka'],
