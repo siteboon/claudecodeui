@@ -62,7 +62,8 @@ const filterSlashCommands = (
   if (normalizedQuery.includes(':') || namePrefixMatches.length > 0) {
     // A fully typed name means that command, as it does when the text is sent:
     // list it first, ahead of more-used longer names, since Enter and Tab act
-    // on the first entry while nothing is highlighted.
+    // on the first entry while nothing is highlighted. Like the prefix match it
+    // ignores case, while sending matches the name exactly.
     const isExactName = (command: SlashCommand) => command.name.toLowerCase() === commandPrefix;
     return [
       ...namePrefixMatches.filter(isExactName),
@@ -377,6 +378,8 @@ export function useSlashCommands({
         event.preventDefault();
         // Until the user arrows through the menu nothing is highlighted, so both
         // keys act on the first match — the entry the menu renders at the top.
+        // Inside the debounce window that is the top of the typed text's list,
+        // which the menu shows once the flush above re-renders it.
         const targetCommand = menuCommands[highlightedIndex >= 0 ? highlightedIndex : 0];
         if (!targetCommand) {
           return true;

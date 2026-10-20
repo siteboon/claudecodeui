@@ -43,6 +43,23 @@ describe('slash command menu group order', () => {
     assert.deepEqual(renderedNames([project('/stat'), builtin('/status')]), ['/stat', '/status']);
   });
 
+  it('highlights the top row for the first command', () => {
+    render(
+      <CommandMenu
+        isOpen
+        commands={[project('/stat'), builtin('/status')]}
+        selectedIndex={0}
+        onClose={() => undefined}
+      />,
+    );
+
+    const rows = Array.from(document.body.querySelectorAll('[role="option"]'));
+    assert.deepEqual(
+      rows.map((row) => row.getAttribute('aria-selected')),
+      ['true', 'false'],
+    );
+  });
+
   it('keeps the remaining groups in their usual order', () => {
     assert.deepEqual(
       renderedNames([user('/stat-user'), builtin('/status'), project('/stat-project')]),

@@ -420,6 +420,28 @@ describe('slash command exact-name match', () => {
     assert.deepEqual(executedCommands.map((command) => command.name), ['/bar']);
   });
 
+  it('ignores case for the fully typed name, like the prefix match', async () => {
+    const { result, typeQuickly, listedNames } = await setUp(['/Review', '/review-all'], { '/review-all': 5 });
+
+    typeQuickly('/review');
+    await waitFor(() => assert.equal(result.current.commandQuery, 'review'));
+
+    assert.deepEqual(listedNames(), ['/Review', '/review-all']);
+  });
+
+  it('lists a fully typed namespaced name first', async () => {
+    const { result, typeQuickly, listedNames } = await setUp(
+      [],
+      { '/plugin:review-all': 5 },
+      ['/plugin:review', '/plugin:review-all'],
+    );
+
+    typeQuickly('/plugin:review');
+    await waitFor(() => assert.equal(result.current.commandQuery, 'plugin:review'));
+
+    assert.deepEqual(listedNames(), ['/plugin:review', '/plugin:review-all']);
+  });
+
   it('keeps the usage order while the name is only a prefix', async () => {
     const { result, typeQuickly, listedNames } = await setUp(['/bar', '/bar-baz'], { '/bar-baz': 5 });
 
