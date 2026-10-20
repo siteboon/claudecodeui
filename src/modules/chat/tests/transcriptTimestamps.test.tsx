@@ -153,7 +153,8 @@ describe('a transcript row with timestamps on', () => {
       prevMessage: FIRST_REPLY,
       showTimestamps: true,
     });
-    assert.equal(container.querySelector('[title="Answered by claude-opus-5"]'), null);
+    // Counted rather than compared with null: a failing assert would try to print the whole DOM node.
+    assert.equal(container.querySelectorAll('[title="Answered by claude-opus-5"]').length, 0);
   });
 
   it('adds the date once a row is not from today, and the year once it is not from this year', () => {
