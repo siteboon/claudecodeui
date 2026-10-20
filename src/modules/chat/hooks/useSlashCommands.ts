@@ -262,9 +262,12 @@ export function useSlashCommands({
     setShowCommandMenu(isOpening);
     setCommandQuery('');
     setSelectedCommandIndex(-1);
+    // The toggle shows the full list; a query still waiting for the debounce
+    // must not replace it a moment later.
+    clearCommandQueryTimer();
 
     textareaRef.current?.focus();
-  }, [showCommandMenu, textareaRef]);
+  }, [clearCommandQueryTimer, showCommandMenu, textareaRef]);
 
   const handleCommandInputChange = useCallback(
     (newValue: string, cursorPos: number) => {

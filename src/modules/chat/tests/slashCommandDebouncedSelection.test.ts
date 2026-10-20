@@ -311,6 +311,32 @@ describe('slash command keys pressed inside the filter debounce', () => {
     assert.deepEqual(listedNames(), ['/foo', '/help', '/bar']);
   });
 
+  it('keeps the full list the toggle shows when a typed query is still waiting', async () => {
+    const { result, executedCommands, typeQuickly, press, listedNames } = await setUp(
+      ['/foo', '/bar'],
+      { '/foo': 5 },
+    );
+
+    typeQuickly('/bar');
+    // The menu button closes and reopens the menu inside the window.
+    act(() => {
+      result.current.handleToggleCommandMenu();
+    });
+    act(() => {
+      result.current.handleToggleCommandMenu();
+    });
+    assert.equal(result.current.showCommandMenu, true);
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 200);
+    });
+    assert.equal(result.current.commandQuery, '');
+    assert.deepEqual(listedNames(), ['/foo', '/help', '/bar']);
+    // Enter acts on the row shown on top.
+    press('Enter');
+    assert.deepEqual(executedCommands.map((command) => command.name), ['/foo']);
+  });
+
   it('keeps a hover highlight made once the list has caught up', async () => {
     const { result, executedCommands, typeQuickly, press, listedNames } = await setUp(
       ['/foo', '/bar', '/baz', '/bazooka'],
