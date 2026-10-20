@@ -73,14 +73,23 @@ function installObservers({ nativeScrollAnchoring }: { nativeScrollAnchoring: bo
 }
 
 const ROW_TIMESTAMPS = ['row-a', 'row-b', 'row-c', 'row-d'];
+const VIEWPORT_HEIGHT = 600;
 
 /**
  * Lays the rows out top to bottom in a 600px scroll container whose top edge
  * is at y=0, from heights that a test can change between frames. Every
- * `getBoundingClientRect` the code under test takes reads this model.
+ * `getBoundingClientRect` the code under test takes reads this model, and
+ * scrollTop stays within the scrollable range the way a browser keeps it: a
+ * write past the end lands at the end, and a layout that shrinks the content
+ * under a scroller at its end pulls scrollTop in with it.
  */
 function modelLayout(initialHeights: Record<string, number>, initialScrollTop: number) {
   const heights = { ...initialHeights };
+  const contentHeight = () => ROW_TIMESTAMPS.reduce((sum, timestamp) => sum + heights[timestamp], 0);
+  const clamp = (next: number) => Math.min(Math.max(next, 0), Math.max(contentHeight() - VIEWPORT_HEIGHT, 0));
+  if (clamp(initialScrollTop) !== initialScrollTop) {
+    throw new Error(`scrollTop ${initialScrollTop} is outside the modelled content`);
+  }
   let scrollTop = initialScrollTop;
   let hidden = false;
   const scrollWrites: number[] = [];
@@ -97,7 +106,9 @@ function modelLayout(initialHeights: Record<string, number>, initialScrollTop: n
 
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
     if (hidden) return { top: 0, bottom: 0, height: 0, width: 0 } as DOMRect;
-    if (this === scroller()) return { top: 0, bottom: 600, height: 600, width: 400 } as DOMRect;
+    if (this === scroller()) {
+      return { top: 0, bottom: VIEWPORT_HEIGHT, height: VIEWPORT_HEIGHT, width: 400 } as DOMRect;
+    }
     const timestamp = this.getAttribute('data-message-timestamp');
     if (!timestamp || !(timestamp in heights)) return { top: 0, bottom: 0, height: 0, width: 0 } as DOMRect;
     const top = rowTop(timestamp);
@@ -105,21 +116,32 @@ function modelLayout(initialHeights: Record<string, number>, initialScrollTop: n
   });
 
   return {
-    heights,
     scrollWrites,
     setHidden: (next: boolean) => { hidden = next; },
-    /** Installs the scrollTop accessor once the scroller exists. */
+    /** Lays rows out at new heights, as the frame's layout does before its resize reports. */
+    resize: (nextHeights: Record<string, number>) => {
+      Object.assign(heights, nextHeights);
+      scrollTop = clamp(scrollTop);
+    },
+    /** Installs the scroll geometry accessors once the scroller exists. */
     attach: () => {
-      Object.defineProperty(scroller(), 'scrollTop', {
+      const element = scroller()!;
+      Object.defineProperty(element, 'scrollTop', {
         configurable: true,
         get: () => scrollTop,
         set: (next: number) => {
-          scrollTop = next;
+          scrollTop = clamp(next);
           scrollWrites.push(next);
         },
       });
+      Object.defineProperty(element, 'scrollHeight', {
+        configurable: true,
+        get: () => Math.max(contentHeight(), VIEWPORT_HEIGHT),
+      });
+      Object.defineProperty(element, 'clientHeight', { configurable: true, get: () => VIEWPORT_HEIGHT });
     },
     get scrollTop() { return scrollTop; },
+    get distanceFromBottom() { return Math.max(contentHeight() - VIEWPORT_HEIGHT, 0) - scrollTop; },
     offsetOf: (timestamp: string) => rowTop(timestamp),
     row: (timestamp: string) => document.querySelector(`[data-message-timestamp="${timestamp}"]`) as Element,
   };
@@ -139,13 +161,25 @@ function Transcript() {
   );
 }
 
-/** At the default 200px: rows a and b above the viewport, c at its top edge, d inside it. */
-function renderTranscript(scrollTop = 200) {
-  const layout = modelLayout({ 'row-a': 100, 'row-b': 100, 'row-c': 300, 'row-d': 300 }, scrollTop);
+/**
+ * By default 800px of rows scrolled 200px, which is the bottom: rows a and b
+ * above the viewport, c at its top edge, d inside it.
+ */
+function renderTranscript({ scrollTop = 200, heights = {} }: {
+  scrollTop?: number;
+  heights?: Record<string, number>;
+} = {}) {
+  const layout = modelLayout(
+    { 'row-a': 100, 'row-b': 100, 'row-c': 300, 'row-d': 300, ...heights },
+    scrollTop,
+  );
   render(<Transcript />);
   layout.attach();
   return layout;
 }
+
+/** Row d 900px tall, so the default 200px scroll position is 600px above the bottom. */
+const TALL_LAST_ROW = { 'row-d': 900 };
 
 afterEach(() => {
   StubResizeObserver.instances = [];
@@ -159,23 +193,54 @@ describe('transcript reading position without native scroll anchoring', () => {
     expect(layout.offsetOf('row-c')).toBe(0);
 
     // A lazy row above the viewport mounts: its 100px estimate becomes 400px.
-    layout.heights['row-a'] = 400;
+    layout.resize({ 'row-a': 400 });
     fireResize([layout.row('row-a')]);
 
     expect(layout.scrollTop).toBe(500);
     expect(layout.offsetOf('row-c')).toBe(0);
+    // The reader was at the bottom and still is.
+    expect(layout.distanceFromBottom).toBe(0);
   });
 
   it('follows a row above the viewport that shrinks', () => {
     installObservers({ nativeScrollAnchoring: false });
-    const layout = renderTranscript();
+    const layout = renderTranscript({ heights: TALL_LAST_ROW });
 
     // A lazy row whose 100px estimate was taller than its content.
-    layout.heights['row-b'] = 40;
+    layout.resize({ 'row-b': 40 });
     fireResize([layout.row('row-b')]);
 
     expect(layout.offsetOf('row-c')).toBe(0);
     expect(layout.scrollTop).toBe(140);
+  });
+
+  it('stays at the bottom when a row far above it shrinks', () => {
+    installObservers({ nativeScrollAnchoring: false });
+    // 1300px of rows scrolled to the end; row a ends 300px above the viewport.
+    const layout = renderTranscript({ scrollTop: 700, heights: { 'row-a': 400, 'row-b': 300 } });
+
+    // The content shrinks by 60px, and layout clamps scrollTop to the new end,
+    // which already leaves the rows in view where they were. Scrolling up by
+    // the shrink as well pulled the reader 60px off the bottom, where they
+    // stopped following new messages.
+    layout.resize({ 'row-a': 340 });
+    fireResize([layout.row('row-a')]);
+
+    expect(layout.distanceFromBottom).toBe(0);
+    expect(layout.offsetOf('row-c')).toBe(0);
+    expect(layout.scrollWrites).toEqual([]);
+  });
+
+  it('does not scroll for a change of less than half a pixel', () => {
+    installObservers({ nativeScrollAnchoring: false });
+    const layout = renderTranscript({ heights: TALL_LAST_ROW });
+
+    // Rounding between the committed height and the reported one: no visible
+    // move, and a scroll write can cut short an iOS momentum scroll.
+    layout.resize({ 'row-a': 100.3 });
+    fireResize([layout.row('row-a')]);
+
+    expect(layout.scrollWrites).toEqual([]);
   });
 
   it('measures from the committed height even when the first resize report is already the new one', () => {
@@ -185,7 +250,7 @@ describe('transcript reading position without native scroll anchoring', () => {
     // The row settled its real height in the frame after the commit (an image,
     // a highlighted code block), before the observer ever reported it: the
     // report is the first one it sends.
-    layout.heights['row-a'] = 250;
+    layout.resize({ 'row-a': 250 });
     fireResize(ROW_TIMESTAMPS.map(layout.row));
 
     expect(layout.offsetOf('row-c')).toBe(0);
@@ -195,8 +260,7 @@ describe('transcript reading position without native scroll anchoring', () => {
     installObservers({ nativeScrollAnchoring: false });
     const layout = renderTranscript();
 
-    layout.heights['row-a'] = 180;
-    layout.heights['row-b'] = 260;
+    layout.resize({ 'row-a': 180, 'row-b': 260 });
     // Reported out of document order.
     fireResize([layout.row('row-b'), layout.row('row-a')]);
 
@@ -208,8 +272,7 @@ describe('transcript reading position without native scroll anchoring', () => {
     installObservers({ nativeScrollAnchoring: false });
     const layout = renderTranscript();
 
-    layout.heights['row-c'] = 900;
-    layout.heights['row-d'] = 500;
+    layout.resize({ 'row-c': 900, 'row-d': 500 });
     fireResize([layout.row('row-c'), layout.row('row-d')]);
 
     expect(layout.scrollWrites).toEqual([]);
@@ -218,9 +281,9 @@ describe('transcript reading position without native scroll anchoring', () => {
   it('leaves a row that reaches into the viewport alone, like a reply streaming in above the fold', () => {
     installObservers({ nativeScrollAnchoring: false });
     // Row c starts 50px above the viewport and fills it.
-    const layout = renderTranscript(250);
+    const layout = renderTranscript({ scrollTop: 250, heights: TALL_LAST_ROW });
 
-    layout.heights['row-c'] = 700;
+    layout.resize({ 'row-c': 700 });
     fireResize([layout.row('row-c')]);
 
     // Its visible part stays put and it grows downward, as scroll anchoring
@@ -261,7 +324,25 @@ const message = (index: number): ChatMessage => ({
   timestamp: new Date(Date.UTC(2026, 0, 1, 0, 0, index)).toISOString(),
 });
 
-const HISTORY = Array.from({ length: 400 }, (_, index) => message(index));
+const HISTORY = Array.from({ length: 150 }, (_, index) => message(index));
+
+/**
+ * 200 messages where 135-144 are one run of Read calls, which the transcript
+ * shows as a single tool group row.
+ */
+const HISTORY_WITH_TOOL_RUN = Array.from({ length: 200 }, (_, index): ChatMessage => (
+  index >= 135 && index < 145
+    ? {
+      type: 'assistant',
+      content: '',
+      isToolUse: true,
+      toolName: 'Read',
+      toolId: `tool-${index}`,
+      toolInput: JSON.stringify({ file_path: `/repo/file-${index}.ts` }),
+      timestamp: message(index).timestamp,
+    }
+    : message(index)
+));
 
 const noop = () => undefined;
 const stablePaneProps = {
@@ -302,8 +383,8 @@ const stablePaneProps = {
 };
 
 /** The pane showing the newest `count` messages, as each history page widens the window. */
-function paneShowingLast(count: number) {
-  const visible = HISTORY.slice(-count);
+function paneShowingLast(count: number, history = HISTORY) {
+  const visible = history.slice(-count);
   const props = {
     ...stablePaneProps,
     chatMessages: visible,
@@ -323,6 +404,12 @@ function paneShowingLast(count: number) {
 const isMounted = (container: HTMLElement, item: ChatMessage) => {
   const row = container.querySelector(`[data-message-timestamp="${String(item.timestamp)}"]`) as HTMLElement;
   return row.querySelector('.chat-message') !== null;
+};
+
+/** Whether a row (a message or a tool group) renders its content rather than an empty placeholder. */
+const rendersContent = (container: HTMLElement, item: ChatMessage) => {
+  const row = container.querySelector(`[data-message-timestamp="${String(item.timestamp)}"]`);
+  return row !== null && row.childElementCount > 0;
 };
 
 describe('prepending a page of history', () => {
@@ -353,5 +440,18 @@ describe('prepending a page of history', () => {
     expect(mounted).toEqual(prepended.slice(prepended.length - mounted.length));
     expect(mounted.length).toBeGreaterThanOrEqual(20);
     expect(mounted.length).toBeLessThanOrEqual(40);
+  });
+
+  it('mounts the prepended rows when the page boundary falls inside a tool run', () => {
+    vi.stubGlobal('IntersectionObserver', SilentIntersectionObserver);
+
+    // The window starts at message 140, so its first row groups Reads 140-144.
+    const view = render(paneShowingLast(60, HISTORY_WITH_TOOL_RUN));
+    // The next page ends with Reads 135-139. They join that group, which then
+    // starts at 135 and takes a new key: the old first row's key is gone.
+    view.rerender(paneShowingLast(80, HISTORY_WITH_TOOL_RUN));
+
+    const pageRows = [...HISTORY_WITH_TOOL_RUN.slice(120, 135), HISTORY_WITH_TOOL_RUN[135]];
+    expect(pageRows.filter((item) => !rendersContent(view.container, item))).toEqual([]);
   });
 });

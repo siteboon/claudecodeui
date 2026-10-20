@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { RefObject } from 'react';
 
+import { setScrollTopProgrammatically } from '@/shared/utils';
+
 /** How far beyond the viewport a transcript row keeps (or gains) its mounted content. */
 const LAZY_ROW_VIEWPORT_MARGIN_PX = 1200;
 
@@ -24,7 +26,7 @@ function hasNativeScrollAnchoring(): boolean {
 }
 
 /** Sorts elements into document order. */
-function compareDocumentPosition(first: Element, second: Element): number {
+function byDocumentOrder(first: Element, second: Element): number {
   return first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
 }
 
@@ -71,12 +73,8 @@ export function useLazyRowObserver(
     const container = scrollContainerRef.current;
     if (!container) return;
 
-    const containerTop = container.getBoundingClientRect().top;
-    // Document order, so each row is judged by where it sat before this
-    // frame, once the rows above it have been compensated for.
-    const rows = entries.map((entry) => entry.target).sort(compareDocumentPosition);
-    let shift = 0;
-    for (const row of rows) {
+    const resizedRows: { row: Element; rect: DOMRect; previousHeight: number }[] = [];
+    for (const { target: row } of entries) {
       const rect = row.getBoundingClientRect();
       // A 0x0 box is a hidden Chat tab, not a row that collapsed: keep the
       // last height so showing the tab again moves nothing.
@@ -84,8 +82,20 @@ export function useLazyRowObserver(
 
       const previousHeight = rowHeightsRef.current.get(row);
       rowHeightsRef.current.set(row, rect.height);
-      if (previousHeight === undefined) continue;
+      // A row still at the height it was committed with (the first report of
+      // every row that just mounted) moved nothing. Leaving those out keeps
+      // the sort below small when "Load all" mounts thousands of rows.
+      if (previousHeight !== undefined && rect.height !== previousHeight) {
+        resizedRows.push({ row, rect, previousHeight });
+      }
+    }
 
+    // Document order, so each row is judged by where it sat before this
+    // frame, once the rows above it have been compensated for.
+    resizedRows.sort((first, second) => byDocumentOrder(first.row, second.row));
+    const containerTop = container.getBoundingClientRect().top;
+    let shift = 0;
+    for (const { rect, previousHeight } of resizedRows) {
       // Only a row that was wholly above the viewport. One reaching into it
       // changes where the reader can see it (a reply streaming in, a tool
       // result opened), so it is left alone, as scroll anchoring leaves it.
@@ -94,9 +104,17 @@ export function useLazyRowObserver(
       }
     }
 
-    if (shift !== 0) {
-      container.scrollTop += shift;
-    }
+    // Less than half a pixel is rounding noise between two reads, not a
+    // visible move, and each scroll write can cut an iOS momentum scroll short.
+    if (Math.abs(shift) < 0.5) return;
+    // When rows above shrink and the scroller now sits at its end, layout has
+    // already clamped scrollTop to the smaller maximum, which kept the content
+    // in view where it was; scrolling by the shrink as well would pull the
+    // reader off the bottom.
+    if (shift < 0 && container.scrollTop >= container.scrollHeight - container.clientHeight - 1) return;
+    // Through the shared setter, so the scroll event this fires is not taken
+    // for the reader scrolling away from the bottom.
+    setScrollTopProgrammatically(container, container.scrollTop + shift);
   }, [scrollContainerRef]);
 
   const observe = useCallback<LazyRowObserver['observe']>((element, onNearViewportChange) => {

@@ -32,8 +32,9 @@ const INITIAL_MOUNTED_TAIL_ROWS = 30;
  * were already on screen, mount with real content on their first commit. That
  * commit also restores the reader's scroll position, so their heights are part
  * of the restore. As placeholders they grew a frame later, above the reader,
- * and pushed the transcript down by several messages; after the programmatic
- * restore no browser's scroll anchoring absorbed that (#1574).
+ * and pushed the transcript down by several messages: Chromium's scroll
+ * anchoring did not absorb that after the programmatic restore, and Safari
+ * before 27 has none (#1574).
  */
 const PREPENDED_MOUNTED_ROWS = 30;
 

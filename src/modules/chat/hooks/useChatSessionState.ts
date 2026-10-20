@@ -10,6 +10,7 @@ import { createCachedDiffCalculator } from '@/modules/chat/utils/messageTransfor
 import { normalizedToChatMessages } from '@/modules/chat/hooks/useChatMessages';
 import { findSearchTargetIndex, resolveSearchWindowSize } from '@/modules/chat/utils/searchTargetLocator';
 import { readSelectedProvider } from '@/shared/selectedProvider';
+import { getProgrammaticScrollPosition, setScrollTopProgrammatically } from '@/shared/utils';
 import type { SearchTarget } from '@/modules/chat/utils/searchTargetLocator';
 
 const INITIAL_VISIBLE_MESSAGES = 100;
@@ -467,7 +468,7 @@ export function useChatSessionState({
   const scrollToBottom = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
-    container.scrollTop = container.scrollHeight;
+    setScrollTopProgrammatically(container, container.scrollHeight);
   }, []);
 
   const scrollToBottomAndReset = useCallback(() => {
@@ -483,7 +484,11 @@ export function useChatSessionState({
     const container = scrollContainerRef.current;
     if (!container) return false;
     const { scrollTop, scrollHeight, clientHeight } = container;
-    return scrollHeight - scrollTop - clientHeight < 50;
+    // Also where the app last scrolled it to the bottom and the reader has not
+    // moved it since: whatever was committed in between (more of a streamed
+    // reply, before that scroll's own event) moved the bottom, not the reader.
+    return scrollHeight - scrollTop - clientHeight < 50
+      || getProgrammaticScrollPosition(container)?.atEnd === true;
   }, []);
 
   const loadOlderMessages = useCallback(
@@ -552,7 +557,12 @@ export function useChatSessionState({
     if (!container) return;
 
     const nearBottom = isNearBottom();
-    setIsUserScrolledUp(!nearBottom);
+    // Only the reader scrolls away from the bottom. A scroll event at the spot
+    // the app itself scrolled to above it (a history restore, holding the
+    // reading position) leaves following the transcript as it was.
+    if (nearBottom || !getProgrammaticScrollPosition(container)) {
+      setIsUserScrolledUp(!nearBottom);
+    }
     scrollPositionRef.current = {
       height: container.scrollHeight,
       top: container.scrollTop,
@@ -601,18 +611,19 @@ export function useChatSessionState({
           anchor.getBoundingClientRect().top
           - container.getBoundingClientRect().top
         );
-        container.scrollTop += nextAnchorOffset - anchorOffset;
+        setScrollTopProgrammatically(container, container.scrollTop + nextAnchorOffset - anchorOffset);
       } else {
-        container.scrollTop = top + Math.max(container.scrollHeight - height, 0);
+        setScrollTopProgrammatically(container, top + Math.max(container.scrollHeight - height, 0));
       }
       pendingScrollRestoreRef.current = null;
       return;
     }
 
     if (becameActive) {
-      container.scrollTop = isUserScrolledUp
-        ? scrollPositionRef.current.top
-        : container.scrollHeight;
+      setScrollTopProgrammatically(
+        container,
+        isUserScrolledUp ? scrollPositionRef.current.top : container.scrollHeight,
+      );
     }
   }, [chatMessages.length, isActive, isUserScrolledUp]);
 
@@ -667,7 +678,7 @@ export function useChatSessionState({
 
     const tick = () => {
       if (!pendingInitialScrollRef.current || !scrollContainerRef.current) return;
-      container.scrollTop = container.scrollHeight;
+      setScrollTopProgrammatically(container, container.scrollHeight);
       if (container.scrollHeight === lastHeight) {
         stableCount++;
       } else {
