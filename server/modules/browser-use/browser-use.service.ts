@@ -806,7 +806,7 @@ export const browserUseService = {
     if (input.type === 'click') {
       await handle.page.mouse.click(input.x, input.y);
     } else if (input.type === 'text') {
-      await handle.page.keyboard.insertText(input.text);
+      await handle.page.keyboard.type(input.text);
     } else {
       await handle.page.keyboard.press(input.key);
     }

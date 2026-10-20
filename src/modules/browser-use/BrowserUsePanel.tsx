@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { KeyboardEvent, MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Bot,
@@ -233,37 +233,83 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
   });
 
   const [inputText, setInputText] = useState('');
+  const [isInputPending, setIsInputPending] = useState(false);
+  const [keyboardPoint, setKeyboardPoint] = useState<{ x: number; y: number } | null>(null);
+  const inputLockRef = useRef(false);
 
-  const sendInput = useCallback(async (input: { type: 'click'; x: number; y: number } | { type: 'text'; text: string } | { type: 'key'; key: string }) => {
-    if (!selectedSession || selectedSession.status !== 'ready') return;
+  type BrowserInput = { type: 'click'; x: number; y: number } | { type: 'text'; text: string } | { type: 'key'; key: string };
+
+  // Runs the inputs one after the other under a single lock so that overlapping
+  // requests cannot act on a different focus state or apply screenshots out of order.
+  // Resolves to true only when every input succeeded.
+  const sendInputs = useCallback(async (inputs: BrowserInput[]) => {
+    if (!selectedSession || selectedSession.status !== 'ready' || inputLockRef.current) return false;
+    inputLockRef.current = true;
+    setIsInputPending(true);
     setError(null);
     try {
-      const response = await api.browserUse.sendInput(selectedSession.id, input);
-      const data = await readApiJson<{ data: { session: BrowserUseSession } }>(response);
-      setSessions((current) => current.map((session) => (session.id === data.data.session.id ? data.data.session : session)));
+      for (const input of inputs) {
+        const response = await api.browserUse.sendInput(selectedSession.id, input);
+        const data = await readApiJson<{ data: { session: BrowserUseSession } }>(response);
+        setSessions((current) => current.map((session) => (session.id === data.data.session.id ? data.data.session : session)));
+      }
+      return true;
     } catch (err) {
       setError(localizeApiError(err, 'browserUse.actionFailed', t));
+      return false;
+    } finally {
+      inputLockRef.current = false;
+      setIsInputPending(false);
     }
   }, [selectedSession, t]);
 
-  const handleSurfaceClick = (event: MouseEvent<HTMLImageElement>) => {
+  const sendInput = useCallback((input: BrowserInput) => sendInputs([input]), [sendInputs]);
+
+  const clickAtFraction = (fractionX: number, fractionY: number) => {
     const viewport = selectedSession?.viewport;
     if (!viewport) return;
+    void sendInput({ type: 'click', x: fractionX * viewport.width, y: fractionY * viewport.height });
+  };
+
+  const handleSurfaceClick = (event: MouseEvent<HTMLElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
-    void sendInput({
-      type: 'click',
-      x: ((event.clientX - rect.left) / rect.width) * viewport.width,
-      y: ((event.clientY - rect.top) / rect.height) * viewport.height,
-    });
+    clickAtFraction((event.clientX - rect.left) / rect.width, (event.clientY - rect.top) / rect.height);
+  };
+
+  // Keyboard path to the same click action: arrows move a marker, Enter/Space clicks it.
+  const handleSurfaceKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    const step = event.shiftKey ? 0.1 : 0.02;
+    const delta: Record<string, [number, number]> = {
+      ArrowLeft: [-step, 0],
+      ArrowRight: [step, 0],
+      ArrowUp: [0, -step],
+      ArrowDown: [0, step],
+    };
+    const move = delta[event.key];
+    if (move) {
+      event.preventDefault();
+      setKeyboardPoint((point) => {
+        const current = point ?? { x: 0.5, y: 0.5 };
+        return {
+          x: Math.min(1, Math.max(0, current.x + move[0])),
+          y: Math.min(1, Math.max(0, current.y + move[1])),
+        };
+      });
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      const point = keyboardPoint ?? { x: 0.5, y: 0.5 };
+      setKeyboardPoint(point);
+      clickAtFraction(point.x, point.y);
+    }
   };
 
   const submitInputText = async () => {
-    if (!inputText) return;
+    if (!inputText || isInputPending) return;
     const text = inputText;
-    setInputText('');
-    await sendInput({ type: 'text', text });
-    await sendInput({ type: 'key', key: 'Enter' });
+    // Enter is only sent once the text went through; on failure the draft stays for a retry.
+    const sent = await sendInputs([{ type: 'text', text }, { type: 'key', key: 'Enter' }]);
+    if (sent) setInputText('');
   };
 
   const installBrowserBinaries = () => runAction(async () => {
@@ -369,16 +415,34 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
   const renderBrowserScreen = (fullscreen = false) => (
     <div className={cn('flex flex-1 items-center justify-center bg-neutral-950', fullscreen ? 'min-h-[80vh]' : 'min-h-[420px]')}>
       {selectedSession?.screenshotDataUrl ? (
-        <div className="relative inline-block max-h-full">
+        <div
+          className={cn(
+            'relative inline-block max-h-full',
+            selectedSession.status === 'ready' && 'rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-primary',
+          )}
+          {...(selectedSession.status === 'ready' && {
+            tabIndex: 0,
+            role: 'button',
+            'aria-label': t('browserUse.surfaceAriaLabel'),
+            onKeyDown: handleSurfaceKeyDown,
+            onBlur: () => setKeyboardPoint(null),
+          })}
+        >
           <img
             src={selectedSession.screenshotDataUrl}
             alt={t('browserUse.screenshotAlt')}
             onClick={handleSurfaceClick}
             className={cn(
               fullscreen ? 'block max-h-[80vh] w-auto max-w-full object-contain' : 'block max-h-[72vh] w-auto max-w-full object-contain',
-              selectedSession.status === 'ready' && 'cursor-pointer',
+              selectedSession.status === 'ready' && !isInputPending && 'cursor-pointer',
             )}
           />
+          {keyboardPoint && (
+            <div
+              className="pointer-events-none absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-primary/70"
+              style={{ left: `${keyboardPoint.x * 100}%`, top: `${keyboardPoint.y * 100}%` }}
+            />
+          )}
           {cursorStyle && (
             <div
               className="pointer-events-none absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/90 bg-primary/80 shadow-[0_0_0_6px_hsl(var(--primary)/0.18)]"
@@ -412,13 +476,14 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
                 void submitInputText();
               }
             }}
+            disabled={isInputPending}
             placeholder={t('browserUse.inputPlaceholder')}
             className="min-w-[200px] flex-1"
           />
-          <Button variant="outline" size="sm" onClick={() => void submitInputText()} disabled={!inputText}>{t('browserUse.inputSend')}</Button>
-          <Button variant="outline" size="sm" onClick={() => void sendInput({ type: 'key', key: 'Backspace' })}>{t('browserUse.inputBackspace')}</Button>
-          <Button variant="outline" size="sm" onClick={() => void sendInput({ type: 'key', key: 'Tab' })}>{t('browserUse.inputTab')}</Button>
-          <Button variant="outline" size="sm" onClick={() => void sendInput({ type: 'key', key: 'Enter' })}>{t('browserUse.inputEnter')}</Button>
+          <Button variant="outline" size="sm" onClick={() => void submitInputText()} disabled={!inputText || isInputPending}>{t('browserUse.inputSend')}</Button>
+          <Button variant="outline" size="sm" onClick={() => void sendInput({ type: 'key', key: 'Backspace' })} disabled={isInputPending}>{t('browserUse.inputBackspace')}</Button>
+          <Button variant="outline" size="sm" onClick={() => void sendInput({ type: 'key', key: 'Tab' })} disabled={isInputPending}>{t('browserUse.inputTab')}</Button>
+          <Button variant="outline" size="sm" onClick={() => void sendInput({ type: 'key', key: 'Enter' })} disabled={isInputPending}>{t('browserUse.inputEnter')}</Button>
           <span className="w-full text-xs text-muted-foreground">{t('browserUse.inputHint')}</span>
         </div>
       )}
