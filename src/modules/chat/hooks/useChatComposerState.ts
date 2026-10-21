@@ -155,14 +155,14 @@ const showsQueuedMessage = (card: QueuedDraft, stored: QueuedDraft): boolean => 
 );
 
 // Whether a stored queued message is the card's message with more added after
-// it (by this tab or another one), rather than a different message. Only then
-// do the card's browser files still belong to it. Uploaded descriptors are
-// unique per upload, so they tell the two apart even when the text matches.
+// it (by this tab or another one), rather than a different message: only then
+// do the card's browser files still belong to it. A card holds browser files
+// only for attachments it uploaded, and every upload gets its own descriptor,
+// so the stored message must start with the card's descriptors.
 const extendsQueuedMessage = (card: QueuedDraft, stored: QueuedDraft): boolean => {
   const cardUploads = card.uploadedAttachments ?? [];
   const storedUploads = stored.uploadedAttachments ?? [];
-  return (stored.content.startsWith(card.content) || !card.content.trim())
-    && JSON.stringify(storedUploads.slice(0, cardUploads.length)) === JSON.stringify(cardUploads);
+  return JSON.stringify(storedUploads.slice(0, cardUploads.length)) === JSON.stringify(cardUploads);
 };
 
 const getNotificationSessionSummary = (

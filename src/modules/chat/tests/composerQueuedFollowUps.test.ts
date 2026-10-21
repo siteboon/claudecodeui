@@ -528,14 +528,35 @@ test('files of a message already sent do not come back with a follow-up queued a
   const fileB = new File(['b'], 'b.txt', { type: 'text/plain' });
   const { view } = render();
   await submit(view, 'follow-up A', [fileA]);
-  // The dispatcher sent A; another tab then queued a message of its own.
+  // The dispatcher sent A; another tab then queued the same text again, without the file.
   dispatcherClaims('session-1');
-  server.set('session-1', { text: '', queuedMessage: { content: 'from the other tab', attachments: [] } });
+  server.set('session-1', { text: '', queuedMessage: { content: 'follow-up A', attachments: [] } });
 
   await submit(view, 'follow-up B', [fileB]);
 
-  assert.equal(view.result.current.queuedDraft?.content, 'from the other tab\n\nfollow-up B');
+  assert.equal(view.result.current.queuedDraft?.content, 'follow-up A\n\nfollow-up B');
   assert.deepEqual(view.result.current.queuedDraft?.attachments, [fileB]);
+});
+
+test('a refused follow-up goes back to the session it was typed in, after a switch during the upload', async () => {
+  const { view, errors } = render();
+  refuseQueueing = true;
+  const upload = hold();
+  uploadGate = upload.gate;
+  await act(async () => {
+    view.result.current.setInput('follow-up B');
+    view.result.current.setAttachedFiles([new File(['b'], 'b.txt', { type: 'text/plain' })]);
+  });
+  const pending = startSubmit(view);
+  view.rerender({ session: SESSION_2, isLoading: true, model: 'model-1' });
+  await act(async () => {
+    upload.release();
+    await pending;
+  });
+
+  assert.equal(errors.length, 1);
+  assert.equal(readDraftText('session-1'), 'follow-up B', 'it is waiting there to be sent again');
+  assert.equal(view.result.current.input, '', 'and not in the composer of the session now open');
 });
 
 test('a session switch during the upload keeps a draft that changed in the session left', async () => {
