@@ -1,8 +1,6 @@
 import { readFile, stat } from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
 
-import { readObjectRecord, readStringArray } from '@/shared/utils.js';
+import { readObjectRecord, readStringArray, resolveClaudeUserSettingsPath } from '@/shared/utils.js';
 
 /**
  * The permission rules one Claude settings file contributes.
@@ -20,19 +18,6 @@ type ClaudeSettingsPermissionSource = {
   allow: string[];
   deny: string[];
   ask: string[];
-};
-
-/**
- * The user's own settings file. The CLI reads it from `CLAUDE_CONFIG_DIR` when
- * that is set, and the server forwards its whole env to every CLI it spawns,
- * so the same override has to apply here.
- */
-const userSettingsPath = (): string => {
-  const configDirectory = process.env.CLAUDE_CONFIG_DIR?.trim();
-  const baseDirectory = configDirectory && path.isAbsolute(configDirectory)
-    ? configDirectory
-    : path.join(os.homedir(), '.claude');
-  return path.join(baseDirectory, 'settings.json');
 };
 
 /** The administrator-managed settings file, at the fixed path the CLI uses per OS. */
@@ -120,7 +105,8 @@ export const claudeSettingsPermissionsService = {
   /** `managedPath` is only overridden by tests, which cannot write to the system path. */
   async listRuleSources(managedPath: string = managedSettingsPath()): Promise<ClaudeSettingsPermissionSource[]> {
     return Promise.all([
-      readPermissionSource('user', userSettingsPath()),
+      // The user's own settings file, CLAUDE_CONFIG_DIR aware like the CLI.
+      readPermissionSource('user', resolveClaudeUserSettingsPath()),
       readPermissionSource('managed', managedPath),
     ]);
   },

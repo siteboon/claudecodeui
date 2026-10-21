@@ -637,6 +637,49 @@ export const readStringRecord = (value: unknown): Record<string, string> | undef
 };
 
 // ---------------------------
+//----------------- CLAUDE CLI CONFIG LOCATION UTILITIES ------------
+/**
+ * The folder `CLAUDE_CONFIG_DIR` names, or null when it is unset, blank or
+ * relative. The Claude CLI reads its config from that folder instead of the
+ * default locations, and this server forwards its whole env to every CLI it
+ * spawns. A relative value resolves against each CLI's working folder (the
+ * project of a Chat turn), so there is no single folder to follow and callers
+ * keep the default location for it.
+ */
+const readClaudeConfigDirOverride = (): string | null => {
+  const configDirectory = process.env.CLAUDE_CONFIG_DIR?.trim();
+  return configDirectory && path.isAbsolute(configDirectory) ? configDirectory : null;
+};
+
+/**
+ * The Claude CLI's global config file, which holds the user-scope MCP servers
+ * (`mcpServers`) and the local-scope ones (`projects[<path>].mcpServers`):
+ * `$CLAUDE_CONFIG_DIR/.claude.json` when that is an absolute path, else
+ * `~/.claude.json` (in the home folder itself, not in `~/.claude/`).
+ *
+ * Used by the Claude MCP provider, through which the MCP settings and the
+ * Browser MCP registration read and write Claude's servers, and by TaskMaster's
+ * MCP detection. Chat leaves MCP loading to the CLI, so both have to look where
+ * a CLI spawned by this server looks. Not covered: the CLI's legacy
+ * `<config folder>/.config.json`, which it reads instead when that file exists
+ * and is not empty.
+ */
+export function resolveClaudeGlobalConfigPath(): string {
+  return path.join(readClaudeConfigDirOverride() ?? os.homedir(), '.claude.json');
+}
+
+/**
+ * The Claude CLI's user settings file: `$CLAUDE_CONFIG_DIR/settings.json` when
+ * that is an absolute path, else `~/.claude/settings.json`.
+ *
+ * Used by the Claude settings permissions service (the permission rules shown
+ * in Settings) and by TaskMaster's MCP detection, which falls back to it.
+ */
+export function resolveClaudeUserSettingsPath(): string {
+  return path.join(readClaudeConfigDirOverride() ?? path.join(os.homedir(), '.claude'), 'settings.json');
+}
+
+// ---------------------------
 //----------------- PROVIDER MODEL LOOKUP UTILITIES ------------
 /**
  * Builds the standard "default current model" result used when a provider
