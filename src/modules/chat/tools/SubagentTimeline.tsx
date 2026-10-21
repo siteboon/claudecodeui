@@ -94,15 +94,17 @@ export const SubagentTimeline = memo(({ activity, activityCount, onFileOpen, cre
             );
 
             // The time sits in a column of its own beside the step rather than
-            // inside it, since a step is any of the tool renderers. Only
-            // wrapped while shown, so with the preference off the timeline's
-            // markup is exactly what it was.
+            // inside it, since a step is any of the tool renderers; at phone
+            // widths it takes a line under the step instead, as a nested step
+            // has no width to spare. Only wrapped while shown, so with the
+            // preference off the timeline's markup is exactly what it was
+            // (flipping it therefore remounts the steps of an open timeline).
             return showTimestamps ? (
-              <div key={key} className="flex items-start gap-2">
-                <div className="min-w-0 flex-1">{step}</div>
+              <div key={key} className="flex flex-col sm:flex-row sm:items-start sm:gap-2">
+                <div className="min-w-0 sm:flex-1">{step}</div>
                 <TranscriptTimestamp
                   value={entry.timestamp}
-                  className="mt-1.5 flex-shrink-0 text-[10px] leading-none text-muted-foreground/60"
+                  className="mb-1 flex-shrink-0 text-[10px] leading-none text-muted-foreground/60 sm:mb-0 sm:mt-1.5"
                 />
               </div>
             ) : step;

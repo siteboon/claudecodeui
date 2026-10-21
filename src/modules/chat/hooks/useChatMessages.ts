@@ -386,6 +386,8 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
       // Set by the provider only on an assistant reply, and only when it knows
       // which model produced it, so every other row simply carries undefined.
       model: msg.model,
+      // A time the backend had to make up orders the row but is never shown.
+      timestampEstimated: msg.timestampEstimated,
     };
 
     if (appendCompactionRow(msg, converted, sharedMetadata, {

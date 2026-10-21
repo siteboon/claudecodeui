@@ -19,7 +19,7 @@ type ToolGroupContainerProps = {
   onGrantToolPermission?: (suggestion: ClaudePermissionSuggestion) => PermissionGrantResult | null | undefined;
   showRawParameters?: boolean;
   showThinking?: boolean;
-  /** Stamps the collapsed row with the time the run's first call was made, and each expanded row with its own. */
+  /** Stamps the collapsed row with the span from the run's first call to its last, and each expanded row with its own time. */
   showTimestamps?: boolean;
   selectedProject?: Project | null;
   provider: LLMProvider | string;
@@ -104,6 +104,12 @@ function ToolGroupContainer({
 
   const preview = group.preview;
   const groupDiffStats = useGroupDiffStats(group.toolName, group.messages, createDiff);
+  // The run's span, over the calls whose times the provider recorded: when
+  // it began, and when the agent last did something in it.
+  const { firstStampAt, lastStampAt } = useMemo(() => {
+    const recorded = group.messages.filter((message) => !message.timestampEstimated);
+    return { firstStampAt: recorded[0]?.timestamp, lastStampAt: recorded[recorded.length - 1]?.timestamp };
+  }, [group.messages]);
 
   // Keys only have to be unique among this group's own rows, so repeats of the
   // same key are disambiguated here by occurrence.
@@ -145,7 +151,8 @@ function ToolGroupContainer({
         {groupDiffStats && <DiffStatsBadge stats={groupDiffStats} className="ml-auto pl-2" />}
         {showTimestamps && (
           <TranscriptTimestamp
-            value={group.timestamp}
+            value={firstStampAt}
+            endValue={lastStampAt}
             className={`${groupDiffStats ? '' : 'ml-auto pl-2 '}flex-shrink-0 text-[11px] text-muted-foreground`}
           />
         )}

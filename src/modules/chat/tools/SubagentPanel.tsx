@@ -1,9 +1,10 @@
 import { memo, useMemo, useState } from 'react';
 import { Bot, ChevronRight, CircleAlert, CircleCheck, CircleDashed } from 'lucide-react';
 
-import type { DiffLine, LiveTaskStatus, Project, SubagentActivity, SubagentInfo, ToolResult } from '@/shared/types';
+import type { ChatMessage, DiffLine, LiveTaskStatus, Project, SubagentActivity, SubagentInfo, ToolResult } from '@/shared/types';
 import { cn } from '@/shared/utils';
 import { SubagentTimeline } from '@/modules/chat/tools/SubagentTimeline';
+import TranscriptTimestamp from '@/modules/chat/transcript/TranscriptTimestamp';
 import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
 import { MarkdownContent } from '@/modules/chat/tools/ContentRenderers/MarkdownContent';
 import { resolveBackgroundTaskStatus } from '@/modules/chat/utils/backgroundTasks';
@@ -21,6 +22,11 @@ type SubagentPanelProps = {
   selectedProject?: Project | null;
   /** Stamps each step of the agent's timeline with its time. */
   showTimestamps?: boolean;
+  /**
+   * When the agent was launched, given only while the timestamps preference
+   * is on. The header then reads from it to the agent's latest recorded step.
+   */
+  launchedAt?: ChatMessage['timestamp'];
 };
 
 function parseToolInput(toolInput: unknown): Record<string, unknown> {
@@ -85,6 +91,7 @@ export const SubagentPanel = memo(({
   createDiff,
   selectedProject,
   showTimestamps = false,
+  launchedAt,
 }: SubagentPanelProps) => {
   // Collapsed by default: an agent is a summary of work, and its detail is
   // only wanted on demand.
@@ -115,6 +122,14 @@ export const SubagentPanel = memo(({
   const nickname = subagent?.name && subagent.name !== subagent.type ? subagent.name : '';
   const description = subagent?.description ?? String(parsedInput.description ?? '');
   const prompt = String(parsedInput.prompt ?? '');
+  // The newest step the provider recorded a time for: with the launch, it
+  // says both when the agent started and when it last did something.
+  let latestStepAt: string | undefined;
+  if (launchedAt !== undefined) {
+    for (let index = entries.length - 1; index >= 0 && !latestStepAt; index -= 1) {
+      latestStepAt = entries[index].timestamp;
+    }
+  }
 
   return (
     <div className="my-1 border-l-2 border-l-purple-500 py-0.5 pl-3 dark:border-l-purple-400">
@@ -161,6 +176,13 @@ export const SubagentPanel = memo(({
             </>
           )}
         </span>
+        {launchedAt !== undefined && (
+          <TranscriptTimestamp
+            value={launchedAt}
+            endValue={latestStepAt}
+            className="flex-shrink-0 text-[11px] text-muted-foreground/70"
+          />
+        )}
       </button>
 
       {showTimeline && (

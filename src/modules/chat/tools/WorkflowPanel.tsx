@@ -4,6 +4,7 @@ import { ChevronRight, CircleAlert, CircleCheck, CircleDashed, Workflow } from '
 
 import type {
   BackgroundTaskStatus,
+  ChatMessage,
   DiffLine,
   LiveTaskStatus,
   Project,
@@ -14,7 +15,7 @@ import type {
   WorkflowInfo,
 } from '@/shared/types';
 import { api, readApiJson } from '@/shared/api';
-import { cn } from '@/shared/utils';
+import { cn, toPlausibleTimestamp } from '@/shared/utils';
 import { MarkdownContent } from '@/modules/chat/tools/ContentRenderers/MarkdownContent';
 import { SubagentTimeline } from '@/modules/chat/tools/SubagentTimeline';
 import { ToolErrorDisplay } from '@/modules/chat/tools/ToolErrorDisplay';
@@ -42,6 +43,8 @@ type WorkflowPanelProps = {
   selectedProject?: Project | null;
   /** Stamps each agent with the time it started, when the live stream said, and each step of an opened agent's timeline. */
   showTimestamps?: boolean;
+  /** When the workflow was launched, given only while the timestamps preference is on; shown in the header. */
+  launchedAt?: ChatMessage['timestamp'];
 };
 
 /** What the agent-activity route answers with. */
@@ -310,7 +313,7 @@ const WorkflowAgentRowView = memo(({ agent, timelineAddress, onFileOpen, createD
   const canOpen = Boolean(timelineAddress && agent.agentId);
   // Only the live stream says when an agent started; the journal a history
   // load reads records no times, so a reloaded row has none to show.
-  const showStartedAt = showTimestamps && agent.startedAt !== undefined;
+  const showStartedAt = showTimestamps && toPlausibleTimestamp(agent.startedAt) !== null;
 
   const summary = (
     <>
@@ -322,7 +325,7 @@ const WorkflowAgentRowView = memo(({ agent, timelineAddress, onFileOpen, createD
       {showStartedAt && (
         <TranscriptTimestamp value={agent.startedAt} className="ml-auto flex-shrink-0 text-[10px] text-muted-foreground/60" />
       )}
-      <span className={cn('flex-shrink-0 text-[11px] text-muted-foreground/70', !showStartedAt && 'ml-auto')}>
+      <span className={cn(!showStartedAt && 'ml-auto', 'flex-shrink-0 text-[11px] text-muted-foreground/70')}>
         {t(`workflow.agentStatus.${agent.status}`, agent.status)}
       </span>
     </>
@@ -389,7 +392,7 @@ WorkflowAgentRowView.displayName = 'WorkflowAgentRowView';
  * Shaped like SubagentPanel: the launch is a summary of work, and the
  * detail is only wanted on demand, so the body stays unmounted until opened.
  */
-export const WorkflowPanel = memo(({ toolInput, toolResult, workflow, taskStatus, onFileOpen, createDiff, selectedProject, showTimestamps = false }: WorkflowPanelProps) => {
+export const WorkflowPanel = memo(({ toolInput, toolResult, workflow, taskStatus, onFileOpen, createDiff, selectedProject, showTimestamps = false, launchedAt }: WorkflowPanelProps) => {
   const { t } = useTranslation();
   const isExporting = useIsExportingTranscript();
   // Collapsed by default, like an agent card; the header carries the status.
@@ -492,6 +495,9 @@ export const WorkflowPanel = memo(({ toolInput, toolResult, workflow, taskStatus
             </>
           )}
         </span>
+        {launchedAt !== undefined && (
+          <TranscriptTimestamp value={launchedAt} className="flex-shrink-0 text-[11px] text-muted-foreground/70" />
+        )}
       </button>
 
       {showBody && (

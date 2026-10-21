@@ -3,7 +3,9 @@ import { useTranslation } from 'react-i18next';
 import { GitBranchIcon, PencilIcon } from 'lucide-react';
 
 import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider,DiffLine,Project } from '@/shared/types';
+import { cn, toPlausibleTimestamp } from '@/shared/utils';
 import { formatUsageLimitText, stripProposedPlanEnvelope } from '@/modules/chat/utils/chatFormatting';
+import { formatAnsweringModelLabel } from '@/modules/chat/utils/modelLabel';
 import { ToolRenderer, ToolErrorDisplay, SubagentPanel, WorkflowPanel, shouldHideToolResult } from '@/modules/chat/tools';
 import { LLMProviderLogo } from '@/shared/ui';
 import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/modules/chat/transcript/Reasoning';
@@ -29,8 +31,9 @@ type MessageComponentProps = {
   showThinking?: boolean;
   /**
    * Stamps this row with its time whatever its kind, and hands the preference
-   * on to the agent and workflow cards' timelines. Off, only user turns and
-   * the first row of an assistant run carry a time, as they always have.
+   * on to the agent and workflow cards and their timelines. Off, only user
+   * turns and the first row of an assistant run carry a time, as they always
+   * have.
    */
   showTimestamps?: boolean;
   selectedProject?: Project | null;
@@ -92,10 +95,27 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
 
 
   const formattedTime = useMemo(() => new Date(message.timestamp).toLocaleTimeString(), [message.timestamp]);
+  // The time the timestamps preference shows. One the backend had to make up,
+  // because the provider recorded none, orders the row but is never shown:
+  // it would read as "just now" and change on every reload.
+  const stampValue = message.timestampEstimated ? undefined : message.timestamp;
+  const hasStamp = showTimestamps && toPlausibleTimestamp(stampValue) !== null;
+  // Where that time goes on a left-hand row: an agent or workflow card
+  // carries it in its own header, a tool call at the end of its input line
+  // (a footer line per call would add a line to every tool row), and
+  // anything else in its footer.
+  const isCardRow = Boolean((message.isToolUse && message.toolName === 'Workflow') || message.isSubagentContainer);
+  const stampsToolLine = hasStamp && !isCardRow && Boolean(message.isToolUse && message.toolInput);
+  const stampsFooter = hasStamp && !isCardRow && !stampsToolLine;
   // The footer a left-hand row has always had: copy controls, model and, on
-  // the first row of a run, the time. The timestamps preference adds a
-  // time-only footer to every other row.
+  // the first row of a run, the time. With the preference on it is drawn only
+  // when something is left to show in it.
   const hasDefaultFooter = shouldShowAssistantCopyControl || !isGrouped;
+  const showsFooter = showTimestamps
+    ? shouldShowAssistantCopyControl || (hasDefaultFooter && Boolean(formatAnsweringModelLabel(message.model))) || stampsFooter
+    : hasDefaultFooter;
+  const hasUserTurnControls = shouldShowUserCopyControl
+    || Boolean(message.transcriptAnchorId && (onEditMessage || onForkFromMessage));
   const shouldHideThinkingMessage = Boolean(message.isThinking && !showThinking);
 
   if (shouldHideThinkingMessage) {
@@ -131,39 +151,41 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                     {message.content}
                   </Markdown>
                 </div>
-                <div className="mt-1 flex items-center justify-end gap-1 text-xs text-muted-foreground">
-                  {onEditMessage && message.transcriptAnchorId && (
-                    <button
-                      type="button"
-                      onClick={() => onEditMessage(message)}
-                      title={t('message.editAndResend')}
-                      aria-label={t('message.editAndResend')}
-                      className="rounded p-1 opacity-0 transition-opacity hover:bg-muted focus-visible:opacity-100 group-hover:opacity-100"
-                    >
-                      <PencilIcon className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                  {onForkFromMessage && message.transcriptAnchorId && (
-                    <button
-                      type="button"
-                      onClick={() => onForkFromMessage(message)}
-                      title={t('message.forkFromHere')}
-                      aria-label={t('message.forkFromHere')}
-                      className="rounded p-1 opacity-0 transition-opacity hover:bg-muted focus-visible:opacity-100 group-hover:opacity-100"
-                    >
-                      <GitBranchIcon className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                  {shouldShowUserCopyControl && (
-                    <MessageCopyControl content={userCopyContent} messageType="user" />
-                  )}
-                  {showTimestamps ? <TranscriptTimestamp value={message.timestamp} /> : <span>{formattedTime}</span>}
-                </div>
+                {(!showTimestamps || hasStamp || hasUserTurnControls) && (
+                  <div className="mt-1 flex items-center justify-end gap-1 text-xs text-muted-foreground">
+                    {onEditMessage && message.transcriptAnchorId && (
+                      <button
+                        type="button"
+                        onClick={() => onEditMessage(message)}
+                        title={t('message.editAndResend')}
+                        aria-label={t('message.editAndResend')}
+                        className="rounded p-1 opacity-0 transition-opacity hover:bg-muted focus-visible:opacity-100 group-hover:opacity-100"
+                      >
+                        <PencilIcon className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    {onForkFromMessage && message.transcriptAnchorId && (
+                      <button
+                        type="button"
+                        onClick={() => onForkFromMessage(message)}
+                        title={t('message.forkFromHere')}
+                        aria-label={t('message.forkFromHere')}
+                        className="rounded p-1 opacity-0 transition-opacity hover:bg-muted focus-visible:opacity-100 group-hover:opacity-100"
+                      >
+                        <GitBranchIcon className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    {shouldShowUserCopyControl && (
+                      <MessageCopyControl content={userCopyContent} messageType="user" />
+                    )}
+                    {showTimestamps ? <TranscriptTimestamp value={stampValue} /> : <span>{formattedTime}</span>}
+                  </div>
+                )}
               </div>
-            ) : (
+            ) : (!showTimestamps || hasStamp) && (
               /* Attachment-only turn: no text bubble, but the timestamp still shows */
               <div className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
-                {showTimestamps ? <TranscriptTimestamp value={message.timestamp} /> : <span>{formattedTime}</span>}
+                {showTimestamps ? <TranscriptTimestamp value={stampValue} /> : <span>{formattedTime}</span>}
               </div>
             )}
           </div>
@@ -190,7 +212,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
               {message.content || t('chat:misc.compacted', 'Compacted')}
             </span>
             {showTimestamps && (
-              <TranscriptTimestamp value={message.timestamp} className="ml-auto flex-shrink-0 text-[11px] text-gray-400 dark:text-gray-500" />
+              <TranscriptTimestamp value={stampValue} className="ml-auto flex-shrink-0 text-[11px] text-gray-400 dark:text-gray-500" />
             )}
           </div>
           {message.compactSummary && (
@@ -213,7 +235,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
             <span className={`inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${message.taskNotificationStatus === 'completed' ? 'bg-green-400 dark:bg-green-500' : 'bg-amber-400 dark:bg-amber-500'}`} />
             <span className="text-xs text-gray-500 dark:text-gray-400">{message.content}</span>
             {showTimestamps && (
-              <TranscriptTimestamp value={message.timestamp} className="ml-auto flex-shrink-0 text-[11px] text-gray-400 dark:text-gray-500" />
+              <TranscriptTimestamp value={stampValue} className="ml-auto flex-shrink-0 text-[11px] text-gray-400 dark:text-gray-500" />
             )}
           </div>
         </div>
@@ -266,6 +288,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                   createDiff={createDiff}
                   selectedProject={selectedProject}
                   showTimestamps={showTimestamps}
+                  launchedAt={showTimestamps ? stampValue : undefined}
                 />
               </div>
             ) : message.isSubagentContainer ? (
@@ -282,6 +305,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                   createDiff={createDiff}
                   selectedProject={selectedProject}
                   showTimestamps={showTimestamps}
+                  launchedAt={showTimestamps ? stampValue : undefined}
                 />
               </div>
             ) : message.isToolUse ? (
@@ -297,8 +321,15 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                 {message.toolInput && (
                   // Bash draws its output inside this row rather than in the
                   // result section below, so for a backgrounded command this is
-                  // the row the background-tasks strip scrolls to.
-                  <div id={message.toolName === 'Bash' ? `tool-result-${message.toolId}` : undefined} className="scroll-mt-4">
+                  // the row the background-tasks strip scrolls to. With the
+                  // timestamps preference on, the call's time sits in a column
+                  // beside the input line; the renderer stays the first child
+                  // either way, so flipping the preference does not remount it
+                  // (which would collapse an expanded output).
+                  <div
+                    id={message.toolName === 'Bash' ? `tool-result-${message.toolId}` : undefined}
+                    className={cn('scroll-mt-4', stampsToolLine && 'grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2')}
+                  >
                     <ToolRenderer
                       toolName={message.toolName || 'UnknownTool'}
                       toolInput={message.toolInput}
@@ -312,6 +343,14 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                       rawToolInput={typeof message.toolInput === 'string' ? message.toolInput : undefined}
                       toolStatus={message.toolStatus}
                     />
+                    {stampsToolLine && (
+                      // Pinned to the first row: Bash draws the files it
+                      // changed as a second element, which flows below.
+                      <TranscriptTimestamp
+                        value={stampValue}
+                        className="col-start-2 row-start-1 mt-1 text-[11px] leading-4 text-gray-400 dark:text-gray-500"
+                      />
+                    )}
                   </div>
                 )}
 
@@ -428,7 +467,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
               <MemoryCitations citations={message.memoryCitations} />
             )}
 
-            {(hasDefaultFooter || showTimestamps) && (
+            {showsFooter && (
               <div className="mt-1 flex w-full items-center gap-2 text-[11px] text-gray-400 dark:text-gray-500">
                 {shouldShowAssistantCopyControl && (
                   <MessageCopyControl content={assistantCopyContent} messageType="assistant" />
@@ -441,11 +480,11 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                     copy and speak it is not gated on the copy control, and an
                     exported transcript keeps it wherever the footer renders.
                     The time-only footer the timestamps preference adds to
-                    every other row leaves it out, so it is not repeated on
-                    each tool call of a run. */}
+                    other rows leaves it out, so it is not repeated on each
+                    row of a run. */}
                 {hasDefaultFooter && <MessageModelLabel model={message.model} />}
                 {showTimestamps
-                  ? <TranscriptTimestamp value={message.timestamp} />
+                  ? stampsFooter && <TranscriptTimestamp value={stampValue} />
                   : !isGrouped && <span>{formattedTime}</span>}
               </div>
             )}
