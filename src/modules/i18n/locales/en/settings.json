@@ -177,6 +177,7 @@
       "saving": "Saving...",
       "saved": "Saved",
       "remove": "Remove",
+      "confirmRemove": "Remove this webhook? Its URL and signing secret will be deleted.",
       "payloadNote": "Each event carries only its type, provider, session ID and outcome. Prompts, messages and output are never sent.",
       "eventsNote": "Webhooks follow the \"Run stopped\" and \"Run failed\" choices under Event Types.",
       "secret": {
@@ -186,7 +187,7 @@
         "set": "Set",
         "generate": "Generate",
         "rotate": "Rotate",
-        "remove": "Remove",
+        "remove": "Remove secret",
         "showOnce": "Copy this secret now. It will not be shown again.",
         "copy": "Copy secret",
         "copied": "Copied",
@@ -215,7 +216,7 @@
       "errors": {
         "invalidUrl": "Enter a valid http:// or https:// URL.",
         "insecureUrl": "Plain http:// URLs need \"Allow plain HTTP\".",
-        "blockedAddress": "This address cannot be a webhook destination (link-local, multicast or reserved).",
+        "blockedAddress": "This address cannot be a webhook destination (link-local, cloud metadata, multicast or reserved).",
         "notConfigured": "Save a webhook URL first.",
         "requestFailed": "The request failed. Please try again."
       }

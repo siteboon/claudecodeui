@@ -151,6 +151,7 @@
       "saving": "Enregistrement...",
       "saved": "Enregistré",
       "remove": "Supprimer",
+      "confirmRemove": "Supprimer ce webhook ? Son URL et son secret de signature seront effacés.",
       "payloadNote": "Chaque événement contient uniquement son type, le fournisseur, l'ID de session et le résultat. Les prompts, messages et sorties ne sont jamais envoyés.",
       "eventsNote": "Les webhooks suivent les choix « Exécution arrêtée » et « Exécution échouée » dans Types d'événements.",
       "secret": {
@@ -160,7 +161,7 @@
         "set": "Défini",
         "generate": "Générer",
         "rotate": "Renouveler",
-        "remove": "Supprimer",
+        "remove": "Supprimer le secret",
         "showOnce": "Copiez ce secret maintenant. Il ne sera plus affiché.",
         "copy": "Copier le secret",
         "copied": "Copié",
@@ -189,7 +190,7 @@
       "errors": {
         "invalidUrl": "Saisissez une URL http:// ou https:// valide.",
         "insecureUrl": "Les URL http:// nécessitent « Autoriser le HTTP non chiffré ».",
-        "blockedAddress": "Cette adresse ne peut pas être une destination de webhook (lien local, multicast ou réservée).",
+        "blockedAddress": "Cette adresse ne peut pas être une destination de webhook (lien local, métadonnées cloud, multicast ou réservée).",
         "notConfigured": "Enregistrez d'abord une URL de webhook.",
         "requestFailed": "La requête a échoué. Veuillez réessayer."
       }

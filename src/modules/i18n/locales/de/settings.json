@@ -151,6 +151,7 @@
       "saving": "Wird gespeichert...",
       "saved": "Gespeichert",
       "remove": "Entfernen",
+      "confirmRemove": "Diesen Webhook entfernen? Seine URL und das Signaturgeheimnis werden gelöscht.",
       "payloadNote": "Jedes Ereignis enthält nur Typ, Anbieter, Sitzungs-ID und Ergebnis. Prompts, Nachrichten und Ausgaben werden nie gesendet.",
       "eventsNote": "Webhooks folgen den Optionen \"Lauf gestoppt\" und \"Lauf fehlgeschlagen\" unter Ereignistypen.",
       "secret": {
@@ -160,7 +161,7 @@
         "set": "Festgelegt",
         "generate": "Erzeugen",
         "rotate": "Erneuern",
-        "remove": "Entfernen",
+        "remove": "Geheimnis entfernen",
         "showOnce": "Kopiere das Geheimnis jetzt. Es wird nicht noch einmal angezeigt.",
         "copy": "Geheimnis kopieren",
         "copied": "Kopiert",
@@ -189,7 +190,7 @@
       "errors": {
         "invalidUrl": "Gib eine gültige http://- oder https://-URL ein.",
         "insecureUrl": "Für http://-URLs muss \"Unverschlüsseltes HTTP erlauben\" aktiviert sein.",
-        "blockedAddress": "Diese Adresse kann kein Webhook-Ziel sein (Link-Local, Multicast oder reserviert).",
+        "blockedAddress": "Diese Adresse kann kein Webhook-Ziel sein (Link-Local, Cloud-Metadaten, Multicast oder reserviert).",
         "notConfigured": "Speichere zuerst eine Webhook-URL.",
         "requestFailed": "Die Anfrage ist fehlgeschlagen. Bitte versuche es erneut."
       }

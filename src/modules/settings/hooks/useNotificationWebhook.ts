@@ -24,18 +24,17 @@ const draftFrom = (webhook: NotificationWebhookState): WebhookDraft => (
     : EMPTY_DRAFT
 );
 
-// Server error codes the card has a message for; anything else is a generic failure.
-const KNOWN_ERROR_CODES = new Set([
-  'WEBHOOK_URL_INVALID',
-  'WEBHOOK_URL_INSECURE',
-  'WEBHOOK_URL_BLOCKED',
-  'WEBHOOK_NOT_CONFIGURED',
+// Server error codes the card has a message for → `notifications.webhook.errors.*`
+// keys. Any other failure shows the generic `requestFailed` message.
+const ERROR_MESSAGE_KEYS = new Map([
+  ['WEBHOOK_URL_INVALID', 'invalidUrl'],
+  ['WEBHOOK_URL_INSECURE', 'insecureUrl'],
+  ['WEBHOOK_URL_BLOCKED', 'blockedAddress'],
+  ['WEBHOOK_NOT_CONFIGURED', 'notConfigured'],
 ]);
 
-const readErrorCode = (error: unknown): string => (
-  error instanceof ApiRequestError && error.code && KNOWN_ERROR_CODES.has(error.code)
-    ? error.code
-    : 'REQUEST_FAILED'
+const readErrorMessageKey = (error: unknown): string => (
+  (error instanceof ApiRequestError && error.code && ERROR_MESSAGE_KEYS.get(error.code)) || 'requestFailed'
 );
 
 /** Used by NotificationWebhookCard to load and edit the webhook destination, its signing secret and its test event. */
@@ -46,8 +45,9 @@ export function useNotificationWebhook() {
   const [draft, setDraft] = useState<WebhookDraft>(EMPTY_DRAFT);
   // Which request is running, to disable the buttons and label the busy one.
   const [pendingAction, setPendingAction] = useState<WebhookAction | null>(null);
-  // Server error code of the last failed request, shown under the form until the next edit or action.
-  const [errorCode, setErrorCode] = useState<string | null>(null);
+  // Message key (`notifications.webhook.errors.*`) of the last failed request, shown under
+  // the form until the next edit or action. A failed first load shows it instead of the form.
+  const [errorMessageKey, setErrorMessageKey] = useState<string | null>(null);
   // Set after a successful save and cleared by the next edit, to confirm the save.
   const [saved, setSaved] = useState(false);
   // The freshly generated signing secret. The server returns it only once, so it lives
@@ -69,7 +69,7 @@ export function useNotificationWebhook() {
         }
       } catch (error) {
         if (!cancelled) {
-          setErrorCode(readErrorCode(error));
+          setErrorMessageKey(readErrorMessageKey(error));
         }
       }
     })();
@@ -80,12 +80,12 @@ export function useNotificationWebhook() {
 
   const run = useCallback(async (action: WebhookAction, request: () => Promise<void>) => {
     setPendingAction(action);
-    setErrorCode(null);
+    setErrorMessageKey(null);
     setSaved(false);
     try {
       await request();
     } catch (error) {
-      setErrorCode(readErrorCode(error));
+      setErrorMessageKey(readErrorMessageKey(error));
     } finally {
       setPendingAction(null);
     }
@@ -94,7 +94,7 @@ export function useNotificationWebhook() {
   const updateDraft = useCallback((patch: Partial<WebhookDraft>) => {
     setDraft((current) => ({ ...current, ...patch }));
     setSaved(false);
-    setErrorCode(null);
+    setErrorMessageKey(null);
   }, []);
 
   const save = useCallback(() => run('save', async () => {
@@ -139,7 +139,7 @@ export function useNotificationWebhook() {
     draft,
     isDirty,
     pendingAction,
-    errorCode,
+    errorMessageKey,
     saved,
     revealedSecret,
     updateDraft,

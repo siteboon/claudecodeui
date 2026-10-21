@@ -21,6 +21,8 @@ const SECRET = 'whsec_c2VjcmV0LXZhbHVlLWZvci10aGUtY2FyZC10ZXN0cw==';
 let state: NotificationWebhookState;
 let calls: Recorded[];
 let testStatus: number;
+// When set, GET /webhook answers with this HTTP status instead of the state.
+let loadFailure: number | null;
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), {
   status,
@@ -33,7 +35,11 @@ function fakeServer(url: string, init: RequestInit = {}): Response {
   calls.push({ method, url, body });
   const ok = (data: unknown) => json(200, { success: true, data });
 
-  if (url === '/api/notifications/webhook' && method === 'GET') return ok({ webhook: state });
+  if (url === '/api/notifications/webhook' && method === 'GET') {
+    return loadFailure
+      ? json(loadFailure, { success: false, error: { code: 'INTERNAL_ERROR', message: 'server text' } })
+      : ok({ webhook: state });
+  }
   if (url === '/api/notifications/webhook' && method === 'PUT') {
     if (body.url.startsWith('http://') && !body.allowHttp) {
       return json(400, { success: false, error: { code: 'WEBHOOK_URL_INSECURE', message: 'server text' } });
@@ -69,6 +75,7 @@ beforeEach(() => {
   state = EMPTY;
   calls = [];
   testStatus = 200;
+  loadFailure = null;
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => fakeServer(url, init)));
 });
 
@@ -116,6 +123,18 @@ describe('NotificationWebhookCard', () => {
     expect(screen.getByRole('button', { name: 'Remove' })).toBeTruthy();
   });
 
+  it('does not offer the form when the stored destination could not be loaded', async () => {
+    loadFailure = 500;
+    state = { ...EMPTY, configured: true, enabled: true, url: 'https://hooks.example.com/stored', hasSecret: true };
+    render(<NotificationWebhookCard />);
+
+    expect((await screen.findByRole('alert')).textContent).toBe('The request failed. Please try again.');
+    // A Save from an empty form here would overwrite the stored URL.
+    expect(screen.queryByLabelText('Destination URL')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+    expect(calls.map((call) => call.method)).toEqual(['GET']);
+  });
+
   it('shows a generated secret once; a reload only knows that one is set', async () => {
     state = { ...EMPTY, configured: true, enabled: true, url: 'https://hooks.example.com/x' };
     const { unmount } = render(<NotificationWebhookCard />);
@@ -125,6 +144,9 @@ describe('NotificationWebhookCard', () => {
     expect(revealed.textContent).toContain(SECRET);
     expect(revealed.textContent).toContain('It will not be shown again.');
     expect(screen.getByRole('button', { name: 'Rotate' })).toBeTruthy();
+    // The secret's own remove button is told apart from the webhook's.
+    expect(screen.getByRole('button', { name: 'Remove secret' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Remove' })).toHaveLength(1);
 
     fireEvent.click(screen.getByRole('button', { name: "I've saved it" }));
     expect(screen.queryByTestId('notification-webhook-secret')).toBeNull();
@@ -150,8 +172,10 @@ describe('NotificationWebhookCard', () => {
       .toMatch(/^Last delivery failed \(webhook\.test, .+, attempts: 1\): The receiver answered HTTP 503\.$/));
   });
 
-  it('keeps the test button off while the form has unsaved changes, and removes the webhook', async () => {
+  it('keeps the test button off while the form has unsaved changes, and removes the webhook after a confirm', async () => {
     state = { ...EMPTY, configured: true, enabled: true, url: 'https://hooks.example.com/x' };
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal('confirm', confirm);
     render(<NotificationWebhookCard />);
     const testButton = await screen.findByRole('button', { name: 'Send test event' }) as HTMLButtonElement;
     expect(testButton.disabled).toBe(false);
@@ -161,6 +185,12 @@ describe('NotificationWebhookCard', () => {
     expect(testButton.disabled).toBe(true);
     expect(saveButton().disabled).toBe(false);
 
+    // Declining the confirmation keeps the webhook.
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    expect(confirm).toHaveBeenCalledWith('Remove this webhook? Its URL and signing secret will be deleted.');
+    expect(calls.some((call) => call.method === 'DELETE')).toBe(false);
+
+    confirm.mockReturnValue(true);
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
     });

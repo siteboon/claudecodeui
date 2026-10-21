@@ -177,6 +177,7 @@
       "saving": "Guardando...",
       "saved": "Guardado",
       "remove": "Eliminar",
+      "confirmRemove": "¿Eliminar este webhook? Se borrarán su URL y su secreto de firma.",
       "payloadNote": "Cada evento solo incluye su tipo, el proveedor, el ID de sesión y el resultado. Nunca se envían prompts, mensajes ni salidas.",
       "eventsNote": "Los webhooks siguen las opciones \"Ejecución detenida\" y \"Ejecución fallida\" de Tipos de evento.",
       "secret": {
@@ -186,7 +187,7 @@
         "set": "Definido",
         "generate": "Generar",
         "rotate": "Rotar",
-        "remove": "Eliminar",
+        "remove": "Eliminar secreto",
         "showOnce": "Copia este secreto ahora. No se volverá a mostrar.",
         "copy": "Copiar secreto",
         "copied": "Copiado",
@@ -215,7 +216,7 @@
       "errors": {
         "invalidUrl": "Introduce una URL http:// o https:// válida.",
         "insecureUrl": "Las URL http:// necesitan \"Permitir HTTP sin cifrar\".",
-        "blockedAddress": "Esta dirección no puede ser un destino de webhook (enlace local, multidifusión o reservada).",
+        "blockedAddress": "Esta dirección no puede ser un destino de webhook (enlace local, metadatos de la nube, multidifusión o reservada).",
         "notConfigured": "Primero guarda una URL de webhook.",
         "requestFailed": "La solicitud falló. Inténtalo de nuevo."
       }
