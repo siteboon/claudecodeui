@@ -361,7 +361,7 @@
     "navShell": "Ir a la shell",
     "navGit": "Ir a Git",
     "navTasks": "Ir a Tareas",
-    "gitFetch": "Git: obtener",
+    "gitFetch": "Git: hacer fetch",
     "gitPull": "Git: hacer pull",
     "gitPush": "Git: hacer push",
     "settingsItem": "Ajustes: {{label}}",

@@ -65,9 +65,9 @@
     "publishTitle": "Publicar \"{{branch}}\" en {{remote}}",
     "publishing": "Publicando…",
     "publish": "Publicar",
-    "fetchTitle": "Obtener de {{remote}}",
-    "fetching": "Obteniendo…",
-    "fetch": "Obtener",
+    "fetchTitle": "Hacer fetch desde {{remote}}",
+    "fetching": "Haciendo fetch…",
+    "fetch": "Fetch",
     "pullTitle": "Hacer pull de {{n}} desde {{remote}}",
     "pulling": "Haciendo pull…",
     "pullCount": "Pull {{n}}",
@@ -193,8 +193,8 @@
     "create": "Crear rama"
   },
   "merge": {
-    "defaultSquash": "Fusionar con squash la rama '{{branch}}'",
-    "defaultMerge": "Fusionar la rama '{{branch}}'",
+    "defaultSquash": "Squash merge branch '{{branch}}'",
+    "defaultMerge": "Merge branch '{{branch}}'",
     "commitsCount_one": "{{count}} commit",
     "commitsCount_other": "{{count}} commits",
     "commitsCount_many": "{{count}} commits",
