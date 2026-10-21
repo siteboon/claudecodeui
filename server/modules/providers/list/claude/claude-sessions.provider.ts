@@ -1807,7 +1807,16 @@ export class ClaudeSessionsProvider implements IProviderSessions {
 
     const normalized: NormalizedMessage[] = [];
     for (const raw of rawMessages) {
-      normalized.push(...this.normalizeMessage(raw, sessionId));
+      const rowMessages = this.normalizeMessage(raw, sessionId);
+      // normalizeMessage stamps a row that has no time of its own with "now",
+      // which for a live event is when it arrived but for a transcript row is
+      // only when it was read.
+      if (!raw.timestamp) {
+        for (const msg of rowMessages) {
+          msg.timestampEstimated = true;
+        }
+      }
+      normalized.push(...rowMessages);
     }
 
     for (const msg of normalized) {
