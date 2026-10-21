@@ -291,14 +291,16 @@ function mapCliOptionsToSDK(options = {}) {
   };
 
   // With these sources the CLI loads the user's MCP servers on its own (user
-  // and local scope from ~/.claude.json, project scope from .mcp.json). Never
+  // and local scope from its global config, ~/.claude.json or
+  // $CLAUDE_CONFIG_DIR/.claude.json; project scope from .mcp.json). Never
   // pass them as `sdkOptions.mcpServers`: the SDK serializes that into a
   // `--mcp-config <json>` argument, exposing every server's env and header
   // secrets to any local user through `ps` or /proc/<pid>/cmdline.
-  // It would also slow every turn down: the CLI holds the first API request
-  // until each `--mcp-config` server has connected (up to MCP_TIMEOUT, 30 s by
-  // default), and every turn spawns a new CLI. Servers it loads itself connect
-  // in the background and join the turn when ready, as in a terminal.
+  // It would also slow every turn down: Claude CLI 2.1.303 holds the first
+  // API request until each `--mcp-config` server has connected (up to
+  // MCP_TIMEOUT, 30 s by default; the SDK-bundled 2.1.165 does not wait), and
+  // every turn spawns a new CLI. Servers it loads itself get a wait of about
+  // 2 s, then join later requests of the turn once connected.
   sdkOptions.settingSources = ['project', 'user', 'local'];
 
   // The SDK resumes with the provider-native session id, never the app id.
