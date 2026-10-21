@@ -166,6 +166,22 @@ function getMcpApiUrl(): string {
   return `http://127.0.0.1:${port}/api/browser-use-mcp`;
 }
 
+/** The Browser MCP entry every provider gets: the stdio bridge back to this server. */
+function getAgentMcpServerInput() {
+  const { command, args } = getMcpCommand();
+  return {
+    name: MCP_SERVER_NAME,
+    scope: 'user' as const,
+    transport: 'stdio' as const,
+    command,
+    args,
+    env: {
+      CLOUDCLI_BROWSER_USE_MCP_TOKEN: getOrCreateMcpToken(),
+      CLOUDCLI_BROWSER_USE_API_URL: getMcpApiUrl(),
+    },
+  };
+}
+
 async function removeMcpServerFromAllProviders(name: string) {
   const results = await providerMcpService.removeMcpServerFromAllProviders({
     name,
@@ -456,20 +472,34 @@ export const browserUseService = {
   },
 
   async registerAgentMcp() {
-    const { command, args } = getMcpCommand();
+    const serverInput = getAgentMcpServerInput();
     await Promise.all(LEGACY_MCP_SERVER_NAMES.map((name) => removeMcpServerFromAllProviders(name)));
-    const results = await providerMcpService.addMcpServerToAllProviders({
-      name: MCP_SERVER_NAME,
-      scope: 'user',
-      transport: 'stdio',
-      command,
-      args,
-      env: {
-        CLOUDCLI_BROWSER_USE_MCP_TOKEN: getOrCreateMcpToken(),
-        CLOUDCLI_BROWSER_USE_API_URL: getMcpApiUrl(),
-      },
-    });
-    return { name: MCP_SERVER_NAME, command, args, results };
+    const results = await providerMcpService.addMcpServerToAllProviders(serverInput);
+    return { name: MCP_SERVER_NAME, command: serverInput.command, args: serverInput.args, results };
+  },
+
+  /**
+   * Called once by the server entrypoint at startup. Registration otherwise
+   * only happens when the setting is toggled, but the Claude config file it
+   * writes follows CLAUDE_CONFIG_DIR (#1576): an entry saved to ~/.claude.json
+   * before that, or by a server started without the variable, is never read by
+   * a CLI that uses another config folder, while the setting still says enabled.
+   * So when Browser is enabled and the Claude config the CLI reads lacks the
+   * entry, it is written there again. Other providers are left as they are:
+   * their config location did not change.
+   */
+  async restoreClaudeAgentMcpRegistration(): Promise<{ restored: boolean }> {
+    if (!readSettings().enabled) {
+      return { restored: false };
+    }
+
+    const claudeUserServers = await providerMcpService.listProviderMcpServersForScope('claude', 'user');
+    if (claudeUserServers.some((server) => server.name === MCP_SERVER_NAME)) {
+      return { restored: false };
+    }
+
+    await providerMcpService.upsertProviderMcpServer('claude', getAgentMcpServerInput());
+    return { restored: true };
   },
 
   getMcpToken() {

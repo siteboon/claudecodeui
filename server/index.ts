@@ -377,6 +377,11 @@ async function startServer() {
             startEnabledPluginServers().catch(err => {
                 console.error('[Plugins] Error during startup:', err.message);
             });
+
+            // An enabled Browser MCP must be in the Claude config the CLI reads.
+            browserUseService.restoreClaudeAgentMcpRegistration().catch((err) => {
+                console.error('[Browser] Error restoring the Claude MCP registration:', getErrorMessage(err));
+            });
         });
 
         await closeSessionsWatcher();
