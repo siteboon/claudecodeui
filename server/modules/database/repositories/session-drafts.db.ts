@@ -1,5 +1,6 @@
 import { getConnection } from '@/modules/database/connection.js';
 import type { QueuedChatMessage } from '@/shared/types.js';
+import { readQueuedChatMessage } from '@/shared/utils.js';
 
 /**
  * One chat scope's unsent state: the text still in the composer, plus the
@@ -45,30 +46,6 @@ function parseQueuedMessage(raw: string | null): unknown | null {
   } catch {
     return null;
   }
-}
-
-/**
- * Reads a stored queued message, or null when it has nothing to send. Older
- * rows may hold `images` instead of `attachments`.
- */
-function readQueuedChatMessage(value: unknown): QueuedChatMessage | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return null;
-  }
-  const record = value as Record<string, unknown>;
-  const content = typeof record.content === 'string' ? record.content : '';
-  const attachments = Array.isArray(record.attachments)
-    ? record.attachments
-    : Array.isArray(record.images)
-      ? record.images
-      : [];
-  if (!content.trim() && attachments.length === 0) {
-    return null;
-  }
-  const options = record.options && typeof record.options === 'object' && !Array.isArray(record.options)
-    ? record.options as Record<string, unknown>
-    : undefined;
-  return { content, ...(options ? { options } : {}), attachments };
 }
 
 /**
