@@ -30,6 +30,8 @@ const TSX_LOADER = import.meta.resolve('tsx');
 // A turn that has not finished by then is stuck; it is aborted so the suite
 // fails instead of hanging.
 const TURN_DEADLINE_MS = 20_000;
+// The abort of a stuck turn waits for its server's stop, which gets this long.
+const STOP_DEADLINE_MS = 10_000;
 // Execs its arguments as a child subreaper (prctl PR_SET_CHILD_SUBREAPER):
 // orphaned descendants are reparented to that process, and a Node process
 // never reaps children it did not spawn, like a container's PID 1 without an
@@ -132,6 +134,8 @@ after(async () => {
 
 type CaptureEntry = {
   pid: number;
+  /** spawn: the wrapper script's pid when the fake runs behind one. */
+  ppid?: number;
   kind: 'spawn' | 'request' | 'exit' | 'crash' | 'sigterm-ignored';
   argv?: string[];
   permissionEnv?: string | null;
@@ -249,8 +253,16 @@ async function runTurn(input: {
     });
     const sideTask = input.whileRunning?.(capturePath);
     if (await Promise.race([turn, stuck]) === 'stuck') {
-      await opencodeRuntime.abort(input.appSessionId);
-      await turn.catch(() => undefined);
+      // The abort waits for the server's stop: a stop that never ends must
+      // fail the test too, not hang it.
+      let stopDeadline: NodeJS.Timeout | undefined;
+      await Promise.race([
+        opencodeRuntime.abort(input.appSessionId).then(() => turn).catch(() => undefined),
+        new Promise((resolve) => {
+          stopDeadline = setTimeout(resolve, STOP_DEADLINE_MS);
+        }),
+      ]);
+      clearTimeout(stopDeadline);
       throw new Error(`the turn did not finish within ${TURN_DEADLINE_MS / 1000} s`);
     }
     await sideTask;
@@ -943,6 +955,39 @@ test('a wrapped binary that outlives its wrapper script on SIGTERM is killed', {
     assert.ok(await waitUntil(() => !isProcessAlive(spawn?.pid as number), 1_000), 'the wrapped binary outlived its stop');
     // SIGTERM first; SIGKILL only once the grace ran out.
     assert.ok(turn.capture.some((entry) => entry.kind === 'sigterm-ignored'), 'the binary was never asked to stop');
+  } finally {
+    process.env[pathKey] = previousPath;
+  }
+});
+
+test('the binary behind a wrapper script that died mid-turn is stopped with the turn', {
+  skip: process.platform === 'win32' && 'Windows stops the whole tree with taskkill /T /F',
+}, async () => {
+  // The script leading the server's process group dies while the binary
+  // behind it keeps running: the leader's exit must not end the stop early.
+  const pathKey = findEnvKey('PATH');
+  const previousPath = process.env[pathKey];
+  process.env[pathKey] = `${wrapperBinDir}${path.delimiter}${previousPath ?? ''}`;
+  try {
+    let asked = false;
+    const turn = await runTurn({
+      appSessionId: 'app-wrapper-died',
+      scenario: { newSessionId: 'ses_wrapper_died', steps: bashCallSteps('per_wrapper_died', 'printf x') },
+      onMessage(message) {
+        asked ||= message.kind === 'permission_request';
+      },
+      async whileRunning(capturePath) {
+        if (await waitUntil(() => asked, 10_000)) {
+          const binary = (await readCapture(capturePath)).find((entry) => entry.kind === 'spawn');
+          process.kill(binary?.ppid as number, 'SIGKILL');
+        }
+      },
+    });
+
+    assert.match(String(turn.error?.message), /OpenCode server exited unexpectedly/);
+    const binary = turn.capture.find((entry) => entry.kind === 'spawn');
+    assert.ok(await waitUntil(() => !isProcessAlive(binary?.pid as number), 5_000), 'the binary outlived its wrapper script and the turn');
+    assert.ok(turn.capture.some((entry) => entry.kind === 'exit' && entry.signal === 'SIGTERM'));
   } finally {
     process.env[pathKey] = previousPath;
   }

@@ -87,6 +87,8 @@ function capture(entry: Record<string, unknown>): void {
 
 capture({
   kind: 'spawn',
+  // The wrapper script's pid when the `opencode` shim runs the fake as its child.
+  ppid: process.ppid,
   argv,
   permissionEnv: process.env.OPENCODE_PERMISSION ?? null,
   hasPassword: Boolean(process.env.OPENCODE_SERVER_PASSWORD),
