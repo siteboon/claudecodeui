@@ -243,6 +243,18 @@ describe('transcript reading position without native scroll anchoring', () => {
     expect(layout.scrollWrites).toEqual([]);
   });
 
+  it('still scrolls for a change of a pixel or two', () => {
+    installObservers({ nativeScrollAnchoring: false });
+    const layout = renderTranscript({ heights: TALL_LAST_ROW });
+
+    // Small, but on screen: the row being read would move by as much.
+    layout.resize({ 'row-a': 102 });
+    fireResize([layout.row('row-a')]);
+
+    expect(layout.offsetOf('row-c')).toBe(0);
+    expect(layout.scrollWrites).toEqual([202]);
+  });
+
   it('measures from the committed height even when the first resize report is already the new one', () => {
     installObservers({ nativeScrollAnchoring: false });
     const layout = renderTranscript();

@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { RefObject } from 'react';
 
-import { setScrollTopProgrammatically } from '@/shared/utils';
-
 /** How far beyond the viewport a transcript row keeps (or gains) its mounted content. */
 const LAZY_ROW_VIEWPORT_MARGIN_PX = 1200;
 
@@ -112,9 +110,7 @@ export function useLazyRowObserver(
     // in view where it was; scrolling by the shrink as well would pull the
     // reader off the bottom.
     if (shift < 0 && container.scrollTop >= container.scrollHeight - container.clientHeight - 1) return;
-    // Through the shared setter, so the scroll event this fires is not taken
-    // for the reader scrolling away from the bottom.
-    setScrollTopProgrammatically(container, container.scrollTop + shift);
+    container.scrollTop += shift;
   }, [scrollContainerRef]);
 
   const observe = useCallback<LazyRowObserver['observe']>((element, onNearViewportChange) => {

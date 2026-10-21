@@ -47,13 +47,15 @@ const buildMessage = (index: number, timestamp: string): NormalizedMessage => ({
  * with scrollTop kept within the scrollable range as a browser keeps it, and
  * no geometry at all while hidden (a display:none Chat tab).
  */
-function createContainer(scrollHeight: number, clientHeight: number) {
+function createContainer(scrollHeight: number, initialClientHeight: number) {
   const element = document.createElement('div');
   const writes: number[] = [];
   let contentHeight = scrollHeight;
+  let clientHeight = initialClientHeight;
   let hidden = false;
   const maxScrollTop = () => Math.max(contentHeight - clientHeight, 0);
   let scrollTop = maxScrollTop();
+  const clamp = (next: number) => Math.min(Math.max(next, 0), maxScrollTop());
 
   Object.defineProperty(element, 'scrollHeight', { get: () => (hidden ? 0 : contentHeight) });
   Object.defineProperty(element, 'clientHeight', { get: () => (hidden ? 0 : clientHeight) });
@@ -61,7 +63,7 @@ function createContainer(scrollHeight: number, clientHeight: number) {
     get: () => (hidden ? 0 : scrollTop),
     set: (next: number) => {
       writes.push(next);
-      if (!hidden) scrollTop = Math.min(Math.max(next, 0), maxScrollTop());
+      if (!hidden) scrollTop = clamp(next);
     },
   });
 
@@ -73,6 +75,13 @@ function createContainer(scrollHeight: number, clientHeight: number) {
     /** Content committed below what is on screen: nothing scrolls, so no scroll event fires. */
     grow: (px: number) => { contentHeight += px; },
     setHidden: (next: boolean) => { hidden = next; },
+    /** The pane's own height changes (a rotated phone, a taller composer); scrollTop stays in range. */
+    setClientHeight: (px: number) => {
+      clientHeight = px;
+      scrollTop = clamp(scrollTop);
+    },
+    /** Layout itself moves scrollTop, as scroll anchoring does: not a write by the app. */
+    layoutScrollTo: (top: number) => { scrollTop = clamp(top); },
   };
 }
 
@@ -301,7 +310,11 @@ describe('following new messages at the bottom', () => {
 
     const container = createContainer(5000, 500);
     (result.current.scrollContainerRef as { current: HTMLDivElement | null }).current = container.element;
-    // The reader had scrolled up while a reply streams in.
+    // The transcript opened at its bottom, and the reader had scrolled up
+    // while a reply streams in.
+    act(() => {
+      void result.current.handleScroll();
+    });
     container.element.scrollTop = 3000;
     act(() => {
       void result.current.handleScroll();
@@ -399,6 +412,247 @@ describe('following new messages at the bottom', () => {
       vi.advanceTimersByTime(60);
     });
     expect(container.writes).toContain(container.scrollHeight);
+  });
+});
+
+describe('telling the reader\'s scrolls from the transcript\'s own', () => {
+  /** A session at its bottom, scrolled there by the transcript itself when a message landed. */
+  async function renderScrolledToBottomByTheApp() {
+    const messages = new Map<string, NormalizedMessage[]>([
+      [SESSION_A, [buildMessage(0, '2026-01-01T00:00:00.000Z')]],
+    ]);
+    const store = createStore(messages);
+    const hook = await renderChatSessionState({ session: { id: SESSION_A } as ProjectSession, store });
+    const container = createContainer(5000, 500);
+    (hook.result.current.scrollContainerRef as { current: HTMLDivElement | null }).current = container.element;
+
+    messages.set(SESSION_A, [...messages.get(SESSION_A)!, buildMessage(1, '2026-01-01T00:00:01.000Z')]);
+    act(() => {
+      hook.rerender({ session: { id: SESSION_A } as ProjectSession });
+    });
+    act(() => {
+      vi.advanceTimersByTime(60);
+    });
+    expect(container.distanceFromBottom).toBe(0);
+    return {
+      ...hook,
+      container,
+      scrollEvent: () => act(() => {
+        void hook.result.current.handleScroll();
+      }),
+      nextMessage: () => {
+        messages.set(SESSION_A, [...messages.get(SESSION_A)!, buildMessage(2, '2026-01-01T00:00:02.000Z')]);
+        act(() => {
+          hook.rerender({ session: { id: SESSION_A } as ProjectSession });
+        });
+        act(() => {
+          vi.advanceTimersByTime(200);
+        });
+      },
+    };
+  }
+
+  it('stops following once the reader scrolls up from where the transcript scrolled itself', async () => {
+    const { result, container, scrollEvent, nextMessage } = await renderScrolledToBottomByTheApp();
+
+    // Three wheel notches up.
+    container.element.scrollTop -= 300;
+    scrollEvent();
+    expect(result.current.isUserScrolledUp).toBe(true);
+
+    container.writes.length = 0;
+    nextMessage();
+    expect(container.writes).toEqual([]);
+  });
+
+  it('leaves a reader who scrolls back down to where the transcript last scrolled itself scrolled up', async () => {
+    const { result, container, scrollEvent, nextMessage } = await renderScrolledToBottomByTheApp();
+
+    // The reader wheels up three notches while a reply grows 800px below, no
+    // scroll event, then wheels back down three: exactly where the transcript
+    // last scrolled itself to the bottom, which is now 800px above it.
+    container.element.scrollTop -= 300;
+    scrollEvent();
+    container.grow(800);
+    container.element.scrollTop += 300;
+    scrollEvent();
+    expect(container.distanceFromBottom).toBe(800);
+    expect(result.current.isUserScrolledUp).toBe(true);
+
+    // So the next message leaves them where they are.
+    container.writes.length = 0;
+    nextMessage();
+    expect(container.writes).toEqual([]);
+  });
+});
+
+/**
+ * A session whose first message lands while the pane is on screen, so the
+ * transcript scrolls itself to the bottom and follows new messages from then
+ * on. ResizeObserver reports, which the browser delivers right after a
+ * layout, are delivered by hand.
+ */
+async function renderFollowingTranscript() {
+  vi.stubGlobal('ResizeObserver', StubResizeObserver);
+  const messages = new Map<string, NormalizedMessage[]>([[SESSION_A, []]]);
+  const store = createStore(messages);
+  const hook = await renderChatSessionState({ session: { id: SESSION_A } as ProjectSession, store });
+  const container = createContainer(5000, 500);
+  (hook.result.current.scrollContainerRef as { current: HTMLDivElement | null }).current = container.element;
+
+  let messageCount = 0;
+  const addMessage = () => {
+    const message = buildMessage(messageCount, new Date(Date.UTC(2026, 0, 1, 0, 0, messageCount)).toISOString());
+    messageCount += 1;
+    messages.set(SESSION_A, [...messages.get(SESSION_A)!, message]);
+    act(() => {
+      hook.rerender({ session: { id: SESSION_A } as ProjectSession });
+    });
+  };
+  const scrollEvent = () => act(() => {
+    void hook.result.current.handleScroll();
+  });
+
+  addMessage();
+  act(() => {
+    vi.advanceTimersByTime(60);
+  });
+  scrollEvent();
+  expect(container.distanceFromBottom).toBe(0);
+  expect(hook.result.current.isUserScrolledUp).toBe(false);
+
+  return {
+    ...hook,
+    container,
+    addMessage,
+    scrollEvent,
+    /** The browser's report that the pane changed size. */
+    reportPaneResize: () => act(() => {
+      for (const observer of StubResizeObserver.instances) {
+        observer.callback(
+          [{ target: container.element } as unknown as ResizeObserverEntry],
+          observer as unknown as ResizeObserver,
+        );
+      }
+    }),
+  };
+}
+
+describe('following new messages through layout changes', () => {
+  afterEach(() => {
+    StubResizeObserver.instances = [];
+  });
+
+  it('keeps a reader who follows the transcript at the bottom when the pane is resized', async () => {
+    const { result, container, addMessage, scrollEvent } = await renderFollowingTranscript();
+
+    // The phone turns back to portrait: the pane gets taller and scroll
+    // anchoring, holding the rows in view while every row re-wraps, leaves
+    // the bottom 900px below. Its scroll event comes before the resize report.
+    container.setClientHeight(800);
+    container.layoutScrollTo(container.element.scrollTop - 900);
+    scrollEvent();
+    expect(container.distanceFromBottom).toBe(0);
+    expect(result.current.isUserScrolledUp).toBe(false);
+
+    container.writes.length = 0;
+    addMessage();
+    act(() => {
+      vi.advanceTimersByTime(60);
+    });
+    expect(container.writes).toContain(container.scrollHeight);
+  });
+
+  it('keeps following when the resize is reported before its scroll event', async () => {
+    const { result, container, scrollEvent, reportPaneResize } = await renderFollowingTranscript();
+
+    container.setClientHeight(800);
+    container.layoutScrollTo(container.element.scrollTop - 900);
+    reportPaneResize();
+    expect(container.distanceFromBottom).toBe(0);
+
+    scrollEvent();
+    expect(result.current.isUserScrolledUp).toBe(false);
+  });
+
+  it('keeps following when scroll anchoring moves the transcript down after it scrolled itself to the bottom', async () => {
+    const { result, container, addMessage, scrollEvent } = await renderFollowingTranscript();
+
+    // A message lands, and in the same layout a row above the reader grows by
+    // 52px: scroll anchoring moves scrollTop by those 52px, and the message's
+    // own 83px are below. That move's scroll event arrives before the
+    // message's deferred scroll to the bottom fires.
+    addMessage();
+    container.grow(52 + 83);
+    container.layoutScrollTo(container.element.scrollTop + 52);
+    scrollEvent();
+    expect(container.distanceFromBottom).toBe(83);
+    expect(result.current.isUserScrolledUp).toBe(false);
+
+    act(() => {
+      vi.advanceTimersByTime(60);
+    });
+    expect(container.distanceFromBottom).toBe(0);
+  });
+
+  it('leaves a reader who scrolled up where they are when the pane is resized', async () => {
+    const { result, container, scrollEvent, reportPaneResize } = await renderFollowingTranscript();
+    container.element.scrollTop = 3000;
+    scrollEvent();
+    expect(result.current.isUserScrolledUp).toBe(true);
+    container.writes.length = 0;
+
+    container.setClientHeight(800);
+    container.layoutScrollTo(2500);
+    reportPaneResize();
+    scrollEvent();
+
+    expect(container.writes).toEqual([]);
+    expect(result.current.isUserScrolledUp).toBe(true);
+  });
+
+  it('leaves a reader who scrolls up in the frame the pane is resized where they are', async () => {
+    const { result, container } = await renderFollowingTranscript();
+
+    // One frame: the reader's scroll event is dispatched, then the pane's
+    // layout changes and is reported, before React has re-rendered.
+    act(() => {
+      container.element.scrollTop -= 300;
+      container.writes.length = 0;
+      void result.current.handleScroll();
+      container.setClientHeight(400);
+      for (const observer of StubResizeObserver.instances) {
+        observer.callback(
+          [{ target: container.element } as unknown as ResizeObserverEntry],
+          observer as unknown as ResizeObserver,
+        );
+      }
+    });
+
+    expect(container.writes).toEqual([]);
+    expect(result.current.isUserScrolledUp).toBe(true);
+  });
+
+  it('takes the reader\'s next scroll after a resize that fired no scroll event for the reader\'s', async () => {
+    const { result, addMessage, container, scrollEvent, reportPaneResize } = await renderFollowingTranscript();
+
+    // The composer grows by a line: the pane gets 100px shorter and scrollTop
+    // stays, so no scroll event fires; the reader is kept at the bottom.
+    container.setClientHeight(400);
+    reportPaneResize();
+    expect(container.distanceFromBottom).toBe(0);
+
+    // Then the reader scrolls up.
+    container.element.scrollTop -= 300;
+    scrollEvent();
+    expect(result.current.isUserScrolledUp).toBe(true);
+
+    container.writes.length = 0;
+    addMessage();
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(container.writes).toEqual([]);
   });
 });
 
@@ -618,5 +872,28 @@ describe('older-history restore', () => {
     });
 
     assert.equal(rowOffset(), offsetAtRequest);
+  });
+
+  it('leaves a reader in older history scrolled up after the restore\'s own scroll event', async () => {
+    const { result, pane, deliver } = await renderWithOlderHistory();
+
+    // The session opened at its bottom; the reader scrolled up to the top.
+    act(() => {
+      void result.current.handleScroll();
+    });
+    pane.scrollTop = 90;
+    await act(async () => {
+      void result.current.handleScroll();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.isUserScrolledUp).toBe(true);
+
+    await deliver();
+    expect(pane.scrollTop).toBeGreaterThan(1000);
+    // The scroll event of the restore, which put the reader far above the bottom.
+    act(() => {
+      void result.current.handleScroll();
+    });
+    expect(result.current.isUserScrolledUp).toBe(true);
   });
 });

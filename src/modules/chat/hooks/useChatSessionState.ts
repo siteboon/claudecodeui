@@ -9,7 +9,6 @@ import { createMessageHistoryRefreshCoordinator } from '@/modules/chat/utils/mes
 import { createCachedDiffCalculator } from '@/modules/chat/utils/messageTransforms';
 import { normalizedToChatMessages } from '@/modules/chat/hooks/useChatMessages';
 import { findSearchTargetIndex, resolveSearchWindowSize } from '@/modules/chat/utils/searchTargetLocator';
-import { getProgrammaticScrollPosition, setScrollTopProgrammatically } from '@/shared/utils';
 import { readSelectedProvider } from '@/shared/selectedProvider';
 import type { SearchTarget } from '@/modules/chat/utils/searchTargetLocator';
 
@@ -260,6 +259,8 @@ export function useChatSessionState({
   const pendingInitialScrollRef = useRef(true);
   const messagesOffsetRef = useRef(0);
   const scrollPositionRef = useRef({ height: 0, top: 0 });
+  /** The pane's size when handleScroll or its resize observer last looked. */
+  const paneSizeRef = useRef<{ width: number; height: number } | null>(null);
   const loadAllFinishedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadAllOverlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastLoadedSessionKeyRef = useRef<string | null>(null);
@@ -468,11 +469,16 @@ export function useChatSessionState({
   const scrollToBottom = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
-    setScrollTopProgrammatically(container, container.scrollHeight);
+    container.scrollTop = container.scrollHeight;
   }, []);
 
   const scrollToBottomAndReset = useCallback(() => {
     scrollToBottom();
+    // The reader asked to follow the transcript again. Its scroll event may
+    // find the bottom further down already (more of a reply committed), and
+    // that is not them scrolling away.
+    isUserScrolledUpRef.current = false;
+    setIsUserScrolledUp(false);
     if (allMessagesLoaded) {
       setVisibleMessageCount(INITIAL_VISIBLE_MESSAGES);
       setAllMessagesLoaded(false);
@@ -480,15 +486,30 @@ export function useChatSessionState({
     }
   }, [allMessagesLoaded, scrollToBottom]);
 
+  /** Whether the pane changed size since handleScroll or the resize observer last looked. */
+  const takePaneResize = useCallback((container: HTMLDivElement) => {
+    const { clientWidth: width, clientHeight: height } = container;
+    const previous = paneSizeRef.current;
+    paneSizeRef.current = { width, height };
+    return previous !== null && (previous.width !== width || previous.height !== height);
+  }, []);
+
+  /**
+   * Back to the bottom after the pane was resized, for a reader who follows
+   * the transcript. A resize re-wraps every row, and scroll anchoring (which
+   * holds the rows in view, not the bottom) or a clamp moves scrollTop with
+   * them: the reader did not scroll.
+   */
+  const keepFollowingThroughResize = useCallback((container: HTMLDivElement) => {
+    if (isUserScrolledUpRef.current || pendingScrollRestoreRef.current || searchScrollActiveRef.current) return;
+    container.scrollTop = container.scrollHeight;
+  }, []);
+
   const isNearBottom = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return false;
     const { scrollTop, scrollHeight, clientHeight } = container;
-    // Also where the app last scrolled it to the bottom and the reader has not
-    // moved it since: whatever was committed in between (more of a streamed
-    // reply, before that scroll's own event) moved the bottom, not the reader.
-    return scrollHeight - scrollTop - clientHeight < 50
-      || getProgrammaticScrollPosition(container)?.atEnd === true;
+    return scrollHeight - scrollTop - clientHeight < 50;
   }, []);
 
   const loadOlderMessages = useCallback(
@@ -551,16 +572,27 @@ export function useChatSessionState({
     [hasMoreMessages, isActive, isLoadingMoreMessages, selectedProject, selectedSession, sessionStore],
   );
 
+  // The pane's scroll listener, and also its wheel and touchmove handler
+  // (ChatInterface): those run before the scroll they start has moved
+  // anything, so they find the transcript where it was.
   const handleScroll = useCallback(async () => {
     if (!isActive) return;
     const container = scrollContainerRef.current;
     if (!container) return;
 
+    if (takePaneResize(container)) keepFollowingThroughResize(container);
     const nearBottom = isNearBottom();
-    // Only the reader scrolls away from the bottom. A scroll event at the spot
-    // the app itself scrolled to above it (a history restore, holding the
-    // reading position) leaves following the transcript as it was.
-    if (nearBottom || !getProgrammaticScrollPosition(container)) {
+    // Following stops only when the transcript moved up since it was last
+    // seen (the previous call, or the last render). The app's own scrolls (to
+    // the bottom, a history restore, holding the reading position) and scroll
+    // anchoring move it down or nowhere: such a call can find the bottom
+    // further down (more of a reply committed meanwhile) without the reader
+    // having scrolled away.
+    const movedUp = container.scrollTop < scrollPositionRef.current.top;
+    if (nearBottom || movedUp) {
+      // The ref too, right away: the resize observer can run before React
+      // re-renders, and must not pull a reader who just scrolled up back down.
+      isUserScrolledUpRef.current = !nearBottom;
       setIsUserScrolledUp(!nearBottom);
     }
     scrollPositionRef.current = {
@@ -595,7 +627,7 @@ export function useChatSessionState({
       const didLoad = await loadOlderMessages(container);
       if (didLoad) topLoadLockRef.current = true;
     }
-  }, [hasMoreMessages, isActive, isNearBottom, loadOlderMessages]);
+  }, [hasMoreMessages, isActive, isNearBottom, keepFollowingThroughResize, loadOlderMessages, takePaneResize]);
 
   const wasChatActiveRef = useRef(isActive);
   useLayoutEffect(() => {
@@ -611,19 +643,18 @@ export function useChatSessionState({
           anchor.getBoundingClientRect().top
           - container.getBoundingClientRect().top
         );
-        setScrollTopProgrammatically(container, container.scrollTop + nextAnchorOffset - anchorOffset);
+        container.scrollTop += nextAnchorOffset - anchorOffset;
       } else {
-        setScrollTopProgrammatically(container, top + Math.max(container.scrollHeight - height, 0));
+        container.scrollTop = top + Math.max(container.scrollHeight - height, 0);
       }
       pendingScrollRestoreRef.current = null;
       return;
     }
 
     if (becameActive) {
-      setScrollTopProgrammatically(
-        container,
-        isUserScrolledUp ? scrollPositionRef.current.top : container.scrollHeight,
-      );
+      container.scrollTop = isUserScrolledUp
+        ? scrollPositionRef.current.top
+        : container.scrollHeight;
     }
   }, [chatMessages.length, isActive, isUserScrolledUp]);
 
@@ -678,7 +709,7 @@ export function useChatSessionState({
 
     const tick = () => {
       if (!pendingInitialScrollRef.current || !scrollContainerRef.current) return;
-      setScrollTopProgrammatically(container, container.scrollHeight);
+      container.scrollTop = container.scrollHeight;
       if (container.scrollHeight === lastHeight) {
         stableCount++;
       } else {
@@ -1047,8 +1078,24 @@ export function useChatSessionState({
     const container = scrollContainerRef.current;
     if (!container) return;
     container.addEventListener('scroll', handleScroll);
-    return () => container.removeEventListener('scroll', handleScroll);
-  }, [handleScroll]);
+
+    // A resized pane (a rotated phone, a widened window, a taller composer)
+    // does not always fire a scroll event, and when it does, that event can
+    // come before or after this report. Whichever sees the new size first
+    // keeps a following reader at the bottom, and the reader's next scroll is
+    // not mistaken for the resize.
+    const resizeObserver = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(() => {
+        if (takePaneResize(container)) keepFollowingThroughResize(container);
+      });
+    resizeObserver?.observe(container);
+
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+      resizeObserver?.disconnect();
+    };
+  }, [handleScroll, keepFollowingThroughResize, takePaneResize]);
 
   // "Load all" overlay visibility is driven by scroll-to-top in handleScroll;
   // timers are cleared on session change via the reset effect above.
