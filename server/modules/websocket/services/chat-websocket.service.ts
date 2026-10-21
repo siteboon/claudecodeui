@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 
 import type { WebSocket } from 'ws';
@@ -18,8 +19,9 @@ import type {
   LLMProvider,
   ProviderPermissionDecision,
   ProviderRuntimeWriter,
+  RealtimeClientConnection,
 } from '@/shared/types.js';
-import { parseIncomingJsonObject } from '@/shared/utils.js';
+import { createNormalizedMessage, parseIncomingJsonObject } from '@/shared/utils.js';
 
 /**
  * Trust boundary for client-supplied image attachments: chat.send options come
@@ -78,6 +80,20 @@ export type ProviderRuntimeGateway = {
   hasBackgroundWork(sessionId: string): boolean;
   resolveToolApproval(requestId: string, payload: ProviderPermissionDecision): void;
   getPendingApprovalsForSession(sessionId: string): unknown[];
+  /** Whether the provider's runtime can deliver a message into an already-running turn. */
+  canSteer(provider: string): boolean;
+  /**
+   * Pushes a message into a running turn's stdin so the CLI folds it in at its
+   * next tool boundary, instead of queuing it for a turn of its own. Resolves
+   * `null` when the provider cannot steer, or when the live process wound down
+   * between the `canSteer` check and this call.
+   */
+  steer(
+    provider: LLMProvider,
+    sessionId: string,
+    command: string,
+    options: AnyRecord,
+  ): Promise<{ uuid: string } | null>;
 };
 
 type ChatWebSocketDependencies = {
@@ -115,23 +131,40 @@ function sendJson(ws: WebSocket, payload: unknown): void {
 }
 
 /**
+ * The inbound frame type a protocol error is responding to. Carried on
+ * `RUN_IN_PROGRESS`/`STEER_UNSUPPORTED` protocol errors so the client can
+ * tell a `chat.steer` rejection (silently re-queue the pending steer text)
+ * apart from an ordinary `chat.send`/`chat.edit-send` rejection that happens
+ * to share the same code (a real failure — must surface as an error row).
+ * Used only within this file today; move to `server/shared/types.ts` if a
+ * second module needs it.
+ */
+type ChatRequestType = 'chat.send' | 'chat.steer' | 'chat.edit-send';
+
+/**
  * Reports a protocol-level failure to the requesting client.
  *
  * Protocol errors deliberately use their own `kind` (instead of the provider
  * `error` message kind) so the frontend can distinguish "your request was
  * invalid" from "the model run produced an error" without inspecting text.
+ *
+ * `requestType`, when given, is the inbound frame type that triggered this
+ * error — see `ChatRequestType`. Omitted entirely from the payload when not
+ * given, so unrelated protocol errors keep their existing shape.
  */
 function sendProtocolError(
   ws: WebSocket,
   code: string,
   error: string,
-  sessionId?: string
+  sessionId?: string,
+  requestType?: ChatRequestType
 ): void {
   sendJson(ws, {
     kind: 'protocol_error',
     code,
     error,
     sessionId: sessionId ?? null,
+    ...(requestType ? { requestType } : {}),
     timestamp: new Date().toISOString(),
   });
 }
@@ -142,9 +175,71 @@ function readRequiredSessionId(data: AnyRecord): string | null {
 }
 
 /**
+ * Validates client-supplied attachments against the upload store, dedupes
+ * them, and splits the result into images and non-image files.
+ *
+ * Shared by `dispatchRun` (chat.send / chat.edit-send) and `handleChatSteer`,
+ * which accept the same `options.images` / `options.files` / `options.attachments`
+ * shape and must apply the same trust boundary (see `filterAttachmentsToUploadStore`).
+ */
+function resolveVerifiedAttachments(clientOptions: AnyRecord): {
+  attachments: ChatAttachmentDescriptor[];
+  images: ChatAttachmentDescriptor[];
+  files: ChatAttachmentDescriptor[];
+} {
+  const attachmentCandidates = [
+    ...normalizeAttachmentDescriptors(clientOptions.images),
+    ...normalizeAttachmentDescriptors(clientOptions.files),
+    ...normalizeAttachmentDescriptors(clientOptions.attachments),
+  ];
+  const verifiedAttachments = filterAttachmentsToUploadStore(attachmentCandidates);
+  const attachments = verifiedAttachments.filter(
+    (descriptor, index, all) => all.findIndex((candidate) => candidate.path === descriptor.path) === index,
+  );
+
+  return {
+    attachments,
+    images: attachments.filter(isImageAttachmentDescriptor),
+    files: attachments.filter((descriptor) => !isImageAttachmentDescriptor(descriptor)),
+  };
+}
+
+/**
+ * Aborts a session's running run and emits its terminal `complete` on its
+ * behalf, so a caller can immediately start a new run in its place.
+ *
+ * Shared by `runDetachedChatTurn` (a scheduled message outranks whatever is
+ * running) and `chat.send` with `options.interrupt` (the user replaces their
+ * own in-flight turn instead of queuing behind it).
+ *
+ * `options.replaced` marks the emitted `complete { aborted: true }` as one
+ * where a replacement run is about to start right after, so a client that
+ * reads it should keep the session's processing state instead of treating it
+ * as the session going idle. Only the `chat.send` interrupt route passes it —
+ * see its call site for why `runDetachedChatTurn`'s does not.
+ */
+async function abortRunningRun(
+  dependencies: ChatWebSocketDependencies,
+  provider: LLMProvider,
+  sessionId: string,
+  options?: { replaced?: boolean },
+): Promise<void> {
+  const aborted = await dependencies.runtime.abort(provider, sessionId);
+  chatRunRegistry.completeRun(sessionId, {
+    exitCode: aborted ? 0 : 1,
+    aborted: true,
+    replaced: options?.replaced,
+  });
+}
+
+/**
  * Handles `chat.send`: resolves the session row (provider, project path, and
  * provider-native id all come from the database — never from the client),
  * registers the run, and dispatches to the provider runtime.
+ *
+ * `options.interrupt === true` while a run is already processing aborts that
+ * run first instead of refusing with `RUN_IN_PROGRESS` — the user is
+ * deliberately replacing their own in-flight turn.
  */
 async function handleChatSend(
   ws: WebSocket,
@@ -157,7 +252,201 @@ async function handleChatSend(
     return;
   }
 
-  await dispatchRun(ws, userId, resolved.sessionId, resolved.session, data, dependencies);
+  const clientOptions = (data.options ?? {}) as AnyRecord;
+  // Every socket watching the run being replaced, captured before it's
+  // aborted. `dispatchRun` below only attaches the sender to the replacement
+  // run's writer, so without carrying these over, a second tab on the same
+  // session would see the old run's `complete { replaced: true }` (which it
+  // deliberately ignores, expecting a follow-up run) and then never hear from
+  // the replacement run again — stuck "processing" forever.
+  let carryOverConnections: RealtimeClientConnection[] = [];
+  if (clientOptions.interrupt === true && chatRunRegistry.isProcessing(resolved.sessionId)) {
+    const activeRun = chatRunRegistry.getRun(resolved.sessionId);
+    if (activeRun) {
+      carryOverConnections = activeRun.writer.listConnections();
+      await abortRunningRun(dependencies, activeRun.provider, resolved.sessionId, { replaced: true });
+    }
+  }
+
+  await dispatchRun(ws, userId, resolved.sessionId, resolved.session, data, dependencies, {}, (run) => {
+    for (const connection of carryOverConnections) {
+      // The sender is already attached by `dispatchRun`/`startRun`; skip it
+      // so it isn't double-registered, and skip anything that dropped while
+      // the abort was in flight.
+      if (connection === ws || connection.readyState !== WS_OPEN_STATE) {
+        continue;
+      }
+      run.writer.updateWebSocket(connection);
+    }
+  });
+}
+
+/**
+ * Handles `chat.steer`: while a turn is running, pushes the message into that
+ * turn's stdin so the CLI folds it in at its next tool boundary (the CLI's own
+ * "queued message" behaviour) instead of refusing with `RUN_IN_PROGRESS`.
+ *
+ * A session with nothing running has no turn to fold into, so it behaves
+ * exactly like `chat.send`.
+ */
+/**
+ * Delivers a `chat.steer` request when there is no running turn to fold
+ * into: dispatches a normal run, but still acks the sender (`chat.steer`
+ * expects `chat_steered`, not silence) and echoes the message itself — the
+ * composer already cleared its optimistic input on send, relying on the
+ * same run-stream echo `chat.steer`'s folding path uses.
+ *
+ * Used both when `chatRunRegistry.isProcessing` is already false up front,
+ * and when `runtime.steer` resolves to `null` because the run finished
+ * *during* the steer call (e.g. while awaiting attachment reads) — by the
+ * time we find out, the registry agrees nothing is running, so the same
+ * fallback applies instead of a client-facing `STEER_UNSUPPORTED`.
+ */
+function dispatchSteerFallback(
+  ws: WebSocket,
+  userId: string | number | null,
+  sessionId: string,
+  session: NonNullable<ReturnType<typeof sessionsDb.getSessionById>>,
+  provider: LLMProvider,
+  data: AnyRecord,
+  dependencies: ChatWebSocketDependencies,
+): void {
+  const clientOptions = (data.options ?? {}) as AnyRecord;
+  const content = typeof data.content === 'string' ? data.content : '';
+  const { images, files } = resolveVerifiedAttachments(clientOptions);
+
+  // Not awaited: `runtime.run` only resolves once the whole turn ends, and
+  // the sender's `chat_steered` ack (below) must not wait that long. The
+  // registry's `startRun` call inside `dispatchRun` runs synchronously
+  // before its first `await`, so the run is already registered by the time
+  // execution reaches the `sendJson` call beneath it.
+  void dispatchRun(ws, userId, sessionId, session, data, dependencies, {}, (run) => {
+    run.writer.send(createNormalizedMessage({
+      kind: 'text',
+      role: 'user',
+      content,
+      id: `local_steer_${randomUUID()}`,
+      images,
+      files,
+      sessionId,
+      provider,
+      steered: false,
+    }));
+  }, 'chat.steer');
+
+  sendJson(ws, {
+    kind: 'chat_steered',
+    sessionId,
+    uuid: null,
+    fallback: true,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+async function handleChatSteer(
+  ws: WebSocket,
+  userId: string | number | null,
+  data: AnyRecord,
+  dependencies: ChatWebSocketDependencies
+): Promise<void> {
+  const resolved = resolveSendTarget(ws, data, dependencies, 'chat.steer');
+  if (!resolved) {
+    return;
+  }
+  const { sessionId, session, provider } = resolved;
+
+  if (!chatRunRegistry.isProcessing(sessionId)) {
+    dispatchSteerFallback(ws, userId, sessionId, session, provider, data, dependencies);
+    return;
+  }
+
+  if (!dependencies.runtime.canSteer(provider)) {
+    sendProtocolError(
+      ws,
+      'STEER_UNSUPPORTED',
+      `Provider "${provider}" cannot deliver a message into a running turn.`,
+      sessionId,
+      'chat.steer',
+    );
+    return;
+  }
+
+  const clientOptions = (data.options ?? {}) as AnyRecord;
+  const content = typeof data.content === 'string' ? data.content : '';
+  const { attachments, images, files } = resolveVerifiedAttachments(clientOptions);
+
+  const steerOptions: AnyRecord = {
+    ...clientOptions,
+    attachments,
+    images,
+    files,
+    cwd: clientOptions.cwd ?? session.project_path ?? undefined,
+  };
+
+  let result: { uuid: string } | null;
+  try {
+    result = await dependencies.runtime.steer(provider, sessionId, content, steerOptions);
+  } catch (error) {
+    // The runtime can throw before ever reaching the CLI/SDK — e.g.
+    // `buildPromptMessages` failing on an unreadable image attachment.
+    // Left unguarded, this escaped to `handleChatConnection`'s catch as an
+    // untagged INTERNAL_ERROR with no sessionId, which idles the whole
+    // session client-side even though only this steer failed, and loses the
+    // steered text (the composer already cleared it optimistically on send).
+    // Reporting it as STEER_UNSUPPORTED instead matches the "runtime can't
+    // accept this steer" path below, so the client re-queues it.
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[Chat] Provider runtime "${provider}" steer failed`, { sessionId, error: message });
+    sendProtocolError(ws, 'STEER_UNSUPPORTED', message, sessionId, 'chat.steer');
+    return;
+  }
+  if (!result) {
+    if (!chatRunRegistry.isProcessing(sessionId)) {
+      // The turn ended while we were awaiting `runtime.steer` (e.g. during
+      // its attachment-read step) — the client's `complete` handler already
+      // ran and discarded any pending-steer bookkeeping, so a late
+      // `STEER_UNSUPPORTED` would land on nothing. Deliver it as a normal
+      // run instead, same as the up-front idle path above.
+      dispatchSteerFallback(ws, userId, sessionId, session, provider, data, dependencies);
+      return;
+    }
+    // Still processing (e.g. the process is winding down but the registry
+    // hasn't caught up yet) — same client-facing outcome as a provider that
+    // never supported steering; the client re-queues it.
+    sendProtocolError(
+      ws,
+      'STEER_UNSUPPORTED',
+      `Provider "${provider}" cannot deliver a message into a running turn.`,
+      sessionId,
+      'chat.steer',
+    );
+    return;
+  }
+
+  // Echoed to every socket attached to the run (not just the sender) via the
+  // run's writer, the same channel the provider's own turn events flow
+  // through — a second tab watching this session sees the steered message too.
+  const run = chatRunRegistry.getRun(sessionId);
+  run?.writer.send(createNormalizedMessage({
+    kind: 'text',
+    role: 'user',
+    content,
+    id: `local_steer_${result.uuid}`,
+    images,
+    files,
+    sessionId,
+    provider,
+    steered: true,
+  }));
+
+  // The ack goes only to the sender — every other attached socket already
+  // learned about the steer from the echo above.
+  sendJson(ws, {
+    kind: 'chat_steered',
+    sessionId,
+    uuid: result.uuid,
+    timestamp: new Date().toISOString(),
+  });
 }
 
 type ResolvedSendTarget = {
@@ -207,6 +496,13 @@ function resolveSendTarget(
  *
  * `extraRuntimeOptions` is how an edited message asks the provider to resume
  * partway instead of continuing from the tip; a normal send passes nothing.
+ *
+ * `requestType` names the inbound frame that led here (defaults to
+ * `chat.send`, its most common caller) purely so a `RUN_IN_PROGRESS` refusal
+ * can tag itself correctly — see `ChatRequestType` and `sendProtocolError`.
+ * `dispatchSteerFallback` passes `chat.steer` and `handleChatEditSend` passes
+ * `chat.edit-send`; a detached run started by `runDetachedChatTurn` has no
+ * `ws` to send the error to, so its requestType never surfaces either way.
  */
 async function dispatchRun(
   ws: WebSocket | null,
@@ -217,6 +513,7 @@ async function dispatchRun(
   dependencies: ChatWebSocketDependencies,
   extraRuntimeOptions: AnyRecord = {},
   beforeRun?: (run: NonNullable<ReturnType<typeof chatRunRegistry.startRun>>) => void | Promise<void>,
+  requestType: ChatRequestType = 'chat.send',
 ): Promise<{ started: boolean; error: string | null }> {
   const provider = session.provider as LLMProvider;
 
@@ -234,7 +531,8 @@ async function dispatchRun(
         ws,
         'RUN_IN_PROGRESS',
         `Session "${sessionId}" already has a run in progress.`,
-        sessionId
+        sessionId,
+        requestType,
       );
     }
     return { started: false, error: 'A run is already in progress for this session.' };
@@ -253,15 +551,7 @@ async function dispatchRun(
     providerModelsService.setSessionEffort(provider, sessionId, clientOptions.effort);
   }
 
-  const attachmentCandidates = [
-    ...normalizeAttachmentDescriptors(clientOptions.images),
-    ...normalizeAttachmentDescriptors(clientOptions.files),
-    ...normalizeAttachmentDescriptors(clientOptions.attachments),
-  ];
-  const verifiedAttachments = filterAttachmentsToUploadStore(attachmentCandidates);
-  const uniqueAttachments = verifiedAttachments.filter(
-    (descriptor, index, all) => all.findIndex((candidate) => candidate.path === descriptor.path) === index,
-  );
+  const { attachments: uniqueAttachments, images, files } = resolveVerifiedAttachments(clientOptions);
 
   // The provider runtimes receive the stable app session id. When their
   // CLI/SDK needs the provider-native id for resume, they resolve it from the
@@ -275,8 +565,8 @@ async function dispatchRun(
     // Attachments are re-validated server-side: only direct children of the
     // global upload store may reach provider runtimes or their file tools.
     attachments: uniqueAttachments,
-    images: uniqueAttachments.filter(isImageAttachmentDescriptor),
-    files: uniqueAttachments.filter((descriptor) => !isImageAttachmentDescriptor(descriptor)),
+    images,
+    files,
     sessionId,
     cwd: clientOptions.cwd ?? session.project_path ?? undefined,
     projectPath: session.project_path ?? clientOptions.projectPath,
@@ -407,6 +697,7 @@ async function handleChatEditSend(
         }
       }
     },
+    'chat.edit-send',
   );
 }
 
@@ -578,7 +869,10 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  * Handles authenticated chat websocket messages used by the main chat panel.
  *
  * Inbound protocol (client to server):
- * - `chat.send`                { sessionId, content, options? }
+ * - `chat.send`                { sessionId, content, options? } — `options.interrupt === true`
+ *                               aborts a running turn first instead of refusing with `RUN_IN_PROGRESS`.
+ * - `chat.steer`                { sessionId, content, options? } — while a turn is running, folds the
+ *                               message into it instead of queuing/refusing; idle sessions behave like `chat.send`.
  * - `chat.abort`               { sessionId }
  * - `chat.stop-task`           { sessionId, taskId }
  * - `chat.subscribe`           { sessions: [{ sessionId, lastSeq? }] }
@@ -637,11 +931,7 @@ export async function runDetachedChatTurn(
     // interrupted run end before this turn's stream begins. The interrupted
     // run's own dispatch settles later through completeRunIfCurrent, which is
     // scoped to that run and cannot touch the one started here.
-    const aborted = await dependencies.runtime.abort(activeRun.provider, input.sessionId);
-    chatRunRegistry.completeRun(input.sessionId, {
-      exitCode: aborted ? 0 : 1,
-      aborted: true,
-    });
+    await abortRunningRun(dependencies, activeRun.provider, input.sessionId);
   }
 
   return dispatchRun(
@@ -680,6 +970,9 @@ export function handleChatConnection(
           return;
         case 'chat.send':
           await handleChatSend(ws, userId, data, dependencies);
+          return;
+        case 'chat.steer':
+          await handleChatSteer(ws, userId, data, dependencies);
           return;
         case 'chat.abort':
           await handleChatAbort(ws, data, dependencies);
