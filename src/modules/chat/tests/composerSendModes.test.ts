@@ -5,8 +5,8 @@ import { afterEach, beforeEach, test, vi } from 'vitest';
 
 import '@/modules/i18n';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
-import { readQueuedMessage, resetChatDrafts } from '@/shared/chatDrafts';
-import type { PermissionMode, Project, ProjectSession } from '@/shared/types';
+import { readQueuedMessage, resetChatDrafts, writeQueuedMessage } from '@/shared/chatDrafts';
+import type { PermissionMode, Project, ProjectSession, SessionActivityMap } from '@/shared/types';
 
 /**
  * Three ways `handleSubmit` behaves while a turn is already running: `steer`
@@ -293,4 +293,50 @@ test('a provider without steer support (e.g. codex) queues a steer submit instea
     'no chat.steer frame is sent for a provider that cannot steer',
   );
   assert.equal(readQueuedMessage(SESSION.id)?.content, 'hello', 'falls back to the ordinary queue instead');
+});
+
+test('handleSteerRejected keeps an attachments-only queued message instead of overwriting it', async () => {
+  const view = renderHook(() => useChatComposerState(baseConfig({ isLoading: true }) as never));
+  const queuedFile = { name: 'notes.txt', path: '/uploads/notes.txt', mimeType: 'text/plain', size: 5 };
+  writeQueuedMessage(SESSION.id, { content: '', attachments: [queuedFile] } as never);
+
+  await act(async () => { view.result.current.setInput('second'); });
+  await act(async () => {
+    await view.result.current.handleSubmit({ preventDefault: () => undefined } as never, undefined, { mode: 'steer' });
+  });
+  act(() => { view.result.current.handleSteerRejected(SESSION.id, 'STEER_UNSUPPORTED'); });
+
+  const merged = readQueuedMessage(SESSION.id);
+  assert.equal(merged?.content, 'second', 'no blank-line join when the queued message had no text');
+  assert.deepEqual(merged?.attachments, [queuedFile], 'the queued attachment survives the merge');
+});
+
+test('"Now" on a queued draft asks about background work first, and "Queue" leaves the draft queued', async () => {
+  const backgroundWork: SessionActivityMap = new Map([[SESSION.id, {
+    statusText: null,
+    canInterrupt: false,
+    startedAt: 1,
+    background: true,
+    tasks: [{ taskId: 'a1', toolUseId: 'toolu_agent', taskType: 'local_agent', description: 'Survey the repo', startedAt: 1 }],
+  }]]) as SessionActivityMap;
+  const sent: Array<{ type: string }> = [];
+  const view = renderHook(() => useChatComposerState(baseConfig({
+    isLoading: true,
+    processingSessions: backgroundWork,
+    sendMessage: (message: unknown) => { sent.push(message as { type: string }); },
+  }) as never));
+
+  await act(async () => { view.result.current.setInput('queued text'); });
+  await act(async () => {
+    await view.result.current.handleSubmit({ preventDefault: () => undefined } as never);
+  });
+  assert.equal(readQueuedMessage(SESSION.id)?.content, 'queued text', 'sanity: the draft is queued');
+
+  await act(async () => { void view.result.current.sendQueuedDraft('interrupt'); });
+  assert.ok(view.result.current.backgroundSendPrompt, 'the background-work dialog is open');
+  await act(async () => { view.result.current.resolveBackgroundSendPrompt('queue'); });
+
+  assert.equal(sent.length, 0, 'nothing is sent');
+  assert.equal(readQueuedMessage(SESSION.id)?.content, 'queued text', 'the draft is still queued');
+  assert.equal(view.result.current.queuedDraft?.content, 'queued text', 'and still shown as the queued card');
 });

@@ -1347,31 +1347,34 @@ export function useChatComposerState({
    * (locally and on the server) FIRST, so the server's own dispatcher never
    * races this and double-sends the same text once the turn ends.
    */
-  const sendQueuedDraft = useCallback((mode: 'steer' | 'interrupt') => {
+  const sendQueuedDraft = useCallback(async (mode: 'steer' | 'interrupt') => {
     const draft = queuedDraft;
     if (!draft) {
       return;
     }
     const targetKey = queuedDraftSessionRef.current ?? sessionKey;
+    // handleSubmit drops a submit while this composer is still sending (e.g.
+    // a live-composer send whose attachments are uploading) without ever
+    // reaching the restore path, so the draft must not be cleared then.
+    const isSubmitting = () => submittingScopesRef.current.has(draftScopeRef.current ?? '');
+    if (isSubmitting()) {
+      return;
+    }
 
     // Interrupt mode can hit the same "background work still running" gate
     // handleSubmit itself guards — replacing the turn stops anything that
     // hasn't reported back yet. Ask BEFORE clearing the draft below: a
-    // cancelled confirm used to arrive after the draft was already gone,
+    // cancelled prompt used to arrive after the draft was already gone,
     // losing it for nothing. handleSubmit's own copy of this gate is skipped
     // for this exact replay (queuedSubmission + mode 'interrupt') so the user
-    // is only asked once.
+    // is only asked once. "Queue" leaves the draft exactly where it is.
     if (mode === 'interrupt' && targetKey) {
       const backgroundActivity = processingSessionsRef.current?.get(targetKey);
       if (backgroundActivity?.background) {
         const work = ownBackgroundTasks(backgroundActivity.tasks ?? [])
-          .map((task) => `• ${describeBackgroundTask(task, t)}`)
-          .join('\n');
-        const confirmed = window.confirm(t('claudeStatus.backgroundTask.sendAnyway', {
-          work,
-          defaultValue: 'This session still has background work running:\n{{work}}\n\nA new message starts a new turn, which stops that work; anything it has not reported yet is lost. Send anyway?',
-        }));
-        if (!confirmed) {
+          .map((task) => describeBackgroundTask(task, t));
+        const choice = await askBeforeSendingOverBackgroundWork(work);
+        if (choice !== 'send' || isSubmitting()) {
           return;
         }
       }
@@ -1382,7 +1385,7 @@ export function useChatComposerState({
     }
     setQueuedDraft(null);
     void handleSubmit(createFakeSubmitEvent(), draft, { mode });
-  }, [queuedDraft, sessionKey, handleSubmit, t]);
+  }, [queuedDraft, sessionKey, handleSubmit, askBeforeSendingOverBackgroundWork, t]);
 
   /**
    * Pops the oldest outstanding steer for `sessionId` off its FIFO queue and
@@ -1466,9 +1469,11 @@ export function useChatComposerState({
     // whether this session's queued draft is currently mounted in this
     // composer.
     const existingStored = readQueuedMessage(sessionId);
-    const existingContent = existingStored?.content?.trim() ? existingStored : null;
+    // Any stored message counts, attachments-only included: only the text
+    // join needs text on both sides.
+    const existingContent = existingStored;
     const hasExistingContent = existingContent !== null;
-    const mergedContent = existingContent
+    const mergedContent = existingContent?.content?.trim()
       ? `${existingContent.content}\n\n${pending.content}`
       : pending.content;
     // The earlier queued message's options (model/effort/permission mode/…)
