@@ -139,6 +139,60 @@
       "actionRequired": "対応が必要",
       "stop": "実行停止",
       "error": "実行失敗"
+    },
+    "webhook": {
+      "title": "Webhook",
+      "description": "実行イベントを自分の HTTP エンドポイント（n8n、Home Assistant、チャット中継など）に送信します。ブラウザーを開いていなくても届きます。",
+      "urlLabel": "送信先 URL",
+      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "allowHttp": "暗号化されていない HTTP を許可する（このマシンまたはローカルネットワーク専用）",
+      "enabled": "有効",
+      "save": "保存",
+      "saving": "保存中...",
+      "saved": "保存しました",
+      "remove": "削除",
+      "payloadNote": "各イベントに含まれるのは種別、プロバイダー、セッション ID、結果のみです。プロンプト、メッセージ、出力は送信されません。",
+      "eventsNote": "Webhook は「イベント種別」の「実行停止」と「実行失敗」の設定に従います。",
+      "secret": {
+        "title": "署名シークレット",
+        "description": "受信側で各リクエストを検証できます（Standard Webhooks 署名）。",
+        "none": "未設定",
+        "set": "設定済み",
+        "generate": "生成",
+        "rotate": "再生成",
+        "remove": "削除",
+        "showOnce": "このシークレットを今すぐコピーしてください。再表示はできません。",
+        "copy": "シークレットをコピー",
+        "copied": "コピーしました",
+        "dismiss": "保存しました"
+      },
+      "test": {
+        "send": "テストイベントを送信",
+        "sending": "送信中..."
+      },
+      "status": {
+        "never": "まだ配信はありません。",
+        "ok": "前回の配信は成功しました（{{type}}、{{time}}）: HTTP {{status}}",
+        "failed": "前回の配信は失敗しました（{{type}}、{{time}}、試行回数: {{attempts}}）: {{reason}}"
+      },
+      "reasons": {
+        "invalidUrl": "保存された URL が無効です。",
+        "insecureUrl": "この URL では暗号化されていない HTTP は許可されていません。",
+        "blockedAddress": "送信先アドレスは許可されていません。",
+        "timeout": "5 秒以内に応答がありませんでした。",
+        "redirect": "受信側がリダイレクト（HTTP {{status}}）を返しました。リダイレクトはたどりません。",
+        "httpStatus": "受信側が HTTP {{status}} を返しました。",
+        "network": "受信側に接続できませんでした。",
+        "tls": "受信側の TLS 証明書が拒否されました。",
+        "dropped": "進行中の配信が多すぎるためスキップしました。"
+      },
+      "errors": {
+        "invalidUrl": "有効な http:// または https:// の URL を入力してください。",
+        "insecureUrl": "http:// の URL を使うには「暗号化されていない HTTP を許可する」をオンにしてください。",
+        "blockedAddress": "このアドレスは Webhook の送信先にできません（リンクローカル、マルチキャスト、または予約済み）。",
+        "notConfigured": "先に Webhook の URL を保存してください。",
+        "requestFailed": "リクエストに失敗しました。もう一度お試しください。"
+      }
     }
   },
   "appearanceSettings": {

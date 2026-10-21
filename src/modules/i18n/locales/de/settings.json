@@ -139,6 +139,60 @@
       "actionRequired": "Aktion erforderlich",
       "stop": "Lauf gestoppt",
       "error": "Lauf fehlgeschlagen"
+    },
+    "webhook": {
+      "title": "Webhook",
+      "description": "Sendet Lauf-Ereignisse an deinen eigenen HTTP-Endpunkt (zum Beispiel n8n, Home Assistant oder ein Chat-Relay), auch wenn kein Browser geöffnet ist.",
+      "urlLabel": "Ziel-URL",
+      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "allowHttp": "Unverschlüsseltes HTTP erlauben (nur für diesen Rechner oder dein lokales Netzwerk)",
+      "enabled": "Aktiviert",
+      "save": "Speichern",
+      "saving": "Wird gespeichert...",
+      "saved": "Gespeichert",
+      "remove": "Entfernen",
+      "payloadNote": "Jedes Ereignis enthält nur Typ, Anbieter, Sitzungs-ID und Ergebnis. Prompts, Nachrichten und Ausgaben werden nie gesendet.",
+      "eventsNote": "Webhooks folgen den Optionen \"Lauf gestoppt\" und \"Lauf fehlgeschlagen\" unter Ereignistypen.",
+      "secret": {
+        "title": "Signaturgeheimnis",
+        "description": "Damit kann dein Empfänger jede Anfrage prüfen (Standard-Webhooks-Signatur).",
+        "none": "Nicht festgelegt",
+        "set": "Festgelegt",
+        "generate": "Erzeugen",
+        "rotate": "Erneuern",
+        "remove": "Entfernen",
+        "showOnce": "Kopiere das Geheimnis jetzt. Es wird nicht noch einmal angezeigt.",
+        "copy": "Geheimnis kopieren",
+        "copied": "Kopiert",
+        "dismiss": "Ich habe es gespeichert"
+      },
+      "test": {
+        "send": "Testereignis senden",
+        "sending": "Wird gesendet..."
+      },
+      "status": {
+        "never": "Noch keine Zustellungen.",
+        "ok": "Letzte Zustellung erfolgreich ({{type}}, {{time}}): HTTP {{status}}",
+        "failed": "Letzte Zustellung fehlgeschlagen ({{type}}, {{time}}, Versuche: {{attempts}}): {{reason}}"
+      },
+      "reasons": {
+        "invalidUrl": "Die gespeicherte URL ist ungültig.",
+        "insecureUrl": "Unverschlüsseltes HTTP ist für diese URL nicht erlaubt.",
+        "blockedAddress": "Die Zieladresse ist nicht erlaubt.",
+        "timeout": "Keine Antwort innerhalb von 5 Sekunden.",
+        "redirect": "Der Empfänger hat mit einer Weiterleitung geantwortet (HTTP {{status}}); Weiterleitungen werden nicht verfolgt.",
+        "httpStatus": "Der Empfänger hat mit HTTP {{status}} geantwortet.",
+        "network": "Keine Verbindung zum Empfänger möglich.",
+        "tls": "Das TLS-Zertifikat des Empfängers wurde abgelehnt.",
+        "dropped": "Übersprungen, weil bereits zu viele Zustellungen liefen."
+      },
+      "errors": {
+        "invalidUrl": "Gib eine gültige http://- oder https://-URL ein.",
+        "insecureUrl": "Für http://-URLs muss \"Unverschlüsseltes HTTP erlauben\" aktiviert sein.",
+        "blockedAddress": "Diese Adresse kann kein Webhook-Ziel sein (Link-Local, Multicast oder reserviert).",
+        "notConfigured": "Speichere zuerst eine Webhook-URL.",
+        "requestFailed": "Die Anfrage ist fehlgeschlagen. Bitte versuche es erneut."
+      }
     }
   },
   "appearanceSettings": {

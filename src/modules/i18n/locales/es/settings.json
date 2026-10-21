@@ -165,6 +165,60 @@
       "actionRequired": "Acción requerida",
       "stop": "Ejecución detenida",
       "error": "Ejecución fallida"
+    },
+    "webhook": {
+      "title": "Webhook",
+      "description": "Envía los eventos de ejecución a tu propio endpoint HTTP (por ejemplo n8n, Home Assistant o un relé de chat), incluso sin ningún navegador abierto.",
+      "urlLabel": "URL de destino",
+      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "allowHttp": "Permitir HTTP sin cifrar (solo para este equipo o tu red local)",
+      "enabled": "Activado",
+      "save": "Guardar",
+      "saving": "Guardando...",
+      "saved": "Guardado",
+      "remove": "Eliminar",
+      "payloadNote": "Cada evento solo incluye su tipo, el proveedor, el ID de sesión y el resultado. Nunca se envían prompts, mensajes ni salidas.",
+      "eventsNote": "Los webhooks siguen las opciones \"Ejecución detenida\" y \"Ejecución fallida\" de Tipos de evento.",
+      "secret": {
+        "title": "Secreto de firma",
+        "description": "Permite que tu receptor verifique cada solicitud (firma Standard Webhooks).",
+        "none": "Sin definir",
+        "set": "Definido",
+        "generate": "Generar",
+        "rotate": "Rotar",
+        "remove": "Eliminar",
+        "showOnce": "Copia este secreto ahora. No se volverá a mostrar.",
+        "copy": "Copiar secreto",
+        "copied": "Copiado",
+        "dismiss": "Ya lo guardé"
+      },
+      "test": {
+        "send": "Enviar evento de prueba",
+        "sending": "Enviando..."
+      },
+      "status": {
+        "never": "Todavía no hay entregas.",
+        "ok": "Última entrega correcta ({{type}}, {{time}}): HTTP {{status}}",
+        "failed": "Última entrega fallida ({{type}}, {{time}}, intentos: {{attempts}}): {{reason}}"
+      },
+      "reasons": {
+        "invalidUrl": "La URL guardada no es válida.",
+        "insecureUrl": "No se permite HTTP sin cifrar para esta URL.",
+        "blockedAddress": "La dirección de destino no está permitida.",
+        "timeout": "Sin respuesta en 5 segundos.",
+        "redirect": "El receptor respondió con una redirección (HTTP {{status}}), que no se sigue.",
+        "httpStatus": "El receptor respondió HTTP {{status}}.",
+        "network": "No se pudo conectar con el receptor.",
+        "tls": "Se rechazó el certificado TLS del receptor.",
+        "dropped": "Omitido porque ya había demasiadas entregas en curso."
+      },
+      "errors": {
+        "invalidUrl": "Introduce una URL http:// o https:// válida.",
+        "insecureUrl": "Las URL http:// necesitan \"Permitir HTTP sin cifrar\".",
+        "blockedAddress": "Esta dirección no puede ser un destino de webhook (enlace local, multidifusión o reservada).",
+        "notConfigured": "Primero guarda una URL de webhook.",
+        "requestFailed": "La solicitud falló. Inténtalo de nuevo."
+      }
     }
   },
   "appearanceSettings": {

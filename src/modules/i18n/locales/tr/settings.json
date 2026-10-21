@@ -140,6 +140,60 @@
       "actionRequired": "Aksiyon gerekli",
       "stop": "Çalıştırma durduruldu",
       "error": "Çalıştırma başarısız"
+    },
+    "webhook": {
+      "title": "Webhook",
+      "description": "Çalıştırma olaylarını, açık bir tarayıcı olmasa bile kendi HTTP uç noktana (örneğin n8n, Home Assistant veya bir sohbet aktarıcısı) gönderir.",
+      "urlLabel": "Hedef URL",
+      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "allowHttp": "Şifresiz HTTP'ye izin ver (yalnızca bu bilgisayar veya yerel ağın için)",
+      "enabled": "Etkin",
+      "save": "Kaydet",
+      "saving": "Kaydediliyor...",
+      "saved": "Kaydedildi",
+      "remove": "Kaldır",
+      "payloadNote": "Her olay yalnızca türünü, sağlayıcıyı, oturum kimliğini ve sonucu içerir. İstemler, mesajlar ve çıktılar asla gönderilmez.",
+      "eventsNote": "Webhook'lar, Etkinlik Türleri altındaki \"Çalıştırma durduruldu\" ve \"Çalıştırma başarısız\" seçimlerini izler.",
+      "secret": {
+        "title": "İmzalama anahtarı",
+        "description": "Alıcının her isteği doğrulamasını sağlar (Standard Webhooks imzası).",
+        "none": "Ayarlanmadı",
+        "set": "Ayarlandı",
+        "generate": "Oluştur",
+        "rotate": "Yenile",
+        "remove": "Kaldır",
+        "showOnce": "Bu anahtarı şimdi kopyala. Bir daha gösterilmeyecek.",
+        "copy": "Anahtarı kopyala",
+        "copied": "Kopyalandı",
+        "dismiss": "Kaydettim"
+      },
+      "test": {
+        "send": "Test olayı gönder",
+        "sending": "Gönderiliyor..."
+      },
+      "status": {
+        "never": "Henüz teslimat yok.",
+        "ok": "Son teslimat başarılı ({{type}}, {{time}}): HTTP {{status}}",
+        "failed": "Son teslimat başarısız ({{type}}, {{time}}, deneme: {{attempts}}): {{reason}}"
+      },
+      "reasons": {
+        "invalidUrl": "Kayıtlı URL geçerli değil.",
+        "insecureUrl": "Bu URL için şifresiz HTTP'ye izin verilmiyor.",
+        "blockedAddress": "Hedef adrese izin verilmiyor.",
+        "timeout": "5 saniye içinde yanıt gelmedi.",
+        "redirect": "Alıcı bir yönlendirmeyle yanıt verdi (HTTP {{status}}); yönlendirmeler takip edilmez.",
+        "httpStatus": "Alıcı HTTP {{status}} ile yanıt verdi.",
+        "network": "Alıcıya bağlanılamadı.",
+        "tls": "Alıcının TLS sertifikası reddedildi.",
+        "dropped": "Zaten çok fazla teslimat sürdüğü için atlandı."
+      },
+      "errors": {
+        "invalidUrl": "Geçerli bir http:// veya https:// URL'si gir.",
+        "insecureUrl": "http:// URL'leri için \"Şifresiz HTTP'ye izin ver\" seçeneği gerekir.",
+        "blockedAddress": "Bu adres bir webhook hedefi olamaz (link-local, multicast veya ayrılmış).",
+        "notConfigured": "Önce bir webhook URL'si kaydet.",
+        "requestFailed": "İstek başarısız oldu. Lütfen tekrar dene."
+      }
     }
   },
   "appearanceSettings": {

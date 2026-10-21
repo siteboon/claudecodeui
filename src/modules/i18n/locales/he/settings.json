@@ -166,6 +166,60 @@
       "actionRequired": "נדרשת פעולה",
       "stop": "הריצה נעצרה",
       "error": "הריצה נכשלה"
+    },
+    "webhook": {
+      "title": "Webhook",
+      "description": "שליחת אירועי ריצה לנקודת קצה HTTP משלך (למשל n8n, Home Assistant או ממסר צ'אט), גם כשאף דפדפן אינו פתוח.",
+      "urlLabel": "כתובת URL של היעד",
+      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "allowHttp": "לאפשר HTTP לא מוצפן (רק למחשב הזה או לרשת המקומית)",
+      "enabled": "מופעל",
+      "save": "שמירה",
+      "saving": "שומר...",
+      "saved": "נשמר",
+      "remove": "הסרה",
+      "payloadNote": "כל אירוע כולל רק את הסוג, הספק, מזהה הסשן והתוצאה. הנחיות, הודעות ופלט לעולם אינם נשלחים.",
+      "eventsNote": "ה-Webhooks פועלים לפי הבחירות \"הריצה נעצרה\" ו\"הריצה נכשלה\" תחת סוגי אירועים.",
+      "secret": {
+        "title": "סוד חתימה",
+        "description": "מאפשר למקבל לאמת כל בקשה (חתימת Standard Webhooks).",
+        "none": "לא הוגדר",
+        "set": "הוגדר",
+        "generate": "יצירה",
+        "rotate": "החלפה",
+        "remove": "הסרה",
+        "showOnce": "יש להעתיק את הסוד עכשיו. הוא לא יוצג שוב.",
+        "copy": "העתקת הסוד",
+        "copied": "הועתק",
+        "dismiss": "שמרתי אותו"
+      },
+      "test": {
+        "send": "שליחת אירוע בדיקה",
+        "sending": "שולח..."
+      },
+      "status": {
+        "never": "עדיין אין משלוחים.",
+        "ok": "המשלוח האחרון הצליח ({{type}}, {{time}}): HTTP {{status}}",
+        "failed": "המשלוח האחרון נכשל ({{type}}, {{time}}, ניסיונות: {{attempts}}): {{reason}}"
+      },
+      "reasons": {
+        "invalidUrl": "כתובת ה-URL השמורה אינה תקינה.",
+        "insecureUrl": "HTTP לא מוצפן אינו מותר עבור כתובת זו.",
+        "blockedAddress": "כתובת היעד אינה מותרת.",
+        "timeout": "לא התקבלה תשובה תוך 5 שניות.",
+        "redirect": "המקבל ענה בהפניה (HTTP {{status}}), וההפניה לא נעקבת.",
+        "httpStatus": "המקבל ענה HTTP {{status}}.",
+        "network": "לא ניתן להתחבר למקבל.",
+        "tls": "אישור ה-TLS של המקבל נדחה.",
+        "dropped": "דולג כי כבר היו יותר מדי משלוחים בתהליך."
+      },
+      "errors": {
+        "invalidUrl": "יש להזין כתובת http:// או https:// תקינה.",
+        "insecureUrl": "כתובות http:// דורשות את האפשרות \"לאפשר HTTP לא מוצפן\".",
+        "blockedAddress": "לא ניתן להשתמש בכתובת זו כיעד Webhook (link-local, multicast או שמורה).",
+        "notConfigured": "יש לשמור קודם כתובת Webhook.",
+        "requestFailed": "הבקשה נכשלה. יש לנסות שוב."
+      }
     }
   },
   "appearanceSettings": {
