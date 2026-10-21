@@ -154,6 +154,17 @@ const showsQueuedMessage = (card: QueuedDraft, stored: QueuedDraft): boolean => 
   && JSON.stringify(card.uploadedAttachments ?? []) === JSON.stringify(stored.uploadedAttachments ?? [])
 );
 
+// Whether a stored queued message is the card's message with more added after
+// it (by this tab or another one), rather than a different message. Only then
+// do the card's browser files still belong to it. Uploaded descriptors are
+// unique per upload, so they tell the two apart even when the text matches.
+const extendsQueuedMessage = (card: QueuedDraft, stored: QueuedDraft): boolean => {
+  const cardUploads = card.uploadedAttachments ?? [];
+  const storedUploads = stored.uploadedAttachments ?? [];
+  return (stored.content.startsWith(card.content) || !card.content.trim())
+    && JSON.stringify(storedUploads.slice(0, cardUploads.length)) === JSON.stringify(cardUploads);
+};
+
 const getNotificationSessionSummary = (
   selectedSession: ProjectSession | null,
   fallbackInput: string,
@@ -726,10 +737,37 @@ export function useChatComposerState({
   // waiting is added after it rather than replacing it, so a burst of
   // follow-ups all reach the provider, in order, as that turn. The server
   // does the append against what it has stored, and the card shows what it
-  // returns: exactly what will be sent. If the server refuses the message, the
-  // composer keeps it and says so, rather than showing a card nothing will send.
+  // returns: exactly what will be sent.
+  //
+  // The composer empties when the message is taken, as it does for a direct
+  // send, not when the server answers: what the user types during that round
+  // trip is the next follow-up and must not be erased with this one. If the
+  // server refuses the message, it goes back into the composer, in front of
+  // anything typed since, and the composer says so, rather than showing a card
+  // nothing will send.
   const queueMessage = useCallback(
     async (durableDraft: QueuedDraft, queuedSessionKey: string | null) => {
+      const queuedFromOpenComposer = !queuedSessionKey || sessionKeyRef.current === queuedSessionKey;
+      if (queuedFromOpenComposer) {
+        setInput('');
+        inputValueRef.current = '';
+        setAttachedFiles([]);
+        setFileErrors(new Map());
+        resetCommandMenuState();
+        setIsTextareaExpanded(false);
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+        }
+        if (draftScopeRef.current) {
+          writeDraftText(draftScopeRef.current, '');
+        }
+      } else if (queuedSessionKey && readDraftText(queuedSessionKey) === durableDraft.content) {
+        // The user changed sessions during the upload. The composer they left
+        // still holds the text as its draft: clear it, or going back and
+        // pressing Enter would queue the same message a second time.
+        writeDraftText(queuedSessionKey, '');
+      }
+
       let queuedCard = durableDraft;
       let appendedToEarlierMessage = false;
       if (queuedSessionKey) {
@@ -754,6 +792,23 @@ export function useChatComposerState({
             content: `Failed to queue message: ${message}`,
             timestamp: new Date(),
           });
+          const withTypedSince = (typedSince: string) => (
+            [durableDraft.content, typedSince].filter((part) => part.trim()).join('\n\n')
+          );
+          if (sessionKeyRef.current === queuedSessionKey) {
+            const restored = withTypedSince(inputValueRef.current);
+            setInput(restored);
+            inputValueRef.current = restored;
+            if (queuedFromOpenComposer) {
+              setAttachedFiles((current) => [...durableDraft.attachments, ...current]);
+            }
+            if (draftScopeRef.current) {
+              writeDraftText(draftScopeRef.current, restored);
+            }
+          } else {
+            // Browser files cannot follow it into a composer that is not open.
+            writeDraftText(queuedSessionKey, withTypedSince(readDraftText(queuedSessionKey)));
+          }
           return;
         }
       }
@@ -764,38 +819,22 @@ export function useChatComposerState({
       recordSentMessage(durableDraft.content, queuedSessionKey);
 
       // The server owns dispatch after persistence. If the user changed
-      // sessions during upload, the durable record is already enough; do
-      // not attach its UI card to the newly opened composer. The composer
-      // they left still holds the text as its draft: clear it, or going back
-      // and pressing Enter would queue the same message a second time.
+      // sessions meanwhile, the durable record is already enough; do not
+      // attach its UI card to the newly opened composer.
       if (queuedSessionKey && sessionKeyRef.current !== queuedSessionKey) {
-        if (readDraftText(queuedSessionKey) === durableDraft.content) {
-          writeDraftText(queuedSessionKey, '');
-        }
         return;
       }
 
       queuedDraftSessionRef.current = queuedSessionKey;
       // The browser files of the messages queued before this one stay with
-      // the card, so editing it brings all of them back into the composer.
+      // the card, so editing it brings all of them back into the composer;
+      // not when the earlier one was already sent and this one queued alone.
       setQueuedDraft((previous) => ({
         ...queuedCard,
-        attachments: appendedToEarlierMessage && previous
+        attachments: appendedToEarlierMessage && previous && extendsQueuedMessage(previous, queuedCard)
           ? [...previous.attachments, ...queuedCard.attachments]
           : queuedCard.attachments,
       }));
-      setInput('');
-      inputValueRef.current = '';
-      setAttachedFiles([]);
-      setFileErrors(new Map());
-      resetCommandMenuState();
-      setIsTextareaExpanded(false);
-      if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto';
-      }
-      if (draftScopeRef.current) {
-        writeDraftText(draftScopeRef.current, '');
-      }
     },
     [addMessage, recordSentMessage, resetCommandMenuState, setInput],
   );
@@ -1123,7 +1162,8 @@ export function useChatComposerState({
   }, [handleSubmit]);
 
   // The VPS dispatcher owns sending. While the card is visible, periodically
-  // reconcile only its removal so the UI notices when the server claims it.
+  // reconcile it with the server, so the UI notices when the server claims it
+  // or another tab adds to it.
   useEffect(() => {
     if (!sessionKey || !queuedDraft) {
       return;
@@ -1139,13 +1179,29 @@ export function useChatComposerState({
       // will be sent, so it follows the server's copy.
       const stored = cancelled ? null : restoreQueuedDraft(sessionKey);
       if (stored) {
-        setQueuedDraft((card) => (!card || showsQueuedMessage(card, stored) ? card : stored));
+        setQueuedDraft((card) => {
+          if (!card || showsQueuedMessage(card, stored)) {
+            return card;
+          }
+          // This tab's browser files stay with its part of the message, so
+          // editing the card still brings them back into the composer.
+          return extendsQueuedMessage(card, stored) ? { ...stored, attachments: card.attachments } : stored;
+        });
       }
     };
     const timer = setInterval(() => void reconcile(), 5_000);
+    // A hidden tab's timers are throttled (to about once a minute after a few
+    // minutes), so its card can be far behind; catch up as soon as it is shown.
+    const reconcileWhenShown = () => {
+      if (document.visibilityState === 'visible') {
+        void reconcile();
+      }
+    };
+    document.addEventListener('visibilitychange', reconcileWhenShown);
     return () => {
       cancelled = true;
       clearInterval(timer);
+      document.removeEventListener('visibilitychange', reconcileWhenShown);
     };
   }, [queuedDraft, sessionKey]);
 

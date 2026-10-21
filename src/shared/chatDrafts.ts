@@ -63,6 +63,13 @@ let serverWriteTimer: ReturnType<typeof setTimeout> | null = null;
 // Counts this page's changes to each scope's queued message, so a hydrate that
 // was already in flight when one happened does not put back the older copy.
 const queueRevisions = new Map<string, number>();
+// The last queue request (append or clear) made for each scope, settled once
+// the server has answered it. The next one waits for it, so the server applies
+// them in the order they were made: an Edit's clear that reached the server
+// after the message re-queued from it would otherwise delete that message.
+const queueRequests = new Map<string, Promise<void>>();
+// The last clear made for each scope, resolving to whether the server applied it.
+const queueClears = new Map<string, Promise<boolean>>();
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -180,6 +187,32 @@ function noteQueueChanged(scope: string): void {
   queueRevisions.set(scope, (queueRevisions.get(scope) ?? 0) + 1);
 }
 
+/**
+ * Sends a scope's queue request once the previous one has been answered, or at
+ * once when none is outstanding (a clear must still beat the dispatcher's poll).
+ */
+function sendQueueRequest<T>(scope: string, send: () => Promise<T>): Promise<T> {
+  const previous = queueRequests.get(scope);
+  let request: Promise<T>;
+  if (previous) {
+    request = previous.then(send);
+  } else {
+    try {
+      request = send();
+    } catch (error) {
+      request = Promise.reject(error);
+    }
+  }
+  const settled = request.then(() => undefined, () => undefined);
+  queueRequests.set(scope, settled);
+  void settled.then(() => {
+    if (queueRequests.get(scope) === settled) {
+      queueRequests.delete(scope);
+    }
+  });
+  return request;
+}
+
 /** A stored queued message in the shape the composer sends, or null when it has nothing to send. */
 function normalizeQueuedMessage(queued: StoredQueuedMessage | null): StoredQueuedMessage | null {
   if (!queued || typeof queued.content !== 'string') {
@@ -220,42 +253,66 @@ export function readQueuedMessage(scope: string): StoredQueuedMessage | null {
  * The append happens on the server, against the stored message rather than
  * this page's copy of it: if the dispatcher has already taken the earlier
  * message to send, the new one is queued on its own, so nothing is sent twice
- * and nothing is lost. Rejects when the server did not accept the message, so
- * the composer can keep it instead of showing a card that will never be sent.
+ * and nothing is lost. A clear made on this page goes to the server in order
+ * with the appends around it. Rejects when the server did not accept the
+ * message, so the composer can keep it instead of showing a card that will
+ * never be sent.
  */
 export async function appendQueuedMessage(
   scope: string,
   message: StoredQueuedMessage,
 ): Promise<{ queuedMessage: StoredQueuedMessage; appended: boolean }> {
-  const response = await api.user.appendQueuedMessage(scope, message);
-  const payload = (await response.json().catch(() => null)) as {
-    queuedMessage?: unknown;
-    appended?: unknown;
-  } | null;
-  if (!response.ok) {
-    throw new Error(readApiErrorMessage(payload) ?? `HTTP ${response.status}`);
-  }
+  for (;;) {
+    const result = await sendQueueRequest(scope, async () => {
+      const revisionAtRequest = queueRevisions.get(scope) ?? 0;
+      const response = await api.user.appendQueuedMessage(scope, message);
+      const payload = (await response.json().catch(() => null)) as {
+        queuedMessage?: unknown;
+        appended?: unknown;
+      } | null;
+      if (!response.ok) {
+        throw new Error(readApiErrorMessage(payload) ?? `HTTP ${response.status}`);
+      }
 
-  const queuedMessage = normalizeQueuedMessage(
-    isRecord(payload?.queuedMessage) ? (payload?.queuedMessage as StoredQueuedMessage) : null,
-  );
-  if (!queuedMessage) {
-    throw new Error('The server returned no queued message');
-  }
+      const queuedMessage = normalizeQueuedMessage(
+        isRecord(payload?.queuedMessage) ? (payload?.queuedMessage as StoredQueuedMessage) : null,
+      );
+      if (!queuedMessage) {
+        throw new Error('The server returned no queued message');
+      }
+      return {
+        queuedMessage,
+        appended: payload?.appended === true,
+        clearedMeanwhile: (queueRevisions.get(scope) ?? 0) !== revisionAtRequest,
+      };
+    });
 
-  noteQueueChanged(scope);
-  setLocalDraft(scope, { queuedMessage });
-  return { queuedMessage, appended: payload?.appended === true };
+    // The queued message was edited or deleted on this page while the append
+    // was in flight. That clear reaches the server after the append, so it
+    // removes this message too: queue it again, behind the clear.
+    if (result.clearedMeanwhile && await queueClears.get(scope)) {
+      continue;
+    }
+
+    noteQueueChanged(scope);
+    setLocalDraft(scope, { queuedMessage: result.queuedMessage });
+    return { queuedMessage: result.queuedMessage, appended: result.appended };
+  }
 }
 
 /** Removes a scope's queued message (edited back into the composer or deleted). */
 export function clearQueuedMessage(scope: string): void {
   noteQueueChanged(scope);
   setLocalDraft(scope, { queuedMessage: null });
-  // Sent at once: editing or cancelling must beat the server's next dispatcher poll.
-  void api.user.clearQueuedMessage(scope).catch((error: unknown) => {
+  // Sent at once unless an append is still being answered: editing or
+  // cancelling must beat the server's next dispatcher poll.
+  queueClears.set(scope, sendQueueRequest(scope, async () => {
+    const response = await api.user.clearQueuedMessage(scope);
+    return response.ok;
+  }).catch((error: unknown) => {
     console.error('Failed to clear queued chat message:', error);
-  });
+    return false;
+  }));
 }
 
 /** Subscribes to any draft change; returns the unsubscribe function. */
@@ -346,6 +403,8 @@ export function resetChatDrafts(): void {
   drafts = new Map();
   pendingScopes.clear();
   queueRevisions.clear();
+  queueRequests.clear();
+  queueClears.clear();
   if (serverWriteTimer !== null) {
     clearTimeout(serverWriteTimer);
     serverWriteTimer = null;

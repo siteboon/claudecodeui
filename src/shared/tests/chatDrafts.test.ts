@@ -24,6 +24,10 @@ let draftsRequestFailed = false;
 let draftsResponseGate: Promise<void> | null = null;
 // What the server answers to an append; by default it queues the message alone.
 let appendResponse: ((queuedMessage: unknown) => Response) | null = null;
+// Lets a test hold an append's answer, to make a queue change while it is in flight.
+let appendResponseGate: Promise<void> | null = null;
+// What the server answers to a clear.
+let clearStatus = 200;
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -48,13 +52,14 @@ vi.mock('@/shared/api', async (importOriginal) => ({
       },
       appendQueuedMessage: async (scope: string, queuedMessage: unknown) => {
         appendRequests.push({ scope, queuedMessage });
+        await appendResponseGate;
         return appendResponse
           ? appendResponse(queuedMessage)
           : json({ success: true, queuedMessage, appended: false });
       },
       clearQueuedMessage: async (scope: string) => {
         clearedScopes.push(scope);
-        return new Response('{}', { status: 200 });
+        return new Response('{}', { status: clearStatus });
       },
     },
   },
@@ -74,6 +79,8 @@ beforeEach(() => {
   draftsRequestFailed = false;
   draftsResponseGate = null;
   appendResponse = null;
+  appendResponseGate = null;
+  clearStatus = 200;
   vi.useFakeTimers();
 });
 
@@ -241,6 +248,76 @@ test('a hydrate already in flight when a message is queued does not put back the
   releaseDrafts();
   await hydrating;
 
+  assert.equal(store.readQueuedMessage('session-a')?.content, 'A\n\nB');
+});
+
+test('a hydrate already in flight when the queued message is cleared does not bring it back', async () => {
+  const store = await loadStore();
+  await store.appendQueuedMessage('session-a', { content: 'A', attachments: [] });
+
+  serverDrafts = [{ scope: 'session-a', text: '', queuedMessage: { content: 'A', attachments: [] } }];
+  let releaseDrafts!: () => void;
+  draftsResponseGate = new Promise((resolve) => { releaseDrafts = resolve; });
+  const hydrating = store.hydrateChatDrafts();
+
+  store.clearQueuedMessage('session-a');
+  releaseDrafts();
+  await hydrating;
+
+  assert.equal(store.readQueuedMessage('session-a'), null);
+});
+
+test('a hydrate takes the server\'s text for a scope whose queue changed but which nobody typed into', async () => {
+  const store = await loadStore();
+  store.writeDraftText('session-a', 'older text');
+  await vi.advanceTimersByTimeAsync(1_500);
+
+  serverDrafts = [{ scope: 'session-a', text: 'typed on the phone', queuedMessage: null }];
+  let releaseDrafts!: () => void;
+  draftsResponseGate = new Promise((resolve) => { releaseDrafts = resolve; });
+  const hydrating = store.hydrateChatDrafts();
+  await store.appendQueuedMessage('session-a', { content: 'B', attachments: [] });
+  releaseDrafts();
+  await hydrating;
+
+  assert.equal(store.readDraftText('session-a'), 'typed on the phone');
+  assert.equal(store.readQueuedMessage('session-a')?.content, 'B');
+});
+
+test('a clear made while an append is being answered is sent after it, and the message queued again', async () => {
+  appendResponse = (queuedMessage) => json({ success: true, queuedMessage, appended: false });
+  const store = await loadStore();
+  let releaseAppend!: () => void;
+  appendResponseGate = new Promise((resolve) => { releaseAppend = resolve; });
+
+  const appending = store.appendQueuedMessage('session-a', { content: 'B', attachments: [] });
+  await vi.advanceTimersByTimeAsync(0);
+  store.clearQueuedMessage('session-a');
+  assert.deepEqual(clearedScopes, [], 'the clear waits for the append to be answered');
+  releaseAppend();
+  const result = await appending;
+
+  assert.deepEqual(clearedScopes, ['session-a']);
+  assert.equal(appendRequests.length, 2, 'the clear removed B on the server too, so B is queued again');
+  assert.equal(result.queuedMessage.content, 'B');
+  assert.equal(store.readQueuedMessage('session-a')?.content, 'B');
+});
+
+test('a clear that fails while an append is being answered does not queue the message twice', async () => {
+  appendResponse = () => json({ success: true, queuedMessage: { content: 'A\n\nB', attachments: [] }, appended: true });
+  clearStatus = 503;
+  const store = await loadStore();
+  let releaseAppend!: () => void;
+  appendResponseGate = new Promise((resolve) => { releaseAppend = resolve; });
+
+  const appending = store.appendQueuedMessage('session-a', { content: 'B', attachments: [] });
+  await vi.advanceTimersByTimeAsync(0);
+  store.clearQueuedMessage('session-a');
+  releaseAppend();
+  const result = await appending;
+
+  assert.equal(appendRequests.length, 1);
+  assert.equal(result.queuedMessage.content, 'A\n\nB', 'the server still holds both, so that is what is shown');
   assert.equal(store.readQueuedMessage('session-a')?.content, 'A\n\nB');
 });
 

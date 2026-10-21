@@ -35,8 +35,14 @@ export default function QueuedMessageCard({
           </div>
           {/* Follow-ups queued while one waits are joined into this message, so
               it scrolls instead of clamping: everything that will be sent stays
-              readable, with each follow-up on its own lines. */}
-          <p className="mt-0.5 max-h-28 overflow-y-auto whitespace-pre-wrap break-words text-sm text-foreground/90">{content}</p>
+              readable, with each follow-up on its own lines. Focusable, so it
+              can also be scrolled from the keyboard. */}
+          <p
+            tabIndex={0}
+            className="mt-0.5 max-h-28 overflow-y-auto whitespace-pre-wrap break-words text-sm text-foreground/90"
+          >
+            {content}
+          </p>
           {attachmentCount > 0 && (
             <p className="mt-0.5 text-xs text-muted-foreground">
               {attachmentCount} {attachmentCount === 1 ? 'file' : 'files'} attached
