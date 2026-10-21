@@ -165,6 +165,60 @@
       "actionRequired": "작업 필요",
       "stop": "실행 중지",
       "error": "실행 실패"
+    },
+    "webhook": {
+      "title": "웹훅",
+      "description": "브라우저가 열려 있지 않아도 실행 이벤트를 직접 지정한 HTTP 엔드포인트(예: n8n, Home Assistant, 채팅 릴레이)로 보냅니다.",
+      "urlLabel": "대상 URL",
+      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "allowHttp": "암호화되지 않은 HTTP 허용(이 컴퓨터나 로컬 네트워크 전용)",
+      "enabled": "사용",
+      "save": "저장",
+      "saving": "저장 중...",
+      "saved": "저장됨",
+      "remove": "제거",
+      "payloadNote": "각 이벤트에는 유형, 제공자, 세션 ID, 결과만 포함됩니다. 프롬프트, 메시지, 출력은 절대 전송되지 않습니다.",
+      "eventsNote": "웹훅은 이벤트 유형의 '실행 중지' 및 '실행 실패' 선택을 따릅니다.",
+      "secret": {
+        "title": "서명 시크릿",
+        "description": "수신 측에서 각 요청을 검증할 수 있습니다(Standard Webhooks 서명).",
+        "none": "설정 안 됨",
+        "set": "설정됨",
+        "generate": "생성",
+        "rotate": "교체",
+        "remove": "제거",
+        "showOnce": "지금 이 시크릿을 복사하세요. 다시 표시되지 않습니다.",
+        "copy": "시크릿 복사",
+        "copied": "복사됨",
+        "dismiss": "저장했습니다"
+      },
+      "test": {
+        "send": "테스트 이벤트 보내기",
+        "sending": "보내는 중..."
+      },
+      "status": {
+        "never": "아직 전송 기록이 없습니다.",
+        "ok": "마지막 전송 성공({{type}}, {{time}}): HTTP {{status}}",
+        "failed": "마지막 전송 실패({{type}}, {{time}}, 시도 횟수: {{attempts}}): {{reason}}"
+      },
+      "reasons": {
+        "invalidUrl": "저장된 URL이 올바르지 않습니다.",
+        "insecureUrl": "이 URL에는 암호화되지 않은 HTTP를 사용할 수 없습니다.",
+        "blockedAddress": "허용되지 않는 대상 주소입니다.",
+        "timeout": "5초 안에 응답이 없었습니다.",
+        "redirect": "수신 측이 리디렉션(HTTP {{status}})으로 응답했습니다. 리디렉션은 따라가지 않습니다.",
+        "httpStatus": "수신 측이 HTTP {{status}}로 응답했습니다.",
+        "network": "수신 측에 연결할 수 없습니다.",
+        "tls": "수신 측의 TLS 인증서가 거부되었습니다.",
+        "dropped": "이미 진행 중인 전송이 너무 많아 건너뛰었습니다."
+      },
+      "errors": {
+        "invalidUrl": "올바른 http:// 또는 https:// URL을 입력하세요.",
+        "insecureUrl": "http:// URL을 사용하려면 '암호화되지 않은 HTTP 허용'을 켜야 합니다.",
+        "blockedAddress": "이 주소는 웹훅 대상으로 사용할 수 없습니다(링크 로컬, 멀티캐스트 또는 예약됨).",
+        "notConfigured": "먼저 웹훅 URL을 저장하세요.",
+        "requestFailed": "요청에 실패했습니다. 다시 시도해 주세요."
+      }
     }
   },
   "appearanceSettings": {

@@ -165,6 +165,60 @@
       "actionRequired": "Action required",
       "stop": "Run stopped",
       "error": "Run failed"
+    },
+    "webhook": {
+      "title": "Webhook",
+      "description": "Send run events to your own HTTP endpoint (for example n8n, Home Assistant or a chat relay), even while no browser is open.",
+      "urlLabel": "Destination URL",
+      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "allowHttp": "Allow plain HTTP (unencrypted; only for this machine or your local network)",
+      "enabled": "Enabled",
+      "save": "Save",
+      "saving": "Saving...",
+      "saved": "Saved",
+      "remove": "Remove",
+      "payloadNote": "Each event carries only its type, provider, session ID and outcome. Prompts, messages and output are never sent.",
+      "eventsNote": "Webhooks follow the \"Run stopped\" and \"Run failed\" choices under Event Types.",
+      "secret": {
+        "title": "Signing secret",
+        "description": "Lets your receiver verify each request (Standard Webhooks signature).",
+        "none": "Not set",
+        "set": "Set",
+        "generate": "Generate",
+        "rotate": "Rotate",
+        "remove": "Remove",
+        "showOnce": "Copy this secret now. It will not be shown again.",
+        "copy": "Copy secret",
+        "copied": "Copied",
+        "dismiss": "I've saved it"
+      },
+      "test": {
+        "send": "Send test event",
+        "sending": "Sending..."
+      },
+      "status": {
+        "never": "No deliveries yet.",
+        "ok": "Last delivery succeeded ({{type}}, {{time}}): HTTP {{status}}",
+        "failed": "Last delivery failed ({{type}}, {{time}}, attempts: {{attempts}}): {{reason}}"
+      },
+      "reasons": {
+        "invalidUrl": "The saved URL is not valid.",
+        "insecureUrl": "Plain HTTP is not allowed for this URL.",
+        "blockedAddress": "The destination address is not allowed.",
+        "timeout": "No answer within 5 seconds.",
+        "redirect": "The receiver answered with a redirect (HTTP {{status}}), which is not followed.",
+        "httpStatus": "The receiver answered HTTP {{status}}.",
+        "network": "Could not connect to the receiver.",
+        "tls": "The receiver's TLS certificate was rejected.",
+        "dropped": "Skipped because too many deliveries were already in progress."
+      },
+      "errors": {
+        "invalidUrl": "Enter a valid http:// or https:// URL.",
+        "insecureUrl": "Plain http:// URLs need \"Allow plain HTTP\".",
+        "blockedAddress": "This address cannot be a webhook destination (link-local, multicast or reserved).",
+        "notConfigured": "Save a webhook URL first.",
+        "requestFailed": "The request failed. Please try again."
+      }
     }
   },
   "appearanceSettings": {

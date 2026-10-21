@@ -139,6 +139,60 @@
       "actionRequired": "Action requise",
       "stop": "Exécution arrêtée",
       "error": "Exécution échouée"
+    },
+    "webhook": {
+      "title": "Webhook",
+      "description": "Envoie les événements d'exécution vers votre propre point de terminaison HTTP (par exemple n8n, Home Assistant ou un relais de chat), même lorsqu'aucun navigateur n'est ouvert.",
+      "urlLabel": "URL de destination",
+      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "allowHttp": "Autoriser le HTTP non chiffré (uniquement pour cette machine ou votre réseau local)",
+      "enabled": "Activé",
+      "save": "Enregistrer",
+      "saving": "Enregistrement...",
+      "saved": "Enregistré",
+      "remove": "Supprimer",
+      "payloadNote": "Chaque événement contient uniquement son type, le fournisseur, l'ID de session et le résultat. Les prompts, messages et sorties ne sont jamais envoyés.",
+      "eventsNote": "Les webhooks suivent les choix « Exécution arrêtée » et « Exécution échouée » dans Types d'événements.",
+      "secret": {
+        "title": "Secret de signature",
+        "description": "Permet à votre récepteur de vérifier chaque requête (signature Standard Webhooks).",
+        "none": "Non défini",
+        "set": "Défini",
+        "generate": "Générer",
+        "rotate": "Renouveler",
+        "remove": "Supprimer",
+        "showOnce": "Copiez ce secret maintenant. Il ne sera plus affiché.",
+        "copy": "Copier le secret",
+        "copied": "Copié",
+        "dismiss": "Je l'ai sauvegardé"
+      },
+      "test": {
+        "send": "Envoyer un événement de test",
+        "sending": "Envoi..."
+      },
+      "status": {
+        "never": "Aucune livraison pour l'instant.",
+        "ok": "Dernière livraison réussie ({{type}}, {{time}}) : HTTP {{status}}",
+        "failed": "Dernière livraison échouée ({{type}}, {{time}}, tentatives : {{attempts}}) : {{reason}}"
+      },
+      "reasons": {
+        "invalidUrl": "L'URL enregistrée n'est pas valide.",
+        "insecureUrl": "Le HTTP non chiffré n'est pas autorisé pour cette URL.",
+        "blockedAddress": "L'adresse de destination n'est pas autorisée.",
+        "timeout": "Aucune réponse dans les 5 secondes.",
+        "redirect": "Le récepteur a répondu par une redirection (HTTP {{status}}), qui n'est pas suivie.",
+        "httpStatus": "Le récepteur a répondu HTTP {{status}}.",
+        "network": "Impossible de se connecter au récepteur.",
+        "tls": "Le certificat TLS du récepteur a été refusé.",
+        "dropped": "Ignoré car trop de livraisons étaient déjà en cours."
+      },
+      "errors": {
+        "invalidUrl": "Saisissez une URL http:// ou https:// valide.",
+        "insecureUrl": "Les URL http:// nécessitent « Autoriser le HTTP non chiffré ».",
+        "blockedAddress": "Cette adresse ne peut pas être une destination de webhook (lien local, multicast ou réservée).",
+        "notConfigured": "Enregistrez d'abord une URL de webhook.",
+        "requestFailed": "La requête a échoué. Veuillez réessayer."
+      }
     }
   },
   "appearanceSettings": {

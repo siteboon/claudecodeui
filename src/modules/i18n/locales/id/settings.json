@@ -165,6 +165,60 @@
       "actionRequired": "Tindakan diperlukan",
       "stop": "Proses dihentikan",
       "error": "Proses gagal"
+    },
+    "webhook": {
+      "title": "Webhook",
+      "description": "Mengirim event proses ke endpoint HTTP milik Anda (misalnya n8n, Home Assistant, atau relay chat), bahkan saat tidak ada browser yang terbuka.",
+      "urlLabel": "URL tujuan",
+      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "allowHttp": "Izinkan HTTP tanpa enkripsi (hanya untuk komputer ini atau jaringan lokal Anda)",
+      "enabled": "Aktif",
+      "save": "Simpan",
+      "saving": "Menyimpan...",
+      "saved": "Tersimpan",
+      "remove": "Hapus",
+      "payloadNote": "Setiap event hanya berisi jenis, provider, ID sesi, dan hasilnya. Prompt, pesan, dan output tidak pernah dikirim.",
+      "eventsNote": "Webhook mengikuti pilihan \"Proses dihentikan\" dan \"Proses gagal\" di Jenis Event.",
+      "secret": {
+        "title": "Secret penandatanganan",
+        "description": "Memungkinkan penerima memverifikasi setiap permintaan (tanda tangan Standard Webhooks).",
+        "none": "Belum diatur",
+        "set": "Sudah diatur",
+        "generate": "Buat",
+        "rotate": "Ganti",
+        "remove": "Hapus",
+        "showOnce": "Salin secret ini sekarang. Secret tidak akan ditampilkan lagi.",
+        "copy": "Salin secret",
+        "copied": "Disalin",
+        "dismiss": "Sudah saya simpan"
+      },
+      "test": {
+        "send": "Kirim event uji",
+        "sending": "Mengirim..."
+      },
+      "status": {
+        "never": "Belum ada pengiriman.",
+        "ok": "Pengiriman terakhir berhasil ({{type}}, {{time}}): HTTP {{status}}",
+        "failed": "Pengiriman terakhir gagal ({{type}}, {{time}}, percobaan: {{attempts}}): {{reason}}"
+      },
+      "reasons": {
+        "invalidUrl": "URL yang disimpan tidak valid.",
+        "insecureUrl": "HTTP tanpa enkripsi tidak diizinkan untuk URL ini.",
+        "blockedAddress": "Alamat tujuan tidak diizinkan.",
+        "timeout": "Tidak ada jawaban dalam 5 detik.",
+        "redirect": "Penerima menjawab dengan pengalihan (HTTP {{status}}), yang tidak diikuti.",
+        "httpStatus": "Penerima menjawab HTTP {{status}}.",
+        "network": "Tidak dapat terhubung ke penerima.",
+        "tls": "Sertifikat TLS penerima ditolak.",
+        "dropped": "Dilewati karena sudah terlalu banyak pengiriman yang berjalan."
+      },
+      "errors": {
+        "invalidUrl": "Masukkan URL http:// atau https:// yang valid.",
+        "insecureUrl": "URL http:// memerlukan opsi \"Izinkan HTTP tanpa enkripsi\".",
+        "blockedAddress": "Alamat ini tidak dapat menjadi tujuan webhook (link-local, multicast, atau dicadangkan).",
+        "notConfigured": "Simpan URL webhook terlebih dahulu.",
+        "requestFailed": "Permintaan gagal. Silakan coba lagi."
+      }
     }
   },
   "appearanceSettings": {

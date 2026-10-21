@@ -145,6 +145,60 @@
       "actionRequired": "Vyžadována akce",
       "stop": "Běh zastaven",
       "error": "Běh selhal"
+    },
+    "webhook": {
+      "title": "Webhook",
+      "description": "Odesílá události běhů na váš vlastní HTTP endpoint (například n8n, Home Assistant nebo chatový relay), i když není otevřený žádný prohlížeč.",
+      "urlLabel": "Cílová URL",
+      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "allowHttp": "Povolit nešifrované HTTP (jen pro tento počítač nebo vaši místní síť)",
+      "enabled": "Zapnuto",
+      "save": "Uložit",
+      "saving": "Ukládání...",
+      "saved": "Uloženo",
+      "remove": "Odebrat",
+      "payloadNote": "Každá událost obsahuje jen svůj typ, poskytovatele, ID relace a výsledek. Prompty, zprávy ani výstupy se nikdy neodesílají.",
+      "eventsNote": "Webhooky se řídí volbami „Běh zastaven“ a „Běh selhal“ v sekci Typy událostí.",
+      "secret": {
+        "title": "Podpisový klíč",
+        "description": "Umožňuje příjemci ověřit každý požadavek (podpis Standard Webhooks).",
+        "none": "Nenastaven",
+        "set": "Nastaven",
+        "generate": "Vygenerovat",
+        "rotate": "Obnovit",
+        "remove": "Odebrat",
+        "showOnce": "Zkopírujte si tento klíč hned. Znovu se už nezobrazí.",
+        "copy": "Kopírovat klíč",
+        "copied": "Zkopírováno",
+        "dismiss": "Mám uloženo"
+      },
+      "test": {
+        "send": "Odeslat testovací událost",
+        "sending": "Odesílání..."
+      },
+      "status": {
+        "never": "Zatím žádná doručení.",
+        "ok": "Poslední doručení proběhlo ({{type}}, {{time}}): HTTP {{status}}",
+        "failed": "Poslední doručení selhalo ({{type}}, {{time}}, pokusy: {{attempts}}): {{reason}}"
+      },
+      "reasons": {
+        "invalidUrl": "Uložená URL není platná.",
+        "insecureUrl": "Nešifrované HTTP není pro tuto URL povoleno.",
+        "blockedAddress": "Cílová adresa není povolena.",
+        "timeout": "Žádná odpověď do 5 sekund.",
+        "redirect": "Příjemce odpověděl přesměrováním (HTTP {{status}}), které se nesleduje.",
+        "httpStatus": "Příjemce odpověděl HTTP {{status}}.",
+        "network": "Nepodařilo se připojit k příjemci.",
+        "tls": "TLS certifikát příjemce byl odmítnut.",
+        "dropped": "Přeskočeno, protože už probíhalo příliš mnoho doručení."
+      },
+      "errors": {
+        "invalidUrl": "Zadejte platnou URL http:// nebo https://.",
+        "insecureUrl": "URL http:// vyžadují volbu „Povolit nešifrované HTTP“.",
+        "blockedAddress": "Tato adresa nemůže být cílem webhooku (link-local, multicast nebo rezervovaná).",
+        "notConfigured": "Nejprve uložte URL webhooku.",
+        "requestFailed": "Požadavek selhal. Zkuste to prosím znovu."
+      }
     }
   },
   "appearanceSettings": {

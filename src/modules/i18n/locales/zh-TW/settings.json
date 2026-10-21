@@ -140,6 +140,60 @@
       "actionRequired": "需要處理",
       "stop": "執行已停止",
       "error": "執行失敗"
+    },
+    "webhook": {
+      "title": "Webhook",
+      "description": "即使沒有開啟瀏覽器，也會把執行事件傳送到您自己的 HTTP 端點（例如 n8n、Home Assistant 或聊天轉送服務）。",
+      "urlLabel": "目標 URL",
+      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "allowHttp": "允許未加密的 HTTP（僅限本機或本地網路）",
+      "enabled": "已啟用",
+      "save": "儲存",
+      "saving": "正在儲存...",
+      "saved": "已儲存",
+      "remove": "移除",
+      "payloadNote": "每個事件只包含類型、提供者、工作階段 ID 和結果。絕不會傳送提示詞、訊息或輸出。",
+      "eventsNote": "Webhook 會依照「事件類型」中「執行已停止」和「執行失敗」的設定。",
+      "secret": {
+        "title": "簽章密鑰",
+        "description": "讓接收端可以驗證每個請求（Standard Webhooks 簽章）。",
+        "none": "未設定",
+        "set": "已設定",
+        "generate": "產生",
+        "rotate": "輪替",
+        "remove": "移除",
+        "showOnce": "請立即複製此密鑰，它不會再次顯示。",
+        "copy": "複製密鑰",
+        "copied": "已複製",
+        "dismiss": "我已儲存"
+      },
+      "test": {
+        "send": "傳送測試事件",
+        "sending": "正在傳送..."
+      },
+      "status": {
+        "never": "尚無傳遞紀錄。",
+        "ok": "上次傳遞成功（{{type}}，{{time}}）：HTTP {{status}}",
+        "failed": "上次傳遞失敗（{{type}}，{{time}}，嘗試次數：{{attempts}}）：{{reason}}"
+      },
+      "reasons": {
+        "invalidUrl": "已儲存的 URL 無效。",
+        "insecureUrl": "此 URL 不允許使用未加密的 HTTP。",
+        "blockedAddress": "不允許使用該目標位址。",
+        "timeout": "5 秒內沒有回應。",
+        "redirect": "接收端回傳了重新導向（HTTP {{status}}），不會跟隨重新導向。",
+        "httpStatus": "接收端回傳了 HTTP {{status}}。",
+        "network": "無法連線到接收端。",
+        "tls": "接收端的 TLS 憑證遭到拒絕。",
+        "dropped": "已略過，因為進行中的傳遞過多。"
+      },
+      "errors": {
+        "invalidUrl": "請輸入有效的 http:// 或 https:// URL。",
+        "insecureUrl": "http:// URL 需要勾選「允許未加密的 HTTP」。",
+        "blockedAddress": "此位址不能作為 Webhook 目標（鏈路本地、多點傳送或保留位址）。",
+        "notConfigured": "請先儲存 Webhook URL。",
+        "requestFailed": "請求失敗，請再試一次。"
+      }
     }
   },
   "appearanceSettings": {
