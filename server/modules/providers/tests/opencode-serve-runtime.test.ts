@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -29,6 +30,17 @@ const TSX_LOADER = import.meta.resolve('tsx');
 // A turn that has not finished by then is stuck; it is aborted so the suite
 // fails instead of hanging.
 const TURN_DEADLINE_MS = 20_000;
+// Execs its arguments as a child subreaper (prctl PR_SET_CHILD_SUBREAPER):
+// orphaned descendants are reparented to that process, and a Node process
+// never reaps children it did not spawn, like a container's PID 1 without an
+// init.
+const EXEC_AS_SUBREAPER_PY = [
+  'import ctypes, os, sys',
+  'if ctypes.CDLL(None, use_errno=True).prctl(36, 1, 0, 0, 0) != 0: sys.exit(70)',
+  'os.execv(sys.argv[1], sys.argv[1:])',
+].join('\n');
+const CAN_EXEC_AS_SUBREAPER = process.platform === 'linux'
+  && spawnSync('python3', ['-c', EXEC_AS_SUBREAPER_PY, '/bin/true'], { stdio: 'ignore' }).status === 0;
 
 const sessionsProvider = new OpenCodeSessionsProvider();
 const providerSessionIds = new Map<string, string>();
@@ -263,7 +275,17 @@ const kinds = (messages: NormalizedMessage[]) => messages.map((message) => messa
 function isProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
+  } catch {
+    return false;
+  }
+  if (process.platform !== 'linux') {
     return true;
+  }
+  // kill() also reaches a process that exited but was not reaped yet, which
+  // an orphan never is under a container's PID 1 without an init.
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[0] !== 'Z';
   } catch {
     return false;
   }
@@ -923,6 +945,77 @@ test('a wrapped binary that outlives its wrapper script on SIGTERM is killed', {
     assert.ok(turn.capture.some((entry) => entry.kind === 'sigterm-ignored'), 'the binary was never asked to stop');
   } finally {
     process.env[pathKey] = previousPath;
+  }
+});
+
+test('a stop does not wait for processes of its group that exited but nobody reaps', {
+  skip: !CAN_EXEC_AS_SUBREAPER && 'needs Linux and python3 to run CloudCLI as a subreaper that reaps nothing',
+}, async () => {
+  // CloudCLI as a container's PID 1 without an init: the binary behind a
+  // wrapper script outlives the script on SIGTERM, is reparented to CloudCLI,
+  // and once it exits stays a zombie in the server's process group.
+  runCounter += 1;
+  const scenarioPath = path.join(tempRoot, `scenario-${runCounter}.json`);
+  const capturePath = path.join(tempRoot, `capture-${runCounter}.jsonl`);
+  await writeFile(scenarioPath, JSON.stringify({}), 'utf8');
+  await writeFile(capturePath, '', 'utf8');
+  const script = path.join(tempRoot, 'cloudcli-reaps-nothing.mts');
+  await writeFile(script, [
+    `import { readFileSync } from 'node:fs';`,
+    `import { OpenCodeServerProcess } from ${JSON.stringify(pathToFileURL(SERVER_PROCESS_MODULE).href)};`,
+    `const server = await OpenCodeServerProcess.start({ cwd: ${JSON.stringify(projectDir)}, env: process.env });`,
+    'const startedAt = Date.now();',
+    'await server.stop();',
+    'const stopMs = Date.now() - startedAt;',
+    `const capture = readFileSync(${JSON.stringify(capturePath)}, 'utf8').split('\\n').filter(Boolean).map((line) => JSON.parse(line));`,
+    "const binary = capture.find((entry) => entry.kind === 'spawn');",
+    "let binaryState = 'reaped';",
+    'try {',
+    "  const stat = readFileSync(`/proc/${binary.pid}/stat`, 'utf8');",
+    "  binaryState = stat.slice(stat.lastIndexOf(')') + 2).split(' ')[0];",
+    '} catch {}',
+    'console.log(JSON.stringify({ stopMs, binaryState }));',
+    'process.exit(0);',
+    '',
+  ].join('\n'), 'utf8');
+
+  const pathKey = findEnvKey('PATH');
+  const cloudcli = spawn('python3', ['-c', EXEC_AS_SUBREAPER_PY, process.execPath, '--import', TSX_LOADER, script], {
+    cwd: APPLICATION_ROOT,
+    env: {
+      ...process.env,
+      [pathKey]: `${wrapperBinDir}${path.delimiter}${process.env[pathKey] ?? ''}`,
+      FAKE_OPENCODE_SCENARIO: scenarioPath,
+      FAKE_OPENCODE_CAPTURE: capturePath,
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let output = '';
+  cloudcli.stdout.on('data', (chunk: Buffer) => {
+    output += chunk.toString();
+  });
+  cloudcli.stderr.on('data', (chunk: Buffer) => {
+    output += chunk.toString();
+  });
+  const exited = new Promise<number | null>((resolve) => cloudcli.once('exit', resolve));
+  let guard: NodeJS.Timeout | undefined;
+  try {
+    const exitCode = await Promise.race([
+      exited,
+      new Promise<'stuck'>((resolve) => {
+        guard = setTimeout(() => resolve('stuck'), 30_000);
+      }),
+    ]);
+    assert.equal(exitCode, 0, output);
+    const result = JSON.parse(output.trim().split('\n').pop() ?? '{}') as { stopMs: number; binaryState: string };
+    // The case under test happened: the binary was asked to stop, exited and
+    // was left unreaped.
+    assert.ok((await readCapture(capturePath)).some((entry) => entry.kind === 'exit' && entry.signal === 'SIGTERM'));
+    assert.equal(result.binaryState, 'Z', output);
+    assert.ok(result.stopMs < 3_000, `the stop waited ${result.stopMs} ms for a process that had exited`);
+  } finally {
+    clearTimeout(guard);
+    cloudcli.kill('SIGKILL');
   }
 });
 

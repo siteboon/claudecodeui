@@ -20,6 +20,7 @@
 import { spawn as spawnChildProcess, spawnSync } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
+import fsp from 'node:fs/promises';
 import http from 'node:http';
 import net from 'node:net';
 
@@ -136,22 +137,54 @@ function signalProcessTree(child: ChildProcess, signal: NodeJS.Signals, synchron
 }
 
 /**
- * POSIX: whether any process is left in the server's process group (the
- * server leads it, see signalProcessTree). A wrapper script that leads the
- * group can exit on SIGTERM while the binary it started is still running.
- * Asked only while a stop is in progress, so the group id cannot have been
- * reused yet. Windows has no groups here: taskkill /T /F ends the tree.
+ * POSIX: whether a process that is still running is left in the server's
+ * process group (the server leads it, see signalProcessTree). A wrapper script
+ * that leads the group can exit on SIGTERM while the binary it started is
+ * still running. Asked only while a stop is in progress, so the group id
+ * cannot have been reused yet. Windows has no groups here: taskkill /T /F ends
+ * the tree.
  */
-function processGroupAlive(child: ChildProcess): boolean {
+async function processGroupAlive(child: ChildProcess): Promise<boolean> {
   if (!RUNS_DETACHED || child.pid === undefined) {
     return false;
   }
   try {
     process.kill(-child.pid, 0);
-    return true;
   } catch {
     return false;
   }
+  // kill() also reaches members that have exited but were not reaped yet. A
+  // member that outlives the server (an MCP server OpenCode started, the
+  // binary behind a wrapper script) is reaped by whatever adopts it, which
+  // never happens when that is a container's PID 1 without an init: Node only
+  // reaps the children it spawned. Linux shows those zombies in /proc; on
+  // macOS launchd reaps every orphan.
+  return process.platform !== 'linux' || groupHasRunningMember(child.pid);
+}
+
+/** Linux: whether process group `pgid` has a member that has not exited. */
+async function groupHasRunningMember(pgid: number): Promise<boolean> {
+  let entries: string[];
+  try {
+    entries = await fsp.readdir('/proc');
+  } catch {
+    // No procfs to look at: trust kill().
+    return true;
+  }
+  const states = await Promise.all(entries.filter((entry) => /^\d+$/.test(entry)).map(async (pid) => {
+    try {
+      const stat = await fsp.readFile(`/proc/${pid}/stat`, 'utf8');
+      // "pid (comm) state ppid pgrp ...": comm may itself contain spaces and
+      // parentheses, so the fields are counted from the last ')'.
+      const [state, , pgrp] = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+      return Number(pgrp) === pgid ? state : null;
+    } catch {
+      // Exited and reaped meanwhile.
+      return null;
+    }
+  }));
+  // Z: exited, not reaped yet; X/x: being torn down.
+  return states.some((state) => state !== null && !['Z', 'X', 'x'].includes(state));
 }
 
 function installExitSweep(): void {
@@ -433,7 +466,7 @@ export class OpenCodeServerProcess {
       request.destroy();
     }
     this.longRequests.clear();
-    if (this.hasExited() && !processGroupAlive(this.child)) {
+    if (this.hasExited() && !(await processGroupAlive(this.child))) {
       return;
     }
 
@@ -446,15 +479,16 @@ export class OpenCodeServerProcess {
   }
 
   /**
-   * Waits for the server and, on POSIX, for every process left in its group:
-   * the group leader's exit alone does not mean a wrapped binary is gone.
+   * Waits for the server and, on POSIX, for every process of its group that
+   * is still running: the group leader's exit alone does not mean a wrapped
+   * binary is gone.
    */
   private async waitForProcessTreeExit(timeoutMs: number): Promise<boolean> {
     const deadline = Date.now() + timeoutMs;
     if (!(await this.waitForExit(timeoutMs))) {
       return false;
     }
-    while (processGroupAlive(this.child)) {
+    while (await processGroupAlive(this.child)) {
       if (Date.now() >= deadline) {
         return false;
       }
