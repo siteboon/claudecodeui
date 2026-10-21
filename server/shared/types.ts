@@ -101,6 +101,14 @@ export type ProviderModelsDefinition = {
    * library offers the same levels on every machine. Adapter catalogs omit it.
    */
   EFFORT_LEVELS?: string[];
+  /**
+   * The user's "use only my models" flag for this provider, set by the
+   * Providers service on merged catalogs. While it is true and at least one
+   * custom model exists, `OPTIONS` holds only custom models and `DEFAULT` is
+   * the first of them; with no custom models the built-ins are listed anyway.
+   * Adapter catalogs omit it.
+   */
+  CUSTOM_MODELS_ONLY?: boolean;
 };
 
 /**

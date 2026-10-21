@@ -187,6 +187,7 @@
     "pressToSearch": "Tekan <kbd>{{shortcut}}</kbd> untuk mencari sesi, file, dan commit",
     "chooseModel": "Pilih model",
     "chooseModelDescription": "Model bawaan dan kustom dalam satu daftar",
+    "chooseModelDescriptionCustomOnly": "Hanya model Anda yang ditampilkan untuk {{providers, list}}",
     "addModel": "Tambah model",
     "searchModels": "Cari model...",
     "manageModels": "Kelola model",
@@ -375,6 +376,10 @@
   "modelLibrary": {
     "effortLevels": "Tingkat penalaran",
     "effortLevelsHint": "Pilih tingkat upaya penalaran yang diterima model ini. Jika tidak ada yang dipilih, tidak ada tingkat yang bisa dipilih untuk model ini di composer.",
-    "effortSummary": "Penalaran: {{levels}}"
+    "effortSummary": "Penalaran: {{levels}}",
+    "customModelsOnly": "Gunakan hanya model saya",
+    "customModelsOnlyHint": "Sembunyikan model bawaan {{provider}} dari semua pemilih model dan jadikan model pertama Anda sebagai default. Model bawaan tetap ditampilkan sampai Anda menambahkan model.",
+    "builtInModelsHidden": "Disembunyikan dari pemilih model selama “Gunakan hanya model saya” aktif.",
+    "customModelsOnlyFailed": "Pengaturan ini tidak dapat diubah."
   }
 }

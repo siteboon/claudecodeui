@@ -543,12 +543,6 @@
       "description": "Planifiez des invites d'espace de travail, consultez l'historique des exécutions et gérez les tâches locales récurrentes.",
       "install": "Installer"
     },
-    "claudeWatchPlugin": {
-      "name": "Claude Watch",
-      "badge": "non officiel",
-      "description": "Surveillez les sessions Claude Code longues pour détecter les blocages et exposez les contrôles de processus.",
-      "install": "Installer"
-    },
     "prismCloudCLI": {
       "name": "PRISM CloudCLI",
       "badge": "non officiel",
