@@ -541,13 +541,17 @@ test('URL policy at connect time: a hostname resolving to a blocked address is r
         'nat64.example': [{ address: '64:ff9b::a9fe:a9fe', family: 6 }],
         'receiver.example': [{ address: '127.0.0.1', family: 4 }],
       };
+      // Answers asynchronously, like dns.lookup: a synchronous answer reaches
+      // net.connect before http.request listens for socket errors.
       const resolveHost = ((hostname: string, options: dns.LookupOptions, callback: (...args: unknown[]) => void) => {
         const entries = answers[hostname] || [];
-        if (options.all) {
-          callback(null, entries);
-        } else {
-          callback(null, entries[0].address, entries[0].family);
-        }
+        setImmediate(() => {
+          if (options.all) {
+            callback(null, entries);
+          } else {
+            callback(null, entries[0].address, entries[0].family);
+          }
+        });
       }) as unknown as typeof dns.lookup;
       const notifier = createWebhookNotificationsService({ ...FAST, resolveHost });
       const { port } = new URL(receiver.url);
