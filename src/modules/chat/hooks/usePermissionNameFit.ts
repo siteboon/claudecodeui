@@ -40,7 +40,7 @@ type PermissionNameFitInput = {
  * still fits on one row, so naming the mode never moves the model menu and the
  * send button onto a second row that the icon did not need.
  */
-export function fitsPermissionName({
+function fitsPermissionName({
   room,
   toolsWidth,
   controlsWidth,
