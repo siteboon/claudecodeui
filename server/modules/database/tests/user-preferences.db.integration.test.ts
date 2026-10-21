@@ -165,15 +165,15 @@ test('follow-ups queued while one waits are appended in order, not overwritten',
       content: 'C', options: { model: 'opus' }, attachments: [{ name: 'c.txt' }],
     });
 
-    assert.equal(first.appended, false);
-    assert.equal(second.appended, true);
-    assert.equal(third.appended, true);
+    assert.equal(first?.appended, false);
+    assert.equal(second?.appended, true);
+    assert.equal(third?.appended, true);
     const expected = {
       content: 'A\n\nB\n\nC',
       options: { model: 'opus' },
       attachments: [{ name: 'a.png' }, { name: 'c.txt' }],
     };
-    assert.deepEqual(third.queuedMessage, expected);
+    assert.deepEqual(third?.queuedMessage, expected);
     assert.deepEqual(queuedIn('session-a'), expected);
     assert.equal(sessionDraftsDb.getDrafts(USER_ID)[0]?.text, 'still typing', 'the draft text is untouched');
   });
@@ -186,7 +186,7 @@ test('a follow-up queued after the dispatcher claimed the waiting message is que
 
     const result = sessionDraftsDb.appendQueuedMessage(USER_ID, 'session-a', { content: 'B', attachments: [] });
 
-    assert.equal(result.appended, false);
+    assert.equal(result?.appended, false);
     assert.deepEqual(queuedIn('session-a'), { content: 'B', attachments: [] }, 'A is not sent a second time');
   });
 });
@@ -285,7 +285,7 @@ test('an attachments-only message merged with a later text gains no leading blan
 
     const result = sessionDraftsDb.appendQueuedMessage(USER_ID, 'session-a', { content: 'B', attachments: [] });
 
-    assert.deepEqual(result.queuedMessage, { content: 'B', attachments: [{ name: 'a.png' }] });
+    assert.deepEqual(result?.queuedMessage, { content: 'B', attachments: [{ name: 'a.png' }] });
   });
 });
 
