@@ -1408,7 +1408,18 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     const wasAborted = sessionKey() ? abortedSessionIds.delete(sessionKey()) : false;
     if (wasAborted) {
       // The abort already produced the terminal complete; a generator throw
-      // caused by interrupt() is expected noise, not a user-facing error.
+      // caused by interrupt() is expected noise, not a user-facing error. It
+      // is still a cancelled run, reported the same way as when the stream
+      // ends after the interrupt.
+      if (!turnCompleteSent) {
+        notifyRunStopped({
+          userId: ws?.userId || null,
+          provider: 'claude',
+          sessionId: sessionId || capturedSessionId || null,
+          sessionName: sessionSummary,
+          stopReason: 'aborted'
+        });
+      }
       return;
     }
 

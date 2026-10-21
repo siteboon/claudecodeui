@@ -18,6 +18,11 @@ import {
   registerDesktopNotificationClient,
   unregisterDesktopNotificationClient,
 } from '@/modules/notifications/index.js';
+import {
+  abortClaudeSDKSession,
+  isClaudeSDKSessionActive,
+  queryClaudeSDK,
+} from '@/modules/providers/list/claude/claude-runtime.provider.js';
 import { codexRuntime } from '@/modules/providers/list/codex/codex-runtime.provider.js';
 import { cursorRuntime } from '@/modules/providers/list/cursor/cursor-runtime.provider.js';
 import { opencodeRuntime } from '@/modules/providers/list/opencode/opencode-runtime.provider.js';
@@ -217,6 +222,54 @@ for (const mode of ['throws', 'yields'] as const) {
 
       // Awaited: the abort may be async (it waits for the CLI to exit).
       assert.equal(await codexRuntime.abort(sessionId), true);
+      await run;
+
+      assert.deepEqual(payloads.map((payload) => payload.data.code), ['run.stopped'], `notifications sent: ${JSON.stringify(payloads)}`);
+      assert.match(payloads[0].body, /aborted$/);
+      assert.equal(payloads[0].data.sessionId, sessionId);
+    });
+  });
+}
+
+/**
+ * A stand-in for the Claude SDK query: it reports the session, then waits.
+ * `interrupt()` either ends the stream or makes it throw; the Claude CLI on
+ * this box (measured in the real app) takes the throwing path:
+ * "Claude Code returned an error result: [ede_diagnostic] result_type=user ...".
+ */
+function createInterruptibleQuery(mode: 'throws' | 'ends'): NonNullable<ProviderRuntimeContext['createQuery']> {
+  return ({ prompt }) => {
+    void (async () => {
+      for await (const _message of prompt) { /* the CLI reads its stdin */ }
+    })();
+    let interrupted: (() => void) | null = null;
+    const interruptedSignal = new Promise<void>((resolve) => { interrupted = resolve; });
+    const iterator = (async function* () {
+      yield { type: 'system', subtype: 'init', session_id: 'claude-native-abort' };
+      await interruptedSignal;
+      if (mode === 'throws') {
+        throw new Error('Claude Code returned an error result: [ede_diagnostic] result_type=user last_content_type=n/a stop_reason=null');
+      }
+    })();
+    return Object.assign(iterator, {
+      interrupt: async () => { interrupted?.(); },
+      stopTask: async () => {},
+    });
+  };
+}
+
+for (const mode of ['throws', 'ends'] as const) {
+  test(`claude: a cancelled run is reported as stopped/aborted (stream ${mode} on interrupt)`, async () => {
+    await withDesktopListener(async ({ userId, payloads, binDir }) => {
+      const sessionId = `claude-abort-session-${mode}`;
+      const writer = createWriter(userId);
+      const run = queryClaudeSDK('hello', { sessionId, cwd: binDir }, writer as never, {
+        ...runtimeContext,
+        createQuery: createInterruptibleQuery(mode),
+      });
+      await waitFor(() => isClaudeSDKSessionActive(sessionId), 'claude to start');
+
+      assert.equal(await abortClaudeSDKSession(sessionId), true);
       await run;
 
       assert.deepEqual(payloads.map((payload) => payload.data.code), ['run.stopped'], `notifications sent: ${JSON.stringify(payloads)}`);
