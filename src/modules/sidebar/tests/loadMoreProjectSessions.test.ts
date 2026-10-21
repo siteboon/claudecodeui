@@ -175,9 +175,12 @@ test('a failed page says so and leaves the button ready to retry', async () => {
   assert.equal(onLoadMoreSessions.mock.calls.length, 2, 'the retry was sent');
 });
 
-test('one project loading does not hold back another', async () => {
-  const page = pendingPage();
-  const onLoadMoreSessions = vi.fn(() => page.promise);
+test('one project loading does not hold back another, and finishing one leaves the other loading', async () => {
+  const firstPage = pendingPage();
+  const secondPage = pendingPage();
+  const onLoadMoreSessions = vi.fn((projectId: string) => (
+    projectId === 'project-1' ? firstPage.promise : secondPage.promise
+  ));
   const { result } = await renderAfterOwnRerender(onLoadMoreSessions);
 
   const firstLoading = clickLoadMore(result, 'project-1');
@@ -187,8 +190,17 @@ test('one project loading does not hold back another', async () => {
   assert.deepEqual([...result.current.loadingMoreProjects].sort(), ['project-1', 'project-2']);
 
   await act(async () => {
-    page.resolve();
-    await Promise.all([firstLoading, secondLoading]);
+    firstPage.resolve();
+    await firstLoading;
+  });
+
+  assert.deepEqual([...result.current.loadingMoreProjects], ['project-2'], 'project-2 still shows its loading state');
+  void clickLoadMore(result, 'project-2');
+  assert.equal(onLoadMoreSessions.mock.calls.length, 2, 'project-2 is still guarded while its page loads');
+
+  await act(async () => {
+    secondPage.resolve();
+    await secondLoading;
   });
 
   assert.equal(result.current.loadingMoreProjects.size, 0);
