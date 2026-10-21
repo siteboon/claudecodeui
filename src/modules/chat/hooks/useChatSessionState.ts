@@ -89,6 +89,57 @@ export function visibleCountToReveal(total: number, index: number, current: numb
   return needed <= current ? current : needed + SESSION_MESSAGES_PAGE_SIZE;
 }
 
+/** How long a reveal keeps correcting the row's position after the jump. */
+const REVEAL_SETTLE_WINDOW_MS = 1000;
+
+// Identifies the newest reveal; settle frames from an earlier one (a second
+// click landed while its deadline still ran) stand down instead of fighting
+// the newer jump for the scroll position.
+let revealSettleToken = 0;
+
+/**
+ * Corrects a just-jumped row while the lazy rows around it settle. Outside the
+ * viewport band a row is a fixed-height placeholder (an estimate when never
+ * measured), so a deep jump first lands against estimated geometry; as the
+ * band mounts real content, heights change and the row drifts away from where
+ * scrollIntoView put it — often out of the viewport entirely. Each frame
+ * re-centers the row on the pane's reading line until two consecutive frames
+ * hold it there, or the window closes. Only this scroll container moves; the
+ * correction writes scrollTop directly, so nothing scrolls the page.
+ */
+const settleReveal = (container: HTMLElement, element: HTMLElement, deadline: number, token: number): void => {
+  let stableFrames = 0;
+  const step = () => {
+    if (token !== revealSettleToken) {
+      return;
+    }
+    // The widened window can re-commit rows (a new element for the same row);
+    // re-resolve by the timestamp the wrapper always carries.
+    const target = element.isConnected
+      ? element
+      : findRenderedMessageElement(container, element.getAttribute('data-message-timestamp'), false);
+    if (target) {
+      const containerRect = container.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const delta = (targetRect.top + targetRect.bottom) / 2
+        - (containerRect.top + containerRect.bottom) / 2;
+      if (Math.abs(delta) <= 1) {
+        stableFrames += 1;
+        if (stableFrames >= 2) {
+          return;
+        }
+      } else {
+        stableFrames = 0;
+        container.scrollTop += delta;
+      }
+    }
+    if (performance.now() < deadline) {
+      requestAnimationFrame(step);
+    }
+  };
+  requestAnimationFrame(step);
+};
+
 type UseChatSessionStateArgs = {
   isActive: boolean;
   selectedProject: Project | null;
@@ -1107,14 +1158,20 @@ export function useChatSessionState({
   // Brings one row into view even when it is outside the visible window or
   // sits in a lazy row that has not mounted: widen the window to include it,
   // then scroll to the row's wrapper, which is in the DOM as soon as the row
-  // is inside the window, mounted or not.
+  // is inside the window, mounted or not. The jump is instant and followed by
+  // a settle loop — see settleReveal for why a plain smooth scroll lands
+  // short of the row on deep jumps.
   const revealMessage = useCallback((message: ChatMessage) => {
     const index = chatMessages.indexOf(message);
     if (index >= 0) {
       setVisibleMessageCount((prev) => visibleCountToReveal(chatMessages.length, index, prev));
     }
+    const token = ++revealSettleToken;
 
     const attempt = (remaining: number) => {
+      if (token !== revealSettleToken) {
+        return;
+      }
       const container = scrollContainerRef.current;
       // The widened window commits after this frame, so the row can be absent
       // on the first attempts; only the last one may settle for the nearest
@@ -1122,8 +1179,12 @@ export function useChatSessionState({
       // timestamp), or the first attempt scrolls to an unrelated row and the
       // retries never run.
       const element = container ? findRenderedMessageElement(container, message.timestamp, remaining === 0) : null;
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (container && element) {
+        // Instant, not smooth: deep jumps cross long stretches of unmeasured
+        // lazy-row placeholders, and a smooth animation runs against those
+        // estimates only to land wherever the drift leaves the row.
+        element.scrollIntoView({ block: 'center' });
+        settleReveal(container, element, performance.now() + REVEAL_SETTLE_WINDOW_MS, token);
         return;
       }
       if (remaining > 0) {

@@ -91,7 +91,12 @@ test('revealing a row not yet rendered waits for it instead of scrolling to its 
   container.appendChild(target);
   await act(async () => { frames.shift()?.(0); });
   assert.equal((target.scrollIntoView as ReturnType<typeof vi.fn>).mock.calls.length, 1);
-  assert.equal(frames.length, 0);
+  // The settle loop's frames (jsdom rects are zero, so it stabilizes at once)
+  // follow the jump; draining them here also proves the retry chain itself
+  // has ended without scheduling anything further.
+  while (frames.length > 0) {
+    await act(async () => { frames.shift()?.(0); });
+  }
 });
 
 test('the last attempt settles for the nearest row, for a hit collapsed inside a tool group', async () => {
@@ -122,4 +127,49 @@ test('the last attempt settles for the nearest row, for a hit collapsed inside a
     await act(async () => { frames.shift()?.(0); });
   }
   assert.equal((group.scrollIntoView as ReturnType<typeof vi.fn>).mock.calls.length, 1);
+});
+
+test('the settle loop re-centers the row while lazy heights drift it off the reading line', async () => {
+  const { useChatSessionState } = await import('@/modules/chat/hooks/useChatSessionState');
+  const hook = renderHook(() =>
+    useChatSessionState({
+      isActive: true,
+      selectedProject: project,
+      selectedSession: session,
+      ws: null,
+      sendMessage: vi.fn(),
+      resetStreamingState: vi.fn(),
+      statusCheckSentAtRef: { current: new Map() },
+      lastSeqRef: { current: new Map() },
+      sessionStore: store as never,
+    }),
+  );
+  const container = document.createElement('div');
+  container.getBoundingClientRect = () => ({ top: 0, bottom: 900 } as DOMRect);
+  const target = row('2026-08-21T10:32:10.000Z');
+  target.getBoundingClientRect = () => ({ top: 600, bottom: 700 } as DOMRect);
+  container.appendChild(target);
+  (hook.result.current.scrollContainerRef as { current: HTMLDivElement | null }).current = container;
+  frames.length = 0;
+
+  await act(async () => {
+    hook.result.current.revealMessage({ type: 'assistant', content: '', timestamp: '2026-08-21T10:32:10.000Z' });
+  });
+  // Attempt frame: finds the row, jumps, schedules the settle loop.
+  await act(async () => { frames.shift()?.(0); });
+  assert.equal((target.scrollIntoView as ReturnType<typeof vi.fn>).mock.calls.length, 1);
+
+  // First settle frame: the row's center (650) sits 200px below the pane's
+  // reading line (450) — lazy placeholders estimating wrong — and the scroll
+  // corrects by exactly that drift.
+  await act(async () => { frames.shift()?.(0); });
+  assert.equal(container.scrollTop, 200);
+
+  // The rows around finish mounting; the row now holds the line, so two
+  // stable frames end the loop and nothing scrolls further.
+  target.getBoundingClientRect = () => ({ top: 400, bottom: 500 } as DOMRect);
+  await act(async () => { frames.shift()?.(0); });
+  await act(async () => { frames.shift()?.(0); });
+  assert.equal(container.scrollTop, 200);
+  assert.equal(frames.length, 0);
 });
