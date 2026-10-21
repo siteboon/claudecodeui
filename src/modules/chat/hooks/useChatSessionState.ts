@@ -767,26 +767,16 @@ export function useChatSessionState({
 
     lastLoadedSessionKeyRef.current = sessionKey;
 
-    // Fetch from server → store updates → chatMessages re-derives automatically
+    // Fetch from server → store updates → chatMessages re-derives automatically.
+    // Hydration goes through the latest-refresh path, never a bare page fetch:
+    // the refresh merges the newest page into whatever the slot already holds
+    // (the navigation rail's full-transcript fetch may already have landed —
+    // child effects run first), where fetchFromServer replaces the slot and
+    // would shrink a fully loaded store back to a single page. Pagination
+    // bookkeeping (hasMore/total/offset/tokenUsage) is set by the refresh
+    // executor itself.
     setIsLoadingSessionMessages(true);
-    sessionStore.fetchFromServer(selectedSessionId, {
-      limit: SESSION_MESSAGES_PAGE_SIZE,
-      offset: 0,
-      canRequest: () => (
-        isActiveRef.current
-        && activeSessionIdRef.current === selectedSessionId
-      ),
-    }).then(slot => {
-      if (slot) {
-        setHasMoreMessages(slot.hasMore);
-        setTotalMessages(slot.total);
-        messagesOffsetRef.current = slot.offset;
-        if (slot.tokenUsage !== undefined) {
-          setTokenBudget((slot.tokenUsage as Record<string, unknown> | null) ?? null);
-        }
-      }
-      setIsLoadingSessionMessages(false);
-    }).catch(() => {
+    requestLatestMessages(selectedSessionId).finally(() => {
       setIsLoadingSessionMessages(false);
     });
   }, [
