@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 
-import { fireEvent, render } from '@testing-library/react';
-import { test } from 'vitest';
+import { act, fireEvent, render } from '@testing-library/react';
+import { afterEach, test, vi } from 'vitest';
 
 import type { PermissionMode } from '@/shared/types';
 import ComposerPermissionMenu from '@/modules/chat/composer/ComposerPermissionMenu';
+import { PromptInputFooter, PromptInputTools } from '@/modules/chat/composer/PromptInput';
 
 /**
  * The permission control used to be a bare icon, so nothing on screen said
@@ -83,22 +84,145 @@ test('every mode leads the accessible name, a mode with no translation by its id
   }
 });
 
-test('only plan mode keeps its name on narrow screens', () => {
-  // jsdom has no layout, so this reads the breakpoint the name is shown from.
-  const nameClasses = (mode: PermissionMode) => {
-    const { getByRole, unmount } = renderMenu(mode);
-    const name = getByRole('button').querySelector('span');
-    assert.ok(name, `${mode} has a visible name`);
-    const classes = name.className.split(/\s+/);
-    unmount();
-    return classes;
-  };
+// jsdom has no layout, so the footer tests below give the composer the widths
+// the real app measures for Claude with text typed: 210px of left-hand tools,
+// and 273px of controls (schedule, model menu, this trigger, send) with the
+// trigger as a 32px icon. A named trigger is 40px plus 6px per character,
+// capped at 192px like the real one.
+const layout = { room: 0, tools: 210 };
+const CONTROLS_BESIDE_TRIGGER = 241;
 
-  assert.ok(!nameClasses('plan').includes('hidden'));
-  for (const mode of MODES.filter((candidate) => candidate !== 'plan')) {
-    const classes = nameClasses(mode);
-    assert.ok(classes.includes('hidden') && classes.includes('lg:inline'), `${mode} is named from lg`);
+const triggerWidth = (trigger: Element | null) => {
+  const name = trigger?.querySelector('span')?.textContent;
+  return name ? Math.min(192, 40 + 6 * name.length) : 32;
+};
+
+const widthOf = (element: Element) => {
+  if (element.matches('[data-slot="prompt-input-tools"]')) {
+    return layout.tools;
   }
+  if (element.matches('[data-testid="composer-controls"]')) {
+    return CONTROLS_BESIDE_TRIGGER + triggerWidth(element.querySelector('button'));
+  }
+  return element.matches('button[aria-haspopup="menu"]') ? triggerWidth(element) : 0;
+};
+
+const resizeObservers = new Set<{ callback: () => void }>();
+
+const layOutComposer = (room: number, tools = 210) => {
+  layout.room = room;
+  layout.tools = tools;
+  vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(function (this: Element) {
+    return this.matches('[data-slot="prompt-input-footer"]') ? layout.room : 0;
+  });
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+    const width = widthOf(this);
+    return { x: 0, y: 0, top: 0, left: 0, right: width, bottom: 32, width, height: 32, toJSON: () => ({}) };
+  });
+  vi.stubGlobal('ResizeObserver', class {
+    callback: () => void;
+
+    constructor(callback: () => void) {
+      this.callback = callback;
+    }
+
+    observe() {
+      resizeObservers.add(this);
+    }
+
+    disconnect() {
+      resizeObservers.delete(this);
+    }
+  });
+};
+
+/** Changes the composer's widths the way a resize or a keystroke would, and lets the observers see it. */
+const resizeComposer = (changes: Partial<typeof layout>) => {
+  act(() => {
+    Object.assign(layout, changes);
+    for (const observer of [...resizeObservers]) {
+      observer.callback();
+    }
+  });
+};
+
+const renderInFooter = (permissionMode: PermissionMode) =>
+  render(
+    <PromptInputFooter>
+      <PromptInputTools />
+      <div data-testid="composer-controls">
+        <ComposerPermissionMenu
+          permissionMode={permissionMode}
+          permissionModes={[...MODES]}
+          onSelectPermissionMode={() => {}}
+          providerLabel="Claude"
+        />
+      </div>
+    </PromptInputFooter>,
+  );
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  resizeObservers.clear();
+});
+
+test('the mode is named where the composer has room, and only the icon is left where it does not', () => {
+  // 678px is the composer at 1024px with the sidebar open.
+  layOutComposer(678);
+  const { getByRole } = renderInFooter('default');
+  const trigger = getByRole('button', { name: /^Default Mode: / });
+  assert.equal(trigger.textContent, 'Default Mode');
+
+  // The code editor docked beside the chat at 1280px leaves 330px. Even on its
+  // own row the named trigger would push the send button out of the composer.
+  resizeComposer({ room: 330 });
+  assert.equal(trigger.textContent, '');
+  assert.ok(getByRole('button', { name: /^Default Mode: / }), 'the accessible name still says which mode');
+
+  // Docked at 1440px everything fits on one row, with 7px to spare: the name
+  // would move the controls onto a second row, so it stays hidden.
+  resizeComposer({ room: 490 });
+  assert.equal(trigger.textContent, '');
+
+  resizeComposer({ room: 678 });
+  assert.equal(trigger.textContent, 'Default Mode');
+});
+
+test('plan mode keeps its name wherever it fits inside the composer', () => {
+  // Docked at 1366px (416px): the controls already need a row of their own,
+  // and with the name they still fit inside it. Default mode stays an icon.
+  layOutComposer(416);
+  const plan = renderInFooter('plan');
+  assert.equal(plan.getByRole('button').textContent, 'Plan Mode');
+  plan.unmount();
+
+  const other = renderInFooter('default');
+  assert.equal(other.getByRole('button').textContent, '');
+  other.unmount();
+
+  // Docked at 1280px (330px) even Plan Mode's name would push the send button
+  // out, so plan mode falls back to the icon too.
+  layOutComposer(330);
+  const narrow = renderInFooter('plan');
+  assert.equal(narrow.getByRole('button').textContent, '');
+  assert.ok(narrow.getByRole('button', { name: /^Plan Mode: / }));
+});
+
+test('typing the first character neither takes the name away nor brings it in', () => {
+  // The clear button joins the left-hand tools (174px -> 210px) once something
+  // is typed. A name is only shown with room for it to spare.
+  layOutComposer(600, 174);
+  const roomy = renderInFooter('default');
+  assert.equal(roomy.getByRole('button').textContent, 'Default Mode');
+  resizeComposer({ tools: 210 });
+  assert.equal(roomy.getByRole('button').textContent, 'Default Mode');
+  roomy.unmount();
+
+  layOutComposer(540, 174);
+  const tight = renderInFooter('default');
+  assert.equal(tight.getByRole('button').textContent, '');
+  resizeComposer({ tools: 210 });
+  assert.equal(tight.getByRole('button').textContent, '');
 });
 
 test('the menu ends by saying Tab in the message box switches modes', () => {
