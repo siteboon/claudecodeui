@@ -348,7 +348,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                       // changed as a second element, which flows below.
                       <TranscriptTimestamp
                         value={stampValue}
-                        className="col-start-2 row-start-1 mt-1 text-[11px] leading-4 text-gray-400 dark:text-gray-500"
+                        className="col-start-2 row-start-1 mt-1.5 text-[11px] leading-4 text-gray-400 dark:text-gray-500"
                       />
                     )}
                   </div>

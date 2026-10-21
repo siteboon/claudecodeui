@@ -447,6 +447,25 @@ describe('a subagent timeline', () => {
     fireEvent.click(header);
     assert.deepEqual(timeLabels(container), ['8:03:00 AM – 8:03:31 AM', '8:03:30 AM', '8:03:31 AM']);
   });
+
+  it('keeps the card\'s time in its header alone while the spawning call has no input yet', () => {
+    const { container } = renderRow({
+      message: {
+        type: 'assistant',
+        content: '',
+        isToolUse: true,
+        toolName: 'Agent',
+        toolId: 'toolu_agent_streaming',
+        isSubagentContainer: true,
+        subagent: { id: 'agent-2', type: 'Explore', status: 'running' },
+        timestamp: at(20, 8, 3, 0),
+      },
+      prevMessage: FIRST_REPLY,
+      showTimestamps: true,
+    });
+    assert.deepEqual(timeLabels(container), ['8:03:00 AM']);
+    assert.equal(footers(container).length, 0);
+  });
 });
 
 describe('a workflow card', () => {
