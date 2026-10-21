@@ -271,7 +271,7 @@ async function runTurn(input: {
       // fail the test too, not hang it.
       let stopDeadline: NodeJS.Timeout | undefined;
       await Promise.race([
-        opencodeRuntime.abort(input.appSessionId).then(() => turn).catch(() => undefined),
+        Promise.resolve(opencodeRuntime.abort(input.appSessionId)).then(() => turn).catch(() => undefined),
         new Promise((resolve) => {
           stopDeadline = setTimeout(resolve, STOP_DEADLINE_MS);
         }),
