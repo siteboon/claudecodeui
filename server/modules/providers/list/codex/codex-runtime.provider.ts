@@ -306,6 +306,17 @@ async function queryCodex(
   // Session-map key: the app session id when the caller supplied one, else
   // the provider-native thread id once captured (legacy/direct API callers).
   const sessionKey = () => sessionId || capturedSessionId || null;
+  // A user abort ends the run on one of two paths (the loop breaks, or the SDK
+  // throws its AbortError); either way it is reported as a cancellation.
+  const notifyCodexRunAborted = () => {
+    notifyRunStopped({
+      userId: ws?.userId || null,
+      provider: 'codex',
+      sessionId: sessionId || capturedSessionId || null,
+      sessionName: sessionSummary,
+      stopReason: 'aborted'
+    });
+  };
 
   try {
     codex = new Codex();
@@ -452,6 +463,8 @@ async function queryCodex(
           stopReason: 'completed'
         });
       }
+    } else if (!terminalFailure) {
+      notifyCodexRunAborted();
     }
 
   } catch (error) {
@@ -488,6 +501,11 @@ async function queryCodex(
           error
         });
       }
+    } else if (!terminalFailure && (session?.status === 'aborted' || abortController.signal.aborted)) {
+      // The SDK rethrows the spawn AbortError once the CLI is killed. Only a
+      // real user abort counts; an error that merely mentions "aborted" stays
+      // silent as before.
+      notifyCodexRunAborted();
     }
 
   } finally {

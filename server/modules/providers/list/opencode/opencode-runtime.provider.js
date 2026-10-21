@@ -152,7 +152,7 @@ async function spawnOpenCode(command, options = {}, ws, context) {
     // (close and error handlers can both fire for spawn failures).
     let completeSent = false;
 
-    const notifyTerminalState = ({ code = null, error = null } = {}) => {
+    const notifyTerminalState = ({ code = null, error = null, aborted = false } = {}) => {
       if (terminalNotificationSent) {
         return;
       }
@@ -160,6 +160,19 @@ async function spawnOpenCode(command, options = {}, ws, context) {
       terminalNotificationSent = true;
       // Notifications are app-facing, so they carry the app session id.
       const finalSessionId = sessionId || capturedSessionId || processKey;
+      // A user abort kills the CLI with SIGTERM, so it exits with code null;
+      // that is a cancellation, not a failure.
+      if (aborted) {
+        notifyRunStopped({
+          userId: ws?.userId || null,
+          provider: 'opencode',
+          sessionId: finalSessionId,
+          sessionName: sessionSummary,
+          stopReason: 'aborted',
+        });
+        return;
+      }
+
       if (code === 0 && !error) {
         notifyRunStopped({
           userId: ws?.userId || null,
@@ -354,7 +367,7 @@ async function spawnOpenCode(command, options = {}, ws, context) {
         }
 
         if (code === 0) {
-          notifyTerminalState({ code });
+          notifyTerminalState({ code, aborted: Boolean(opencodeProcess.aborted) });
           resolve();
           return;
         }
@@ -371,7 +384,7 @@ async function spawnOpenCode(command, options = {}, ws, context) {
           }
         }
 
-        notifyTerminalState({ code });
+        notifyTerminalState({ code, aborted: Boolean(opencodeProcess.aborted) });
         reject(new Error(code === null ? 'OpenCode CLI process was terminated' : `OpenCode CLI exited with code ${code}`));
       });
 
@@ -395,7 +408,7 @@ async function spawnOpenCode(command, options = {}, ws, context) {
           completeSent = true;
           ws.send(createCompleteMessage({ provider: 'opencode', sessionId: finalSessionId, exitCode: 1 }));
         }
-        notifyTerminalState({ error });
+        notifyTerminalState({ error, aborted: Boolean(opencodeProcess.aborted) });
         reject(error);
       });
     }).catch(reject);
