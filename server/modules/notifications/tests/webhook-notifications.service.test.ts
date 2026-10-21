@@ -9,6 +9,8 @@ import path from 'node:path';
 import test from 'node:test';
 import { format } from 'node:util';
 
+import type { WebSocket } from 'ws';
+
 import {
   closeConnection,
   initializeDatabase,
@@ -23,6 +25,8 @@ import {
   notifyRunFailed as notifyRunFailedJs,
   notifyRunStopped as notifyRunStoppedJs,
   notifyUserIfEnabled,
+  registerDesktopNotificationClient,
+  unregisterDesktopNotificationClient,
 } from '@/modules/notifications/index.js';
 import {
   createWebhookNotificationsService,
@@ -231,6 +235,47 @@ test('the existing event checkboxes gate webhooks: stop covers completed/cancell
       await webhookNotificationsService.waitForIdle();
       assert.deepEqual(receiver.hits.map((hit) => JSON.parse(hit.body).type), ['run.failed', 'run.completed']);
     } finally {
+      await receiver.close();
+    }
+  });
+});
+
+test('runs of one session that end the same way inside the dedupe window each reach the webhook; desktop still collapses them', async () => {
+  await withDatabase(async (userId) => {
+    const receiver = await startReceiver();
+    const desktopCodes: string[] = [];
+    const desktopSocket = {
+      OPEN: 1,
+      readyState: 1,
+      send: (message: string) => {
+        desktopCodes.push(JSON.parse(message).payload.data.code);
+      },
+      close: () => {},
+    } as unknown as WebSocket;
+    try {
+      notificationPreferencesDb.updatePreferences(userId, { channels: { desktop: true } });
+      registerDesktopNotificationClient({ userId, deviceId: 'dedupe-device', ws: desktopSocket });
+      webhookNotificationsService.saveConfig(userId, { url: receiver.url, allowHttp: true });
+
+      // Back-to-back runs, as an automation driving one session produces them.
+      for (let run = 0; run < 2; run += 1) {
+        notifyRunStopped({ userId, provider: 'claude', sessionId: 'repeat-1', stopReason: 'completed' });
+        notifyRunStopped({ userId, provider: 'cursor', sessionId: 'repeat-2', stopReason: 'aborted' });
+        notifyRunFailed({ userId, provider: 'codex', sessionId: 'repeat-3', error: 'rate limited' });
+      }
+
+      await waitForHits(receiver, 6);
+      await webhookNotificationsService.waitForIdle();
+      const bodies = receiver.hits.map((hit) => JSON.parse(hit.body));
+      assert.deepEqual(
+        bodies.map((body) => body.type).sort(),
+        ['run.cancelled', 'run.cancelled', 'run.completed', 'run.completed', 'run.failed', 'run.failed'],
+      );
+      assert.equal(new Set(bodies.map((body) => body.id)).size, 6);
+      // Web Push and desktop keep their 20 s window.
+      assert.deepEqual(desktopCodes, ['run.stopped', 'run.stopped', 'run.failed']);
+    } finally {
+      unregisterDesktopNotificationClient(desktopSocket);
       await receiver.close();
     }
   });
