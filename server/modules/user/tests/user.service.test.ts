@@ -189,6 +189,23 @@ test('appendQueuedMessage refuses a message with nothing to send, or a bad scope
   assert.throws(() => service.appendQueuedMessage(5, '   ', { content: 'B' }), /scope/i);
 });
 
+test('appendQueuedMessage refuses, as a conflict, a slash command the repository cannot combine', () => {
+  const service = createUserService(createDependencies({
+    drafts: { ...noDrafts, appendQueuedMessage: () => null },
+  }));
+
+  assert.throws(
+    () => service.appendQueuedMessage(5, 'session-1', { content: '/compact', attachments: [] }),
+    (error: unknown) => {
+      const appError = error as { code?: string; statusCode?: number; message?: string };
+      assert.equal(appError.code, 'QUEUED_MESSAGE_NOT_COMBINABLE');
+      assert.equal(appError.statusCode, 409);
+      assert.match(appError.message ?? '', /slash command/);
+      return true;
+    },
+  );
+});
+
 test('clearQueuedMessage clears the named scope', () => {
   const cleared: unknown[][] = [];
   const service = createUserService(createDependencies({

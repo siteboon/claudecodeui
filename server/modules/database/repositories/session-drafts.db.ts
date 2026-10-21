@@ -63,6 +63,17 @@ function mergeQueuedMessages(earlier: QueuedChatMessage, later: QueuedChatMessag
   };
 }
 
+/**
+ * Whether a queued message is a slash command, such as "/compact" or
+ * "/review src". The CLI takes the command from the start of the message and
+ * the rest as its arguments, so a command cannot share a turn with other
+ * follow-ups: text added after it would become its arguments, and a command
+ * added after text would reach the CLI as plain text.
+ */
+function isSlashCommand(message: QueuedChatMessage): boolean {
+  return message.content.trimStart().startsWith('/');
+}
+
 /** The message waiting in a scope's queue, or null when nothing sendable is stored there. */
 function readStoredQueuedMessage(userId: number, scope: string): QueuedChatMessage | null {
   const row = getConnection()
@@ -181,16 +192,21 @@ export const sessionDraftsDb = {
    * Reading and writing in one transaction keeps this exact against the
    * dispatcher, which claims the stored value: once the earlier message has been
    * claimed for sending, the new one is queued on its own and nothing is sent
-   * twice. Returns the message that is now queued and whether it was appended.
+   * twice. Returns the message that is now queued and whether it was appended,
+   * or null, storing nothing, when the waiting message and this one cannot be
+   * one turn because either of them is a slash command.
    */
   appendQueuedMessage(
     userId: number,
     scope: string,
     message: QueuedChatMessage
-  ): { queuedMessage: QueuedChatMessage; appended: boolean } {
+  ): { queuedMessage: QueuedChatMessage; appended: boolean } | null {
     const db = getConnection();
     return db.transaction(() => {
       const waiting = readStoredQueuedMessage(userId, scope);
+      if (waiting && (isSlashCommand(waiting) || isSlashCommand(message))) {
+        return null;
+      }
       const queuedMessage = waiting ? mergeQueuedMessages(waiting, message) : message;
       writeStoredQueuedMessage(userId, scope, JSON.stringify(queuedMessage));
       return { queuedMessage, appended: waiting !== null };

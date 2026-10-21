@@ -239,6 +239,29 @@ test('clearing the queued message keeps the draft text, and drops an emptied row
   });
 });
 
+test('a slash command is never merged with another queued message, in either order', async () => {
+  await withDatabase(() => {
+    sessionDraftsDb.appendQueuedMessage(USER_ID, 'session-a', { content: 'fix the test', attachments: [] });
+    assert.equal(
+      sessionDraftsDb.appendQueuedMessage(USER_ID, 'session-a', { content: '/compact', attachments: [] }),
+      null,
+    );
+    assert.deepEqual(queuedIn('session-a'), { content: 'fix the test', attachments: [] }, 'the waiting text is kept as it was');
+
+    sessionDraftsDb.appendQueuedMessage(USER_ID, 'session-b', { content: '  /review src', attachments: [] });
+    assert.equal(
+      sessionDraftsDb.appendQueuedMessage(USER_ID, 'session-b', { content: 'then fix it', attachments: [] }),
+      null,
+    );
+    assert.deepEqual(queuedIn('session-b'), { content: '  /review src', attachments: [] }, 'the waiting command is kept as it was');
+
+    // On its own, with nothing waiting, a command is queued as before.
+    assert.equal(sessionDraftsDb.claimQueuedMessage(claimCandidate('session-a')), true);
+    const alone = sessionDraftsDb.appendQueuedMessage(USER_ID, 'session-a', { content: '/compact', attachments: [] });
+    assert.deepEqual(alone, { queuedMessage: { content: '/compact', attachments: [] }, appended: false });
+  });
+});
+
 test('a claim restored after losing a race goes back in front of a follow-up queued meanwhile', async () => {
   await withDatabase(() => {
     sessionDraftsDb.appendQueuedMessage(USER_ID, 'session-a', { content: 'A', attachments: [{ name: 'a.png' }] });

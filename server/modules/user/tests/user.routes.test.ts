@@ -33,7 +33,8 @@ async function withUserServer(run: (baseUrl: string, calls: DraftCall[]) => Prom
       saveDraftText: (...args) => { calls.push(['saveDraftText', ...args]); },
       appendQueuedMessage: (...args) => {
         calls.push(['appendQueuedMessage', ...args]);
-        return { queuedMessage: args[2], appended: false };
+        // Stands in for a scope whose waiting message cannot take this one.
+        return args[1] === 'session-with-command' ? null : { queuedMessage: args[2], appended: false };
       },
       clearQueuedMessage: (...args) => { calls.push(['clearQueuedMessage', ...args]); },
       deleteDraft: (...args) => { calls.push(['deleteDraft', ...args]); },
@@ -103,6 +104,18 @@ test('POST /drafts/queued-message refuses a message with nothing to send', async
     assert.equal(response.status, 400);
     assert.deepEqual(await response.json(), { code: 'INVALID_QUEUED_MESSAGE' });
     assert.deepEqual(calls, []);
+  });
+});
+
+test('POST /drafts/queued-message answers 409 when the message cannot be combined with the waiting one', async () => {
+  await withUserServer(async (baseUrl) => {
+    const response = await send(`${baseUrl}/api/user/drafts/queued-message`, 'POST', {
+      scope: 'session-with-command',
+      queuedMessage: { content: 'fix it', attachments: [] },
+    });
+
+    assert.equal(response.status, 409);
+    assert.deepEqual(await response.json(), { code: 'QUEUED_MESSAGE_NOT_COMBINABLE' });
   });
 });
 

@@ -33,7 +33,7 @@ type UserDependencies = {
       userId: number,
       scope: string,
       message: QueuedChatMessage,
-    ): { queuedMessage: QueuedChatMessage; appended: boolean };
+    ): { queuedMessage: QueuedChatMessage; appended: boolean } | null;
     clearQueuedMessage(userId: number, scope: string): void;
     deleteDraft(userId: number, scope: string): void;
   };
@@ -224,12 +224,22 @@ export function createUserService(dependencies: UserDependencies) {
      * Queues a message behind the session's running turn. A message already
      * waiting there is kept and this one is added after it, so a burst of
      * follow-ups all reach the provider, in order, as the next turn.
+     *
+     * A slash command is the one exception: it only works as a turn of its
+     * own, so it is refused rather than merged, and the composer keeps it.
      */
     appendQueuedMessage(userId: number, scopeInput: unknown, queuedMessageInput: unknown) {
       const scope = readDraftScope(scopeInput);
       const message = readQueuedMessageInput(queuedMessageInput);
-      const { queuedMessage, appended } = dependencies.drafts.appendQueuedMessage(userId, scope, message);
-      return { success: true, queuedMessage, appended };
+      const result = dependencies.drafts.appendQueuedMessage(userId, scope, message);
+      if (!result) {
+        throw new AppError(
+          'A slash command runs as a turn of its own, so it cannot be combined with the queued message. '
+            + 'Send it after the queued message has gone.',
+          { code: 'QUEUED_MESSAGE_NOT_COMBINABLE', statusCode: 409 },
+        );
+      }
+      return { success: true, queuedMessage: result.queuedMessage, appended: result.appended };
     },
 
     clearQueuedMessage(userId: number, scopeInput: unknown) {

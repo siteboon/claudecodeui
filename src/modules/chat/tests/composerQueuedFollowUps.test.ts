@@ -75,6 +75,14 @@ const fakeServer = async (url: RequestInfo | URL, init?: RequestInit): Promise<R
       const message = body.queuedMessage as StoredQueued;
       const current = server.get(scope) ?? { text: '', queuedMessage: null };
       const waiting = current.queuedMessage;
+      const isCommand = (queued: StoredQueued) => queued.content.trimStart().startsWith('/');
+      if (waiting && (isCommand(waiting) || isCommand(message))) {
+        await appendGate;
+        return json({
+          success: false,
+          error: { code: 'QUEUED_MESSAGE_NOT_COMBINABLE', message: 'A slash command runs as a turn of its own' },
+        }, 409);
+      }
       const queuedMessage: StoredQueued = waiting
         ? {
             content: [waiting.content, message.content].filter((part) => part.trim()).join('\n\n'),
@@ -344,6 +352,19 @@ test('a follow-up the server does not accept stays in the composer, with an erro
   assert.equal(view.result.current.queuedDraft, null, 'no card for a message nothing will send');
   assert.equal(errors.length, 1);
   assert.match(String(errors[0]?.content), /Failed to queue message/);
+});
+
+test('a slash command is not merged with a queued message: it stays in the composer, with an error', async () => {
+  const { view, errors } = render();
+  await submit(view, 'fix the failing test');
+
+  await submit(view, '/compact');
+
+  assert.equal(queuedOnServer()?.content, 'fix the failing test', 'the queued text is not turned into /compact arguments');
+  assert.equal(view.result.current.queuedDraft?.content, 'fix the failing test');
+  assert.equal(view.result.current.input, '/compact', 'the command is kept to send on its own later');
+  assert.equal(errors.length, 1);
+  assert.match(String(errors[0]?.content), /Failed to queue message: A slash command/);
 });
 
 test('switching sessions during the upload still queues the follow-up behind the earlier one', async () => {
