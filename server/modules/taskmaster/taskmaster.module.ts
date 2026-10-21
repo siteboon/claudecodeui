@@ -1,17 +1,17 @@
 import fs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
-import os from 'node:os';
 
 import spawn from 'cross-spawn';
 
 import { projectsDb } from '@/modules/database/index.js';
+import { resolveClaudeGlobalConfigPath, resolveClaudeUserSettingsPath } from '@/shared/utils.js';
 
 import { createTaskmasterRouter } from './taskmaster.routes.js';
 import { createTaskmasterService } from './taskmaster.service.js';
 
 const taskmasterService = createTaskmasterService({
   readTextFile: (filePath) => fsPromises.readFile(filePath, 'utf8'),
-  getHomeDirectory: os.homedir,
+  getClaudeConfigPaths: () => [resolveClaudeGlobalConfigPath(), resolveClaudeUserSettingsPath()],
 });
 
 /** Used by the server entrypoint to mount authenticated TaskMaster endpoints. */

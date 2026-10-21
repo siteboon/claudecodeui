@@ -11,7 +11,10 @@ function createDependencies(
   files: Record<string, string>,
 ): ServiceDependencies {
   return {
-    getHomeDirectory: () => homeDirectory,
+    getClaudeConfigPaths: () => [
+      path.join(homeDirectory, '.claude.json'),
+      path.join(homeDirectory, '.claude', 'settings.json'),
+    ],
     readTextFile: async (filePath) => {
       const content = files[filePath];
       if (content === undefined) {
