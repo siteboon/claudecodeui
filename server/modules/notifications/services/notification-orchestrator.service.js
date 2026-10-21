@@ -227,6 +227,11 @@ const notificationChannels = [
     // preferences.channels, which the Settings client rewrites with only its
     // known keys. The channel sends run lifecycle events only.
     isEnabled: () => true,
+    // The dedupe window keeps a person from being pinged twice, but it also
+    // swallows a second run of the same session that ends the same way within
+    // 20 s. Each run reports its end once at the source, and receivers dedupe
+    // on the event id, so every run is sent.
+    bypassesDedupe: true,
     send: ({ userId, event }) => webhookNotificationsService.sendForEvent({ userId, event })
   }
 ];
@@ -241,13 +246,11 @@ function notifyUserIfEnabled({ userId, event }) {
   if (!isNotificationEventEnabled(preferences, normalizedEvent)) {
     return;
   }
-  if (isDuplicate(normalizedEvent)) {
-    return;
-  }
+  const duplicate = isDuplicate(normalizedEvent);
 
   const payload = buildNotificationPayload(normalizedEvent);
   for (const channel of notificationChannels) {
-    if (!channel.isEnabled(preferences)) {
+    if ((duplicate && !channel.bypassesDedupe) || !channel.isEnabled(preferences)) {
       continue;
     }
     Promise.resolve(channel.send({ userId, event: normalizedEvent, payload })).catch((err) => {
@@ -276,7 +279,8 @@ function notifyRunStopped({ userId, provider, sessionId = null, stopReason = 'co
  *
  * Uses the `stop` kind so it rides the existing "run stopped" preference rather
  * than needing a new opt-in that would default to off. No explicit dedupeKey, so
- * the default composite key collapses repeats inside the dedupe window.
+ * the default composite key collapses repeats inside the dedupe window (on the
+ * channels that dedupe; the webhook sends each).
  */
 function notifyBackgroundWorkCompleted({ userId, provider, sessionId = null, sessionName = null }) {
   notifyUserIfEnabled({
