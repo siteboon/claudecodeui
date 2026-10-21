@@ -42,6 +42,11 @@
     "pattern": "pattern:",
     "in": "in:"
   },
+  "navRail": {
+    "label": "Conversation navigation",
+    "goToTurn": "Go to message {{index}}",
+    "attachmentPreview": "Attachment"
+  },
   "fileOperations": {
     "updated": "File updated successfully",
     "created": "File created successfully",

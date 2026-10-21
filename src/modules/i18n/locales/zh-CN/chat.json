@@ -42,6 +42,11 @@
     "pattern": "模式：",
     "in": "在："
   },
+  "navRail": {
+    "label": "对话导航",
+    "goToTurn": "跳转到第 {{index}} 条消息",
+    "attachmentPreview": "附件"
+  },
   "fileOperations": {
     "updated": "文件更新成功",
     "created": "文件创建成功",
