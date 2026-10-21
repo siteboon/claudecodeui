@@ -138,12 +138,23 @@ test('providerMcpService keeps claude user/local MCP servers where the CLI reads
       url: 'https://example.com/mcp',
       workspacePath,
     });
+    await providerMcpService.upsertProviderMcpServer('claude', {
+      name: 'profile-project-stdio',
+      scope: 'project',
+      transport: 'stdio',
+      command: 'node',
+      workspacePath,
+    });
 
     const profileConfig = await readJson(path.join(configDir, '.claude.json'));
     assert.ok(Object.hasOwn(profileConfig.mcpServers as Record<string, unknown>, 'profile-user-stdio'));
     const projects = profileConfig.projects as Record<string, Record<string, unknown>>;
     assert.ok(Object.hasOwn(projects[workspacePath].mcpServers as Record<string, unknown>, 'profile-local-http'));
     await assert.rejects(fs.access(path.join(tempRoot, '.claude.json')), { code: 'ENOENT' });
+    // Project scope stays in the workspace's .mcp.json: the CLI reads it from the project, not the config folder.
+    const projectConfig = await readJson(path.join(workspacePath, '.mcp.json'));
+    assert.ok(Object.hasOwn(projectConfig.mcpServers as Record<string, unknown>, 'profile-project-stdio'));
+    await assert.rejects(fs.access(path.join(configDir, '.mcp.json')), { code: 'ENOENT' });
 
     // Servers the user added with `claude mcp add` under that profile are listed too.
     profileConfig.mcpServers = {
@@ -154,6 +165,7 @@ test('providerMcpService keeps claude user/local MCP servers where the CLI reads
     const grouped = await providerMcpService.listProviderMcpServers('claude', { workspacePath });
     assert.deepEqual(grouped.user.map((server) => server.name).sort(), ['cli-added', 'profile-user-stdio']);
     assert.deepEqual(grouped.local.map((server) => server.name), ['profile-local-http']);
+    assert.deepEqual(grouped.project.map((server) => server.name), ['profile-project-stdio']);
 
     // A relative value would resolve against the CLI's project folder, not the
     // server's cwd, so the provider keeps the default ~/.claude.json.
