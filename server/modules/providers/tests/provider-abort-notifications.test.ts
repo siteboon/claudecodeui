@@ -231,13 +231,40 @@ for (const mode of ['throws', 'yields'] as const) {
   });
 }
 
+test('codex: an error that only mentions "aborted", with no user abort, is not reported as a cancellation', async (t) => {
+  await withDesktopListener(async ({ userId, payloads }) => {
+    t.mock.method(Codex.prototype, 'startThread', () => ({
+      id: 'codex-native-2',
+      async runStreamed() {
+        return {
+          events: (async function* () {
+            yield { type: 'thread.started', thread_id: 'codex-native-2' };
+            throw new Error('stream aborted by the upstream proxy');
+          })(),
+        };
+      },
+    }) as unknown as Thread);
+    const writer = createWriter(userId);
+
+    await codexRuntime.run('hello', { sessionId: 'codex-not-aborted', cwd: process.cwd() }, writer, runtimeContext).catch(() => {});
+
+    assert.ok(
+      !payloads.some((payload) => payload.data.code === 'run.stopped'),
+      `notifications sent: ${JSON.stringify(payloads)}`,
+    );
+  });
+});
+
 /**
  * A stand-in for the Claude SDK query: it reports the session, then waits.
  * `interrupt()` either ends the stream or makes it throw; the Claude CLI on
  * this box (measured in the real app) takes the throwing path:
  * "Claude Code returned an error result: [ede_diagnostic] result_type=user ...".
  */
-function createInterruptibleQuery(mode: 'throws' | 'ends'): NonNullable<ProviderRuntimeContext['createQuery']> {
+function createInterruptibleQuery(
+  mode: 'throws' | 'ends',
+  { afterCompletedTurn = false }: { afterCompletedTurn?: boolean } = {},
+): NonNullable<ProviderRuntimeContext['createQuery']> {
   return ({ prompt }) => {
     void (async () => {
       for await (const _message of prompt) { /* the CLI reads its stdin */ }
@@ -246,6 +273,16 @@ function createInterruptibleQuery(mode: 'throws' | 'ends'): NonNullable<Provider
     const interruptedSignal = new Promise<void>((resolve) => { interrupted = resolve; });
     const iterator = (async function* () {
       yield { type: 'system', subtype: 'init', session_id: 'claude-native-abort' };
+      if (afterCompletedTurn) {
+        // The turn ends while a backgrounded command is still running, so the
+        // runtime reports completion and holds the process open for it.
+        yield {
+          type: 'assistant',
+          session_id: 'claude-native-abort',
+          message: { content: [{ type: 'tool_use', id: 'bg-1', name: 'Bash', input: { command: 'sleep 60', run_in_background: true } }] },
+        };
+        yield { type: 'result', subtype: 'success', is_error: false, session_id: 'claude-native-abort' };
+      }
       await interruptedSignal;
       if (mode === 'throws') {
         throw new Error('Claude Code returned an error result: [ede_diagnostic] result_type=user last_content_type=n/a stop_reason=null');
@@ -278,3 +315,22 @@ for (const mode of ['throws', 'ends'] as const) {
     });
   });
 }
+
+test('claude: cancelling the post-turn hold of a completed turn sends no second notice', async () => {
+  await withDesktopListener(async ({ userId, payloads, binDir }) => {
+    const sessionId = 'claude-abort-session-held';
+    const writer = createWriter(userId);
+    const run = queryClaudeSDK('hello', { sessionId, cwd: binDir }, writer as never, {
+      ...runtimeContext,
+      createQuery: createInterruptibleQuery('throws', { afterCompletedTurn: true }),
+    });
+    await waitFor(() => payloads.length > 0, 'claude to report the completed turn');
+    assert.equal(isClaudeSDKSessionActive(sessionId), true, 'the process is held for the background command');
+
+    assert.equal(await abortClaudeSDKSession(sessionId), true);
+    await run;
+
+    assert.deepEqual(payloads.map((payload) => payload.data.code), ['run.stopped'], `notifications sent: ${JSON.stringify(payloads)}`);
+    assert.match(payloads[0].body, /completed$/);
+  });
+});
