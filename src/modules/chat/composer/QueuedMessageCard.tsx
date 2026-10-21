@@ -39,7 +39,7 @@ export default function QueuedMessageCard({
               can also be scrolled from the keyboard. */}
           <p
             tabIndex={0}
-            className="mt-0.5 max-h-28 overflow-y-auto whitespace-pre-wrap break-words text-sm text-foreground/90"
+            className="mt-0.5 max-h-28 overflow-y-auto whitespace-pre-wrap break-words rounded-sm text-sm text-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {content}
           </p>
