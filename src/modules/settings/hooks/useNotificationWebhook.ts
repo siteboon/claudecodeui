@@ -38,7 +38,7 @@ const readErrorCode = (error: unknown): string => (
     : 'REQUEST_FAILED'
 );
 
-/** Loads and edits the Settings webhook destination, its signing secret and its test event. */
+/** Used by NotificationWebhookCard to load and edit the webhook destination, its signing secret and its test event. */
 export function useNotificationWebhook() {
   // Server copy of the destination; null until the first load finishes.
   const [webhook, setWebhook] = useState<NotificationWebhookState | null>(null);
