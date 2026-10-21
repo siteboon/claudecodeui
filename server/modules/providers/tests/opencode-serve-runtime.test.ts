@@ -918,8 +918,9 @@ test('a wrapped binary that outlives its wrapper script on SIGTERM is killed', {
     assert.equal(turn.error, null);
     assert.equal(turn.messages.find((message) => message.kind === 'complete')?.exitCode, 0);
     const spawn = turn.capture.find((entry) => entry.kind === 'spawn');
-    assert.ok(turn.capture.some((entry) => entry.kind === 'sigterm-ignored'), 'the binary was never asked to stop');
     assert.ok(await waitUntil(() => !isProcessAlive(spawn?.pid as number), 1_000), 'the wrapped binary outlived its stop');
+    // SIGTERM first; SIGKILL only once the grace ran out.
+    assert.ok(turn.capture.some((entry) => entry.kind === 'sigterm-ignored'), 'the binary was never asked to stop');
   } finally {
     process.env[pathKey] = previousPath;
   }
