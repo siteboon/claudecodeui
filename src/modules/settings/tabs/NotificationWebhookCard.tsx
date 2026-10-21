@@ -152,9 +152,10 @@ export default function NotificationWebhookCard() {
           {configured && (
             <>
               <div className="space-y-2 border-t border-border pt-4">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0 space-y-0.5">
-                    <div className="flex items-center gap-2">
+                {/* The buttons drop below the text when both no longer fit on one line. */}
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                  <div className="min-w-[220px] flex-1 space-y-0.5">
+                    <div className="flex flex-wrap items-center gap-x-2">
                       <KeyRound className="h-4 w-4 shrink-0 text-muted-foreground" />
                       <span className="text-sm font-medium text-foreground">{t('notifications.webhook.secret.title')}</span>
                       <span className="text-sm text-muted-foreground">
