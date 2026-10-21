@@ -13,6 +13,23 @@ import {
   writeJsonConfig,
 } from '@/shared/utils.js';
 
+/**
+ * The Claude CLI's global config, which holds the user- and local-scope MCP
+ * servers. The CLI reads it from `CLAUDE_CONFIG_DIR` when that is set, and the
+ * server forwards its whole env to every CLI it spawns, so this file has to
+ * follow the same override: Chat leaves MCP loading to the CLI, and a server
+ * saved anywhere else would never reach it. A relative value would resolve
+ * against the CLI's project folder, not the server's cwd, so it keeps the
+ * default location.
+ */
+const claudeGlobalConfigPath = (): string => {
+  const configDirectory = process.env.CLAUDE_CONFIG_DIR?.trim();
+  const baseDirectory = configDirectory && path.isAbsolute(configDirectory)
+    ? configDirectory
+    : os.homedir();
+  return path.join(baseDirectory, '.claude.json');
+};
+
 export class ClaudeMcpProvider extends McpProvider {
   constructor() {
     super('claude', ['user', 'local', 'project'], ['stdio', 'http', 'sse']);
@@ -25,7 +42,7 @@ export class ClaudeMcpProvider extends McpProvider {
       return readObjectRecord(config.mcpServers) ?? {};
     }
 
-    const filePath = path.join(os.homedir(), '.claude.json');
+    const filePath = claudeGlobalConfigPath();
     const config = await readJsonConfig(filePath);
     if (scope === 'user') {
       return readObjectRecord(config.mcpServers) ?? {};
@@ -49,7 +66,7 @@ export class ClaudeMcpProvider extends McpProvider {
       return;
     }
 
-    const filePath = path.join(os.homedir(), '.claude.json');
+    const filePath = claudeGlobalConfigPath();
     const config = await readJsonConfig(filePath);
     if (scope === 'user') {
       config.mcpServers = servers;

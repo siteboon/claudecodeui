@@ -17,6 +17,17 @@ const patchHomeDir = (nextHomeDir: string) => {
   };
 };
 
+// The Claude provider follows CLAUDE_CONFIG_DIR like the CLI, so every Claude
+// test pins it: a value inherited from the developer's shell would otherwise
+// send the writes into their real Claude config.
+const setClaudeConfigDir = (nextConfigDir: string | undefined) => {
+  const original = process.env.CLAUDE_CONFIG_DIR;
+  if (nextConfigDir === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = nextConfigDir;
+  return () => {
+    if (original === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = original;
+  };
+};
+
 const readJson = async (filePath: string): Promise<Record<string, unknown>> => {
   const content = await fs.readFile(filePath, 'utf8');
   return JSON.parse(content) as Record<string, unknown>;
@@ -32,6 +43,7 @@ test('providerMcpService handles claude MCP scopes/transports with file-backed p
   await fs.mkdir(workspacePath, { recursive: true });
 
   const restoreHomeDir = patchHomeDir(tempRoot);
+  const restoreConfigDir = setClaudeConfigDir(undefined);
   try {
     await providerMcpService.upsertProviderMcpServer('claude', {
       name: 'claude-user-stdio',
@@ -86,7 +98,76 @@ test('providerMcpService handles claude MCP scopes/transports with file-backed p
       workspacePath,
     });
     assert.equal(removeResult.removed, true);
+
+    // Without CLAUDE_CONFIG_DIR the CLI reads ~/.claude.json, never ~/.claude/.claude.json.
+    const userConfig = await readJson(path.join(tempRoot, '.claude.json'));
+    assert.ok(Object.hasOwn(userConfig.mcpServers as Record<string, unknown>, 'claude-user-stdio'));
   } finally {
+    restoreConfigDir();
+    restoreHomeDir();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+/**
+ * Chat leaves MCP loading to the Claude CLI (#1576), which reads user- and
+ * local-scope servers from `$CLAUDE_CONFIG_DIR/.claude.json` when that is set.
+ * The servers CloudCLI saves (the MCP settings, Browser MCP registration) must
+ * land in that same file, or they would never reach a Chat turn.
+ */
+test('providerMcpService keeps claude user/local MCP servers where the CLI reads them under CLAUDE_CONFIG_DIR', { concurrency: false }, async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-mcp-claude-config-dir-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  const configDir = path.join(tempRoot, 'claude-profile');
+  await fs.mkdir(workspacePath, { recursive: true });
+
+  const restoreHomeDir = patchHomeDir(tempRoot);
+  const restoreConfigDir = setClaudeConfigDir(configDir);
+  try {
+    await providerMcpService.upsertProviderMcpServer('claude', {
+      name: 'profile-user-stdio',
+      scope: 'user',
+      transport: 'stdio',
+      command: 'node',
+      args: ['server.js'],
+    });
+    await providerMcpService.upsertProviderMcpServer('claude', {
+      name: 'profile-local-http',
+      scope: 'local',
+      transport: 'http',
+      url: 'https://example.com/mcp',
+      workspacePath,
+    });
+
+    const profileConfig = await readJson(path.join(configDir, '.claude.json'));
+    assert.ok(Object.hasOwn(profileConfig.mcpServers as Record<string, unknown>, 'profile-user-stdio'));
+    const projects = profileConfig.projects as Record<string, Record<string, unknown>>;
+    assert.ok(Object.hasOwn(projects[workspacePath].mcpServers as Record<string, unknown>, 'profile-local-http'));
+    await assert.rejects(fs.access(path.join(tempRoot, '.claude.json')), { code: 'ENOENT' });
+
+    // Servers the user added with `claude mcp add` under that profile are listed too.
+    profileConfig.mcpServers = {
+      ...(profileConfig.mcpServers as Record<string, unknown>),
+      'cli-added': { type: 'stdio', command: 'uvx', args: ['some-server'] },
+    };
+    await fs.writeFile(path.join(configDir, '.claude.json'), JSON.stringify(profileConfig));
+    const grouped = await providerMcpService.listProviderMcpServers('claude', { workspacePath });
+    assert.deepEqual(grouped.user.map((server) => server.name).sort(), ['cli-added', 'profile-user-stdio']);
+    assert.deepEqual(grouped.local.map((server) => server.name), ['profile-local-http']);
+
+    // A relative value would resolve against the CLI's project folder, not the
+    // server's cwd, so the provider keeps the default ~/.claude.json.
+    process.env.CLAUDE_CONFIG_DIR = 'claude-profile';
+    await providerMcpService.upsertProviderMcpServer('claude', {
+      name: 'home-user-stdio',
+      scope: 'user',
+      transport: 'stdio',
+      command: 'node',
+    });
+    const homeConfig = await readJson(path.join(tempRoot, '.claude.json'));
+    assert.deepEqual(Object.keys(homeConfig.mcpServers as Record<string, unknown>), ['home-user-stdio']);
+  } finally {
+    restoreConfigDir();
     restoreHomeDir();
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
