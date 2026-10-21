@@ -212,8 +212,9 @@ test('plan mode keeps its name wherever it fits inside the composer', () => {
 
 test('typing the first character neither takes the name away nor brings it in', () => {
   // The clear button joins the left-hand tools (174px -> 210px) once something
-  // is typed. A name is only shown with room for it to spare.
-  layOutComposer(600, 174);
+  // is typed. A name is only shown with that much room to spare, and once shown
+  // it stays as long as it fits.
+  layOutComposer(580, 174);
   const roomy = renderInFooter('default');
   assert.equal(roomy.getByRole('button').textContent, 'Default Mode');
   resizeComposer({ tools: 210 });
