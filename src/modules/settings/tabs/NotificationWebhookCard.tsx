@@ -54,7 +54,11 @@ export default function NotificationWebhookCard() {
     if (delivery.ok) {
       return t('notifications.webhook.status.ok', { type: delivery.type, time, status: delivery.status });
     }
-    const reason = t(`notifications.webhook.reasons.${delivery.error ?? 'network'}`, { status: delivery.status });
+    // A reason this client does not know yet (newer server) falls back to the generic network one.
+    const reason = t(`notifications.webhook.reasons.${delivery.error ?? 'network'}`, {
+      status: delivery.status,
+      defaultValue: t('notifications.webhook.reasons.network'),
+    });
     return t('notifications.webhook.status.failed', { type: delivery.type, time, attempts: delivery.attempts, reason });
   };
 
