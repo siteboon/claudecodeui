@@ -469,6 +469,28 @@ test('Enter pressed again while a follow-up is being queued neither sends it twi
   );
 });
 
+test('Enter pressed while a refused follow-up is still being answered keeps both, in the order they were typed', async () => {
+  const { view, errors } = render();
+  refuseQueueing = true;
+  const response = hold();
+  appendGate = response.gate;
+
+  await act(async () => { view.result.current.setInput('follow-up A'); });
+  const first = startSubmit(view);
+  await waitFor(() => assert.equal(appendRequestCount, 1));
+  await act(async () => { view.result.current.setInput('follow-up B'); });
+  const next = startSubmit(view);
+  await act(async () => {
+    response.release();
+    await Promise.all([first, next]);
+  });
+
+  assert.equal(view.result.current.input, 'follow-up A\n\nfollow-up B', 'B waits in the composer, behind A');
+  assert.equal(appendRequestCount, 1, 'B is not sent while A is still being answered');
+  assert.equal(errors.length, 1);
+  assert.equal(queuedOnServer(), null);
+});
+
 test('Edit then Enter re-queues the merged message even when the clear reaches the server late', async () => {
   const { view } = render();
   await submit(view, 'follow-up A');
