@@ -215,7 +215,8 @@ for (const mode of ['throws', 'yields'] as const) {
       const run = codexRuntime.run('hello', { sessionId, cwd: process.cwd() }, writer, runtimeContext);
       await waitFor(() => writer.sessionIds.length > 0, 'codex to start');
 
-      assert.equal(codexRuntime.abort(sessionId), true);
+      // Awaited: the abort may be async (it waits for the CLI to exit).
+      assert.equal(await codexRuntime.abort(sessionId), true);
       await run;
 
       assert.deepEqual(payloads.map((payload) => payload.data.code), ['run.stopped'], `notifications sent: ${JSON.stringify(payloads)}`);

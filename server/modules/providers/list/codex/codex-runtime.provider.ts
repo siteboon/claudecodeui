@@ -295,17 +295,6 @@ async function queryCodex(
   // the stream for brand-new sessions).
   let capturedSessionId = providerSessionId;
   let sessionCreatedSent = false;
-  let terminalFailure: { message: string } | null = null;
-  // Codex surfaces API failures as streamed error items/turn.failed events, and
-  // then the SDK also throws "Codex Exec exited with code N: <stderr>" once the
-  // process dies. Showing both means the rendered error is followed by a raw
-  // stderr dump of unrelated CLI log lines, so the thrown wrapper is dropped
-  // when the stream already reported the failure.
-  let errorSurfaced = false;
-  const abortController = new AbortController();
-  // Session-map key: the app session id when the caller supplied one, else
-  // the provider-native thread id once captured (legacy/direct API callers).
-  const sessionKey = () => sessionId || capturedSessionId || null;
   // A user abort ends the run on one of two paths (the loop breaks, or the SDK
   // throws its AbortError); either way it is reported as a cancellation.
   const notifyCodexRunAborted = () => {
@@ -317,6 +306,17 @@ async function queryCodex(
       stopReason: 'aborted'
     });
   };
+  let terminalFailure: { message: string } | null = null;
+  // Codex surfaces API failures as streamed error items/turn.failed events, and
+  // then the SDK also throws "Codex Exec exited with code N: <stderr>" once the
+  // process dies. Showing both means the rendered error is followed by a raw
+  // stderr dump of unrelated CLI log lines, so the thrown wrapper is dropped
+  // when the stream already reported the failure.
+  let errorSurfaced = false;
+  const abortController = new AbortController();
+  // Session-map key: the app session id when the caller supplied one, else
+  // the provider-native thread id once captured (legacy/direct API callers).
+  const sessionKey = () => sessionId || capturedSessionId || null;
 
   try {
     codex = new Codex();
