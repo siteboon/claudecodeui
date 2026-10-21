@@ -39,6 +39,8 @@ const REQUEST_TIMEOUT_MS = 15_000;
 const EVENTS_CONNECT_TIMEOUT_MS = 15_000;
 // SIGTERM ends the server in 0.1-0.7 s (measured); SIGKILL after this grace.
 const STOP_GRACE_MS = 3_000;
+// How often a stop checks whether the server's process group has emptied.
+const GROUP_EXIT_POLL_MS = 50;
 const STDERR_TAIL_LENGTH = 4_000;
 const LISTENING_LINE = /listening on (https?:\/\/\S+)/;
 // Start failures worth one more try: the port probed free was taken before
@@ -130,6 +132,25 @@ function signalProcessTree(child: ChildProcess, signal: NodeJS.Signals, synchron
     } catch {
       // Already exited.
     }
+  }
+}
+
+/**
+ * POSIX: whether any process is left in the server's process group (the
+ * server leads it, see signalProcessTree). A wrapper script that leads the
+ * group can exit on SIGTERM while the binary it started is still running.
+ * Asked only while a stop is in progress, so the group id cannot have been
+ * reused yet. Windows has no groups here: taskkill /T /F ends the tree.
+ */
+function processGroupAlive(child: ChildProcess): boolean {
+  if (!RUNS_DETACHED || child.pid === undefined) {
+    return false;
+  }
+  try {
+    process.kill(-child.pid, 0);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -412,16 +433,34 @@ export class OpenCodeServerProcess {
       request.destroy();
     }
     this.longRequests.clear();
-    if (this.hasExited()) {
+    if (this.hasExited() && !processGroupAlive(this.child)) {
       return;
     }
 
     signalProcessTree(this.child, 'SIGTERM', false);
-    if (await this.waitForExit(STOP_GRACE_MS)) {
+    if (await this.waitForProcessTreeExit(STOP_GRACE_MS)) {
       return;
     }
     signalProcessTree(this.child, 'SIGKILL', false);
-    await this.waitForExit(STOP_GRACE_MS);
+    await this.waitForProcessTreeExit(STOP_GRACE_MS);
+  }
+
+  /**
+   * Waits for the server and, on POSIX, for every process left in its group:
+   * the group leader's exit alone does not mean a wrapped binary is gone.
+   */
+  private async waitForProcessTreeExit(timeoutMs: number): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    if (!(await this.waitForExit(timeoutMs))) {
+      return false;
+    }
+    while (processGroupAlive(this.child)) {
+      if (Date.now() >= deadline) {
+        return false;
+      }
+      await new Promise((resolve) => setTimeout(resolve, GROUP_EXIT_POLL_MS));
+    }
+    return true;
   }
 
   private waitForExit(timeoutMs: number): Promise<boolean> {

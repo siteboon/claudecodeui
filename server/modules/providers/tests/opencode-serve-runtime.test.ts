@@ -120,7 +120,7 @@ after(async () => {
 
 type CaptureEntry = {
   pid: number;
-  kind: 'spawn' | 'request' | 'exit' | 'crash';
+  kind: 'spawn' | 'request' | 'exit' | 'crash' | 'sigterm-ignored';
   argv?: string[];
   permissionEnv?: string | null;
   hasPassword?: boolean;
@@ -895,6 +895,31 @@ test('stopping a server also stops the binary behind a wrapper script', {
     const spawn = turn.capture.find((entry) => entry.kind === 'spawn');
     assert.equal(spawn?.argv?.[0], 'serve');
     assert.ok(await waitUntil(() => !isProcessAlive(spawn?.pid as number), 5_000), 'the wrapped binary outlived its server');
+  } finally {
+    process.env[pathKey] = previousPath;
+  }
+});
+
+test('a wrapped binary that outlives its wrapper script on SIGTERM is killed', {
+  skip: process.platform === 'win32' && 'Windows stops the whole tree with taskkill /T /F',
+}, async () => {
+  // The wrapper script leads the server's process group and exits on SIGTERM;
+  // the binary behind it ignores SIGTERM. The stop must not take the leader's
+  // exit for the end of the server.
+  const pathKey = findEnvKey('PATH');
+  const previousPath = process.env[pathKey];
+  process.env[pathKey] = `${wrapperBinDir}${path.delimiter}${previousPath ?? ''}`;
+  try {
+    const turn = await runTurn({
+      appSessionId: 'app-wrapper-lingers',
+      scenario: { newSessionId: 'ses_wrapper_lingers', ignoreSigterm: true, steps: [textPart('wrapped')] },
+    });
+
+    assert.equal(turn.error, null);
+    assert.equal(turn.messages.find((message) => message.kind === 'complete')?.exitCode, 0);
+    const spawn = turn.capture.find((entry) => entry.kind === 'spawn');
+    assert.ok(turn.capture.some((entry) => entry.kind === 'sigterm-ignored'), 'the binary was never asked to stop');
+    assert.ok(await waitUntil(() => !isProcessAlive(spawn?.pid as number), 1_000), 'the wrapped binary outlived its stop');
   } finally {
     process.env[pathKey] = previousPath;
   }

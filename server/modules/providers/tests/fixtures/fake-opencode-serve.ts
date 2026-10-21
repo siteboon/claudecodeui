@@ -19,6 +19,7 @@
 //                           and leaves the request waiting.
 //                           `abortDropsEvents`: a session abort is accepted, then every event stream
 //                           ends before any idle and the prompt never answers.
+//                           `ignoreSigterm`: SIGTERM is recorded and ignored (only SIGKILL ends it).
 //
 // Steps run when the prompt arrives ("$SID" anywhere is replaced by the session id):
 // - { "emit": <event> }                  push one SSE event `{ type, properties }`
@@ -66,6 +67,7 @@ type Scenario = {
   promptBody?: unknown;
   replyStatus?: number;
   abortDropsEvents?: boolean;
+  ignoreSigterm?: boolean;
   knownRequests?: string[];
 };
 
@@ -351,6 +353,10 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 }
 
 process.on('SIGTERM', () => {
+  if (scenario.ignoreSigterm) {
+    capture({ kind: 'sigterm-ignored' });
+    return;
+  }
   capture({ kind: 'exit', signal: 'SIGTERM' });
   process.exit(0);
 });
