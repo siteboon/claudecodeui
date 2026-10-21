@@ -41,11 +41,14 @@ test('MiniMax runtime environment applies the selected model and context window'
 
   assert.equal(environment.ANTHROPIC_BASE_URL, MINIMAX_ANTHROPIC_ENDPOINTS.global);
   assert.equal(environment.ANTHROPIC_MODEL, MINIMAX_MODEL_IDS[1]);
-  assert.equal(environment.CLAUDE_CODE_AUTO_COMPACT_WINDOW, '204800');
+  assert.equal(environment.CLAUDE_CODE_AUTO_COMPACT_WINDOW, '1000000');
+  assert.equal(resolveMiniMaxContextWindow('MiniMax-M2.7'), 204_800);
 });
 
 test('MiniMax transcript model detection accepts the configured model variants', () => {
   assert.equal(isMiniMaxModel(MINIMAX_MODEL_IDS[0]), true);
   assert.equal(isMiniMaxModel(`${MINIMAX_MODEL_IDS[0]}[1m]`), true);
+  assert.equal(isMiniMaxModel('MiniMax-M2.7'), true);
+  assert.equal(isMiniMaxModel('MiniMax-M2.7[1m]'), true);
   assert.equal(isMiniMaxModel('unrelated-model'), false);
 });

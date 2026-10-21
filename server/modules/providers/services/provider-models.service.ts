@@ -17,7 +17,9 @@ import { readProviderSessionActiveModelChange } from '@/shared/utils.js';
 
 export const PROVIDER_MODELS_CACHE_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 const PROVIDER_MODELS_CACHE_VERSION = 2;
-const UNCACHED_PROVIDERS = new Set<LLMProvider>(['claude']);
+// Curated catalogs ship with the application; persisted entries must not pin
+// their defaults to a previous release.
+const UNCACHED_PROVIDERS = new Set<LLMProvider>(['claude', 'minimax']);
 
 type ProviderModelsServiceDependencies = {
   resolveProvider?: (provider: LLMProvider) => Pick<IProvider, 'models'>;

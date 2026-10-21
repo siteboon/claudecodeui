@@ -63,6 +63,16 @@ export const readMiniMaxSettingsEnvironment = async (): Promise<MiniMaxEnvironme
   }
 };
 
+export const resolveMiniMaxConfiguredModel = (
+  environment: MiniMaxEnvironment,
+  settingsEnvironment: MiniMaxEnvironment = {},
+): string | undefined => (
+  (isMiniMaxBaseUrl(environment.ANTHROPIC_BASE_URL)
+    ? readOptionalString(environment.ANTHROPIC_MODEL) : undefined)
+  ?? (isMiniMaxBaseUrl(settingsEnvironment.ANTHROPIC_BASE_URL)
+    ? readOptionalString(settingsEnvironment.ANTHROPIC_MODEL) : undefined)
+);
+
 export const resolveMiniMaxCredential = (
   environment: MiniMaxEnvironment,
   settingsEnvironment: MiniMaxEnvironment = {},

@@ -70,7 +70,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsAbort: true,
     supportsPermissionRequests: true,
     supportsTokenUsage: true,
-    supportsEffort: false,
+    supportsEffort: true,
   },
   opencode: {
     provider: 'opencode',

@@ -499,6 +499,9 @@ async function queryClaudeSDK(command, options = {}, ws, runtimeConfig = {}) {
       environment: runtimeConfig.environment,
       unsetEnvironment: runtimeConfig.unsetEnvironment,
     });
+    if (runtimeConfig.thinking) {
+      sdkOptions.thinking = runtimeConfig.thinking;
+    }
 
     const mcpServers = await loadMcpConfig(options.cwd);
     if (mcpServers) {

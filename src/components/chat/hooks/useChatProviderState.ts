@@ -20,7 +20,7 @@ const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   claude: 'default',
   cursor: 'gpt-5.3-codex',
   codex: 'gpt-5.4',
-  minimax: 'MiniMax-M3',
+  minimax: 'MiniMax-M3.1-Flash',
   opencode: 'anthropic/claude-sonnet-4-5',
 };
 
@@ -411,7 +411,10 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   useEffect(() => {
     const minimax = providerModelCatalog.minimax;
     if (minimax) {
-      const next = pickStoredOrCurrent('minimax-model', minimaxModel, minimax);
+      // A curated picker is not an allowlist: preserve saved legacy/custom IDs.
+      const next = localStorage.getItem('minimax-model')?.trim()
+        || minimaxModel.trim()
+        || minimax.DEFAULT;
       if (next !== minimaxModel) {
         setMiniMaxModel(next);
       }
