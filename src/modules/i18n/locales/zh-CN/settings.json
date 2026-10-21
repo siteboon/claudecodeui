@@ -177,6 +177,7 @@
       "saving": "正在保存...",
       "saved": "已保存",
       "remove": "移除",
+      "confirmRemove": "移除此 Webhook？其 URL 和签名密钥将被删除。",
       "payloadNote": "每个事件只包含类型、提供方、会话 ID 和结果。绝不会发送提示词、消息或输出。",
       "eventsNote": "Webhook 遵循“事件类型”中“运行已停止”和“运行失败”的设置。",
       "secret": {
@@ -186,7 +187,7 @@
         "set": "已设置",
         "generate": "生成",
         "rotate": "轮换",
-        "remove": "移除",
+        "remove": "移除密钥",
         "showOnce": "请立即复制此密钥，它不会再次显示。",
         "copy": "复制密钥",
         "copied": "已复制",
@@ -215,7 +216,7 @@
       "errors": {
         "invalidUrl": "请输入有效的 http:// 或 https:// URL。",
         "insecureUrl": "http:// URL 需要勾选“允许未加密的 HTTP”。",
-        "blockedAddress": "此地址不能作为 Webhook 目标（链路本地、组播或保留地址）。",
+        "blockedAddress": "此地址不能作为 Webhook 目标（链路本地、云元数据、组播或保留地址）。",
         "notConfigured": "请先保存 Webhook URL。",
         "requestFailed": "请求失败，请重试。"
       }

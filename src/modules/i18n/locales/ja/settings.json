@@ -151,6 +151,7 @@
       "saving": "保存中...",
       "saved": "保存しました",
       "remove": "削除",
+      "confirmRemove": "この Webhook を削除しますか？URL と署名シークレットが削除されます。",
       "payloadNote": "各イベントに含まれるのは種別、プロバイダー、セッション ID、結果のみです。プロンプト、メッセージ、出力は送信されません。",
       "eventsNote": "Webhook は「イベント種別」の「実行停止」と「実行失敗」の設定に従います。",
       "secret": {
@@ -160,7 +161,7 @@
         "set": "設定済み",
         "generate": "生成",
         "rotate": "再生成",
-        "remove": "削除",
+        "remove": "シークレットを削除",
         "showOnce": "このシークレットを今すぐコピーしてください。再表示はできません。",
         "copy": "シークレットをコピー",
         "copied": "コピーしました",
@@ -189,7 +190,7 @@
       "errors": {
         "invalidUrl": "有効な http:// または https:// の URL を入力してください。",
         "insecureUrl": "http:// の URL を使うには「暗号化されていない HTTP を許可する」をオンにしてください。",
-        "blockedAddress": "このアドレスは Webhook の送信先にできません（リンクローカル、マルチキャスト、または予約済み）。",
+        "blockedAddress": "このアドレスは Webhook の送信先にできません（リンクローカル、クラウドメタデータ、マルチキャスト、または予約済み）。",
         "notConfigured": "先に Webhook の URL を保存してください。",
         "requestFailed": "リクエストに失敗しました。もう一度お試しください。"
       }

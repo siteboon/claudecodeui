@@ -177,6 +177,7 @@
       "saving": "Menyimpan...",
       "saved": "Tersimpan",
       "remove": "Hapus",
+      "confirmRemove": "Hapus webhook ini? URL dan secret penandatanganannya akan dihapus.",
       "payloadNote": "Setiap event hanya berisi jenis, provider, ID sesi, dan hasilnya. Prompt, pesan, dan output tidak pernah dikirim.",
       "eventsNote": "Webhook mengikuti pilihan \"Proses dihentikan\" dan \"Proses gagal\" di Jenis Event.",
       "secret": {
@@ -186,7 +187,7 @@
         "set": "Sudah diatur",
         "generate": "Buat",
         "rotate": "Ganti",
-        "remove": "Hapus",
+        "remove": "Hapus secret",
         "showOnce": "Salin secret ini sekarang. Secret tidak akan ditampilkan lagi.",
         "copy": "Salin secret",
         "copied": "Disalin",
@@ -215,7 +216,7 @@
       "errors": {
         "invalidUrl": "Masukkan URL http:// atau https:// yang valid.",
         "insecureUrl": "URL http:// memerlukan opsi \"Izinkan HTTP tanpa enkripsi\".",
-        "blockedAddress": "Alamat ini tidak dapat menjadi tujuan webhook (link-local, multicast, atau dicadangkan).",
+        "blockedAddress": "Alamat ini tidak dapat menjadi tujuan webhook (link-local, metadata cloud, multicast, atau dicadangkan).",
         "notConfigured": "Simpan URL webhook terlebih dahulu.",
         "requestFailed": "Permintaan gagal. Silakan coba lagi."
       }

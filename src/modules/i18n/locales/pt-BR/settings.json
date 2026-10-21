@@ -177,6 +177,7 @@
       "saving": "Salvando...",
       "saved": "Salvo",
       "remove": "Remover",
+      "confirmRemove": "Remover este webhook? A URL e o segredo de assinatura serão excluídos.",
       "payloadNote": "Cada evento traz apenas o tipo, o provedor, o ID da sessão e o resultado. Prompts, mensagens e saídas nunca são enviados.",
       "eventsNote": "Os webhooks seguem as opções \"Execução parada\" e \"Execução falhou\" em Tipos de evento.",
       "secret": {
@@ -186,7 +187,7 @@
         "set": "Definido",
         "generate": "Gerar",
         "rotate": "Trocar",
-        "remove": "Remover",
+        "remove": "Remover segredo",
         "showOnce": "Copie este segredo agora. Ele não será exibido novamente.",
         "copy": "Copiar segredo",
         "copied": "Copiado",
@@ -215,7 +216,7 @@
       "errors": {
         "invalidUrl": "Informe uma URL http:// ou https:// válida.",
         "insecureUrl": "URLs http:// precisam de \"Permitir HTTP sem criptografia\".",
-        "blockedAddress": "Este endereço não pode ser um destino de webhook (link-local, multicast ou reservado).",
+        "blockedAddress": "Este endereço não pode ser um destino de webhook (link-local, metadados de nuvem, multicast ou reservado).",
         "notConfigured": "Salve uma URL de webhook primeiro.",
         "requestFailed": "A requisição falhou. Tente novamente."
       }

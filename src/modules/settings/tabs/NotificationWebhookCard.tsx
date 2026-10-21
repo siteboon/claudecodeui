@@ -7,15 +7,6 @@ import { Button, Input } from '@/shared/ui';
 import type { NotificationWebhookDelivery } from '@/shared/types';
 import { copyTextToClipboard } from '@/shared/utils';
 
-// Server error codes → `notifications.webhook.errors.*` keys.
-const ERROR_MESSAGE_KEYS: Record<string, string> = {
-  WEBHOOK_URL_INVALID: 'invalidUrl',
-  WEBHOOK_URL_INSECURE: 'insecureUrl',
-  WEBHOOK_URL_BLOCKED: 'blockedAddress',
-  WEBHOOK_NOT_CONFIGURED: 'notConfigured',
-  REQUEST_FAILED: 'requestFailed',
-};
-
 /** Rendered by NotificationsSettingsTab: the outbound webhook destination, its signing secret and a test event. */
 export default function NotificationWebhookCard() {
   const { t, i18n } = useTranslation('settings');
@@ -24,7 +15,7 @@ export default function NotificationWebhookCard() {
     draft,
     isDirty,
     pendingAction,
-    errorCode,
+    errorMessageKey,
     saved,
     revealedSecret,
     updateDraft,
@@ -62,6 +53,13 @@ export default function NotificationWebhookCard() {
     return t('notifications.webhook.status.failed', { type: delivery.type, time, attempts: delivery.attempts, reason });
   };
 
+  // Removing deletes the signing secret too, so the receiver would need a new one.
+  const confirmRemove = () => {
+    if (window.confirm(t('notifications.webhook.confirmRemove'))) {
+      void remove();
+    }
+  };
+
   const copySecret = async () => {
     if (revealedSecret && await copyTextToClipboard(revealedSecret)) {
       setSecretCopied(true);
@@ -79,8 +77,16 @@ export default function NotificationWebhookCard() {
         <p className="text-sm text-muted-foreground">{t('notifications.webhook.description')}</p>
       </div>
 
-      {webhook === null && !errorCode ? (
-        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+      {webhook === null ? (
+        // Without the stored destination there is nothing to edit: a Save here
+        // would overwrite it.
+        errorMessageKey ? (
+          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+            {t(`notifications.webhook.errors.${errorMessageKey}`)}
+          </p>
+        ) : (
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        )
       ) : (
         <>
           <div className="space-y-3">
@@ -126,7 +132,7 @@ export default function NotificationWebhookCard() {
                 {pendingAction === 'save' ? t('notifications.webhook.saving') : t('notifications.webhook.save')}
               </Button>
               {configured && (
-                <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void remove()}>
+                <Button type="button" size="sm" variant="outline" disabled={busy} onClick={confirmRemove}>
                   <Trash2 className="h-4 w-4" />
                   {t('notifications.webhook.remove')}
                 </Button>
@@ -136,14 +142,14 @@ export default function NotificationWebhookCard() {
               )}
             </div>
 
-            {errorCode && (
+            {errorMessageKey && (
               <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-                {t(`notifications.webhook.errors.${ERROR_MESSAGE_KEYS[errorCode] ?? 'requestFailed'}`)}
+                {t(`notifications.webhook.errors.${errorMessageKey}`)}
               </p>
             )}
           </div>
 
-          {configured && webhook && (
+          {configured && (
             <>
               <div className="space-y-2 border-t border-border pt-4">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

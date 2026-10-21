@@ -152,6 +152,7 @@
       "saving": "Kaydediliyor...",
       "saved": "Kaydedildi",
       "remove": "Kaldır",
+      "confirmRemove": "Bu webhook kaldırılsın mı? URL'si ve imzalama anahtarı silinecek.",
       "payloadNote": "Her olay yalnızca türünü, sağlayıcıyı, oturum kimliğini ve sonucu içerir. İstemler, mesajlar ve çıktılar asla gönderilmez.",
       "eventsNote": "Webhook'lar, Etkinlik Türleri altındaki \"Çalıştırma durduruldu\" ve \"Çalıştırma başarısız\" seçimlerini izler.",
       "secret": {
@@ -161,7 +162,7 @@
         "set": "Ayarlandı",
         "generate": "Oluştur",
         "rotate": "Yenile",
-        "remove": "Kaldır",
+        "remove": "Anahtarı kaldır",
         "showOnce": "Bu anahtarı şimdi kopyala. Bir daha gösterilmeyecek.",
         "copy": "Anahtarı kopyala",
         "copied": "Kopyalandı",
@@ -190,7 +191,7 @@
       "errors": {
         "invalidUrl": "Geçerli bir http:// veya https:// URL'si gir.",
         "insecureUrl": "http:// URL'leri için \"Şifresiz HTTP'ye izin ver\" seçeneği gerekir.",
-        "blockedAddress": "Bu adres bir webhook hedefi olamaz (link-local, multicast veya ayrılmış).",
+        "blockedAddress": "Bu adres bir webhook hedefi olamaz (link-local, bulut meta verisi, multicast veya ayrılmış).",
         "notConfigured": "Önce bir webhook URL'si kaydet.",
         "requestFailed": "İstek başarısız oldu. Lütfen tekrar dene."
       }

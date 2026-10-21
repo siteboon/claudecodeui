@@ -178,6 +178,7 @@
       "saving": "שומר...",
       "saved": "נשמר",
       "remove": "הסרה",
+      "confirmRemove": "להסיר את ה-Webhook הזה? כתובת ה-URL וסוד החתימה שלו יימחקו.",
       "payloadNote": "כל אירוע כולל רק את הסוג, הספק, מזהה הסשן והתוצאה. הנחיות, הודעות ופלט לעולם אינם נשלחים.",
       "eventsNote": "ה-Webhooks פועלים לפי הבחירות \"הריצה נעצרה\" ו\"הריצה נכשלה\" תחת סוגי אירועים.",
       "secret": {
@@ -187,7 +188,7 @@
         "set": "הוגדר",
         "generate": "יצירה",
         "rotate": "החלפה",
-        "remove": "הסרה",
+        "remove": "הסרת הסוד",
         "showOnce": "יש להעתיק את הסוד עכשיו. הוא לא יוצג שוב.",
         "copy": "העתקת הסוד",
         "copied": "הועתק",
@@ -216,7 +217,7 @@
       "errors": {
         "invalidUrl": "יש להזין כתובת http:// או https:// תקינה.",
         "insecureUrl": "כתובות http:// דורשות את האפשרות \"לאפשר HTTP לא מוצפן\".",
-        "blockedAddress": "לא ניתן להשתמש בכתובת זו כיעד Webhook (link-local, multicast או שמורה).",
+        "blockedAddress": "לא ניתן להשתמש בכתובת זו כיעד Webhook (link-local, מטא-נתוני ענן, multicast או שמורה).",
         "notConfigured": "יש לשמור קודם כתובת Webhook.",
         "requestFailed": "הבקשה נכשלה. יש לנסות שוב."
       }

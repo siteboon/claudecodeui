@@ -157,6 +157,7 @@
       "saving": "Ukládání...",
       "saved": "Uloženo",
       "remove": "Odebrat",
+      "confirmRemove": "Odebrat tento webhook? Jeho URL a podpisový klíč budou smazány.",
       "payloadNote": "Každá událost obsahuje jen svůj typ, poskytovatele, ID relace a výsledek. Prompty, zprávy ani výstupy se nikdy neodesílají.",
       "eventsNote": "Webhooky se řídí volbami „Běh zastaven“ a „Běh selhal“ v sekci Typy událostí.",
       "secret": {
@@ -166,7 +167,7 @@
         "set": "Nastaven",
         "generate": "Vygenerovat",
         "rotate": "Obnovit",
-        "remove": "Odebrat",
+        "remove": "Odebrat klíč",
         "showOnce": "Zkopírujte si tento klíč hned. Znovu se už nezobrazí.",
         "copy": "Kopírovat klíč",
         "copied": "Zkopírováno",
@@ -195,7 +196,7 @@
       "errors": {
         "invalidUrl": "Zadejte platnou URL http:// nebo https://.",
         "insecureUrl": "URL http:// vyžadují volbu „Povolit nešifrované HTTP“.",
-        "blockedAddress": "Tato adresa nemůže být cílem webhooku (link-local, multicast nebo rezervovaná).",
+        "blockedAddress": "Tato adresa nemůže být cílem webhooku (link-local, cloudová metadata, multicast nebo rezervovaná).",
         "notConfigured": "Nejprve uložte URL webhooku.",
         "requestFailed": "Požadavek selhal. Zkuste to prosím znovu."
       }

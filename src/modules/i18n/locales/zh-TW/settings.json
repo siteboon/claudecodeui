@@ -152,6 +152,7 @@
       "saving": "正在儲存...",
       "saved": "已儲存",
       "remove": "移除",
+      "confirmRemove": "移除此 Webhook？其 URL 和簽章密鑰將被刪除。",
       "payloadNote": "每個事件只包含類型、提供者、工作階段 ID 和結果。絕不會傳送提示詞、訊息或輸出。",
       "eventsNote": "Webhook 會依照「事件類型」中「執行已停止」和「執行失敗」的設定。",
       "secret": {
@@ -161,7 +162,7 @@
         "set": "已設定",
         "generate": "產生",
         "rotate": "輪替",
-        "remove": "移除",
+        "remove": "移除密鑰",
         "showOnce": "請立即複製此密鑰，它不會再次顯示。",
         "copy": "複製密鑰",
         "copied": "已複製",
@@ -190,7 +191,7 @@
       "errors": {
         "invalidUrl": "請輸入有效的 http:// 或 https:// URL。",
         "insecureUrl": "http:// URL 需要勾選「允許未加密的 HTTP」。",
-        "blockedAddress": "此位址不能作為 Webhook 目標（鏈路本地、多點傳送或保留位址）。",
+        "blockedAddress": "此位址不能作為 Webhook 目標（鏈路本地、雲端中繼資料、多點傳送或保留位址）。",
         "notConfigured": "請先儲存 Webhook URL。",
         "requestFailed": "請求失敗，請再試一次。"
       }
