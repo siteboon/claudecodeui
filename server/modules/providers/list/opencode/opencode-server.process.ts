@@ -162,6 +162,23 @@ async function processGroupAlive(child: ChildProcess): Promise<boolean> {
   return process.platform !== 'linux' || groupHasRunningMember(child.pid);
 }
 
+// Linux task states of a process or thread that has ended: Z (exited, not
+// reaped yet), X/x (being torn down).
+const ENDED_TASK_STATES = new Set(['Z', 'X', 'x']);
+
+/** Linux: state and process group from a /proc stat file; null once it is gone. */
+async function readProcStat(statPath: string): Promise<{ state: string; pgrp: number } | null> {
+  try {
+    const stat = await fsp.readFile(statPath, 'utf8');
+    // "pid (comm) state ppid pgrp ...": comm may itself contain spaces and
+    // parentheses, so the fields are counted from the last ')'.
+    const [state, , pgrp] = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+    return { state, pgrp: Number(pgrp) };
+  } catch {
+    return null;
+  }
+}
+
 /** Linux: whether process group `pgid` has a member that has not exited. */
 async function groupHasRunningMember(pgid: number): Promise<boolean> {
   let entries: string[];
@@ -171,20 +188,21 @@ async function groupHasRunningMember(pgid: number): Promise<boolean> {
     // No procfs to look at: trust kill().
     return true;
   }
-  const states = await Promise.all(entries.filter((entry) => /^\d+$/.test(entry)).map(async (pid) => {
-    try {
-      const stat = await fsp.readFile(`/proc/${pid}/stat`, 'utf8');
-      // "pid (comm) state ppid pgrp ...": comm may itself contain spaces and
-      // parentheses, so the fields are counted from the last ')'.
-      const [state, , pgrp] = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
-      return Number(pgrp) === pgid ? state : null;
-    } catch {
-      // Exited and reaped meanwhile.
-      return null;
+  const running = await Promise.all(entries.filter((entry) => /^\d+$/.test(entry)).map(async (pid) => {
+    const stat = await readProcStat(`/proc/${pid}/stat`);
+    if (!stat || stat.pgrp !== pgid) {
+      return false;
     }
+    if (!ENDED_TASK_STATES.has(stat.state)) {
+      return true;
+    }
+    // The stat file shows the main thread, which can end before the others:
+    // opencode's does about 2 ms after SIGTERM, ~50 ms before its exit.
+    const threads = await fsp.readdir(`/proc/${pid}/task`).catch(() => [] as string[]);
+    const states = await Promise.all(threads.map((tid) => readProcStat(`/proc/${pid}/task/${tid}/stat`)));
+    return states.some((thread) => thread !== null && !ENDED_TASK_STATES.has(thread.state));
   }));
-  // Z: exited, not reaped yet; X/x: being torn down.
-  return states.some((state) => state !== null && !['Z', 'X', 'x'].includes(state));
+  return running.includes(true);
 }
 
 function installExitSweep(): void {

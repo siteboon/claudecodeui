@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -43,6 +43,20 @@ const EXEC_AS_SUBREAPER_PY = [
 ].join('\n');
 const CAN_EXEC_AS_SUBREAPER = process.platform === 'linux'
   && spawnSync('python3', ['-c', EXEC_AS_SUBREAPER_PY, '/bin/true'], { stdio: 'ignore' }).status === 0;
+// On SIGTERM its main thread ends at once while another thread works on for
+// 1.5 s, then touches the file in argv[1] and ends the process (the opencode
+// binary's main thread also ends ~50 ms before the rest of it).
+const MAIN_THREAD_ENDS_FIRST_PY = [
+  'import ctypes, signal, sys, threading, time',
+  'def finish():',
+  '    time.sleep(1.5)',
+  "    open(sys.argv[1], 'w').close()",
+  'def on_term(*_):',
+  '    threading.Thread(target=finish).start()',
+  '    ctypes.CDLL(None).pthread_exit(None)',
+  'signal.signal(signal.SIGTERM, on_term)',
+  'time.sleep(60)',
+].join('\n');
 
 const sessionsProvider = new OpenCodeSessionsProvider();
 const providerSessionIds = new Map<string, string>();
@@ -1061,6 +1075,45 @@ test('a stop does not wait for processes of its group that exited but nobody rea
   } finally {
     clearTimeout(guard);
     cloudcli.kill('SIGKILL');
+  }
+});
+
+test('a stop waits for a group member whose main thread ended before its other threads', {
+  skip: !CAN_EXEC_AS_SUBREAPER && 'needs Linux and python3',
+}, async () => {
+  // Linux shows such a process as a zombie in /proc/<pid>/stat while its
+  // other threads still run; it has not exited yet.
+  const shimDir = path.join(tempRoot, 'bin-thread');
+  await mkdir(shimDir, { recursive: true });
+  const helperPath = path.join(shimDir, 'main-thread-ends-first.py');
+  const marker = path.join(shimDir, 'last-thread-ended');
+  await writeFile(helperPath, MAIN_THREAD_ENDS_FIRST_PY, 'utf8');
+  await writeFile(path.join(shimDir, 'opencode'), [
+    '#!/bin/sh',
+    `python3 "${helperPath}" "${marker}" &`,
+    `"${process.execPath}" --import "${TSX_LOADER}" "${FAKE_OPENCODE}" "$@"`,
+    '',
+  ].join('\n'), 'utf8');
+  await chmod(path.join(shimDir, 'opencode'), 0o755);
+
+  const pathKey = findEnvKey('PATH');
+  const previousPath = process.env[pathKey];
+  process.env[pathKey] = `${shimDir}${path.delimiter}${previousPath ?? ''}`;
+  try {
+    let lastThreadEndedBeforeTurn = false;
+    const turn = await runTurn({
+      appSessionId: 'app-main-thread-first',
+      scenario: { newSessionId: 'ses_main_thread_first', steps: [textPart('threads')] },
+      onSettled() {
+        lastThreadEndedBeforeTurn = existsSync(marker);
+      },
+    });
+
+    assert.equal(turn.error, null);
+    assert.equal(turn.messages.find((message) => message.kind === 'text')?.content, 'threads');
+    assert.ok(lastThreadEndedBeforeTurn, 'the turn ended while a thread of the group was still running');
+  } finally {
+    process.env[pathKey] = previousPath;
   }
 });
 
