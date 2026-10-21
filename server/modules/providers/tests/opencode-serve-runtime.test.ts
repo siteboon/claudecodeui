@@ -48,6 +48,8 @@ const findEnvKey = (name: string) =>
 let tempRoot = '';
 let projectDir = '';
 let binDir = '';
+/** POSIX only: an `opencode` that is a wrapper script around the fake (see writeShim). */
+let wrapperBinDir = '';
 let runCounter = 0;
 const savedEnv = new Map<string, string | undefined>();
 /** Every fake server pid seen, so none can outlive the suite. */
@@ -84,6 +86,9 @@ before(async () => {
     setEnv(pathExtKey, pathExt?.toUpperCase().includes('.CMD') ? pathExt : `.COM;.EXE;.BAT;.CMD${pathExt ? `;${pathExt}` : ''}`);
   } else {
     await writeShim(binDir, 'exec');
+    wrapperBinDir = path.join(tempRoot, 'bin-wrapper');
+    await mkdir(wrapperBinDir, { recursive: true });
+    await writeShim(wrapperBinDir, 'wrap');
   }
 
   const pathKey = findEnvKey('PATH');
@@ -547,7 +552,7 @@ test('an agent question reaches the chat and its answers go back as label lists'
   assert.equal(turn.messages.find((message) => message.kind === 'tool_use')?.toolResult?.isError, false);
 });
 
-test('skipping an agent question rejects it', async () => {
+test('dismissing an agent question rejects it', async () => {
   const turn = await runTurn({
     appSessionId: 'app-question-skip',
     scenario: { newSessionId: 'ses_question_skip', steps: questionSteps('que_2') },
@@ -879,12 +884,9 @@ test('stopping a server also stops the binary behind a wrapper script', {
 }, async () => {
   // Some installs put a shell script in front of the binary, which then runs
   // as the script's child; the server is stopped as a process group.
-  const wrapperBin = path.join(tempRoot, 'bin-wrapper');
-  await mkdir(wrapperBin, { recursive: true });
-  await writeShim(wrapperBin, 'wrap');
   const pathKey = findEnvKey('PATH');
   const previousPath = process.env[pathKey];
-  process.env[pathKey] = `${wrapperBin}${path.delimiter}${previousPath ?? ''}`;
+  process.env[pathKey] = `${wrapperBinDir}${path.delimiter}${previousPath ?? ''}`;
   try {
     const turn = await runTurn({ appSessionId: 'app-wrapper', scenario: { newSessionId: 'ses_wrapper', steps: [textPart('wrapped')] } });
 
@@ -917,10 +919,14 @@ test('a server still starting when CloudCLI exits is stopped too', {
     '',
   ].join('\n'), 'utf8');
 
+  const pathKey = findEnvKey('PATH');
   const cloudcli = spawn(process.execPath, ['--import', TSX_LOADER, script], {
     cwd: APPLICATION_ROOT,
     env: {
       ...process.env,
+      // Behind a wrapper script, so only a signal to the server's whole
+      // process group reaches the binary (the script alone would leave it).
+      [pathKey]: `${wrapperBinDir}${path.delimiter}${process.env[pathKey] ?? ''}`,
       FAKE_OPENCODE_SCENARIO: scenarioPath,
       FAKE_OPENCODE_CAPTURE: capturePath,
     },
