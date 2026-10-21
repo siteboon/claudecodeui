@@ -304,7 +304,7 @@ test('editing the merged card brings every follow-up back and takes it off the q
   await act(async () => { view.result.current.editQueuedDraft(); });
 
   assert.equal(view.result.current.input, 'follow-up A\n\nfollow-up B');
-  assert.deepEqual(view.result.current.attachedFiles, [fileA, fileB]);
+  assert.deepEqual(view.result.current.attachedFiles.map((file) => file.name), ['a.txt', 'b.txt']);
   assert.equal(view.result.current.queuedDraft, null);
   await waitFor(() => assert.equal(queuedOnServer(), null, 'nothing is left for the dispatcher to send'));
 });
@@ -439,7 +439,7 @@ test('a follow-up the server refuses goes back in front of what was typed meanwh
   });
 
   assert.equal(view.result.current.input, 'follow-up A\n\nmore');
-  assert.deepEqual(view.result.current.attachedFiles, [fileA, fileC]);
+  assert.deepEqual(view.result.current.attachedFiles.map((file) => file.name), ['a.txt', 'c.txt']);
   assert.equal(view.result.current.queuedDraft, null);
   assert.equal(errors.length, 1);
 });
@@ -550,7 +550,27 @@ test('Edit after the card caught up with another tab still brings back this tab\
   await act(async () => { view.result.current.editQueuedDraft(); });
 
   assert.equal(view.result.current.input, 'follow-up A\n\nfrom the other tab');
-  assert.deepEqual(view.result.current.attachedFiles, [fileA]);
+  assert.deepEqual(view.result.current.attachedFiles.map((file) => file.name), ['a.txt']);
+}, 10_000);
+
+test('Edit after another tab added a file to the queued message still brings back this tab\'s files', async () => {
+  const fileA = new File(['a'], 'a.txt', { type: 'text/plain' });
+  const { view } = render();
+  await submit(view, 'follow-up A', [fileA]);
+  server.set('session-1', {
+    text: '',
+    queuedMessage: {
+      content: 'follow-up A\n\nfrom the other tab',
+      attachments: [{ name: 'a.txt', path: '/uploads/a.txt' }, { name: 'x.txt', path: '/uploads/x.txt' }],
+    },
+  });
+
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5_300)); });
+  assert.equal(view.result.current.queuedDraft?.uploadedAttachments?.length, 2, 'the card shows both files');
+  await act(async () => { view.result.current.editQueuedDraft(); });
+
+  // x.txt was uploaded by the other tab, so this page has no browser file for it.
+  assert.deepEqual(view.result.current.attachedFiles.map((file) => file.name), ['a.txt']);
 }, 10_000);
 
 test('a tab that is shown again catches up with the queued message at once', async () => {
@@ -578,7 +598,7 @@ test('files of a message already sent do not come back with a follow-up queued a
   await submit(view, 'follow-up B', [fileB]);
 
   assert.equal(view.result.current.queuedDraft?.content, 'follow-up A\n\nfollow-up B');
-  assert.deepEqual(view.result.current.queuedDraft?.attachments, [fileB]);
+  assert.deepEqual(view.result.current.queuedDraft?.attachments.map((file) => file.name), ['b.txt']);
 });
 
 test('a refused follow-up goes back to the session it was typed in, after a switch during the upload', async () => {
@@ -600,6 +620,47 @@ test('a refused follow-up goes back to the session it was typed in, after a swit
   assert.equal(errors.length, 1);
   assert.equal(readDraftText('session-1'), 'follow-up B', 'it is waiting there to be sent again');
   assert.equal(view.result.current.input, '', 'and not in the composer of the session now open');
+});
+
+test('a follow-up refused after a switch made while it was being queued goes back to the session it was typed in', async () => {
+  const { view, errors } = render();
+  refuseQueueing = true;
+  const response = hold();
+  appendGate = response.gate;
+  await act(async () => { view.result.current.setInput('follow-up A'); });
+  const pending = startSubmit(view);
+  await waitFor(() => assert.equal(appendRequestCount, 1));
+  view.rerender({ session: SESSION_2, isLoading: true, model: 'model-1' });
+  await act(async () => { view.result.current.setInput('typed in session 2'); });
+  await act(async () => {
+    response.release();
+    await pending;
+  });
+
+  assert.equal(errors.length, 1);
+  assert.equal(readDraftText('session-1'), 'follow-up A', 'it is waiting there to be sent again');
+  assert.equal(view.result.current.input, 'typed in session 2', 'the composer now open is left alone');
+  assert.equal(readDraftText('session-2'), 'typed in session 2');
+});
+
+test('a follow-up refused after a switch keeps the draft written meanwhile in the session it was typed in', async () => {
+  const { view, errors } = render();
+  refuseQueueing = true;
+  const response = hold();
+  appendGate = response.gate;
+  await act(async () => { view.result.current.setInput('follow-up A'); });
+  const pending = startSubmit(view);
+  await waitFor(() => assert.equal(appendRequestCount, 1));
+  view.rerender({ session: SESSION_2, isLoading: true, model: 'model-1' });
+  // Another device changed that session's draft meanwhile.
+  writeDraftText('session-1', 'written on the laptop');
+  await act(async () => {
+    response.release();
+    await pending;
+  });
+
+  assert.equal(errors.length, 1);
+  assert.equal(readDraftText('session-1'), 'follow-up A\n\nwritten on the laptop', 'both are kept, the refused one first');
 });
 
 test('a session switch during the upload keeps a draft that changed in the session left', async () => {
