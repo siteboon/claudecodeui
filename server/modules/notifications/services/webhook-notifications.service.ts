@@ -19,9 +19,10 @@ import { AppError } from '@/shared/utils.js';
  *
  * Destination policy (same as the voice proxy's server-side URLs): https by
  * default, http only after an explicit opt-in, loopback/LAN/private addresses
- * allowed, link-local (cloud metadata), unspecified, multicast and reserved
- * addresses refused. Hostnames are checked on every resolved address at
- * connect time, and redirects are never followed.
+ * allowed, link-local and other cloud metadata, unspecified, multicast and
+ * reserved addresses refused. Hostnames are checked on every resolved address
+ * at connect time, and redirects are never followed. Retries stop once the
+ * destination is removed, disabled or changed.
  */
 
 /** Used by notifications.routes to keep the generic endpoint routes away from this channel. */
@@ -131,17 +132,28 @@ const DEFAULT_NOTIFIER_OPTIONS: WebhookNotifierOptions = {
   resolveHost: dns.lookup,
 };
 
-// Destinations a webhook must never reach. IPv4-mapped IPv6 forms
-// (::ffff:169.254.169.254, ::ffff:a9fe:a9fe) match the IPv4 rules.
+// IPv4 destinations a webhook must never reach, as [network, prefix length].
+const BLOCKED_IPV4_SUBNETS: ReadonlyArray<readonly [string, number]> = [
+  ['0.0.0.0', 8], // "this network", incl. 0.0.0.0
+  ['169.254.0.0', 16], // link-local, incl. AWS/GCP/Azure metadata
+  ['100.100.100.200', 32], // Alibaba Cloud metadata (inside the allowed CGNAT 100.64/10)
+  ['224.0.0.0', 4], // multicast
+  ['240.0.0.0', 4], // reserved, incl. 255.255.255.255
+];
+
+// IPv4-mapped IPv6 forms (::ffff:169.254.169.254, ::ffff:a9fe:a9fe) match the
+// IPv4 rules on their own.
 const blockedAddresses = new net.BlockList();
-blockedAddresses.addSubnet('0.0.0.0', 8, 'ipv4'); // "this network", incl. 0.0.0.0
-blockedAddresses.addSubnet('169.254.0.0', 16, 'ipv4'); // link-local, incl. AWS/GCP/Azure metadata
-blockedAddresses.addSubnet('224.0.0.0', 4, 'ipv4'); // multicast
-blockedAddresses.addSubnet('240.0.0.0', 4, 'ipv4'); // reserved, incl. 255.255.255.255
+for (const [network, prefix] of BLOCKED_IPV4_SUBNETS) {
+  blockedAddresses.addSubnet(network, prefix, 'ipv4');
+  // The same IPv4 address reached through a NAT64 gateway (64:ff9b::/96).
+  blockedAddresses.addSubnet(`64:ff9b::${network}`, 96 + prefix, 'ipv6');
+}
 blockedAddresses.addAddress('::', 'ipv6'); // unspecified
 blockedAddresses.addSubnet('fe80::', 10, 'ipv6'); // link-local
 blockedAddresses.addSubnet('ff00::', 8, 'ipv6'); // multicast
 blockedAddresses.addAddress('fd00:ec2::254', 'ipv6'); // AWS instance metadata over IPv6
+blockedAddresses.addAddress('fd20:ce::254', 'ipv6'); // GCP instance metadata over IPv6
 
 function isBlockedAddress(address: string): boolean {
   const family = net.isIP(address);
@@ -391,14 +403,24 @@ export function createWebhookNotificationsService(overrides: Partial<WebhookNoti
     });
   }
 
-  async function deliver(target: WebhookTarget, event: WebhookEventBody, maxAttempts: number): Promise<WebhookDelivery> {
+  async function deliver(userId: number, firstTarget: WebhookTarget, event: WebhookEventBody, maxAttempts: number): Promise<WebhookDelivery> {
     const body = JSON.stringify(event);
+    let target = firstTarget;
     let attempts = 0;
     let result: AttemptResult = { status: null, error: 'invalidUrl', retryable: false };
 
     while (attempts < maxAttempts) {
       if (attempts > 0) {
         await delay(options.retryDelaysMs[attempts - 1] ?? 0);
+        // The owner may have removed, disabled or re-pointed the destination,
+        // or rotated its secret, while this event waited. Retry only to the
+        // same, still enabled URL, signed with the current secret; otherwise
+        // the last attempt's outcome stands.
+        const current = readStoredWebhook(userId);
+        if (!current || !current.enabled || current.url !== firstTarget.url) {
+          break;
+        }
+        target = current;
       }
       attempts += 1;
 
@@ -496,7 +518,7 @@ export function createWebhookNotificationsService(overrides: Partial<WebhookNoti
     }
 
     return track(
-      deliver(target, event, maxAttempts)
+      deliver(userId, target, event, maxAttempts)
         .catch((): WebhookDelivery => ({
           eventId: event.id,
           type: event.type,

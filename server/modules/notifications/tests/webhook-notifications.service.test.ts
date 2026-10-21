@@ -119,6 +119,16 @@ async function waitForHits(receiver: Receiver, count: number, timeoutMs = 5000):
   }
 }
 
+async function waitUntil(condition: () => boolean, label: string, timeoutMs = 2000): Promise<void> {
+  const startedAt = Date.now();
+  while (!condition()) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error(`timed out waiting for ${label}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
 test('the test signer reproduces the Standard Webhooks published example', () => {
   assert.equal(
     standardWebhookSignature('whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw', 'msg_p5jXN8AQM9LWM0D4loKWxJek', '1614265330', '{"test": 2432232314}'),
@@ -340,10 +350,70 @@ test('4xx other than 408/429 is not retried; 429 is', async () => {
   });
 });
 
+test('retries stop once the destination is removed, disabled or re-pointed, and use the current secret', async () => {
+  await withDatabase(async (userId) => {
+    // Each request takes the next step: an optional change made while the
+    // delivery is in flight, then the status to answer with (default 200).
+    const plan: Array<{ status: number; before?: () => void }> = [];
+    const receiver = await startReceiver((_req, res) => {
+      const step = plan.shift() ?? { status: 200 };
+      step.before?.();
+      res.statusCode = step.status;
+      res.end();
+    });
+    const other = await startReceiver();
+    try {
+      const notifier = createWebhookNotificationsService(FAST);
+      const event = createNotificationEvent({ provider: 'claude', sessionId: 'moved-1', kind: 'stop', code: 'run.stopped' });
+      const send = async () => {
+        const hitsBefore = receiver.hits.length;
+        const delivery = await notifier.sendForEvent({ userId, event });
+        return { attempts: delivery?.attempts, error: delivery?.error, status: delivery?.status, hits: receiver.hits.length - hitsBefore };
+      };
+
+      notifier.saveConfig(userId, { url: receiver.url, allowHttp: true });
+      plan.push({ status: 500, before: () => notifier.removeConfig(userId) });
+      assert.deepEqual(await send(), { attempts: 1, error: 'httpStatus', status: 500, hits: 1 });
+      assert.equal(notifier.getConfig(userId).configured, false, 'a removed destination is not re-created');
+
+      notifier.saveConfig(userId, { url: receiver.url, allowHttp: true });
+      plan.push({ status: 500, before: () => notifier.saveConfig(userId, { url: receiver.url, allowHttp: true, enabled: false }) });
+      assert.deepEqual(await send(), { attempts: 1, error: 'httpStatus', status: 500, hits: 1 });
+      assert.equal(notifier.getConfig(userId).lastDelivery?.attempts, 1);
+
+      notifier.saveConfig(userId, { url: receiver.url, allowHttp: true, enabled: true });
+      plan.push({ status: 500, before: () => notifier.saveConfig(userId, { url: other.url, allowHttp: true }) });
+      assert.deepEqual(await send(), { attempts: 1, error: 'httpStatus', status: 500, hits: 1 });
+      assert.equal(other.hits.length, 0);
+      assert.equal(notifier.getConfig(userId).lastDelivery, null, 'the old URL\'s outcome is not shown for the new one');
+
+      notifier.saveConfig(userId, { url: receiver.url, allowHttp: true });
+      const { secret: oldSecret } = notifier.createSecret(userId);
+      let newSecret = '';
+      plan.push({ status: 500, before: () => { newSecret = notifier.createSecret(userId).secret; } });
+      assert.deepEqual(await send(), { attempts: 2, error: null, status: 200, hits: 2 });
+      const [rotatedFirst, rotatedRetry] = receiver.hits.slice(-2);
+      const signatureWith = (secret: string, hit: (typeof receiver.hits)[number]) => standardWebhookSignature(
+        secret, String(hit.headers['webhook-id']), String(hit.headers['webhook-timestamp']), hit.body,
+      );
+      assert.equal(rotatedFirst.headers['webhook-signature'], signatureWith(oldSecret, rotatedFirst));
+      assert.equal(rotatedRetry.headers['webhook-signature'], signatureWith(newSecret, rotatedRetry));
+    } finally {
+      await receiver.close();
+      await other.close();
+    }
+  });
+});
+
 test('a hanging receiver never blocks the caller: notify returns at once, attempts time out, nothing rejects', async () => {
   await withDatabase(async (userId) => {
     // Accepts the request and never answers.
-    const receiver = await startReceiver(() => {});
+    let socketsClosed = 0;
+    const receiver = await startReceiver((request) => {
+      request.socket.once('close', () => {
+        socketsClosed += 1;
+      });
+    });
     const rejectionsBefore = unhandledRejections;
     try {
       const notifier = createWebhookNotificationsService({ attemptTimeoutMs: 150, retryDelaysMs: [10, 10] });
@@ -361,6 +431,8 @@ test('a hanging receiver never blocks the caller: notify returns at once, attemp
       assert.equal(receiver.hits.length, 3);
       assert.equal(notifier.getConfig(userId).lastDelivery?.error, 'timeout');
       assert.equal(unhandledRejections, rejectionsBefore);
+      // A timed-out attempt drops its connection instead of leaving it open.
+      await waitUntil(() => socketsClosed === 3, 'the timed-out connections to close');
     } finally {
       await receiver.close();
     }
@@ -434,6 +506,10 @@ test('URL policy at save time: https by default, http on opt-in, link-local and 
       'http://[::]/',
       'http://224.0.0.1/',
       'http://255.255.255.255/',
+      'http://100.100.100.200/latest/meta-data/',
+      'http://[fd20:ce::254]/',
+      'http://[64:ff9b::169.254.169.254]/',
+      'http://[64:ff9b::a9fe:a9fe]/',
     ]) {
       assertAppErrorCode(save(blocked, true), 'WEBHOOK_URL_BLOCKED');
     }
@@ -445,6 +521,8 @@ test('URL policy at save time: https by default, http on opt-in, link-local and 
       'http://192.168.1.20/hook',
       'http://100.101.102.103/hook',
       'http://localhost:9000/hook',
+      // NAT64 itself is fine; only the blocked IPv4 ranges behind it are not.
+      'http://[64:ff9b::808:808]/hook',
     ]) {
       assert.equal(notifier.saveConfig(userId, { url: allowed, allowHttp: true }).url, allowed);
     }
@@ -460,6 +538,7 @@ test('URL policy at connect time: a hostname resolving to a blocked address is r
         'metadata.example': [{ address: '169.254.169.254', family: 4 }],
         'mixed.example': [{ address: '127.0.0.1', family: 4 }, { address: 'fe80::1', family: 6 }],
         'mapped.example': [{ address: '::ffff:169.254.169.254', family: 6 }],
+        'nat64.example': [{ address: '64:ff9b::a9fe:a9fe', family: 6 }],
         'receiver.example': [{ address: '127.0.0.1', family: 4 }],
       };
       const resolveHost = ((hostname: string, options: dns.LookupOptions, callback: (...args: unknown[]) => void) => {
@@ -474,7 +553,7 @@ test('URL policy at connect time: a hostname resolving to a blocked address is r
       const { port } = new URL(receiver.url);
       const event = createNotificationEvent({ provider: 'claude', sessionId: 'dns-1', kind: 'stop', code: 'run.stopped' });
 
-      for (const host of ['metadata.example', 'mixed.example', 'mapped.example']) {
+      for (const host of ['metadata.example', 'mixed.example', 'mapped.example', 'nat64.example']) {
         notifier.saveConfig(userId, { url: `http://${host}:${port}/hook`, allowHttp: true });
         const delivery = await notifier.sendForEvent({ userId, event });
         assert.deepEqual({ host, error: delivery?.error, attempts: delivery?.attempts }, { host, error: 'blockedAddress', attempts: 1 });
