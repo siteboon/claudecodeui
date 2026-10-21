@@ -2,6 +2,7 @@ import webPush from 'web-push';
 
 import { notificationPreferencesDb, pushSubscriptionsDb, sessionsDb } from '@/modules/database/index.js';
 import { sendDesktopNotification as sendDesktopNotificationToClients } from '@/modules/notifications/services/desktop-notification-clients.service.js';
+import { webhookNotificationsService } from '@/modules/notifications/services/webhook-notifications.service.js';
 
 const KIND_TO_PREF_KEY = {
   action_required: 'actionRequired',
@@ -219,6 +220,14 @@ const notificationChannels = [
     id: 'desktop',
     isEnabled: (preferences) => Boolean(preferences?.channels?.desktop),
     send: ({ userId, payload }) => sendDesktopNotificationToClients(userId, payload)
+  },
+  {
+    id: 'webhook',
+    // Gated by the webhook endpoint row's own `enabled` flag instead of
+    // preferences.channels, which the Settings client rewrites with only its
+    // known keys. The channel sends run lifecycle events only.
+    isEnabled: () => true,
+    send: ({ userId, event }) => webhookNotificationsService.sendForEvent({ userId, event })
   }
 ];
 
