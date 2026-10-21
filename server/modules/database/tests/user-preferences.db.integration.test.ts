@@ -255,3 +255,27 @@ test('a claim restored after losing a race goes back in front of a follow-up que
     });
   });
 });
+
+test('an attachments-only message merged with a later text gains no leading blank line', async () => {
+  await withDatabase(() => {
+    sessionDraftsDb.appendQueuedMessage(USER_ID, 'session-a', { content: '', attachments: [{ name: 'a.png' }] });
+
+    const result = sessionDraftsDb.appendQueuedMessage(USER_ID, 'session-a', { content: 'B', attachments: [] });
+
+    assert.deepEqual(result.queuedMessage, { content: 'B', attachments: [{ name: 'a.png' }] });
+  });
+});
+
+test('a claim restored after its emptied row was removed is written back', async () => {
+  await withDatabase(() => {
+    sessionDraftsDb.appendQueuedMessage(USER_ID, 'session-a', { content: 'A', attachments: [] });
+    const claimed = claimCandidate('session-a');
+    assert.equal(sessionDraftsDb.claimQueuedMessage(claimed), true);
+    sessionDraftsDb.deleteEmptyDraft(USER_ID, 'session-a');
+    assert.deepEqual(sessionDraftsDb.getDrafts(USER_ID), []);
+
+    sessionDraftsDb.restoreQueuedMessage(claimed);
+
+    assert.deepEqual(queuedIn('session-a'), { content: 'A', attachments: [] });
+  });
+});
