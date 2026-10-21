@@ -244,6 +244,7 @@
   "composer": {
     "permissionHeading": "{{provider}} eylemleri nasıl onaylansın?",
     "permissionCycleHint": "Modu değiştirmek için giriş alanında Tab tuşuna bas",
+    "permissionTriggerLabel": "{{mode}}: {{heading}}",
     "editing": {
       "title": "Önceki bir mesaj değiştiriliyor",
       "filesNotReverted": "zaten değiştirilen dosyalar geri alınmaz",

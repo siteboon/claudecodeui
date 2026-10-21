@@ -138,7 +138,11 @@ function ComposerPermissionMenu({
         aria-expanded={isOpen}
         // The mode name leads the accessible name, so what a screen reader
         // announces starts with what the button shows.
-        aria-label={`${activeModeLabel}: ${heading}`}
+        aria-label={t('composer.permissionTriggerLabel', {
+          mode: activeModeLabel,
+          heading,
+          defaultValue: '{{mode}}: {{heading}}',
+        })}
         title={t('input.clickToChangeMode')}
       >
         <ActiveIcon className="h-4 w-4 shrink-0" />

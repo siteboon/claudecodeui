@@ -256,6 +256,7 @@
   "composer": {
     "permissionHeading": "Как подтверждать действия {{provider}}?",
     "permissionCycleHint": "Нажмите Tab в поле ввода, чтобы переключить режим",
+    "permissionTriggerLabel": "{{mode}}: {{heading}}",
     "editing": {
       "title": "Замена предыдущего сообщения",
       "filesNotReverted": "уже изменённые файлы не возвращаются",

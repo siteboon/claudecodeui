@@ -4,6 +4,8 @@ import { act, fireEvent, render } from '@testing-library/react';
 import { afterEach, test, vi } from 'vitest';
 
 import type { PermissionMode } from '@/shared/types';
+import { i18n } from '@/modules/i18n';
+import frChat from '@/modules/i18n/locales/fr/chat.json';
 import ComposerPermissionMenu from '@/modules/chat/composer/ComposerPermissionMenu';
 import { PromptInputFooter, PromptInputTools } from '@/modules/chat/composer/PromptInput';
 
@@ -223,6 +225,36 @@ test('typing the first character neither takes the name away nor brings it in', 
   assert.equal(tight.getByRole('button').textContent, '');
   resizeComposer({ tools: 210 });
   assert.equal(tight.getByRole('button').textContent, '');
+});
+
+test('the trigger and the menu speak the user\'s language', async () => {
+  await act(async () => {
+    await i18n.changeLanguage('fr');
+  });
+  try {
+    const { getByRole, getAllByRole } = renderMenu('plan');
+    const trigger = getByRole('button');
+    const heading = frChat.composer.permissionHeading.replace('{{provider}}', 'Claude');
+
+    assert.equal(trigger.textContent, frChat.codex.modes.plan);
+    assert.equal(
+      trigger.getAttribute('aria-label'),
+      frChat.composer.permissionTriggerLabel.replace('{{mode}}', frChat.codex.modes.plan).replace('{{heading}}', heading),
+    );
+    assert.match(trigger.getAttribute('aria-label') ?? '', /^Mode planification : /);
+
+    fireEvent.click(trigger);
+    const rows = getAllByRole('menuitemradio');
+    assert.equal(rows.length, MODES.length);
+    MODES.forEach((mode, index) => {
+      assert.ok(rows[index].textContent?.startsWith(frChat.codex.modes[mode]), `${mode} row is in French`);
+    });
+    assert.equal(getByRole('menu').lastElementChild?.textContent, frChat.composer.permissionCycleHint);
+  } finally {
+    await act(async () => {
+      await i18n.changeLanguage('en');
+    });
+  }
 });
 
 test('the menu ends by saying Tab in the message box switches modes', () => {

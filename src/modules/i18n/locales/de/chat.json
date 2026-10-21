@@ -244,6 +244,7 @@
   "composer": {
     "permissionHeading": "Wie sollen Aktionen von {{provider}} genehmigt werden?",
     "permissionCycleHint": "Tab im Eingabefeld drücken, um den Modus zu wechseln",
+    "permissionTriggerLabel": "{{mode}}: {{heading}}",
     "editing": {
       "title": "Ersetzt eine frühere Nachricht",
       "filesNotReverted": "bereits geänderte Dateien werden nicht zurückgesetzt",

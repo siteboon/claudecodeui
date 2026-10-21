@@ -225,6 +225,7 @@
   "composer": {
     "permissionHeading": "{{provider}} の操作をどのように承認しますか？",
     "permissionCycleHint": "入力欄でTabを押すとモードを切り替えられます",
+    "permissionTriggerLabel": "{{mode}}：{{heading}}",
     "editing": {
       "title": "以前のメッセージを置き換えています",
       "filesNotReverted": "変更済みのファイルは元に戻りません",
