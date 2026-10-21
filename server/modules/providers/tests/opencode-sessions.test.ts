@@ -618,6 +618,24 @@ test('OpenCode sessions provider shows an answered question with the question ca
   assert.equal(message?.toolResult?.isError, false);
 });
 
+test('OpenCode question card leaves out empty answers', () => {
+  // A question answered with an empty list (bypassPermissions answers every
+  // question that way) or with empty labels shows as unanswered.
+  const [message] = normalizeLiveEvent({
+    type: 'tool_use',
+    sessionID: 'ses_1',
+    part: {
+      type: 'tool',
+      tool: 'question',
+      callID: 'call_q_empty',
+      state: { ...answeredQuestionState, metadata: { answers: [['', 'Red'], ['']] } },
+    },
+  });
+
+  assert.equal(message?.toolName, 'AskUserQuestion');
+  assert.deepEqual((message?.toolInput as { answers?: unknown })?.answers, { 'Which color?': 'Red' });
+});
+
 /** Rewrites one row of the seeded database (createOpenCodeDatabase). */
 const updateSeededRow = (homeDir: string, table: 'message' | 'part', id: string, data: unknown): void => {
   const db = new Database(path.join(homeDir, '.local', 'share', 'opencode', 'opencode.db'));
