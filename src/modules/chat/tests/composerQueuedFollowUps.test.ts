@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 
-import '@/modules/i18n';
+import { i18n } from '@/modules/i18n';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
 import { readDraftText, resetChatDrafts, writeDraftText } from '@/shared/chatDrafts';
 import type { BackgroundSendChoice, ChatMessage, PermissionMode, Project, ProjectSession, SessionActivityMap } from '@/shared/types';
@@ -351,7 +351,7 @@ test('a follow-up the server does not accept stays in the composer, with an erro
   assert.equal(view.result.current.input, 'follow-up A', 'the message is kept for another try');
   assert.equal(view.result.current.queuedDraft, null, 'no card for a message nothing will send');
   assert.equal(errors.length, 1);
-  assert.match(String(errors[0]?.content), /Failed to queue message/);
+  assert.equal(errors[0]?.content, 'Failed to queue message: Internal server error', 'what the server said');
 });
 
 test('a slash command is not merged with a queued message: it stays in the composer, with an error', async () => {
@@ -364,7 +364,23 @@ test('a slash command is not merged with a queued message: it stays in the compo
   assert.equal(view.result.current.queuedDraft?.content, 'fix the failing test');
   assert.equal(view.result.current.input, '/compact', 'the command is kept to send on its own later');
   assert.equal(errors.length, 1);
-  assert.match(String(errors[0]?.content), /Failed to queue message: A slash command/);
+  assert.equal(errors[0]?.content, 'Failed to queue message: A slash command runs as a turn of its own, so it cannot be combined with the queued message. Send it after the queued message has gone.');
+});
+
+test('the slash-command refusal is shown in the user\'s language', async () => {
+  await i18n.changeLanguage('de');
+  try {
+    const { view, errors } = render();
+    await submit(view, 'fix the failing test');
+
+    await submit(view, '/compact');
+
+    assert.equal(errors.length, 1);
+    assert.equal(errors[0]?.content, i18n.t('chat:input.queue.notCombinable'));
+    assert.match(String(errors[0]?.content), /^Nachricht konnte nicht in die Warteschlange gestellt werden/);
+  } finally {
+    await i18n.changeLanguage('en');
+  }
 });
 
 test('switching sessions during the upload still queues the follow-up behind the earlier one', async () => {

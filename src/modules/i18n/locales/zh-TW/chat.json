@@ -129,7 +129,8 @@
     "clearInput": "清空輸入",
     "scrollToBottom": "捲動到底部",
     "queue": {
-      "append": "加入排隊訊息"
+      "append": "加入排隊訊息",
+      "notCombinable": "無法將訊息加入排隊：斜線指令會單獨執行，因此無法與排隊訊息合併。請在排隊訊息送出後再傳送。"
     }
   },
   "thinkingMode": {

@@ -160,6 +160,7 @@
     "queue": {
       "sendNext": "Enfileirar próxima mensagem",
       "append": "Adicionar à mensagem enfileirada",
+      "notCombinable": "Falha ao enfileirar a mensagem: um slash command é executado sozinho, então não pode ser combinado com a mensagem enfileirada. Envie-o depois que a mensagem enfileirada for enviada.",
       "label": "Enfileirado",
       "willSend": "Enviará quando isto terminar",
       "edit": "Editar mensagem enfileirada",

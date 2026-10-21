@@ -135,7 +135,8 @@
     "clearInput": "Cancella input",
     "scrollToBottom": "Scorri in basso",
     "queue": {
-      "append": "Aggiungi al messaggio in coda"
+      "append": "Aggiungi al messaggio in coda",
+      "notCombinable": "Impossibile mettere in coda il messaggio: un comando con / viene eseguito da solo, quindi non può essere unito al messaggio in coda. Invialo dopo che il messaggio in coda è stato inviato."
     }
   },
   "providerSelection": {

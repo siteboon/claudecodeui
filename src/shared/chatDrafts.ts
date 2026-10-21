@@ -1,4 +1,4 @@
-import { api, readApiErrorMessage } from '@/shared/api';
+import { api, ApiRequestError, readApiErrorMessage } from '@/shared/api';
 import type { QueuedSendOptions } from '@/shared/types';
 
 /**
@@ -256,7 +256,7 @@ export function readQueuedMessage(scope: string): StoredQueuedMessage | null {
  * and nothing is lost. A clear made on this page goes to the server in order
  * with the appends around it. Rejects when the server did not accept the
  * message, so the composer can keep it instead of showing a card that will
- * never be sent.
+ * never be sent; the ApiRequestError carries the server's error code, if any.
  */
 export async function appendQueuedMessage(
   scope: string,
@@ -269,9 +269,14 @@ export async function appendQueuedMessage(
       const payload = (await response.json().catch(() => null)) as {
         queuedMessage?: unknown;
         appended?: unknown;
+        error?: unknown;
       } | null;
       if (!response.ok) {
-        throw new Error(readApiErrorMessage(payload) ?? `HTTP ${response.status}`);
+        const errorCode = isRecord(payload?.error) ? payload.error.code : undefined;
+        throw new ApiRequestError(readApiErrorMessage(payload) ?? `HTTP ${response.status}`, {
+          code: typeof errorCode === 'string' ? errorCode : undefined,
+          status: response.status,
+        });
       }
 
       const queuedMessage = normalizeQueuedMessage(

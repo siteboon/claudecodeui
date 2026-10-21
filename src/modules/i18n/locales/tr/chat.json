@@ -135,7 +135,8 @@
     "clearInput": "Girdiyi temizle",
     "scrollToBottom": "En alta git",
     "queue": {
-      "append": "Sıradaki mesaja ekle"
+      "append": "Sıradaki mesaja ekle",
+      "notCombinable": "Mesaj sıraya eklenemedi: Slash komutu tek başına çalışır, bu yüzden sıradaki mesajla birleştirilemez. Sıradaki mesaj gönderildikten sonra gönderin."
     }
   },
   "providerSelection": {

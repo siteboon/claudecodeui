@@ -147,6 +147,7 @@
     "queue": {
       "sendNext": "Poner en cola el siguiente mensaje",
       "append": "Añadir al mensaje en cola",
+      "notCombinable": "No se pudo poner el mensaje en cola: un comando con / se ejecuta por separado, así que no se puede combinar con el mensaje en cola. Envíalo cuando se haya enviado el mensaje en cola.",
       "label": "En cola",
       "willSend": "Se enviará cuando esto termine",
       "edit": "Editar mensaje en cola",

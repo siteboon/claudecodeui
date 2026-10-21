@@ -12,7 +12,7 @@ import type {
 import { useDropzone } from 'react-dropzone';
 import { useTranslation } from 'react-i18next';
 
-import { api } from '@/shared/api';
+import { api, ApiRequestError } from '@/shared/api';
 import { PROVIDER_PERMISSION_PREFERENCE_KEYS } from '@/shared/constants';
 import { readUserPreference } from '@/shared/userSettings';
 import type { BackgroundSendChoice, BackgroundSendPrompt, CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
@@ -789,7 +789,11 @@ export function useChatComposerState({
           console.error('Failed to queue message:', error);
           addMessage({
             type: 'error',
-            content: `Failed to queue message: ${message}`,
+            // A slash command is refused by design, and the reason is said in
+            // the user's language; any other failure shows the server's text.
+            content: error instanceof ApiRequestError && error.code === 'QUEUED_MESSAGE_NOT_COMBINABLE'
+              ? t('input.queue.notCombinable')
+              : `Failed to queue message: ${message}`,
             timestamp: new Date(),
           });
           const withTypedSince = (typedSince: string) => (
@@ -836,7 +840,7 @@ export function useChatComposerState({
           : queuedCard.attachments,
       }));
     },
-    [addMessage, recordSentMessage, resetCommandMenuState, setInput],
+    [addMessage, recordSentMessage, resetCommandMenuState, setInput, t],
   );
 
   const submitMessage = useCallback(

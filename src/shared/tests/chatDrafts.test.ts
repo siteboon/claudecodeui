@@ -332,6 +332,19 @@ test('a queue the server refuses rejects and changes nothing here', async () => 
   assert.equal(store.readQueuedMessage('session-a'), null);
 });
 
+test('a refused queue carries the server\'s error code, so the composer can say why in the user\'s language', async () => {
+  appendResponse = () => json({
+    success: false,
+    error: { code: 'QUEUED_MESSAGE_NOT_COMBINABLE', message: 'A slash command runs as a turn of its own' },
+  }, 409);
+  const store = await loadStore();
+
+  await assert.rejects(
+    store.appendQueuedMessage('session-a', { content: '/compact', attachments: [] }),
+    { code: 'QUEUED_MESSAGE_NOT_COMBINABLE', status: 409, message: 'A slash command runs as a turn of its own' },
+  );
+});
+
 test('a queued message with neither text nor attachments reads as absent', async () => {
   localStorage.setItem('chat-drafts', JSON.stringify({
     'session-a': { text: '', queuedMessage: { content: '   ', attachments: [] } },
