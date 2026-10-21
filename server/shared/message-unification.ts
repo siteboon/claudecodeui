@@ -162,8 +162,16 @@ function readAskAnswers(message: NormalizedMessage): AnyRecord | null {
  * Normalizes one ask-the-user call: canonical name, and the answers folded into
  * the input so the question and what was picked render as one card instead of a
  * question card followed by an unreadable result blob.
+ *
+ * The transcript pass below reads the answers from the call's result. The
+ * OpenCode sessions provider (live and history) passes `rawAnswers` itself:
+ * OpenCode's `question` tool keeps the picked labels in its metadata, one list
+ * per question, and the provider keys those lists by question text first.
  */
-function unifyAskCall(message: NormalizedMessage): void {
+export function unifyAskCall(
+  message: NormalizedMessage,
+  rawAnswers: AnyRecord | null = readAskAnswers(message),
+): void {
   message.toolName = ASK_TOOL;
 
   const input = readToolPayload(message.toolInput);
@@ -171,7 +179,6 @@ function unifyAskCall(message: NormalizedMessage): void {
     return;
   }
 
-  const rawAnswers = readAskAnswers(message);
   message.toolInput = rawAnswers
     ? { ...input, answers: keyAnswersByQuestion(input.questions, rawAnswers) }
     : input;

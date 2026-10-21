@@ -5,6 +5,7 @@ import Database from 'better-sqlite3';
 import { isOpenCodeSessionActive } from '@/modules/providers/list/opencode/opencode-runtime.provider.js';
 import { parseFilesInputTag, parseImagesInputTag } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
+import { unifyAskCall } from '@/shared/message-unification.js';
 import type {
   AnyRecord,
   FetchHistoryOptions,
@@ -312,9 +313,11 @@ const QUESTION_TOOL_NAME = 'question';
 
 /**
  * Shows a `question` call with the chat's AskUserQuestion card, as Claude's and
- * Codex's ask-the-user calls are shown: the canonical tool name, Claude's
- * `multiSelect` spelling, and the picked labels (OpenCode keeps one list per
- * question in `metadata.answers`) folded into the input by question text.
+ * Codex's ask-the-user calls are shown. The card itself (canonical name,
+ * answers folded in by question text) is the shared unifyAskCall; what is
+ * OpenCode's own is read here: Claude's `multiSelect` spelling of `multiple`,
+ * and the picked labels, which OpenCode keeps in `metadata.answers` as one
+ * list per question, in question order.
  */
 const presentOpenCodeQuestionCall = (message: NormalizedMessage, state: AnyRecord): void => {
   const input = readObjectRecord(state.input) ?? readObjectRecord(message.toolInput);
@@ -324,7 +327,7 @@ const presentOpenCodeQuestionCall = (message: NormalizedMessage, state: AnyRecor
 
   const metadataAnswers = readObjectRecord(state.metadata)?.answers;
   const answerLists: unknown[] = Array.isArray(metadataAnswers) ? metadataAnswers : [];
-  const answers: Record<string, string> = {};
+  const labelsByQuestion: Record<string, string[]> = {};
   const questions = input.questions.map((entry: unknown, index: number) => {
     const question = readObjectRecord(entry);
     if (!question) {
@@ -335,13 +338,13 @@ const presentOpenCodeQuestionCall = (message: NormalizedMessage, state: AnyRecor
       ? labelList.filter((label): label is string => typeof label === 'string' && label.length > 0)
       : [];
     if (typeof question.question === 'string' && labels.length > 0) {
-      answers[question.question] = labels.join(', ');
+      labelsByQuestion[question.question] = labels;
     }
     return { ...question, multiSelect: question.multiple === true };
   });
 
-  message.toolName = 'AskUserQuestion';
-  message.toolInput = { ...input, questions, answers };
+  message.toolInput = { ...input, questions };
+  unifyAskCall(message, labelsByQuestion);
 };
 
 // The task tool wraps the subagent's answer as `<task …><task_result>…</task_result></task>`.
