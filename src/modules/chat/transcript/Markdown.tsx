@@ -305,7 +305,17 @@ function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 
                 // trimmed from the parser, but the link-text fallback keeps a
                 // trailing space (``[`src/foo.ts:12` ]()``), and that space
                 // defeats the `$`-anchored suffix strip.
-                const reference = fileRef.trim();
+                let reference = fileRef.trim();
+                // Markdown hrefs are URI-encoded, but the file APIs expect
+                // filesystem paths. Decode exactly once, and only for hrefs:
+                // a link-text fallback may contain a literal `%20` filename.
+                if (looksLikeFilePath(href)) {
+                  try {
+                    reference = decodeURIComponent(reference);
+                  } catch {
+                    // Keep malformed escapes usable instead of throwing on click.
+                  }
+                }
                 if (reference.endsWith('/')) {
                   openDirectory(reference);
                   return;
