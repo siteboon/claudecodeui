@@ -134,7 +134,6 @@
     "moveSessionNotSupported": "This session cannot be moved to another project.",
     "moveSessionAlreadyInProject": "The session already belongs to this project.",
     "moveSessionFailed": "The session could not be moved; it stays in its project.",
-    "moveSessionRefreshFailed": "The session was moved, but the lists could not be refreshed. Reload the page to see it in its new project.",
     "moveSessionNotFound": "This session no longer exists.",
     "moveSessionProjectNotFound": "The target project no longer exists."
   },
