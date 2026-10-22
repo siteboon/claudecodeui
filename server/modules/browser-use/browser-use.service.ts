@@ -73,6 +73,24 @@ type RuntimeProbe = Omit<RuntimeReadiness, 'installInProgress' | 'installMessage
 
 const sessions = new Map<string, BrowserUseSession>();
 const handles = new Map<string, RuntimeHandle>();
+
+const sessionLocks = new Map<string, Promise<unknown>>();
+
+/**
+ * Runs page actions for one session one at a time. Agent and panel actions share the same
+ * page, so without this a Tab from the agent could move focus while the user's text is
+ * being typed, and an older screenshot could overwrite a newer one.
+ */
+function withSessionLock<T>(sessionId: string, action: () => Promise<T>): Promise<T> {
+  const previous = sessionLocks.get(sessionId) ?? Promise.resolve();
+  const run = previous.then(action, action);
+  const tail = run.catch(() => undefined);
+  sessionLocks.set(sessionId, tail);
+  void tail.then(() => {
+    if (sessionLocks.get(sessionId) === tail) sessionLocks.delete(sessionId);
+  });
+  return run;
+}
 let installPromise: Promise<{ success: boolean; message: string }> | null = null;
 let lastInstallMessage: string | null = null;
 let runtimeProbeCache: { value: RuntimeProbe; updatedAt: number } | null = null;
@@ -380,6 +398,14 @@ async function expireStaleSessions(now = Date.now()): Promise<void> {
   }));
 }
 
+/** Caller must hold the session lock for `session.id`. */
+async function navigateLocked(session: BrowserUseSession, handle: RuntimeHandle, rawUrl: string): Promise<void> {
+  const url = normalizeUrl(rawUrl);
+  await handle.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  session.lastAction = `navigate:${url}`;
+  session.cursor = null;
+}
+
 async function captureSession(session: BrowserUseSession, page: any): Promise<void> {
   const screenshot = await page.screenshot({ type: 'jpeg', quality: 72, fullPage: false });
   session.screenshotDataUrl = `data:image/jpeg;base64,${Buffer.from(screenshot).toString('base64')}`;
@@ -594,196 +620,246 @@ export const browserUseService = {
   },
 
   async agentNavigate(sessionId: string, rawUrl: string) {
-    await this.getAgentSession(sessionId);
-    await expireStaleSessions();
+    return withSessionLock(sessionId, async () => {
+      await this.getAgentSession(sessionId);
+      await expireStaleSessions();
 
-    const session = sessions.get(sessionId);
-    if (!session || session.ownerId !== AGENT_OWNER_ID) {
-      throw new Error('Browser session not found.');
-    }
+      const session = sessions.get(sessionId);
+      if (!session || session.ownerId !== AGENT_OWNER_ID) {
+        throw new Error('Browser session not found.');
+      }
 
-    if (session.status !== 'ready') {
-      throw new Error(session.message || 'Browser session is not available.');
-    }
+      if (session.status !== 'ready') {
+        throw new Error(session.message || 'Browser session is not available.');
+      }
 
-    const handle = handles.get(sessionId);
-    if (!handle?.page) {
-      throw new Error('Browser runtime handle is not available.');
-    }
+      const handle = handles.get(sessionId);
+      if (!handle?.page) {
+        throw new Error('Browser runtime handle is not available.');
+      }
 
-    const url = normalizeUrl(rawUrl);
-    await handle.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-    session.lastAction = `navigate:${url}`;
-    session.cursor = null;
-    await captureSession(session, handle.page);
-    return publicSession(session);
+      await navigateLocked(session, handle, rawUrl);
+      await captureSession(session, handle.page);
+      return publicSession(session);
+    });
   },
 
   async agentSnapshot(sessionId: string) {
-    const session = await this.getAgentSession(sessionId);
-    const handle = handles.get(sessionId);
-    if (!handle?.page) {
-      throw new Error('Browser runtime handle is not available.');
-    }
-    await captureSession(session, handle.page);
-    const text = await handle.page.locator('body').innerText({ timeout: 5_000 }).catch(() => '');
-    return {
-      session: publicSession(session),
-      text: text.slice(0, 30_000),
-    };
+    return withSessionLock(sessionId, async () => {
+      const session = await this.getAgentSession(sessionId);
+      const handle = handles.get(sessionId);
+      if (!handle?.page) {
+        throw new Error('Browser runtime handle is not available.');
+      }
+      await captureSession(session, handle.page);
+      const text = await handle.page.locator('body').innerText({ timeout: 5_000 }).catch(() => '');
+      return {
+        session: publicSession(session),
+        text: text.slice(0, 30_000),
+      };
+    });
   },
 
   async agentClick(sessionId: string, input: { selector?: string; text?: string; x?: number; y?: number }) {
-    const session = await this.getAgentSession(sessionId);
-    const handle = handles.get(sessionId);
-    if (!handle?.page) {
-      throw new Error('Browser runtime handle is not available.');
-    }
-    const point = await getActionPoint(handle.page, input);
+    return withSessionLock(sessionId, async () => {
+      const session = await this.getAgentSession(sessionId);
+      const handle = handles.get(sessionId);
+      if (!handle?.page) {
+        throw new Error('Browser runtime handle is not available.');
+      }
+      const point = await getActionPoint(handle.page, input);
 
-    if (input.selector) {
-      await handle.page.locator(input.selector).first().click({ timeout: 10_000 });
-    } else if (input.text) {
-      await handle.page.getByText(input.text, { exact: false }).first().click({ timeout: 10_000 });
-    } else if (typeof input.x === 'number' && typeof input.y === 'number') {
-      await handle.page.mouse.click(input.x, input.y);
-    } else {
-      throw new Error('Provide selector, text, or x/y coordinates.');
-    }
+      if (input.selector) {
+        await handle.page.locator(input.selector).first().click({ timeout: 10_000 });
+      } else if (input.text) {
+        await handle.page.getByText(input.text, { exact: false }).first().click({ timeout: 10_000 });
+      } else if (typeof input.x === 'number' && typeof input.y === 'number') {
+        await handle.page.mouse.click(input.x, input.y);
+      } else {
+        throw new Error('Provide selector, text, or x/y coordinates.');
+      }
 
-    session.lastAction = 'click';
-    session.cursor = point ? { ...point, actor: 'agent' } : null;
-    await captureSession(session, handle.page);
-    return publicSession(session);
+      session.lastAction = 'click';
+      session.cursor = point ? { ...point, actor: 'agent' } : null;
+      await captureSession(session, handle.page);
+      return publicSession(session);
+    });
   },
 
   async agentType(sessionId: string, input: { selector?: string; text: string; submit?: boolean }) {
-    const session = await this.getAgentSession(sessionId);
-    const handle = handles.get(sessionId);
-    if (!handle?.page) {
-      throw new Error('Browser runtime handle is not available.');
-    }
+    return withSessionLock(sessionId, async () => {
+      const session = await this.getAgentSession(sessionId);
+      const handle = handles.get(sessionId);
+      if (!handle?.page) {
+        throw new Error('Browser runtime handle is not available.');
+      }
 
-    if (input.selector) {
-      await handle.page.locator(input.selector).first().fill(input.text, { timeout: 10_000 });
-      session.cursor = await getActionPoint(handle.page, input).then((point) => (
-        point ? { ...point, actor: 'agent' as const } : null
-      ));
-    } else {
-      await handle.page.keyboard.type(input.text);
-    }
-    if (input.submit) {
-      await handle.page.keyboard.press('Enter');
-    }
+      if (input.selector) {
+        await handle.page.locator(input.selector).first().fill(input.text, { timeout: 10_000 });
+        session.cursor = await getActionPoint(handle.page, input).then((point) => (
+          point ? { ...point, actor: 'agent' as const } : null
+        ));
+      } else {
+        await handle.page.keyboard.type(input.text);
+      }
+      if (input.submit) {
+        await handle.page.keyboard.press('Enter');
+      }
 
-    session.lastAction = 'type';
-    await captureSession(session, handle.page);
-    return publicSession(session);
+      session.lastAction = 'type';
+      await captureSession(session, handle.page);
+      return publicSession(session);
+    });
   },
 
   async agentFillForm(sessionId: string, fields: Array<{ selector: string; value: string }>) {
-    const session = await this.getAgentSession(sessionId);
-    const handle = handles.get(sessionId);
-    if (!handle?.page) {
-      throw new Error('Browser runtime handle is not available.');
-    }
-    for (const field of fields) {
-      await handle.page.locator(field.selector).first().fill(field.value, { timeout: 10_000 });
-    }
-    session.lastAction = 'fill_form';
-    if (fields[0]) {
-      session.cursor = await getActionPoint(handle.page, { selector: fields[0].selector }).then((point) => (
-        point ? { ...point, actor: 'agent' as const } : null
-      ));
-    }
-    await captureSession(session, handle.page);
-    return publicSession(session);
+    return withSessionLock(sessionId, async () => {
+      const session = await this.getAgentSession(sessionId);
+      const handle = handles.get(sessionId);
+      if (!handle?.page) {
+        throw new Error('Browser runtime handle is not available.');
+      }
+      for (const field of fields) {
+        await handle.page.locator(field.selector).first().fill(field.value, { timeout: 10_000 });
+      }
+      session.lastAction = 'fill_form';
+      if (fields[0]) {
+        session.cursor = await getActionPoint(handle.page, { selector: fields[0].selector }).then((point) => (
+          point ? { ...point, actor: 'agent' as const } : null
+        ));
+      }
+      await captureSession(session, handle.page);
+      return publicSession(session);
+    });
   },
 
   async agentPressKey(sessionId: string, key: string) {
-    const session = await this.getAgentSession(sessionId);
-    const handle = handles.get(sessionId);
-    if (!handle?.page) {
-      throw new Error('Browser runtime handle is not available.');
-    }
-    await handle.page.keyboard.press(key);
-    session.lastAction = `press_key:${key}`;
-    await captureSession(session, handle.page);
-    return publicSession(session);
+    return withSessionLock(sessionId, async () => {
+      const session = await this.getAgentSession(sessionId);
+      const handle = handles.get(sessionId);
+      if (!handle?.page) {
+        throw new Error('Browser runtime handle is not available.');
+      }
+      await handle.page.keyboard.press(key);
+      session.lastAction = `press_key:${key}`;
+      await captureSession(session, handle.page);
+      return publicSession(session);
+    });
   },
 
   async agentSelectOption(sessionId: string, selector: string, values: string[]) {
-    const session = await this.getAgentSession(sessionId);
-    const handle = handles.get(sessionId);
-    if (!handle?.page) {
-      throw new Error('Browser runtime handle is not available.');
-    }
-    await handle.page.locator(selector).first().selectOption(values, { timeout: 10_000 });
-    session.lastAction = 'select_option';
-    session.cursor = await getActionPoint(handle.page, { selector }).then((point) => (
-      point ? { ...point, actor: 'agent' as const } : null
-    ));
-    await captureSession(session, handle.page);
-    return publicSession(session);
+    return withSessionLock(sessionId, async () => {
+      const session = await this.getAgentSession(sessionId);
+      const handle = handles.get(sessionId);
+      if (!handle?.page) {
+        throw new Error('Browser runtime handle is not available.');
+      }
+      await handle.page.locator(selector).first().selectOption(values, { timeout: 10_000 });
+      session.lastAction = 'select_option';
+      session.cursor = await getActionPoint(handle.page, { selector }).then((point) => (
+        point ? { ...point, actor: 'agent' as const } : null
+      ));
+      await captureSession(session, handle.page);
+      return publicSession(session);
+    });
   },
 
   async agentWaitFor(sessionId: string, input: { text?: string; url?: string; timeoutMs?: number }) {
-    const session = await this.getAgentSession(sessionId);
-    const handle = handles.get(sessionId);
-    if (!handle?.page) {
-      throw new Error('Browser runtime handle is not available.');
-    }
-    const timeout = Math.max(250, Math.min(input.timeoutMs || 5_000, 30_000));
-    if (input.text) {
-      await handle.page.getByText(input.text, { exact: false }).first().waitFor({ timeout });
-    } else if (input.url) {
-      await handle.page.waitForURL(input.url, { timeout });
-    } else {
-      await handle.page.waitForTimeout(timeout);
-    }
-    session.lastAction = 'wait_for';
-    await captureSession(session, handle.page);
-    return publicSession(session);
+    return withSessionLock(sessionId, async () => {
+      const session = await this.getAgentSession(sessionId);
+      const handle = handles.get(sessionId);
+      if (!handle?.page) {
+        throw new Error('Browser runtime handle is not available.');
+      }
+      const timeout = Math.max(250, Math.min(input.timeoutMs || 5_000, 30_000));
+      if (input.text) {
+        await handle.page.getByText(input.text, { exact: false }).first().waitFor({ timeout });
+      } else if (input.url) {
+        await handle.page.waitForURL(input.url, { timeout });
+      } else {
+        await handle.page.waitForTimeout(timeout);
+      }
+      session.lastAction = 'wait_for';
+      await captureSession(session, handle.page);
+      return publicSession(session);
+    });
   },
 
   async agentTabs(sessionId: string, input: { action?: 'list' | 'new' | 'select' | 'close'; index?: number; url?: string }) {
-    const session = await this.getAgentSession(sessionId);
-    const handle = handles.get(sessionId);
-    if (!handle?.context || !handle?.page) {
-      throw new Error('Browser runtime handle is not available.');
-    }
-    const action = input.action || 'list';
-    if (action === 'new') {
-      const page = await handle.context.newPage();
-      handles.set(sessionId, { ...handle, page });
-      if (input.url) {
-        await this.agentNavigate(sessionId, input.url);
+    return withSessionLock(sessionId, async () => {
+      const session = await this.getAgentSession(sessionId);
+      const handle = handles.get(sessionId);
+      if (!handle?.context || !handle?.page) {
+        throw new Error('Browser runtime handle is not available.');
       }
-    } else if (action === 'select') {
-      const page = handle.context.pages()[input.index || 0];
-      if (!page) {
-        throw new Error('Tab not found.');
+      const action = input.action || 'list';
+      if (action === 'new') {
+        const page = await handle.context.newPage();
+        const newHandle = { ...handle, page };
+        handles.set(sessionId, newHandle);
+        if (input.url) {
+          // Not agentNavigate: it would wait on the session lock this call already holds.
+          await navigateLocked(session, newHandle, input.url);
+        }
+      } else if (action === 'select') {
+        const page = handle.context.pages()[input.index || 0];
+        if (!page) {
+          throw new Error('Tab not found.');
+        }
+        handles.set(sessionId, { ...handle, page });
+      } else if (action === 'close') {
+        const pages = handle.context.pages();
+        const page = pages[input.index ?? pages.indexOf(handle.page)];
+        if (!page) {
+          throw new Error('Tab not found.');
+        }
+        await page.close();
+        handles.set(sessionId, { ...handle, page: handle.context.pages()[0] || await handle.context.newPage() });
       }
-      handles.set(sessionId, { ...handle, page });
-    } else if (action === 'close') {
-      const pages = handle.context.pages();
-      const page = pages[input.index ?? pages.indexOf(handle.page)];
-      if (!page) {
-        throw new Error('Tab not found.');
+      const updatedHandle = handles.get(sessionId);
+      await captureSession(session, updatedHandle?.page || handle.page);
+      return {
+        session: publicSession(session),
+        tabs: handle.context.pages().map((page: any, index: number) => ({
+          index,
+          url: page.url(),
+          active: page === (updatedHandle?.page || handle.page),
+        })),
+      };
+    });
+  },
+
+  /** Lets the signed-in user drive an agent-owned session (e.g. to complete a login the agent must not handle). */
+  async userInput(
+    sessionId: string,
+    input: { type: 'click'; x: number; y: number } | { type: 'text'; text: string } | { type: 'key'; key: string },
+  ) {
+    return withSessionLock(sessionId, async () => {
+      const session = sessions.get(sessionId);
+      if (!session || session.ownerId !== AGENT_OWNER_ID) {
+        throw new Error('Browser session not found.');
       }
-      await page.close();
-      handles.set(sessionId, { ...handle, page: handle.context.pages()[0] || await handle.context.newPage() });
-    }
-    const updatedHandle = handles.get(sessionId);
-    await captureSession(session, updatedHandle?.page || handle.page);
-    return {
-      session: publicSession(session),
-      tabs: handle.context.pages().map((page: any, index: number) => ({
-        index,
-        url: page.url(),
-        active: page === (updatedHandle?.page || handle.page),
-      })),
-    };
+      if (session.status !== 'ready') {
+        throw new Error(session.message || 'Browser session is not available.');
+      }
+      const handle = handles.get(sessionId);
+      if (!handle?.page) {
+        throw new Error('Browser runtime handle is not available.');
+      }
+
+      if (input.type === 'click') {
+        await handle.page.mouse.click(input.x, input.y);
+      } else if (input.type === 'text') {
+        await handle.page.keyboard.type(input.text);
+      } else {
+        await handle.page.keyboard.press(input.key);
+      }
+
+      session.lastAction = `user_${input.type}`;
+      session.cursor = null;
+      await captureSession(session, handle.page);
+      return publicSession(session);
+    });
   },
 
   async stopSession(sessionId: string) {
