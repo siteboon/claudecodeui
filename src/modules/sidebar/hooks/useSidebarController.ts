@@ -62,6 +62,14 @@ type UseSidebarControllerArgs = {
   sidebarVisible: boolean;
 };
 
+/** Server error codes of a refused move, shown as translated reasons instead of the server's English text. */
+const MOVE_SESSION_ERROR_KEYS: Record<string, string> = {
+  SESSION_MOVE_RUNNING: 'messages.moveSessionRunning',
+  SESSION_MOVE_NOT_SUPPORTED: 'messages.moveSessionNotSupported',
+  SESSION_ALREADY_IN_PROJECT: 'messages.moveSessionAlreadyInProject',
+  SESSION_MOVE_FAILED: 'messages.moveSessionFailed',
+};
+
 export function useSidebarController({
   projects,
   selectedProject,
@@ -1288,26 +1296,37 @@ export function useSidebarController({
       }
       setPendingMove(null);
 
+      let payload;
       try {
         const response = await api.moveSession(session.id, projectId);
-        const payload = await response.json().catch(() => null);
+        payload = await response.json().catch(() => null);
         if (!response.ok) {
-          throw new Error(payload?.error?.message || `HTTP ${response.status}`);
-        }
-        await onRefresh();
-        reloadRecentConversations();
-        // The open chat sends its project's folder as cwd; keep it on the old
-        // one and the next turn would resume from where the transcript was.
-        if (selectedSession?.id === session.id) {
-          onSessionSelect({ ...session, __projectId: projectId });
-        }
-        // Moved, but its transcript path is not saved yet; history follows once indexed.
-        if (payload?.data?.warning === 'SESSION_MOVE_TRANSCRIPT_PENDING') {
-          alert(t('messages.moveSessionTranscriptPending'));
+          const reasonKey = MOVE_SESSION_ERROR_KEYS[payload?.error?.code as string];
+          console.error('[Sidebar] Error moving session:', payload?.error ?? response.status);
+          alert(reasonKey ? t(reasonKey) : t('messages.moveSessionError'));
+          return;
         }
       } catch (error) {
         console.error('[Sidebar] Error moving session:', error);
-        alert(`${t('messages.moveSessionError')}\n${error instanceof Error ? error.message : ''}`);
+        alert(t('messages.moveSessionError'));
+        return;
+      }
+
+      // The session has moved from here on, whatever the refresh does.
+      // The open chat sends its project's folder as cwd; keep it on the old
+      // one and the next turn would resume from where the transcript was.
+      if (selectedSession?.id === session.id) {
+        onSessionSelect({ ...session, __projectId: projectId });
+      }
+      // Moved, but its transcript path is not saved yet; history follows once indexed.
+      if (payload?.data?.warning === 'SESSION_MOVE_TRANSCRIPT_PENDING') {
+        alert(t('messages.moveSessionTranscriptPending'));
+      }
+      try {
+        await onRefresh();
+        reloadRecentConversations();
+      } catch (error) {
+        console.error('[Sidebar] Session moved, but the lists could not be refreshed:', error);
       }
     },
     [onRefresh, onSessionSelect, pendingMove, reloadRecentConversations, selectedSession, t],

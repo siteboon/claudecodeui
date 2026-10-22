@@ -129,7 +129,11 @@
     "deleteSessionsPartialFailure_one": "{{count}} session out of {{total}} could not be deleted. Please try again.",
     "deleteSessionsPartialFailure_other": "{{count}} of {{total}} sessions could not be deleted. Please try again.",
     "moveSessionError": "Could not move this session.",
-    "moveSessionTranscriptPending": "The session was moved, but its history may take a moment to show up."
+    "moveSessionTranscriptPending": "The session was moved, but its history may take a moment to show up.",
+    "moveSessionRunning": "Stop the session before moving it to another project.",
+    "moveSessionNotSupported": "This session cannot be moved to another project.",
+    "moveSessionAlreadyInProject": "The session already belongs to this project.",
+    "moveSessionFailed": "The session could not be moved; it stays in its project."
   },
   "version": {
     "updateAvailable": "Update available",
