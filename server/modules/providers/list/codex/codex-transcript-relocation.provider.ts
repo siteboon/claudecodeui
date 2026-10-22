@@ -10,7 +10,7 @@ import { rewriteJsonlCwd } from '@/shared/utils.js';
  *
  * Codex rollouts are filed by date, not by directory, and a thread is resumed
  * by id, so the files stay where they are. Only the `cwd` they record changes
- * (`session_meta` and every `turn_context`): the synchronizer files a session
+ * (`session_meta` and every `turn_context` that names the old folder): the synchronizer files a session
  * under that cwd, and left stale it would move the session back to the old
  * folder on its next pass.
  *
@@ -35,7 +35,7 @@ export class CodexTranscriptRelocationProvider implements IProviderTranscriptRel
         const content = await readFile(session.jsonlPath, 'utf8');
         const rewritten = rewriteJsonlCwd(
           content,
-          [input.oldProjectPath],
+          input.oldProjectPath,
           input.newProjectPath,
           (row) => (row.payload && typeof row.payload === 'object' ? row.payload : null),
         );

@@ -105,8 +105,8 @@ test('a Codex session is rewritten in place', async () => {
     const rows = (await readFile(transcript, 'utf8')).split('\n').map((line) => JSON.parse(line));
     assert.deepEqual(
       rows.map((row) => row.payload.cwd),
-      [target, target, path.join(target, 'packages', 'api')],
-      'a subdirectory of the project follows it',
+      [target, target, path.join(source, 'packages', 'api')],
+      'only the project folder itself is swapped; a subdirectory has no counterpart in the target',
     );
     assert.equal(sessionsDb.getSessionById('codex-native')?.project_path, target);
   });
@@ -170,6 +170,7 @@ test('a failed transcript-path write moves the rollout back and restores the row
 
     assert.equal(JSON.parse(await readFile(transcript, 'utf8')).payload.cwd, source);
     assert.equal(sessionsDb.getSessionById('codex-rb')?.project_path, source);
+    assert.equal(sessionsDb.getSessionById('codex-rb')?.jsonl_path, transcript);
   });
 });
 
@@ -185,6 +186,7 @@ test('when the rollout cannot be moved back either, the row stays with the file 
 
     const facet = providerRegistry.resolveProvider('codex').transcriptRelocation!;
     const realRelocate = facet.relocateTranscripts.bind(facet);
+    assert.equal(Object.hasOwn(facet, 'relocateTranscripts'), false);
     let calls = 0;
     facet.relocateTranscripts = async (input) => {
       calls += 1;
@@ -199,10 +201,12 @@ test('when the rollout cannot be moved back either, the row stays with the file 
       await assert.rejects(() => sessionsService.moveSessionToProject('codex-stuck', targetId), /disk full/);
     } finally {
       sessionsDb.updateSessionTranscriptPath = realUpdate;
-      facet.relocateTranscripts = realRelocate;
+      // Drop the own-property override so the class method shows through again.
+      delete (facet as { relocateTranscripts?: unknown }).relocateTranscripts;
     }
 
     assert.equal(JSON.parse(await readFile(transcript, 'utf8')).payload.cwd, target);
     assert.equal(sessionsDb.getSessionById('codex-stuck')?.project_path, target, 'the row follows the file, not the plan');
+    assert.equal(sessionsDb.getSessionById('codex-stuck')?.jsonl_path, transcript);
   });
 });
