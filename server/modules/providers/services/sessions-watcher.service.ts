@@ -61,7 +61,12 @@ const IGNORED_FILE_SUFFIXES = ['.tmp', '.swp'];
 export function createWatcherIgnoredMatcher(rootPath: string): (filePath: string) => boolean {
   return (filePath: string) => {
     const relativePath = path.relative(rootPath, filePath);
-    if (!relativePath || relativePath.startsWith('..')) {
+    // Outside the root is `..` as a whole component, or an absolute result
+    // (another drive on Windows). A child called `..archive` is still inside.
+    const isOutsideRoot = relativePath === '..'
+      || relativePath.startsWith(`..${path.sep}`)
+      || path.isAbsolute(relativePath);
+    if (!relativePath || isOutsideRoot) {
       return false;
     }
 

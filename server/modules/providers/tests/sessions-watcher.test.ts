@@ -28,6 +28,16 @@ test('the ignored matcher never looks above its own root', () => {
 
   assert.equal(isIgnored(root), false);
   assert.equal(isIgnored(path.join(root, '-home-me-app', 'abc.jsonl')), false);
+  // Paths outside the root are never judged, whatever their names.
+  assert.equal(isIgnored(path.join(root, '..', 'node_modules', 'x.js')), false);
+});
+
+test('a child whose name starts with two dots is still inside the root', () => {
+  const root = path.join(os.tmpdir(), 'watch-root');
+  const isIgnored = createWatcherIgnoredMatcher(root);
+
+  assert.equal(isIgnored(path.join(root, '..archive', 'node_modules', 'x.js')), true);
+  assert.equal(isIgnored(path.join(root, '..archive', 'abc.jsonl')), false);
 });
 
 test('chokidar reports only session files through the matcher (#1156)', async () => {
