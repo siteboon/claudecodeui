@@ -103,14 +103,14 @@
     "permissionMode": "Berechtigungsmodus",
     "modes": {
       "default": "Standardmodus",
-      "auto": "Auto Mode",
+      "auto": "Automatikmodus",
       "acceptEdits": "Bearbeitungen akzeptieren",
       "bypassPermissions": "Berechtigungen umgehen",
       "plan": "Planungsmodus"
     },
     "descriptions": {
       "default": "Nur vertrauenswürdige Befehle (ls, cat, grep, git status usw.) werden automatisch ausgeführt. Andere Befehle werden übersprungen. Kann in den Arbeitsbereich schreiben.",
-      "auto": "A model classifier decides per tool call whether to approve or deny. Hands-off, but safer than Bypass — denials still happen.",
+      "auto": "Ein Klassifikator-Modell entscheidet bei jedem Tool-Aufruf, ob er genehmigt oder abgelehnt wird. Ohne Eingreifen, aber sicherer als das Umgehen der Berechtigungen – Ablehnungen kommen weiterhin vor.",
       "acceptEdits": "Alle Befehle werden automatisch innerhalb des Arbeitsbereichs ausgeführt. Vollautomatischer Modus mit isolierter Ausführung.",
       "bypassPermissions": "Vollständiger Systemzugriff ohne Einschränkungen. Alle Befehle werden automatisch mit vollem Festplatten- und Netzwerkzugriff ausgeführt. Mit Vorsicht verwenden.",
       "plan": "Planungsmodus – keine Befehle werden ausgeführt"
@@ -247,6 +247,9 @@
     "answeredBy": "Beantwortet von {{model}}"
   },
   "composer": {
+    "permissionHeading": "Wie sollen Aktionen von {{provider}} genehmigt werden?",
+    "permissionCycleHint": "Tab im Eingabefeld drücken, um den Modus zu wechseln",
+    "permissionTriggerLabel": "{{mode}}: {{heading}}",
     "editing": {
       "title": "Ersetzt eine frühere Nachricht",
       "filesNotReverted": "bereits geänderte Dateien werden nicht zurückgesetzt",

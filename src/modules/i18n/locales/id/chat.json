@@ -162,6 +162,8 @@
     "loadingModels": "Memuat model…",
     "modelMenu": "Pilih model dan tingkat penalaran",
     "permissionHeading": "Bagaimana tindakan {{provider}} harus disetujui?",
+    "permissionCycleHint": "Tekan Tab di kolom input untuk mengganti mode",
+    "permissionTriggerLabel": "{{mode}}: {{heading}}",
     "editing": {
       "title": "Mengganti pesan sebelumnya",
       "filesNotReverted": "file yang sudah diubah agen tidak dikembalikan",

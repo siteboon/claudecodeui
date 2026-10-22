@@ -277,6 +277,9 @@
     "answeredBy": "由 {{model}} 回答"
   },
   "composer": {
+    "permissionHeading": "如何核准 {{provider}} 的操作？",
+    "permissionCycleHint": "在輸入框中按 Tab 切換模式",
+    "permissionTriggerLabel": "{{mode}}：{{heading}}",
     "editing": {
       "title": "正在取代先前的訊息",
       "filesNotReverted": "已修改的檔案不會還原",

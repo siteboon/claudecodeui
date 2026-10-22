@@ -103,14 +103,14 @@
     "permissionMode": "Modalità permessi",
     "modes": {
       "default": "Modalità predefinita",
-      "auto": "Auto Mode",
+      "auto": "Modalità automatica",
       "acceptEdits": "Accetta modifiche",
       "bypassPermissions": "Ignora permessi",
       "plan": "Modalità piano"
     },
     "descriptions": {
       "default": "Solo i comandi attendibili (ls, cat, grep, git status, ecc.) vengono eseguiti automaticamente. Gli altri comandi vengono saltati. Può scrivere nell'area di lavoro.",
-      "auto": "A model classifier decides per tool call whether to approve or deny. Hands-off, but safer than Bypass — denials still happen.",
+      "auto": "Un classificatore basato su un modello decide a ogni chiamata di uno strumento se approvarla o negarla. Senza interventi, ma più sicura di Ignora permessi: i rifiuti possono comunque capitare.",
       "acceptEdits": "Tutti i comandi vengono eseguiti automaticamente nell'area di lavoro. Modalità completamente automatica con esecuzione sandboxed.",
       "bypassPermissions": "Accesso completo al sistema senza restrizioni. Tutti i comandi vengono eseguiti automaticamente con accesso completo a disco e rete. Usa con cautela.",
       "plan": "Modalità pianificazione - nessun comando viene eseguito"
@@ -247,6 +247,9 @@
     "answeredBy": "Risposto da {{model}}"
   },
   "composer": {
+    "permissionHeading": "Come approvare le azioni di {{provider}}?",
+    "permissionCycleHint": "Premi Tab nel campo di testo per cambiare modalità",
+    "permissionTriggerLabel": "{{mode}}: {{heading}}",
     "editing": {
       "title": "Sostituzione di un messaggio precedente",
       "filesNotReverted": "i file già modificati non vengono ripristinati",

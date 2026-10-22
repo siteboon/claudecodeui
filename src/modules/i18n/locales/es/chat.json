@@ -161,6 +161,8 @@
     "loadingModels": "Cargando modelos…",
     "modelMenu": "Seleccionar modelo y esfuerzo de razonamiento",
     "permissionHeading": "¿Cómo se deben aprobar las acciones de {{provider}}?",
+    "permissionCycleHint": "Pulsa Tab en el campo de texto para cambiar de modo",
+    "permissionTriggerLabel": "{{mode}}: {{heading}}",
     "editing": {
       "title": "Reemplazando un mensaje anterior",
       "filesNotReverted": "los archivos ya modificados no se revierten",

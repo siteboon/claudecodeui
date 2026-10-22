@@ -188,6 +188,8 @@
     "loadingModels": "Načítání modelů…",
     "modelMenu": "Vyberte model a úroveň uvažování",
     "permissionHeading": "Jak schvalovat akce, které provádí {{provider}}?",
+    "permissionCycleHint": "Režim přepnete klávesou Tab ve vstupním poli",
+    "permissionTriggerLabel": "{{mode}}: {{heading}}",
     "editing": {
       "title": "Nahrazení dřívější zprávy",
       "filesNotReverted": "soubory, které agent už změnil, se nevrátí do původního stavu",

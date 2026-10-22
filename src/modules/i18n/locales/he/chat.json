@@ -152,6 +152,8 @@
     "loadingModels": "טוען מודלים…",
     "modelMenu": "בחירת מודל ורמת חשיבה",
     "permissionHeading": "איך לאשר פעולות של {{provider}}?",
+    "permissionCycleHint": "לחיצה על Tab בשדה הקלט מחליפה מצב",
+    "permissionTriggerLabel": "{{mode}}: {{heading}}",
     "editing": {
       "title": "החלפת הודעה קודמת",
       "filesNotReverted": "קבצים שהסוכן כבר שינה לא משוחזרים",

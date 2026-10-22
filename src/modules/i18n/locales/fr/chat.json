@@ -249,6 +249,9 @@
     "answeredBy": "Répondu par {{model}}"
   },
   "composer": {
+    "permissionHeading": "Comment approuver les actions de {{provider}} ?",
+    "permissionCycleHint": "Appuyez sur Tab dans la zone de saisie pour changer de mode",
+    "permissionTriggerLabel": "{{mode}} : {{heading}}",
     "editing": {
       "title": "Remplacement d’un message précédent",
       "filesNotReverted": "les fichiers déjà modifiés ne sont pas restaurés",

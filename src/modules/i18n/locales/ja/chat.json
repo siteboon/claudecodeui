@@ -97,14 +97,14 @@
     "permissionMode": "権限モード",
     "modes": {
       "default": "デフォルトモード",
-      "auto": "Auto Mode",
+      "auto": "自動モード",
       "acceptEdits": "編集を許可",
       "bypassPermissions": "権限をバイパス",
       "plan": "プランモード"
     },
     "descriptions": {
       "default": "信頼されたコマンド（ls、cat、grep、git statusなど）のみ自動実行。その他のコマンドはスキップ。ワークスペースへの書き込みは可能。",
-      "auto": "A model classifier decides per tool call whether to approve or deny. Hands-off, but safer than Bypass — denials still happen.",
+      "auto": "モデルの分類器がツール呼び出しごとに承認か拒否かを判断します。手動での承認は不要ですが、「権限をバイパス」より安全です。拒否されることもあります。",
       "acceptEdits": "ワークスペース内ですべてのコマンドを自動実行。サンドボックス環境での完全自動モード。",
       "bypassPermissions": "制限なしの完全なシステムアクセス。すべてのコマンドがディスクとネットワークへの完全なアクセスで自動実行されます。注意して使用してください。",
       "plan": "プランニングモード - コマンドは実行されません"
@@ -228,6 +228,9 @@
     "answeredBy": "{{model}} が回答"
   },
   "composer": {
+    "permissionHeading": "{{provider}} の操作をどのように承認しますか？",
+    "permissionCycleHint": "入力欄でTabを押すとモードを切り替えられます",
+    "permissionTriggerLabel": "{{mode}}：{{heading}}",
     "editing": {
       "title": "以前のメッセージを置き換えています",
       "filesNotReverted": "変更済みのファイルは元に戻りません",
