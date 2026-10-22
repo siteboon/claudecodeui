@@ -127,7 +127,8 @@
     "forkSessionError": "Diese Sitzung konnte nicht verzweigt werden. Bitte erneut versuchen.",
     "deleteSessionsPartialFailure_one": "{{count}} Sitzung von {{total}} konnte nicht gelöscht werden. Bitte erneut versuchen.",
     "deleteSessionsPartialFailure_other": "{{count}} von {{total}} Sitzungen konnten nicht gelöscht werden. Bitte erneut versuchen.",
-    "moveSessionError": "Diese Sitzung konnte nicht verschoben werden."
+    "moveSessionError": "Diese Sitzung konnte nicht verschoben werden.",
+    "moveSessionTranscriptPending": "Die Sitzung wurde verschoben, ihr Verlauf erscheint aber eventuell erst nach einem Moment."
   },
   "version": {
     "updateAvailable": "Update verfügbar",

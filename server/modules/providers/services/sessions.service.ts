@@ -430,7 +430,7 @@ export const sessionsService = {
   async moveSessionToProject(
     sessionId: string,
     projectId: string,
-  ): Promise<{ sessionId: string; projectId: string; projectPath: string; warning?: string }> {
+  ): Promise<{ sessionId: string; projectId: string; projectPath: string; warning?: 'SESSION_MOVE_TRANSCRIPT_PENDING' }> {
     const session = sessionsDb.getSessionById(sessionId);
     if (!session) {
       throw new AppError(`Session "${sessionId}" was not found.`, {
@@ -495,7 +495,7 @@ export const sessionsService = {
       }
     };
     // Set when the move took effect but its transcript path could not be saved.
-    let warning: string | undefined;
+    let warning: 'SESSION_MOVE_TRANSCRIPT_PENDING' | undefined;
     // Row before transcript, as a project relocation does: the watcher may
     // index the moved transcript (whose cwd names the new folder) mid-move.
     sessionsDb.updateSessionProjectPath(sessionId, target.project_path);
@@ -559,7 +559,7 @@ export const sessionsService = {
               restoreRow(true);
               throw new AppError('The session could not be moved; it stays in its project.', {
                 code: 'SESSION_MOVE_FAILED',
-                statusCode: 503,
+                statusCode: 500,
               });
             }
             // The session is in the target project, where its file now is, so
@@ -568,7 +568,8 @@ export const sessionsService = {
             console.warn(
               `[sessions] Session ${sessionId} is in ${target.project_path} but its row still names ${session.jsonl_path}; the transcript is at ${movedPath}.`,
             );
-            warning = 'The session was moved, but its history may take a moment to show up.';
+            // A code, not a sentence: the client shows it in the user's language.
+            warning = 'SESSION_MOVE_TRANSCRIPT_PENDING';
           }
         }
       }
