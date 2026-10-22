@@ -527,6 +527,7 @@ export const sessionsService = {
           // The file has moved but the row cannot say so: move it back to where
           // the old row points, then restore the row. If the file cannot go
           // back, the row keeps the target project, which is where it now is.
+          // shortcut: the move-back swaps target -> old, so a row that already named the target before the move is changed too; keep the original bytes if that ever matters.
           let movedBack = false;
           try {
             movedBack = (await transcriptRelocation.relocateTranscripts({
@@ -540,14 +541,10 @@ export const sessionsService = {
           if (movedBack) {
             restoreRow(true);
           } else {
+            // The watcher repoints jsonl_path once it indexes the moved file.
             console.warn(
               `[sessions] Session ${sessionId} stays in ${target.project_path}; its transcript is at ${relocated[0].jsonlPath}.`,
             );
-            try {
-              sessionsDb.updateSessionTranscriptPath(sessionId, relocated[0].jsonlPath);
-            } catch {
-              // Same write that just failed; the watcher repoints it once it indexes the file.
-            }
           }
           throw error;
         }

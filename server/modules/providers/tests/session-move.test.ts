@@ -210,3 +210,43 @@ test('when the rollout cannot be moved back either, the row stays with the file 
     assert.equal(sessionsDb.getSessionById('codex-stuck')?.jsonl_path, transcript);
   });
 });
+
+test('a Claude move whose transcript path cannot be saved puts the file back in the source folder', async () => {
+  await withDatabase(async (directory) => {
+    const source = path.join(directory, 'source');
+    const target = path.join(directory, 'target');
+    await mkdir(source);
+    await mkdir(target);
+    const projectsRoot = path.join(directory, 'claude', 'projects');
+    const sourceFolder = path.join(projectsRoot, source.replace(/[^a-zA-Z0-9]/g, '-'));
+    const transcript = path.join(sourceFolder, 'claude-rb.jsonl');
+    await mkdir(sourceFolder, { recursive: true });
+    await writeFile(transcript, `${JSON.stringify({ type: 'user', sessionId: 'claude-rb', cwd: source })}\n`);
+    const now = new Date().toISOString();
+    sessionsDb.createSession('claude-rb', 'claude', source, 'Claude rollback', now, now, transcript);
+    const targetId = createTargetProject(target);
+
+    const realUpdate = sessionsDb.updateSessionTranscriptPath;
+    let failed = false;
+    sessionsDb.updateSessionTranscriptPath = (...args) => {
+      // Only the forward write fails; the restore must still be able to write.
+      if (!failed) {
+        failed = true;
+        throw new Error('disk full');
+      }
+      return realUpdate(...args);
+    };
+    try {
+      await assert.rejects(() => sessionsService.moveSessionToProject('claude-rb', targetId), /disk full/);
+    } finally {
+      sessionsDb.updateSessionTranscriptPath = realUpdate;
+    }
+
+    const targetCopy = path.join(projectsRoot, target.replace(/[^a-zA-Z0-9]/g, '-'), 'claude-rb.jsonl');
+    assert.equal(await exists(targetCopy), false);
+    assert.equal(JSON.parse((await readFile(transcript, 'utf8')).split('\n')[0]).cwd, source);
+    const row = sessionsDb.getSessionById('claude-rb');
+    assert.equal(row?.project_path, source);
+    assert.equal(row?.jsonl_path, transcript);
+  });
+});
